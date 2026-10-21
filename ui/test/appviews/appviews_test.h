@@ -51,10 +51,37 @@ private slots:
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
+    /* P7: the Run tab -- the full-screen cue runner, ⇧⌘0. */
+    void theRunTabIsTheCueRunner();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
      *  production run": a show's definitions come from this computer. */
     void aShowsDefinitionsComeFromTheShowCache();
+
+    /** "set the h,w,d by the configured measurement type": one Settings
+     *  entry, kept for the person, read by the fixture editor too. */
+    void settingsChoosesTheUnits();
+    void settingsAdvancedHoldsAutoOpen();
+    /** The grid follows Settings -> Units: an old show in feet seeds an
+     *  unset preference once, a show opens in the person's unit, and is
+     *  saved with Units from the preference */
+    void theGridFollowsTheUnitPreference();
+
+    /** The cue page's drop area says what it is for in every theme the app
+     *  ships: its words stand out from the page (they were palette(mid),
+     *  all but the page's own colour on the dark themes). */
+    void theDropAreaReadsInEveryTheme();
+
+    /** The rig network gate: the footer's red "Output held" says where the
+     *  show belongs and where this machine is; Settings -> Network edits the
+     *  show's rig networks (validated) and this machine's check. */
+    void rigNetworkFooterSaysWhyOutputIsHeld();
+    void rigNetworkSettingsRoundTrip();
+
+    /** Quitting with the window still up and the Show Tree in front: the
+     *  tab goes before the Doc, so its hide event (which stops its preview)
+     *  doesn't land on a freed Doc. Last: it deletes the app. */
+    void quittingWithTheShowTreeShowing();
 
 private:
     App *m_app;

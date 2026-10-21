@@ -81,7 +81,28 @@ public:
     bool probeTarget(const QString &address) override
     { m_probed << address; return true; }
 
+    /** @reimp m_outputProblems for @p universe, whatever the line */
+    QStringList outputProblems(quint32 output, quint32 universe) const override
+    { Q_UNUSED(output) return m_outputProblems.value(universe); }
+
+    /** Say the problems changed, as a real plugin would */
+    void emitTargetProblemsChanged() { emit targetProblemsChanged(); }
+
+    /** @reimp m_channelRoles for @p channel, whatever the line */
+    QString inputChannelRole(quint32 input, quint32 channel) const override
+    { Q_UNUSED(input) return m_channelRoles.value(channel); }
+
+    /** @reimp m_channelNames for @p channel, whatever the line */
+    QString inputChannelName(quint32 input, quint32 channel) const override
+    { Q_UNUSED(input) return m_channelNames.value(channel); }
+
 public:
+    /** What outputProblems() reports, by universe */
+    QMap<quint32, QStringList> m_outputProblems;
+    /** What inputChannelRole() reports, by channel ("a", "lb", "rx"...) */
+    QMap<quint32, QString> m_channelRoles;
+    /** What inputChannelName() reports, by channel ("Cross", "L1"...) */
+    QMap<quint32, QString> m_channelNames;
     QList<Device> m_devices;
     QMap<int, QString> m_lineDescriptions;
     bool m_linesAreHardware;
@@ -90,6 +111,23 @@ public:
     QStringList m_probed;
     /** Number of lines outputs()/inputs() advertise; 4 unless a test says otherwise. */
     int m_lineCount;
+    /** When set, outputs()/inputs() advertise exactly these line names
+     *  (e.g. interface addresses, like Art-Net) instead of m_lineCount stubs. */
+    QStringList m_lineNames;
+    /** When set, name() returns this (e.g. "ArtNet", to load real show XML). */
+    QString m_nameOverride;
+
+    /** @reimp Like a network plugin: each line's rig network gate decision,
+     *  cached by line name (the line's address) and counted. */
+    void refreshTransmitGate() override
+    {
+        m_gateRefreshes++;
+        m_gateAllowed.clear();
+        for (const QString &line : std::as_const(m_lineNames))
+            m_gateAllowed.insert(line, transmitAllowedFrom(line));
+    }
+    int m_gateRefreshes = 0;
+    QMap<QString, bool> m_gateAllowed;
 
     /*********************************************************************
      * Outputs

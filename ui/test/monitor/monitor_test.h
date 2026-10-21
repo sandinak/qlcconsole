@@ -29,8 +29,14 @@ class Monitor_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** A mover's colour ring (Branson's LED Movinghead+Circle): found in
+     *  the two-head definition and the old one-head one, not on a mover
+     *  without; its live segments off / solid / chasing; drawn round the
+     *  head on the 2D plot and in the Rig Overview. */
+    void aColourRingIsFoundAndDrawn();
     void aShowsRigViewDrawTime();
     void theRigOverviewShortcutTogglesIt();
+    void layersShowAndHideFromTheRigOverviewInAnyMode();
     void theRulerMarksTheMiddleOfADraggedDrape();
     void theRigViewHidesWhatTheStudioHides();
     void aLightAtTheFootOfATowerIsNotHungOnItsTopBar();
@@ -45,6 +51,7 @@ private slots:
     void fixturesSitAlongAHorizontalPipe();
     void theTrussEditorSpansTwoStands();
     void initTestCase();
+    void init();
     void cleanupTestCase();
 
     void addTrussAccepted();
@@ -141,6 +148,11 @@ private slots:
     void aSockedTrussGlowsWithTheBarsInsideIt();
     void aTowerWearsItsFacesPlainOrPrinted();
     void ledsGlowInTheHaze();
+    void hazeGlowStaysBehindAClosedDrape();
+    void aBigPixelRigPaintsInGoodTime();
+    void aWashStopsOnARiserSeenFromTheSide();
+    void aWashStopsOnARiserSeenFromTheFront();
+    void aBeamClearOfTheRisersIsLeftAlone();
     /** Consolidation 3: double-click a fixture = Fixture Properties; click
      *  again picks one out of a group. */
     void doubleClickingAFixtureOpensItWhereverItIs();
@@ -283,6 +295,10 @@ private slots:
     /** ...and one standing on a DECK is not buried in it by a mountingType
      *  that defaults to "hung" when nothing set it. */
     void aMoverOnADeckIsNotBuriedInIt();
+    /** "the truss editor shows the fixtures just under the cross member .. but
+     *  the rig view shows them down a bit": a mover hung on a truss is drawn
+     *  at the same height in the elevation and in the 3D rig view. */
+    void aMoverHungOnATrussIsAtTheSameHeightInEveryView();
     /** "fixture set as underhung .. visually upright": a mover mounted on a
      *  horizontal TRUSS/bar (not a tower shelf) must also flip in its own
      *  Front/Side elevation -- the generic (non-tower) mover branch used to
@@ -403,6 +419,8 @@ private slots:
     void rotatingASelectionTurnsItAboutItsMiddle();
     void aTurnedDeckIsDrawnAndLitWhereItIs();
     void aSilkFlameRisesOnlyWhenItsRelayIsOn();
+    void aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves();
+    void cancellingTheDrapeDialogTakesItsNewCurtainAway();
     void addFountainBuildsItAsOneGroup();
     void beamsLandOnTheCycloramaInTheRigView();
     /** "set a gobo and projected on the cyc .. and it's not visible" /
@@ -417,6 +435,13 @@ private slots:
     void keptLandingsFollowTheDecks();
     void aPoolOnADeckIsDrawn();
     void theGpuDrawsWhatTheCpuDraws();
+    /** Coloured light on a grey surface reads as its colour ("blue on the
+     *  cyc looks pale"): white light is plain Screen, a saturated surface
+     *  keeps its own colour. */
+    void colouredLightTakesOverAGreySurface();
+    /** A fixture standing in for a missing definition: one small body,
+     *  no overlap warning (not a 19 m wall of heads in red). */
+    void aStandInForAMissingDefinitionIsOneSmallBody();
     void aGoboPoolIsDrawnThroughItsMask();
     /** "specialized gobos": a slot of ONE unit fitted with the operator's
      *  own picture (Gobo Wheels…), saved per fixture, drawn on the rig. */
@@ -473,6 +498,15 @@ private slots:
     /** Aim a head at a mark, feed it its own DMX, and the beam it draws
      *  arrives at that mark -- hung or standing, inverted or not. */
     void aHeadAimedAtAMarkDrawsItsBeamThere();
+    /** The plot's pool from live DMX of a head with calibration offsets
+     *  lands on the mark it is aimed at, not the offset beside it. */
+    void aCalibratedHeadsPoolLandsOnItsMark();
+    /** Focus mode's setup offers the selected scene's aim first, and the
+     *  selected heads. */
+    void focusModeSetupOffersTheSceneAimFirst();
+    /** Focus mode end to end from the keyboard: nudge, save, next, revert,
+     *  step size, zero, Esc asks about unsaved, the plot ring, one undo. */
+    void focusModeRunsFromTheKeyboard();
     /** A head standing on a truss top cannot point at its own feet. */
     void anUprightHeadCannotPointBesideItself();
     /** A par or bar throws light as well -- beams were movers-only. */
@@ -625,11 +659,20 @@ private slots:
     void aBeamFadesAlongItsLengthWhicheverWayItPoints();
     void aPersonTargetIsDrawnAsAPerson();
     void anAreaTargetShowsItsSize();
+    /** A line target in the studio: drag an end, Alt-drag along it, double-
+     *  click the curve to add a point and the point to take it out, drag the
+     *  body to move it all; each one undoes. */
+    void aLineTargetIsEditedInTheStudio();
+    /** Each head aimed at a line traces to its own point, in the studio and
+     *  in the rig view. */
+    void headsAimedAtALineGoToTheirOwnPoints();
     void aPersonTakesTheColourOfTheLightOnIt();
     void manyWhiteBeamsDoNotBlowOut();
     void aFrameFilledAcrossCoresIsTheSameFrame();
     void aFaceFixtureDrawsOverWhatIsInside();
     void aTargetSaysWhichHeadsCannotReachIt();
+    void aBlockedBeamIsTracedToWhatBlocksIt();
+    void theLineOfSightMenuSetsWhatBlocks();
     void theReachOverlayShadesWhereASpotCannotAim();
     void aSelectedLookLightsTheRigInDesign();
     void anUndrivenHeadPointsAtTheScenesTarget();

@@ -544,11 +544,12 @@ void VCXYPadFixture::writeDMX(qreal xmul, qreal ymul, QSharedPointer<GenericFade
     const ushort x = ushort(qBound(0.0, floor(m_xRange * xmul + m_xOffset + 0.5), 65535.0));
     const ushort y = ushort(qBound(0.0, floor(m_yRange * ymul + m_yOffset + 0.5), 65535.0));
 
-    FadeChannel *fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xMSB);
-    updateChannel(fc, uchar(x >> 8));
+    GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xMSB);
+    updateChannel(fc.get(), uchar(x >> 8));
 
     fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yMSB);
-    updateChannel(fc, uchar(y >> 8));
+    updateChannel(fc.get(), uchar(y >> 8));
+    fc.release();
 
     CaptureManager *cm = m_doc->captureManager();
     bool capturing = (cm != NULL && cm->isCapturing());
@@ -564,10 +565,10 @@ void VCXYPadFixture::writeDMX(qreal xmul, qreal ymul, QSharedPointer<GenericFade
     if (m_xLSB != QLCChannel::invalid() && m_yLSB != QLCChannel::invalid())
     {
         fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xLSB);
-        updateChannel(fc, uchar(x & 0xFF));
+        updateChannel(fc.get(), uchar(x & 0xFF));
 
         fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yLSB);
-        updateChannel(fc, uchar(y & 0xFF));
+        updateChannel(fc.get(), uchar(y & 0xFF));
 
         if (capturing)
         {

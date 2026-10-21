@@ -10,13 +10,330 @@ active work in [TODO.md](TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+## [0.2.0] - Unreleased
+
+The Show Tree release. A show is written as one tree — productions → cue
+lists → cues → layers → looks — with tracking, sub-cues and a cue runner
+for playback; line targets, line of sight and Focus mode for aiming;
+curtains a fixture opens and flies; colour rings on movers; Matrix effects
+for pixel boxes; backup WLED lanterns; and output held off the rig
+network. Everything in 0.1.0 is in it too.
+
+### Added
+- **Focus mode controller map and device choice.** The Focus mode panel
+  draws the controller (an Xbox-style layout, vector, following the theme)
+  with each control labelled by its Focus mode action, taken from the
+  profile's gamepad roles rather than fixed text: a profile with other names
+  (Cross, R1, Options…) shows them, a control it lacks is greyed, unused
+  ones (triggers, stick clicks, Guide) are grey. Buttons light while held
+  and the stick caps follow the sticks; a click on a control does it.
+  **Use: Controller | Keyboard** in the setup dialog and the panel picks
+  the device that drives the nudges and the map shown (the keys, labelled
+  and lit as pressed, in Keyboard). Default: the controller when one Focus
+  mode can use is connected, else the keyboard; the user's choice is kept
+  per machine (`focusmode/input`). On the keyboard every controller input
+  is swallowed and ignored -- sticks centred, nothing applied -- so a
+  resting pad cannot drift a head; keyboard shortcuts work in both. A
+  controller disconnecting mid-session switches to the keyboard with a
+  note, and returning offers **Use the controller**.
+  `ProgrammerController::focusController()` / `focusControllerChanged()` /
+  `focusControllerInput()`, `FocusSession::setInputDevice()`.
+- **Auto-open shutters** (Settings → Advanced, saved with the show, on by
+  default). Like a console's auto open: a head given a level (its dimmer,
+  or a colour when it has no dimmer) by any look, layer, cue, slider or
+  programmer edit, whose shutter nothing sets, has its shutter opened on
+  output, at the definition's open value (an open default, else the
+  ShutterOpen / "Shutter open" capability; a strobe preset channel at 0;
+  never an iris). An explicit shutter value -- Closed, Strobe, anything --
+  always wins, including one a slider or programmer edit left behind; a
+  head with no level, or a dimmer only resting at its default, is left
+  alone. Each universe applies it after its faders on its own thread, on
+  the post-GM values only, so DMX, the 2D view and the Rig Overview agree
+  and turning it off restores exactly what the show sets. Shows that never
+  turned it off save as before (`<ShutterAutoOpen Enabled="0"/>` only
+  when off). The AT-Spots (Focus Spot Three Z, shutter resting at Off) now
+  light from White, Full alone. The Programming tab stops warning "no look
+  for: shutter" while it is on.
+- **Software update check and install** (GitHub Releases). A background
+  check after start-up and at most once a day, plus **Help → Check for
+  Updates…**. It sends one unauthenticated GET of the releases list, with
+  ETag / If-None-Match, waits out GitHub's rate-limit reset, and gives up
+  quietly offline. Channels are Stable or Pre-release, defaulting to the
+  build's own. Versions are compared SemVer-style, with `+qlcconsole.N`
+  breaking ties. **Skip This Version** is available. A footer chip shows
+  "Update available: X", and a non-modal dialog shows the release notes as
+  Markdown. Downloads are verified against the release's `SHA256SUMS`, and
+  anything that does not match is refused. On macOS the new app is staged
+  beside the old one, after its code signature, Gatekeeper, Team ID and
+  bundle id are checked. A detached helper swaps it in at quit, keeps the
+  old app until the new one has started, and reopens the show on **Restart
+  and Install**. A read-only /Applications falls back to opening the DMG.
+  Windows runs the NSIS installer silently after quit. Linux and the Pi are
+  notified only. Nothing installs in Perform mode, in kiosk mode, or while a
+  function runs. "Install updates automatically" downloads in the
+  background and installs at the next quit. `QLCCONSOLE_NO_UPDATES=1` or
+  the system-wide `updates/disabled` turns it all off. `release.sh` now
+  publishes `SHA256SUMS`, and `./release.sh attach` adds CI's files and
+  their checksums.
+- **Only transmit on the rig network.** A show can name its rig networks
+  (Settings → Network, e.g. `172.18.0.0/20`, saved with the show as
+  `<RigNetwork>` in the IO map). With **Only transmit on rig networks** on
+  (this computer's setting, default on), Art-Net, E1.31/sACN, OSC and WLED
+  output from any interface outside them is **held** — patch kept and saved
+  unchanged, line not opened, nothing sent (no default-route unicast, no
+  broadcast, no ArtPoll/ArtPollReply/discovery) — and resumes by itself
+  within ~5 s on the rig network. Loopback and non-network outputs are not
+  affected. A red footer chip ("Output held — not on the rig network
+  (172.18.0.0/20). Connected: en0 10.4.12.7") opens the setting;
+  **Transmit anyway, this session…** asks first and is never saved. A show
+  with none set transmits as before, with an amber footer note and a
+  suggestion taken from its patches' saved networks (offered, not written).
+- **Focus mode** for aligning the rig before a show: step through the moving
+  heads with the controller's bumpers, each aimed at its reference (a
+  scene's aim, a stage target, a line target's own point) and lit, nudge its
+  pan/tilt calibration offsets with the sticks (the follow spot's stick
+  path) or D-pad, A to save (one undo step), B revert, X zero, Y a second
+  reference, Menu to leave (asks about unsaved heads). Keyboard fallback for
+  all of it. Lighting Studio / Rig Overview **Focus**, View → Focus Mode…
+  (⌘⌥F), or View + Menu. Controller profiles gain optional gamepad
+  `role=` attributes; the Xbox profile has them and the D-pad.
+- **Show Tree** (new tab, ⇧⌘6): productions → cue lists → cues → layers →
+  looks, with tracking (Block / Cue-only / Release), includes, one
+  precedence rule up and down the chain, a plan view for line targets, and
+  preview that matches GO. **Import chaser…** turns an existing chaser into
+  a tree (0 channels differ on playback); **Convert to tracking** /
+  **Detach to plain chaser** go the other way. A **Looks** section for
+  busking (with **Make VC page**), the **Library** with palettes, Recent and
+  Pinned, one undo history shared with the Programming tab, and a typed
+  command line. Deleting a palette takes it off every look that uses it
+  (one Undo puts it all back).
+- **Productions, sub-cues and the cue runner.** Several productions per
+  show, each with its own main list and timecode; sub-cues 4.1, 4.2… with
+  Sub GO or Auto-follow; the **Run** tab (⇧⌘0, Space = GO) and the **Cue
+  Runner** VC widget (and **Swap Widget** from a Cue List); OSC `/subgo`,
+  `/subback`.
+- **Line targets.** A stage target can be a line (or curve): an Aim look
+  spreads its heads along it, crosses them, groups them in pairs or halves,
+  in hanging or look order.
+- **Colour rings on movers.** A mover's LED ring is a head type of its own
+  (group by head type makes Movers and Ring groups); ring chases by name;
+  drawn live in the 2D plot and Rig Overview; **Change Definition…** moves
+  fixtures to a drop-in definition.
+- **Create Group(s) from Selection** — one group, a group per head type, or
+  a group per head type for each fixture, previewed before anything is made.
+- **Palette folders hold any type** — folders first, or Group by type.
+- **Matrix effects for pixel boxes.** Fourteen effects in a new Matrix tab
+  (bars, chevrons, ripple, rain, checker, sparkle, radar, iris, equaliser,
+  snakes, wipes, colour noise, box chase, strobe), across a run of boxes or
+  in each box, with white-pixel options (the XL-450's).
+- **Curtains that move.** A main drape or traveler can be driven by a
+  curtain fixture (bundled **Generic › Stage Curtain**: Open, Open fine,
+  Fly): it opens and flies as the channel fades, on the plot and in the Rig
+  Overview, and blocks beams where it is (see Line of sight).
+- **Backup WLED lanterns.** A WLED universe can drive several devices: a
+  backup lantern mirrors the primary without programming anything twice.
+  Right-click the universe in Connections (or the Fixture Manager) →
+  **WLED Devices / Backup Lanterns…** to add, remove and reorder devices
+  (the top one is the primary), each with its own address and channel count
+  if it needs one; one undo step. Every device is sent to on its own, so a
+  dead or hanging one never holds up the others, and one that comes back is
+  sent the whole look again. Connections says "1 of 2 answering — … not
+  answering", the footer names the silent backup, and the rig view shows
+  the first device that answers. Saved as `outputIP2`, `outputIP3`… beside
+  `outputIP`; older versions ignore them and drive the primary alone.
+- **Line of sight for follow spots and aiming.** The stage's solid features
+  — drapes and travelers as they hang (closed blocks, the open gap doesn't,
+  flown is out of the way), walls and the proscenium, platform and riser
+  sides, towers, and trusses/pipes/stands at least 20 cm thick — are checked
+  between each aimed head and its point; a head's own mount never counts.
+  The Followspot effect's **Fade When Blocked** (ms; 0 = off) fades a
+  blocked head out and back; an Aim look's **Dim lights that can't see the
+  target** (off by default) does the same for any aimed look. Reach
+  warnings name the blocker ("blocked by Main drape"), the Lighting Studio
+  plot draws blocked aim lines red to the blocker, and **Show → Line of
+  sight** sets which kinds block and whether the 3D views stop beams at
+  them. Effect scripts read `sceneTarget.blocked` / `blockedBy` /
+  `blockedKind` / `blockedAt` / `clearance` (also on `aimAt` slots). A
+  line target checks each head's own point on the line; a curtain driven by
+  a fixture blocks where that fixture has it now.
+- **Sub-cues from QLab.** OSC `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play
+  a sub-cue (its cue first); `/subgo` and `/subback` say why when they
+  can't; LOAD 4.2 puts a sub-cue on standby and **Next:** in the footer
+  and the cue list shows it ("Next: 4.2 — Wash"); STOP 4.2 stops the list
+  only while 4.2 is the one playing. ⌥⌘↩ / ⌥⌘⇧↩ go through show control, so their result is
+  reported with the rest.
+- **Two new look warnings.** The Looks list marks a Colour look that is all
+  zero (**Black**), and a position look on fixtures whose definition marks
+  every Pan or Tilt channel Fine (**Can't move**: the head stays at 0).
+
+### Changed
+- **Settings has General and Advanced tabs.** Advanced holds the show's
+  output behaviour (auto-open shutters) and two settings for experienced
+  users moved off the one page: the effect script editor, and the Show
+  control (QLab) pointer to Connections. Everything else stays on General.
+
+- **One top bar instead of two.** The show controls and the open tab's
+  own tools share one row: the tab's tools on the left, **Stop all**,
+  **Blackout**, **Blind** and a **Design | Operate** switch (the mode you
+  are in lit) on the right, as small icon-and-word buttons. About 57 px
+  more for content on every tab (94 px of bars above it before, 37 px
+  now). Blackout lights red and Blind blue while on, readable in all six
+  themes. A narrow window folds the tab's tools into **»**; the show
+  controls never fold. **Settings → Show Controls** can put them in the
+  status bar instead, at its right end, leaving the top to the tab's own
+  tools; it switches at once, no restart. Same actions and shortcuts
+  either way; a tab in a window of its own keeps its tools at its top;
+  kiosk mode still has neither. The Show Tree header and the Programming
+  tab's row are toolbars now (they fold into » rather than being cut off
+  or scrolled), and the Lighting Studio's toolbar uses the same 20 px
+  icons as the others.
+- **A new production is current when nothing else has GO.** In the Show
+  Tree, a production made while no production is current and the main cue
+  list isn't some other chaser becomes the current one, so a first
+  production plays from the Run tab without **Make current**. Adding a
+  production never takes GO from one the operator chose.
+- **Coloured light reads as its colour in the rig views.** Light landing on
+  a grey or white surface (a cyc, the deck) now takes it over in the
+  light's colour: a full blue wash on the cyc draws blue, not white with a
+  lavender tint. White light looks as before, and coloured surfaces (LED
+  strips, drapes) keep their own colour.
+
+### Fixed
+- **Import chaser keeps an include brighter than the cue's own level.** A
+  cue that includes another at full and sets the same fixtures lower itself
+  (DanceHysteria's Full Show 0.0.5: 0.0.4's StepTops at full, its own at
+  45%) played the 45% after import; the chaser had run both and the full
+  level won. The importer now makes such a cue **mix** (Overlap: Mix, *≈
+  mix* in the tree) — only where the tree's rule would change its output,
+  checked channel by channel — and in a cue that mixes an include plays
+  beside the cue's own layers on the same group instead of giving way to
+  them, so it plays as the chaser did. The report says which cues and how
+  many channels; Convert to tracking keeps them mixing. On DanceHysteria-0.6
+  the import dry run is 0 channels different in every cue (Full Show 0.0.5
+  marked; 0.0.6 and 0.0.7 already mixed and now match too). The dry run
+  (`showtree_test importARealShow`) reads the show's embedded fixture
+  definitions, as opening it does, with the user folder kept out, so it
+  compares the same on a machine without the author's fixture files, starts
+  each playback from the idle rig with channel defaults put back, and fails
+  unless 0 channels differ.
+- **Beams stop at risers and the floor in the rig views.** A wash thrown
+  across a riser went through it, lighting the air behind it, and its cone
+  carried on below the stage floor (the cone's edge was followed to the
+  surface the middle of the beam landed on, a drape far beyond). A beam now
+  stops at a platform's side as well as its top, each edge of the cone ends
+  at what it meets, and a side or front elevation cuts the beam round the
+  risers it meets and shows the wash on their tops and faces as a band.
+- **Calibration offsets no longer show in the rig views.** A head's pan/tilt
+  offsets correct the physical fixture: the DMX keeps them, but the plot,
+  its gauges, the Studio, the Rig Overview, beams and footprints now draw
+  the intended aim. Fixture Properties' **Test orientation → Aim at target**
+  uses the aim solver (it was 180° out and solved standing heads as hung).
+- macOS Xbox controller (raw mode): axes now arrive in the order the Xbox
+  profile names them (the right stick was reported as the left trigger),
+  and the D-pad is reported.
+- **Crash on quit with the Show Tree open.** Closing the app while its
+  window was still up could crash: the Show Tree tab stopped its preview on
+  a show that had already been freed.
+- **The cue page's drop area is readable in every theme.** "Drag groups or
+  fixtures here…" was nearly invisible on the dark themes (Blue especially).
+- **Chaser teardown use-after-free.** Deleting a chaser while its runner was
+  still running freed the steps the runner reads (an intermittent "double
+  free" on Linux).
+- **A dimmer effect on a two-arm beam went black.** One master dimmer
+  serving several heads got one scaled write per head, multiplied together:
+  confetti's lit arm times its dark one was 0. The brightest head now sets
+  it.
+- **GO by number on a paused list resumed it and stayed put.** It now plays
+  that cue.
+- **An OSC float cue number matched nothing.** 2.2 sent as a float read as
+  2.200000048; floats now read to the digits they hold.
+
 ## [0.1.0] - Unreleased
 
 First public release. qlcconsole is a fork of
 [QLC+ 4.14.2](https://github.com/mcallegari/qlcplus), rebuilt around a
-console-first programmer-mode workflow for macOS.
+console-first programmer-mode workflow.
+
+**Platforms:**
+- **macOS** — one app for Apple silicon and Intel Macs (macOS 12 Monterey
+  or later), signed and notarized, as a DMG.
+- **Windows** — a 64-bit installer (Windows 10 or later). Not code-signed
+  yet, so SmartScreen asks before it runs.
+- **Linux** — an x86_64 AppImage.
+
+**Soak-tested** (2026-10-16 → 17, the DanceHysteria show, three 8-hour
+phases — the real show, a scaled-up show, rough handling with reloads —
+with DMX output stripped): no crashes or hangs on Linux x86_64 (Debian 13),
+Linux arm64 or macOS in any phase. On Windows 10 (a VM) the real-show phase
+ran clean; the scaled phase was cut short by a Windows Update reboot, and
+a shorter Windows re-soak is planned.
 
 ### Added
+- **QLab and show control.** Chase steps carry cue numbers (a Cue column in
+  the chaser editor, with Renumber); a chase can be the main cue list or
+  have a list number; **MIDI Show Control** and **OSC** can GO, LOAD, STOP,
+  PAUSE, RESUME, RESET and ALL OFF them. The footer's **Next:** shows what
+  the main list's GO plays next; GO (⌘↩) and Back (⌘⇧↩) work from any
+  window; the Virtual Console cue list shows cue numbers and what's next.
+  **Skip** a step without deleting it — GO, Next, Back and auto-follow pass
+  over it.
+- **Connections → Show control & sync** — one page for what controls the
+  show from outside and what it syncs to: OSC in (port, listening or not,
+  the last command), MSC in (device number, **Listen on** all MIDI inputs
+  or just one, the last command), and the MIDI timecode source with its
+  sync health. The timecode source is saved with the show.
+- **Sub-cues** — a chase used as a cue lists its own steps under it as
+  4.1, 4.2…; set to **Sub GO** they wait for Sub GO (⌥⌘↩, Sub Back ⌥⌘⇧↩)
+  while GO moves on to the next cue. Shown in the chaser editor, the
+  Virtual Console cue list (with Sub GO / Sub Back buttons) and the footer
+  ("Sub: 4.2 · Next: 5").
+- **Output trouble is reported** — an Art-Net or E1.31 output that can't
+  send, an Art-Net node that stops answering, or a node port reporting a
+  DMX short shows in the footer (with **Open Connections**) and in red on
+  the universe's row in Connections. It settles before it warns, so a
+  brief hiccup doesn't flicker on and off.
+- **Shows carry their own definitions** — a `.qlcc` saves the fixture
+  definitions and effect scripts it uses. Opened on another computer, the
+  show's own copies are used (**Install on This Computer** keeps the ones
+  it lacks); where they differ from that computer's the footer says so and
+  **Review…** shows the differences. **File → Collect for Transfer…** gathers a
+  show and everything it needs into one folder.
+- **One beat clock and speed masters.** Every effect and beat chase reads
+  one clock (effects started apart are on the same beat); a Tap on the
+  Programming toolbar. Up to sixteen **speed masters**, each its own BPM and
+  tap, rate and pause, or following the main clock or another master by a
+  ratio; a look, chase, step or collection runs on one, and the footer
+  shows each master's beat. **GO on the beat** holds a GO to the next beat
+  or bar.
+- **Spread** — an effect's phase spread across its heads: by order,
+  columns, rows or across the stage, forward, reversed, from the centre or
+  the ends, mirrored or in blocks, or out from / round the look's aim; a
+  preview in the look editor.
+- **The stack checker** — the Looks list marks a look the one below always
+  covers, an effect another covers, a dimmer only some heads get, and says
+  why.
+- **Patch list** — every fixture's patch, where its universe goes and what
+  it hangs on, as CSV or a printable PDF (Fixtures → Patch List…).
+  **Labels…** prints a label per fixture (all, or the selected rows) on
+  Avery 5160 sheets or a 62 mm roll: name, universe and address, mode,
+  and a network fixture's name (its IP on mouseover in the list).
+- **Units** — Settings → Units picks mm, cm, m, inches or feet (kg or lb
+  to match); fixture sizes and weights show in it and take any unit typed
+  with the number (`7.5"`, `6' 3"`, `26.5 lb`), and the Studio's grid
+  follows it. Files still store millimetres and kilograms.
+- **In-app pictures** — the guides show the main window, footer,
+  Programming tab, effect browser, Patch dialog and more with numbered
+  marks; click one for full size.
+- **The Rig Overview on the graphics card** (Metal on a Mac, OpenGL
+  elsewhere) with its fixtures worked out on every core: a fully lit
+  208-fixture show from about a second a frame to 15 ms.
+  A **GPU** box turns it off. Its own **Layers** menu shows and hides
+  layers — the same switch as the Studio's eye.
+- **Washes look like washes** — a pool fades past its beam angle for a wash
+  and stays crisp for a profile; PC and Fresnel lenses are softest. Pools
+  show on decks and steps.
 - **Programming tab** — a dedicated top-level tab for building scenes/"looks":
   searchable/foldered palette and function trees, drag-and-drop palettes onto
   looks, groups onto dynamic targets, fixtures onto fixed targets. Inline look
@@ -81,10 +398,11 @@ console-first programmer-mode workflow for macOS.
   autosave recovery) on every platform, replacing the old indeterminate,
   macOS-only progress dialog. The main window now only ever appears once
   everything is actually ready.
-- **Real-time DMX output timing (macOS)** — the DMX timer thread now
-  requests real-time scheduling from the OS, fixing missed output ticks
-  under scheduling pressure on a busy machine; Linux/Windows equivalents
-  are in progress.
+- **Real-time DMX output timing** — on macOS the DMX timer thread asks the
+  OS for real-time scheduling, fixing missed output ticks on a busy
+  machine. On Windows it has a thread of its own with "Pro Audio"
+  priority; on Linux it asks for real-time priority, which a stock install
+  doesn't grant (it then runs at normal priority).
 - **Backstage color themes** — six selectable app-wide color themes (View →
   Theme): Default, Tan, Blue, QLC+ Original, Red Shift (keeps the blue
   channel near-zero, for working in the dark without wrecking night vision),
@@ -120,8 +438,9 @@ console-first programmer-mode workflow for macOS.
   times a second at most). Devices that don't answer, or are on weak Wi-Fi,
   are reported in the footer; while the rig view is open it shows what each
   device's LEDs are actually doing. Looks can pick WLED's own effects for
-  the device to run. Tested against a stand-in so far, not yet a real WLED
-  on a show network.
+  the device to run, and **160 WLED effects** play in qlcconsole itself —
+  every 1D effect, the 23 sound-reactive ones on the audio input. Tried on
+  real devices only briefly so far.
 - **Scene transitions** — a scene can have a Transition in and out that
   reaches each fixture by where it stands: wipes across, up/down or
   front-to-back, from/to the centre, dissolve, or along each bar, set on
@@ -186,10 +505,19 @@ console-first programmer-mode workflow for macOS.
 - The Rig Overview follows the Lighting Studio's layers.
 
 ### Changed
-- Versioning scheme: the in-app build string now tracks the QLC+ base version
-  this fork tracks, plus a git-derived build count
-  (`4.14.2+qlcconsole.<N>`); public releases additionally get a SemVer tag
-  (see [RELEASE.md](RELEASE.md)).
+- The version you see is the release: the About box, `--version` and
+  Finder say **0.1.0**, with the build (`4.14.2+qlcconsole.<N>`, what a saved
+  show records) and the commit beside it (see [RELEASE.md](RELEASE.md)).
+- **Qt 6.8 or later only**; Qt 5 is no longer supported (the last tree that
+  built on it is tagged `qt5-last`).
+- Opening the app goes straight into qlcconsole — no window asking whether
+  to open the Fixture Editor (Fixtures → Fixture Editor…; a double-clicked
+  definition still opens in it).
+- Showing and hiding layers, and their labels, work in Operate mode; locking
+  stays a Design-mode change.
+- A look stacks one way: top to bottom, the lower wins; an effect's colour
+  replaces the base; dimmer effects scale and multiply; a Colour or Dimmer
+  under an effect is that effect's only.
 - Main tab order regrouped to follow the build workflow: Hardware →
   Inputs/Outputs → Lighting Studio → Functions → Programming → Shows →
   Virtual Console → Simple Desk.
@@ -218,10 +546,38 @@ console-first programmer-mode workflow for macOS.
 - Fixtures with a structure above them draw faded and dashed in the Top
   view; the rulers band any selection and mark the middle of what's dragged.
 - The Connections Devices header is one row.
+- Opening a show with many universes is much faster: a 94-universe show
+  loads in about 9 s (was 34 s), in a tenth of the memory.
+- A fixture whose definition isn't on this computer draws in the rig view
+  as one small box (not a wall of red heads); the footer says which folder
+  to copy the definition into, and **Fetch Definitions** looks there again.
+- Off a Mac: the themes are readable (buttons, lists and splitter handles
+  follow the theme), and the help spells keys Ctrl / Alt / Shift.
+- Linux: the app icon shows at every size, and on Wayland.
 - Effects on big pixel rigs: about 8 ms a tick for 96 × 64 pixels (was 68);
   the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
 ### Fixed
+- **Lights behind a closed curtain glowed through it in the Rig Overview.**
+  Steps just upstage of the closed main drape showed their haze glow on the
+  drape and on the floor in front of it, and the pools their light made on
+  the back of the cloth. Opaque scenery and platforms now hide a light's
+  glow, and pools on the far side of a drape stay there; where the drape is
+  open the glow shows through the gap, and a scrim is still see-through.
+- **Saving a fixture definition could stall for minutes on a busy Mac:**
+  it flushed every disk instead of the one file. It now writes the file
+  whole (or not at all) and flushes only that file.
+- **Universe patches were lost when a show was opened away from its
+  network.** Opening a show on a computer without the interface it was
+  patched to (a laptop off the show VLAN) and saving it wrote the show
+  without those patches — every Art-Net universe on that interface gone,
+  however often it was re-patched. Patches that can't be opened are now
+  kept, shown as offline ("not present — kept, will reconnect"), saved back
+  unchanged, and reconnect by themselves when the network appears; inputs,
+  feedback and patches to plugins not installed are kept the same way.
+  Art-Net, E1.31 and OSC patches also **follow the network** rather than
+  one interface address: the same show opens patched on any console on the
+  show network, through whichever interface (or route) reaches it.
 - A workspace whose last-active tab was Lighting Studio could come up with
   the whole 2D plot empty on a fresh launch — trusses, layers, and every
   fixture missing — even though the save was completely intact.
@@ -249,11 +605,67 @@ console-first programmer-mode workflow for macOS.
 - Creating a palette or function in a new folder renamed the workspace's
   first look to the folder's name.
 - Add Fixture gave every fixture in a network batch the same IP.
-
-[0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
 - Lanterns on hangers that kept an earlier mount's face drew on their side;
   a fixture on a hanger now always hangs straight.
 - A light at the foot of a tower, moved under the bar on top of it, was
   hung on the bar.
 - A copy of a fixture's physical data recompiled a regular expression and
   wrote a guessed power figure into the copy.
+- **Don't Save** left the unsaved show's autosave behind, so every start
+  offered the discarded work back.
+- Two static looks on one channel kept the higher value (Blue then Red came
+  out magenta-ish); a second Colour look moved a colour wheel; an Aim or a
+  Dimmer after a movement effect did nothing; Breathe did nothing on movers
+  with only a head dimmer.
+- The speed master's beat blinked in the footer with nothing playing.
+- The Xbox controller profile was installed where the HID plugin never
+  looked.
+- A crash under heavy load: with a busy show running, scenes and effects
+  starting and stopping could corrupt memory and bring the app down (found
+  in a 24-hour soak). Writes past the end of a universe are refused too.
+- Lighting Studio's **Add Target**, **Add Person**, **Copy** and **Paste**
+  did nothing.
+- The patch grid didn't follow universes being added or removed, and the
+  Function Manager's buttons didn't follow the selection.
+- Windows: a slow tick could pile up hundreds of timer threads until the
+  app stopped responding.
+- Windows: the app felt sluggish — every output check walked every network
+  interface; and USB devices plugged in while running weren't noticed.
+- Art-Net send-failure warnings flickered on and off for a target that
+  never answered; and Connections read a merging node port as "SHORT
+  DETECTED".
+- Engine: a fader's priority could be raised but never lowered, and an
+  overriding 16-bit channel wrote only its low byte, to the coarse address.
+  Nothing in 0.1.0 hit either yet; fixed ahead of the features that will.
+- Rig Overview: an RGB fixture with no dimmer channel (pixel bars, many
+  par cans) drew far too dark, or black, when dimmed: its level was counted
+  twice.
+- macOS: pressing the empty canvas in Structure Studio's Angled view to orbit
+  crashed the app. Qt 6.11 draws its move cursor (and the wait/busy ones)
+  from a colour-profiled picture that it frees too early (QTBUG-147602); the
+  move cursor is now the open hand (closed while dragging) on macOS, and
+  wait/busy the arrow. Linux and Windows are unchanged.
+- macOS: the same Qt 6.11 fault (QTBUG-147602) could crash the app wherever
+  one of its own pictures -- an icon, a gobo, a help picture -- was handed to
+  AppKit, since 508 of the 660 bundled PNGs carried a colour profile. The
+  profiles are removed (the pixels are unchanged, and the app never used
+  them), and the test gate now fails if one comes back.
+
+### Known issues
+- **Windows:** on heavy shows (around 90 universes with thousands of
+  pixel fixtures) the engine couldn't keep its tick rate. A fix is in
+  (the test VM now ticks that show at about 8 ms on average) but it hasn't
+  had a long soak on a heavy show yet. Moderate shows run normally.
+- **macOS:** over a long run the on-screen app's memory grows with no crash
+  or slowdown — about 50 MB an hour in the first 24-hour soak; in the
+  second, 312 → 492 MB over the 8-hour real-show phase. Being tracked
+  down.
+- **Linux:** DMX output timing runs at normal priority unless the system
+  grants real-time priority (CAP_SYS_NICE or an rtprio limit).
+- The universal Mac app has no OLA plugin.
+- Not yet tried against the real thing: QLab / MIDI Show Control end to
+  end, Art-Net trouble reporting on a failing node, and opening a show's
+  carried definitions on a machine without them.
+
+[0.2.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.2.0
+[0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0

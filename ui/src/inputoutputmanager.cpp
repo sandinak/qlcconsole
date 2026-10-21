@@ -38,10 +38,12 @@
 #include <QIcon>
 
 #include "inputoutputpatcheditor.h"
+#include "showcontrolsyncpage.h"
 #include "universepatchgrid.h"
 #include "universeitemwidget.h"
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
+#include "universe.h"
 #include "apputil.h"
 #include "inputoutputmap.h"
 #include "patchundo.h"
@@ -69,6 +71,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     , m_ioTabs(NULL)
     , m_patchGrid(NULL)
     , m_undoPatchAction(NULL)
+    , m_showControlPage(NULL)
     , m_toolbar(NULL)
     , m_addUniverseAction(NULL)
     , m_deleteUniverseAction(NULL)
@@ -112,6 +115,15 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_splitter = new QSplitter(Qt::Horizontal, detailed);
     detailedLay->addWidget(m_splitter);
     m_ioTabs->addTab(detailed, tr("Detailed"));
+
+    /* Everything outside that controls or clocks the show -- OSC and MSC
+       cue commands, MIDI timecode -- next to the patch they arrive on.
+       Patch a MIDI input takes you to Devices, where inputs are patched. */
+    m_showControlPage = new ShowControlSyncPage(m_doc, this);
+    m_ioTabs->addTab(m_showControlPage, tr("Show control && sync"));
+    connect(m_showControlPage, &ShowControlSyncPage::patchMidiInputRequested, this, [this]() {
+        m_ioTabs->setCurrentWidget(m_devicesTree);
+    });
 
     /* Parented to the Detailed page, not to the manager. Both actions live on
        the Detailed toolbar, but as children of InputOutputManager with the
@@ -284,6 +296,8 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     /* Listen to plugin configuration changes */
     connect(m_ioMap, SIGNAL(pluginConfigurationChanged(const QString&, bool)),
             this, SLOT(updateList()));
+    connect(m_ioMap, SIGNAL(offlinePatchesChanged()), this, SLOT(updateList()));
+    connect(m_ioMap, SIGNAL(transmitGateChanged()), this, SLOT(updateList()));
 
     connect(m_ioMap, SIGNAL(universeAdded(quint32)),
             this, SLOT(slotUniverseAdded(quint32)));
@@ -308,6 +322,16 @@ InputOutputManager::~InputOutputManager()
 InputOutputManager* InputOutputManager::instance()
 {
     return s_instance;
+}
+
+void InputOutputManager::showShowControlPage()
+{
+    m_ioTabs->setCurrentWidget(m_showControlPage);
+}
+
+void InputOutputManager::setShowControlListener(ShowControlListener *listener)
+{
+    m_showControlPage->setListener(listener);
 }
 
 void InputOutputManager::applyToolbarLabelMode()
@@ -386,6 +410,22 @@ void InputOutputManager::updateItem(QListWidgetItem* item, quint32 universe)
         item->setData(Qt::DisplayRole, uniName);
     item->setSizeHint(QSize(m_list->width(), 50));
     item->setData(Qt::UserRole, universe);
+    /* A patch kept offline (its interface/network is not present here) is
+       shown as such, never as unpatched: it reconnects by itself. */
+    QString offlineIn, offlineFb;
+    const QList<Universe *> unis = m_ioMap->universes();
+    if (Universe *uni = (universe < quint32(unis.count())) ? unis.at(universe) : NULL)
+    {
+        foreach (const Universe::OfflinePatch &p, uni->offlinePatches())
+        {
+            const QString what = tr("%1 — not present").arg(p.uid.isEmpty() ? p.plugin : p.uid);
+            if (p.tag == Universe::InputPatchTag)
+                offlineIn = what;
+            else if (p.tag == Universe::FeedbackPatchTag)
+                offlineFb = what;
+        }
+    }
+
     if (ip != NULL)
     {
         item->setData(Qt::UserRole + 1, ip->inputName());
@@ -393,17 +433,18 @@ void InputOutputManager::updateItem(QListWidgetItem* item, quint32 universe)
     }
     else
     {
-        item->setData(Qt::UserRole + 1, KInputNone);
+        item->setData(Qt::UserRole + 1, offlineIn.isEmpty() ? KInputNone : offlineIn);
         item->setData(Qt::UserRole + 2, KInputNone);
     }
     if (op != NULL)
-        item->setData(Qt::UserRole + 3, op->outputName());
+        item->setData(Qt::UserRole + 3, op->isPending()
+                      ? tr("%1 — not present").arg(op->outputName()) : op->outputName());
     else
         item->setData(Qt::UserRole + 3, KOutputNone);
     if (fp != NULL)
         item->setData(Qt::UserRole + 4, fp->outputName());
     else
-        item->setData(Qt::UserRole + 4, KOutputNone);
+        item->setData(Qt::UserRole + 4, offlineFb.isEmpty() ? KOutputNone : offlineFb);
 }
 
 void InputOutputManager::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)

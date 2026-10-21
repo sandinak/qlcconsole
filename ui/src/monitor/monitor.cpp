@@ -54,6 +54,7 @@
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
 #include "studiotemplate.h"
+#include "mainbar.h"
 #include <QLineEdit>
 #include <QListWidget>
 #include <QTreeWidget>
@@ -89,6 +90,8 @@
 #include <QMutexLocker>
 #include <memory>
 #include "monitorfixtureitem.h"
+#include "focusmodepanel.h"
+#include "aimsolver.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "networkgearcatalog.h"
@@ -146,6 +149,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "beamocclusion.h"
 #include "fountaindiagram.h"
 #include "fixturemanager.h"
 #include "patchinventorydialog.h"
@@ -164,6 +168,7 @@
 #define SETTINGS_RULERS "monitor/rulers"
 #define SETTINGS_GRID   "monitor/grid"
 #define SETTINGS_CENTERLINES "monitor/centerlines"
+#define SETTINGS_LINEOFSIGHT "monitor/lineOfSightBeams"
 #define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
 #define SETTINGS_STUDIOROTATION "monitor/studiorotation"
 #define SETTINGS_PLOTROTATION "monitor/plotrotation"
@@ -192,7 +197,7 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_inventoryPanel(NULL)
     , m_gridWSpin(NULL)
     , m_gridHSpin(NULL)
-    , m_unitsCombo(NULL)
+    , m_unitsLabel(NULL)
     , m_povCombo(NULL)
     , m_labelsAction(NULL)
     , m_layersAction(NULL)
@@ -262,6 +267,19 @@ Monitor::~Monitor()
 void Monitor::initView()
 {
     qDebug() << Q_FUNC_INFO;
+
+    /* Both views' toolbars live in one holder, the layout's menu bar, and a
+       view switch only shows one and hides the other. The holder is what
+       the main window's top bar borrows while this is the current tab
+       (MainBar), so it must stay put: setMenuBar() on each switch would
+       pull whichever bar it named back out of the top bar. */
+    m_toolsHolder = new QWidget(this);
+    m_toolsHolder->setObjectName(QStringLiteral("monitorToolbars"));
+    QVBoxLayout *holder = new QVBoxLayout(m_toolsHolder);
+    holder->setContentsMargins(0, 0, 0, 0);
+    holder->setSpacing(0);
+    layout()->setMenuBar(m_toolsHolder);
+    MainBar::registerTabTools(this, m_toolsHolder);
 
     initDMXToolbar();
     initDMXView();
@@ -343,7 +361,6 @@ void Monitor::showDMXView()
     m_graphicsView->hide();
     m_graphicsToolBar->hide();
 
-    layout()->setMenuBar(m_DMXToolBar);
     m_DMXToolBar->show();
     m_scrollArea->show();
 
@@ -543,6 +560,7 @@ void Monitor::initGraphicsView()
         m_pendingAddScenePos = scenePos;
         if (what == QLatin1String("fixture"))     slotAddFixture();
         else if (what == QLatin1String("target")) slotAddTarget();
+        else if (what == QLatin1String("targetline")) slotAddTargetLine();
         else if (what == QLatin1String("person")) slotAddPerson();
     });
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -682,12 +700,13 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_gridHSpin->setValue(gridSize.z());
     connect(m_gridHSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridHeightChanged(int)));
 
-    m_unitsCombo = new QComboBox();
-    m_unitsCombo->addItem(tr("Meters"), MonitorProperties::Meters);
-    m_unitsCombo->addItem(tr("Feet"), MonitorProperties::Feet);
-    if (m_props->gridUnits() == MonitorProperties::Feet)
-        m_unitsCombo->setCurrentIndex(1);
-    connect(m_unitsCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotGridUnitsChanged(int)));
+    // The unit is the person's, set in Settings -> Units (App applies it to
+    // the show); shown here, not chosen here.
+    m_unitsLabel = new QLabel();
+    m_unitsLabel->setObjectName(QStringLiteral("monitorGridUnitsLabel"));
+    m_unitsLabel->setToolTip(tr("Metres for mm, cm and m; feet for inches and feet. "
+                                "Change it in Settings, Units."));
+    updateUnitsLabel();
 
     m_gridSubdivSpin = new QSpinBox();
     m_gridSubdivSpin->setMinimum(1);
@@ -714,7 +733,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         srl->addWidget(new QLabel("x", sizeRow));
         srl->addWidget(m_gridHSpin);
         gfl->addRow(tr("Stage size:"), sizeRow);
-        gfl->addRow(tr("Units:"), m_unitsCombo);
+        gfl->addRow(tr("Units:"), m_unitsLabel);
         gfl->addRow(tr("Subdivisions:"), m_gridSubdivSpin);
 
         QMenu *gm = new QMenu(gridBtn);
@@ -849,6 +868,63 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             projectionBtn, [projectionBtn](bool on) {
         QSignalBlocker block(projectionBtn);
         projectionBtn->setChecked(on);
+    });
+
+    /* Line of sight: what stands in a beam's way. The kinds are the
+       stage's own (saved with the show) and are what a follow spot's Fade
+       When Blocked, an Aim look's "Dim lights that can't see the target" and
+       the blocked aim traces go by; whether the rig views stop beams at
+       them too is a view choice, remembered here. */
+    QMenu *sightMenu = showMenu->addMenu(tr("Line of sight"));
+    sightMenu->setObjectName("lineOfSightMenu");
+    sightMenu->setToolTipsVisible(true);
+    QAction *sightBeams = sightMenu->addAction(tr("Beams stop at what is in their way"));
+    sightBeams->setObjectName("lineOfSightBeams");
+    sightBeams->setCheckable(true);
+    sightBeams->setToolTip(tr("In the 3D views, a beam stops at a tower, a truss or a riser's "
+                              "side in its way, as it already does at decks, drapes and walls"));
+    {
+        const bool on = QSettings().value(SETTINGS_LINEOFSIGHT, false).toBool();
+        sightBeams->setChecked(on);
+        StructureStudioView::setLineOfSightBeams(on);
+    }
+    connect(sightBeams, &QAction::toggled, this, [this](bool on) {
+        StructureStudioView::setLineOfSightBeams(on);
+        QSettings().setValue(SETTINGS_LINEOFSIGHT, on);
+        foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
+            v->update();
+    });
+    sightMenu->addSection(tr("What blocks a beam"));
+    foreach (int kind, BeamOcclusion::kinds())
+    {
+        QAction *k = sightMenu->addAction(BeamOcclusion::kindName(kind));
+        k->setObjectName(QStringLiteral("lineOfSightKind%1").arg(kind));
+        k->setCheckable(true);
+        k->setChecked((m_props->occlusionKinds() & kind) != 0);
+        if (kind == BeamOcclusion::Trusses || kind == BeamOcclusion::Pipes
+            || kind == BeamOcclusion::Stands)
+            k->setToolTip(tr("Only when at least %1 cm thick: a beam lights round a thin pipe")
+                              .arg(qRound(m_props->occlusionMinSize() * 100.0f)));
+        connect(k, &QAction::toggled, this, [this, kind](bool on) {
+            const int kinds = m_props->occlusionKinds();
+            m_props->setOcclusionKinds(on ? (kinds | kind) : (kinds & ~kind));
+            m_doc->setModified();
+            m_graphicsView->updateAimLines();
+            foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
+                v->update();
+        });
+    }
+    // A show loaded later brings its own kinds: tick them to match on opening.
+    connect(sightMenu, &QMenu::aboutToShow, this, [this, sightMenu]() {
+        foreach (QAction *a, sightMenu->actions())
+        {
+            const QString name = a->objectName();
+            if (!name.startsWith(QLatin1String("lineOfSightKind")))
+                continue;
+            const int kind = name.mid(15).toInt();
+            QSignalBlocker block(a);
+            a->setChecked((m_props->occlusionKinds() & kind) != 0);
+        }
     });
 
     QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));
@@ -1122,20 +1198,14 @@ void Monitor::fillGraphicsView(bool keepView)
 
     m_gridWSpin->blockSignals(true);
     m_gridHSpin->blockSignals(true);
-    m_unitsCombo->blockSignals(true);
     m_gridSubdivSpin->blockSignals(true);
     m_snapCombo->blockSignals(true);
 
     if (m_props->gridUnits() == MonitorProperties::Meters)
-    {
         m_graphicsView->setGridMetrics(1000.0);
-        m_unitsCombo->setCurrentIndex(0);
-    }
     else // m_props->gridUnits() == MonitorProperties::Feet
-    {
         m_graphicsView->setGridMetrics(304.8);
-        m_unitsCombo->setCurrentIndex(1);
-    }
+    updateUnitsLabel();
 
     m_gridWSpin->setValue(m_props->gridSize().x());
     m_gridHSpin->setValue(m_props->gridSize().z());
@@ -1144,7 +1214,6 @@ void Monitor::fillGraphicsView(bool keepView)
     m_snapCombo->setCurrentIndex(snapIdx >= 0 ? snapIdx : 0);
     m_gridWSpin->blockSignals(false);
     m_gridHSpin->blockSignals(false);
-    m_unitsCombo->blockSignals(false);
     m_gridSubdivSpin->blockSignals(false);
     m_snapCombo->blockSignals(false);
 
@@ -1356,7 +1425,6 @@ void Monitor::showGraphicsView()
     m_DMXToolBar->hide();
     m_scrollArea->hide();
 
-    layout()->setMenuBar(m_graphicsToolBar);
     m_graphicsToolBar->show();
     m_graphicsView->show();
 
@@ -1405,6 +1473,25 @@ void Monitor::highlightFixtures(const QList<quint32> &ids)
 {
     if (m_graphicsView != NULL)
         m_graphicsView->highlightFixtures(ids);
+}
+
+void Monitor::showFocusFixture(quint32 fid)
+{
+    QList<quint32> ids;
+    if (fid != UINT_MAX)
+        ids << fid;
+    if (m_graphicsView != NULL)
+        m_graphicsView->highlightFixtures(ids);
+    if (m_overviewView != NULL)
+        m_overviewView->setHighlight(ids);
+}
+
+void Monitor::openFocusMode()
+{
+    QList<quint32> selection;
+    if (m_doc->programmer() != NULL)
+        selection = m_doc->programmer()->programmerSelection();
+    FocusModePanel::open(m_doc, window(), m_activeSceneId, selection);
 }
 
 void Monitor::setActiveScene(quint32 sceneId)
@@ -1503,10 +1590,10 @@ void Monitor::initDMXToolbar()
     QActionGroup* group;
     QAction* action;
     m_DMXToolBar = new QToolBar(this);
-
-    /* Menu bar */
-    Q_ASSERT(layout() != NULL);
-    layout()->setMenuBar(m_DMXToolBar);
+    // The app-wide 20x20 toolbar icon (Fixtures, Shows, ...); unset, it
+    // was the platform's 32 and a row half again as tall as the others.
+    m_DMXToolBar->setIconSize(QSize(20, 20));
+    m_toolsHolder->layout()->addWidget(m_DMXToolBar);
 
     action = m_DMXToolBar->addAction(tr("2D View"));
     m_DMXToolBar->addSeparator();
@@ -1639,10 +1726,10 @@ void Monitor::initGraphicsToolbar()
     QAction* action;
 
     m_graphicsToolBar = new QToolBar(this);
-
-    /* Menu bar */
-    Q_ASSERT(layout() != NULL);
-    layout()->setMenuBar(m_graphicsToolBar);
+    // The app-wide 20x20 toolbar icon (Fixtures, Shows, ...); unset, it
+    // was the platform's 32 and a row half again as tall as the others.
+    m_graphicsToolBar->setIconSize(QSize(20, 20));
+    m_toolsHolder->layout()->addWidget(m_graphicsToolBar);
 
     // Unified view selector: the DMX channel grid, or the 2D map from a chosen
     // point of view. Front/Side are read-only elevation views.
@@ -1717,6 +1804,8 @@ void Monitor::initGraphicsToolbar()
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));
+        addMenu->addAction(tr("Add Target Line"),
+                           this, SLOT(slotAddTargetLine()));
         addMenu->addAction(tr("Add Person"),
                            this, SLOT(slotAddPerson()));
         addBtn->setMenu(addMenu);
@@ -1731,6 +1820,16 @@ void Monitor::initGraphicsToolbar()
 
     // "More" popup — the secondary view/edit tools, folded off the toolbar to
     // keep it lean. (Most also have shortcuts and/or a right-click equivalent.)
+    /* Focus mode: align the rig before a show, a head at a time
+       (FOCUS_MODE_DESIGN.md). Also View > Focus Mode, the Rig Overview, and
+       View + Menu on the controller. */
+    QAction *focusAct = m_graphicsToolBar->addAction(QIcon(":/target.png"), tr("Focus"));
+    focusAct->setObjectName(QStringLiteral("focusModeAction"));
+    focusAct->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
+                            "nudge its calibration offsets until it lands there "
+                            "(controller: View + Menu)"));
+    connect(focusAct, &QAction::triggered, this, &Monitor::openFocusMode);
+
     m_moreBtn = new QToolButton(this);
     QToolButton *moreBtn = m_moreBtn;
     moreBtn->setIcon(QIcon(":/configure.png"));
@@ -1992,58 +2091,22 @@ void Monitor::slotGridHeightChanged(int value)
     m_props->setGridSize(QVector3D(m_gridWSpin->value(), m_props->gridSize().y(), value));
 }
 
-void Monitor::slotGridUnitsChanged(int index)
+void Monitor::updateUnitsLabel()
 {
-    Q_ASSERT(m_graphicsView != NULL);
+    if (m_unitsLabel == NULL)
+        return;
+    m_unitsLabel->setText(m_props->gridUnits() == MonitorProperties::Feet
+                          ? tr("Feet (Settings, Units)") : tr("Metres (Settings, Units)"));
+}
 
-    MonitorProperties::GridUnits units = MonitorProperties::Meters;
-
-    QVariant var = m_unitsCombo->itemData(index);
-    if (var.isValid())
-        units = MonitorProperties::GridUnits(var.toInt());
-
-    /* Re-express the stage in the new unit WITHOUT re-quantising it.
-     *
-     * This used to read the integer spin boxes, multiply, and qRound back into
-     * integers -- so the stored extent was rounded to a whole foot or metre on
-     * every toggle. A 10 m stage became 33 ft, which is 10.058 m: the stage
-     * physically grew, everything on it shifted relative to the grid, and
-     * toggling back did not undo it because the rounding had already thrown
-     * the original away. Switch units twice and the rig has moved.
-     *
-     * m_gridSize is a QVector3D of floats, so the exact converted value fits.
-     * Convert from the STORED extent rather than from the spin boxes -- the
-     * spin boxes are integers and reading them back is what lost the precision
-     * in the first place -- and round only for display. */
-    if (units != m_props->gridUnits())
-    {
-        const double factor = (units == MonitorProperties::Feet) ? 3.28084 : (1.0 / 3.28084);
-        const QVector3D cur = m_props->gridSize();
-        const double exactW = qMax(0.001, double(cur.x()) * factor);
-        const double exactH = qMax(0.001, double(cur.z()) * factor);
-        const double exactY = double(cur.y()) * factor;
-
-        m_gridWSpin->blockSignals(true);
-        m_gridHSpin->blockSignals(true);
-        m_gridWSpin->setValue(qMax(1, qRound(exactW)));
-        m_gridHSpin->setValue(qMax(1, qRound(exactH)));
-        m_gridWSpin->blockSignals(false);
-        m_gridHSpin->blockSignals(false);
-
-        // The view draws whole grid cells, so it gets the rounded count --
-        // that only decides how many lines are painted. The DOCUMENT keeps the
-        // exact extent, which is what has to survive a round trip.
-        m_graphicsView->setGridSize(QSize(qMax(1, qRound(exactW)),
-                                          qMax(1, qRound(exactH))));
-        m_props->setGridSize(QVector3D(float(exactW), float(exactY), float(exactH)));
-    }
-
-    if (units == MonitorProperties::Meters)
-        m_graphicsView->setGridMetrics(1000.0);
-    else if (units == MonitorProperties::Feet)
-        m_graphicsView->setGridMetrics(304.8);
-
-    m_props->setGridUnits(units);
+void Monitor::unitsChanged()
+{
+    // App has converted the stage (MonitorProperties::convertGridUnits);
+    // redraw everything that rules or labels it.
+    updateView();
+    for (QWidget *w : QApplication::topLevelWidgets())
+        for (StructureStudioView *v : w->findChildren<StructureStudioView *>())
+            v->update();
 }
 
 void Monitor::slotGridSubdivisionsChanged(int value)
@@ -2482,6 +2545,45 @@ void Monitor::showStageOverview()
         view->setSupersample(qualityCombo->currentData().toInt());
     });
 
+    /* Layers, from here: show or hide one without the Studio open. The same
+       switch as the Studio's eye (saved with the show), so the two agree --
+       and in any mode, since it is how you look at the rig, not a change to
+       it. Rebuilt each time it opens, so it is the show's layers as they are. */
+    QToolButton *layersBtn = new QToolButton(&dlg);
+    layersBtn->setObjectName(QStringLiteral("rigLayers"));
+    layersBtn->setText(tr("Layers"));
+    layersBtn->setToolTip(tr("Show or hide a layer (the same as its eye in the Studio)"));
+    layersBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *layersMenu = new QMenu(layersBtn);
+    layersBtn->setMenu(layersMenu);
+    connect(layersMenu, &QMenu::aboutToShow, layersMenu, [this, layersMenu]() {
+        layersMenu->clear();
+        MonitorProperties *props = m_doc->monitorProperties();
+        auto setShown = [this, props](quint32 id, bool on) {
+            props->setLayerVisible(id, on);
+            m_doc->setModified();
+            if (m_graphicsView != NULL)
+                m_graphicsView->refreshItemLayerState();   // -> this view, the Studio's list
+        };
+        const QList<MonitorProperties::MonitorLayer> layers = props->layers();
+        for (const MonitorProperties::MonitorLayer &lyr : layers)
+        {
+            QAction *a = layersMenu->addAction(lyr.name);
+            a->setCheckable(true);
+            a->setChecked(lyr.visible);
+            const quint32 id = lyr.id;
+            connect(a, &QAction::toggled, layersMenu, [setShown, id](bool on) { setShown(id, on); });
+        }
+        layersMenu->addSeparator();
+        QAction *all = layersMenu->addAction(tr("Show all"));
+        connect(all, &QAction::triggered, layersMenu, [setShown, layers]() {
+            for (const MonitorProperties::MonitorLayer &lyr : layers)
+                if (!lyr.visible)
+                    setShown(lyr.id, true);
+        });
+    });
+    bar->addWidget(layersBtn);
+
     /* On the graphics card when there is one (RhiRaster): the same picture,
        drawn there instead of on the CPU. Off falls back to the CPU renderer,
        for comparing or for a driver that misbehaves. */
@@ -2508,6 +2610,16 @@ void Monitor::showStageOverview()
             [view, rateCombo](int) {
         view->setMaxFrameRate(rateCombo->currentData().toInt());
     });
+
+    /* Focus mode from here too: the Overview is where you watch the beams
+       land while you align them. */
+    QToolButton *focusBtn = new QToolButton(&dlg);
+    focusBtn->setObjectName(QStringLiteral("rigFocus"));
+    focusBtn->setText(tr("Focus"));
+    focusBtn->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
+                            "nudge its calibration offsets"));
+    bar->addWidget(focusBtn);
+    connect(focusBtn, &QToolButton::clicked, this, &Monitor::openFocusMode);
 
     bar->addStretch();
     bar->addWidget(new QLabel(tr("drag to swing · shift-drag to pan · "
@@ -2823,6 +2935,8 @@ void Monitor::slotCopySelected()
             c.name = t->name();
             c.x = t->x(); c.y = t->y(); c.z = t->z();
             c.color = t->color();
+            c.kind = int(t->kind());
+            c.linePoints = t->linePoints();
             targets.append(c);
         }
     }
@@ -2885,6 +2999,12 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         t->setY(c.y + dyM);
         t->setZ(c.z);
         t->setColor(c.color);
+        // A pasted line is the same line, not a point at its centre.
+        if (StageTarget::Kind(c.kind) == StageTarget::Kind::Line)
+        {
+            t->setLinePoints(c.linePoints);
+            t->makeLine();
+        }
         newTargetIds.append(t->id());
 
         // Mirror slotAddTarget: give the copy its own linked PanTilt palette so
@@ -2893,7 +3013,6 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         pal->setName(t->name());
         pal->setValue(0, 0);
         pal->setStageTargetId(t->id());
-        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::PanTilt)));
         m_doc->addPalette(pal);
         newPaletteIds.append(pal->id());
     }
@@ -3261,10 +3380,15 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         QSettings().setValue(SETTINGS_STUDIOROTATION, next);
     });
     cv->addWidget(view, 1);
-    QLabel *hint = new QLabel(tr("click a fixture to select · ⌘- or ⇧-click to add more · "
+#if defined(Q_OS_MACOS)
+    const QString addClick = tr("⌘- or ⇧-click to add more");
+#else
+    const QString addClick = tr("Ctrl- or Shift-click to add more");
+#endif
+    QLabel *hint = new QLabel(tr("click a fixture to select · %1 · "
                                  "double-click to edit · drag to reposition (all "
                                  "selected move together) · drag the background "
-                                 "to pan · wheel to zoom"), center);
+                                 "to pan · wheel to zoom").arg(addClick), center);
     hint->setWordWrap(true);
     hint->setStyleSheet("color:#8a8e99;");
     cv->addWidget(hint);
@@ -5309,8 +5433,30 @@ void Monitor::slotTargetDoubleClicked(quint32 tid)
 
 void Monitor::slotAddTarget()
 {
+    addTarget(false);
+}
+
+void Monitor::slotAddTargetLine()
+{
+    addTarget(true);
+}
+
+void Monitor::addTarget(bool line)
+{
     StageTarget *t = m_props->addStageTarget();
-    t->setName(tr("Target %1").arg(t->id() + 1));
+    if (line)
+    {
+        t->makeLine();
+        int n = 0;
+        foreach (StageTarget *other, m_props->stageTargets())
+            if (other != nullptr && other->isLine())
+                n++;
+        t->setName(tr("Line %1").arg(n));
+    }
+    else
+    {
+        t->setName(tr("Target %1").arg(t->id() + 1));
+    }
 
     QPointF mm = m_graphicsView->pixelsToRealPosition(
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
@@ -5354,7 +5500,6 @@ void Monitor::slotAddTarget()
         // Aim carries no values of its own: the target IS the value, and each
         // fixture solves its own pan/tilt from where it sits on the rig.
         pal->setStageTargetId(tid);
-        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::Aim)));
         m_doc->addPalette(pal);
         m_doc->setModified();
     }
@@ -5448,6 +5593,8 @@ void Monitor::slotEditTarget(quint32 tid)
     kindCombo->addItem(tr("Bound to a structure"),
                        int(StageTarget::Kind::Structure));
     kindCombo->addItem(tr("Area"),          int(StageTarget::Kind::Area));
+    kindCombo->addItem(tr("Line — lights spread along it"),
+                       int(StageTarget::Kind::Line));
     kindCombo->setCurrentIndex(kindCombo->findData(int(t->kind())));
     kindCombo->setToolTip(tr("What is standing here. Decides the height light "
                              "is aimed at and what is drawn in the rig view."));
@@ -5533,6 +5680,9 @@ void Monitor::slotEditTarget(quint32 tid)
         wSpin->setEnabled(sized);
         dSpin->setEnabled(sized);
         personSpin->setEnabled(k == StageTarget::Kind::Person);
+        // A line's points carry their own heights.
+        ovrChk->setEnabled(k != StageTarget::Kind::Line);
+        ovrSpin->setEnabled(k != StageTarget::Kind::Line && ovrChk->isChecked());
         /* Unticked, show what the Subject gives -- which for a Person is the
            chest of its height, or the follow-spot subject height above. */
         if (ovrChk->isChecked() == false)
@@ -5576,6 +5726,8 @@ void Monitor::slotEditTarget(quint32 tid)
         m_props->notifyStageTargetsChanged();
 
         t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
+        if (t->isLine())
+            t->makeLine();          // a point turned into a line gets a 4 m one
         if (t->kind() == StageTarget::Kind::Person)
             t->setPersonHeight(float(personSpin->value() * fromDisp_t));
         const QString bound = boundCombo->currentData().toString();
@@ -6070,6 +6222,36 @@ void Monitor::slotEditScenery(quint32 sid)
     stateCombo->setObjectName("sceneryState");
     stateCombo->setToolTip(tr("Open: split, each half gathered at its end. Flown out: taken up, "
                               "out of the way of the light"));
+    /* Driven by a fixture: a curtain that opens as a channel moves. */
+    QList<quint32> createdCurtains;
+    QComboBox *driveCombo = new QComboBox(&dlg);
+    driveCombo->setObjectName("sceneryDriver");
+    driveCombo->setToolTip(tr("A curtain fixture that moves it: as its Open channel goes from 0 "
+                              "to 255 the curtain opens, as its Fly channel does it flies out. "
+                              "Not driven, it stays as Curtain says"));
+    auto fillDrivers = [&](quint32 select) {
+        const QSignalBlocker block(driveCombo);
+        driveCombo->clear();
+        driveCombo->addItem(tr("Nothing (stays as set)"), uint(Fixture::invalidId()));
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (fx != nullptr && (Scenery::isCurtainFixture(fx) || fx->id() == select))
+                driveCombo->addItem(fx->name(), uint(fx->id()));
+        driveCombo->setCurrentIndex(qMax(0, driveCombo->findData(uint(select))));
+    };
+    fillDrivers(s->driverFixture());
+    QPushButton *newCurtainBtn = new QPushButton(tr("Add curtain fixture"), &dlg);
+    newCurtainBtn->setObjectName("sceneryAddCurtain");
+    newCurtainBtn->setToolTip(tr("Add a Generic > Stage Curtain fixture for it and drive it by that: "
+                                 "use it in scenes, chasers and cues like any fixture -- the fade "
+                                 "time is how long the move takes. Patch it to the curtain's "
+                                 "controller or relay box to move the real one"));
+    QWidget *driveRow = new QWidget(&dlg);
+    {
+        QHBoxLayout *hl = new QHBoxLayout(driveRow);
+        hl->setContentsMargins(0, 0, 0, 0);
+        hl->addWidget(driveCombo, 1);
+        hl->addWidget(newCurtainBtn);
+    }
     depthSpin->setToolTip(tr("From the open back to the front of the curve"));
     thickSpin->setToolTip(tr("How thick it is; 0 for cloth"));
     QDoubleSpinBox *rotSpin = new QDoubleSpinBox(&dlg);
@@ -6093,6 +6275,7 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Bow:"), bowSpin);
     form->addRow(tr("Facing:"), rotSpin);
     form->addRow(tr("Curtain:"), stateCombo);
+    form->addRow(tr("Driven by:"), driveRow);
     form->addRow(tr("Opening width:"), openWSpin);
     form->addRow(tr("Opening height:"), openHSpin);
     // Each row only where it means something for the kind.
@@ -6111,9 +6294,11 @@ void Monitor::slotEditScenery(quint32 sid)
         showRow(bowSpin, !u && !arch);
         showRow(thickSpin, built);
         const bool curtain = (k == Scenery::MainDrape || k == Scenery::Traveler);
-        showRow(openWSpin, arch || (curtain && stateCombo->currentData().toInt() == Scenery::Open));
+        const bool driven = curtain && driveCombo->currentData().toUInt() != Fixture::invalidId();
+        showRow(openWSpin, arch || (curtain && (driven || stateCombo->currentData().toInt() == Scenery::Open)));
         showRow(openHSpin, arch);
         showRow(stateCombo, k == Scenery::MainDrape || k == Scenery::Traveler);
+        showRow(driveRow, curtain);
         dlg.adjustSize();
     };
     QColor chosen = s->color();
@@ -6142,17 +6327,28 @@ void Monitor::slotEditScenery(quint32 sid)
         s->setDepth(float(depthSpin->value() * fromDisp));
         s->setThickness(built ? float(thickSpin->value() * fromDisp) : 0.0f);
         s->setState(stateCombo->currentData().toInt());
+        s->setDriverFixture(driveCombo->currentData().toUInt());
         s->setColor(chosen);
         m_graphicsView->updatePlatforms();
     };
     for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin, depthSpin, thickSpin,
                                 openWSpin, openHSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
-    for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo })
+    for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo, driveCombo })
         connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {
             showRows();
             apply();
         });
+    connect(newCurtainBtn, &QPushButton::clicked, &dlg, [&]() {
+        apply();                // the kind it is now decides the mode
+        if (Fixture *fx = addCurtainFixture(sid))
+        {
+            createdCurtains << fx->id();
+            fillDrivers(fx->id());
+            showRows();
+            apply();
+        }
+    });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [&apply](const QString &) { apply(); });
     connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
         chosen = c;
@@ -6169,12 +6365,46 @@ void Monitor::slotEditScenery(quint32 sid)
     if (dlg.exec() != QDialog::Accepted)
     {
         edit.cancel();
+        // A curtain fixture added for it goes too.
+        foreach (quint32 fid, createdCurtains)
+            m_doc->deleteFixture(fid);
         return;
     }
     apply();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
     edit.accept();
+}
+
+Fixture *Monitor::addCurtainFixture(quint32 sid)
+{
+    Scenery *s = m_props->scenery(sid);
+    if (s == nullptr || !s->hasState())
+        return nullptr;
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("Generic"),
+                                                               QStringLiteral("Stage Curtain"));
+    if (def == nullptr || def->modes().isEmpty())
+        return nullptr;
+    // A main drape opens and flies; a traveler runs on its track only.
+    QLCFixtureMode *mode = def->mode(s->kind() == Scenery::MainDrape ? QStringLiteral("Open + Fly")
+                                                                     : QStringLiteral("Open"));
+    if (mode == nullptr)
+        mode = def->modes().first();
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, mode);
+    fx->setName(tr("%1 curtain").arg(s->name().isEmpty() ? Scenery::kindName(s->kind()) : s->name()));
+    /* Unpatched: it moves in the plot from the looks that hold it; patched to
+       the curtain's controller (or a relay box) it moves the real one. */
+    fx->setPatched(false);
+    if (!m_doc->addFixture(fx))
+    {
+        delete fx;
+        return nullptr;
+    }
+    s->setDriverFixture(fx->id());
+    m_graphicsView->updatePlatforms();
+    m_doc->setModified();
+    return fx;
 }
 
 void Monitor::slotAddTower()
@@ -7078,6 +7308,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     addMenu->addSeparator();
     addMenu->addAction(tr("Target Position"),
                        this, SLOT(slotAddTarget()));
+    addMenu->addAction(tr("Target Line"),
+                       this, SLOT(slotAddTargetLine()));
     addMenu->addAction(tr("Person"),
                        this, SLOT(slotAddPerson()));
     addMenu->addSeparator();
@@ -9480,45 +9712,43 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         const int   mode       = testModeCb->currentData().toInt();
 
         if (mode == 2) {
-            // "Aim at target": compute full 3D geometry like PanTilt palettes do.
+            /* "Aim at target": the solver every Aim look uses, so the test
+               pose is the show's pose. This had a copy of its own that
+               measured the bearing from upstage (180 degrees out) and solved a
+               standing head as though it hung. */
             quint32 tgtId = testTargetCb->currentData().toUInt();
             StageTarget *tgt = m_props->stageTarget(tgtId);
-            FixtureRigProps lrp = m_props->fixtureRigProps(fxId_dlg);
-            QVector3D fixPos = m_props->fixtureRigPosition(fxId_dlg);
-            if (tgt && lrp.trussId != Truss::invalidId() && fixPos != QVector3D())
+            AimSolver::Solution sol;
+            if (tgt != nullptr
+                && AimSolver::reach(m_doc, fxId_dlg,
+                                    AimSolver::aimPointFor(m_doc, fxId_dlg, tgt, false), sol))
             {
-                QVector3D tgtPos = tgt->position();
-                tgtPos.setZ(tgtPos.z() + m_props->platformHeightAt(tgtPos.x(), tgtPos.y()));
-                float dx = tgtPos.x() - fixPos.x();
-                float dy = tgtPos.y() - fixPos.y();
-                float dz = tgtPos.z() - fixPos.z();
-                float horizDist = qSqrt(dx*dx + dy*dy);
-                float azimuthDeg = float(qRadiansToDegrees(qAtan2(double(dx), double(-dy))));
-                if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
-                float relativePan = azimuthDeg - float(panZeroSpin->value());
-                while (relativePan >  180.0f) relativePan -= 360.0f;
-                while (relativePan < -180.0f) relativePan += 360.0f;
-                float panRaw = panMax / 2.0f + relativePan + panOffset;
-                if (lrp.panInvert) panRaw = panMax - panRaw;
-                outPan = qBound(0.0f, panRaw, panMax);
-                float elevDeg = float(qRadiansToDegrees(qAtan2(double(dz), double(horizDist))));
-                float tiltOff = 90.0f + elevDeg;
-                float tiltDeg = (lrp.mountingType == Truss::FloorMounted)
-                                ? tiltMax / 2.0f - tiltOff + tiltOffset
-                                : tiltMax / 2.0f + tiltOff + tiltOffset;
-                if (lrp.tiltInvert) tiltDeg = tiltMax - tiltDeg;
-                outTilt = qBound(0.0f, tiltDeg, tiltMax);
+                outPan = sol.panDeg;
+                outTilt = sol.tiltDeg;
             } else {
                 // Fallback: straight down when no rig data
                 outPan  = panMax / 2.0f + panOffset;
                 outTilt = tiltMax / 2.0f + tiltOffset;
             }
         } else if (mode == 1) {
-            float relPan = -float(panZeroSpin->value());
-            while (relPan >  180.0f) relPan -= 360.0f;
-            while (relPan < -180.0f) relPan += 360.0f;
-            outPan  = qBound(0.0f, panMax / 2.0f + relPan + panOffset, panMax);
-            outTilt = horizTilt;
+            /* Level, straight downstage: a point far out front at the head's
+               own height, through the same solver. */
+            AimSolver::Frame frame;
+            if (AimSolver::frameFor(m_doc, fxId_dlg, frame))
+            {
+                const AimSolver::Solution sol =
+                    AimSolver::solve(frame, frame.position + QVector3D(0.0f, 1000.0f, 0.0f));
+                outPan = sol.panDeg;
+                outTilt = sol.tiltDeg;
+            }
+            else
+            {
+                float relPan = -float(panZeroSpin->value());
+                while (relPan >  180.0f) relPan -= 360.0f;
+                while (relPan < -180.0f) relPan += 360.0f;
+                outPan  = qBound(0.0f, panMax / 2.0f + relPan + panOffset, panMax);
+                outTilt = horizTilt;
+            }
         } else {
             outPan  = panMax / 2.0f + panOffset;
             outTilt = tiltMax / 2.0f + tiltOffset;

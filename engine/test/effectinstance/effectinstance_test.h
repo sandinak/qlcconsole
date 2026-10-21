@@ -24,6 +24,18 @@ private slots:
     void theFixturesAScriptSeesFollowTheRig();
     void aWholeRigOfPixelsTicksQuickly();
     void theTextEffectSpellsOnAGrid();
+    /** The matrix effects on a box of RGB and white pixel rows, eight boxes
+     *  as one canvas, its RGB-only and white-only modes and a plain RGB
+     *  matrix: each head told what it emits, every effect running through
+     *  the host, its output in range and where it belongs. */
+    void matrixEffectsRunOnBoxesAndTheirModes();
+    /** The same effects frame by frame (as the host hands them their
+     *  heads): moving, repeatable, in range, white pixels doing what the
+     *  white setting says; and still frames that must not drift. */
+    void matrixEffectsAreRepeatableAndKeepTheirWhites();
+    /** A loose pixel box with no group is drawn on as its grid, not a
+     *  strip of its heads. */
+    void aLooseBoxIsItsOwnGrid();
     void init();
     void cleanup();
 
@@ -56,10 +68,13 @@ private slots:
     void effectsOnOneChannelLayerAsADeskDoes();
     void aMovementEffectMovesRoundWhereTheLookPoints();
     void aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour();
+    void aSharedDimmerTakesItsBrightestHead();
     /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
      *  target is out of that head's reach, and leaves the dimmer to the scene
      *  when it is comfortably within it. */
     void followSpotFadesAHeadThatCannotReach();
+    void followSpotFadesAHeadThatCannotSeeTheSubject();
+    void aScriptIsToldWhatIsInTheWay();
     /** Size On Subject zooms a head so its beam is that wide where it lands,
      *  whatever the throw, within the lens's range. */
     void followSpotZoomsToHoldSizeOnSubject();

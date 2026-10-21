@@ -10,19 +10,324 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-(Nothing open right now.)
+- **Software update: first real-release checks (2026-10-20)**: the updater
+  (feat/update-check, docs/features/updates.md) is unit-tested against a
+  local fake GitHub and fake apps only. Still to do:
+  - When the first release with `SHA256SUMS` is out, update a signed
+    /Applications copy end to end, from the previous release.
+  - Test a standard (non-admin) account, which should fall back to Open
+    Download.
+  - Test the Windows silent install (`/S /D=`) and reopen on the Win10 VM.
+  - Versions stay plain X.Y.Z; a build learns it is a pre-release from its
+    own release's GitHub flag at its first check. Until that check, a
+    pre-release build behaves as Stable. A SemVer suffix would also work, but
+    it would break NSIS `VIProductVersion "${VERSION}.0"`.
+  - `hdiutil attach -mountpoint` warns that it is deprecated on macOS 27, in
+    favour of `diskutil image attach`. It still works.
+
+- **MasterTimer stop/start race (2026-10-16)** — `MasterTimerPrivate::run()`
+  sets `m_run = true` inside the thread, so a `stop()` that comes right after
+  `start()` (before the thread runs) is undone and `wait()` never returns:
+  two `App::clearDocument()` in a row hung appviews_test. `m_run` is a plain
+  bool too. Fix: set it in `start()` before `QThread::start()`, make it
+  atomic. Found on feat/unit-aware-dimensions; worked round in the test.
+
+- **Layers panel: a row the plot can't select loses its selection on any
+  rebuild (2026-10-15)** — clicking a fixture the plot can't select (stacked
+  inside a tower in plan view) now keeps its row selected, but the next
+  `MonitorLayersPanel::reload()` re-selects from the plot's (empty)
+  selection and clears it. Rebuilds are frequent (a rename, any
+  `fixtureChanged`), so renaming T1-W from the list may still drop the row
+  afterwards. Found when monitor_test's
+  `aLayersRowStaysSelectedWhenThePlotCannotFollow` failed under QPA minimal:
+  a queued rebuild landed after the click (the test now settles first).
+  Fix: carry the list's own selection across a rebuild for items the plot
+  can't hold.
+
+- **macOS dev builds show no app icon (2026-10-15)** — `build/main/qlcconsole`
+  is a bare binary, so the bundle's `.icns` never applies, and
+  `AppUtil::setApplicationIdentity` deliberately skips the app-wide icon on
+  macOS (it would override the `.icns` in a packaged Dock). Could set it only
+  when not running from a bundle, if it matters.
+
+## Line targets — leftovers (2026-10-17)
+
+P1–P3 built on `feat/line-targets` (DONE.md); not merged yet. If wanted
+later (LINE_TARGET_DESIGN.md P4): Spread on a control-surface fader; a
+"breathe" effect sweeping Spread on a speed master; dragging line handles in
+the Rig Overview; effects that chase along a line. Also: the target menu's
+"Lock Target" is undone by the next plot refresh (locks mirror the layer's).
+
+## Release 0.1.0 (in progress, 2026-10-16)
+
+On `release/0.1.0`. macOS universal (Apple silicon + Intel, 12+), Windows
+installer and Linux AppImage from CI. CHANGELOG.md's 0.1.0 section is
+written, known issues included.
+
+- **First 24-hour soak (kronk) — reviewed, fixes merged** (DONE.md
+  2026-10-16). **Second soak done** (2026-10-16 → 17, 4 hosts, DONE.md):
+  0 crashes or hangs on Linux x86_64, Linux arm64 (podman) and macOS in all
+  three phases; Windows 10 VM clean in the real phase, the scaled phase cut
+  after 15 min by a Windows Update reboot. Left: a short Windows re-soak
+  (scaled + rough), and diff kronk's `--heap-track` snapshots.
+- **Rig test pass** — `RIG_TEST_PLAN.md`, section K first (the 0.1.0
+  work), on the office rig with kronk.
+- Then: merge `release/0.1.0` to main, `make release`, `make attach` the Windows
+  installer and Linux AppImage from CI (RELEASE.md).
+
+## Platforms and soak findings — open (2026-10-16)
+
+- **Windows: engine ticks slow on heavy shows** — on the scaled soak show
+  (94 universes, 2560 pixel fixtures) the tick can't keep its rate on
+  Windows. `fix/win-tick-perf` (merged): the universe threads' per-tick
+  qDebug formatting held their fader locks (68 ms mean tick, 660% CPU on the
+  VM), and MinGW's std::recursive_mutex leaked a kernel Event per fader
+  (~5000 handles/s). GenericFader uses QRecursiveMutex on Windows now: STRESS
+  show on the VM at 8.1 ms / 0.2% over / 287% CPU, handles flat at ~1600
+  (Linux on ender: 2.3 ms / ~165%). What's left is ordinary engine work
+  (Scene::processValue, GenericFader::write). Still in CHANGELOG known issues
+  until a heavy show is soaked on Windows.
+- **The STRESS show is too heavy for the Windows 10 VM** — soak the VM
+  with a lighter show; heavy-show Windows numbers want real hardware.
+- **macOS: the on-screen app's memory grows** — about 50 MB/h in the
+  first soak's real-show phase (RSS 201 → 1116 MB, no crash, ticks fine);
+  neither the engine nor the App driven offscreen reproduces it. The
+  second soak runs with `--heap-track` (hourly `heap -s` / `vmmap
+  --summary`): diff two snapshots for what grew.
+- **WLED config check: log noise** — reported from the soak logs (where
+  it logs from is not yet pinned down); find what logs it and how often,
+  and quiet it.
+- **Windows: make the CI test step fail the job** — all 142 test binaries
+  pass on Windows CI since `fix/win-tests-and-nits` (run 38938082831); the
+  step is still informational (`continue-on-error`) -- make it fail the job
+  once a few more runs stay green. The failures were QSettings with no
+  organization name (every UI test now gets its own INI file,
+  ui/test/common/testsettings.cpp), USERPROFILE not set alongside HOME, mixed
+  '\' separators in system fixture paths, and a read-only folder Windows
+  ignores. lookeditor's segfault (exit 139) went away with the settings
+  change; its exact cause was not pinned down.
+- **Windows leftovers** — not code-signed (SmartScreen warns); ~95 MB
+  installer, mostly ffmpeg codec DLLs from Qt Multimedia (trim if it
+  matters); `QLCIOPlugin` signals are connected by member pointer from the
+  UI too but its moc lives in each plugin DLL as well as the engine, not
+  annotated; no `-Werror` on MinGW, by design. Still to confirm on the VM:
+  the main window's outer edges resizing, audio, DMX USB/D2XX, the file
+  associations, and opening a .qlcc whose definitions the VM lacks.
+
+## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2–P4 2026-10-17, R1–R3 2026-10-18 — not merged)
+
+[SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (D1–D27 approved; §10 has the
+implementation notes and the questions below). Built: the hand-over fix,
+the engine model / cascade / bake / undo / import, the Show Tree tab and its
+help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
+
+- **Colour rings 2026-10-18 done** (DONE.md). Branson to do: install
+  `engine/test/common/fixtures/Branson-LED-Movinghead+Circle-2heads.qxf`
+  beside his own definition (qlcconsole fixtures folder), then select the
+  10 movers → **Change Definition…** → "LED Movinghead+Circle (2 heads)",
+  then Create Group(s) from Selection by head type. Try on the rig: does
+  the ring take the spot's dimmer (drawn as not)?; the chase step rate.
+- **Fix pass 2026-10-17 done** (DONE.md): preview of the selected cue in
+  Design mode, several groups in one layer, Library group folders, gobos by
+  name per fixture type.
+- **Follow-up 2026-10-17 done** (DONE.md, §10.9): in Design the edited cue
+  wins over any list running for real (Perform: the list owns the stage);
+  gobo names match in tiers, ambiguous → not guessed, pick offered.
+- **Open for Branson** (§10): `Generated` mark on `<Function>` too?; undo
+  shared with Programming?; an effect's own Gobo (out of scope so far);
+  DanceHysteria's Hold-0 cues 0.0.4–0.0.7 auto-follow — intended?; **Blind
+  and the preview — to discuss**.
+- **Try on the rig:** the Design-mode preview while editing (and that Blind
+  mutes it), also over a list running for real (edit a dimmer down under a
+  running cue at full; stop the preview: the cue comes back); GO through an imported list with effects running (the
+  hand-over keeps a shared scene's effect phase — tested on engine signals,
+  not seen on stage).
+- **P2 done 2026-10-17** (DONE.md, §10.10): tracking controls in the tab
+  (list mode, base cue, cue modes, Release on any layer, includes with loop
+  refusal, "Next cue receives" with values), the re-bake chain (tested
+  against what a bake really changes), "Update cue X" and Record as new cue
+  (D22/D23), Library "In this cue list" (D20), the optional command line
+  (D24). **Try:** import a show's chaser on a copy, make the list
+  Tracking, release / base / remove repeated layers by hand (P4 brings
+  Convert to tracking), and GO through it; the command line (Command).
+- **P2 answers done 2026-10-17** (DONE.md, §10.11; open 9–11 resolved):
+  Record asks selected / running / everything lit when they differ, with
+  per-mode defaults in Settings → Show Tree; several groups = one layer
+  everywhere, a layer each with ⌥ or a comma, Split / Merge layers; a typed
+  or picked value reuses the palette playing it, the command line makes a
+  named one per the show's pattern, the picker's one-off has one-click Make
+  reusable. **Try:** Record while a list runs (Perform and Design), merge
+  two layers and GO through the cues after.
+- **Gaps from the help done 2026-10-17** (DONE.md, §10.12): Merge by mouse
+  (multi-select), D13 enforced outside the tab, one list rule (new =
+  Tracking), one undo step per action audited. **Open:** Detach to plain
+  *chaser*. **Try:** ⌘-click two layers → Merge; open the list's chaser in
+  the Functions window (locked, Show in Show Tree).
+- **P3 done 2026-10-17** (DONE.md, §10.13): group sets (Make set, by
+  name everywhere, laid out by position), child layers and overlap with
+  `Scene::excludedFixtures` (no HTP show-through; an import keeps mixing),
+  cue-level effects as one across layers (D10), line aims in the tree with
+  Spread / Grouping / Cross rows, one formation by hang position (D16–D19);
+  plus rename in place (Return/F2), ⌘C/⌘V/⌘D cues and layers, `help` in the
+  command line. **Open (§10 "Open for Branson" 12–16):** D10/D17 built as a
+  shared layout span rather than one extra scene; the plan view (top view
+  with the previous cue's rings) not built — the order strip is; a Mix
+  cue's overlap in the Design preview; a child's Dimmer on no-dimmer RGB
+  fixtures; sub-cue numbering for paste waits for P6. **Try:** make Towers
+  from two groups, drop it with ⌥; ⇧-drop a group on a layer, set its
+  dimmer down; drop a line target on a cue with two layers and slide Spread
+  from the cue's Line ⋯; type `help`.
+- **P5–P7 done 2026-10-18 on the build host** (DONE.md, §10.17–10.19;
+  handoff SHOW_TREE_OVERNIGHT.md "P5-P7 on the build host"): several
+  productions with a current one (what GO, the footer, show control and the
+  runner play; its main list, its timecode source); sub-cues in the tree
+  (Sub GO / Auto-follow, cue-only, `SubGoFollow`); the cue runner (Run tab
+  ⇧⌘0, Cue Runner VC widget, Swap widget, "what changes", OSC
+  `/subgo` `/subback`). **Open (§10, 27–35):** switching production while a
+  list runs; no current production by default; a sub-cue's wait from fade-in
+  or start; the cue's own fade with sub-cues; Run-tab keys; VC widget inputs;
+  Swap's follow rule; Convert/Detach/import with sub-cues; the tracking
+  sheet. **Mac:** `./check-all.sh` legs not run yet (Linux only). **Try:**
+  two productions, switch, ⌘↩; + Sub-cue, Sub GO, auto-follow; the Run tab;
+  a Cue Runner on a VC page, Swap Widget.
+- **Show Tree command line: plain-language prompts** (Branson, 2026-10-17;
+  not built). Two layers, phrase layer first. (1) Offline phrase layer
+  (~2–3 days): synonyms/filler words mapped onto the existing grammar —
+  'make the towers blue at half', 'all the movers', colour names, 'at
+  half'→50 — always available at a show, deterministic. (2) Optional AI
+  layer when online (~3–5 days): prompt + the show's names (groups,
+  palettes, cues) sent to Claude, which returns ordinary command lines;
+  shown for confirmation, Return runs them through the same op layer, one
+  undo step each; API key in Settings; handles 'warmer', 'like cue 3
+  but…'. Not show-time (needs internet).
+- **P4 done 2026-10-17** (DONE.md, §10.14): reusable layers and cues
+  (Make reusable, uses live-linked by syncing after every edit, Unlink
+  here, Library → Reusable with Used by incl. VC buttons, rename, delete
+  that asks), Detach to plain chaser, Convert to tracking… (plan first,
+  every cue checked to play the same; DanceHysteria-0.5's three lists: 0
+  channels differ). **Open (§10, 17–20):** what a reusable cue shares
+  (mode yes, timing no); Convert releases rather than Cue-only and leaves
+  Mix cues mixing (ties to 13); a detached list's shared scenes stay
+  locked until the tree lets go; "detached from X" badge not built.
+  **Try:** make a layer reusable, drop it in another list's cue, change it
+  there; Convert to tracking on an imported list and GO through it.
+- **R1–R3 (PROGRAMMING_ROLE_DESIGN.md) done 2026-10-18** (DONE.md,
+  §10.15): PaletteOps + one undo history (tree + palette steps, the
+  Programming tab's palette list on it too) + one Used by incl. VC;
+  Library palettes (+ Palette, F2, folders of any type, drag to file,
+  delete naming every use); the Looks section (looks as cues that never
+  track, a Collection each fired from VC, Make VC page, Copy to look, Adopt
+  as look). **Left of R1:** Look Editor value edits on the palette undo;
+  Programming's tree folder rename/delete/drag through PaletteOps; power
+  estimate to the app; Stage bar
+  (P-D10). **Left of R2:** Open in Palettes. **Left of R3:** per-look fades /
+  transition / speed master (and on cue layers), Fire as, a look's MIDI
+  trigger in the tab. **Open (§10): none.** **Try:** + Look on a
+  production, drop groups and palettes on it, Make VC page, press the
+  button over a running list; + Palette in a Library folder, F2, drag,
+  delete one a cue uses and ⌘Z.
+- **Answers 12–25 done 2026-10-18** (DONE.md, §10.16; open 12–25
+  resolved, 26 still open): one precedence rule (Convert puts Mix cues on
+  it where every channel plays the same, ≈ mix marks the rest); the plan
+  view of a line aim; the Design preview = GO (also in a Mix cue); a
+  Dimmer dims the colour it doesn't own on no-dimmer fixtures; Convert
+  tries Cue-only; Detach copies shared scenes; "Unlinked from" tooltip;
+  Make VC page updates its frame; Programming's ⌘Z / ⇧⌘Z on the one
+  history + Edit menu; feat/palette-folders merged with the legacy-layout
+  detection fixed. **Try:** Convert on DanceHysteria's New Chaser 8 (its
+  cue 1 stays ≈ mix); a line aim's plan view while sliding Spread; Make VC
+  page twice after adding a look; Programming → New palette, ⌘Z there;
+  open an older show and check its palette folders.
+- **Answer 26 done 2026-10-18** (DONE.md, §10.20; Branson: "delete"):
+  deleting a used palette clears it from every cue, layer, look and
+  reusable (a look left empty goes), as well as scenes and effect slots;
+  one Undo puts back the palette and every use. **Try:** delete a palette
+  three cues and a look use (Library, Programming, `palette X delete
+  anyway`), check the cues, ⌘Z.
+- **Course fixes 2026-10-18 done** (DONE.md, fix/course-app-issues): crash
+  on quit, new production current, drop-area text, coloured light on the
+  cyc. **Open for Branson:** should a coarse Pan/Tilt channel whose
+  definition declares no Default rest at centre (128) instead of 0, as
+  most consoles home a mover? It changes real DMX for every such head (all
+  but ~50 of the 1,639 shipped Pan/Tilt channels declare none), and a
+  floor-standing head at centre points straight up, so it would not make
+  the classroom's front washes light the stage either. Not changed.
+  Branson's "36LED Moving Head" definition marks **Pan** as the fine byte
+  (`<Group Byte="1">`): the app finds no coarse pan, so Aim can't pan
+  those heads (DanceHysteria's AT washes too) -- fix it in the definition.
+- **P5 next:** multiple productions (switcher, current production for VC /
+  footer GO / show control, per-production timecode).
 
 ## Needs the real rig / hardware
 
+- **Rig network gate on real networks (built 2026-10-19, feat/rig-network-gate)**
+  — tested with a modelled machine (NetworkRoute::setResolverForTest) and
+  Art-Net's test sink only; no packet was sent. On ender: with the show's
+  rig network 172.18.0.0/20, unplug vlan0 / join another Wi-Fi and confirm
+  with tcpdump on en0 that no Art-Net/sACN/ArtPoll leaves (and the footer
+  goes red within ~5 s); plug back in and it resumes. Check WLED on the
+  show Wi-Fi vs. a laptop whose default route is elsewhere. Also: a VPN
+  route to the show network (source on utunN, outside the rig CIDR) is
+  *held* by design — decide whether the VPN's own subnet should be listed.
+
+- **Focus mode with a real controller (built 2026-10-18, feat/focus-alignment)**
+  — FOCUS_MODE_DESIGN.md. Tested offscreen with a stub controller and the
+  keyboard only. On the rig with the Xbox pad: View + Menu opens it; the
+  bumpers, A/B/X/Y, View/Menu and the D-pad (macOS raw mode now reports it
+  as buttons 11–14 -- check the bits on a Series pad, and on an element-mode
+  / 360-driver pad that 11–14 really are the D-pad); the right stick and
+  triggers after the raw reader's axis reorder (LX LY LT RX RY RT, as the
+  profile names them); stick right/up feel on hung, standing and inverted
+  heads; 8°/s and 1°/s rates feel right; the offsets land the light on a
+  real mark from two references across the stage.
+  **Controller map and Use: Controller | Keyboard (2026-10-21,
+  feat/focus-controller-map):** that each control on the panel's map lights
+  as the real button is pressed (and the D-pad arms the right way round),
+  that the stick caps follow the sticks the right way (up is up); that
+  unplugging the pad mid-session switches to the keyboard with the note
+  and plugging it back offers it (does HID's rescan emit
+  configurationChanged on unplug on macOS, and how quickly?); that on
+  Keyboard a resting / knocked pad moves nothing.
+
+- **Matrix effects on the XL-450s (built 2026-10-18, feat/matrix-effects)**
+  — the fourteen Matrix effects were checked offscreen only (no DMX from
+  the laptop). On the rig: each on one box, on all eight as one canvas, in
+  the 135ch and 30ch modes, and the white setting's five choices; that the
+  head map's RGB/W/RGB/W/RGB rows are the box as built (Grid Probe); and
+  how a look on the split TrussC-RGB + TrussC-W groups lays out against
+  one group of all 75 heads per box.
+
+- **Re-check the Oppsk wall-washer readings (2026-10-16)** — the 24 bars in
+  DanceHysteria-0.4 carry Full 12.3 A / Half 2.7 / Standby 0.4 (White 6.6,
+  R/G/B 2.3) against a definition rated 100 W: at 120 V that is 1.48 kW a
+  bar at full and 48 W dark, 9.6 A for the 24 doing nothing. A DC-side or
+  whole-chain reading would explain it; re-measure one bar on its mains lead.
+  The V-Show PL-4003 definition has no power at all (now guessed at 50 W).
+
 - **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate on the
   freeze list).
+- **Output trouble reporting, on the rig** (built 2026-10-15, DONE.md)
+  — (1) unicast to an address with nothing on it for a few minutes — one
+  "not reachable" line per target in the footer and log, no "recovered";
+  (2) unplug a node that was answering — "stopped answering" within
+  ~9-12 s, back ~6 s after it is plugged in, fixtures respond at once
+  (reporting never holds output back); (3) short a DMX run on a node port
+  that reports it (or pull the terminator if that trips it) — "DMX output
+  short" on that universe's row, gone 10 s after it's cleared; (4) pull
+  the console's own cable — "not reachable" within 1-2 s, gone ~30 s after
+  it's back; (5) a node on another subnet: confirm it now appears and is
+  watched (unicast polls), and that nothing on the show segment minds a
+  poll every 3 s; (6) a healthy rig over a long run shows and logs
+  nothing; (7) check a merging port no longer reads SHORT DETECTED.
 - **WLED on a real device** — Branson tested some 2026-10-11: hit or miss,
   probably the WLED controller rather than the interface; needs more
   testing. Still to do: the live view included;
   effect / palette names read from the device (`/json/eff`, `/json/pal`);
-  92 WLED effects ported, written from behaviour (WLED is EUPL -- never
-  from FX.cpp); the rest of the 1D list next, 2D / sound-reactive only if
-  wanted; compare the ports side by side with a real device.
+  160 WLED effects ported, written from behaviour (WLED is EUPL -- never
+  from FX.cpp): every 1D effect, the 23 sound-reactive 1D ones on the audio
+  input; not ported: the 2D ones, Copy Segment, Image, Slow Transition.
+  Compare the ports side by side with a real device -- Percent's share
+  (intensity/255, from the docs' "% of fill") especially.
 - **Control surfaces** — PMJ (OpenDeck) mapping as the show's operating
   surface; the control-surface engine (PMJ + APC40 mk2 + Xbox) was last
   "in progress, at the rig".
@@ -38,6 +343,15 @@ under `~/.claude/.../memory/`.
   actually passing DMX, reachability on `ender`).
 
 ## Backlog — asked for, not started
+
+- **Signalling system (cue lights / stand-by / go signals to crew, house
+  curtain controller)** — Branson, 2026-10-17: "eventually we'll need a
+  signaling system". Drapes can now be driven by a curtain fixture
+  (feat/drape-curtain; Lighting Studio "Curtains that move"): patching that
+  fixture to a curtain motor controller or a DMX relay box is how a real
+  curtain gets cued today. Still to come: stand-by/go cue lights for the
+  fly floor and the curtain operator, warn/go timing in the show, and a
+  house-curtain controller that is more than a channel.
 
 Effects and playback (from Branson, 2026-10-11, in this order; scope each
 before building):
@@ -56,23 +370,43 @@ before building):
    stands on the plot; fire as one of them.
 3. **Layers, blend modes and masks** — effects stacked in layers, with
    blend modes between them and masks to limit where one applies.
-4. **Beat-quantized GO and Swop** — GO and Swop that land on the next
-   beat rather than the instant they're pressed.
+4. **Beat-quantized Swop** — GO on the beat is done (a chase or cue list
+   holds a GO to the next beat or bar); Swop still lands the instant it's
+   pressed.
 5. **Keyframe shapes and spatial transitions** — the shape of a move
    between keyframes, and transitions that sweep across the rig spatially
    instead of everything changing at once.
 
-- **Patch-list labels** — the patch list (Fixtures → Patch List…) exports
-  CSV and PDF; still to come: printing a label per fixture from it.
+- **Agreed next (2026-10-13/15), after 0.1.0:**
+  - **Sub-cues** ([SUBCUES_DESIGN.md](SUBCUES_DESIGN.md)) — P1 (engine)
+    and P2 (editor, VC cue list, footer, ⌥⌘↩) shipped in 0.1.0 (DONE.md);
+    P3 show control (`/cue/4.2/go`, `/go 4.2`, MSC GO 4.2, `/subgo`,
+    `/subback`, LOAD 4.2 on Next) is in 0.2.0. Still to do: P4 step-based
+    effects on Sub GO.
+  - **Sending to QLab** — OSC / MSC out. Its home is ready: the "QLab out"
+    section of Connections → Show control & sync (`ShowControlSyncPage`).
+  - **Duplicate a structure's setup** (Branson, 2026-10-15; replaces the
+    one-off "tower patch rule") — from one structure (T1) and the fixtures
+    on it, set up its likes (T2, T3…): the same fixtures placed and mounted
+    the same way, matched by their labels, and addressed. The addressing
+    half exists (right-click → Patch Others Like This / the Patch dialog's
+    Match); the placement half is the new part. Design first.
+  - **Playback timing** (PLAYBACK_TIMING_DESIGN.md): P2 fade shapes, P3
+    per-chase-step transitions, P4 Swop, P5 clickable Load chip.
+  - **Rig Overview frame rate** — maybe automatic (30, lower when the
+    engine is busy): the overview now draws on every core, which competes
+    with the DMX engine on a 6-core machine. Decide from the soak (the
+    first one's worst tick on kronk, 6 cores, was 40-43 ms).
 - **Stage and inventory across show files** — keep a stage layout
   (structures, platforms, scenery) and the hardware inventory (fixtures,
   network gear, their patch) outside any one show, and bring them into a
   new show instead of copying a .qlcc and stripping it.
-- **Stress test across Mac / Linux / Windows 11** — Branson can lend the
-  machines; plan the matrix first: 70–80 universes, a soak with the machine
-  kept awake (`caffeinate`), and the new paths (effect runner, WLED/JSON,
-  rig view at full rig). The 2026-10-10 overnight run was cut short when
-  the Mac slept.
+- **Stress test across Mac / Linux / Windows 11** — the 24-hour soak
+  runner (`stresstest/soak24/`) now runs on all three (DONE.md 2026-10-16)
+  and the second soak ran on 4 hosts (DONE.md). Still missing from the matrix: a real
+  Windows 11 machine (only the Windows 10 VM so far), and the new paths at
+  full rig (WLED/JSON output, effect runner) with outputs live rather than
+  stripped.
 - **One object editor** — merge Fixture Properties and "Edit Fixtures in
   Studio" into one: a tree of the object's fixtures by group, add by
   right-click or drag, multi-select → fixture group, distribute / put on
@@ -263,22 +597,9 @@ rig edits, bulk repatching, cross-show consistency checks.
   192.168.1.245 was proven the day it was built: its older glibc exposed a
   pthread linkage bug (`4a360911c`) that Ubuntu 22.04 structurally cannot see.
 
-- **Decide whether qlcconsole supports Intel Macs (TODO, 2026-08-25)** — a
-  product question, not a coverage gap, and worth settling before building
-  hardware for it. The shipped binary is **arm64 only** (`file` on both the
-  build output and the packaged app); nothing sets `CMAKE_OSX_ARCHITECTURES`,
-  so it targets whatever host builds it. An Intel Mac therefore cannot run the
-  current DMG at all. Note this is NOT a Rosetta problem — Rosetta translates
-  x86 -> arm, not the reverse, so its sunset doesn't threaten an arm64 build.
-  If the answer is "yes, support Intel", the cheap route is probably a
-  universal binary (`CMAKE_OSX_ARCHITECTURES="arm64;x86_64"`; Qt from
-  install-qt-action ships universal for macOS) rather than a second build
-  machine — one CI config change instead of another host to maintain. Branson
-  has an Intel Mac available if a real second machine turns out to be needed.
-
-
 - **MasterTimer misses ticks at full output load (2026-08-25, 2026-09-02) —
-  fixed on macOS, ROUGHED IN elsewhere, NOT YET VERIFIED on Linux/Windows.**
+  fixed on macOS, own thread on Windows (2026-10-16), ROUGHED IN and NOT
+  YET VERIFIED on Linux.**
   With 51 universes forced to `transmitMode="Full"` on `ender` (~2484 pkt/s,
   ~49 Hz per universe) a 61 s run logged **2** `MasterTimer is running late`
   events while a 91 s run at the same settings logged **0**. CPU was only 50%
@@ -307,16 +628,10 @@ rig edits, bulk repatching, cross-show consistency checks.
   or a bundled rtprio limits.d rule) is a separate, bigger decision — not
   done, flagged as its own backlog item below.
 
-  **Windows — MMCSS ("Pro Audio" thread characteristics), ROUGHED IN,
-  UNVERIFIED, NO TEST PATH AVAILABLE.** Architecturally different from the
-  unix path: `mastertimer-win32.cpp`'s timer callback runs on a Windows
-  thread-pool worker (`CreateTimerQueueTimer`), not a thread this code owns,
-  so the boost happens inside the callback itself, `thread_local`-guarded to
-  run once per actual OS thread. No revert on stop (would need to run on the
-  same pool thread that acquired it, which nothing here tracks) — released
-  when that thread exits at process end. This one has had zero real-world
-  testing of any kind; treat as a rough sketch, not a working feature, until
-  someone with a Windows box confirms it.
+  **Windows — done 2026-10-16** (`fix/win-mastertimer`): one dedicated
+  timer thread with MMCSS instead of a thread-pool callback per tick
+  (DONE.md 2026-10-16). Ticks too slow on heavy shows is a separate,
+  open item ("Platforms and soak findings" above).
 
 - **Linux: package a way to actually grant SCHED_FIFO (2026-09-02, follow-on
   to the item above, not started)** — the DMX timer thread's real-time
@@ -328,19 +643,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   convention, needs the user in a group like `audio`). Needs a real Linux
   box to even confirm the roughed-in `SCHED_FIFO` call links/behaves as
   written before this is worth deciding.
-
-- **Gate hole: on headless Linux `make check` silently skips ALL UI tests and
-  still prints "Unit tests passed" (OPEN, 2026-08-26)** —
-  `platforms/linux/unittest.sh:44` decides whether to run `ui/test` from
-  `pidof X` / `pidof Xorg`, unless `whoami` is `runner`/`buildbot`/`abuild`.
-  On a headless box under a normal login both checks fail, so `RUN_UI_TESTS=0`
-  and **32 UI test binaries never run** — a third of the suite — while the gate
-  still reports success. The same branch also leaves `TESTPREFIX` empty, so the
-  engine tests run with no platform plugin and `genericdmxsource_test` aborts
-  with "could not connect to display". Note `xvfb-run` does NOT rescue it: the
-  process is named `Xvfb`, which `pidof X` does not match. Fix is to key off
-  "can Qt start a platform plugin" (or just always set
-  `QT_QPA_PLATFORM=offscreen`) rather than probing for an X server.
 
 - **The ARM char-signedness tripwire is commented out (OPEN, 2026-08-26)** —
   the assertion cited as the reason to want an ARM build host,
@@ -397,16 +699,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   Worth considering a `QLC_PLUGIN_PATH` env override so test rigs stop needing
   root to run what they just built.
 
-- **ArtNet failure reporting still flaps (OPEN, 2026-08-25)** — `e3905a2a1`
-  replaced 2850 identical `sendDmx failed` lines with one report per universe
-  per state change, which is an ~87% reduction but not the "one line" first
-  claimed. A universe whose target never answers ARP oscillates fail →
-  succeed → fail (ARP cache expiry), so the live soak still produced 200
-  "is failing" + 150 "recovered" lines across 50 universes in 120 s. Wants
-  hysteresis: don't report recovery until it has held for N sends. Deliberately
-  NOT built on speculation, because the flapping was caused by absent hardware
-  (rig in storage) rather than a real-world configuration.
-
 - **`VCCueList_Test::functionRemoved()` flake — watch, don't assume fixed
   (OPEN, 2026-08-25)** — failed on 2 of ~9 macOS CI runs asserting a tree row
   count right after a 100 ms deferred refresh. `6d3757bb2` switched it to
@@ -416,15 +708,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   across many runs is the only evidence that counts. If it returns, the fix was
   insufficient rather than wrong. Five other UI test files still use fixed
   `QTest::qWait` and were left alone — none has failed.
-
-- **Windows CI removed, not repaired (OPEN, 2026-08-25)** — `fb9c5fd74` deleted
-  the `build-windows` job. Both legs failed at "Fix build" seding
-  `platforms/windows/qlcplus4Qt6.nsi`, which the rebrand renamed, and
-  RELEASE.md already lists Windows packaging as out of scope and stale. Removed
-  rather than left permanently red, because a job that cannot pass trains
-  people to ignore CI — which is exactly how this repo ended up with a workflow
-  nobody noticed had never run. Re-add when Windows is a real target and the
-  NSIS scripts have had their rebrand pass.
 
 - **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
   tree-wide `-Wall -Wextra` sweep reports ~1100
@@ -442,7 +725,13 @@ rig edits, bulk repatching, cross-show consistency checks.
   unexercised.
 
 
-- **Output ENDPOINT reachability check (BACK BURNER, 2026-08-25)** — the
+- **Output ENDPOINT reachability check (MOSTLY BUILT 2026-10-15, see "Output
+  trouble reporting" in DONE.md)** — node liveness is now watched continuously
+  from the ArtPoll the plugin already ran every 3 s, rather than the
+  config-time probe sketched below; only nodes heard this session are judged,
+  which answers the cry-wolf concern. Still open from this item: a check at
+  load/patch time for a unicast target that has NEVER answered. Original
+  notes: the
   readiness indicator added in `daeeb97d7` catches one failure mode: the
   workspace names a plugin *line* (for the network plugins, an index into the
   local interface list) that doesn't exist on this machine. It does **not**
@@ -500,7 +789,8 @@ rig edits, bulk repatching, cross-show consistency checks.
     background heartbeat. A permanent poll across 50 universes is precisely
     the "desk that cries wolf" / spam failure mode this whole area already
     burned itself on once (the 2850-line `sendDmx` flood).
-  - **Backoff + hysteresis, shared with the ArtNet flapping item above.** A
+  - **Backoff + hysteresis, as in send health** (output trouble reporting,
+    DONE.md 2026-10-15 — built there, reuse it). A
     node that is down stays down between probes; don't re-report. The
     "don't announce recovery until it has held for N" rule wanted there is
     the same rule wanted here — build it once.
@@ -512,31 +802,15 @@ rig edits, bulk repatching, cross-show consistency checks.
   the first — it is a per-patch-row fact.
 
 
-- **App icon does not reach the runtime on Linux (OPEN, 2026-08-27)** — the
-  asset is fine; the delivery is not. `resources/icons/png/qlcconsole.png` is a
-  purpose-made fork icon (not the old QLC+ logo), `app.cpp:314` does
-  `setWindowIcon(QIcon(":/qlcconsole.png"))`, and `ui/src/qlcui.qrc` aliases it
-  correctly. What is wrong:
-  1. **One size only.** A single **96×96** PNG is shipped, and it is installed
-     to the legacy `share/pixmaps/` rather than the freedesktop icon theme
-     (`share/icons/hicolor/<size>/apps/qlcconsole.png`) --
-     `platforms/linux/CMakeLists.txt:9-13`. Modern shells prefer hicolor, and
-     scaling one 96px source to 128/256 looks soft. `.desktop` says
-     `Icon=qlcconsole`, which resolves through the theme first.
-  2. **The SVG is never installed.** `resources/icons/svg/qlcconsole.svg`
-     exists and would give every size for free via
-     `share/icons/hicolor/scalable/apps/`.
-  3. **Nothing is installed at all when running from `build/`**, which is how
-     every test run works, so the desktop falls back to a generic icon. Only
-     `_NET_WM_ICON` from `setWindowIcon` applies, and shells vary in whether
-     they use it for the task list.
-  4. **macOS dev builds are a bare binary**, not a `.app`, so
-     `CFBundleIconFile=qlcconsole.icns` only takes effect in a packaged DMG --
-     the icon is never seen during development.
-  Fix: install the SVG to `hicolor/scalable/apps/` plus rendered PNGs at
-  16/22/24/32/48/64/128/256 to `hicolor/<size>/apps/`, keep `share/pixmaps` for
-  compatibility, and run `gtk-update-icon-cache` on install. The `.icns`
-  (1024×1024) and `.ico` are already right for macOS/Windows packaging.
+- **Verify node IP setting (ArtIpProg) on a real node (2026-10-16)** — built on
+  `fix/artnet-unconfigured-nodes` (see DONE.md 2026-10-16), tested only against
+  a sink. On the rig: a factory-fresh node, Connections → **Rescan** (does it
+  appear amber? if not, add the alias the docs give and Rescan again) →
+  right-click → **Set node IP address…** → Ask the node, then Apply. Watch
+  with `tools/artnetprobe --listen` from another machine if it misbehaves.
+  Open: whether the limited-broadcast poll really leaves by the named
+  interface on macOS/Windows (IP_PKTINFO), and whether nodes answer
+  ArtIpProg from the old or new address (both are accepted).
 
 - **Art-Net node configuration (ArtAddress) — send path built and proven, but
   no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root
@@ -865,7 +1139,7 @@ the existing theme/tab-label-mode pattern would be the obvious fit). Pick
 up with a real audit of every `setIconSize()`/fixed-pixel QSS rule before
 estimating effort for real.
 
-### Show lifecycle: Construction / Test-Validate / Production *(2026-08-15, design doc written)*
+### Show lifecycle: Construction / Test-Validate / Run *(2026-08-15, design doc written; "Production" renamed Run 2026-10-16, D1)*
 See `SHOW_LIFECYCLE_DESIGN.md` — names the three phases a show moves through
 (building off-rig → matching Lighting Studio to the real rig → running on the
 road) and settles that this is **not** a third `Doc::mode()`; it's the

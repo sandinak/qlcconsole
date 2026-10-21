@@ -21,6 +21,7 @@
 #define MONITORPROPERTIES_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <functional>
 #include <QVector3D>
 #include <QPointF>
@@ -30,11 +31,13 @@
 #include <QMap>
 
 #include "truss.h"
+#include "measurementunits.h"
 #include "headlayout.h"
 #include "stageplatform.h"
 #include "pipe.h"
 #include "hanger.h"
 #include "scenery.h"
+#include "beamocclusion.h"
 #include "stand.h"
 #include "tower.h"
 #include "stagetarget.h"
@@ -50,7 +53,10 @@ class Doc;
 
 #define KXMLQLCMonitorProperties QStringLiteral("Monitor")
 
-typedef struct
+// Named structs, not typedef'd anonymous ones: the default member
+// initialisers below make them non-C types, which GCC rejects as typedef
+// names for linkage purposes (-Wnon-c-typedef-for-linkage).
+struct PreviewItem
 {
     QVector3D m_position;       ///< 3D item position
     QVector3D m_rotation;       ///< 3D item rotation
@@ -62,15 +68,15 @@ typedef struct
     quint32 m_flags;            ///< Item flags as specified in the ItemsFlags enum
     quint32 m_layerId = 0;      ///< 2D-map organizational layer (0 = Default)
     quint32 m_groupId = 0;      ///< 2D-map group (0 = ungrouped)
-} PreviewItem;
+};
 
-typedef struct
+struct FixturePreviewItem
 {
     PreviewItem m_baseItem;                 ///< Base fixture item properties
     QMap<quint32, PreviewItem> m_subItems;  ///< Map of the heads/linked fixtures
-} FixturePreviewItem;
+};
 
-class MonitorProperties final : public QObject
+class QLC_ENGINE_EXPORT MonitorProperties final : public QObject
 {
     Q_OBJECT
 
@@ -146,8 +152,16 @@ public:
         return QVector3D(m_gridSize.x() * mpu / 2.0f, m_gridSize.z() * mpu / 2.0f, 0.0f);
     }
 
-    /** Get/Set the grid measurement units to use in 2D display mode */
+    /** Get/Set the grid measurement units to use in 2D display mode.
+     *  The unit is the person's (Settings -> Units, which App applies with
+     *  convertGridUnits() on load); a show's saved Units only says what its
+     *  saved grid size is in. setGridUnits() relabels without converting. */
     inline void setGridUnits(GridUnits units) { m_gridUnits = units; }
+    /** Change unit, keeping the stage the same physical size (the grid size
+     *  is converted exactly, positions are mm and untouched) */
+    void convertGridUnits(GridUnits units);
+    /** The grid unit for a preference: metres for mm/cm/m, feet for in/ft */
+    static GridUnits gridUnitsFor(MeasurementUnits::LengthUnit unit);
     inline GridUnits gridUnits() const { return m_gridUnits; }
 
     /** Get/Set the point of view to render the 2D preview */
@@ -178,6 +192,27 @@ public:
     inline void setAimSubjectHeight(float metres) { m_aimSubjectHeight = metres; }
     inline float aimSubjectHeight() const { return m_aimSubjectHeight; }
 
+    /** Line of sight: which stage features stand in a beam's way
+     *  (BeamOcclusion::Kind flags), and how thick a truss, pipe or stand must
+     *  be (metres) before it counts. Only read where line of sight is asked
+     *  for -- a follow spot's Fade When Blocked, an Aim look's "Dim lights
+     *  that can't see the target", the reach warnings and aim traces. */
+    inline void setOcclusionKinds(int kinds) { m_occlusionKinds = kinds; }
+    inline int occlusionKinds() const { return m_occlusionKinds; }
+    inline void setOcclusionMinSize(float metres) { m_occlusionMinSize = qMax(0.0f, metres); }
+    inline float occlusionMinSize() const { return m_occlusionMinSize; }
+    /** This stage's line-of-sight model as it stands now: rebuilt when
+     *  anything that blocks moved, opened or flew since the last call, shared
+     *  otherwise. With @p doc, a curtain driven by a fixture is where that
+     *  fixture has it now (BeamOcclusion::livePoses()); without, every
+     *  curtain is at its fixed state. Safe from any thread. */
+    BeamOcclusion::ModelPtr occlusionModel(const Doc *doc = nullptr) const
+    { return occlusionModel(BeamOcclusion::livePoses(doc, this)); }
+    /** The same with each curtain in @p poses where it says (a view that
+     *  draws the curtains where it shows them). */
+    BeamOcclusion::ModelPtr occlusionModel(const BeamOcclusion::Poses &poses) const
+    { return m_occlusion.get(this, m_occlusionKinds, m_occlusionMinSize, poses); }
+
     /** The world point (metres, stage coordinates) that the 2D-view rulers and
      *  coordinate readout treat as 0,0. Lets the operator zero measurements at
      *  stage centre / a downstage mark / anywhere. Default (0,0). */
@@ -194,6 +229,9 @@ private:
     int m_snapDivisions;
     float m_aimSubjectHeight;
     QPointF m_stageOrigin;
+    int m_occlusionKinds = BeamOcclusion::defaultKinds();
+    float m_occlusionMinSize = BeamOcclusion::defaultMinSize();
+    mutable BeamOcclusion::Cache m_occlusion;
 
     /********************************************************************
      * Items flags
@@ -621,6 +659,11 @@ public:
      *                      this way, which is how every existing show behaves.
      */
     QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false) const;
+
+    /** A line target's control points in world space: its points around
+     *  targetAimPoint() (its centre, following any binding). Empty for any
+     *  other kind. */
+    QVector<QVector3D> targetLinePoints(const class StageTarget *t) const;
 
     /** The point a head at @p from with a beam @p beamDeg wide should aim at,
      *  for target @p t. A follow spot on a Person: the chest while the beam is

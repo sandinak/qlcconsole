@@ -22,6 +22,8 @@
 #include "functionliveeditdialog.h"
 #include "rgbmatrixeditor.h"
 #include "chasereditor.h"
+#include "showtreecontroller.h"
+#include "showtreeview.h"
 #include "sceneeditor.h"
 #include "efxeditor.h"
 #include "rgbmatrix.h"
@@ -74,7 +76,13 @@ FunctionLiveEditDialog::FunctionLiveEditDialog(Doc *doc, quint32 fid, QWidget *p
         break;
         case Function::ChaserType:
         case Function::SequenceType:
-            m_editor = new ChaserEditor(m_scrollArea, qobject_cast<Chaser*> (func), m_doc, true);
+        {
+            ChaserEditor *ed = new ChaserEditor(m_scrollArea, qobject_cast<Chaser*> (func), m_doc, true);
+            // A cue list's chaser (D13): its steps and name are the Show Tree's.
+            if (m_doc->showTree()->isGenerated(func->id()))
+                ed->setLocked(ShowTreeView::lockedBanner(ed, m_doc, func->id()));
+            m_editor = ed;
+        }
         break;
         case Function::EFXType:
             m_editor = new EFXEditor(m_scrollArea, qobject_cast<EFX*> (func), m_doc);

@@ -324,11 +324,85 @@ bool ArtNetPacketizer::fillArtPollReplyInfo(QByteArray const& data, ArtNetNodeIn
         info.bindIndex = uchar(data.at(211));
     if (data.size() >= 213)
         info.status2 = uchar(data.at(212));
-    info.dhcpCapable = (info.status2 & 0x02) ? true : false;
+    /* Status2 bit 1 is "the IP came from DHCP", bit 2 is "can do DHCP" (Art-Net
+       4). Bit 1 was being read as the capability, so a node with a static
+       address that could use DHCP read "static only", and one that was using
+       DHCP read "capable" without saying it was in use. */
+    info.dhcpConfigured = (info.status2 & 0x02) ? true : false;
+    info.dhcpCapable = (info.status2 & 0x04) ? true : false;
 
     return true;
 }
 
+
+static void appendIPv4(QByteArray &data, const QHostAddress &addr)
+{
+    const quint32 v = addr.toIPv4Address();
+    data.append(char((v >> 24) & 0xff));
+    data.append(char((v >> 16) & 0xff));
+    data.append(char((v >> 8) & 0xff));
+    data.append(char(v & 0xff));
+}
+
+static QHostAddress readIPv4(const QByteArray &data, int at)
+{
+    return QHostAddress((quint32(uchar(data.at(at))) << 24)
+                        | (quint32(uchar(data.at(at + 1))) << 16)
+                        | (quint32(uchar(data.at(at + 2))) << 8)
+                        | quint32(uchar(data.at(at + 3))));
+}
+
+void ArtNetPacketizer::setupArtNetIpProg(QByteArray &data, const ArtNetIpProgRequest &request)
+{
+    data.clear();
+    data.append(m_commonHeader);            // ID, OpCode, ProtVer: 0..11
+    data[8] = char(ARTNET_IPPROG & 0xff);
+    data[9] = char(ARTNET_IPPROG >> 8);
+    data.append('\0');                      // Filler1
+    data.append('\0');                      // Filler2
+
+    /* Command: bit 7 enables any programming at all, bit 6 DHCP (the node
+       then ignores the rest), bit 4 gateway, bit 3 factory defaults, bit 2 IP,
+       bit 1 mask, bit 0 port (deprecated, never sent). Zero is a query. */
+    uchar command = 0;
+    if (request.programs())
+    {
+        command |= 0x80;
+        if (request.enableDhcp)
+            command |= 0x40;
+        else if (request.resetToDefaults)
+            command |= 0x08;
+        else
+        {
+            if (request.setGateway) command |= 0x10;
+            if (request.setIp)      command |= 0x04;
+            if (request.setMask)    command |= 0x02;
+        }
+    }
+    data.append(char(command));             // Command: 14
+    data.append('\0');                      // Filler4: 15
+    appendIPv4(data, request.setIp ? request.ip : QHostAddress(quint32(0)));        // 16..19
+    appendIPv4(data, request.setMask ? request.mask : QHostAddress(quint32(0)));    // 20..23
+    data.append('\0');                      // ProgPortHi (deprecated): 24
+    data.append('\0');                      // ProgPortLo: 25
+    appendIPv4(data, request.setGateway ? request.gateway : QHostAddress(quint32(0))); // 26..29
+    data.append(QByteArray(4, '\0'));       // Spare: 30..33
+}
+
+bool ArtNetPacketizer::fillArtIpProgReply(const QByteArray &data, ArtNetIpProgReply &reply)
+{
+    /* Up to and including Status (26) every revision agrees; ProgDg arrived
+       with Art-Net 4, and an Art-Net 3 node sends spares there. */
+    if (data.size() < 27)
+        return false;
+
+    reply.ip = readIPv4(data, 16);
+    reply.mask = readIPv4(data, 20);
+    reply.dhcpEnabled = (uchar(data.at(26)) & 0x40) ? true : false;
+    reply.hasGateway = data.size() >= 32;
+    reply.gateway = reply.hasGateway ? readIPv4(data, 28) : QHostAddress();
+    return true;
+}
 
 bool ArtNetPacketizer::fillDMXdata(QByteArray const& data, QByteArray &dmx, quint32 &universe)
 {

@@ -1,58 +1,16 @@
 project(effectscripts)
 
-set(SCRIPT_FILES
-    amber-pulse.js
-    audio-spectrum.js
-    audio-vu.js
-    ballyhoo.js
-    candle-flicker.js
-    color-alternate.js
-    color-chase.js
-    color-gradient.js
-    color-phaser.js
-    color-spread.js
-    confetti.js
-    dimmer-phaser.js
-    drawn-path.js
-    fan.js
-    figure8.js
-    fire.js
-    followspot.js
-    grid-probe.js
-    step-test-pattern.js
-    text.js
-    diamond.js
-    gobo-chase.js
-    iris-pulse.js
-    lightning.js
-    lissajous.js
-    meteor.js
-    midi-comet.js
-    midi-flash.js
-    midi-keys.js
-    midi-puddles.js
-    native-strobe.js
-    plasma.js
-    orbit.js
-    pantilt-phaser.js
-    rainbow.js
-    sparkle.js
-    spatial-gradient.js
-    spotlight-chase.js
-    stage-shape.js
-    sweep.js
-    uv-pulse.js
-    wander.js
-    warm-cool.js
-    wave.js
-    zoom-pulse.js
-    wled-breathe.js
-    wled-chase.js
-    wled-device.js
-)
+# Every effect script here ships. Globbed, not listed: a hand-kept list
+# once left 89 of the WLED ports out of the app (the tests read this
+# directory, so they never noticed). CONFIGURE_DEPENDS re-globs on each
+# build, so a new script is picked up without a reconfigure.
+file(GLOB SCRIPT_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
+     ${CMAKE_CURRENT_SOURCE_DIR}/*.js)
+list(SORT SCRIPT_FILES)
 
 # Helpers several scripts share (effect.requires): not effects themselves.
 set(SCRIPT_LIBS
+    lib/matrix.js
     lib/wled.js
 )
 

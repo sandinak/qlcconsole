@@ -236,6 +236,255 @@ jobs:
           name: ${{ matrix.task }}-AppImage
           path: qlcconsole-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
 
+
+  build-windows:
+    runs-on: windows-2025
+    name: QLCplus Windows ${{matrix.task}}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Widgets UI only, as on macOS and Linux.
+        task: [build-v4]
+    env:
+      CI_REPO_SLUG: ${{ github.repository }}
+      CI_BRANCH: ${{ github.head_ref }}
+      CI_PULL_REQUEST: ${{ github.event.number }}
+      # windeployqt + cmake --install stage the app here (INSTALLROOT in
+      # variables.cmake is $SystemDrive/qlcconsole on Windows).
+      DEPLOY_DIR: /c/qlcconsole
+
+    # Toolchain: MSYS2 UCRT64 with MSYS2's own Qt 6 packages, not aqt's
+    # win64_mingw Qt. Everything -- compiler, Qt, libsndfile/fftw/libusb --
+    # then comes from one place, built by one GCC: no MinGW ABI mismatch
+    # between aqt's bundled MinGW and MSYS2's newer GCC, and Qt's private
+    # headers (GuiPrivate, for QRhi) and ShaderTools (qt_add_shaders) are
+    # just packages. The cost is that MSYS2's Qt links shared system libs
+    # (ICU, harfbuzz, ffmpeg, ...), which windeployqt does not copy -- the
+    # deploy step sweeps them in with ldd.
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          # APPVERSION counts commits since the fork point.
+          fetch-depth: 0
+
+      - name: Install MSYS2 (UCRT64) and dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          release: true
+          update: true
+          install: >-
+            git
+            wget
+            unzip
+          pacboy: >-
+            gcc:p
+            cmake:p
+            ninja:p
+            ccache:p
+            pkgconf:p
+            tools-git:p
+            qt6-base:p
+            qt6-declarative:p
+            qt6-imageformats:p
+            qt6-multimedia:p
+            qt6-serialport:p
+            qt6-shadertools:p
+            qt6-svg:p
+            qt6-tools:p
+            qt6-translations:p
+            qt6-websockets:p
+            libmad:p
+            libsndfile:p
+            flac:p
+            fftw:p
+            libusb:p
+            python-lxml:p
+            libxml2:p
+            nsis:p
+
+      - name: Set ENV variables
+        run: |
+          echo "BUILD_DATE=`date -u '+%Y%m%d'`" >> $GITHUB_ENV
+          echo "GIT_REV=`git rev-parse --short HEAD`" >> $GITHUB_ENV
+          echo "QLCCONSOLE_VERSION=`head -n1 VERSION | tr -d '\r'`" >> $GITHUB_ENV
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ matrix.task }}
+
+      - name: D2XX SDK (64 bit)
+        run: |
+          mkdir -p /c/projects/D2XXSDK
+          wget -q https://qlcplus.org/misc/CDM-v2.12.36.20-WHQL-Certified.zip -O /c/projects/D2XXSDK/cdm.zip
+          cd /c/projects/D2XXSDK
+          unzip -q cdm.zip
+          cd amd64
+          gendef.exe - ftd2xx64.dll > ftd2xx.def
+          dlltool -k --input-def ftd2xx.def --dllname ftd2xx64.dll --output-lib libftd2xx.a
+
+      - name: Print program versions
+        run: |
+          echo "MSYSTEM: ${MSYSTEM}"
+          g++ --version
+          cmake --version
+          ninja --version
+          qtpaths6 --qt-version || qmake6 -query QT_VERSION || true
+          pkg-config --modversion libusb-1.0 sndfile fftw3
+          ccache --version || true
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        # -k 0: on a broken build, report every failing file in one run
+        # instead of stopping at the first.
+        run: cmake --build build -- -k 0
+
+      - name: Install
+        run: cmake --install build
+
+      - name: Deploy Qt and runtime libraries
+        run: |
+          set -e
+          ./translate.sh release ui
+          cp -v *.qm ${DEPLOY_DIR}/
+          cd ${DEPLOY_DIR}
+          WINDEPLOYQT=$(command -v windeployqt6 || command -v windeployqt-qt6 || command -v windeployqt || true)
+          [ -n "$WINDEPLOYQT" ] || WINDEPLOYQT=$(ls ${MINGW_PREFIX}/share/qt6/bin/windeployqt*.exe | head -n1)
+          echo "windeployqt: $WINDEPLOYQT"
+          "$WINDEPLOYQT" --release --no-translations \
+            qlcconsole.exe qlcconsole-fixtureeditor.exe \
+            qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll Plugins/dmxusb.dll
+          # MSYS2's Qt is linked against shared system libraries windeployqt
+          # knows nothing about. ldd lists the whole dependency closure; copy
+          # in everything that resolves into the MSYS2 prefix.
+          find . \( -iname '*.exe' -o -iname '*.dll' \) -print0 \
+            | xargs -0 -n1 ldd 2>/dev/null \
+            | awk '{print $3}' | grep -i "^${MINGW_PREFIX}/bin/" | sort -u \
+            | while read dll; do [ -e "$(basename "$dll")" ] || cp -v "$dll" . ; done
+          # Fail here, not on a user's machine: anything still unresolved?
+          if find . \( -iname '*.exe' -o -iname '*.dll' \) -print0 | xargs -0 -n1 ldd 2>/dev/null | grep -i "not found"; then
+            echo "Unresolved DLLs remain in the deploy dir" ; exit 1
+          fi
+
+      - name: Smoke test
+        run: |
+          cd ${DEPLOY_DIR}
+          # Run from the deploy dir with the MSYS2 prefix OFF the PATH, so
+          # a DLL missing from the installer fails here.
+          # --version prints and exits before any window is created.
+          PATH=/c/Windows/system32:/c/Windows /usr/bin/timeout 120 ./qlcconsole.exe --version > /tmp/qlcconsole-version.txt 2>&1 || true
+          cat /tmp/qlcconsole-version.txt
+          grep -q "qlcconsole ${QLCCONSOLE_VERSION}" /tmp/qlcconsole-version.txt
+
+      - name: Build installation package
+        run: |
+          cd ${DEPLOY_DIR}
+          sh ${GITHUB_WORKSPACE}/platforms/windows/nsis-manifest.sh
+          makensis -V3 -X'SetCompressor /FINAL lzma' qlcconsole.nsi
+          mv -v qlcconsole-${QLCCONSOLE_VERSION}-win64-setup.exe \
+            ${GITHUB_WORKSPACE}/qlcconsole-${QLCCONSOLE_VERSION}-${BUILD_DATE}-${GIT_REV}-win64-setup.exe
+
+      - name: Store installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
+          path: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
+          if-no-files-found: error
+
+      # Informational, after the artifact on purpose: the suite does not pass
+      # on Windows yet (TODO.md lists the failures), and a failing test there
+      # should not withhold the installer. Runs every test binary rather than
+      # stopping at the first failure like unittest.sh, and lists them all.
+      # (unittest.sh itself also works under MSYS2: ./unittest.sh ui build.)
+      - name: Test (informational)
+        continue-on-error: true
+        timeout-minutes: 45
+        run: |
+          ./unittest.sh ui build > /tmp/unittest.log 2>&1 || true   # stages resources for the tests
+          grep -E "^Fixtures|definitions processed|^Fixturesmap" /tmp/unittest.log || true
+          DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
+          FAILED=""
+          PASSED=0
+          for t in $(find build -name '*_test.exe' -not -path '*/CMakeFiles/*' | sort); do
+            rc=0
+            ( cd "$(dirname "$t")" && PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
+                /usr/bin/timeout 300 "./$(basename "$t")" > /tmp/t.log 2>&1 ) || rc=$?
+            if [ $rc -ne 0 ]; then
+              FAILED="$FAILED $(basename "$t" .exe)($rc)"
+              echo "=== $t exit $rc"
+              grep -E -A3 "^FAIL!|^QFATAL" /tmp/t.log | head -40 || true
+              # A crash: which test function it was in, then the trace.
+              [ $rc -gt 128 ] && { grep -E "^(PASS|FAIL!|SKIP|QDEBUG|QINFO|QWARN|QCRITICAL)" /tmp/t.log \
+                                     | tail -n 12; tail -n 30 /tmp/t.log; } || true
+            else
+              PASSED=$((PASSED + 1))
+            fi
+          done
+          echo "Passed: $PASSED test binaries"
+          echo "Failed:$FAILED"
+          [ -z "$FAILED" ]
+
+      # The rig view on Direct3D 11 (the runner has no GPU: WARP), drawn
+      # both ways, the pictures kept to look at: the GPU-vs-CPU test, and a
+      # real show lit. Plus a bundle that runs the same headless on another
+      # Windows machine (monitor_test + the deployed app + offscreen).
+      - name: Rig view renders (informational)
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          SHOTS=${GITHUB_WORKSPACE}/rig-shots
+          mkdir -p $SHOTS
+          DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
+          T=$(find build -name 'monitor_test.exe' -not -path '*/CMakeFiles/*' | head -n1)
+          cd "$(dirname "$T")"
+          run() { PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
+                    /usr/bin/timeout 600 ./monitor_test.exe "$@" 2>&1 \
+                  | grep -E "RhiRaster|quality|rig view|^PASS|^FAIL|^SKIP|^QFATAL|Totals|   Loc" || true; }
+          QLC_RIG_GPU=1 QLC_GPU_SHOTS=$SHOTS run theGpuDrawsWhatTheCpuDraws
+          for gpu in 0 1; do
+            QLC_RIG_GPU=$gpu QLC_RIG_BENCH=${GITHUB_WORKSPACE}/test-workspaces/DanceHysteria-0.1.qlcc \
+              QLC_RIG_BENCH_DEFS=${GITHUB_WORKSPACE}/resources/fixtures QLC_RIG_BENCH_LIT=1 \
+              QLC_RIG_BENCH_SHOT=$SHOTS/dancehysteria-gpu$gpu.png run aShowsRigViewDrawTime
+          done
+          ls -l $SHOTS
+          # The bundle: monitor_test beside the deployed app and its DLLs.
+          B=${GITHUB_WORKSPACE}/rig-test-bundle
+          mkdir -p $B
+          cp -r ${DEPLOY_DIR}/. $B/
+          cp -v monitor_test.exe $B/
+          mkdir -p $B/platforms
+          cp -v ${MINGW_PREFIX}/share/qt6/plugins/platforms/qoffscreen.dll $B/platforms/
+          cd $B
+          ldd monitor_test.exe platforms/qoffscreen.dll | awk '{print $3}' | grep -i "^${MINGW_PREFIX}/bin/" | sort -u \
+            | while read dll; do [ -e "$(basename "$dll")" ] || cp -v "$dll" . ; done
+
+      - name: Store rig view renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rig-shots-windows
+          path: rig-shots
+          if-no-files-found: warn
+
+      - name: Store rig test bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rig-test-bundle-windows
+          path: rig-test-bundle
+          if-no-files-found: warn
+
   build-macos:
     runs-on: macos-15
     name: QLCplus macOS ${{matrix.task}}

@@ -17,6 +17,7 @@
 
 #include "sceneryitem.h"
 #include "scenery.h"
+#include "apputil.h"
 
 SceneryItem::SceneryItem(Scenery *scenery, Doc *doc, const QPointF &anchor,
                          const QList<QPolygonF> &parts, bool elevation, QGraphicsItem *parent)
@@ -47,9 +48,36 @@ SceneryItem::SceneryItem(Scenery *scenery, Doc *doc, const QPointF &anchor,
     m_label->setDefaultTextColor(QColor(220, 220, 228, 200));
     m_label->setFont(QFont("Arial", 8));
     m_label->setZValue(0.1);
+    placeLabel();
+}
+
+void SceneryItem::placeLabel()
+{
+    if (m_label == nullptr)
+        return;
     const QRectF b = m_bounds;
     m_label->setPos(b.center().x() - m_label->boundingRect().width() / 2.0,
                     m_elevation ? b.top() + 2.0 : b.top() - m_label->boundingRect().height() - 2.0);
+}
+
+void SceneryItem::setParts(const QPointF &anchor, const QList<QPolygonF> &parts, bool flown,
+                           const Scenery::Pose &pose)
+{
+    prepareGeometryChange();
+    /* Relative to where its model says it is: a drag in progress keeps the
+       offset it has given the item until it is dropped. */
+    m_parts.clear();
+    m_bounds = QRectF();
+    foreach (const QPolygonF &part, parts)
+    {
+        m_parts << part.translated(-anchor);
+        m_bounds |= m_parts.last().boundingRect();
+    }
+    m_flown = flown;
+    m_pose = pose;
+    m_hasPose = true;
+    placeLabel();
+    update();
 }
 
 quint32 SceneryItem::sceneryId() const { return m_scenery->id(); }
@@ -59,7 +87,7 @@ void SceneryItem::setMovable(bool movable)
     // Moved on the floor plan only, as the stands and towers are.
     const bool can = movable && !m_elevation && !m_scenery->locked();
     setFlag(ItemIsMovable, can);
-    setCursor(can ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor(can ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 void SceneryItem::showLabel(bool visible)
@@ -103,7 +131,7 @@ void SceneryItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     const QColor edge = m_scenery->locked() ? QColor(200, 60, 60)
                                             : cloth.darker(selected ? 190 : 150).lighter(selected ? 160 : 100);
     // Flown out: only where it hangs from, dashed.
-    if (m_scenery->hasState() && m_scenery->state() == Scenery::Flown)
+    if (m_flown)
     {
         painter->setPen(QPen(cloth, selected ? 2.0 : 1.2, Qt::DashLine));
         painter->setBrush(Qt::NoBrush);

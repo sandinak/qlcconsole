@@ -18,6 +18,7 @@ qt_add_translation(QM_FILES ${TS_FILES})
 add_executable(${module_name} WIN32
     ../ui/src/aboutbox.cpp ../ui/src/aboutbox.h ../ui/src/aboutbox.ui
     ../ui/src/apputil.cpp ../ui/src/apputil.h
+    ../ui/src/measurementedit.cpp ../ui/src/measurementedit.h
     ../ui/src/showstatus.cpp ../ui/src/showstatus.h
     addchannelsdialog.cpp addchannelsdialog.h addchannelsdialog.ui
     app.cpp app.h
@@ -619,6 +620,10 @@ qt_add_resources(${module_name} "qlcui"
     FILES
         ${qlcui_resource_files}
 )
+
+# The window icon at every size (AppUtil::setApplicationIdentity).
+qt_add_resources(fixtureeditor_appicon_files "../resources/icons/hicolor/appicons.qrc")
+target_sources(${module_name} PRIVATE ${fixtureeditor_appicon_files})
 
 install(TARGETS ${module_name}
     DESTINATION ${INSTALLROOT}/${BINDIR}

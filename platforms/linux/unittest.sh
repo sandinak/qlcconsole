@@ -3,7 +3,6 @@
 CURRUSER=$(whoami)
 TESTPREFIX=""
 SLEEPCMD=""
-RUN_UI_TESTS="0"
 THISCMD=`basename "$0"`
 
 TARGET=${1:-}
@@ -18,53 +17,92 @@ if [ "$TARGET" != "ui" ] && [ "$TARGET" != "qmlui" ]; then
   exit 1
 fi
 
+# No modal may wait for a click: on a real display (xcb, cocoa) the
+# Programming tab's first-run guide and App's recovery offer would. Offscreen
+# and minimal skip them anyway; each UI test sets this too
+# (ui/test/common/testsettings.cpp), this covers anything run from here.
+export QLC_NO_RECOVERY_PROMPT=1
+
+IS_CI=0
 if [ "$CURRUSER" == "runner" ] \
     || [ "$CURRUSER" == "buildbot" ] \
     || [ "$CURRUSER" == "abuild" ]; then
   echo "Found build environment with CURRUSER='$CURRUSER' and OSTYPE='$OSTYPE'"
-  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    if [ $(which xvfb-run) == "" ]; then
-      echo "xvfb-run not found in this system. Please install with: sudo apt-get install xvfb"
-      exit
-    fi
-
-    TESTPREFIX="QT_QPA_PLATFORM=minimal xvfb-run --auto-servernum"
-    RUN_UI_TESTS="1"
-    # if we're running as build slave, set a sleep time to start/stop xvfb between tests
-    SLEEPCMD="sleep 1"
-
-  elif [[ "$OSTYPE" == "darwin"* ]]; then
-    TESTPREFIX="QT_QPA_PLATFORM=offscreen"
-    RUN_UI_TESTS="1"
-  fi
-
-else
-
-  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Do NOT gate on an X server being present. This used to probe
-    # `pidof X` / `pidof Xorg`, which meant that on any headless Linux box under
-    # a normal login RUN_UI_TESTS stayed 0 and all 32 UI test binaries were
-    # silently skipped -- a third of the suite -- while the gate still printed
-    # "Unit tests passed". The same branch left TESTPREFIX empty, so the engine
-    # tests then ran with no platform plugin and genericdmxsource_test aborted
-    # with "could not connect to display". `xvfb-run` did not rescue it either,
-    # because that process is named Xvfb and `pidof X` does not match it.
-    #
-    # Qt's offscreen platform needs no display at all, so use it whenever there
-    # isn't a real one and run everything. A real X session still gets used when
-    # DISPLAY points at one, which keeps headed runs behaving as before.
-    if [ -n "${DISPLAY:-}" ] && xdpyinfo >/dev/null 2>&1; then
-      TESTPREFIX=""
-    else
-      TESTPREFIX="QT_QPA_PLATFORM=offscreen"
-    fi
-    RUN_UI_TESTS="1" 
-  elif [[ "$OSTYPE" == "darwin"* ]]; then
-    # No X server concept on macOS to gate on — offscreen doesn't need one.
-    TESTPREFIX="QT_QPA_PLATFORM=offscreen"
-    RUN_UI_TESTS="1"
-  fi
+  IS_CI=1
 fi
+
+# Which Qt platform the tests get. This decides HOW the UI tests run, never
+# WHETHER: every branch below runs them. An earlier version only ran ui/test
+# when it could find an X server (`pidof X` / `pidof Xorg`) or the login was a
+# known CI user, so on a headless Linux box under a normal login all the UI
+# test programs -- a third of the suite -- were silently skipped while the gate
+# still printed "Unit tests passed". The run is now also counted (see the end
+# of this script), so a skip can't pass quietly again.
+if [ -n "${QT_QPA_PLATFORM:-}" ]; then
+  # The caller chose a platform (cocoa to watch the tests on macOS, xcb to
+  # watch them on a Linux desktop, offscreen from the top-level unittest.sh).
+  echo "Using the caller's QT_QPA_PLATFORM='$QT_QPA_PLATFORM'"
+  TESTPREFIX=""
+elif [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$IS_CI" -eq 1 ]; then
+  # CI: the suite has always run under Xvfb with the minimal platform there.
+  if [ -z "$(command -v xvfb-run)" ]; then
+    echo >&2 "xvfb-run not found in this system. Please install with: sudo apt-get install xvfb"
+    exit 1
+  fi
+  TESTPREFIX="QT_QPA_PLATFORM=minimal xvfb-run --auto-servernum"
+  # if we're running as build slave, set a sleep time to start/stop xvfb between tests
+  SLEEPCMD="sleep 1"
+elif [[ "$OSTYPE" == "linux-gnu"* ]] && [ -n "${DISPLAY:-}" ] \
+    && command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo >/dev/null 2>&1; then
+  # A real, reachable X session: use it, as headed runs always have.
+  TESTPREFIX=""
+else
+  # Headless Linux, macOS, anything else: Qt's offscreen platform needs no
+  # display at all. (xvfb-run is no substitute for this check: its server is
+  # named Xvfb, which `pidof X` never matched.)
+  TESTPREFIX="QT_QPA_PLATFORM=offscreen"
+fi
+
+# Windows (MSYS2 bash, as CI runs it): no display needed for offscreen, and
+# no rpath -- test.sh's LD_LIBRARY_PATH means nothing to the Windows loader,
+# which finds DLLs on PATH. Put every build dir holding one there.
+# QT_FORCE_STDERR_LOGGING: a Windows process without a console (CI's piped
+# output) has QTest send its whole log to OutputDebugString instead of stdout,
+# so every test, failing ones included, ran silently. A caller's
+# QT_QPA_PLATFORM still wins, as above.
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  if [ -n "${QT_QPA_PLATFORM:-}" ]; then
+    TESTPREFIX="QT_FORCE_STDERR_LOGGING=1"
+  else
+    TESTPREFIX="QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1"
+  fi
+  DLLDIRS=$(find "$PWD" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
+  export PATH="${DLLDIRS}${PATH}"
+fi
+
+# How many test programs actually ran, per group -- checked at the end.
+# Run one test's test.sh. A connection to a slot or signal that doesn't
+# exist only logs "No such slot"/"No such signal" and the feature it was for
+# silently does nothing (the Studio's Add Target/Copy/Paste, the patch grid,
+# the Function Manager's actions all did, for weeks): such a log fails the test.
+run_test()
+{
+    local out rc
+    out=$(mktemp)
+    eval $TESTPREFIX ./test.sh 2>&1 | tee "$out"
+    rc=${PIPESTATUS[0]}
+    if grep -qE "No such (slot|signal)" "$out"; then
+        echo "*** A broken signal/slot connection was logged:"
+        grep -E "No such (slot|signal)" "$out" | sort | uniq -c
+        [ "$rc" -eq 0 ] && rc=1
+    fi
+    rm -f "$out"
+    return $rc
+}
+
+ENGINE_RAN=0
+UI_RAN=0
+UI_EXPECTED=0
 
 #############################################################################
 # Fixture definitions check with xmllint
@@ -104,13 +142,14 @@ do
     # Execute the test
     pushd ${TESTDIR}/${test}
     echo "$TESTPREFIX ./test.sh"
-    eval $TESTPREFIX ./test.sh
+    run_test
     RESULT=${?}
     popd
     if [ ${RESULT} != 0 ]; then
         echo "${RESULT} Engine unit tests failed. Please fix before commit."
         exit ${RESULT}
     fi
+    ENGINE_RAN=$((ENGINE_RAN + 1))
 done
 
 #############################################################################
@@ -118,7 +157,7 @@ done
 #############################################################################
 
 # Skip ui in qmlui mode
-if [ "$RUN_UI_TESTS" -eq "1" ] && [ "$TARGET" != "qmlui" ]; then
+if [ "$TARGET" != "qmlui" ]; then
 
 TESTDIR=ui/test
 TESTS=$(find ${TESTDIR} -maxdepth 1 -mindepth 1 -type d)
@@ -137,19 +176,26 @@ do
     # Isolate just the test name
     test=$(echo ${test} | sed 's/ui\/test\///')
 
+    UI_EXPECTED=$((UI_EXPECTED + 1))
+    if [ ! -f ${TESTDIR}/${test}/test.sh ]; then
+        echo "UI test '${test}' has no test.sh in the build dir, so it can't be run. Please fix before commit."
+        exit 1
+    fi
+
     $SLEEPCMD
     # Execute the test via its checked-in test.sh (sets LD_LIBRARY_PATH/
     # DYLD_FALLBACK_LIBRARY_PATH itself, and already resolves the macOS
     # <name>_test.app/Contents/MacOS/<name>_test bundle path vs. a plain
     # executable — the old bare "./${test}_test" here didn't).
     pushd ${TESTDIR}/${test}
-    eval $TESTPREFIX ./test.sh
+    run_test
     RESULT=${?}
     popd
     if [ ${RESULT} != 0 ]; then
         echo "${RESULT} UI unit tests failed. Please fix before commit."
         exit ${RESULT}
     fi
+    UI_RAN=$((UI_RAN + 1))
 done
 
 fi
@@ -160,7 +206,7 @@ fi
 
 $SLEEPCMD
 pushd plugins/enttecwing/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} Enttec wing unit tests failed. Please fix before commit."
@@ -174,10 +220,12 @@ popd
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "Skip Velleman test (not supported on OSX)"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  echo "Skip Velleman test (plugin not built on Windows)"
 else
   $SLEEPCMD
   pushd plugins/velleman/test
-  eval $TESTPREFIX ./test.sh
+  run_test
   RESULT=$?
   if [ $RESULT != 0 ]; then
     echo "Velleman unit test failed ($RESULT). Please fix before commit."
@@ -192,7 +240,7 @@ fi
 
 $SLEEPCMD
 pushd plugins/midi/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} MIDI unit tests failed. Please fix before commit."
@@ -206,10 +254,24 @@ popd
 
 $SLEEPCMD
 pushd plugins/artnet/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} ArtNet unit tests failed. Please fix before commit."
+	exit $RESULT
+fi
+popd
+
+#############################################################################
+# E1.31 tests
+#############################################################################
+
+$SLEEPCMD
+pushd plugins/E1.31/test
+run_test
+RESULT=$?
+if [ $RESULT != 0 ]; then
+	echo "${RESULT} E1.31 unit tests failed. Please fix before commit."
 	exit $RESULT
 fi
 popd
@@ -220,7 +282,7 @@ popd
 
 $SLEEPCMD
 pushd plugins/wled/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} WLED unit tests failed. Please fix before commit."
@@ -231,5 +293,19 @@ popd
 #############################################################################
 # Final judgment
 #############################################################################
+
+# A gate that ran nothing must not pass. Count what actually ran, say it, and
+# fail if a whole group came up empty -- that is how the UI tests used to go
+# missing for a third of the suite without anyone noticing.
+echo "Test programs run: ${ENGINE_RAN} engine, ${UI_RAN} of ${UI_EXPECTED} UI" \
+     "(platform: ${TESTPREFIX:-QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-default}})"
+if [ ${ENGINE_RAN} -eq 0 ]; then
+    echo "No engine test programs were run. This is not a pass."
+    exit 1
+fi
+if [ "$TARGET" != "qmlui" ] && [ ${UI_RAN} -eq 0 ]; then
+    echo "No UI test programs were run (is ui/test in the build dir?). This is not a pass."
+    exit 1
+fi
 
 echo "Unit tests passed."

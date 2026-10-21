@@ -23,6 +23,12 @@
 #include <QScopedPointer>
 #include <QByteArray>
 #include <QMap>
+#include <atomic>
+#include <QPair>
+#include <QElapsedTimer>
+#include <climits>
+
+#include "sendhealth.h"
 #include <QSharedPointer>
 #include <QNetworkInterface>
 #include <QHostAddress>
@@ -32,6 +38,7 @@
 #include <QMap>
 
 #include "e131packetizer.h"
+#include "qlcioplugin.h"
 
 #define E131_DEFAULT_PORT     5568
 
@@ -52,6 +59,12 @@ typedef struct _uinfo
     int outputPriority;
 
     int type;
+
+    /** Whether sends for this universe are failing, with hysteresis (see
+     *  SendHealth), and the address that verdict is about: a new target
+     *  starts clean. */
+    SendHealth sendHealth;
+    QHostAddress healthTarget;
 } UniverseInfo;
 
 class E131Controller final : public QObject
@@ -74,6 +87,12 @@ public:
 
     /** Send DMX data to a specific port/universe */
     void sendDmx(const quint32 universe, const QByteArray& data);
+
+    /** Work out again whether this line is held by the rig network gate
+     *  (QLCIOPlugin::setTransmitNetworks()). Called when the line is made,
+     *  and by the plugin's refreshTransmitGate(); sendDmx() only reads the
+     *  cached answer. */
+    void refreshTransmitGate();
 
     /** Return the controller IP address */
     QString getNetworkIP();
@@ -145,6 +164,25 @@ public:
     /** Get the number of packets received by this controller */
     quint64 getPacketReceivedNumber();
 
+    /** Output universes whose sends are failing, as (QLC+ universe, text)
+     *  pairs: "E1.31 to 239.255.0.3: not reachable since 20:14". @a universe
+     *  limits it to one (UINT_MAX: all). Changes: problemsChanged(). */
+    QList<QPair<quint32, QString> > outputProblems(quint32 universe = UINT_MAX);
+
+private:
+    /** Feed one send result to the universe's SendHealth; log only when the
+     *  reported state changes. Returns true when it did. */
+    bool reportSendResult(UniverseInfo &info, quint32 universe,
+                          const QHostAddress &dest, bool ok);
+
+    /** The monotonic time SendHealth is fed */
+    qint64 nowMs() const { return m_testNowMs >= 0 ? m_testNowMs : m_clock.elapsed(); }
+
+    QElapsedTimer m_clock;
+
+    /** When >= 0, the time nowMs() returns instead of the clock. Tests only. */
+    qint64 m_testNowMs;
+
 private:
     QSharedPointer<QUdpSocket> getInputSocket(bool multicast, QHostAddress const& address, quint16 port);
 
@@ -153,6 +191,15 @@ private:
     QNetworkInterface m_interface;
     /** The controller IP address as QHostAddress */
     QHostAddress m_ipAddr;
+
+    /** The plugin whose rig network gate applies (the parent), or NULL.
+     *  A line not on the show's rig networks sends nothing: see
+     *  QLCIOPlugin::setTransmitNetworks(). */
+    const QLCIOPlugin *m_gate = nullptr;
+
+    /** The gate's decision for this line, cached: written on the main thread
+     *  by refreshTransmitGate(), read on every send (any thread) */
+    std::atomic<bool> m_held{false};
 
     quint64 m_packetSent;
     quint64 m_packetReceived;
@@ -184,6 +231,10 @@ private slots:
 
 signals:
     void valueChanged(quint32 universe, quint32 input, quint32 channel, uchar value);
+
+    /** outputProblems() has changed. May be emitted from the thread that
+     *  sends DMX; never with the data mutex held. */
+    void problemsChanged();
 };
 
 #endif

@@ -10,6 +10,7 @@
 */
 
 #include <QPainter>
+#include <QMatrix4x4>
 #include <QFontMetricsF>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -57,6 +58,8 @@
 #include "zraster.h"
 #include "rhiraster.h"
 #include "aimsolver.h"
+#include "linecurve.h"
+#include "apputil.h"
 #include <QScopedValueRollback>
 #include <array>
 #include <QVarLengthArray>
@@ -1079,6 +1082,27 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         if (t == nullptr || !layerShown(t->layerId()))
             continue;
 
+        /* A line: the curve at its real heights, with a small cross at each
+           handle -- the beams aimed at it land along it. */
+        if (t->isLine())
+        {
+            const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+            const QVector<QVector3D> world = props->targetLinePoints(t);
+            const LineCurve curve(world);
+            const QVector<QVector3D> &sm = curve.samples();
+            for (int k = 0; k + 1 < sm.size(); ++k)
+                emitLine(w2s(sm.at(k)), w2s(sm.at(k + 1)), viewDepth(sm.at(k)), viewDepth(sm.at(k + 1)),
+                         mark, 2.0, p);
+            const float arm = 0.08f;
+            foreach (const QVector3D &h, world)
+            {
+                const QVector3D ax[3] = { QVector3D(arm, 0, 0), QVector3D(0, arm, 0), QVector3D(0, 0, arm) };
+                for (const QVector3D &a : ax)
+                    emitLine(w2s(h - a), w2s(h + a), viewDepth(h - a), viewDepth(h + a), mark, 1.5, p);
+            }
+            continue;
+        }
+
         /* An Area or a drum kit: its outline on the deck, in its colour, at
            its real size -- where a beam lands relative to it is the point. */
         if ((t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
@@ -2037,21 +2061,19 @@ void StructureStudioView::flushOps(QPainter &p) const
         for (const QRect &r : lit)
             m_z->addLit(r);
     }
-    p.drawImage(0, 0, m_z->resolve());
     {
         /* SCREEN, not plus: light over a dark background adds nearly in full,
            over something already bright it closes in on white without
            reaching it. Plus clipped the air behind a crowd of beams, and the
-           glow in front of a lit body, straight to white. */
+           glow in front of a lit body, straight to white. And coloured light
+           on a grey surface takes it over (composeLight()): Screen alone left
+           a blue cyc white with a lavender tint. */
+        QImage frame = m_z->resolve();
         QPoint at;
         const QImage light = m_z->lightImage(&at);
         if (!light.isNull())
-        {
-            p.save();
-            p.setCompositionMode(QPainter::CompositionMode_Screen);
-            p.drawImage(at, light);
-            p.restore();
-        }
+            ZRaster::composeLight(frame, light, at);
+        p.drawImage(0, 0, frame);
     }
     }   // !drawn: the CPU
 
@@ -2222,15 +2244,12 @@ bool StructureStudioView::gpuRender(QPainter &p, const OpRefs &opaque,
 
     if (!m_gpu->render(size(), m_supersample, solids, see, light))
         return false;
-    p.drawImage(0, 0, m_gpu->scene());
+    // Light over the frame as the CPU adds it (ZRaster::composeLight()).
+    QImage frame = m_gpu->scene();
     const QImage lit = m_gpu->lightImage();
     if (!lit.isNull())
-    {
-        p.save();
-        p.setCompositionMode(QPainter::CompositionMode_Screen);
-        p.drawImage(0, 0, lit);
-        p.restore();
-    }
+        ZRaster::composeLight(frame, lit, QPoint(0, 0));
+    p.drawImage(0, 0, frame);
     return true;
 }
 
@@ -3121,7 +3140,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             }
             emitPoly(poly, dsum / 4.0, fill, seam, 0.6, p, vz);
         };
-        const QList<Scenery::Piece> pieces = sc->pieces();
+        const QList<Scenery::Piece> pieces = sc->pieces(drapePose(sc));
         const bool gathered = sc->hasState() && (pieces.size() > 1);
         foreach (const Scenery::Piece &pc, pieces)
         {
@@ -3546,9 +3565,27 @@ QVector<StructureStudioView::Deck> StructureStudioView::decks() const
     return out;
 }
 
+bool StructureStudioView::s_lineOfSightBeams = false;
+
+void StructureStudioView::setLineOfSightBeams(bool on)
+{
+    s_lineOfSightBeams = on;
+}
+
+bool StructureStudioView::lineOfSightBeams()
+{
+    return s_lineOfSightBeams;
+}
+
 quint64 StructureStudioView::throwScene() const
 {
     QVector<float> f;
+    // Line of sight: where beams stop moves with everything that blocks them.
+    if (m_sightModel)
+    {
+        const quint64 sig = m_sightModel->signature();
+        f << 1.0f << float(sig & 0xFFFFFF) << float((sig >> 24) & 0xFFFFFF) << float(sig >> 48);
+    }
     for (const Deck &d : decks())
     {
         const StagePlatform *pl = d.platform;
@@ -3566,6 +3603,11 @@ quint64 StructureStudioView::throwScene() const
           << sc->width() << sc->height() << sc->bottom() << sc->rotation() << sc->bow()
           << float(sc->outline()) << sc->depth() << sc->thickness() << float(sc->state())
           << sc->openingWidth() << sc->openingHeight();
+        if (sc->isDriven())
+        {
+            const Scenery::Pose pose = drapePose(sc);
+            f << float(pose.open) << float(pose.fly);
+        }
     }
     return quint64(qHashBits(f.constData(), size_t(f.size()) * sizeof(float), 0x5eed))
          ^ (quint64(f.size()) << 40);
@@ -3626,6 +3668,100 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
     return run;
 }
 
+/* A platform block as something a ray runs into: a box from @p baseZ to its
+ * top, in the platform's plan frame. The ray is @p o + t @p e across the plan
+ * (that frame) and @p oz + t @p ez up. The distance to where it goes IN, with
+ * the face it goes in by (0 top, 1 bottom, 2/3 the x0/x1 sides, 4/5 the y0/y1
+ * ends); -1 when it misses, or starts inside -- a fixture rigged in a step
+ * lights its way out, not into the step. */
+static double rayIntoBlock(const QPointF &o, const QPointF &e, double oz, double ez,
+                           const StagePlatform::Block &bk, double baseZ, int *face)
+{
+    const double org[3] = { o.x(), o.y(), oz };
+    const double vec[3] = { e.x(), e.y(), ez };
+    const double lo[3] = { double(bk.x0), double(bk.y0), baseZ };
+    const double hi[3] = { double(bk.x1), double(bk.y1), baseZ + double(bk.height) };
+    static const int loFace[3] = { 2, 4, 1 }, hiFace[3] = { 3, 5, 0 };
+    double tIn = -1e30, tOut = 1e30;
+    int in = -1;
+    for (int k = 0; k < 3; ++k)
+    {
+        if (qAbs(vec[k]) < 1e-12)
+        {
+            if (org[k] < lo[k] || org[k] > hi[k])
+                return -1.0;
+            continue;
+        }
+        double t0 = (lo[k] - org[k]) / vec[k], t1 = (hi[k] - org[k]) / vec[k];
+        int f = loFace[k];
+        if (t0 > t1)
+        {
+            std::swap(t0, t1);
+            f = hiFace[k];
+        }
+        if (t0 > tIn)
+        {
+            tIn = t0;
+            in = f;
+        }
+        tOut = qMin(tOut, t1);
+    }
+    if (in < 0 || tOut < tIn || tIn <= 0.0)
+        return -1.0;
+    if (face != nullptr)
+        *face = in;
+    return tIn;
+}
+
+/* What a ray landed on, as beamThrow() names it: 0 the floor, below 0
+ * scenery or a line-of-sight blocker, above 0 a platform block's face. A
+ * block's top keeps the number it has always had (that is what a pool on a
+ * deck is drawn and kept by); its sides are numbered above kBlockSides. */
+static const int kBlockSides = 1 << 26;
+
+/* Below this camera elevation (degrees) a rig view counts as a side or front
+ * elevation for beams (StructureStudioView::seenLevel()). */
+static const double kLevelViewDeg = 10.0;
+
+static int deckSurface(quint32 platformId, int blockNo, int face)
+{
+    const int block = int(platformId) * 64 + blockNo;
+    return (face <= 0) ? block : kBlockSides + block * 8 + face;
+}
+
+/* The platform, block (from 1) and face (0 the top) a surface names; false
+ * when it is not a platform block. */
+static bool deckSurfaceParts(int surface, quint32 &platformId, int &blockNo, int &face)
+{
+    if (surface <= 0)
+        return false;
+    int block = surface;
+    face = 0;
+    if (surface >= kBlockSides)
+    {
+        block = (surface - kBlockSides) / 8;
+        face = (surface - kBlockSides) % 8;
+    }
+    platformId = quint32(block / 64);
+    blockNo = block % 64;
+    return blockNo > 0;
+}
+
+/* The outward normal of a block's face (rayIntoBlock()), in the world. */
+static QVector3D blockFaceNormal(const StagePlatform *pl, int face)
+{
+    switch (face)
+    {
+    case 0: return QVector3D(0, 0, 1);
+    case 1: return QVector3D(0, 0, -1);
+    default: break;
+    }
+    const QPointF local[4] = { QPointF(-1, 0), QPointF(1, 0), QPointF(0, -1), QPointF(0, 1) };
+    const QPointF l = local[qBound(0, face - 2, 3)];
+    const QPointF w = pl->toWorld(l) - pl->toWorld(QPointF(0, 0));
+    return QVector3D(float(w.x()), float(w.y()), 0.0f).normalized();
+}
+
 double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVector3D &dir,
                                              bool *hit, QVector3D *landNormal, int *surface) const
 {
@@ -3646,34 +3782,44 @@ double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVect
     double best = toPlane(0.0);            // the stage floor
     int what = 0;
 
-    // Platform tops, but only where the beam actually crosses the footprint.
+    /* Platforms: each block a solid box, from the platform's base to its
+       top. A beam stops at the first face it meets -- the top it comes down
+       on, or the side of a riser it runs into ("the TrussW are going thru
+       the platforms .. should wash on them vs thru them"). Only the tops used
+       to count, so a beam thrown across the stage went in at a riser's back
+       and on out of its front to the floor beyond. */
     MonitorProperties *props = m_doc->monitorProperties();
+    QVector3D normal(0, 0, 1);                // the floor faces up
     const QVector<Deck> shown = decks();   // const: shares, never copies
     for (const Deck &deck : shown)
     {
         StagePlatform *pl = deck.platform;
-        // Each tread of a flight of steps is a deck of its own height.
+        // The ray in the platform's own plan frame: it may be turned.
+        const QPointF o = pl->toLocal(QPointF(double(apex.x()), double(apex.y())));
+        const QPointF e = pl->toLocal(QPointF(double(apex.x() + dir.x()),
+                                              double(apex.y() + dir.y()))) - o;
+        // Each tread of a flight of steps is a block of its own height.
         int blockNo = 0;
         for (const StagePlatform::Block &bk : deck.blocks)
         {
             ++blockNo;
-            const double topZ = deck.baseZ + double(bk.height);
-            if (double(apex.z()) <= topZ)      // already at or below it
+            int face = -1;
+            const double t = rayIntoBlock(o, e, double(apex.z()), double(dir.z()),
+                                          bk, deck.baseZ, &face);
+            if (t <= MIN_THROW || t > MAX_THROW || (best > 0.0 && t >= best))
                 continue;
-            const double t = toPlane(topZ);
-            if (t < 0.0 || (best > 0.0 && t >= best))
-                continue;
-            const QVector3D at = apex + dir * float(t);
-            const QPointF loc = pl->toLocal(QPointF(double(at.x()), double(at.y())));
-            if (loc.x() < bk.x0 || loc.x() > bk.x1 || loc.y() < bk.y0 || loc.y() > bk.y1)
-                continue;
-            if (!pl->containsPoint(at.x(), at.y()))   // off a rounded front's cut corners
-                continue;
+            // Off a rounded front's cut corners: asked just inside the face.
+            if (pl->hasRoundedFront())
+            {
+                const QVector3D in = apex + dir * float(t + 2e-3);
+                if (!pl->containsPoint(in.x(), in.y()))
+                    continue;
+            }
             best = t;
-            what = int(pl->id()) * 64 + blockNo;
+            what = deckSurface(pl->id(), blockNo, face);
+            normal = blockFaceNormal(pl, face);
         }
     }
-    QVector3D normal(0, 0, 1);                // floor and decks face up
 
     /* Scenery: a cyc or a drape stands in the way of a beam going level or
        even upward, which is exactly how a cyc is lit. */
@@ -3683,11 +3829,37 @@ double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVect
             continue;
         double t = 0.0;
         QVector3D n;
-        if (sc->rayHit(apex, dir, t, best > 0.0 ? best : MAX_THROW, 16, &n) && t > MIN_THROW)
+        const Scenery::Pose pose = drapePose(sc);
+        if (sc->rayHit(apex, dir, t, best > 0.0 ? best : MAX_THROW, 16, &n, &pose) && t > MIN_THROW)
         {
             best = t;
             normal = n;
             what = -1 - int(sc->id());
+        }
+    }
+
+    /* Line of sight: a tower, a truss -- whatever else solid the stage
+       counts -- stops it too, when the views are asked to show that.
+       Platforms and scenery are found above, layer by layer, as ever. */
+    BeamOcclusion::ModelPtr sight = m_decksValid ? m_sightModel : BeamOcclusion::ModelPtr();
+    if (!m_decksValid && s_lineOfSightBeams)
+    {
+        BeamOcclusion::Poses poses;     // the curtains where this view shows them
+        foreach (Scenery *sc, props->sceneries())
+            if (sc != nullptr && sc->isDriven())
+                poses.insert(sc->id(), drapePose(sc));
+        sight = props->occlusionModel(poses);
+    }
+    if (sight && !sight->isEmpty())
+    {
+        const double reach = best > 0.0 ? best : MAX_THROW;
+        const BeamOcclusion::Hit h = sight->ray(apex, dir, float(reach));
+        if (h.blocked && h.kind != BeamOcclusion::Drapes && h.kind != BeamOcclusion::Walls
+            && double(h.distance) > MIN_THROW && double(h.distance) < reach - 1e-3)
+        {
+            best = double(h.distance);
+            normal = -dir.normalized();
+            what = -1000000 - h.kind * 10000 - int(h.id % 10000);
         }
     }
 
@@ -3713,6 +3885,28 @@ struct HullPt
     double  a;
     double  z = 0.0;     ///< depth, for callers that need it carried along
 };
+
+static QVector<HullPt> convexHullWith(QVector<HullPt> pts);
+
+/* Is @p q inside (or on) the convex outline @p poly, either way round? */
+static bool pointInConvex(const QVector<HullPt> &poly, const QPointF &q)
+{
+    int sign = 0;
+    const int n = poly.size();
+    for (int i = 0; i < n; ++i)
+    {
+        const QPointF a = poly.at(i).p, b = poly.at((i + 1) % n).p;
+        const double c = (b.x() - a.x()) * (q.y() - a.y()) - (b.y() - a.y()) * (q.x() - a.x());
+        if (qAbs(c) < 1e-9)
+            continue;
+        const int sg = c > 0.0 ? 1 : -1;
+        if (sign == 0)
+            sign = sg;
+        else if (sg != sign)
+            return false;
+    }
+    return true;
+}
 
 static QVector<HullPt> convexHullWith(QVector<HullPt> pts)
 {
@@ -3776,6 +3970,7 @@ void StructureStudioView::rebuildAimTargets()
     // Where the scene is aiming. More than one Aim palette is legal; the first
     // that resolves wins, which is what a single head can actually do.
     quint32 aimTargetId = 0xFFFFFFFF;
+    QLCPalette *aimPal = nullptr;
     QColor aimColour(255, 180, 0);
     bool haveAim = false;
 
@@ -3812,6 +4007,7 @@ void StructureStudioView::rebuildAimTargets()
         if (t == nullptr)
             continue;
         aimTargetId = t->id();
+        aimPal = pal;
         if (t->color().isValid())
             aimColour = t->color();
         haveAim = true;
@@ -3880,6 +4076,15 @@ void StructureStudioView::rebuildAimTargets()
     if (haveAim == false)
         return;
 
+    /* On a line each head has its own place along it, fixed by the look's
+       spread and the heads' order -- worked out here, once; the point itself
+       is read fresh per frame, so a dragged line is followed. */
+    QHash<quint32, double> lineFraction;
+    if (StageTarget *lt = props->stageTarget(aimTargetId))
+        if (lt->isLine() && aimPal != nullptr)
+            lineFraction = AimSolver::lineFractions(m_doc, lt, AimSolver::aimHeads(m_doc, scene, aimPal->id()),
+                                                    LineSpread::fromParams(aimPal->effectParamValues()));
+
     // Everything the scene touches, directly or through a group.
     QSet<quint32> candidates;
     foreach (quint32 fid, scene->fixtures())
@@ -3910,6 +4115,7 @@ void StructureStudioView::rebuildAimTargets()
             spec.targetId = aimTargetId;
             spec.colour = aimColour;
             spec.subjectHeight = subjectMode;
+            spec.lineFraction = lineFraction.value(fid, -1.0);
             m_aimTarget.insert(fid, spec);
         }
     }
@@ -3957,7 +4163,12 @@ bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
     /* The shared rule -- binding, kind, height and this head's beam all
        resolved in one place, so this view and QLCPalette cannot drift apart
        again. */
-    out = AimSolver::aimPointFor(m_doc, fid, t, it.value().subjectHeight);
+    if (t->isLine())
+        out = it.value().lineFraction >= 0.0
+                ? AimSolver::linePoint(m_doc, t, it.value().lineFraction)
+                : props->targetAimPoint(t);
+    else
+        out = AimSolver::aimPointFor(m_doc, fid, t, it.value().subjectHeight);
     return true;
 }
 
@@ -4232,6 +4443,24 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     int axisSurface = 0;
     const double len = beamThrow(apex, d, &lands, &landNormal, &axisSurface);
 
+    /* A pool lies just off its surface, toward the eye -- unless it is on the
+       far side of a cloth. A drape has no thickness, so a pool on its back
+       (steps lighting it from upstage) lifted toward the eye sat in front of
+       the cloth and showed through it. On the far side it sinks instead. */
+    const Trig &tr = angledTrig();
+    const QVector3D eye(float(tr.sA * tr.cE), float(tr.cA * tr.cE), float(tr.sE));
+    MonitorProperties *props = m_doc->monitorProperties();
+    auto poolLift = [&](int surface, const QVector3D &normal) {
+        if (surface < 0 && QVector3D::dotProduct(normal, eye) < 0.0f)
+        {
+            const Scenery *sc = props->scenery(quint32(-1 - surface));
+            if (sc != nullptr && !sc->isSeeThrough())
+                return -1e-4;
+        }
+        return 1e-4;
+    };
+    const double axisLift = poolLift(axisSurface, landNormal);
+
     /* Brighter in a dark room, which is both true and useful: at work light you
        want to see the rig, at blackout you want to see the light. */
     const double room = 1.25 - 0.65 * m_ambient;
@@ -4288,8 +4517,76 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     /* Light spreads, so even a beam that lands thins out along the way; one
        going nowhere has to reach zero by the end or it terminates in mid-air. */
     const double farA = lands ? 0.65 : 0.0;
-    foreach (const QVector3D &q, footprint)
-        pts << HullPt{ w2s(q), farA, viewDepth(q) };
+
+    /* Each edge of the cone ends at what IT meets first, not on the surface
+       the middle of the beam lands on. Followed on to that surface, the edge
+       rays of a beam whose middle met a drape ran on down through the risers
+       and the stage floor to where the drape would have reached below it.
+       Stopped short, a point keeps the fade it had there. */
+    const bool levelLook = seenLevel();
+    QVarLengthArray<BeamLanding, 64> landings;     // where its rays land, seen level
+    if (levelLook && lands)
+        landings.append(BeamLanding{ axisSurface, apex + d * float(len) });
+    for (const QVector3D &q : footprint)
+    {
+        QVector3D end = q;
+        double a = farA;
+        const QVector3D v = q - apex;
+        const double run = double(v.length());
+        if (run > 1e-6)
+        {
+            const QVector3D ray = v / float(run);
+            bool h = false;
+            int s = 0;
+            const double t = beamThrow(apex, ray, &h, nullptr, &s);
+            if (h && t < run - 1e-3)
+            {
+                end = apex + ray * float(t);
+                a = 1.0 - (1.0 - farA) * (t / run);
+            }
+            if (h && levelLook)
+                landings.append(BeamLanding{ s, end });
+        }
+        pts << HullPt{ w2s(end), a, viewDepth(end) };
+    }
+
+    /* Does ALL of it land on the one surface its middle does? The pool used
+       to be wherever the middle of the beam landed, as one oval on that
+       surface: a follow-spot whose middle went just past the end of the cyc
+       washed none of it, though half the beam was on the cloth ("the spots
+       aren't both backwashing"). The edge of the beam is asked too; when its
+       rays end on different things -- the cyc and the floor beyond, a deck
+       and the floor below its edge -- the pool is laid ray by ray instead,
+       each part on what it reaches. */
+    const double halfA = qBound(0.005, halfAngleRad * fieldMult, 1.4);
+    QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
+    if (side.length() < 1e-3f)
+        side = QVector3D(1, 0, 0);
+    side.normalize();
+    const QVector3D up = QVector3D::crossProduct(d, side).normalized();
+    auto rayAt = [&](double r, double a) {
+        const QVector3D across = side * float(qCos(a)) + up * float(qSin(a));
+        return (d * float(qCos(halfA * r)) + across * float(qSin(halfA * r))).normalized();
+    };
+    bool split = false;
+    for (int i = 0; i < 16 && (!split || levelLook); ++i)
+    {
+        bool h = false;
+        int s = 0;
+        const QVector3D ray = rayAt(1.0, 2.0 * M_PI * i / 16);
+        const double run = beamThrow(apex, ray, &h, nullptr, &s);
+        split = split || (h != lands) || (h && s != axisSurface);
+        if (h && levelLook)
+            landings.append(BeamLanding{ s, apex + ray * float(run) });
+    }
+
+    /* Seen level -- a side or front elevation -- a riser stands across the
+       beam as a flat cut-out, and the light in the air behind it, the side
+       away from the lens, is in its shadow: nothing of the cone is drawn
+       there, nor over the riser itself (see levelShadows()). */
+    const QVector<QPolygonF> shadows = levelLook ? levelShadows(apex, landings.constData(),
+                                                                landings.size())
+                                                 : QVector<QPolygonF>();
 
     const QVector<HullPt> hull = convexHullWith(pts);
     if (hull.size() >= 3)
@@ -4340,36 +4637,14 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
         {
             const HullPt &a = rim.at(i);
             const HullPt &b = rim.at((i + 1) % rim.size());
-            emitLightTri(lensPx, a.p, b.p, lensZ, a.z + lift, b.z + lift,
-                         1.0, a.a, b.a, c, p);
+            if (shadows.isEmpty())
+                emitLightTri(lensPx, a.p, b.p, lensZ, a.z + lift, b.z + lift,
+                             1.0, a.a, b.a, c, p);
+            else
+                emitLightTriOutside(LitCorner{ lensPx, lensZ, 1.0 },
+                                    LitCorner{ a.p, a.z + lift, a.a },
+                                    LitCorner{ b.p, b.z + lift, b.a }, shadows, c, p);
         }
-    }
-
-    /* Does ALL of it land on the one surface its middle does? The pool used
-       to be wherever the middle of the beam landed, as one oval on that
-       surface: a follow-spot whose middle went just past the end of the cyc
-       washed none of it, though half the beam was on the cloth ("the spots
-       aren't both backwashing"). The edge of the beam is asked too; when its
-       rays end on different things -- the cyc and the floor beyond, a deck
-       and the floor below its edge -- the pool is laid ray by ray instead,
-       each part on what it reaches. */
-    const double halfA = qBound(0.005, halfAngleRad * fieldMult, 1.4);
-    QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
-    if (side.length() < 1e-3f)
-        side = QVector3D(1, 0, 0);
-    side.normalize();
-    const QVector3D up = QVector3D::crossProduct(d, side).normalized();
-    auto rayAt = [&](double r, double a) {
-        const QVector3D across = side * float(qCos(a)) + up * float(qSin(a));
-        return (d * float(qCos(halfA * r)) + across * float(qSin(halfA * r))).normalized();
-    };
-    bool split = false;
-    for (int i = 0; i < 16 && !split; ++i)
-    {
-        bool h = false;
-        int s = 0;
-        beamThrow(apex, rayAt(1.0, 2.0 * M_PI * i / 16), &h, nullptr, &s);
-        split = (h != lands) || (h && s != axisSurface);
     }
 
     /* The pool, only where the beam actually arrives on something -- lying ON
@@ -4408,6 +4683,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
            its projection to the screen is asked again. A gobo's mask can
            turn, so a gobo's mesh is worked out every frame. */
         const BeamMesh *kept = nullptr;
+        QVector<QVector3D> meshQ;           // where each ray landed, in the world
         BeamMeshKey key;
         if (!gobo && m_decksValid)
         {
@@ -4427,16 +4703,18 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             for (int k = 0; k < N; ++k)
             {
                 px[k] = w2s(kept->q.at(k));
-                pz[k] = viewDepth(kept->q.at(k)) + 1e-4;
+                pz[k] = viewDepth(kept->q.at(k)) + poolLift(kept->surf.at(k), kept->normal.at(k));
             }
             surf = kept->surf;
             landed = kept->landed;
             pt = kept->fade;
+            meshQ = kept->q;
         }
         else
         {
             BeamMesh fresh;
             fresh.q.resize(N);
+            fresh.normal.resize(N);
             for (int ri = 0; ri <= RINGS; ++ri)
                 for (int si = 0; si < SECTORS; ++si)
                 {
@@ -4445,12 +4723,14 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                     const QVector3D ray = (ri == 0) ? d : rayAt(r, a);
                     bool h = false;
                     int sf = 0;
-                    const double run = beamThrow(apex, ray, &h, nullptr, &sf);
+                    QVector3D nrm(0, 0, 1);
+                    const double run = beamThrow(apex, ray, &h, &nrm, &sf);
                     const QVector3D q = apex + ray * float(run);
                     const int k = ri * SECTORS + si;
                     fresh.q[k] = q;
+                    fresh.normal[k] = nrm;
                     px[k] = w2s(q);
-                    pz[k] = viewDepth(q) + 1e-4;
+                    pz[k] = viewDepth(q) + poolLift(sf, nrm);
                     surf[k] = sf;
                     landed[k] = h;
                     const double rs = qMin(r, 0.985);
@@ -4468,7 +4748,12 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 else
                     m_beamMeshes.insert(key, fresh);
             }
+            meshQ = fresh.q;
         }
+        if (levelLook)
+            for (int k = 0; k < N; ++k)
+                if (landed[k] && pt[k] >= 0.04)
+                    landings.append(BeamLanding{ surf[k], meshQ.at(k) });
         QColor cellCol = colour;
         cellCol.setAlpha(qBound(0, int(poolA), 220));
         auto tri = [&](int i, int j, int k) {
@@ -4528,7 +4813,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 const QVector3D q = landAt(r, a);
                 const int k = ri * SECTORS + si;
                 px[k] = w2s(q);
-                pz[k] = viewDepth(q) + 1e-4;
+                pz[k] = viewDepth(q) + axisLift;
                 // Just inside the rim, so the outer ring isn't sampled dark.
                 const double rs = qMin(r, 0.985);
                 pt[k] = BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a));
@@ -4575,7 +4860,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             for (const QVector3D &q : ring)
             {
                 px << w2s(q);
-                zs << viewDepth(q) + 1e-4;
+                zs << viewDepth(q) + axisLift;
             }
             ringPx << px;
             ringZ << zs;
@@ -4605,6 +4890,250 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             }
         }
     }
+
+    /* Seen level, the top of a riser and the face it is lit on are edges:
+       the pool on them has no area to show. The wash is drawn as a band
+       just inside each edge the beam reaches, as far along it as it does. */
+    if (levelLook)
+    {
+        /* Brighter than the pool it stands for: the whole of that pool is
+           seen edge-on, packed into the band. */
+        QColor bandCol = colour;
+        bandCol.setAlpha(qBound(0, int(3.0 * poolA), 230));
+        drawLevelWash(landings.constData(), landings.size(), bandCol, p);
+    }
+}
+
+/*********************************************************************
+ * Beams seen level: risers in the way
+ *********************************************************************/
+
+bool StructureStudioView::seenLevel() const
+{
+    /* A side or front elevation: the eye level with the stage, so a riser
+       is seen as its upright cross-section. From higher up the depth buffer
+       sorts a beam against the risers well enough, and the air above a deck
+       -- which a cut-out shadow would take away -- is in plain view. */
+    return m_plane == Angled && m_elevationDeg <= kLevelViewDeg;
+}
+
+bool StructureStudioView::deckBlock(int surface, StagePlatform **pl, StagePlatform::Block *bk,
+                                    double *baseZ, int *face) const
+{
+    quint32 pid = 0;
+    int blockNo = 0, f = 0;
+    if (!deckSurfaceParts(surface, pid, blockNo, f))
+        return false;
+    for (const Deck &deck : decks())
+    {
+        if (deck.platform == nullptr || deck.platform->id() != pid)
+            continue;
+        if (blockNo > deck.blocks.size())
+            return false;
+        *pl = deck.platform;
+        *bk = deck.blocks.at(blockNo - 1);
+        *baseZ = deck.baseZ;
+        if (face != nullptr)
+            *face = f;
+        return true;
+    }
+    return false;
+}
+
+QVector<QPolygonF> StructureStudioView::levelShadows(const QVector3D &apex,
+                                                     const BeamLanding *landings, int count) const
+{
+    /* Every block the beam meets, as it is seen: its outline on screen and
+       everything beyond it as seen from the lens -- the corners pushed out
+       along the lines from the lens, far off the screen. Both are convex, so
+       the whole is the hull of the two. A lens inside a block's outline (a
+       light in or in front of a step) has no "beyond" here: that block is
+       left out. */
+    QVector<QPolygonF> out;
+    QVarLengthArray<int, 16> done;
+    const QPointF lens = w2s(apex);
+    const double reach = 4.0 * (width() + height());
+    for (int i = 0; i < count; ++i)
+    {
+        const int sf = landings[i].surface;
+        quint32 pid = 0;
+        int blockNo = 0, face = 0;
+        if (!deckSurfaceParts(sf, pid, blockNo, face))
+            continue;
+        const int block = int(pid) * 64 + blockNo;
+        if (std::find(done.begin(), done.end(), block) != done.end())
+            continue;
+        done.append(block);
+
+        StagePlatform *pl = nullptr;
+        StagePlatform::Block bk{ 0, 0, 0, 0, 0 };
+        double baseZ = 0.0;
+        if (!deckBlock(sf, &pl, &bk, &baseZ))
+            continue;
+        QVector3D c[8];
+        boxCorners(c, bk.x0, bk.y0, float(baseZ), bk.x1, bk.y1, float(baseZ) + bk.height);
+        turnCorners(c, pl);
+        QVector<HullPt> box;
+        for (const QVector3D &w : c)
+            box << HullPt{ w2s(w), 0.0 };
+        const QVector<HullPt> outline = convexHullWith(box);
+        if (outline.size() < 3 || pointInConvex(outline, lens))
+            continue;
+        QVector<HullPt> pts = outline;
+        for (const HullPt &h : outline)
+        {
+            const QPointF v = h.p - lens;
+            const double l = qSqrt(QPointF::dotProduct(v, v));
+            if (l > 1e-6)
+                pts << HullPt{ h.p + v * (reach / l), 0.0 };
+        }
+        QPolygonF shade;
+        for (const HullPt &h : convexHullWith(pts))
+            shade << h.p;
+        out << shade;
+    }
+    return out;
+}
+
+void StructureStudioView::drawLevelWash(const BeamLanding *landings, int count,
+                                        const QColor &colour, QPainter &p) const
+{
+    const QVector3D eye = toViewer();
+    const double band = qBound(3.0, 0.06 * m_scale, 8.0);   // px into the block
+    QVarLengthArray<int, 16> done;
+    for (int i = 0; i < count; ++i)
+    {
+        const int sf = landings[i].surface;
+        if (std::find(done.begin(), done.end(), sf) != done.end())
+            continue;
+        done.append(sf);
+        StagePlatform *pl = nullptr;
+        StagePlatform::Block bk{ 0, 0, 0, 0, 0 };
+        double baseZ = 0.0;
+        int face = 0;
+        if (!deckBlock(sf, &pl, &bk, &baseZ, &face))
+            continue;
+        const QVector3D n = blockFaceNormal(pl, face);
+        // A face turned to the eye shows its pool as it is.
+        if (qAbs(QVector3D::dotProduct(n, eye)) > 0.25f)
+            continue;
+        if (QVector3D::dotProduct(n, eye) < -1e-3f && face != 0)
+            continue;          // the far side of the block: hidden by it anyway
+
+        // Into the block, on screen; the face runs across that.
+        const QVector3D at = landings[i].at;
+        QPointF in = w2s(at) - w2s(at + n * 0.1f);
+        const double inLen = qSqrt(QPointF::dotProduct(in, in));
+        if (inLen < 1e-6)
+            continue;
+        in /= inLen;
+        const QPointF along(-in.y(), in.x());
+        const QPointF o = w2s(at);
+        double lo = 0.0, hi = 0.0;
+        for (int k = i; k < count; ++k)
+        {
+            if (landings[k].surface != sf)
+                continue;
+            const double s = QPointF::dotProduct(w2s(landings[k].at) - o, along);
+            lo = qMin(lo, s);
+            hi = qMax(hi, s);
+        }
+        if (hi - lo < 1.0)
+            continue;
+
+        // On the block's nearest face: that is what shows where the band is.
+        QVector3D c[8];
+        boxCorners(c, bk.x0, bk.y0, float(baseZ), bk.x1, bk.y1, float(baseZ) + bk.height);
+        turnCorners(c, pl);
+        const double z = boxNearFaceDepth(c) + 2e-4;
+        const QPointF a = o + along * lo, b = o + along * hi;
+        emitLightTri(a, b, b + in * band, z, z, z, 1.0, 1.0, 0.6, colour, p);
+        emitLightTri(a, b + in * band, a + in * band, z, z, z, 1.0, 0.6, 0.6, colour, p);
+    }
+}
+
+/* Keep the part of a lit polygon on the inner side of a line: where
+ * (point - @p q) . @p n >= 0. Depth and alpha are carried along the cut edges
+ * -- both are affine across a triangle, so a cut point gets exactly what the
+ * triangle had there. */
+void StructureStudioView::keepInside(const LitPiece &in, const QPointF &q, const QPointF &n,
+                                     LitPiece &out)
+{
+    out.clear();
+    const int cnt = in.size();
+    for (int i = 0; i < cnt; ++i)
+    {
+        const LitCorner &c = in[i], &d = in[(i + 1) % cnt];
+        const double dc = QPointF::dotProduct(c.p - q, n);
+        const double dd = QPointF::dotProduct(d.p - q, n);
+        if (dc >= 0.0)
+            out.append(c);
+        if ((dc >= 0.0) != (dd >= 0.0))
+        {
+            const double t = dc / (dc - dd);
+            out.append(LitCorner{ c.p + (d.p - c.p) * t, c.z + (d.z - c.z) * t,
+                                  c.a + (d.a - c.a) * t });
+        }
+    }
+}
+
+void StructureStudioView::emitLightTriOutside(const LitCorner &a, const LitCorner &b,
+                                              const LitCorner &c,
+                                              const QVector<QPolygonF> &shadows,
+                                              const QColor &colour, QPainter &p) const
+{
+    /* What is left of the triangle outside every shadow, as convex pieces:
+       the part outside a convex shadow is, edge by edge, what lies beyond
+       that edge but inside the ones before it. A handful of blocks and a
+       handful of edges each -- a few dozen cuts a triangle. */
+    typedef LitPiece Piece;
+    QVector<Piece> pieces;
+    {
+        Piece t;
+        t.append(a); t.append(b); t.append(c);
+        pieces << t;
+    }
+    for (const QPolygonF &sh : shadows)
+    {
+        const int m = sh.size();
+        if (m < 3)
+            continue;
+        // Which side of its edges is inside: the side its middle is on.
+        QPointF mid(0, 0);
+        for (const QPointF &q : sh)
+            mid += q;
+        mid /= m;
+        QVector<Piece> next;
+        for (const Piece &pc : std::as_const(pieces))
+        {
+            Piece rest = pc, beyond, keep;
+            for (int k = 0; k < m && rest.size() >= 3; ++k)
+            {
+                const QPointF e = sh.at((k + 1) % m) - sh.at(k);
+                QPointF n(-e.y(), e.x());
+                if (QPointF::dotProduct(mid - sh.at(k), n) < 0.0)
+                    n = -n;
+                keepInside(rest, sh.at(k), -n, beyond);
+                if (beyond.size() >= 3)
+                    next << beyond;
+                keepInside(rest, sh.at(k), n, keep);
+                rest = keep;
+            }
+            // What is left in rest is in the shade.
+        }
+        pieces = next;
+        if (pieces.isEmpty() || pieces.size() > 256)
+            break;
+    }
+    for (const Piece &pc : std::as_const(pieces))
+        for (int i = 1; i + 1 < pc.size(); ++i)
+        {
+            const QPointF e1 = pc[i].p - pc[0].p, e2 = pc[i + 1].p - pc[0].p;
+            if (qAbs(e1.x() * e2.y() - e1.y() * e2.x()) < 1e-4)
+                continue;                         // a sliver of no area
+            emitLightTri(pc[0].p, pc[i].p, pc[i + 1].p, pc[0].z, pc[i].z, pc[i + 1].z,
+                         pc[0].a, pc[i].a, pc[i + 1].a, colour, p);
+        }
 }
 
 double StructureStudioView::opticsTime() const
@@ -4733,9 +5262,20 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
        And not for a free-placed fixture either: there is no surface under it to
        stand on, and its plotted position is its CENTRE -- which is what the 2D
        plot, the hit test and every other view already agree it is. Seating one
-       just shifts it half a body off the spot it was put on. */
+       just shifts it half a body off the spot it was put on.
+
+       And not on a truss or pipe. The elevations draw a mover there CENTRED
+       on its rig point (and the hit test agrees), so that is where a rigger
+       drags one to sit it just under the bar, and the drop (mountZOffset)
+       records it. Seating it here as well hung every such head half a body
+       lower in the rig view than in the truss editor, clear of the bar it is
+       clamped to ("the truss editor shows the fixtures just under the cross
+       member .. but the rig view shows them down a bit"). Only what the
+       elevations seat is seated: a tower shelf (towerFixtureBodyRect()), a
+       deck, a riser -- surfaces a body really stands on or hangs flush from. */
+    const bool seatsOnSurface = rp.onTower() || rp.onDeck() || rp.onRiser();
     const double seat = (rp.placement == FixtureRigProps::Inside
-                         || hasStructuralMount(rp) == false) ? 0.0 : 0.5;
+                         || seatsOnSurface == false) ? 0.0 : 0.5;
     const QVector3D seated = c + H * float(h * seat);
 
     for (int u = 0; u < units; ++u)
@@ -4806,6 +5346,26 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                 // Just in front of the face it sits on; behind the head when
                 // the face is turned away.
                 emitDots(dots, viewDepth(face) + 0.003, qMax(0.8, pitch * 0.36 * m_scale), led, p);
+            }
+
+            /* A colour ring round the lens: a dot per segment just inside the
+               face's edge, each its segment's colour, dark glass when off.
+               On the face, so it turns with pan and tilt and hides behind
+               the head when the face is turned away. */
+            if (!look.ring.isEmpty())
+            {
+                const QVector3D face = headMid + beam * float(h * 0.265);
+                const double radius = qMin(slice, d) * 0.26 * 0.92;
+                const int n = look.ring.size();
+                const double dotPx = qMax(1.0, radius * 2.0 * M_PI / n * 0.42 * m_scale);
+                for (int i = 0; i < n; ++i)
+                {
+                    const double a = 2.0 * M_PI * i / n;
+                    const QVector3D at = face + side * float(radius * qCos(a)) + up * float(radius * qSin(a));
+                    const QColor rc = look.ring.at(i);
+                    const QColor dot = (rc.isValid() && rc.value() >= 16) ? rc : QColor(46, 46, 50);
+                    emitDots(QVector<QPointF>{ w2s(at) }, viewDepth(face) + 0.004, dotPx, dot, p);
+                }
             }
 
             // A stub of beam, so the direction reads at overview scale where the
@@ -5584,7 +6144,160 @@ void StructureStudioView::drawSocks(QPainter &p) const
     }
 }
 
-void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sources) const
+QVector<StructureStudioView::Occluder> StructureStudioView::occluders() const
+{
+    /* What can stand between a light and the eye: opaque scenery as it hangs
+       now -- a curtain as its fixture has it this frame (drapePose()); its
+       open or flown part is not in its pieces(), so it stops nothing; a
+       scrim is seen through -- and every block of every platform.
+       Each with the box it fits in, so a light can pass over everything not
+       within its reach without asking. Once a frame, while painting. */
+    if (m_decksValid)
+        return m_occluders;
+    QVector<Occluder> out;
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (Scenery *sc, props->sceneries())
+    {
+        if (sc == nullptr || sc->isSeeThrough() || !layerShown(sc->layerId()))
+            continue;
+        Occluder o;
+        o.scenery = sc;
+        o.pose = drapePose(sc);         // a curtain where this view draws it
+        bool first = true;
+        const double half = double(sc->thickness()) / 2.0;
+        for (const Scenery::Piece &pc : sc->pieces(o.pose))
+            for (int i = 0; i <= 32; ++i)
+            {
+                const double u = pc.u0 + (pc.u1 - pc.u0) * i / 32.0;
+                for (double off : { -half, half })
+                    for (float z : { pc.z0, pc.z1 })
+                    {
+                        const QVector3D w = sc->pointAt(u, double(z), off);
+                        o.lo = first ? w : QVector3D(qMin(o.lo.x(), w.x()), qMin(o.lo.y(), w.y()),
+                                                     qMin(o.lo.z(), w.z()));
+                        o.hi = first ? w : QVector3D(qMax(o.hi.x(), w.x()), qMax(o.hi.y(), w.y()),
+                                                     qMax(o.hi.z(), w.z()));
+                        first = false;
+                    }
+            }
+        if (first)
+            continue;                       // nothing of it hangs anywhere
+        // A bowed cloth bulges between the samples: a little to spare.
+        o.lo -= QVector3D(0.05f, 0.05f, 0.05f);
+        o.hi += QVector3D(0.05f, 0.05f, 0.05f);
+        out << o;
+    }
+    for (const Deck &deck : decks())
+    {
+        if (deck.platform == nullptr)
+            continue;
+        for (const StagePlatform::Block &bk : deck.blocks)
+        {
+            Occluder o;
+            o.platform = deck.platform;
+            o.block = bk;
+            o.baseZ = deck.baseZ;
+            const QList<QPointF> cs = deck.platform->corners(bk);
+            double x0 = cs.first().x(), x1 = x0, y0 = cs.first().y(), y1 = y0;
+            for (const QPointF &c : cs)
+            {
+                x0 = qMin(x0, c.x()); x1 = qMax(x1, c.x());
+                y0 = qMin(y0, c.y()); y1 = qMax(y1, c.y());
+            }
+            o.lo = QVector3D(float(x0), float(y0), float(deck.baseZ));
+            o.hi = QVector3D(float(x1), float(y1), float(deck.baseZ + double(bk.height)));
+            out << o;
+        }
+    }
+    return out;
+}
+
+double StructureStudioView::opaqueTowardTheEye(const QVector3D &from, const QVector3D &eye,
+                                              double maxT, quint32 hostPlatform,
+                                              QVector3D *normal) const
+{
+    double best = maxT;
+    bool hit = false;
+    QVector3D bestN;
+    const QPointF o2(double(from.x()), double(from.y()));
+    const QVector<Occluder> all = occluders();      // const: shares, never copies
+    for (const Occluder &oc : all)
+    {
+        // Out of reach: further from the light than it has to look.
+        const double dx = qMax(0.0, qMax(double(oc.lo.x() - from.x()), double(from.x() - oc.hi.x())));
+        const double dy = qMax(0.0, qMax(double(oc.lo.y() - from.y()), double(from.y() - oc.hi.y())));
+        const double dz = qMax(0.0, qMax(double(oc.lo.z() - from.z()), double(from.z() - oc.hi.z())));
+        if (dx * dx + dy * dy + dz * dz >= best * best)
+            continue;
+
+        if (oc.scenery != nullptr)
+        {
+            double t = 0.0;
+            QVector3D n;
+            if (oc.scenery->rayHit(from, eye, t, best, 16, &n, &oc.pose) && t > 1e-4)
+            {
+                best = t;
+                bestN = n;
+                hit = true;
+            }
+            continue;
+        }
+
+        /* A platform's block: a box, turned with its platform. Not the one
+           the light is fixed to -- its body is drawn past that one's near
+           face too (the depth bias in drawOneFixture()). */
+        StagePlatform *pl = oc.platform;
+        if (pl->id() == hostPlatform)
+            continue;
+        const StagePlatform::Block &bk = oc.block;
+        const QPointF lo = pl->toLocal(o2);
+        const QPointF ld = pl->toLocal(o2 + QPointF(double(eye.x()), double(eye.y()))) - lo;
+        const double org[3] = { lo.x(), lo.y(), double(from.z()) };
+        const double dir[3] = { ld.x(), ld.y(), double(eye.z()) };
+        const double mn[3] = { double(bk.x0), double(bk.y0), oc.baseZ };
+        const double mx[3] = { double(bk.x1), double(bk.y1), oc.baseZ + double(bk.height) };
+        double tNear = -1e30, tFar = 1e30;
+        int axis = -1;
+        bool miss = false;
+        for (int k = 0; k < 3 && !miss; ++k)
+        {
+            if (qAbs(dir[k]) < 1e-12)
+            {
+                miss = (org[k] < mn[k] || org[k] > mx[k]);
+                continue;
+            }
+            double t0 = (mn[k] - org[k]) / dir[k], t1 = (mx[k] - org[k]) / dir[k];
+            if (t0 > t1)
+                qSwap(t0, t1);
+            if (t0 > tNear) { tNear = t0; axis = k; }
+            tFar = qMin(tFar, t1);
+            miss = (tNear > tFar);
+        }
+        // Starting inside a block says nothing about what is in front.
+        if (miss || axis < 0 || tNear <= 1e-4 || tNear >= best)
+            continue;
+        const QVector3D at = from + eye * float(tNear + 1e-3);
+        if (!pl->containsPoint(at.x(), at.y()))   // off a rounded front's cut corners
+            continue;
+        best = tNear;
+        hit = true;
+        const double sgn = dir[axis] > 0.0 ? -1.0 : 1.0;   // facing back along the ray
+        if (axis == 2)
+            bestN = QVector3D(0.0f, 0.0f, float(sgn));
+        else
+        {
+            const QPointF a = pl->toWorld(axis == 0 ? QPointF(1.0, 0.0) : QPointF(0.0, 1.0))
+                              - pl->toWorld(QPointF(0.0, 0.0));
+            bestN = QVector3D(float(a.x() * sgn), float(a.y() * sgn), 0.0f);
+        }
+    }
+    if (normal != nullptr)
+        *normal = bestN.normalized();
+    return hit ? best : -1.0;
+}
+
+void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sources,
+                                       quint32 hostPlatform) const
 {
     if (sources.isEmpty() || m_haze <= 0.0)
         return;
@@ -5594,6 +6307,9 @@ void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sou
     const double share = 1.0 / qSqrt(double(sources.size()));
     const double radius = 0.25 + 0.25 * haze;               // metres of lit air
     const int n = 20;
+    // Toward the eye: viewDepth() grows by one for each metre along it.
+    const Trig &tr = angledTrig();
+    const QVector3D eye(float(tr.sA * tr.cE), float(tr.cA * tr.cE), float(tr.sE));
     for (const BarLight &src : sources)
     {
         const double peak = qMax(src.colour.redF(), qMax(src.colour.greenF(), src.colour.blueF()));
@@ -5608,14 +6324,125 @@ void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sou
                                             + QLineF(c, w2s(src.at + QVector3D(0, 0, float(radius)))).length()));
         // The lit air between us and it: in front of its body, not inside it.
         const double z = viewDepth(src.at) + radius;   // larger is nearer
+
+        /* ...but not in front of what stands between us and it. Lifted a flat
+           half-metre toward the eye, the glow of a row of steps a foot behind
+           the closed main drape sorted in front of the drape and shone through
+           it. Where something opaque is nearer than that, the glow lies just
+           behind its face instead -- following the face's slant across the
+           disc, so a drape seen at an angle hides all of it -- and the face
+           covers it as it covers the step. Nothing in the way: as it was. */
+        QVector3D faceN;
+        const double t = opaqueTowardTheEye(src.at, eye, radius, hostPlatform, &faceN);
+        bool onFace = false;
+        double fd0 = 0.0, fgx = 0.0, fgy = 0.0;      // the face's depth across the screen
+        QPointF fs0;
+        if (t >= 0.0)
+        {
+            const QVector3D at = src.at + eye * float(t);
+            QVector3D a = QVector3D::crossProduct(faceN, QVector3D(0, 0, 1));
+            if (a.lengthSquared() < 1e-6f)
+                a = QVector3D(1, 0, 0);
+            a.normalize();
+            const QVector3D b = QVector3D::crossProduct(faceN, a).normalized();
+            fs0 = w2s(at);
+            fd0 = viewDepth(at);
+            const QPointF s1 = w2s(at + a) - fs0, s2 = w2s(at + b) - fs0;
+            const double d1 = viewDepth(at + a) - fd0, d2 = viewDepth(at + b) - fd0;
+            const double det = s1.x() * s2.y() - s1.y() * s2.x();
+            if (qAbs(det) > 1e-9)
+            {
+                fgx = (d1 * s2.y() - d2 * s1.y()) / det;
+                fgy = (s1.x() * d2 - s2.x() * d1) / det;
+                onFace = true;
+            }
+        }
+        const double behind = 0.02;                   // metres behind the face
+        auto depthAt = [&](const QPointF &q) {
+            if (t < 0.0)
+                return z;
+            if (!onFace)                                  // the face edge-on: its one depth
+                return qMin(z, fd0 - behind);
+            return qMin(z, fd0 + fgx * (q.x() - fs0.x()) + fgy * (q.y() - fs0.y()) - behind);
+        };
+        const double zc = depthAt(c);
+
+        /* Laid behind a face, the disc reaches below the floor where the face
+           meets it -- and the floor is not in the depth buffer, so that part
+           showed as a strip of glow on the floor in front of the drape. Air
+           under the floor is not lit: where the face hides the light, clip the
+           disc to what is above the floor. The world height of what is drawn
+           at a point of the screen at a depth is affine in the three. */
+        QMatrix4x4 toWorld;
+        bool clipFloor = false;
+        if (t >= 0.0)
+        {
+            const QPointF ex = w2s(src.at + QVector3D(1, 0, 0)) - c;
+            const QPointF ey = w2s(src.at + QVector3D(0, 1, 0)) - c;
+            const QPointF ez = w2s(src.at + QVector3D(0, 0, 1)) - c;
+            const QMatrix4x4 toScreen(float(ex.x()), float(ey.x()), float(ez.x()), 0.0f,
+                                      float(ex.y()), float(ey.y()), float(ez.y()), 0.0f,
+                                      eye.x(), eye.y(), eye.z(), 0.0f,
+                                      0.0f, 0.0f, 0.0f, 1.0f);
+            toWorld = toScreen.inverted(&clipFloor);
+        }
+        const double z0 = viewDepth(src.at);
+        auto heightAt = [&](const QPointF &q, double zq) {
+            const QVector3D dw = toWorld.map(QVector3D(float(q.x() - c.x()), float(q.y() - c.y()),
+                                                       float(zq - z0)));
+            return double(src.at.z()) + double(dw.z());
+        };
+
         // A fan, bright at the source and nothing at its rim.
+        QPointF prev(c.x() + rPx, c.y());
+        double zPrev = depthAt(prev);
         for (int i = 0; i < n; ++i)
         {
-            const double a0 = 2.0 * M_PI * i / n, a1 = 2.0 * M_PI * (i + 1) / n;
-            QPolygonF tri;
-            tri << c << QPointF(c.x() + rPx * qCos(a0), c.y() + rPx * qSin(a0))
-                << QPointF(c.x() + rPx * qCos(a1), c.y() + rPx * qSin(a1));
-            emitLight(tri, z, glow, p, QVector<double>{ z, z, z }, QVector<double>{ 1.0, 0.0, 0.0 });
+            const double a1 = 2.0 * M_PI * (i + 1) / n;
+            const QPointF next(c.x() + rPx * qCos(a1), c.y() + rPx * qSin(a1));
+            const double zNext = depthAt(next);
+            const QPointF vp[3] = { c, prev, next };
+            const double vz[3] = { zc, zPrev, zNext };
+            const double va[3] = { 1.0, 0.0, 0.0 };
+            prev = next;
+            zPrev = zNext;
+            double vh[3] = { 1.0, 1.0, 1.0 };
+            int below = 0;
+            if (clipFloor)
+                for (int k = 0; k < 3; ++k)
+                    if ((vh[k] = heightAt(vp[k], vz[k])) < 0.0)
+                        ++below;
+            if (below == 0)
+            {
+                // One mesh for the whole fan (emitLightTri() joins them).
+                emitLightTri(vp[0], vp[1], vp[2], vz[0], vz[1], vz[2], va[0], va[1], va[2], glow, p);
+                continue;
+            }
+            if (below == 3)
+                continue;
+            QPointF cp[4];
+            double cz[4], ca[4];
+            int m = 0;
+            for (int k = 0; k < 3; ++k)
+            {
+                const int j = (k + 1) % 3;
+                if (vh[k] >= 0.0)
+                {
+                    cp[m] = vp[k]; cz[m] = vz[k]; ca[m] = va[k];
+                    ++m;
+                }
+                if ((vh[k] >= 0.0) != (vh[j] >= 0.0))      // crosses the floor
+                {
+                    const double f = vh[k] / (vh[k] - vh[j]);
+                    cp[m] = vp[k] + (vp[j] - vp[k]) * f;
+                    cz[m] = vz[k] + (vz[j] - vz[k]) * f;
+                    ca[m] = va[k] + (va[j] - va[k]) * f;
+                    ++m;
+                }
+            }
+            for (int k = 1; k + 1 < m; ++k)
+                emitLightTri(cp[0], cp[k], cp[k + 1], cz[0], cz[k], cz[k + 1],
+                             ca[0], ca[k], ca[k + 1], glow, p);
         }
     }
 }
@@ -5709,7 +6536,9 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
         for (int i = 0; i < sceneries.size(); ++i)
         {
             double t = 0.0;
-            if (sceneries.at(i) != nullptr && sceneries.at(i)->rayHit(from, d, t, best, 16) && t > 0.05)
+            const Scenery::Pose pose = (sceneries.at(i) != nullptr) ? drapePose(sceneries.at(i)) : Scenery::Pose();
+            if (sceneries.at(i) != nullptr && sceneries.at(i)->rayHit(from, d, t, best, 16, nullptr, &pose)
+                && t > 0.05)
             {
                 best = t;
                 which = i;
@@ -6188,6 +7017,21 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     }
                 }
             }
+            /* Its colour ring, from the same snapshot: what the ring's
+               macro channel says (off, a colour, a chase stepping round on
+               the optics clock). Dark glass when output isn't shown. */
+            if (traits.ringChannel >= 0)
+            {
+                bool chasing = false;
+                QVector<QColor> ring;
+                if (showingOutput)
+                    ring = colourRingLive(fx, vals, opticsTime(), 16, &chasing);
+                if (ring.isEmpty())
+                    ring.fill(QColor(Qt::black), 16);
+                looks[0].ring = ring;
+                if (chasing)
+                    markOpticsAnimating();
+            }
             drawMoverSolid(p, fid, traits, col, looks, !showingOutput,
                            beamNow);
 
@@ -6265,7 +7109,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 if (fixtureLiveState(fx, vals, c, dim, valsComplete) && dim > 2)
                     glows << BarLight{ fixtureCentre(fid), c, 0.0, dim / 255.0 };
             }
-            drawHazeGlow(p, glows);
+            drawHazeGlow(p, glows, rp.onRiser() ? rp.riserPlatformId
+                                 : rp.onDeck() ? rp.deckPlatformId
+                                               : FixtureRigProps::invalidPlatformId());
         }
 
         /* A silk flame: on or off, as its relay is -- past half on -- and when
@@ -8132,6 +8978,36 @@ QByteArray StructureStudioView::valuesForDrawing(Fixture *fx, bool *complete) co
     return m_sceneValues.value(fx->id());
 }
 
+Scenery::Pose StructureStudioView::computeDrapePose(const Scenery *sc) const
+{
+    if (sc == nullptr)
+        return Scenery::Pose();
+    if (m_liveValues && sc->isDriven() && m_doc != nullptr)
+        if (Fixture *fx = m_doc->fixture(sc->driverFixture()))
+            return Scenery::poseFromValues(fx->fixtureMode(), fx->channelValues());
+    return sc->staticPose();
+}
+
+void StructureStudioView::updateDrapePoses() const
+{
+    m_drapePoses.clear();
+    if (m_doc == nullptr)
+        return;
+    foreach (Scenery *sc, m_doc->monitorProperties()->sceneries())
+        if (sc != nullptr && sc->isDriven())
+            m_drapePoses.insert(sc->id(), computeDrapePose(sc));
+}
+
+Scenery::Pose StructureStudioView::drapePose(const Scenery *sc) const
+{
+    if (sc == nullptr)
+        return Scenery::Pose();
+    if (!sc->isDriven())
+        return sc->staticPose();
+    const auto it = m_drapePoses.constFind(sc->id());
+    return (it != m_drapePoses.constEnd()) ? it.value() : computeDrapePose(sc);
+}
+
 QByteArray StructureStudioView::liveValuesFor(Fixture *fx) const
 {
     if (fx == nullptr)
@@ -8188,8 +9064,8 @@ void StructureStudioView::rebuildOverlapWarnings() const
     QVector<Box> boxes;
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx == nullptr)
-            continue;
+        if (fx == nullptr || fx->definitionUnavailable())
+            continue;   // a stand-in's size is made up: nothing to warn about
         const FixtureVisualTraits traits = classifyFixture(fx);
         if (traits.physW <= 0.0f && traits.physH <= 0.0f && traits.physD <= 0.0f)
             continue;   // nothing declared to compare against
@@ -8232,6 +9108,12 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     // The decks every beam ray is thrown against, worked out once this frame.
     m_decksValid = false;
     m_decks = decks();
+    // Before the sight model and throwScene(): where a curtain is decides
+    // what a ray meets -- the curtains as this view draws them.
+    updateDrapePoses();
+    m_sightModel = s_lineOfSightBeams ? m_doc->monitorProperties()->occlusionModel(m_drapePoses)
+                                      : BeamOcclusion::ModelPtr();
+    m_occluders = occluders();     // after the poses: where each curtain is now
     m_decksValid = true;
 
     /* Where rays landed last frame still stands if what they land on hasn't
@@ -8544,7 +9426,7 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
             {
                 m_orbiting = true;
                 m_orbitLast = e->pos();
-                setCursor(Qt::SizeAllCursor);
+                setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor, true));
             }
             else
             {

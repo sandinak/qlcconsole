@@ -25,6 +25,11 @@
 class QCheckBox;
 class QComboBox;
 class QSpinBox;
+class QLineEdit;
+class QLabel;
+class QPushButton;
+class QDialogButtonBox;
+class QTabWidget;
 class App;
 
 /** @addtogroup ui UI
@@ -39,11 +44,27 @@ public:
     AppSettings(App *app, QWidget *parent = nullptr);
     ~AppSettings();
 
+    /** Put the cursor in the show's rig networks (the footer chip's click) */
+    void focusRigNetworks();
+
+    /** Open on the Advanced tab */
+    void showAdvanced();
+
 protected slots:
     void accept() override;
 
+private slots:
+    /** Check the rig networks as typed; OK only while they parse */
+    void validateRigNetworks();
+    /** "Transmit anyway, this session" -- confirmed, never saved -- or,
+     *  while that is in force, turn the check back on */
+    void slotTransmitAnyway();
+
 private:
     App *m_app;
+    QTabWidget *m_tabs = nullptr;
+    // Advanced: the show's auto-open shutters (ShutterAutoOpen)
+    QCheckBox *m_autoOpenCheck = nullptr;
 
     // Autosave widgets
     QCheckBox *m_autosaveEnabledCheck;
@@ -51,13 +72,28 @@ private:
 
     // Tab label mode
     QComboBox *m_tabLabelModeCombo;
+    // Show controls: top bar or status bar (App::ShowControlsPlacement)
+    QComboBox *m_showControlsCombo;
     QComboBox *m_scriptEditorCombo;
 
-    // Show control
-    QCheckBox *m_oscCheck;
-    QSpinBox  *m_oscPortSpin;
-    QCheckBox *m_mscCheck;
-    QSpinBox  *m_mscDeviceSpin;
+    // Show Tree: Record as new cue, when the choices differ
+    QComboBox *m_recordDesignCombo;
+    QComboBox *m_recordPerformCombo;
+    // Measurement units (MeasurementUnits::preferredLength)
+    QComboBox *m_unitsCombo;
+
+    // Network: the show's rig networks and the transmit gate
+    QLineEdit *m_rigNetworksEdit;
+    QLabel *m_rigNetworksError;
+    QCheckBox *m_rigOnlyCheck;
+    QPushButton *m_transmitAnywayButton;
+
+    // Software Update (UpdateChecker): this machine's, not the show's
+    QCheckBox *m_updateCheck = nullptr;
+    QComboBox *m_updateChannel = nullptr;
+    QCheckBox *m_updateAuto = nullptr;
+    QDialogButtonBox *m_buttonBox;
+    void updateTransmitAnywayButton();
 };
 
 /** @} */

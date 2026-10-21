@@ -242,10 +242,11 @@ void HIDOSXJoystick::init()
     {
         if (m_vendorXboxElem && m_dev_info->vendor_id == 0x045E)
         {
-            // Axes 0-5:  LX, LY, RX, RY, LT, RT
-            // Buttons 0-9: A, B, X, Y, LB, RB, View, Menu, LS, RS
+            // Axes 0-5:  LX, LY, LT, RX, RY, RT (the Xbox profile's order)
+            // Buttons 0-9: A, B, X, Y, LB, RB, View, Menu, LS, RS;
+            // 10 (Xbox) is not in the report; 11-14: D-pad up/down/left/right
             m_axesNumber    = 6;
-            m_buttonsNumber = 10;
+            m_buttonsNumber = 15;
             m_rawMode       = true;
             if (dbg) fprintf(dbg, "  vendor-element mode (Xbox): axes=%d buttons=%d\n",
                              m_axesNumber, m_buttonsNumber);
@@ -261,7 +262,7 @@ void HIDOSXJoystick::init()
                 if (m_dev_info->vendor_id == 0x045E)
                 {
                     m_axesNumber    = 6;
-                    m_buttonsNumber = 10;
+                    m_buttonsNumber = 15;
                 }
                 if (dbg) fprintf(dbg, "  hidapi raw mode fallback (axes=%d buttons=%d)\n",
                                  m_axesNumber, m_buttonsNumber);
@@ -311,9 +312,10 @@ void HIDOSXJoystick::init()
 // [14-15]RY  int16  LE
 // [16]   reserved
 //
-// QLC+ axis indices: 0=LX 1=LY 2=RX 3=RY 4=LT 5=RT
+// QLC+ axis indices: 0=LX 1=LY 2=LT 3=RX 4=RY 5=RT (xbox.qxhid's order)
 // QLC+ button indices (offset by axesNumber=6): 0=A 1=B 2=X 3=Y 4=LB 5=RB
 //                                                6=View 7=Menu 8=LS 9=RS
+//                                                11-14=D-pad up/down/left/right
 
 static uchar xboxAxisNorm(int raw)
 {
@@ -601,12 +603,23 @@ void HIDOSXJoystick::processRawReport(uint32_t reportID, const uint8_t *report, 
     const int16_t  rx = (int16_t)(report[14] | (report[15] << 8));      // Right stick X
     const int16_t  ry = (int16_t)(report[16] | (report[17] << 8));      // Right stick Y
 
+    /* In the order the Xbox profile (xbox.qxhid) names them -- LX, LY, LT,
+       RX, RY, RT -- so its names and gamepad roles are right for this reader
+       too. It used to send RX/RY as 2/3, which the profile calls the left
+       trigger and the right stick X. */
     emitAxis(0, xboxAxisNorm(lx));
     emitAxis(1, xboxAxisNorm(ly));
-    emitAxis(2, xboxAxisNorm(rx));
-    emitAxis(3, xboxAxisNorm(ry));
-    emitAxis(4, xboxTriggerNorm(lt));
+    emitAxis(2, xboxTriggerNorm(lt));
+    emitAxis(3, xboxAxisNorm(rx));
+    emitAxis(4, xboxAxisNorm(ry));
     emitAxis(5, xboxTriggerNorm(rt));
+
+    // The D-pad, as the profile's buttons 11-14 (10 is the Xbox button,
+    // which this report does not carry).
+    emitBtn(11, b1 & 0x01); // D-pad up
+    emitBtn(12, b1 & 0x02); // D-pad down
+    emitBtn(13, b1 & 0x04); // D-pad left
+    emitBtn(14, b1 & 0x08); // D-pad right
 
     emitBtn(0, b2 & 0x01); // A
     emitBtn(1, b2 & 0x02); // B

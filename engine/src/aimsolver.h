@@ -22,10 +22,15 @@
 
 #include <QVector3D>
 #include <QList>
+#include <QHash>
+
+#include "linespread.h"
+#include "beamocclusion.h"
 
 class Doc;
 class Scene;
 class StageTarget;
+class QLCPalette;
 
 /** @addtogroup engine Engine
  * @{
@@ -91,6 +96,31 @@ namespace AimSolver
      *  which is the case a clamp used to get silently wrong. */
     Solution solve(const Frame &frame, const QVector3D &targetWorld);
 
+    /** The way back: a head's pan and tilt as DMX sends them (fixture
+     *  degrees, CENTRED -- 0 is the middle of the range) turned into what they
+     *  mean on the stage, with the calibration taken out.
+     *
+     *  Exactly the inverse of solve(), step for step and in reverse order: the
+     *  mirrors first (invert flags, a standing head's flipped pan), then the
+     *  calibration offsets, then the mounting. The offsets correct the
+     *  PHYSICAL head -- DMX carries them so the real light lands where the
+     *  design says -- so every view that turns DMX back into "where is it
+     *  pointing" must remove them, or a head with a +3 degree pan offset aimed
+     *  at a mark draws its beam 3 degrees off it. Pan zero, invert and
+     *  standing are geometry, not calibration: applied both ways.
+     *
+     *  @p panRelDeg comes back as the bearing relative to the head's facing
+     *  (FixtureRigProps::panZeroDir) and @p tiltRelDeg as the tilt away from
+     *  its home (straight down hung, straight up standing), both in the same
+     *  turning sense the views draw. */
+    void intendedAngles(const ::FixtureRigProps &rp, double panCentredDeg, double tiltCentredDeg,
+                        double &panRelDeg, double &tiltRelDeg);
+
+    /** The same, as the world-space direction of the beam (unit vector;
+     *  +Y downstage, +X stage left, +Z up). False only when it degenerates. */
+    bool beamDirection(const ::FixtureRigProps &rp, double panCentredDeg, double tiltCentredDeg,
+                       QVector3D &dir);
+
     /** Compute the fixture's pan/tilt (degrees) to aim its beam at @p targetWorld
      *  (metres, absolute — the caller bakes in platform/subject height). Honours
      *  the fixture's rig position, mounting (floor vs hung), pan-zero facing,
@@ -110,18 +140,74 @@ namespace AimSolver
     QVector3D aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
                           bool subjectMode);
 
+    /** The heads an Aim look in @p scene points, in LOOK ORDER: each of the
+     *  scene's groups' members in the group's head order, then the scene's
+     *  own fixtures; once each; only heads that can point (pan or tilt) and
+     *  are placed on the plot. */
+    QList<quint32> aimHeads(Doc *doc, const Scene *scene);
+
+    /** The heads Aim look @p paletteId in @p scene lays out over: as
+     *  above, but over the look's layout span when it is one formation with
+     *  other scenes (a cue-level aim across layers), and less the heads the
+     *  scene leaves out for it (Scene::layoutFixtures()). */
+    QList<quint32> aimHeads(Doc *doc, const Scene *scene, quint32 paletteId);
+
+    /** @p fixtures (in their order, once each) less any that cannot point or
+     *  are not placed on the plot. */
+    QList<quint32> aimable(Doc *doc, const QList<quint32> &fixtures);
+
+    /** A line target: how far along it (0..1) each of @p heads lands, by
+     *  @p settings. @p heads is any ordered list -- one look's heads, or the
+     *  union of several -- in look order; Order "along the line" re-sorts it
+     *  by where the heads hang. Empty if @p target is not a line. */
+    QHash<quint32, double> lineFractions(Doc *doc, const StageTarget *target,
+                                         const QList<quint32> &heads,
+                                         const LineSpread::Settings &settings);
+
+    /** @p heads in the order they take places on line @p target: as given
+     *  (LookOrder), or by where they hang measured from the line's first end
+     *  towards its last (AlongLine). */
+    QList<quint32> orderedLineHeads(Doc *doc, const StageTarget *target,
+                                    const QList<quint32> &heads, LineSpread::Order order);
+
+    /** The world point @p fraction of the way along line target @p target. */
+    QVector3D linePoint(Doc *doc, const StageTarget *target, double fraction);
+
+    /** Each head's aim point for Aim look @p look on line @p target, over
+     *  @p heads (as lineFractions()). */
+    QHash<quint32, QVector3D> linePoints(Doc *doc, const QLCPalette *look,
+                                         const StageTarget *target,
+                                         const QList<quint32> &heads);
+
     /** True if @p scene carries a follow-spot effect, which is what makes an
      *  Aim look in it track a SUBJECT (chest height above the deck) rather
      *  than the target's own point. */
     bool sceneFollowsSubject(Doc *doc, const Scene *scene);
+
+    /** Line of sight from head @p fixtureId to @p point: whether a solid
+     *  feature of the stage stands between its beam origin and the point, and
+     *  which one (BeamOcclusion). The head's own mount never blocks it. Clear
+     *  when the head has no rig geometry. @p model, when given, is used
+     *  instead of fetching the stage's current one -- a caller asking for
+     *  many heads fetches it once. */
+    BeamOcclusion::Hit lineOfSight(Doc *doc, quint32 fixtureId, const QVector3D &point,
+                                   const BeamOcclusion::Model *model = nullptr);
+    /** The same from a known beam origin. */
+    BeamOcclusion::Hit lineOfSight(Doc *doc, const BeamOcclusion::Model &model, quint32 fixtureId,
+                                   const QVector3D &from, const QVector3D &point);
 
     /** One head a scene's Aim look points, where, and whether it can. */
     struct SceneAim
     {
         quint32   fixtureId;
         quint32   targetId;
+        quint32   paletteId;     ///< the Aim look pointing it
         QVector3D point;         ///< the aim point, as the palette resolves it
         Solution  solution;
+        /** Whether its beam gets there: the first thing on stage in the way. */
+        BeamOcclusion::Hit sight;
+        /** The Aim look dims it while it is blocked (QLCPalette::dimWhenBlocked). */
+        bool dimsWhenBlocked = false;
     };
 
     /** Every aimable head each Aim look in @p scene points at its target --
@@ -130,6 +216,10 @@ namespace AimSolver
      *  palette uses. Heads with no rig geometry are left out: there is no
      *  answer to give for them. */
     QList<SceneAim> sceneAims(Doc *doc, const Scene *scene);
+    /** The heads an Aim look in @p scene that has "Dim lights that can't see
+     *  the target" on points at something they cannot see, and what is in the
+     *  way. Empty -- and cheap -- when no Aim look in it has that on. */
+    QHash<quint32, BeamOcclusion::Hit> blockedDimmedHeads(Doc *doc, const Scene *scene);
 }
 
 /** @} */

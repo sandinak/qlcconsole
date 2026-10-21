@@ -36,13 +36,18 @@ Three panes:
 
 - **Left — Scenes / functions.** A filterable tree of every function
   (Scene/Chaser/Collection/EFX/RGB Matrix/Show) in folders. Single-click
-  selects; double-click opens it in the canvas.
-- **Center — canvas.** A toolbar — **Highlight**, **Flash**, **Tap** and
+  selects; double-click opens it in the canvas. See
+  [Filing into folders](#filing-into-folders).
+- **The tab's tools**, in the top bar beside the show controls (or over
+  the canvas, with the show controls in the status bar, or the tab in a
+  window of its own): **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
   **Move in black** (mark, unmark, auto move-in-black and its lead time),
   **Beat** (internal beat on, BPM, speed masters — the button reads the
-  tempo) and **More** (snapshot live output, jog speed) as drop-downs —
-  then either an empty-state placeholder or the loaded editor. For
+  tempo) and **More** (snapshot live output, jog speed) as drop-downs.
+  In a narrow window, what doesn't fit is under **»**.
+- **Center — canvas.** Either an empty-state placeholder or the loaded
+  editor. For
   a Scene, that's the **Targets** panel (left half) and **Looks** panel
   (right half) shown above. Other function types (Chaser, Collection, EFX,
   RGB Matrix, Show) open their own stock editors here instead. Below the
@@ -65,6 +70,87 @@ Double-clicking a fixture group opens its layout view in the canvas. A
 **← Back to &lt;scene&gt;** button there returns you to the scene you came
 from; if you open an effect while in a group's view, the tab goes back to
 that scene first, with the effect showing.
+
+## Filing into folders
+
+Both the scenes/functions tree and the Palettes tab keep things in folders.
+
+- **Drag to file.** Press on a scene (or any function, or a palette) and
+  drag it onto a folder — it moves in. Drop it on another row and it joins
+  that row's folder; drop it on the type's heading (**Scene**, **Chaser**…)
+  or on empty space below the list to take it back out to the top. Select
+  several first (⇧/⌘-click) to move them together. The folder it will land
+  in is outlined while you drag, and hovering over a closed folder opens it.
+- **Folders move too.** Drag a folder onto another folder and it goes inside
+  it with everything in it.
+- A scene stays among scenes, a chaser among chasers: a folder of another
+  type doesn't take it. Dropping a scene **on a Collection's row** adds it
+  to that collection instead of filing it.
+- **Right-click a folder** for **Rename Folder**, **Delete Folder** and the
+  usual **New …** items, which then create inside it. Deleting an empty
+  folder just removes it. Deleting one with things in it asks first, and
+  what was in it moves up a level — nothing is deleted.
+
+Folders are saved with the show and show the same in the Functions tab.
+
+**Palette folders hold any type.** A folder in the Palettes tab can hold
+colours, aims, dimmers and effects together — say a folder per song,
+"01-Everybody Scream", with everything that song uses. Right-click empty
+space → **New folder…** makes one at the top level. The tab shows folders
+first, each palette with its type's icon, and the palettes in no folder
+below them. Tick **Group by type** in the right-click menu to see it the
+other way round: Aim, Color, Dimmer… first, with the same folders under each
+type (it is remembered). In that view a folder is still one folder: renaming
+or deleting it under Color does it for every type, and dropping a palette on
+it files the palette there whatever its type.
+
+Shows saved before this had a folder per type (Color › 01-Song, Aim ›
+01-Song); they open with those merged into one folder per name, and effect
+looks that had been filed automatically under Effect › category › engine are
+left in no folder. Only what is really that old layout changes: a folder
+you made that happens to be named like a type (*Color* holding dimmers) or
+*Colour* keeps its name. Saving keeps the new layout; an older version of
+qlcconsole opening such a show shows the same folders at the top level. The
+Show Tree's Library uses the same folders.
+
+### Taking something out of a collection, chaser or show
+
+An open collection, chaser or show lists what is in it underneath its row.
+Right-click one of those rows (or several, ⇧/⌘-click) and pick **Remove from
+“…”**: they come out of it and the functions themselves stay. Taking a step
+out of a chaser, or an item off a show's track, asks first, since its fade,
+hold and timing go with it. **Delete Function Everywhere…** on such a row is
+different: it deletes the function itself, from every collection, chaser and
+show; the question names where it is used.
+
+### Deleting palettes and functions
+
+Right-click → **Delete**, or select and press **⌫** (Delete), in either tree.
+The question lists every place the palette or function is used — each scene
+and which look row, each effect look whose slot uses the palette, each
+collection, chaser step and show track — and says what happens: scenes lose
+that look (their other looks and values stay), effect looks lose that slot's
+palette and use their look's colours, collections/chasers/shows lose it. With
+a folder selected, ⌫ deletes the folder the same way as its menu item.
+
+A palette the Show Tree uses is named by its **cues and looks** ("Cue 1.0.1
+Verse in Full Show — Towers"), not by the scenes the tree made for them, and
+the **VC buttons** that fire those are listed too.
+
+### Palettes here and in the Show Tree
+
+New, Duplicate, Delete and Move to folder of a palette are the same
+operations as in the Show Tree's Library ([Palettes in the
+Library](show-tree.md#palettes-in-the-library)), and each is one step on the
+**one history** the two tabs share: **⌘Z** here (or the Show Tree's) takes
+back whatever was done last — an edit to the look open on the canvas, a
+Bundle stamp, a palette made, renamed, filed or deleted in either tab, or a
+Show Tree change — and **⇧⌘Z** puts back what was undone last. Deleting a
+palette here clears it from everything that uses it — scenes, effect slots
+and the Show Tree's cues and looks, as the Library's Delete does — and one
+⌘Z brings it back with its id, in every one of them.
+The **Edit** menu's Undo / Redo name the step. Effect design, `.qxfx` files
+and Bundles stay here.
 
 ## Building a look, step by step
 
@@ -95,7 +181,7 @@ that scene first, with the effect showing.
    are colour 1 and colour 2 instead; see
    [How a look stacks](effects.md#how-a-look-stacks)). Remove a look or
    target with its panel's **Remove** button.
-8. Save the workspace normally (⌘S / Ctrl+S).
+8. Save the workspace normally (⌘S).
 
 If some of a scene's targets are still in the inventory (not patched), an
 amber warning under Targets says so: they send no DMX, and the look shows in
@@ -152,7 +238,7 @@ The editor shown depends on the selected look's palette type:
 
 | Type | What you get |
 |---|---|
-| **Color** | A color-wheel picker, a grid of basic-color swatches, and six numbered sliders (1 R · 2 G · 3 B · 4 White · 5 Amber · 6 UV — matching a physical-fader numbering convention). Amber/UV only appear if your target fixtures actually have those emitters. |
+| **Color** | A color-wheel picker, a grid of basic-color swatches, and six numbered sliders (1 R · 2 G · 3 B · 4 White · 5 Amber · 6 UV — matching a physical-fader numbering convention). Amber/UV only appear if your target fixtures actually have those emitters. Fixtures with a colour wheel or a colour ring add a **Wheel / ring** list: *Nearest to the colour* (each wheel and ring takes its slot nearest the colour), or a slot by name — a ring's chase, which no colour can pick. See [Colour rings](show-tree.md#colour-rings). |
 | **Dimmer** | A gradient bar marked with the fixture's actual intensity capability regions (e.g. strobe bands), with a live capability-name readout. |
 | **Pan/Tilt** | An XY pad plus Home/Down/Front/Left/Right preset buttons — the same raw pan/tilt pair applied to every target, regardless of where it's physically rigged. |
 | **Aim** | A combo box listing your **Stage Targets** instead of raw angles — each fixture's actual pan/tilt is computed from its rig position, so fixtures in different spots converge on the same point. Needs fixtures placed in Lighting Studio first. See [Stage Targets](stage-targets.md). |
@@ -301,8 +387,12 @@ Picking an effect from the **WLED** tab has the WLED fixtures in the look
 run it **on the device itself**: they're sent the effect, its speed,
 intensity, palette and option, the look's three colours and the look's
 dimmer. Every other fixture in the look runs qlcconsole's own port of that
-effect where one exists — so far 92 of them: Android, Aurora, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase Flash, Chase Rainbow, Chunchun, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fill Noise, Fire 2012, Fire Flicker, Fireworks 1D, Flow, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, Juggle, Lake, Lightning, Loading, Meteor, Multi Comet, Noise Pal, Oscillate, Pacifica, Palette, Phased, Plasma, Police, Popcorn, Pride 2015, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Sparkle, Sparkle Dark, Spots, Spots Fade, Stream, Strobe, Strobe Rainbow, Sunrise, Sweep, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe — written from what each does on a device (not from WLED's
+effect where one exists — 160 of them, every 1D effect WLED has: Android, Aurora, Blends, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase 2, Chase 3, Chase Flash, Chase Flash Rnd, Chase Rainbow, Chase Random, Chunchun, Color Clouds, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Dissolve Rnd, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fairytwinkle, Fill Noise, Fire 2012, Fire Flicker, Fireworks, Fireworks 1D, Fireworks Starburst, Flow, Flow Stripe, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, ICU, Juggle, Lake, Lighthouse, Lightning, Loading, Meteor, Meteor Smooth, Multi Comet, Noise 1, Noise 2, Noise 3, Noise 4, Noise Pal, Oscillate, Pacifica, PacMan, Palette, Percent, Perlin Move, Phased, Phased Noise, Plasma, Police, Popcorn, Pride 2015, PS 1D Balance, PS Chase, PS Dancing Shadows, PS DripDrop, PS Fire 1D, PS Fireworks 1D, PS Hourglass, PS Pinball, PS Sparkler, PS Spray 1D, PS Springy, PS Starburst, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scan Dual, Scanner, Scanner Dual, Shimmer, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Solid Pattern, Solid Pattern Tri, Sparkle, Sparkle Dark, Sparkle+, Spots, Spots Fade, Stream, Stream 2, Strobe, Strobe Mega, Strobe Rainbow, Sunrise, Sweep, Sweep Random, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Twinkleup, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe, Wipe Random; and, following the audio input (Inputs/Outputs; with none they rest, dark), the sound-reactive DJ Light, Freqmap, Freqpixels, Freqwave, Gravcenter, Gravcentric, Gravfreq, Gravimeter, Juggles, Matripix, Midnoise, Noisefire, Noisemeter, Noisemove, Plasmoid, PS GEQ 1D, PS Sonic Boom, PS Sonic Stream, Puddlepeak, Puddles, Ripple Peak, Rocktaves, Waterfall — written from what each does on a device (not from WLED's
 code), so they look the same on the WLED fixtures and the rest.
+Hyper Sparkle, Police and Two Areas are WLED's older names, offered when a
+device's firmware still lists them. WLED's 2D effects, and Copy Segment,
+Image and Slow Transition (which need the device's other segments, its
+stored images or its colour history), run on WLED devices only.
 
 A WLED effect with no port runs on a WLED device and nowhere else, so the
 browser only offers it when the look's targets include a WLED device;

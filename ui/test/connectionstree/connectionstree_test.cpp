@@ -23,6 +23,11 @@
 #include <QtTest>
 #include <QScrollBar>
 #include <QMenu>
+#include <QSettings>
+#include <QSplitter>
+#include <QContextMenuEvent>
+#include <QInputDialog>
+#include <QMessageBox>
 
 #define protected public
 #define private public
@@ -39,6 +44,9 @@
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "apputil.h"
+#include "showstatus.h"
+#include "networkroute.h"
 
 #undef private
 #undef protected
@@ -158,6 +166,9 @@ void ConnectionsTree_Test::init()
 
 void ConnectionsTree_Test::cleanup()
 {
+    /* "By universe" is remembered across sessions; a test that turned it on
+       must not leave every later test looking at the universe list. */
+    QSettings().setValue(QStringLiteral("connections/byUniverse"), false);
     delete m_doc;
     m_doc = NULL;
 }
@@ -410,9 +421,9 @@ void ConnectionsTree_Test::manualTargetPortsAreRendered()
 
     // Shown in Art-Net's own net:subnet:universe terms, which is what is
     // printed on the node's panel, not the packed 15-bit number.
-    QCOMPARE(dev->child(0)->text(COL_DETAIL), QString("0:1:1"));
+    QCOMPARE(dev->child(0)->text(COL_DETAIL), QString("universe 0:1:1"));
     QCOMPARE(dev->child(0)->data(COL_NAME, ROLE_PORTADDR).toUInt(), quint32(0x011));
-    QCOMPARE(dev->child(1)->text(COL_DETAIL), QString("0:1:2"));
+    QCOMPARE(dev->child(1)->text(COL_DETAIL), QString("universe 0:1:2"));
 }
 
 /****************************************************************************
@@ -928,6 +939,261 @@ void ConnectionsTree_Test::bulkRetargetNumbersPortsUpwardAndIsOneUndoStep()
 }
 
 /****************************************************************************
+ * Multi-universe patch / unpatch
+ ****************************************************************************/
+
+/** The By-universe list, every universe showing, on screen so it can be
+    clicked. */
+static void showUniverseList(ConnectionsTree &tree)
+{
+    tree.resize(1000, 600);
+    tree.m_showUnused->setChecked(true);
+    tree.m_byUniverse->setChecked(true);
+    tree.show();
+    tree.refresh();
+    QApplication::processEvents();
+}
+
+static QTreeWidgetItem *universeRow(QTreeWidget *tree, quint32 id)
+{
+    foreach (QTreeWidgetItem *it, allItems(tree))
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid()
+                && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == id)
+            return it;
+    return NULL;
+}
+
+/** Click a universe's row the way a hand does, with @p mod held. */
+static void clickUniverse(ConnectionsTree &tree, quint32 id,
+                          Qt::KeyboardModifiers mod = Qt::NoModifier)
+{
+    QTreeWidgetItem *row = universeRow(tree.m_tree, id);
+    QVERIFY(row != NULL);
+    const QPoint at = tree.m_tree->visualItemRect(row).center();
+    QTest::mouseClick(tree.m_tree->viewport(), Qt::LeftButton, mod, at);
+    QApplication::processEvents();
+}
+
+/** Pick @p text (by prefix) from the context menu opened on @p id's row. */
+static QStringList contextMenuOn(ConnectionsTree &tree, quint32 id, const QString &pick)
+{
+    QStringList seen;
+    QTimer::singleShot(0, [&seen, pick]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        QAction *chosen = NULL;
+        foreach (QAction *a, m->actions())
+        {
+            seen << a->text();
+            if (chosen == NULL && pick.isEmpty() == false && a->text().startsWith(pick))
+                chosen = a;
+        }
+        if (chosen != NULL)
+        {
+            m->setActiveAction(chosen);
+            QTest::keyClick(m, Qt::Key_Return);
+        }
+        else
+            m->close();
+    });
+    QTreeWidgetItem *row = universeRow(tree.m_tree, id);
+    tree.slotContextMenu(tree.m_tree->visualItemRect(row).center());
+    QApplication::processEvents();
+    return seen;
+}
+
+static IOPluginStub *fourPortNode(Doc *doc)
+{
+    IOPluginStub *stub = stubOf(doc);
+    stub->m_supportsTargets = true;
+    QLCIOPlugin::Device node = makeDevice(0, "Quad", "172.18.2.50");
+    for (quint32 p = 0; p < 4; p++)
+    {
+        node.portLabels << QString("0:0:%1").arg(p);
+        node.portUniverses << p;
+    }
+    stub->m_devices << node;
+    InputOutputMap *iom = doc->inputOutputMap();
+    while (iom->universesCount() < 8)
+        iom->addUniverse();
+    return stub;
+}
+
+void ConnectionsTree_Test::selectionRemembersTheOrderUniversesWerePicked()
+{
+    fourPortNode(m_doc);
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    // Listed 1..8; picked 3, then 1, 4, 2. A selection model can only ever
+    // say "1, 2, 3, 4" -- the order is what has to be remembered.
+    clickUniverse(tree, 2);
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    clickUniverse(tree, 3, Qt::ControlModifier);
+    clickUniverse(tree, 1, Qt::ControlModifier);
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 2 << 0 << 3 << 1);
+
+    // The five-second rebuild clears and restores the selection: not a
+    // reason to forget the order.
+    tree.refresh();
+    QApplication::processEvents();
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 2 << 0 << 3 << 1);
+
+    // Ctrl-clicking one off drops just that one.
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 2 << 3 << 1);
+
+    // A plain click starts again; a shift-click range adds in list order.
+    clickUniverse(tree, 6);
+    clickUniverse(tree, 4, Qt::ShiftModifier);
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 6 << 4 << 5);
+}
+
+void ConnectionsTree_Test::multiPatchPutsThemOnTheDevicePortsInPickedOrder()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // An unselected universe, patched elsewhere: must not move.
+    QVERIFY(iom->setOutputPatch(7, stub->name(), "", 1, false, 0));
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    // Five picked for a four-port node, out of list order: 3, 1, 4, 2, 6.
+    clickUniverse(tree, 2);
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    clickUniverse(tree, 3, Qt::ControlModifier);
+    clickUniverse(tree, 1, Qt::ControlModifier);
+    clickUniverse(tree, 5, Qt::ControlModifier);
+    const QList<quint32> picked = tree.orderedSelectedUniverses();
+    QCOMPARE(picked, QList<quint32>() << 2 << 0 << 3 << 1 << 5);
+
+    // The menu now offers it for the whole selection, by count.
+    const QStringList offered = contextMenuOn(tree, 0, QString());
+    QVERIFY2(offered.contains("Patch 5 selected universes to…"), qPrintable(offered.join(" | ")));
+
+    const QList<quint32> ports = QList<quint32>() << 0 << 1 << 2 << 3;
+    const ConnectionsTree::OrderedPatch plan = tree.planOrderedPatch(
+        picked, stub->name(), 0, "172.18.2.50", ports, QStringList(), false);
+    QCOMPARE(plan.entries.count(), 4);
+    QCOMPARE(plan.overflow, QList<quint32>() << 5);   // said, not wrapped or dropped
+    QVERIFY(plan.conflicts.isEmpty());
+
+    int rebuilds = 0;
+    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, [&rebuilds]() { rebuilds++; });
+    QCOMPARE(tree.applyOrderedPatch(plan), 4);
+    QCOMPARE(rebuilds, 1);                             // one rebuild, not one per universe
+
+    // Port k carries the k-th one PICKED.
+    for (int k = 0; k < 4; k++)
+    {
+        QString a;
+        quint32 p = 99;
+        QVERIFY(tree.patchTarget(picked.at(k), stub->name(), 0, a, p));
+        QCOMPARE(a, QString("172.18.2.50"));
+        QCOMPARE(p, quint32(k));
+    }
+    // The one that did not fit, and the one not selected, are as they were.
+    QCOMPARE(iom->outputPatchesCount(5), 0);
+    QCOMPARE(iom->outputPatchesCount(7), 1);
+    QCOMPARE(iom->outputPatch(7)->output(), quint32(1));
+
+    // Re-ordering the same four across the same four ports is not a clash
+    // with themselves.
+    const QList<quint32> reversed = QList<quint32>() << 1 << 3 << 0 << 2;
+    const ConnectionsTree::OrderedPatch again = tree.planOrderedPatch(
+        reversed, stub->name(), 0, "172.18.2.50", ports, QStringList(), false);
+    QVERIFY(again.conflicts.isEmpty());
+    QCOMPARE(tree.applyOrderedPatch(again), 4);
+    for (int k = 0; k < 4; k++)
+    {
+        QString a;
+        quint32 p = 99;
+        QVERIFY(tree.patchTarget(reversed.at(k), stub->name(), 0, a, p));
+        QCOMPARE(p, quint32(k));
+    }
+
+    // One undo step for the whole set.
+    QVERIFY(iom->patchUndo()->undo());
+    for (int k = 0; k < 4; k++)
+    {
+        QString a;
+        quint32 p = 99;
+        QVERIFY(tree.patchTarget(picked.at(k), stub->name(), 0, a, p));
+        QCOMPARE(p, quint32(k));
+    }
+}
+
+void ConnectionsTree_Test::multiPatchSkipsAPortAnotherUniverseHolds()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ConnectionsTree tree(m_doc);
+    // Universe 8 already sends to the node's port 3.
+    QVERIFY(iom->setOutputPatch(7, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(7, stub->name(), 0, "172.18.2.50", 2));
+
+    const QList<quint32> picked = QList<quint32>() << 3 << 2 << 1 << 0;
+    const ConnectionsTree::OrderedPatch plan = tree.planOrderedPatch(
+        picked, stub->name(), 0, "172.18.2.50",
+        QList<quint32>() << 0 << 1 << 2 << 3, QStringList(), false);
+
+    // The third one picked would land on universe 8's port: skipped, and who
+    // holds it is said. The rest keep their positions -- port k is still
+    // the k-th pick, nothing shuffles up into the gap.
+    QCOMPARE(plan.conflicts.count(), 1);
+    QCOMPARE(plan.conflicts.first().universe, quint32(1));
+    QCOMPARE(plan.conflicts.first().owner, quint32(7));
+    QCOMPARE(tree.applyOrderedPatch(plan), 3);
+    QCOMPARE(iom->outputPatchesCount(1), 0);
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
+    QCOMPARE(p, quint32(3));
+    QVERIFY(tree.patchTarget(7, stub->name(), 0, a, p));
+    QCOMPARE(p, quint32(2));                           // untouched
+}
+
+void ConnectionsTree_Test::multiUnpatchRemovesEveryOneInOneStep()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < 5; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", u % 4, false, 0));
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    clickUniverse(tree, 3);
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    clickUniverse(tree, 2, Qt::ControlModifier);
+    clickUniverse(tree, 1, Qt::ControlModifier);
+
+    int rebuilds = 0;
+    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, [&rebuilds]() { rebuilds++; });
+
+    // From the menu, as Branson would: all four go at once.
+    const QStringList offered = contextMenuOn(tree, 1, "Unpatch 4 selected universes");
+    QVERIFY2(offered.contains("Unpatch 4 selected universes"), qPrintable(offered.join(" | ")));
+    // ...and the single-row action is still there for the row under the pointer.
+    QVERIFY(offered.contains("Unpatch from this interface"));
+
+    for (quint32 u = 0; u < 4; u++)
+        QCOMPARE(iom->outputPatchesCount(u), 0);
+    QCOMPARE(iom->outputPatchesCount(4), 1);           // not selected: kept
+    QCOMPARE(rebuilds, 1);
+
+    // One press of Undo Patch Change puts all four back.
+    QVERIFY(iom->patchUndo()->canUndo());
+    QVERIFY(iom->patchUndo()->undo());
+    for (quint32 u = 0; u < 4; u++)
+    {
+        QCOMPARE(iom->outputPatchesCount(u), 1);
+        QCOMPARE(iom->outputPatch(u)->output(), u % 4);
+    }
+}
+
+/****************************************************************************
  * Reachability probing
  ****************************************************************************/
 
@@ -1120,6 +1386,30 @@ void ConnectionsTree_Test::deviceRowCarriesItsPropertiesAsATooltip()
     }
 }
 
+/* A node heard on the cable but on no network this computer has an address
+   on -- new, still on its factory 2.x.x.x -- is listed, amber, with what to
+   do about it first in its detail, not presented as a usable green node. */
+void ConnectionsTree_Test::deviceNeedingAttentionSaysSoOnItsRow()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    QLCIOPlugin::Device fresh = makeDevice(0, "New node", "2.0.0.5");
+    fresh.attention = "on its factory Art-Net address, not this network: set its IP";
+    stub->m_devices << fresh << makeDevice(0, "CR041R", "172.18.2.10");
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+
+    QTreeWidgetItem *dev = itemWithAddress(tree.m_tree, "2.0.0.5");
+    QVERIFY(dev != NULL);
+    QVERIFY(dev->text(COL_DETAIL).startsWith(fresh.attention));
+    QCOMPARE(dev->background(COL_NAME).color(), QColor(245, 166, 35, 40));
+
+    QTreeWidgetItem *ok = itemWithAddress(tree.m_tree, "172.18.2.10");
+    QVERIFY(ok != NULL);
+    QVERIFY(ok->text(COL_DETAIL).contains("set its IP") == false);
+    QCOMPARE(ok->background(COL_NAME).color(), QColor(46, 125, 50, 40));
+}
+
 /* "wasting a lot of space in the connections view with the top panel": the
    explanation is one line beside the controls (the rest on hover), and the
    list and output take the height. */
@@ -1215,4 +1505,614 @@ void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
     tree.m_byUniverse->setChecked(false);
     QVERIFY(tree.m_tree->rootIsDecorated());
     QVERIFY(!itemsOfKind(tree.m_tree, KIND_PLUGIN).isEmpty());
+}
+
+/****************************************************************************
+ * Output problems
+ ****************************************************************************/
+
+static QList<QTreeWidgetItem *> rowsWithText(QTreeWidget *tree, const QString &text)
+{
+    QList<QTreeWidgetItem *> out;
+    foreach (QTreeWidgetItem *it, allItems(tree))
+        if (it->text(COL_DETAIL).contains(text))
+            out << it;
+    return out;
+}
+
+void ConnectionsTree_Test::outputProblemsShowOnTheRowAndClear()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+
+    const QString problem("Art-Net to 172.18.2.50: not reachable since 20:14");
+    stub->m_outputProblems[0] = QStringList() << problem;
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+
+    QList<QTreeWidgetItem *> rows = rowsWithText(tree.m_tree, problem);
+    QCOMPARE(rows.count(), 1);
+    QVERIFY(rows.first()->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 0);
+    QCOMPARE(rows.first()->foreground(COL_DETAIL).color(), QColor(220, 90, 90));
+    QVERIFY(rows.first()->toolTip(COL_NAME).contains("not reachable since 20:14"));
+
+    // The universe list says it too
+    tree.m_byUniverse->setChecked(true);
+    rows = rowsWithText(tree.m_tree, problem);
+    QCOMPARE(rows.count(), 1);
+    QCOMPARE(rows.first()->text(COL_NAME).left(2), QString("1:"));
+
+    // Fixed: the plugin says so, the tree (on screen) catches up by itself
+    tree.m_byUniverse->setChecked(false);
+    tree.show();
+    stub->m_outputProblems.clear();
+    stub->emitTargetProblemsChanged();
+    QTRY_VERIFY(rowsWithText(tree.m_tree, problem).isEmpty());
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        QVERIFY(it->text(COL_DETAIL).contains("not reachable") == false);
+}
+
+void ConnectionsTree_Test::outputProblemsReachTheFooterOncePerProblem()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 4)
+        QVERIFY(iom->addUniverse());
+    for (quint32 u = 0; u < 4; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", 0, false, 0) == true);
+
+    // One dead node behind universes 2 and 3; universe 4 has its own trouble
+    const QString dead("Art-Net node CR041R (172.18.2.10): stopped answering since 20:14");
+    const QString shorted("Art-Net node CS1 (172.18.2.211), port 1 (0:0:3): DMX output short since 20:15");
+    stub->m_outputProblems[1] = QStringList() << dead;
+    stub->m_outputProblems[2] = QStringList() << dead;
+    stub->m_outputProblems[3] = QStringList() << shorted;
+
+    AppUtil::updateFixtureReadiness(m_doc);
+    ShowStatus::Entry e;
+    foreach (const ShowStatus::Entry &x, ShowStatus::instance()->allEntries())
+        if (x.key == "outputs.problems")
+            e = x;
+    QCOMPARE(e.key, QString("outputs.problems"));
+    QCOMPARE(e.items.count(), 2);
+    QCOMPARE(e.items.at(0), dead + " (universes 2, 3)");
+    QCOMPARE(e.items.at(1), shorted + " (universe 4)");
+    // The fix opens the first universe each one hits
+    QCOMPARE(e.itemData, (QVariantList{ 1u, 3u }));
+
+    // Cleared once the plugin stops reporting it
+    stub->m_outputProblems.clear();
+    AppUtil::updateFixtureReadiness(m_doc);
+    foreach (const ShowStatus::Entry &x, ShowStatus::instance()->allEntries())
+        QVERIFY(x.key != "outputs.problems");
+}
+
+/** Right-click @p at in the tree's viewport the way a hand does: press,
+    the context menu (closed again unpicked), release. */
+static void rightClickAt(ConnectionsTree &tree, const QPoint &at)
+{
+    QWidget *vp = tree.m_tree->viewport();
+    QTest::mousePress(vp, Qt::RightButton, Qt::NoModifier, at);
+    QTimer::singleShot(0, []() {
+        if (QWidget *m = QApplication::activePopupWidget())
+            m->close();
+    });
+    QContextMenuEvent ev(QContextMenuEvent::Mouse, at, vp->mapToGlobal(at));
+    QApplication::sendEvent(vp, &ev);
+    QTest::mouseRelease(vp, Qt::RightButton, Qt::NoModifier, at);
+    /* The menu closing hands focus back to the list -- what the offscreen
+       platform, with no active window, does not do by itself. */
+    QFocusEvent back(QEvent::FocusIn, Qt::PopupFocusReason);
+    QApplication::sendEvent(tree.m_tree, &back);
+    QApplication::processEvents();
+}
+
+/* "every time I open the right click menu in connections the connections
+   list scrolls right": the menu holds the rebuild off, and the rebuild that
+   follows (and every five-second one) put the current row back with
+   setCurrentItem(row, 0) -- which Qt answers by scrolling sideways to show
+   that cell, back to the left edge of the list. Rows are what is picked
+   here, so neither a click (either button), the menu nor a rebuild moves the
+   list sideways; going up and down still follows the current row. */
+void ConnectionsTree_Test::clickingARowDoesNotScrollSideways()
+{
+    fourPortNode(m_doc);
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    QSplitter *split = qobject_cast<QSplitter *>(tree.m_tree->parentWidget());
+    QVERIFY(split != nullptr);
+    split->setSizes(QList<int>() << 160 << 840);   // narrower than its columns
+    QApplication::processEvents();
+    QScrollBar *h = tree.m_tree->horizontalScrollBar();
+    QVERIFY(h->maximum() > 0);
+
+    const int y = tree.m_tree->visualItemRect(universeRow(tree.m_tree, 2)).center().y();
+    const int right = tree.m_tree->viewport()->width() - 4;
+
+    foreach (const int start, QList<int>() << 0 << h->maximum() / 2 << h->maximum())
+    {
+        h->setValue(start);
+        rightClickAt(tree, QPoint(right, y));
+        QCOMPARE(h->value(), start);
+        rightClickAt(tree, QPoint(4, y));
+        QCOMPARE(h->value(), start);
+        QTest::mouseClick(tree.m_tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          QPoint(right, y));
+        QApplication::processEvents();
+        QCOMPARE(h->value(), start);
+        QTest::mouseClick(tree.m_tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          QPoint(4, y));
+        QApplication::processEvents();
+        QCOMPARE(h->value(), start);
+        QCOMPARE(tree.m_tree->currentItem(), universeRow(tree.m_tree, 2));
+
+        tree.refresh();                             // the periodic rebuild
+        QApplication::processEvents();
+        QCOMPARE(h->value(), start);
+    }
+
+    // Arrow keys still bring the current row into view, up and down.
+    split->setSizes(QList<int>() << 160 << 840);
+    tree.resize(1000, 150);                        // short: the list scrolls
+    QApplication::processEvents();
+    QScrollBar *v = tree.m_tree->verticalScrollBar();
+    QVERIFY(v->maximum() > 0);
+    v->setValue(0);
+    h->setValue(h->maximum() / 2);
+    const int side = h->value();
+    tree.m_tree->setFocus();
+    QTest::keyClick(tree.m_tree, Qt::Key_End);
+    QApplication::processEvents();
+    QCOMPARE(v->value(), v->maximum());
+    QCOMPARE(h->value(), side);
+}
+
+/** Answer the dialogs the code under test is about to open, in order. An
+    answer to a list is the first item starting with it ("#N" picks the Nth);
+    to a text box, the text itself; "<cancel>" cancels. Every list offered
+    lands in @p lists, every message box's text in @p messages. */
+class DialogAnswers : public QObject
+{
+public:
+    DialogAnswers(const QStringList &answers) : m_answers(answers)
+    {
+        m_timer.setInterval(5);
+        connect(&m_timer, &QTimer::timeout, this, [this]() { step(); });
+        m_timer.start();
+    }
+    QList<QStringList> lists;
+    QStringList preselected;    ///< what each list opened on
+    QStringList messages;
+    int left() const { return m_answers.count(); }
+
+private:
+    void step()
+    {
+        QWidget *w = QApplication::activeModalWidget();
+        if (w == nullptr)
+            return;
+        if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+        {
+            messages << mb->text();
+            mb->accept();
+            return;
+        }
+        QInputDialog *d = qobject_cast<QInputDialog *>(w);
+        if (d == nullptr || m_answers.isEmpty())
+            return;
+        const QString a = m_answers.takeFirst();
+        const QStringList items = d->comboBoxItems();
+        if (items.isEmpty() == false)
+        {
+            lists << items;
+            preselected << d->textValue();
+        }
+        if (a == "<cancel>")
+        {
+            d->reject();
+            return;
+        }
+        if (items.isEmpty() == false)
+        {
+            QString pick;
+            if (a.startsWith('#'))
+                pick = items.value(a.mid(1).toInt());
+            else
+                foreach (const QString &it, items)
+                    if (pick.isEmpty() && it.startsWith(a))
+                        pick = it;
+            if (pick.isEmpty())
+            {
+                d->reject();
+                return;
+            }
+            d->setTextValue(pick);
+        }
+        else
+            d->setTextValue(a);
+        d->accept();
+    }
+    QStringList m_answers;
+    QTimer m_timer;
+};
+
+/** The four-port node, with universe 8 already sending to its second port. */
+static IOPluginStub *nodeWithOnePortTaken(Doc *doc, ConnectionsTree &tree)
+{
+    IOPluginStub *stub = fourPortNode(doc);
+    InputOutputMap *iom = doc->inputOutputMap();
+    iom->setOutputPatch(7, stub->name(), "", 0, false, 0);
+    tree.applyTarget(7, stub->name(), 0, "172.18.2.50", 1);
+    return stub;
+}
+
+/* "when patching .. and target address comes up .. should be able to select
+   an unused Artnet->DMX or other interface if they're visible". */
+void ConnectionsTree_Test::targetPickerListsFreePortsFirst()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // Declared by hand, with two ports; and one only a patch names.
+    iom->addManualTarget(stub->name(), 0, "10.0.0.7");
+    iom->addManualPort("10.0.0.7", 16);
+    iom->addManualPort("10.0.0.7", 17);
+    QVERIFY(iom->setOutputPatch(6, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(6, stub->name(), 0, "10.0.0.9", 5));
+
+    const QList<ConnectionsTree::TargetPortChoice> c =
+        tree.targetPortChoices(stub->name(), 0, 0);
+    QStringList texts;
+    foreach (const ConnectionsTree::TargetPortChoice &x, c)
+        texts << x.text;
+    QCOMPARE(texts, QStringList()
+        << "Quad (172.18.2.50) — port 1 · universe 0:0:0 — free"
+        << "Quad (172.18.2.50) — port 3 · universe 0:0:2 — free"
+        << "Quad (172.18.2.50) — port 4 · universe 0:0:3 — free"
+        << "10.0.0.7 — port 1 · universe 0:1:0 — free"
+        << "10.0.0.7 — port 2 · universe 0:1:1 — free"
+        << "Quad (172.18.2.50) — port 2 · universe 0:0:1 — used by 8: Universe 8"
+        << "10.0.0.9 — universe 0:0:5 — used by 7: Universe 7");
+
+    // Asked for universe 8 itself, its own port is not "used".
+    bool ownFree = false;
+    foreach (const ConnectionsTree::TargetPortChoice &x,
+             tree.targetPortChoices(stub->name(), 0, 7))
+        if (x.port == 1 && x.address == "172.18.2.50")
+            ownFree = (x.owner == InputOutputMap::invalidUniverse());
+    QVERIFY(ownFree);
+
+    // Another line lists none of them.
+    QVERIFY(tree.targetPortChoices(stub->name(), 1, 0).isEmpty());
+}
+
+void ConnectionsTree_Test::patchToPicksAVisiblePort()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 3");
+    tree.patchUnpatchedUniverseTo(0);
+    QCOMPARE(answers.left(), 0);
+    QCOMPARE(answers.lists.count(), 2);
+    QVERIFY(answers.lists.at(1).contains("Another address…"));
+    QVERIFY(answers.lists.at(1).contains("Broadcast (no target)"));
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
+    QCOMPARE(a, QString("172.18.2.50"));
+    QCOMPARE(p, quint32(2));
+    QCOMPARE(iom->outputPatchesCount(0), 1);
+}
+
+void ConnectionsTree_Test::patchToAUsedPortChangesNothing()
+{
+    ConnectionsTree tree(m_doc);
+    nodeWithOnePortTaken(m_doc, tree);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    {
+        DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 2");
+        tree.patchUnpatchedUniverseTo(0);
+        QCOMPARE(answers.messages.count(), 1);
+        QVERIFY2(answers.messages.first().contains("Universe 8 already sends"),
+                 qPrintable(answers.messages.first()));
+        QCOMPARE(iom->outputPatchesCount(0), 0);       // never half-patched
+    }
+
+    // Cancelling the target question leaves it unpatched too.
+    DialogAnswers cancel(QStringList() << "#0" << "<cancel>");
+    tree.patchUnpatchedUniverseTo(0);
+    QCOMPARE(iom->outputPatchesCount(0), 0);
+}
+
+void ConnectionsTree_Test::patchToAnAddressTypedByHand()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+
+    {
+        DialogAnswers answers(QStringList() << "#0" << "Another address…"
+                                            << "10.1.1.1" << "0:1:2");
+        tree.patchUnpatchedUniverseTo(0);
+        QCOMPARE(answers.left(), 0);
+    }
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
+    QCOMPARE(a, QString("10.1.1.1"));
+    QCOMPARE(p, quint32(0x12));
+
+    // Typing a port another universe holds is refused the same way.
+    DialogAnswers clash(QStringList() << "#0" << "Another address…"
+                                      << "172.18.2.50" << "0:0:1");
+    tree.patchUnpatchedUniverseTo(1);
+    QCOMPARE(clash.messages.count(), 1);
+    QCOMPARE(m_doc->inputOutputMap()->outputPatchesCount(1), 0);
+}
+
+void ConnectionsTree_Test::retargetOffersTheVisiblePortsWithTheCurrentOne()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+
+    DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 4");
+    tree.retargetPatch(7, stub->name(), 0);
+    QCOMPARE(answers.left(), 0);
+    QVERIFY(answers.lists.at(1).contains(
+        "Quad (172.18.2.50) — port 2 · universe 0:0:1 — free  (current)"));
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(7, stub->name(), 0, a, p));
+    QCOMPARE(p, quint32(3));
+}
+
+static QTreeWidgetItem *rowNamed(QTreeWidget *tree, const QString &prefix)
+{
+    foreach (QTreeWidgetItem *it, allItems(tree))
+        if (it->text(COL_NAME).startsWith(prefix))
+            return it;
+    return NULL;
+}
+
+/* "port 1..4" on the universe list, "0:0:1" on the device's port row and
+   "port 2" for the same port on an unheard node: one name, three numbers.
+   Now "port N" is the socket on the node as the node numbers it, and
+   "universe n:s:u" is the Art-Net port-address -- everywhere. */
+void ConnectionsTree_Test::portAndUniverseReadTheSameEverywhere()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_supportsTargets = true;
+    // A node whose first and third sockets are inputs: its two outputs are
+    // ports 2 and 4, listening to 0:0:5 and 0:0:6.
+    QLCIOPlugin::Device node = makeDevice(0, "Duo", "172.18.2.70");
+    node.portLabels << "0:0:5" << "0:0:6";
+    node.portUniverses << 5 << 6;
+    node.portNumbers << 2 << 4;
+    stub->m_devices << node;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 4)
+        iom->addUniverse();
+
+    ConnectionsTree tree(m_doc);
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(1, stub->name(), 0, "172.18.2.70", 6));
+    QVERIFY(iom->setOutputPatch(2, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(2, stub->name(), 0, "172.18.2.80", 1));   // never heard
+    tree.refresh();
+
+    QTreeWidgetItem *heard = rowNamed(tree.m_tree, "port 4 → 2:");
+    QVERIFY(heard != NULL);
+    QVERIFY2(heard->text(COL_DETAIL).startsWith("universe 0:0:6"),
+             qPrintable(heard->text(COL_DETAIL)));
+    QVERIFY(rowNamed(tree.m_tree, "port 2") != NULL);     // the free one
+    // Unheard: which socket is unknown, so none is made up.
+    QVERIFY(rowNamed(tree.m_tree, "universe 0:0:1 → 3:") != NULL);
+    QVERIFY(rowNamed(tree.m_tree, "port 2 → 3:") == NULL);
+
+    tree.m_byUniverse->setChecked(true);
+    tree.refresh();
+    QTreeWidgetItem *u2 = universeRow(tree.m_tree, 1);
+    QTreeWidgetItem *u3 = universeRow(tree.m_tree, 2);
+    QVERIFY(u2 != NULL && u3 != NULL);
+    QVERIFY2(u2->text(COL_DETAIL).contains("Duo (172.18.2.70) · port 4 · universe 0:0:6"),
+             qPrintable(u2->text(COL_DETAIL)));
+    QVERIFY2(u3->text(COL_DETAIL).contains("172.18.2.80 · universe 0:0:1"),
+             qPrintable(u3->text(COL_DETAIL)));
+    QVERIFY(u3->text(COL_DETAIL).contains("port") == false);
+}
+
+/* "Re-patching a universe that's already patched must ask for the network
+   interface again (currently it reuses the old one) -- offer the interfaces
+   with the current one preselected." */
+void ConnectionsTree_Test::repatchAsksTheInterfaceAgain()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);         // the node is on line 0
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ConnectionsTree tree(m_doc);
+    QVERIFY(iom->setOutputPatch(6, stub->name(), "", 1, false, 0));
+    QVERIFY(tree.applyTarget(6, stub->name(), 1, "10.0.0.1", 3));
+
+    {
+        DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 2");
+        tree.retargetPatch(6, stub->name(), 1);
+        QCOMPARE(answers.left(), 0);
+        QCOMPARE(answers.lists.count(), 2);
+        QCOMPARE(answers.preselected.first(), answers.lists.first().at(1));  // where it is
+    }
+    QCOMPARE(iom->universe(6)->outputPatch(0)->output(), quint32(0));
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(6, stub->name(), 0, a, p));
+    QCOMPARE(a, QString("172.18.2.50"));
+    QCOMPARE(p, quint32(1));
+
+    // One undo step puts it back on its old interface and node.
+    QVERIFY(iom->patchUndo()->undo());
+    QCOMPARE(iom->universe(6)->outputPatch(0)->output(), quint32(1));
+    QVERIFY(tree.patchTarget(6, stub->name(), 1, a, p));
+    QCOMPARE(a, QString("10.0.0.1"));
+
+    // Cancelling the interface question changes nothing.
+    {
+        DialogAnswers cancel(QStringList() << "<cancel>");
+        tree.retargetPatch(6, stub->name(), 1);
+    }
+    QCOMPARE(iom->universe(6)->outputPatch(0)->output(), quint32(1));
+
+    // Patching a selection asks too, opening on the line they are on.
+    QVERIFY(iom->setOutputPatch(5, stub->name(), "", 1, false, 0));
+    {
+        DialogAnswers sel(QStringList() << "<cancel>");
+        tree.patchSelectionTo(QList<quint32>() << 5 << 6);
+        QCOMPARE(sel.lists.count(), 1);
+        QCOMPARE(sel.preselected.first(), sel.lists.first().at(1));
+    }
+
+    // And the menu says it does more than the target now.
+    showUniverseList(tree);
+    const QStringList offered = contextMenuOn(tree, 6, QString());
+    QVERIFY2(offered.contains("Change interface / target…"), qPrintable(offered.join(" | ")));
+}
+
+/* "By-universe and By-device views must agree": a node patched from the
+   universe list must be findable, with every universe on it, in the device
+   view -- heard from or not, and on every interface it is fed from -- and
+   called the same thing in both. */
+void ConnectionsTree_Test::bothViewsListTheSameTargets()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_supportsTargets = true;
+    // One node that answers, by name; the rest never heard from.
+    QLCIOPlugin::Device t1 = makeDevice(1, "T1 node", "172.18.2.60");
+    t1.portLabels << "0:0:0" << "0:0:2";
+    t1.portUniverses << 0 << 2;
+    stub->m_devices << t1;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 10)
+        iom->addUniverse();
+    ConnectionsTree tree(m_doc);
+    struct P { quint32 u; quint32 line; const char *addr; quint32 port; };
+    const P ps[] = { {4, 1, "172.18.2.60", 0}, {5, 1, "172.16.2.60", 1},
+                     {6, 1, "172.18.2.60", 2}, {7, 0, "172.18.2.60", 3},
+                     {8, 1, "172.18.2.61", 0}, {9, 1, "172.18.2.61", 1},
+                     {3, 1, "172.18.2.61", 2} };
+    for (const P &p : ps)
+    {
+        QVERIFY(iom->setOutputPatch(p.u, stub->name(), "", p.line, false, 0));
+        QVERIFY(tree.applyTarget(p.u, stub->name(), p.line, p.addr, p.port));
+    }
+    tree.resize(1000, 600);
+    tree.show();
+    tree.refresh();
+
+    // Device view: universe -> "device label · via interface" it is filed under.
+    QMap<quint32, QString> byDevice;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+    {
+        const int k = it->data(COL_NAME, ROLE_KIND).toInt();
+        const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() == false || (k != KIND_UNIVERSE && k != KIND_PORT))
+            continue;
+        QTreeWidgetItem *dev = it;
+        while (dev != NULL && dev->data(COL_NAME, ROLE_KIND).toInt() != KIND_DEVICE)
+            dev = dev->parent();
+        QVERIFY2(dev != NULL, qPrintable(it->text(COL_NAME)));
+        QTreeWidgetItem *line = dev->parent();
+        QVERIFY(line != NULL);
+        byDevice.insert(uv.toUInt(), QString("%1 · via %2").arg(dev->text(COL_NAME))
+                                     .arg(line->data(COL_NAME, ROLE_LINENAME).toString()));
+    }
+
+    tree.m_byUniverse->setChecked(true);
+    tree.refresh();
+    QMap<quint32, QString> byUniverse;
+    for (const P &p : ps)
+    {
+        QTreeWidgetItem *row = universeRow(tree.m_tree, p.u);
+        QVERIFY(row != NULL);
+        byUniverse.insert(p.u, row->text(COL_DETAIL));
+    }
+
+    QCOMPARE(byDevice.keys(), byUniverse.keys());   // the same set, both ways
+    for (const P &p : ps)
+    {
+        const QString dev = byDevice.value(p.u);
+        const QString name = dev.section(" · via ", 0, 0);
+        const QString via = dev.section(" · via ", 1);
+        QVERIFY2(byUniverse.value(p.u).contains(name + " · ")
+                 && byUniverse.value(p.u).contains(" · via " + via),
+                 qPrintable(QString("%1: device view %2, universe list %3")
+                            .arg(p.u + 1).arg(dev).arg(byUniverse.value(p.u))));
+    }
+    QCOMPARE(byDevice.value(4).section(" · via ", 0, 0), QString("T1 node (172.18.2.60)"));
+    QCOMPARE(byDevice.value(7).section(" · via ", 0, 0), QString("172.18.2.60"));  // line 0: unheard
+}
+
+/* A show patched to a network this machine is not on (a laptop away from the
+   show VLAN): its patches are shown as kept, offline -- never as "not
+   patched" -- and reconnect by themselves when the network appears. */
+void ConnectionsTree_Test::offlinePatchesShowKeptNotUnpatched()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    NetworkRoute::LocalAddress home;
+    home.iface = "en0"; home.ip = QHostAddress("192.168.1.5"); home.prefix = 24;
+    NetworkRoute::setResolverForTest(
+        [home]() { return QList<NetworkRoute::LocalAddress>() << home; },
+        [](const QHostAddress &) { return QHostAddress("192.168.1.5"); });
+    stub->m_lineNames = QStringList() << "192.168.1.5";
+
+    Universe::OfflinePatch out;
+    out.tag = Universe::OutputPatchTag;
+    out.plugin = stub->name();
+    out.uid = "172.18.2.219";
+    out.line = 1;
+    out.params["outputIP"] = "172.18.2.60";
+    out.params["outputUni"] = "0";
+    iom->loadPatch(0, out);
+    Universe::OfflinePatch in;
+    in.tag = Universe::InputPatchTag;
+    in.plugin = stub->name();
+    in.uid = "172.18.2.219";
+    in.line = 1;
+    iom->loadPatch(1, in);
+    QVERIFY(iom->outputPatch(0, 0)->isPending());
+    QVERIFY(iom->inputPatch(1) == NULL);
+
+    ConnectionsTree tree(m_doc);
+    QVERIFY(rowsWithText(tree.m_tree, "not present — kept, will reconnect").isEmpty() == false);
+
+    tree.m_byUniverse->setChecked(true);
+    QTreeWidgetItem *u1 = tree.m_tree->topLevelItem(0);
+    QVERIFY2(u1->text(COL_DETAIL).contains("no route (172.18.2.219 not present)"),
+             qPrintable(u1->text(COL_DETAIL)));
+    QTreeWidgetItem *u2 = tree.m_tree->topLevelItem(1);
+    QVERIFY2(u2->text(COL_DETAIL).contains("\"172.18.2.219\" not present — kept"),
+             qPrintable(u2->text(COL_DETAIL)));
+
+    // The laptop joins the show network: both reconnect, no re-patching.
+    NetworkRoute::LocalAddress show;
+    show.iface = "en5"; show.ip = QHostAddress("172.18.2.157"); show.prefix = 24;
+    NetworkRoute::setResolverForTest(
+        [home, show]() { return QList<NetworkRoute::LocalAddress>() << home << show; },
+        [](const QHostAddress &t) {
+            return t.isInSubnet(QHostAddress("172.18.2.0"), 24) ? QHostAddress("172.18.2.157")
+                                                                : QHostAddress("192.168.1.5");
+        });
+    stub->m_lineNames << "172.18.2.157";
+    QCOMPARE(iom->retryOfflinePatches(), 2);
+    QVERIFY(iom->inputPatch(1) != NULL);
+
+    tree.m_byUniverse->setChecked(false);
+    tree.m_byUniverse->setChecked(true);
+    u1 = tree.m_tree->topLevelItem(0);
+    QVERIFY2(u1->text(COL_DETAIL).contains("via en5 (172.18.2.157)"), qPrintable(u1->text(COL_DETAIL)));
+    QVERIFY(rowsWithText(tree.m_tree, "kept, will reconnect").isEmpty());
+
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
 }

@@ -58,6 +58,12 @@ public:
      *  and scroll the view to it */
     void selectStepAtTime(quint32 time);
 
+    /** Lock the steps and the name (a chaser the Show Tree made, D13):
+     *  @a banner, which says so, goes at the top; run order, direction,
+     *  the speed modes, the cue-list number and testing stay. */
+    void setLocked(QWidget *banner);
+    bool isLocked() const { return m_locked; }
+
 protected:
     /** Intercept drag/drop events on the step tree's viewport so the
         chaser accepts function-id drops from the Function Manager. */
@@ -159,6 +165,19 @@ private slots:
 
 private:
     int getCurrentIndex();
+    /** The step row @a item is, or is under (a sub-cue row); -1 for none. */
+    int topLevelIndex(QTreeWidgetItem *item) const;
+
+    /************************************************************************
+     * Sub-cues (SUBCUES_DESIGN.md)
+     ************************************************************************/
+private:
+    /** List a chase step's steps under its row: read-only, numbered. */
+    void updateSubCueItems(QTreeWidgetItem *item, const ChaserStep &step);
+    /** Its sub-cue rows' numbers: their own, or (grey) "<parent>.<n>". */
+    void updateSubCueNumbers(QTreeWidgetItem *item);
+    /** Edit Chase…: open step @a index's chase in the Function Manager. */
+    void editSubCueChase(int index);
 
     /************************************************************************
      * Utilities
@@ -192,6 +211,7 @@ private:
 
 private:
     bool m_liveMode;
+    bool m_locked = false;
 };
 
 /** @} */

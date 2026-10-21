@@ -24,7 +24,10 @@
 #include <functional>
 #include <QList>
 #include <QHash>
-#include <QReadWriteLock>
+#include <mutex>
+#if defined(Q_OS_WIN)
+#include <QRecursiveMutex>
+#endif
 
 #include "universe.h"
 #include "scenevalue.h"
@@ -109,14 +112,70 @@ public:
      *  in between saw an empty fader and sent a blank frame. */
     void replaceAll(const QList<FadeChannel> &channels);
 
+    /** Add ($on) or remove @a flag on every channel this fader holds, e.g.
+     *  FadeChannel::Override on a scene that is to win over the rest. */
+    void setChannelsFlag(int flag, bool on);
+
     /** Get/Set a request of deletion of this fader */
     bool deleteRequested();
     void requestDelete();
 
-    /** Returns a reference of a FadeChannel for the provided $fixtureID and $channel.
-     *  If no FadeChannel is found, a new one is created and added to m_channels.
-     *  Also, new channels will have a start value set depending on their type */
-    FadeChannel *getChannelFader(const Doc *doc, Universe *universe, quint32 fixtureID, quint32 channel);
+    /** The lock guarding a fader's channels.
+     *
+     *  std::recursive_mutex where TSan can see it (it can't see into a
+     *  QRecursiveMutex, which locks out of line). Not on Windows: MinGW's
+     *  libstdc++ gives std::recursive_mutex no destructor (it has a static
+     *  initializer, so it assumes the pthread mutex owns nothing), while
+     *  winpthreads allocates the mutex and a kernel Event on its first lock.
+     *  Every fader leaked both, and faders come and go all the time (a
+     *  scene asks for one per universe each time it starts): the Windows
+     *  stress run leaked ~5000 Events a second -- 3 million handles and
+     *  300 MB in 10 minutes -- with a CreateEvent call on the timer thread
+     *  for each. QRecursiveMutex is a word and a futex: nothing to create,
+     *  nothing to leak. */
+#if defined(Q_OS_WIN)
+    typedef QRecursiveMutex ChannelsLock;
+#else
+    typedef std::recursive_mutex ChannelsLock;
+#endif
+
+    /** A FadeChannel of this fader, with the fader's channels locked for as
+     *  long as it is held. The universe this fader belongs to writes it on
+     *  its own thread -- stepping its channels, and dropping the ones that are
+     *  done -- and a QHash moves its entries when one is added or removed: a
+     *  bare FadeChannel pointer, kept past the lock, wrote into whatever had
+     *  moved there (heap corruption under load). Keep it only as long as the
+     *  channel is being set up; don't hold two from different faders, nor
+     *  ask a Universe for a fader, while holding one. */
+    class ChannelRef
+    {
+    public:
+        ChannelRef(std::unique_lock<ChannelsLock> &&lock, FadeChannel *fc)
+            : m_lock(std::move(lock)), m_fc(fc) {}
+        ChannelRef() = default;
+        ChannelRef(ChannelRef &&) = default;
+        ChannelRef &operator=(ChannelRef &&) = default;
+        ChannelRef(const ChannelRef &) = delete;
+        ChannelRef &operator=(const ChannelRef &) = delete;
+
+        FadeChannel *get() const { return m_fc; }
+        FadeChannel *operator->() const { return m_fc; }
+        FadeChannel &operator*() const { return *m_fc; }
+        explicit operator bool() const { return m_fc != nullptr; }
+
+        /** Let go of the channel (and the lock) before the end of the scope */
+        void release() { m_fc = nullptr; m_lock = std::unique_lock<ChannelsLock>(); }
+
+    private:
+        std::unique_lock<ChannelsLock> m_lock;
+        FadeChannel *m_fc = nullptr;
+    };
+
+    /** Returns the FadeChannel for the provided $fixtureID and $channel,
+     *  locked (see ChannelRef). If no FadeChannel is found, a new one is
+     *  created and added to m_channels. Also, new channels will have a start
+     *  value set depending on their type */
+    ChannelRef getChannelFader(const Doc *doc, Universe *universe, quint32 fixtureID, quint32 channel);
 
     /** Get all channels in a non-modifiable hashmap */
     QHash <quint32,FadeChannel> channels() const;
@@ -200,7 +259,9 @@ private:
     int m_priority;
     bool m_handleSecondary;
     QHash <quint32,FadeChannel> m_channels;
-    mutable QReadWriteLock m_channelsLock;
+    /** Guards m_channels and the FadeChannels in it. Recursive: a caller
+     *  holding a ChannelRef may ask for another channel of the same fader. */
+    mutable ChannelsLock m_channelsLock;
     qreal m_intensity;
     qreal m_parentIntensity;
     bool m_paused;

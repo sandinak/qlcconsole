@@ -38,6 +38,24 @@ class QXmlStreamReader;
  */
 class ChaserStep final
 {
+public:
+    /** How a chase step's own steps -- its sub-cues -- advance
+     *  (SUBCUES_DESIGN.md). Only meaningful when the step's function is a
+     *  chase (or a sequence); ignored otherwise. */
+    enum SubCueMode
+    {
+        Auto = 0,   //! The inner chase runs on its own timing (as ever)
+        SubGo,      //! The inner chase holds each step until a Sub GO
+        /** As SubGo, but an inner step with a finite hold goes on to the
+         *  next by itself once it has run (auto-follow sub-cues, the Show
+         *  Tree's "auto 0.5s"); an infinite hold waits for Sub GO. Saved as
+         *  SubCues="SubGoFollow" (an older build reads it as Auto). */
+        SubGoFollow
+    };
+
+    static QString subCueModeToString(SubCueMode mode);
+    static SubCueMode stringToSubCueMode(const QString &str);
+
     /************************************************************************
      * Initialization
      ***********************************************************************/
@@ -100,6 +118,9 @@ public:
     /** Skipped: GO, Next, Back and auto-follow pass over it; a jump straight
      *  to it still plays it. Kept so it can be put back (rehearsals). */
     bool skip = false;
+    /** How the step's sub-cues advance: saved as SubCues="SubGo", nothing
+     *  for Auto, so older shows read and write unchanged. */
+    SubCueMode subCues = Auto;
 };
 
 /** @} */

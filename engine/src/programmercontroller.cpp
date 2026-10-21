@@ -33,6 +33,8 @@
 #include <QVariant>
 
 #include "programmercontroller.h"
+#include "focussession.h"
+#include "gamepadrole.h"
 
 #include "doc.h"
 #include "fixture.h"
@@ -43,6 +45,9 @@
 #include "chaser.h"
 #include "chaseraction.h"
 #include "collection.h"
+#include "show.h"
+#include "track.h"
+#include "showfunction.h"
 #include "qlcpalette.h"
 #include "qlcphysical.h"
 #include "qlcchannel.h"
@@ -79,6 +84,19 @@ ProgrammerController::ProgrammerController(Doc *doc)
     // The mark set auto-releases fixtures on reveal; surface that to the monitor.
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);
+    m_focusSession = new FocusSession(m_doc, this);
+    /* Focus mode takes the stick from the follow spot's data channel while it
+       runs (a free-flying follow spot must not fly while its stick is
+       aligning the rig), and gives it back as it stands when it stops. */
+    connect(m_focusSession, &FocusSession::started, this, [this]() {
+        connectControllerInput();    // even with no follow-spot axes bound
+        m_fineNormX = m_fineNormY = 0.5f;
+        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        emit joystickUpdated(0.5f, 0.5f);
+    });
+    connect(m_focusSession, &FocusSession::stopped, this, [this]() {
+        emit joystickUpdated(m_panNorm, m_tiltNorm);
+    });
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
     connect(m_markPlanner, &MarkPlanner::enabledChanged,
             this, &ProgrammerController::autoMoveInBlackChanged);
@@ -1653,6 +1671,12 @@ void ProgrammerController::connectControllerInput()
             SIGNAL(inputValueChanged(quint32, quint32, uchar, const QString&)),
             this,
             SLOT(slotControllerInputChanged(quint32, quint32, uchar, const QString&)));
+    /* A controller unplugged or plugged back in is a plugin configuration
+       change (HID rescans); a profile reassigned is a profile change. */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::pluginConfigurationChanged,
+            this, &ProgrammerController::focusControllerChanged);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged,
+            this, &ProgrammerController::focusControllerChanged);
     m_controllerInputConnected = true;
 }
 
@@ -1718,6 +1742,9 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         emit functionTriggerChanged(fid, functionTriggerLabel(fid));
         return;
     }
+
+    if (routeFocusInput(universe, channel, value))
+        return;
 
     const float norm = value / 255.0f;
 
@@ -1870,8 +1897,156 @@ void ProgrammerController::sendTriggerFeedback(quint32 universe, quint32 channel
     m_doc->inputOutputMap()->sendFeedBack(universe, channel, on ? 255 : 0, QVariant());
 }
 
+int ProgrammerController::controllerRole(quint32 universe, quint32 channel) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr)
+        return GamepadRole::None;
+    return GamepadRole::fromProfile(ip->plugin()->inputChannelRole(ip->input(), channel),
+                                    ip->plugin()->inputChannelName(ip->input(), channel));
+}
+
+ProgrammerController::FocusController ProgrammerController::focusController() const
+{
+    /* Controls numbered past this are not a gamepad's: HID channels are
+       the axes, then the buttons, and no profile goes near it. */
+    const quint32 kMaxChannel = 128;
+
+    FocusController best;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return best;
+    int bestScore = 0;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || ip->plugin() == nullptr)
+            continue;
+        QLCIOPlugin *plugin = ip->plugin();
+        FocusController c;
+        c.universe = u;
+        c.name = ip->inputName();
+        c.profile = ip->hidProfileName();
+        int used = 0;
+        for (quint32 ch = 0; ch < kMaxChannel; ++ch)
+        {
+            const QString name = plugin->inputChannelName(ip->input(), ch);
+            const GamepadRole::Role role =
+                GamepadRole::fromProfile(plugin->inputChannelRole(ip->input(), ch), name);
+            if (role == GamepadRole::None || c.controls.contains(role))
+                continue;
+            c.controls.insert(role, name);
+            if (FocusSession::controlFor(role) != FocusSession::NoControl
+                || role == GamepadRole::LeftX || role == GamepadRole::LeftY
+                || role == GamepadRole::RightX || role == GamepadRole::RightY)
+                ++used;
+        }
+        // The follow spot's bound stick is the left stick here, named or not.
+        if (m_panBound && m_panUniverse == u && !c.controls.contains(GamepadRole::LeftX))
+        {
+            c.controls.insert(GamepadRole::LeftX, plugin->inputChannelName(ip->input(), m_panChannel));
+            ++used;
+        }
+        if (m_tiltBound && m_tiltUniverse == u && !c.controls.contains(GamepadRole::LeftY))
+        {
+            c.controls.insert(GamepadRole::LeftY, plugin->inputChannelName(ip->input(), m_tiltChannel));
+            ++used;
+        }
+        if (used == 0)
+            continue;
+        // Most of what Focus mode uses wins; the follow spot's breaks a tie.
+        const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0);
+        if (score > bestScore)
+        {
+            bestScore = score;
+            best = c;
+            best.present = true;
+        }
+    }
+    return best;
+}
+
+bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
+{
+    const float norm = value / 255.0f;
+    const bool active = m_focusSession->isActive();
+    const bool isPan = m_panBound && universe == m_panUniverse && channel == m_panChannel;
+    const bool isTilt = m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel;
+    /* The bound pan/tilt pair is the follow spot's stick: when Focus mode is
+       off it stays theirs, untouched by any of this. */
+    if (!active && (isPan || isTilt))
+        return false;
+
+    const GamepadRole::Role role = GamepadRole::Role(controllerRole(universe, channel));
+    if (role == GamepadRole::None && !active)
+        return false;
+
+    if (!GamepadRole::isAxis(role) && role != GamepadRole::None)
+    {
+        if (value > 0)
+            m_heldRoles.insert(role);
+        else
+            m_heldRoles.remove(role);
+        // View + Menu together: ask for Focus mode.
+        if (!active && value > 0 && m_heldRoles.contains(GamepadRole::Back)
+            && m_heldRoles.contains(GamepadRole::Start))
+        {
+            emit focusModeRequested();
+            return true;
+        }
+    }
+    if (!active)
+        return false;
+
+    /* On the keyboard the controller is ignored -- but still kept from the
+       follow spot and the rest -- so a resting stick cannot drift a head. */
+    if (m_focusSession->inputDevice() == FocusSession::KeyboardInput)
+        return true;
+
+    // What the panel lights: the stick by its role even when it is only bound.
+    const GamepadRole::Role shown = isPan ? GamepadRole::LeftX
+                                  : isTilt ? GamepadRole::LeftY : role;
+    if (shown != GamepadRole::None)
+        emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
+                                                                        : (value > 0 ? 1.0f : 0.0f));
+
+    // Focus mode owns the controller: everything stops here.
+    if (isPan || role == GamepadRole::LeftX)
+    {
+        m_panNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+    }
+    else if (isTilt || role == GamepadRole::LeftY)
+    {
+        m_tiltNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+    }
+    else if (role == GamepadRole::RightX || role == GamepadRole::RightY)
+    {
+        (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = norm;
+        m_focusSession->setStick(FocusSession::Fine, m_fineNormX, m_fineNormY);
+    }
+    else if (value > 0)
+    {
+        m_focusSession->apply(FocusSession::controlFor(role));
+    }
+    return true;
+}
+
 void ProgrammerController::applyDesignJoystick()
 {
+    /* Focus mode is the follow spot's stick put to another use: the same
+       bound axes, the same profile deadzone and sensitivity, this same tick --
+       nudging the current head's calibration instead of moving a target. */
+    if (m_focusSession != nullptr && m_focusSession->isActive())
+    {
+        m_focusSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
+        m_focusSession->tick(m_designJoyTimer != nullptr
+                             ? m_designJoyTimer->interval() / 1000.0 : 0.02);
+        return;
+    }
+
     // Run-mode joystick: for an Aim look, drag the stage target in floor space
     // (the scene re-resolves per-fixture pan/tilt from the moved target).  A
     // Standard Pan/Tilt look is fixed; a followspot.js effect, when present,
@@ -2195,10 +2370,10 @@ void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, 
         }
     }
 
-    FadeChannel *fc = fader->getChannelFader(m_doc, universe, fixtureId, channel);
+    GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universe, fixtureId, channel);
     if (fc->universe() == Universe::invalid())
     {
-        fader->remove(fc);
+        fader->remove(fc.get());
         return;
     }
 
@@ -2213,6 +2388,9 @@ void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, 
     fc->setTarget(value);
     fc->setReady(false);
     fc->setElapsed(0);
+    // routing the edit may ask a universe for a fader: not while holding this
+    // one, which that universe's thread may be waiting on
+    fc.release();
 
     // Edit-routing for Save, same as VCSlider: let an owning running Scene
     // absorb the edit if one exists, else stash it in the programmer values
@@ -2937,8 +3115,19 @@ ProgrammerController::updatePaletteForChannelType(QLCPalette *pal,
         return PaletteChanged;
     }
 
-    case QLCPalette::Dimmer:
     case QLCPalette::Gobo:
+        // A gobo by name: the edit picks the slot for this fixture's type
+        // only; the others keep finding theirs by the name.
+        if (pal->isGoboByName() && ref != NULL && !QLCPalette::definitionKey(ref).isEmpty())
+        {
+            const QString def = QLCPalette::definitionKey(ref);
+            if (pal->goboValueFor(ref) == int(rawValue) && pal->goboValues().contains(def))
+                return PaletteUnchanged;
+            pal->setGoboValue(def, int(rawValue));
+            return PaletteChanged;
+        }
+        Q_FALLTHROUGH();
+    case QLCPalette::Dimmer:
     case QLCPalette::Shutter:
         if (pal->intValue1() == int(rawValue))
             return PaletteUnchanged;
@@ -3182,4 +3371,94 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
 
     // Return a valid id so VCSlider knows the edit was taken.
     return (owningSceneId != Function::invalidId()) ? owningSceneId : pal->id();
+}
+
+/*****************************************************************************
+ * Where is this used
+ *****************************************************************************/
+
+QList<ProgrammerController::Usage> ProgrammerController::paletteUsage(quint32 pid) const
+{
+    QList<Usage> uses;
+    foreach (Function *f, m_doc->functions())
+    {
+        const Scene *s = qobject_cast<const Scene*>(f);
+        if (s == NULL)
+            continue;
+        const QList<quint32> looks = s->palettes();
+        for (int i = 0; i < looks.size(); i++)
+            if (looks.at(i) == pid)
+                uses << Usage{ Usage::SceneLook, s->id(), s->name(), i + 1, QString() };
+    }
+    foreach (QLCPalette *p, m_doc->palettes())
+    {
+        if (p == NULL || p->id() == pid)
+            continue;
+        const QMap<QString, quint32> binds = p->effectPaletteBindings();
+        for (auto it = binds.constBegin(); it != binds.constEnd(); ++it)
+            if (it.value() == pid)
+                uses << Usage{ Usage::EffectBinding, p->id(), p->name(), 0, it.key() };
+    }
+    return uses;
+}
+
+QList<ProgrammerController::Usage> ProgrammerController::functionUsage(quint32 fid) const
+{
+    QList<Usage> uses;
+    foreach (Function *f, m_doc->functions())
+    {
+        if (f == NULL || f->id() == fid)
+            continue;
+        if (const Collection *c = qobject_cast<const Collection*>(f))
+        {
+            if (c->functions().contains(fid))
+                uses << Usage{ Usage::CollectionMember, c->id(), c->name(), 0, QString() };
+        }
+        else if (const Chaser *ch = qobject_cast<const Chaser*>(f))
+        {
+            const QList<ChaserStep> steps = ch->steps();
+            for (int i = 0; i < steps.size(); i++)
+                if (steps.at(i).fid == fid)
+                    uses << Usage{ Usage::ChaserStep, ch->id(), ch->name(), i + 1, QString() };
+        }
+        else if (const Show *sh = qobject_cast<const Show*>(f))
+        {
+            foreach (Track *trk, sh->tracks())
+            {
+                if (trk == NULL)
+                    continue;
+                foreach (ShowFunction *sf, trk->showFunctions())
+                    if (sf != NULL && sf->functionID() == fid)
+                        uses << Usage{ Usage::ShowItem, sh->id(), sh->name(), 0, trk->name() };
+            }
+        }
+    }
+    return uses;
+}
+
+QStringList ProgrammerController::usageLines(const QList<Usage> &uses)
+{
+    QStringList lines;
+    for (const Usage &u : uses)
+    {
+        switch (u.kind)
+        {
+        case Usage::SceneLook:
+            lines << tr("Scene “%1” — look %2").arg(u.ownerName).arg(u.position);
+            break;
+        case Usage::EffectBinding:
+            lines << tr("Effect look “%1” — its “%2” slot").arg(u.ownerName, u.slot);
+            break;
+        case Usage::CollectionMember:
+            lines << tr("Collection “%1”").arg(u.ownerName);
+            break;
+        case Usage::ChaserStep:
+            lines << tr("Chaser “%1” — step %2").arg(u.ownerName).arg(u.position);
+            break;
+        case Usage::ShowItem:
+            lines << tr("Show “%1” — track “%2”").arg(u.ownerName, u.slot);
+            break;
+        }
+    }
+    return lines;
 }

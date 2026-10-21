@@ -113,6 +113,27 @@ bool RhiRaster::ensureRhi()
         release(m_surface);
         return false;
     }
+    /* Which GPU the rig is drawn on, once: a report from a machine we cannot
+       see (a VM's virtual adapter, a software one) starts from this. */
+    static bool told = false;
+    if (!told)
+    {
+        told = true;
+        const QRhiDriverInfo info = m_rhi->driverInfo();
+        qDebug().noquote() << "[RhiRaster]" << m_rhi->backendName() << "on"
+                          << QString::fromUtf8(info.deviceName)
+                          << QStringLiteral("(%1)").arg(int(info.deviceType));
+    }
+    /* What the passes need. Without a floating-point target the light could
+       not pile up past white: the CPU draws instead. */
+    if (!m_rhi->isTextureFormatSupported(QRhiTexture::RGBA16F)
+        && !m_rhi->isTextureFormatSupported(QRhiTexture::RGBA32F))
+    {
+        qWarning() << "[RhiRaster] no floating-point textures on this GPU: drawing on the CPU";
+        release(m_rhi);
+        release(m_surface);
+        return false;
+    }
 
     m_ubuf = m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 16);
     m_sampler = m_rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,

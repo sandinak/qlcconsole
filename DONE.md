@@ -6,6 +6,1684 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-21 — Auto-open shutters; Settings → Advanced *(feat/shutter-auto-open)*
+
+Board Q10 (Branson: "configurable option with default to open ... a tab for
+advanced config"). `ShutterAutoOpen` (engine, owned by Doc, built like
+PowerLimiter) turns each patched fixture into per-universe
+`Universe::AutoOpenRule`s: shutter address, open value
+(`ShutterAutoOpen::openValue()`: open default, else ShutterOpen preset,
+else a plain "Open"/"Shutter open" name; strobe preset 0; never iris) and
+the heads' levels (master + head dimmer as gates, colours when a head has
+no dimmer). `Universe::applyAutoOpen()` runs in `processFaders()` after the
+faders, under `m_autoOpenMutex`, on the post-GM buffer only: open when a
+head is lit by something written in the last two frames and the shutter
+itself is neither written lately nor held. Per-channel frame stamps
+(`std::atomic`) are set in write / writeMultiple / writeRelative; a
+GenericFader AutoRemove channel (slider, programmer edit; not a fade-out)
+leaves it held via `holdChannels()`. Saved per show as
+`<ShutterAutoOpen Enabled="0"/>`, only when off. AppSettings is now General
+| Advanced; Advanced holds it plus the effect script editor and the Show
+control (QLab) pointer. Programming tab's "no look for: shutter" is skipped
+while on. Tests: engine/test/shutterautoopen, appviews
+`settingsAdvancedHoldsAutoOpen`; both AT-Spots in copies of the classroom
+show and DanceHysteria-0.6 light at Full from a dimmer-only scene (shutter
+11) and stay at 0 with it off.
+
+- **Course:** Lesson 1.3's Shutter → Open step can go once this lands (the
+  course branch is untouched).
+
+### 2026-10-21 — One top bar: the tab's tools + the show controls *(feat/compact-toolbar)*
+
+Mockups A–D (Branson chose A, with B as a setting). `ui/src/mainbar.{h,cpp}`:
+`MainBar` is the row above the tabs (a plain widget in the central widget,
+not a QMainWindow toolbar: a toolbar inside a toolbar paid both margins);
+`ShowControls` is Stop all / Blackout / Blind (the App's own actions, short
+`iconText()`s) plus a separate Design | Operate switch widget.
+
+- **Borrowing, not re-registering.** A tab names its tools once
+  (`MainBar::registerTabTools(page, widget)`); while it is current they are
+  lifted out of its layout (a hidden placeholder keeps their place, or the
+  layout's menu bar is cleared) into the bar, and put back on a tab change,
+  detach, park, Settings → status bar, kiosk and quit. The tab keeps
+  building / enabling / hiding them as before, so no action can be lost;
+  words-under-icons become words-beside while borrowed and go back after.
+  Registered: Fixtures, Lighting Studio (both its toolbars now live in one
+  holder; view switches only hide/show), Programming (its canvas row is a
+  QToolBar now, was a scroll area), Show Tree (its header is a QToolBar
+  now), Shows, Virtual Console (hidden in Operate, still). Connections
+  keeps its toolbar in the universe pane; Simple Desk and Run have none.
+- **Status bar (B):** icons only there (unless Text Only), the DESIGN and
+  BLACKOUT chips hide, and the switch is its own widget so a full footer's
+  squeeze (widest item first) takes the big chips before it.
+- Measured offscreen at 1280×800 on help-demo.qxw, Fixtures tab, from the
+  menu bar to content: 94 px before → 37 px (A) / 36 px (B).
+- Test: `ui/test/mainbar` (12 cases incl. all six themes' contrast,
+  detach, narrow window, Operate, kiosk). Gotcha found on the way: the
+  Virtual Console's contents layout was added with `addItem()`, so it has
+  no parent widget and `replaceWidget()` won't re-adopt a widget into it;
+  MainBar re-parents to the original parent first.
+
+### 2026-10-16 — Sub-cues P3: show control by sub-cue number *(feat/sub-cues-p3, merged into feat/show-tree 2026-10-21)*
+
+SUBCUES_DESIGN.md §4.1. `ShowControl` reads a cue by number as
+`Chaser::findCueOrSubCue()` does (a main "4.2" wins); GO 4.2 over OSC / MSC
+jumps there, its cue first; new `SubGo` / `SubBack` commands (OSC `/subgo`,
+`/subback`); LOAD 4.2 keeps the sub-cue on standby (`Standby { step, subCue }`,
+`loadedSubCue()`, `standbySubCue()`, `cueName()`), shown on the footer's and
+the VC cue list's **Next:**; STOP 4.2 only when it's the one playing. ⌥⌘↩ /
+⌥⌘⇧↩ go through ShowControl. Fixes: OSC float cues read to their 7 digits;
+`Chaser::write` unpauses the runner directly so a GO by number on a paused
+list isn't swallowed.
+
+- **Merge note:** show-tree's P7 had already added a smaller Sub GO / LOAD
+  4.2 to ShowControl (a parallel `m_loadedSub` hash). P3's version replaces
+  it; show-tree's `Request::chaser` and `mainCueListChanged()` stay.
+
+### 2026-10-16 — Confetti on two-arm beams; Black and Can't-move look warnings *(fix/programming-confetti-look, merged into feat/show-tree 2026-10-21)*
+
+- `EffectInstance::parseIntents()`: one effect's heads writing a shared
+  master dimmer collapse to the brightest (they were multiplied as two
+  effects would be; confetti's dark arm zeroed the beam).
+- `LookStackCheck` checks 6 and 7: a Colour look that is all zero (**Black**),
+  and a position look on fixtures whose Pan or Tilt channels are all Fine
+  (**Can't move**, e.g. the AT-W-Bottom movers' definition).
+
+### 2026-10-20 — Beams stop at risers and the floor *(fix/beams-stop-at-platforms, off feat/show-tree, not merged)*
+
+"The TrussW are going thru the platforms .. should wash on them vs thru
+them" — DanceHysteria-0.6, the side-on (az 90/270, el 0) Angled view, with
+TrussW-RGB lit blue.
+
+- **Cause.** The flat Top/Front/Side planes draw no beams at all; Branson's
+  "side elevation" is the Angled view, eye level. `drawBeamCone()` drew the
+  cone as the hull of the lens and `beamFootprint()`'s ring, which is every
+  edge ray followed on to the *plane the axis landed on*. The TrussW's axis
+  landed on the closed main drape (a vertical plane), so the lower edge
+  rays ran on down through the steps and ~2 m below the floor to meet it.
+  And `beamThrowUncached()` only knew platform *tops*: a ray going into a
+  riser's back went out of its front to the floor beyond (only the
+  optional Line of sight stopped it), so pools lit the floor in a riser's
+  shadow. The planar-depth fan also tinted riser faces it passed beside.
+  Every view of the Studio and the Rig Overview (CPU and GPU draw the same
+  ops) had the below-floor cone; the 45° overview only showed it as a glow
+  on the floor in front of the drape.
+- **beamThrow**: each platform block is a box (`rayIntoBlock()`, slab test
+  in the platform's turned frame); a ray stops at the first face, with that
+  face's normal. Tops keep their old surface numbers; sides are
+  `kBlockSides + block*8 + face` (`deckSurface()`/`deckSurfaceParts()`).
+- **The cone's far end**: each footprint point is cut back to where its own
+  edge ray stops (when it stops sooner), keeping the fade it had there. A
+  beam whose rays all land where its footprint says is drawn exactly as
+  before.
+- **Seen level** (`seenLevel()`: Angled, el <= 10°): every block a ray hits
+  is cut out of the cone as its screen outline plus everything beyond it
+  from the lens (`levelShadows()`, convex; `emitLightTriOutside()` splits
+  each fan triangle into the convex pieces outside, depth and alpha carried
+  by interpolation), and the wash on an edge-on top or face is a band just
+  inside that edge (`drawLevelWash()`, 3x the pool's alpha, on the block's
+  near face depth). Higher up, the depth buffer and the pools do it.
+- Tests: `aWashStopsOnARiserSeenFromTheSide` / `...FromTheFront` (nothing
+  below the floor, inside the riser or in its shadow; a band on its top),
+  `aBeamClearOfTheRisersIsLeftAlone` (a riser drawn across the beam but not
+  in its way changes no pixel of it); all three fail on the old code.
+  `aBigPixelRigPaintsInGoodTime` now has four risers and an eye-level
+  camera: 45° 44-48 ms vs 42-46 before, level 23-26 vs 22-26.
+
+### 2026-10-19 — Rig network transmit gate *(feat/rig-network-gate, off feat/show-tree, not merged)*
+
+So a laptop on a school network never sprays Art-Net, sACN or WLED onto it.
+Docs: other-improvements.md "Only transmit on the rig network",
+troubleshooting, whats-new.
+
+- **Rig networks per show** — `InputOutputMap::rigNetworks()`, IPv4 CIDRs,
+  saved as `<RigNetwork>172.18.0.0/20</RigNetwork>` inside
+  `<InputOutputMap>` *before* the universes so a load knows them before it
+  opens a patch (an older build skips them with its usual "Unknown IO Map
+  tag" warning). Text/matching in `engine/src/rignetwork.{h,cpp}`
+  (normalise, parseList, contains; IPv6 never matches, never crashes).
+  Loading a show replaces them; File → New keeps them (it keeps the patch
+  they describe). `suggestedRigNetworks()` = distinct saved Network values of
+  the show's patches, offered in Settings (placeholder + **Use these**),
+  never written by itself.
+- **The gate** (`transmitGateActive()` = enabled && !override && networks
+  set). A network output patch — a line named after a non-loopback local
+  address (Art-Net, E1.31, OSC), or a patch with IPv4 `outputIP*` targets
+  (WLED; source = `NetworkRoute::sourceFor(target)`) — that may not transmit
+  is **held**: made pending (`OutputPatch::isHeld()`/`heldReason()`), so the
+  plugin line is never opened and the patch saves unchanged. Held at load
+  (`loadPatch`), on a live patch (`setOutputPatch`), and on the 5 s retry
+  tick (`applyTransmitGate()` closes open offenders, e.g. after a DHCP move
+  or a settings change); resumes through `retryOfflinePatches()`. Line
+  resolution prefers rig lines when several qualify. A pending network
+  patch whose network is absent while this machine is on no rig network at
+  all counts as held too (footer). Host-name WLED targets can't be checked:
+  held while the gate is on.
+- **Plugins enforce it too** — `QLCIOPlugin::setTransmitNetworks()` (pushed
+  by the engine, empty = unrestricted; parsed without QtNetwork since every
+  plugin builds that file). Art-Net routes *every* send through
+  `ArtNetController::writeDatagram()` (DMX, RDM, ArtPoll, ArtPollReply,
+  discovery, ArtIpProg used to call the socket directly in places) and drops
+  it there while `transmitHeld()`; E1.31 and OSC DMX output check before
+  sending; WLED checks each device's route before its POSTs/GETs. That covers
+  what a patch hold can't see: input lines answering polls, Rescan. OSC
+  *feedback* to a control surface is deliberately not held.
+- **Decided on change, not per packet** *(fix/rig-gate-cached)* — each
+  Art-Net/E1.31/OSC controller keeps the answer in a `std::atomic<bool>
+  m_held` and WLED each `Device::gateOpen`; the send path only reads it (no
+  mutex, no CIDR walk, no allocation, no route probe). Worked out again by
+  `QLCIOPlugin::refreshTransmitGate()` when `setTransmitNetworks()` changes
+  the list (gate setting, session override, rig networks), when a line's
+  controller is made or a WLED address is set, and on InputOutputMap's 5 s
+  reconnect tick (catches DHCP/VPN/Wi-Fi moves). WLED's route probe (UDP
+  connect, up to `waitForConnected(100)`) moved from the send tick to that
+  refresh, so it can no longer stall a send.
+- **Settings → Network** (AppSettings): the show's rig networks (validated as
+  typed; OK disabled while any entry is bad), **Only transmit on rig
+  networks** (QSettings `network/onlyTransmitOnRigNetworks`, default on —
+  this machine's choice, not the show's), **Transmit anyway, this session…**
+  (confirmation; never saved; ends on quit or opening another show; the
+  button then reads "Check the rig network again").
+- **Footer** — `footerRigNetwork` chip beside the readiness chip: red "Output
+  held — not on the rig network (…). Connected: en0 10.4.12.7" / "N of M
+  outputs held…", red "Transmitting anyway…", amber "Rig network not set…" /
+  "Rig network check off"; tooltip lists each universe and why; click →
+  Settings with the field focused. "Not ready" lists held universes too;
+  Connections' ghost row reads "held: … — kept, resumes on the rig network".
+- **No CLI/web output-state query exists** (webaccess has none; `-n`/`-w`
+  have no status command), so there was nothing to extend; the engine's
+  `transmitGateStatus()` is there for one.
+- Tests: inputoutputmap_test (9 new: parsing, held off the rig network,
+  resume, live patch + settings + override + off, none set, loopback and
+  non-network, WLED targets by route, save/load round trip, suggestion not
+  written); artnet_test (every send held through the test sink, rig and
+  loopback allowed, junk entries ignored); appviews_test (footer text and
+  colour on a stub dressed as Art-Net, Settings round trip and validation,
+  suggestion offered not written).
+
+### 2026-10-18 — Fixes from writing the student course *(fix/course-app-issues, off feat/show-tree, not merged)*
+
+COURSE_PLAN.md §8 (docs/show-tree-course) listed what the app got in the
+way of in Lesson 1.1.
+
+- **Crash on quit.** `App::~App` deleted the Doc before the Show Tree tab;
+  with the window still up, `ShowTreeView::hideEvent` → `stopPreview` ran
+  on the freed `ShowTreeController`. The tab is now deleted before the Doc
+  (beside the ProgrammingManager one), the view holds the controller in a
+  `QPointer`, and `ShowTreeController::syncPreview` does nothing once the
+  Doc has freed its master timer (~Doc frees it before `clearContents()`).
+  appviews_test `quittingWithTheShowTreeShowing` reproduced the SIGSEGV
+  before the fix.
+- **A new production is current when nothing else has GO**
+  (`ShowTreeController::addProduction`): no production current, and the
+  main cue list isn't a chaser that still exists. Chosen over "always"
+  (that would take GO from a production being run, or a plain chaser the
+  operator picked) and over "when it's the only one" (a show whose only
+  production was deleted, or that had "production none", is the same case).
+  After `production none` the main cue list still names that production's
+  chaser, so GO still plays it and a new production doesn't take it. Undo
+  of the add leaves none current. showtreeplay_test
+  `aNewProductionIsCurrentWhenNothingElseHasGo`; three tests that assumed
+  no current production updated.
+- **Drop-area text.** It was `palette(mid)`, which Fusion derives from
+  Button: on the dark themes about the page's own colour (contrast 1.7:1
+  even on Default offscreen). Now two thirds of the way from Window to
+  WindowText, re-applied on a palette change. appviews_test
+  `theDropAreaReadsInEveryTheme` grabs it in all six themes: ≥ 4.5:1.
+- **Blue on the cyc.** Not haze and not saturation lost in the light
+  buffer: light was Screened over the frame, and Screen only adds -- the
+  cyc's red and green stayed at what the House ambient gave them (~156),
+  so a full blue wash was (156,157,168). `ZRaster::composeLight()` (both
+  CPU and GPU paths): where coloured light lands on something grey, the
+  channels it lacks are taken down by its strength (up to 80%, easing in,
+  times grey²), then Screen. Classroom cyc, four XL-450s at full: blue
+  (156,157,168) → (108,109,168), red (163,157,162) → (163,109,112), white
+  unchanged; red riser strips and drapes unchanged in a mixed look. Banded
+  on the global pool: ~1.9 ms for a fully lit 2400×1400 frame at -O2.
+  Still faint in absolute terms: the pool model has no distance term, so a
+  wide wash a metre from the cyc lights it no more than from ten.
+- **Front washes at the floor: data, not the app.** The classroom's Front
+  Wash heads are `FloorMounted` on tower shelves; their definition declares
+  no Default for Tilt, so untouched tilt is DMX 0, which on a 280° head
+  standing up is about 50° below the horizon -- a pool beside the tower. The rig
+  view draws exactly that. Centre (128) would point them straight up. Open
+  question (and the definition's Pan byte) in TODO.md.
+
+### 2026-10-18 — Colour rings on movers *(on feat/show-tree, not merged)*
+
+Branson's "LED Movinghead+Circle" (10 fixtures in DanceHysteria): a small
+spot with a colour ring round the lens on one macro channel ("Circle
+Color": off, Red … White, two-colour chases, RGB/Random-Chase). His
+definition (left untouched) has one head -- the ring inside it in 12
+Channel, in no head in 10 Channel.
+
+- **New definition** `LED Movinghead+Circle (2 heads)` (a distinct model:
+  the cache keys definitions by manufacturer + model, so a second file of
+  the same model would be ignored as a duplicate): the same channels and
+  DMX, head 1 Spot, head 2 Ring, both modes. In the repo at
+  `engine/test/common/fixtures/` (with a copy of his original, for tests);
+  not installed into his user folder (left to him). Schema: only the
+  original's `Weight="0"` complaint.
+- **Head types** (`HeadKinds::typeOf`): a head whose only colour is a
+  Colour-group channel is `Ring` on a fixture that moves, `Macro`
+  ("Colour macro") elsewhere; a mover's dimmer-only head (`I/PT`) is named
+  "Movers". Groups by head type: "Mover · Movers" + "Mover · Ring".
+- **Colour → slot** (`QLCPalette::nearestColourValue`, wheels and rings
+  alike, replacing RGB distance): black → "off" (a wheel without one: its
+  white/open slot), white/grey → White, else nearest hue; slot colours from
+  their names (`capabilityColour`; splits and chases are no colour). Was:
+  black → Green, pink → White. A Colour look can name a slot
+  (`colourMacro`, saved as `ColourMacro`): the ring plays it, the rest the
+  colour. Channels in no head are set too on a fixture that mixes colour
+  nowhere -- so the old 10 Channel ring now follows a colour as the 12
+  Channel one did (before: untouched).
+- **Show Tree**: overlap is per head (`unitsOfTarget`), so Movers and Ring
+  layers on the same fixtures no longer exclude each other (they did: the
+  ring layer was dropped). Command line: a per-type group by its type alone
+  (`Ring colour Blue`), ring slots as colour values (`colour
+  Red/Yellow-Chase`, Tab offers them).
+- **Look Editor**: Colour page "Wheel / ring" list (slots of the targets'
+  wheels and rings, else the show's). **Fixture Manager**: Change
+  Definition… for fixtures of one definition to a drop-in one.
+- **Drawing**: `findColourRing()` (Ring head; else a Colour channel named
+  Circle/Ring/Halo; else a later Colour channel with an off and a chase),
+  `colourRingSegments()` (chases step 4/s). 2D plot: a band round the head
+  (ring head not drawn as a second head, ring channel not the head's
+  colour); Rig Overview: points round the head's face, from the frame's
+  value snapshot, chases on the optics clock. A ring head is not a mover
+  unit (`headCount`).
+- Tests: qlcpalette (mapping table, Spot/Ring/both, old def pinned, named
+  macro), showtree (ring layers, tracking, preview, command line, overlap),
+  headtypegroups (types, groups, Change Definition), lookeditor (Wheel /
+  ring), monitor (detection, segments, 2D + Rig Overview render).
+
+### 2026-10-18 — Show Tree answer 26: deleting a palette clears every use *(on feat/show-tree, not merged)*
+
+Branson: "delete" (SHOW_TREE_DESIGN.md §10.20). Deleting a used palette —
+Library, Programming tab, `palette X delete anyway` (all `PaletteOps::
+remove`) — takes it off every cue look, layer, Looks-section look and
+reusable layer/cue (a look left empty goes, not None), as well as scenes and
+effect slots, and bakes once; nothing shows *(missing)*. One Undo restores
+the palette with its id and every use in place, the generated functions with
+their ids (show XML byte-identical, same DMX); redo deletes again. The
+question and the command line say so. Tests: showtree_test
+`deletingAPaletteClearsEveryUse`, showtreeview_test
+`aPaletteDeletedFromTheLibraryComesBackWithUndo`, programmingmanager_test
+`deletingHereClearsTheShowTreesUses`.
+
+---
+### 2026-10-18 — Show Tree P5–P7: productions, sub-cues in the tree, the cue runner *(on feat/show-tree, built on the Linux build host, not merged)*
+
+SHOW_TREE_DESIGN.md §8 P5–P7; notes §10.17–10.19, open 27–35; handoff in
+SHOW_TREE_OVERNIGHT.md.
+
+- **P5 productions:** the current production (header switcher, production
+  page, footer menu, `production … current`) is the show's main cue list
+  seen from the tree, kept as one both ways; per production a main list and
+  a timecode source (a second layer on `TimecodeSource`); one undo history.
+- **Fix:** `~Chaser` deletes a running runner before its steps (a
+  use-after-free on teardown, intermittent "double free" on Linux, found
+  with ASan).
+- **P6 sub-cues:** a flagged list per cue (`CueList::subOf`), tracking from
+  the cue then each other, cue-only for the next cue; baked as a held inner
+  chaser (`SubGo`, new `SubGoFollow` for auto-follow); hand-over through
+  them; tree rows, + Sub-cue, Advance, `sub` / `follow` / `subgo`.
+- **P7 cue runner:** `CueRunner` (Full / Compact / List) through
+  ShowControl only; Run tab (⇧⌘0, Space = GO); `VCCueRunner` + Swap
+  Widget; `changeLine()` "what changes"; ShowControl Sub GO / Sub Back,
+  sub-cue numbers, LOAD of a sub-cue.
+
+### 2026-10-18 — Show Tree answers 12–25: one precedence rule, the plan view, preview = GO, palette folders merged *(on feat/show-tree, not merged)*
+
+Branson's answers to SHOW_TREE_DESIGN.md §10 open 12–25 (26 still open);
+notes in §10.16.
+
+- **13 one rule:** for a fixture × attribute the most specific source wins
+  (tracked < included < cue look < layer < child layer < an effect's own),
+  then the deeper, then the lower layer. Convert to tracking puts imported
+  Mix cues on it where the static output (`staticCueOutput`) and effect
+  placement are identical, else lists them; the tree marks them **≈ mix**.
+  DanceHysteria-0.5 copy: 2 Mix cues converted, 1 kept; 0 channels differ
+  in all 11 cues.
+- **14 plan view** (`LinePlanView`) under a line aim's order strip: beams,
+  the previous cue's points as rings.
+- **15 preview = GO:** the Design preview's scenes are HTP among themselves
+  (`Universe::writeOverride`, `FadeChannel::EditOverride`).
+- **16** a Dimmer dims the colour it doesn't own on no-dimmer fixtures (the
+  Dimmer's layer plays the colour there).
+- **18** Convert tries Cue-only; **19** Detach copies shared scenes; **20**
+  "Unlinked from <name>" tooltip; **17, 21, 23** as built.
+- **22** Make VC page updates the frame it made; **24** Programming's ⌘Z /
+  ⇧⌘Z on the one history, Edit menu names the step; **25**
+  feat/palette-folders merged, its migration strips only the genuine old
+  layout (own type always; any type only when the whole show is old).
+- Tests: showtree_test `oneRuleUpAndDownTheChain`,
+  `aChildDimmerDimsItsParentsColourWithoutADimmer`,
+  `previewPlaysWhatGoPlays`, convert/detach tests extended;
+  showtreeview_test `planViewOfALineAim`, `makeVcPageUpdatesItsFrame`,
+  unlink tooltip; qlcpalette_test `aUserFolderNamedLikeATypeIsKept`;
+  programmingmanager_test `libraryAndProgrammingAgreeOnFolders`,
+  `undoHereReachesTheSharedHistory`.
+
+---
+
+### 2026-10-18 — Show Tree R1–R3: palettes in the Library, the Looks section (busking), one undo history *(on feat/show-tree, not merged)*
+
+PROGRAMMING_ROLE_DESIGN.md R1 (the parts R2/R3 need), R2, R3; notes in
+SHOW_TREE_DESIGN.md §10.15, open 21–26.
+
+- **PaletteOps** (engine, owned by Doc): create by type, rename,
+  duplicate, file, folders of any type, delete — each one step on one
+  palette undo; Undo of a delete brings the palette back with its id in
+  every scene and effect slot. **One history:** tree and palette steps are
+  stamped; the tab's Undo takes back whichever came last. The Programming
+  tab's New / Duplicate / Delete / Move to folder go through it too.
+- **One Used by** (P-D13): cues and looks by number and layer, reusables,
+  plain scenes, effect slots, and the VC buttons firing them — in the
+  Library, the Look Editor's new Used by line, the delete questions of both
+  tabs (never a generated scene's name).
+- **Library palettes** (P-D8): by type with folders under each, or folders
+  first (remembered); + Palette (opens in the Look Editor), F2 rename,
+  New / rename / delete folder, drag to file, Move to folder, Duplicate,
+  Used by, Delete that asks. Older type-first folders read as one folder.
+- **Looks section** (P-D5…P-D7): looks built as cues, never tracking, each
+  a visible locked Collection whose id survives edits; folders; + Look;
+  Fired by on the page and VC ×N in the tree; **Make VC page** (a frame, a
+  Toggle button per look, coloured); **Copy to look**; **Adopt as look**
+  (re-points VC buttons if asked); Record lit takes a running look's
+  layers. Plays over a list with HTP/LTP (tested).
+- Command line: `palette …`, `palette folder …`, `look "name" [in …]`,
+  `vcpage`, `adopt`, `undo`/`redo` shared; help and Tab.
+- Tests: showtree_test +12, showtreeview_test +6.
+
+### 2026-10-17 — Show Tree P4: reusable layers and cues, Convert to tracking, Detach to plain chaser *(on feat/show-tree, not merged)*
+
+- **Reusable layers and cues** (§1, SHOW_TREE_DESIGN.md §10.14): Make
+  reusable on a layer or a cue (tree right-click, the page's Reuse line,
+  `reusable "name"`); Library → All → Reusable (drag or Return onto a cue:
+  a layer in it / a cue after it; `use`). Every use is live-linked — the
+  engine syncs the uses after every edit, so any operation on one use
+  (looks, groups, name, a cue's mode or layers) changes all of them, one
+  undo step. Per use: a layer's Release and tracking, a cue's number,
+  timing, note, includes. Unlink here; Used by (cues, reusable cues, VC
+  buttons); rename; delete asks while used. Saved in `<ShowTree>`
+  (`<ReusableLayer>`, `<ReusableCue>`, `Reusable=`).
+- **Detach to plain chaser**: the list's chaser, collections and the scenes
+  only it plays become the show's own; a scene still shared is handed over
+  when the tree lets go of it, never deleted. Undo takes them back.
+- **Convert to tracking…** (§7): plan first, then one undo step; each
+  change kept only if every cue plays the same (stage, generated scenes,
+  opaque functions). DanceHysteria-0.5 copy: Full Show 5 cues track, 3
+  includes become tracking, 6 values + 2 layers taken out; 0 channels
+  differ in all 11 cues of its three lists.
+- Command line: `reusable`, `use`, `unlink`, `detach [list]`, `convert
+  [apply]`, with help and Tab.
+
+### 2026-10-17 — Show Tree P3: group sets, child layers and overlap, cue-wide effects, line aims; rename in place, copy/paste, `help` *(on feat/show-tree, not merged)*
+
+- **Engine:** `Scene::setExcludedFixtures` / `setLayoutSpan` per look (fader
+  map under `m_valueListMutex`, effects, line aims, CueOutput; saved as
+  `<Exclude>` / `<Span>`). The bake works out, per cue, attribute and
+  fixture, which layer sets it (this cue over earlier, then the child, then
+  the lower layer) and leaves the others out there — no HTP show-through.
+- **Group sets** in the tree's Library (Make set, members, rename, delete;
+  `set "Towers" SL SR`), a layer's identity; spread by position on stage.
+- **Child layers** (⇧-drop, Add child layer, `US in Steps …`), nested in the
+  tree, inherited values grey "from Steps (parent)".
+- **Overlap:** the tree's rule, or *mix as a chaser* (an import's, so the
+  DanceHysteria-0.5 dry run stays at 0 channels different).
+- **D10:** an effect on the cue is one effect across its layers (a shared
+  layout span; each layer keeps its own base). **Line aims:** Library →
+  Targets, Spread / Grouping / Cross rows (keys of their own), one formation
+  by hang position across the union (D17), cue values only reach line aims
+  (D18), spread changes fade (D19), the order strip.
+- **Rename in place** (Return/F2, `name`), **copy/paste** (⌘C/⌘V/⌘D,
+  `copy`/`paste`), **`help`** from the command table, with did-you-mean.
+- **Layout** Library | Tree | Editor; Return / double-click in the Library
+  and ⌘F or / to add without dragging; a drop below the tree's rows; a
+  named layer is its name in the tree, its contents on the page; **several
+  layers edited together** (shared / mixed values, tri-state Release, one
+  undo step, the command line on the selection).
+- Tests: showtree_test +17, showtreeview_test +9 (and the undo walk +13).
+
+### 2026-10-17 — Show Tree: the four limits from the help closed — Merge by mouse, D13 lock, new lists Tracking, one undo step per action *(on feat/show-tree, not merged)*
+
+- **Multi-select** in the tree (⌘/⇧-click). The page, the preview and single-row
+  actions follow the row clicked last. **Merge** is in the header and the context menu
+  when 2+ layers of one cue are selected. Delete removes several cues/layers in one
+  step (a list/production in the selection is refused). Dragging several cues is
+  refused, with a hint. Rows selected from code use ClearAndSelect (a held ⌘ toggled
+  them; the test found it).
+- **D13 enforced**: "Made by the Show Tree — edit it there." The chaser's editor is
+  locked in the Functions window, Programming tab, Shows and VC live edit (steps and
+  name; run order, speed modes, cue-list number and testing are kept), with **Show in
+  Show Tree**. Delete, in-place rename, folder move and add-to/take-out-of are refused
+  everywhere. A layer's scene offers **Detach to plain scene**. Open: Detach to plain
+  *chaser*.
+- **New list = Tracking** from + Cue list and from `list`. An import stays
+  Non-tracking (D12).
+- **Undo audit (D22)**: Make reusable is now a step. Detach undo removes its scene and
+  redo brings it back. Several functions, or a colour + dimmer, dropped together are
+  one step.
+- Tests: showtree_test +4; showtreeview_test +5, including a 47-action walk (one undo
+  gives back the state before, redo the state after). The gate passed, -j4: Qt6 461 s,
+  Release 399 s, Werror 438 s.
+
+### 2026-10-17 — Show Tree: drop on the page, command line always open, Tab for every word; dimmed RGB bars on the Rig Overview *(on feat/show-tree, not merged)*
+
+- **Cue page takes drops** as the tree does: groups/fixtures on the page =
+  one new layer (⌥ one each, now one undo step), onto a layer row = added to
+  it, onto a grey carried-in row = brought into the cue with them (one undo
+  step), palettes = cue look / that layer's look, functions = opaque layer.
+  Rows are real (click opens the layer); dashed drop area; page / row light
+  up; the tree's hint wording. The tree also takes drops on carried-in rows;
+  the layer page shows the hint and takes multi-group drops.
+- **Command line** always at the bottom (no toggle), ClickFocus, **:** from
+  the tree, Esc back. **Tab** completes from a parse of the line: keywords,
+  cue numbers, lists, groups (+ folder paths), fixtures, attributes,
+  palettes by kind, none/off/clear, functions, modes, record choices;
+  common prefix + options, Tab again cycles. Grammar: fixtures and group
+  paths as targets, `function <name>, …`, `list X` selects an existing list.
+- **Rig Overview bug** (Branson's truss bars): an RGB fixture with no dimmer
+  channel had its level counted twice (colour × max(colour)): 19% blue drew
+  as 9/255. Fixed in `channelSetLiveState()`; the engine side was right.
+- Tests: showtreeview_test +3 (`dropsOnTheCuePage`, `dropsOnTheLayerPage`,
+  `aDimmedColourOnPixelBarsReachesTheUniverse`), showtree_test
+  `commandLineCompletesEveryWord` (44-row table) + `commandLineTabCyclesAndRuns`,
+  monitor_test pixel-bar regression.
+
+### 2026-10-17 — Show Tree P2 answers: Record which stage, one layer or each, reused values *(on feat/show-tree, not merged)*
+
+Branson's answers to SHOW_TREE_DESIGN.md §10 open 9–11; notes in §10.11.
+
+- **Record as new cue** records the selected cue, the list's **running**
+  cue, or **everything lit** (running lists, the Design preview, other lit
+  scenes/EFX/matrices as they are). Asks only when they differ ("Don't ask
+  again" writes the default); **Settings → Show Tree** has a default each
+  for Design and Perform (Ask by default); `record selected|running|lit`.
+- **Several groups:** one layer by default everywhere — drop, + Layer
+  (⌥-click / its menu for one each), command line (`Towers USTs` =
+  `Towers+USTs` = one layer; `Towers, USTs` = one each). Tree: **Split
+  layer (one per group)** and **Merge layers**, both keeping tracking
+  (re-set cues split/merged too; `Layer::continuesAlso`, several pieces
+  carrying on from one layer) and refused with a reason if anything on
+  stage would change (`ShowTree::stageDiffers`) or looks conflict.
+- **Values reuse palettes** (D11/D21 changed): a typed or picked level /
+  colour reuses a named palette playing exactly it (In this cue list →
+  Recent → any); the command line otherwise makes one named per the show's
+  pattern ("Intensity 30%" beside "Intensity 45%"), the picker a one-off
+  with one-click **Make reusable** on its row.
+- Tests: `showtree_test` +5, `showtreeview_test` +3, command-line tests
+  updated for the new grammar; `helpbrowser_test` green.
+
+### 2026-10-17 — Show Tree P2: tracking in the tab, Update cue / Record, the command line *(on feat/show-tree, not merged)*
+
+SHOW_TREE_DESIGN.md §8 P2; notes in §10.10.
+
+- **Tracking in the tab.** List page: Tracking / Non-tracking and the base
+  cue. Cue page: mode, "the list's base cue", includes (add — a loop is
+  greyed with why —, remove, reorder; later wins), "Next cue receives" with
+  values, back-to-base and released-dark layers. Release on a carried-in
+  layer makes it the cue's own. Tree menu: Mode, Record, Duplicate.
+- **Engine:** `ShowTree::dependsOn/canInclude` (a cue's dependencies:
+  tracking, includes, the base through a release) — the resolver leaves a
+  looping include or base out instead of reading a half-resolved cue (a
+  latent bug: an include of a later cue that tracks from this one gave
+  that cue an empty start); `addInclude/removeInclude/moveInclude`.
+  `rebakeChain()` (this cue → following until a Block, Cue-only passing on
+  only its start → every includer → the base's releases); the bake reports
+  what it really changed (`lastBakeChanged`), shown as "Changed: …".
+- **D22/D23:** "Update cue X" on a tracked value's ⋯ (`valueSource/
+  updateSource`, follows tracking, includes and the base back to where it
+  was set); Record as new cue (`recordCue`: a Block cue of the resolved
+  stage, numbered per D23; it plays the same scenes); Duplicate.
+- **Library "In this cue list"** (D20): groups, palettes, functions the
+  list uses, most used first, with counts.
+- **Command line** (D24, §6C): `ShowTreeCommand` (engine) over the same
+  operations, one undo step per command (`beginBatch/endBatch`; a failure
+  restores everything, one-off values included), Tab completion from the
+  Library, history, the hint line. Hidden by default (Command).
+- Tests: `showtree_test` +12 (re-bake chain on the model and baked, includes,
+  D22, record, dup, usage, tracked preview, an import converted to
+  tracking by hand playing §3.2/§3.3/§3.4 on the rig, command line ×3);
+  `showtreeview_test` +8. DanceHysteria-0.5 import dry run (a copy): 0
+  channels differ in all 8 cues. Not tried on the rig.
+
+### 2026-10-17 — Show Tree follow-up: the edit wins in Design; looser gobo names *(on feat/show-tree, not merged)*
+
+Branson's answers to §10 questions 6 and 7 (SHOW_TREE_DESIGN.md §10.9).
+
+- **Preview rule:** "In Design, whatever is in edit should be visible. In
+  Perform, the cue list overrides." The selected cue previews also over its
+  own list or any other running for real (header: "…, over Full Show
+  running"); stopping the preview leaves what really runs. It takes
+  precedence via `Scene::setEditOverride()`: Override-priority faders and
+  LTP on every channel, applied in place on the DMX thread, cleared before
+  a stop so the fade-out is HTP into what runs underneath. Engine fixes:
+  `Universe::requestFaderPriority()` couldn't lower a priority; the
+  `FadeChannel::Override` write handled one byte of a 16-bit channel.
+  Perform unchanged; Blind to discuss.
+- **Gobo names, in tiers:** per-type pick → exact (case/space/-/_) →
+  singular/plural ignoring "gobo" and numbers → unique prefix/contains.
+  Several different names in a tier: ambiguous, not guessed; the row says
+  "ambiguous: pick per type…" (link to the Look Editor), the editor's list
+  says which. `QLCPalette::matchGoboName()/resolveGobo()`.
+- Tests: `qlcpalette_test::goboNamesMatchInTiers` (table),
+  `universe_test::faderPriorityMovesBothWays`,
+  `showtree_test::inDesignTheEditWinsOverARunningList`,
+  `showtreeview_test::inDesignTheEditShowsOverItsRunningList`, gobo
+  ambiguity in `goboLooksMatchByNamePerType`. Not tried on the rig.
+
+### 2026-10-17 — Show Tree fix pass: see the cue, layers on several groups, folders, gobos by name *(on feat/show-tree, not merged)*
+
+Branson tried P1 and asked for four fixes (SHOW_TREE_OVERNIGHT.md, "Fix
+pass"; SHOW_TREE_DESIGN.md §10.8).
+
+- **Selecting a cue plays it on the rig** (Design mode, tab on screen), as
+  Programming's preview does; every bake re-takes it, so edits show at once.
+  The preview runs the cue's members under a parent of its own
+  (`ShowTreeController::previewParent()`), so a scene shared with the next
+  previewed cue runs on, and stopping it never stops a chaser's or a VC
+  widget's. Not while the cue's own list runs for real (it gives way when the
+  list starts, comes back when it stops). Live (Operate): blind, edits on GO.
+  Header says what is on the rig. Power chip already covers it.
+- **Several groups in one layer**: a multi-group drop is one layer (⌥: one
+  each), a group dropped on a layer joins it, "Remove X from layer". A
+  layer stays one layer when its target changes (`Layer.continues`; the
+  same layer in the cues it tracks into follows).
+- **Library groups in the Fixture Manager's folders**, nested; open folders
+  kept by path; the filter works at any depth and by folder name.
+- **Gobos by name per fixture type** (§10.7): `QLCPalette::goboName()`,
+  per-definition `goboValues()`, `goboValueFor()`; Look Editor names the look
+  from a pick and lists what each type plays; "applies to N of M" counts it.
+  Unnamed gobo looks play as before.
+- Tests: `engine/test/showtree` (preview ×5, layer target ×3, gobo by name),
+  `ui/test/showtreeview` (preview, drops on a layer, folders, gobo in the
+  Look Editor). Not tried on the rig.
+
+### 2026-10-16 — Show Tree P1: one tree for a show *(on feat/show-tree, not merged)*
+
+[SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (§10: implementation notes).
+Production → Cue list → Cue → Layer → looks; the scenes, collections and
+chaser that play it are generated. Handoff: SHOW_TREE_OVERNIGHT.md.
+
+- **Hand-over (engine)** — a Scene two consecutive cues share keeps running
+  on GO / Back / a jump / auto-follow, and a cue that is a collection of the
+  one before no longer re-fades it: `ChaserRunner` stops a leaving
+  Collection a tick later when it shares a member with the new one;
+  `Collection` gives back its intensity override to a member that runs on.
+  Tests: `engine/test/cuehandover`.
+- **Engine** — `ShowTree` model + `resolve()` (the §2 cascade: tracking,
+  Block / Cue-only, Release to the base cue, includes, per-attribute keys
+  incl. Beam's Gobo / Zoom / Focus, effects with their own looks, None),
+  D23 numbering; `ShowTreeController` (`Doc::showTree()`): edits as undo
+  steps, deterministic bake into a Chaser / Collections / shared hidden
+  Scenes, unused ones dropped (never while running), inline palettes, Make
+  reusable, "applies to N of M", Detach, **Import chaser as cue list**.
+  `<ShowTree>` in `<Engine>`, only when there is one. Tests:
+  `engine/test/showtree` (the §3 examples as tables; an imported list plays
+  exactly as its chaser; `QLC_SHOWTREE_IMPORT=` dry-runs a real show — 0
+  channels differ on DanceHysteria-0.5).
+- **UI** — the **Show Tree** tab beside Programming (⇧⌘6): tree with
+  tracked/included layers greyed, cue and layer inspectors (one row per
+  attribute, inherited values with their source), Library (Recent / Pinned
+  / All), drops with hints, one-off values, undo, the Look Editor docked
+  under it (✎ on a row). Help: show-tree.md.
+  Tests: `ui/test/showtreeview` (+ `QLC_SHOWTREE_SHOW`/`_SHOT` pictures a
+  real show offscreen).
+- Gobo name mapping: done in the 2026-10-17 fix pass. Not tried on the rig.
+
+### 2026-10-17 — Line targets, P3: grouping on the spread *(feat/line-targets)*
+
+"A way to group them on the spreads .. so for 6 lights I could have them
+1 2 3 cross 4 5 6 .. or an adjustment to have 1 and 2 .. then 3 and 4."
+Branson's decisions: Cross offers both readings; pairs move as blocks; Share
+a point kept as a minor option.
+
+- **Group** (`__lineGroup`): each light / pairs / threes / fours / halves (0;
+  an odd middle light stays on the centre). **Cross** (`__lineCross`):
+  groups swap sides keeping their order (default: halves at -5 =
+  `4 5 6 | 1 2 3`, pairs = `5 6 3 4 1 2`) or each group flips in place
+  (`3 2 1 | 6 5 4`, `2 1 4 3 6 5`). Groups of one or a single group give
+  the plain mirror either way. **Share a point** (`__lineShare`): a group's
+  lights on one point, groups end to end (sharing forces swap-sides).
+  **Order** (`__lineOrder`): along the line as they hang (default) or look
+  order.
+- Maths in `LineSpread::fractions()` (group centre D, member offset e,
+  `0.5 + |s|/5 * (sg*D + sm*e)`); look editor Aim page: Group / Cross /
+  Share / Order row, Cross disabled when it cannot matter.
+- Tests: linetarget_test (the design's six-light diagrams, odd halves,
+  short last pair, share, look order), lookeditor_test
+  `aLineLooksGroupingIsSetOnTheAimPage`. Help: stage-targets.md "Grouping".
+
+### 2026-10-17 — Line targets, P2: the Spread slider *(feat/line-targets)*
+
+"The effect should have a horizontal spread slider to move the lights away
+from center 0->5 and across center 0 -> -5."
+
+- **Mapping** (LINE_TARGET_DESIGN.md Q2): linear in distance along the line
+  from its centre: 0 = all on the centre, +5 = evenly end to end, -5 = each
+  light the same distance on the other side (crossed). Clamped to the line.
+- **Storage**: the Aim look's param `__lineSpread` (only when not +5), saved
+  as an `EffectParam` child of an Aim `<Palette>` -- QLCPalette now writes and
+  reads those for Aim too (`removeEffectParamValue()` added); an older build
+  skips an Aim palette's children.
+- **Look editor** (Aim page, shown only for a line): slider -50..50 and a
+  -5.0..5.0 box kept together, and `LineSpreadPreview` (new,
+  `ui/src/linespreadpreview.*`) -- numbered dots along the line, from the
+  context scene's heads (six stand in without one). A change emits
+  `paletteValueChanged` (live preview, no look-list rebuild under the mouse),
+  re-aims running scenes using the look and notifies them changed so the
+  Studio and Rig Overview follow. `AimSolver::orderedLineHeads()` split out of
+  `lineFractions()` for the strip.
+- Tests: linetarget_test (spread values, params of their own, XML round trip
+  with the next palette still read, heads at 0 and -5), lookeditor_test
+  `aLineLooksSpreadIsSetOnTheAimPage`. Help: stage-targets.md "Spread".
+
+### 2026-10-16 — Line targets, P1: a curve in space that spreads lights along it *(feat/line-targets)*
+
+Branson: "we have point, area, we need line.. and the line can be in space ..
+and curvable in multiple directions.. where you doubleclick to add a mid point
+and drag to change.. handles on the ends to extend and retract and move...
+grab the center click hold can move it around... and the lights will be
+distributed along the line evenly." Design: `LINE_TARGET_DESIGN.md`.
+
+- **Model**: `StageTarget::Kind::Line` (`"line"`), control points stored
+  RELATIVE to the target's position, which is kept at the curve's half-way
+  point (`recentreLine()` after every edit) -- so a drag, the design
+  joystick, follow-spot hold and a structure binding all move the whole line,
+  and anything that reads a target's single point (follow spot, effects, an
+  older build) gets the centre. Points are under the position mutex (the DMX
+  thread reads them). Saved as `<LinePoint>` children; an older build reads
+  Kind="line" as a plain mark and skips the children.
+- **Curve**: `engine/src/linecurve.{h,cpp}` -- centripetal Catmull-Rom through
+  every point, arc-length table, `pointAt(fraction)`, `spanAt`,
+  `nearestFraction`, `recentred`.
+- **Distribution**: `engine/src/linespread.{h,cpp}` -- pure, over any ordered
+  list (so a cue-level aim over several looks' heads can use it later):
+  `fractions(n, settings)` and `orderAlong(positions, from, to)`. P1 uses the
+  defaults: ends included, ordered by where the heads hang along the line.
+  `AimSolver::aimHeads/aimable/lineFractions/linePoint/linePoints`;
+  `QLCPalette::valuesFromFixtures` (Aim) resolves the line points once per call
+  over the OWNING scene's heads (groups and fixtures are expanded in two calls,
+  so per-call lists would split the line), else the list it was given;
+  `sceneAims` (reach), the studio's aim traces and the Rig Overview's beams
+  (`AimSpec::lineFraction`, point read fresh per frame) all use it.
+  `targetAimPoint` ignores aim height for a line (its points carry heights).
+- **Studio editing** (`TargetItem` line geometry + `shape()` so only the
+  curve/handles/mark pick; `MonitorGraphicsView::slotLineHandle*`,
+  `slotLineInsertPoint/RemovePoint`, `commitLineEdit`): drag ends / mid
+  points, Alt = along the line, Shift = axis, double-click curve adds, double-
+  click mid point removes, right-click Add/Remove Point, body drag moves all;
+  Top keeps height above the deck, Front/Side drag height. Undo:
+  `UndoEntry::TargetLineEdit`; TargetMove now also restores Z. Add menu +
+  canvas "Target Line Here"; dialog Subject "Line"; copy/paste keeps a line.
+- **Rig Overview**: the curve and handle crosses drawn; beams land on each
+  head's own point. Display only.
+- Tests: engine `linetarget_test` (curve, spacing, XML, forgiving load, aim
+  per head, palette values); `monitor_test` `aLineTargetIsEditedInTheStudio`,
+  `headsAimedAtALineGoToTheirOwnPoints`. Help: stage-targets.md
+  "Line targets", whats-new.
+- Noticed on the way (not changed): a target's lock mirrors its layer's on
+  every plot refresh (`MonitorProperties::syncItemLocksToLayers`), so the
+  target menu's own "Lock Target" is undone by the next refresh unless the
+  layer is locked -- by design for layers, but the menu item then misleads.
+
+---
+
+### 2026-10-18 — Backup WLED lanterns: several devices per universe *(feat/wled-multi-device)*
+
+A backup lantern mirrors the primary without double programming.
+
+- **File format** (backward compatible): `outputIP` stays the primary;
+  backups are `outputIP2`…`outputIP16`, each with optional `wledAddress2`/
+  `wledChannels2`… (absent = the primary's). Older builds' WLED plugin
+  drops unknown keys in `setParameter()`, so they drive the primary alone.
+  The plugin now routes every numbered key (`WledPlugin::parameterSlot()`)
+  into its base parameter store, so an open patch saves them; a kept
+  (offline / plugin-missing) patch writes its cache verbatim as before.
+  Round trips byte-identical for 1/2/3 devices, and old single-device shows
+  unchanged (`wleddevices_test`, `inputoutputmap_test`).
+- **Plugin** (`plugins/wled/src/wledplugin.*`): `Target` now holds a
+  `QVector<Device>`; each device has its own sent cache, in-flight flag,
+  info poll, answer, live-clear, and a 1 s retry after a failed send. A
+  device that answers again after not answering has its sent cache and
+  live-clear reset, so it gets the full look (`live:false` too). New
+  `unSetParameter()` override (removing a backup), `outputProblems()` for
+  the Connections row ("1 of 2 answering — X not answering"; single device:
+  "X not answering"), per-device lines in `outputInfo()`, and
+  `targetProblems()` lines get " · 1 of 2 answering". The rig view's
+  `/json/live` goes to the first answering device (`Target::liveSlot()`).
+- **UI:** `WledDevicesDialog` (`ui/src/wleddevicesdialog.*`): table of IP /
+  Address / Channels, Add Backup / Remove / Move Up / Move Down, validation
+  (IP or host[:port], duplicates, a device another WLED universe uses),
+  suggestions from the show's WLED fixture IPs (WLED has no discovery). It
+  is what `UniversePatcher::retargetPatch()` opens for a WLED patch, so both
+  Connections and the Fixture Manager reach it; the menu entry reads **WLED
+  Devices / Backup Lanterns…**. One `PatchUndo` step. The leg text reads
+  "WLED → ip + 1 backup". The footer names a silent backup "Lantern SL
+  backup" and no longer double-reports WLED through `outputs.problems`.
+- **Patch planner:** re-patching a WLED fixture keeps the backups; a
+  backup that was made the primary by hand swaps back instead of
+  duplicating.
+- Tests: `wled_test` (+5: parameters, same look to every device, a hanging
+  device doesn't hold the backup up, a device that comes back is resynced,
+  rig view uses the first answering device; all on 127.0.0.1 fakes),
+  new `wleddevices_test` (UI + round trips through the real plugin),
+  `inputoutputmap_test` (kept offline with backups), `inventory_test`.
+
+---
+
+### 2026-10-18 — Line of sight: follow spot and Aim looks dim when blocked *(feat/beam-occlusion)*
+
+Branson: "for follow spot .. do we have interference detection .. can we
+enable it so when a light is trying to reach a place it can't because of
+other stage features it dims out .. this should be an option".
+
+- **Engine query** (`engine/src/beamocclusion.{h,cpp}`): the stage's solid
+  features become flat panels (scenery pieces along their line — so a
+  closed drape is one sheet, an open one its two gathered ends, a flown one
+  nothing; platform/step blocks' sides and solid decks; tower boxes) and
+  rods (trusses, pipes, stand poles at least `occlusionMinSize`, default
+  0.2 m, thick), each with a bounding box. `Model::segment()` skips the
+  first 0.25 m at the head and the last 5 cm (the deck a target stands on)
+  and returns blocked / which / where / how far / clearance (how close it
+  passes the nearest feature, from in-plane edge distance or rod
+  distance). The model is immutable and shared; `MonitorProperties::
+  occlusionModel()` keeps one under a mutex and rebuilds it when a cheap
+  stage signature (every blocking item's geometry, including
+  `Scenery::pieces()`) changes. `ownMounts()` excludes a head's truss chain,
+  pipe chain, tower, hanger parent, deck/riser, or the platform a free head
+  stands on. Which kinds block (`OcclusionKinds`) and the size threshold
+  (`OcclusionMinSize`) are saved on the Monitor element, only when not the
+  default. 100 heads × 50 features: ~0.5 ms a tick in a Debug build.
+- **Live drape later:** nothing to do here for `feat/drape-curtain`'s
+  `Scenery::Pose` — the model is built from, and the signature hashes,
+  `Scenery::pieces()`, so a live pose that moves the pieces rebuilds it on
+  the next query.
+- **Scripts:** `sceneTarget` and `aimAt` slots carry `blocked`, `blockedBy`,
+  `blockedKind`, `blockedAt`, `clearance` (EFFECTSCRIPT_API.md, Line of
+  sight). `followspot.js` gains **fadeWhenBlocked** (ms, 0 = off): a per-head
+  level ramps down while blocked and up when clear, min'd with Fade Near
+  Limit, dimmer written only while below full.
+- **Aim looks:** `QLCPalette::dimWhenBlocked` (XML `DimWhenBlocked="1"`, only
+  when on). `Scene::write` zeroes the dimmers (else emitters) of blocked
+  heads on the full build, and every tick `updateSightDim()` asks
+  `AimSolver::blockedDimmedHeads()` (cheap early-out when no Aim look asks)
+  and fades newly blocked heads to 0 / newly clear ones back to the
+  resolved look value over 0.4 s; the repalette path keeps them down.
+  `AimSolver::SceneAim` carries `sight` and `paletteId`.
+- **UI:** look editor Aim page and palette dialog checkbox "Dim lights that
+  can't see the target"; Programming tab reach warnings read "can't reach:
+  Vocalist (blocked by Main drape)"; plot aim traces of blocked heads red
+  dashed to the blocker + a cross + a faint dotted rest; Lighting Studio
+  Show → Line of sight (kinds, saved with the show; "Beams stop at what is
+  in their way", QSettings, off by default — the 3D views clip beams at
+  towers/trusses/riser sides via `Model::ray()`; decks, drapes and walls
+  already stopped them).
+- **Tests:** `beamocclusion_test` (drape closed/open/flown, scrim, wall over
+  the top, platform edge and deck, tower / box truss / thin boom +
+  threshold, clearance, own mount, kinds, rebuild-on-change, XML, sceneAims,
+  Aim-look dimming through MasterTimer, perf); effectinstance_test (follow
+  spot fades and recovers, script fields); lookeditor_test, monitor_test
+  (blocked trace, Line of sight menu).
+- **Not done:** "line targets" — no such target kind exists yet; the
+  warnings/traces are informational and always on (they change no output);
+  min size has no UI (XML only); blocked dimming of an Aim look is the
+  look's own dimmer — an HTP dimmer from another scene still shows.
+
+### 2026-10-18 — Fixture definition save flushes one file, not every disk *(fix/fixture-def-flush)*
+
+Backport of `cd3826b31` from feat/show-tree into 0.1.0.
+
+- **Problem:** `QLCFixtureDefCache::storeFixtureDef()` followed the write
+  with a global `sync()`, which flushes every mounted volume (Time Machine
+  over SMB, external disks, other builds' output). On a busy machine it
+  stalled for minutes; `qlcfixturedefcache_test::storeDef` hit its 300 s
+  timeout under load.
+- **Fix:** write through `QSaveFile` — temp file in the same folder,
+  `commit()` flushes just that file (fsync/fdatasync on Unix,
+  `FlushFileBuffers` on Windows, inside Qt — so MinGW needs nothing extra)
+  and then renames it over the target; a failed write is cancelled and
+  leaves the old file intact. The definitions are reloaded only after the
+  commit. storeDef now takes ~1.3 s and checks the file reads back as
+  written.
+
+---
+
+### 2026-10-18 — Offline patches kept; patches follow the network *(fix/keep-offline-patches)*
+
+Release blocker from Branson's DanceHysteria 0.5: saved on the laptop off the
+show VLAN, the show lost all 68 Art-Net outputs (UID 172.18.2.219, vlan0's
+address), keeping only the 6 WLED ones; re-patching didn't stick.
+
+- **Root cause:** `Universe::savePatchXML()` skips any patch whose line is
+  `invalidLine()`, and a pending output (`OutputPatch::isPending()`, the
+  "interface not present" state added with portable patches) has exactly
+  that line. Loading kept the patch; *saving* silently dropped it. WLED
+  survived because its plugin has one static line ("WLED (JSON over
+  Wi-Fi)") that always resolves. Inputs and feedback were worse: an
+  unresolved UID fell back to the stored line index -- possibly a different
+  real interface -- and a missing plugin dropped the patch at load.
+- **Kept, saved unchanged:** pending outputs remember their saved line and
+  network and are written back as loaded. Inputs, feedback and patches to a
+  plugin not installed become `Universe::OfflinePatch` records (plugin, UID,
+  line, profile/HID profile, network, every PluginParameter) saved verbatim.
+  `InputOutputMap::loadPatch()` is the single load path; Universe::loadXML
+  reads PluginParameters *before* applying the patch so the target can
+  steer resolution.
+- **Follows the network** (`engine/src/networkroute.{h,cpp}`): for an
+  address-named line (Art-Net, E1.31, OSC) resolution is (1) the interface
+  the OS routes a unicast target through (UDP connect + localAddress, no
+  packet sent; the plain default route doesn't count unless the target is
+  on that subnet), (2) the saved UID, (3) the saved `Network` (new
+  attribute, ignored by older builds) or, for old shows, the saved
+  address's subnet via the local netmask (/24 if unknown), (4) a
+  broadcast/directed target on a local subnet. First match in plugin line
+  order wins. Saves write the live interface as UID (compat) plus Network.
+- **Reconnect:** a 5 s `InputOutputMap` tick (idle unless something is
+  kept) re-resolves; pending outputs replay their parameters on the new
+  line (`OutputPatch::resolvePending()`); `offlinePatchesChanged()` refreshes
+  the footer and universe list. Pending patches no longer push parameters
+  to the plugin on an invalid line.
+- **UI:** footer "N universes patched to interfaces not present (…) — kept,
+  will reconnect"; Devices ghost rows "not present — kept, will reconnect"
+  (+ network), line rows show their network; kept input/feedback universes
+  say "offline: …" instead of "not patched"; universe list "… — not
+  present". Forget patch / unpatch clear kept records (`forgetOfflinePatches`).
+- **Tests** (inputoutputmap_test, 11 new): the real IOMap block of the
+  backup (`dancehysteria-iomap.xml`, 74 outputs) load→save byte-identical
+  offline with nothing opened (fails with 74→6 on the old save), then all 68
+  reconnect when 172.18.2.157/24 appears; kronk-style other-address
+  machine; VPN route; default route is not the show net; stored network;
+  reconnect replays parameters; user unpatch; input+feedback kept and
+  reconnected; missing plugin; real loopback route lookup.
+- **Not done:** a *live* patch whose interface disappears mid-session stays
+  on its (dead) line rather than going offline/re-routing -- demoting live
+  output on a transient interface flap was judged riskier than it's worth
+  for 0.1.0. ManualTarget/LineAlias still key on line index (they survive
+  as saved).
+
+### 2026-10-17 — Rig Overview: dimmed RGB without a dimmer channel drew black
+
+`channelSetLiveState()` (`ui/src/monitor/fixturevisualtraits.cpp`) handed back the raw, already-dimmed colour *and* a level of max(R,G,B) for fixtures with no dimmer channel; every reader draws colour × level, so Blue at 19% (0,1,48) drew at 9/255. It now returns the hue at full and the level once. Fixtures with a dimmer channel are unchanged. Found from a Show Tree preview (feat/show-tree d8664080a); backported with its `monitor_test` case.
+### 2026-10-17 — No colour profiles in the bundled PNGs (QTBUG-147602 guard) *(fix/png-colour-profiles)*
+
+Follow-up to the cursor crash below. QTBUG-147602 (Qt 6.11.x, macOS;
+upstream fix qtbase a481ede673, not in Homebrew's 6.11.1):
+`qt_mac_cgImageFormatForImage()` releases a QImage's `CGColorSpace` before
+`CGImageCreate` reads it, so **any** QImage carrying a colour space can crash
+in `QImage::toCGImage()` -- cursors, drag pixmaps, icons/NSImages. 508 of the
+repo's 660 PNGs carried one.
+
+- **Which chunks matter** (measured with an offscreen Qt 6.11.1 probe, one
+  chunk spliced into a clean icon at a time): `iCCP` (here Display P3) and
+  `sRGB` each give a valid `QColorSpace`; `gAMA` alone or with `cHRM` does
+  too; `cHRM` alone and `cICP` alone (libpng 1.6.4x) do not. Qt applies no
+  gamma/colour conversion on load (the reader's gamma is 0): the decoded
+  pixels are byte-identical with and without each chunk.
+- **`tools/png-colour-chunks.py`** -- dependency-free chunk rewriter. Lists
+  PNGs with `iCCP`/`sRGB`/`gAMA`/`cHRM`/`cICP` (exit 1), or `--strip`s exactly
+  those chunks, copying every other chunk (IDAT included) byte for byte.
+  `cICP` is stripped too although Qt 6.11.1 ignores it: in the 9 macOS
+  screenshots it said "Display P3" next to the iCCP, and a later Qt that reads
+  it would put them back on the crash path.
+- **Stripped:** 660 PNGs scanned, 508 changed, 35 777 bytes saved (429
+  gobos/icons sRGB+gAMA+cHRM, 65 icons sRGB, 9 `docs/images` screenshots
+  iCCP+cICP, 5 gAMA[+cHRM]).
+- **No visual change:** for all 508, Qt's decode (RGBA8888, same format and
+  size) and Pillow's decode are identical before/after, and IHDR/PLTE/tRNS/
+  IDAT are byte-identical. Qt reports a valid colour space on 508 files
+  before, 0 after. In-app drawing (QPainter) never colour-managed these, so
+  nothing the app paints changes. Only where an image goes to AppKit (native
+  menu icons, drag pixmaps) is it now read as sRGB instead of its tag: the same
+  for the 494 sRGB files and close for the gamma-0.45 icons (effect, fontcolor,
+  function, grid); the help screenshots (P3) are only ever painted by Qt, and
+  Robe gobo00004 (gamma 1.0) only in Qt views.
+- **Guard:** the root `unittest.sh` (so `make check`, check-all, CI) runs the
+  checker over the tree first and stops on any hit; `help-shots.sh` checks
+  `docs/images` after a run (its QImages carry no colour space, so it never
+  wrote one). CONTRIBUTING.md says why and how to strip a new picture.
+
+### 2026-10-17 — macOS: no image-based cursors (crash orbiting the Angled view) *(fix/macos-native-cursors)*
+
+Crash report 2026-10-17 15:36 (macOS 27.0, Homebrew Qt 6.11.1): pressing the
+empty canvas in Structure Studio's Angled view to orbit called
+`setCursor(Qt::SizeAllCursor)` and died in `CGColorSpaceGetType` under
+`QImage::toCGImage()` ← `QCocoaCursor::createCursorData()`.
+
+- **Root cause (Qt):** cursors with no native NSCursor are built from PNGs;
+  `sizeallcursor.png`, `spincursor.png` and `waitcursor.png` all carry an
+  `iCCP` profile, so the QImage has a custom colour space. In Qt 6.11.x
+  `qt_mac_cgImageFormatForImage()` returns a raw `CGColorSpaceRef` whose
+  `QCFType` owner has already released it -- a use-after-free that only
+  survives for the system sRGB space. QTBUG-147602, fixed upstream in qtbase
+  a481ede673 (picked to 6.11/6.12), not yet in the Homebrew 6.11.1 here.
+- **Fix:** `AppUtil::nativeCursorShape()` -- on macOS SizeAll → OpenHand
+  (ClosedHand while dragging), Wait/Busy → Arrow; everything else (and every
+  shape on Linux/Windows) passes through. In Qt 6.11 Forbidden, WhatsThis,
+  Drag*, the four resize arrows and the hands are native NSCursors already,
+  and Blank is a profile-less pixmap, so they stay. All 21 SizeAll call
+  sites (Structure Studio view and its items, path draw widget, VC widget
+  move) and the VC widget's FDiag resize go through it.
+- **Residual risk:** any other QImage with an embedded profile that reaches
+  `toCGImage()` (e.g. a drag pixmap made from a profiled PNG) can hit the same
+  Qt bug until Qt is upgraded.
+- **Test:** `ui/test/nativecursor` -- the mapping, that no shape maps to a
+  PNG-backed one, pass-through off macOS, and a source guard that no
+  `Qt::SizeAll/Wait/BusyCursor` in `ui/src`, `main`, `fixtureeditor` or
+  `webaccess/src` bypasses the helper. The CoreGraphics crash itself cannot be
+  reproduced offscreen.
+
+### 2026-10-17 — Engine: fader priority moves both ways; an Override 16-bit channel writes both bytes *(fix/fader-priority-16bit)*
+
+Backported from `feat/show-tree` (4973a8d43), the two engine fixes only.
+
+- **`Universe::requestFaderPriority()`** searched for a slot with the fader
+  still in the list, so a priority lower than its own never found one: the
+  fader stayed put and kept its old priority. It now takes the fader out,
+  sets the priority and puts it back where `requestFader()` would place a
+  new fader of that priority (after the last one at or below it).
+- **`GenericFader::write()`, `FadeChannel::Override`**: a fader handling
+  secondary channels holds a 16-bit channel (coarse + fine) in one
+  FadeChannel; Override wrote one byte -- the low one, at the coarse
+  address. It now writes every byte, MSB first, like the Flashing branch.
+- **User-visible on 0.1.0: nothing.** No code on the release branch calls
+  `requestFaderPriority()`, and the Override flag is only set on faders
+  without secondary handling (Simple Desk, VC slider override, power
+  measuring, effect-script `replace`), whose channels are always one byte.
+  Both were latent; Show Tree's edit override is the first user of either.
+- **Tests**: `Universe_Test::faderPriorityMovesBothWays`,
+  `GenericFader_Test::anOverride16BitChannelWritesBothBytes` -- each fails
+  on the unfixed code and passes with the fix.
+
+### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
+
+Branson: "when I set something on the speed masters .. and then double click
+on the icon it resets those."
+
+- **What reset**: a look's *Speed:* (`__speedMaster`) and its host Spread
+  (`__spread*`) live in the effect palette's param map beside the script's
+  own params. `LookEditor::slotEffectScriptChanged()` clears that map on
+  every effect change and carries back only params the **new script
+  declares** (`carryOverParams()`); no script declares the look-level ones,
+  so clicking or double-clicking another effect's tile (icon) in the effect
+  picker -- the picker applies each pick at once, to preview it -- put the
+  look back on *As the look* with no spread. Going back to the first effect
+  didn't bring them back; only Cancel did. Now both are carried across an
+  effect change (a preset that pins one still wins). The one-shot length
+  (`__durationMs`) deliberately stays with the effect it was set for.
+- **Not the cause, checked**: double-clicking a footer speed-master button
+  (two clicks, opens/raises the window twice), the window's beat lights,
+  names, tempo fields, or the look itself (re-opened in the editor), and
+  re-picking the **same** effect in the picker change nothing. The
+  masters themselves (count, names, follow/ratio, BPM, rate, pause, inputs)
+  are saved with the show (`SpeedMasters::saveXML`, engine test
+  `mastersAreSavedWithTheShow`); the footer's beat style/when are in
+  QSettings (`workspace/speedFooterBeat*`), read once at start and on the
+  View menu -- nothing re-reads defaults over them. A look's Speed/Spread
+  save with the palette (now also checked in the new test).
+- **Found on the way** (Speed Masters window): a name typed but not yet
+  left when the window went (with the main window) fired `editingFinished`
+  into a half-destroyed panel -- a Qt assertion, a crash without one. The
+  destructor now keeps the typed name and disconnects the fields. Leaving a
+  name field without changing it no longer marks the show modified.
+- **Tests**: `LookEditor_Test::aLooksSpeedMasterAndSpreadSurviveADoubleClick`
+  (look re-opened; the current effect's tile double-clicked; another effect
+  tried and back; Done; palette XML round trip -- fails without the fix);
+  `SpeedMastersPanel_Test::doubleClickingAMasterChangesNothing` (every
+  setting incl. 6 masters, follow, pause, rate, tapped and fractional BPM,
+  an input, beat style/when; footer buttons and panel widgets
+  double-clicked; no modified flag; the close-with-a-typed-name crash).
+
+- **On feat/show-tree (merge, 2026-10-18):** made to work with **line
+  targets** -- `collectAims` takes each head's own point on the line
+  (`AimSolver::linePoints`, the heads the look writes) and checks that,
+  not the centre -- and with the **live drape pose**: the occlusion model
+  takes `BeamOcclusion::Poses` (`livePoses(doc, mp)` from each driving
+  curtain fixture's channel values; the stage signature includes them, so a
+  curtain moving rebuilds the model on the next query).
+  `MonitorProperties::occlusionModel(doc)` everywhere in the engine; the 3D
+  views pass the poses they draw; the 2D plot redraws its aim traces when a
+  driven curtain moves. Tests: `beamocclusion_test::
+  aLineTargetChecksEachHeadsOwnPoint`, `aDrivenCurtainBlocksAsItsFixtureHasIt`
+  (query, model rebuild, and a running scene's Aim-look dimming following
+  the curtain fixture).
+
+---
+
+### 2026-10-16 — Palette folders hold any type; folders-first / group-by-type *(feat/palette-folders)*
+
+Branson: "be able to make top level things here and put any other type under
+em in the folder structure" — "01-EverybodyScream" existed twice, under Aim
+and under Color.
+
+- **Model**: a palette's `Path` was "Palettes/<Type>/<folders>/" by
+  convention only (createPalette defaulted to the type folder; the type
+  folder was just the first path level, so an Effect could sit in
+  Color/01-Song). Paths are now type-independent ("Palettes/01-Song/", ""
+  = unfiled). `QLCPalette::migrateLegacyPath()` runs on load for palettes
+  without the new `Folders="1"` attribute (written with every saved path):
+  it drops a first level named like any palette type; an effect auto-filed as
+  Effect/<Category>/<Engine> becomes unfiled. A user folder named e.g.
+  "Color" made after this is safe (marked shows never migrate). Older
+  qlcconsole ignores the attribute and shows the folders at the top level.
+- **Tree**: `FunctionsTreeWidget::setPaletteTypesFirst()`. Off (default):
+  folders at top, any type inside, unfiled palettes at root. On: synthetic
+  type headings (not user folders) with the same folders under each — the
+  tree maps display paths ("Palettes/Color/01-Song") to stored ones
+  (`paletteStorePath`, `filePalette`), and folder rename/move/delete re-root
+  the stored path for every type. Toggle "Group by type" in the palette
+  menu, QSettings `programming/palettetree/groupByType`. Renaming a top-level
+  palette folder now works (it had no parent item, so the rename was
+  dropped).
+- **Dropped**: effect auto-filing into Effect/<Category>/<Engine>
+  (`organizeEffectPalettes`, `LookEditor::maybeAutoPath`/`isAutoEffectPath`)
+  — with type-independent folders it would invent top-level "Color"/"WLED"
+  folders. Effect category detection already falls back to the script.
+  Possible follow-up: virtual category/engine grouping under Effect in the
+  by-type view. New palettes and generated ones start unfiled (or in the
+  selected folder).
+- Tests: qlcpalette_test `olderShowsTypeFoldersBecomeSharedFolders` (rule,
+  load with/without marker, save round trip); programmingmanager_test
+  `paletteFoldersHoldAnyTypeInBothViews`.
+
+---
+
+### 2026-10-16 — Programming tab: drag scenes/palettes/folders into folders; folder menu *(fix/programming-drag-to-folder)*
+
+Branson: "I can't seem to drag a scene to a folder in the programming view";
+"I can't right click on an empty folder to delete it"; "when I first tried ..
+it was drag selecting other things vs dragging to folder."
+
+- **Why**: the nav tree (`m_funcTree`) was never given a drag mode at
+  construction (`programmingmanager.cpp` ~L117-136 on release/0.1.0), so until
+  a function was opened it was `NoDragDrop`: press-and-move rubber-band
+  selected rows. Opening a scene/EFX/matrix switched it to Qt `InternalMove`
+  (L916/L1047), and opening a collection/chaser/show to external mode, whose
+  `FunctionsTreeWidget::dragMoveEvent/dropEvent` (functionstreewidget.cpp
+  L1099-1108 / L1125-1131) only accepted functions on a *Collection* row —
+  never on a folder. Palette drops worked but palette *folders* weren't
+  draggable, and an empty palette folder made via "New folder…" in the
+  palettes-only tree was tagged FunctionNode (invisible root has no kind), so
+  it refused palette drops.
+- **Fix**: the nav tree is in external drag mode from the start and always;
+  `FunctionsTreeWidget::canDropMimeOn()/dropMimeOn()` (used by
+  dragMove/drop) take functions, palettes and folders (new
+  `application/x-qlcconsole-folders` payload) onto a folder / a row (joins its
+  folder) / the category or empty space (top level), type-checked, never a
+  folder into itself; sets paths, `Doc::setModified()`, rebuilds the tree on
+  the next turn (re-creating empty sub-folders) and emits
+  `folderContentsMoved()` (Programming re-nests collection member rows). A
+  Collection row still takes dropped functions as members; payload for the
+  collection/chaser/show editors and the looks canvas unchanged. Drop target
+  outlined (custom paint), autoscroll + hover-to-open (autoExpandDelay 600).
+  `folderItem()` gives invisible-root folders PaletteNode. Function Manager
+  rebuilds its tree on show (keeps selection) so moves made here appear there.
+- **Folder menu** (both trees): Rename / Delete Folder; Delete on an empty
+  folder is immediate, with contents asks and moves them up a level
+  (`removeFolderKeepContents`, nothing deleted). "New Folder" now creates
+  under the right-clicked row (it used the selection).
+- No undo for folder moves (the tab's undo is per-scene look edits; Function
+  Manager has none for moves either).
+- Tests (programmingmanager_test): `scenesDragIntoAFolderAndBackOut`
+  (incl. save/load round-trip, collection open, collection-row membership),
+  `aFolderDragsIntoAnotherFolder`, `palettesAndTheirFoldersDragIntoFolders`,
+  `deletingAFolderKeepsWhatIsInIt`, `pressAndMoveOnARowDragsIt` (QTest press
+  + move on an unselected row starts a QDrag carrying only that row). The
+  first and last fail with the old construction. Help: programming-tab.md
+  "Filing into folders", whats-new.
+- **Remove from container** (Branson: "No ability to remove from side
+  menu", 3 rows under a collection offered only Duplicate/Delete): nested
+  member rows now carry their index (chaser step / collection member) and,
+  for shows, track + ShowFunction ids; the menu offers **Remove from “X”** /
+  **Remove N from “X”** / **Remove N from their K containers** (per
+  container). `removeMembers()` takes out exactly that membership
+  (collection `removeFunction`, chaser `removeStep` by index, show
+  `removeShowFunction`; a running show is left alone with a note), asks
+  first for chaser steps/show items, re-nests the rows and refreshes the open
+  editor. Delete on such rows reads **Delete Function Everywhere…** and the
+  question lists every collection/chaser/show using each function. No undo
+  (the tab's undo is scene look edits only). Test
+  `rowsUnderAContainerComeOutOfIt`.
+- **Delete with "where is it used"** (Branson: "can't remove anything here ..
+  no delete .. AND delete should check for usage and warn"): one helper,
+  `ProgrammerController::paletteUsage()/functionUsage()/usageLines()` (scene
+  look rows, effect-look palette-slot bindings; collections, chaser steps,
+  show tracks), used by the palette and function delete questions and the
+  look editor's "used by N scene(s)". Palettes can't be referenced by VC
+  widgets / cue lists, so none listed. `Doc::deletePalette()` now also clears
+  effect-look slot bindings to it (before: a dangling id, which a later
+  palette reusing the id would have been picked up by). ⌫/Delete on either
+  tree deletes the selection (or the selected folder). No undo. Test
+  `deletingAPaletteSaysWhereItIsUsed`.
+
+---
+### 2026-10-16 — Fixture Manager: patch a universe from its row *(feat/fixtures-universe-patch)*
+
+Branson: "right click on universe in fixtures list should let me patch".
+
+- **Shared, not copied**: the Connections tab's patch logic moved out of
+  `ConnectionsTree` into `UniversePatcher` (`ui/src/universepatcher.{h,cpp}`,
+  a QObject with no view): `pickPluginLine`, `askTargetPort` (free ports
+  first, held ports refused, Another address…, Broadcast),
+  `visibleTargets`/`targetPortChoices`, `patchTarget`/`applyTarget`/
+  `universeOnTarget`, `retargetPatch`, `planOrderedPatch`/
+  `applyOrderedPatch`/`patchSelectionTo`, `unpatchLegs`, and the
+  "Art-Net → CS1 (ip) · port N · universe n:s:u" leg text the By-universe
+  list shows. Every change emits `patchChanged()` once; `ConnectionsTree`
+  keeps its private methods as forwarders (and `using` aliases for the
+  structs), and rebuilds on that signal — `connectionstree_test` unchanged,
+  57/57.
+- **`patchUniverse(u)`** (was `ConnectionsTree::patchUnpatchedUniverseTo`):
+  protocol → interface → port, each opened on the current patch, applied as
+  a one-universe `applyOrderedPatch` — so it now replaces patch 0 and is ONE
+  undo step (Connections' "Patch to…" on an unpatched universe had no undo
+  capture before; it does now).
+- **Universe row menu** (`FixtureManager::slotContextMenuRequested`):
+  unpatched → **Patch output…**; patched → a disabled **Output: …** line,
+  **Change interface / target…** (`retargetPatch`; for a target-less
+  protocol, **Patch output…** instead) and **Unpatch output**; several
+  universe rows selected → **Patch N selected universes to…** / **Unpatch
+  N selected universes** (shared wording, `UniversePatcher::patchSelectionText()`
+  etc.) in click order (`m_universePickOrder`, the Connections rule);
+  **Show in Connections** via a new `ShowStatus` action
+  `connections.universe` (App registers it with the existing
+  open-Connections lambda). Fixture rows' menu is unchanged.
+- **Row label**: `FixtureTreeWidget::updateUniverseLabels()` rewrites the
+  "— destination" suffix in place (no rebuild, the selection stays) on
+  `patchChanged()` and, a zero-delay hop later, on `PatchUndo::changed()` —
+  so Undo Patch Change in Connections shows here too.
+- **Fixed on the way**: *Delete Universe…* from this menu did nothing —
+  `m_ctxUniverse` is cleared as soon as the menu closes, before the action
+  read it. Now read from a local taken before.
+- Tests: `ui/test/fixtureuniversepatch` (offscreen, I/O plugin stub, no
+  network): menu offers, patch to a picked port + label + one-step undo,
+  change target, unpatch + undo, 4 picked out of order onto a 4-port node,
+  plural unpatch counts only the patched ones, fixture row menu untouched,
+  Show in Connections hands over the universe. Help: fixture-manager.md
+  "Patching a universe's output", whats-new, other-improvements.
+
+### 2026-10-16 — Connections: patch / unpatch several universes at once *(fix/connections-multipatch)*
+
+Branson: "when I select a group to patch or unpatch from the universes
+listing in connection it doesn't work — 4 U patched to a 4-port Art-Net
+device should go onto those ports in selected order; 4 U unpatched should
+all go at the same time."
+
+- **Why it didn't work**: every universe-row action in
+  `ConnectionsTree::slotContextMenu()` acted on the row under the pointer
+  only (by design: "right-clicking one row while twelve are selected must
+  not quietly act on twelve"). The one plural action, *Retarget N selected
+  universes…*, only counted already-patched output rows, so a selection of
+  unpatched universes got the single-row *Patch to…* and a multi-select
+  *Unpatch from this interface* removed one patch.
+- **Selection order**: `m_selectionOrder`, kept from `itemSelectionChanged`
+  (not during a rebuild): what is still selected keeps its place, new picks
+  append — one per ctrl-click, a shift-click range in list order.
+- **Patch N selected universes to…** (both views, any mix of patched /
+  unpatched / pending): protocol → interface → device (discovered or
+  declared on that interface, with its ports; or *Another address…* +
+  first port address; or *Broadcast*) → starting port. Universe k goes to
+  port k. `planOrderedPatch()` works it out first and the plan is shown to
+  confirm: overflow (more universes than ports) is named and left alone —
+  no wrap, no silent drop; a port held by an UNSELECTED universe is skipped
+  with the owner named (the one-port-one-universe rule `applyTarget()`
+  already enforces), while universes in the same run may swap ports.
+  `applyOrderedPatch()`: one undo capture, patch 0 replaced (as
+  `patchUniverseTo()` does), two passes so a universe moving off a port
+  frees it first, one rebuild. Protocols without targets (DMX USB) use
+  consecutive lines as the ports.
+- **Unpatch N selected universes**: what each row's own Unpatch removes
+  (output leg, input, or a pending patch; feedback rows skipped), one undo
+  step, one rebuild.
+- *Retarget N selected universes…* now numbers in picked order too.
+- Plural actions are handled in `handleUniversalMenuAction()`, so every
+  per-kind branch honours them; single-row actions unchanged.
+- Tests (`connectionstree_test`): picked order incl. rebuild / ctrl-deselect
+  / shift range; 5 picked onto a 4-port node out of list order (overflow,
+  untouched unselected universe, swap, one undo, one rebuild; menu offers
+  it); a held port skipped; 4 unpatched from the real context menu in one
+  step and one rebuild. Help: other-improvements.md (Connections &amp;
+  patch), whats-new.md, the Devices hint tooltip.
+### 2026-10-16 — Art-Net: new nodes without an address are found, flagged, and can be given one *(fix/artnet-unconfigured-nodes — NOT yet verified on a real node)*
+
+Branson put a new node on the show network and it didn't appear until its IP
+was set. The "DMX-Workshop configure" tooling was only ever `artnet-config.py`
+(ArtAddress: names / port addresses, unicast to a known IP); nothing in the app
+could see or address a node off this computer's subnets.
+
+**Why it didn't appear** (any of these is enough):
+- The periodic poll (`ArtNetController::slotSendPoll`) goes only to the line's
+  subnet broadcast (172.18.2.255), every 3 s, and only on lines with an output
+  open; Rescan sent the same. A node on 2.x.x.x may ignore a broadcast for a
+  subnet it isn't on.
+- A node that answers to its *own* subnet broadcast (2.255.255.255 — Art-Net 3
+  behaviour, and what the CR041R does with .255) is dropped by the host's IP
+  stack: the address isn't a broadcast address of any local interface. No
+  socket option changes that; only an address on that network does.
+- If an answer did arrive, it was listed like any other node — nothing said it
+  was unusable, and there was no way to set its IP (ArtIpProg was defined,
+  never built).
+
+**Changed**
+- Rescan also sends one ArtPoll to 255.255.255.255 per physical interface,
+  named via IP_PKTINFO (`QNetworkDatagram::setInterfaceIndex`) so it leaves by
+  that cable. The 3 s poll is unchanged (one datagram, to the subnet broadcast).
+- `Device::attention`: a node whose IP is in no line's subnet is listed amber
+  with "on its factory Art-Net address, not this network: set its IP" (or the
+  169.254 / 0.0.0.0 / other-network variants).
+- ArtIpProg / ArtIpProgReply (0xf800 / 0xf900, 34 bytes, Art-Net 4 incl.
+  gateway) in `ArtNetPacketizer`; `ArtNetPlugin::sendIpProg` sends it **unicast
+  only, through the line whose subnet holds the node**, and refuses otherwise —
+  it carries no MAC, so a broadcast one would re-address every node.
+- `ArtNetNodeSetup` dialog (right-click a node → **Set node IP address…**,
+  through new `QLCIOPlugin::canConfigureDevice/configureDevice`): fixed / DHCP /
+  factory default, "Ask the node" query, confirm before any write, shows the
+  reply. For an unreachable node: explains, and shows the temporary-alias
+  command (macOS `ifconfig alias`, Linux `ip addr add`, Windows `netsh`) — shown,
+  never run.
+- Status2 DHCP bits were swapped (bit 1 is "using DHCP", bit 2 "capable").
+- Controller sends go through a test sink (`m_testSink`); 16 new artnet tests
+  + 1 connectionstree test, none touch a network.
+
+**To verify on the rig:** the limited-broadcast poll actually leaving by vlan0
+(not the default route), a factory node answering it, and a real node applying
+ArtIpProg. Passive capture on vlan0 wasn't possible from the agent (BPF is
+root-only).
+
+### 2026-10-16 — The first 24-hour soak: what it found, and the fixes *(release/0.1.0: fix/soak-findings, fix/win-mastertimer, feat/soak-windows, feat/soak-linux, fix/linux-soak-findings)*
+
+First 24 h run of `stresstest/soak24/` on **kronk** (the Intel show Mac,
+i7-9750H, 6 cores), on screen, from 2026-10-15 09:56, three phases:
+
+- **Real show:** 0 crashes, worst tick 40 ms. RSS 201 → 1116 MB over the
+  phase -- the on-screen app grows (~50 MB/h) where neither the engine nor
+  the App driven offscreen does. Not explained yet: `--heap-track` (lite
+  malloc stack logging, hourly `heap -s` / `vmmap --summary`) is on the
+  second soak (TODO.md).
+- **Scaled** (the show plus a synthetic block): **6 crashes in 8 h**,
+  `nanov2_guard_corruption_detected` on universe threads and the
+  MasterTimer -- heap corruption. **Fixed** (`228bc9274`):
+  `GenericFader::getChannelFader()` handed back a bare `FadeChannel*` after
+  letting go of the fader's lock, while the universe thread stepped and
+  removed channels in the same QHash (Qt 6 moves entries on remove/grow),
+  so set-up writes landed in another channel or freed memory. It now
+  returns a `ChannelRef` holding the fader's `std::recursive_mutex` until
+  the caller lets go. Shown three ways on the old code: TSan, ASan
+  (heap-use-after-free in FadeChannel's QList) and a new genericfader test
+  (fails 5/5 before, passes after). `qlcstress --churn-ms` reproduces the
+  load (function churn on top of output).
+- **Universe bounds** (`d5f527e35`): `writeMultiple` / `writeBlended` /
+  `writeRelative` wrote past the 512-byte buffers for a 16-bit pair or a
+  fixture on the last addresses (unchecked in Release); now clipped, and a
+  write starting outside is refused. The per-tick HTP / MaskBlend qDebugs
+  (an allocation per losing channel, every tick, where the corruption
+  surfaced) are gone, and the message handler checks the level first.
+- **Rough handling:** 0 crashes, 7 reloads, worst tick 43 ms, RSS 317 →
+  549 MB.
+
+**Windows** (soak runner on Windows, `47c3c8779`; dry run on the Windows
+10 VM):
+- **Timer pile-up, fixed** (`86e14a88a`): `CreateTimerQueueTimer` started
+  a pool worker for every overlapping tick once ticks overran -- threads
+  111 → 872, private bytes 163 → 803 MB, ticks up to 40 s, 736 MMCSS
+  refusals. Now one dedicated thread on a high-resolution waitable timer,
+  absolute deadlines, re-anchored on overrun (missed ticks dropped, never
+  queued), MMCSS asked once. After: **threads flat at ~110**. Ticks on the
+  heavy show are still slow on Windows (`fix/win-tick-perf`, TODO.md).
+- **Two dead connections** found in the dry run's log (`731dc55d9`):
+  `UniversePatchGrid::reload()` and `FunctionManager::updateActionStatus()`
+  were connected by SLOT() but weren't slots. `unittest.sh` now fails any
+  test that logs "No such slot/signal" (the third in a week, after the
+  Studio's Add Target / Add Person / Copy / Paste, `5c98fd717`).
+- **Patch-grid load** (`da40149e5`): with reload() live, a show load
+  rebuilt the whole grid once per universe added. Now coalesced into one:
+  the 94-universe STRESS show loads in **8.9 s (was 33.9 s), 283 MB (was
+  2.8 GB)** on macOS; on the VM it had held the main thread past the
+  runner's 120 s load timeout.
+
+**Linux** (`48e687a66`): the soak runner runs headless under Xvfb (a box
+or a container), sampling /proc (CPU, RSS, private, threads, fds), cores /
+coredumpctl on a crash. Its first runs found (`be5eefa5d`) a GCC -O3
+-Werror maybe-uninitialized in patchinventorydialog_test (Release builds of
+the tree failed), and the Programming tab's first-run guide holding up the
+web API on a scripted run (it now honours `QLC_NO_RECOVERY_PROMPT`).
+
+**Second soak, 2026-10-16 → 17, on 4 hosts**, with all of the above in:
+DanceHysteria-0.3, three 8 h phases (real / scaled / rough), outputs
+stripped. RSS is start → peak → end.
+
+| Host | Real | Scaled | Rough |
+|---|---|---|---|
+| Linux build host (Debian 13, Qt 6.8.2, x86_64) | 0 crashes/hangs/restarts; RSS 234 → 291 → 277 MB; worst tick 44 ms | 0; 281 → 400 → 394 MB; 101 ms | 0; 295 → 404 → 375 MB; 57 ms; 7 reloads |
+| Podman container (Linux arm64) | 0 crashes/hangs/restarts; 231 → 281 → 271 MB | 0; 269 → 385 → 378 MB | 0; 289 → 408 → 378 MB |
+| kronk (macOS, `--heap-track`) | 0 crashes/hangs; 312 → 492 → 486 MB | 0; 547 → 758 → 749 MB | 0; 360 → 639 → 608 MB |
+| Windows 10 VM | 0 crashes/hangs/restarts; 204 → 248 → 233 MB; handles 1612 → 1628 → 1595; worst tick 97.8 ms | cut after 15 min by a Windows Update reboot (event 1074, planned) -- not an app fault | not run |
+
+Linux fds stayed flat (~100-119). The first soak's scaled-phase crashes
+did not recur: 0 on the three hosts that ran that phase in full. Still open: a short Windows
+re-soak (scaled and rough phases), and reading kronk's heap snapshots for
+what the on-screen app's memory is (TODO.md).
+
+### 2026-10-15 — WLED: the rest of the 1D effects, 160 in all *(feat/wled-effects-2, merged into release/0.1.0)*
+
+- 68 more ports, from what each effect does on a device and WLED's effect
+  documentation -- never from WLED's code (EUPL): every remaining 1D effect
+  (Fireworks Starburst, Percent, Noise 1-4, Perlin Move, Meteor Smooth,
+  the particle-system 1D ones…) and the 23 sound-reactive 1D ones on the
+  audio data channel (dark with no audio input). `lib/wled.js` gains the
+  shared helpers (randomColor, mix/dim/add, bounce, heatColor, audio(),
+  beat(), pixel memory between ticks).
+- Not ported: the 2D effects; Copy Segment, Image and Slow Transition.
+- **effectscripts: every script ships** (a glob, not a hand-kept list) --
+  the Windows VM's first install lacked the WLED scripts because of it.
+- Tests: the every-port sweep wants 160; sound-reactive ones play a
+  made-up song and rest dark without one. Not compared side by side with
+  a real device yet (TODO.md, "WLED on a real device").
+
+### 2026-10-15 — Output trouble reporting: send health, node health, UI *(feat/artnet-status, merged into release/0.1.0)*
+
+Moved from TODO.md word for word (its rig checks stay there).
+
+- **Built 2026-10-15 — needs the rig** — started as "ArtNet failure reporting still flaps":
+  `e3905a2a1` logged once per state change, and a unicast target that never
+  answers ARP flips that state itself (macOS: ~5 s of queued "successes"
+  while ARP is out, then 20 s of "host is down"), so the soak still produced
+  200 "is failing" + 150 "recovered" lines across 50 universes in 120 s.
+  Built on `feat/artnet-status`:
+  - **Send health** (`plugins/interfaces/sendhealth.{h,cpp}`, shared by
+    Art-Net and E1.31): failing once failures persist 1 s (isolated successes
+    don't reset it), at once for a hard error; recovered only after 30 s of
+    uninterrupted successes. E1.31's per-packet `qDebug` spam is gone too.
+  - **Node health** (`plugins/artnet/src/artnetnodewatch.{h,cpp}`), from the
+    ArtPollReplies the plugin already asks for: a node heard this session
+    that misses 3 polls in a row is "stopped answering" (back after 2
+    answered); the port carrying our universe reporting a DMX short
+    (GoodOutputA bit 2), or no longer outputting after it was, is a port
+    fault (2 replies in a row; clears after 10 s clean). Broadcast universes
+    watch the nodes that output that Port-Address; unicast ones the node at
+    that address.
+  - **Traffic:** unchanged on-subnet (the existing 3 s broadcast ArtPoll per
+    interface with an output). New: one unicast ArtPoll per 3 s to each
+    distinct unicast output target OFF the interface's subnet (coalesced by
+    address, GUI thread, never in a DMX tick), since those never hear the
+    broadcast.
+  - **UI:** new `QLCIOPlugin::outputProblems(output, universe)`; footer entry
+    `outputs.problems` (one line per problem with the universes it hits,
+    **Open Connections**); the universe's Connections row gets the problem in
+    red with a tooltip, in both views, refreshed on `targetProblemsChanged()`.
+    The footer now listens to every plugin's `targetProblemsChanged()`, not
+    only WLED's.
+  - **Bug found on the way:** Connections had GoodOutput's short (0x04) and
+    merging (0x08) bits swapped, so a merging port showed SHORT DETECTED.
+    Fixed per the Art-Net 4 spec / libartnet's `PORT_STATUS_*` — **worth
+    confirming against a node that really is merging**.
+  - Tests: `artnet_test` 7 → 24, new `e131_test` (5), `connectionstree_test`
+    +2 (row + footer), all on injected results/times and fabricated replies;
+    nothing is sent.
+  **To confirm on the rig:** the seven checks are in TODO.md ("Needs the
+  real rig / hardware").
+  Not built: E1.31 has no per-receiver reply in the base protocol. E1.31
+  Universe Discovery packets only list the universes a *source* sends, so
+  they say nothing about receivers either -- noted, not worth building.
+
+### 2026-10-15 — Windows build, installer and first install *(feat/windows-build, merged into release/0.1.0)*
+
+Moved from TODO.md word for word; what is still open (tests, signing,
+installer size, VM checks) is in TODO.md, "Platforms and soak findings".
+
+- **Windows build back in CI (2026-10-15)** — `fb9c5fd74` had deleted
+  `build-windows` (it died seding the pre-rebrand `qlcplus4Qt6.nsi`).
+  Re-added: MSYS2 UCRT64 + MSYS2's own Qt 6 packages (6.11 at the time; GCC
+  16), NSIS installer `qlcconsole-<VERSION>-<date>-<rev>-win64-setup.exe`
+  uploaded as an artifact, `--version` smoke test run from the deploy dir with
+  MSYS2 off PATH. Fixed on the way: avrt.h include order, `near` (a windows.h
+  macro) as a variable name, PreviewItem typedefs, and -- the important one --
+  signals named by member pointer across the engine/UI DLL boundary silently
+  never connecting under MinGW (`qlcengine_export.h` / `qlcui_export.h`; a new
+  class whose signal another module connects by `&Class::signal` needs
+  `QLC_ENGINE_EXPORT` / `QLC_UI_EXPORT` too). Left open:
+  1. Nobody has installed it on a real Windows machine -- rig view on D3D11,
+     audio, DMX USB/D2XX and the per-user file associations are unverified.
+  2. ~95 MB installer, mostly ffmpeg codec DLLs pulled in by Qt Multimedia's
+     ffmpeg backend; trim if it matters.
+  3. Tests: 126 of 136 binaries pass; the step is informational
+     (`continue-on-error`). Failing: qlcfixturedefcache (definitionSourceFile
+     vs relPath -- path form), rgbscript (`scriptName.toLower()`), addfixture
+     rememberExpanded, functionselection rememberFilter/constFilter,
+     programmingguide (these three look like QSettings persisting in the
+     registry between runs), monitor theInventoryButtonShowsAndHidesThePanel,
+     networkreportdialog saveCsv (a "locked" dir is writable on Windows),
+     showcontrol_ui OSC listener (firewall/port on the runner?), speedmasters
+     panel blink timing, lookeditor segfault (exit 139). mastertimer
+     startStopFunction failed once and passed once -- timing.
+  4. Not code-signed (SmartScreen will warn). No `-Werror` on MinGW, by design.
+  5. `QLCIOPlugin` signals are connected by member pointer from the UI too, but
+     its moc lives in each plugin DLL as well as the engine; not annotated.
+  6. First install on a Windows 10 VM (2026-10-15), Branson's report and what
+     was done: unreadable buttons/combos/spin boxes on a dark theme (the
+     native windowsvista style ignores the palette's Button colour) -> Fusion
+     off macOS (main.cpp) plus theme-derived shade roles (App::applyTheme);
+     invisible splitter handles -> same; "Win+Shift+R does nothing" -> it is
+     Ctrl+Shift+R, now also in the Window menu, and the help spells keys as
+     Ctrl/Alt/Shift off a Mac (HelpBrowser::keysForPlatform); sluggishness ->
+     Art-Net/E1.31/OSC walked every network interface (~20 ms each on
+     Windows) on every outputs()/inputs() call, now at most once a second;
+     also fewer repolishes/registry reads on the status-bar timers, NoProxy
+     for WLED, and App::nativeEvent fixed for Qt 6's qintptr* (USB hotplug
+     never reached HotPlugMonitor). Still to confirm on the VM: the main
+     window's outer edges resizing, and whether it still feels slow.
+  7. "Rig Overview wireframed in red, no light" on the VM (GPU and CPU alike):
+     not Direct3D -- the VM had none of DanceHysteria's own definitions, so
+     those fixtures stood in as generic dimmers, 300 mm per channel: a
+     64-channel bar was a 19 m wall of heads in the overlap-warning red. A
+     stand-in now draws as one small box with no overlap warning; the footer's
+     "no definition on this computer" error names the folder to copy the
+     .qxf files into, and Fetch Definitions rereads it. Windows CI now runs
+     the rig view on D3D11 (WARP): GPU-vs-CPU matches as on Metal/GL, and the
+     pictures are kept (rig-shots-windows artifact).
+
+### 2026-10-16 — Fixture sizes and weights in your own units *(feat/unit-aware-dimensions)*
+
+- **One preference: Settings → Units** (`units/length` in qlcconsole's
+  settings: mm / cm / m / in / ft; weight follows, kg for the metric ones,
+  lb for in/ft). The fixture editor reads the same key from qlcconsole's
+  settings (as it does the toolbar style) and re-reads it each time the
+  Physical page is shown; its page has a note saying where to change it.
+- **Parse/format in one place**, `engine/src/measurementunits.*`
+  (`MeasurementUnits`): `7.5"`, `7.5 in`, `0.625'`, `6' 3"`, `6 ft 3 in`,
+  `190.5mm`, `19.05 cm`, `0.19 m`, `1 m 20 cm`, `7,5 in`; `12 kg`,
+  `26.5 lb(s)`, `400 g`, `5 lb 4 oz`. A bare number is the preferred unit;
+  after feet (pounds) a trailing bare number is inches (ounces). Refused:
+  negatives, `1,200` (thousands or decimal?), unknown units, two bare
+  numbers, a weight unit in a length and vice versa.
+- **Field** `ui/src/measurementedit.*` (a QLineEdit): holds the exact
+  typed mm/kg; red + tooltip on nonsense, value unchanged; commits on
+  Return/leaving and before the page is read. Used for width/height/depth/
+  weight on the editor's Physical page (fixture-wide and per-mode); the
+  Fixture Manager info panel shows sizes/weight in the same unit.
+- **Storage unchanged** (stock-QLC+ compatible): whole mm, halves up
+  (`toStoredMm`: 7.5" = 190.5 mm → 191), weight as kg double. A stored
+  whole mm is shown with the fewest decimals that mean that same mm
+  (191 → 7.5 in, 190 → 7.48 in, 300 → 11.8 in). Weight is no longer cut to
+  the old spin box's 2 decimals. Limits as before: 9999 mm, 999.99 kg.
+- Tests: `engine/test/measurementunits` (all forms, invalid, every mm
+  0..9999 round-trips in every unit, preference), `ui/test/editphysical`
+  (offscreen: `7.5"` with inches → 7.5 in / 191 mm, with mm → 190.5 mm,
+  invalid, uncommitted text, follows the preference), appviews
+  `settingsChoosesTheUnits`.
+- **The grid follows it too** (Branson, 2026-10-16). Metres for mm/cm/m,
+  feet for in/ft (`MonitorProperties::gridUnitsFor`); the Grid menu's
+  Meters/Feet combo is now a label pointing at Settings. `App::
+  applyUnitPreference()` after every load, on New and when Settings
+  changes it: the show's saved `Units` only says what its grid size is in;
+  `convertGridUnits()` re-expresses the stage exactly (positions are mm).
+  Seed: the first show ever opened, with no unit chosen, sets ft if it was
+  in feet (`units/seededFromShow`, once). Saved: `Units` from the
+  preference; Width/Height/Depth whole (older readers use toInt -- a
+  "32.8084" was read as 0, a bug this fork already had after a units
+  toggle), `ExactWidth/Height/Depth` beside them when not whole.
+  Tests: monitorproperties (`gridUnitsConvertExactly`,
+  `gridSizeSavedWholeAndExact`), measurementunits (`seedFromFirstShow`),
+  appviews (`theGridFollowsTheUnitPreference`).
+
+### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
+
+- **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The
+  headless-Linux skip (`pidof X` gate; 0 of 52 UI programs run, "Unit tests
+  passed") was closed 2026-08-26; now the runner also prints "Test programs
+  run: 82 engine, 52 of 52 UI (platform: …)" and fails if a group ran none.
+  A caller's `QT_QPA_PLATFORM` wins (cocoa really shows the tests on macOS);
+  CI stays on minimal + xvfb-run, which now exits 1 if xvfb-run is missing.
+- **monitor_test under QPA minimal**: one test read a tree row a queued
+  rebuild had deleted (failed, or SIGSEGV); it settles the panel first.
+- **App icon on Linux**: `desktopFileName` set ("qlcconsole",
+  "qlcconsole-fixtureeditor") so Wayland's app_id matches the .desktop file
+  (it was "org.qlcplus.qlcconsole"); hicolor 16..256 PNGs + scalable SVG
+  installed (`resources/icons/hicolor/render.sh`), cache refreshed on a
+  direct install; the window icon is app-wide at every size (not on macOS:
+  it would replace the .icns in the Dock). `StartupWMClass` in both
+  .desktop files.
+
+### 2026-10-15 — Connections → Show control & sync *(feat/connections-showcontrol)*
+
+- **One page for outside control and sync** (`ui/src/showcontrolsyncpage.*`,
+  a fourth Connections sub-tab): OSC in (on, port, listening / can't, last
+  command + time), MSC in (on, device, the MIDI inputs it answers on with
+  Patch a MIDI input…, last command + time + universe), MIDI timecode
+  (source — the footer chip's pick — code, sync health), QLab out kept as a
+  note. Edits save to the same `showcontrol/...` keys and apply at once.
+- **Settings → Show control** is a pointer with **Open** (keeps the
+  dialog's changes, opens Connections at the page).
+- Engine: `ShowControl::commandFrom` (OSC / MSC+universe / local);
+  `TimecodeSource::health()` is the one verdict (chip, calibration dialog,
+  page) and `sourceUniverseChanged` keeps chip and page in step.
+- Tests: showcontrol_ui_test (page, own QSettings + HOME), showcontrol_test,
+  timecodesource_test.
+- **MSC on one port**: Listen on All MIDI inputs (default) or one, saved
+  machine-wide by plugin + input name (`showcontrol/mscInputPlugin`,
+  `showcontrol/mscInput`); `ShowControl::acceptsMscFrom()` filters the
+  SysEx path; a chosen port not patched in the show is shown in red, no
+  fall-back. **Timecode source saved with the show** (`<Timecode Source>`;
+  absent/unknown universe = any; cleared on a new show).
+
+### 2026-10-15 — Sub-cues P1 + P2 *(feat/sub-cues, merged into release/0.1.0)*
+
+[SUBCUES_DESIGN.md](SUBCUES_DESIGN.md). A chase used as a cue-list step
+lists its steps under it as 4.1, 4.2…; set to **Sub GO** they wait for Sub
+GO while GO goes on to the next cue.
+
+- **Engine** — `ChaserStep::subCues` (Auto / SubGo, `SubCues="SubGo"` only
+  when set); a SubGo step starts its chase held on its first playable step
+  (`ChaserRunner::setSubCueHeld`: holds not counted, own fades, list
+  order); `ChaserSubNextStep` / `ChaserSubPreviousStep` / `ChaserSubSetStep`
+  on the outer chase, quantized like GO; numbering and lookup
+  (`subCue`, `findSubCue`, `findCueOrSubCue`), `currentSubCueIndex`,
+  `nextSubCueIndex`, `jumpToSubCue`. Tests: `engine/test/subcues`.
+- **UI** — chaser editor disclosure + Sub-cues column + Edit Chase…; VC cue
+  list nesting, highlight, Sub GO / Sub Back buttons, click to jump; footer
+  "Sub: 4.2 · Next: 5"; ⌥⌘↩ / ⌥⌘⇧↩. Tests: `ui/test/subcues`.
+- Not yet: P3 show control, P4 step-based effects (TODO.md). Not tried on
+  the rig.
+
+### 2026-10-16 — Shows that carry their own definitions and scripts *(feat/show-embedding, merged into release/0.1.0)*
+
+SHOW_EMBEDDING_DESIGN.md, P0–P3.
+
+- **P0:** effect scripts, effect presets, bundles, head layouts, gobos and
+  network gear use the per-platform user folder (USERQLCPLUSDIR), not the
+  Mac's path everywhere; the shipped effect scripts/presets/bundles come
+  from EFFECTSCRIPTDIR/EFFECTPRESETDIR/BUNDLEDIR in qlcconfig.h. Files a
+  Windows/Linux user saved at the old (wrong) path are not moved.
+- **P1/P2:** `engine/src/showembedding.{h,cpp}` (Doc::showEmbedding()). A
+  .qlcc saves an `Embedded` section (exact bytes, CDATA or base64,
+  SHA-256, From/FromModified/Embedded, KeptAgainst); opening compares with
+  this computer's: show-only → used from a temp working folder (footer
+  note, Install on This Computer); identical → nothing; different → the
+  show's wins (substituted in QLCFixtureDefCache / scanned first in
+  EffectScriptCache / RGBScriptsCache show overrides), footer warning,
+  Review… (ShowDifferencesDialog). Closing restores this computer's.
+  ShowStatus Ok entries are now footer *notes* ("Ready · 1 note").
+- **P3:** File → Collect for Transfer…; the show's folder's Fixtures/,
+  EffectScripts/, RGBScripts/ searched last.
+- Tests: showembedding_test, showdifferences_test, qlcfile_test.
+- **Not yet tried by hand:** opening a .qlcc on a machine without the
+  definitions (the Windows VM), and Review… on a real difference.
+
+### 2026-10-15 — Patch-list labels *(feat/patch-labels, merged into release/0.1.0)*
+
+- **Labels…** in the patch list (`engine/src/patchlabels.{h,cpp}`,
+  `ui/src/patchlabelsdialog.{h,cpp}`): a label per fixture — all, or the
+  selected rows (the default when there are some) — saved as a PDF
+  (QPdfWriter) to print from Preview. Name and `U3 · 101` large, the
+  universe's name smaller beside the address; mode · channels, a network
+  fixture's own line (`WLED · lantern-2` — the IP's target alias,
+  `PatchList::Row::host`; the IP when it has none, and on mouseover in the
+  patch list's Connection column) and the mount description small; each
+  line shrinks to fit, then elides. Stocks are data
+  (`PatchLabels::sheets()`): **Avery 5160** (Letter, 3 × 10, 2⅝ × 1 in, the
+  default) and a **62 mm roll** (62 × 29 mm, one a page, landscape); the
+  choice is remembered (`patchlist/labelsheet`). No QR code. Docs:
+  fixture-manager.md "Labels", whats-new. Tests: `patchlabels_test` (14),
+  `patchlistdialog_test` (+5, settings in a scratch INI).
+
+### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
+
+- **Version shown is the release** (VERSION): About box (build id + commit
+  under it, selectable), `--version`, Info.plist (CFBundleShortVersionString
+  0.1.0, CFBundleVersion = commit count, LSMinimumSystemVersion 12.0).
+  APPVERSION stays the build id shows record.
+- **Intel Macs: yes, one universal app** (the 2026-08-25 TODO decided).
+  `package-local.sh` builds arm64 + x86_64 by default against aqt's universal
+  Qt 6.9.3 and `platforms/macos/universal-deps.sh` (libusb, libftdi, fftw,
+  libsndfile; libusb without pipe2(), which the macOS 27 SDK has and 26 does
+  not); macdeployqt + bundlefix.py; the bundle is checked for both arches and
+  every @rpath resolving. No OLA in it (Homebrew's is single-arch). macOS 12+
+  (Qt 6.9's own minimum). Verified on kronk (i7-9750H, macOS 26.7.1),
+  installed from the DMG.
+- **Launcher** starts qlcconsole instead of showing the Fixture Editor /
+  qlcconsole chooser; double-clicked files still route.
+- **HID profiles** install to Resources/HIDProfiles (were loose in Contents/:
+  never found, and broke a strict codesign).
+- **Don't Save** removes the autosave (the recovery prompt came back every
+  start).
+- **Rig Overview Layers menu**; the Studio's eye and labels work in Operate
+  mode (Branson hit them disabled in run mode); collapse glyph ▾/▸.
+- **stresstest/soak24/** — 24 h on-screen soak of the real app (see TODO).
+
+### 2026-10-15 — Rig Overview on the GPU, fixtures across the cores *(SHIPPED, merged)*
+
+- RhiRaster (QRhi: Metal / D3D11 / OpenGL incl. Mesa GL 2.1) does what
+  ZRaster does; picking rasterises depth on the CPU on demand. GPU box in the
+  overview (monitor/rig/gpu).
+- Fixtures drawn in parallel (EmitContext per run, merged in order; lanterns
+  and omni lights on the GUI thread; landing/mesh caches read-only meanwhile);
+  light as one mesh op per beam; beamLightAt() sphere reject; flushOps by
+  pointer. Lit 208-fixture show, Release: 72.5 -> 14.3 ms (GPU), 33.8 (CPU);
+  pixel-identical one thread or many. kronk: 50.6 ms GPU, 98.4 CPU.
+- Tested: Mac gate, Linux suite (Mesa offscreen + xcb), TSan (no
+  worker-vs-worker race in the fixture code).
+
+### 2026-10-14/15 — Qt 6 only *(SHIPPED, merged)*
+
+- Qt 6.8+ required; Qt5 branches, the QtScript RGB engine and Qt4/5 audio
+  backends gone; `QT_DISABLE_DEPRECATED_UP_TO=0x060800`; tag `qt5-last` is
+  the last tree that built on Qt5, `qt6-pre-gpu` the Qt6 tree before the GPU
+  work. Two speed-master timing tests made robust (CI flakes).
+
+### 2026-10-13/14 — Show control, help pictures, soft pools *(SHIPPED, merged)*
+
+- **Show control (QLab)**: SHOW_CONTROL_DESIGN.md / docs show-control.md —
+  cue numbers, main / numbered cue lists, MSC (SysEx on CoreMIDI and ALSA)
+  and OSC in, footer Next, GO / Back app-wide, VC cue list cue column, step
+  skip. *Not yet tried against a real QLab / MIDI port.*
+- **Help pictures**: `./help-shots.sh` (offscreen, Blue theme, numbered
+  callouts), eight pictures; help browser fits and zooms them.
+- **Soft pools** (FixtureVisualTraits::edgeSoftness) and the rig beam cache
+  (decks per frame, kept landings, adaptive split grid): lit DanceHysteria
+  1073 -> 157 ms before the GPU work.
+
 ### 2026-10-12 — How a look stacks: one set of rules, tested end to end *(SHIPPED)*
 
 Branson: "make sure that stacked effects and colors and such always applied

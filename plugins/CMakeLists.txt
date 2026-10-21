@@ -8,6 +8,15 @@ project(plugins)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
 
+# MinGW: some plugin tests (artnet_test) link straight against the plugin
+# DLL. ld exports every symbol from a DLL automatically -- unless anything in
+# it is explicitly dllexport'ed, and Q_PLUGIN_METADATA's entry points are, so
+# the test then finds none of the classes it uses. Export them all again.
+if(MINGW)
+    string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,--export-all-symbols")
+    string(APPEND CMAKE_MODULE_LINKER_FLAGS " -Wl,--export-all-symbols")
+endif()
+
 # libusb-1.0
 pkg_check_modules(LIBUSB_1 IMPORTED_TARGET libusb-1.0)
 

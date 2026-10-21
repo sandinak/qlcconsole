@@ -20,6 +20,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QFileInfo>
+#include <QSet>
+#include <QDir>
 #include <QtMath>
 #include <QDebug>
 
@@ -37,6 +39,7 @@
 #include "qlccapability.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include "scenevalue.h"
 #include "scene.h"
 #include "doc.h"
@@ -44,6 +47,10 @@
 #define KXMLQLCPaletteType      QStringLiteral("Type")
 #define KXMLQLCPaletteName      QStringLiteral("Name")
 #define KXMLQLCPalettePath      QStringLiteral("Path")
+/* Present (="1") on palettes whose Path is type-independent ("Palettes/01-Song/").
+   Absent: an older show, whose paths start with the palette type -- migrated
+   on load. Older versions ignore it and show the folders at the top level. */
+#define KXMLQLCPaletteFolders   QStringLiteral("Folders")
 #define KXMLQLCPalettePersistent QStringLiteral("Persistent")
 #define KXMLQLCPaletteValue     QStringLiteral("Value")
 #define KXMLQLCPaletteFanning     QStringLiteral("Fan")
@@ -51,6 +58,7 @@
 #define KXMLQLCPaletteFanAmount   QStringLiteral("Amount")
 #define KXMLQLCPaletteFanValue    QStringLiteral("FanValue")
 #define KXMLQLCPaletteStageTarget QStringLiteral("StageTarget")
+#define KXMLQLCPaletteDimWhenBlocked QStringLiteral("DimWhenBlocked")
 
 QLCPalette::QLCPalette(QLCPalette::PaletteType type, QObject *parent)
     : QObject(parent)
@@ -73,6 +81,10 @@ QLCPalette *QLCPalette::createCopy()
     copy->setFanningAmount(this->fanningAmount());
     copy->setFanningValue(this->fanningValue());
     copy->setStageTargetId(this->stageTargetId());
+    copy->setGoboName(this->goboName());
+    copy->setGoboValues(this->goboValues());
+    copy->setColourMacro(this->colourMacro());
+    copy->setDimWhenBlocked(this->dimWhenBlocked());
     copy->setScriptPath(this->scriptPath());
     copy->setPersistent(this->persistent());
     copy->setEffectPreset(this->effectPreset());
@@ -219,6 +231,92 @@ QString QLCPalette::path() const
 void QLCPalette::setPath(const QString &path)
 {
     m_path = path;
+}
+
+bool QLCPalette::isTypeFolderName(const QString &name)
+{
+    static const PaletteType kTypes[] = { Dimmer, Color, Pan, Tilt, PanTilt, Aim,
+                                          Shutter, Strobe, Gobo, Zoom, Beam, Effect };
+    for (PaletteType t : kTypes)
+        if (name == typeToString(t))
+            return true;
+    return false;
+}
+
+QString QLCPalette::migrateLegacyPath(const QString &path, PaletteType type, bool anyTypeFolder)
+{
+    QString norm = path;
+    while (norm.endsWith('/'))
+        norm.chop(1);
+    if (norm.isEmpty() || norm == QLatin1String("Palettes"))
+        return QString();
+
+    QStringList segs = norm.split('/');
+    if (segs.first() != QLatin1String("Palettes") || segs.size() < 2)
+        return path;
+
+    /* Only what is genuinely the old layout is taken apart. Older versions
+       showed palettes under a heading per TYPE, and stored that heading as
+       the path's first folder: each palette under its own type
+       ("Palettes/Color/01-Song/" for a colour) -- or, dragged there, under
+       another type's ("Palettes/Color/01-Song/" for an effect). So:
+         - its own type's name first: the old layout, always dropped;
+         - another type's name first: dropped only when the whole show is
+           in the old layout (@a anyTypeFolder, see migrateLegacyPaths());
+           otherwise it is a folder the user made and named so -- kept;
+         - anything else ("Colour", "Warm", "01-Song"): the user's, kept. */
+    if (type == Undefined || !isTypeFolderName(segs.at(1))
+        || (segs.at(1) != typeToString(type) && !anyTypeFolder))
+        return path;
+
+    // An effect auto-filed under Palettes/Effect/<Category>/<Engine>: that
+    // was bookkeeping, not the user's folder.
+    static const char *kEffectCategories[] = { "Color", "Dimmer", "Position", "Beam",
+                                               "Other", "WLED" };
+    if (type == Effect && segs.at(1) == QLatin1String("Effect") && segs.size() == 4)
+    {
+        for (const char *c : kEffectCategories)
+            if (segs.at(2) == QLatin1String(c))
+                return QString();
+    }
+
+    segs.removeAt(1);
+    return segs.size() < 2 ? QString() : segs.join('/') + '/';
+}
+
+void QLCPalette::migrateLegacyPaths(const QList<QLCPalette *> &palettes)
+{
+    /* The whole show in the old layout: every palette loaded without the
+       Folders marker that has a folder has a palette TYPE's name as its
+       first one (as the old per-type headings stored it). Then any type
+       name first was a heading, and goes. One folder that isn't a type's
+       name (a show saved by a build with shared folders but no marker yet)
+       and only a palette's own type name goes. */
+    bool oldLayout = true, any = false;
+    for (const QLCPalette *p : palettes)
+    {
+        // A marked path: the show was saved with shared folders.
+        if (p != nullptr && p->m_loadedMarked)
+            oldLayout = false;
+        if (p == nullptr || p->m_unmarkedPath.isNull())
+            continue;
+        QStringList segs = p->m_unmarkedPath.split('/', Qt::SkipEmptyParts);
+        if (segs.size() < 2 || segs.first() != QLatin1String("Palettes"))
+            continue;
+        any = true;
+        if (!isTypeFolderName(segs.at(1)))
+            oldLayout = false;
+    }
+    for (QLCPalette *p : palettes)
+    {
+        if (p != nullptr)
+            p->m_loadedMarked = false;
+        if (p == nullptr || p->m_unmarkedPath.isNull())
+            continue;
+        if (any && oldLayout)
+            p->setPath(migrateLegacyPath(p->m_unmarkedPath, p->type(), true));
+        p->m_unmarkedPath = QString();
+    }
 }
 
 QVariant QLCPalette::value() const
@@ -413,6 +511,10 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             }
         });
 
+    // Aim at a line target: each head's point, worked out on first use.
+    bool lineReady = false;
+    QHash<quint32, QVector3D> linePts;
+
     foreach (quint32 id, fixtures)
     {
         Fixture *fixture = doc->fixture(id);
@@ -517,6 +619,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     col.setBlue(startColor.blue() + qRound(bDelta * factor));
                 }
 
+                bool anyHead = false;
                 for (int i = 0; i < fixture->heads(); i++)
                 {
                     /* Only the group's own heads: a group of a bar's RGB pixels
@@ -524,6 +627,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                        the white leds as well as the RGB"). */
                     if (!headWanted(id, i))
                         continue;
+                    anyHead = true;
                     // White/Amber/UV emitter values: explicit wauv, else auto
                     // White = min(R,G,B) so RGBW fixtures light their white LED.
                     QColor emitters = wauv;
@@ -572,51 +676,18 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         list << SceneValue(id, cmyCh.at(2), uchar(col.yellow()));
                     }
 
-                    // Color-wheel fixtures: snap to the nearest wheel slot.
-                    // Only applies when the fixture has no RGB/CMY channels
-                    // (those are already handled above with exact mixing).
-                    if (primary && rgbSets.isEmpty() && cmyCh.size() < 3)
+                    // Colour wheels and colour macros (a mover's ring): the
+                    // slot nearest the colour, or the macro the look names.
+                    // Only on a head that mixes no colour (RGB/CMY above
+                    // already made it exactly).
+                    if (primary)
                     {
-                        QLCFixtureMode *mode = fixture->fixtureMode();
-                        QLCFixtureHead fHead = fixture->head(i);
-                        const QVector<quint32> &wheels = fHead.colorWheels();
-                        for (quint32 wheelCh : wheels)
+                        const QLCFixtureMode *mode = fixture->fixtureMode();
+                        for (quint32 wheelCh : colourSlotChannels(fixture, i))
                         {
-                            QLCChannel *ch = mode ? mode->channel(wheelCh) : nullptr;
-                            if (!ch)
-                                continue;
-                            // Walk all 256 slots; keep the one whose colour is
-                            // closest (squared RGB distance) to col.
-                            int bestDmx  = -1;
-                            qint64 bestDist = LLONG_MAX;
-                            for (int v = 0; v < 256; ++v)
-                            {
-                                QLCCapability *cap = ch->searchCapability(uchar(v));
-                                if (!cap)
-                                    continue;
-                                QColor slotCol = cap->resource(0).value<QColor>();
-                                if (!slotCol.isValid())
-                                {
-                                    // Fall back to name-based colour (e.g. "Blue")
-                                    slotCol = QColor(cap->name().trimmed());
-                                }
-                                if (!slotCol.isValid())
-                                    continue;
-                                qint64 dr = col.red()   - slotCol.red();
-                                qint64 dg = col.green() - slotCol.green();
-                                qint64 db = col.blue()  - slotCol.blue();
-                                qint64 dist = dr*dr + dg*dg + db*db;
-                                if (dist < bestDist)
-                                {
-                                    bestDist = dist;
-                                    bestDmx  = cap->middle();   // the slot's middle, as effects pick it
-                                }
-                                // Advance v to skip identical caps in the range
-                                if (cap->max() > uchar(v))
-                                    v = int(cap->max());
-                            }
-                            if (bestDmx >= 0)
-                                list << SceneValue(id, wheelCh, uchar(bestDmx));
+                            const int v = colourSlotValue(mode != nullptr ? mode->channel(wheelCh) : nullptr, col);
+                            if (v >= 0)
+                                list << SceneValue(id, wheelCh, uchar(v));
                         }
                     }
 
@@ -633,6 +704,20 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         channel = fixture->channelNumber(QLCChannel::UV, QLCChannel::MSB, i);
                         if (channel != QLCChannel::invalid())
                             list << SceneValue(id, channel, uchar(emitters.blue()));
+                    }
+                }
+                /* A wheel or ring in no head is the whole fixture's: a look on
+                   any of its heads sets it, as a master dimmer is (the old
+                   one-head definitions of a mover with a ring left the ring
+                   out of the head in one mode and in it in the other). */
+                if (anyHead && colorSetOffset == 0)
+                {
+                    const QLCFixtureMode *mode = fixture->fixtureMode();
+                    for (quint32 wheelCh : colourSlotChannels(fixture, -1))
+                    {
+                        const int v = colourSlotValue(mode != nullptr ? mode->channel(wheelCh) : nullptr, col);
+                        if (v >= 0)
+                            list << SceneValue(id, wheelCh, uchar(v));
                     }
                 }
             }
@@ -742,7 +827,28 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                    This used to be written out here AND again in the renderer,
                    and the two disagreed: a follow-spot aimed at chest height in
                    Edit while the rig view pointed at the target's own Z. */
-                const QVector3D tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
+                QVector3D tgtPos;
+                if (tgt->isLine())
+                {
+                    /* A line gives each head its own point, so where THIS head
+                       goes depends on every head the look aims: the owning
+                       scene's (groups and fixtures together, which this
+                       palette is expanded for in two calls), else the list
+                       this call was given. Worked out once per call. */
+                    if (!lineReady)
+                    {
+                        const QList<quint32> heads = (owner != nullptr)
+                                ? AimSolver::aimHeads(doc, owner, m_id)
+                                : AimSolver::aimable(doc, fixtures);
+                        linePts = AimSolver::linePoints(doc, this, tgt, heads);
+                        lineReady = true;
+                    }
+                    tgtPos = linePts.value(id, mProps->targetAimPoint(tgt));
+                }
+                else
+                {
+                    tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
+                }
 
                 // Shared aim geometry — identical to the follow-spot effect's, so
                 // a fixture points the same way in Edit and Run.
@@ -914,8 +1020,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 const quint32 goboCh = fixture->fixtureMode() != NULL
                     ? fixture->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB)
                     : QLCChannel::invalid();
-                if (goboCh != QLCChannel::invalid())
-                    list << SceneValue(id, goboCh, uchar(value().toUInt()));
+                // Named: the slot of that name on this fixture's own wheel
+                // (or the one picked for its type); none, and it ignores it.
+                const int gv = goboValueFor(fixture);
+                if (goboCh != QLCChannel::invalid() && gv >= 0)
+                    list << SceneValue(id, goboCh, uchar(gv));
             }
             break;
             case Zoom:
@@ -1410,7 +1519,22 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         setName(attrs.value(KXMLQLCPaletteName).toString());
 
     if (attrs.hasAttribute(KXMLQLCPalettePath))
-        setPath(attrs.value(KXMLQLCPalettePath).toString());
+    {
+        const QString path = attrs.value(KXMLQLCPalettePath).toString();
+        if (attrs.value(KXMLQLCPaletteFolders) == QLatin1String("1"))
+        {
+            setPath(path);
+            m_loadedMarked = true;
+        }
+        else
+        {
+            // The palette's own type first is the old layout whatever else
+            // the show holds; another type's name waits for the whole show
+            // (Doc load: migrateLegacyPaths()).
+            setPath(migrateLegacyPath(path, m_type));
+            m_unmarkedPath = path;
+        }
+    }
 
     // Effect looks only: keep the script engine alive across stop/start.
     if (attrs.hasAttribute(KXMLQLCPalettePersistent))
@@ -1466,6 +1590,11 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
 
     if (attrs.hasAttribute(KXMLQLCPaletteStageTarget))
         m_stageTargetId = attrs.value(KXMLQLCPaletteStageTarget).toUInt();
+    m_dimWhenBlocked = attrs.value(KXMLQLCPaletteDimWhenBlocked).toString() == QLatin1String("1");
+
+    /* a colour macro by name */
+    if (m_type == Color)
+        m_colourMacro = attrs.value(QStringLiteral("ColourMacro")).toString();
 
     if (attrs.hasAttribute(KXMLQLCPaletteFanning))
     {
@@ -1563,6 +1692,34 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         }
         // readNextStartElement() has consumed </Palette> — reader is at EndElement.
     }
+    else if (m_type == Gobo)
+    {
+        m_goboName = attrs.value(QStringLiteral("GoboName")).toString();
+        while (doc.readNextStartElement())
+        {
+            if (doc.name() == QLatin1String("GoboValue"))
+            {
+                const QString def = doc.attributes().value(QStringLiteral("Fixture")).toString();
+                if (!def.isEmpty())
+                    m_goboValues[def] = doc.attributes().value(QStringLiteral("Value")).toInt();
+            }
+            doc.skipCurrentElement();
+        }
+    }
+    else if (m_type == Aim)
+    {
+        // A line's spread, group and cross (see saveXML()).
+        while (doc.readNextStartElement())
+        {
+            if (doc.name() == QLatin1String("EffectParam"))
+            {
+                const QString name = doc.attributes().value("name").toString();
+                if (!name.isEmpty())
+                    m_effectParamValues[name] = doc.attributes().value("value").toDouble();
+            }
+            doc.skipCurrentElement();
+        }
+    }
     else
     {
         // No children: skip from <Palette> StartElement to </Palette> EndElement.
@@ -1600,7 +1757,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     if (m_type == Effect && m_persistent)
         doc->writeAttribute(KXMLQLCPalettePersistent, QStringLiteral("1"));
     if (m_path.isEmpty() == false)
+    {
         doc->writeAttribute(KXMLQLCPalettePath, m_path);
+        doc->writeAttribute(KXMLQLCPaletteFolders, QStringLiteral("1"));
+    }
 
     /* write value */
     switch (m_type)
@@ -1652,9 +1812,20 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         case Undefined: break;
     }
 
+    /* a gobo by name */
+    if (m_type == Gobo && !m_goboName.isEmpty())
+        doc->writeAttribute(QStringLiteral("GoboName"), m_goboName);
+
+    /* a colour macro by name */
+    if (m_type == Color && !m_colourMacro.isEmpty())
+        doc->writeAttribute(QStringLiteral("ColourMacro"), m_colourMacro);
+
     /* write stage target linkage */
     if (m_stageTargetId != UINT_MAX)
         doc->writeAttribute(KXMLQLCPaletteStageTarget, QString::number(m_stageTargetId));
+    // Only when on, so a show that never used it saves byte-identical.
+    if (m_dimWhenBlocked)
+        doc->writeAttribute(KXMLQLCPaletteDimWhenBlocked, QStringLiteral("1"));
 
     /* write fanning */
     if (m_fanningType != Flat)
@@ -1663,6 +1834,18 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         doc->writeAttribute(KXMLQLCPaletteFanLayout, fanningLayoutToString(m_fanningLayout));
         doc->writeAttribute(KXMLQLCPaletteFanAmount, QString::number(m_fanningAmount));
         doc->writeAttribute(KXMLQLCPaletteFanValue, fanningValue().toString());
+    }
+
+    /* a gobo's slot picked per fixture type */
+    if (m_type == Gobo)
+    {
+        for (auto it = m_goboValues.constBegin(); it != m_goboValues.constEnd(); ++it)
+        {
+            doc->writeStartElement(QStringLiteral("GoboValue"));
+            doc->writeAttribute(QStringLiteral("Fixture"), it.key());
+            doc->writeAttribute(QStringLiteral("Value"), QString::number(it.value()));
+            doc->writeEndElement();
+        }
     }
 
     /* write Effect-palette sub-elements */
@@ -1732,6 +1915,20 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             doc->writeEndElement();
         }
     }
+    /* An Aim look on a line carries its spread (LineSpread's "__line*"
+       params), one element each so each can be inherited on its own. A build
+       that predates lines skips an Aim palette's children. */
+    else if (m_type == Aim)
+    {
+        for (auto it = m_effectParamValues.constBegin();
+             it != m_effectParamValues.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectParam");
+            doc->writeAttribute("name",  it.key());
+            doc->writeAttribute("value", QString::number(it.value()));
+            doc->writeEndElement();
+        }
+    }
 
     doc->writeEndElement();
 
@@ -1747,4 +1944,388 @@ QColor QLCPalette::colorValue() const
             return rgb;
     }
     return QColor();
+}
+
+/****************************************************************************
+ * Gobo by name
+ ****************************************************************************/
+
+QString QLCPalette::definitionKey(const Fixture *fixture)
+{
+    if (fixture == nullptr || fixture->fixtureDef() == nullptr)
+        return QString();
+    return QStringLiteral("%1/%2").arg(fixture->fixtureDef()->manufacturer(),
+                                        fixture->fixtureDef()->model());
+}
+
+static QString goboKey(const QString &name)
+{
+    QString out;
+    for (const QChar c : name)
+        if (!c.isSpace() && c != QLatin1Char('-') && c != QLatin1Char('_'))
+            out += c.toLower();
+    return out;
+}
+
+bool QLCPalette::sameGoboName(const QString &a, const QString &b)
+{
+    const QString ka = goboKey(a);
+    return !ka.isEmpty() && ka == goboKey(b);
+}
+
+/** Tier 2's key: the words without "gobo" and numbers, run together, with
+    trailing digits and a plural 's' dropped ("Gobo 3 Dots" -> "dot"). */
+static QString goboStem(const QString &name)
+{
+    QString out;
+    QString word;
+    auto flush = [&out, &word]() {
+        bool digits = !word.isEmpty();
+        for (const QChar c : word)
+            if (!c.isDigit())
+                digits = false;
+        if (!digits && word != QLatin1String("gobo") && word != QLatin1String("gobos"))
+            out += word;
+        word.clear();
+    };
+    for (const QChar c : name)
+    {
+        if (c.isLetterOrNumber())
+            word += c.toLower();
+        else
+            flush();
+    }
+    flush();
+    while (!out.isEmpty() && out.at(out.size() - 1).isDigit())
+        out.chop(1);
+    if (out.size() > 2 && out.endsWith(QLatin1Char('s')) && !out.endsWith(QLatin1String("ss")))
+        out.chop(1);
+    return out;
+}
+
+int QLCPalette::matchGoboName(const QString &wanted, const QList<QStringList> &gobos,
+                              GoboMatch *how, QList<int> *ambiguous)
+{
+    if (how != nullptr)
+        *how = GoboNoMatch;
+    if (ambiguous != nullptr)
+        ambiguous->clear();
+    if (goboKey(wanted).isEmpty())
+        return -1;
+
+    auto decide = [how, ambiguous, &gobos](const QList<int> &found, GoboMatch tier) {
+        /* The same name twice on a wheel (an "Open", a glass repeated in its
+           shake range) is one gobo: its first slot. Different names are a
+           guess, not taken. */
+        QSet<QString> names;
+        for (int i : found)
+            names.insert(goboKey(gobos.at(i).value(0)));
+        if (found.count() == 1 || names.count() == 1)
+        {
+            if (how != nullptr)
+                *how = tier;
+            return found.first();
+        }
+        if (how != nullptr)
+            *how = GoboAmbiguous;
+        if (ambiguous != nullptr)
+            *ambiguous = found;
+        return -1;
+    };
+
+    // 1. Exact: the slot's name or its picture.
+    QList<int> found;
+    for (int i = 0; i < gobos.count(); ++i)
+        for (const QString &n : gobos.at(i))
+            if (sameGoboName(n, wanted))
+            {
+                found << i;
+                break;
+            }
+    if (!found.isEmpty())
+        return decide(found, GoboExact);
+
+    // A picture ("ClayPaky/gobo00006") is that glass or nothing.
+    if (wanted.contains(QLatin1Char('/')))
+        return -1;
+
+    // 2. Singular/plural, without "gobo" and numbers.
+    const QString stem = goboStem(wanted);
+    if (stem.isEmpty())
+        return -1;
+    for (int i = 0; i < gobos.count(); ++i)
+        if (!gobos.at(i).isEmpty() && goboStem(gobos.at(i).first()) == stem)
+            found << i;
+    if (!found.isEmpty())
+        return decide(found, GoboSingular);
+
+    // 3. The one slot whose name starts with or contains it.
+    if (stem.size() < 3)
+        return -1;
+    for (int i = 0; i < gobos.count(); ++i)
+        if (!gobos.at(i).isEmpty() && goboKey(gobos.at(i).first()).contains(stem))
+            found << i;
+    if (!found.isEmpty())
+        return decide(found, GoboPartial);
+    return -1;
+}
+
+QLCPalette::GoboResolution QLCPalette::resolveGobo(const Fixture *fixture) const
+{
+    GoboResolution r;
+    if (m_type != Gobo || fixture == nullptr || fixture->fixtureMode() == nullptr)
+        return r;
+    const quint32 goboCh = fixture->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB);
+    if (goboCh == QLCChannel::invalid())
+        return r;
+
+    const QString def = definitionKey(fixture);
+    if (!def.isEmpty() && m_goboValues.contains(def))
+    {
+        r.value = qBound(0, m_goboValues.value(def), 255);
+        r.how = GoboPicked;
+        return r;
+    }
+
+    if (m_goboName.isEmpty())
+    {
+        if (!m_values.isEmpty())
+        {
+            r.value = qBound(0, value().toInt(), 255);
+            r.how = GoboRaw;
+        }
+        return r;
+    }
+
+    // Its wheel's slots: the capability's own name, then its picture
+    // ("ClayPaky/gobo00006.svg" -> "ClayPaky/gobo00006").
+    const QLCChannel *ch = fixture->channel(goboCh);
+    if (ch == nullptr)
+        return r;
+    const QList<QLCCapability *> caps = ch->capabilities();
+    QList<QStringList> gobos;
+    for (QLCCapability *cap : caps)
+    {
+        QStringList names(cap->name());
+        if (cap->presetType() == QLCCapability::Picture)
+        {
+            // The resource may be resolved to a full path: its folder and
+            // file name are what name the glass.
+            const QFileInfo picture(cap->resource(0).toString());
+            names << picture.dir().dirName() + QLatin1Char('/') + picture.completeBaseName();
+        }
+        gobos << names;
+    }
+    QList<int> ambiguous;
+    const int at = matchGoboName(m_goboName, gobos, &r.how, &ambiguous);
+    if (at >= 0)
+        r.value = (int(caps.at(at)->min()) + int(caps.at(at)->max())) / 2;
+    for (int i : ambiguous)
+        r.candidates << caps.at(i)->name();
+    return r;
+}
+
+/*****************************************************************************
+ * Colour wheels and colour macros
+ *****************************************************************************/
+
+QColor QLCPalette::capabilityColour(const QLCCapability *cap)
+{
+    if (cap == nullptr)
+        return QColor();
+    QLCCapability *c = const_cast<QLCCapability *>(cap);
+    const QColor c1 = c->resource(0).value<QColor>();
+    const QColor c2 = c->resource(1).value<QColor>();
+    if (c1.isValid())
+        return c2.isValid() && c2 != c1 ? QColor() : c1;   // a split is no one colour
+
+    QString name = cap->name().trimmed().toLower();
+    // "Red 2", "Blue (deep)": the colour is the words before.
+    const int paren = name.indexOf(QLatin1Char('('));
+    if (paren > 0)
+        name = name.left(paren).trimmed();
+    while (!name.isEmpty() && (name.at(name.size() - 1).isDigit() || name.at(name.size() - 1).isSpace()))
+        name.chop(1);
+    if (name.isEmpty())
+        return QColor();
+
+    static const QStringList off = { "off", "none", "no color", "no colour", "blackout", "black",
+                                     "dark", "closed", "close" };
+    static const QStringList open = { "open", "white", "open white", "open/white", "no filter" };
+    if (off.contains(name))
+        return QColor(Qt::black);
+    if (open.contains(name))
+        return QColor(Qt::white);
+
+    // Not one colour: a split, a mix of two, a chase, a rainbow...
+    static const QStringList moving = { "/", "+", "&", " and ", "chase", "random", "rainbow", "scroll",
+                                        "rotat", "fade", "jump", "auto", "sound", "music", "strobe",
+                                        "split", "half", "cycle", "change", "speed", "mix", "effect" };
+    for (const QString &m : moving)
+        if (name.contains(m))
+            return QColor();
+
+    QString key = name;
+    key.remove(QLatin1Char(' ')).remove(QLatin1Char('-')).remove(QLatin1Char('_'));
+    static const QHash<QString, QColor> extra = {
+        { "amber", QColor(255, 191, 0) }, { "uv", QColor(148, 0, 211) },
+        { "ultraviolet", QColor(148, 0, 211) }, { "warmwhite", QColor(255, 220, 180) },
+        { "coolwhite", QColor(220, 235, 255) }, { "coldwhite", QColor(220, 235, 255) },
+        { "cto", QColor(255, 200, 140) }, { "ctb", QColor(200, 220, 255) },
+        { "lightgreen", QColor(144, 238, 144) }, { "darkblue", QColor(0, 0, 139) } };
+    if (extra.contains(key))
+        return extra.value(key);
+    const QColor named = QColor::fromString(key);
+    return named.isValid() ? named : QColor();
+}
+
+int QLCPalette::nearestColourValue(const QLCChannel *ch, const QColor &col, QString *slotName)
+{
+    if (ch == nullptr || !col.isValid())
+        return -1;
+
+    struct Slot { int value; QColor colour; QString name; };
+    QList<Slot> black, grey, chroma;
+    for (const QLCCapability *cap : ch->capabilities())
+    {
+        const QColor c = capabilityColour(cap);
+        if (!c.isValid())
+            continue;
+        Slot s { int(cap->middle()), c, cap->name() };
+        if (c.value() < 16)
+            black << s;
+        else if (c.hsvSaturation() < 51)
+            grey << s;
+        else
+            chroma << s;
+    }
+    if (black.isEmpty() && grey.isEmpty() && chroma.isEmpty())
+        return -1;
+
+    auto pick = [slotName](const Slot &s) {
+        if (slotName != nullptr)
+            *slotName = s.name;
+        return s.value;
+    };
+    // The plain RGB distance: the last word, between slots of one kind.
+    auto nearestRgb = [&col](const QList<Slot> &cands) {
+        int best = 0;
+        qint64 bestDist = LLONG_MAX;
+        for (int i = 0; i < cands.size(); ++i)
+        {
+            const qint64 dr = col.red() - cands.at(i).colour.red();
+            const qint64 dg = col.green() - cands.at(i).colour.green();
+            const qint64 db = col.blue() - cands.at(i).colour.blue();
+            const qint64 d = dr * dr + dg * dg + db * db;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                best = i;
+            }
+        }
+        return cands.at(best);
+    };
+
+    if (col.value() < 16)
+    {
+        // Black: off where there is an off; a wheel has none, and stays open
+        // (its dimmer makes it dark).
+        if (!black.isEmpty())
+            return pick(black.first());
+        if (!grey.isEmpty())
+            return pick(nearestRgb(QList<Slot>() << grey));
+        return -1;
+    }
+    if (col.hsvSaturation() < 51 || chroma.isEmpty())
+    {
+        // White or a grey: the white slot -- a grey is a dim white.
+        if (!grey.isEmpty())
+        {
+            Slot best = grey.first();
+            for (const Slot &s : grey)
+                if (s.colour.value() > best.colour.value())
+                    best = s;
+            return pick(best);
+        }
+        return chroma.isEmpty() ? -1 : pick(nearestRgb(chroma));
+    }
+
+    // A colour: the slot of the nearest hue, then the nearest saturation.
+    const int hue = col.hsvHue();
+    int best = -1, bestHue = INT_MAX, bestSat = INT_MAX;
+    for (int i = 0; i < chroma.size(); ++i)
+    {
+        int d = qAbs(chroma.at(i).colour.hsvHue() - hue);
+        d = qMin(d, 360 - d);
+        const int ds = qAbs(chroma.at(i).colour.hsvSaturation() - col.hsvSaturation());
+        if (d < bestHue || (d == bestHue && ds < bestSat))
+        {
+            best = i;
+            bestHue = d;
+            bestSat = ds;
+        }
+    }
+    return pick(chroma.at(best));
+}
+
+int QLCPalette::namedSlotValue(const QLCChannel *ch, const QString &name)
+{
+    if (ch == nullptr || name.trimmed().isEmpty())
+        return -1;
+    for (const QLCCapability *cap : ch->capabilities())
+        if (sameGoboName(cap->name(), name))
+            return int(cap->middle());
+    return -1;
+}
+
+int QLCPalette::colourSlotValue(const QLCChannel *ch, const QColor &col) const
+{
+    if (!m_colourMacro.isEmpty())
+    {
+        const int v = namedSlotValue(ch, m_colourMacro);
+        if (v >= 0)
+            return v;
+    }
+    return nearestColourValue(ch, col);
+}
+
+QList<quint32> QLCPalette::colourSlotChannels(const Fixture *fixture, int head)
+{
+    QList<quint32> out;
+    const QLCFixtureMode *mode = fixture != nullptr ? fixture->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return out;
+    if (head >= 0)
+    {
+        if (head >= fixture->heads() || !fixture->rgbChannelSets(head).isEmpty()
+            || fixture->cmyChannels(head).size() >= 3)
+            return out;
+        for (quint32 c : fixture->head(head).colorWheels())
+            out << c;
+        return out;
+    }
+
+    // In no head: the fixture's, when it mixes colour nowhere.
+    QList<quint32> loose;
+    for (quint32 c = 0; c < quint32(mode->channels().size()); ++c)
+    {
+        const QLCChannel *ch = mode->channel(c);
+        if (ch == nullptr)
+            continue;
+        if (ch->group() == QLCChannel::Intensity)
+        {
+            switch (ch->colour())
+            {
+            case QLCChannel::Red: case QLCChannel::Green: case QLCChannel::Blue:
+            case QLCChannel::Cyan: case QLCChannel::Magenta: case QLCChannel::Yellow:
+                return out;                 // it mixes: leave its macros alone
+            default:
+                break;
+            }
+        }
+        if (ch->group() == QLCChannel::Colour && ch->controlByte() == QLCChannel::MSB
+            && mode->headForChannel(c) < 0)
+            loose << c;
+    }
+    return loose;
 }

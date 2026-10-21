@@ -84,6 +84,7 @@
 #include "stagetarget.h"
 #include "monitor.h"
 #include "aimsolver.h"
+#include "linecurve.h"
 #include "qlcfixturemode.h"
 #include "qlcpalette.h"
 #include "scene.h"
@@ -451,6 +452,26 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         }
         event->accept();
         return;
+    }
+
+    /* A press on a line target's handle is the start of bending or stretching
+       it, with any modifier (Shift locks the drag to an axis, Alt keeps an end
+       on the line's direction): the item takes it, not the selection logic. */
+    if (event->button() == Qt::LeftButton)
+    {
+        const QPointF sp = mapToScene(event->pos());
+        QGraphicsItem *hit = topPickableAt(sp);
+        while (hit && hit->parentItem())
+            hit = hit->parentItem();
+        if (auto *tgi = dynamic_cast<TargetItem *>(hit))
+        {
+            if (tgi->isLine() && (tgi->flags() & QGraphicsItem::ItemIsMovable)
+                && tgi->lineHandleAt(tgi->mapFromScene(sp)) >= 0)
+            {
+                QGraphicsView::mousePressEvent(event);
+                return;
+            }
+        }
     }
 
     if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ShiftModifier))
@@ -4586,44 +4607,24 @@ void MonitorGraphicsView::updatePlatforms()
     {
         const QPointF anchor = projectMm(sc->originX() * 1000.0, sc->originY() * 1000.0,
                                          sc->bottom() * 1000.0);
-        auto at = [&](double u, double z, double off) {
-            const QVector3D p = sc->pointAt(u, z, off);
-            return projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
-        };
-        const double half = double(sc->thickness()) / 2.0;
-        QList<Scenery::Piece> pieces = sc->pieces();
-        if (pieces.isEmpty())                    // flown out: where it hangs, dashed
-            pieces << Scenery::Piece{ -1.0, 1.0, sc->bottom(), sc->bottom() + sc->height() };
-        QList<QPolygonF> parts;
-        for (const Scenery::Piece &pc : pieces)
-        {
-            const QPair<double, double> sp(pc.u0, pc.u1);
-            const float lo = pc.z0, hi = pc.z1;
-            const int segs = qMax(1, int(qCeil(qMax(16, sc->segments()) * (sp.second - sp.first) / 2.0)));
-            QPolygonF part;
-            if (m_pov == PovTop)
-            {
-                // Its line; a wall's footprint, out along one face and back along the other.
-                for (int i = 0; i <= segs; ++i)
-                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, -half);
-                if (half > 0.0)
-                    for (int i = segs; i >= 0; --i)
-                        part << at(sp.first + (sp.second - sp.first) * i / segs, lo, half);
-            }
-            else
-            {
-                for (int i = 0; i <= segs; ++i)
-                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, 0.0);
-                for (int i = segs; i >= 0; --i)
-                    part << at(sp.first + (sp.second - sp.first) * i / segs, hi, 0.0);
-            }
-            parts << part;
-        }
+        bool flown = false;
+        const Scenery::Pose pose = sceneryPose(sc);
+        const QList<QPolygonF> parts = sceneryParts(sc, pose, &flown);
         SceneryItem *sci = new SceneryItem(sc, m_doc, anchor, parts, m_pov != PovTop);
+        sci->setParts(anchor, parts, flown, pose);
         sci->setMovable(!m_layoutLocked);
         m_scene->addItem(sci);
         m_sceneryItems.insert(sc->id(), sci);
         connect(sci, &SceneryItem::itemDropped, this, &MonitorGraphicsView::slotSceneryMoved);
+        /* A curtain driven by a fixture opens as its channel moves. The values
+           change on the engine's thread; the item, the receiver, takes them on
+           this one -- and goes with the item. */
+        if (sc->isDriven())
+            if (Fixture *drv = m_doc->fixture(sc->driverFixture()))
+            {
+                const quint32 sid = sc->id();
+                connect(drv, &Fixture::valuesChanged, sci, [this, sid]() { refreshScenery(sid); });
+            }
     }
 
     // Towers: footprint square in Top; box + shelf lines in the elevations.
@@ -4787,6 +4788,80 @@ void MonitorGraphicsView::slotStandMoved(StandItem *item)
     m_doc->monitorProperties()->recomputeStandMounts();   // pipes on it follow
     m_doc->setModified();
     emit mapStructureChanged();
+}
+
+Scenery::Pose MonitorGraphicsView::sceneryPose(const Scenery *sc) const
+{
+    /* A curtain driven by a fixture is where that fixture's channels put it
+       (a patched one's last output, an unpatched one's preview) -- closed at
+       0, whatever its fixed state says. Undriven, or its fixture gone: its
+       fixed state, as it always was. */
+    if (sc == nullptr)
+        return Scenery::Pose();
+    if (sc->isDriven())
+        if (Fixture *fx = m_doc->fixture(sc->driverFixture()))
+            return Scenery::poseFromValues(fx->fixtureMode(), fx->channelValues());
+    return sc->staticPose();
+}
+
+QList<QPolygonF> MonitorGraphicsView::sceneryParts(const Scenery *sc, const Scenery::Pose &pose,
+                                                   bool *flown) const
+{
+    auto at = [&](double u, double z, double off) {
+        const QVector3D p = sc->pointAt(u, z, off);
+        return projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
+    };
+    const double half = double(sc->thickness()) / 2.0;
+    QList<Scenery::Piece> pieces = sc->pieces(pose);
+    if (flown != nullptr)
+        *flown = pieces.isEmpty();
+    if (pieces.isEmpty())                    // flown out: where it hangs, dashed
+        pieces << Scenery::Piece{ -1.0, 1.0, sc->bottom(), sc->bottom() + sc->height() };
+    QList<QPolygonF> parts;
+    for (const Scenery::Piece &pc : pieces)
+    {
+        const QPair<double, double> sp(pc.u0, pc.u1);
+        const float lo = pc.z0, hi = pc.z1;
+        const int segs = qMax(1, int(qCeil(qMax(16, sc->segments()) * (sp.second - sp.first) / 2.0)));
+        QPolygonF part;
+        if (m_pov == PovTop)
+        {
+            // Its line; a wall's footprint, out along one face and back along the other.
+            for (int i = 0; i <= segs; ++i)
+                part << at(sp.first + (sp.second - sp.first) * i / segs, lo, -half);
+            if (half > 0.0)
+                for (int i = segs; i >= 0; --i)
+                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, half);
+        }
+        else
+        {
+            for (int i = 0; i <= segs; ++i)
+                part << at(sp.first + (sp.second - sp.first) * i / segs, lo, 0.0);
+            for (int i = segs; i >= 0; --i)
+                part << at(sp.first + (sp.second - sp.first) * i / segs, hi, 0.0);
+        }
+        parts << part;
+    }
+    return parts;
+}
+
+void MonitorGraphicsView::refreshScenery(quint32 sceneryId)
+{
+    SceneryItem *sci = m_sceneryItems.value(sceneryId, nullptr);
+    Scenery *sc = m_doc->monitorProperties()->scenery(sceneryId);
+    if (sci == nullptr || sc == nullptr)
+        return;
+    const Scenery::Pose pose = sceneryPose(sc);
+    if (sci->hasPose() && sci->pose() == pose)
+        return;
+    bool flown = false;
+    const QList<QPolygonF> parts = sceneryParts(sc, pose, &flown);
+    const QPointF anchor = projectMm(sc->originX() * 1000.0, sc->originY() * 1000.0,
+                                     sc->bottom() * 1000.0);
+    sci->setParts(anchor, parts, flown, pose);
+    // A curtain that opened or closed can block, or clear, an aim trace.
+    if (m_doc->monitorProperties()->occlusionKinds() & BeamOcclusion::Drapes)
+        updateAimLines();
 }
 
 void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)
@@ -5328,6 +5403,8 @@ void MonitorGraphicsView::repositionTargetItems()
         // realPositionToPixels expects millimetres (StageTarget is in metres).
         const QPointF px = realPositionToPixels(p.x() * 1000.0, p.y() * 1000.0);
         ti->setScenePos(float(px.x()), float(px.y()));
+        if (t->isLine())
+            refreshLineItem(ti);
     }
     updateAimLines();   // keep aim lines tracking the moved target
 }
@@ -5379,7 +5456,9 @@ void MonitorGraphicsView::updateTargets()
     foreach (StageTarget *t, props->stageTargets())
     {
         // projectMm places the target at its 3-D position for Top or elevation.
-        const QPointF tp = projectMm(t->x() * 1000.0, t->y() * 1000.0, t->z() * 1000.0);
+        // A line sits on its centre as the aim rule resolves it.
+        const QVector3D at = t->isLine() ? props->targetAimPoint(t) : t->position();
+        const QPointF tp = projectMm(at.x() * 1000.0, at.y() * 1000.0, at.z() * 1000.0);
         float pxX = float(tp.x());
         float pxY = float(tp.y());
 
@@ -5423,6 +5502,18 @@ void MonitorGraphicsView::updateTargets()
 
         connect(ti, &TargetItem::itemDropped,
                 this, &MonitorGraphicsView::slotTargetMoved);
+        if (t->isLine())
+        {
+            refreshLineItem(ti);
+            connect(ti, &TargetItem::lineHandleMoved,
+                    this, &MonitorGraphicsView::slotLineHandleMoved);
+            connect(ti, &TargetItem::lineHandleReleased,
+                    this, &MonitorGraphicsView::slotLineHandleReleased);
+            connect(ti, &TargetItem::lineInsertRequested,
+                    this, &MonitorGraphicsView::slotLineInsertPoint);
+            connect(ti, &TargetItem::lineRemoveRequested,
+                    this, &MonitorGraphicsView::slotLineRemovePoint);
+        }
     }
 
     refreshItemLayerState();
@@ -5464,7 +5555,13 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
            riser sits inside the riser, which is both wrong to look at and wrong
            to aim at -- the lights would point at the floor under someone's
            feet. Elevations set height directly, so they are left alone. */
-        if (m_pov == PovTop)
+        /* A line's centre keeps its height: its points were drawn at their
+           heights, and dropping the centre onto a riser would lift the lot. */
+        if (m_pov == PovTop && t->isLine())
+        {
+            newZ = oldZ;
+        }
+        else if (m_pov == PovTop)
         {
             const float deck = floorHeightAt(float(newPos.x()), float(newPos.y()));
             const float oldDeck = floorHeightAt(float(oldPos.x()), float(oldPos.y()));
@@ -5472,9 +5569,13 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
             newZ = deck + qMax(0.0f, oldZ - oldDeck);
         }
 
-        if (newPos != oldPos || !qFuzzyCompare(newZ, oldZ))
+        // Within a tenth of a millimetre is where it was: a projection there
+        // and back is not a move.
+        const bool movedXY = qAbs(newPos.x() - oldPos.x()) > 1e-4 || qAbs(newPos.y() - oldPos.y()) > 1e-4;
+        if (movedXY || qAbs(newZ - oldZ) > 1e-4f)
         {
             e.targetPositions.insert(t->id(), oldPos);
+            e.targetZ.insert(t->id(), oldZ);
             t->setX(float(newPos.x()));
             t->setY(float(newPos.y()));
             t->setZ(newZ);
@@ -5517,6 +5618,169 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
     }
 }
 
+void MonitorGraphicsView::refreshLineItem(TargetItem *item)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    StageTarget *t = item != nullptr ? item->target() : nullptr;
+    if (props == nullptr || t == nullptr || !t->isLine())
+        return;
+    auto px = [this](const QVector3D &m) {
+        return projectMm(double(m.x()) * 1000.0, double(m.y()) * 1000.0, double(m.z()) * 1000.0);
+    };
+    const QPointF centre = px(props->targetAimPoint(t));
+    item->setPos(centre);
+    const QVector<QVector3D> world = props->targetLinePoints(t);
+    const LineCurve curve(world);
+    QPolygonF poly;
+    foreach (const QVector3D &s, curve.samples())
+        poly << px(s) - centre;
+    QVector<QPointF> handles;
+    foreach (const QVector3D &w, world)
+        handles << px(w) - centre;
+    item->setLineGeometry(poly, curve.sampleFractions(), handles);
+}
+
+void MonitorGraphicsView::reaimScenesAimingAt(quint32 targetId)
+{
+    foreach (Function *fn, m_doc->functions())
+    {
+        Scene *s = qobject_cast<Scene *>(fn);
+        if (s == nullptr || !s->isRunning())
+            continue;
+        foreach (quint32 pid, s->runtimePalettes())
+        {
+            QLCPalette *pal = m_doc->palette(pid);
+            if (pal != nullptr && pal->type() == QLCPalette::Aim && pal->stageTargetId() == targetId)
+            {
+                s->requestReaim();
+                break;
+            }
+        }
+    }
+}
+
+void MonitorGraphicsView::commitLineEdit(StageTarget *t, const QVector3D &posBefore,
+                                         const QVector<QVector3D> &pointsBefore)
+{
+    t->recentreLine();
+    UndoEntry e;
+    e.type = UndoEntry::TargetLineEdit;
+    e.targetLines.insert(t->id(), qMakePair(posBefore, pointsBefore));
+    pushUndo(e);
+    m_doc->setModified();
+    m_doc->monitorProperties()->notifyStageTargetsChanged();
+    reaimScenesAimingAt(t->id());
+    if (TargetItem *ti = m_targetItems.value(t->id(), nullptr))
+        refreshLineItem(ti);
+    updateAimLines();
+}
+
+void MonitorGraphicsView::slotLineHandleMoved(TargetItem *item, int index, QPointF scenePos,
+                                              Qt::KeyboardModifiers modifiers)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    StageTarget *t = item != nullptr ? item->target() : nullptr;
+    if (props == nullptr || t == nullptr || !t->isLine() || t->locked())
+        return;
+    QVector<QVector3D> rel = t->linePoints();
+    if (index < 0 || index >= rel.size())
+        return;
+    const QVector3D origin = props->targetAimPoint(t);
+
+    if (m_lineDrag.targetId != t->id() || m_lineDrag.index != index)
+    {
+        m_lineDrag.targetId = t->id();
+        m_lineDrag.index = index;
+        m_lineDrag.posBefore = t->position();
+        m_lineDrag.pointsBefore = rel;
+        m_lineDrag.startWorld = origin + rel.at(index);
+        m_lineDrag.startScene = item->mapToScene(item->lineHandle(index));
+    }
+    const QVector3D startW = m_lineDrag.startWorld;
+
+    // Shift: along the view's horizontal or vertical only, whichever is more.
+    QPointF sp = scenePos;
+    if (modifiers & Qt::ShiftModifier)
+    {
+        const QPointF d = sp - m_lineDrag.startScene;
+        if (qAbs(d.x()) >= qAbs(d.y()))
+            sp.setY(m_lineDrag.startScene.y());
+        else
+            sp.setX(m_lineDrag.startScene.x());
+    }
+
+    QVector3D w = unprojectMm(sp, startW * 1000.0f) / 1000.0f;
+    /* From above, height is not something the drag can say: keep the handle
+       as far above whatever is under it as it was -- the rule a point
+       target's drop follows. */
+    if (m_pov == PovTop)
+        w.setZ(floorHeightAt(w.x(), w.y())
+               + (startW.z() - floorHeightAt(startW.x(), startW.y())));
+
+    // Alt on an end: extend or retract along the line, keeping its direction.
+    const int last = rel.size() - 1;
+    if ((modifiers & Qt::AltModifier) && (index == 0 || index == last))
+    {
+        const QVector3D neighbour = origin + m_lineDrag.pointsBefore.at(index == 0 ? 1 : last - 1);
+        const QVector3D dir = (startW - neighbour).normalized();
+        if (!dir.isNull())
+            w = startW + dir * QVector3D::dotProduct(w - startW, dir);
+    }
+
+    rel[index] = w - origin;
+    t->setLinePoints(rel);
+    refreshLineItem(item);
+    reaimScenesAimingAt(t->id());
+    updateAimLines();
+}
+
+void MonitorGraphicsView::slotLineHandleReleased(TargetItem *item, int index)
+{
+    Q_UNUSED(index)
+    StageTarget *t = item != nullptr ? item->target() : nullptr;
+    const LineDrag drag = m_lineDrag;
+    m_lineDrag = LineDrag();
+    if (t == nullptr || drag.targetId != t->id())
+        return;                         // pressed and let go: nothing moved
+    if (t->linePoints() == drag.pointsBefore)
+        return;
+    commitLineEdit(t, drag.posBefore, drag.pointsBefore);
+}
+
+void MonitorGraphicsView::slotLineInsertPoint(TargetItem *item, double fraction)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    StageTarget *t = item != nullptr ? item->target() : nullptr;
+    if (props == nullptr || t == nullptr || !t->isLine() || t->locked())
+        return;
+    const QVector3D posBefore = t->position();
+    const QVector<QVector3D> before = t->linePoints();
+    if (before.size() < 2)
+        return;
+    // On the curve where the click was, so the shape does not jump.
+    const LineCurve curve(before);
+    QVector<QVector3D> pts = before;
+    pts.insert(curve.spanAt(fraction) + 1, curve.pointAt(fraction));
+    t->setLinePoints(pts);
+    commitLineEdit(t, posBefore, before);
+}
+
+void MonitorGraphicsView::slotLineRemovePoint(TargetItem *item, int index)
+{
+    StageTarget *t = item != nullptr ? item->target() : nullptr;
+    if (t == nullptr || !t->isLine() || t->locked())
+        return;
+    const QVector3D posBefore = t->position();
+    const QVector<QVector3D> before = t->linePoints();
+    // The ends stay: a line has two.
+    if (index <= 0 || index >= before.size() - 1)
+        return;
+    QVector<QVector3D> pts = before;
+    pts.removeAt(index);
+    t->setLinePoints(pts);
+    commitLineEdit(t, posBefore, before);
+}
+
 void MonitorGraphicsView::updateAimLines()
 {
     // Remove old aim lines
@@ -5547,11 +5811,16 @@ void MonitorGraphicsView::updateAimLines()
        cannot reach is not pointed at the target; it is stuck at its limit
        somewhere short of it, and a line drawn as if it arrived says otherwise. */
     QHash<QPair<quint32, quint32>, AimSolver::Solution> reach;
+    QHash<QPair<quint32, quint32>, QVector3D> aimedAt;  // a line's head -> its own point
+    QHash<QPair<quint32, quint32>, BeamOcclusion::Hit> sight;   // line of sight
     QHash<quint32, QPair<int, int> > shortfall;        // target -> (short, aimed)
     QHash<quint32, QStringList> shortNames;
     foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, activeScene))
     {
         reach.insert(qMakePair(a.fixtureId, a.targetId), a.solution);
+        aimedAt.insert(qMakePair(a.fixtureId, a.targetId), a.point);
+        if (a.sight.blocked)
+            sight.insert(qMakePair(a.fixtureId, a.targetId), a.sight);
         QPair<int, int> &sf = shortfall[a.targetId];
         sf.second += 1;
         if (a.solution.reachable() == false)
@@ -5603,7 +5872,7 @@ void MonitorGraphicsView::updateAimLines()
             continue;
 
         StageTarget *tgt = ti->target();
-        QPointF tgtPx = ti->pos();
+        const QPointF tgtCentrePx = ti->pos();
         QPen aimPen(tgt->color().isValid() ? tgt->color() : QColor(255, 180, 0), 1.5);
         aimPen.setStyle(Qt::DashLine);
 
@@ -5627,6 +5896,16 @@ void MonitorGraphicsView::updateAimLines()
                 continue;
 
             QPointF fixPx = mfi->iconCentreScene();
+            /* On a line each head has its own point: the trace goes there,
+               so you can see the beams spread, converge or cross. */
+            QPointF tgtPx = tgtCentrePx;
+            if (tgt->isLine())
+            {
+                const auto ait = aimedAt.constFind(qMakePair(fid, tgt->id()));
+                if (ait != aimedAt.constEnd())
+                    tgtPx = projectMm(double(ait->x()) * 1000.0, double(ait->y()) * 1000.0,
+                                      double(ait->z()) * 1000.0);
+            }
 
             /* Out of reach: solid red, and it says by how much. */
             QPen pen = aimPen;
@@ -5636,6 +5915,50 @@ void MonitorGraphicsView::updateAimLines()
             {
                 pen = QPen(QColor(235, 70, 60), 2.0);
                 pen.setStyle(Qt::SolidLine);
+            }
+
+            /* Something solid in the way (line of sight): red and dashed as
+               far as the blocker, a cross where it stops, and only a faint
+               dotted line on to where it was meant to go. */
+            const auto sit = sight.constFind(qMakePair(fid, tgt->id()));
+            if (!cannot && sit != sight.constEnd())
+            {
+                const BeamOcclusion::Hit &hit = sit.value();
+                const QPointF stopPx = fixPx + (tgtPx - fixPx) * qreal(qBound(0.0f, hit.fraction, 1.0f));
+                QPen blockedPen(QColor(235, 70, 60), 2.0);
+                blockedPen.setStyle(Qt::DashLine);
+                const QString tip = tr("%1 cannot see %2: blocked by %3, %4 m out")
+                                        .arg(fxi->name(), tgt->name(), hit.name)
+                                        .arg(double(hit.distance), 0, 'f', 1);
+                QGraphicsLineItem *toBlock = m_scene->addLine(
+                    fixPx.x(), fixPx.y(), stopPx.x(), stopPx.y(), blockedPen);
+                toBlock->setZValue(2.5);
+                toBlock->setAcceptedMouseButtons(Qt::NoButton);
+                toBlock->setToolTip(tip);
+                toBlock->setData(0, QStringLiteral("blockedTrace"));
+                m_aimLines.append(toBlock);
+                QPen restPen(QColor(235, 70, 60, 90), 1.0);
+                restPen.setStyle(Qt::DotLine);
+                QGraphicsLineItem *rest = m_scene->addLine(
+                    stopPx.x(), stopPx.y(), tgtPx.x(), tgtPx.y(), restPen);
+                rest->setZValue(2.4);
+                rest->setAcceptedMouseButtons(Qt::NoButton);
+                rest->setToolTip(tip);
+                m_aimLines.append(rest);
+                QPen crossPen(QColor(235, 70, 60), 2.5);
+                const qreal c = 5.0;
+                QGraphicsLineItem *x1 = m_scene->addLine(stopPx.x() - c, stopPx.y() - c,
+                                                         stopPx.x() + c, stopPx.y() + c, crossPen);
+                QGraphicsLineItem *x2 = m_scene->addLine(stopPx.x() - c, stopPx.y() + c,
+                                                         stopPx.x() + c, stopPx.y() - c, crossPen);
+                for (QGraphicsLineItem *x : { x1, x2 })
+                {
+                    x->setZValue(2.6);
+                    x->setAcceptedMouseButtons(Qt::NoButton);
+                    x->setToolTip(tip);
+                    m_aimLines.append(x);
+                }
+                continue;
             }
 
             QGraphicsLineItem *line = m_scene->addLine(
@@ -6519,6 +6842,28 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     }
     if (auto *tgi = dynamic_cast<TargetItem *>(it))
     {
+        /* A line: double-click the curve to add a point there, a mid point
+           to take it out; the centre mark (or right-click > Edit) opens the
+           dialog. Point targets open it from anywhere, as always. */
+        if (tgi->isLine())
+        {
+            const QPointF local = tgi->mapFromScene(sp);
+            const bool editable = (tgi->flags() & QGraphicsItem::ItemIsMovable);
+            const int h = tgi->lineHandleAt(local);
+            double f = 0.0;
+            if (editable && h > 0 && h < tgi->lineHandleCount() - 1)
+            {
+                slotLineRemovePoint(tgi, h);
+                return;
+            }
+            if (h >= 0)
+                return;             // an end: nothing to add or take out
+            if (editable && !tgi->onCentreMark(local) && tgi->lineHitAt(local, &f))
+            {
+                slotLineInsertPoint(tgi, f);
+                return;
+            }
+        }
         emit targetDoubleClicked(tgi->targetId());
         return;
     }
@@ -7242,6 +7587,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             adds()->addSeparator();
             adds()->addAction(tr("Target Here"), this, [this, at]() {
                 emit addItemRequested(QStringLiteral("target"), at);
+            });
+            adds()->addAction(tr("Target Line Here"), this, [this, at]() {
+                emit addItemRequested(QStringLiteral("targetline"), at);
             });
             adds()->addAction(tr("Person Here"), this, [this, at]() {
                 emit addItemRequested(QStringLiteral("person"), at);
@@ -9260,6 +9608,25 @@ void MonitorGraphicsView::undoOne(const UndoEntry &entry)
         return;
     }
 
+    if (entry.type == UndoEntry::TargetLineEdit)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        for (auto it = entry.targetLines.constBegin(); it != entry.targetLines.constEnd(); ++it)
+        {
+            StageTarget *t = props ? props->stageTarget(it.key()) : nullptr;
+            if (t == nullptr)
+                continue;
+            t->setPosition(it.value().first);
+            t->setLinePoints(it.value().second);
+            reaimScenesAimingAt(t->id());
+        }
+        updateTargets();
+        if (props != nullptr)
+            props->notifyStageTargetsChanged();
+        m_doc->setModified();
+        return;
+    }
+
     if (entry.type == UndoEntry::TargetMove)
     {
         MonitorProperties *props = m_doc->monitorProperties();
@@ -9272,6 +9639,8 @@ void MonitorGraphicsView::undoOne(const UndoEntry &entry)
                 continue;
             t->setX(float(it.value().x()));
             t->setY(float(it.value().y()));
+            if (entry.targetZ.contains(it.key()))
+                t->setZ(entry.targetZ.value(it.key()));
         }
         updateTargets();
         if (props != nullptr)

@@ -27,6 +27,7 @@
 #include <QtPlugin>
 #include <QVariant>
 #include <QObject>
+#include <QMutex>
 #include <climits>
 #include <QMap>
 
@@ -206,8 +207,16 @@ public:
         QString hardwareId;     //!< MAC, serial, or empty
         QString detail;         //!< one line of extra description
         QString status;         //!< last reported status, or empty
+        /** Something the operator has to act on before this device is usable,
+         *  e.g. "not on this network: set its IP". Empty when all is well. */
+        QString attention;
         QStringList portLabels; //!< one label per physical port
         QList<quint32> portUniverses; //!< protocol universe per port, parallel to portLabels
+        /** The node's own number for each of those ports (1-based), parallel
+            to portLabels: only some of a node's ports may be listed (Art-Net
+            lists output ports), so position + 1 is not always the number
+            printed on the box. Empty means position + 1. */
+        QList<int> portNumbers;
         bool rdmCapable;
         /**
          * Everything else the plugin happens to know, as ordered name/value
@@ -469,6 +478,21 @@ public:
     { Q_UNUSED(identity) return -1; }
 
     /**
+     * Can configureDevice() change the device at @p address (one of
+     * discoveredDevices()) -- its network address, for an Art-Net node?
+     */
+    virtual bool canConfigureDevice(const QString &address) const
+    { Q_UNUSED(address) return false; }
+
+    /**
+     * Open this plugin's own dialog for the device at @p address. Called
+     * only from an explicit operator action; the dialog asks for
+     * confirmation before anything is written to the device.
+     */
+    virtual void configureDevice(const QString &address)
+    { Q_UNUSED(address) }
+
+    /**
      * Re-enumerate hardware devices and update internal state.
      * Plugins that support hot-plug or need an explicit rescan can override
      * this; the default implementation does nothing.
@@ -483,6 +507,16 @@ public:
      * Default: none.
      */
     virtual QStringList targetProblems() const { return QStringList(); }
+
+    /**
+     * The same kind of trouble, for one patched output: what is wrong with
+     * where @p universe goes from @p output ("Art-Net to 172.18.2.50: not
+     * reachable since 20:14"), one line each, for the Connections row that
+     * patch is drawn on. Empty when it is fine or the plugin can't tell.
+     * Changes are announced with targetProblemsChanged(), as above.
+     */
+    virtual QStringList outputProblems(quint32 output, quint32 universe) const
+    { Q_UNUSED(output) Q_UNUSED(universe) return QStringList(); }
 
     /**
      * A device that runs its own looks (a WLED: the console sends "Chase, speed
@@ -541,6 +575,18 @@ public:
      * start after the axis channels (channel >= axisCount).
      */
     virtual QString inputButtonAction(quint32 input, quint32 channel) const
+    { Q_UNUSED(input); Q_UNUSED(channel); return QString(); }
+
+    /**
+     * Return the standard gamepad ROLE of an input channel (axis or button)
+     * on a given input line: "a", "b", "x", "y", "lb", "rb", "back", "start",
+     * "ls", "rs", "guide", "dpad_up", "dpad_down", "dpad_left", "dpad_right"
+     * for buttons, "lx", "ly", "rx", "ry", "lt", "rt" for axes -- or an empty
+     * string when the profile does not say. Tools that use a gamepad as a
+     * gamepad (Focus mode) map by role, so any controller whose profile
+     * declares them works the same way.
+     */
+    virtual QString inputChannelRole(quint32 input, quint32 channel) const
     { Q_UNUSED(input); Q_UNUSED(channel); return QString(); }
 
     /**
@@ -673,6 +719,60 @@ signals:
      * @param data
      */
     void rdmValueChanged(quint32 universe, quint32 line, QVariantMap data);
+
+    /*************************************************************************
+     * Rig network transmit gate
+     *************************************************************************/
+public:
+    /**
+     * The networks this plugin may transmit from, as "a.b.c.d/p" (IPv4).
+     *
+     * Set by the engine from the show's rig networks while the gate is on
+     * (see InputOutputMap::transmitGateActive()); an empty list means no
+     * restriction, which is also how a plugin starts. A network plugin
+     * (Art-Net, E1.31, OSC, WLED) holds everything a line or device would
+     * send -- DMX, polls, replies, discovery -- while the local address it
+     * would leave from is not allowed (transmitAllowedFrom()), so a laptop
+     * on some other network (a school's, a venue's office Wi-Fi) never puts
+     * show traffic on it, even through a path the engine's own patch hold
+     * does not see (an input line answering polls, a rescan). Entries that
+     * do not parse are ignored.
+     *
+     * The decision is not made per packet: each line (controller) or device
+     * keeps it in a flag its send path only reads, worked out again by
+     * refreshTransmitGate() -- called from here when the list changes, and
+     * by the engine on its reconnect tick -- and when a line opens or a
+     * device's address changes.
+     *
+     * Returns true when the list changed (and refreshTransmitGate() ran).
+     */
+    bool setTransmitNetworks(const QStringList &networks);
+
+    /** The list last given to setTransmitNetworks(), normalised */
+    QStringList transmitNetworks() const;
+
+    /** Is any network set, i.e. is anything held at all? */
+    bool transmitRestricted() const;
+
+    /** May this plugin send from local IPv4 address @a ipv4 (host order)?
+     *  Always for loopback (127.0.0.0/8) and when no networks are set.
+     *  Takes a lock and walks the list: for working out a cached decision,
+     *  never for a send path. */
+    bool transmitAllowedFrom(quint32 ipv4) const;
+
+    /** The same for a dotted address string; anything that is not an IPv4
+     *  address (a hostname, IPv6) is allowed only when no networks are set. */
+    bool transmitAllowedFrom(const QString &address) const;
+
+    /** Work out every line's / device's cached transmit decision again:
+     *  the networks changed, or (the engine's reconnect tick) an interface
+     *  or route may have. Main thread; never blocks a send path. Default:
+     *  nothing to do (a plugin that does not transmit over IP). */
+    virtual void refreshTransmitGate() {}
+
+private:
+    mutable QMutex m_transmitMutex;
+    QVector<QPair<quint32, int> > m_transmitNetworks;
 };
 
 #define QLCIOPlugin_iid "org.qlcplus.QLCIOPlugin"

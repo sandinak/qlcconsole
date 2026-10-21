@@ -32,6 +32,7 @@
 #include "inputpatch.h"
 #include "qlcmacros.h"
 #include "universe.h"
+#include "networkroute.h"
 #include "function.h"
 #include "qlcfile.h"
 #include "utils.h"
@@ -67,6 +68,13 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     , m_passthroughValues()
 {
     m_modifiers.fill(NULL, UNIVERSE_SIZE);
+    m_writtenFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
+    m_held.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
+    for (int i = 0; i < UNIVERSE_SIZE; i++)
+    {
+        m_writtenFrame[i].store(0, std::memory_order_relaxed);
+        m_held[i].store(0, std::memory_order_relaxed);
+    }
 
     connect(m_grandMaster, SIGNAL(valueChanged(uchar)),
             this, SLOT(slotGMValueChanged()));
@@ -266,28 +274,31 @@ void Universe::requestFaderPriority(QSharedPointer<GenericFader> fader, Universe
 {
     QMutexLocker fadersLocker(&m_fadersMutex);
     int pos = m_faders.indexOf(fader);
-    int newPos = 0;
 
     if (pos == -1)
         return;
 
+    /* Out, then back in where requestFader() would put a new one of that
+       priority: after the last fader at or below it. (Searched with the
+       fader still in the list, a lower priority than its own never found
+       a place and was not set.) */
+    m_faders.removeAt(pos);
+    fader->setPriority(priority);
+    int newPos = 0;
     for (int i = m_faders.count() - 1; i >= 0; i--)
     {
-        QSharedPointer<GenericFader> f = m_faders.at(i);
+        const QSharedPointer<GenericFader> &f = m_faders.at(i);
         if (!f.isNull() && f->priority() <= priority)
         {
-            newPos = i;
-            fader->setPriority(priority);
+            newPos = i + 1;
             break;
         }
     }
+    m_faders.insert(newPos, fader);
 
     if (newPos != pos)
-    {
-        m_faders.move(pos, newPos);
         qDebug() << "[Universe]" << id() << ": Generic fader moved from" << pos
-                 << "to" << m_faders.indexOf(fader) << ". Count:" << m_faders.count();
-    }
+                 << "to" << newPos << ". Count:" << m_faders.count();
 }
 
 QList<QSharedPointer<GenericFader> > Universe::faders()
@@ -331,6 +342,10 @@ void Universe::processFaders()
 {
     flushInput();
     zeroIntensityChannels();
+    if (m_overrideWritten.size() != UNIVERSE_SIZE)
+        m_overrideWritten = QByteArray(UNIVERSE_SIZE, char(0));
+    else
+        m_overrideWritten.fill(char(0));
 
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
@@ -358,6 +373,11 @@ void Universe::processFaders()
             fader->write(this);
         }
     }
+
+    applyAutoOpen();
+    // Writes from here on (the DMX sources, before the next frame) belong
+    // to the next frame.
+    m_frame.fetch_add(1, std::memory_order_relaxed);
 
     bool dataChanged = hasChanged();
     QByteArray postGM = m_postGMValues->mid(0, m_usedChannels);
@@ -417,6 +437,106 @@ bool Universe::applyPowerLimits(QByteArray &out)
     return true;
 }
 
+/************************************************************************
+ * Auto-open shutters
+ ************************************************************************/
+
+void Universe::setAutoOpenRules(const QVector<AutoOpenRule> &rules)
+{
+    QMutexLocker locker(&m_autoOpenMutex);
+    // Whatever the old rules may have opened goes back to what is stored,
+    // unless the new rules still cover it.
+    foreach (const AutoOpenRule &r, m_autoOpenRules)
+        if (m_autoOpenRestore.contains(r.shutter) == false)
+            m_autoOpenRestore << r.shutter;
+    m_autoOpenRules = rules;
+}
+
+void Universe::holdChannels(int address, int count)
+{
+    for (int i = 0; i < count; i++)
+        if (address + i >= 0 && address + i < UNIVERSE_SIZE)
+            m_held[address + i].store(1, std::memory_order_relaxed);
+}
+
+bool Universe::isChannelSet(int address) const
+{
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
+    return writtenRecently(address) || m_held[address].load(std::memory_order_relaxed) != 0;
+}
+
+void Universe::applyAutoOpen()
+{
+    QMutexLocker locker(&m_autoOpenMutex);
+    if (m_autoOpenRestore.isEmpty() == false)
+    {
+        foreach (int a, m_autoOpenRestore)
+            if (a >= 0 && a < UNIVERSE_SIZE && isChannelSet(a) == false)
+                updatePostGMValue(a);
+        m_autoOpenRestore.clear();
+    }
+    if (m_autoOpenRules.isEmpty())
+        return;
+
+    const char *post = m_postGMValues->constData();
+    auto lit = [post](int a) {
+        return a >= 0 && a < UNIVERSE_SIZE && post[a] != 0;
+    };
+    // Given a level lately: a resting default (a dimmer that sits at full
+    // when nothing drives it) never opens a shutter by itself.
+    auto given = [this, post](int a) {
+        return a >= 0 && a < UNIVERSE_SIZE && post[a] != 0 && writtenRecently(a);
+    };
+
+    foreach (const AutoOpenRule &r, m_autoOpenRules)
+    {
+        if (r.shutter < 0 || r.shutter >= UNIVERSE_SIZE)
+            continue;
+        // An explicit shutter value -- closed, strobe, open -- always wins.
+        if (isChannelSet(r.shutter))
+            continue;
+
+        bool open = false;
+        foreach (const AutoOpenHead &h, r.heads)
+        {
+            bool ok = true, fresh = false;
+            foreach (int a, h.gates)
+            {
+                if (lit(a) == false) { ok = false; break; }
+                fresh = fresh || given(a);
+            }
+            if (ok && h.anyOf.isEmpty() == false)
+            {
+                bool any = false;
+                foreach (int a, h.anyOf)
+                    if (lit(a))
+                    {
+                        any = true;
+                        fresh = fresh || given(a);
+                    }
+                ok = any;
+            }
+            if (ok && fresh)
+            {
+                open = true;
+                break;
+            }
+        }
+
+        if (open)
+        {
+            if (r.shutter >= m_usedChannels)
+                m_usedChannels = r.shutter + 1;
+            (*m_postGMValues)[r.shutter] = char(r.open);
+        }
+        else
+        {
+            updatePostGMValue(r.shutter);
+        }
+    }
+}
+
 void Universe::run()
 {
     m_running = true;
@@ -447,6 +567,8 @@ void Universe::run()
 
 void Universe::reset()
 {
+    for (int i = 0; i < UNIVERSE_SIZE; i++)
+        m_held[i].store(0, std::memory_order_relaxed);
     m_preGMValues->fill(0);
     m_blackoutValues->fill(0);
 
@@ -713,7 +835,8 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index)
     return false;
 }
 
-bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index)
+bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index,
+                                     quint32 savedLine, const QString &network)
 {
     if (index < 0 || plugin == NULL || pendingUID.isEmpty())
         return false;
@@ -724,14 +847,14 @@ bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pending
     if (index < m_outputPatchList.count())
     {
         OutputPatch *patch = m_outputPatchList.at(index);
-        patch->setPending(plugin, pendingUID);
+        patch->setPending(plugin, pendingUID, savedLine, network);
         emit outputPatchChanged();
         return true;
     }
     else
     {
         OutputPatch *patch = new OutputPatch(m_id, this);
-        patch->setPending(plugin, pendingUID);
+        patch->setPending(plugin, pendingUID, savedLine, network);
         m_outputPatchList.append(patch);
         emit outputPatchesCountChanged();
         return true;
@@ -1024,22 +1147,40 @@ void Universe::updateIntensityChannelsRanges()
  * Writing
  ****************************************************************************/
 
+/* What of a write of $channelCount channels from $address fits in a universe:
+   a 16-bit pair, or a fixture, at its end ran past the buffers (and the
+   modifiers) -- unchecked in a release build. Keeps the most significant
+   bytes of $value, the ones that land on the channels that exist. */
+static bool clipToUniverse(int address, quint32 &value, int &channelCount)
+{
+    if (address < 0 || address >= UNIVERSE_SIZE || channelCount <= 0)
+        return false;
+    const int room = UNIVERSE_SIZE - address;
+    if (channelCount > room)
+    {
+        value >>= 8 * (channelCount - room);
+        channelCount = room;
+    }
+    return true;
+}
+
 bool Universe::write(int address, uchar value, bool forceLTP)
 {
-    Q_ASSERT(address < UNIVERSE_SIZE);
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
 
     //qDebug() << "[Universe]" << id() << ": write channel" << address << ", value:" << value;
 
     if (address >= m_usedChannels)
         m_usedChannels = address + 1;
 
+    markWritten(address);
+
+    // A lower value on an HTP channel loses: routine, every tick -- not logged
     if (m_channelsMask->at(address) & HTP)
     {
         if (forceLTP == false && value < (uchar)m_preGMValues->at(address))
-        {
-            qDebug() << "[Universe] HTP check not passed" << address << value;
             return false;
-        }
     }
     else
     {
@@ -1054,11 +1195,28 @@ bool Universe::write(int address, uchar value, bool forceLTP)
     return true;
 }
 
+bool Universe::writeOverride(int address, uchar value)
+{
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
+    if (m_overrideWritten.size() != UNIVERSE_SIZE)
+        m_overrideWritten = QByteArray(UNIVERSE_SIZE, char(0));
+    if ((m_channelsMask->at(address) & HTP) && m_overrideWritten.at(address))
+        value = qMax(value, uchar(m_preGMValues->at(address)));
+    m_overrideWritten[address] = char(1);
+    return write(address, value, true);
+}
+
 bool Universe::writeMultiple(int address, quint32 value, int channelCount)
 {
+    if (!clipToUniverse(address, value, channelCount))
+        return false;
+
     for (int i = 0; i < channelCount; i++)
     {
         //qDebug() << "[Universe]" << id() << ": write channel" << (address + i) << ", value:" << QString::number(((uchar *)&value)[channelCount - 1 - i]);
+
+        markWritten(address + i);
 
         // preserve non HTP channels for blackout
         if ((m_channelsMask->at(address + i) & HTP) == 0)
@@ -1074,12 +1232,16 @@ bool Universe::writeMultiple(int address, quint32 value, int channelCount)
 
 bool Universe::writeRelative(int address, quint32 value, int channelCount)
 {
-    Q_ASSERT(address < UNIVERSE_SIZE);
+    if (!clipToUniverse(address, value, channelCount))
+        return false;
 
     //qDebug() << "Write relative channel" << address << "value" << value;
 
     if (address + channelCount >= m_usedChannels)
         m_usedChannels = address + channelCount;
+
+    for (int i = 0; i < channelCount; i++)
+        markWritten(address + i);
 
     if (channelCount == 1)
     {
@@ -1110,6 +1272,9 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
 
 bool Universe::writeBlended(int address, quint32 value, int channelCount, Universe::BlendMode blend)
 {
+    if (!clipToUniverse(address, value, channelCount))
+        return false;
+
     if (address + channelCount >= m_usedChannels)
         m_usedChannels = address + channelCount;
 
@@ -1121,18 +1286,15 @@ bool Universe::writeBlended(int address, quint32 value, int channelCount, Univer
     {
         case NormalBlend:
         {
+            // routine, every tick -- not logged
             if ((m_channelsMask->at(address) & HTP) && value < currentValue)
-            {
-                qDebug() << "[Universe] HTP check not passed" << address << value;
                 return false;
-            }
         }
         break;
         case MaskBlend:
         {
             if (value)
             {
-                qDebug() << "Current value" << currentValue << "value" << value;
                 if (currentValue)
                     value = float(currentValue) * (float(value) / pow(255.0, channelCount));
                 else
@@ -1177,8 +1339,6 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
         return false;
     }
 
-    int outputIndex = 0;
-
     QXmlStreamAttributes attrs = root.attributes();
 
     if (attrs.hasAttribute(KXMLQLCUniverseName))
@@ -1200,109 +1360,78 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
     while (root.readNextStartElement())
     {
         QXmlStreamAttributes pAttrs = root.attributes();
+        OfflinePatch patch;
 
         if (root.name() == KXMLQLCUniverseInputPatch)
-        {
-            QString plugin = KInputNone;
-            quint32 inputLine = QLCIOPlugin::invalidLine();
-            QString inputUID;
-            QString profile = KInputNone;
-            QString hidProfile;
-
-            if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
-                plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
-                inputUID = pAttrs.value(KXMLQLCUniverseLineUID).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
-                inputLine = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseProfileName))
-                profile = pAttrs.value(KXMLQLCUniverseProfileName).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseHIDProfileName))
-                hidProfile = pAttrs.value(KXMLQLCUniverseHIDProfileName).toString();
-
-            // apply the parameters just loaded
-            ioMap->setInputPatch(index, plugin, inputUID, inputLine, profile);
-            if (!hidProfile.isEmpty() && ioMap->inputPatch(index))
-                ioMap->inputPatch(index)->setHidProfileName(hidProfile);
-
-            QXmlStreamReader::TokenType tType = root.readNext();
-            if (tType == QXmlStreamReader::Characters)
-                tType = root.readNext();
-
-            // check if there is a PluginParameters tag defined
-            if (tType == QXmlStreamReader::StartElement)
-            {
-                if (root.name() == KXMLQLCUniversePluginParameters)
-                    loadXMLPluginParameters(root, InputPatchTag, 0);
-                root.skipCurrentElement();
-            }
-        }
+            patch.tag = InputPatchTag;
         else if (root.name() == KXMLQLCUniverseOutputPatch)
-        {
-            QString plugin = KOutputNone;
-            QString outputUID;
-            quint32 outputLine = QLCIOPlugin::invalidLine();
-
-            if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
-                plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
-                outputUID = pAttrs.value(KXMLQLCUniverseLineUID).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
-                outputLine = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
-
-            // apply the parameters just loaded
-            ioMap->setOutputPatch(index, plugin, outputUID, outputLine, false, outputIndex);
-
-            QXmlStreamReader::TokenType tType = root.readNext();
-            if (tType == QXmlStreamReader::Characters)
-                tType = root.readNext();
-
-            // check if there is a PluginParameters tag defined
-            if (tType == QXmlStreamReader::StartElement)
-            {
-                if (root.name() == KXMLQLCUniversePluginParameters)
-                    loadXMLPluginParameters(root, OutputPatchTag, outputIndex);
-                root.skipCurrentElement();
-            }
-
-            outputIndex++;
-        }
+            patch.tag = OutputPatchTag;
         else if (root.name() == KXMLQLCUniverseFeedbackPatch)
-        {
-            QString plugin = KOutputNone;
-            QString outputUID;
-            quint32 output = QLCIOPlugin::invalidLine();
-
-            if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
-                plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
-                outputUID = pAttrs.value(KXMLQLCUniverseLineUID).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
-                output = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
-
-            // apply the parameters just loaded
-            ioMap->setOutputPatch(index, plugin, outputUID, output, true);
-
-            QXmlStreamReader::TokenType tType = root.readNext();
-            if (tType == QXmlStreamReader::Characters)
-                tType = root.readNext();
-
-            // check if there is a PluginParameters tag defined
-            if (tType == QXmlStreamReader::StartElement)
-            {
-                if (root.name() == KXMLQLCUniversePluginParameters)
-                    loadXMLPluginParameters(root, FeedbackPatchTag, 0);
-                root.skipCurrentElement();
-            }
-        }
+            patch.tag = FeedbackPatchTag;
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown Universe tag:" << root.name();
             root.skipCurrentElement();
+            continue;
         }
+
+        patch.plugin = patch.tag == InputPatchTag ? KInputNone : KOutputNone;
+        patch.profile = KInputNone;
+        if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
+            patch.plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
+            patch.uid = pAttrs.value(KXMLQLCUniverseLineUID).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
+            patch.line = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseNetwork))
+            patch.network = pAttrs.value(KXMLQLCUniverseNetwork).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseProfileName))
+            patch.profile = pAttrs.value(KXMLQLCUniverseProfileName).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseHIDProfileName))
+            patch.hidProfile = pAttrs.value(KXMLQLCUniverseHIDProfileName).toString();
+
+        /* The parameters are read BEFORE the patch is applied: a unicast
+           target (outputIP) is what decides which local interface reaches
+           the patch's network -- see NetworkRoute::resolve(). */
+        while (root.readNextStartElement())
+        {
+            if (root.name() == KXMLQLCUniversePluginParameters)
+            {
+                QXmlStreamAttributes pluginAttrs = root.attributes();
+                for (int i = 0; i < pluginAttrs.count(); i++)
+                    patch.params[pluginAttrs.at(i).name().toString()] =
+                            pluginAttrs.at(i).value().toString();
+            }
+            root.skipCurrentElement();
+        }
+
+        ioMap->loadPatch(index, patch);
     }
 
     return true;
+}
+
+QList<Universe::OfflinePatch> Universe::offlinePatches() const
+{
+    return m_offlinePatches;
+}
+
+void Universe::addOfflinePatch(const OfflinePatch &patch)
+{
+    m_offlinePatches.append(patch);
+}
+
+void Universe::removeOfflinePatch(int index)
+{
+    if (index >= 0 && index < m_offlinePatches.count())
+        m_offlinePatches.removeAt(index);
+}
+
+void Universe::clearOfflinePatches(PatchTagType tag)
+{
+    for (int i = m_offlinePatches.count() - 1; i >= 0; i--)
+        if (m_offlinePatches.at(i).tag == tag)
+            m_offlinePatches.removeAt(i);
 }
 
 bool Universe::loadXMLPluginParameters(QXmlStreamReader &root, PatchTagType currentTag, int patchIndex)
@@ -1352,21 +1481,53 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
     if (passthrough() == true)
         doc->writeAttribute(KXMLQLCUniversePassthrough, KXMLQLCTrue);
 
+    /* A kept (offline) patch is written back exactly as it was loaded --
+       a show saved on a machine away from its network must not lose a
+       patch it merely could not open here. */
+    auto saveOffline = [&](PatchTagType tag, const QString &xmlTag)
+    {
+        foreach (const OfflinePatch &p, m_offlinePatches)
+        {
+            if (p.tag != tag)
+                continue;
+            savePatchXML(doc, xmlTag, p.plugin, p.uid, p.line, p.profile,
+                         p.params, p.hidProfile, p.network);
+        }
+    };
+
     if (inputPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseInputPatch, inputPatch()->pluginName(), inputPatch()->inputName(),
             inputPatch()->input(), inputPatch()->profileName(), inputPatch()->getPluginParameters(),
-            inputPatch()->hidProfileName());
+            inputPatch()->hidProfileName(), NetworkRoute::networkForLine(inputPatch()->inputName()));
+    }
+    else
+    {
+        saveOffline(InputPatchTag, KXMLQLCUniverseInputPatch);
     }
     foreach (OutputPatch *op, m_outputPatchList)
     {
+        if (op->isPending())
+        {
+            // Pending: the same UID, line and network it was loaded with.
+            savePatchXML(doc, KXMLQLCUniverseOutputPatch, op->pluginName(), op->outputName(),
+                op->pendingLine(), "", op->getPluginParameters(), QString(), op->pendingNetwork());
+            continue;
+        }
         savePatchXML(doc, KXMLQLCUniverseOutputPatch, op->pluginName(), op->outputName(),
-            op->output(), "", op->getPluginParameters());
+            op->output(), "", op->getPluginParameters(), QString(),
+            NetworkRoute::networkForLine(op->outputName()));
     }
+    saveOffline(OutputPatchTag, KXMLQLCUniverseOutputPatch);
     if (feedbackPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseFeedbackPatch, feedbackPatch()->pluginName(), feedbackPatch()->outputName(),
-            feedbackPatch()->output(), "", feedbackPatch()->getPluginParameters());
+            feedbackPatch()->output(), "", feedbackPatch()->getPluginParameters(), QString(),
+            NetworkRoute::networkForLine(feedbackPatch()->outputName()));
+    }
+    else
+    {
+        saveOffline(FeedbackPatchTag, KXMLQLCUniverseFeedbackPatch);
     }
 
     /* End the <Universe> tag */
@@ -1383,7 +1544,8 @@ void Universe::savePatchXML(
     quint32 line,
     QString profileName,
     QMap<QString, QVariant> parameters,
-    const QString &hidProfileName) const
+    const QString &hidProfileName,
+    const QString &network) const
 {
     // sanity check: don't save invalid data
     if (pluginName.isEmpty() || pluginName == KInputNone || line == QLCIOPlugin::invalidLine())
@@ -1397,6 +1559,11 @@ void Universe::savePatchXML(
         doc->writeAttribute(KXMLQLCUniverseProfileName, profileName);
     if (!hidProfileName.isEmpty())
         doc->writeAttribute(KXMLQLCUniverseHIDProfileName, hidProfileName);
+    /* The network the line is on ("172.18.2.0/24") -- what loading resolves
+       by, so the show follows the network to another machine or address.
+       UID/Line stay for older builds, which ignore this attribute. */
+    if (!network.isEmpty())
+        doc->writeAttribute(KXMLQLCUniverseNetwork, network);
 
     savePluginParametersXML(doc, parameters);
     doc->writeEndElement();

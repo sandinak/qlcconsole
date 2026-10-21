@@ -12,12 +12,14 @@
 #include <QStackedWidget>
 #include <QColorDialog>
 #include <QCheckBox>
+#include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QSlider>
 #include <QLabel>
+#include <QTextDocument>
 #include <QFrame>
 #include <QPixmap>
 #include <QIcon>
@@ -37,7 +39,11 @@
 #include <QShortcut>
 #include <QTextBrowser>
 #include <QDialog>
+#include <QGridLayout>
+#include <QSignalBlocker>
+#include <cmath>
 #include "lookeditor.h"
+#include "programmercontroller.h"
 #include "fadetimespin.h"
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
@@ -50,6 +56,8 @@
 #include "monitorproperties.h"
 #include "gobolibrary.h"
 #include "stagetarget.h"
+#include "linespread.h"
+#include "linespreadpreview.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "fixturegroup.h"
@@ -102,7 +110,7 @@ enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2, EffectK
 static const int EffectKindRole = Qt::UserRole + 1;
 
 // Display order for the category groups in the effect picker.
-static const char *kEffectCategoryOrder[] = { "Color", "Dimmer", "Position", "Beam", "Other" };
+static const char *kEffectCategoryOrder[] = { "Color", "Dimmer", "Matrix", "Position", "Beam", "Other" };
 
 // Category for a RAW script from its fixtureTypes (shared with the engine cache
 // so the picker grouping and the palette-folder pathing never drift apart).
@@ -279,6 +287,14 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_trialNote->hide();
     root->addWidget(m_trialNote);
 
+    m_usedBy = new QLabel(this);
+    m_usedBy->setObjectName("lookEditorUsedBy");
+    m_usedBy->setWordWrap(true);
+    m_usedBy->setTextFormat(Qt::RichText);
+    m_usedBy->hide();
+    connect(m_usedBy, &QLabel::linkActivated, this, &LookEditor::usedByLinkActivated);
+    root->addWidget(m_usedBy);
+
     // Per-look fade override row: "Fade in [ step ] s   out [ step ] s". Each
     // spin's minimum reads "step" — meaning fall back to the chaser step /
     // scene fade for that direction. Any value >= 0 overrides it for this look's
@@ -384,6 +400,25 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     xl->addWidget(m_amberRow);
     xl->addWidget(m_uvRow);
     cl->addWidget(extras, 0);
+
+    // A slot of the colour wheels / rings by name: a ring's chase is no
+    // colour the picker can make.
+    m_macroRow = new QWidget(colorPage);
+    QHBoxLayout *ml = new QHBoxLayout(m_macroRow);
+    ml->setContentsMargins(0, 0, 0, 0);
+    QLabel *macroLabel = new QLabel(tr("Wheel / ring:"), m_macroRow);
+    ml->addWidget(macroLabel);
+    m_macroCombo = new QComboBox(m_macroRow);
+    m_macroCombo->setObjectName("lookColourMacro");
+    m_macroCombo->setToolTip(tr("What colour wheels and colour rings play. Nearest to the colour: "
+                                "each its slot nearest the colour above (black is a ring's off). "
+                                "A slot by name -- a ring's chase, say -- plays that slot where a "
+                                "wheel or ring has it, and the colour everywhere else."));
+    macroLabel->setBuddy(m_macroCombo);
+    ml->addWidget(m_macroCombo, 1);
+    cv->addWidget(m_macroRow, 0);
+    m_macroRow->setVisible(false);
+    connect(m_macroCombo, SIGNAL(activated(int)), this, SLOT(slotColourMacroChanged(int)));
 
     m_colorWarning = new QLabel(colorPage);
     m_colorWarning->setWordWrap(true);
@@ -507,8 +542,117 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_aimTargetCombo->setToolTip(tr("Stage target this palette aims at (rig geometry computes per-fixture pan/tilt)"));
     aimRow->addWidget(m_aimTargetCombo, 1);
     av->addLayout(aimRow);
+
+    /* On a line: how far the lights spread along it. 0 puts them all on the
+       centre, +5 evenly end to end, and below 0 across the centre -- the
+       beams cross, fully at -5. */
+    m_lineBox = new QWidget(aim);
+    m_lineBox->setObjectName(QStringLiteral("lineControls"));
+    QGridLayout *lg = new QGridLayout(m_lineBox);
+    lg->setContentsMargins(0, 0, 0, 0);
+    lg->setHorizontalSpacing(6);
+    QLabel *spreadLbl = new QLabel(tr("Spread:"), m_lineBox);
+    spreadLbl->setMinimumWidth(60);
+    lg->addWidget(spreadLbl, 0, 0);
+    QLabel *crossLbl = new QLabel(tr("cross"), m_lineBox);
+    crossLbl->setStyleSheet("color: palette(mid);");
+    lg->addWidget(crossLbl, 0, 1);
+    m_lineSpreadSlider = new QSlider(Qt::Horizontal, m_lineBox);
+    m_lineSpreadSlider->setObjectName(QStringLiteral("lineSpreadSlider"));
+    m_lineSpreadSlider->setRange(-50, 50);
+    m_lineSpreadSlider->setTickPosition(QSlider::TicksBelow);
+    m_lineSpreadSlider->setTickInterval(10);
+    m_lineSpreadSlider->setToolTip(tr("Right: the lights move out from the centre, to evenly "
+                                      "end to end at +5. Left: they cross over the centre, "
+                                      "fully crossed at -5. 0: all on the centre."));
+    lg->addWidget(m_lineSpreadSlider, 0, 2);
+    QLabel *outLbl = new QLabel(tr("spread"), m_lineBox);
+    outLbl->setStyleSheet("color: palette(mid);");
+    lg->addWidget(outLbl, 0, 3);
+    m_lineSpreadSpin = new QDoubleSpinBox(m_lineBox);
+    m_lineSpreadSpin->setObjectName(QStringLiteral("lineSpread"));
+    m_lineSpreadSpin->setRange(-LineSpread::maxSpread(), LineSpread::maxSpread());
+    m_lineSpreadSpin->setSingleStep(0.1);
+    m_lineSpreadSpin->setDecimals(1);
+    lg->addWidget(m_lineSpreadSpin, 0, 4);
+    /* Grouping: which lights move together. "1 2 3 cross 4 5 6" is halves
+       whose groups swap sides; "1 and 2, then 3 and 4" is pairs, each pair
+       a block. */
+    QWidget *grow = new QWidget(m_lineBox);
+    QHBoxLayout *gl = new QHBoxLayout(grow);
+    gl->setContentsMargins(0, 0, 0, 0);
+    m_lineGroupCombo = new QComboBox(grow);
+    m_lineGroupCombo->setObjectName(QStringLiteral("lineGroup"));
+    m_lineGroupCombo->addItem(tr("Each light"), 1);
+    m_lineGroupCombo->addItem(tr("Pairs"), 2);
+    m_lineGroupCombo->addItem(tr("Threes"), 3);
+    m_lineGroupCombo->addItem(tr("Fours"), 4);
+    m_lineGroupCombo->addItem(tr("Halves"), LineSpread::Halves);
+    m_lineGroupCombo->setToolTip(tr("Lights that move together, in order along the line. "
+                                    "Halves: the first half and the second (an odd middle "
+                                    "light stays on the centre)."));
+    gl->addWidget(m_lineGroupCombo);
+    QLabel *crossWhat = new QLabel(tr("Cross:"), grow);
+    gl->addWidget(crossWhat);
+    m_lineCrossCombo = new QComboBox(grow);
+    m_lineCrossCombo->setObjectName(QStringLiteral("lineCross"));
+    m_lineCrossCombo->addItem(tr("Groups swap sides"), int(LineSpread::SwapSides));
+    m_lineCrossCombo->addItem(tr("Each group flips (mirror)"), int(LineSpread::Mirror));
+    m_lineCrossCombo->setToolTip(tr("Below 0, what crosses: whole groups swap sides of the "
+                                    "centre keeping their order (1 2 3 | 4 5 6 becomes "
+                                    "4 5 6 | 1 2 3), or each group flips where it is "
+                                    "(3 2 1 | 6 5 4)."));
+    gl->addWidget(m_lineCrossCombo, 1);
+    m_lineShareCheck = new QCheckBox(tr("Share a point"), grow);
+    m_lineShareCheck->setObjectName(QStringLiteral("lineShare"));
+    m_lineShareCheck->setToolTip(tr("A group's lights all land on one point, the groups "
+                                    "spread end to end."));
+    gl->addWidget(m_lineShareCheck);
+    QLabel *groupLbl = new QLabel(tr("Group:"), m_lineBox);
+    lg->addWidget(groupLbl, 1, 0);
+    lg->addWidget(grow, 1, 1, 1, 4);
+    m_lineOrderCombo = new QComboBox(m_lineBox);
+    m_lineOrderCombo->setObjectName(QStringLiteral("lineOrder"));
+    m_lineOrderCombo->addItem(tr("Along the line, as they hang"), int(LineSpread::AlongLine));
+    m_lineOrderCombo->addItem(tr("Look order"), int(LineSpread::LookOrder));
+    m_lineOrderCombo->setToolTip(tr("Which light goes where: the one hanging nearest the "
+                                    "line's start takes the start, or the order the look "
+                                    "lists them in (its groups' head order, then its "
+                                    "fixtures)."));
+    lg->addWidget(new QLabel(tr("Order:"), m_lineBox), 3, 0);
+    lg->addWidget(m_lineOrderCombo, 3, 1, 1, 4);
+    for (QComboBox *cb : { m_lineGroupCombo, m_lineCrossCombo, m_lineOrderCombo })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int) { slotLineSettingsChanged(); });
+    connect(m_lineShareCheck, &QCheckBox::toggled, this, [this](bool) { slotLineSettingsChanged(); });
+    m_linePreview = new LineSpreadPreview(m_doc, m_lineBox);
+    lg->addWidget(m_linePreview, 2, 0, 1, 5);
+    av->addWidget(m_lineBox);
+    m_lineBox->hide();
+    connect(m_lineSpreadSlider, &QSlider::valueChanged, this, [this](int v) {
+        const QSignalBlocker b(m_lineSpreadSpin);
+        m_lineSpreadSpin->setValue(v / 10.0);
+        slotLineSettingsChanged();
+    });
+    connect(m_lineSpreadSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) {
+        const QSignalBlocker b(m_lineSpreadSlider);
+        m_lineSpreadSlider->setValue(int(std::lround(v * 10.0)));
+        slotLineSettingsChanged();
+    });
+    /* Line of sight: off unless asked for, so an existing show never
+       changes. On, a head with a drape, a wall or a riser between it and the
+       target fades out while it is blocked and back when it is clear. */
+    m_aimDimBlocked = new QCheckBox(tr("Dim lights that can't see the target"), aim);
+    m_aimDimBlocked->setObjectName("aimDimWhenBlocked");
+    m_aimDimBlocked->setToolTip(tr("Fade a head out while something solid on stage -- a closed "
+                                   "drape, a wall, a riser, a tower -- stands between it and the "
+                                   "target, and back up when the way is clear. Which features "
+                                   "count is set in the Lighting Studio (Show > Line of sight)."));
+    av->addWidget(m_aimDimBlocked);
     av->addStretch(1);
     m_pageAim = m_stack->addWidget(aim);
+    connect(m_aimDimBlocked, SIGNAL(toggled(bool)),
+            this, SLOT(slotAimDimWhenBlocked(bool)));
     connect(m_aimTargetCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotAimTargetChanged(int)));
 
@@ -548,6 +692,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_singleSourceLabel = new QLabel(tr("Wheel of"), single);
     sourceRow->addWidget(m_singleSourceLabel);
     m_singleSourceCombo = new QComboBox(single);
+    m_singleSourceCombo->setObjectName("singleSourceCombo");
     m_singleSourceCombo->setToolTip(tr("The look stores one DMX value; each fixture "
                                        "type has its own wheel. Pick the type whose "
                                        "gobos to choose from."));
@@ -566,6 +711,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_singleChannel = NULL;
     pickRow->addWidget(m_singlePreview);
     m_singleCombo = new QComboBox(single);
+    m_singleCombo->setObjectName("singleCapabilityCombo");
     pickRow->addWidget(m_singleCombo, 1);
     QHBoxLayout *sl = new QHBoxLayout();
     sv->addLayout(sl);
@@ -576,6 +722,26 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_singleValue = new QLabel("0", single);
     m_singleValue->setMinimumWidth(32);
     sl->addWidget(m_singleValue);
+    // Gobo: one look, the same gobo on every type's own wheel, by name.
+    m_goboNameRow = new QWidget(single);
+    QHBoxLayout *gn = new QHBoxLayout(m_goboNameRow);
+    gn->setContentsMargins(0, 0, 0, 0);
+    gn->addWidget(new QLabel(tr("Gobo name"), m_goboNameRow));
+    m_goboNameEdit = new QLineEdit(m_goboNameRow);
+    m_goboNameEdit->setObjectName("goboNameEdit");
+    m_goboNameEdit->setPlaceholderText(tr("(the same DMX value on every type)"));
+    m_goboNameEdit->setToolTip(tr("Other fixture types play their own gobo of this name. A slot "
+                                  "picked above is kept for that type and wins over the name."));
+    gn->addWidget(m_goboNameEdit, 1);
+    sv->addWidget(m_goboNameRow);
+    m_goboMatches = new QLabel(single);
+    m_goboMatches->setObjectName("goboMatches");
+    m_goboMatches->setWordWrap(true);
+    m_goboMatches->setTextFormat(Qt::PlainText);
+    sv->addWidget(m_goboMatches);
+    m_goboNameRow->setVisible(false);
+    m_goboMatches->setVisible(false);
+    connect(m_goboNameEdit, &QLineEdit::editingFinished, this, &LookEditor::slotGoboNameEdited);
     m_pageSingle = m_stack->addWidget(single);
     connect(m_singleSlider, SIGNAL(valueChanged(int)),
             this, SLOT(slotSingleValueChanged(int)));
@@ -827,6 +993,21 @@ void LookEditor::setTrialNote(const QString &text)
     m_trialNote->setVisible(!text.isEmpty());
 }
 
+void LookEditor::setUsedBy(const QString &html)
+{
+    m_usedBy->setText(html);
+    m_usedBy->setVisible(!html.isEmpty());
+}
+
+QString LookEditor::usedByText() const
+{
+    if (m_usedBy->isHidden())
+        return QString();
+    QTextDocument doc;
+    doc.setHtml(m_usedBy->text());
+    return doc.toPlainText();
+}
+
 QString LookEditor::trialNote() const
 {
     return m_trialNote->isHidden() ? QString() : m_trialNote->text();
@@ -1038,13 +1219,13 @@ void LookEditor::setPalette(quint32 paletteId)
     if (folder.endsWith('/'))
         folder.chop(1);
 
-    int uses = 0;
-    foreach (Function *fn, m_doc->functions())
-    {
-        Scene *s = qobject_cast<Scene*>(fn);
-        if (s != NULL && s->palettes().contains(paletteId))
-            uses++;
-    }
+    // Same "where is it used" as the delete question (ProgrammerController).
+    QSet<quint32> usingScenes;
+    if (ProgrammerController *pc = m_doc->programmer())
+        for (const ProgrammerController::Usage &u : pc->paletteUsage(paletteId))
+            if (u.kind == ProgrammerController::Usage::SceneLook)
+                usingScenes.insert(u.ownerId);
+    const int uses = usingScenes.size();
     QString info = folder.isEmpty() ? QString() : folder + "  •  ";
     info += tr("used by %n scene(s)", "", uses);
     m_title->setText(info);
@@ -1079,6 +1260,7 @@ void LookEditor::setPalette(quint32 paletteId)
         m_whiteRow->setVisible(true);
         m_amberRow->setVisible(unknown || targetsHaveColour(QLCChannel::Amber));
         m_uvRow->setVisible(unknown || targetsHaveColour(QLCChannel::UV));
+        fillColourMacros(p);
 
         m_stack->setCurrentIndex(m_pageColor);
         setMaximumHeight(340);
@@ -1121,7 +1303,8 @@ void LookEditor::setPalette(quint32 paletteId)
         if (m_doc->monitorProperties())
         {
             for (StageTarget *t : m_doc->monitorProperties()->stageTargets())
-                m_aimTargetCombo->addItem(t->name(), QVariant(t->id()));
+                m_aimTargetCombo->addItem(t->isLine() ? tr("Line: %1").arg(t->name()) : t->name(),
+                                          QVariant(t->id()));
         }
         // Pre-select the palette's linked target
         int sel = 0;
@@ -1132,6 +1315,11 @@ void LookEditor::setPalette(quint32 paletteId)
         }
         m_aimTargetCombo->setCurrentIndex(sel);
         m_aimTargetCombo->blockSignals(false);
+        syncLineControls();
+        {
+            QSignalBlocker block(m_aimDimBlocked);
+            m_aimDimBlocked->setChecked(p->dimWhenBlocked());
+        }
         m_stack->setCurrentIndex(m_pageAim);
         setMaximumHeight(340);
         break;
@@ -1200,8 +1388,25 @@ void LookEditor::setPalette(quint32 paletteId)
         m_singleSourceCombo->setVisible(choose);
         m_singleChannel = m_singleSources.isEmpty() ? NULL
                                                     : m_singleSources.at(source).channel;
-        fillSingleCapabilities(p->intValue1());
-        updateSinglePreview(p->intValue1());
+        // A gobo by name shows the browsed type's own slot for it.
+        int shown = p->intValue1();
+        if (p->isGoboByName() && goboValueForSource(p) >= 0)
+            shown = goboValueForSource(p);
+        if (shown != p->intValue1())
+        {
+            m_singleSlider->setValue(shown);
+            m_singleValue->setText(QString::number(shown));
+        }
+        fillSingleCapabilities(shown);
+        updateSinglePreview(shown);
+        const bool gobo = p->type() == QLCPalette::Gobo;
+        m_goboNameRow->setVisible(gobo);
+        m_goboMatches->setVisible(gobo);
+        if (gobo)
+        {
+            m_goboNameEdit->setText(p->goboName());
+            updateGoboMatches();
+        }
         m_stack->setCurrentIndex(m_pageSingle);
         setMaximumHeight(340);
         break;
@@ -1325,6 +1530,11 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     {
     case QLCPalette::Color:
     {
+        if (!p->colourMacro().isEmpty())
+        {
+            autoName = p->colourMacro();        // the ring's slot it plays
+            break;
+        }
         QColor c = p->rgbValue();
         struct { int r, g, b; const char *name; } table[] = {
             { 255,   0,   0, "Red" },
@@ -1395,38 +1605,6 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     m_nameEdit->setText(autoName);
     m_nameEdit->blockSignals(false);
     emit paletteRenamed(p->id());
-}
-
-bool LookEditor::isAutoEffectPath(const QString &path) const
-{
-    QString p = path;
-    if (p.endsWith('/')) p.chop(1);
-    if (p.isEmpty() || p == QLatin1String("Palettes/Effect"))
-        return true;   // the bare default
-
-    // An auto path looks exactly like Palettes/Effect/<Category>/<Engine>, where
-    // the category is one we use and the engine is a real script display name.
-    // Anything else (e.g. a user folder "Palettes/Effect/My Faves") is left be.
-    const QStringList seg = p.split('/');
-    if (seg.size() != 4 || seg[0] != QLatin1String("Palettes")
-        || seg[1] != QLatin1String("Effect"))
-        return false;
-    bool knownCat = false;
-    for (const char *c : kEffectCategoryOrder)
-        if (seg[2] == QLatin1String(c)) { knownCat = true; break; }
-    if (!knownCat)
-        return false;
-    return m_doc->effectScriptRunner()
-        && m_doc->effectScriptRunner()->cache()->scriptNames().contains(seg[3]);
-}
-
-void LookEditor::maybeAutoPath(QLCPalette *p, const QString &category, const QString &engine)
-{
-    if (!p || category.isEmpty() || engine.isEmpty())
-        return;
-    if (!isAutoEffectPath(p->path()))
-        return;   // user organized this palette — don't clobber their folder
-    p->setPath(QString("Palettes/Effect/%1/%2/").arg(category, engine));
 }
 
 void LookEditor::slotNameEdited()
@@ -1539,6 +1717,135 @@ void LookEditor::updateColorWarning()
     m_colorWarning->setVisible(!text.isEmpty());
 }
 
+QStringList LookEditor::colourSlotNames(QList<QColor> *colours) const
+{
+    QList<quint32> ids;
+    if (m_contextScene != NULL)
+    {
+        foreach (quint32 fid, m_contextScene->fixtures())
+            ids << fid;
+        foreach (quint32 gid, m_contextScene->fixtureGroups())
+        {
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            if (g == NULL)
+                continue;
+            foreach (quint32 fid, g->fixtureList())
+            {
+                if (!ids.contains(fid))
+                    ids << fid;
+            }
+        }
+    }
+    auto collect = [this, colours](const QList<quint32> &fids) {
+        QStringList out;
+        QSet<const QLCChannel *> seen;
+        for (quint32 fid : fids)
+        {
+            const Fixture *f = m_doc->fixture(fid);
+            const QLCFixtureMode *mode = f != NULL ? f->fixtureMode() : NULL;
+            if (mode == NULL)
+                continue;
+            QList<quint32> chans;
+            for (int h = 0; h < f->heads(); ++h)
+                chans << QLCPalette::colourSlotChannels(f, h);
+            chans << QLCPalette::colourSlotChannels(f, -1);
+            for (quint32 c : chans)
+            {
+                const QLCChannel *ch = mode->channel(c);
+                if (ch == NULL || seen.contains(ch))
+                    continue;
+                seen.insert(ch);
+                for (const QLCCapability *cap : ch->capabilities())
+                {
+                    const QString n = cap->name().trimmed();
+                    bool have = n.isEmpty();
+                    for (const QString &o : out)
+                        if (QLCPalette::sameGoboName(o, n))
+                            have = true;
+                    if (have)
+                        continue;
+                    out << n;
+                    if (colours != NULL)
+                        *colours << QLCPalette::capabilityColour(cap);
+                }
+            }
+        }
+        return out;
+    };
+    QStringList out = collect(ids);
+    if (out.isEmpty())
+    {
+        // A colour made from the palette list has no look yet: the show's.
+        if (colours != NULL)
+            colours->clear();
+        QList<quint32> all;
+        foreach (Fixture *f, m_doc->fixtures())
+            all << f->id();
+        out = collect(all);
+    }
+    return out;
+}
+
+void LookEditor::fillColourMacros(const QLCPalette *p)
+{
+    if (m_macroCombo == NULL)
+        return;
+    QList<QColor> colours;
+    const QStringList names = colourSlotNames(&colours);
+    QSignalBlocker block(m_macroCombo);
+    m_macroCombo->clear();
+    m_macroCombo->addItem(tr("Nearest to the colour"), QString());
+    int at = 0;
+    for (int i = 0; i < names.count(); ++i)
+    {
+        const QColor c = colours.value(i);
+        QIcon icon;
+        if (c.isValid())
+        {
+            QPixmap px(12, 12);
+            px.fill(c);
+            icon = QIcon(px);
+        }
+        m_macroCombo->addItem(icon, names.at(i), names.at(i));
+        if (p != NULL && QLCPalette::sameGoboName(p->colourMacro(), names.at(i)))
+            at = m_macroCombo->count() - 1;
+    }
+    // A name no target has (the show's rings changed): keep it, say so.
+    if (p != NULL && !p->colourMacro().isEmpty() && at == 0)
+    {
+        m_macroCombo->addItem(tr("%1 (not on these)").arg(p->colourMacro()), p->colourMacro());
+        at = m_macroCombo->count() - 1;
+    }
+    m_macroCombo->setCurrentIndex(at);
+    m_macroRow->setVisible(!names.isEmpty() || at > 0);
+}
+
+void LookEditor::slotColourMacroChanged(int index)
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Color)
+        return;
+    const QString name = m_macroCombo->itemData(index).toString();
+    if (name == p->colourMacro())
+        return;
+    p->setColourMacro(name);
+    // A slot of one colour: the picker shows it too (and RGB fixtures play it).
+    QList<QColor> colours;
+    const QStringList names = colourSlotNames(&colours);
+    const int i = names.indexOf(name);
+    const QColor c = i >= 0 ? colours.value(i) : QColor();
+    if (!name.isEmpty() && c.isValid() && c != Qt::black && c.rgb() != m_colorDialog->currentColor().rgb())
+    {
+        m_colorDialog->setCurrentColor(c);      // commits, as a pick does
+        return;
+    }
+    maybeAutoName(p);
+    m_doc->setModified();
+    emit paletteChanged(m_paletteId);
+}
+
 bool LookEditor::targetsHaveColour(int primaryColour) const
 {
     if (m_contextScene == NULL)
@@ -1619,6 +1926,100 @@ void LookEditor::slotAimTargetChanged(int index)
         return;
     p->setStageTargetId(m_aimTargetCombo->itemData(index).toUInt());
     m_doc->setModified();
+    syncLineControls();
+    emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::syncLineControls()
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const StageTarget *t = (p != nullptr && p->type() == QLCPalette::Aim && props != nullptr)
+            ? props->stageTarget(p->stageTargetId()) : nullptr;
+    const bool line = (t != nullptr && t->isLine());
+    m_lineBox->setVisible(line);
+    if (!line)
+        return;
+    const LineSpread::Settings s = LineSpread::fromParams(p->effectParamValues());
+    {
+        const QSignalBlocker b1(m_lineSpreadSlider), b2(m_lineSpreadSpin);
+        m_lineSpreadSlider->setValue(int(std::lround(s.spread * 10.0)));
+        m_lineSpreadSpin->setValue(s.spread);
+        const QSignalBlocker b3(m_lineGroupCombo), b4(m_lineCrossCombo),
+                             b5(m_lineShareCheck), b6(m_lineOrderCombo);
+        int gi = m_lineGroupCombo->findData(s.group);
+        if (gi < 0)
+        {
+            // A group size the list does not offer (set elsewhere): show it.
+            m_lineGroupCombo->addItem(tr("Groups of %1").arg(s.group), s.group);
+            gi = m_lineGroupCombo->count() - 1;
+        }
+        m_lineGroupCombo->setCurrentIndex(gi);
+        m_lineCrossCombo->setCurrentIndex(qMax(0, m_lineCrossCombo->findData(int(s.cross))));
+        m_lineShareCheck->setChecked(s.share);
+        m_lineOrderCombo->setCurrentIndex(qMax(0, m_lineOrderCombo->findData(int(s.order))));
+    }
+    // Each light on its own has nothing to choose between: both cross it all.
+    m_lineCrossCombo->setEnabled(s.group != 1 && !s.share);
+    m_linePreview->setLook(m_contextScene, p);
+}
+
+void LookEditor::slotLineSettingsChanged()
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Aim)
+        return;
+
+    LineSpread::Settings s = LineSpread::fromParams(p->effectParamValues());
+    s.spread = m_lineSpreadSpin->value();
+    s.group = m_lineGroupCombo->currentData().toInt();
+    s.cross = LineSpread::Cross(m_lineCrossCombo->currentData().toInt());
+    s.share = m_lineShareCheck->isChecked();
+    s.order = LineSpread::Order(m_lineOrderCombo->currentData().toInt());
+    m_lineCrossCombo->setEnabled(s.group != 1 && !s.share);
+
+    /* Each setting is its own param, and one at its default is taken out,
+       so the look carries only what it changes. */
+    QMap<QString, double> params = p->effectParamValues();
+    LineSpread::toParams(s, params);
+    for (const char *what : { "Spread", "Group", "Cross", "Share", "Order" })
+    {
+        const QString key = LineSpread::paramName(what);
+        if (params.contains(key))
+            p->setEffectParamValue(key, params.value(key));
+        else
+            p->removeEffectParamValue(key);
+    }
+    m_linePreview->setLook(m_contextScene, p);
+    m_doc->setModified();
+
+    /* Live: the Programming tab's preview re-resolves (paletteValueChanged,
+       which leaves the look list alone, so the slider is not rebuilt under
+       the mouse), running scenes using the look re-aim, and the studio and
+       rig view are told their scene changed. */
+    emit paletteValueChanged(m_paletteId);
+    foreach (Function *f, m_doc->functions())
+    {
+        Scene *sc = qobject_cast<Scene *>(f);
+        if (sc == nullptr || !(sc->palettes().contains(m_paletteId) || sc->trialPalette() == m_paletteId))
+            continue;
+        if (sc->isRunning())
+            sc->requestReaim();
+        m_doc->notifyFunctionChanged(sc->id());
+    }
+}
+
+void LookEditor::slotAimDimWhenBlocked(bool on)
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Aim || p->dimWhenBlocked() == on)
+        return;
+    p->setDimWhenBlocked(on);
+    m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }
 
@@ -1632,8 +2033,103 @@ void LookEditor::slotSingleValueChanged(int v)
     if (p == NULL)
         return;
     p->setValue(v);
+    if (p->type() == QLCPalette::Gobo)
+    {
+        // The slot is picked for the type being browsed; the look is named
+        // after it (first pick, or changing this type's own pick), so the
+        // other types play their gobo of that name.
+        const int src = m_singleSourceCombo->currentIndex();
+        const Fixture *fxi = (src >= 0 && src < m_singleSources.size() && !m_singleSources.at(src).fixtures.isEmpty())
+                             ? m_doc->fixture(m_singleSources.at(src).fixtures.first()) : NULL;
+        const QString def = QLCPalette::definitionKey(fxi);
+        auto capName = [this](int value) {
+            if (m_singleChannel == NULL || value < 0)
+                return QString();
+            for (const QLCCapability *cap : m_singleChannel->capabilities())
+                if (value >= cap->min() && value <= cap->max())
+                    return cap->name();
+            return QString();
+        };
+        if (!def.isEmpty())
+        {
+            const QString was = capName(p->goboValues().value(def, -1));
+            const QString now = capName(v);
+            if (!now.isEmpty() && (p->goboName().isEmpty() || QLCPalette::sameGoboName(p->goboName(), was)))
+            {
+                p->setGoboName(now);
+                m_goboNameEdit->setText(now);
+            }
+            p->setGoboValue(def, v);
+        }
+        updateGoboMatches();
+    }
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
+}
+
+int LookEditor::goboValueForSource(const QLCPalette *p) const
+{
+    const int src = m_singleSourceCombo->currentIndex();
+    if (p == NULL || src < 0 || src >= m_singleSources.size() || m_singleSources.at(src).fixtures.isEmpty())
+        return -1;
+    return p->goboValueFor(m_doc->fixture(m_singleSources.at(src).fixtures.first()));
+}
+
+void LookEditor::slotGoboNameEdited()
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Gobo)
+        return;
+    const QString name = m_goboNameEdit->text().trimmed();
+    if (name == p->goboName())
+        return;
+    p->setGoboName(name);
+    updateGoboMatches();
+    m_doc->setModified();
+    emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::updateGoboMatches()
+{
+    // What each fixture type plays for this look: "Sharpy: Breakup (picked)",
+    // "XL-450: no gobo of that name -- ignores it".
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Gobo || !p->isGoboByName() || m_singleSources.isEmpty())
+    {
+        m_goboMatches->clear();
+        return;
+    }
+    QStringList lines;
+    for (const ChannelSource &src : m_singleSources)
+    {
+        const Fixture *fxi = src.fixtures.isEmpty() ? NULL : m_doc->fixture(src.fixtures.first());
+        const QLCPalette::GoboResolution r = p->resolveGobo(fxi);
+        const int v = r.value;
+        QString what;
+        if (r.how == QLCPalette::GoboAmbiguous)
+            what = tr("ambiguous (%1): ignores it; pick one on its wheel")
+                   .arg(r.candidates.join(QStringLiteral(" / ")));
+        else if (v < 0)
+            what = tr("no gobo of that name: ignores it");
+        else
+        {
+            QString cap;
+            for (const QLCCapability *c : src.channel->capabilities())
+                if (v >= c->min() && v <= c->max())
+                    cap = c->name();
+            switch (r.how)
+            {
+                case QLCPalette::GoboPicked: what = tr("%1 (picked for this type)").arg(cap); break;
+                case QLCPalette::GoboSingular: what = tr("%1 (by name, singular/plural)").arg(cap); break;
+                case QLCPalette::GoboPartial: what = tr("%1 (closest name)").arg(cap); break;
+                default: what = tr("%1 (by name)").arg(cap); break;
+            }
+        }
+        lines << tr("%1: %2").arg(src.label, what);
+    }
+    m_goboMatches->setText(lines.join(QLatin1Char('\n')));
 }
 
 QString LookEditor::slotPicture(QLCCapability *cap, QString *swapName) const
@@ -1706,6 +2202,15 @@ void LookEditor::slotSingleSourcePicked(int index)
         return;
     m_singleSourceKey = m_singleSources.at(index).key;
     m_singleChannel = m_singleSources.at(index).channel;
+    // A gobo by name: show this type's own slot for it.
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p != NULL && p->isGoboByName() && goboValueForSource(p) >= 0)
+    {
+        const bool was = m_loading;
+        m_loading = true;
+        m_singleSlider->setValue(goboValueForSource(p));
+        m_loading = was;
+    }
     fillSingleCapabilities(m_singleSlider->value());
     updateSinglePreview(m_singleSlider->value());
 }
@@ -2032,6 +2537,7 @@ void LookEditor::rebuildEffectDynWidget()
         ftLabels["rgb"]     = tr("RGB/LED Wash");
         ftLabels["dimmer"]  = tr("Dimmer");
         ftLabels["shutter"] = tr("Strobe/Shutter");
+        ftLabels["matrix"]  = tr("Pixel matrix");
         QStringList human;
         for (const QString &t : tmpScript.fixtureTypes())
             human << ftLabels.value(t, t);
@@ -2935,28 +3441,24 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         p->clearEffectParamValues();
         carryOverParams(p, path);
     }
+    /* What the look keeps time with and how it spreads are the look's, not
+       the effect's: no script declares them, so carryOverParams() never
+       does, and trying another effect in the picker put the look back on
+       "As the look" with no spread ("when I set something on the speed
+       masters .. and then double click on the icon it resets those"). A
+       preset that pins one of them still wins. The one-shot length stays
+       with the effect it was set for. */
+    for (auto it = prevParams.constBegin(); it != prevParams.constEnd(); ++it)
+    {
+        const bool lookLevel = it.key() == QLatin1String("__speedMaster")
+                               || it.key().startsWith(SpreadLayer::paramName(""));
+        if (lookLevel && !p->effectParamValues().contains(it.key()))
+            p->setEffectParamValue(it.key(), it.value());
+    }
     // Wipe old input bindings since the effect changed.
     p->clearEffectInputBindings();
     maybeAutoName(p);
 
-    // Organize the palette FOLDER to mirror the picker hierarchy:
-    //   Palettes/Effect/<Category>/<Engine>/
-    // so browsing effect palettes reads the same as the script picker.
-    {
-        QString engineBase;
-        if (kind == EffectKindWled)
-            maybeAutoPath(p, QStringLiteral("WLED"), name);
-        else if (kind == EffectKindPreset)
-            engineBase = m_doc->effectScriptRunner()->presetCache()->preset(name).script;
-        else if (!name.isEmpty())
-            engineBase = EffectScriptCache::portableName(scache->scriptPath(name));
-        if (!engineBase.isEmpty())
-        {
-            const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(engineBase);
-            const QString engineDisplay = meta.displayName.isEmpty() ? engineBase : meta.displayName;
-            maybeAutoPath(p, scriptCategory(meta.fixtureTypes), engineDisplay);
-        }
-    }
 
     m_doc->setModified();
     emit paletteChanged(m_paletteId);

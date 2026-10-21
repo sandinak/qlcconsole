@@ -30,6 +30,7 @@ private slots:
     void initial();
     void slotTimeout();
     void itemClick();
+    void applicationIdentity();
 };
 
 #endif

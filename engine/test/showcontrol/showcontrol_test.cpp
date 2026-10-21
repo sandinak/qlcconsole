@@ -25,7 +25,11 @@
 #include <cstring>
 
 #define private public
+#include "timecodesource.h"
+#include "ioplugincache.h"
+#include "qlcioplugin.h"
 #include "mastertimer.h"
+#include "qlcfile.h"
 #undef private
 #include "inputoutputmap.h"
 #include "functionparent.h"
@@ -413,9 +417,126 @@ void ShowControl_Test::mscFromAPatchedInputFiresTheCue()
         timer->timerTick();
     QCOMPARE(c->currentStepIndex(), 1);
 
+    // Said to be MSC, from the universe it came in on; GO pressed here isn't.
+    sc->setMscEnabled(true);
+    QSignalSpy from(sc, &ShowControl::commandFrom);
+    emit m_doc->inputOutputMap()->inputSysExReceived(0, msc(1, 0x01, 0x01, "3"));
+    sc->execute({ ShowControl::Go, QString(), QString() });
+    QCOMPARE(from.count(), 2);
+    QCOMPARE(from.at(0).at(0).value<ShowControl::Source>(), ShowControl::Msc);
+    QCOMPARE(from.at(0).at(1).toUInt(), 0u);
+    QCOMPARE(from.at(1).at(0).value<ShowControl::Source>(), ShowControl::Local);
+    QCOMPARE(from.at(1).at(1).toUInt(), UINT_MAX);
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+
     c->stop(FunctionParent::master());
     for (int i = 0; i < 3; ++i)
         timer->timerTick();
+}
+
+/* MSC from one chosen input only -- the port, by name -- or from all. */
+void ShowControl_Test::mscOnlyOnTheChosenInput()
+{
+    QDir dir(QStringLiteral("../iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(!m_doc->ioPluginCache()->plugins().isEmpty());
+    QLCIOPlugin *stub = m_doc->ioPluginCache()->plugins().at(0);
+    const QStringList inputs = stub->inputs();
+    QVERIFY(inputs.size() >= 3);
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), inputs.at(0), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), inputs.at(1), 1));
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    QSignalSpy from(sc, &ShowControl::commandFrom);
+
+    // All inputs: either one.
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 0, 1 }));
+    emit iom->inputSysExReceived(0, msc(1, 0x01, 0x01, "1"));
+    emit iom->inputSysExReceived(1, msc(1, 0x01, 0x01, "2"));
+    QCOMPARE(from.count(), 2);
+
+    // The second port only: the first is ignored.
+    sc->setMscInput(stub->name(), inputs.at(1));
+    QVERIFY(!sc->acceptsMscFrom(0));
+    QVERIFY(sc->acceptsMscFrom(1));
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 1 }));
+    emit iom->inputSysExReceived(0, msc(1, 0x01, 0x01, "3"));
+    QCOMPARE(from.count(), 2);
+    emit iom->inputSysExReceived(1, msc(1, 0x01, 0x01, "3"));
+    QCOMPARE(from.count(), 3);
+    QCOMPARE(from.last().at(1).toUInt(), 1u);
+
+    // A port not patched in this show: nothing answered, no fall-back to all.
+    sc->setMscInput(stub->name(), inputs.at(2));
+    QVERIFY(sc->mscUniverses().isEmpty());
+    emit iom->inputSysExReceived(0, msc(1, 0x01, 0x01, "1"));
+    emit iom->inputSysExReceived(1, msc(1, 0x01, 0x01, "1"));
+    QCOMPARE(from.count(), 3);
+
+    // Moved to another universe, the port is still the port.
+    QVERIFY(iom->setInputPatch(3, stub->name(), inputs.at(2), 2));
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 3 }));
+    emit iom->inputSysExReceived(3, msc(1, 0x01, 0x01, "1"));
+    QCOMPARE(from.count(), 4);
+
+    sc->setMscInput(QString(), QString());
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 0, 1, 3 }));
+
+    c->stop(FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+}
+
+/* The timecode source is a universe of the show's patch: saved with it,
+   back on load, and one naming no universe of the show is "any". */
+void ShowControl_Test::theTimecodeSourceIsSavedWithTheShow()
+{
+    auto save = [](Doc *doc) {
+        QByteArray xml;
+        QXmlStreamWriter w(&xml);
+        w.writeStartDocument();
+        doc->saveXML(&w);
+        w.writeEndDocument();
+        return xml;
+    };
+    auto load = [](Doc *doc, const QByteArray &xml) {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        return doc->loadXML(r, true);
+    };
+
+    // "Any" isn't written at all.
+    QVERIFY(!save(m_doc).contains("<Timecode"));
+
+    m_doc->timecodeSource()->setSourceUniverse(2);
+    const QByteArray xml = save(m_doc);
+    QVERIFY2(xml.contains("<Timecode Source=\"2\"/>"), xml.constData());
+
+    Doc other(this);
+    QSignalSpy changed(other.timecodeSource(), &TimecodeSource::sourceUniverseChanged);
+    QVERIFY(load(&other, xml));
+    QCOMPARE(other.timecodeSource()->sourceUniverse(), qint32(2));
+    QCOMPARE(changed.count(), 1);           // the chip and Connections follow
+
+    // A new show starts on "any".
+    other.clearContents();
+    QCOMPARE(other.timecodeSource()->sourceUniverse(), qint32(-1));
+
+    // A universe this show doesn't have: ignored.
+    QByteArray bad = xml;
+    bad.replace("<Timecode Source=\"2\"/>", "<Timecode Source=\"99\"/>");
+    Doc third(this);
+    QVERIFY(load(&third, bad));
+    QCOMPARE(third.timecodeSource()->sourceUniverse(), qint32(-1));
+    bad.replace("<Timecode Source=\"99\"/>", "<Timecode Source=\"x\"/>");
+    Doc fourth(this);
+    QVERIFY(load(&fourth, bad));
+    QCOMPARE(fourth.timecodeSource()->sourceUniverse(), qint32(-1));
 }
 
 void ShowControl_Test::oscIsDecoded()
@@ -432,6 +553,7 @@ void ShowControl_Test::oscIsDecoded()
     QCOMPARE(r.list, QString());
 
     QCOMPARE(one(osc("/go", 12.5f)).cue, QString("12.5"));
+    QCOMPARE(one(osc("/go", 4.2f)).cue, QString("4.2"));     // not 4.199999809
     QCOMPARE(one(osc("/go", 7)).cue, QString("7"));
     QCOMPARE(one(osc("/go", QString("A1"))).cue, QString("A1"));
     QCOMPARE(one(osc("/go/3")).cue, QString("3"));
@@ -473,8 +595,11 @@ void ShowControl_Test::oscFiresTheCue()
     other->setCueListNumber("2");
     m_doc->showControl()->setMainCueList(c->id());
 
+    QSignalSpy from(m_doc->showControl(), &ShowControl::commandFrom);
     QCOMPARE(m_doc->showControl()->handleOsc(osc("/cue/3/start")), 1);
     QCOMPARE(m_doc->showControl()->handleOsc(osc("/list/2/go")), 1);
+    QCOMPARE(from.count(), 2);
+    QCOMPARE(from.at(0).at(0).value<ShowControl::Source>(), ShowControl::Osc);
     for (int i = 0; i < 3; ++i)
         timer->timerTick();
     QCOMPARE(c->currentStepIndex(), 2);
@@ -595,6 +720,306 @@ void ShowControl_Test::standbyIsWhatGoPlaysNext()
 
     c->stop(FunctionParent::master());
     tick();
+}
+
+/*****************************************************************************
+ * Sub-cues (SUBCUES_DESIGN.md P3): 4.2 by number, /subgo, /subback, LOAD
+ *****************************************************************************/
+
+Chaser *ShowControl_Test::makeSubCueList(Chaser **inner)
+{
+    Chaser *in = makeList(3, "Inner");
+    Chaser *list = makeList(3, "Main");
+    ChaserStep step(in->id());
+    step.subCues = ChaserStep::SubGo;
+    list->replaceStep(step, 1);
+    // Two chases: name the main one, as a show with sub-cues has to.
+    m_doc->showControl()->setMainCueList(list->id());
+    if (inner != nullptr)
+        *inner = in;
+    return list;
+}
+
+void ShowControl_Test::stopAll()
+{
+    for (Function *f : m_doc->functions())
+        f->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        m_doc->masterTimer()->timerTick();
+}
+
+void ShowControl_Test::aSubCueIsFoundByNumber()
+{
+    Chaser *inner = nullptr;
+    Chaser *list = makeSubCueList(&inner);
+    QCOMPARE(ShowControl::cueName(list, 1, -1), QString("2"));
+    QCOMPARE(ShowControl::cueName(list, 1, 1), QString("2.2"));
+
+    int step = -1, sub = -1;
+    QVERIFY(list->findCueOrSubCue("2.2", &step, &sub));
+    QCOMPARE(step, 1);
+    QCOMPARE(sub, 1);
+
+    // A main cue numbered "2.1" wins over sub-cue 1 of cue 2.
+    ChaserStep third = list->steps().at(2);
+    third.cueNumber = "2.1";
+    list->replaceStep(third, 2);
+    QVERIFY(list->findCueOrSubCue("2.1", &step, &sub));
+    QCOMPARE(step, 2);
+    QCOMPARE(sub, -1);
+
+    // A sub-cue with a number of its own answers to it.
+    ChaserStep own = inner->steps().at(2);
+    own.cueNumber = "2.75";
+    inner->replaceStep(own, 2);
+    QVERIFY(list->findCueOrSubCue("2.75", &step, &sub));
+    QCOMPARE(step, 1);
+    QCOMPARE(sub, 2);
+    QCOMPARE(ShowControl::cueName(list, 1, 2), QString("2.75"));
+}
+
+void ShowControl_Test::goASubCueByNumberPlaysItsCueFirst()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    Chaser *inner = nullptr;
+    Chaser *list = makeSubCueList(&inner);
+    ShowControl *sc = m_doc->showControl();
+    QSignalSpy said(sc, &ShowControl::commandHandled);
+    auto tick = [timer]() { for (int i = 0; i < 3; ++i) timer->timerTick(); };
+
+    // From stopped: cue 2, held at its second sub-cue.
+    QVERIFY(sc->execute({ ShowControl::Go, "2.2", QString() }));
+    tick();
+    QVERIFY(list->isRunning());
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 1);
+    QVERIFY(inner->isSubCueHeld());
+    QVERIFY(said.last().at(0).toString().startsWith("GO cue 2.2"));
+
+    // Its cue playing: just the sub-cue.
+    QVERIFY(sc->execute({ ShowControl::Go, "2.3", QString() }));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 2);
+
+    // Another cue playing: back to cue 2 first, then the sub-cue.
+    QVERIFY(sc->execute({ ShowControl::Go, "3", QString() }));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 2);
+    QVERIFY(!inner->isRunning());
+    QVERIFY(sc->execute({ ShowControl::Go, "2.1", QString() }));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 0);
+
+    // Over OSC, QLab's way.
+    QCOMPARE(sc->handleOsc(osc("/cue/2.3/go")), 1);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 2);
+    QCOMPARE(sc->handleOsc(osc("/go", 2.2f)), 1);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 1);
+
+    // Paused: a GO by number carries on from there -- a main cue, and a
+    // sub-cue (the unpause used to take the GO's place, and it was lost).
+    list->setPause(true);
+    tick();
+    QVERIFY(sc->execute({ ShowControl::Go, "3", QString() }));
+    tick();
+    QVERIFY(!list->isPaused());
+    QCOMPARE(list->currentStepIndex(), 2);
+    QVERIFY(sc->execute({ ShowControl::Go, "2.2", QString() }));
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 1);
+    list->setPause(true);
+    tick();
+    QVERIFY(sc->execute({ ShowControl::Go, "2.3", QString() }));
+    tick();
+    QVERIFY(!list->isPaused());
+    QCOMPARE(list->currentSubCueIndex(), 2);
+
+    // No such sub-cue.
+    QVERIFY(!sc->execute({ ShowControl::Go, "2.9", QString() }));
+    QCOMPARE(said.last().at(1).toBool(), false);
+
+    stopAll();
+}
+
+void ShowControl_Test::oscSubGoAndSubBackAreDecoded()
+{
+    auto one = [](const QByteArray &d) {
+        const QList<ShowControl::Request> l = ShowControl::parseOsc(d);
+        return l.count() == 1 ? l.first() : ShowControl::Request{ ShowControl::Reset, "none", "none" };
+    };
+
+    QCOMPARE(one(osc("/subgo")).command, ShowControl::SubGo);
+    QCOMPARE(one(osc("/subback")).command, ShowControl::SubBack);
+    QCOMPARE(one(osc("/SubGo")).command, ShowControl::SubGo);
+    QCOMPARE(one(osc("/qlcconsole/subgo")).command, ShowControl::SubGo);
+    // A button's 1 isn't a cue: Sub GO steps the cue playing.
+    QCOMPARE(one(osc("/subgo", 1.0f)).cue, QString());
+    QCOMPARE(one(osc("/subback", 1)).cue, QString());
+
+    const ShowControl::Request r = one(osc("/list/2/subgo"));
+    QCOMPARE(r.command, ShowControl::SubGo);
+    QCOMPARE(r.list, QString("2"));
+
+    QCOMPARE(ShowControl::commandName(ShowControl::SubGo), QString("SUB GO"));
+    QCOMPARE(ShowControl::commandName(ShowControl::SubBack), QString("SUB BACK"));
+}
+
+void ShowControl_Test::oscSubGoAndSubBackStepTheCuePlaying()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    Chaser *list = makeSubCueList();
+    ShowControl *sc = m_doc->showControl();
+    QSignalSpy said(sc, &ShowControl::commandHandled);
+    QSignalSpy from(sc, &ShowControl::commandFrom);
+    auto tick = [timer]() { for (int i = 0; i < 3; ++i) timer->timerTick(); };
+
+    // Stopped: nothing to step.
+    QCOMPARE(sc->handleOsc(osc("/subgo")), 0);
+    QVERIFY(said.last().at(0).toString().contains("isn't playing"));
+
+    // Cue 1 is a scene: no sub-cues.
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 0);
+    QCOMPARE(sc->handleOsc(osc("/subgo")), 0);
+    QVERIFY(said.last().at(0).toString().contains("cue 1 has no sub-cues"));
+
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 0);
+
+    QCOMPARE(sc->handleOsc(osc("/subgo")), 1);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 1);
+    QVERIFY(said.last().at(0).toString().startsWith("SUB GO cue 2.2"));
+    QCOMPARE(from.last().at(0).value<ShowControl::Source>(), ShowControl::Osc);
+
+    QCOMPARE(sc->handleOsc(osc("/subgo")), 1);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 2);
+
+    // The last: Sub GO does nothing, and says so.
+    QCOMPARE(sc->handleOsc(osc("/subgo")), 0);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 2);
+    QVERIFY(said.last().at(0).toString().contains("end of 2"));
+
+    QCOMPARE(sc->handleOsc(osc("/subback")), 1);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 1);
+    QCOMPARE(sc->handleOsc(osc("/subback")), 1);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 0);
+    QCOMPARE(sc->handleOsc(osc("/subback")), 0);
+    QVERIFY(said.last().at(0).toString().contains("first sub-cue"));
+
+    // GO still goes on to cue 3, sub-cues left or not.
+    QCOMPARE(sc->handleOsc(osc("/go")), 1);
+    tick();
+    QCOMPARE(list->currentStepIndex(), 2);
+
+    // In a bundle, as one Network cue can send them.
+    QCOMPARE(sc->handleOsc(bundle({ osc("/cue/2/go") })), 1);
+    tick();
+    QCOMPARE(sc->handleOsc(bundle({ osc("/subgo"), osc("/subgo") })), 2);
+    tick();
+    QVERIFY(list->currentSubCueIndex() >= 1);
+
+    stopAll();
+}
+
+void ShowControl_Test::mscGoAndLoadASubCue()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    Chaser *list = makeSubCueList();
+    ShowControl *sc = m_doc->showControl();
+    auto tick = [timer]() { for (int i = 0; i < 3; ++i) timer->timerTick(); };
+
+    ShowControl::Request r;
+    QVERIFY(ShowControl::parseMsc(msc(1, 0x01, 0x01, "2.2"), 1, &r));
+    QCOMPARE(r.cue, QString("2.2"));
+
+    // MSC has no Sub GO: a numbered GO covers it.
+    emit m_doc->inputOutputMap()->inputSysExReceived(0, msc(1, 0x01, 0x01, "2.2"));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 1);
+
+    // LOAD 2.3, then a GO with no cue plays it.
+    emit m_doc->inputOutputMap()->inputSysExReceived(0, msc(1, 0x01, 0x05, "2.3"));
+    QCOMPARE(sc->loadedStep(list->id()), 1);
+    QCOMPARE(sc->loadedSubCue(list->id()), 2);
+    tick();
+    QCOMPARE(list->currentSubCueIndex(), 1);    // LOAD doesn't fire
+    emit m_doc->inputOutputMap()->inputSysExReceived(0, msc(1, 0x01, 0x01, QByteArray()));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 2);
+
+    stopAll();
+}
+
+void ShowControl_Test::loadASubCuePutsItOnStandby()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    Chaser *list = makeSubCueList();
+    ShowControl *sc = m_doc->showControl();
+    QSignalSpy said(sc, &ShowControl::commandHandled);
+    auto tick = [timer]() { for (int i = 0; i < 3; ++i) timer->timerTick(); };
+
+    QCOMPARE(sc->standbySubCue(list), -1);
+    QCOMPARE(sc->handleOsc(osc("/cue/2.3/load")), 1);
+    QCOMPARE(sc->standbyStep(list), 1);
+    QCOMPARE(sc->standbySubCue(list), 2);
+    tick();
+    QVERIFY(!list->isRunning());
+
+    // GO from stopped: cue 2, at that sub-cue; standby used up.
+    QCOMPARE(sc->handleOsc(osc("/go")), 1);
+    QVERIFY(said.last().at(0).toString().startsWith("GO cue 2.3"));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 2);
+    QCOMPARE(sc->loadedStep(list->id()), -1);
+    QCOMPARE(sc->loadedSubCue(list->id()), -1);
+    QCOMPARE(sc->standbySubCue(list), -1);
+    QCOMPARE(sc->standbyStep(list), 2);         // next: cue 3
+
+    // A main cue LOADed after a sub-cue replaces it.
+    QVERIFY(sc->execute({ ShowControl::Load, "2.1", QString() }));
+    QVERIFY(sc->execute({ ShowControl::Load, "1", QString() }));
+    QCOMPARE(sc->standbyStep(list), 0);
+    QCOMPARE(sc->standbySubCue(list), -1);
+
+    // RESET forgets it.
+    QVERIFY(sc->execute({ ShowControl::Load, "2.2", QString() }));
+    QVERIFY(sc->execute({ ShowControl::Reset, QString(), QString() }));
+    QCOMPARE(sc->loadedSubCue(list->id()), -1);
+
+    stopAll();
+}
+
+void ShowControl_Test::stopASubCueOnlyWhenItsPlaying()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    Chaser *list = makeSubCueList();
+    ShowControl *sc = m_doc->showControl();
+    auto tick = [timer]() { for (int i = 0; i < 3; ++i) timer->timerTick(); };
+
+    QVERIFY(sc->execute({ ShowControl::Go, "2.3", QString() }));
+    tick();
+    QVERIFY(!sc->execute({ ShowControl::Stop, "2.2", QString() }));
+    QVERIFY(list->isRunning());
+    QVERIFY(sc->execute({ ShowControl::Stop, "2.3", QString() }));
+    tick();
+    QVERIFY(!list->isRunning());
+
+    stopAll();
 }
 
 QTEST_MAIN(ShowControl_Test)

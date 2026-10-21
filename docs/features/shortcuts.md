@@ -13,7 +13,10 @@
 | ⌘L | Show-mode lock |
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |
-| ⇧⌘1 … ⇧⌘8 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Programming, Shows, Virtual Console, Simple Desk |
+| ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
+| ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
+| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Programming, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
+| Space (in the Run tab) | **GO** for the list the Run tab plays |
 | ⇧⌘M | Lighting Studio |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
 | ⌘W | Close the window in front (Rig Overview, a broken-out view…) |
@@ -52,6 +55,11 @@ editor's last change, a selected bar's ring rotates it (⇧ snaps to 15°).
 **In the Rig Overview / Angled view:** drag to swing, ⇧-drag to pan, scroll
 to zoom, ⇧⌘R or ⌘W to close.
 
+**Focus mode** (⌘⌥F, or View + Menu on the controller): ] / [ next and
+previous head, arrows nudge 0.1° (⇧ for 1°), + / − step size, Return save,
+Backspace revert, 0 zero, R the other reference, ⌘Z undo the last save, Esc
+leave. See [Focus mode](lighting-studio.md#focus-mode).
+
 ## Programming
 
 | Keys / mouse | Does |
@@ -61,6 +69,28 @@ to zoom, ⇧⌘R or ⌘W to close.
 | Drag a palette onto **Looks** | Add it to the look |
 | ⌘Z | Undo the last change to the open scene (else the last bundle stamped) |
 | Double-click a scene / function | Open it on the canvas |
+
+## Show Tree
+
+| Keys / mouse | Does |
+|---|---|
+| Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it ([Adding layers](show-tree.md#adding-layers)) |
+| **⌥ held as you drop** groups | A layer for each group (a group set: each member) |
+| **⇧ held as you drop** groups on a layer | A child layer on them ([Child layers](show-tree.md#child-layers)) |
+| Drop below the tree's last row | A new layer in the selected cue |
+| **Return** / double-click (in the Library) | What is selected there goes to the tree's selection, as a drop would ([Adding layers](show-tree.md#adding-layers)) |
+| **⌘F**, or **/** in the tree | To the Library's filter; type, then Return adds the first match |
+| **Return** / **F2** (in the tree) | Rename the row in place ([Renaming](show-tree.md#renaming)) |
+| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
+| ⌥-click **+ Layer** | A layer for each group selected in the Library |
+| Drag a cue onto another cue | Move it there; with **⌥**, include it |
+| Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
+| **:** (in the tree) | To the command line at the bottom ([The command line](show-tree.md#the-command-line)) |
+| **Esc** (in the command line) | Close the help, then back to the tree |
+| **Tab** (in the command line) | Complete the word; again, the next match |
+| `help` / `?` (in the command line) | Every word, or `help <word>` with examples |
+| ↑ / ↓ (in the command line) | Earlier / later commands |
+| ⌘Z / ⇧⌘Z | Undo / Redo in the tree (in the command line ⌘Z undoes typing: type `undo`) |
 
 ## Connections
 

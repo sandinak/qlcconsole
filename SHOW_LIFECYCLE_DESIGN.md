@@ -1,16 +1,19 @@
-# Show Lifecycle — Construction / Test-Validate / Production
+# Show Lifecycle — Construction / Test-Validate / Run
 
 Companion to the ongoing "make this cohesive, not haphazard" cleanup pass
 (2026-08-14 discussion). Names the workflow phases a show actually moves
 through and maps today's tabs/tools onto them, so future refinement work has
 a north star instead of picking at whatever's nearest. Directly informs (but
 doesn't replace) the "Look" backlog item — Look's *scope* metadata serves
-Construction, its *state-as-base-for-effects* idea serves Production.
+Construction, its *state-as-base-for-effects* idea serves Run.
 
 Status: **DESIGN ONLY** — the model below is settled, and the mechanism for
 disabling real output during Construction turned out to already exist
 (**Blind**, see below). What's still unbuilt is surfacing the rolled-up
 connected/simulated state and defaulting Blind sensibly.
+
+*2026-10-16: the third phase, called "Production" here before, is **Run**
+(SHOW_TREE_DESIGN.md D1: "Production" is now the top of the Show Tree).*
 
 ---
 
@@ -21,7 +24,7 @@ connected/simulated state and defaulting Blind sensibly.
 - **Test/Validate** — connected to the rig in a fixed space. Matching what
   was built (esp. **Lighting Studio**, the 2D/3D visualizer) to physical
   reality before it travels.
-- **Production** — running the rig on the road. Lighting Studio probably
+- **Run** — running the rig on the road. Lighting Studio probably
   isn't needed here, but nice to have.
 
 ---
@@ -59,7 +62,7 @@ three *meaningful combinations* of these two axes, not a state of their own:
 | | Design | Operate |
 |---|---|---|
 | **Offline / simulated** | **Construction** | *(rehearsal — real cues, no hardware; rare, not a priority to support explicitly)* |
-| **Connected to rig** | **Test/Validate** | **Production** |
+| **Connected to rig** | **Test/Validate** | **Run** |
 
 ---
 
@@ -109,9 +112,9 @@ around this framing:
 **AND** `InputOutputMap::outputInhibited() == false`. Blind engaged should
 read as "simulated," regardless of what's physically plugged in.
 
-**Production tab mapping correction:** Blind does **not** belong in the
-Production tools list below — it's forced off and disabled in Operate.
-Blackout and Panic remain live-safe Production tools; Blind is
+**Run tab mapping correction:** Blind does **not** belong in the
+Run tools list below — it's forced off and disabled in Operate.
+Blackout and Panic remain live-safe Run tools; Blind is
 Construction/Design-only.
 
 ---
@@ -128,12 +131,12 @@ Construction/Design-only.
   draw. Today this phase's only real "path" is a human reading
   `RIG_TEST_PLAN.md` — everything else is scattered, purpose-built tools with
   no shared home.
-- **Production** — Simple Desk, the Operate-mode toolbar (Blackout/Panic —
+- **Run** — Simple Desk, the Operate-mode toolbar (Blackout/Panic —
   **not** Blind, which is Design-only and force-disabled in Operate), the
   footer safety chips (MTC/Load/Power/Dangle).
 - **Spans phases** — Lighting Studio (heavy in Validate, optional-but-nice in
-  Production, per Branson); the footer chips (Validate *and* Production both
-  want live truth, not just Production).
+  Run, per Branson); the footer chips (Validate *and* Run both
+  want live truth, not just Run).
 
 ---
 

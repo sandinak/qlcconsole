@@ -20,6 +20,7 @@
 #include <QCoreApplication>
 #include <QXmlStreamReader>
 #include <QDebug>
+#include <QSaveFile>
 #include <QList>
 #include <QSet>
 
@@ -174,15 +175,22 @@ bool QLCFixtureDefCache::storeFixtureDef(QString filename, QString data)
 {
     QDir userFolder = userDefinitionDirectory();
 
-    QFile file(userFolder.absoluteFilePath(filename));
+    /* Written whole or not at all, and only THIS file flushed to disk.
+       A global sync() used to follow, which flushes every mounted volume --
+       a Time Machine backup over SMB, an external disk, another build's
+       output -- and could stall for minutes on a busy machine (it timed the
+       storeDef test out at 300 s under load). */
+    QSaveFile file(userFolder.absoluteFilePath(filename));
     if (file.open(QIODevice::WriteOnly | QIODevice::Text) == false)
         return false;
 
-    file.write(data.toUtf8());
-    file.close();
-#ifdef Q_OS_UNIX
-    sync();
-#endif
+    if (file.write(data.toUtf8()) < 0)
+    {
+        file.cancelWriting();
+        return false;
+    }
+    if (file.commit() == false)
+        return false;
 
     // reload user definitions
     load(userDefinitionDirectory());
@@ -300,8 +308,11 @@ int QLCFixtureDefCache::loadMapManufacturer(QXmlStreamReader *doc, QString manuf
 
             if (doc->attributes().hasAttribute("n"))
             {
-                defFile = QString("%1%2%3%4")
-                            .arg(manufacturer).arg(QDir::separator())
+                // '/', not QDir::separator(): on Windows that is '\' and
+                // the path came out mixed (C:/.../Fixtures\Make\Make-Model.qxf),
+                // so it never equalled the same file named the Qt way.
+                defFile = QString("%1/%2%3")
+                            .arg(manufacturer)
                             .arg(doc->attributes().value("n").toString()).arg(KExtFixture);
                 //qDebug() << "Manufacturer" << spacedManufacturer << "file" << defFile;
             }
@@ -499,6 +510,11 @@ bool QLCFixtureDefCache::cacheForShows(const QLCFixtureDef *def) const
         || def->model() == QLatin1String("Generic"))
         return false;
     const QString from = def->definitionSourceFile();
+    /* A show's own copy (embedded in it) is not this computer's: caching it
+       would quietly make it the computer's copy for every other show. */
+    if (!m_showCopiesDir.isEmpty()
+        && QFileInfo(from).absoluteFilePath().startsWith(QDir(m_showCopiesDir).absolutePath() + QLatin1Char('/')))
+        return false;
     const QString to = showCacheFile(def->manufacturer(), def->model());
     if (from.isEmpty() || QFileInfo(from).absoluteFilePath() == QFileInfo(to).absoluteFilePath())
         return QFile::exists(to);
@@ -518,6 +534,30 @@ bool QLCFixtureDefCache::cacheForShows(const QLCFixtureDef *def) const
     dst.close();
     QFile::remove(to);
     return QFile::rename(to + QStringLiteral(".part"), to);
+}
+
+QLCFixtureDef *QLCFixtureDefCache::substitute(QLCFixtureDef *def)
+{
+    if (def == nullptr)
+        return nullptr;
+    for (int i = 0; i < m_defs.size(); ++i)
+    {
+        QLCFixtureDef *existing = m_defs.at(i);
+        if (existing != def && existing->manufacturer() == def->manufacturer()
+            && existing->model() == def->model())
+        {
+            m_defs[i] = def;
+            return existing;
+        }
+    }
+    if (!m_defs.contains(def))
+        m_defs << def;
+    return nullptr;
+}
+
+bool QLCFixtureDefCache::take(QLCFixtureDef *def)
+{
+    return m_defs.removeAll(def) > 0;
 }
 
 bool QLCFixtureDefCache::loadFromShowCache(const QString &manufacturer, const QString &model)

@@ -32,6 +32,8 @@ class QXmlStreamWriter;
 class SceneValue;
 class Doc;
 class Scene;
+class QLCChannel;
+class QLCCapability;
 
 /** @addtogroup engine Engine
  * @{
@@ -125,6 +127,24 @@ public:
      *  just "Palettes/") means the Palettes category root. */
     QString path() const;
     void setPath(const QString& path);
+
+    /** A palette folder path as older shows stored it — the palette's OWN
+     *  TYPE as the first folder ("Palettes/Color/01-Song/" for a Color
+     *  palette, an effect auto-filed as "Palettes/Effect/<Category>/<Engine>/")
+     *  — made type-independent ("Palettes/01-Song/"; an auto-filed effect is
+     *  unfiled, ""). A first folder named like ANOTHER type, or like none
+     *  ("Colour"), is a user folder and is kept. Applied on load only, to
+     *  palettes without the Folders="1" marker. Paths not under "Palettes/"
+     *  are returned unchanged. */
+    static QString migrateLegacyPath(const QString &path, PaletteType type, bool anyTypeFolder = false);
+    /** After a show's palettes are loaded (Doc::loadXML): when every
+     *  unmarked palette path has a type's name first -- the old per-type
+     *  layout throughout -- a first folder named like ANY type is dropped
+     *  (an effect dragged under Color/01-Song joins 01-Song). Otherwise
+     *  only each palette's own type name was (loadXML). */
+    static void migrateLegacyPaths(const QList<QLCPalette *> &palettes);
+    /** Whether @p name is a palette type's name as typeToString() gives it. */
+    static bool isTypeFolderName(const QString &name);
 
     /** Get/Set the value(s) for this Palette.
      *  Some types like Position will store 2 values */
@@ -221,6 +241,12 @@ private:
     PaletteType m_type;
     QString m_name;
     QString m_path;
+    /** The path as loaded without the Folders marker, until the show is
+     *  loaded (migrateLegacyPaths()); null otherwise. */
+    QString m_unmarkedPath;
+    /** Loaded with the Folders marker: the show was saved with shared
+     *  folders (until migrateLegacyPaths()). */
+    bool m_loadedMarked = false;
     QVariantList m_values;
 
     /************************************************************************
@@ -309,8 +335,135 @@ public:
     /** Associate this palette with a StageTarget (pass invalidId() to clear). */
     void setStageTargetId(quint32 id) { m_stageTargetId = id; }
 
+    /** Aim looks: "Dim lights that can't see the target". On, a head this
+     *  look points at its target with something solid on stage in the way
+     *  (a closed drape, a wall, a riser -- BeamOcclusion) has its dimmer
+     *  taken down while it is blocked, and back when it is clear. Off (the
+     *  default) the look never touches a dimmer. */
+    bool dimWhenBlocked() const { return m_dimWhenBlocked; }
+    void setDimWhenBlocked(bool on) { m_dimWhenBlocked = on; }
+
 private:
     quint32 m_stageTargetId = UINT_MAX;
+    bool m_dimWhenBlocked = false;
+
+    /************************************************************************
+     * Gobo by name (type == Gobo only), SHOW_TREE_DESIGN.md §3A / §10.7
+     ************************************************************************/
+public:
+    /** The gobo this look means, by name ("Breakup"). Empty: the look is a
+     *  plain DMX value() on every fixture's gobo channel (as it always was).
+     *  Named, it resolves per fixture definition: goboValueFor(). */
+    QString goboName() const { return m_goboName; }
+    void setGoboName(const QString &name) { m_goboName = name; }
+    bool isGoboByName() const { return m_type == Gobo && !m_goboName.isEmpty(); }
+
+    /** The slot picked by hand for a fixture definition (its
+     *  definitionKey()): wins over the name match. */
+    QMap<QString, int> goboValues() const { return m_goboValues; }
+    void setGoboValue(const QString &definition, int value) { m_goboValues[definition] = value; }
+    void removeGoboValue(const QString &definition) { m_goboValues.remove(definition); }
+    void setGoboValues(const QMap<QString, int> &values) { m_goboValues = values; }
+
+    /** "Manufacturer/Model": what goboValues() are keyed by. */
+    static QString definitionKey(const Fixture *fixture);
+
+    /** How a Gobo look found its slot on a fixture's wheel. */
+    enum GoboMatch
+    {
+        GoboNoMatch = 0,    //!< nothing of that name: the fixture ignores it
+        GoboPicked,         //!< the slot picked for its type (goboValues())
+        GoboRaw,            //!< unnamed: value() as it always was
+        GoboExact,          //!< same name (case, space, '-' and '_' ignored)
+        GoboSingular,       //!< "Dot" = "Dots" = "Gobo 3 Dots"
+        GoboPartial,        //!< the one slot whose name starts with/contains it
+        GoboAmbiguous       //!< a tier found several: not guessed, ignored
+    };
+
+    struct GoboResolution
+    {
+        int value = -1;                 //!< DMX value, -1: not applied
+        GoboMatch how = GoboNoMatch;
+        QStringList candidates;         //!< GoboAmbiguous: the slots' names
+    };
+
+    /** What this Gobo look puts on @a fixture's gobo channel (the first
+     *  wheel) and how it got there. In order: the slot picked for its
+     *  definition; unnamed, value(); named, matchGoboName() over the wheel's
+     *  capabilities (its middle value). */
+    GoboResolution resolveGobo(const Fixture *fixture) const;
+    /** resolveGobo()'s value: -1 when the look doesn't apply to @a fixture. */
+    int goboValueFor(const Fixture *fixture) const { return resolveGobo(fixture).value; }
+
+    /** The name match, in tiers; the first tier that finds anything decides:
+     *  1. exact, ignoring case, spaces, '-' and '_' (a slot's name, or its
+     *     picture as "ClayPaky/gobo00006" -- the folder counts: Chauvet's
+     *     gobo00006 is other glass);
+     *  2. singular/plural, ignoring the word "gobo" and numbers ("Dot" =
+     *     "Dots" = "Gobo 3 Dots");
+     *  3. the one slot whose name starts with or contains it (3+ letters).
+     *  Tiers 2 and 3 compare slot names only, never pictures, and are not
+     *  tried for a picture name (one with a '/'). @a gobos: each slot's
+     *  names, its own name first, then its picture's. Returns the slot's
+     *  index, or -1: none (@a how GoboNoMatch), or more than one in the
+     *  deciding tier (GoboAmbiguous, their indexes in @a ambiguous). The
+     *  same name on several slots is one gobo (its first slot). */
+    static int matchGoboName(const QString &wanted, const QList<QStringList> &gobos,
+                             GoboMatch *how = nullptr, QList<int> *ambiguous = nullptr);
+    /** Whether two gobo names are the same gobo ("Break-up" = "breakup"). */
+    static bool sameGoboName(const QString &a, const QString &b);
+
+private:
+    QString m_goboName;
+    QMap<QString, int> m_goboValues;
+
+    /************************************************************************
+     * Colour wheels and colour macros (type == Color)
+     ************************************************************************/
+public:
+    /** A slot this Colour look means by NAME on colour-macro channels: a
+     *  mover's colour ring ("Red/Yellow-Chase", "RGB/Random-Chase") has
+     *  slots that are no single colour, so no colour picks them. Empty: the
+     *  look's colour picks each wheel's/macro's nearest slot (as it always
+     *  did). A channel with no slot of that name takes the nearest to the
+     *  look's colour instead. */
+    QString colourMacro() const { return m_colourMacro; }
+    void setColourMacro(const QString &name) { m_colourMacro = name; }
+
+    /** The one colour a wheel/macro slot shows: its picture colour, else the
+     *  colour its name says ("Blue", "Light Blue", "off" = black, "Open" =
+     *  white). Invalid for a slot that is no single colour: a split
+     *  ("Blue/Purple"), a chase, a rainbow, a random. */
+    static QColor capabilityColour(const QLCCapability *cap);
+
+    /** The DMX value (a slot's middle) of the slot on colour wheel/macro
+     *  @p ch nearest to @p col, or -1 when it has no slot of one colour.
+     *  Black is "off" where the channel has one (else the open/white slot);
+     *  a grey or white is the white slot; anything else is the slot of the
+     *  nearest HUE -- RGB distance alone made black green and pink white.
+     *  @p slotName, when given, gets the slot's name. */
+    static int nearestColourValue(const QLCChannel *ch, const QColor &col,
+                                  QString *slotName = nullptr);
+
+    /** The DMX value of the slot named @p name on @p ch (case, spaces, '-'
+     *  and '_' ignored; its middle), or -1. */
+    static int namedSlotValue(const QLCChannel *ch, const QString &name);
+
+    /** What this Colour look puts on colour wheel/macro channel @p ch: the
+     *  slot named colourMacro() if the channel has one, else the nearest to
+     *  @p col (nearestColourValue()). */
+    int colourSlotValue(const QLCChannel *ch, const QColor &col) const;
+
+    /** The colour wheel/macro channels a Colour look sets on @p fixture's
+     *  head @p head: the head's own when it mixes no colour (no RGB set, no
+     *  CMY); empty for a head that mixes its colour. @p head -1: the ones in
+     *  no head, which belong to the whole fixture (a ring channel left out
+     *  of every head) -- only on a fixture that mixes colour nowhere, since
+     *  an RGB par's "colour macros" channel would override its mix. */
+    static QList<quint32> colourSlotChannels(const Fixture *fixture, int head);
+
+private:
+    QString m_colourMacro;
 
     /************************************************************************
      * Effect script (type == Effect only)
@@ -384,6 +537,8 @@ public:
         { return m_effectParamValues; }
     void setEffectParamValue(const QString &name, double value)
         { m_effectParamValues[name] = value; }
+    void removeEffectParamValue(const QString &name)
+        { m_effectParamValues.remove(name); }
     /** Replace ALL numeric param overrides at once (used when stamping a
      *  preset). String/path params are cleared too so nothing stale lingers. */
     void setEffectParamValues(const QMap<QString, double> &values)

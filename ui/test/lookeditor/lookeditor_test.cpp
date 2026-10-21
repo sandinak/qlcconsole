@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QBuffer>
+#include <QXmlStreamWriter>
 #include <QScrollArea>
 #include <QToolButton>
 #include <QTextBrowser>
@@ -55,7 +57,12 @@
 
 #include "speedmasters.h"
 #include "spreadpreview.h"
+#include "linespreadpreview.h"
+#include "linespread.h"
+#include "stagetarget.h"
 #include "lookeditor_test.h"
+#include "qlcfixturedefcache.h"
+#include "qlcfile.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
 {
@@ -97,6 +104,94 @@ void LookEditor_Test::aDarkRedLookWarnsUntilItIsBrightened()
     ed.m_redSlider->setValue(20);
     QVERIFY(!ed.m_colorWarning->isHidden());
     QVERIFY(ed.m_colorWarning->text().contains("8%"));
+}
+
+void LookEditor_Test::aColourLookCanPickARingSlot()
+{
+    Doc doc(this);
+    QDir dir(TEST_FIXTURE_DIR);
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
+    QVERIFY(doc.fixtureDefCache()->load(dir));
+    QLCFixtureDef *def = doc.fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle (2 heads)");
+    QVERIFY(def != nullptr);
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Color, &doc);
+    look->setName("New Color");
+    look->setValue(QLCPalette::colorToString(QColor(Qt::blue), QColor()));
+    QVERIFY(doc.addPalette(look));
+
+    // No ring anywhere: no chooser.
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    QVERIFY(ed.m_macroRow->isHidden());
+
+    Fixture *f = new Fixture(&doc);
+    f->setFixtureDefinition(def, def->mode("12 Channel"));
+    QVERIFY(doc.addFixture(f));
+    ed.setPalette(QLCPalette::invalidId());
+    ed.setPalette(look->id());
+    QVERIFY(!ed.m_macroRow->isHidden());
+    QCOMPARE(ed.m_macroCombo->currentIndex(), 0);           // nearest to the colour
+    QList<QColor> colours;
+    const QStringList names = ed.colourSlotNames(&colours);
+    QVERIFY(names.contains("off"));
+    QVERIFY(names.contains("Red/Yellow-Chase"));
+    QVERIFY(names.contains("Blue/Purple"));                 // the wheel's split
+    QCOMPARE(names.count(QStringLiteral("Blue")), 1);       // wheel and ring: once
+    QVERIFY(!colours.at(names.indexOf("Red/Yellow-Chase")).isValid());
+
+    // A chase: the look names it, and is named after it.
+    const int chase = ed.m_macroCombo->findData("Red/Yellow-Chase");
+    QVERIFY(chase > 0);
+    ed.m_macroCombo->setCurrentIndex(chase);
+    emit ed.m_macroCombo->activated(chase);
+    QCOMPARE(look->colourMacro(), QString("Red/Yellow-Chase"));
+    QCOMPARE(look->name(), QString("Red/Yellow-Chase"));
+    QCOMPARE(look->rgbValue(), QColor(Qt::blue));           // the colour stays
+
+    // A colour slot sets the picker too.
+    const int yellow = ed.m_macroCombo->findData("Yellow");
+    ed.m_macroCombo->setCurrentIndex(yellow);
+    emit ed.m_macroCombo->activated(yellow);
+    QCOMPARE(look->colourMacro(), QString("Yellow"));
+    QCOMPARE(look->rgbValue(), QColor(Qt::yellow));
+
+    // Back to the colour alone.
+    ed.m_macroCombo->setCurrentIndex(0);
+    emit ed.m_macroCombo->activated(0);
+    QVERIFY(look->colourMacro().isEmpty());
+
+    // Shown as it is when opened again.
+    look->setColourMacro("RGB/Random-Chase");
+    ed.setPalette(QLCPalette::invalidId());
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_macroCombo->currentData().toString(), QString("RGB/Random-Chase"));
+}
+
+void LookEditor_Test::anAimLookCanDimLightsThatCannotSeeItsTarget()
+{
+    Doc doc(this);
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, &doc);
+    aim->setName("At the vocalist");
+    QVERIFY(doc.addPalette(aim));
+
+    LookEditor ed(&doc);
+    ed.setPalette(aim->id());
+    QCheckBox *dim = ed.findChild<QCheckBox *>("aimDimWhenBlocked");
+    QVERIFY(dim != nullptr);
+    // Off unless asked for: an existing show never changes.
+    QVERIFY(!dim->isChecked());
+    QVERIFY(!aim->dimWhenBlocked());
+    dim->setChecked(true);
+    QVERIFY(aim->dimWhenBlocked());
+
+    // Opened again, it shows what the look says.
+    LookEditor again(&doc);
+    again.setPalette(aim->id());
+    QVERIFY(again.findChild<QCheckBox *>("aimDimWhenBlocked")->isChecked());
+    again.findChild<QCheckBox *>("aimDimWhenBlocked")->setChecked(false);
+    QVERIFY(!aim->dimWhenBlocked());
 }
 
 /* A one-channel fixture type whose channel is a gobo wheel with the given
@@ -304,12 +399,12 @@ void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
     QCOMPARE(look->name(), QString("WLED Chase"));
     QCOMPARE(EffectBrowser::recent().first(), QString("3:Chase"));
 
-    // One with no port: the device runs it; the look gets WLED's controls.
-    browser->search()->setText("fireworks");
-    QListWidgetItem *fireworks = rowNamed("Fireworks", "WLED");
-    QVERIFY(fireworks != nullptr);
-    emit browser->list()->itemClicked(fireworks);
-    QCOMPARE(look->wledEffect(), QString("Fireworks"));
+    // One with no port (a 2D one): the device runs it; the look gets WLED's controls.
+    browser->search()->setText("game of life");
+    QListWidgetItem *life = rowNamed("Game Of Life", "WLED");
+    QVERIFY(life != nullptr);
+    emit browser->list()->itemClicked(life);
+    QCOMPARE(look->wledEffect(), QString("Game Of Life"));
     QVERIFY(look->scriptPath().endsWith("wled-device.js"));
 
     // An ordinary effect is not a WLED one.
@@ -396,6 +491,27 @@ void LookEditor_Test::previewsShowWhatEachEffectDoes()
     foreach (const QColor &c, amber.lights)
         lit += (c.red() > 60 && c.blue() < c.red()) ? 1 : 0;
     QVERIFY2(lit > 0, "amber pulse should light amber");
+
+    // A matrix effect is shown on a pixel box -- RGB rows and white rows --
+    // and a strobe hit lights the white rows too.
+    const EffectBrowser::Preview bars = browser->previewFrame(cache->scriptPath("Matrix Bars"));
+    QCOMPARE(bars.kind, EffectBrowser::Preview::Matrix);
+    QCOMPARE(bars.cols * bars.rows, bars.lights.size());
+    QVERIFY(bars.rows > 1);
+    const QString strobePath = cache->scriptPath("Matrix Strobe");
+    QCOMPARE(browser->previewFrame(strobePath).kind, EffectBrowser::Preview::Matrix);
+    QVERIFY(!browser->m_runs.value(strobePath).isNull());
+    bool whiteRowLit = false;
+    for (int k = 0; k < 40 && !whiteRowLit; ++k)
+    {
+        // Row 1 is a white row; a hit is a few hundredths of a second in.
+        const EffectBrowser::Preview strobe = browser->previewWith(browser->m_runs.value(strobePath).data(),
+                                                                   k * 0.05);
+        QCOMPARE(strobe.lights.size(), strobe.cols * strobe.rows);
+        for (int x = 0; x < strobe.cols; ++x)
+            whiteRowLit = whiteRowLit || strobe.lights.at(strobe.cols + x).red() > 200;
+    }
+    QVERIFY2(whiteRowLit, "a strobe hit lights the box's white rows");
 }
 
 /* An effect with words to show (the Text effect) gets a box to type them in,
@@ -474,6 +590,102 @@ void LookEditor_Test::anEffectIsPutOnASpeedMaster()
     QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Master1 + 1));
     speed->setCurrentIndex(speed->findData(SpeedMasters::Free));
     QTRY_VERIFY(!perBeatLabel());
+}
+
+/* "when I set something on the speed masters .. and then double click on
+   the icon it resets those": the look's Speed and Spread are the look's,
+   not the effect's -- double-clicking the effect's icon in the picker, or
+   the look itself, or trying another effect, must keep them. */
+void LookEditor_Test::aLooksSpeedMasterAndSpreadSurviveADoubleClick()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Phase");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    auto itemNamed = [browser](const QString &name) -> QListWidgetItem * {
+        browser->search()->setText(name);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            if (browser->list()->item(i)->text() == name)
+                return browser->list()->item(i);
+        return nullptr;
+    };
+    QListWidgetItem *item = itemNamed("Dimmer Phaser");
+    QVERIFY(item != nullptr);
+    browser->pick(item);
+    QApplication::processEvents();
+
+    QComboBox *speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    QVERIFY(speed != nullptr);
+    speed->setCurrentIndex(speed->findData(SpeedMasters::Master1 + 1));
+    QApplication::processEvents();
+    look->setEffectParamValue(QStringLiteral("__spreadAmount"), 50);
+    look->setEffectParamValue(QStringLiteral("__spreadWings"), 2);
+    auto kept = [look]() {
+        return int(look->effectParamValues().value("__speedMaster")) == int(SpeedMasters::Master1 + 1)
+            && look->effectParamValues().value("__spreadAmount") == 50.0
+            && look->effectParamValues().value("__spreadWings") == 2.0;
+    };
+    QVERIFY(kept());
+
+    // The look double-clicked (it opens in the editor again).
+    ed.setPalette(look->id());
+    QApplication::processEvents();
+    QVERIFY(kept());
+
+    // Its effect's icon double-clicked in the picker.
+    ed.openEffectPicker();
+    item = itemNamed("Dimmer Phaser");
+    QVERIFY(item != nullptr);
+    const QRect r = browser->list()->visualItemRect(item);
+    QTest::mouseClick(browser->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+    QTest::mouseDClick(browser->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+    QTest::mouseRelease(browser->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+    QApplication::processEvents();
+    QVERIFY(kept());
+
+    // Another effect tried, then back to it: the look's Speed and Spread
+    // go with it (until now they were wiped as the effect's own settings).
+    browser->search()->setText("Dimmer");
+    QApplication::processEvents();
+    QListWidgetItem *other = nullptr;
+    for (int i = 0; i < browser->list()->count() && other == nullptr; ++i)
+        if (browser->list()->item(i)->text() != QLatin1String("Dimmer Phaser"))
+            other = browser->list()->item(i);
+    QVERIFY(other != nullptr);
+    browser->pick(other);
+    QApplication::processEvents();
+    QVERIFY(kept());
+    item = itemNamed("Dimmer Phaser");
+    browser->pick(item);
+    QApplication::processEvents();
+    QVERIFY(kept());
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerDone")->click();
+    QVERIFY(kept());
+    speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Master1 + 1));
+
+    // And they are saved with the look.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        QVERIFY(look->saveXML(&w));
+    }
+    buf.close();
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader xml(&buf);
+    xml.readNextStartElement();
+    QLCPalette back(QLCPalette::Effect);
+    QVERIFY(back.loadXML(xml));
+    QCOMPARE(int(back.effectParamValues().value("__speedMaster")), int(SpeedMasters::Master1 + 1));
+    QCOMPARE(back.effectParamValues().value("__spreadAmount"), 50.0);
 }
 
 /* An effect that takes the host spread gets a Spread row; turned on, it hides
@@ -802,6 +1014,110 @@ void LookEditor_Test::theBrowsersListsAreAToZ()
             QVERIFY2(collator.compare(keys.at(i - 1), keys.at(i)) <= 0,
                      qPrintable(QString("%1: \"%2\" before \"%3\"").arg(tabs.at(t), keys.at(i - 1), keys.at(i))));
     }
+}
+
+void LookEditor_Test::aLineLooksSpreadIsSetOnTheAimPage()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StageTarget *line = props->addStageTarget();
+    line->setName("Edge");
+    line->makeLine();
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Aim, &doc);
+    look->setName("Along the edge");
+    look->setStageTargetId(line->id());
+    QVERIFY(doc.addPalette(look));
+
+    LookEditor ed(&doc);
+    ed.resize(800, 500);
+    ed.show();
+    ed.setPalette(look->id());
+    QApplication::processEvents();
+
+    QVERIFY2(ed.m_lineBox->isVisible(), "a look on a line shows no Spread");
+    QCOMPARE(ed.m_lineSpreadSpin->value(), 5.0);
+    QCOMPARE(ed.m_lineSpreadSlider->value(), 50);
+    // No scene to say which lights: six stand in, evenly end to end.
+    QCOMPARE(ed.m_linePreview->dots().size(), 6);
+    QCOMPARE(ed.m_linePreview->dots().first().fraction, 0.0);
+
+    ed.m_lineSpreadSlider->setValue(-25);
+    QCOMPARE(ed.m_lineSpreadSpin->value(), -2.5);
+    QCOMPARE(look->effectParamValues().value("__lineSpread"), -2.5);
+    QVERIFY(qAbs(ed.m_linePreview->dots().first().fraction - 0.75) < 1e-9);
+    ed.m_linePreview->grab();                           // it paints
+
+    ed.m_lineSpreadSpin->setValue(0.0);
+    QCOMPARE(ed.m_lineSpreadSlider->value(), 0);
+    QCOMPARE(look->effectParamValues().value("__lineSpread"), 0.0);
+
+    // Back to the default: the look no longer carries it.
+    ed.m_lineSpreadSpin->setValue(5.0);
+    QVERIFY(!look->effectParamValues().contains("__lineSpread"));
+
+    // Re-opened, it shows what the look has.
+    look->setEffectParamValue("__lineSpread", -1.0);
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_lineSpreadSpin->value(), -1.0);
+
+    // A point target has no spread.
+    ed.m_aimTargetCombo->setCurrentIndex(ed.m_aimTargetCombo->findData(mark->id()));
+    QCOMPARE(look->stageTargetId(), mark->id());
+    QVERIFY(!ed.m_lineBox->isVisible());
+    // And the picker says which targets are lines.
+    QVERIFY(ed.m_aimTargetCombo->itemText(ed.m_aimTargetCombo->findData(line->id())).startsWith("Line:"));
+}
+
+void LookEditor_Test::aLineLooksGroupingIsSetOnTheAimPage()
+{
+    Doc doc(this);
+    StageTarget *line = doc.monitorProperties()->addStageTarget();
+    line->makeLine();
+    QLCPalette *look = new QLCPalette(QLCPalette::Aim, &doc);
+    look->setStageTargetId(line->id());
+    QVERIFY(doc.addPalette(look));
+
+    LookEditor ed(&doc);
+    ed.resize(800, 500);
+    ed.show();
+    ed.setPalette(look->id());
+    QApplication::processEvents();
+    QVERIFY(!ed.m_lineCrossCombo->isEnabled());         // each light: nothing to choose
+
+    ed.m_lineGroupCombo->setCurrentIndex(ed.m_lineGroupCombo->findData(LineSpread::Halves));
+    QVERIFY(ed.m_lineCrossCombo->isEnabled());
+    QCOMPARE(look->effectParamValues().value("__lineGroup"), double(LineSpread::Halves));
+    ed.m_lineSpreadSpin->setValue(-5.0);
+
+    // "1 2 3 cross 4 5 6": the halves swap sides.
+    auto at = [&ed](int number) {
+        foreach (const LineSpreadPreview::Dot &d, ed.m_linePreview->dots())
+            if (d.number == number)
+                return d.fraction;
+        return -1.0;
+    };
+    QVERIFY(qAbs(at(1) - 0.6) < 1e-9 && qAbs(at(4) - 0.0) < 1e-9);
+
+    ed.m_lineCrossCombo->setCurrentIndex(ed.m_lineCrossCombo->findData(int(LineSpread::Mirror)));
+    QCOMPARE(look->effectParamValues().value("__lineCross"), double(LineSpread::Mirror));
+    QVERIFY(qAbs(at(1) - 0.4) < 1e-9 && qAbs(at(3) - 0.0) < 1e-9);
+
+    ed.m_lineShareCheck->setChecked(true);
+    QCOMPARE(look->effectParamValues().value("__lineShare"), 1.0);
+    QVERIFY(!ed.m_lineCrossCombo->isEnabled());
+
+    ed.m_lineOrderCombo->setCurrentIndex(ed.m_lineOrderCombo->findData(int(LineSpread::LookOrder)));
+    QCOMPARE(look->effectParamValues().value("__lineOrder"), double(LineSpread::LookOrder));
+
+    // Re-opened, every control shows the look.
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_lineGroupCombo->currentData().toInt(), int(LineSpread::Halves));
+    QCOMPARE(ed.m_lineCrossCombo->currentData().toInt(), int(LineSpread::Mirror));
+    QVERIFY(ed.m_lineShareCheck->isChecked());
+    QCOMPARE(ed.m_lineOrderCombo->currentData().toInt(), int(LineSpread::LookOrder));
 }
 
 QTEST_MAIN(LookEditor_Test)

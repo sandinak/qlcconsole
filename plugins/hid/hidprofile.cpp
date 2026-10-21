@@ -99,12 +99,16 @@ HIDProfile *HIDProfile::load(const QString &path)
                                   .value(QLatin1String("index")).toInt(&ok);
                     const QString slot = xml.attributes()
                                              .value(QLatin1String("slot")).toString();
+                    const QString role = xml.attributes()
+                                             .value(QLatin1String("role")).toString().toLower();
                     const QString label = xml.readElementText();
                     if (ok && !label.isEmpty())
                     {
                         p->m_axisNames.insert(idx, label);
                         if (!slot.isEmpty())
                             p->m_axisSlots.insert(idx, slot);
+                        if (!role.isEmpty())
+                            p->m_axisRoles.insert(idx, role);
                     }
                 }
                 else
@@ -124,12 +128,16 @@ HIDProfile *HIDProfile::load(const QString &path)
                                   .value(QLatin1String("index")).toInt(&ok);
                     const QString action = xml.attributes()
                                                .value(QLatin1String("action")).toString();
+                    const QString role = xml.attributes()
+                                             .value(QLatin1String("role")).toString().toLower();
                     const QString label = xml.readElementText();
                     if (ok && !label.isEmpty())
                     {
                         p->m_buttonNames.insert(idx, label);
                         if (!action.isEmpty())
                             p->m_buttonActions.insert(idx, action);
+                        if (!role.isEmpty())
+                            p->m_buttonRoles.insert(idx, role);
                     }
                 }
                 else
@@ -162,11 +170,15 @@ bool HIDProfile::save() const
 {
     if (m_path.isEmpty())
         return false;
+    return saveTo(m_path);
+}
 
-    QFile file(m_path);
+bool HIDProfile::saveTo(const QString &path) const
+{
+    QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
     {
-        qWarning() << "[HIDProfile] cannot write" << m_path;
+        qWarning() << "[HIDProfile] cannot write" << path;
         return false;
     }
 
@@ -212,6 +224,9 @@ bool HIDProfile::save() const
         const QString slot = m_axisSlots.value(idx);
         if (!slot.isEmpty())
             xml.writeAttribute(QLatin1String("slot"), slot);
+        const QString role = m_axisRoles.value(idx);
+        if (!role.isEmpty())
+            xml.writeAttribute(QLatin1String("role"), role);
         xml.writeCharacters(m_axisNames.value(idx));
         xml.writeEndElement();
     }
@@ -228,6 +243,9 @@ bool HIDProfile::save() const
         const QString action = m_buttonActions.value(idx);
         if (!action.isEmpty())
             xml.writeAttribute(QLatin1String("action"), action);
+        const QString role = m_buttonRoles.value(idx);
+        if (!role.isEmpty())
+            xml.writeAttribute(QLatin1String("role"), role);
         xml.writeCharacters(m_buttonNames.value(idx));
         xml.writeEndElement();
     }
@@ -236,6 +254,6 @@ bool HIDProfile::save() const
     xml.writeEndElement(); // HIDProfile
     xml.writeEndDocument();
 
-    qDebug() << "[HIDProfile] saved:" << m_path;
+    qDebug() << "[HIDProfile] saved:" << path;
     return true;
 }

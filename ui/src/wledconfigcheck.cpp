@@ -10,6 +10,7 @@
 */
 
 #include <QNetworkAccessManager>
+#include <QNetworkProxy>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -69,6 +70,7 @@ WledConfigCheck::WledConfigCheck(Doc *doc, QObject *parent)
 {
     if (s_instance == nullptr)
         s_instance = this;
+    m_nam->setProxy(QNetworkProxy::NoProxy);    // WLEDs are on the show LAN
     m_timer->setInterval(30000);
     connect(m_timer, &QTimer::timeout, this, &WledConfigCheck::checkNow);
     m_timer->start();
@@ -229,10 +231,7 @@ void WledConfigCheck::checkNow()
         QNetworkRequest req(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
         req.setTransferTimeout(4000);
         QNetworkReply *r = m_nam->get(req);
-        connect(r, &QNetworkReply::finished, this, [this, r, ip]() {
-            receive(ip, r->readAll(), r->error() == QNetworkReply::NoError);
-            r->deleteLater();
-        });
+        connect(r, &QNetworkReply::finished, this, [this, r, ip]() { replied(ip, r); });
     }
     if (ips.isEmpty() && !m_findings.isEmpty())
     {
@@ -240,6 +239,23 @@ void WledConfigCheck::checkNow()
         publish();
         emit changed();
     }
+}
+
+void WledConfigCheck::replied(const QString &ip, QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const bool ok = reply->error() == QNetworkReply::NoError;
+
+    /* A failed reply is not read: it may already be closed, and reading it
+       logged "QIODevice::read (QNetworkReplyHttpImpl): device not open" for
+       every unreachable WLED every 30 s. And said once when a device stops
+       answering, and once when it is back -- not on every check. */
+    if (!ok && m_answered.value(ip, true))
+        qDebug() << "WLED" << ip << "does not answer:" << reply->errorString();
+    else if (ok && !m_answered.value(ip, true))
+        qDebug() << "WLED" << ip << "answers again";
+
+    receive(ip, ok ? reply->readAll() : QByteArray(), ok);
 }
 
 void WledConfigCheck::receive(const QString &ip, const QByteArray &body, bool ok)
@@ -351,10 +367,7 @@ void WledConfigCheck::fix(const QList<quint32> &fixtureIds)
             QNetworkRequest back(QUrl(baseUrl(ip) + QStringLiteral("/json/cfg")));
             back.setTransferTimeout(4000);
             QNetworkReply *b = m_nam->get(back);
-            connect(b, &QNetworkReply::finished, this, [this, b, ip]() {
-                receive(ip, b->readAll(), b->error() == QNetworkReply::NoError);
-                b->deleteLater();
-            });
+            connect(b, &QNetworkReply::finished, this, [this, b, ip]() { replied(ip, b); });
         });
     }
 }

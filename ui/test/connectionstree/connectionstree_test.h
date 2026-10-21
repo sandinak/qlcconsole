@@ -88,6 +88,14 @@ private slots:
     /** Two universes may share a NIC, but not a node port. */
     void twoUniversesCannotTargetTheSameNodePort();
 
+    /* Patching and unpatching several selected universes at once
+       ("when I select a group to patch or unpatch from the universes
+       listing in connection it doesn't work") */
+    void selectionRemembersTheOrderUniversesWerePicked();
+    void multiPatchPutsThemOnTheDevicePortsInPickedOrder();
+    void multiPatchSkipsAPortAnotherUniverseHolds();
+    void multiUnpatchRemovesEveryOneInOneStep();
+
     /* Reachability probing */
     void rescanProbesUnheardTargetsOnly();
     void rescanProbesAddressesNamedByPatches();
@@ -102,9 +110,35 @@ private slots:
     /* Tooltip rendering */
     void propertyTooltipRendersPairs();
     void deviceRowCarriesItsPropertiesAsATooltip();
+    void deviceNeedingAttentionSaysSoOnItsRow();
     /** "why is there no patched folder in the connections view?" -- By
      *  universe: all of them, in order, each saying where it goes. */
     void byUniverseListsEveryUniverseWithWhereItGoes();
+
+    /* Output problems a plugin reports (QLCIOPlugin::outputProblems()):
+       on the row, in both views, and in the footer -- and gone once fixed. */
+    void outputProblemsShowOnTheRowAndClear();
+    void outputProblemsReachTheFooterOncePerProblem();
+
+    /* A click or the periodic rebuild never scrolls the list sideways. */
+    void clickingARowDoesNotScrollSideways();
+
+    /* A target address is picked from the ports visible on the interface. */
+    void targetPickerListsFreePortsFirst();
+    void patchToPicksAVisiblePort();
+    void patchToAUsedPortChangesNothing();
+    void patchToAnAddressTypedByHand();
+    void retargetOffersTheVisiblePortsWithTheCurrentOne();
+
+    /* "port" is the node's socket, "universe" its port-address: everywhere. */
+    void portAndUniverseReadTheSameEverywhere();
+
+    /* Re-patching asks the interface again, the current one preselected. */
+    void repatchAsksTheInterfaceAgain();
+
+    /* The device view and the universe list show the same patches. */
+    void bothViewsListTheSameTargets();
+    void offlinePatchesShowKeptNotUnpatched();
 
 private:
     Doc *m_doc;

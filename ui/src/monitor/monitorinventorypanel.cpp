@@ -23,6 +23,7 @@
 #include <QSet>
 
 #include "monitorinventorypanel.h"
+#include "scenery.h"
 #include "monitorgraphicsview.h"
 #include "qlcfixturedef.h"
 #include "fixture.h"
@@ -152,6 +153,9 @@ void MonitorInventoryPanel::reload()
     foreach (Fixture *fx, m_doc->fixtures())
     {
         if (fx == NULL || fx->isPatched() || onPlot.contains(fx->id()))
+            continue;
+        // A curtain is on the plot as its drape, not as a fixture to place.
+        if (Scenery::isCurtainFixture(fx))
             continue;
         total++;
         if (fx->connection() == Fixture::Network)

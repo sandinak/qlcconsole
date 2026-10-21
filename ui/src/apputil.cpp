@@ -58,11 +58,41 @@
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
 #include "showstatus.h"
+#include "showembedding.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
 #include "fixturedefcheck.h"
 #include "inputoutputmap.h"
+#include "outputpatch.h"
+#include "universe.h"
 #include "qlcfixturedefcache.h"
+
+/****************************************************************************
+ * Application identity
+ ****************************************************************************/
+
+QIcon AppUtil::applicationIcon(const QString &name)
+{
+    // The sizes resources/icons/hicolor/render.sh produces (appicons.qrc).
+    static const int sizes[] = { 16, 22, 24, 32, 48, 64, 128, 256 };
+
+    QIcon icon;
+    for (int size : sizes)
+    {
+        const QString path = QString(":/appicon/%1x%1/apps/%2.png").arg(size).arg(name);
+        if (QFile::exists(path))
+            icon.addFile(path, QSize(size, size));
+    }
+    return icon;
+}
+
+void AppUtil::setApplicationIdentity(const QString &name)
+{
+    QGuiApplication::setDesktopFileName(name);
+#if !defined(Q_OS_MACOS)
+    QApplication::setWindowIcon(applicationIcon(name));
+#endif
+}
 
 /****************************************************************************
  * Widget visibility helper
@@ -625,6 +655,31 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 foreach (Fixture *fx, doc->fixtures())
                     if (fx != NULL && fx->connection() == Fixture::Network && fx->ipAddress() == ip)
                         names << fx->name();
+                /* A backup lantern has no fixture of its own: it is named
+                   after the universe it mirrors ("Lantern SL backup"). */
+                if (names.isEmpty())
+                {
+                    InputOutputMap *io = doc->inputOutputMap();
+                    foreach (Universe *u, io->universes())
+                        for (int i = 0; u != NULL && i < u->outputPatchesCount(); i++)
+                        {
+                            OutputPatch *op = u->outputPatch(i);
+                            if (op == NULL || op->pluginName() != QLatin1String("WLED"))
+                                continue;
+                            const QMap<QString, QVariant> pp = op->getPluginParameters();
+                            bool backup = false;
+                            for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
+                                backup = backup || (it.key().startsWith(QLatin1String("outputIP"))
+                                                    && it.key() != QLatin1String("outputIP")
+                                                    && it.value().toString().trimmed() == ip);
+                            if (!backup)
+                                continue;
+                            foreach (Fixture *fx, doc->fixtures())
+                                if (fx != NULL && fx->isPatched() && fx->universe() == u->id())
+                                    names << QCoreApplication::translate("AppUtil", "%1 backup")
+                                                 .arg(fx->name());
+                        }
+                }
                 items << (names.isEmpty() ? problem
                                           : QString("%1 (%2)").arg(names.join(", "), problem));
                 ips << ip;
@@ -639,6 +694,63 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 QCoreApplication::translate("AppUtil", "Checked every few seconds. Weaker than -75 dBm "
                                             "drops on stage Wi-Fi."),
                 items, ips);
+    }
+
+    /* Network outputs in trouble, as their plugins judge it -- sends that
+       keep failing, Art-Net nodes that stopped answering, node ports that
+       report a fault (QLCIOPlugin::outputProblems()). Asked per patch so
+       each line can say which universes it hits and the fix can open the
+       first of them in Connections; one line per problem, not per universe,
+       because fifty universes behind one dead node are one problem. */
+    {
+        InputOutputMap *io = doc->inputOutputMap();
+        QStringList order;
+        QMap<QString, QList<quint32> > hit;
+        foreach (Universe *u, io->universes())
+        {
+            if (u == NULL)
+                continue;
+            for (int i = 0; i < u->outputPatchesCount(); i++)
+            {
+                OutputPatch *op = u->outputPatch(i);
+                /* WLED says its own, by fixture name, above: its
+                   outputProblems() are for its rows in Connections. */
+                if (op == NULL || op->plugin() == NULL
+                    || op->plugin()->name() == QLatin1String("WLED"))
+                    continue;
+                foreach (const QString &problem, op->plugin()->outputProblems(op->output(), u->id()))
+                {
+                    if (hit.contains(problem) == false)
+                        order << problem;
+                    if (hit[problem].contains(u->id()) == false)
+                        hit[problem] << u->id();
+                }
+            }
+        }
+        QStringList items;
+        QVariantList universes;
+        foreach (const QString &problem, order)
+        {
+            const QList<quint32> &unis = hit[problem];
+            QStringList nums;
+            foreach (quint32 id, unis)
+                nums << QString::number(id + 1);
+            items << (unis.count() == 1
+                ? QCoreApplication::translate("AppUtil", "%1 (universe %2)").arg(problem, nums.first())
+                : QCoreApplication::translate("AppUtil", "%1 (universes %2)").arg(problem, nums.join(", ")));
+            universes << unis.first();
+        }
+        if (items.isEmpty())
+            status->clearStatus("outputs.problems");
+        else
+            status->setStatus("outputs.problems", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n network output problem(s)",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Outputs that can't send, Art-Net nodes that "
+                                            "stopped answering, and node ports reporting a "
+                                            "fault. Each shows once it has lasted, and clears "
+                                            "once it has stayed fixed."),
+                items, universes);
     }
 
     /* A universe fixtures are patched on, with nowhere to send it. */
@@ -735,9 +847,14 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
             status->setStatus("fixtures.nodefinition", ShowStatus::Error,
                 QCoreApplication::translate("AppUtil", "%n fixture(s) have no definition on this computer",
                                             "", items.count()),
-                QCoreApplication::translate("AppUtil", "Standing in as dimmers. Saved as what they "
+                QCoreApplication::translate("AppUtil", "Standing in as dimmers (the Lighting Studio "
+                                            "and the Rig Overview draw each as a small "
+                                            "box). Saved as what they "
                                             "really are, but not programmable as that until "
-                                            "their definitions are back."),
+                                            "their definitions are back: copy the .qxf files "
+                                            "into %1 and Fetch Definitions.")
+                    .arg(QDir::toNativeSeparators(
+                        QLCFixtureDefCache::userDefinitionDirectory().absolutePath())),
                 items, ids, groups);
     }
 
@@ -835,6 +952,84 @@ QString AppUtil::nthAddress(const QString &ip, int n)
     return QString("%1.%2.%3.%4").arg(o[0]).arg(o[1]).arg(low / 256).arg(low % 256);
 }
 
+void AppUtil::updateShowEmbeddingStatus(Doc *doc)
+{
+    ShowStatus *status = ShowStatus::instance();
+    ShowEmbedding *e = doc != nullptr ? doc->showEmbedding() : nullptr;
+    if (e == nullptr)
+    {
+        status->clearStatus("embedded.showonly");
+        status->clearStatus("embedded.differ");
+        status->clearStatus("embedded.problems");
+        return;
+    }
+
+    /* Only the show has them: used from it, nothing wrong -- information,
+       with a way to keep them on this computer. */
+    {
+        QStringList items, groups;
+        QVariantList keys;
+        bool allDefinitions = true;
+        foreach (const ShowEmbedding::Item &it, e->showOnly())
+        {
+            items << it.displayName();
+            keys << it.key();
+            groups << (it.fromShowFolder
+                       ? QCoreApplication::translate("AppUtil", "In the show's folder")
+                       : QCoreApplication::translate("AppUtil", "In the show file"));
+            if (it.kind != ShowEmbedding::FixtureDefinition)
+                allDefinitions = false;
+        }
+        if (items.isEmpty())
+            status->clearStatus("embedded.showonly");
+        else
+            status->setStatus("embedded.showonly", ShowStatus::Ok,
+                allDefinitions
+                    ? QCoreApplication::translate("AppUtil", "%n definition(s) came with this show",
+                                                  "", items.count())
+                    : QCoreApplication::translate("AppUtil", "%n definition(s) and script(s) came with this show",
+                                                  "", items.count()),
+                QCoreApplication::translate("AppUtil", "This computer does not have them, so the "
+                                            "show's own copies are used while it is open. Install "
+                                            "on this computer to keep them in your library."),
+                items, keys, groups);
+    }
+
+    /* Different from this computer's: the show's is in use until you choose. */
+    {
+        QStringList items;
+        QVariantList keys;
+        foreach (const ShowEmbedding::Item &it, e->differences())
+        {
+            items << QStringLiteral("%1 — %2").arg(it.displayName(),
+                                                   ShowEmbedding::newerText(e->newer(it)));
+            keys << it.key();
+        }
+        if (items.isEmpty())
+            status->clearStatus("embedded.differ");
+        else
+            status->setStatus("embedded.differ", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n item(s) in this show differ from this computer's",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "The show's own copies are in use, so nothing "
+                                            "changes under the rig by itself. Review… says which "
+                                            "looks newer and whether this computer's would work "
+                                            "in their place."),
+                items, keys);
+    }
+
+    {
+        const QStringList problems = e->problems();
+        if (problems.isEmpty())
+            status->clearStatus("embedded.problems");
+        else
+            status->setStatus("embedded.problems", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n of the show's own copies cannot be used",
+                                            "", problems.count()),
+                QString(), problems);
+    }
+}
+
 void AppUtil::updateLoadProblems(const QString &errorLog)
 {
     ShowStatus *status = ShowStatus::instance();
@@ -875,4 +1070,32 @@ bool AppUtil::patchAllowed(Doc *doc, const QList<quint32> &fixtureIds)
             return false;
     }
     return true;
+}
+
+/*********************************************************************
+ * Cursors
+ *********************************************************************/
+
+Qt::CursorShape AppUtil::macSafeCursorShape(Qt::CursorShape shape, bool dragging)
+{
+    switch (shape)
+    {
+        case Qt::SizeAllCursor:
+            return dragging ? Qt::ClosedHandCursor : Qt::OpenHandCursor;
+        case Qt::WaitCursor:
+        case Qt::BusyCursor:
+            return Qt::ArrowCursor;
+        default:
+            return shape;
+    }
+}
+
+Qt::CursorShape AppUtil::nativeCursorShape(Qt::CursorShape shape, bool dragging)
+{
+#if defined(Q_OS_MACOS)
+    return macSafeCursorShape(shape, dragging);
+#else
+    Q_UNUSED(dragging)
+    return shape;
+#endif
 }

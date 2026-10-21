@@ -29,16 +29,23 @@ enum ChaserActionType
     ChaserNextStep,
     ChaserPreviousStep,
     ChaserSetStepIndex,
-    ChaserPauseRequest
+    ChaserPauseRequest,
+    /* Sub-cues (SUBCUES_DESIGN.md): actions on the OUTER chase that its
+       runner passes to the chase playing as the current step's sub-cues. */
+    ChaserSubNextStep,      //! Sub GO: the next playable sub-cue
+    ChaserSubPreviousStep,  //! Sub Back: the previous one
+    ChaserSubSetStep        //! Sub-cue m_subStepIndex of step m_stepIndex,
+                            //! playing that step first if it isn't
 };
 
-typedef struct
+typedef struct ChaserAction
 {
     ChaserActionType m_action;
     qreal m_masterIntensity;
     qreal m_stepIntensity;
     int m_fadeMode;
     int m_stepIndex;
+    int m_subStepIndex = -1;    //! ChaserSubSetStep: the sub-cue
 } ChaserAction;
 
 #endif /* CHASERACTION_H */

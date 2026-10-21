@@ -27,3 +27,7 @@ target_link_libraries(${module_name} PRIVATE
     Qt6::Qml
 )
 
+
+target_compile_definitions(${module_name} PRIVATE
+    TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../engine/test/common/fixtures/"
+)

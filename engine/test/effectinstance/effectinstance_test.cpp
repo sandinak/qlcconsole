@@ -15,6 +15,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QBuffer>
+#include <QCryptographicHash>
 
 #include "effectinstance_test.h"
 #define private public                  // MasterTimer::timerTick(), and the instance's insides
@@ -42,6 +43,7 @@
 #include "qlcphysical.h"
 #include "stagetarget.h"
 #include "truss.h"
+#include "scenery.h"
 #include "aimsolver.h"
 #include <QtMath>
 #include <cmath>
@@ -475,7 +477,7 @@ void EffectInstance_Test::wledPortsRunAsWledDoes()
     cache.addDirectory(QDir(dir));
     QVERIFY(cache.scriptPathForWled("chase").endsWith("wled-chase.js"));
     QVERIFY(cache.scriptPathForWled("Breathe").endsWith("wled-breathe.js"));
-    QVERIFY(cache.scriptPathForWled("Fireworks").isEmpty());
+    QVERIFY(cache.scriptPathForWled("Game Of Life").isEmpty());   // 2D: not ported
 
     auto run = [](EffectScript &es, int n, double t, int speed, int intensity, int option,
                   const QList<QColor> &cols) {
@@ -567,23 +569,68 @@ void EffectInstance_Test::wledPortsRunAsWledDoes()
         QVERIFY2(c.red() < 20, qPrintable(c.name()));
     px = run(breathe, 4, period / 2, 128, 128, 0, { red, QColor(Qt::black), QColor(Qt::black) });
     QVERIFY2(px.first().red() > 240, qPrintable(px.first().name()));
+
+    /* Percent lights a share of the strip from its start -- intensity is the
+       share -- in colour 1, the rest colour 2. */
+    EffectScript percent;
+    QVERIFY(percent.load(dir + "wled-percent.js"));
+    QCOMPARE(percent.wled(), QString("Percent"));
+    QCOMPARE(count(run(percent, 20, 1.0, 128, 0, 0, { red, bg, blue }), red), 0);
+    px = run(percent, 20, 1.0, 128, 128, 0, { red, bg, blue });
+    QCOMPARE(count(px, red), 10);
+    for (int i = 0; i < 10; ++i)
+        QCOMPARE(px.at(i), red);                       // from the start
+    QCOMPARE(count(px, bg), 10);
+    QCOMPARE(count(run(percent, 20, 1.0, 128, 64, 0, { red, bg, blue }), red), 5);
+    QCOMPARE(count(run(percent, 20, 1.0, 128, 255, 0, { red, bg, blue }), red), 20);
+    // Reversed, it fills from the other end.
+    px = run(percent, 20, 1.0, 128, 64, 128, { red, bg, blue });
+    for (int i = 15; i < 20; ++i)
+        QCOMPARE(px.at(i), red);
+
+    /* Solid Pattern: speed is how many lit, intensity how many not, over and
+       over -- speed 8 is two, intensity 24 three. */
+    EffectScript pattern;
+    QVERIFY(pattern.load(dir + "wled-solid-pattern.js"));
+    px = run(pattern, 20, 1.0, 8, 24, 0, { red, bg, blue });
+    for (int i = 0; i < 20; ++i)
+        QCOMPARE(px.at(i), (i % 5) < 2 ? red : bg);
+    // Solid Pattern Tri: the three colours in runs of the intensity's size.
+    EffectScript tri;
+    QVERIFY(tri.load(dir + "wled-solid-pattern-tri.js"));
+    px = run(tri, 12, 1.0, 128, 32, 0, { red, bg, blue });
+    const QList<QColor> threes = { red, red, red, bg, bg, bg, blue, blue, blue, red, red, red };
+    QCOMPARE(px, threes);
+
+    /* Found by the names a WLED device lists them under -- "Sparkle+" is what
+       WLED now calls its hyper sparkle. */
+    EffectScriptCache all;
+    all.addDirectory(QDir(dir));
+    QVERIFY(all.scriptPathForWled("Sparkle+").endsWith("wled-sparkle-plus.js"));
+    QVERIFY(all.scriptPathForWled("Fireworks Starburst").endsWith("wled-fireworks-starburst.js"));
+    QVERIFY(all.scriptPathForWled("PS Fire 1D").endsWith("wled-ps-fire-1d.js"));
+    QVERIFY(all.scriptPathForWled("Gravimeter").endsWith("wled-gravimeter.js"));
 }
 
 /* Every WLED effect written for qlcconsole loads, paints every pixel with a
-   real colour, gives the same frame for the same moment, and (all but Solid)
-   moves. The look's colours, thirty pixels, a few moments. */
+   real colour, gives the same frame for the same moment, and (all but the
+   still ones) moves. The look's colours, thirty pixels, a few moments. The
+   sound-reactive ones hear a made-up song -- and rest, dark, with none. */
 void EffectInstance_Test::everyWledPortRuns()
 {
     const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
-    int ports = 0;
+    // Still patterns: the same frame at every moment, as on a device.
+    const QStringList still = { "Solid", "Solid Pattern", "Solid Pattern Tri", "Percent" };
+    int ports = 0, heard = 0;
     foreach (const QString &file, QDir(dir).entryList({ "wled-*.js" }, QDir::Files))
     {
         EffectScript es;
         QVERIFY2(es.load(dir + file), qPrintable(file));
         if (es.wled().isEmpty())
             continue;                               // the device itself, not a port
+        const bool listens = es.dataChannelKeys().contains(QStringLiteral("audio"));
         QJSEngine *eng = es.engine();
-        auto frame = [&](double t) {
+        auto frame = [&](double t, bool song = true) {
             QJSValue fixtures = eng->newArray(30);
             for (int i = 0; i < 30; ++i)
             {
@@ -606,7 +653,26 @@ void EffectInstance_Test::everyWledPortRuns()
             QJSValue palettes = eng->newObject();
             palettes.setProperty("look", look);
             QJSValue state = es.newState();
-            const QJSValue r = es.callTick(fixtures, inputs, palettes, eng->newObject(), state, eng->newObject());
+            QJSValue data = eng->newObject();
+            if (listens && song)
+            {
+                // A song: sixteen bands rising and falling out of step.
+                QJSValue bands = eng->newArray(16);
+                double peak = 0;
+                for (int k = 0; k < 16; ++k)
+                {
+                    const double v = qBound(0.0, 0.45 + 0.45 * std::sin(t * 3.0 + k * 0.9), 1.0);
+                    bands.setProperty(uint(k), v);
+                    peak = qMax(peak, v);
+                }
+                QJSValue audio = eng->newObject();
+                audio.setProperty("bands", bands);
+                audio.setProperty("level", 0.3 + 0.3 * std::sin(t * 2.1));
+                audio.setProperty("peak", peak);
+                audio.setProperty("maxHz", 5000);
+                data.setProperty("audio", audio);
+            }
+            const QJSValue r = es.callTick(fixtures, inputs, palettes, eng->newObject(), state, data);
             QStringList px;
             for (int i = 0; i < 30; ++i)
             {
@@ -626,11 +692,23 @@ void EffectInstance_Test::everyWledPortRuns()
             seen.insert(f.join(QLatin1Char(' ')));
         }
         QCOMPARE(frame(1.17), frame(1.17));          // the same moment, the same frame
-        if (es.wled() != QLatin1String("Solid"))
+        if (!still.contains(es.wled()))
             QVERIFY2(seen.size() > 1, qPrintable(file + ": never moves"));
+        else
+            QVERIFY2(seen.size() == 1, qPrintable(file + ": should hold still"));
+        if (listens)
+        {
+            // No audio input: it rests, dark, rather than making something up.
+            const QStringList quiet = frame(1.17, false);
+            QVERIFY2(quiet.size() == 30, qPrintable(file));
+            for (const QString &p : quiet)
+                QVERIFY2(p == QLatin1String("0,0,0"), qPrintable(file + ": lit with no audio"));
+            heard++;
+        }
         ports++;
     }
-    QVERIFY2(ports >= 90, qPrintable(QString("only %1 WLED ports").arg(ports)));
+    QVERIFY2(ports >= 160, qPrintable(QString("only %1 WLED ports").arg(ports)));
+    QVERIFY2(heard >= 23, qPrintable(QString("only %1 sound-reactive WLED ports").arg(heard)));
 }
 
 /* "for WLED based fixtures we should be selecting WLED effects": a look set
@@ -753,10 +831,18 @@ void EffectInstance_Test::bothFiresAreOfferedAndEachComesBackAsItself()
     QTemporaryDir home;
     const QByteArray realHome = qgetenv("HOME");
     qputenv("HOME", home.path().toUtf8());
+#ifdef Q_OS_WIN
+    // Windows takes the home folder from USERPROFILE, not HOME.
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("USERPROFILE", home.path().toUtf8());
+#endif
     EffectScriptCache cache;
     cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
     cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "rgbscripts"), true);
     qputenv("HOME", realHome);
+#ifdef Q_OS_WIN
+    qputenv("USERPROFILE", realProfile);
+#endif
 
     // Both listed: the flicker by its new name, the rising flame as Fire.
     const QStringList names = cache.scriptNames();
@@ -991,6 +1077,206 @@ void EffectInstance_Test::followSpotFadesAHeadThatCannotReach()
     who->setPosition(QVector3D(1.67f, 1.872f, 0.0f));
     inst.runTick();
     QCOMPARE(dimmerWrites(), 0);
+}
+
+/* A spot on a downstage pipe, the main drape across the stage, and a person
+   who walks from behind it to in front of it. */
+static Fixture *drapeStageSpot(Doc *doc, Scenery *&drape, StageTarget *&who)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setName("Main drape");
+    drape->setWidth(10.0f);
+    drape->setHeight(6.0f);
+    drape->setOpeningWidth(8.0f);
+
+    Truss *pipe = props->addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(-3.0f, 4.0f, 6.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.29f);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Spot behind the drape");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    const char *names[] = { "Pan", "Tilt", "Dimmer" };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *spot = new Fixture(doc);
+    spot->setName("FOH spot");
+    spot->setFixtureDefinition(def, mode);
+    spot->setAddress(300);
+    if (!doc->addFixture(spot))
+        return nullptr;
+    FixtureRigProps rp;
+    rp.trussId = pipe->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(0.0f, -3.0f, 0.0f));     // behind the drape
+    return spot;
+}
+
+void EffectInstance_Test::followSpotFadesAHeadThatCannotSeeTheSubject()
+{
+    Scenery *drape = nullptr;
+    StageTarget *who = nullptr;
+    Fixture *spot = drapeStageSpot(m_doc, drape, who);
+    QVERIFY(spot != nullptr);
+    const quint32 dimmer = spot->masterIntensityChannel();
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, m_doc);
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    QVERIFY(m_doc->addPalette(follow));
+
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Solo");
+    m_doc->addFunction(scene);
+    scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(follow->id());
+    MasterTimer timer(m_doc);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QVERIFY(scene->isRunning());
+
+    EffectInstance inst(m_doc, scene->id(), follow->id());
+    QVERIFY2(inst.isValid(), "followspot.js did not load");
+
+    // The dimmer this tick wrote, as a fraction of full; -1 when it wrote none.
+    auto level = [&]() {
+        inst.runTick();
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            if (w.fixtureId == spot->id() && w.channel == dimmer)
+                return int(w.value);
+        return -1;
+    };
+
+    // Off (the default): behind the drape or not, it never touches the dimmer.
+    QCOMPARE(level(), -1);
+    QCOMPARE(level(), -1);
+
+    // 100 ms: five ticks from full to dark.
+    inst.setParamValue("fadeWhenBlocked", 100.0);
+    int v = level();
+    QVERIFY2(v > 0 && v < 255, qPrintable(QString("first blocked tick wrote %1").arg(v)));
+    int prev = v;
+    for (int i = 0; i < 6; ++i)
+    {
+        v = level();
+        QVERIFY2(v <= prev, "went up while blocked");
+        prev = v;
+    }
+    QCOMPARE(v, 0);
+
+    // The drape flies out: it comes back up, and once full hands the dimmer back.
+    drape->setState(Scenery::Flown);
+    v = level();
+    QVERIFY2(v > 0, "still dark with nothing in the way");
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, -1);
+
+    // Down again, then the subject walks out in front of the drape.
+    drape->setState(Scenery::Closed);
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, 0);
+    who->setPosition(QVector3D(0.0f, 2.0f, 0.0f));
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, -1);
+
+    // Turned off while dark: hands the dimmer straight back.
+    who->setPosition(QVector3D(0.0f, -3.0f, 0.0f));
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, 0);
+    inst.setParamValue("fadeWhenBlocked", 0.0);
+    QCOMPARE(level(), -1);
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+void EffectInstance_Test::aScriptIsToldWhatIsInTheWay()
+{
+    Scenery *drape = nullptr;
+    StageTarget *who = nullptr;
+    Fixture *spot = drapeStageSpot(m_doc, drape, who);
+    QVERIFY(spot != nullptr);
+    const quint32 dimmer = spot->masterIntensityChannel();
+
+    // A script that reports what it is told through the dimmer.
+    QTemporaryDir dir;
+    QFile js(dir.filePath("sight.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Sight';"
+             " e.tick = function(fixtures) { return fixtures.map(function(f) {"
+             "   var t = f.sceneTarget; if (!t) return { dimmer: 0.1 };"
+             "   if (t.blocked === true && t.blockedBy === 'Main drape' && t.blockedKind === 'drape'"
+             "       && t.blockedAt > 3 && t.blockedAt < 7 && t.clearance <= 0) return { dimmer: 0.25 };"
+             "   if (t.blocked === false && t.blockedBy === '' && t.blockedKind === ''"
+             "       && t.clearance > 0) return { dimmer: 0.75 };"
+             "   return { dimmer: 0.5 }; }); }; return e; })()");
+    js.close();
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *eff = new QLCPalette(QLCPalette::Effect, m_doc);
+    eff->setScriptPath(js.fileName());
+    QVERIFY(m_doc->addPalette(eff));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(eff->id());
+    MasterTimer timer(m_doc);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    EffectInstance inst(m_doc, scene->id(), eff->id());
+    QVERIFY(inst.isValid());
+    auto told = [&]() {
+        inst.runTick();
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            if (w.fixtureId == spot->id() && w.channel == dimmer)
+                return int(w.value);
+        return -1;
+    };
+    QCOMPARE(told(), int(qRound(255 * 0.25)));
+    drape->setState(Scenery::Open);
+    QCOMPARE(told(), int(qRound(255 * 0.75)));
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
 }
 
 void EffectInstance_Test::followSpotZoomsToHoldSizeOnSubject()
@@ -1505,6 +1791,85 @@ void EffectInstance_Test::aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour()
              qPrintable(QString("a dim blue should keep the wheel on blue, not %1").arg(wheelOut)));
 }
 
+void EffectInstance_Test::aSharedDimmerTakesItsBrightestHead()
+{
+    /* A two-arm beam: one master dimmer outside its heads, an RGB set in
+       each. Confetti lights one arm and leaves the other dark: the dimmer is
+       the lit arm's, not the lit arm's times the dark one's (which was 0, and
+       the fixture stayed black). */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("TwoArmBeam");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *dim = new QLCChannel(); dim->setName("Intensity"); dim->setPreset(QLCChannel::IntensityMasterDimmer);
+    QList<QLCChannel *> chans = { dim };
+    const QLCChannel::Preset rgb[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                       QLCChannel::IntensityBlue };
+    for (int h = 0; h < 2; h++)
+        for (int k = 0; k < 3; k++)
+        {
+            QLCChannel *c = new QLCChannel();
+            c->setName(QString("Colour %1.%2").arg(h).arg(k));
+            c->setPreset(rgb[k]);
+            chans << c;
+        }
+    for (int c = 0; c < chans.size(); c++)
+    {
+        def->addChannel(chans.at(c));
+        mode->insertChannel(chans.at(c), c);
+    }
+    for (int h = 0; h < 2; h++)
+    {
+        QLCFixtureHead head;
+        for (int k = 0; k < 3; k++)
+            head.addChannel(quint32(1 + h * 3 + k));
+        mode->insertHead(-1, head);
+    }
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *beam = new Fixture(m_doc);
+    beam->setFixtureDefinition(def, mode);
+    beam->setUniverse(0); beam->setAddress(20);
+    QVERIFY(m_doc->addFixture(beam));
+    QCOMPARE(beam->masterIntensityChannel(), quint32(0));
+    QCOMPARE(beam->heads(), 2);
+
+    QLCPalette *confetti = new QLCPalette(QLCPalette::Effect, m_doc);
+    confetti->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/confetti.js");
+    QVERIFY(m_doc->addPalette(confetti));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(beam->id());
+    scene->addPalette(confetti->id());
+    EffectInstance inst(m_doc, scene->id(), confetti->id());
+    QVERIFY(inst.isValid());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QCOMPARE(cells.size(), 2);
+
+    QJSEngine *js = inst.m_script.engine();
+    for (int lit = 0; lit < 2; lit++)          // the lit arm first, then last
+    {
+        QJSValue intents = js->newArray(2);
+        for (int h = 0; h < 2; h++)
+        {
+            const int i = (cells.at(h).head == lit) ? 200 : 0;
+            QJSValue o = js->newObject();
+            o.setProperty("r", i); o.setProperty("g", i); o.setProperty("b", i);
+            o.setProperty("dimmer", i / 255.0);
+            intents.setProperty(quint32(h), o);
+        }
+        const QList<EffectInstance::DmxWrite> out =
+            EffectScriptRunner::composeWrites(inst.parseIntents(intents, cells));
+        int n = 0, dimOut = -1;
+        foreach (const EffectInstance::DmxWrite &w, out)
+            if (w.fixtureId == beam->id() && w.channel == 0) { ++n; dimOut = w.value; }
+        QCOMPARE(n, 1);
+        QVERIFY2(qAbs(dimOut - 200) <= 1,
+                 qPrintable(QString("arm %1 lit: the shared dimmer got %2").arg(lit).arg(dimOut)));
+    }
+}
+
 void EffectInstance_Test::effectsOnOneChannelLayerAsADeskDoes()
 {
     auto w = [](int addr, int value, bool replace, float scale = -1.0f, int base = 0) {
@@ -1898,6 +2263,448 @@ void EffectInstance_Test::theTextEffectSpellsOnAGrid()
 
     scene->stop(FunctionParent::master());
     timer.timerTick();
+}
+
+/*****************************************************************************
+ * Matrix effects
+ *****************************************************************************/
+
+namespace
+{
+const QStringList kMatrixScripts = {
+    "matrix-bars.js", "matrix-box-chase.js", "matrix-checker.js", "matrix-chevrons.js",
+    "matrix-eq.js", "matrix-iris.js", "matrix-noise.js", "matrix-radar.js", "matrix-rain.js",
+    "matrix-ripple.js", "matrix-snake.js", "matrix-sparkle.js", "matrix-strobe.js", "matrix-wipe.js"
+};
+
+/* The Warmdance XL-450 in its 165ch mode: 45 RGB heads, then 30 white, on a
+   bar built in rows of fifteen, RGB / W / RGB / W / RGB. */
+QPoint xl165Cell(int head)
+{
+    if (head < 45)
+        return QPoint(head % 15, (head / 15) * 2);
+    const int w = head - 45;
+    return QPoint(w % 15, 1 + (w / 15) * 2);
+}
+
+/* One head as a script sees it, for the frame-by-frame checks. */
+struct MatrixHead
+{
+    int id = 0, head = 0, col = 0, row = 0;
+    bool rgb = true, white = false, dimmer = false;
+};
+struct MatrixLayout
+{
+    QString name;
+    int cols = 0, rows = 0;
+    QList<MatrixHead> heads;
+};
+
+MatrixLayout matrixLayout(const QString &name)
+{
+    MatrixLayout l;
+    l.name = name;
+    auto box = [&l](int id, int x0, int mode) {
+        const int n = mode == 165 ? 75 : mode == 135 ? 45 : 30;
+        for (int h = 0; h < n; ++h)
+        {
+            MatrixHead m;
+            m.id = id;
+            m.head = h;
+            QPoint at = mode == 165 ? xl165Cell(h) : QPoint(h % 15, h / 15);
+            m.col = x0 + at.x();
+            m.row = at.y();
+            m.rgb = mode == 135 || (mode == 165 && h < 45);
+            m.white = mode == 30 || (mode == 165 && h >= 45);
+            m.dimmer = mode != 135;         // a white channel reads as a dimmer
+            l.heads << m;
+        }
+    };
+    if (name == "box")        { box(1, 0, 165); l.cols = 15; l.rows = 5; }
+    else if (name == "rig")   { for (int b = 0; b < 8; ++b) box(10 + b, b * 15, 165); l.cols = 120; l.rows = 5; }
+    else if (name == "rgb")   { box(1, 0, 135); l.cols = 15; l.rows = 3; }
+    else if (name == "white") { box(1, 0, 30); l.cols = 15; l.rows = 2; }
+    else if (name == "matrix")
+    {
+        // A plain RGB matrix: eight strips of sixteen.
+        for (int r = 0; r < 8; ++r)
+            for (int c = 0; c < 16; ++c)
+            {
+                MatrixHead m;
+                m.id = 100 + r; m.head = c; m.col = c; m.row = r;
+                l.heads << m;
+            }
+        l.cols = 16; l.rows = 8;
+    }
+    else
+    {
+        // Sixteen single-head lights in a row: the effect browser's preview.
+        for (int c = 0; c < 16; ++c)
+        {
+            MatrixHead m;
+            m.id = c; m.col = c; m.dimmer = true;
+            l.heads << m;
+        }
+        l.cols = 16; l.rows = 1;
+    }
+    return l;
+}
+
+/* One frame of @p es on @p l at @p t: each head's intent as "r,g,b,w,d"
+   (a dash for a key it leaves out), or an empty list if any is out of range
+   or the script failed. */
+QStringList matrixFrame(EffectScript &es, const MatrixLayout &l, double t, int white,
+                        const QMap<QString, double> &extra = QMap<QString, double>())
+{
+    QJSEngine *eng = es.engine();
+    QJSValue fixtures = eng->newArray(uint(l.heads.size()));
+    for (int i = 0; i < l.heads.size(); ++i)
+    {
+        const MatrixHead &m = l.heads.at(i);
+        QJSValue o = eng->newObject();
+        o.setProperty("id", m.id);
+        o.setProperty("head", m.head);
+        o.setProperty("hasRGB", m.rgb || m.white);      // the fixture's, not the head's
+        o.setProperty("hasDimmer", m.dimmer);
+        o.setProperty("headRGB", m.rgb);
+        o.setProperty("headWhite", m.white);
+        o.setProperty("phase", 0);
+        QJSValue g = eng->newObject();
+        g.setProperty("col", m.col); g.setProperty("row", m.row);
+        g.setProperty("cols", l.cols); g.setProperty("rows", l.rows);
+        o.setProperty("grid", g);
+        fixtures.setProperty(uint(i), o);
+    }
+    QJSValue inputs = eng->newObject();
+    inputs.setProperty("_time", t);
+    inputs.setProperty("_bpm", 120);
+    inputs.setProperty("_beatPos", t * 2);
+    inputs.setProperty("_beat", t * 2 - std::floor(t * 2));
+    inputs.setProperty("_beatCount", int(std::floor(t * 2)));
+    QJSValue params = eng->newObject();
+    for (const EffectScript::ParamDef &d : es.paramDefs())
+        params.setProperty(d.name, double(d.defaultValue));
+    params.setProperty("white", white);
+    for (auto it = extra.constBegin(); it != extra.constEnd(); ++it)
+        params.setProperty(it.key(), it.value());
+    QJSValue palettes = eng->newObject();
+    QJSValue look = eng->newObject();
+    look.setProperty("colors", eng->newArray(0));
+    palettes.setProperty("look", look);
+    QJSValue state = es.newState();
+    const QJSValue r = es.callTick(fixtures, inputs, palettes, params, state, eng->newObject());
+    if (!r.isArray() || r.property("length").toInt() != l.heads.size())
+        return QStringList();
+    QStringList out;
+    for (int i = 0; i < l.heads.size(); ++i)
+    {
+        const QJSValue o = r.property(uint(i));
+        QStringList parts;
+        for (const char *k : { "r", "g", "b", "w" })
+        {
+            const QJSValue v = o.property(k);
+            if (v.isUndefined()) { parts << "-"; continue; }
+            const double n = v.toNumber();
+            if (!(n >= 0 && n <= 255) || n != std::floor(n))
+                return QStringList();
+            parts << QString::number(int(n));
+        }
+        const QJSValue d = o.property("dimmer");
+        if (!d.isUndefined() && !(d.toNumber() >= 0 && d.toNumber() <= 1))
+            return QStringList();
+        parts << (d.isUndefined() ? QString("-") : QString::number(d.toNumber(), 'f', 3));
+        out << parts.join(',');
+    }
+    return out;
+}
+
+bool headLit(const QString &intent)
+{
+    const QStringList p = intent.split(',');
+    for (int k = 0; k < 4; ++k)
+        if (p.at(k) != "-" && p.at(k).toInt() > 0)
+            return true;
+    return p.at(4) != "-" && p.at(4).toDouble() > 0;
+}
+}
+
+void EffectInstance_Test::matrixEffectsAreRepeatableAndKeepTheirWhites()
+{
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    const QStringList layouts = { "box", "rig", "rgb", "white", "matrix", "strip" };
+    const QList<double> times = { 0.0, 0.13, 0.37, 0.71, 1.1, 1.9, 2.6, 4.05 };
+    QHash<QString, MatrixLayout> built;
+    for (const QString &n : layouts)
+        built.insert(n, matrixLayout(n));
+
+    for (const QString &file : kMatrixScripts)
+    {
+        EffectScript es;
+        QVERIFY2(es.load(dir + file), qPrintable(file + ": " + es.lastError()));
+        QVERIFY2(es.fixtureTypes().contains("matrix"), qPrintable(file));
+        QVERIFY2(EffectScriptCache::categoryForTypes(es.fixtureTypes()) == "Matrix", qPrintable(file));
+        bool hasWhite = false;
+        for (const EffectScript::ParamDef &d : es.paramDefs())
+            hasWhite = hasWhite || (d.name == "white" && d.enumValues.size() == 5);
+        QVERIFY2(hasWhite, qPrintable(file + ": no white setting"));
+
+        for (const QString &ln : layouts)
+        {
+            const MatrixLayout &l = built.value(ln);
+            for (int white = 0; white < 5; ++white)
+            {
+                QSet<QString> seen;
+                bool whiteLit = false, anyLit = false;
+                for (double t : times)
+                {
+                    const QStringList f = matrixFrame(es, l, t, white);
+                    const QString where = QString("%1 on %2, white %3, t %4").arg(file, ln).arg(white).arg(t);
+                    QVERIFY2(f.size() == l.heads.size(), qPrintable(where + ": failed or out of range"));
+                    seen.insert(f.join(' '));
+                    for (int i = 0; i < f.size(); ++i)
+                    {
+                        const MatrixHead &m = l.heads.at(i);
+                        const QStringList p = f.at(i).split(',');
+                        anyLit = anyLit || headLit(f.at(i));
+                        if (!m.rgb && m.white)
+                        {
+                            // A white pixel is only ever told white.
+                            QVERIFY2(p.at(0) == "-" && p.at(1) == "-" && p.at(2) == "-", qPrintable(where));
+                            if (p.at(3) != "-" && p.at(3).toInt() > 0)
+                                whiteLit = true;
+                            if (white == 3 && ln == "box")
+                                QVERIFY2(p.at(3) == "-", qPrintable(where + ": RGB only, white lit"));
+                        }
+                        if (m.rgb && !m.white)
+                        {
+                            // An RGB pixel never gets white (it would black its colour out).
+                            QVERIFY2(p.at(3) == "-", qPrintable(where + ": w on an RGB pixel"));
+                            if (white == 4 && (ln == "box" || ln == "rig"))
+                                QVERIFY2(f.at(i) == "-,-,-,-,-", qPrintable(where + ": White only, RGB lit"));
+                            if (white == 4 && ln == "rgb" && headLit(f.at(i)))
+                                QVERIFY2(p.at(0) == p.at(1) && p.at(1) == p.at(2),
+                                         qPrintable(where + ": White only with no white pixels is grey"));
+                        }
+                    }
+                    // The same moment, the same frame.
+                    QCOMPARE(matrixFrame(es, l, t, white), f);
+                }
+                const QString where = QString("%1 on %2, white %3").arg(file, ln).arg(white);
+                QVERIFY2(seen.size() > 1, qPrintable(where + ": never moves"));
+                if (white != 4 || ln == "rgb" || ln == "white")
+                    QVERIFY2(anyLit, qPrintable(where + ": dark"));
+                // A box in its white-only mode still shows the picture.
+                if (ln == "white" && white != 2)
+                    QVERIFY2(whiteLit, qPrintable(where + ": white-only box stays dark"));
+                if ((ln == "box" || ln == "rig") && (white == 1 || white == 4))
+                    QVERIFY2(whiteLit, qPrintable(where + ": white pixels never lit"));
+            }
+        }
+    }
+
+    /* Still frames of the effects with no randomness, at their defaults on
+       one box: a change to one of these is a change in what it draws. */
+    const QList<QPair<QString, QString>> stills = {
+        { "matrix-bars.js",     "837b8c514b9c" },
+        { "matrix-chevrons.js", "e004b4669ea3" },
+        { "matrix-checker.js",  "1bf4d3b3de4d" },
+        { "matrix-snake.js",    "5e9f31b83655" },
+        { "matrix-wipe.js",     "4f878342656b" }
+    };
+    const MatrixLayout box = built.value("box");
+    QStringList drifted;
+    for (const auto &st : stills)
+    {
+        EffectScript es;
+        QVERIFY(es.load(dir + st.first));
+        QStringList all;
+        for (double t : { 0.37, 1.1, 2.6 })
+            all << matrixFrame(es, box, t, 0);
+        const QString sum = QString::fromLatin1(
+            QCryptographicHash::hash(all.join('|').toUtf8(), QCryptographicHash::Md5).toHex().left(12));
+        if (sum != st.second)
+            drifted << QString("%1 is %2, was %3").arg(st.first, sum, st.second);
+    }
+    QVERIFY2(drifted.isEmpty(), qPrintable(drifted.join("; ")));
+}
+
+void EffectInstance_Test::matrixEffectsRunOnBoxesAndTheirModes()
+{
+    MasterTimer timer(m_doc);
+    QLCFixtureDef *def165 = makePixelDef("XL 165", 45, 30);
+    QLCFixtureDef *def135 = makePixelDef("XL 135", 45, 0);
+    QLCFixtureDef *def30 = makePixelDef("XL 30", 0, 30);
+    QLCFixtureDef *strip = makePixelDef("Strip 16", 16, 0);
+    for (QLCFixtureDef *d : { def165, def135, def30, strip })
+        m_doc->fixtureDefCache()->addFixtureDef(d);
+
+    struct Rig
+    {
+        QString name;
+        QLCFixtureDef *def;
+        int count;
+        QSize size;
+    };
+    const QList<Rig> rigs = {
+        { "box", def165, 1, QSize(15, 5) },
+        { "rig", def165, 8, QSize(120, 5) },
+        { "rgb", def135, 1, QSize(15, 3) },
+        { "white", def30, 1, QSize(15, 2) },
+        { "matrix", strip, 8, QSize(16, 8) }
+    };
+    quint32 uni = 1;
+    for (const Rig &rig : rigs)
+    {
+        FixtureGroup *grp = new FixtureGroup(m_doc);
+        grp->setSize(rig.size);
+        QList<Fixture *> fx;
+        const int chans = rig.def->modes().first()->channels().size();
+        int addr = 0;
+        for (int b = 0; b < rig.count; ++b)
+        {
+            if (addr + chans > 512) { ++uni; addr = 0; }
+            Fixture *f = new Fixture(m_doc);
+            f->setFixtureDefinition(rig.def, rig.def->modes().first());
+            f->setName(QString("%1 #%2").arg(rig.name).arg(b + 1));
+            f->setUniverse(uni);
+            f->setAddress(quint32(addr));
+            addr += chans;
+            QVERIFY(m_doc->addFixture(f));
+            fx << f;
+            for (int h = 0; h < f->heads(); ++h)
+            {
+                QPoint at;
+                if (rig.name == "matrix") at = QPoint(h, b);
+                else if (rig.def == def165) at = xl165Cell(h) + QPoint(b * 15, 0);
+                else at = QPoint(h % 15, h / 15);
+                grp->assignHead(QLCPoint(at.x(), at.y()), GroupHead(f->id(), h));
+            }
+        }
+        ++uni;
+        m_doc->addFixtureGroup(grp);
+        Scene *scene = new Scene(m_doc);
+        scene->setName(rig.name);
+        scene->addFixtureGroup(grp->id());
+        for (Fixture *f : fx)
+            scene->addFixture(f->id());
+        m_doc->addFunction(scene);
+
+        for (const QString &file : kMatrixScripts)
+        {
+            QLCPalette *pal = new QLCPalette(QLCPalette::Effect, m_doc);
+            pal->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/" + file);
+            QVERIFY(m_doc->addPalette(pal));
+            scene->addPalette(pal->id());
+            const QString where = rig.name + ": " + file;
+
+            EffectInstance inst(m_doc, scene->id(), pal->id());
+            QVERIFY2(inst.isValid(), qPrintable(where + ": " + inst.error()));
+            int cols = 0, rows = 0;
+            const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+            QCOMPARE(cells.size(), rig.count * fx.first()->heads());
+            QCOMPARE(QSize(cols, rows), rig.size);
+            QJSValue fixtures = inst.buildFixturesArray(cells, cols, rows);
+            // Each head says what it is.
+            for (int i = 0; i < cells.size(); ++i)
+            {
+                const QJSValue o = fixtures.property(uint(i));
+                const bool white = rig.def == def30 || (rig.def == def165 && cells.at(i).head >= 45);
+                QCOMPARE(o.property("headWhite").toBool(), white);
+                QCOMPARE(o.property("headRGB").toBool(), !white);
+            }
+            int lit = 0;
+            for (double t : { 0.02, 0.4, 0.9, 1.6, 3.3 })
+            {
+                QJSValue inputs = inst.buildInputsObject();
+                inputs.setProperty("_time", t);
+                inputs.setProperty("_bpm", 0);
+                QJSValue r = inst.m_script.callTick(fixtures, inputs, inst.buildPalettesObject(),
+                                                    inst.buildParamsObject(), inst.m_state,
+                                                    inst.buildDataChannelsObject());
+                QVERIFY2(r.isArray(), qPrintable(where + ": its tick failed"));
+                QCOMPARE(r.property("length").toInt(), cells.size());
+                for (int i = 0; i < cells.size(); ++i)
+                {
+                    const QJSValue o = r.property(uint(i));
+                    for (const char *k : { "r", "g", "b", "w" })
+                        if (!o.property(k).isUndefined())
+                        {
+                            const double v = o.property(k).toNumber();
+                            QVERIFY2(v >= 0 && v <= 255, qPrintable(where));
+                            if (v > 0) ++lit;
+                        }
+                }
+            }
+            QVERIFY2(lit > 0, qPrintable(where + ": dark"));
+            scene->removePalette(pal->id());
+        }
+
+        /* Through to DMX: a strobe hit, free running and just started, is
+           full white on every emitter -- the RGB pixels' three and the white
+           pixels' one -- and on nothing else. */
+        QLCPalette *strobe = new QLCPalette(QLCPalette::Effect, m_doc);
+        strobe->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/matrix-strobe.js");
+        strobe->setEffectParamValue("timing", 1);
+        strobe->setEffectParamValue("speed", 0.5);
+        strobe->setEffectParamValue("length", 0.9);
+        strobe->setEffectParamValue("decay", 0);
+        QVERIFY(m_doc->addPalette(strobe));
+        scene->addPalette(strobe->id());
+        scene->start(&timer, FunctionParent::master());
+        timer.timerTick();
+        EffectInstance inst(m_doc, scene->id(), strobe->id());
+        inst.runTick();
+        QSet<QPair<quint32, quint32>> full;
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            if (w.value == 255)
+                full.insert(qMakePair(w.fixtureId, w.channel));
+        QCOMPARE(full.size(), rig.count * fx.first()->channels());
+        scene->stop(FunctionParent::master());
+        timer.timerTick();
+    }
+}
+
+void EffectInstance_Test::aLooseBoxIsItsOwnGrid()
+{
+    QLCFixtureDef *def = makePixelDef("XL loose", 45, 30);
+    QLCFixtureMode *mode = def->modes().first();
+    QLCPhysical phys = mode->physical();
+    phys.setLayoutSize(QSize(15, 5));
+    mode->setPhysical(phys);
+    m_doc->fixtureDefCache()->addFixtureDef(def);
+    QList<Fixture *> fx;
+    for (int b = 0; b < 2; ++b)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setFixtureDefinition(def, mode);
+        f->setUniverse(1 + quint32(b));
+        f->setAddress(0);
+        QVERIFY(m_doc->addFixture(f));
+        fx << f;
+    }
+    // Its rows as the bar is built: RGB, W, RGB, W, RGB.
+    m_doc->monitorProperties()->setHeadLayout(
+        HeadLayout::fromRowPattern(fx.first(), { "RGB", "W", "RGB", "W", "RGB" }));
+
+    Scene *scene = new Scene(m_doc);
+    for (Fixture *f : fx)
+        scene->addFixture(f->id());
+    m_doc->addFunction(scene);
+    QLCPalette *pal = new QLCPalette(QLCPalette::Effect, m_doc);
+    pal->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/matrix-bars.js");
+    QVERIFY(m_doc->addPalette(pal));
+    scene->addPalette(pal->id());
+
+    EffectInstance inst(m_doc, scene->id(), pal->id());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QCOMPARE(cells.size(), 150);
+    QCOMPARE(QSize(cols, rows), QSize(30, 5));          // side by side, each its grid
+    for (const EffectInstance::EffectCell &c : cells)
+    {
+        const QPoint want = xl165Cell(c.head) + QPoint(c.fixtureId == fx.at(1)->id() ? 15 : 0, 0);
+        QCOMPARE(QPoint(c.col, c.row), want);
+    }
 }
 
 QTEST_GUILESS_MAIN(EffectInstance_Test)

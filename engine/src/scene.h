@@ -22,8 +22,10 @@
 #define SCENE_H
 
 #include <QMutex>
+#include <atomic>
 #include <QHash>
 #include <QList>
+#include <QSet>
 
 #include "genericfader.h"
 #include "fadechannel.h"
@@ -186,6 +188,16 @@ protected:
     mutable QMutex m_valueListMutex;
     bool m_reaimRequested = false;
     bool m_repaletteRequested = false;
+
+    /** Line of sight: the heads an Aim look with "Dim lights that can't see
+     *  the target" has dimmed because something on stage is in their way
+     *  (QLCPalette::dimWhenBlocked). Under m_valueListMutex, like the faders. */
+    QSet<quint32> m_sightDimmed;
+    /** Look again, each tick, for heads that became blocked or clear, and
+     *  fade their dimmers down or back. Holds m_valueListMutex. */
+    void updateSightDim(QList<Universe *> ua);
+    /** Fade one channel of the running scene to @p value over @p ms. */
+    void fadeChannelTo(QList<Universe *> ua, quint32 fxi, quint32 channel, uchar value, uint ms);
 
     /**
      * Guards m_fixtures, m_fixtureGroups and m_palettes.
@@ -370,6 +382,57 @@ public:
      *  this. */
     QList<quint32> runtimePalettes() const;
 
+    /*********************************************************************
+     * What a look leaves out, and what it lays out over (the Show Tree)
+     *********************************************************************/
+public:
+    /** Fixtures look @a paletteId does NOT write in this scene: a lower
+     *  layer sets that attribute there (a child layer, or two layers that
+     *  overlap -- SHOW_TREE_DESIGN.md §3.5), and this scene's value must
+     *  not show through it (a lower intensity would, by HTP). Honoured
+     *  where the fader map is built (write(), under m_valueListMutex), by an
+     *  effect (EffectInstance), by an Aim on a line (AimSolver::aimHeads)
+     *  and by CueOutput: each leaves those fixtures out, and lays out over
+     *  what is left. An effect still reads the scene's own looks on them
+     *  as its base. An empty list clears it. Meant for generated scenes,
+     *  set before they run; any thread (guarded by m_bindingsMutex). */
+    void setExcludedFixtures(quint32 paletteId, const QList<quint32> &fixtures);
+    QList<quint32> excludedFixtures(quint32 paletteId) const;
+    /** Every look's exclusions, by palette id. */
+    QHash<quint32, QList<quint32> > excludedFixtures() const;
+
+    /** What look @a paletteId lays out over when it is ONE formation or ONE
+     *  effect with other scenes (a cue-level aim or effect across layers,
+     *  SHOW_TREE_DESIGN.md D10/D17): an Aim on a line numbers its heads
+     *  over all of these, an effect lays its cells over all of them; this
+     *  scene still writes only its own targets. Empty: its own targets. */
+    struct LayoutSpan
+    {
+        QList<quint32> groups;
+        QList<quint32> fixtures;
+        bool isEmpty() const { return groups.isEmpty() && fixtures.isEmpty(); }
+        bool operator==(const LayoutSpan &o) const { return groups == o.groups && fixtures == o.fixtures; }
+    };
+    void setLayoutSpan(quint32 paletteId, const LayoutSpan &span);
+    LayoutSpan layoutSpan(quint32 paletteId) const;
+    QHash<quint32, LayoutSpan> layoutSpans() const;
+
+    /** The fixtures look @a paletteId lays out over, once each and in look
+     *  order: its span's (else the scene's own) groups' members, then its
+     *  fixtures, less the ones it leaves out. */
+    QList<quint32> layoutFixtures(quint32 paletteId) const;
+    /** The groups look @a paletteId lays out over: its span's, else the
+     *  scene's own. */
+    QList<quint32> layoutGroups(quint32 paletteId) const;
+    /** The fixtures look @a paletteId writes: the scene's own targets'
+     *  fixtures, less the ones it leaves out. */
+    QList<quint32> writtenFixtures(quint32 paletteId) const;
+
+private:
+    /** Both guarded by m_bindingsMutex. */
+    QHash<quint32, QList<quint32> > m_excluded;
+    QHash<quint32, LayoutSpan> m_layoutSpans;
+
 private:
     QList<quint32> m_palettes;
     /** See setTrialPalette(); guarded by m_bindingsMutex, never saved. */
@@ -423,6 +486,26 @@ public:
 
     /** @reimp */
     void setPause(bool enable) override;
+
+    /** The scene being edited wins on stage (the Show Tree's Design-mode
+     *  preview): its faders go above the Auto ones (Universe::Override) and
+     *  write every channel LTP, so a dimmer edited down shows under a cue
+     *  running at full (HTP would keep the higher). The other channels stay
+     *  whatever else plays them. Off again: back to its own priority and
+     *  HTP, in place -- the scene keeps running if something else holds it,
+     *  and a fade-out then ends in what plays underneath. Any thread; the
+     *  DMX thread applies it at the next write. */
+    void setEditOverride(bool on);
+    bool editOverride() const;
+
+private:
+    /** Bring the faders in line with setEditOverride(). Under
+     *  m_valueListMutex. */
+    void applyEditOverride(QList<Universe *> ua);
+    int editFaderPriority() const;
+
+    std::atomic<bool> m_editOverride { false };
+    bool m_editOverrideApplied = false;   //!< what the faders were built with
 
 private:
     /** Internal helper method to abtract Scene value processing */

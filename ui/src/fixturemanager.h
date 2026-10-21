@@ -150,6 +150,14 @@ private:
      *  renaming that same row is inline (Enter/F2/double-click) instead. */
     void deleteUniverse(quint32 universe);
 
+    /** Universe rows selected in the fixtures list, in the order they were
+     *  PICKED (a ctrl-click appends; a shift-click range appends in list
+     *  order) -- the order "Patch N selected universes to…" puts them on a
+     *  node's ports, as in the Connections tab. */
+    QList<quint32> orderedSelectedUniverses();
+    /** Bring m_universePickOrder in line with what is selected now. */
+    void syncUniversePickOrder();
+
     /** Remove a previously created channels group */
     void removeChannelsGroup();
 
@@ -172,6 +180,13 @@ private:
     void copySelectionIntoGroup(FixtureGroup* target,
                                 const QList<quint32>& fixtureIds,
                                 const QList<quint32>& groupIds);
+
+    /** Group ▸ Create Group(s) from Selection…: the fixtures and groups as
+     *  one group (each group a block), or their heads as a group per head
+     *  type, or a group per head type for each fixture, through
+     *  CreateGroupsDialog. Returns the groups made (none when cancelled). */
+    QList<FixtureGroup *> createGroupsFromSelection(const QList<quint32>& fixtureIds,
+                                                    const QList<quint32>& groupIds);
 
     /** Create the text browser for displaying information */
     void createInfo();
@@ -242,6 +257,12 @@ private:
      *  defaults to it. invalidUniverse() = no context (toolbar / empty space). */
     quint32 m_ctxUniverse;
 
+    /** Patching a universe row's output: the Connections tab's questions
+     *  and rules (shared, not copied). */
+    class UniversePatcher *m_patcher = nullptr;
+    /** Selected universe rows in the order they were clicked. */
+    QList<quint32> m_universePickOrder;
+
     QSplitter* m_splitter;
     FixtureTreeWidget* m_fixtures_tree;
     QLineEdit* m_fixturesSearch;
@@ -276,6 +297,16 @@ public:
      *  stock dialog -- reached from Fixture Properties' "Definition & Mode…"
      *  and the Fixture Manager's menu. True when something changed. */
     static bool editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid);
+
+    /** Definitions that can stand in for the one @p fids share (same
+     *  manufacturer, another model): every mode they use is there by name,
+     *  with the same channels in the same order -- only the heads or the
+     *  details may differ ("LED Movinghead+Circle (2 heads)" for "LED
+     *  Movinghead+Circle"). Empty when the fixtures' definitions differ. */
+    static QList<QLCFixtureDef *> dropInDefinitions(Doc *doc, const QList<quint32> &fids);
+    /** Put @p fids on @p def, each in its mode of the same name, keeping
+     *  address, name and groups. Returns how many changed. */
+    static int changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFixtureDef *def);
 
 private:
 

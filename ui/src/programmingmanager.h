@@ -24,6 +24,7 @@
 #include <QSet>
 #include <QElapsedTimer>
 #include "function.h"
+#include "powerdistribution.h"
 
 class QTreeWidgetItem;
 class Scene;
@@ -58,6 +59,11 @@ class ProgrammingManager final : public QWidget
     friend class HelpShots;     // opens scenes for the help's pictures
 
 public:
+    /** What ⌘Z / ⇧⌘Z here would undo / redo, named (the Edit menu); empty:
+     *  nothing. */
+    QString undoText() const;
+    QString redoText() const;
+
     ProgrammingManager(QWidget *parent, Doc *doc);
     ~ProgrammingManager();
 
@@ -119,9 +125,14 @@ private slots:
     void slotSaveAsBundle();
     void slotUndoStamp();
 
-    /** General canvas undo (Ctrl+Z): revert the open scene one edit. Falls back
-     *  to the bundle-stamp undo when there's no scene-edit history. */
+    /** Undo (⌘Z): whichever was done last of the open scene's canvas edits,
+     *  a bundle stamp, and the shared history (open 24: the Show Tree's
+     *  steps and the palette operations -- New / Duplicate / Delete / Move
+     *  to folder here, the Library there -- are one history, so ⌘Z in
+     *  either tab undoes whatever was done last in it). */
     void slotUndo();
+    /** Redo (⇧⌘Z): the shared history's (canvas edits have no redo). */
+    void slotRedo();
 
     // Power/amperage estimate (Design mode only)
     /** Re-estimate the load of the previewed look and refresh the footer. */
@@ -212,11 +223,6 @@ private:
      *  creating a palette or auto-renaming an effect, so it's easy to find). */
     void revealPalette(quint32 paletteId);
 
-    /** Move Effect palettes still on the bare default folder into
-     *  Palettes/Effect/<Category>/<Engine>/ so the tree mirrors the picker.
-     *  Idempotent; leaves user-chosen folders alone. Cosmetic (no setModified).
-     *  Returns true if any path changed. */
-    bool organizeEffectPalettes();
 
     /** Duplicate palette $pid ("… (copy)"), add it, and open it for editing. */
     void duplicatePalette(quint32 pid);
@@ -239,9 +245,51 @@ private:
     void saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene = nullptr);
     /** Duplicate each function (smart-incremented name), select the last copy. */
     void duplicateFunctions(const QList<quint32> &fids);
+
+    /** A function row shown nested under a collection / chaser / show track
+     *  in the nav tree: which container it belongs to and where in it. */
+    struct MemberRef
+    {
+        quint32 container = 0;   ///< Collection / Chaser / Show id
+        quint32 fid = 0;         ///< the member function
+        int stepIndex = -1;      ///< Collection member / Chaser step index
+        quint32 trackId = 0;     ///< Show: the track
+        quint32 showFuncId = 0;  ///< Show: the placed ShowFunction
+    };
+
+    /** Member rows among the rows a context-menu click on $clicked acts on
+     *  (the selection if $clicked is in it). */
+    QList<MemberRef> funcTreeMemberTargets(QTreeWidgetItem *clicked) const;
+
+    /** Take the $refs out of their containers — the membership only, the
+     *  functions stay. Asks first for chaser steps / show items (they lose
+     *  their timing) unless $confirm is false. Returns how many were removed. */
+    int removeMembers(const QList<MemberRef> &refs, bool confirm = true);
+
+    /** The confirmation text for deleting palettes $pids: where each is used
+     *  (scene looks, effect-look slots) and what deleting does to them. */
+    QString deletePalettesMessage(const QList<quint32> &pids) const;
+
+    /** Delete palettes $pids after asking (unless $confirm is false). */
+    bool deletePalettes(const QList<quint32> &pids, bool confirm = true);
+
+    /** Delete/Backspace on a tree: the selection's functions or palettes, or
+     *  the selected folder. */
+    void deleteTreeSelection(FunctionsTreeWidget *tree);
+
+    /** The confirmation text for deleting $fids (says it is the function
+     *  itself, everywhere, and where else each one is used). */
+    QString deleteFunctionsMessage(const QList<quint32> &fids) const;
     /** Delete each function after confirmation. Collects by id first, since the
      *  first deletion rebuilds the tree and invalidates every item pointer. */
     void deleteFunctions(const QList<quint32> &fids);
+
+    /** Delete the user folder $item of $tree. Its functions/palettes and
+     *  sub-folders move up into the parent folder — nothing is deleted. A
+     *  folder with something in it asks first (unless $confirm is false).
+     *  Returns true if the folder was removed. */
+    bool deleteTreeFolder(FunctionsTreeWidget *tree, QTreeWidgetItem *item,
+                          bool confirm = true);
 
     /** Add @p fids to collection @p containerId (skipping self / duplicates /
      *  cycles) and refresh the nav tree + canvas editor if they show it. Called
@@ -333,6 +381,10 @@ private:
     QHash<quint32, QPair<int, int> > m_stampUndoFades;
     quint32              m_stampUndoSceneId = quint32(-1);
 
+    /** When each canvas snapshot / the bundle stamp was taken
+     *  (PaletteOps::nextUndoStamp()), against the shared history. */
+    QList<quint64>       m_undoStamps;
+    quint64              m_stampUndoStamp = 0;
     // General per-scene undo: detached Scene copies of the pre-edit state.
     // m_undoBaseline holds the state as of the last load/undo; on each canvas
     // edit it is pushed to m_undoStack and re-captured. Scene-canvas only.
@@ -396,6 +448,12 @@ private:
     // the show goes live, so Run mode pays nothing.
     QTimer      *m_powerTimer = nullptr;
 
+public:
+    /** The chip's tooltip: the biggest draws by fixture type, where each
+     *  figure comes from, and what the estimate assumes. */
+    static QString powerDetailText(const QList<PowerEstimator::TypeLoad> &rows,
+                                   double amps, double kw, double defaultVoltage);
+private:
     /** Start the periodic re-estimate timer. */
     void initPowerTimer();
     /** Start/stop the periodic re-estimate per mode; clears the status-bar
@@ -410,8 +468,9 @@ signals:
      *  what's "in use right now" (e.g. LED highlighting) without polling. */
     void currentPaletteIdChanged(quint32 paletteId);
     /** Live power estimate for the app status-bar chip (Design mode). Amps, kW,
-     *  and whether any circuit/source is overloaded. */
-    void powerEstimateChanged(double amps, double kw, bool overload);
+     *  whether any circuit/source is overloaded, and what it is made of (the
+     *  biggest draws and what the figure assumes -- the chip's tooltip). */
+    void powerEstimateChanged(double amps, double kw, bool overload, const QString &detail);
 };
 
 /** @} */

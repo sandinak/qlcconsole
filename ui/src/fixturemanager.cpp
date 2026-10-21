@@ -47,6 +47,7 @@
 #include <QtGui>
 #include <climits>
 
+#include "mainbar.h"
 #include "patchlistdialog.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -54,6 +55,7 @@
 #include "qlcfile.h"
 
 #include "createfixturegroup.h"
+#include "creategroupsdialog.h"
 #include "powerdistributionwidget.h"
 #include "powerdistribution.h"
 #include "universeusagewidget.h"
@@ -63,6 +65,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "measurementunits.h"
 #include <QShortcut>
 #include "fixtureremap.h"
 #include "addrgbpanel.h"
@@ -77,6 +80,11 @@
 #include "doc.h"
 #include "programmercontroller.h"
 #include "monitor/monitor.h"
+#include "universepatcher.h"
+#include "outputpatch.h"
+#include "qlcioplugin.h"
+#include "patchundo.h"
+#include "showstatus.h"
 
 // Bumped when the power pane was added as a third section: an older 2-section
 // saved state would collapse the new pane to zero width and hide it.
@@ -170,6 +178,27 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     });
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
+
+    /* Patching a universe row's output (its context menu) asks what the
+       Connections tab asks, through the same code. A patch changed -- here,
+       or put back by Undo Patch Change in Connections -- relabels the
+       universe rows in place: a rebuild would drop the selection. PatchUndo
+       says "changed" before a change as well as after an undo, hence the
+       zero-delay hop to read the patch once it has landed. */
+    m_patcher = new UniversePatcher(m_doc, this);
+    connect(m_patcher, &UniversePatcher::patchChanged, this, [this]() {
+        if (m_fixtures_tree != NULL)
+            m_fixtures_tree->updateUniverseLabels();
+    });
+    if (m_doc->inputOutputMap() != NULL && m_doc->inputOutputMap()->patchUndo() != NULL)
+        connect(m_doc->inputOutputMap()->patchUndo(), &PatchUndo::changed, this, [this]() {
+            QTimer::singleShot(0, this, [this]() {
+                if (m_fixtures_tree != NULL)
+                    m_fixtures_tree->updateUniverseLabels();
+            });
+        });
+    connect(m_fixtures_tree, &QTreeWidget::itemSelectionChanged,
+            this, &FixtureManager::syncUniversePickOrder);
 
     connect(m_doc, SIGNAL(channelsGroupRemoved(quint32)),
             this, SLOT(slotChannelsGroupRemoved(quint32)));
@@ -1244,19 +1273,22 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
         const QLCPhysical physical = fixtureMode->physical();
         info += title.arg(tr("Physical"));
 
-        float mmInch = 0.0393700787;
-        float kgLbs = 2.20462262;
-        QString mm("%1mm (%2\")");
-        QString kg("%1kg (%2 lbs)");
+        // In the person's unit (Settings -> Units), what the file holds after.
+        typedef MeasurementUnits MU;
+        const MU::LengthUnit unit = MU::preferredLength();
+        const MU::WeightUnit wunit = MU::weightUnitFor(unit);
+        auto len = [unit](int mm) {
+            return unit == MU::Millimetres ? MU::formatLength(mm, unit)
+                   : QStringLiteral("%1 (%2 mm)").arg(MU::formatLength(mm, unit)).arg(mm);
+        };
         QString W("%1W");
-        info += genInfo.arg(tr("Width")).arg(mm.arg(physical.width()))
-                                        .arg(physical.width() * mmInch, 0, 'g', 4);
-        info += genInfo.arg(tr("Height")).arg(mm.arg(physical.height()))
-                                         .arg(physical.height() * mmInch, 0, 'g', 4);
-        info += genInfo.arg(tr("Depth")).arg(mm.arg(physical.depth()))
-                                        .arg(physical.depth() * mmInch, 0, 'g', 4);
-        info += genInfo.arg(tr("Weight")).arg(kg.arg(physical.weight()))
-                                         .arg(physical.weight() * kgLbs, 0, 'g', 4);
+        info += genInfo.arg(tr("Width")).arg(len(physical.width()));
+        info += genInfo.arg(tr("Height")).arg(len(physical.height()));
+        info += genInfo.arg(tr("Depth")).arg(len(physical.depth()));
+        info += genInfo.arg(tr("Weight")).arg(wunit == MU::Kilograms
+                ? MU::formatWeight(physical.weight(), wunit)
+                : QStringLiteral("%1 (%2)").arg(MU::formatWeight(physical.weight(), wunit),
+                                                MU::formatWeight(physical.weight(), MU::Kilograms)));
         info += genInfo.arg(tr("Power consumption")).arg(W.arg(physical.powerConsumption()));
         info += genInfo.arg(tr("DMX Connector")).arg(physical.dmxConnector());
 
@@ -1574,6 +1606,8 @@ void FixtureManager::initToolBar()
     // extended here to the other manager toolbars that never set one.
     toolbar->setIconSize(QSize(20, 20));
     layout()->setMenuBar(toolbar);
+    // On show in the main window's top bar while this is the current tab.
+    MainBar::registerTabTools(this, toolbar);
 
     // Trimmed to creation-only actions (2026-09-03 modernization pass):
     // Properties/Test/Remove/Ungroup/Move Up/Down are all selection- or
@@ -2039,6 +2073,78 @@ void FixtureManager::editFixtureProperties()
     editDefinitionAndMode(this, m_doc, var.toUInt());
 }
 
+QList<QLCFixtureDef *> FixtureManager::dropInDefinitions(Doc *doc, const QList<quint32> &fids)
+{
+    QList<QLCFixtureDef *> out;
+    if (doc == NULL || fids.isEmpty())
+        return out;
+    QLCFixtureDef *current = NULL;
+    QSet<QString> modes;
+    for (quint32 fid : fids)
+    {
+        Fixture *fxi = doc->fixture(fid);
+        if (fxi == NULL || fxi->fixtureDef() == NULL || fxi->fixtureMode() == NULL)
+            return out;
+        if (current != NULL && fxi->fixtureDef() != current)
+            return out;                         // one definition at a time
+        current = fxi->fixtureDef();
+        modes.insert(fxi->fixtureMode()->name());
+    }
+    if (current->manufacturer() == KXMLFixtureGeneric)
+        return out;
+
+    QLCFixtureDefCache *cache = doc->fixtureDefCache();
+    for (const QString &model : cache->models(current->manufacturer()))
+    {
+        if (model == current->model())
+            continue;
+        QLCFixtureDef *def = cache->fixtureDef(current->manufacturer(), model);
+        if (def == NULL)
+            continue;
+        bool fits = true;
+        for (const QString &m : modes)
+        {
+            const QLCFixtureMode *was = current->mode(m), *now = def->mode(m);
+            if (was == NULL || now == NULL || was->channels().size() != now->channels().size())
+            {
+                fits = false;
+                break;
+            }
+            for (int c = 0; fits && c < was->channels().size(); ++c)
+            {
+                const QLCChannel *a = was->channels().at(c), *b = now->channels().at(c);
+                if (a->name() != b->name() || a->group() != b->group() || a->controlByte() != b->controlByte())
+                    fits = false;
+            }
+            if (!fits)
+                break;
+        }
+        if (fits)
+            out << def;
+    }
+    return out;
+}
+
+int FixtureManager::changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFixtureDef *def)
+{
+    if (doc == NULL || def == NULL || !dropInDefinitions(doc, fids).contains(def))
+        return 0;
+    int n = 0;
+    for (quint32 fid : fids)
+    {
+        Fixture *fxi = doc->fixture(fid);
+        QLCFixtureMode *mode = fxi != NULL ? def->mode(fxi->fixtureMode()->name()) : NULL;
+        if (mode == NULL)
+            continue;
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setID(fxi->id());                  // tell everyone it changed
+        ++n;
+    }
+    if (n > 0)
+        doc->setModified();
+    return n;
+}
+
 bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid)
 {
     Fixture* fxi = (doc != NULL) ? doc->fixture(fid) : NULL;
@@ -2319,6 +2425,21 @@ void FixtureManager::slotUnGroup()
     }
 }
 
+QList<FixtureGroup *> FixtureManager::createGroupsFromSelection(const QList<quint32> &fixtureIds,
+                                                                const QList<quint32> &groupIds)
+{
+    if (fixtureIds.isEmpty() && groupIds.isEmpty())
+        return QList<FixtureGroup *>();
+    CreateGroupsDialog dlg(m_doc, fixtureIds, groupIds, QString(), this);
+    if (dlg.heads() == 0)
+        return QList<FixtureGroup *>();
+    if (dlg.exec() != QDialog::Accepted)
+        return QList<FixtureGroup *>();
+    updateGroupMenu();
+    updateView();
+    return dlg.createdGroups();
+}
+
 void FixtureManager::slotGroupSelected(QAction* action)
 {
     // m_groupMenu (this action's origin) only ever lists real existing
@@ -2538,69 +2659,7 @@ void FixtureManager::copySelectionIntoGroup(FixtureGroup* target,
 
     // Silence the per-head changed() storm; one refresh happens at the end.
     target->blockSignals(true);
-
-    // Start appending below whatever the target already holds.
-    int curY = 0;
-    {
-        QMapIterator<QLCPoint, GroupHead> it(target->headsMap());
-        while (it.hasNext()) { it.next(); curY = qMax(curY, it.key().y() + 1); }
-    }
-
-    // Each source group goes in as a block (preserving its relative layout),
-    // tagged as a sub-group so it stays visually distinct and movable as a unit.
-    foreach (quint32 gid, groupIds)
-    {
-        FixtureGroup* src = m_doc->fixtureGroup(gid);
-        if (src == NULL || src == target)
-            continue;
-
-        const QMap<QLCPoint, GroupHead> srcHeads = src->headsMap();
-        if (srcHeads.isEmpty())
-            continue;
-
-        // Normalise the source to its top-left corner.
-        int minX = INT_MAX, minY = INT_MAX;
-        QMapIterator<QLCPoint, GroupHead> nit(srcHeads);
-        while (nit.hasNext()) { nit.next(); minX = qMin(minX, nit.key().x()); minY = qMin(minY, nit.key().y()); }
-
-        int blockMaxY = curY;
-        QMapIterator<QLCPoint, GroupHead> it(srcHeads);
-        while (it.hasNext())
-        {
-            it.next();
-            const int x = it.key().x() - minX;
-            const int y = curY + (it.key().y() - minY);
-            if (target->assignHead(QLCPoint(x, y), it.value()) == true)
-            {
-                target->setHeadSubGroup(QLCPoint(x, y), FixtureGroup::subGroupTagFor(src->id()));
-                blockMaxY = qMax(blockMaxY, y);
-            }
-        }
-        curY = blockMaxY + 1;
-    }
-
-    // Loose fixtures go in a row of their own (all heads of each fixture).
-    int col = 0;
-    foreach (quint32 fid, fixtureIds)
-    {
-        Fixture* fxi = m_doc->fixture(fid);
-        if (fxi == NULL)
-            continue;
-        for (int h = 0; h < fxi->heads(); h++)
-        {
-            if (target->assignHead(QLCPoint(col, curY), GroupHead(fid, h)) == true)
-                col++;
-        }
-    }
-
-    // Grow the grid to fit everything we placed.
-    int maxX = 0, maxY = 0;
-    QMapIterator<QLCPoint, GroupHead> sz(target->headsMap());
-    while (sz.hasNext()) { sz.next(); maxX = qMax(maxX, sz.key().x()); maxY = qMax(maxY, sz.key().y()); }
-    if (maxX + 1 > target->size().width() || maxY + 1 > target->size().height())
-        target->setSize(QSize(qMax(maxX + 1, target->size().width()),
-                              qMax(maxY + 1, target->size().height())));
-
+    CreateFixtureGroup::appendSelection(m_doc, target, fixtureIds, groupIds);
     target->blockSignals(false);
     target->notifyChanged(); // single refresh
     m_doc->setModified();
@@ -2699,6 +2758,31 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 editDefinitionAndMode(this, m_doc, fid);
             });
         }
+        /* Another version of their definition, the same channels with
+           other heads (a mover's colour ring as a head of its own): every
+           fixture selected moves to it, each keeping its mode. */
+        if (!selFixtures.isEmpty() && selGroups.isEmpty() && m_doc->mode() != Doc::Operate)
+        {
+            const QList<QLCFixtureDef *> dropIns = dropInDefinitions(m_doc, selFixtures);
+            if (!dropIns.isEmpty())
+            {
+                const QList<quint32> fids = selFixtures;
+                menu.addAction(tr("Change Definition…"), this, [this, fids, dropIns]() {
+                    QStringList names;
+                    for (QLCFixtureDef *d : dropIns)
+                        names << d->model();
+                    bool ok = false;
+                    const QString pick = QInputDialog::getItem(this, tr("Change Definition"),
+                        tr("%n fixture(s) to the definition (same channels, same addresses):", "",
+                           int(fids.count())), names, 0, false, &ok);
+                    if (!ok || names.indexOf(pick) < 0)
+                        return;
+                    changeDefinition(m_doc, fids, dropIns.at(names.indexOf(pick)));
+                    updateView();
+                    slotSelectionChanged();
+                });
+            }
+        }
         /* The definition file itself, in the Fixture Editor -- one real
            fixture with a .qxf; a generic dimmer has none. */
         if (selFixtures.size() == 1 && selGroups.isEmpty())
@@ -2792,7 +2876,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // ---- Organising it ----
     QAction *moveToFolder = NULL;
     QAction *ungroupOnly = NULL;
-    QAction *copyToNew = NULL;
+    QAction *createGroups = NULL;
     QMenu *copyIntoMenu = NULL;
     QAction *rebuildComposite = NULL;
     QMenu *circuitMenu = NULL;
@@ -2801,7 +2885,13 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     {
         menu.addSeparator();
         QMenu *groupMenu = menu.addMenu(QIcon(":/group.png"), tr("Group"));
-        copyToNew = groupMenu->addAction(tr("Create Group from Selection…"));
+        /* One group (selected groups as blocks), a group per head type, or
+           a group per head type for each fixture -- previewed, and named,
+           before any is made. */
+        createGroups = groupMenu->addAction(tr("Create Group(s) from Selection…"));
+        createGroups->setToolTip(tr("One group of the selection (a group selected goes in as a "
+                                    "block), a group per head type across the fixtures, or a "
+                                    "group per head type for each fixture."));
         const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
         if (groups.isEmpty() == false)
         {
@@ -2893,11 +2983,75 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         menu.addAction(m_addRGBAction);
     }
 
-    // A universe row itself: delete it (renaming is inline; how it reaches
-    // hardware is the Connections tab's job).
+    // A universe row itself: where it goes (patch, change, unpatch -- the
+    // Connections tab's questions, through UniversePatcher), and deleting
+    // it. Renaming is inline.
     QAction *deleteUni = NULL;
-    if (ctxIsUniverseRow)
+    QAction *patchOut = NULL;
+    QAction *retargetOut = NULL;
+    QAction *unpatchOut = NULL;
+    QAction *pluralPatch = NULL;
+    QAction *pluralUnpatch = NULL;
+    QAction *showInConnections = NULL;
+    const quint32 ctxUni = m_ctxUniverse;
+    QString ctxPlugin;
+    quint32 ctxLine = 0;
+    QList<quint32> pickedUnis;
+    QList<UniversePatcher::UnpatchLeg> pickedLegs;
+    if (ctxIsUniverseRow && m_patcher != NULL)
     {
+        menu.addSeparator();
+
+        /* Several universe rows selected: the plural actions, named with
+           their count, first -- the same two the Connections tab offers,
+           in the order the universes were picked. */
+        pickedUnis = orderedSelectedUniverses();
+        if (pickedUnis.count() > 1 && pickedUnis.contains(ctxUni))
+        {
+            pluralPatch = menu.addAction(UniversePatcher::patchSelectionText(pickedUnis.count()));
+            pickedLegs = m_patcher->outputLegs(pickedUnis);
+            QSet<quint32> withPatch;
+            foreach (const UniversePatcher::UnpatchLeg &l, pickedLegs)
+                withPatch.insert(l.universe);
+            if (withPatch.isEmpty() == false)
+                pluralUnpatch = menu.addAction(
+                    UniversePatcher::unpatchSelectionText(withPatch.count()));
+            menu.addSeparator();
+        }
+
+        /* This one universe: where it goes now, said in the menu itself,
+           then what can be done about it. */
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        Universe *u = iomap != NULL ? iomap->universe(ctxUni) : NULL;
+        for (int i = 0; u != NULL && i < u->outputPatchesCount() && ctxPlugin.isEmpty(); i++)
+        {
+            OutputPatch *op = u->outputPatch(i);
+            if (op != NULL && op->plugin() != NULL && op->isPending() == false)
+            {
+                ctxPlugin = op->plugin()->name();
+                ctxLine = op->output();
+            }
+        }
+        const QStringList legs = m_patcher->outputText(ctxUni);
+        if (legs.isEmpty())
+        {
+            patchOut = menu.addAction(tr("Patch output…"));
+            patchOut->setToolTip(tr("Choose the protocol, interface and node port this "
+                                    "universe goes out on"));
+        }
+        else
+        {
+            QAction *where = menu.addAction(tr("Output: %1").arg(legs.join(QStringLiteral(" · "))));
+            where->setEnabled(false);
+            if (ctxPlugin.isEmpty() == false && m_patcher->supportsTargets(ctxPlugin))
+                retargetOut = menu.addAction(UniversePatcher::retargetText(ctxPlugin));
+            else
+                patchOut = menu.addAction(tr("Patch output…"));
+            unpatchOut = menu.addAction(tr("Unpatch output"));
+        }
+        if (ShowStatus::instance()->actionLabel(QStringLiteral("connections.universe")).isEmpty() == false)
+            showInConnections = menu.addAction(tr("Show in Connections"));
+
         menu.addSeparator();
         deleteUni = menu.addAction(tr("Delete Universe…"));
     }
@@ -3023,6 +3177,37 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (chosen == NULL)
         return;
 
+    if (patchOut != NULL && chosen == patchOut)
+    {
+        m_patcher->patchUniverse(ctxUni);
+        return;
+    }
+    if (retargetOut != NULL && chosen == retargetOut)
+    {
+        m_patcher->retargetPatch(ctxUni, ctxPlugin, ctxLine);
+        return;
+    }
+    if (unpatchOut != NULL && chosen == unpatchOut)
+    {
+        m_patcher->unpatchLegs(m_patcher->outputLegs(QList<quint32>() << ctxUni));
+        return;
+    }
+    if (pluralPatch != NULL && chosen == pluralPatch)
+    {
+        m_patcher->patchSelectionTo(pickedUnis);
+        return;
+    }
+    if (pluralUnpatch != NULL && chosen == pluralUnpatch)
+    {
+        m_patcher->unpatchLegs(pickedLegs);
+        return;
+    }
+    if (showInConnections != NULL && chosen == showInConnections)
+    {
+        ShowStatus::instance()->runAction(QStringLiteral("connections.universe"), this,
+                                          QVariantList() << ctxUni);
+        return;
+    }
     if (readdress != NULL && chosen == readdress)
     {
         patchOrReaddress(readdressIds);
@@ -3134,34 +3319,9 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             updateView();
         }
     }
-    else if (chosen == copyToNew)
+    else if (createGroups != NULL && chosen == createGroups)
     {
-        if (selGroups.isEmpty() && !selFixtures.isEmpty())
-        {
-            // Loose fixtures → the shared creator (grid heuristic + name/size
-            // prompt + physical-order arrangement), consistent with the
-            // Programming tab and Studio.
-            if (CreateFixtureGroup::createFromFixtures(m_doc, selFixtures, this) != NULL)
-                updateView();
-        }
-        else
-        {
-            // Selection includes existing groups → keep the block-copy behaviour
-            // (each source group placed as a sub-group block, grown to fit).
-            bool ok = false;
-            const QString name = QInputDialog::getText(
-                this, tr("Create group from selection"), tr("New group name:"),
-                QLineEdit::Normal, tr("New Group"), &ok);
-            if (ok)
-            {
-                FixtureGroup *ng = new FixtureGroup(m_doc);
-                ng->setName(name.trimmed().isEmpty() ? tr("New Group") : name.trimmed());
-                ng->setSize(QSize(1, 1)); // grown to fit by copySelectionIntoGroup
-                m_doc->addFixtureGroup(ng);
-                copySelectionIntoGroup(ng, selFixtures, selGroups);
-                updateView();
-            }
-        }
+        createGroupsFromSelection(selFixtures, selGroups);
     }
     else if (copyIntoMenu != NULL && copyIntoMenu->actions().contains(chosen))
     {
@@ -3193,7 +3353,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
     else if (chosen == deleteUni)
     {
-        deleteUniverse(m_ctxUniverse);
+        // m_ctxUniverse is cleared as soon as the menu closes (above).
+        deleteUniverse(ctxUni);
     }
     else if (chosen == addPowerSource)
     {
@@ -3282,6 +3443,36 @@ void FixtureManager::deleteUniverse(quint32 universe)
 
     m_doc->setModified();
     updateView();
+}
+
+void FixtureManager::syncUniversePickOrder()
+{
+    if (m_fixtures_tree == NULL)
+        return;
+    /* What is selected now, in list order; then the picking order of what is
+       still selected, with what is new appended -- one ctrl-click adds one, a
+       shift-click range several in list order, a plain click starts again. */
+    QList<quint32> now;
+    for (QTreeWidgetItemIterator it(m_fixtures_tree, QTreeWidgetItemIterator::Selected); *it; ++it)
+    {
+        const QVariant uv = (*it)->data(KColumnName, PROP_UNIVERSE);
+        if (uv.isValid() && now.contains(uv.toUInt()) == false)
+            now << uv.toUInt();
+    }
+    QList<quint32> order;
+    foreach (quint32 u, m_universePickOrder)
+        if (now.contains(u))
+            order << u;
+    foreach (quint32 u, now)
+        if (order.contains(u) == false)
+            order << u;
+    m_universePickOrder = order;
+}
+
+QList<quint32> FixtureManager::orderedSelectedUniverses()
+{
+    syncUniversePickOrder();
+    return m_universePickOrder;
 }
 
 void FixtureManager::slotChannelGroupContextMenuRequested(const QPoint &pos)

@@ -19,6 +19,8 @@
 #include "spreadlayer.h"
 #include <QMutex>
 #include <QJSValue>
+
+#include "beamocclusion.h"
 #include <QColor>
 #include <QHash>
 #include <QList>
@@ -203,8 +205,12 @@ private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
     struct FixtureFacts;
     void readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const;
-    QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal);
-    QJSValue sceneTargetObject(quint32 fid, StageTarget *st);
+    QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
+                         const BeamOcclusion::Model &sight);
+    QJSValue sceneTargetObject(quint32 fid, StageTarget *st, const BeamOcclusion::Model &sight);
+    /** Line of sight onto a script's aim object: blocked, blockedBy,
+     *  blockedKind, blockedAt, clearance (see EFFECTSCRIPT_API.md). */
+    void setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) const;
     QJSValue buildInputsObject() const;
     /** What it runs on (a SpeedMasters::Assignment): its own "__speedMaster"
      *  param, else its look's effective speed master. */
@@ -217,8 +223,15 @@ private:
      *  -1 when it has none. */
     void ownLook(QList<QColor> &colours, double &dimmer) const;
     void lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer = nullptr) const;
-    /** The fixtures and groups the look is on, before any type filter. */
+    /** The fixtures and groups the look is on, before any type filter:
+     *  what this scene writes (less any it leaves out for this effect). */
     QList<quint32> lookFixtureIds() const;
+    /** What the effect lays out over: lookFixtureIds(), or ONE effect's
+     *  fixtures across several scenes (Scene::layoutSpan()). */
+    QList<quint32> layoutFixtureIds() const;
+    /** @p fxIds less WLED fixtures that run it themselves, filtered by the
+     *  script's fixtureTypes. */
+    QList<quint32> typeFiltered(QList<quint32> fxIds) const;
     /** A WLED look (QLCPalette::wledEffect()): what WLED fixtures in it are
      *  sent -- the effect, its controls and the look's colours, on their own
      *  channels. They run it; the script never sees them. */

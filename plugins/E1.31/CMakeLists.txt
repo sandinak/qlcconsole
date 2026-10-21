@@ -22,6 +22,7 @@ add_library(${module_name}
 
 target_sources(${module_name} PRIVATE
     ../interfaces/qlcioplugin.cpp ../interfaces/qlcioplugin.h
+    ../interfaces/sendhealth.cpp ../interfaces/sendhealth.h
     configuree131.cpp configuree131.h configuree131.ui
     e131controller.cpp e131controller.h
     e131packetizer.cpp e131packetizer.h
@@ -47,4 +48,8 @@ install(TARGETS ${module_name}
 if (UNIX AND NOT APPLE)
    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcconsole.QLCConsole.e131.metainfo.xml"
            DESTINATION ${METAINFODIR})
+endif()
+
+if(NOT ANDROID AND NOT IOS)
+    add_subdirectory(test)
 endif()

@@ -882,6 +882,83 @@ void MonitorProperties_Test::studioFrameSlavedToPlatform()
     QCOMPARE(mp.fixtureRigPosition(9), QVector3D(6, 7, 0.5f));
 }
 
+void MonitorProperties_Test::gridUnitsConvertExactly()
+{
+    QCOMPARE(MonitorProperties::gridUnitsFor(MeasurementUnits::Millimetres), MonitorProperties::Meters);
+    QCOMPARE(MonitorProperties::gridUnitsFor(MeasurementUnits::Centimetres), MonitorProperties::Meters);
+    QCOMPARE(MonitorProperties::gridUnitsFor(MeasurementUnits::Metres), MonitorProperties::Meters);
+    QCOMPARE(MonitorProperties::gridUnitsFor(MeasurementUnits::Inches), MonitorProperties::Feet);
+    QCOMPARE(MonitorProperties::gridUnitsFor(MeasurementUnits::Feet), MonitorProperties::Feet);
+
+    MonitorProperties mp;
+    mp.setGridSize(QVector3D(10, 4, 8));
+    mp.setFixturePosition(1, 0, 0, QVector3D(1000, 2000, 3));
+    mp.convertGridUnits(MonitorProperties::Feet);
+    QCOMPARE(mp.gridUnits(), MonitorProperties::Feet);
+    QVERIFY(qAbs(mp.gridSize().x() - 32.8084f) < 1e-3f);
+    QVERIFY(qAbs(mp.gridSize().z() - 26.2467f) < 1e-3f);
+    QCOMPARE(mp.stageCentre(), QVector3D(5.0f, 4.0f, 0.0f));          // same stage
+    QCOMPARE(mp.fixturePosition(1, 0, 0), QVector3D(1000, 2000, 3));   // mm, untouched
+
+    mp.convertGridUnits(MonitorProperties::Feet);   // already: nothing
+    QVERIFY(qAbs(mp.gridSize().x() - 32.8084f) < 1e-3f);
+    mp.convertGridUnits(MonitorProperties::Meters);  // and back, not grown
+    QVERIFY(qAbs(mp.gridSize().x() - 10.0f) < 1e-4f);
+    QVERIFY(qAbs(mp.gridSize().y() - 4.0f) < 1e-4f);
+}
+
+void MonitorProperties_Test::gridSizeSavedWholeAndExact()
+{
+    MonitorProperties mp;
+    mp.setGridSize(QVector3D(10, 4, 8));
+    mp.convertGridUnits(MonitorProperties::Feet);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    // Whole feet where an older reader (toInt) looks, the exact extent
+    // beside them, the unit as the person has it.
+    QVERIFY2(buf.contains("Width=\"33\""), buf.constData());
+    QVERIFY(buf.contains("Depth=\"26\""));
+    QVERIFY(buf.contains("ExactWidth=\"32.8084"));
+    QVERIFY(buf.contains("Units=\"1\""));
+
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+    QCOMPARE(mp2.gridUnits(), MonitorProperties::Feet);
+    QVERIFY(qAbs(mp2.gridSize().x() - 32.8084f) < 1e-3f);
+    QVERIFY(qAbs(mp2.gridSize().z() - 26.2467f) < 1e-3f);
+
+    // A whole stage writes no Exact* at all, as before.
+    MonitorProperties whole;
+    whole.setGridSize(QVector3D(12, 3, 9));
+    QByteArray buf2;
+    QXmlStreamWriter w2(&buf2);
+    w2.writeStartDocument();
+    whole.saveXML(&w2, nullptr);
+    w2.writeEndDocument();
+    QVERIFY(!buf2.contains("Exact"));
+    QVERIFY(buf2.contains("Width=\"12\""));
+    QVERIFY(buf2.contains("Units=\"0\""));
+
+    // A show this fork wrote before Exact* ("32.8084" in Width) is read as
+    // the number, not as 0.
+    QByteArray old = buf2;
+    old.replace("Width=\"12\"", "Width=\"32.8084\"");
+    MonitorProperties mp3;
+    QXmlStreamReader r3(old);
+    while (r3.readNextStartElement())
+        if (r3.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp3.loadXML(r3, nullptr));
+    QVERIFY(qAbs(mp3.gridSize().x() - 32.8084f) < 1e-3f);
+}
+
 void MonitorProperties_Test::reset()
 {
     MonitorProperties mp;

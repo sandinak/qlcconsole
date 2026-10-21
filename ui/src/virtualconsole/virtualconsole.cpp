@@ -40,6 +40,7 @@
 #include <QMenu>
 #include <QList>
 
+#include "mainbar.h"
 #include "vcpropertieseditor.h"
 #include "addvcbuttonmatrix.h"
 #include "addvcslidermatrix.h"
@@ -58,6 +59,10 @@
 #include "vcxypad.h"
 #include "vcclock.h"
 #include "vcshowcontrol.h"
+#include "vccuerunner.h"
+#include "chaser.h"
+#include "vccuelist.h"
+#include "showtreecontroller.h"
 #include "functionwizard.h"
 #include "programmerframewizard.h"
 #include "doc.h"
@@ -387,6 +392,12 @@ void VirtualConsole::initActions()
     m_addShowControlAction = new QAction(QIcon(":/show.png"), tr("New Show control"), this);
     connect(m_addShowControlAction, SIGNAL(triggered(bool)), this, SLOT(slotAddShowControl()), Qt::QueuedConnection);
 
+    m_addCueRunnerAction = new QAction(QIcon(":/chaser.png"), tr("New Cue Runner"), this);
+    m_addCueRunnerAction->setObjectName(QStringLiteral("vcAddCueRunner"));
+    m_addCueRunnerAction->setToolTip(tr("The Show Tree's cue runner: GO, Sub GO and what changes, for the current "
+                                        "production or one cue list"));
+    connect(m_addCueRunnerAction, SIGNAL(triggered(bool)), this, SLOT(slotAddCueRunner()), Qt::QueuedConnection);
+
     /* Put add actions under the same group */
     m_addActionGroup = new QActionGroup(this);
     m_addActionGroup->setExclusive(false);
@@ -405,6 +416,7 @@ void VirtualConsole::initActions()
     m_addActionGroup->addAction(m_addClockAction);
     m_addActionGroup->addAction(m_addAnimationAction);
     m_addActionGroup->addAction(m_addShowControlAction);
+    m_addActionGroup->addAction(m_addCueRunnerAction);
 
     /* Tools menu actions */
     m_toolsSettingsAction = new QAction(QIcon(":/configure.png"), tr("Virtual Console Settings"), this);
@@ -429,6 +441,17 @@ void VirtualConsole::initActions()
 
     m_editDeleteAction = new QAction(QIcon(":/editdelete.png"), tr("Delete"), this);
     connect(m_editDeleteAction, SIGNAL(triggered(bool)), this, SLOT(slotEditDelete()));
+
+    /* P7: a VC Cue List of a Show Tree list <-> a Cue Runner, in place. */
+    m_editSwapAction = new QAction(QIcon(":/chaser.png"), tr("Swap Widget (Cue List ⇄ Cue Runner)"), this);
+    m_editSwapAction->setObjectName(QStringLiteral("vcSwapWidget"));
+    m_editSwapAction->setToolTip(tr("Replace the selected Cue List with a Cue Runner playing the same cue list "
+                                    "(or the other way round), where it is"));
+    m_editSwapAction->setEnabled(false);
+    connect(m_editSwapAction, &QAction::triggered, this, [this]() {
+        if (m_selectedWidgets.count() == 1)
+            swapWidget(m_selectedWidgets.first());
+    });
 
     m_editPropertiesAction = new QAction(QIcon(":/edit.png"), tr("Widget Properties"), this);
     connect(m_editPropertiesAction, SIGNAL(triggered(bool)), this, SLOT(slotEditProperties()));
@@ -535,6 +558,7 @@ void VirtualConsole::initMenuBar()
     m_addMenu->addSeparator();
     m_addMenu->addAction(m_addXYPadAction);
     m_addMenu->addAction(m_addCueListAction);
+    m_addMenu->addAction(m_addCueRunnerAction);
     m_addMenu->addAction(m_addAnimationAction);
     m_addMenu->addAction(m_addAudioTriggersAction);
     m_addMenu->addSeparator();
@@ -556,6 +580,7 @@ void VirtualConsole::initMenuBar()
     m_editMenu->addSeparator();
     m_editMenu->addAction(m_editPropertiesAction);
     m_editMenu->addAction(m_editRenameAction);
+    m_editMenu->addAction(m_editSwapAction);
     m_editMenu->addSeparator();
 
     /* Background Menu */
@@ -606,6 +631,9 @@ void VirtualConsole::initMenuBar()
     // 26x26 — see fixturemanager.cpp's initToolBar for the full reasoning).
     m_toolbar->setIconSize(QSize(20, 20));
     m_contentsLayout->addWidget(m_toolbar);
+    // On show in the main window's top bar while this is the current tab
+    // (hidden there in Operate, as here).
+    MainBar::registerTabTools(this, m_toolbar);
 
     // "Add" consolidates the New Button/Slider/…/Frame actions that used to
     // be spelled out as fourteen separate toolbar buttons — reuses m_addMenu
@@ -711,6 +739,7 @@ void VirtualConsole::updateActions()
         m_editDeleteAction->setEnabled(false);
         m_editRenameAction->setEnabled(false);
         m_editPropertiesAction->setEnabled(false);
+        m_editSwapAction->setEnabled(false);
 
         /* All the rest are disabled for draw area, except BG & font */
         m_frameActionGroup->setEnabled(false);
@@ -730,6 +759,12 @@ void VirtualConsole::updateActions()
         m_editDeleteAction->setEnabled(true);
         m_editRenameAction->setEnabled(true);
         m_editPropertiesAction->setEnabled(true);
+        m_editSwapAction->setEnabled(m_selectedWidgets.count() == 1
+                                     && (m_selectedWidgets.first()->type() == VCWidget::CueRunnerWidget
+                                         || (m_selectedWidgets.first()->type() == VCWidget::CueListWidget
+                                             && m_doc->showTree()->productionOfChaser(
+                                                    qobject_cast<VCCueList *>(m_selectedWidgets.first())->chaserID())
+                                                != ShowTree::invalidId())));
 
         /* Enable all common properties */
         m_bgActionGroup->setEnabled(true);
@@ -1084,6 +1119,65 @@ void VirtualConsole::slotAddShowControl()
     m_doc->setModified();
 }
 
+void VirtualConsole::slotAddCueRunner()
+{
+    VCWidget* parent(closestParent());
+    if (parent == NULL)
+        return;
+
+    VCCueRunner* cr = new VCCueRunner(parent, m_doc);
+    setupWidget(cr, parent);
+    m_doc->setModified();
+}
+
+VCWidget *VirtualConsole::swapWidget(VCWidget *widget)
+{
+    if (widget == NULL)
+        return NULL;
+    VCWidget *parent = qobject_cast<VCWidget *>(widget->parentWidget());
+    if (parent == NULL)
+        return NULL;
+    ShowTreeController *st = m_doc->showTree();
+    VCWidget *made = NULL;
+    if (VCCueList *cl = qobject_cast<VCCueList *>(widget))
+    {
+        // A Cue List of a Show Tree list: a Cue Runner on that list -- or on
+        // the current production when that is what it plays.
+        quint32 listId = ShowTree::invalidId();
+        const quint32 pid = st->productionOfChaser(cl->chaserID(), &listId);
+        if (pid == ShowTree::invalidId())
+            return NULL;                // a plain chaser: the Cue List is its widget
+        VCCueRunner *cr = new VCCueRunner(parent, m_doc);
+        cr->setRunnerSize(CueRunner::List);
+        cr->setFollow(pid == st->currentProduction() && st->mainList(pid) == listId
+                      ? ShowTree::invalidId() : listId);
+        made = cr;
+    }
+    else if (VCCueRunner *cr = qobject_cast<VCCueRunner *>(widget))
+    {
+        Chaser *ch = cr->runner()->chaser();
+        if (ch == NULL)
+            return NULL;
+        VCCueList *cl = new VCCueList(parent, m_doc);
+        cl->setChaser(ch->id());
+        made = cl;
+    }
+    if (made == NULL)
+        return NULL;
+    placeWidget(made, parent);
+    made->setGeometry(widget->geometry());
+    if (!widget->caption().isEmpty())
+        made->setCaption(widget->caption());
+    made->setPage(widget->page());
+    if (VCFrame *frame = qobject_cast<VCFrame *>(parent))
+        frame->addWidgetToPageMap(made);
+    clearWidgetSelection();
+    removeWidget(widget);
+    setWidgetSelected(made, true);
+    m_doc->setModified();
+    return made;
+}
+
 void VirtualConsole::slotAddProgrammerFrame()
 {
     ProgrammerFrameWizard wiz(m_doc, this);
@@ -1296,6 +1390,23 @@ void VirtualConsole::slotEditDelete()
 
         updateActions();
     }
+    m_doc->setModified();
+}
+
+void VirtualConsole::removeWidget(VCWidget *widget)
+{
+    if (widget == NULL)
+        return;
+    m_selectedWidgets.removeAll(widget);
+    m_widgetsMap.remove(widget->id());
+    foreach (VCWidget* child, getChildren(widget))
+        m_widgetsMap.remove(child->id());
+    VCWidget* parent = qobject_cast<VCWidget*> (widget->parentWidget());
+    widget->deleteLater();
+    if (parent != NULL)
+        disconnectWidgetFromParent(widget, parent);
+    m_clipboard.removeAll(widget);
+    updateActions();
     m_doc->setModified();
 }
 
@@ -1685,6 +1796,16 @@ void VirtualConsole::setupWidget(VCWidget *widget, VCWidget *parent)
     widget->move(parent->lastClickPoint());
     clearWidgetSelection();
     setWidgetSelected(widget, true);
+}
+
+void VirtualConsole::placeWidget(VCWidget *widget, VCWidget *parent)
+{
+    Q_ASSERT(widget != NULL);
+    Q_ASSERT(parent != NULL);
+
+    addWidgetInMap(widget);
+    connectWidgetToParent(widget, parent);
+    widget->show();
 }
 
 VCWidget *VirtualConsole::widget(quint32 id)

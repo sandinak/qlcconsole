@@ -903,6 +903,8 @@ QList<Issue> FixtureDefCheck::check(const QLCFixtureDef *def)
 
         if (phys.width() <= 0 || phys.height() <= 0 || phys.depth() <= 0)
             physicalGaps[QStringLiteral("No size (width, height, depth): the rig view draws it at a guess.")] << mode->name();
+        if (!phys.emitsLight())
+            continue;                   // a curtain: nothing about light applies
         if (!phys.declaresOutput())
             physicalGaps[QStringLiteral("No light output (lumens or power): the rig view draws its light at a guess.")] << mode->name();
         if (phys.lensDegreesMax() <= 0.0 && phys.emission() != QLCPhysical::OmniEmission)

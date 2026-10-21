@@ -1,0 +1,22 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<!-- The application icons at every hicolor size, for the window icon.
+     Paths mirror share/icons/hicolor; render.sh regenerates the PNGs. -->
+<qresource prefix="/appicon">
+    <file>16x16/apps/qlcconsole.png</file>
+    <file>22x22/apps/qlcconsole.png</file>
+    <file>24x24/apps/qlcconsole.png</file>
+    <file>32x32/apps/qlcconsole.png</file>
+    <file>48x48/apps/qlcconsole.png</file>
+    <file>64x64/apps/qlcconsole.png</file>
+    <file>128x128/apps/qlcconsole.png</file>
+    <file>256x256/apps/qlcconsole.png</file>
+    <file>16x16/apps/qlcconsole-fixtureeditor.png</file>
+    <file>22x22/apps/qlcconsole-fixtureeditor.png</file>
+    <file>24x24/apps/qlcconsole-fixtureeditor.png</file>
+    <file>32x32/apps/qlcconsole-fixtureeditor.png</file>
+    <file>48x48/apps/qlcconsole-fixtureeditor.png</file>
+    <file>64x64/apps/qlcconsole-fixtureeditor.png</file>
+    <file>128x128/apps/qlcconsole-fixtureeditor.png</file>
+    <file>256x256/apps/qlcconsole-fixtureeditor.png</file>
+</qresource>
+</RCC>

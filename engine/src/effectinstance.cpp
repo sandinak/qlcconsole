@@ -284,6 +284,19 @@ void EffectInstance::runTick()
     }
 
     QList<DmxWrite> writes = parseIntents(result, cells);
+    // Laid out over other scenes' fixtures too (one effect across layers):
+    // this scene writes its own only.
+    if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    {
+        if (!sc->layoutSpan(m_effectPaletteId).isEmpty())
+        {
+            const QList<quint32> own = sc->writtenFixtures(m_effectPaletteId);
+            const QSet<quint32> mine(own.constBegin(), own.constEnd());
+            writes.erase(std::remove_if(writes.begin(), writes.end(), [&mine](const DmxWrite &w) {
+                return !mine.contains(w.fixtureId);
+            }), writes.end());
+        }
+    }
     // Where this effect sits in its look: two effects on one channel, the
     // lower in the list wins (EffectScriptRunner::composeWrites()).
     if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
@@ -568,23 +581,29 @@ QList<quint32> EffectInstance::lookFixtureIds() const
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (!scene)
         return {};
+    /* The scene's groups' members and its fixtures, less any a lower layer
+       sets this effect's kind on itself (Scene::excludedFixtures). */
+    return scene->writtenFixtures(m_effectPaletteId);
+}
 
-    QList<quint32> fxIds;
-    for (quint32 gid : scene->fixtureGroups())
-    {
-        FixtureGroup *grp = m_doc->fixtureGroup(gid);
-        if (grp)
-            fxIds.append(grp->fixtureList());
-    }
-    for (quint32 fid : scene->fixtures())
-        if (!fxIds.contains(fid))
-            fxIds.append(fid);
-    return fxIds;
+QList<quint32> EffectInstance::layoutFixtureIds() const
+{
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+    if (!scene)
+        return {};
+    /* ONE effect across several scenes (a cue-level effect over layers,
+       SHOW_TREE_DESIGN.md D10): it lays out over all of them; this scene
+       writes only its own (runTick()). Otherwise the same as above. */
+    return scene->layoutFixtures(m_effectPaletteId);
 }
 
 QList<quint32> EffectInstance::effectiveFixtureIds() const
 {
-    QList<quint32> fxIds = lookFixtureIds();
+    return typeFiltered(lookFixtureIds());
+}
+
+QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
+{
     // A WLED look's WLED fixtures run it themselves (wledDeviceWrites()).
     if (!m_wledEffect.isEmpty())
         fxIds.erase(std::remove_if(fxIds.begin(), fxIds.end(), [this](quint32 fid) {
@@ -687,13 +706,15 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
     gridCols = 1;
     gridRows = 1;
 
-    const QList<quint32> fxIds = effectiveFixtureIds();   // type-filtered fixtures
+    // What it lays out over (type-filtered): its own fixtures, or all of
+    // ONE effect's across several scenes.
+    const QList<quint32> fxIds = typeFiltered(layoutFixtureIds());
     if (fxIds.isEmpty())
         return cells;
     const QSet<quint32> allowed(fxIds.constBegin(), fxIds.constEnd());
 
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
-    const QList<quint32> grpIds = scene ? scene->fixtureGroups() : QList<quint32>();
+    const QList<quint32> grpIds = scene ? scene->layoutGroups(m_effectPaletteId) : QList<quint32>();
 
     // A multi-group look's stage grid, while it is fresh (see below).
     QList<quint32> stageKey;
@@ -873,6 +894,52 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
         return cells;
     }
 
+    /* No laid-out group, but a fixture that is a grid of its own (a pixel
+       box: the XL-450 is 15 x 5, by its head map or its definition's
+       layout): each as its grid, side by side in fixture order, so a matrix
+       effect on one loose box draws on the box and not on a 75-pixel strip.
+       Fixtures of one row stay a run of their heads, as below. */
+    const MonitorProperties *props = m_doc->monitorProperties();
+    QList<HeadLayout> loose;
+    bool anyGrid = false;
+    for (quint32 fid : fxIds)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        HeadLayout l = (fxi != nullptr && props != nullptr) ? props->headLayoutFor(fxi) : HeadLayout();
+        if (fxi != nullptr && (!l.isValid() || l.cells.size() < fxi->heads()))
+            l = HeadLayout();
+        anyGrid = anyGrid || (l.isValid() && l.size.height() > 1);
+        loose << l;
+    }
+    if (anyGrid)
+    {
+        int x = 0, tallest = 1;
+        for (int i = 0; i < fxIds.size(); ++i)
+        {
+            Fixture *fxi = m_doc->fixture(fxIds.at(i));
+            if (fxi == nullptr)
+                continue;
+            const HeadLayout &l = loose.at(i);
+            const int nh = qMax(1, fxi->heads());
+            if (!l.isValid())
+            {
+                for (int h = 0; h < nh; ++h)
+                    cells.append({fxIds.at(i), h, x++, 0});
+                continue;
+            }
+            for (int h = 0; h < nh; ++h)
+            {
+                const QPoint at = l.cellOf(h);
+                cells.append({fxIds.at(i), h, x + qMax(0, at.x()), qMax(0, at.y())});
+            }
+            x += l.size.width();
+            tallest = qMax(tallest, l.size.height());
+        }
+        gridCols = qMax(1, x);
+        gridRows = tallest;
+        return cells;
+    }
+
     // Fallback: no laid-out group → a 1-D strip of every head of the loose
     // fixtures, in fixture order.
     int col = 0;
@@ -1039,6 +1106,38 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             obj.setProperty("hasDimmer",     f.hasDimmer);
             obj.setProperty("hasGobo",       f.hasGobo);
             obj.setProperty("hasShutter",    f.hasShutter);
+            // What THIS head emits. hasRGB is the whole fixture's: a box of
+            // RGB pixel rows and white pixel rows (the XL-450's 165ch mode)
+            // has it on every head, the white ones too, and a pixel effect
+            // needs to know which of its heads can show a colour and which
+            // only white.
+            {
+                bool hr = false, hg = false, hb = false, hw = false;
+                const QLCFixtureMode *mode = f.fixture->fixtureMode();
+                QList<quint32> chans;
+                if (mode != nullptr && cell.head >= 0 && cell.head < mode->heads().size())
+                    chans = mode->heads().at(cell.head).channels();
+                if (chans.isEmpty())
+                    for (quint32 c = 0; c < f.fixture->channels(); ++c)
+                        chans << c;
+                for (quint32 c : chans)
+                {
+                    const QLCChannel *ch = mode != nullptr ? mode->channel(c) : nullptr;
+                    if (ch == nullptr || (ch->group() != QLCChannel::Intensity
+                                          && ch->group() != QLCChannel::Colour))
+                        continue;
+                    switch (ch->colour())
+                    {
+                        case QLCChannel::Red:   hr = true; break;
+                        case QLCChannel::Green: hg = true; break;
+                        case QLCChannel::Blue:  hb = true; break;
+                        case QLCChannel::White: hw = true; break;
+                        default: break;
+                    }
+                }
+                obj.setProperty("headRGB",   hr && hg && hb);
+                obj.setProperty("headWhite", hw);
+            }
             // The lens a zoom channel sweeps: its intent 0..1 runs lensMin..lensMax.
             obj.setProperty("hasZoom",       f.hasZoom && f.lensMax > f.lensMin);
             obj.setProperty("lensMin",       double(f.lensMin));
@@ -1127,6 +1226,9 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
     QHash<quint32, QJSValue> aimAtOf, sceneTargetOf, lastSpotOf;
     if (aiming || sceneTarget || !m_lastSpotIn.isEmpty())
     {
+        // Line of sight: the stage's model, fetched once for every head.
+        const BeamOcclusion::ModelPtr sight = (aiming || sceneTarget)
+            ? mp->occlusionModel(m_doc) : BeamOcclusion::ModelPtr();
         for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
         {
             const quint32 fid = it.key();
@@ -1134,9 +1236,9 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             if (f.fixture == nullptr)
                 continue;
             if (aiming)
-                aimAtOf.insert(fid, aimAtObject(fid, f.pos, effectPal));
+                aimAtOf.insert(fid, aimAtObject(fid, f.pos, effectPal, *sight));
             if (sceneTarget)
-                sceneTargetOf.insert(fid, sceneTargetObject(fid, sceneTarget));
+                sceneTargetOf.insert(fid, sceneTargetObject(fid, sceneTarget, *sight));
             // lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
             // previous Operate-mode tick (possibly from a different scene).  Lets a
             // followspot script seed followMode = "lastPosition" so the beam holds
@@ -1281,7 +1383,29 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
     f.hasRGB = hasR && hasG && hasB;
 }
 
-QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal)
+void EffectInstance::setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) const
+{
+    obj.setProperty("blocked", hit.blocked);
+    obj.setProperty("blockedBy", hit.blocked ? hit.name : QString());
+    QString kind;
+    switch (hit.blocked ? hit.kind : 0)
+    {
+        case BeamOcclusion::Drapes:    kind = QStringLiteral("drape"); break;
+        case BeamOcclusion::Walls:     kind = QStringLiteral("wall"); break;
+        case BeamOcclusion::Platforms: kind = QStringLiteral("platform"); break;
+        case BeamOcclusion::Towers:    kind = QStringLiteral("tower"); break;
+        case BeamOcclusion::Trusses:   kind = QStringLiteral("truss"); break;
+        case BeamOcclusion::Pipes:     kind = QStringLiteral("pipe"); break;
+        case BeamOcclusion::Stands:    kind = QStringLiteral("stand"); break;
+        default: break;
+    }
+    obj.setProperty("blockedKind", kind);
+    obj.setProperty("blockedAt", double(hit.distance));
+    obj.setProperty("clearance", double(hit.clearance));
+}
+
+QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
+                                     const BeamOcclusion::Model &sight)
 {
     // aimAt: pre-computed pan/tilt for each bound target slot
     QJSValue aimAt = m_script.engine()->newObject();
@@ -1305,20 +1429,23 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
         // palette uses in Edit — so the beam doesn't jump on Edit→Run.
         // aimAt.pan/tilt are fixture degrees; the host converts via
         // positionToValues (see parseIntents).
-        AimSolver::Solution sol;
+        AimSolver::Frame frame;
         QJSValue aimObj = m_script.engine()->newObject();
-        if (AimSolver::reach(m_doc, fid, tgtPos, sol))
+        if (AimSolver::frameFor(m_doc, fid, frame))
         {
+            const AimSolver::Solution sol = AimSolver::solve(frame, tgtPos);
             aimObj.setProperty("pan",  (double)sol.panDeg);
             aimObj.setProperty("tilt", (double)sol.tiltDeg);
             aimObj.setProperty("reachMargin", (double)sol.marginDeg);
+            setSight(aimObj, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tgtPos));
         }
         aimAt.setProperty(td.name, aimObj);
     }
     return aimAt;
 }
 
-QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st)
+QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
+                                           const BeamOcclusion::Model &sight)
 {
     const MonitorProperties *mp = m_doc->monitorProperties();
     QVector3D raw = st->position();
@@ -1352,6 +1479,9 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st)
         so.setProperty("tilt", double(sol.tiltDeg));
         so.setProperty("reachMargin", double(sol.marginDeg));
         so.setProperty("distance", double((subject - frame.position).length()));
+        // blocked / blockedBy / clearance: whether anything solid on stage
+        // stands between the head and the point it is aimed at.
+        setSight(so, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tp));
     }
     return so;
 }
@@ -2233,6 +2363,37 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 }
             }
         }
+    }
+
+    /* A master dimmer is the fixture's, not a head's: each head of a two-arm
+       beam sends its own level to the one channel. Those are one effect's
+       heads, so the brightest takes it -- as scales they went on to multiply
+       (EffectScriptRunner::composeWrites(), right for two EFFECTS on one
+       dimmer), and confetti's lit arm times its dark one left it black. */
+    QHash<qint64, int> scaled;              // (universe, address) -> index in writes
+    for (int i = 0; i < writes.size(); )
+    {
+        const DmxWrite &w = writes.at(i);
+        if (w.scale < 0)
+        {
+            ++i;
+            continue;
+        }
+        const qint64 key = (qint64(w.universeId) << 32) | quint32(w.addr);
+        auto it = scaled.constFind(key);
+        if (it == scaled.constEnd())
+        {
+            scaled.insert(key, i);
+            ++i;
+            continue;
+        }
+        DmxWrite &kept = writes[it.value()];
+        if (w.scale > kept.scale)
+        {
+            kept.scale = w.scale;
+            kept.value = w.value;
+        }
+        writes.removeAt(i);
     }
 
     return writes;

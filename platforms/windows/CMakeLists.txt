@@ -1,11 +1,10 @@
 project(windows)
 
-# Set paths
-if (DEFINED $ENV{MSYSTEM_CARCH} AND $ENV{MSYSTEM_CARCH} STREQUAL "i686")
-    set(SYS_LIBS_PATH $ENV{SystemDrive}/msys64/mingw32/bin)
-else()
-    set(SYS_LIBS_PATH $ENV{SystemDrive}/msys64/mingw64/bin)
-endif()
+# Where the toolchain's runtime DLLs live: next to the compiler. Upstream
+# hard-coded $ENV{SystemDrive}/msys64/mingw64/bin and CI sed-patched it to the
+# runner's MSYS2 location; the compiler's own directory is right for any
+# MSYS2 environment (MINGW64, UCRT64, ...) wherever MSYS2 is installed.
+get_filename_component(SYS_LIBS_PATH "${CMAKE_CXX_COMPILER}" DIRECTORY)
 
 function(copy_system_library target libname)
 	if(EXISTS ${SYS_LIBS_PATH}/${libname})
@@ -35,13 +34,16 @@ copy_system_library(mmedia_files "libfftw3-3.dll")
 
 install(FILES ${mmedia_files} DESTINATION ${mmedia_path})
 
-# NullSoft installer files
+# NullSoft installer script: the version (VERSION at the repo root) and the
+# source tree it takes the icon and licence from are filled in here, so
+# nothing has to sed-patch the script before makensis.
 set(nsis_path "${INSTALLROOT}/${DATADIR}")
 if(qmlui)
-    set(nsis_files qlcplus5Qt6.nsi)
+    install(FILES qlcconsole5Qt6.nsi DESTINATION ${nsis_path})
 else()
-    set(nsis_files qlcplus4Qt6.nsi)
+    file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}" QLC_NSIS_SRCDIR)
+    configure_file(qlcconsole.nsi.in ${CMAKE_CURRENT_BINARY_DIR}/qlcconsole.nsi @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/qlcconsole.nsi DESTINATION ${nsis_path})
 endif()
-install(FILES ${nsis_files} DESTINATION ${nsis_path})
 
 # install(FILES ../Sample.qxw DESTINATION ${INSTALLROOT}/${DATADIR})

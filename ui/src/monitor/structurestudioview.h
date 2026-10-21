@@ -26,6 +26,7 @@
 #define STRUCTURESTUDIOVIEW_H
 
 #include <QWidget>
+#include "../qlcui_export.h"
 #include <cstring>
 #include <QImage>
 #include <functional>
@@ -36,15 +37,19 @@
 #include <QHash>
 #include <QPair>
 #include <QVector>
+#include <QVarLengthArray>
+#include <QPolygonF>
 #include <climits>
 #include <QElapsedTimer>
 
 #include "beamoptics.h"
 #include "rhiraster.h"
 #include "stageplatform.h"
+#include "scenery.h"
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 #include "truss.h"     // FixtureRigProps::Face
+#include "beamocclusion.h"
 
 class Doc;
 
@@ -52,7 +57,7 @@ class Doc;
  * @{
  */
 
-class StructureStudioView : public QWidget
+class QLC_UI_EXPORT StructureStudioView : public QWidget
 {
     Q_OBJECT
 
@@ -153,6 +158,14 @@ public:
      *  is no live DMX saying otherwise. The studio draws these as dashed lines;
      *  this is the same association, shown as the direction it actually means. */
     void setActiveScene(quint32 sceneId);
+
+    /** Line of sight in the rig views: a beam stops at the first solid
+     *  feature in its way -- a tower, a truss -- as it always does at
+     *  platforms (top and sides) and scenery (BeamOcclusion, the kinds the
+     *  stage counts). Off by default; every view shares it (Lighting Studio:
+     *  Show > Line of sight). */
+    static void setLineOfSightBeams(bool on);
+    static bool lineOfSightBeams();
 
     /** Metres along truss @p trussId to the point nearest @p viewPos as it
      *  is drawn in this view (0 at its origin, clamped to its length); -1 when
@@ -528,6 +541,18 @@ private:
     QByteArray valuesForDrawing(class Fixture *fx, bool *complete = nullptr) const;
     mutable QHash<quint32, QByteArray> m_liveSnapshot;
 
+public:
+    /** Where a curtain is drawn this frame: with Live on, a curtain driven
+     *  by a fixture where that fixture's channels put it; otherwise (Live
+     *  off, not driven, its fixture gone) its fixed state. */
+    Scenery::Pose drapePose(const Scenery *sc) const;
+private:
+    /** Works out drapePose() for every driven curtain, once a frame, before
+     *  anything is drawn: the drawing threads only read it. */
+    void updateDrapePoses() const;
+    Scenery::Pose computeDrapePose(const Scenery *sc) const;
+    mutable QHash<quint32, Scenery::Pose> m_drapePoses;
+
     /** Fixtures whose physical body overlaps another fixture's -- rigged in
      *  the same physical space, whether that is two heads stacked on the same
      *  truss offset or a deck fixture dragged into another one's footprint.
@@ -689,6 +714,19 @@ private:
                              QVector3D *landNormal, int *surface) const;
     QVector<Deck> decks() const;
     mutable QVector<Deck> m_decks;      ///< this frame's, while painting
+    /** Something a light's haze can be hidden behind (opaqueTowardTheEye()):
+     *  opaque scenery, or one block of a platform, in the box it fits in. */
+    struct Occluder
+    {
+        const Scenery *scenery = nullptr;
+        Scenery::Pose pose;                 ///< the curtain as drawn this frame
+        StagePlatform *platform = nullptr;
+        StagePlatform::Block block{ 0, 0, 0, 0, 0 };
+        double baseZ = 0.0;
+        QVector3D lo, hi;
+    };
+    QVector<Occluder> occluders() const;
+    mutable QVector<Occluder> m_occluders;  ///< this frame's, while painting
     mutable bool m_decksValid = false;
 
     /** Where each ray thrown while painting landed (beamThrow()), kept from
@@ -713,6 +751,10 @@ private:
     };
     mutable QHash<ThrowKey, Throw> m_throws;
     mutable quint64 m_throwScene = 0;
+    /** This frame's line-of-sight model, when beams stop at what is in
+     *  their way (lineOfSightBeams()); null otherwise. */
+    mutable BeamOcclusion::ModelPtr m_sightModel;
+    static bool s_lineOfSightBeams;
     mutable quint32 m_throwFrame = 0;
     mutable int m_throwsUsed = 0;
     /** A split pool's mesh, as it landed (drawBeamCone()): kept while the
@@ -729,6 +771,7 @@ private:
     struct BeamMesh
     {
         QVector<QVector3D> q;   ///< where each ray of the mesh landed
+        QVector<QVector3D> normal;  ///< the face it landed on, facing the ray
         QVector<int> surf;
         QVector<bool> landed;
         QVector<double> fade;
@@ -739,6 +782,46 @@ private:
      *  the decks (where, how big, how high, their blocks), the scenery,
      *  what's hidden. A change, and the kept landings are thrown away. */
     quint64 throwScene() const;
+
+    /** Where one ray of a beam met something, for a view seen level. */
+    struct BeamLanding
+    {
+        int surface;            ///< as beamThrow() names it
+        QVector3D at;
+    };
+    /** The eye level with the stage (an Angled view no more than a few
+     *  degrees up): a side or front elevation, where a riser in a beam's way
+     *  is seen as its upright cross-section. */
+    bool seenLevel() const;
+    /** The platform block a beamThrow() surface names, and which face. */
+    bool deckBlock(int surface, StagePlatform **pl, StagePlatform::Block *bk,
+                   double *baseZ, int *face = nullptr) const;
+    /** Seen level: for each block the rays in @p landings met, its outline
+     *  and all that lies beyond it from @p apex -- where the beam's air is in
+     *  its shade. */
+    QVector<QPolygonF> levelShadows(const QVector3D &apex, const BeamLanding *landings,
+                                    int count) const;
+    /** Seen level: the light on each riser top or face the rays met, as a
+     *  band inside its edge, as far along it as they reach. */
+    void drawLevelWash(const BeamLanding *landings, int count, const QColor &colour,
+                       QPainter &p) const;
+public:
+    /** One corner of a triangle of light: screen point, depth, alpha. */
+    struct LitCorner
+    {
+        QPointF p;
+        double z;
+        double a;
+    };
+private:
+    typedef QVarLengthArray<LitCorner, 16> LitPiece;
+    static void keepInside(const LitPiece &in, const QPointF &q, const QPointF &n,
+                           LitPiece &out);
+    /** emitLightTri() for what of the triangle lies outside every one of
+     *  @p shadows (convex outlines, on screen). */
+    void emitLightTriOutside(const LitCorner &a, const LitCorner &b, const LitCorner &c,
+                             const QVector<QPolygonF> &shadows, const QColor &colour,
+                             QPainter &p) const;
 
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                       double halfAngleRad, const QColor &colour, double level,
@@ -760,6 +843,9 @@ private:
         double beamLevel = 0.0;
         QColor beamColour;
         BeamOptics::Optics optics;   ///< gobo / prism, for the pool it throws
+        /** Its colour ring round the lens, segment by segment (black:
+         *  dark); empty: it has none (colourRingLive()). */
+        QVector<QColor> ring;
     };
     /** Seconds on the clock gobo and prism rotation turn by; a test may pin
      *  it (m_opticsTime >= 0). Something turning keeps the view redrawing. */
@@ -874,7 +960,15 @@ private:
     /** In haze, the air right round each lit source glows: a soft halo by
      *  how bright its pixels are, not by its lumens -- faint LED strip glows
      *  without throwing beams it should not. */
-    void drawHazeGlow(QPainter &p, const QVector<BarLight> &sources) const;
+    void drawHazeGlow(QPainter &p, const QVector<BarLight> &sources,
+                      quint32 hostPlatform = UINT_MAX) const;
+    /** How far from @p from toward the eye (@p eye, a unit vector) the first
+     *  opaque thing stands -- a closed drape, a wall, a platform other than
+     *  @p hostPlatform -- or -1 when nothing does within @p maxT. @p normal
+     *  is the face it meets there. A scrim is seen through and does not
+     *  count. */
+    double opaqueTowardTheEye(const QVector3D &from, const QVector3D &eye, double maxT,
+                              quint32 hostPlatform, QVector3D *normal) const;
     QVector<BarLight> barLights(class Fixture *fx, const struct FixtureRigProps &rp,
                                 const struct FixtureVisualTraits &traits,
                                 const QByteArray &vals, const QVector3D &centre) const;
@@ -1018,6 +1112,9 @@ private:
          *  QLCPalette's rule; the two have to agree or Edit and the rig view
          *  point different ways. */
         bool    subjectHeight = false;
+        /** On a line target: how far along it (0..1) this head lands; -1 =
+         *  not a line. */
+        double  lineFraction = -1.0;
     };
     /** The live world point a fixture is aimed at, or false if it aims at
      *  nothing. Resolved per frame from the target's CURRENT position. */

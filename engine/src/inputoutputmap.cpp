@@ -31,6 +31,7 @@
 #include <qmath.h>
 
 #include "inputoutputmap.h"
+#include <QTimer>
 #include "patchundo.h"
 #include "qlcinputchannel.h"
 #include "qlcinputsource.h"
@@ -40,6 +41,8 @@
 #include "inputpatch.h"
 #include "qlcconfig.h"
 #include "universe.h"
+#include "networkroute.h"
+#include "rignetwork.h"
 #include "qlcfile.h"
 #include "doc.h"
 
@@ -66,6 +69,16 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     connect(doc->ioPluginCache(), SIGNAL(pluginConfigurationChanged(QLCIOPlugin*)),
             this, SLOT(slotPluginConfigurationChanged(QLCIOPlugin*)));
     connect(doc->masterTimer(), SIGNAL(beat()), this, SLOT(slotMasterTimerBeat()));
+
+    /* Kept offline patches reconnect by themselves when their network shows
+       up (laptop back on the show VLAN, interface plugged in, VPN up). A
+       cheap poll rather than per-platform change notifications: the tick
+       does nothing at all unless something is being kept, and the plugins
+       already throttle their own interface walks. */
+    m_offlineRetry = new QTimer(this);
+    m_offlineRetry->setInterval(5000);
+    connect(m_offlineRetry, SIGNAL(timeout()), this, SLOT(slotRetryOfflinePatches()));
+    m_offlineRetry->start();
 }
 
 InputOutputMap::~InputOutputMap()
@@ -382,6 +395,9 @@ void InputOutputMap::resetUniverses()
     setGrandMasterChannelMode(GrandMaster::Intensity);
 
     m_localProfilesLoaded = false;
+
+    /* The rig networks stay: File -> New keeps the patch, and they say where
+       that patch belongs. Opening a show (loadXML) replaces both. */
 }
 
 /*********************************************************************
@@ -470,6 +486,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
     }
 
     QMutexLocker locker(&m_universeMutex);
+    // An explicit (re)patch or unpatch replaces any input kept offline.
+    m_universeArray.at(universe)->clearOfflinePatches(Universe::InputPatchTag);
     InputPatch *currInPatch = m_universeArray.at(universe)->inputPatch();
     QLCInputProfile *currProfile = NULL;
     if (currInPatch != NULL)
@@ -564,6 +582,10 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
     QMutexLocker locker(&m_universeMutex);
     QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(pluginName);
 
+    // An explicit (re)patch or unpatch replaces any feedback kept offline.
+    if (isFeedback)
+        m_universeArray.at(universe)->clearOfflinePatches(Universe::FeedbackPatchTag);
+
     /* "None" (KOutputNone) is the sentinel OutputPatch::outputName() itself
        falls back to when a patch has a plugin but no line was ever actually
        resolved for it -- not a real interface identity someone patched to
@@ -622,7 +644,31 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
     }
 
     if (isFeedback == false)
+    {
+        /* Patching by hand onto a line that is not on a rig network: keep the
+           patch, open nothing (see transmitGateActive()). */
+        if (plugin != NULL && output != QLCIOPlugin::invalidLine() && transmitGateActive())
+        {
+            const QString lineName = plugin->outputs().value(int(output));
+            QMap<QString, QVariant> params;
+            Universe *uni = m_universeArray.at(universe);
+            if (NetworkRoute::isAddressIdentity(lineName) == false && index < uni->outputPatchesCount()
+                && uni->outputPatch(index) != NULL)
+                params = uni->outputPatch(index)->getPluginParameters();
+            const QString reason = transmitHoldReason(lineName, params);
+            if (reason.isEmpty() == false && lineName.isEmpty() == false)
+            {
+                holdOutputPatch(universe, index, plugin, lineName, output,
+                                NetworkRoute::networkForLine(lineName), reason);
+                QTimer::singleShot(0, this, [this]() {
+                    emit offlinePatchesChanged();
+                    noteTransmitGateStatus();
+                });
+                return true;
+            }
+        }
         return m_universeArray.at(universe)->setOutputPatch(plugin, output, index);
+    }
     else
         return m_universeArray.at(universe)->setFeedbackPatch(plugin, output);
 
@@ -680,6 +726,7 @@ QList<InputOutputMap::DanglingPatch> InputOutputMap::danglingOutputPatches() con
                 bad.line = 0;
                 bad.availableLines = 0;
                 bad.missingInterface = patch->outputName();
+                bad.heldReason = patch->heldReason();
                 problems << bad;
                 continue;
             }
@@ -705,9 +752,606 @@ QList<InputOutputMap::DanglingPatch> InputOutputMap::danglingOutputPatches() con
             bad.availableLines = available;
             problems << bad;
         }
+
+        foreach (const Universe::OfflinePatch &rec, m_universeArray.at(uni)->offlinePatches())
+        {
+            DanglingPatch bad;
+            bad.universe = uni;
+            bad.pluginName = rec.plugin;
+            bad.line = 0;
+            bad.availableLines = 0;
+            bad.missingInterface = rec.uid.isEmpty() ? rec.plugin : rec.uid;
+            bad.kind = rec.tag == Universe::InputPatchTag ? QStringLiteral("input")
+                     : rec.tag == Universe::FeedbackPatchTag ? QStringLiteral("feedback")
+                     : QStringLiteral("output");
+            bad.pluginMissing = m_doc->ioPluginCache()->plugin(rec.plugin) == NULL;
+            problems << bad;
+        }
     }
 
     return problems;
+}
+
+int InputOutputMap::resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
+                                     const QString &network, const QString &target) const
+{
+    if (plugin == NULL)
+        return -1;
+
+    const QStringList lines = output ? plugin->outputs() : plugin->inputs();
+
+    if (NetworkRoute::isAddressIdentity(uid))
+    {
+        /* A line named after a local address (Art-Net, E1.31, OSC): follow
+           the network, not the interface -- see NetworkRoute::resolve(). */
+        NetworkRoute::Resolution r;
+        if (transmitGateActive())
+        {
+            /* With the rig network gate on, a line on a rig network wins
+               over one that would only be held: blank the others out (the
+               indices stay) and only fall back to them when no rig line
+               reaches the patch at all -- the caller then holds it. */
+            QStringList rigLines = lines;
+            for (int i = 0; i < rigLines.count(); i++)
+                if (transmitHoldReason(rigLines.at(i), QMap<QString, QVariant>()).isEmpty() == false)
+                    rigLines[i].clear();
+            r = NetworkRoute::resolve(rigLines, uid, network, target);
+        }
+        if (r.line < 0)
+            r = NetworkRoute::resolve(lines, uid, network, target);
+        if (r.line >= 0)
+        {
+            qDebug() << "[IOMAP]" << plugin->name() << uid << "resolved by" << r.how
+                     << "to line" << r.line << "via" << r.via << "network" << r.network;
+            return r.line;
+        }
+        return -1;
+    }
+
+    const int idx = lines.indexOf(uid);
+    if (idx != -1)
+        return idx;
+
+    return plugin->lineOnSameSubnet(uid);
+}
+
+void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &patch)
+{
+    if (universe >= universesCount())
+        return;
+
+    if (patch.plugin.isEmpty() || patch.plugin == KOutputNone || patch.plugin == KInputNone)
+        return;
+
+    const bool hasIdentity = patch.uid.isEmpty() == false && patch.uid != KOutputNone;
+    if (hasIdentity == false && patch.line == QLCIOPlugin::invalidLine())
+        return;   // nothing that could ever be opened
+
+    Universe *uni = m_universeArray.at(universe);
+    QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(patch.plugin);
+
+    if (plugin == NULL)
+    {
+        // The whole plugin is missing on this machine. Keep the patch.
+        qDebug() << "[IOMAP] plugin" << patch.plugin << "not available - keeping universe"
+                 << universe << "patch offline";
+        uni->addOfflinePatch(patch);
+        return;
+    }
+
+    int line = int(patch.line);
+    if (hasIdentity)
+        line = resolveSavedLine(plugin, patch.tag != Universe::InputPatchTag, patch.uid,
+                                patch.network, NetworkRoute::targetFromParameters(patch.params));
+    if (line < 0)
+        qDebug() << "[IOMAP] universe" << universe + 1 << patch.plugin << patch.uid
+                 << "network" << patch.network << "- nothing here reaches it: kept offline";
+
+    QMapIterator<QString, QVariant> it(patch.params);
+
+    switch (patch.tag)
+    {
+        case Universe::InputPatchTag:
+            if (line < 0)
+            {
+                uni->addOfflinePatch(patch);
+                return;
+            }
+            setInputPatch(universe, patch.plugin, QString(), quint32(line), patch.profile);
+            if (InputPatch *ip = inputPatch(universe))
+            {
+                if (patch.hidProfile.isEmpty() == false)
+                    ip->setHidProfileName(patch.hidProfile);
+                while (it.hasNext())
+                {
+                    it.next();
+                    ip->setPluginParameter(it.key(), it.value());
+                }
+            }
+        break;
+
+        case Universe::FeedbackPatchTag:
+            if (line < 0)
+            {
+                uni->addOfflinePatch(patch);
+                return;
+            }
+            setOutputPatch(universe, patch.plugin, QString(), quint32(line), true);
+            if (OutputPatch *fb = feedbackPatch(universe))
+            {
+                while (it.hasNext())
+                {
+                    it.next();
+                    fb->setPluginParameter(it.key(), it.value());
+                }
+            }
+        break;
+
+        case Universe::OutputPatchTag:
+        {
+            const int index = uni->outputPatchesCount();
+            const QString holdReason = line < 0 ? QString()
+                    : transmitHoldReason(plugin->outputs().value(line), patch.params);
+            if (line < 0)
+            {
+                QMutexLocker locker(&m_universeMutex);
+                uni->setOutputPatchPending(plugin, patch.uid, index, patch.line, patch.network);
+            }
+            else if (holdReason.isEmpty() == false)
+            {
+                /* It resolves, but not to a rig network: keep it exactly as
+                   saved (identity, line, network), unopened. */
+                QMutexLocker locker(&m_universeMutex);
+                holdOutputPatch(universe, index, plugin,
+                                hasIdentity ? patch.uid : plugin->outputs().value(line),
+                                patch.line, patch.network, holdReason);
+            }
+            else
+            {
+                setOutputPatch(universe, patch.plugin, QString(), quint32(line), false, index);
+            }
+            if (OutputPatch *op = outputPatch(universe, index))
+            {
+                while (it.hasNext())
+                {
+                    it.next();
+                    op->setPluginParameter(it.key(), it.value());
+                }
+            }
+        }
+        break;
+    }
+}
+
+bool InputOutputMap::hasOfflinePatches() const
+{
+    for (quint32 i = 0; i < universesCount(); i++)
+    {
+        Universe *uni = m_universeArray.at(i);
+        if (uni->offlinePatches().isEmpty() == false)
+            return true;
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op != NULL && op->isPending())
+                return true;
+        }
+    }
+    return false;
+}
+
+int InputOutputMap::retryOfflinePatches()
+{
+    int reconnected = 0;
+
+    for (quint32 i = 0; i < universesCount(); i++)
+    {
+        Universe *uni = m_universeArray.at(i);
+
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL || op->isPending() == false)
+                continue;
+            const QMap<QString, QVariant> params = op->getPluginParameters();
+            const int line = resolveSavedLine(op->plugin(), true, op->outputName(),
+                    op->pendingNetwork(), NetworkRoute::targetFromParameters(params));
+            if (line < 0)
+            {
+                /* Nothing reaches its network. With the gate on and this
+                   machine on no rig network at all, that IS being held. */
+                QString why;
+                if (transmitGateActive() && isNetworkOutput(op->outputName(), params)
+                    && onRigNetwork() == false)
+                    why = tr("this machine is not on the rig network");
+                op->setHeldReason(why);
+                continue;
+            }
+            const QString reason = op->plugin() == NULL ? QString()
+                    : transmitHoldReason(op->plugin()->outputs().value(line), params);
+            if (reason.isEmpty() == false)
+            {
+                op->setHeldReason(reason);
+                continue;
+            }
+            qDebug() << "[IOMAP] universe" << i + 1 << "output" << op->outputName()
+                     << "reconnected on line" << line;
+            QMutexLocker locker(&m_universeMutex);
+            op->resolvePending(quint32(line));
+            reconnected++;
+        }
+
+        /* One at a time, re-reading the list after each: reconnecting an
+           input or feedback patch clears that kind's kept entries, which
+           would shift any index still to be visited. */
+        bool again = true;
+        while (again)
+        {
+            again = false;
+            const QList<Universe::OfflinePatch> kept = uni->offlinePatches();
+            for (int k = 0; k < kept.count(); k++)
+            {
+                const Universe::OfflinePatch &rec = kept.at(k);
+                QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(rec.plugin);
+                if (plugin == NULL)
+                    continue;
+                const bool hasIdentity = rec.uid.isEmpty() == false && rec.uid != KOutputNone;
+                const int line = hasIdentity
+                        ? resolveSavedLine(plugin, rec.tag != Universe::InputPatchTag, rec.uid,
+                                           rec.network, NetworkRoute::targetFromParameters(rec.params))
+                        : int(rec.line);
+                if (line < 0)
+                    continue;
+                uni->removeOfflinePatch(k);
+                loadPatch(i, rec);
+                reconnected++;
+                again = true;
+                break;
+            }
+        }
+    }
+
+    if (reconnected > 0)
+        emit offlinePatchesChanged();
+
+    return reconnected;
+}
+
+void InputOutputMap::slotRetryOfflinePatches()
+{
+    applyTransmitGate();
+    if (hasOfflinePatches())
+        retryOfflinePatches();
+    noteTransmitGateStatus();
+}
+
+void InputOutputMap::forgetOfflinePatches(quint32 universe)
+{
+    if (universe >= universesCount())
+        return;
+
+    Universe *uni = m_universeArray.at(universe);
+    uni->clearOfflinePatches(Universe::InputPatchTag);
+    uni->clearOfflinePatches(Universe::OutputPatchTag);
+    uni->clearOfflinePatches(Universe::FeedbackPatchTag);
+    for (int i = uni->outputPatchesCount() - 1; i >= 0; i--)
+    {
+        OutputPatch *op = uni->outputPatch(i);
+        if (op != NULL && op->isPending())
+            setOutputPatch(universe, QString(), QString(), 0, false, i);
+    }
+    emit offlinePatchesChanged();
+}
+
+/*****************************************************************************
+ * Rig network transmit gate
+ *****************************************************************************/
+
+namespace
+{
+    /* The IPv4 targets a patch is aimed at: "outputIP", and WLED's backups
+       "outputIP2", "outputIP3"... Empty values are not targets. */
+    QStringList ipTargets(const QMap<QString, QVariant> &params)
+    {
+        QStringList out;
+        for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+        {
+            if (it.key().startsWith(QStringLiteral("outputIP")) == false)
+                continue;
+            const QString value = it.value().toString().trimmed();
+            if (value.isEmpty() == false)
+                out << value;
+        }
+        return out;
+    }
+}
+
+QStringList InputOutputMap::rigNetworks() const
+{
+    return m_rigNetworks;
+}
+
+void InputOutputMap::setRigNetworks(const QStringList &networks)
+{
+    QStringList list;
+    foreach (const QString &entry, networks)
+    {
+        const QString net = RigNetwork::normalise(entry);
+        if (net.isEmpty() == false && list.contains(net) == false)
+            list << net;
+    }
+    if (list == m_rigNetworks)
+        return;
+    m_rigNetworks = list;
+    reapplyTransmitGate();
+}
+
+QStringList InputOutputMap::suggestedRigNetworks() const
+{
+    QStringList out;
+    auto add = [&out](const QString &network)
+    {
+        const QString net = RigNetwork::normalise(network);
+        if (net.isEmpty() || out.contains(net))
+            return;
+        if (QHostAddress::parseSubnet(net).first.isLoopback())
+            return;
+        out << net;
+    };
+
+    for (quint32 u = 0; u < universesCount(); u++)
+    {
+        Universe *uni = m_universeArray.at(u);
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL)
+                continue;
+            if (op->isPending())
+                add(op->pendingNetwork());
+            else if (op->isPatched())
+                add(NetworkRoute::networkForLine(op->outputName()));
+        }
+        if (InputPatch *ip = uni->inputPatch())
+            add(NetworkRoute::networkForLine(ip->inputName()));
+        if (OutputPatch *fb = uni->feedbackPatch())
+            add(NetworkRoute::networkForLine(fb->outputName()));
+        foreach (const Universe::OfflinePatch &rec, uni->offlinePatches())
+            add(rec.network);
+    }
+    return out;
+}
+
+bool InputOutputMap::transmitGateEnabled() const
+{
+    return m_transmitGateEnabled;
+}
+
+void InputOutputMap::setTransmitGateEnabled(bool enable)
+{
+    if (enable == m_transmitGateEnabled)
+        return;
+    m_transmitGateEnabled = enable;
+    reapplyTransmitGate();
+}
+
+bool InputOutputMap::transmitOverride() const
+{
+    return m_transmitOverride;
+}
+
+void InputOutputMap::setTransmitOverride(bool override)
+{
+    if (override == m_transmitOverride)
+        return;
+    qWarning() << "[IOMAP] rig network check" << (override ? "lifted for this session" : "back on");
+    m_transmitOverride = override;
+    reapplyTransmitGate();
+}
+
+bool InputOutputMap::transmitGateActive() const
+{
+    return m_transmitGateEnabled && m_transmitOverride == false && m_rigNetworks.isEmpty() == false;
+}
+
+bool InputOutputMap::isNetworkOutput(const QString &lineName,
+                                     const QMap<QString, QVariant> &params) const
+{
+    if (NetworkRoute::isAddressIdentity(lineName))
+        return QHostAddress(lineName.trimmed()).isLoopback() == false;
+    foreach (const QString &target, ipTargets(params))
+    {
+        const QHostAddress ip(target);
+        if (ip.isNull() || ip.isLoopback() == false)
+            return true;
+    }
+    return false;
+}
+
+bool InputOutputMap::onRigNetwork() const
+{
+    foreach (const NetworkRoute::LocalAddress &la, NetworkRoute::localAddresses())
+        if (la.ip.isLoopback() == false && RigNetwork::contains(m_rigNetworks, la.ip))
+            return true;
+    return false;
+}
+
+QString InputOutputMap::transmitHoldReason(const QString &lineName,
+                                           const QMap<QString, QVariant> &params) const
+{
+    if (transmitGateActive() == false)
+        return QString();
+
+    /* A line named after a local address (Art-Net, E1.31, OSC): it sends
+       from that address. */
+    if (NetworkRoute::isAddressIdentity(lineName))
+    {
+        const QHostAddress ip(lineName.trimmed());
+        if (ip.isLoopback() || RigNetwork::contains(m_rigNetworks, ip))
+            return QString();
+        return tr("%1 is not on the rig network").arg(NetworkRoute::describeLine(lineName));
+    }
+
+    /* A patch aimed at devices (WLED): each request leaves from whatever
+       the OS would route it through -- on a laptop off the show network,
+       the default route, which is exactly what must not happen. */
+    foreach (const QString &target, ipTargets(params))
+    {
+        const QHostAddress ip(target);
+        if (ip.isNull() || ip.protocol() != QAbstractSocket::IPv4Protocol)
+            return tr("%1 is a name, not an address: it cannot be checked "
+                      "against the rig network").arg(target);
+        if (ip.isLoopback())
+            continue;
+        const QHostAddress src = NetworkRoute::sourceFor(ip);
+        if (src.isNull())
+            return tr("nothing on this machine reaches %1").arg(target);
+        if (src.isLoopback() == false && RigNetwork::contains(m_rigNetworks, src) == false)
+            return tr("%1 would be reached through %2, not on the rig network")
+                    .arg(target, NetworkRoute::describeLine(src.toString()));
+    }
+    return QString();
+}
+
+void InputOutputMap::holdOutputPatch(quint32 universe, int index, QLCIOPlugin *plugin,
+                                     const QString &uid, quint32 savedLine,
+                                     const QString &network, const QString &reason)
+{
+    // The caller holds m_universeMutex.
+    Universe *uni = m_universeArray.at(universe);
+    if (uni->setOutputPatchPending(plugin, uid, index, savedLine, network) == false)
+        return;
+    if (OutputPatch *op = uni->outputPatch(index))
+        op->setHeldReason(reason);
+    qWarning() << "[IOMAP] universe" << universe + 1 << "output held, nothing sent:" << reason;
+}
+
+void InputOutputMap::pushTransmitNetworks()
+{
+    if (m_doc == NULL || m_doc->ioPluginCache() == NULL)
+        return;
+    /* The plugins keep each line's / device's decision cached, so nothing
+       is worked out per packet: a changed list refreshes them by itself;
+       otherwise (the reconnect tick, a line reopened) they are asked to
+       look again, which catches an address or route that moved (DHCP,
+       VPN, Wi-Fi) without the networks changing. */
+    const QStringList effective = transmitGateActive() ? m_rigNetworks : QStringList();
+    foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
+        if (plugin != NULL && plugin->setTransmitNetworks(effective) == false)
+            plugin->refreshTransmitGate();
+}
+
+int InputOutputMap::applyTransmitGate()
+{
+    pushTransmitNetworks();
+
+    const bool active = transmitGateActive();
+    int held = 0;
+    for (quint32 u = 0; u < universesCount(); u++)
+    {
+        Universe *uni = m_universeArray.at(u);
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL)
+                continue;
+            if (op->isPending())
+            {
+                // The gate went away: plain pending, retryOfflinePatches() reopens it
+                if (active == false && op->isHeld())
+                    op->setHeldReason(QString());
+                continue;
+            }
+            if (active == false || op->isPatched() == false)
+                continue;
+
+            const QString lineName = op->outputName();
+            const QMap<QString, QVariant> params = NetworkRoute::isAddressIdentity(lineName)
+                    ? QMap<QString, QVariant>() : op->getPluginParameters();
+            const QString reason = transmitHoldReason(lineName, params);
+            if (reason.isEmpty())
+                continue;
+
+            QMutexLocker locker(&m_universeMutex);
+            holdOutputPatch(u, o, op->plugin(), lineName, op->output(),
+                            NetworkRoute::networkForLine(lineName), reason);
+            held++;
+        }
+    }
+
+    if (held > 0)
+        emit offlinePatchesChanged();
+    return held;
+}
+
+void InputOutputMap::reapplyTransmitGate()
+{
+    applyTransmitGate();
+    if (hasOfflinePatches())
+        retryOfflinePatches();
+    noteTransmitGateStatus();
+    emit transmitGateChanged();
+}
+
+InputOutputMap::TransmitGateStatus InputOutputMap::transmitGateStatus() const
+{
+    TransmitGateStatus st;
+    st.networks = m_rigNetworks;
+
+    foreach (const NetworkRoute::LocalAddress &la, NetworkRoute::localAddresses())
+    {
+        if (la.ip.isLoopback())
+            continue;
+        st.connected << (la.iface.isEmpty() ? la.ip.toString()
+                                            : QString("%1 %2").arg(la.iface, la.ip.toString()));
+    }
+
+    for (quint32 u = 0; u < universesCount(); u++)
+    {
+        Universe *uni = m_universeArray.at(u);
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL || op->plugin() == NULL)
+                continue;
+            const QString lineName = op->outputName();
+            const QMap<QString, QVariant> params = NetworkRoute::isAddressIdentity(lineName)
+                    ? QMap<QString, QVariant>() : op->getPluginParameters();
+            if (isNetworkOutput(lineName, params) == false)
+                continue;
+            st.networkOutputs++;
+            if (op->isHeld())
+            {
+                st.held++;
+                st.reasons << tr("Universe %1 (%2): %3").arg(u + 1).arg(uni->name(), op->heldReason());
+            }
+        }
+    }
+
+    if (st.networkOutputs == 0)
+        st.state = TransmitGateStatus::Clear;
+    else if (m_transmitGateEnabled == false)
+        st.state = TransmitGateStatus::Off;
+    else if (m_transmitOverride)
+        st.state = TransmitGateStatus::Overridden;
+    else if (m_rigNetworks.isEmpty())
+        st.state = TransmitGateStatus::NotSet;
+    else if (st.held > 0)
+        st.state = TransmitGateStatus::Held;
+    else
+        st.state = TransmitGateStatus::Clear;
+    return st;
+}
+
+void InputOutputMap::noteTransmitGateStatus()
+{
+    const TransmitGateStatus st = transmitGateStatus();
+    const QString summary = QString("%1|%2|%3|%4|%5").arg(int(st.state)).arg(st.held)
+            .arg(st.networks.join(','), st.connected.join(','), st.reasons.join(','));
+    if (summary == m_lastGateSummary)
+        return;
+    m_lastGateSummary = summary;
+    emit transmitGateChanged();
 }
 
 OutputPatch *InputOutputMap::feedbackPatch(quint32 universe) const
@@ -1513,10 +2157,23 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
     m_targetAliases.clear();
     m_manualTargets.clear();
     m_lineAliases.clear();
+    /* An older show has none, and behaves as it always did. "Transmit
+       anyway" was said about the show being replaced. */
+    m_rigNetworks.clear();
+    m_transmitOverride = false;
 
     while (root.readNextStartElement())
     {
-        if (root.name() == KXMLQLCUniverse)
+        if (root.name() == KXMLIORigNetwork)
+        {
+            /* Before the universes in the file, so the patches below are
+               loaded knowing where they may transmit. */
+            const QString net = RigNetwork::normalise(root.readElementText());
+            if (net.isEmpty() == false && m_rigNetworks.contains(net) == false)
+                m_rigNetworks << net;
+            continue;   // readElementText already consumed the end element
+        }
+        else if (root.name() == KXMLQLCUniverse)
         {
             quint32 id = InputOutputMap::invalidUniverse();
             if (root.attributes().hasAttribute(KXMLQLCUniverseID))
@@ -1588,6 +2245,14 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
             root.skipCurrentElement();
         }
     }
+
+    /* A hand-edited file may list them after the universes: hold whatever
+       was opened meanwhile, and set every kept patch's held reason now
+       rather than on the next tick. */
+    applyTransmitGate();
+    if (hasOfflinePatches())
+        retryOfflinePatches();
+    noteTransmitGateStatus();
 
     return true;
 }
@@ -1723,6 +2388,12 @@ bool InputOutputMap::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLIOBeatType, beatTypeToString(m_beatGeneratorType));
     doc->writeAttribute(KXMLIOBeatsPerMinute, QString::number(m_currentBPM));
     doc->writeEndElement();
+
+    /* The show's rig networks, ahead of the universes so a load knows them
+       before it opens any patch. An older build skips them (with a warning)
+       and transmits as it always did. */
+    foreach (const QString &net, m_rigNetworks)
+        doc->writeTextElement(KXMLIORigNetwork, net);
 
     foreach (Universe *uni, m_universeArray)
         uni->saveXML(doc);

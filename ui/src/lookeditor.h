@@ -29,6 +29,7 @@ class GradientDirectionWidget;
 class QSlider;
 class QCheckBox;
 class QDoubleSpinBox;
+class LineSpreadPreview;
 class QComboBox;
 class QPushButton;
 class QLabel;
@@ -68,6 +69,13 @@ public:
     void setTrialNote(const QString &text);
     QString trialNote() const;
 
+    /** The Used by line (PROGRAMMING_ROLE_DESIGN.md P-D13): where the
+     *  edited palette is used, rich text whose links the host follows
+     *  (usedByLinkActivated). Empty hides it. Either tab may set it. */
+    void setUsedBy(const QString &html);
+    /** The line as plain text (tests). */
+    QString usedByText() const;
+
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
@@ -85,6 +93,9 @@ signals:
      *  preview — does NOT rebuild the look list or palette tree. */
     void paletteValueChanged(quint32 paletteId);
 
+    /** A link in the Used by line was clicked (see setUsedBy()). */
+    void usedByLinkActivated(const QString &link);
+
     /** Emitted at the end of every setPalette() call — on a genuine focus
      *  change (a different look selected on screen) as well as a same-id
      *  redraw (e.g. after a control surface writes a new value into the
@@ -95,15 +106,22 @@ signals:
 
 private slots:
     void slotColorChanged(const QColor &c);
+    /** "Wheel / ring" picked: the look names that slot (or none). */
+    void slotColourMacroChanged(int index);
     void slotRgbSliderChanged();  //!< numbered R/G/B sliders (1-3)
     void slotColorExtraChanged(); //!< White/Amber/UV sliders
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
     void slotAimTargetChanged(int index);
+    /** A line target's Spread (and grouping) changed in the Aim page. */
+    void slotLineSettingsChanged();
+    void slotAimDimWhenBlocked(bool on);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
     /** "Wheel of" changed: list that fixture type's gobos/shutter states. */
     void slotSingleSourcePicked(int index);
+    /** A Gobo look's name was typed: it matches by it on other types. */
+    void slotGoboNameEdited();
     void slotBeamChanged(int);
     /** Per-look fade override (checkbox + seconds spin) changed. */
     void slotFadeTimeChanged();
@@ -162,6 +180,12 @@ public:
      *  colour-wheel head, which only takes the hue, still shines. */
     static QString darkColourWarning(const QColor &rgb, const QColor &wauv);
 
+    /** The named slots a Colour look can name on the colour wheels and
+     *  rings of the look's targets (else of every fixture in the show):
+     *  "off", "Blue", "Red/Yellow-Chase"... each once, wheel order. With
+     *  @p colours, each one's colour (invalid for a chase). */
+    QStringList colourSlotNames(QList<QColor> *colours = nullptr) const;
+
 private:
 
     /** Capability name covering value v on the channel, or empty. */
@@ -185,6 +209,7 @@ private:
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
     QLabel    *m_trialNote;   //!< see setTrialNote()
+    QLabel    *m_usedBy;      //!< see setUsedBy()
 
     // Per-look fade override row (per scene+palette; hidden when no context
     // scene or for Effect palettes, which the script runner fades itself).
@@ -207,10 +232,30 @@ private:
     QWidget *m_whiteRow, *m_amberRow, *m_uvRow;          //!< hidden when absent
     CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
     QLabel *m_colorWarning;    //!< "nearly dark" note under the colour page
+    /* "Wheel / ring": a slot of the targets' colour wheels and rings by
+       name -- a ring's chases are no colour, so only a name picks them. */
+    QWidget   *m_macroRow = nullptr;
+    QComboBox *m_macroCombo = nullptr;   //!< data: the slot name ("" nearest)
+    /** Fill the "Wheel / ring" chooser for @p p; hidden when no target has
+     *  a colour wheel or ring. */
+    void fillColourMacros(const QLCPalette *p);
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
     QComboBox   *m_aimTargetCombo;  //!< stage target for Aim palettes
+    /* A line target's controls (LINE_TARGET_DESIGN.md), shown only when
+       the look aims at a line. */
+    QWidget *m_lineBox = nullptr;
+    QSlider *m_lineSpreadSlider = nullptr;       //!< -50..50 = -5..+5
+    QDoubleSpinBox *m_lineSpreadSpin = nullptr;
+    QComboBox *m_lineGroupCombo = nullptr;       //!< data: LineSpread group
+    QComboBox *m_lineCrossCombo = nullptr;       //!< data: LineSpread::Cross
+    QCheckBox *m_lineShareCheck = nullptr;
+    QComboBox *m_lineOrderCombo = nullptr;       //!< data: LineSpread::Order
+    LineSpreadPreview *m_linePreview = nullptr;
+    /** Show the line controls for the look's target, filled from the look. */
+    void syncLineControls();
+    QCheckBox   *m_aimDimBlocked;   //!< Aim: dim heads that can't see the target
     QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
     QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;
     QSlider *m_singleSlider;
@@ -222,6 +267,13 @@ private:
     QComboBox *m_singleSourceCombo;    //!< which fixture type's wheel to browse
     QList<ChannelSource> m_singleSources;
     QString m_singleSourceKey;         //!< last type chosen, kept across palettes
+    QWidget *m_goboNameRow;            //!< Gobo: "Name on other types"
+    QLineEdit *m_goboNameEdit;
+    QLabel *m_goboMatches;             //!< Gobo: what each type plays for it
+    /** Gobo: the value the look plays on the browsed type (by name, or as
+     *  picked for it); -1 when it doesn't apply to it. */
+    int goboValueForSource(const QLCPalette *p) const;
+    void updateGoboMatches();
 
     // Strobe page
     QSlider *m_strobeSlider;   //!< 0-100 → rate 0.0-1.0
@@ -336,13 +388,6 @@ private:
      *  default name ("New Color", "New Dimmer", "New Effect"). */
     void maybeAutoName(QLCPalette *p);
 
-    /** True if @p path is the bare default or an auto-generated
-     *  Effect/<Category>/<Engine> folder (i.e. safe to re-derive). */
-    bool isAutoEffectPath(const QString &path) const;
-
-    /** Move an Effect palette into Palettes/Effect/<category>/<engine>/ to
-     *  mirror the picker, unless the user has chosen a custom folder. */
-    void maybeAutoPath(QLCPalette *p, const QString &category, const QString &engine);
 };
 
 /** @} */

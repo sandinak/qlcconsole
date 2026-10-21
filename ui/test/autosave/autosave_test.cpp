@@ -36,7 +36,18 @@
 
 void Autosave_Test::initTestCase()
 {
-    // Clear any existing settings
+    /* Never the user's: App's start-up merges the legacy user data into the
+       user folder under HOME, and these tests change autosave settings and
+       write recovery files. A home and an INI settings file of our own,
+       before App exists. */
+    QVERIFY(m_home.isValid());
+    m_realHome = qgetenv("HOME");
+    m_realProfile = qgetenv("USERPROFILE");
+    qputenv("HOME", m_home.path().toUtf8());
+    qputenv("USERPROFILE", m_home.path().toUtf8());   // Windows' user folder
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_home.filePath("settings"));
+
     QSettings settings;
     settings.remove("workspace/autosave");
 
@@ -46,12 +57,13 @@ void Autosave_Test::initTestCase()
 
 void Autosave_Test::cleanupTestCase()
 {
-    // Clean up settings
-    QSettings settings;
-    settings.remove("workspace/autosave");
-
     delete m_app;
     m_app = nullptr;
+    qputenv("HOME", m_realHome);
+    if (m_realProfile.isEmpty())
+        qunsetenv("USERPROFILE");
+    else
+        qputenv("USERPROFILE", m_realProfile);
 }
 
 void Autosave_Test::defaultSettings()

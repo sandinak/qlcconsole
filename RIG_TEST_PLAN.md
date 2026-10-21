@@ -16,7 +16,8 @@ a phone photo or screenshot.
   to it (some centered, some off-axis), plus a platform/pipe/stand/tower/image
   so a genuinely mixed multi-select drag (§I12-13) has more than one kind to
   test.
-- Run with: `build/main/qlcconsole -o <your show>.qxw`.
+- Run with: `build/main/qlcconsole -o <your show>.qxw` (dev build), or the
+  installed app (section K).
 - To capture effect internals on a failure, relaunch with
   `QLC_EFFECT_DEBUG=/tmp/effect.log build/main/qlcconsole -o <show>.qxw` and attach
   `/tmp/effect.log`.
@@ -170,6 +171,33 @@ information, not a regression check.
 | J2 | Hardware tab → Power folder → **Add power source…**, then **Add circuit…** | New source/circuit appear nested under Power | |
 | J3 | Drag a fixture from anywhere in the tree onto a circuit | Assigns it; the footer Power chip (⚡) updates | |
 | J4 | Click the footer Power chip | Opens the Circuits dialog | |
+
+---
+
+## K · Release 0.1.0 — run this first (October's work)
+Run the installed app (`/Applications/qlcconsole.app`, from the 0.1.0 DMG) on
+the show machine — kronk — with the office rig. Not while the soak is
+running on it (`pgrep -f run_soak.py`): it drives the same rig.
+
+| # | Step | Expect | ✅/❌ |
+|---|------|--------|------|
+| K1 | Open qlcconsole from the Dock / Finder | It opens straight into qlcconsole — no window asking Fixture Editor or qlcconsole | |
+| K2 | Help → About | **0.1.0**, and under it the build (`4.14.2+qlcconsole.N`) and a commit; Finder → Get Info also says 0.1.0 | |
+| K3 | Double-click a `.qlcc` in Finder (app closed) | The show opens; a `.qxf` opens in the Fixture Editor | |
+| K4 | First output to the rig | macOS asks to allow **local network** access; allow — the rig answers | |
+| K5 | Open DanceHysteria-0.3, run looks with effects | The rig follows; the footer **Load** stays well under full | |
+| K6 | Chaser editor on a chase: set **Cue** numbers, tick it **Main cue list**, **Renumber** | Numbers stay; the footer shows **Next:** the cue GO plays | |
+| K7 | GO (⌘↩) and Back (⌘⇧↩) from another window (e.g. the Studio) | The main list steps forward / back; Next: updates | |
+| K8 | Untick a step's box in the Step column (or right-click → Skip) | GO, Next and Back pass over it; it's greyed in the VC cue list | |
+| K9 | (If QLab is to hand) Settings → Show control: OSC on; from QLab send `/cue/1/go` (or MSC GO on the patched MIDI input) | That cue fires; STOP / ALL OFF stop it | |
+| K10 | Speed masters: assign a chase to one, **Tap** a tempo | The chase steps on the taps; the footer shows the master's beat — and nothing blinks with nothing playing | |
+| K11 | Rig Overview (⇧⌘R), **GPU** ticked, Quality Fast, rig lit | Smooth; washes have soft-edged pools, profiles crisp; untick GPU — same picture, slower | |
+| K12 | Rig Overview → **Layers** → untick a layer | It leaves the overview at once; the Studio's layer eye shows hidden too; **Show all** brings it back | |
+| K13 | Operate (run) mode: Studio layer **eye** and **A** buttons | They work; the **lock** is greyed (Design only) | |
+| K14 | New show, change something, quit → **Don't Save**; reopen | No "recover the autosave?" question | |
+| K15 | Change something, force-quit (Activity Monitor), reopen | The autosave **is** offered back | |
+| K16 | F1 on the Programming tab, the Patch dialog, the footer | The right guide opens; pictures fit; a click shows one full size | |
+| K17 | Save the show, quit, reopen | Nothing moved, lost, or changed value | |
 
 ---
 

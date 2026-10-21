@@ -27,8 +27,20 @@ class LookEditor_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** An Aim look on a line shows the line's Spread; the slider and the
+     *  box move together, write the look's param, and the strip shows where
+     *  the lights land. A point target hides them. */
+    void aLineLooksSpreadIsSetOnTheAimPage();
+    /** Group, Cross, Share and Order are set on the Aim page, each its own
+     *  param, and the strip shows the crossing. */
+    void aLineLooksGroupingIsSetOnTheAimPage();
     void aColourDarkerThanAFifthIsCalledOut();
     void aDarkRedLookWarnsUntilItIsBrightened();
+    /** A colour look offers the colour ring's slots by name (Wheel /
+     *  ring): picking a chase makes the look name it; a colour slot sets the
+     *  picker too; "Nearest to the colour" goes back. */
+    void aColourLookCanPickARingSlot();
+    void anAimLookCanDimLightsThatCannotSeeItsTarget();
     /** "if I create a gobo it doesn't give me a gobo selector?" A gobo made
      *  from the palette list has no look yet; the picker falls back to the
      *  workspace's fixtures, with a chooser when several wheels differ. */
@@ -43,6 +55,7 @@ private slots:
     void anEffectsTextIsTypedIn();
     void previewsShowWhatEachEffectDoes();
     void anEffectIsPutOnASpeedMaster();
+    void aLooksSpeedMasterAndSpreadSurviveADoubleClick();
     void theHostSpreadStandsInForTheEffectsOwn();
     void theSpreadIsPreviewed();
     void theEffectPickerIsAWindowOfItsOwn();

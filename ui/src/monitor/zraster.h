@@ -140,6 +140,18 @@ public:
      *  beams cost a few beams' worth. Null when no light was drawn. */
     QImage lightImage(QPoint *topLeft) const;
 
+    /** Add @p light (a lightImage(), its top-left at @p at) over @p frame:
+     *  Screen, as before, except that light lands on a grey or white surface
+     *  in its own colour. Screen alone only ever adds: a white cyc in a lit
+     *  room under a full blue wash stayed white with a lavender tint, its red
+     *  and green untouched. So where coloured light falls on something with
+     *  little colour of its own, what that surface shows in the channels the
+     *  light lacks is taken down, by how strong the light is -- as the eye
+     *  sees a lit cyc against a dim room. White light is exactly Screen, and
+     *  a saturated surface (a red LED strip under a blue beam) keeps its own
+     *  colour. Used by the CPU and GPU paths alike. */
+    static void composeLight(QImage &frame, const QImage &light, const QPoint &at);
+
     /** A line of finite width, as a quad with depth down its length. */
     void thickLine(const QPointF &a, const QPointF &b, double za, double zb,
                    double width, const QColor &colour, bool depthWrite = true,

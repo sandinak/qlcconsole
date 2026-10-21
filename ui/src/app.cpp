@@ -41,6 +41,9 @@
 #include "functionselection.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
+#include "showtreecontroller.h"
+#include "cuerunner.h"
+#include "showtreeview.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
 #include "virtualconsole.h"
@@ -68,7 +71,9 @@
 #include "monitorproperties.h"
 #include "vcframe.h"
 #include "speedmastersfooter.h"
+#include "updatemanager.h"
 #include "app.h"
+#include "measurementunits.h"
 #include "effectscriptrunner.h"
 #include <QPointer>
 #include <thread>
@@ -102,8 +107,14 @@
 #include "pmjoverlay.h"
 #include "showstatus.h"
 #include "showstatusdialog.h"
+#include "showembedding.h"
+#include "showdifferencesdialog.h"
 #include "qlcioplugin.h"
 #include "startupwindow.h"
+#include "mainbar.h"
+#include <QFrame>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -249,6 +260,10 @@ App::~App()
     else
         settings.setValue(SETTINGS_GEOMETRY, QVariant());
 
+    // A tab's borrowed tools go home before the tabs go.
+    if (m_mainBar != NULL)
+        m_mainBar->setHosting(false);
+
     if (Monitor::instance() != NULL)
         delete Monitor::instance();
 
@@ -277,6 +292,12 @@ App::~App()
     // editors) while the Doc is still alive.
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         delete pm;
+
+    // The Show Tree tab is the same trap: its hide event (the window still
+    // showing when App goes) stops its preview through the Doc's
+    // ShowTreeController, which is freed with m_doc below.
+    if (ShowTreeView::instance() != NULL)
+        delete ShowTreeView::instance();
 
     // Same ordering trap: the overlay and the engine are both children of App,
     // so QObject child deletion tears them down in construction order — engine
@@ -376,12 +397,20 @@ void App::init()
     if (m_startupWindow != NULL)
         m_startupWindow->beginStep(tr("Restoring window state"));
 
-    setWindowIcon(QIcon(":/qlcconsole.png"));
-
-    m_tab = new QTabWidget(this);
+    // The top bar (initToolBar()) and the tabs, one above the other. The
+    // bar is a plain row here rather than a QMainWindow toolbar: it holds a
+    // tab's own QToolBar, and a toolbar inside a toolbar pays both their
+    // margins (8 px of the height this bar exists to save).
+    QWidget *central = new QWidget(this);
+    central->setObjectName("MainCentral");
+    QVBoxLayout *centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    m_tab = new QTabWidget(central);
     m_tab->setObjectName("MainTabs");
     m_tab->setTabPosition(QTabWidget::South);
-    setCentralWidget(m_tab);
+    centralLayout->addWidget(m_tab, 1);
+    setCentralWidget(central);
 
 #if defined(__APPLE__) || defined(Q_OS_MAC)
     m_tab->setElideMode(Qt::TextElideMode::ElideNone);
@@ -477,9 +506,11 @@ void App::init()
             { QStringLiteral("Lighting Studio"), QStringLiteral("lighting-studio.md") },
             { QStringLiteral("Functions"),       QStringLiteral("other-improvements.md#window-menu") },
             { QStringLiteral("Programming"),     QStringLiteral("programming-tab.md") },
+            { QStringLiteral("Show Tree"),       QStringLiteral("show-tree.md") },
             { QStringLiteral("Shows"),           QStringLiteral("shows.md") },
             { QStringLiteral("Virtual Console"), QStringLiteral("getting-started.md#running-the-show") },
-            { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") } };
+            { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") },
+            { QStringLiteral("Run"),             QStringLiteral("show-tree.md#the-cue-runner") } };
         if (!w->property("helpTopic").isValid())
             w->setProperty("helpTopic", guide.value(text, QStringLiteral("getting-started.md")));
         // Stored as tab data (travels with the tab through detach/reattach's
@@ -529,7 +560,7 @@ void App::init()
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
         connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
         connect(pm, &ProgrammingManager::powerEstimateChanged, this,
-                [this](double amps, double kw, bool overload) {
+                [this](double amps, double kw, bool overload, const QString &detail) {
             if (m_statusPowerLabel == NULL)
                 return;
             if (amps <= 0.0 && kw <= 0.0)   // cleared (Operate mode) → hide the chip
@@ -542,15 +573,21 @@ void App::init()
             m_statusPowerLabel->setText(overload
                 ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
                 : tr("%1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
-            m_statusPowerLabel->setStyleSheet(overload
+            const QString sheet = overload
                 ? QStringLiteral("QLabel { color: #ff5555; font-weight: bold; }")
-                : QString());
+                : QString();
+            if (m_statusPowerLabel->styleSheet() != sheet)   // every 500 ms: only on a change
+                m_statusPowerLabel->setStyleSheet(sheet);
+            if (!detail.isEmpty() && m_statusPowerLabel->toolTip() != detail)
+                m_statusPowerLabel->setToolTip(detail);
             m_statusPowerLabel->show();
         });
         w = pm;
     }
     if (ProgrammerController *pc = m_doc->programmer())
     {
+        // View + Menu on the controller.
+        connect(pc, &ProgrammerController::focusModeRequested, this, &App::slotFocusMode);
         connect(pc, &ProgrammerController::dangleFixturesChanged, this,
                 [this](const QList<quint32> &fixtureIds) {
             if (m_statusDangleLabel == NULL)
@@ -573,12 +610,23 @@ void App::init()
         });
     }
     addTab(w, QIcon(":/scene.png"), tr("Programming"));
+    // The Show Tree beside Programming (SHOW_TREE_DESIGN.md D2): writing a
+    // show as one tree of cue lists, cues and layers.
+    w = new ShowTreeView(m_tab, m_doc);
+    addTab(w, QIcon(":/chaser.png"), tr("Show Tree"));
     w = new ShowManager(m_tab, m_doc);
     addTab(w, QIcon(":/show.png"), tr("Shows"));
     w = new VirtualConsole(m_tab, m_doc);
     addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
     addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
+    /* The cue runner's full-screen home (SHOW_TREE_DESIGN.md §6B, D26):
+       the operator's view -- big targets, keyboard GO, nothing to bump. It
+       follows the current production; the Cue Runner VC widget is its
+       other home. */
+    w = new CueRunner(m_doc, CueRunner::Full, m_tab);
+    w->setObjectName(QStringLiteral("runTab"));
+    addTab(w, QIcon(":/chaser.png"), tr("Run"));
     /* Functions: no tab ("I keep hitting it by mistake instead of
        Programming"), but there to open from the Window menu, in a window of
        its own. Closing that window puts it away again. */
@@ -615,10 +663,17 @@ void App::init()
        was a double-click, which broke views out by accident. */
     m_tab->tabBar()->installEventFilter(this);
     connect(m_tab, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
+    // The tab on show lends its own tools to the top bar.
+    if (m_mainBar != NULL)
+        m_mainBar->hostTabTools(m_tab->currentWidget());
 
     // Listen to blackout changes and toggle m_controlBlackoutAction
     connect(m_doc->inputOutputMap(), SIGNAL(blackoutChanged(bool)), this, SLOT(slotBlackoutChanged(bool)));
     connect(m_doc->inputOutputMap(), SIGNAL(outputInhibitedChanged(bool)), this, SLOT(slotOutputInhibitedChanged(bool)));
+    /* A patch kept offline reconnected (its network appeared): the footer
+       notice has to drop it without waiting for the next mode change. */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
+            this, [this]() { updateOutputReadiness(); updateRigNetworkFooter(); });
 
     // Listen to DMX value changes and update each Fixture values array
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),
@@ -643,8 +698,19 @@ void App::init()
 
     m_videoProvider = new VideoProvider(m_doc, this);
 
+    // The rig network transmit gate is this machine's choice: on unless
+    // turned off in Settings. (The networks themselves come with the show.)
+    m_doc->inputOutputMap()->setTransmitGateEnabled(
+            QSettings().value(rigNetworkGateSettingKey(), true).toBool());
+
     // Initialize status bar
     initStatusBar();
+
+    // The show controls: top bar (default) or status bar. After the status
+    // bar, which the second puts them in.
+    m_showControlsPlacement = QSettings().value(showControlsPlacementKey(),
+                                                ShowControlsInTopBar).toInt();
+    applyShowControlsPlacement();
 
     // Initialize autosave
     initAutosave();
@@ -667,11 +733,17 @@ void App::setActiveWindow(const QString& name)
 }
 
 #if defined(WIN32) || defined(Q_OS_WIN)
-bool App::nativeEvent(const QByteArray &eventType, void *message, long *result)
+/* Qt 6 takes the result as qintptr*. Declared with Qt 5's long* this never
+   overrode anything, so WM_DEVICECHANGE never reached HotPlugMonitor and a
+   USB device plugged in after launch went unnoticed on Windows. */
+bool App::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
 {
     Q_UNUSED(eventType)
-    //qDebug() << Q_FUNC_INFO << eventType;
-    return HotPlugMonitor::parseWinEvent(message, result);
+    long res = 0;
+    const bool handled = HotPlugMonitor::parseWinEvent(message, &res);
+    if (handled && result != NULL)
+        *result = res;
+    return handled;
 }
 
 void App::disableTimerResolutionThrottling()
@@ -731,6 +803,15 @@ void App::closeEvent(QCloseEvent* e)
                                             "before closing the application?")) == true)
         {
             e->accept();
+            // A staged update goes in now that qlcconsole is quitting -- and
+            // only if nothing is running (UpdateManager::aboutToQuit()). The
+            // helper waits for this process to end: make sure it does, even
+            // with a help or detached window still open.
+            if (m_updateManager != nullptr
+                && m_updateManager->aboutToQuit(m_restartForUpdate, fileName()))
+            {
+                QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+            }
         }
         else
         {
@@ -833,6 +914,7 @@ void App::clearDocument()
     VirtualConsole::instance()->resetContents();
     ShowManager::instance()->clearContents();
     m_doc->clearContents();
+    applyUnitPreference(false);
     if (Monitor::instance() != NULL)
         Monitor::instance()->updateView();
     SimpleDesk::instance()->clearContents();
@@ -841,6 +923,16 @@ void App::clearDocument()
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
+}
+
+void App::applyUnitPreference(bool fromShow)
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    if (fromShow)
+        MeasurementUnits::seedFromFirstShow(mp->gridUnits() == MonitorProperties::Feet);
+    /* The show's own Units only said what its grid size was in; from here
+       on it's the person's, and is saved that way. */
+    mp->convertGridUnits(MonitorProperties::gridUnitsFor(MeasurementUnits::preferredLength()));
 }
 
 Doc *App::doc()
@@ -854,6 +946,8 @@ void App::initDoc()
     m_doc = new Doc(this);
 
     connect(m_doc, SIGNAL(modified(bool)), this, SLOT(slotDocModified(bool)));
+    connect(m_doc->showEmbedding(), &ShowEmbedding::changed, this,
+            [this]() { AppUtil::updateShowEmbeddingStatus(m_doc); });
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
@@ -888,6 +982,8 @@ void App::initDoc()
     /* Cues fired from outside (QLab): OSC on a port of our own, MSC on a
        patched MIDI input (SHOW_CONTROL_DESIGN.md). */
     m_showControlListener = new ShowControlListener(m_doc, this);
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->setShowControlListener(m_showControlListener);
     QTimer *wledRecheck = new QTimer(this);
     wledRecheck->setSingleShot(true);
     wledRecheck->setInterval(1500);
@@ -1008,6 +1104,25 @@ void App::initDoc()
        of their own reads each one (which makes the cloud send it), however
        long that takes. Fixtures and effects then load at once; anything else
        loads next time qlcconsole starts. */
+    /* What the show carries: keep the ones only it has; review the ones that
+       differ from this computer's (SHOW_EMBEDDING_DESIGN.md). */
+    ShowStatus::instance()->setAction("embedded.showonly", tr("Install on This Computer"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QStringList failed;
+            foreach (const QVariant &v, items)
+            {
+                QString error;
+                if (!m_doc->showEmbedding()->installShows(v.toString(), &error))
+                    failed << error;
+            }
+            if (!failed.isEmpty())
+                QMessageBox::warning(parent, tr("Install on This Computer"), failed.join("\n"));
+        });
+    ShowStatus::instance()->setAction("embedded.differ", tr("Review…"),
+        [this](QWidget *parent, const QVariantList &) {
+            ShowDifferencesDialog dlg(m_doc, parent);
+            dlg.exec();
+        });
     ShowStatus::instance()->setAction("fixtures.nodefinition", tr("Fetch Definitions"),
         [this](QWidget *parent, const QVariantList &) { recoverUnavailableDefinitions(parent); });
     ShowStatus::instance()->setAction("storage.onlineonly", tr("Download Now"),
@@ -1062,8 +1177,7 @@ void App::initDoc()
             }).detach();
         });
     ShowStatus::instance()->setAction("definitions.duplicates", tr("Move to Trash…"), trashDefinitions);
-    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"),
-        [this](QWidget *parent, const QVariantList &items) {
+    auto openConnections = [this](QWidget *parent, const QVariantList &items) {
             InputOutputManager *io = InputOutputManager::instance();
             if (io == NULL || items.isEmpty())
                 return;
@@ -1071,7 +1185,11 @@ void App::initDoc()
             io->selectUniverse(items.first().toUInt());
             if (QDialog *dlg = qobject_cast<QDialog *>(parent))
                 dlg->accept();          // out of the way of the tab it opened
-        });
+        };
+    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"), openConnections);
+    ShowStatus::instance()->setAction("outputs.problems", tr("Open Connections"), openConnections);
+    // The Fixture Manager's universe rows: "Show in Connections".
+    ShowStatus::instance()->setAction("connections.universe", tr("Show in Connections"), openConnections);
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif
@@ -1117,10 +1235,17 @@ void App::initDoc()
             m_startupWindow->logDetail(name);
     });
     m_doc->ioPluginCache()->load(IOPluginCache::systemPluginDirectory());
-    // WLED devices that stop answering, or fade to a weak signal: the footer.
-    if (QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin(QStringLiteral("WLED")))
-        if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
-            connect(wled, &QLCIOPlugin::targetProblemsChanged, t, QOverload<>::of(&QTimer::start));
+    /* Outputs in trouble -- WLED devices that stop answering or fade to a
+       weak signal, Art-Net / E1.31 outputs that can't send, Art-Net nodes
+       that stop answering: the footer, whichever plugin says so. */
+    /* By name, not by member pointer: QLCIOPlugin is compiled into the engine
+       and into every plugin, so on Windows its signal has no single exporting
+       DLL, and a pointer-to-member connection there silently never fires. */
+    if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
+    {
+        foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
+            connect(plugin, SIGNAL(targetProblemsChanged()), t, SLOT(start()));
+    }
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause
@@ -1210,19 +1335,36 @@ void App::updateOutputReadiness()
     }
 
     QStringList items;
-    int pendingCount = 0, rangeCount = 0;
+    int rangeCount = 0;
+    QSet<quint32> keptUniverses;
+    QSet<quint32> heldUniverses;
+    QStringList missing;
     foreach (const InputOutputMap::DanglingPatch &p, bad)
     {
-        if (p.missingInterface.isEmpty() == false)
+        if (p.heldReason.isEmpty() == false)
         {
-            // Pending: the interface this patch names (an ArtNet IP, most
-            // often) just isn't one this machine has -- typically because
-            // the workspace was built on a different network. The mapping
-            // itself is untouched and will resolve again on a machine that
-            // does have it; nothing is being output in the meantime.
-            pendingCount++;
-            items << tr("Universe %1 — %2 \"%3\" not present here")
-                        .arg(p.universe + 1).arg(p.pluginName).arg(p.missingInterface);
+            // Held by the rig network gate: the red footer chip of its own
+            // (updateRigNetworkFooter()) says why; listed here too.
+            heldUniverses.insert(p.universe);
+            items << tr("Universe %1 — %2 output held: %3")
+                        .arg(p.universe + 1).arg(p.pluginName, p.heldReason);
+        }
+        else if (p.missingInterface.isEmpty() == false)
+        {
+            // Kept offline: the interface/network (an Art-Net address, most
+            // often), device or plugin this patch names is not present here
+            // -- typically a laptop away from the show network. The patch is
+            // untouched, saved unchanged, and reconnects by itself.
+            keptUniverses.insert(p.universe);
+            if (missing.contains(p.missingInterface) == false)
+                missing << p.missingInterface;
+            const QString kind = p.kind == "input" ? tr("input")
+                               : p.kind == "feedback" ? tr("feedback") : tr("output");
+            items << (p.pluginMissing
+                ? tr("Universe %1 — %2 %3 \"%4\": plugin not installed here — kept")
+                      .arg(p.universe + 1).arg(kind, p.pluginName, p.missingInterface)
+                : tr("Universe %1 — %2 %3 \"%4\" not present — kept, will reconnect")
+                      .arg(p.universe + 1).arg(kind, p.pluginName, p.missingInterface));
         }
         else
         {
@@ -1237,12 +1379,17 @@ void App::updateOutputReadiness()
     // configuration mistake to fix, when on a laptop away from the show
     // network it is simply expected and will resolve itself back on-site.
     QStringList summaryParts;
-    if (pendingCount > 0)
-        summaryParts << tr("%1 patched network interface%2 not present on this machine")
-                            .arg(pendingCount).arg(pendingCount == 1 ? QString() : "s");
+    if (keptUniverses.isEmpty() == false)
+        summaryParts << tr("%1 universe%2 patched to interfaces not present (%3) — kept, will reconnect")
+                            .arg(keptUniverses.count())
+                            .arg(keptUniverses.count() == 1 ? QString() : "s")
+                            .arg(missing.join(", "));
     if (rangeCount > 0)
         summaryParts << tr("%1 universe%2 patched to a line this machine doesn't have")
                             .arg(rangeCount).arg(rangeCount == 1 ? QString() : "s");
+    if (heldUniverses.isEmpty() == false)
+        summaryParts << tr("%n universe(s) held — not on the rig network", "",
+                           heldUniverses.count());
 
     // Registered into ShowStatus rather than written straight to the footer
     // -- see showstatus.h. items carries the per-universe breakdown as an
@@ -1250,8 +1397,11 @@ void App::updateOutputReadiness()
     // closing sentence that applies to all of them.
     ShowStatus::instance()->setStatus("output.dangling", ShowStatus::Warning,
         summaryParts.join(" · "),
-        tr("Re-patch these universes in Connections, or open the workspace "
-           "on the machine it was built for."),
+        rangeCount > 0
+            ? tr("Re-patch these universes in Connections, or open the workspace "
+                 "on the machine it was built for.")
+            : tr("Patches follow the network: they reconnect by themselves when "
+                 "any interface on that network appears. Nothing is sent meanwhile."),
         items);
 
     foreach (const QString &line, items)
@@ -1311,6 +1461,10 @@ void App::updateWindowTitle()
 void App::slotTabChanged(int index)
 {
     Q_UNUSED(index)
+    // Also how a tab moved to its own window (or put away) gets its tools
+    // back: it stops being current first.
+    if (m_mainBar != NULL)
+        m_mainBar->hostTabTools(m_tab->currentWidget());
     updateWindowTitle();
 }
 
@@ -1350,9 +1504,15 @@ void App::enableKioskMode()
     // Hide the tab bar to save some pixels
     m_tab->tabBar()->hide();
 
-    // No need for the toolbar
+    // No need for the toolbar, nor the show controls (in it, or in the
+    // status bar). The tab's tools go home first.
+    if (m_mainBar != NULL)
+        m_mainBar->setHosting(false);
+    delete m_showControls;
+    m_showControls = NULL;
     delete m_toolbar;
     m_toolbar = NULL;
+    m_mainBar = NULL;   // was m_toolbar's
 }
 
 void App::createKioskCloseButton(const QRect& rect)
@@ -1546,6 +1706,9 @@ void App::initActions()
 
     m_controlBlackoutAction = new QAction(QIcon(":/blackout.png"), tr("Toggle &Blackout"), this);
     m_controlBlackoutAction->setCheckable(true);
+    m_controlBlackoutAction->setIconText(tr("Blackout"));
+    m_controlBlackoutAction->setToolTip(tr("Blackout: every output to zero, whatever is running. "
+                                           "Lit red while on."));
     connect(m_controlBlackoutAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlackout()));
     m_controlBlackoutAction->setChecked(m_doc->inputOutputMap()->blackout());
 
@@ -1554,10 +1717,11 @@ void App::initActions()
     // only (disabled in Operate; forced off on →Operate). Sibling of Blackout.
     m_controlBlindAction = new QAction(QIcon(":/blind.png"), tr("Toggle Bl&ind"), this);
     m_controlBlindAction->setCheckable(true);
+    m_controlBlindAction->setIconText(tr("Blind"));
     m_controlBlindAction->setToolTip(tr(
         "Blind: mute the physical rig but keep the 2D preview live, so you can "
         "build a look without hitting the stage. Turn off to take it live. "
-        "Design mode only."));
+        "Design mode only. Lit blue while on."));
     connect(m_controlBlindAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlind(bool)));
     m_controlBlindAction->setChecked(m_doc->inputOutputMap()->outputInhibited());
 
@@ -1658,6 +1822,11 @@ void App::initActions()
 
     m_controlPanicAction = new QAction(QIcon(":/panic.png"), tr("Stop ALL functions!"), this);
     m_controlPanicAction->setShortcut(QKeySequence("CTRL+SHIFT+ESC"));
+    // The show controls' button says the short form (iconText); the Control
+    // menu keeps the full name.
+    m_controlPanicAction->setIconText(tr("Stop all"));
+    m_controlPanicAction->setToolTip(tr("Stop ALL functions (%1). Hold for Fade and stop.")
+            .arg(m_controlPanicAction->shortcut().toString(QKeySequence::NativeText)));
     connect(m_controlPanicAction, SIGNAL(triggered(bool)), this, SLOT(slotControlPanic()));
 
     m_fadeAndStopMenu = new QMenu();
@@ -1706,6 +1875,23 @@ void App::initActions()
     connect(m_cueBackAction, &QAction::triggered, this, [this]() {
         m_doc->showControl()->execute({ ShowControl::Back, QString(), QString() });
     });
+    /* ...and its Sub GO / Sub Back (SUBCUES_DESIGN.md): through the sub-cues
+       of the cue playing, 4.1, 4.2..., while GO goes on to 5. ⌥⌘↩ / ⌥⌘⇧↩
+       on macOS (Qt's CTRL is ⌘ there). */
+    m_cueSubGoAction = new QAction(tr("Sub GO (Main Cue List)"), this);
+    m_cueSubGoAction->setShortcut(cueSubGoShortcut());
+    m_cueSubGoAction->setShortcutContext(Qt::ApplicationShortcut);
+    // Through show control, as GO is: what came of it is reported the
+    // same way (Connections → Show control & sync, last command).
+    connect(m_cueSubGoAction, &QAction::triggered, this, [this]() {
+        m_doc->showControl()->execute({ ShowControl::SubGo, QString(), QString() });
+    });
+    m_cueSubBackAction = new QAction(tr("Sub Back (Main Cue List)"), this);
+    m_cueSubBackAction->setShortcut(cueSubBackShortcut());
+    m_cueSubBackAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_cueSubBackAction, &QAction::triggered, this, [this]() {
+        m_doc->showControl()->execute({ ShowControl::SubBack, QString(), QString() });
+    });
 
     m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
@@ -1715,6 +1901,17 @@ void App::initActions()
     // macOS relocates this to the application menu ("About QLC+").
     m_helpAboutAction->setMenuRole(QAction::AboutRole);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
+
+    /* Software Update (UpdateManager): GitHub Releases, never during a show.
+       Gone entirely when IT has turned update checks off. */
+    m_checkUpdatesAction = new QAction(tr("Check for Updates…"), this);
+    m_checkUpdatesAction->setObjectName(QStringLiteral("checkForUpdates"));
+    m_checkUpdatesAction->setMenuRole(QAction::NoRole);   // stays in Help on macOS
+    m_checkUpdatesAction->setVisible(UpdateChecker::isDisabledByPolicy() == false);
+    connect(m_checkUpdatesAction, &QAction::triggered, this, [this]() {
+        if (m_updateManager != nullptr)
+            m_updateManager->checkNow();
+    });
 
     /* Settings action */
     m_appSettingsAction = new QAction(QIcon(":/configure.png"), tr("&Settings"), this);
@@ -1733,17 +1930,27 @@ void App::initActions()
 
 void App::initToolBar()
 {
-    m_toolbar = new QToolBar(tr("Workspace"), this);
+    m_toolbar = new QWidget(this);
     m_toolbar->setObjectName("MainToolBar");
-    m_toolbar->setFloatable(false);
-    m_toolbar->setMovable(false);
-    m_toolbar->setAllowedAreas(Qt::TopToolBarArea);
-    m_toolbar->setContextMenuPolicy(Qt::CustomContextMenu);
-    // Matches every per-manager toolbar's icon size (Fixture/Function/Show
-    // Manager, Connections, ...), all already 20x20 — this was the one
-    // toolbar still at the tab bar's larger 24x24.
-    m_toolbar->setIconSize(QSize(20, 20));
-    addToolBar(m_toolbar);
+    // Its own height, never a share of the window's: the tabs take the rest.
+    m_toolbar->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    QVBoxLayout *column = new QVBoxLayout(m_toolbar);
+    column->setContentsMargins(0, 0, 0, 0);
+    column->setSpacing(0);
+    QWidget *row = new QWidget(m_toolbar);
+    QHBoxLayout *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(4, 0, 4, 0);
+    column->addWidget(row);
+    // A hairline under it, as under a QMainWindow toolbar area.
+    QFrame *line = new QFrame(m_toolbar);
+    line->setObjectName("MainToolBarLine");
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Plain);
+    line->setFixedHeight(1);
+    line->setForegroundRole(QPalette::Mid);
+    column->addWidget(line);
+    if (QVBoxLayout *central = qobject_cast<QVBoxLayout *>(centralWidget()->layout()))
+        central->insertWidget(0, m_toolbar);
 
     // A macOS-native "unified title bar" merge (icons sitting level with the
     // window title, like Safari/Mail) was attempted here and repeatedly
@@ -1759,30 +1966,81 @@ void App::initToolBar()
     // NSToolbar built in Objective-C++; deliberately not pursued (Branson's
     // call) since it's macOS-only new surface area and Windows/Linux have no
     // equivalent "unified title bar" concept to begin with -- a toolbar as
-    // its own row is already the normal, correct look there. This toolbar
-    // is now a plain, ordinary QMainWindow toolbar on every platform,
-    // following the same "Toolbar Style" preference as everything else
-    // (applyTabLabelMode()) instead of being locked to icon-only.
+    // its own row is already the normal, correct look there. This bar is
+    // an ordinary row on every platform (since 2026-10 not even a
+    // QMainWindow toolbar, see above), following the same "Toolbar Style"
+    // preference as everything else (applyTabLabelMode()).
 
     // Native-first layout: the full command set lives in the menu bar (see
-    // initMenuBar). The toolbar keeps only the handful of live show controls
-    // you reach for mid-show. A flexible spacer flushes them to the right so
-    // they sit away from the workspace tabs, where the Operate button has
-    // always been.
-    QWidget* spacer = new QWidget(this);
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_toolbar->addWidget(spacer);
+    // initMenuBar). This bar is the ONE row above the tabs (MainBar): the
+    // current tab's own tools on the left, borrowed from the tab while it
+    // is on show, and the live show controls pinned on the right. It used
+    // to be two rows -- this bar's big icon-over-word show buttons (~58 px)
+    // and then each tab's own toolbar (~36 px) -- about 94 px before any
+    // content. Settings can move the show controls to the status bar
+    // instead (applyShowControlsPlacement()).
+    m_mainBar = new MainBar(row);
+    rowLayout->addWidget(m_mainBar);
 
-    m_toolbar->addAction(m_controlPanicAction);   // Stop ALL (hold = fade menu)
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_controlBlackoutAction);
-    m_toolbar->addAction(m_controlBlindAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_modeToggleAction);      // Design/Operate (rightmost)
+    m_showControls = new ShowControls(m_doc, m_controlPanicAction, m_controlBlackoutAction,
+                                      m_controlBlindAction, m_modeToggleAction, m_mainBar);
+    m_mainBar->setShowControls(m_showControls, m_showControls->modeSwitch());
+}
 
-    QToolButton* btn = qobject_cast<QToolButton*>(m_toolbar->widgetForAction(m_controlPanicAction));
-    if (btn != NULL)
-        btn->setPopupMode(QToolButton::DelayedPopup); // click = stop, hold = fade menu
+QString App::showControlsPlacementKey()
+{
+    return QStringLiteral("workspace/showControlsPlacement");
+}
+
+void App::setShowControlsPlacement(int placement)
+{
+    if (placement != ShowControlsInStatusBar)
+        placement = ShowControlsInTopBar;
+    QSettings().setValue(showControlsPlacementKey(), placement);
+    if (placement == m_showControlsPlacement)
+        return;
+    m_showControlsPlacement = placement;
+    applyShowControlsPlacement();
+}
+
+void App::applyShowControlsPlacement()
+{
+    if (m_toolbar == NULL || m_mainBar == NULL || m_showControls == NULL)
+        return;     // kiosk: neither
+
+    if (m_showControlsPlacement == ShowControlsInStatusBar)
+    {
+        // The top is the tab's alone again: its tools go home to its own
+        // top edge, and this bar has nothing left to show.
+        m_mainBar->setHosting(false);
+        m_toolbar->hide();
+        m_showControls->setInStatusBar(true);
+        statusBar()->addPermanentWidget(m_showControls);     // last: rightmost
+        statusBar()->addPermanentWidget(m_showControls->modeSwitch());
+        m_showControls->show();
+        m_showControls->modeSwitch()->show();
+        // The switch says the mode right here, and Blackout lights up: the
+        // DESIGN / BLACKOUT chips would say it all twice, in a footer short
+        // of room.
+        if (m_statusModeChipLabel != NULL)
+            m_statusModeChipLabel->hide();
+        if (m_statusBlackoutLabel != NULL)
+            m_statusBlackoutLabel->hide();
+    }
+    else
+    {
+        statusBar()->removeWidget(m_showControls);
+        statusBar()->removeWidget(m_showControls->modeSwitch());
+        m_showControls->setInStatusBar(false);
+        m_mainBar->setShowControls(m_showControls, m_showControls->modeSwitch());
+        if (m_statusModeChipLabel != NULL)
+            m_statusModeChipLabel->show();
+        if (m_statusBlackoutLabel != NULL)
+            m_statusBlackoutLabel->setVisible(m_doc->inputOutputMap()->blackout());
+        m_mainBar->setHosting(true);
+        m_mainBar->hostTabTools(m_tab != NULL ? m_tab->currentWidget() : NULL);
+        m_toolbar->show();
+    }
 }
 
 void App::initMenuBar()
@@ -1805,6 +2063,15 @@ void App::initMenuBar()
     fileMenu->addSeparator();
     fileMenu->addAction(m_fileSaveAction);
     fileMenu->addAction(m_fileSaveAsAction);
+    {
+        QAction *collect = new QAction(tr("Collect for &Transfer…"), this);
+        collect->setObjectName(QStringLiteral("fileCollectForTransfer"));
+        collect->setToolTip(tr("Write the show and every definition and script it uses "
+                               "that is not part of the app into one folder, to take to "
+                               "another computer"));
+        connect(collect, &QAction::triggered, this, &App::slotFileCollectForTransfer);
+        fileMenu->addAction(collect);
+    }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
     // Quit: m_quitAction only exists when there's no window manager (kiosk/RPi).
@@ -1825,6 +2092,65 @@ void App::initMenuBar()
         fileMenu->addAction(quitAction);
     }
 
+    /* ---- Edit: Undo / Redo, named (open 24) ---- */
+    {
+        // One history for the Show Tree's steps and the palette operations
+        // (either tab), plus Programming's own canvas edits. The menu names
+        // the step; ⌘Z / ⇧⌘Z stay each tab's own shortcuts (a second
+        // binding here would make them ambiguous), shown beside the text.
+        QMenu *editMenu = mb->addMenu(tr("&Edit"));
+        QAction *undo = editMenu->addAction(tr("Undo"));
+        undo->setObjectName(QStringLiteral("editUndo"));
+        QAction *redo = editMenu->addAction(tr("Redo"));
+        redo->setObjectName(QStringLiteral("editRedo"));
+        auto current = [this]() -> QWidget * {
+            return m_tab != nullptr ? m_tab->currentWidget() : nullptr;
+        };
+        auto programming = [current]() -> ProgrammingManager * {
+            QWidget *w = current();
+            ProgrammingManager *pm = qobject_cast<ProgrammingManager *>(w);
+            return pm != nullptr ? pm : (w != nullptr ? w->findChild<ProgrammingManager *>() : nullptr);
+        };
+        auto treeView = [current]() -> ShowTreeView * {
+            QWidget *w = current();
+            ShowTreeView *v = qobject_cast<ShowTreeView *>(w);
+            return v != nullptr ? v : (w != nullptr ? w->findChild<ShowTreeView *>() : nullptr);
+        };
+        connect(editMenu, &QMenu::aboutToShow, this, [this, undo, redo, programming]() {
+            QString u, r;
+            if (ProgrammingManager *pm = programming())
+            {
+                u = pm->undoText();
+                r = pm->redoText();
+            }
+            else if (ShowTreeController *st = m_doc->showTree())
+            {
+                u = st->canUndoShared() ? st->sharedUndoText() : QString();
+                r = st->canRedoShared() ? st->sharedRedoText() : QString();
+            }
+            undo->setText(u.isEmpty() ? tr("Undo") : tr("Undo %1").arg(u));
+            undo->setEnabled(!u.isEmpty());
+            redo->setText(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r));
+            redo->setEnabled(!r.isEmpty());
+        });
+        connect(undo, &QAction::triggered, this, [this, programming, treeView]() {
+            if (ProgrammingManager *pm = programming())
+                QMetaObject::invokeMethod(pm, "slotUndo");
+            else if (ShowTreeView *v = treeView())
+                QMetaObject::invokeMethod(v, "slotUndo");
+            else if (m_doc->showTree() != nullptr)
+                m_doc->showTree()->undoShared();
+        });
+        connect(redo, &QAction::triggered, this, [this, programming, treeView]() {
+            if (ProgrammingManager *pm = programming())
+                QMetaObject::invokeMethod(pm, "slotRedo");
+            else if (ShowTreeView *v = treeView())
+                QMetaObject::invokeMethod(v, "slotRedo");
+            else if (m_doc->showTree() != nullptr)
+                m_doc->showTree()->redoShared();
+        });
+    }
+
     /* ---- View: tools + jump to a workspace tab ---- */
     QMenu* viewMenu = mb->addMenu(tr("&View"));
     // m_controlMonitorAction (Ctrl+Shift+M) is deliberately NOT added to this
@@ -1842,6 +2168,15 @@ void App::initMenuBar()
     m_rigOverviewAction->setShortcut(QKeySequence("CTRL+SHIFT+R"));
     m_rigOverviewAction->setToolTip(tr("An angled, read-only view of the whole rig"));
     connect(m_rigOverviewAction, &QAction::triggered, this, &App::slotRigOverview);
+
+    /* Focus mode: aligning the rig before a show (FOCUS_MODE_DESIGN.md). The
+       Lighting Studio and the Rig Overview have it on their bars; this is the
+       same thing from anywhere, and View + Menu on the controller asks too. */
+    QAction *focusAct = viewMenu->addAction(tr("Focus Mode…"));
+    focusAct->setObjectName(QStringLiteral("focusModeMenuAction"));
+    focusAct->setShortcut(QKeySequence("CTRL+ALT+F"));
+    focusAct->setToolTip(tr("Aim each moving head at its reference and nudge its calibration offsets"));
+    connect(focusAct, &QAction::triggered, this, &App::slotFocusMode);
 
 
     // Backstage color themes: low-glare palettes for working near a stage/
@@ -2024,6 +2359,8 @@ void App::initMenuBar()
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_cueGoAction);
     ctrlMenu->addAction(m_cueBackAction);
+    ctrlMenu->addAction(m_cueSubGoAction);
+    ctrlMenu->addAction(m_cueSubBackAction);
     ctrlMenu->addSeparator();
     QMenu* liveMenu = ctrlMenu->addMenu(tr("&Live Edit"));
     liveMenu->addAction(m_liveEditAction);
@@ -2051,7 +2388,8 @@ void App::initMenuBar()
                                               m_tabOriginals.at(i).first);
         // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
         // the Function Manager's "add function" shortcuts.
-        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
+        // The tenth (Run) is ⇧⌘0.
+        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10)));
         /* Resolve by LABEL, not by construction order. Detaching a view calls
            removeTab(), so every index after it shifts and a raw
            setCurrentIndex(i) lands on the wrong page -- or on nothing at all
@@ -2063,6 +2401,10 @@ void App::initMenuBar()
         });
         m_windowJumps << jump;
     }
+    /* The Rig Overview is a window of its own, so it is offered here too, not
+       only under View: the Window menu is where people go looking for one
+       ("there's no option in Windows"). The same action, so one shortcut. */
+    windowMenu->addAction(m_rigOverviewAction);
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
     m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));
@@ -2107,6 +2449,7 @@ void App::initMenuBar()
     }
     helpMenu->addSeparator();
     helpMenu->addAction(m_helpIndexAction);
+    helpMenu->addAction(m_checkUpdatesAction);
     helpMenu->addAction(m_helpAboutAction);         // → app menu (About) on macOS
 }
 
@@ -2183,6 +2526,10 @@ bool App::saveModifiedDoc(const QString & title, const QString & message)
     }
     else if (result == QMessageBox::No)
     {
+        /* Discarded, on purpose: so is its recovery copy. Left behind (the
+           document is still "modified", so closing doesn't remove it either),
+           it was offered back at every start from then on. */
+        removeAutosaveFile();
         return true;
     }
     else
@@ -2566,6 +2913,54 @@ QFile::FileError App::slotFileSaveAs()
     return error;
 }
 
+void App::slotFileCollectForTransfer()
+{
+    if (!confirmSaveWithoutDefinitions())
+        return;
+
+    const QString base = m_fileName.isEmpty() ? tr("Show") : QFileInfo(m_fileName).completeBaseName();
+    const QString start = m_fileName.isEmpty() ? QDir::homePath() : QFileInfo(m_fileName).absolutePath();
+    const QString parent = QFileDialog::getExistingDirectory(this,
+        tr("Collect for Transfer: where to make the “%1” folder").arg(base), start);
+    if (parent.isEmpty())
+        return;
+
+    const QDir dir(QDir(parent).absoluteFilePath(base));
+    if (dir.exists() && !dir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot).isEmpty()
+        && QMessageBox::question(this, tr("Collect for Transfer"),
+               tr("There is already a folder called “%1” there. Files in it with the same "
+                  "names will be replaced.\n\nCollect into it anyway?").arg(base),
+               QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+        return;
+    if (!QDir().mkpath(dir.absolutePath()))
+    {
+        QMessageBox::warning(this, tr("Collect for Transfer"),
+                             tr("Could not make the folder %1.").arg(dir.absolutePath()));
+        return;
+    }
+
+    /* The show as a .qlcc (it carries the same files), saved as a copy: this
+       window goes on with the show it has open. */
+    const QString show = dir.absoluteFilePath(base + KExtWorkspaceConsole);
+    const QFile::FileError error = saveXML(show, true);
+    if (error != QFile::NoError)
+    {
+        handleFileError(error);
+        return;
+    }
+    QStringList written;
+    const bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    if (!ok)
+        QMessageBox::warning(this, tr("Collect for Transfer"),
+            tr("The show is in %1, but some of the files it uses could not be written there.")
+                .arg(dir.absolutePath()));
+    else
+        QMessageBox::information(this, tr("Collect for Transfer"),
+            tr("Collected in %1: the show, and %n file(s) it uses that are not part of the "
+               "app (fixture definitions, scripts, LED maps).", "", written.size())
+                .arg(QDir::toNativeSeparators(dir.absolutePath())));
+}
+
 /*****************************************************************************
  * Control action slots
  *****************************************************************************/
@@ -2580,6 +2975,12 @@ void App::slotRigOverview()
        in ("every time I open the rig view .. the studio tab comes up"). */
     if (Monitor *mon = Monitor::instance())
         mon->toggleStageOverview();
+}
+
+void App::slotFocusMode()
+{
+    if (Monitor *mon = Monitor::instance())
+        mon->openFocusMode();
 }
 
 void App::slotControlMonitor()
@@ -2605,7 +3006,11 @@ void App::slotBlackoutChanged(bool state)
     if (m_statusBlackoutLabel != NULL)
     {
         m_statusBlackoutLabel->setText(state ? tr("● BLACKOUT ") : QString());
-        m_statusBlackoutLabel->setVisible(state);
+        // With the show controls in the status bar, their Blackout button
+        // is lit red right beside it: the chip would say it twice, in a
+        // footer short of room.
+        m_statusBlackoutLabel->setVisible(state
+                && m_showControlsPlacement != ShowControlsInStatusBar);
     }
 }
 
@@ -3137,6 +3542,15 @@ void App::slotHelpAbout()
     ab.exec();
 }
 
+void App::showShowControlSettings()
+{
+    if (InputOutputManager::instance() == NULL || m_tab == NULL)
+        return;
+    // By label, so a Connections detached into its own window comes forward too.
+    showContext(tr("Connections"));
+    InputOutputManager::instance()->showShowControlPage();
+}
+
 void App::slotAppSettings()
 {
     AppSettings settings(this, this);
@@ -3371,6 +3785,9 @@ bool App::confirmSaveWithoutDefinitions()
 void App::recoverUnavailableDefinitions(QWidget *parent)
 {
     QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    /* Copied into the user folder since qlcconsole started (a show brought
+       to a new computer, its definitions after it): read the folder again. */
+    defs->load(QLCFixtureDefCache::userDefinitionDirectory());
     QList<Fixture *> waiting;
     QStringList fetch;
     foreach (Fixture *fx, m_doc->fixtures())
@@ -3420,6 +3837,13 @@ QFile::FileError App::loadXML(const QString& fileName)
 
     if (fileName.isEmpty() == true)
         return QFile::OpenError;
+
+    /* The definitions and scripts the show carries, put in use before any of
+       it loads: where this computer has none, or a different one, the show's
+       own (SHOW_EMBEDDING_DESIGN.md). Its folder's Fixtures/, EffectScripts/
+       and RGBScripts/ too, for what neither has. */
+    if (m_doc->showEmbedding()->readWorkspace(fileName))
+        m_doc->showEmbedding()->apply(QFileInfo(fileName).absolutePath());
 
     // Every definition it needs on this computer before it loads.
     prepareShowDefinitions(fileName);
@@ -3537,6 +3961,11 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
             /* Ignore creator information */
             doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLShowEmbedded)
+        {
+            /* Read before anything else (App::loadXML(fileName)). */
+            doc.skipCurrentElement();
+        }
         else if (doc.name() == QLatin1String("AppState"))
         {
             // Defer restoring windows until after the full workspace is loaded
@@ -3608,6 +4037,8 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
         // Set the active window to what was saved in the workspace file
         setActiveWindow(activeWindowName);
 
+    applyUnitPreference(true);
+
     // Perform post-load operations
     VirtualConsole::instance()->postLoad();
 
@@ -3650,6 +4081,15 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     doc.writeTextElement(KXMLQLCCreatorVersion, APPVERSION);
     doc.writeTextElement(KXMLQLCCreatorAuthor, QLCFile::currentUserName());
     doc.writeEndElement(); // close KXMLQLCCreator
+
+    /* What the show uses that is not part of the app, carried in it: the
+       version in use, never quietly this computer's. A .qlcc only -- a .qxw
+       stays as QLC+ can read it. Before <Engine>, so it is read first. */
+    if (ShowEmbedding::embedsIn(fileName))
+    {
+        m_doc->showEmbedding()->collect();
+        m_doc->showEmbedding()->saveXML(&doc);
+    }
 
     /* Write engine components to the XML document */
     m_doc->saveXML(&doc);
@@ -3900,28 +4340,9 @@ void App::applyTabLabelMode()
         }
     }
 
-    // Apply the same mode to the main toolbar so "Text only" hides toolbar
-    // icons and "Icons only" hides toolbar text labels. Used to be locked to
-    // icon-only on macOS while this toolbar was (unsuccessfully) trying to
-    // merge into the native title bar -- that attempt is gone (see
-    // initToolBar()'s comment: no real NSToolbar was ever involved, so
-    // nothing was actually merging), so this toolbar now follows the same
-    // general preference as every other toolbar and platform.
-    if (m_toolbar)
-    {
-        switch (m_tabLabelMode)
-        {
-        case TabIconOnly:
-            m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-            break;
-        case TabTextOnly:
-            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            break;
-        default:
-            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-            break;
-        }
-    }
+    // The same mode for the show controls (Design | Operate stays words).
+    if (m_showControls != NULL)
+        m_showControls->setLabelMode(m_tabLabelMode);
 
     // Keep the 2D monitor window's toolbars in sync if it is open.
     if (Monitor::instance() != NULL)
@@ -3942,6 +4363,11 @@ void App::applyTabLabelMode()
         ShowManager::instance()->applyToolbarLabelMode();
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         pm->applyToolbarLabelMode();
+
+    // A tab's tools in the top bar keep their words beside the icons there,
+    // whatever the tab just set.
+    if (m_mainBar != NULL)
+        m_mainBar->restyleHostedTools();
 }
 
 void App::switchToTabContaining(QWidget *w)
@@ -3981,9 +4407,18 @@ void App::applyTheme()
     // boxes with no QSS of their own) only partially does, since this app
     // uses the native widget style outside of default.qss's reach — a
     // known Qt/macOS behavior, not a bug here.
-    QPalette pal = m_defaultPalette;
+    qApp->setPalette(themePalette(m_theme, m_defaultPalette));
 
-    switch (m_theme)
+    // Qt doesn't always re-evaluate palette(...)-based QSS on a palette
+    // change alone — force the chrome stylesheet to re-polish against it.
+    this->setStyleSheet(AppUtil::getStyleSheet("MAIN"));
+}
+
+QPalette App::themePalette(int theme, const QPalette &base)
+{
+    QPalette pal = base;
+
+    switch (theme)
     {
     case ThemeTan:
     {
@@ -4093,11 +4528,33 @@ void App::applyTheme()
         break;
     }
 
-    qApp->setPalette(pal);
+    /* Off macOS the app runs on Fusion (main.cpp; offscreen renders do too),
+       which draws bevels, frames, separators and default.qss's palette(mid)/
+       palette(midlight) borders and hovers from the shade roles. Left at the
+       native palette's values they are a light theme's greys -- bright lines
+       and pale hover blocks across a dark theme. Derive them from the theme's
+       own Button/Window colours, as QPalette(button, window) would, and make
+       the accent the theme's highlight rather than the system accent colour.
+       The native macOS style is left exactly as it was. */
+    if (theme != ThemeDefault
+        && QApplication::style()->name().compare(QLatin1String("fusion"), Qt::CaseInsensitive) == 0)
+    {
+        const QPalette derived(pal.color(QPalette::Button), pal.color(QPalette::Window));
+        const QPalette::ColorRole shades[] = { QPalette::Light, QPalette::Midlight,
+                                               QPalette::Mid, QPalette::Dark,
+                                               QPalette::Shadow };
+        const QPalette::ColorGroup groups[] = { QPalette::Active, QPalette::Inactive,
+                                                QPalette::Disabled };
+        for (QPalette::ColorGroup g : groups)
+            for (QPalette::ColorRole r : shades)
+                pal.setColor(g, r, derived.color(g, r));
+        pal.setColor(QPalette::PlaceholderText,
+                     pal.color(QPalette::Disabled, QPalette::Text));
+        pal.setColor(QPalette::Accent, pal.color(QPalette::Highlight));
+        pal.setColor(QPalette::Link, pal.color(QPalette::Highlight).lighter(130));
+    }
 
-    // Qt doesn't always re-evaluate palette(...)-based QSS on a palette
-    // change alone — force the chrome stylesheet to re-polish against it.
-    this->setStyleSheet(AppUtil::getStyleSheet("MAIN"));
+    return pal;
 }
 
 QString App::autosaveFilePath() const
@@ -4160,6 +4617,13 @@ void App::slotAutosave()
     doc.writeTextElement(KXMLQLCCreatorVersion, APPVERSION);
     doc.writeTextElement(KXMLQLCCreatorAuthor, QLCFile::currentUserName());
     doc.writeEndElement();
+
+    // A .qlcc's recovery copy carries what the show does.
+    if (ShowEmbedding::embedsIn(m_fileName))
+    {
+        m_doc->showEmbedding()->collect();
+        m_doc->showEmbedding()->saveXML(&doc);
+    }
 
     m_doc->saveXML(&doc);
     VirtualConsole::instance()->saveXML(&doc);
@@ -4312,6 +4776,40 @@ void App::initStatusBar()
     m_statusModeLabel->setMinimumWidth(160);
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
+
+    // Rig network gate (InputOutputMap::transmitGateStatus()), right beside
+    // the readiness chip: "Output held — not on the rig network". Hidden
+    // while there is nothing to say.
+    m_statusRigNetLabel = new QLabel(this);
+    m_statusRigNetLabel->setObjectName("footerRigNetwork");
+    m_statusRigNetLabel->setCursor(Qt::PointingHandCursor);
+    m_statusRigNetLabel->setProperty("helpTopic", QStringLiteral("other-improvements.md#only-transmit-on-the-rig-network"));
+    m_statusRigNetLabel->installEventFilter(this);  // click → Settings, rig networks
+    m_statusRigNetLabel->hide();
+    sb->addWidget(m_statusRigNetLabel, 0);
+
+    // Software Update's chip: "Update available: 0.1.1". Never a pop-up --
+    // a show may be running -- just this, until it is clicked.
+    m_statusUpdateLabel = new QLabel(this);
+    m_statusUpdateLabel->hide();
+    sb->addWidget(m_statusUpdateLabel, 0);
+    if (m_noGui == false)
+    {
+        m_updateManager = new UpdateManager(m_doc, this);
+        m_updateManager->setFooterLabel(m_statusUpdateLabel);
+        connect(m_updateManager, &UpdateManager::restartRequested, this, [this]() {
+            m_restartForUpdate = true;
+            if (close() == false)
+                m_restartForUpdate = false;     // kept open (unsaved changes, cancel)
+        });
+        m_updateManager->scheduleChecks();
+    }
+    if (m_doc != NULL)
+    {
+        connect(m_doc->inputOutputMap(), &InputOutputMap::transmitGateChanged,
+                this, [this]() { updateRigNetworkFooter(); updateOutputReadiness(); });
+        updateRigNetworkFooter();
+    }
 
     // Grand Master footer fader (far left, right after the mode label — moved
     // here from the right-hand permanent-chip group per Branson). GM
@@ -4491,6 +4989,9 @@ void App::initStatusBar()
             slotTimecodeStatusChanged();
         });
         connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
+        // The source is picked here or in Connections' Show control & sync page.
+        connect(tc, &TimecodeSource::sourceUniverseChanged,
+                this, &App::slotTimecodeStatusChanged);
     }
     slotTimecodeStatusChanged();
 
@@ -4702,14 +5203,13 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             const double jit  = tc->jitterMs();
             const double ivl  = tc->avgIntervalMs();
             QString verdict;
-            if (!tc->isRunning())
-                verdict = tr("held (no fresh code)");
-            else if (qAbs(rate - 1.0) <= 0.05 && jit < 40.0)
-                verdict = tr("✓ healthy");
-            else if (qAbs(rate - 1.0) <= 0.15 && jit < 120.0)
-                verdict = tr("~ usable");
-            else
-                verdict = tr("⚠ unstable");
+            switch (tc->health())
+            {
+                case TimecodeSource::Healthy:  verdict = tr("✓ healthy"); break;
+                case TimecodeSource::Usable:   verdict = tr("~ usable"); break;
+                case TimecodeSource::Unstable: verdict = tr("⚠ unstable"); break;
+                default:                       verdict = tr("held (no fresh code)"); break;
+            }
 
             QAction *sh = menu.addAction(tr("Sync: %1").arg(verdict));
             sh->setEnabled(false);
@@ -4755,7 +5255,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         anyA->setActionGroup(grp);
         anyA->setChecked(cur < 0);
         connect(anyA, &QAction::triggered, this, [this, tc]() {
-            if (tc) tc->setSourceUniverse(-1);
+            if (tc && tc->sourceUniverse() != -1)
+            {
+                tc->setSourceUniverse(-1);
+                m_doc->setModified();      // saved with the show
+            }
             slotTimecodeStatusChanged();
         });
 
@@ -4801,7 +5305,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             a->setActionGroup(grp);
             a->setChecked(qint32(uniID) == cur);
             connect(a, &QAction::triggered, this, [this, tc, uniID]() {
-                if (tc) tc->setSourceUniverse(qint32(uniID));
+                if (tc && tc->sourceUniverse() != qint32(uniID))
+                {
+                    tc->setSourceUniverse(qint32(uniID));
+                    m_doc->setModified();  // saved with the show
+                }
                 slotTimecodeStatusChanged();   // reflect the selection immediately
             });
         }
@@ -4849,6 +5357,12 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         && m_modeToggleAction != NULL)
     {
         m_modeToggleAction->trigger();
+        return true;
+    }
+
+    if (watched == m_statusRigNetLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        showRigNetworkSettings();
         return true;
     }
 
@@ -5145,20 +5659,63 @@ void App::slotUpdateStandby()
         m_statusStandby->hide();
         return;
     }
-    const int next = sc->standbyStep(list);
-    QString text;
-    if (next < 0)
-        text = tr("Next: (end of %1)").arg(list->name());
-    else
-    {
-        const Function *f = m_doc->function(list->steps().at(next).fid);
-        text = tr("Next: %1").arg(list->stepCue(next));
-        if (f != NULL)
-            text += QStringLiteral(" \u2014 ") + f->name();
-    }
+    QString text = standbyNextText(sc, list);
+    // The cue playing has sub-cues on Sub GO: what Sub GO plays first
+    // ("Sub: 4.2 · Next: 5"), or that there are none left in it.
+    const QString sub = standbySubCueText(list);
+    if (!sub.isEmpty())
+        text = sub + QStringLiteral(" \u00b7 ") + text;
+    // The Show Tree's current production (P5): whose GO this is.
+    if (const ShowTree::Production *prod = m_doc->showTree()->production(m_doc->currentProduction()))
+        text = prod->name + QStringLiteral(" \u25b8 ") + text;
     if (m_statusStandby->text() != text)
         m_statusStandby->setText(text);
     m_statusStandby->show();
+}
+
+QString App::standbyNextText(const ShowControl *sc, const Chaser *list)
+{
+    if (sc == NULL || list == NULL)
+        return QString();
+    const int next = sc->standbyStep(list);
+    if (next < 0)
+        return tr("Next: (end of %1)").arg(list->name());
+
+    const int sub = sc->standbySubCue(list);
+    const Chaser *named = sub < 0 ? list : list->subCueChase(next);
+    const int index = sub < 0 ? next : sub;
+    QString text = tr("Next: %1").arg(ShowControl::cueName(list, next, sub));
+    const QList<ChaserStep> steps = named != NULL ? named->steps() : QList<ChaserStep>();
+    const Doc *doc = list->doc();
+    if (doc != NULL && index < steps.count())
+    {
+        if (const Function *f = doc->function(steps.at(index).fid))
+            text += QStringLiteral(" \u2014 ") + f->name();
+    }
+    return text;
+}
+
+QKeySequence App::cueSubGoShortcut()
+{
+    return QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Return);
+}
+
+QKeySequence App::cueSubBackShortcut()
+{
+    return QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Return);
+}
+
+QString App::standbySubCueText(const Chaser *list)
+{
+    if (list == NULL || !list->isRunning())
+        return QString();
+    const int step = list->currentStepIndex();
+    if (!list->isSubGoStep(step) || list->currentSubCueIndex() < 0)
+        return QString();
+    const int sub = list->nextSubCueIndex();
+    if (sub < 0)
+        return tr("Sub: (end of %1)").arg(list->stepCue(step));
+    return tr("Sub: %1").arg(list->subCue(step, sub));
 }
 
 void App::slotFillStandbyMenu()
@@ -5172,6 +5729,11 @@ void App::slotFillStandbyMenu()
 
     menu->addAction(m_cueGoAction);
     menu->addAction(m_cueBackAction);
+    if (list->hasSubGoSteps())
+    {
+        menu->addAction(m_cueSubGoAction);
+        menu->addAction(m_cueSubBackAction);
+    }
     menu->addAction(tr("Stop %1").arg(list->name()), this, [sc]() {
         sc->execute({ ShowControl::Stop, QString(), QString() });
     });
@@ -5190,7 +5752,48 @@ void App::slotFillStandbyMenu()
             sc->execute({ ShowControl::Load, cue, QString() });
         });
         a->setCheckable(true);
-        a->setChecked(i == sc->standbyStep(list));
+        a->setChecked(i == sc->standbyStep(list) && sc->standbySubCue(list) < 0);
+
+        // A cue on Sub GO: its sub-cues, indented under it (LOAD 4.2).
+        if (!list->isSubGoStep(i))
+            continue;
+        const Chaser *inner = list->subCueChase(i);
+        const QList<ChaserStep> subSteps = inner->steps();
+        for (int j = 0; j < subSteps.count(); ++j)
+        {
+            const QString subCue = list->subCue(i, j);
+            QString subLabel = QStringLiteral("    ") + subCue;
+            if (const Function *sf = m_doc->function(subSteps.at(j).fid))
+                subLabel += QStringLiteral(" \u2014 ") + sf->name();
+            if (subSteps.at(j).skip)
+                subLabel += tr(" (skipped)");
+            QAction *sa = load->addAction(subLabel, this, [sc, subCue]() {
+                sc->execute({ ShowControl::Load, subCue, QString() });
+            });
+            sa->setCheckable(true);
+            sa->setChecked(i == sc->standbyStep(list) && j == sc->standbySubCue(list));
+        }
+    }
+    // Which production GO plays (P5): the same choice as the Show Tree's
+    // switcher.
+    ShowTreeController *tree = m_doc->showTree();
+    if (!tree->productions().isEmpty())
+    {
+        QMenu *prods = menu->addMenu(tr("Production"));
+        QActionGroup *group = new QActionGroup(prods);
+        QList<QPair<quint32, QString>> choices { { ShowTree::invalidId(), tr("None (the main cue list)") } };
+        for (const ShowTree::Production &p : tree->productions())
+            choices << qMakePair(p.id, p.name);
+        for (const auto &c : choices)
+        {
+            const quint32 pid = c.first;
+            QAction *a = prods->addAction(c.second, this, [tree, pid]() {
+                tree->setCurrentProduction(pid);
+            });
+            a->setCheckable(true);
+            a->setChecked(pid == tree->currentProduction());
+            group->addAction(a);
+        }
     }
     menu->addSeparator();
     const quint32 id = list->id();
@@ -5367,8 +5970,13 @@ void App::slotUpdateHealthFooter()
         const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
         const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
         const char *red   = "QLabel { color:#ffffff; background:#c62828; padding:1px 6px; border-radius:3px; }";
-        m_statusLoadLabel->setStyleSheet(pct >= 100 ? red
-                                         : ((pct >= 60 || stalled) ? amber : green));
+        // Only on a change: setStyleSheet() re-polishes the label (and can
+        // re-lay the status bar) even when handed the same sheet, and this
+        // runs twice a second for as long as the app is open.
+        const QString sheet = QString::fromLatin1(pct >= 100 ? red
+                                                  : ((pct >= 60 || stalled) ? amber : green));
+        if (m_statusLoadLabel->styleSheet() != sheet)
+            m_statusLoadLabel->setStyleSheet(sheet);
     }
 
     // Safety refresh for the timecode chip between watchdog transitions.
@@ -5614,8 +6222,26 @@ void App::updateStatusBar()
         // come and go), the tooltip lists each source's own short reason
         // (one line per ShowStatus entry, not its full explanation), and a
         // click opens every entry's complete detail text in one place.
-        const QList<ShowStatus::Entry> entries = ShowStatus::instance()->allEntries();
-        if (entries.isEmpty() == false)
+        const QList<ShowStatus::Entry> all = ShowStatus::instance()->allEntries();
+        /* An Ok entry is information (definitions that came with the show),
+           not a reason the show is not ready: "Ready", with a note to click. */
+        QList<ShowStatus::Entry> entries, notes;
+        foreach (const ShowStatus::Entry &e, all)
+            (e.severity == ShowStatus::Ok ? notes : entries) << e;
+        if (entries.isEmpty() && !notes.isEmpty())
+        {
+            m_statusModeLabel->setText(m_statusMessage.isEmpty()
+                ? tr("Ready · %n note(s)", "", notes.count())
+                : m_statusMessage + QStringLiteral(" · ") + tr("%n note(s)", "", notes.count()));
+            m_statusModeLabel->setStyleSheet(QString());
+            m_statusModeLabel->setCursor(Qt::PointingHandCursor);
+            QStringList lines;
+            foreach (const ShowStatus::Entry &e, notes)
+                lines << (e.summary.isEmpty() ? e.key : e.summary);
+            lines << QString() << tr("Click for details");
+            m_statusModeLabel->setToolTip(lines.join("\n"));
+        }
+        else if (entries.isEmpty() == false)
         {
             m_statusModeLabel->setText(entries.count() == 1
                 ? tr("Not ready")
@@ -5624,7 +6250,7 @@ void App::updateStatusBar()
             m_statusModeLabel->setCursor(Qt::PointingHandCursor);
 
             QStringList lines;
-            foreach (const ShowStatus::Entry &e, entries)
+            foreach (const ShowStatus::Entry &e, all)
                 lines << (e.summary.isEmpty() ? e.key : e.summary);
             lines << QString() << tr("Click for details");
             m_statusModeLabel->setToolTip(lines.join("\n"));
@@ -5640,6 +6266,72 @@ void App::updateStatusBar()
                 m_statusModeLabel->setText(m_statusMessage);
         }
     }
+}
+
+QString App::rigNetworkGateSettingKey()
+{
+    return QStringLiteral("network/onlyTransmitOnRigNetworks");
+}
+
+QString App::rigNetworkFooterText(const InputOutputMap::TransmitGateStatus &st, bool *alarm)
+{
+    typedef InputOutputMap::TransmitGateStatus S;
+    if (alarm)
+        *alarm = st.state == S::Held || st.state == S::Overridden;
+
+    const QString nets = st.networks.join(QStringLiteral(", "));
+    const QString connected = st.connected.isEmpty() ? tr("no network")
+                                                     : st.connected.join(QStringLiteral(", "));
+    switch (st.state)
+    {
+        case S::Held:
+            if (st.held >= st.networkOutputs)
+                return tr("Output held — not on the rig network (%1). Connected: %2")
+                        .arg(nets, connected);
+            return tr("%1 of %2 outputs held — not on the rig network (%3). Connected: %4")
+                    .arg(st.held).arg(st.networkOutputs).arg(nets, connected);
+        case S::NotSet:
+            return tr("Rig network not set — network output goes out on whatever network "
+                      "this machine is on. Set it");
+        case S::Overridden:
+            return tr("Transmitting anyway — rig network check lifted for this session");
+        case S::Off:
+            return tr("Rig network check off — network output goes out on any network");
+        case S::Clear:
+        default:
+            return QString();
+    }
+}
+
+void App::updateRigNetworkFooter()
+{
+    if (m_statusRigNetLabel == NULL || m_doc == NULL)
+        return;
+    const InputOutputMap::TransmitGateStatus st = m_doc->inputOutputMap()->transmitGateStatus();
+    bool alarm = false;
+    const QString text = rigNetworkFooterText(st, &alarm);
+    if (text.isEmpty())
+    {
+        m_statusRigNetLabel->hide();
+        return;
+    }
+    m_statusRigNetLabel->setText(text);
+    m_statusRigNetLabel->setStyleSheet(alarm
+        ? QStringLiteral("QLabel { color: #e60000; font-weight: bold; }")
+        : QStringLiteral("QLabel { color: #d08000; font-weight: bold; }"));
+    QStringList tip = st.reasons;
+    if (tip.isEmpty() == false)
+        tip << QString();
+    tip << tr("Click to set the show's rig networks.");
+    m_statusRigNetLabel->setToolTip(tip.join("\n"));
+    m_statusRigNetLabel->show();
+}
+
+void App::showRigNetworkSettings()
+{
+    AppSettings settings(this, this);
+    settings.focusRigNetworks();
+    settings.exec();
 }
 
 void App::showStatusDetails()

@@ -95,10 +95,11 @@ def decode_pollreply(a, src):
     print(f"    status1    : 0x{a[23]:02X}   status2: 0x{status2:02X}")
     for i in range(min(nports, 4)):
         pt, go = a[174 + i], a[182 + i]
-        # GoodOutput bit 3 set == "RDM is DISABLED" on this port.
+        # GoodOutputA (Art-Net 4): bit 7 data output, bit 3 merging,
+        # bit 2 DMX output short detected.
         print(f"      port{i}: type=0x{pt:02X} out={bool(pt & 0x80)} "
               f"in={bool(pt & 0x40)} proto={pt & 0x3f} | goodOut=0x{go:02X} "
-              f"rdm_disabled={bool(go & 0x08)} | swOut={a[190 + i]}")
+              f"merging={bool(go & 0x08)} short={bool(go & 0x04)} | swOut={a[190 + i]}")
 
 
 def decode_toddata(a, src):

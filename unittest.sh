@@ -18,6 +18,13 @@ fi
 
 echo "Using the destination directory $DEST_DIR"
 
+# No shipped PNG may carry a colour profile (iCCP/sRGB/gAMA/cHRM/cICP): Qt
+# 6.11 on macOS can crash converting such an image for AppKit (QTBUG-147602).
+# See tools/png-colour-chunks.py.
+if ! python3 $SOURCE_DIR/tools/png-colour-chunks.py $SOURCE_DIR; then
+  exit 1
+fi
+
 if [ ! -d $DEST_DIR/resources/ ]; then
   mkdir -p $DEST_DIR/resources/
 fi

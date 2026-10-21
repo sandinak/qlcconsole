@@ -253,7 +253,7 @@ void FixturePower_Test::aUniverseHoldsAFixtureToItsMaximum()
     auto setAll = [&](std::function<uchar(int)> f) {
         for (int o = 0; o < 64; ++o)
         {
-            FadeChannel *fc = fader->getChannelFader(&doc, u, Fixture::invalidId(), quint32(10 + o));
+            GenericFader::ChannelRef fc = fader->getChannelFader(&doc, u, Fixture::invalidId(), quint32(10 + o));
             fc->setCurrent(f(o));
             fc->setTarget(f(o));
             fc->addFlag(FadeChannel::Override);

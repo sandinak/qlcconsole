@@ -44,6 +44,7 @@
 #include "webaccess.h"
 #include "webaccessauth.h"
 #include "helpshots.h"
+#include "apputil.h"
 #include "app.h"
 #include "doc.h"
 
@@ -110,18 +111,20 @@ void qlcMessageHandler(QtMsgType type, const QMessageLogContext &context, const 
 {
     Q_UNUSED(context)
 
+    // Level first: a message below it is dropped, and converting it anyway
+    // was an allocation per message -- many per tick, on the DMX threads.
+    if (type < QLCArgs::debugLevel)
+        return;
+
     QByteArray localMsg = msg.toLocal8Bit();
-    if (type >= QLCArgs::debugLevel)
+    if (QLCArgs::logToFile == true && QLCArgs::logFile.isOpen())
     {
-        if (QLCArgs::logToFile == true && QLCArgs::logFile.isOpen())
-        {
-            QLCArgs::logFile.write(localMsg);
-            QLCArgs::logFile.write((char *)"\n");
-            QLCArgs::logFile.flush();
-        }
-        fprintf(stderr, "%s\n", localMsg.constData());
-        fflush(stderr);
+        QLCArgs::logFile.write(localMsg);
+        QLCArgs::logFile.write((char *)"\n");
+        QLCArgs::logFile.flush();
     }
+    fprintf(stderr, "%s\n", localMsg.constData());
+    fflush(stderr);
 }
 
 #define endl Qt::endl
@@ -134,7 +137,8 @@ void printVersion()
     QTextStream cout(stdout, QIODevice::WriteOnly);
 
     cout << endl;
-    cout << APPNAME << " " << "version " << APPVERSION << endl;
+    cout << APPNAME << " " << QLCCONSOLE_VERSION << " (build " << APPVERSION
+         << ", " << QLCCONSOLE_GITREV << ")" << endl;
     cout << "This program is licensed under the terms of the ";
     cout << "Apache 2.0 license." << endl;
     cout << "By Branson Matheson" << endl;
@@ -293,8 +297,37 @@ int main(int argc, char** argv)
     // default layout and leave the user's own settings alone.
     HelpShots::isolateSettings();
 
+#if !defined(Q_OS_MACOS)
+    /* Asked for a style by name (-style / QT_STYLE_OVERRIDE)? Looked for
+       before QApplication strips the argument out of argv. */
+    bool styleRequested = qEnvironmentVariableIsEmpty("QT_STYLE_OVERRIDE") == false;
+    for (int i = 1; i < argc; i++)
+    {
+        const QByteArray arg(argv[i]);
+        if (arg == "-style" || arg == "--style" || arg.startsWith("-style=") || arg.startsWith("--style="))
+            styleRequested = true;
+    }
+#endif
+
     /* Create the Qt core application object */
     QApplication qapp(argc, argv);
+
+    /* Which .desktop entry this is, and the window icon at every size */
+    AppUtil::setApplicationIdentity("qlcconsole");
+
+#if !defined(Q_OS_MACOS)
+    /* Fusion everywhere but macOS. The themes (App::applyTheme()) work by
+       swapping the application QPalette, and the native Windows styles
+       (windowsvista, windows11) draw push buttons, tool buttons, combo and
+       spin boxes with the system's own light theme, ignoring the palette's
+       Button colour but not its ButtonText -- so on a dark theme every one of
+       them came out pale grey with pale text on it, unreadable. Fusion draws
+       every control from the palette, so a theme looks the same on Windows
+       and Linux as it does in the offscreen renders. macOS keeps its native
+       style. */
+    if (styleRequested == false)
+        QApplication::setStyle(QStringLiteral("Fusion"));
+#endif
 
     /* At least MIDI plugin requires this so best to declare it here for everyone */
     qRegisterMetaType<QVariant>("QVariant");

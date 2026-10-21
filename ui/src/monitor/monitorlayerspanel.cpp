@@ -336,6 +336,20 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
             });
         });
 
+    /* A layer shown or hidden somewhere else -- the Rig Overview's Layers
+       menu -- shows here too. Deferred and coalesced like a rename: a toggle
+       made HERE also lands here, from inside its own button's signal. */
+    if (m_view != nullptr)
+        connect(m_view, &MonitorGraphicsView::layerStateChanged, this, [this]() {
+            if (m_reloadQueued)
+                return;
+            m_reloadQueued = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_reloadQueued = false;
+                reload();
+            });
+        });
+
     updateEditableState();   // sets m_editable and calls reload()
 }
 
@@ -990,13 +1004,15 @@ void MonitorLayersPanel::reload()
                 "QToolButton{border:none;border-radius:4px;background:rgba(90,90,94,0.35);}"
                 "QToolButton:hover{border:1px solid rgba(255,255,255,0.4);}");
         }
-        coll->setText(QStringLiteral("\xE2\x8A\x9F"));   // ⊟ (layers build expanded)
+        // ▾ / ▸: narrow enough for the 20 px button in any font (⊟ / ⊞ came
+        // out as "…" on a Mac whose font drew them wider).
+        coll->setText(QStringLiteral("\xE2\x96\xBE"));   // ▾ (layers build expanded)
         h->addWidget(coll);
         connect(coll, &QToolButton::clicked, this, [layerNode, coll]() {
             const bool nowExpanded = !layerNode->isExpanded();
             setSubtreeExpanded(layerNode, nowExpanded);
-            coll->setText(nowExpanded ? QStringLiteral("\xE2\x8A\x9F")
-                                      : QStringLiteral("\xE2\x8A\x9E"));
+            coll->setText(nowExpanded ? QStringLiteral("\xE2\x96\xBE")
+                                      : QStringLiteral("\xE2\x96\xB8"));
         });
 
         QToolButton *eye = new QToolButton(row);
@@ -1004,7 +1020,9 @@ void MonitorLayersPanel::reload()
         eye->setChecked(lyr.visible);
         eye->setToolTip(lyr.visible ? tr("Visible — click to hide")
                                     : tr("Hidden — click to show"));
-        eye->setEnabled(m_editable);
+        /* Showing, hiding and labels are how you LOOK at the rig, wanted in
+           a show as much as while building it: any mode. Locking -- and
+           everything that changes the rig -- stays Design only. */
         eye->setFixedSize(20, 20);
         styleToggle(eye, lyr.visible, lyr.visible ? kEyeShown : kEyeHidden,
                     "rgb(42,120,60)", "rgb(120,46,46)");
@@ -1015,7 +1033,6 @@ void MonitorLayersPanel::reload()
         lbl->setChecked(lyr.labels);
         lbl->setToolTip(lyr.labels ? tr("Labels shown — click to hide")
                                    : tr("Labels hidden — click to show"));
-        lbl->setEnabled(m_editable);
         lbl->setFixedSize(20, 20);
         // "A" = labels on (blue), dimmed when off.
         styleToggle(lbl, lyr.labels, QStringLiteral("A"),

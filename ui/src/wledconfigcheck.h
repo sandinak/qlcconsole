@@ -13,11 +13,13 @@
 #define WLEDCONFIGCHECK_H
 
 #include <QJsonObject>
+#include "qlcui_export.h"
 #include <QStringList>
 #include <QObject>
 #include <QHash>
 
 class QNetworkAccessManager;
+class QNetworkReply;
 class Fixture;
 class QWidget;
 class QTimer;
@@ -40,7 +42,7 @@ class Doc;
  * fixture -- with the settings that would fix it, which fix() writes to the
  * device (after confirmFix() has shown exactly what changes).
  */
-class WledConfigCheck final : public QObject
+class QLC_UI_EXPORT WledConfigCheck final : public QObject
 {
     Q_OBJECT
 
@@ -100,6 +102,8 @@ signals:
     void changed();
 
 private:
+    /** A /json/cfg reply has finished: read it if it succeeded. */
+    void replied(const QString &ip, QNetworkReply *reply);
     void receive(const QString &ip, const QByteArray &body, bool ok);
     /** The footer's "wled.config" entry, from the findings. */
     void publish();

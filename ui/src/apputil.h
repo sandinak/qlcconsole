@@ -22,6 +22,7 @@
 
 #include <QStyledItemDelegate>
 #include <QColor>
+#include <QIcon>
 #include <QSize>
 
 #include <QHash>
@@ -77,6 +78,29 @@ namespace AppUtil
      *                small regardless of what it claims its size is.
      */
     void ensureWindowOnScreen(QWidget *window, QSize minSize = QSize(400, 300));
+
+    /*********************************************************************
+     * Application identity
+     *********************************************************************/
+    /**
+     * Tell the desktop which application this is and give every window its
+     * icon. Call once from main(), right after the QApplication exists.
+     *
+     * @a name is the desktop entry's basename and the installed icon's name
+     * ("qlcconsole", "qlcconsole-fixtureeditor"). On Wayland the compositor
+     * finds the .desktop file -- and with it the icon in the dock, task list
+     * and window switcher -- only through the app_id, which Qt otherwise
+     * derives from the organisation domain ("org.qlcplus.qlcconsole") and so
+     * matched no installed desktop file at all. The window icon is built from
+     * the hicolor PNGs at every size, not one 96px picture scaled about.
+     *
+     * macOS is left alone: setting an application-wide icon there replaces
+     * the bundle's .icns in the Dock.
+     */
+    void setApplicationIdentity(const QString &name);
+
+    /** The application icon @a name at every size shipped in the binary. */
+    QIcon applicationIcon(const QString &name);
 
     /*********************************************************************
      * Sane style
@@ -160,7 +184,10 @@ namespace AppUtil
      * address was taken (fixture ids); "fixtures.duplicates" -- names more
      * than one fixture has (names); "definitions.failed" -- definition files
      * that could not be read (files); "universes.nooutput" -- universes
-     * fixtures are patched on with no output (universe indexes).
+     * fixtures are patched on with no output (universe indexes);
+     * "outputs.problems" -- network outputs their plugins report in trouble
+     * (QLCIOPlugin::outputProblems()), one per problem (the first universe
+     * each hits).
      */
     void updateFixtureReadiness(Doc *doc);
 
@@ -181,6 +208,14 @@ namespace AppUtil
      *  updateFixtureReadiness(). */
     void updateLoadProblems(const QString &errorLog);
 
+    /** The footer's word on what the show carries (SHOW_EMBEDDING_DESIGN.md):
+     *  "embedded.showonly" -- definitions and scripts only the show has, in
+     *  use from it (information, Install on this computer); "embedded.differ"
+     *  -- ones that differ from this computer's, the show's in use (a
+     *  warning, Review…); "embedded.problems" -- copies that could not be
+     *  read. Item data: each one's ShowEmbedding key. */
+    void updateShowEmbeddingStatus(Doc *doc);
+
     /** The address @p n after IPv4 @p ip (n = 0: @p ip itself), the last
      *  octet carrying into the one before it -- one each for a batch of
      *  network fixtures. Empty when @p ip is not an IPv4 address or the run
@@ -196,6 +231,39 @@ namespace AppUtil
      *  Local (and "replaces the included one") in blue, Downloadable in
      *  italics -- the same everywhere a definition is picked. */
     void showDefinitionSource(QTreeWidgetItem *item, int column, const QLCFixtureDef *def);
+
+    /*********************************************************************
+     * Cursors
+     *********************************************************************/
+    /**
+     * The cursor to use for @p shape on this platform: always call setCursor()
+     * through this instead of naming Qt::SizeAllCursor (or Wait/Busy) directly.
+     *
+     * On macOS, Qt 6.11.x builds the cursors that have no native NSCursor
+     * from PNGs with an embedded colour profile (sizeallcursor.png,
+     * spincursor.png, waitcursor.png). QImage::toCGImage() frees that colour
+     * space before CGImageCreate() reads it (QTBUG-147602, fixed upstream in
+     * qtbase a481ede673), so the first setCursor(Qt::SizeAllCursor) crashed
+     * the app inside CoreGraphics. Those shapes are swapped for native ones
+     * with the same meaning:
+     *   - SizeAll  -> OpenHand (it can be grabbed and moved), ClosedHand when
+     *                 @p dragging (it is being moved/orbited right now);
+     *   - Wait     -> Arrow (macOS shows its own spinning cursor when the app
+     *                 really stops; there is no native "wait" NSCursor);
+     *   - Busy     -> Arrow (native only through a private AppKit selector;
+     *                 if that is missing Qt falls back to waitcursor.png).
+     * Everything else passes through: Forbidden, WhatsThis, Drag*, the
+     * Size{Ver,Hor,BDiag,FDiag} resize arrows, Split* and the hands are
+     * native NSCursors in Qt 6.11; Blank is a profile-less transparent
+     * pixmap, which the bug does not touch.
+     *
+     * Elsewhere (Linux, Windows) @p shape is returned unchanged.
+     */
+    Qt::CursorShape nativeCursorShape(Qt::CursorShape shape, bool dragging = false);
+
+    /** The macOS mapping nativeCursorShape() applies, on every platform
+     *  (so it can be tested anywhere). */
+    Qt::CursorShape macSafeCursorShape(Qt::CursorShape shape, bool dragging = false);
 };
 
 /*****************************************************************************

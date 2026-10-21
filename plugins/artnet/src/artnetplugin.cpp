@@ -18,12 +18,14 @@
 */
 
 #include <QSettings>
+#include <algorithm>
 #include <QNetworkDatagram>
 #include <QDebug>
 
 #include <QHash>
 
 #include "artnetplugin.h"
+#include "artnetnodesetup.h"
 #include "configureartnet.h"
 
 bool addressCompare(const ArtNetIO &v1, const ArtNetIO &v2)
@@ -37,6 +39,18 @@ ArtNetPlugin::~ArtNetPlugin()
 
 void ArtNetPlugin::init()
 {
+    /* outputs() and inputs() both re-enter init(), and the UI asks for them
+       in bursts -- OutputPatch::outputName() alone calls outputs() twice, and
+       a tree or status refresh does that once per universe. On Windows
+       QNetworkInterface::allInterfaces() is a GetAdaptersAddresses() walk of
+       some 20 ms (measured on a VM), so every burst froze the GUI for whole
+       fractions of a second. Interfaces do not come and go that fast: walk
+       them at most once a second. requestLine()'s wait loop invalidates this,
+       so its retries always look again. */
+    if (m_ifaceScan.isValid() && m_ifaceScan.elapsed() < 1000)
+        return;
+    m_ifaceScan.start();
+
     QSettings settings;
     QVariant value = settings.value(SETTINGS_IFACE_WAIT_TIME);
     if (value.isValid() == true)
@@ -140,6 +154,7 @@ bool ArtNetPlugin::requestLine(quint32 line)
         if (m_ifaceWaitTime)
         {
             Sleep(1000);
+            m_ifaceScan.invalidate();
             init();
         }
         if (retryCount++ >= m_ifaceWaitTime)
@@ -279,6 +294,12 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
             dev.hardwareId = n.macAddress;
             dev.status = n.nodeReport;
             dev.rdmCapable = n.rdmCapable;
+            /* A node that answered but sits on no network this computer has
+               an address on -- typically one fresh out of the box, still on
+               its factory 2.x.x.x -- can be heard but not patched to. Say so
+               on its row rather than listing it like any other node. */
+            dev.attention = attentionFor(QHostAddress(dev.address),
+                                         lineReaching(QHostAddress(dev.address)) >= 0);
             dev.detail = QObject::tr("firmware %1").arg(n.firmwareVersion);
 
             for (int p = 0; p < qMin(n.portsNumber, 4); p++)
@@ -289,6 +310,7 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
                                   .arg(n.subSwitch).arg(n.swOut[p]);
                 dev.portUniverses << quint32((n.netSwitch << 8)
                                              + (n.subSwitch << 4) + n.swOut[p]);
+                dev.portNumbers << p + 1;
             }
 
             /* Everything the reply told us that does not fit the fixed fields.
@@ -314,8 +336,11 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
                                        .arg(n.oemCode, 4, 16, QChar('0'))
                                        .arg(n.estaCode, 4, 16, QChar('0')));
             dev.properties << Prop(QObject::tr("Addressing"),
-                                   n.dhcpCapable ? QObject::tr("DHCP capable")
-                                                 : QObject::tr("static only"));
+                                   n.dhcpConfigured ? QObject::tr("DHCP")
+                                   : n.dhcpCapable ? QObject::tr("static (DHCP capable)")
+                                                   : QObject::tr("static only"));
+            if (dev.attention.isEmpty() == false)
+                dev.properties << Prop(QObject::tr("Network"), dev.attention);
             dev.properties << Prop(QObject::tr("RDM"),
                                    n.rdmCapable ? QObject::tr("yes")
                                                 : QObject::tr("no"));
@@ -326,16 +351,18 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
             {
                 if ((n.portTypes[p] & 0x80) == 0)
                     continue;
-                /* GoodOutput bit 7 is "data is being transmitted", bit 2 is
-                   "output is merging", bit 3 is "DMX output short detected". A
-                   short is the single most useful thing a node ever reports
-                   and it has never been surfaced anywhere. */
+                /* GoodOutput bit 7 is "data is being transmitted", bit 3 is
+                   "output is merging", bit 2 is "DMX output short detected"
+                   (Art-Net 4 GoodOutputA; libartnet's PORT_STATUS_MERGE 0x08
+                   and PORT_STATUS_SHORT 0x04 agree). These two were swapped
+                   here, so a merging port read SHORT DETECTED and a real short
+                   read "merging". */
                 QStringList st;
                 st << QString("%1:%2:%3").arg(n.netSwitch).arg(n.subSwitch)
                       .arg(n.swOut[p]);
                 if (n.goodOutput[p] & 0x80) st << QObject::tr("transmitting");
-                if (n.goodOutput[p] & 0x08) st << QObject::tr("SHORT DETECTED");
-                if (n.goodOutput[p] & 0x04) st << QObject::tr("merging");
+                if (n.goodOutput[p] & 0x04) st << QObject::tr("SHORT DETECTED");
+                if (n.goodOutput[p] & 0x08) st << QObject::tr("merging");
                 dev.properties << Prop(QObject::tr("Port %1").arg(p + 1),
                                        st.join(" · "));
             }
@@ -350,6 +377,58 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
         }
     }
     return list;
+}
+
+/** Every output problem on every line, a target's universes on one line:
+ *  "Art-Net to 172.18.2.50: not reachable since 20:14 (universes 3, 4)".
+ *  Fifty universes behind thirteen dead nodes are thirteen problems, not
+ *  fifty. */
+QStringList ArtNetPlugin::targetProblems() const
+{
+    QStringList order;
+    QMap<QString, QList<quint32> > universes;
+    typedef QPair<quint32, QString> Problem;
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(line).controller;
+        if (ctrl == NULL)
+            continue;
+        foreach (const Problem &p, ctrl->outputProblems())
+        {
+            if (universes.contains(p.second) == false)
+                order << p.second;
+            if (universes[p.second].contains(p.first) == false)
+                universes[p.second] << p.first;
+        }
+    }
+
+    QStringList out;
+    foreach (const QString &text, order)
+    {
+        QList<quint32> unis = universes.value(text);
+        std::sort(unis.begin(), unis.end());
+        QStringList nums;
+        foreach (quint32 u, unis)
+            nums << QString::number(u + 1);
+        out << (nums.count() == 1
+                ? tr("%1 (universe %2)").arg(text, nums.first())
+                : tr("%1 (universes %2)").arg(text, nums.join(", ")));
+    }
+    return out;
+}
+
+QStringList ArtNetPlugin::outputProblems(quint32 output, quint32 universe) const
+{
+    QStringList out;
+    if (output >= quint32(m_IOmapping.count()))
+        return out;
+    ArtNetController *ctrl = m_IOmapping.at(int(output)).controller;
+    if (ctrl == NULL)
+        return out;
+    typedef QPair<quint32, QString> Problem;
+    foreach (const Problem &p, ctrl->outputProblems(universe))
+        out << p.second;
+    return out;
 }
 
 /** Poll every line once, on demand.
@@ -434,22 +513,42 @@ QString ArtNetPlugin::lineDescription(quint32 line, bool output) const
 
 void ArtNetPlugin::rescan()
 {
+    QSet<int> interfacesPolled;
     for (int line = 0; line < m_IOmapping.count(); line++)
     {
-        if (m_IOmapping.at(line).controller == NULL)
-        {
-            ArtNetController *controller = new ArtNetController(m_IOmapping.at(line).iface,
-                                                                m_IOmapping.at(line).address,
-                                                                getUdpSocket(),
-                                                                quint32(line), this);
-            connect(controller, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
-                    this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
-            connect(controller, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
-                    this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
-            m_IOmapping[line].controller = controller;
-        }
-        m_IOmapping[line].controller->sendPoll();
+        ArtNetController *controller = ensureController(line);
+        controller->sendPoll();
+
+        /* Plus one limited-broadcast poll per physical interface (not per
+           address on it), for the node nobody has given an address yet: it
+           is not on this line's subnet, so the poll above may never reach
+           it. See ArtNetController::sendDiscoveryPoll(). */
+        const int ifIndex = m_IOmapping.at(line).iface.index();
+        if (interfacesPolled.contains(ifIndex) == false
+                && controller->sendDiscoveryPoll())
+            interfacesPolled.insert(ifIndex);
     }
+}
+
+ArtNetController *ArtNetPlugin::ensureController(int line)
+{
+    if (m_IOmapping.at(line).controller == NULL)
+    {
+        ArtNetController *controller = new ArtNetController(m_IOmapping.at(line).iface,
+                                                            m_IOmapping.at(line).address,
+                                                            getUdpSocket(),
+                                                            quint32(line), this);
+        connect(controller, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
+                this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
+        connect(controller, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
+                this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
+        connect(controller, &ArtNetController::problemsChanged,
+                this, &QLCIOPlugin::targetProblemsChanged);
+        connect(controller, &ArtNetController::ipProgReplied,
+                this, &ArtNetPlugin::ipProgReplied);
+        m_IOmapping[line].controller = controller;
+    }
+    return m_IOmapping.at(line).controller;
 }
 
 bool ArtNetPlugin::openOutput(quint32 output, quint32 universe)
@@ -460,18 +559,7 @@ bool ArtNetPlugin::openOutput(quint32 output, quint32 universe)
     qDebug() << "[ArtNet] Open output on address :" << m_IOmapping.at(output).address.ip().toString();
 
     // if the controller doesn't exist, create it
-    if (m_IOmapping[output].controller == NULL)
-    {
-        ArtNetController *controller = new ArtNetController(m_IOmapping.at(output).iface,
-                                                            m_IOmapping.at(output).address,
-                                                            getUdpSocket(),
-                                                            output, this);
-        connect(controller, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
-                this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
-        connect(controller, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
-                this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
-        m_IOmapping[output].controller = controller;
-    }
+    ensureController(int(output));
 
     m_IOmapping[output].controller->addUniverse(universe, ArtNetController::Output);
     addToMap(universe, output, Output);
@@ -495,6 +583,8 @@ void ArtNetPlugin::closeOutput(quint32 output, quint32 universe)
             m_IOmapping[output].controller = NULL;
         }
     }
+    // A closed output has nothing left to be wrong with
+    emit targetProblemsChanged();
 }
 
 void ArtNetPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
@@ -529,16 +619,7 @@ bool ArtNetPlugin::openInput(quint32 input, quint32 universe)
 
     // if the controller doesn't exist, create it.
     // We need to have only one input controller.
-    if (m_IOmapping[input].controller == NULL)
-    {
-        ArtNetController *controller = new ArtNetController(m_IOmapping.at(input).iface,
-                                                            m_IOmapping.at(input).address,
-                                                            getUdpSocket(),
-                                                            input, this);
-        connect(controller, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
-                this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
-        m_IOmapping[input].controller = controller;
-    }
+    ensureController(int(input));
 
     m_IOmapping[input].controller->addUniverse(universe, ArtNetController::Input);
     addToMap(universe, input, Input);
@@ -594,6 +675,97 @@ QString ArtNetPlugin::inputInfo(quint32 input)
     str += QString("</HTML>");
 
     return str;
+}
+
+/*********************************************************************
+ * Node network settings (ArtIpProg)
+ *********************************************************************/
+
+bool ArtNetPlugin::findNode(const QString &address, ArtNetNodeInfo *info, int *line) const
+{
+    const QHostAddress wanted(address);
+    for (int l = 0; l < m_IOmapping.count(); l++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(l).controller;
+        if (ctrl == NULL)
+            continue;
+        QHash<QHostAddress, ArtNetNodeInfo> nodes = ctrl->getNodesList();
+        for (auto it = nodes.constBegin(); it != nodes.constEnd(); ++it)
+        {
+            if (it.value().ipAddress == address || it.key().isEqual(wanted))
+            {
+                if (info != NULL)
+                    *info = it.value();
+                if (line != NULL)
+                    *line = l;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int ArtNetPlugin::lineReaching(const QHostAddress &address) const
+{
+    if (address.isNull() || address.protocol() != QAbstractSocket::IPv4Protocol)
+        return -1;
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        const QNetworkAddressEntry &e = m_IOmapping.at(line).address;
+        if (e.ip().isLoopback() != address.isLoopback())
+            continue;
+        if (e.prefixLength() > 0 && address.isInSubnet(e.ip(), e.prefixLength()))
+            return line;
+    }
+    return -1;
+}
+
+QString ArtNetPlugin::attentionFor(const QHostAddress &ip, bool reachable)
+{
+    if (reachable)
+        return QString();
+    if (ip.isNull() || ip == QHostAddress(quint32(0)))
+        return tr("has no IP address yet: set its IP");
+    if (ip.isInSubnet(QHostAddress("169.254.0.0"), 16))
+        return tr("self-assigned address (no DHCP server answered it): set its IP");
+    if (ip.isInSubnet(QHostAddress("2.0.0.0"), 8) || ip.isInSubnet(QHostAddress("10.0.0.0"), 8))
+        return tr("on its factory Art-Net address, not this network: set its IP");
+    return tr("not on this computer's network: set its IP");
+}
+
+bool ArtNetPlugin::sendIpProg(const QString &node, const ArtNetIpProgRequest &request,
+                              QString *why)
+{
+    const QHostAddress addr(node);
+    const int line = lineReaching(addr);
+    if (line < 0)
+    {
+        if (why != NULL)
+            *why = tr("No network on this computer contains %1, so it cannot be "
+                      "sent to directly.").arg(node);
+        return false;
+    }
+    ArtNetController *ctrl = ensureController(line);
+    if (ctrl->sendIpProg(addr, request) == false)
+    {
+        if (why != NULL)
+            *why = tr("The send failed (see the log).");
+        return false;
+    }
+    return true;
+}
+
+bool ArtNetPlugin::canConfigureDevice(const QString &address) const
+{
+    return findNode(address);
+}
+
+void ArtNetPlugin::configureDevice(const QString &address)
+{
+    if (findNode(address) == false)
+        return;
+    ArtNetNodeSetup dlg(this, address);
+    dlg.exec();
 }
 
 /*********************************************************************
@@ -658,6 +830,13 @@ void ArtNetPlugin::setParameter(quint32 universe, quint32 line, Capability type,
 QList<ArtNetIO> ArtNetPlugin::getIOMapping() const
 {
     return m_IOmapping;
+}
+
+void ArtNetPlugin::refreshTransmitGate()
+{
+    for (const ArtNetIO &io : m_IOmapping)
+        if (io.controller != NULL)
+            io.controller->refreshTransmitGate();
 }
 
 /********************************************************************

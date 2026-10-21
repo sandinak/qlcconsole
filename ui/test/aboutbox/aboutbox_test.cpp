@@ -21,6 +21,7 @@
 
 #include "qlcconfig.h"
 #include "aboutbox_test.h"
+#include "apputil.h"
 #define private public
 #include "aboutbox.h"
 #undef protected
@@ -37,7 +38,11 @@ void AboutBox_Test::initial()
     QCOMPARE(ab.m_titleLabel->text(), QString(APPNAME));
 
     QVERIFY(ab.m_versionLabel != NULL);
-    QCOMPARE(ab.m_versionLabel->text(), QString(APPVERSION));
+    QCOMPARE(ab.m_versionLabel->text(), AboutBox::versionText());
+    // The release first, then the build id and the commit it was built from.
+    QVERIFY(ab.m_versionLabel->text().startsWith(QLCCONSOLE_VERSION));
+    QVERIFY(ab.m_versionLabel->text().contains(APPVERSION));
+    QVERIFY(ab.m_versionLabel->text().contains(QLCCONSOLE_GITREV));
 
     QVERIFY(ab.m_copyrightLabel != NULL);
     QVERIFY(ab.m_copyrightLabel->text().contains("by <B>Branson Matheson</B>"));
@@ -86,6 +91,40 @@ void AboutBox_Test::itemClick()
     QVERIFY(ab.m_timer == NULL);
     ab.slotItemClicked();
     QVERIFY(ab.m_timer == NULL);
+}
+
+/*
+ * The window icon at every hicolor size, and the desktop entry name that lets
+ * a Wayland compositor find the .desktop file (and so the dock icon) at all --
+ * left to Qt, the app_id was "org.qlcplus.qlcconsole", which matched nothing.
+ */
+void AboutBox_Test::applicationIdentity()
+{
+    const QList<int> sizes = { 16, 22, 24, 32, 48, 64, 128, 256 };
+
+    for (const QString &name : { QString("qlcconsole"), QString("qlcconsole-fixtureeditor") })
+    {
+        QIcon icon = AppUtil::applicationIcon(name);
+        QVERIFY2(!icon.isNull(), qPrintable(name));
+        QList<QSize> available = icon.availableSizes();
+        QCOMPARE(available.size(), sizes.size());
+        for (int size : sizes)
+        {
+            QVERIFY2(available.contains(QSize(size, size)),
+                     qPrintable(QString("%1 has no %2px picture").arg(name).arg(size)));
+            // Drawn at that size, not scaled from another one.
+            QCOMPARE(icon.pixmap(QSize(size, size), 1.0).size(), QSize(size, size));
+        }
+    }
+    QVERIFY(AppUtil::applicationIcon("no-such-app").isNull());
+
+    AppUtil::setApplicationIdentity("qlcconsole");
+    QCOMPARE(QGuiApplication::desktopFileName(), QString("qlcconsole"));
+#if !defined(Q_OS_MACOS)
+    // Every window inherits it, dialogs included, unless it sets its own.
+    QWidget w;
+    QCOMPARE(w.windowIcon().availableSizes().size(), sizes.size());
+#endif
 }
 
 QTEST_MAIN(AboutBox_Test)

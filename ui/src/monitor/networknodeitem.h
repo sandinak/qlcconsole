@@ -21,6 +21,7 @@
 #define NETWORKNODEITEM_H
 
 #include <QGraphicsItem>
+#include "../qlcui_export.h"
 #include <QGraphicsPathItem>
 #include <QObject>
 #include <QString>
@@ -34,7 +35,7 @@ class QGraphicsSceneContextMenuEvent;
  * @{
  */
 
-class NetworkNodeItem : public QObject, public QGraphicsItem
+class QLC_UI_EXPORT NetworkNodeItem : public QObject, public QGraphicsItem
 {
     Q_OBJECT
     Q_INTERFACES(QGraphicsItem)

@@ -38,6 +38,7 @@ OutputPatch::OutputPatch(QObject* parent)
     , m_plugin(NULL)
     , m_pluginLine(QLCIOPlugin::invalidLine())
     , m_universe(UINT_MAX)
+    , m_pendingLine(UINT_MAX)
     , m_paused(false)
     , m_blackout(false)
 {
@@ -48,6 +49,7 @@ OutputPatch::OutputPatch(quint32 universe, QObject* parent)
     , m_plugin(NULL)
     , m_pluginLine(QLCIOPlugin::invalidLine())
     , m_universe(universe)
+    , m_pendingLine(UINT_MAX)
     , m_paused(false)
     , m_blackout(false)
 {
@@ -70,6 +72,9 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
 
     // A concrete set() always supersedes whatever this patch was pending on.
     m_pendingUID.clear();
+    m_pendingLine = UINT_MAX;
+    m_pendingNetwork.clear();
+    m_heldReason.clear();
 
     m_plugin = plugin;
     m_pluginLine = output;
@@ -109,7 +114,8 @@ bool OutputPatch::reconnect()
     return false;
 }
 
-void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid)
+void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid,
+                             quint32 savedLine, const QString &network)
 {
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         m_plugin->closeOutput(m_pluginLine, m_universe);
@@ -117,12 +123,30 @@ void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid)
     m_plugin = plugin;
     m_pluginLine = QLCIOPlugin::invalidLine();
     m_pendingUID = uid;
+    m_pendingLine = savedLine;
+    m_pendingNetwork = network;
 
     if (m_plugin != NULL)
         emit pluginNameChanged();
     // outputName() now returns m_pendingUID rather than "None" -- same
     // property, same signal, the identity just isn't open.
     emit outputNameChanged();
+}
+
+bool OutputPatch::resolvePending(quint32 line)
+{
+    if (isPending() == false || m_plugin == NULL)
+        return false;
+
+    const QMap<QString, QVariant> params = m_parametersCache;
+    const bool opened = set(m_plugin, line);
+    QMapIterator<QString, QVariant> it(params);
+    while (it.hasNext())
+    {
+        it.next();
+        setPluginParameter(it.key(), it.value());
+    }
+    return opened;
 }
 
 bool OutputPatch::isPending() const
@@ -177,14 +201,16 @@ bool OutputPatch::isPatched() const
 void OutputPatch::setPluginParameter(QString prop, QVariant value)
 {
     m_parametersCache[prop] = value;
-    if (m_plugin != NULL)
+    // Nothing to tell the plugin while pending: there is no line yet.
+    // resolvePending() replays the cache once there is.
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop, value);
 }
 
 void OutputPatch::unSetPluginParameter(QString prop)
 {
     m_parametersCache.remove(prop);
-    if (m_plugin != NULL)
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop);
 }
 

@@ -27,12 +27,21 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QDialogButtonBox>
+#include <QMessageBox>
+#include <QLineEdit>
 
-#include <QNetworkInterface>
-#include <QGridLayout>
+#include <QFormLayout>
+#include <QTabWidget>
 
-#include "showcontrollistener.h"
 #include "appsettings.h"
+#include "showtreeview.h"
+#include "measurementunits.h"
+#include "monitor.h"
+#include "inputoutputmap.h"
+#include "rignetwork.h"
+#include "updatechecker.h"
+#include "shutterautoopen.h"
+#include "doc.h"
 #include "app.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
@@ -44,7 +53,44 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     setWindowTitle(tr("Application Settings"));
     setMinimumWidth(400);
 
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    // Two tabs: General, what everyone sets, and Advanced -- settings for
+    // the experienced, and the show's output behaviour (auto-open shutters).
+    QVBoxLayout *dialogLayout = new QVBoxLayout(this);
+    m_tabs = new QTabWidget(this);
+    m_tabs->setObjectName(QStringLiteral("settingsTabs"));
+    dialogLayout->addWidget(m_tabs);
+    QWidget *generalPage = new QWidget(m_tabs);
+    generalPage->setObjectName(QStringLiteral("settingsGeneral"));
+    QVBoxLayout *mainLayout = new QVBoxLayout(generalPage);
+    m_tabs->addTab(generalPage, tr("General"));
+    QWidget *advancedPage = new QWidget(m_tabs);
+    advancedPage->setObjectName(QStringLiteral("settingsAdvanced"));
+    advancedPage->setProperty("helpTopic", QStringLiteral("other-improvements.md#advanced-settings"));
+    QVBoxLayout *advLayout = new QVBoxLayout(advancedPage);
+    m_tabs->addTab(advancedPage, tr("Advanced"));
+
+    // --- Advanced: Output (this show) ---
+    // The show's, saved with it: it changes what the rig does.
+    QGroupBox *outGroup = new QGroupBox(tr("Output (saved with this show)"), advancedPage);
+    outGroup->setObjectName(QStringLiteral("settingsOutput"));
+    outGroup->setProperty("helpTopic", QStringLiteral("other-improvements.md#auto-open-shutters"));
+    QVBoxLayout *outLayout = new QVBoxLayout(outGroup);
+    m_autoOpenCheck = new QCheckBox(tr("Auto-open shutters when a light is given a level"), outGroup);
+    m_autoOpenCheck->setObjectName(QStringLiteral("settingsAutoOpenShutters"));
+    m_autoOpenCheck->setChecked(m_app->doc()->shutterAutoOpen()->isEnabled());
+    m_autoOpenCheck->setToolTip(tr("A light given a level by a look, a cue or a slider, whose "
+                                   "shutter nothing sets, has its shutter opened -- so a spot "
+                                   "whose shutter rests closed lights from a dimmer look alone. "
+                                   "A shutter look (Closed, Strobe...) always wins, and a light "
+                                   "with no level is left alone. Saved with the show."));
+    outLayout->addWidget(m_autoOpenCheck);
+    QLabel *outInfo = new QLabel(
+        tr("Like a lighting console's auto-open. Off: a closed shutter stays closed until a "
+           "look opens it (Shutter → Open), as in QLC+."), outGroup);
+    outInfo->setWordWrap(true);
+    outInfo->setStyleSheet("color: gray; font-size: 10px;");
+    outLayout->addWidget(outInfo);
+    advLayout->addWidget(outGroup);
 
     // Autosave Group
     QGroupBox *autosaveGroup = new QGroupBox(tr("Autosave"), this);
@@ -95,8 +141,56 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     tabLayout->addStretch();
     mainLayout->addWidget(tabGroup);
 
+    // --- Show controls: Stop all, Blackout, Blind, Design | Operate ---
+    // One row at the top with the tab's own tools (the default), or in the
+    // status bar, leaving the top to the tab. Applied on OK, no restart.
+    QGroupBox *scGroupBox = new QGroupBox(tr("Show Controls"), this);
+    scGroupBox->setProperty("helpTopic", QStringLiteral("getting-started.md#finding-your-way-around"));
+    QHBoxLayout *showCtlLayout = new QHBoxLayout(scGroupBox);
+    showCtlLayout->addWidget(new QLabel(tr("Stop all, Blackout, Blind and Design | Operate:"), scGroupBox));
+    m_showControlsCombo = new QComboBox(scGroupBox);
+    m_showControlsCombo->setObjectName(QStringLiteral("settingsShowControls"));
+    m_showControlsCombo->addItem(tr("In the top bar, beside the tab's tools"), App::ShowControlsInTopBar);
+    m_showControlsCombo->addItem(tr("In the status bar"), App::ShowControlsInStatusBar);
+    m_showControlsCombo->setCurrentIndex(qMax(0, m_showControlsCombo->findData(m_app->showControlsPlacement())));
+    m_showControlsCombo->setToolTip(tr("The top bar: one row above the tabs, the tab's own tools on the "
+                                       "left and the show controls on the right. The status bar: the "
+                                       "show controls at the right end of the bottom edge, beside "
+                                       "Ready and the other show chips, and the top is the tab's alone. "
+                                       "The shortcuts are the same either way."));
+    showCtlLayout->addWidget(m_showControlsCombo);
+    showCtlLayout->addStretch();
+    mainLayout->addWidget(scGroupBox);
+
+    // --- Units ---
+    // One choice for the person, whatever show is open: fixture dimensions
+    // and weights (here and in the fixture definition editor) and the
+    // Lighting Studio's grid (App::applyUnitPreference) show in it.
+    QGroupBox *unitsGroup = new QGroupBox(tr("Units"), this);
+    unitsGroup->setObjectName(QStringLiteral("settingsUnits"));
+    unitsGroup->setProperty("helpTopic", QStringLiteral("lighting-studio.md"));
+    QHBoxLayout *unitsLayout = new QHBoxLayout(unitsGroup);
+    unitsLayout->addWidget(new QLabel(tr("Lengths and weights in:"), unitsGroup));
+    m_unitsCombo = new QComboBox(unitsGroup);
+    m_unitsCombo->setObjectName(QStringLiteral("settingsUnitsCombo"));
+    for (MeasurementUnits::LengthUnit u : { MeasurementUnits::Millimetres,
+                                            MeasurementUnits::Centimetres,
+                                            MeasurementUnits::Metres,
+                                            MeasurementUnits::Inches,
+                                            MeasurementUnits::Feet })
+        m_unitsCombo->addItem(MeasurementUnits::name(u), int(u));
+    m_unitsCombo->setCurrentIndex(qMax(0, m_unitsCombo->findData(int(MeasurementUnits::preferredLength()))));
+    m_unitsCombo->setToolTip(tr("How lengths and weights are shown: fixture sizes here and in "
+                                "the fixture definition editor (any unit can still be typed: "
+                                "7.5\", 19 cm, 26 lb), and the Lighting Studio's grid, rulers "
+                                "and fields -- metres for mm, cm and m, feet for inches and "
+                                "feet. Files keep millimetres and kilograms either way."));
+    unitsLayout->addWidget(m_unitsCombo);
+    unitsLayout->addStretch();
+    mainLayout->addWidget(unitsGroup);
+
     // --- Effects ---
-    QGroupBox *fxGroup = new QGroupBox(tr("Effects"), this);
+    QGroupBox *fxGroup = new QGroupBox(tr("Effects"), advancedPage);
     QHBoxLayout *fxLayout = new QHBoxLayout(fxGroup);
     fxLayout->addWidget(new QLabel(tr("Effect script editor:"), fxGroup));
     m_scriptEditorCombo = new QComboBox(fxGroup);
@@ -114,69 +208,163 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     }
     fxLayout->addWidget(m_scriptEditorCombo);
     fxLayout->addStretch();
-    mainLayout->addWidget(fxGroup);
+    advLayout->addWidget(fxGroup);
+
+    // --- Show Tree ---
+    // Record as new cue: what to record when the selected cue, the list's
+    // running cue and everything lit differ. Ask, or one of them -- per mode.
+    QGroupBox *stGroup = new QGroupBox(tr("Show Tree"), this);
+    stGroup->setObjectName(QStringLiteral("settingsShowTree"));
+    stGroup->setProperty("helpTopic", QStringLiteral("show-tree.md"));
+    QFormLayout *stLayout = new QFormLayout(stGroup);
+    auto recordCombo = [this, stGroup](bool perform) {
+        QComboBox *c = new QComboBox(stGroup);
+        c->setObjectName(perform ? QStringLiteral("settingsRecordPerform") : QStringLiteral("settingsRecordDesign"));
+        c->addItem(tr("Ask"), QStringLiteral("ask"));
+        c->addItem(tr("The selected cue"), QStringLiteral("selected"));
+        c->addItem(tr("The running cue"), QStringLiteral("running"));
+        c->addItem(tr("Everything lit"), QStringLiteral("lit"));
+        c->setToolTip(tr("Record as new cue, when what is on stage differs: ask, or record this. "
+                         "When it names something not on stage (nothing running), it asks."));
+        const int idx = c->findData(ShowTreeView::recordSetting(perform));
+        c->setCurrentIndex(idx < 0 ? 0 : idx);
+        return c;
+    };
+    m_recordDesignCombo = recordCombo(false);
+    m_recordPerformCombo = recordCombo(true);
+    stLayout->addRow(tr("Record in Design:"), m_recordDesignCombo);
+    stLayout->addRow(tr("Record in Perform (Operate):"), m_recordPerformCombo);
+    mainLayout->addWidget(stGroup);
 
     // --- Show control (QLab) ---
-    ShowControlListener *listener = m_app->showControlListener();
-    QGroupBox *scGroup = new QGroupBox(tr("Show control (QLab)"), this);
+    // Edited in one place: Connections' Show control & sync page, next to
+    // the MIDI inputs MSC and timecode arrive on. This just points there.
+    QGroupBox *scGroup = new QGroupBox(tr("Show control (QLab)"), advancedPage);
     scGroup->setObjectName(QStringLiteral("settingsShowControl"));
     scGroup->setProperty("helpTopic", QStringLiteral("show-control.md"));
-    QGridLayout *scLayout = new QGridLayout(scGroup);
+    QHBoxLayout *scLayout = new QHBoxLayout(scGroup);
+    QLabel *scWhere = new QLabel(tr("OSC and MIDI Show Control in, and MIDI timecode, are set "
+                                    "up in Connections → Show control & sync."), scGroup);
+    scWhere->setWordWrap(true);
+    scLayout->addWidget(scWhere, 1);
+    QPushButton *scOpen = new QPushButton(tr("Open"), scGroup);
+    scOpen->setObjectName(QStringLiteral("settingsOpenShowControl"));
+    scOpen->setToolTip(tr("Keeps the changes made here and opens Connections at "
+                          "Show control & sync."));
+    connect(scOpen, &QPushButton::clicked, this, [this]() {
+        accept();
+        m_app->showShowControlSettings();
+    });
+    scLayout->addWidget(scOpen, 0, Qt::AlignTop);
+    advLayout->addWidget(scGroup);
+    advLayout->addStretch();
 
-    m_oscCheck = new QCheckBox(tr("Listen for OSC cue commands on port"), scGroup);
-    m_oscCheck->setChecked(ShowControlListener::oscEnabled());
-    m_oscCheck->setToolTip(tr("QLab's Network cue (or anything that sends OSC) can GO a cue: "
-                              "/go, /cue/12/start, /stop... Anyone on the network can, so it's off "
-                              "until you turn it on."));
-    m_oscPortSpin = new QSpinBox(scGroup);
-    m_oscPortSpin->setRange(1, 65535);
-    m_oscPortSpin->setValue(ShowControlListener::oscPort());
-    m_oscPortSpin->setToolTip(tr("Not 53000 or 53001 if QLab runs on this computer: it uses those."));
-    scLayout->addWidget(m_oscCheck, 0, 0);
-    scLayout->addWidget(m_oscPortSpin, 0, 1);
-
-    QStringList addresses;
-    for (const QHostAddress &a : QNetworkInterface::allAddresses())
-        if (a.protocol() == QAbstractSocket::IPv4Protocol && !a.isLoopback())
-            addresses << a.toString();
-    QLabel *where = new QLabel(addresses.isEmpty()
-        ? tr("Send to this computer as localhost (127.0.0.1).")
-        : tr("Send to this computer at %1 (or 127.0.0.1 on this computer).")
-              .arg(addresses.join(tr(" or "))), scGroup);
-    where->setWordWrap(true);
-    where->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    scLayout->addWidget(where, 1, 0, 1, 3);
-
-    m_mscCheck = new QCheckBox(tr("Answer MIDI Show Control as device"), scGroup);
-    m_mscCheck->setChecked(ShowControlListener::mscEnabled());
-    m_mscCheck->setToolTip(tr("MSC GO, STOP, RESUME, LOAD, ALL_OFF, RESET and GO_OFF arriving on "
-                              "a patched MIDI input (Connections), for lighting, moving lights or "
-                              "all types. The all-call (127) is always answered."));
-    m_mscDeviceSpin = new QSpinBox(scGroup);
-    m_mscDeviceSpin->setRange(0, 0x6F);
-    m_mscDeviceSpin->setValue(ShowControlListener::mscDeviceId());
-    scLayout->addWidget(m_mscCheck, 2, 0);
-    scLayout->addWidget(m_mscDeviceSpin, 2, 1);
-
-    QLabel *status = new QLabel(scGroup);
-    status->setObjectName(QStringLiteral("showControlStatus"));
-    QLabel *last = new QLabel(scGroup);
-    last->setObjectName(QStringLiteral("showControlLast"));
-    last->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    auto showLast = [last](const QString &what) {
-        last->setText(what.isEmpty() ? tr("Nothing received yet.") : tr("Last: %1").arg(what));
-    };
-    if (listener != nullptr)
+    // --- Network: rig networks and the transmit gate ---
+    // The networks are the SHOW's (saved in it); "only transmit on them" is
+    // this machine's; "transmit anyway" lasts this session and is never saved.
+    InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+    QGroupBox *netGroup = new QGroupBox(tr("Network"), this);
+    netGroup->setObjectName(QStringLiteral("settingsRigNetwork"));
+    netGroup->setProperty("helpTopic", QStringLiteral("other-improvements.md#only-transmit-on-the-rig-network"));
+    QVBoxLayout *netLayout = new QVBoxLayout(netGroup);
+    QHBoxLayout *rigRow = new QHBoxLayout();
+    rigRow->addWidget(new QLabel(tr("This show's rig networks:"), netGroup));
+    m_rigNetworksEdit = new QLineEdit(netGroup);
+    m_rigNetworksEdit->setObjectName(QStringLiteral("settingsRigNetworks"));
+    m_rigNetworksEdit->setText(ioMap->rigNetworks().join(QStringLiteral(", ")));
+    m_rigNetworksEdit->setToolTip(tr("The IPv4 networks this show's Art-Net, sACN (E1.31), OSC "
+                                     "and WLED output belongs on, e.g. 172.18.0.0/20 -- several "
+                                     "separated by commas. Saved with the show."));
+    const QStringList suggested = ioMap->suggestedRigNetworks();
+    m_rigNetworksEdit->setPlaceholderText(suggested.isEmpty()
+        ? tr("e.g. 172.18.0.0/20")
+        : tr("e.g. %1 (from this show's patches)").arg(suggested.join(QStringLiteral(", "))));
+    rigRow->addWidget(m_rigNetworksEdit, 1);
+    if (ioMap->rigNetworks().isEmpty() && suggested.isEmpty() == false)
     {
-        status->setText(listener->status());
-        showLast(listener->lastCommand());
-        connect(listener, &ShowControlListener::statusChanged, status, &QLabel::setText);
-        connect(listener, &ShowControlListener::lastCommandChanged, last, showLast);
+        // Offered, never written by itself: the operator says yes.
+        QPushButton *useSuggested = new QPushButton(tr("Use these"), netGroup);
+        useSuggested->setObjectName(QStringLiteral("settingsRigUseSuggested"));
+        useSuggested->setToolTip(tr("Fill in the networks this show's patches were saved "
+                                    "with: %1").arg(suggested.join(QStringLiteral(", "))));
+        connect(useSuggested, &QPushButton::clicked, this, [this, suggested]() {
+            m_rigNetworksEdit->setText(suggested.join(QStringLiteral(", ")));
+        });
+        rigRow->addWidget(useSuggested);
     }
-    scLayout->addWidget(status, 3, 0, 1, 3);
-    scLayout->addWidget(last, 4, 0, 1, 3);
-    scLayout->setColumnStretch(2, 1);
-    mainLayout->addWidget(scGroup);
+    netLayout->addLayout(rigRow);
+    m_rigNetworksError = new QLabel(netGroup);
+    m_rigNetworksError->setObjectName(QStringLiteral("settingsRigNetworksError"));
+    m_rigNetworksError->setStyleSheet(QStringLiteral("color: #e60000;"));
+    m_rigNetworksError->setWordWrap(true);
+    m_rigNetworksError->hide();
+    netLayout->addWidget(m_rigNetworksError);
+    m_rigOnlyCheck = new QCheckBox(tr("Only transmit on rig networks"), netGroup);
+    m_rigOnlyCheck->setObjectName(QStringLiteral("settingsRigNetworkOnly"));
+    m_rigOnlyCheck->setChecked(ioMap->transmitGateEnabled());
+    m_rigOnlyCheck->setToolTip(tr("Network output is held -- kept, nothing sent -- while this "
+                                  "machine is not on one of the show's rig networks, and "
+                                  "resumes by itself when it is. Loopback, USB DMX and MIDI are "
+                                  "not affected. A setting of this machine, not the show."));
+    netLayout->addWidget(m_rigOnlyCheck);
+    QHBoxLayout *anywayRow = new QHBoxLayout();
+    m_transmitAnywayButton = new QPushButton(netGroup);
+    m_transmitAnywayButton->setObjectName(QStringLiteral("settingsTransmitAnyway"));
+    connect(m_transmitAnywayButton, &QPushButton::clicked, this, &AppSettings::slotTransmitAnyway);
+    anywayRow->addWidget(m_transmitAnywayButton);
+    anywayRow->addStretch();
+    netLayout->addLayout(anywayRow);
+    QLabel *netInfo = new QLabel(
+        tr("Keeps a laptop on some other network (a school's, a venue office's) from putting "
+           "show traffic on it."), netGroup);
+    netInfo->setWordWrap(true);
+    netInfo->setStyleSheet("color: gray; font-size: 10px;");
+    netLayout->addWidget(netInfo);
+    mainLayout->addWidget(netGroup);
+    updateTransmitAnywayButton();
+
+    // --- Software Update ---
+    // GitHub Releases, this machine's choice. IT can turn it off for every
+    // account (UpdateChecker::isDisabledByPolicy()); then this says so.
+    QGroupBox *updGroup = new QGroupBox(tr("Software Update"), this);
+    updGroup->setObjectName(QStringLiteral("settingsUpdates"));
+    updGroup->setProperty("helpTopic", QStringLiteral("updates.md"));
+    QVBoxLayout *updLayout = new QVBoxLayout(updGroup);
+    m_updateCheck = new QCheckBox(tr("Check for updates (once a day, from GitHub)"), updGroup);
+    m_updateCheck->setObjectName(QStringLiteral("settingsUpdateCheck"));
+    m_updateCheck->setChecked(UpdateChecker::checkEnabled());
+    m_updateCheck->setToolTip(tr("Asks GitHub's list of qlcconsole releases -- nothing is sent "
+                                 "about this computer or the show."));
+    updLayout->addWidget(m_updateCheck);
+    QHBoxLayout *chanRow = new QHBoxLayout();
+    chanRow->addWidget(new QLabel(tr("Channel:"), updGroup));
+    m_updateChannel = new QComboBox(updGroup);
+    m_updateChannel->setObjectName(QStringLiteral("settingsUpdateChannel"));
+    m_updateChannel->addItem(tr("Stable releases"), int(UpdateChecker::Stable));
+    m_updateChannel->addItem(tr("Pre-releases too (e.g. Show Tree)"), int(UpdateChecker::PreRelease));
+    m_updateChannel->setCurrentIndex(m_updateChannel->findData(int(UpdateChecker::channel())));
+    chanRow->addWidget(m_updateChannel);
+    chanRow->addStretch();
+    updLayout->addLayout(chanRow);
+    m_updateAuto = new QCheckBox(tr("Install updates automatically"), updGroup);
+    m_updateAuto->setObjectName(QStringLiteral("settingsUpdateAuto"));
+    m_updateAuto->setChecked(UpdateChecker::autoInstall());
+    m_updateAuto->setToolTip(tr("Download and check an update in the background, and install it "
+                                "the next time you quit qlcconsole -- never during a show. "
+                                "Off: the footer says an update is there and you choose."));
+    updLayout->addWidget(m_updateAuto);
+    connect(m_updateCheck, &QCheckBox::toggled, m_updateChannel, &QWidget::setEnabled);
+    connect(m_updateCheck, &QCheckBox::toggled, m_updateAuto, &QWidget::setEnabled);
+    m_updateChannel->setEnabled(m_updateCheck->isChecked());
+    m_updateAuto->setEnabled(m_updateCheck->isChecked());
+    if (UpdateChecker::isDisabledByPolicy())
+    {
+        updGroup->setEnabled(false);
+        QLabel *off = new QLabel(tr("Turned off for this computer by its administrator."), updGroup);
+        off->setObjectName(QStringLiteral("settingsUpdatePolicy"));
+        updLayout->addWidget(off);
+    }
+    mainLayout->addWidget(updGroup);
 
     // Add stretch to push buttons to bottom
     mainLayout->addStretch();
@@ -184,9 +372,12 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     // Dialog buttons
     QDialogButtonBox *buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    m_buttonBox = buttonBox;
     connect(buttonBox, SIGNAL(accepted()), this, SLOT(accept()));
     connect(buttonBox, SIGNAL(rejected()), this, SLOT(reject()));
-    mainLayout->addWidget(buttonBox);
+    dialogLayout->addWidget(buttonBox);
+    connect(m_rigNetworksEdit, &QLineEdit::textChanged, this, &AppSettings::validateRigNetworks);
+    validateRigNetworks();
 
     // Connect enable checkbox to enable/disable interval spinbox
     connect(m_autosaveEnabledCheck, &QCheckBox::toggled,
@@ -198,8 +389,103 @@ AppSettings::~AppSettings()
 {
 }
 
+void AppSettings::showAdvanced()
+{
+    m_tabs->setCurrentIndex(1);
+}
+
+void AppSettings::focusRigNetworks()
+{
+    m_tabs->setCurrentIndex(0);
+    m_rigNetworksEdit->setFocus(Qt::OtherFocusReason);
+    m_rigNetworksEdit->selectAll();
+}
+
+void AppSettings::validateRigNetworks()
+{
+    QStringList bad, why;
+    RigNetwork::parseList(m_rigNetworksEdit->text(), &bad, &why);
+    QStringList lines;
+    for (int i = 0; i < bad.count(); i++)
+        lines << tr("%1: %2").arg(bad.at(i), why.value(i));
+    m_rigNetworksError->setText(lines.join(QStringLiteral("\n")));
+    m_rigNetworksError->setVisible(lines.isEmpty() == false);
+    if (QPushButton *ok = m_buttonBox->button(QDialogButtonBox::Ok))
+        ok->setEnabled(lines.isEmpty());
+}
+
+void AppSettings::updateTransmitAnywayButton()
+{
+    InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+    if (ioMap->transmitOverride())
+    {
+        m_transmitAnywayButton->setText(tr("Check the rig network again"));
+        m_transmitAnywayButton->setToolTip(tr("End \"Transmit anyway\": hold network output "
+                                              "that is not on a rig network again."));
+        m_transmitAnywayButton->setEnabled(true);
+    }
+    else
+    {
+        m_transmitAnywayButton->setText(tr("Transmit anyway, this session…"));
+        m_transmitAnywayButton->setToolTip(tr("Send network output wherever this machine is "
+                                              "connected, until it quits or another show is "
+                                              "opened. Asks first; never saved."));
+        m_transmitAnywayButton->setEnabled(ioMap->transmitGateActive());
+    }
+}
+
+void AppSettings::slotTransmitAnyway()
+{
+    InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+    if (ioMap->transmitOverride())
+    {
+        ioMap->setTransmitOverride(false);
+    }
+    else
+    {
+        const InputOutputMap::TransmitGateStatus st = ioMap->transmitGateStatus();
+        const QMessageBox::StandardButton answer = QMessageBox::warning(this,
+            tr("Transmit anyway"),
+            tr("This machine is connected to: %1.\n\n"
+               "The show's rig networks are: %2.\n\n"
+               "Transmitting anyway sends this show's Art-Net, sACN and WLED output on "
+               "whatever network this machine is on -- broadcasts included -- until "
+               "qlcconsole quits or another show is opened. Transmit anyway?")
+                .arg(st.connected.isEmpty() ? tr("no network") : st.connected.join(QStringLiteral(", ")),
+                     st.networks.join(QStringLiteral(", "))),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes)
+            return;
+        ioMap->setTransmitOverride(true);
+    }
+    updateTransmitAnywayButton();
+}
+
 void AppSettings::accept()
 {
+    // The show's rig networks (saved with it) and this machine's gate choice
+    {
+        QStringList bad;
+        const QStringList nets = RigNetwork::parseList(m_rigNetworksEdit->text(), &bad);
+        if (bad.isEmpty() == false)
+        {
+            validateRigNetworks();
+            m_rigNetworksEdit->setFocus();
+            return;
+        }
+        InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+        if (nets != ioMap->rigNetworks())
+        {
+            ioMap->setRigNetworks(nets);
+            m_app->doc()->setModified();
+        }
+        QSettings().setValue(App::rigNetworkGateSettingKey(), m_rigOnlyCheck->isChecked());
+        ioMap->setTransmitGateEnabled(m_rigOnlyCheck->isChecked());
+    }
+
+    // Auto-open shutters: the show's (ShutterAutoOpen marks it modified)
+    m_app->doc()->shutterAutoOpen()->setEnabled(m_autoOpenCheck->isChecked());
+
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());
     m_app->setAutosaveInterval(m_autosaveIntervalSpin->value());
@@ -208,14 +494,32 @@ void AppSettings::accept()
     const int mode = m_tabLabelModeCombo->currentData().toInt();
     m_app->setTabLabelMode(mode);
 
+    // Where the show controls sit (live)
+    m_app->setShowControlsPlacement(m_showControlsCombo->currentData().toInt());
+
+    // Show Tree: what Record records when the choices differ.
+    QSettings().setValue(ShowTreeView::recordSettingKey(false), m_recordDesignCombo->currentData().toString());
+    QSettings().setValue(ShowTreeView::recordSettingKey(true), m_recordPerformCombo->currentData().toString());
+    const MeasurementUnits::LengthUnit unit =
+            MeasurementUnits::LengthUnit(m_unitsCombo->currentData().toInt());
+    if (unit != MeasurementUnits::preferredLength())
+    {
+        MeasurementUnits::setPreferredLength(unit);
+        m_app->applyUnitPreference(false);
+        if (Monitor::instance() != nullptr)
+            Monitor::instance()->unitsChanged();
+    }
+
     // Effect script editor preference (read by the Look Editor authoring flow).
     QSettings().setValue(QStringLiteral("effectscript/editor"),
                          m_scriptEditorCombo->currentData().toString());
 
-    ShowControlListener::setSettings(m_oscCheck->isChecked(), m_oscPortSpin->value(),
-                                     m_mscCheck->isChecked(), m_mscDeviceSpin->value());
-    if (ShowControlListener *listener = m_app->showControlListener())
-        listener->apply();
+    if (UpdateChecker::isDisabledByPolicy() == false)
+    {
+        UpdateChecker::setCheckEnabled(m_updateCheck->isChecked());
+        UpdateChecker::setChannel(UpdateChecker::Channel(m_updateChannel->currentData().toInt()));
+        UpdateChecker::setAutoInstall(m_updateAuto->isChecked());
+    }
 
     QDialog::accept();
 }

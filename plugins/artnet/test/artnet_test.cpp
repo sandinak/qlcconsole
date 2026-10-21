@@ -21,13 +21,25 @@
 #include <QNetworkInterface>
 #include <QUdpSocket>
 #include <QSharedPointer>
+#include <QRegularExpression>
+#include <QSignalSpy>
+#include <thread>
+#include <future>
+#include <chrono>
 
 #define private public
 #include "artnet_test.h"
 #include "artnetpacketizer.h"
 #include "artnetcontroller.h"
 #include "artnetplugin.h"
+#include "artnetnodesetup.h"
 #undef private
+
+#include <QNetworkDatagram>
+#include <QPushButton>
+#include <QGroupBox>
+#include <QLineEdit>
+#include <QLabel>
 
 /****************************************************************************
  * ArtNet tests
@@ -125,9 +137,10 @@ void ArtNet_Test::fillArtPollReplyInfo()
 
     /* Capability is Status1 bit 1. This node is transmit-only -- DMX-Workshop
        reports "Node is not RDM capable (Unidirectional DMX)" and it never
-       answers an ArtTodRequest. Note its GoodOutput bit 3 ("RDM disabled") is
-       clear, which reads like RDM support if you check the wrong bit; that
-       misreading is exactly what this assertion guards against. */
+       answers an ArtTodRequest. GoodOutput says nothing about RDM at all (bit 3
+       is "merging"; "RDM disabled" lives in GoodOutputB), so it must not be
+       read as capability; that misreading is what this assertion guards
+       against. */
     QCOMPARE(info.rdmCapable, false);
     QVERIFY((info.goodOutput[0] & 0x08) == 0);
 
@@ -275,5 +288,1365 @@ void ArtNet_Test::lineOnSameSubnetResolvesChangedAddress()
     // Not an address at all -- must not crash or false-match.
     QCOMPARE(plugin.lineOnSameSubnet("not an address"), -1);
 
+    plugin.m_IOmapping.clear();
+}
+
+/****************************************************************************
+ * Send failure reporting (SendHealth)
+ ****************************************************************************/
+
+/* Frame period while data is changing (~44 Hz), and the idle refresh period
+   of Standard mode (SEND_INTERVAL_MS). The rules must hold at both. */
+static const qint64 kFrameMs = 23;
+static const qint64 kIdleMs = 2000;
+
+namespace
+{
+/** Feeds an SendHealth a timeline and tallies what it reports */
+struct HealthDriver
+{
+    SendHealth health;
+    qint64 now = 0;
+    int failingReports = 0;
+    int recoveredReports = 0;
+    qint64 failingAt = -1;
+    qint64 recoveredAt = -1;
+
+    void send(bool ok, bool hard = false)
+    {
+        switch (health.record(ok, now, hard))
+        {
+            case SendHealth::StartedFailing:
+                failingReports++;
+                failingAt = now;
+            break;
+            case SendHealth::Recovered:
+                recoveredReports++;
+                recoveredAt = now;
+            break;
+            case SendHealth::NoChange:
+            break;
+        }
+    }
+
+    /** Send @a ok every @a periodMs for @a forMs */
+    void run(bool ok, qint64 forMs, qint64 periodMs)
+    {
+        const qint64 end = now + forMs;
+        for (; now < end; now += periodMs)
+            send(ok);
+    }
+};
+}
+
+void ArtNet_Test::sendHealthTransientBurstIsNotReported()
+{
+    HealthDriver d;
+
+    // Healthy, then a burst of failures shorter than FailAfterMs, then clean
+    // sends: three times over. A full send buffer looks like this.
+    for (int i = 0; i < 3; i++)
+    {
+        d.run(true, 2000, kFrameMs);
+        d.run(false, 500, kFrameMs);
+        d.run(true, 2000, kFrameMs);
+    }
+    QCOMPARE(d.failingReports, 0);
+    QCOMPARE(d.recoveredReports, 0);
+    QVERIFY(d.health.isFailing() == false);
+
+    // A single failure at the idle cadence, then clean ones: not reported
+    HealthDriver idle;
+    idle.run(true, 10000, kIdleMs);
+    idle.run(false, 1, kIdleMs);
+    idle.run(true, 10000, kIdleMs);
+    QCOMPARE(idle.failingReports, 0);
+}
+
+void ArtNet_Test::sendHealthSustainedFailureIsReported()
+{
+    // At frame rate: reported once, after FailAfterMs and not before
+    HealthDriver d;
+    d.run(true, 1000, kFrameMs);
+    const qint64 firstFailure = d.now;
+    d.run(false, 60000, kFrameMs);
+    QCOMPARE(d.failingReports, 1);
+    QVERIFY(d.failingAt - firstFailure >= SendHealth::FailAfterMs);
+    QVERIFY(d.failingAt - firstFailure < SendHealth::FailAfterMs + kFrameMs);
+    QVERIFY(d.health.isFailing());
+    QCOMPARE(d.recoveredReports, 0);
+    QVERIFY(d.health.failedSends() > 2000);
+
+    // At the idle refresh: the second consecutive failure reports it
+    HealthDriver idle;
+    idle.run(false, 60000, kIdleMs);
+    QCOMPARE(idle.failingReports, 1);
+    QCOMPARE(idle.failingAt, kIdleMs);
+}
+
+void ArtNet_Test::sendHealthHardErrorIsReportedAtOnce()
+{
+    HealthDriver d;
+    d.run(true, 1000, kFrameMs);
+    const qint64 at = d.now;
+    d.send(false, true);
+    QCOMPARE(d.failingReports, 1);
+    QCOMPARE(d.failingAt, at);
+    QVERIFY(d.health.isFailing());
+
+    // ...and further hard errors don't repeat the report
+    for (int i = 0; i < 100; i++)
+    {
+        d.now += kFrameMs;
+        d.send(false, true);
+    }
+    QCOMPARE(d.failingReports, 1);
+}
+
+void ArtNet_Test::sendHealthRecoveryClears()
+{
+    HealthDriver d;
+    d.run(false, 5000, kFrameMs);
+    QCOMPARE(d.failingReports, 1);
+    const quint64 failures = d.health.failedSends();
+
+    const qint64 recoveryStart = d.now;
+    d.run(true, 60000, kFrameMs);
+    QCOMPARE(d.recoveredReports, 1);
+    QVERIFY(d.recoveredAt - recoveryStart >= SendHealth::RecoverAfterMs);
+    QVERIFY(d.recoveredAt - recoveryStart < SendHealth::RecoverAfterMs + kFrameMs);
+    QVERIFY(d.health.isFailing() == false);
+    QCOMPARE(d.health.failedSends(), failures);
+    QVERIFY(d.health.failedForMs() >= 5000 - kFrameMs);
+    QVERIFY(d.health.failedForMs() <= 5000 + kFrameMs);
+
+    // A failure inside the recovery window restarts it
+    HealthDriver r;
+    r.run(false, 5000, kIdleMs);
+    r.run(true, 20000, kIdleMs);
+    r.send(false);
+    r.now += kIdleMs;
+    const qint64 restart = r.now;
+    r.run(true, 60000, kIdleMs);
+    QCOMPARE(r.recoveredReports, 1);
+    QVERIFY(r.recoveredAt - restart >= SendHealth::RecoverAfterMs);
+
+    // ...and a later sustained failure is reported afresh, counted from zero
+    r.run(false, 5000, kIdleMs);
+    QCOMPARE(r.failingReports, 2);
+    QVERIFY(r.health.failedSends() < 5);
+}
+
+void ArtNet_Test::sendHealthAlternatingResultsDoNotToggle()
+{
+    // Every other send failing, for two minutes: reported failing once
+    // (half the frames are being lost) and never "recovered" in between.
+    HealthDriver d;
+    bool ok = true;
+    for (const qint64 end = d.now + 120000; d.now < end; d.now += kFrameMs)
+    {
+        d.send(ok);
+        ok = !ok;
+    }
+    QCOMPARE(d.failingReports, 1);
+    QCOMPARE(d.recoveredReports, 0);
+    QVERIFY(d.health.isFailing());
+
+    // Same at the idle cadence
+    HealthDriver idle;
+    ok = false;
+    for (const qint64 end = idle.now + 120000; idle.now < end; idle.now += kIdleMs)
+    {
+        idle.send(ok);
+        ok = !ok;
+    }
+    QCOMPARE(idle.failingReports, 1);
+    QCOMPARE(idle.recoveredReports, 0);
+}
+
+void ArtNet_Test::sendHealthArpFlapIsReportedOnce()
+{
+    /* The case from the 2026-08-25 soak: a unicast target that never answers
+       ARP. On macOS sends succeed for ~5 s while ARP is outstanding, then
+       fail for host_down_time (20 s), and round again. Per state change that
+       was a fail/recover pair every ~25 s per universe; it must be ONE report
+       for the whole two minutes, at frame rate and at the idle refresh. */
+    const qint64 periods[] = { kFrameMs, kIdleMs };
+    for (const qint64 period : periods)
+    {
+        HealthDriver d;
+        for (int cycle = 0; cycle < 5; cycle++)
+        {
+            d.run(true, 5000, period);
+            d.run(false, 20000, period);
+        }
+        QCOMPARE(d.failingReports, 1);
+        QCOMPARE(d.recoveredReports, 0);
+        QVERIFY(d.health.isFailing());
+
+        // The node is plugged in: sends succeed and keep succeeding
+        d.run(true, 60000, period);
+        QCOMPARE(d.recoveredReports, 1);
+        QCOMPARE(d.failingReports, 1);
+    }
+}
+
+void ArtNet_Test::sendHealthHardErrorClassification()
+{
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::DatagramTooLargeError));
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::SocketAccessError));
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::SocketAddressNotAvailableError));
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::UnsupportedSocketOperationError));
+
+    // Qt reports both "host is down" (ARP, comes and goes) and "no route" as
+    // NetworkError, so it must go through the sustained rule
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::NetworkError) == false);
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::SocketResourceError) == false);
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::TemporaryError) == false);
+    QVERIFY(SendHealth::isHardError(QAbstractSocket::UnknownSocketError) == false);
+}
+
+void ArtNet_Test::controllerLogsOnlyOnStateChange()
+{
+    /* The controller wiring, without sending anything: results are handed to
+       reportSendResult() directly. The socket is never bound or written, and
+       the universe goes straight into the map -- addUniverse() would start
+       the ArtPoll timer and broadcast a poll. */
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress::LocalHost);
+    entry.setPrefixLength(8);
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    ArtNetController ctrl(QNetworkInterface(), entry, sock, 0);
+
+    UniverseInfo info;
+    info.type = ArtNetController::Output;
+    info.outputAddress = QHostAddress::LocalHost;
+    ctrl.m_universeMap[0] = info;
+    UniverseInfo &u = ctrl.m_universeMap[0];
+
+    QTest::failOnWarning(QRegularExpression("ArtNet"));
+
+    ctrl.reportSendResult(u, 0, u.outputAddress, true);
+    ctrl.reportSendResult(u, 0, u.outputAddress, true);
+    QCOMPARE(ctrl.getPacketSentNumber(), quint64(2));
+
+    // Two back-to-back failures are a transient, not a failing universe
+    ctrl.reportSendResult(u, 0, u.outputAddress, false);
+    ctrl.reportSendResult(u, 0, u.outputAddress, false);
+    QVERIFY(u.sendHealth.isFailing() == false);
+    QCOMPARE(ctrl.getPacketSentNumber(), quint64(2));
+
+    ctrl.reportSendResult(u, 0, u.outputAddress, true);
+    QCOMPARE(ctrl.getPacketSentNumber(), quint64(3));
+}
+
+/****************************************************************************
+ * Node health (ArtNetNodeWatch)
+ ****************************************************************************/
+
+static const qint64 kPollMs = 3000;   // POLL_INTERVAL_MS
+
+/** An ArtPollReply as parsed: one node, up to four output ports */
+static ArtNetNodeInfo nodeReply(const QString &name, const QString &ip,
+                                QList<uchar> swOut, QList<uchar> goodOutput,
+                                uchar bindIndex = 0, uchar net = 0, uchar sub = 0)
+{
+    ArtNetNodeInfo n;
+    n.shortName = name;
+    n.ipAddress = ip;
+    n.portsNumber = swOut.count();
+    n.netSwitch = net;
+    n.subSwitch = sub;
+    n.bindIndex = bindIndex;
+    for (int p = 0; p < 4; p++)
+    {
+        n.portTypes[p] = p < swOut.count() ? 0x80 : 0;
+        n.swOut[p] = p < swOut.count() ? swOut.at(p) : 0;
+        n.goodOutput[p] = p < goodOutput.count() ? goodOutput.at(p) : 0;
+        n.goodInput[p] = 0;
+        n.swIn[p] = 0;
+    }
+    return n;
+}
+
+namespace
+{
+/** Polls every 3 s; the node answers each poll (or not) right after it */
+struct NodeDriver
+{
+    ArtNetNodeWatch watch;
+    qint64 now = 0;
+    int changes = 0;
+    QHostAddress addr = QHostAddress("172.18.2.10");
+    ArtNetNodeInfo reply = nodeReply("CR041R", "172.18.2.10", { 0, 1, 2, 3 },
+                                     { 0x80, 0x80, 0x80, 0x80 });
+
+    /** One poll interval; @a answer says whether the node replies in it */
+    void interval(bool answer)
+    {
+        if (watch.pollSent(now))
+            changes++;
+        if (answer && watch.replyHeard(addr, reply, now + 20))
+            changes++;
+        now += kPollMs;
+    }
+
+    bool silent() const
+    {
+        foreach (const ArtNetNodeWatch::Issue &i, watch.issuesFor(addr, false, 0))
+            if (i.kind == ArtNetNodeWatch::Issue::NodeSilent)
+                return true;
+        return false;
+    }
+};
+}
+
+void ArtNet_Test::nodeWatchSilentAfterThreeMissedPolls()
+{
+    NodeDriver d;
+    for (int i = 0; i < 10; i++)
+        d.interval(true);
+    QCOMPARE(d.changes, 0);
+    const qint64 lastReply = d.now - kPollMs + 20;
+
+    // Two missed, then answering again: one lost reply is not a dead node
+    d.interval(false);
+    d.interval(false);
+    d.interval(true);
+    d.interval(true);
+    QVERIFY(d.silent() == false);
+    QCOMPARE(d.changes, 0);
+
+    // Three missed in a row: silent, and since its last reply
+    const qint64 lastAnswer = d.now - kPollMs + 20;
+    d.interval(false);
+    d.interval(false);
+    d.interval(false);
+    QVERIFY(d.silent() == false);   // the third miss is judged at the next poll
+    d.interval(false);
+    QVERIFY(d.silent());
+    QCOMPARE(d.changes, 1);
+    QList<ArtNetNodeWatch::Issue> issues = d.watch.issuesFor(d.addr, false, 0);
+    QCOMPARE(issues.count(), 1);
+    QCOMPARE(issues.first().sinceMs, lastAnswer);
+    QCOMPARE(issues.first().name, QString("CR041R"));
+    QVERIFY(lastReply < lastAnswer);
+
+    // Stays silent, without repeating itself
+    for (int i = 0; i < 20; i++)
+        d.interval(false);
+    QCOMPARE(d.changes, 1);
+}
+
+void ArtNet_Test::nodeWatchAnsweringAgainNeedsTwoIntervals()
+{
+    NodeDriver d;
+    d.interval(true);
+    for (int i = 0; i < 4; i++)
+        d.interval(false);
+    QVERIFY(d.silent());
+    QCOMPARE(d.changes, 1);
+
+    // Answering every other poll: alive but flaky -- no toggling either way
+    for (int i = 0; i < 20; i++)
+        d.interval(i % 2 == 0);
+    QVERIFY(d.silent());
+    QCOMPARE(d.changes, 1);
+
+    // Two answered intervals in a row: answering again, once
+    d.interval(true);
+    d.interval(true);
+    d.interval(true);
+    QVERIFY(d.silent() == false);
+    QCOMPARE(d.changes, 2);
+    QVERIFY(d.watch.issuesFor(d.addr, false, 0).isEmpty());
+}
+
+void ArtNet_Test::nodeWatchNeverHeardIsNotFlagged()
+{
+    ArtNetNodeWatch w;
+    for (int i = 0; i < 50; i++)
+        QVERIFY(w.pollSent(i * kPollMs) == false);
+    QVERIFY(w.issuesFor(QHostAddress("172.18.2.50"), false, 0).isEmpty());
+    QVERIFY(w.issuesFor(QHostAddress("172.18.2.255"), true, 0).isEmpty());
+    QCOMPARE(w.nodeCount(), 0);
+}
+
+void ArtNet_Test::nodeWatchPortShortIsDebouncedBothWays()
+{
+    NodeDriver d;
+    d.interval(true);
+
+    // One odd reply is not a short
+    d.reply.goodOutput[1] = 0x80 | ArtNetNodeWatch::GoodOutputShort;
+    d.interval(true);
+    d.reply.goodOutput[1] = 0x80;
+    d.interval(true);
+    QVERIFY(d.watch.issuesFor(d.addr, false, 1).isEmpty());
+    QCOMPARE(d.changes, 0);
+
+    // Two in a row is
+    d.reply.goodOutput[1] = 0x80 | ArtNetNodeWatch::GoodOutputShort;
+    const qint64 began = d.now + 20;
+    d.interval(true);
+    d.interval(true);
+    QCOMPARE(d.changes, 1);
+    QList<ArtNetNodeWatch::Issue> issues = d.watch.issuesFor(d.addr, false, 1);
+    QCOMPARE(issues.count(), 1);
+    QCOMPARE(int(issues.first().kind), int(ArtNetNodeWatch::Issue::PortShort));
+    QCOMPARE(issues.first().port, 2);
+    QCOMPARE(issues.first().portLabel, QString("0:0:1"));
+    QCOMPARE(issues.first().sinceMs, began);
+
+    // Only the port carrying the universe: port 1 (Port-Address 0) is fine
+    QVERIFY(d.watch.issuesFor(d.addr, false, 0).isEmpty());
+
+    // Merging is not a fault
+    d.reply.goodOutput[2] = 0x80 | ArtNetNodeWatch::GoodOutputMerging;
+    d.interval(true);
+    d.interval(true);
+    QVERIFY(d.watch.issuesFor(d.addr, false, 2).isEmpty());
+
+    // Clean for less than PortClearAfterMs, then short again: still one fault
+    d.reply.goodOutput[1] = 0x80;
+    d.interval(true);
+    d.interval(true);
+    d.reply.goodOutput[1] = 0x80 | ArtNetNodeWatch::GoodOutputShort;
+    d.interval(true);
+    QCOMPARE(d.changes, 1);
+    QCOMPARE(d.watch.issuesFor(d.addr, false, 1).count(), 1);
+
+    // Clean for PortClearAfterMs: cleared, once
+    d.reply.goodOutput[1] = 0x80;
+    for (int i = 0; i < 6; i++)
+        d.interval(true);
+    QVERIFY(d.watch.issuesFor(d.addr, false, 1).isEmpty());
+    QCOMPARE(d.changes, 2);
+}
+
+void ArtNet_Test::nodeWatchNotOutputtingOnlyOnceSeenOutputting()
+{
+    // A node that never sets "data is being output" is not flagged for it
+    NodeDriver quiet;
+    quiet.reply.goodOutput[0] = 0;
+    for (int i = 0; i < 10; i++)
+        quiet.interval(true);
+    QVERIFY(quiet.watch.issuesFor(quiet.addr, false, 0).isEmpty());
+
+    // One that did, then stopped, is
+    NodeDriver d;
+    for (int i = 0; i < 3; i++)
+        d.interval(true);
+    d.reply.goodOutput[0] = 0;
+    d.interval(true);
+    d.interval(true);
+    QList<ArtNetNodeWatch::Issue> issues = d.watch.issuesFor(d.addr, false, 0);
+    QCOMPARE(issues.count(), 1);
+    QCOMPARE(int(issues.first().kind), int(ArtNetNodeWatch::Issue::PortNotOutputting));
+    QCOMPARE(issues.first().port, 1);
+}
+
+void ArtNet_Test::nodeWatchBroadcastAndUnicastPickTheRightNodes()
+{
+    ArtNetNodeWatch w;
+    const QHostAddress a("172.18.2.10"), b("172.18.2.11");
+    const quint16 shortBit = ArtNetNodeWatch::GoodOutputShort;
+    // a outputs Port-Address 0 and 1, b outputs 1 and 2; both short on 1
+    ArtNetNodeInfo ra = nodeReply("A", "172.18.2.10", { 0, 1 }, { 0x80, uchar(0x80 | shortBit) });
+    ArtNetNodeInfo rb = nodeReply("B", "172.18.2.11", { 1, 2 }, { uchar(0x80 | shortBit), 0x80 });
+    for (int i = 0; i < 2; i++)
+    {
+        w.pollSent(i * kPollMs);
+        w.replyHeard(a, ra, i * kPollMs + 10);
+        w.replyHeard(b, rb, i * kPollMs + 10);
+    }
+
+    // Broadcast universe 1: both nodes output it, both shorts count
+    QCOMPARE(w.issuesFor(QHostAddress("172.18.2.255"), true, 1).count(), 2);
+    // Broadcast universe 0: only a carries it, and its port 1 is fine
+    QVERIFY(w.issuesFor(QHostAddress("172.18.2.255"), true, 0).isEmpty());
+    // Unicast to a, universe 1: a's short only
+    QList<ArtNetNodeWatch::Issue> ia = w.issuesFor(a, false, 1);
+    QCOMPARE(ia.count(), 1);
+    QCOMPARE(ia.first().name, QString("A"));
+    // Unicast to an address no node has: nothing, even though the
+    // Port-Address is in trouble elsewhere
+    QVERIFY(w.issuesFor(QHostAddress("172.18.2.99"), false, 1).isEmpty());
+
+    // b goes quiet: broadcast universe 2 (only b carries it) shows it silent
+    for (int i = 2; i < 7; i++)
+    {
+        w.pollSent(i * kPollMs);
+        w.replyHeard(a, ra, i * kPollMs + 10);
+    }
+    QList<ArtNetNodeWatch::Issue> ib = w.issuesFor(QHostAddress("172.18.2.255"), true, 2);
+    QCOMPARE(ib.count(), 1);
+    QCOMPARE(int(ib.first().kind), int(ArtNetNodeWatch::Issue::NodeSilent));
+    QCOMPARE(ib.first().ip, QString("172.18.2.11"));
+}
+
+void ArtNet_Test::nodeWatchBindIndexNumbersPortsPastFour()
+{
+    ArtNetNodeWatch w;
+    const QHostAddress a("172.18.2.10");
+    ArtNetNodeInfo first = nodeReply("Big", "172.18.2.10", { 0, 1, 2, 3 }, { 0x80, 0x80, 0x80, 0x80 }, 1);
+    ArtNetNodeInfo second = nodeReply("Big", "172.18.2.10", { 4, 5, 6, 7 },
+                                      { uchar(0x80 | ArtNetNodeWatch::GoodOutputShort), 0x80, 0x80, 0x80 }, 2);
+    for (int i = 0; i < 2; i++)
+    {
+        w.pollSent(i * kPollMs);
+        w.replyHeard(a, first, i * kPollMs + 10);
+        w.replyHeard(a, second, i * kPollMs + 11);
+    }
+    QList<ArtNetNodeWatch::Issue> issues = w.issuesFor(a, false, 4);
+    QCOMPARE(issues.count(), 1);
+    QCOMPARE(issues.first().port, 5);
+    // The first group's replies don't overwrite the second's state
+    QVERIFY(w.issuesFor(a, false, 0).isEmpty());
+}
+
+/** The captured CR041R reply, with port @a port's GoodOutput set to @a good */
+static QByteArray cr041rWith(int port, uchar good)
+{
+    QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+    reply[182 + port] = char(good);
+    return reply;
+}
+
+/** A controller on loopback with output universes aimed at @a target. Its
+ *  socket is never bound or written: nothing here leaves the machine. */
+static ArtNetController *testController(QObject *parent, const QHostAddress &target,
+                                        QList<quint32> universes)
+{
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress::LocalHost);
+    entry.setPrefixLength(8);
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    ArtNetController *ctrl = new ArtNetController(QNetworkInterface(), entry, sock, 0, parent);
+    foreach (quint32 u, universes)
+    {
+        UniverseInfo info;
+        info.type = ArtNetController::Output;
+        info.outputAddress = target;
+        info.outputUniverse = ushort(u);
+        info.outputTransmissionMode = ArtNetController::Standard;
+        ctrl->m_universeMap[u] = info;
+    }
+    return ctrl;
+}
+
+static QStringList texts(const QList<QPair<quint32, QString> > &problems)
+{
+    QStringList out;
+    typedef QPair<quint32, QString> Problem;
+    foreach (const Problem &p, problems)
+        out << p.second;
+    return out;
+}
+
+void ArtNet_Test::controllerReportsAndClearsProblems()
+{
+    const QHostAddress node("172.18.2.10");
+    QObject owner;
+    ArtNetController *ctrl = testController(&owner, node, { 1 });
+    /* By name, not &ArtNetController::problemsChanged: this test links the
+       artnet plugin DLL, and on Windows a member pointer into another DLL is
+       an import thunk that moc's signal lookup never matches ("Null signal").
+       ArtNetController isn't dllexport'ed (see qlcengine_export.h). */
+    QSignalSpy changed(ctrl, SIGNAL(problemsChanged()));
+    ctrl->m_testNowMs = 0;
+
+    // Heard, answering, port 2 (Port-Address 1) outputting
+    for (int i = 0; i < 3; i++)
+    {
+        ctrl->nodeIntervalElapsed();
+        ctrl->handlePacket(cr041rWith(1, 0x80), node);
+        ctrl->m_testNowMs += kPollMs;
+    }
+    QVERIFY(ctrl->outputProblems().isEmpty());
+    QCOMPARE(changed.count(), 0);
+
+    // A short on that port, in two replies
+    for (int i = 0; i < 2; i++)
+    {
+        ctrl->nodeIntervalElapsed();
+        ctrl->handlePacket(cr041rWith(1, 0x80 | ArtNetNodeWatch::GoodOutputShort), node);
+        ctrl->m_testNowMs += kPollMs;
+    }
+    QCOMPARE(changed.count(), 1);
+    QStringList t = texts(ctrl->outputProblems());
+    QCOMPARE(t.count(), 1);
+    QVERIFY2(QRegularExpression("^Art-Net node CR041R \\(172\\.18\\.2\\.10\\), port 2 \\(0:0:1\\): "
+                                "DMX output short since \\d\\d:\\d\\d$").match(t.first()).hasMatch(),
+             qPrintable(t.first()));
+
+    // The node goes quiet: one problem, silence (its port report is stale)
+    for (int i = 0; i < 4; i++)
+    {
+        ctrl->nodeIntervalElapsed();
+        ctrl->m_testNowMs += kPollMs;
+    }
+    QCOMPARE(changed.count(), 2);
+    t = texts(ctrl->outputProblems());
+    QCOMPARE(t.count(), 1);
+    QVERIFY2(t.first().startsWith("Art-Net node CR041R (172.18.2.10): stopped answering since "),
+             qPrintable(t.first()));
+
+    // Sends to it failing too: a second, distinct problem
+    UniverseInfo &u = ctrl->m_universeMap[1];
+    for (int i = 0; i < 3; i++)
+    {
+        ctrl->reportSendResult(u, 1, node, false);
+        ctrl->m_testNowMs += 600;
+    }
+    t = texts(ctrl->outputProblems(1));
+    QCOMPARE(t.count(), 2);
+    QVERIFY2(t.first().startsWith("Art-Net to 172.18.2.10: not reachable since "), qPrintable(t.first()));
+    QVERIFY(ctrl->outputProblems(0).isEmpty());   // no such universe
+
+    // Back, healthy: answering, port clean for 10 s, sends fine for 30 s
+    for (int i = 0; i < 12; i++)
+    {
+        ctrl->nodeIntervalElapsed();
+        ctrl->handlePacket(cr041rWith(1, 0x80), node);
+        ctrl->reportSendResult(u, 1, node, true);
+        ctrl->m_testNowMs += kPollMs;
+    }
+    QVERIFY2(ctrl->outputProblems().isEmpty(), qPrintable(texts(ctrl->outputProblems()).join("; ")));
+}
+
+void ArtNet_Test::pluginGroupsAProblemsUniverses()
+{
+    ArtNetPlugin plugin;
+    const QHostAddress node("172.18.2.10");
+    ArtNetController *ctrl = testController(&plugin, node, { 0, 1, 2 });
+    ctrl->m_testNowMs = 0;
+
+    ArtNetIO io;
+    io.controller = ctrl;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+
+    // Three universes to one target that can't be reached: one problem
+    for (int i = 0; i < 3; i++)
+    {
+        for (quint32 uni = 0; uni < 3; uni++)
+            ctrl->reportSendResult(ctrl->m_universeMap[uni], uni, node, false);
+        ctrl->m_testNowMs += 600;
+    }
+    const QStringList all = plugin.targetProblems();
+    QCOMPARE(all.count(), 1);
+    QVERIFY2(QRegularExpression("^Art-Net to 172\\.18\\.2\\.10: not reachable since \\d\\d:\\d\\d "
+                                "\\(universes 1, 2, 3\\)$").match(all.first()).hasMatch(),
+             qPrintable(all.first()));
+
+    // Per patch, for the Connections row: no universe suffix
+    const QStringList one = plugin.outputProblems(0, 1);
+    QCOMPARE(one.count(), 1);
+    QVERIFY(one.first().startsWith("Art-Net to 172.18.2.10: not reachable since "));
+    QVERIFY(plugin.outputProblems(5, 1).isEmpty());   // no such line
+
+
+    plugin.m_IOmapping.clear();
+}
+
+
+/****************************************************************************
+ * Nodes not on this computer's network, and ArtIpProg
+ *
+ * A node fresh out of the box sits on its factory address (2.x.x.x for
+ * Art-Net, or whatever its vendor ships) and is on no network this computer
+ * has an address on. It must show up as a node to configure -- not be
+ * dropped, and not look like any other node -- and its IP can only be set by
+ * a unicast ArtIpProg, which these tests prove is never broadcast.
+ ****************************************************************************/
+
+/** The CR041R capture re-addressed to @a ip with a different MAC */
+static QByteArray pollReplyFrom(const QString &ip, uchar macLast = 0x55)
+{
+    QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+    const QStringList parts = ip.split('.');
+    for (int i = 0; i < 4; i++)
+        reply[10 + i] = char(parts.at(i).toInt());
+    reply[206] = char(macLast);
+    return reply;
+}
+
+/** A real IPv4 interface that can broadcast, or an invalid one */
+static QNetworkInterface broadcastInterface()
+{
+    foreach (const QNetworkInterface &iface, QNetworkInterface::allInterfaces())
+    {
+        const QNetworkInterface::InterfaceFlags need =
+                QNetworkInterface::IsUp | QNetworkInterface::CanBroadcast;
+        if ((iface.flags() & need) != need || iface.flags() & QNetworkInterface::IsLoopBack)
+            continue;
+        foreach (const QNetworkAddressEntry &e, iface.addressEntries())
+            if (e.ip().protocol() == QAbstractSocket::IPv4Protocol)
+                return iface;
+    }
+    return QNetworkInterface();
+}
+
+/** One line on "the show network", 172.18.2.219/24, on a real interface
+ *  (QNetworkInterface::index() cannot be faked). Every controller sends into
+ *  @a sink. Returns false when the machine has no usable interface. */
+static bool showNetLine(ArtNetPlugin &plugin, const QSharedPointer<QUdpSocket> &sock,
+                        QList<QNetworkDatagram> *sink, QNetworkInterface *ifaceOut = NULL)
+{
+    const QNetworkInterface iface = broadcastInterface();
+    if (iface.isValid() == false)
+        return false;
+
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress("172.18.2.219"));
+    entry.setPrefixLength(24);
+    entry.setBroadcast(QHostAddress("172.18.2.255"));
+
+    ArtNetIO io;
+    io.iface = iface;
+    io.address = entry;
+    io.controller = new ArtNetController(iface, entry, sock, 0, &plugin);
+    io.controller->m_testSink = sink;
+    QObject::connect(io.controller, &ArtNetController::ipProgReplied,
+                     &plugin, &ArtNetPlugin::ipProgReplied);
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    if (ifaceOut != NULL)
+        *ifaceOut = iface;
+    return true;
+}
+
+void ArtNet_Test::ipProgQueryChangesNothing()
+{
+    ArtNetPacketizer ap;
+    QByteArray data;
+    ap.setupArtNetIpProg(data, ArtNetIpProgRequest());
+
+    QCOMPARE(data.size(), 34);
+    QCOMPARE(data.left(8), QByteArray("Art-Net\0", 8));
+    QCOMPARE(uchar(data.at(8)), uchar(0x00));    // OpCode 0xf800, little-endian
+    QCOMPARE(uchar(data.at(9)), uchar(0xf8));
+    QCOMPARE(uchar(data.at(10)), uchar(0x00));   // ProtVer 14
+    QCOMPARE(uchar(data.at(11)), uchar(14));
+    // Command 0: bit 7 clear, so a query -- the node answers and changes nothing
+    QCOMPARE(uchar(data.at(14)), uchar(0x00));
+    QCOMPARE(data.mid(15), QByteArray(19, '\0'));
+    QVERIFY(ArtNetIpProgRequest().programs() == false);
+}
+
+void ArtNet_Test::ipProgPacketLayout()
+{
+    ArtNetPacketizer ap;
+    QByteArray data;
+
+    ArtNetIpProgRequest r;
+    r.setIp = true;
+    r.ip = QHostAddress("172.18.2.60");
+    r.setMask = true;
+    r.mask = QHostAddress("255.255.255.0");
+    ap.setupArtNetIpProg(data, r);
+    QCOMPARE(data.size(), 34);
+    QCOMPARE(uchar(data.at(14)), uchar(0x80 | 0x04 | 0x02));   // enable + IP + mask
+    QCOMPARE(data.mid(16, 4), QByteArray("\xac\x12\x02\x3c", 4));   // ProgIp, big-endian
+    QCOMPARE(data.mid(20, 4), QByteArray("\xff\xff\xff\x00", 4));   // ProgSm
+    QCOMPARE(data.mid(24, 2), QByteArray(2, '\0'));                  // ProgPort: never
+    QCOMPARE(data.mid(26, 4), QByteArray(4, '\0'));                  // ProgDg: not asked
+
+    r.setGateway = true;
+    r.gateway = QHostAddress("172.18.2.1");
+    ap.setupArtNetIpProg(data, r);
+    QCOMPARE(uchar(data.at(14)), uchar(0x80 | 0x10 | 0x04 | 0x02));
+    QCOMPARE(data.mid(26, 4), QByteArray("\xac\x12\x02\x01", 4));
+
+    // DHCP: bit 6, and the node ignores the rest -- so send none of it
+    ArtNetIpProgRequest dhcp;
+    dhcp.enableDhcp = true;
+    ap.setupArtNetIpProg(data, dhcp);
+    QCOMPARE(uchar(data.at(14)), uchar(0xc0));
+    QCOMPARE(data.mid(16, 14), QByteArray(14, '\0'));
+
+    ArtNetIpProgRequest reset;
+    reset.resetToDefaults = true;
+    ap.setupArtNetIpProg(data, reset);
+    QCOMPARE(uchar(data.at(14)), uchar(0x88));
+}
+
+void ArtNet_Test::ipProgReplyParse()
+{
+    ArtNetPacketizer ap;
+    QByteArray data("Art-Net\0", 8);
+    data.append(char(0x00)).append(char(0xf9));      // OpIpProgReply
+    data.append(char(0)).append(char(14));
+    data.append(QByteArray(4, '\0'));                 // Filler1-4
+    data.append(QByteArray("\x02\x00\x00\x05", 4));   // ProgIp
+    data.append(QByteArray("\xff\x00\x00\x00", 4));   // ProgSm
+    data.append(QByteArray(2, '\0'));                 // ProgPort
+    data.append(char(0x40));                          // Status: DHCP enabled
+    data.append(char(0));                             // Spare2
+    data.append(QByteArray("\x02\x00\x00\x01", 4));   // ProgDg
+    data.append(QByteArray(2, '\0'));
+    QCOMPARE(data.size(), 34);
+
+    quint16 op = 0;
+    QVERIFY(ap.checkPacketAndCode(data, op));
+    QCOMPARE(op, quint16(ARTNET_IPREPLY));
+
+    ArtNetIpProgReply reply;
+    QVERIFY(ap.fillArtIpProgReply(data, reply));
+    QCOMPARE(reply.ip, QHostAddress("2.0.0.5"));
+    QCOMPARE(reply.mask, QHostAddress("255.0.0.0"));
+    QCOMPARE(reply.dhcpEnabled, true);
+    QCOMPARE(reply.hasGateway, true);
+    QCOMPARE(reply.gateway, QHostAddress("2.0.0.1"));
+
+    // An Art-Net 3 node stops before the gateway
+    ArtNetIpProgReply short3;
+    QVERIFY(ap.fillArtIpProgReply(data.left(28), short3));
+    QCOMPARE(short3.hasGateway, false);
+    QVERIFY(ap.fillArtIpProgReply(data.left(20), short3) == false);
+}
+
+void ArtNet_Test::pollReplyDhcpBits()
+{
+    ArtNetPacketizer ap;
+    ArtNetNodeInfo info;
+    QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+
+    /* The CR041R's Status2 is 0x08 (15-bit port addresses): static, and not
+       DHCP capable -- what DMX-Workshop says of it. */
+    QVERIFY(ap.fillArtPollReplyInfo(reply, info));
+    QCOMPARE(info.dhcpConfigured, false);
+    QCOMPARE(info.dhcpCapable, false);
+
+    reply[212] = char(0x0c);    // capable, static
+    QVERIFY(ap.fillArtPollReplyInfo(reply, info));
+    QCOMPARE(info.dhcpConfigured, false);
+    QCOMPARE(info.dhcpCapable, true);
+
+    reply[212] = char(0x0e);    // capable, and its address came from DHCP
+    QVERIFY(ap.fillArtPollReplyInfo(reply, info));
+    QCOMPARE(info.dhcpConfigured, true);
+    QCOMPARE(info.dhcpCapable, true);
+}
+
+void ArtNet_Test::offSubnetReplyIsListedAsNeedingItsIp()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    /* A new node still on its factory 2.x address answers on the show
+       network's cable. It arrived on our interface, so it is ours -- listed,
+       not dropped -- but nothing can be patched to it until its IP is set. */
+    plugin.handlePacket(pollReplyFrom("2.0.0.5"), QHostAddress("2.0.0.5"),
+                        uint(iface.index()));
+
+    const QList<QLCIOPlugin::Device> devs = plugin.discoveredDevices();
+    QCOMPARE(devs.count(), 1);
+    QCOMPARE(devs.first().address, QString("2.0.0.5"));
+    QCOMPARE(devs.first().line, quint32(0));
+    QVERIFY2(devs.first().attention.contains("factory"), qPrintable(devs.first().attention));
+    QVERIFY(devs.first().attention.contains("set its IP"));
+    QVERIFY(plugin.canConfigureDevice("2.0.0.5"));
+    QVERIFY(plugin.canConfigureDevice("2.0.0.99") == false);
+
+    // The other ways a node ends up without a usable address
+    QVERIFY(ArtNetPlugin::attentionFor(QHostAddress("169.254.10.20"), false).contains("DHCP"));
+    QVERIFY(ArtNetPlugin::attentionFor(QHostAddress("192.168.0.50"), false)
+                .contains("not on this computer's network"));
+    QVERIFY(ArtNetPlugin::attentionFor(QHostAddress("192.168.0.50"), true).isEmpty());
+
+    QVERIFY(sink.isEmpty());   // hearing a node sends nothing
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::sameSubnetNodeIsNotFlagged()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    plugin.handlePacket(pollReplyFrom("172.18.2.10"), QHostAddress("172.18.2.10"),
+                        uint(iface.index()));
+    const QList<QLCIOPlugin::Device> devs = plugin.discoveredDevices();
+    QCOMPARE(devs.count(), 1);
+    QVERIFY(devs.first().attention.isEmpty());
+    QVERIFY(plugin.canConfigureDevice("172.18.2.10"));
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::ipProgIsNeverSentToAnUnreachableNode()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    plugin.handlePacket(pollReplyFrom("2.0.0.5"), QHostAddress("2.0.0.5"),
+                        uint(iface.index()));
+
+    /* ArtIpProg names no node; unicast is the only safe way to send it, and
+       no line here can unicast to 2.0.0.5 without a router. Refuse -- never
+       fall back to a broadcast, which would re-address every node. */
+    ArtNetIpProgRequest r;
+    r.setIp = true;
+    r.ip = QHostAddress("172.18.2.60");
+    QString why;
+    QVERIFY(plugin.sendIpProg("2.0.0.5", r, &why) == false);
+    QVERIFY(why.contains("2.0.0.5"));
+    QVERIFY(plugin.sendIpProg("2.0.0.5", ArtNetIpProgRequest()) == false);
+    QVERIFY(sink.isEmpty());
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::ipProgIsUnicastToAReachableNode()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    ArtNetIpProgRequest r;
+    r.setIp = true;
+    r.ip = QHostAddress("172.18.2.60");
+    r.setMask = true;
+    r.mask = QHostAddress("255.255.255.0");
+    QVERIFY(plugin.sendIpProg("172.18.2.10", r));
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.10"));
+    QCOMPARE(sink.first().destinationPort(), ARTNET_PORT);
+    QCOMPARE(sink.first().data().size(), 34);
+    QCOMPARE(uchar(sink.first().data().at(14)), uchar(0x86));
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::ipProgReplyReachesThePlugin()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    QByteArray data("Art-Net\0", 8);
+    data.append(char(0x00)).append(char(0xf9)).append(char(0)).append(char(14));
+    data.append(QByteArray(4, '\0'));
+    data.append(QByteArray("\xac\x12\x02\x3c", 4));
+    data.append(QByteArray("\xff\xff\xff\x00", 4));
+    data.append(QByteArray(10, '\0'));          // ProgPort, Status, Spare, ProgDg, Spares
+    QCOMPARE(data.size(), 34);
+
+    QSignalSpy spy(&plugin, &ArtNetPlugin::ipProgReplied);
+    plugin.handlePacket(data, QHostAddress("172.18.2.60"), uint(iface.index()));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toString(), QString("172.18.2.60"));
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::discoveryPollIsLimitedBroadcastOnTheLine()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    QVERIFY(plugin.m_IOmapping.at(0).controller->sendDiscoveryPoll());
+    QCOMPARE(sink.count(), 1);
+    const QNetworkDatagram &dg = sink.first();
+    QCOMPARE(dg.destinationAddress(), QHostAddress(QHostAddress::Broadcast));
+    QCOMPARE(dg.destinationPort(), ARTNET_PORT);
+    // Out of THIS line's interface, from its address -- not the default route
+    QCOMPARE(dg.interfaceIndex(), uint(iface.index()));
+    QCOMPARE(dg.senderAddress(), QHostAddress("172.18.2.219"));
+    QByteArray poll;
+    ArtNetPacketizer().setupArtNetPoll(poll);
+    QCOMPARE(dg.data(), poll);
+
+    // A loopback line has no cable to broadcast on
+    QNetworkAddressEntry lo;
+    lo.setIp(QHostAddress::LocalHost);
+    lo.setPrefixLength(8);
+    ArtNetController loCtrl(QNetworkInterface::interfaceFromName("lo0").isValid()
+                                ? QNetworkInterface::interfaceFromName("lo0")
+                                : QNetworkInterface::interfaceFromName("lo"),
+                            lo, sock, 1);
+    loCtrl.m_testSink = &sink;
+    QVERIFY(loCtrl.sendDiscoveryPoll() == false);
+    QCOMPARE(sink.count(), 1);
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::rescanSendsOneDiscoveryPollPerInterface()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    // A second address on the same interface (an alias): a line of its own
+    QNetworkAddressEntry alias;
+    alias.setIp(QHostAddress("2.255.255.250"));
+    alias.setPrefixLength(8);
+    alias.setBroadcast(QHostAddress("2.255.255.255"));
+    ArtNetIO io;
+    io.iface = iface;
+    io.address = alias;
+    io.controller = new ArtNetController(iface, alias, sock, 1, &plugin);
+    io.controller->m_testSink = &sink;
+    plugin.m_IOmapping.append(io);
+
+    plugin.rescan();
+
+    // One subnet poll per line, one limited broadcast per interface
+    int subnet = 0, limited = 0;
+    foreach (const QNetworkDatagram &dg, sink)
+    {
+        if (dg.destinationAddress() == QHostAddress(QHostAddress::Broadcast))
+            limited++;
+        else
+            subnet++;
+    }
+    QCOMPARE(subnet, 2);
+    QCOMPARE(limited, 1);
+    QVERIFY(sink.at(0).destinationAddress() == QHostAddress("172.18.2.255"));
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::periodicPollIsUnchanged()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+
+    /* The 3 s poll on a line with an output: still exactly one datagram, to
+       the line's own broadcast address. The limited broadcast is for Rescan
+       only. */
+    QVERIFY(QMetaObject::invokeMethod(plugin.m_IOmapping.at(0).controller, "slotPollTick"));
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.255"));
+    QCOMPARE(sink.first().interfaceIndex(), uint(0));
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::nodeSetupHelpers()
+{
+    QCOMPARE(ArtNetNodeSetup::guessMask(QHostAddress("2.0.0.5")), QHostAddress("255.0.0.0"));
+    QCOMPARE(ArtNetNodeSetup::guessMask(QHostAddress("10.1.2.3")), QHostAddress("255.0.0.0"));
+    QCOMPARE(ArtNetNodeSetup::guessMask(QHostAddress("169.254.3.4")), QHostAddress("255.255.0.0"));
+    QCOMPARE(ArtNetNodeSetup::guessMask(QHostAddress("192.168.0.50")), QHostAddress("255.255.255.0"));
+
+    QCOMPARE(ArtNetNodeSetup::suggestAlias(QHostAddress("2.0.0.5"), QHostAddress("255.0.0.0")),
+             QHostAddress("2.255.255.250"));
+    QCOMPARE(ArtNetNodeSetup::suggestAlias(QHostAddress("192.168.0.50"), QHostAddress("255.255.255.0")),
+             QHostAddress("192.168.0.250"));
+    // Never the node's own address
+    QCOMPARE(ArtNetNodeSetup::suggestAlias(QHostAddress("192.168.0.250"), QHostAddress("255.255.255.0")),
+             QHostAddress("192.168.0.249"));
+
+    const QString add = ArtNetNodeSetup::aliasCommand("vlan0", QHostAddress("2.255.255.250"),
+                                                      QHostAddress("255.0.0.0"), true);
+    const QString del = ArtNetNodeSetup::aliasCommand("vlan0", QHostAddress("2.255.255.250"),
+                                                      QHostAddress("255.0.0.0"), false);
+    QVERIFY(add.contains("vlan0") && add.contains("2.255.255.250"));
+    QVERIFY(del.contains("vlan0") && del.contains("2.255.255.250"));
+#if defined(Q_OS_MACOS)
+    QCOMPARE(add, QString("sudo ifconfig vlan0 alias 2.255.255.250 netmask 255.0.0.0"));
+    QCOMPARE(del, QString("sudo ifconfig vlan0 -alias 2.255.255.250"));
+#elif !defined(Q_OS_WIN)
+    QCOMPARE(add, QString("sudo ip addr add 2.255.255.250/8 dev vlan0"));
+    QCOMPARE(del, QString("sudo ip addr del 2.255.255.250/8 dev vlan0"));
+#endif
+}
+
+void ArtNet_Test::nodeSetupOffersTheAliasForAnUnreachableNode()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    plugin.handlePacket(pollReplyFrom("2.0.0.5"), QHostAddress("2.0.0.5"),
+                        uint(iface.index()));
+
+    ArtNetNodeSetup dlg(&plugin, "2.0.0.5");
+    bool asked = false;
+    dlg.m_confirm = [&asked](const QString &) { asked = true; return true; };
+
+    QCOMPARE(dlg.reachable(), false);
+    QVERIFY(dlg.findChild<QPushButton *>("apply")->isEnabled() == false);
+    QVERIFY(dlg.findChild<QPushButton *>("query")->isEnabled() == false);
+    QVERIFY(dlg.findChild<QGroupBox *>("aliasBox")->isVisibleTo(&dlg));
+    const QString add = dlg.findChild<QLineEdit *>("aliasAdd")->text();
+    QVERIFY2(add.contains("2.255.255.250"), qPrintable(add));
+    QVERIFY2(add.contains(iface.name()) || add.contains(iface.humanReadableName()), qPrintable(add));
+    QVERIFY(dlg.findChild<QLabel *>("reach")->text().contains("Not on this network"));
+    QVERIFY(dlg.findChild<QLabel *>("header")->text().contains("02:4D:48:12:02:55"));
+
+    // Even called directly, it neither asks nor sends
+    QVERIFY(dlg.apply() == false);
+    QVERIFY(dlg.query() == false);
+    QVERIFY(asked == false);
+    QVERIFY(sink.isEmpty());
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::nodeSetupValidatesAndConfirmsBeforeSending()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    plugin.handlePacket(pollReplyFrom("172.18.2.10"), QHostAddress("172.18.2.10"),
+                        uint(iface.index()));
+    plugin.handlePacket(pollReplyFrom("172.18.2.11", 0x66), QHostAddress("172.18.2.11"),
+                        uint(iface.index()));
+
+    ArtNetNodeSetup dlg(&plugin, "172.18.2.10");
+    QString confirmText;
+    bool answer = false;
+    dlg.m_confirm = [&](const QString &text) { confirmText = text; return answer; };
+
+    QVERIFY(dlg.reachable());
+    QVERIFY(dlg.findChild<QGroupBox *>("aliasBox")->isVisibleTo(&dlg) == false);
+    QLineEdit *ip = dlg.findChild<QLineEdit *>("ip");
+    QLineEdit *mask = dlg.findChild<QLineEdit *>("mask");
+    QCOMPARE(mask->text(), QString("255.255.255.0"));   // the line's own mask
+
+    // What is refused before anything is asked
+    ip->setText("172.18.2");
+    QVERIFY(dlg.validate(NULL).isEmpty() == false);
+    ip->setText("172.18.2.219");                         // this computer
+    QVERIFY(dlg.validate(NULL).contains("own address"));
+    ip->setText("172.18.2.11");                          // another node
+    QVERIFY(dlg.validate(NULL).contains("another node"));
+    ip->setText("172.18.2.255");
+    QVERIFY(dlg.validate(NULL).contains("broadcast"));
+    ip->setText("172.18.2.60");
+    mask->setText("255.0.255.0");
+    QVERIFY(dlg.validate(NULL).contains("mask"));
+    mask->setText("255.255.255.0");
+    QVERIFY(dlg.validate(NULL).isEmpty());
+
+    // Declined: nothing sent
+    confirmText.clear();
+    answer = false;
+    QVERIFY(dlg.apply() == false);
+    QVERIFY(confirmText.contains("172.18.2.10"));
+    QVERIFY(confirmText.contains("172.18.2.60 / 255.255.255.0"));
+    QVERIFY(confirmText.contains("02:4D:48:12:02:55"));
+    QVERIFY(sink.isEmpty());
+
+    // Confirmed: one unicast ArtIpProg to the node's current address
+    answer = true;
+    QVERIFY(dlg.apply());
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.10"));
+    QCOMPARE(uchar(sink.first().data().at(14)), uchar(0x86));
+    QCOMPARE(sink.first().data().mid(16, 4), QByteArray("\xac\x12\x02\x3c", 4));
+
+    // A query asks without confirming, and programs nothing
+    sink.clear();
+    QVERIFY(dlg.query());
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(uchar(sink.first().data().at(14)), uchar(0x00));
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::nodeSetupShowsTheNodesAnswer()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkInterface iface;
+    if (showNetLine(plugin, sock, &sink, &iface) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    plugin.handlePacket(pollReplyFrom("172.18.2.10"), QHostAddress("172.18.2.10"),
+                        uint(iface.index()));
+
+    ArtNetNodeSetup dlg(&plugin, "172.18.2.10");
+    dlg.m_confirm = [](const QString &) { return true; };
+    dlg.findChild<QLineEdit *>("ip")->setText("172.18.2.60");
+    QVERIFY(dlg.apply());
+
+    // The node answers from its new address
+    ArtNetIpProgReply reply;
+    reply.ip = QHostAddress("172.18.2.60");
+    reply.mask = QHostAddress("255.255.255.0");
+    emit plugin.ipProgReplied("172.18.2.60", reply);
+    const QString status = dlg.findChild<QLabel *>("status")->text();
+    QVERIFY2(status.contains("172.18.2.60 / 255.255.255.0"), qPrintable(status));
+    QVERIFY(status.contains("DHCP off"));
+    QVERIFY(status.contains("moved from 172.18.2.10"));
+
+    // An unrelated node's answer is not this one's
+    reply.ip = QHostAddress("172.18.2.99");
+    emit plugin.ipProgReplied("172.18.2.99", reply);
+    QVERIFY(dlg.findChild<QLabel *>("status")->text() == status);
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::rigNetworkGateHoldsEverySend()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    ArtNetController *ctrl = plugin.m_IOmapping.at(0).controller;
+
+    // The laptop at school: the show's rig network is somewhere else.
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    QVERIFY(plugin.transmitRestricted());
+    QVERIFY(ctrl->transmitHeld());
+
+    // Opening an output polls at once -- not from here
+    ctrl->addUniverse(0, ArtNetController::Output);
+
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses");
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotPollTick"));
+    QVERIFY(ctrl->sendDiscoveryPoll() == false);
+    QVERIFY(ctrl->sendIpProg(QHostAddress("172.18.2.60"), ArtNetIpProgRequest()) == false);
+
+    // A node on that network polling us: no ArtPollReply goes back.
+    QByteArray poll;
+    ArtNetPacketizer().setupArtNetPoll(poll);
+    ctrl->handlePacket(poll, QHostAddress("172.18.2.60"));
+
+    QVERIFY2(sink.isEmpty(), qPrintable(QString("%1 datagram(s) left a held line").arg(sink.count())));
+    QCOMPARE(ctrl->getPacketSentNumber(), quint64(0));
+    // Nothing failed, either: held is not a send error
+    QVERIFY(ctrl->outputProblems().isEmpty());
+
+    // Back on the rig network: it resumes with the very next frame.
+    plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(ctrl->transmitHeld() == false);
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.255"));
+
+    // No networks at all: as it always was
+    plugin.setTransmitNetworks(QStringList());
+    QVERIFY(plugin.transmitRestricted() == false);
+    QVERIFY(ctrl->transmitHeld() == false);
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::rigNetworkGateAllowsRigAndLoopback()
+{
+    ArtNetPlugin plugin;
+    plugin.setTransmitNetworks(QStringList() << "172.18.2.7/20" << "bogus" << "fe80::/64"
+                                             << "10.0.0.0/33" << "172.18.0.0/20");
+    // Normalised, de-duplicated, the junk ignored
+    QCOMPARE(plugin.transmitNetworks(), QStringList() << "172.18.0.0/20");
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.2.219")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.15.255")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.16.1")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("10.4.12.7")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("127.0.0.1")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("127.4.5.6")));
+    // Not IPv4: never on a rig network, and no crash
+    QVERIFY(plugin.transmitAllowedFrom(QString("fe80::1")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("wled.local")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString()) == false);
+
+    // A loopback line is never held
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkAddressEntry lo;
+    lo.setIp(QHostAddress::LocalHost);
+    lo.setPrefixLength(8);
+    ArtNetController loCtrl(QNetworkInterface::interfaceFromName("lo0").isValid()
+                                ? QNetworkInterface::interfaceFromName("lo0")
+                                : QNetworkInterface::interfaceFromName("lo"),
+                            lo, sock, 1, &plugin);
+    loCtrl.m_testSink = &sink;
+    QVERIFY(loCtrl.transmitHeld() == false);
+    loCtrl.addUniverse(0, ArtNetController::Output);
+    sink.clear();
+    loCtrl.sendDmx(0, QByteArray(512, char(1)), true);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress(QHostAddress::LocalHost));
+}
+
+void ArtNet_Test::rigNetworkGateDecisionIsCachedOffTheSendPath()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    ArtNetController *ctrl = plugin.m_IOmapping.at(0).controller;
+    ctrl->addUniverse(0, ArtNetController::Output);
+    sink.clear();
+
+    // setTransmitNetworks() updates the line's cached flag by itself
+    QVERIFY(ctrl->m_held.load() == false);
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    QVERIFY(ctrl->m_held.load());
+    plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(ctrl->m_held.load() == false);
+
+    // The engine's reconnect tick asks again even with the list unchanged
+    // (a setTransmitNetworks() with the same list is no change): a stale
+    // flag is put right there.
+    QVERIFY(plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20") == false);
+    ctrl->m_held.store(true);
+    plugin.refreshTransmitGate();
+    QVERIFY(ctrl->m_held.load() == false);
+
+    /* The send path takes no gate lock and walks no list: with the plugin's
+       gate mutex held elsewhere (as by a setTransmitNetworks() in progress),
+       a send from another thread -- the universe thread's side -- still
+       completes. Taking the lock would deadlock it: the wait times out and
+       the lock is let go so the test fails instead of hanging. */
+    auto sendFromAnotherThread = [&]() {
+        std::promise<void> done;
+        std::future<void> finished = done.get_future();
+        plugin.m_transmitMutex.lock();
+        std::thread sender([&]() {
+            for (int i = 0; i < 1000; i++)
+            {
+                ctrl->transmitHeld();
+                ctrl->sendDmx(0, QByteArray(512, char(i & 0xFF)), true);
+            }
+            done.set_value();
+        });
+        const bool inTime = finished.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+        plugin.m_transmitMutex.unlock();
+        sender.join();
+        return inTime;
+    };
+
+    sink.clear();
+    QVERIFY2(sendFromAnotherThread(), "an allowed send waited for the gate lock");
+    QCOMPARE(sink.count(), 1000);
+
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    sink.clear();
+    QVERIFY2(sendFromAnotherThread(), "a held send waited for the gate lock");
+    QVERIFY(sink.isEmpty());
+
+    plugin.setTransmitNetworks(QStringList());
     plugin.m_IOmapping.clear();
 }

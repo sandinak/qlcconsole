@@ -361,4 +361,113 @@ void AimSolver_Test::aDeckHeadStandsAtTheDecksHeight()
     delete doc;
 }
 
+/* Centred fixture degrees from a solution, as DMX carries them. */
+static void centred(const AimSolver::Frame &f, const AimSolver::Solution &s,
+                    double &pan, double &tilt)
+{
+    pan = double(s.panDeg) - double(f.panMax) / 2.0;
+    tilt = double(s.tiltDeg) - double(f.tiltMax) / 2.0;
+}
+
+static double degreesBetween(const QVector3D &a, const QVector3D &b)
+{
+    const double d = double(QVector3D::dotProduct(a.normalized(), b.normalized()));
+    return qRadiansToDegrees(qAcos(qBound(-1.0, d, 1.0)));
+}
+
+void AimSolver_Test::calibrationIsInTheDmxAndOutOfThePicture()
+{
+    struct Case { const char *what; bool standing; bool panInv; bool tiltInv;
+                  float facing; float panOfs; float tiltOfs; QVector3D mark; };
+    const QList<Case> cases = {
+        { "hung, +3 pan",              false, false, false,   0.0f,  3.0f,  0.0f, QVector3D(4.0f, 6.0f, 0.0f) },
+        { "hung, -2.5 tilt",           false, false, false,   0.0f,  0.0f, -2.5f, QVector3D(1.0f, 5.0f, 0.0f) },
+        { "hung, both, facing SL",     false, false, false, 270.0f,  4.0f,  1.5f, QVector3D(5.0f, 2.0f, 0.0f) },
+        { "hung, pan inverted",        false, true,  false,   0.0f,  3.0f, -1.0f, QVector3D(4.0f, 6.0f, 0.0f) },
+        { "hung, tilt inverted",       false, false, true,   90.0f, -3.0f,  2.0f, QVector3D(0.5f, 4.0f, 0.0f) },
+        { "standing, both",            true,  false, false,   0.0f,  5.0f,  3.0f, QVector3D(4.0f, 8.0f, 6.0f) },
+        { "standing, both inverted",   true,  true,  true,  180.0f, -2.0f, -4.0f, QVector3D(1.0f, -3.0f, 7.0f) },
+    };
+
+    foreach (const Case &c, cases)
+    {
+        FixtureRigProps rp;
+        rp.mountingType = c.standing ? Truss::FloorMounted : Truss::TopHung;
+        rp.panInvert = c.panInv;
+        rp.tiltInvert = c.tiltInv;
+        rp.panZeroDir = c.facing;
+
+        AimSolver::Frame f;
+        f.position = QVector3D(2.0f, 3.0f, c.standing ? 1.0f : 5.0f);
+        f.floorMounted = AimSolver::floorMounted(rp);
+        f.panZeroDir = c.facing;
+        f.panInvert = c.panInv;
+        f.tiltInvert = c.tiltInv;
+        f.panMax = 540.0f;
+        f.tiltMax = 270.0f;
+
+        const AimSolver::Solution plain = AimSolver::solve(f, c.mark);
+        f.panOffsetDeg = c.panOfs;
+        f.tiltOffsetDeg = c.tiltOfs;
+        rp.panOffsetDeg = c.panOfs;
+        rp.tiltOffsetDeg = c.tiltOfs;
+        const AimSolver::Solution calibrated = AimSolver::solve(f, c.mark);
+        QVERIFY2(plain.reachable() && calibrated.reachable(), c.what);
+
+        // The DMX carries the offset, mirrored as the head is.
+        const double dPan = double(calibrated.panDeg - plain.panDeg);
+        const double dTilt = double(calibrated.tiltDeg - plain.tiltDeg);
+        const bool panMirrored = c.panInv != c.standing;
+        QVERIFY2(qAbs(qAbs(dPan) - double(qAbs(c.panOfs))) < 1e-3
+                 && (c.panOfs == 0.0f || (dPan > 0) == ((c.panOfs > 0) != panMirrored)),
+                 qPrintable(QString("%1: pan DMX moved %2 for an offset of %3")
+                            .arg(c.what).arg(dPan).arg(double(c.panOfs))));
+        QVERIFY2(qAbs(qAbs(dTilt) - double(qAbs(c.tiltOfs))) < 1e-3,
+                 qPrintable(QString("%1: tilt DMX moved %2 for an offset of %3")
+                            .arg(c.what).arg(dTilt).arg(double(c.tiltOfs))));
+
+        // ...and the picture does not: the beam drawn from it hits the mark.
+        double pan = 0.0, tilt = 0.0;
+        centred(f, calibrated, pan, tilt);
+        QVector3D dir;
+        QVERIFY(AimSolver::beamDirection(rp, pan, tilt, dir));
+        const double off = degreesBetween(dir, c.mark - f.position);
+        QVERIFY2(off < 0.05, qPrintable(QString("%1: the beam is drawn %2 degrees off its mark")
+                                        .arg(c.what).arg(off)));
+
+        // Reading the raw angles WITHOUT removing the offset would miss it.
+        FixtureRigProps raw = rp;
+        raw.panOffsetDeg = 0.0f;
+        raw.tiltOffsetDeg = 0.0f;
+        QVERIFY(AimSolver::beamDirection(raw, pan, tilt, dir));
+        QVERIFY2(degreesBetween(dir, c.mark - f.position) > 0.5,
+                 qPrintable(QString("%1: the offset made no difference to the raw ray").arg(c.what)));
+    }
+}
+
+void AimSolver_Test::zeroOffsetsInverseIsUnchanged()
+{
+    FixtureRigProps rp;
+    double panRel = 0.0, tiltRel = 0.0;
+    AimSolver::intendedAngles(rp, 30.0, -45.0, panRel, tiltRel);
+    QCOMPARE(panRel, 30.0);
+    QCOMPARE(tiltRel, -45.0);
+
+    // Hung, centred: straight down.
+    QVector3D dir;
+    QVERIFY(AimSolver::beamDirection(rp, 0.0, 0.0, dir));
+    QVERIFY(qAbs(double(dir.z()) + 1.0) < 1e-5);
+
+    // Tilted 90 at pan 0: level, downstage (+Y).
+    QVERIFY(AimSolver::beamDirection(rp, 0.0, 90.0, dir));
+    QVERIFY(qAbs(double(dir.y()) - 1.0) < 1e-5);
+
+    // Offsets come off before the geometry: an offset head at its offset
+    // reads exactly as the plain head at zero.
+    rp.panOffsetDeg = 7.0f;
+    rp.tiltOffsetDeg = -3.0f;
+    AimSolver::intendedAngles(rp, 7.0, -3.0, panRel, tiltRel);
+    QVERIFY(qAbs(panRel) < 1e-6 && qAbs(tiltRel) < 1e-6);
+}
+
 QTEST_MAIN(AimSolver_Test)

@@ -103,6 +103,13 @@ deck no longer stops a beam). Toggling a layer redraws the open overview
 where it is, keeping your angle and zoom. A structure's own editor always
 shows that structure, whatever layer it is on.
 
+**Or hide it from the overview itself.** The overview's **Layers** menu lists
+the show's layers with a tick each: untick one to hide it, **Show all** to
+bring everything back. It is the same switch as the layer's eye in the
+Studio (and saved with the show), so the two always agree. Showing, hiding
+and labels work in Operate mode too; locking a layer stays a Design-mode
+change.
+
 **Keeping it quick.** The Rig Overview draws on
 the graphics card (Metal on a Mac, OpenGL elsewhere) when the machine has
 one; its **GPU** box turns that off, back to drawing on the processor —
@@ -245,7 +252,10 @@ for some kinds show only there:
   half gathered at its end, with **Opening width** for how wide the gap
   between them is) or **Flown out** (taken up out of the way: not
   drawn, and the light goes through; the plot shows where it hangs from,
-  dashed). Set while designing; it isn't cued.
+  dashed). On its own it is set while designing; to move it in the show,
+  drive it by a curtain fixture (below).
+- **Driven by** (main drape, traveler) — the curtain fixture that moves it;
+  see [Curtains that move](#curtains-that-move).
 - **Opening width** and **Opening height** (proscenium) — the opening,
   centred; the piers are the rest of the width and the header the rest of
   the height. Light goes through the opening and lands on the piers, the
@@ -264,6 +274,45 @@ drapes hang in folds, a scrim is seen through, and a wall has its faces, top
 and ends. Everything but a flown curtain stops the
 light that reaches it and takes its pool — a beam coming down on a wall lands
 on its top — and hides what is behind it.
+
+#### Curtains that move
+
+A main drape or a traveler can open and close in the show, because a fixture
+moves it. In its editor, **Driven by → Add curtain fixture** adds a
+**Generic → Stage Curtain** fixture named after it (*Main drape curtain*) and links
+the two; or pick a curtain fixture you already have. It's saved with the
+show. The curtain fixture is an ordinary fixture with no light and no power
+draw: it isn't counted in power estimates and isn't listed in Inventory as
+something to place, and colour, dimmer and position palettes don't touch it.
+
+| Channel | 0 | 255 |
+|---|---|---|
+| **Open** | closed | open by its **Opening width** |
+| **Open fine** (16-bit modes) | finer steps for Open | |
+| **Fly** (main drape) | in, at its trim | flown out |
+
+A main drape gets the **Open + Fly** mode, a traveler **Open**; change the
+mode in the Fixture Manager if you need to (**Open 16-bit**, **Open 16-bit +
+Fly**). Put the channel in a scene, chaser step, palette or Show Tree layer
+like any other. The **fade time is how long the move takes**: a scene that
+sets Open to 255 with a 6 s fade opens the curtain over six seconds. There's
+no special curtain cue.
+
+**What you see.** The plot and the Rig Overview draw a driven curtain where
+its channel puts it, and follow it smoothly while it fades. The halves part
+from the centre, out to the opening width, and Fly lifts it until it's gone. A
+driven curtain follows its channel and **0 means closed**, so it's closed
+until a look opens it, whatever **Curtain** says. When the look holding the
+channel is released, the channel goes back to 0 and the curtain closes,
+the same as any other channel. **Curtain** still counts in two cases: when
+the Rig Overview's **Live** is off (it shows the design, not the DMX), and
+when the curtain fixture has been deleted. A drape that isn't driven
+looks and behaves exactly as before.
+
+**Moving the real one.** An unpatched curtain fixture moves only the drawing.
+To have a cue move the real curtain, patch the curtain fixture to the address
+of the curtain's motor controller, or to a DMX relay box that runs it.
+Signals to the crew (standby and go cue lights) aren't built yet.
 
 ### Fountains
 
@@ -465,8 +514,17 @@ of, and doesn't override, the real locks above.
   Properties: the
   plot follows its fields as you change them, **Cancel** puts back
   everything it did, and **OK** is one undo step. Lengths are entered in
-  the show's units (feet-and-inches, or metres); colours are one swatch
+  your units — feet-and-inches, or metres (see below); colours are one swatch
   button showing the colour and its hex value, with **Reset**.
+- **Units are yours, not the show's.** The grid, rulers, H/V/Z readouts,
+  dimension labels and every length field use **Settings → Units**:
+  **metres** for mm, cm or m, **feet-and-inches** for inches or feet (finer
+  units would only crowd a stage grid). The Grid button's menu shows which,
+  and says where to change it. A show opens in your units whatever it was
+  saved in — the stage stays the same size, converted exactly — and is
+  saved in them (whole numbers for older versions, the exact size beside
+  them). The first show you ever open decides for you, once, if you had
+  never chosen: one saved in feet sets **Settings → Units** to feet.
 - **Select All Similar** — on a fixture (plot or list), every fixture of the
   same model and mode; on a fixture group's Layers row, the groups of the
   same fixtures laid out the same way.
@@ -490,7 +548,13 @@ the Rig Overview show what it's actually doing, not just where it sits:
   meets that surface — or on the cyclorama, for a beam going level or up.
   A beam that lands on more than one thing — half on the end of the cyc and
   half past it, or across the edge of a deck — is split between them, each
-  part of the pool on what it reaches.
+  part of the pool on what it reaches. Platforms, risers and steps are
+  solid: a beam thrown across the stage stops at a riser's side as well as
+  its top, washes the faces it reaches, and lights nothing behind the riser
+  or below the floor. In a side or front elevation (the Angled view with
+  the eye level, up to 10°) the beam is cut round each riser it meets, and
+  the light on a riser's top and lit face shows as a bright band just inside
+  that edge.
 - **Gobos and prisms** — a beam's pool is drawn through whatever its
   optics are doing: the gobo in the current slot (an open slot, or a wheel
   spinning between slots, shows none), turned by gobo rotation, repeated by
@@ -511,6 +575,26 @@ the Rig Overview show what it's actually doing, not just where it sits:
 
 Both overlays are visualization aids only — they aren't saved with the
 workspace.
+
+### Line of sight
+
+**Show → Line of sight** says what stands in a beam's way and how the views
+show it:
+
+- **What blocks a beam** — drapes and cyc, walls and proscenium, platforms
+  and risers, towers, trusses, pipes and stands (trusses, pipes and stands
+  only when at least 20 cm thick). Saved with the show; it's what a follow
+  spot's *Fade When Blocked*, an Aim look's *Dim lights that can't see the
+  target* and the blocked traces go by. See
+  [Line of sight](stage-targets.md#line-of-sight).
+- **Beams stop at what is in their way** — in the Angled view and the Rig
+  Overview a beam already stops at a platform (its top or its side), a
+  drape or a wall; with this on it stops at a tower or a truss too. Off by
+  default; remembered.
+
+On the plot, a head aimed at a target it can't see draws its aim line **red
+and dashed to the blocker**, with a cross where it stops and a faint dotted
+line on to the target; hover it for what's in the way and how far out.
 
 ### Washes and profiles: the edge of a pool
 
@@ -583,6 +667,30 @@ step sends a sheet of **lit air rising** off it, both as bright as the
 pixels (colour × dimmer) and scaled by the haze. Lanterns have their own
 halo; movers show their beams.
 
+The glow is lit air round the light, so it is hidden by what stands in
+front of the light: a row of steps behind the closed main drape shows no
+glow on the drape (or on the floor in front of it), and where the drape
+opens the glow shows through the gap. A scrim is seen through, glow and all.
+
+### Colour rings
+
+A mover with a **colour ring** round its lens (a ring of LEDs on one
+colour-macro channel) shows it, live, on the **2D plot** — a band round
+the head — and in the **Rig Overview** — a ring of points on the head's
+face, turning with pan and tilt and hidden when the face is turned away.
+Off is dark glass; a colour lights it all round; a chase
+(Red/Yellow-Chase, RGB/Random-Chase) steps its colours round four times a
+second. The ring has no dimmer: it shows whatever the spot's dimmer says.
+
+What counts as a ring, in order: a head of its own whose only colour is a
+colour wheel/macro channel, on a fixture that moves (a definition with a
+**Ring** head); else a Colour channel named "Circle", "Ring" or "Halo";
+else a Colour channel after the fixture's first whose slots include an
+off and a chase (a wheel has neither). Anything else draws no ring. A
+ring that is a head of its own is not drawn as a second mover: the
+fixture is still one head on its yoke, and the spot's colour (its wheel)
+is the beam's.
+
 ### Lasers and star projectors
 
 A fixture definition can say what its light *is* (Fixture Editor → Look in
@@ -606,6 +714,143 @@ other light, and follow a mover's pan and tilt.
   of flame rise off it, wavering, and warm what is near it; below half it is
   off. The bundled **Generic → Silk Flame (relay)** is one channel for a DMX
   relay pack.
+
+## Calibration offsets
+
+A moving head's **Pan offset** and **Tilt offset** (Fixture Properties →
+the rig box, or [Focus mode](#focus-mode)) correct the *physical* head: a
+yoke bolted a few degrees round, a tilt that homes a little high. They are
+calibration, not design:
+
+- **The DMX includes them.** Every aimed look, line target and follow spot
+  adds the offset after working out where the head should point, so the
+  real light lands where the design says.
+- **The views leave them out.** The plot, its pan/tilt gauges, the Studio,
+  the Rig Overview, beams, footprints and line-of-sight rays all draw the
+  **intended** aim. A head with +3° of pan offset aimed at the Main Drape
+  draws its beam on the Main Drape, not 3° off it. (What you see is the
+  light on stage, assuming the offset exactly cancels the fault — which is
+  what setting it means.)
+
+**Facing (pan zero)**, the invert switches and standing or hanging are not
+calibration: they are how the head is rigged, and both the DMX and the views
+use them.
+
+**Test orientation → Aim at target** in Fixture Properties points the head
+the way an Aim look would, offsets included, so you can set them by eye.
+For a whole rig, use Focus mode.
+
+## Focus mode
+
+Aligning the rig before a show, one head at a time, with the Xbox
+controller or the keyboard.
+
+**Start it** from **Focus** on the Lighting Studio toolbar, **Focus** on the
+Rig Overview's bar, **View → Focus Mode…** (⌘⌥F), or by holding **View +
+Menu** on the controller. Choose:
+
+- **Heads** — the ones selected in the programmer, or every moving head on
+  the plot (only heads that can pan or tilt and are placed on the plot).
+- **Order** — by stage position (front to back, then house left to right)
+  or as selected (a group's own order).
+- **Aim at** — the selected scene's aim (each head its own point: on a
+  line target every head has its own place on the line) or a stage target.
+- **Then check at** — an optional second reference to check the same
+  offsets somewhere else across the stage.
+- **The other heads** — dark, dimmed, or left as they are; and how bright
+  to light the head being focused.
+- **Use** — **Controller** or **Keyboard**: which device nudges the heads
+  (see [Controller or keyboard](#controller-or-keyboard) below).
+
+It is a Design-mode tool: in Perform it refuses, and switching to Perform
+ends it (unsaved nudges go back). If functions are running it says so — it
+takes over only the heads it is focusing.
+
+Each head in turn is aimed at its reference, lit white with its shutter
+open, and ringed on the plot and in the Rig Overview. Nudge it until the
+real light lands on the mark: the light moves, and the views keep drawing
+the intended aim while the panel shows the offsets.
+
+| Do | Controller | Keyboard |
+|---|---|---|
+| Next / previous head | RB / LB | ] / [ (or Tab / ⇧Tab) |
+| Nudge (coarse) | Left stick | ⇧ + arrows (1°) |
+| Nudge (fine) | Right stick | — |
+| One step (0.1°) | D-pad | Arrows |
+| Step size ×10 / ÷10 | — | + / − |
+| Save this head | A | Return |
+| Back to what was saved | B | Backspace |
+| Zero the offsets | X | 0 |
+| The other reference | Y | R |
+| Undo the last save | View | ⌘Z |
+| Leave | Menu | Esc |
+
+### The controller map
+
+The panel draws the device it is using, with each control labelled by what
+it does in Focus mode — **Next head** on RB, **Save** on A, **Nudge** on the
+left stick, **Fine nudge** on the right, the step size on the D-pad — and,
+under each, the controller's own name for it. Here RB is held and the left
+stick pushed up and to the right:
+
+![Focus mode's controller map: each control labelled with its action](../images/focus-mode-controller-map.png)
+
+- **It is live.** A button lights while you hold it and a stick's cap
+  follows the stick, so you can check on the real controller that each
+  control does what the map says.
+- **It is the controller's own mapping.** The labels come from the
+  controller profile's roles (see **Controllers** below), not from a fixed
+  picture: another make of pad is drawn the same way with its own names
+  (Cross, Circle, R1, Options…), and a control its profile does not have is
+  greyed and marked *not on this controller*. The triggers, the stick clicks
+  and the Guide button are not used and are always grey.
+- **Click a control** on the map to do what pressing it would.
+
+### Controller or keyboard
+
+**Use: Controller | Keyboard**, in the setup and at the top of the panel,
+picks which device drives the nudges and which map is shown.
+
+- **The default** is **Controller** when a controller Focus mode can use is
+  connected (its profile names the buttons it needs), otherwise
+  **Keyboard**. The choice you make is remembered on this computer: once
+  you pick Keyboard, Focus mode starts on the keyboard until you pick the
+  controller again.
+- **On the keyboard,** the map shows the keys Focus mode uses, each
+  labelled with its action, and each lights while it is pressed (below,
+  ⇧ and ↑). A controller that is also connected is **ignored** — its
+  buttons and sticks do nothing — so a controller resting on the desk
+  cannot drift a head.
+- **The keys work either way.** With the controller chosen, every keyboard
+  shortcut in the table above still works.
+- **If the controller disconnects** in the middle of a session, Focus mode
+  switches to the keyboard and says so. When it comes back, the panel
+  offers **Use the controller**; it does not switch back on its own.
+
+![Focus mode's keyboard map, with Shift and Up held](../images/focus-mode-keyboard-map.png)
+
+### Sticks, saving and profiles
+
+The sticks feel like the follow spot's — they are the same stick, with the
+controller profile's deadzone and sensitivity — scaled for alignment: full
+left stick is 8° a second, full right stick 1°. Stick right is more pan
+offset, stick up more tilt offset; on an inverted or standing head that
+can look mirrored on stage, and the numbers say which way it went.
+
+**Saving.** A nudge changes the head live but is not an edit until you save
+it (A): then it is the head's offset, marks the show changed, and **File →
+Save** keeps it. The panel says **Unsaved** while a head differs from what
+was saved, and counts the heads you have checked. Leaving with unsaved
+heads asks: **Save All**, **Discard** (back as they were saved), or
+**Cancel**. Afterwards the whole session is one step of the Lighting
+Studio's undo (⌘Z).
+
+**Controllers.** Buttons are matched by what they are — A, LB, View… — not
+by number: a controller profile (`.qxhid`) can say so with `role="…"` on each
+axis and button, and one without roles still works if its controls have the
+usual names. The Xbox profile has roles, and the D-pad as buttons 11–14.
+While Focus mode is on it has the controller to itself: chaser stepping
+and the follow spot wait.
 
 ## Lanterns
 
@@ -700,3 +945,5 @@ Two small but load-bearing visual cues:
 | **Shift-drop** | Holding Shift as you drop a fixture over a truss, pipe or deck, to hang or stand it there; a plain drop only moves it. |
 | **Beneath (faded)** | In the Top view, a fixture with a structure more than half a metre above it, drawn faded and dashed but still clickable. |
 | **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |
+| **Calibration offsets** | A head's pan/tilt offsets: in the DMX so the real light lands where intended, left out of every view so it shows the intended aim. |
+| **Focus mode** | Stepping through the heads, each aimed at its reference, to set their calibration offsets with the controller or keyboard. |

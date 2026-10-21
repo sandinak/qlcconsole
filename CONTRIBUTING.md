@@ -34,3 +34,18 @@ Given the above, the guidelines you are invited to follow are:
 
 In general there are cases and cases. If you changed just a few lines of code, most likely the review will be quick and the possibility to be merged are high.
 However, if you changed dozens or hundreds of lines, all the above are applied. The more you explain what you did and why you did it, the less it will take for a review and an eventual discussion.
+
+### Images: no colour profiles in PNGs
+
+Every PNG in the tree must be untagged -- no `iCCP`, `sRGB`, `gAMA`, `cHRM`
+or `cICP` chunk. Qt turns those into a colour space on the loaded image, and
+Qt 6.11.x on macOS frees that colour space too early when it converts the image
+for AppKit (cursors, drag pixmaps, icons; QTBUG-147602), which crashes the app.
+Image editors and macOS screenshots add a profile by default, so after adding
+or replacing a picture run
+
+    tools/png-colour-chunks.py --strip path/to/new.png
+
+It drops only those chunks; the pixels are untouched, and the app never
+colour-managed them anyway. `make check` (unittest.sh) and `help-shots.sh` fail
+if any PNG still carries one.

@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 #include <QDialogButtonBox>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QPushButton>
@@ -88,6 +89,7 @@ PaletteEditDialog::PaletteEditDialog(QLCPalette *existing, QWidget *parent, Doc 
                     break;
                 }
             }
+            m_dimBlockedCheck->setChecked(m_existing->dimWhenBlocked());
             break;
         default:
             m_value1Spin->setValue(m_existing->intValue1());
@@ -138,6 +140,11 @@ void PaletteEditDialog::buildUi()
     }
     m_targetCombo->setToolTip(tr("Associate this palette with a named stage target position"));
     form->addRow(m_targetLabel, m_targetCombo);
+    m_dimBlockedCheck = new QCheckBox(tr("Dim lights that can't see the target"), this);
+    m_dimBlockedCheck->setObjectName("aimDimWhenBlocked");
+    m_dimBlockedCheck->setToolTip(tr("Fade a head out while a drape, wall, riser or tower stands "
+                                     "between it and the target; back up when clear"));
+    form->addRow(QString(), m_dimBlockedCheck);
 
     QDialogButtonBox *bb = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -184,6 +191,7 @@ void PaletteEditDialog::syncEditorsToType()
     m_value2Spin->setVisible(isPanTilt);
     m_targetLabel->setVisible(isAim);
     m_targetCombo->setVisible(isAim);
+    m_dimBlockedCheck->setVisible(isAim);
 
     switch (type)
     {
@@ -236,6 +244,7 @@ void PaletteEditDialog::accept()
     case QLCPalette::Aim:
         // Aim carries no m_values — position is derived from rig geometry.
         p->setStageTargetId(m_targetCombo->currentData().toUInt());
+        p->setDimWhenBlocked(m_dimBlockedCheck->isChecked());
         break;
     case QLCPalette::Dimmer:
     case QLCPalette::Gobo:

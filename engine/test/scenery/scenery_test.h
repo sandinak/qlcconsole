@@ -38,6 +38,11 @@ private slots:
     void anOpenCurtainHangsOnlyAtItsEnds();
     void aProsceniumIsTwoPiersAndAHeader();
     void xmlRoundTripAndStorage();
+    void aDrivenCurtainOpensAsItsChannelMoves();
+    void flyingTakesItUpAndOut();
+    void theChannelsAreFoundByName();
+    void theBundledCurtainIsNotALight();
+    void theDriverIsSavedAndOldShowsAreUndriven();
 };
 
 #endif

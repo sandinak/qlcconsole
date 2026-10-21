@@ -1,0 +1,619 @@
+/*
+  Q Light Controller Plus
+  linetarget_test.cpp
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#include <QtTest>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+
+#include "linetarget_test.h"
+#include "linecurve.h"
+#include "linespread.h"
+#include "aimsolver.h"
+#include "monitorproperties.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "stagetarget.h"
+#include "qlcpalette.h"
+#include "scenevalue.h"
+#include "fixture.h"
+#include "scene.h"
+#include "doc.h"
+
+static bool near3(const QVector3D &a, const QVector3D &b, float tol = 0.01f)
+{
+    return (a - b).length() <= tol;
+}
+
+static QString str(const QVector3D &v)
+{
+    return QString("(%1, %2, %3)").arg(double(v.x()), 0, 'f', 3)
+                                  .arg(double(v.y()), 0, 'f', 3)
+                                  .arg(double(v.z()), 0, 'f', 3);
+}
+
+void LineTarget_Test::aStraightLineIsMeasuredEvenly()
+{
+    LineCurve c({ QVector3D(-2, 0, 0), QVector3D(2, 0, 0) });
+    QVERIFY(c.isValid());
+    QVERIFY(qAbs(c.length() - 4.0) < 1e-4);
+    QVERIFY2(near3(c.pointAt(0.25), QVector3D(-1, 0, 0), 1e-3f), qPrintable(str(c.pointAt(0.25))));
+    QVERIFY(near3(c.pointAt(0.0), QVector3D(-2, 0, 0), 1e-4f));
+    QVERIFY(near3(c.pointAt(1.0), QVector3D(2, 0, 0), 1e-4f));
+    // Clamped, not extrapolated.
+    QVERIFY(near3(c.pointAt(1.5), QVector3D(2, 0, 0), 1e-4f));
+    QVERIFY(near3(c.pointAt(-1.0), QVector3D(-2, 0, 0), 1e-4f));
+
+    QVERIFY(!LineCurve({ QVector3D(1, 1, 1) }).isValid());
+    QVERIFY(LineCurve({ QVector3D(1, 1, 1) }).pointAt(0.5) == QVector3D(1, 1, 1));
+    QVERIFY(LineCurve({}).pointAt(0.5) == QVector3D());
+}
+
+void LineTarget_Test::theCurvePassesThroughEveryPoint()
+{
+    const QVector3D mid(0, 1, 0.5f);
+    LineCurve c({ QVector3D(-2, 0, 0), mid, QVector3D(2, 0, 0) });
+    QVERIFY2(c.length() > 4.0, "bending a line makes it longer");
+    // Symmetric, so the middle handle is exactly half-way along.
+    QVERIFY2(near3(c.pointAt(0.5), mid, 0.01f), qPrintable(str(c.pointAt(0.5))));
+    bool through = false;
+    foreach (const QVector3D &s, c.samples())
+        if (near3(s, mid, 1e-4f))
+            through = true;
+    QVERIFY2(through, "no sample sits on the middle handle");
+}
+
+void LineTarget_Test::halfWayIsHalfTheDistance()
+{
+    // Unevenly spaced handles on one straight line: 1 m, then 4 m.
+    LineCurve c({ QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(5, 0, 0) });
+    QVERIFY2(qAbs(c.length() - 5.0) < 0.01, qPrintable(QString::number(c.length())));
+    QVERIFY2(near3(c.pointAt(0.5), QVector3D(2.5f, 0, 0), 0.02f), qPrintable(str(c.pointAt(0.5))));
+    QVERIFY2(near3(c.pointAt(0.1), QVector3D(0.5f, 0, 0), 0.02f), qPrintable(str(c.pointAt(0.1))));
+}
+
+void LineTarget_Test::spansAndNearestPoints()
+{
+    LineCurve c({ QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(5, 0, 0) });
+    QCOMPARE(c.spanAt(0.05), 0);       // in the first metre
+    QCOMPARE(c.spanAt(0.5), 1);
+    QCOMPARE(c.spanAt(1.0), 1);
+    QVERIFY(qAbs(c.nearestFraction(QVector3D(2.5f, 1.0f, 0)) - 0.5) < 0.01);
+    QVERIFY(qAbs(c.nearestFraction(QVector3D(-3, 0, 0)) - 0.0) < 1e-6);
+}
+
+void LineTarget_Test::recentringKeepsTheLineInPlace()
+{
+    StageTarget t(1);
+    t.setPosition(QVector3D(10, 5, 0));
+    t.setLinePoints({ QVector3D(0, 0, 0), QVector3D(4, 0, 0) });
+    t.makeLine();
+    const QVector<QVector3D> before = t.linePointsAround(t.position());
+    t.recentreLine();
+    const QVector<QVector3D> after = t.linePointsAround(t.position());
+    QCOMPARE(after.size(), before.size());
+    for (int i = 0; i < after.size(); ++i)
+        QVERIFY2(near3(after.at(i), before.at(i), 1e-4f), qPrintable(str(after.at(i))));
+    QVERIFY2(near3(t.position(), QVector3D(12, 5, 0), 1e-3f), qPrintable(str(t.position())));
+    QVERIFY(near3(LineCurve(t.linePoints()).pointAt(0.5), QVector3D(), 1e-3f));
+}
+
+void LineTarget_Test::lightsSpreadEndToEnd()
+{
+    const LineSpread::Settings s;
+    QCOMPARE(s.spread, 5.0);
+    const QVector<double> six = LineSpread::fractions(6, s);
+    QCOMPARE(six.size(), 6);
+    for (int k = 0; k < 6; ++k)
+        QVERIFY2(qAbs(six.at(k) - k * 0.2) < 1e-9, qPrintable(QString::number(six.at(k))));
+    QCOMPARE(LineSpread::fractions(1, s), QVector<double>({ 0.5 }));
+    QVERIFY(LineSpread::fractions(0, s).isEmpty());
+}
+
+void LineTarget_Test::lightsAreOrderedAlongTheLine()
+{
+    const QVector<QVector3D> where = { QVector3D(3, 0, 6), QVector3D(-3, 0, 6),
+                                       QVector3D(0, 0, 6), QVector3D(0, 2, 6) };
+    // Along +X: left, then the two level in the middle in the order given, then right.
+    QCOMPARE(LineSpread::orderAlong(where, QVector3D(-2, 3, 0), QVector3D(2, 3, 0)),
+             QVector<int>({ 1, 2, 3, 0 }));
+    // The line drawn the other way round: the other way round.
+    QCOMPARE(LineSpread::orderAlong(where, QVector3D(2, 3, 0), QVector3D(-2, 3, 0)),
+             QVector<int>({ 0, 2, 3, 1 }));
+    // No length: as given.
+    QCOMPARE(LineSpread::orderAlong(where, QVector3D(1, 1, 0), QVector3D(1, 1, 0)),
+             QVector<int>({ 0, 1, 2, 3 }));
+}
+
+void LineTarget_Test::aLineSavesAndLoads()
+{
+    StageTarget t(7);
+    t.setName("DS edge");
+    t.setPosition(QVector3D(0, 1.5f, 0));
+    t.setLinePoints({ QVector3D(-2, 0, 0), QVector3D(0, 0.4f, 0.25f), QVector3D(2, 0, 0) });
+    t.makeLine();
+
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(t.saveXML(&w));
+    }
+    QVERIFY2(xml.contains("Kind=\"line\""), xml.constData());
+    QCOMPARE(xml.count("<LinePoint"), 3);
+
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    StageTarget back(0);
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.id(), quint32(7));
+    QVERIFY(back.isLine());
+    QCOMPARE(back.linePoints().size(), 3);
+    QVERIFY(near3(back.linePoints().at(1), QVector3D(0, 0.4f, 0.25f), 1e-3f));
+    QVERIFY(near3(back.position(), QVector3D(0, 1.5f, 0), 1e-3f));
+
+    // A point target writes no points at all.
+    StageTarget mark(8);
+    xml.clear();
+    {
+        QXmlStreamWriter w(&xml);
+        mark.saveXML(&w);
+    }
+    QVERIFY(!xml.contains("LinePoint"));
+}
+
+void LineTarget_Test::loadingIsForgiving()
+{
+    const QByteArray xml =
+        "<Targets>"
+        "<StageTarget ID=\"1\" Name=\"bare\" X=\"1\" Y=\"2\" Z=\"0\" Kind=\"line\"/>"
+        "<StageTarget ID=\"2\" Name=\"mark\" X=\"3\" Y=\"4\" Z=\"0\">"
+        "<LinePoint X=\"-1\" Y=\"0\" Z=\"0\"/><LinePoint X=\"1\" Y=\"0\" Z=\"0\"/>"
+        "</StageTarget>"
+        "<After/>"
+        "</Targets>";
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());          // <Targets>
+    QVERIFY(r.readNextStartElement());
+    StageTarget a(0);
+    QVERIFY(a.loadXML(r));
+    QVERIFY(a.isLine());
+    QCOMPARE(a.linePoints(), StageTarget::defaultLinePoints());
+
+    QVERIFY(r.readNextStartElement());
+    StageTarget b(0);
+    QVERIFY(b.loadXML(r));
+    QVERIFY(!b.isLine());
+    QVERIFY(b.linePoints().isEmpty());
+    QVERIFY(near3(b.position(), QVector3D(3, 4, 0)));
+
+    QVERIFY(r.readNextStartElement());
+    QCOMPARE(r.name().toString(), QString("After"));
+
+    // An unknown kind (a newer file) still reads as a plain mark.
+    QCOMPARE(StageTarget::stringToKind("spiral"), StageTarget::Kind::None);
+    QCOMPARE(StageTarget::stringToKind("line"), StageTarget::Kind::Line);
+}
+
+static Fixture *makeSpot(Doc *doc, const QString &name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt };
+    for (int k = 0; k < 2; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Pan" : "Tilt");
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(quint32(doc->fixtures().size() * 2));
+    if (doc->addFixture(fxi) == false)
+        return nullptr;
+    return fxi;
+}
+
+/* Three spots hung 6 m up across the stage, a line target 4 m long 3 m in
+   front of them, an Aim look at it and a scene listing the spots out of
+   order. */
+struct Rig
+{
+    Doc *doc = nullptr;
+    Fixture *left = nullptr, *mid = nullptr, *right = nullptr;
+    StageTarget *line = nullptr;
+    QLCPalette *aim = nullptr;
+    Scene *scene = nullptr;
+};
+
+static Rig makeRig(QObject *parent)
+{
+    Rig rig;
+    rig.doc = new Doc(parent);
+    MonitorProperties *props = rig.doc->monitorProperties();
+    rig.left  = makeSpot(rig.doc, "Left");
+    rig.mid   = makeSpot(rig.doc, "Mid");
+    rig.right = makeSpot(rig.doc, "Right");
+    // (fid, head, linked, pos): X/Y in millimetres, Z in metres.
+    props->setFixturePosition(rig.left->id(),  0, 0, QVector3D(-3000, 0, 6));
+    props->setFixturePosition(rig.mid->id(),   0, 0, QVector3D(0, 0, 6));
+    props->setFixturePosition(rig.right->id(), 0, 0, QVector3D(3000, 0, 6));
+
+    rig.line = props->addStageTarget();
+    rig.line->setName("Line");
+    rig.line->setPosition(QVector3D(0, 3, 0));
+    rig.line->makeLine();
+
+    rig.aim = new QLCPalette(QLCPalette::Aim, rig.doc);
+    rig.aim->setName("At the line");
+    rig.aim->setStageTargetId(rig.line->id());
+    rig.doc->addPalette(rig.aim);
+
+    rig.scene = new Scene(rig.doc);
+    rig.scene->setName("Fan");
+    rig.scene->addFixture(rig.right->id());
+    rig.scene->addFixture(rig.left->id());
+    rig.scene->addFixture(rig.mid->id());
+    rig.scene->addPalette(rig.aim->id());
+    rig.doc->addFunction(rig.scene);
+    return rig;
+}
+
+void LineTarget_Test::anAimLookSpreadsItsHeadsAlongTheLine()
+{
+    Rig rig = makeRig(this);
+    QVERIFY(rig.left && rig.mid && rig.right);
+
+    const QList<AimSolver::SceneAim> aims = AimSolver::sceneAims(rig.doc, rig.scene);
+    QCOMPARE(aims.size(), 3);
+    QHash<quint32, QVector3D> at;
+    foreach (const AimSolver::SceneAim &a, aims)
+    {
+        QCOMPARE(a.targetId, rig.line->id());
+        at.insert(a.fixtureId, a.point);
+    }
+    QVERIFY2(near3(at.value(rig.left->id()),  QVector3D(-2, 3, 0)), qPrintable(str(at.value(rig.left->id()))));
+    QVERIFY2(near3(at.value(rig.mid->id()),   QVector3D(0, 3, 0)),  qPrintable(str(at.value(rig.mid->id()))));
+    QVERIFY2(near3(at.value(rig.right->id()), QVector3D(2, 3, 0)),  qPrintable(str(at.value(rig.right->id()))));
+
+    // Any ordered list of heads works, not only a scene's.
+    const QHash<quint32, double> fr = AimSolver::lineFractions(
+        rig.doc, rig.line, { rig.mid->id(), rig.right->id() }, LineSpread::Settings());
+    QCOMPARE(fr.value(rig.mid->id()), 0.0);
+    QCOMPARE(fr.value(rig.right->id()), 1.0);
+
+    delete rig.doc;
+}
+
+void LineTarget_Test::thePaletteAimsEachHeadAtItsOwnPoint()
+{
+    Rig rig = makeRig(this);
+    auto pans = [&rig]() {
+        QHash<quint32, int> pan;
+        foreach (const SceneValue &v, rig.aim->valuesFromFixtures(rig.doc, rig.scene->fixtures(), rig.scene))
+            if (v.channel == 0)
+                pan.insert(v.fxi, v.value);
+        return pan;
+    };
+
+    QHash<quint32, int> pan = pans();
+    QCOMPARE(pan.size(), 3);
+    /* Each head straight at the point in front of it would be the same pan;
+       the outer heads are 1 m in from where they hang, so they turn inwards,
+       opposite ways. */
+    QVERIFY2(pan.value(rig.left->id()) != pan.value(rig.right->id()),
+             "the outer heads are aimed the same way");
+
+    // The same heads at a point target all converge.
+    rig.line->setKind(StageTarget::Kind::None);
+    QHash<quint32, int> conv = pans();
+    QVERIFY(conv.value(rig.left->id()) != pan.value(rig.left->id()));
+
+    // Without the owning scene, the list given is the set.
+    rig.line->makeLine();
+    QHash<quint32, int> alone;
+    foreach (const SceneValue &v, rig.aim->valuesFromFixtures(rig.doc, { rig.left->id() }, nullptr))
+        if (v.channel == 0)
+            alone.insert(v.fxi, v.value);
+    QCOMPARE(alone.size(), 1);
+    // One head on its own aims at the centre, as the point target did.
+    QCOMPARE(alone.value(rig.left->id()), conv.value(rig.left->id()));
+
+    delete rig.doc;
+}
+
+void LineTarget_Test::movingTheTargetMovesTheLine()
+{
+    Rig rig = makeRig(this);
+    MonitorProperties *props = rig.doc->monitorProperties();
+    rig.line->setPosition(QVector3D(1, 4, 0.5f));
+    const QVector<QVector3D> world = props->targetLinePoints(rig.line);
+    QCOMPARE(world.size(), 2);
+    QVERIFY(near3(world.at(0), QVector3D(-1, 4, 0.5f)));
+    QVERIFY(near3(world.at(1), QVector3D(3, 4, 0.5f)));
+    // Its single point -- what a follow spot or an old build uses -- is the centre.
+    QVERIFY(near3(props->targetAimPoint(rig.line), QVector3D(1, 4, 0.5f)));
+    // An aim height does not lift a line off the heights it was drawn at.
+    rig.line->setAimHeightOverride(1.4f);
+    QVERIFY(near3(props->targetAimPoint(rig.line), QVector3D(1, 4, 0.5f)));
+    delete rig.doc;
+}
+
+static bool sameFractions(const QVector<double> &got, const QVector<double> &want)
+{
+    if (got.size() != want.size())
+        return false;
+    for (int i = 0; i < got.size(); ++i)
+        if (qAbs(got.at(i) - want.at(i)) > 1e-9)
+            return false;
+    return true;
+}
+
+static QString list(const QVector<double> &v)
+{
+    QStringList s;
+    foreach (double d, v)
+        s << QString::number(d, 'f', 3);
+    return s.join(", ");
+}
+
+void LineTarget_Test::theSpreadSqueezesAndCrosses()
+{
+    LineSpread::Settings s;
+    s.spread = 2.5;
+    QVector<double> f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.25, 0.35, 0.45, 0.55, 0.65, 0.75 }), qPrintable(list(f)));
+    s.spread = 0.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 }), qPrintable(list(f)));
+    s.spread = -2.5;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.75, 0.65, 0.55, 0.45, 0.35, 0.25 }), qPrintable(list(f)));
+    s.spread = -5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 1.0, 0.8, 0.6, 0.4, 0.2, 0.0 }), qPrintable(list(f)));
+    // Nothing goes past the ends.
+    s.spread = 9.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 }), qPrintable(list(f)));
+}
+
+void LineTarget_Test::lineSettingsAreParamsOfTheirOwn()
+{
+    QMap<QString, double> params;
+    params.insert("__speedMaster", 2);          // not ours: left alone
+    LineSpread::toParams(LineSpread::Settings(), params);
+    QCOMPARE(params.size(), 1);
+
+    LineSpread::Settings s;
+    s.spread = -2.0;
+    LineSpread::toParams(s, params);
+    QCOMPARE(params.value("__lineSpread"), -2.0);
+    QCOMPARE(params.size(), 2);
+    QCOMPARE(LineSpread::fromParams(params).spread, -2.0);
+
+    s.spread = 5.0;                             // back to the default: gone
+    LineSpread::toParams(s, params);
+    QVERIFY(!params.contains("__lineSpread"));
+
+    params.insert("__lineSpread", 12.0);
+    QCOMPARE(LineSpread::fromParams(params).spread, 5.0);
+    params.insert("__lineSpread", -12.0);
+    QCOMPARE(LineSpread::fromParams(params).spread, -5.0);
+}
+
+void LineTarget_Test::anAimLooksSpreadIsSavedWithIt()
+{
+    Doc doc(this);
+    QLCPalette aim(QLCPalette::Aim, &doc);
+    aim.setName("Across");
+    aim.setStageTargetId(3);
+    aim.setEffectParamValue("__lineSpread", -3.5);
+
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        w.writeStartElement("Palettes");
+        QVERIFY(aim.saveXML(&w));
+        QLCPalette plain(QLCPalette::Aim, &doc);
+        plain.setStageTargetId(4);
+        QVERIFY(plain.saveXML(&w));
+        w.writeEndElement();
+    }
+    QCOMPARE(xml.count("<EffectParam"), 1);
+
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());          // <Palettes>
+    QVERIFY(r.readNextStartElement());
+    QLCPalette back(QLCPalette::Aim, &doc);
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.type(), QLCPalette::Aim);
+    QCOMPARE(back.stageTargetId(), quint32(3));
+    QCOMPARE(back.effectParamValues().value("__lineSpread"), -3.5);
+
+    // The next palette is still read: the first left the reader at its end.
+    QVERIFY(r.readNextStartElement());
+    QLCPalette second(QLCPalette::Aim, &doc);
+    QVERIFY(second.loadXML(r));
+    QCOMPARE(second.stageTargetId(), quint32(4));
+    QVERIFY(second.effectParamValues().isEmpty());
+
+    // A copy keeps it.
+    QLCPalette *copy = back.createCopy();
+    QCOMPARE(copy->effectParamValues().value("__lineSpread"), -3.5);
+    delete copy;
+}
+
+void LineTarget_Test::theSpreadMovesTheHeads()
+{
+    Rig rig = makeRig(this);
+    auto points = [&rig]() {
+        QHash<quint32, QVector3D> at;
+        foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(rig.doc, rig.scene))
+            at.insert(a.fixtureId, a.point);
+        return at;
+    };
+    rig.aim->setEffectParamValue("__lineSpread", 0.0);
+    QHash<quint32, QVector3D> at = points();
+    foreach (const QVector3D &p, at)
+        QVERIFY2(near3(p, QVector3D(0, 3, 0)), qPrintable(str(p)));
+
+    rig.aim->setEffectParamValue("__lineSpread", -5.0);
+    at = points();
+    QVERIFY2(near3(at.value(rig.left->id()), QVector3D(2, 3, 0)), qPrintable(str(at.value(rig.left->id()))));
+    QVERIFY(near3(at.value(rig.right->id()), QVector3D(-2, 3, 0)));
+    QVERIFY(near3(at.value(rig.mid->id()), QVector3D(0, 3, 0)));
+    delete rig.doc;
+}
+
+/* Light k (0-based) on slot u: the diagrams in the design are slots
+   0, .2 .. 1 with the light number written in each. */
+static QVector<double> slotsOf(const QVector<int> &lightAtSlot)
+{
+    QVector<double> f(lightAtSlot.size());
+    for (int slot = 0; slot < lightAtSlot.size(); ++slot)
+        f[lightAtSlot.at(slot) - 1] = slot / double(lightAtSlot.size() - 1);
+    return f;
+}
+
+void LineTarget_Test::groupsCrossAsTheDesignDraws()
+{
+    LineSpread::Settings s;
+    s.group = LineSpread::Halves;
+    s.spread = 5.0;
+    QVector<double> f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 1, 2, 3, 4, 5, 6 })), qPrintable(list(f)));
+
+    // "1 2 3 cross 4 5 6": the halves swap sides, each keeping its order.
+    s.spread = -5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 4, 5, 6, 1, 2, 3 })), qPrintable(list(f)));
+    s.spread = -2.5;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.55, 0.65, 0.75, 0.25, 0.35, 0.45 }), qPrintable(list(f)));
+
+    // ... or each half flips where it is.
+    s.cross = LineSpread::Mirror;
+    s.spread = -5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 3, 2, 1, 6, 5, 4 })), qPrintable(list(f)));
+
+    // "1 and 2 .. then 3 and 4": pairs keep their two points, crossing as blocks.
+    s.group = 2;
+    s.cross = LineSpread::SwapSides;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 5, 6, 3, 4, 1, 2 })), qPrintable(list(f)));
+    s.cross = LineSpread::Mirror;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 2, 1, 4, 3, 6, 5 })), qPrintable(list(f)));
+
+    // At 0 every mode is on the centre; above 0 grouping changes nothing.
+    s.spread = 0.0;
+    foreach (double v, LineSpread::fractions(6, s))
+        QCOMPARE(v, 0.5);
+    s.spread = 5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 1, 2, 3, 4, 5, 6 })), qPrintable(list(f)));
+
+    // One light per group: both choices are the plain mirror.
+    s.group = 1;
+    s.spread = -5.0;
+    s.cross = LineSpread::Mirror;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 6, 5, 4, 3, 2, 1 })), qPrintable(list(f)));
+    // One group of them all: the same.
+    s.group = 6;
+    s.cross = LineSpread::SwapSides;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 6, 5, 4, 3, 2, 1 })), qPrintable(list(f)));
+}
+
+void LineTarget_Test::unevenGroupsStillWork()
+{
+    LineSpread::Settings s;
+    s.group = LineSpread::Halves;
+    s.spread = -5.0;
+    QVector<double> f = LineSpread::fractions(5, s);
+    // 1 2 | 3 | 4 5  ->  4 5 | 3 | 1 2
+    QVERIFY2(sameFractions(f, { 0.75, 1.0, 0.5, 0.0, 0.25 }), qPrintable(list(f)));
+    s.spread = 2.0;
+    QCOMPARE(LineSpread::fractions(5, s).at(2), 0.5);
+
+    // Pairs of five: the last is on its own.
+    s.group = 2;
+    s.spread = -5.0;
+    f = LineSpread::fractions(5, s);
+    // 1 2 | 3 4 | 5  ->  5 | 3 4 | 1 2, each pair keeping its spacing
+    QVERIFY2(sameFractions(f, { 0.75, 1.0, 0.25, 0.5, 0.0 }), qPrintable(list(f)));
+}
+
+void LineTarget_Test::groupsCanShareAPoint()
+{
+    LineSpread::Settings s;
+    s.group = 2;
+    s.share = true;
+    QVector<double> f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.0, 0.0, 0.5, 0.5, 1.0, 1.0 }), qPrintable(list(f)));
+    s.spread = 2.5;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.25, 0.25, 0.5, 0.5, 0.75, 0.75 }), qPrintable(list(f)));
+    // Crossing swaps the shared points, whatever Cross says.
+    s.spread = -5.0;
+    s.cross = LineSpread::Mirror;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 1.0, 1.0, 0.5, 0.5, 0.0, 0.0 }), qPrintable(list(f)));
+
+    QMap<QString, double> params;
+    LineSpread::toParams(s, params);
+    const LineSpread::Settings back = LineSpread::fromParams(params);
+    QVERIFY(back == s);
+    QCOMPARE(params.size(), 4);                 // spread, group, cross, share
+}
+
+void LineTarget_Test::lookOrderIsTheLooksOrder()
+{
+    Rig rig = makeRig(this);                    // the scene lists right, left, mid
+    rig.aim->setEffectParamValue("__lineOrder", LineSpread::LookOrder);
+    QHash<quint32, QVector3D> at;
+    foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(rig.doc, rig.scene))
+        at.insert(a.fixtureId, a.point);
+    QVERIFY2(near3(at.value(rig.right->id()), QVector3D(-2, 3, 0)), qPrintable(str(at.value(rig.right->id()))));
+    QVERIFY(near3(at.value(rig.left->id()), QVector3D(0, 3, 0)));
+    QVERIFY(near3(at.value(rig.mid->id()), QVector3D(2, 3, 0)));
+    delete rig.doc;
+}
+
+QTEST_MAIN(LineTarget_Test)

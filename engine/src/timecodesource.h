@@ -21,6 +21,7 @@
 #define TIMECODESOURCE_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QElapsedTimer>
 
 /** Milliseconds of no fresh timecode before a followed show is treated as
@@ -45,7 +46,11 @@
 // means the timeline runs away.
 #define SHOW_TC_HOLD_MS 1000
 
+class QXmlStreamReader;
+class QXmlStreamWriter;
 class QTimer;
+
+#define KXMLQLCTimecode QStringLiteral("Timecode")
 
 /** @addtogroup engine Engine
  * @{
@@ -65,7 +70,7 @@ class QTimer;
  * universe's timecode is accepted; set a specific universe to lock onto one
  * source and ignore the rest.
  */
-class TimecodeSource : public QObject
+class QLC_ENGINE_EXPORT TimecodeSource : public QObject
 {
     Q_OBJECT
 
@@ -87,6 +92,23 @@ public:
     qint32 sourceUniverse() const;
     void setSourceUniverse(qint32 universe);
 
+    /** The current Show Tree production's own source (P5): while one is
+     *  set it is followed instead of sourceUniverse() -- a universe, or -1
+     *  for any -- and the show's own setting is kept for when it is gone.
+     *  -2: none (the show's setting applies). Not saved here: the
+     *  production carries it. */
+    qint32 productionUniverse() const { return m_productionUniverse; }
+    void setProductionUniverse(qint32 universe);
+    /** The universe timecode is taken from now (-1: any): the production's
+     *  when it has one, else the show's. */
+    qint32 effectiveUniverse() const;
+
+    /** The override is the show's: a universe of its patch. Saved with the
+     *  workspace as <Timecode Source="N"/> (nothing when it's "any");
+     *  Doc drops a loaded one that names no universe of the show. */
+    bool loadXML(QXmlStreamReader &root);
+    bool saveXML(QXmlStreamWriter *doc) const;
+
     /** Universe that most recently delivered timecode (-1 if none yet). */
     qint32 lastUniverse() const;
 
@@ -97,6 +119,19 @@ public:
     double jitterMs() const;
     /** Mean interval between position updates, in ms (the effective update rate). */
     double avgIntervalMs() const;
+
+    /** The verdict on the measurements above -- one place for the
+     *  thresholds, shared by the footer chip, the calibration dialog and
+     *  Connections' Show control & sync page. */
+    enum Health
+    {
+        NoSource,   ///< no timecode has arrived yet
+        Held,       ///< it arrived, but nothing fresh within the watchdog window
+        Healthy,    ///< rate within 5% of real time, jitter under 40 ms
+        Usable,     ///< rate within 15%, jitter under 120 ms
+        Unstable    ///< worse than that
+    };
+    Health health() const;
 
 public slots:
     /** Push a new absolute position received on the given universe. */
@@ -109,6 +144,9 @@ signals:
     /** Emitted when the running/stopped state flips. */
     void runningChanged(bool running);
 
+    /** Emitted when the override (sourceUniverse()) changes. */
+    void sourceUniverseChanged(qint32 universe);
+
 private slots:
     void slotWatchdogTimeout();
 
@@ -117,6 +155,7 @@ private:
     int m_fps;
     bool m_running;
     qint32 m_sourceUniverse;
+    qint32 m_productionUniverse = -2;
     qint32 m_lastUniverse;
     QTimer *m_watchdog;
 

@@ -25,12 +25,21 @@
 #include <QNetworkInterface>
 #include <QHostAddress>
 #include <QUdpSocket>
+#include <QNetworkDatagram>
 #include <QVariant>
 #include <QMutex>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QMap>
+#include <QSet>
+#include <QPair>
+#include <climits>
+#include <atomic>
 
 #include "artnetpacketizer.h"
+#include "qlcioplugin.h"
+#include "sendhealth.h"
+#include "artnetnodewatch.h"
 
 #define ARTNET_PORT      6454
 
@@ -64,12 +73,14 @@ typedef struct _uinfo
     /** Universe data to be sent depending on the transmission mode */
     QByteArray outputData;
 
-    /** Consecutive failed sends for this universe. A send can fail forever --
-     *  most commonly when the workspace names a bind interface this machine
-     *  doesn't have -- and at DMX rates that produced thousands of identical
-     *  warnings a minute, burying the one line that says which universe is
-     *  dark. Report the first failure and the recovery; count the rest. */
-    quint64 sendFailures;
+    /** Whether sends for this universe are failing, with hysteresis. A send
+     *  can fail forever -- most commonly when the workspace names a bind
+     *  interface this machine doesn't have -- and at DMX rates a warning per
+     *  send produced thousands of identical lines a minute. A target that
+     *  never answers ARP also fails and "succeeds" in turns, which a report
+     *  per state change turned into a fail/recover pair every ~25 s.
+     *  See SendHealth for the rules. */
+    SendHealth sendHealth;
 } UniverseInfo;
 
 class ArtNetController final : public QObject
@@ -153,14 +164,81 @@ public:
     /** Is the UDP socket capable of receiving packets ? */
     bool socketBound() const;
 
+    /** This line's address is not on one of the show's rig networks while
+     *  the gate is on (QLCIOPlugin::setTransmitNetworks()): it sends nothing.
+     *  Only reads the cached flag: safe and free on any send path. */
+    bool transmitHeld() const { return m_held.load(std::memory_order_relaxed); }
+
+    /** Work transmitHeld() out again from the plugin's rig networks. Called
+     *  when the line is made, and by ArtNetPlugin::refreshTransmitGate()
+     *  (the networks changed; the engine's reconnect tick). */
+    void refreshTransmitGate();
+
     /** Send a RDM command */
     bool sendRDMCommand(const quint32 universe, uchar command, QVariantList params);
 
+    /** What is wrong with where each output universe goes, as
+     *  (QLC+ universe, text) pairs -- "Art-Net to 172.18.2.50: not reachable
+     *  since 20:14", "Art-Net node CR041R (172.18.2.10): stopped answering
+     *  since 20:14", ... Only universes opened for output; @a universe limits
+     *  it to one (UINT_MAX: all). Changes are announced by problemsChanged().
+     *  See SendHealth and ArtNetNodeWatch for when each is said. */
+    QList<QPair<quint32, QString> > outputProblems(quint32 universe = UINT_MAX);
+
+    /** Is @a address one that every node on this line hears (the line's
+     *  broadcast address, or the limited broadcast)? */
+    bool isBroadcastTarget(const QHostAddress &address) const;
+
+    /** Is @a address on this line's own subnet, i.e. can a unicast to it
+     *  leave by this line's interface without a router? */
+    bool isOnSubnet(const QHostAddress &address) const;
+
+    /** Send ONE ArtPoll to the limited broadcast (255.255.255.255), out of
+     *  this line's interface.
+     *
+     *  The periodic poll goes to the line's subnet broadcast (172.18.2.255),
+     *  and a node that has not been given an address yet -- still on its
+     *  factory 2.x.x.x or 10.x.x.x, or self-assigned 169.254.x.x after DHCP
+     *  found no server -- is not on that subnet and is entitled to ignore it.
+     *  Every IP stack accepts the limited broadcast, so this reaches every
+     *  node on the cable whatever its address. Only on an explicit Rescan:
+     *  it is the same one datagram per interface the subnet poll is, but it
+     *  is not needed every 3 s. Returns false when the line cannot carry it
+     *  (loopback). */
+    bool sendDiscoveryPoll();
+
+    /** Send an ArtIpProg to the node at @a node -- unicast, as Art-Net 4
+     *  says. Only ever on an explicit operator action; ArtNetPlugin checks
+     *  the node is on this line's subnet first. Returns false if the send
+     *  failed. */
+    bool sendIpProg(const QHostAddress &node, const ArtNetIpProgRequest &request);
+
 private:
-    /** Log a send failure/recovery for one universe at most once per state
-     *  change, rather than once per frame. See the implementation. */
-    void reportSendResult(UniverseInfo &info, quint32 universe,
+    /** Feed one send result to the universe's SendHealth and log only
+     *  when its reported state changes. Returns true when it did. See the
+     *  implementation. */
+    bool reportSendResult(UniverseInfo &info, quint32 universe,
                           const QHostAddress &dest, bool ok);
+
+    /** outputProblems(), optionally without the send-health ones (which
+     *  reportSendResult() logs itself) */
+    QList<QPair<quint32, QString> > problems(quint32 universe, bool withSends);
+
+    /** Close one poll interval in the node watch; log and announce what
+     *  changed. Split from the sending so it can be tested without a packet
+     *  leaving the machine. */
+    void nodeIntervalElapsed();
+
+    /** Log node-watch issues that appeared or cleared since the last call */
+    void logNodeIssueChanges();
+
+    /** Write one datagram -- or, under test, record it and send nothing.
+     *  Every packet this controller sends goes through here. Returns 0, and
+     *  sends nothing, while transmitHeld(). */
+    qint64 writeDatagram(const QNetworkDatagram &dg);
+
+    /** The monotonic time SendHealth and ArtNetNodeWatch are fed */
+    qint64 nowMs() const { return m_testNowMs >= 0 ? m_testNowMs : m_clock.elapsed(); }
 
     /** The network interface associated to this controller */
     QNetworkInterface m_interface;
@@ -173,6 +251,22 @@ private:
     QHostAddress m_broadcastAddr;
 
     QString m_MACAddress;
+
+    /** Monotonic clock for SendHealth and the node watch */
+    QElapsedTimer m_clock;
+
+    /** When set, writeDatagram() appends here instead of sending. Tests only:
+     *  nothing a test does should reach a real network. */
+    QList<QNetworkDatagram> *m_testSink;
+
+    /** When >= 0, the time nowMs() returns instead of the clock. Tests only. */
+    qint64 m_testNowMs;
+
+    /** Nodes heard on this line, and their health. GUI thread only. */
+    ArtNetNodeWatch m_nodeWatch;
+
+    /** The node issues last logged, so the log says each once */
+    QSet<QString> m_loggedNodeIssues;
 
     /** Counter for transmitted packets */
     quint64 m_packetSent;
@@ -204,6 +298,13 @@ private:
      *  discover available nodes on the network */
     QTimer m_pollTimer;
 
+    /** The plugin whose rig network gate applies (the parent), or NULL */
+    const QLCIOPlugin *m_gate;
+
+    /** The gate's decision for this line, cached: written on the main thread
+     *  by refreshTransmitGate(), read on every send (any thread) */
+    std::atomic<bool> m_held;
+
     /** Timer used to send output data every N seconds
      *  when data is not changing */
     QTimer m_sendTimer;
@@ -214,6 +315,7 @@ private:
     bool handleArtNetDmx(QByteArray const& datagram, QHostAddress const& senderAddress);
     bool handleArtNetTodData(QByteArray const& datagram, QHostAddress const& senderAddress);
     bool handleArtNetRDM(QByteArray const& datagram, QHostAddress const& senderAddress);
+    bool handleArtNetIpProgReply(QByteArray const& datagram, QHostAddress const& senderAddress);
 
 public:
     // Handle a packet received to the ArtNet port.
@@ -238,16 +340,29 @@ public:
      *  broadcast poll, so it can never answer one -- which is exactly the node
      *  somebody had to declare by hand, and exactly the node they most want to
      *  know is alive. Unicast reaches it through the router if anything can. */
-    void sendPollTo(const QHostAddress &address);
+    void sendPollTo(const QHostAddress &address, bool quiet = false);
 
 protected slots:
     void slotSendPoll();
+
+    /** The periodic poll: judge the interval that just ended, then poll --
+     *  broadcast on this line, plus one unicast ArtPoll to each unicast
+     *  output target OFF this line's subnet (a broadcast never reaches those,
+     *  so without it they could never be known, let alone missed). */
+    void slotPollTick();
     void slotSendAllUniverses();
 
 signals:
     void valueChanged(quint32 universe, quint32 input, quint32 channel, uchar value);
 
     void rdmValueChanged(quint32 universe, quint32 line, QVariantMap data);
+
+    /** outputProblems() has changed. May be emitted from the thread that
+     *  sends DMX; never with the data mutex held. */
+    void problemsChanged();
+
+    /** A node answered an ArtIpProg with its current network settings */
+    void ipProgReplied(const QString &sender, const ArtNetIpProgReply &reply);
 };
 
 #endif

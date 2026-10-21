@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <functional>
 
+#include "shutterautoopen.h"
 #include "programmingmanager.h"
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
@@ -600,10 +601,15 @@ QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach() const
         return out;
     foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, m_scene))
     {
-        if (a.solution.reachable())
+        StageTarget *t = props->stageTarget(a.targetId);
+        if (t == nullptr)
             continue;
-        if (StageTarget *t = props->stageTarget(a.targetId))
+        if (!a.solution.reachable())
             out[a.fixtureId] << t->name();
+        /* In range, but something solid on stage is in the way: it points
+           there and its light stops short (line of sight). */
+        else if (a.sight.blocked)
+            out[a.fixtureId] << tr("%1 (blocked by %2)").arg(t->name(), a.sight.name);
     }
     return out;
 }
@@ -659,7 +665,7 @@ void SceneGroupLooks::reload()
                 cat = EffectScriptCache::categoryForTypes(
                           cache->scriptMeta(cache->nameFromPath(p->scriptPath())).fixtureTypes);
             }
-            if (cat == QLatin1String("Color"))
+            if (cat == QLatin1String("Color") || cat == QLatin1String("Matrix"))
                 coveredTypes.insert(QLCPalette::Color);
             else if (cat == QLatin1String("Dimmer"))
                 coveredTypes.insert(QLCPalette::Dimmer);
@@ -667,6 +673,11 @@ void SceneGroupLooks::reload()
                 coveredTypes.insert(QLCPalette::PanTilt);
         }
     }
+
+    // Auto-open shutters (the show's setting, Settings -> Advanced) opens a
+    // lit head's shutter by itself: no Shutter look needed for it.
+    if (m_doc->shutterAutoOpen() != NULL && m_doc->shutterAutoOpen()->isEnabled())
+        coveredTypes.insert(QLCPalette::Shutter);
 
     // Groups = dynamic targets (top level).
     QList<FixtureGroup*> groups;

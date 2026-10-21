@@ -22,6 +22,7 @@
 #include <QVector3D>
 #include <QSet>
 #include <algorithm>
+#include <climits>
 #include <functional>
 
 #include "createfixturegroup.h"
@@ -172,7 +173,17 @@ FixtureGroup *CreateFixtureGroup::createFromFixtures(Doc *doc,
     grp->setName(cfg.name());
     grp->setSize(cfg.size());
     doc->addFixtureGroup(grp);
+    layoutFixturesInGrid(doc, fixtureIds, grp);
 
+    doc->setModified();
+    return grp;
+}
+
+void CreateFixtureGroup::layoutFixturesInGrid(Doc *doc, const QList<quint32> &fixtureIds,
+                                              FixtureGroup *target)
+{
+    if (doc == NULL || target == NULL)
+        return;
     // Order fixtures by physical position (rows top→bottom, columns left→right)
     // so the grid matches the rig — heads then auto-fill row-major. Unplaced
     // fixtures keep selection order at the end.
@@ -191,10 +202,78 @@ FixtureGroup *CreateFixtureGroup::createFromFixtures(Doc *doc,
             });
     }
     foreach (quint32 fid, ordered)
-        grp->assignFixture(fid);
+        if (doc->fixture(fid) != NULL)
+            target->assignFixture(fid);
+}
 
-    doc->setModified();
-    return grp;
+void CreateFixtureGroup::appendSelection(Doc *doc, FixtureGroup *target,
+                                         const QList<quint32> &fixtureIds,
+                                         const QList<quint32> &groupIds)
+{
+    if (doc == NULL || target == NULL)
+        return;
+
+    // Start appending below whatever the target already holds.
+    int curY = 0;
+    {
+        QMapIterator<QLCPoint, GroupHead> it(target->headsMap());
+        while (it.hasNext()) { it.next(); curY = qMax(curY, it.key().y() + 1); }
+    }
+
+    // Each source group goes in as a block (preserving its relative layout),
+    // tagged as a sub-group so it stays visually distinct and movable as a unit.
+    foreach (quint32 gid, groupIds)
+    {
+        FixtureGroup *src = doc->fixtureGroup(gid);
+        if (src == NULL || src == target)
+            continue;
+
+        const QMap<QLCPoint, GroupHead> srcHeads = src->headsMap();
+        if (srcHeads.isEmpty())
+            continue;
+
+        // Normalise the source to its top-left corner.
+        int minX = INT_MAX, minY = INT_MAX;
+        QMapIterator<QLCPoint, GroupHead> nit(srcHeads);
+        while (nit.hasNext()) { nit.next(); minX = qMin(minX, nit.key().x()); minY = qMin(minY, nit.key().y()); }
+
+        int blockMaxY = curY;
+        QMapIterator<QLCPoint, GroupHead> it(srcHeads);
+        while (it.hasNext())
+        {
+            it.next();
+            const int x = it.key().x() - minX;
+            const int y = curY + (it.key().y() - minY);
+            if (target->assignHead(QLCPoint(x, y), it.value()) == true)
+            {
+                target->setHeadSubGroup(QLCPoint(x, y), FixtureGroup::subGroupTagFor(src->id()));
+                blockMaxY = qMax(blockMaxY, y);
+            }
+        }
+        curY = blockMaxY + 1;
+    }
+
+    // Loose fixtures go in a row of their own (all heads of each fixture).
+    int col = 0;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fxi = doc->fixture(fid);
+        if (fxi == NULL)
+            continue;
+        for (int h = 0; h < fxi->heads(); h++)
+        {
+            if (target->assignHead(QLCPoint(col, curY), GroupHead(fid, h)) == true)
+                col++;
+        }
+    }
+
+    // Grow the grid to fit everything we placed.
+    int maxX = 0, maxY = 0;
+    QMapIterator<QLCPoint, GroupHead> sz(target->headsMap());
+    while (sz.hasNext()) { sz.next(); maxX = qMax(maxX, sz.key().x()); maxY = qMax(maxY, sz.key().y()); }
+    if (maxX + 1 > target->size().width() || maxY + 1 > target->size().height())
+        target->setSize(QSize(qMax(maxX + 1, target->size().width()),
+                              qMax(maxY + 1, target->size().height())));
 }
 
 bool CreateFixtureGroup::layoutGroupsByStage(Doc *doc, const QList<quint32> &groupIds,
@@ -518,6 +597,26 @@ QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headKindBlocks(Doc *do
                                                                          const QString &kind, int *vertical,
                                                                          int view)
 {
+    return headBlocks(doc, fixtureIds, [&kind](const QLCFixtureMode *mode, int h) {
+        return kind.isEmpty() || HeadKinds::kindOf(mode, h) == kind;
+    }, vertical, view);
+}
+
+QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headTypeBlocks(Doc *doc,
+                                                                         const QList<quint32> &fixtureIds,
+                                                                         const QString &type, int *vertical,
+                                                                         int view)
+{
+    return headBlocks(doc, fixtureIds, [&type](const QLCFixtureMode *mode, int h) {
+        return type.isEmpty() || HeadKinds::typeOf(mode, h) == type;
+    }, vertical, view);
+}
+
+QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headBlocks(Doc *doc,
+                                                                     const QList<quint32> &fixtureIds,
+                                                                     const std::function<bool(const QLCFixtureMode *, int)> &keep,
+                                                                     int *vertical, int view)
+{
     QList<StageBlock> out;
     MonitorProperties *mp = (doc != NULL) ? doc->monitorProperties() : NULL;
     if (mp == NULL)
@@ -556,7 +655,7 @@ QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headKindBlocks(Doc *do
         QSet<int> rows, cols;
         for (int h = 0; h < mode->heads().size(); ++h)
         {
-            if (!kind.isEmpty() && HeadKinds::kindOf(mode, h) != kind)
+            if (!keep(mode, h))
                 continue;
             const QPoint c = map.isValid() ? map.cellOf(h) : QPoint(h, 0);
             if (c.x() < 0) continue;

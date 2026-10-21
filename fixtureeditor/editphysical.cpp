@@ -22,6 +22,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QSpinBox>
 
 #include "editphysical.h"
@@ -40,10 +41,21 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_bulbLumensSpin->setValue(m_physical.bulbLumens());
     m_bulbTempCombo->setEditText(str.setNum(m_physical.bulbColourTemperature()));
 
-    m_weightSpin->setValue(m_physical.weight());
-    m_widthSpin->setValue(m_physical.width());
-    m_heightSpin->setValue(m_physical.height());
-    m_depthSpin->setValue(m_physical.depth());
+    /* Dimensions and weight in the person's own unit, typed in any unit;
+       still saved as whole millimetres and kilograms (MeasurementEdit). */
+    m_weightEdit->setKind(MeasurementEdit::Weight);
+    m_weightEdit->setMaximum(999.99);
+    m_weightEdit->setValue(m_physical.weight());
+    m_widthEdit->setValue(m_physical.width());
+    m_heightEdit->setValue(m_physical.height());
+    m_depthEdit->setValue(m_physical.depth());
+    m_unitsNote = new QLabel(m_widthEdit->parentWidget());
+    m_unitsNote->setObjectName(QStringLiteral("m_unitsNote"));
+    m_unitsNote->setWordWrap(true);
+    m_unitsNote->setStyleSheet(QStringLiteral("color: gray;"));
+    if (QGridLayout *dims = qobject_cast<QGridLayout *>(m_widthEdit->parentWidget()->layout()))
+        dims->addWidget(m_unitsNote, dims->rowCount(), 0, 1, 2);
+    setUnit(MeasurementUnits::preferredLength());
 
     m_lensNameCombo->setEditText(m_physical.lensName());
     m_lensDegreesMinSpin->setValue(m_physical.lensDegreesMin());
@@ -74,6 +86,7 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_emissionCombo->addItem(tr("Laser beam"), int(QLCPhysical::LaserEmission));
     m_emissionCombo->addItem(tr("Star field"), int(QLCPhysical::StarEmission));
     m_emissionCombo->addItem(tr("Silk flame"), int(QLCPhysical::FlameEmission));
+    m_emissionCombo->addItem(tr("None (not a light)"), int(QLCPhysical::NoEmission));
     m_emissionCombo->setCurrentIndex(qMax(0, m_emissionCombo->findData(int(m_physical.emission()))));
     m_emissionCombo->setToolTip(tr("Beam: a cone at the lens's angle. All round: a bare "
                                    "source -- a lantern, a bulb -- lighting what is near it. "
@@ -138,10 +151,12 @@ QLCPhysical EditPhysical::physical()
     m_physical.setBulbType(m_bulbTypeCombo->currentText());
     m_physical.setBulbLumens(m_bulbLumensSpin->value());
     m_physical.setBulbColourTemperature(m_bulbTempCombo->currentText().toInt());
-    m_physical.setWeight(m_weightSpin->value());
-    m_physical.setWidth(m_widthSpin->value());
-    m_physical.setHeight(m_heightSpin->value());
-    m_physical.setDepth(m_depthSpin->value());
+    for (MeasurementEdit *e : { m_weightEdit, m_widthEdit, m_heightEdit, m_depthEdit })
+        e->commit();   // what's typed but not yet entered counts
+    m_physical.setWeight(m_weightEdit->value());
+    m_physical.setWidth(MeasurementUnits::toStoredMm(m_widthEdit->value()));
+    m_physical.setHeight(MeasurementUnits::toStoredMm(m_heightEdit->value()));
+    m_physical.setDepth(MeasurementUnits::toStoredMm(m_depthEdit->value()));
     m_physical.setLensName(m_lensNameCombo->currentText());
     m_physical.setLensDegreesMin(m_lensDegreesMinSpin->value());
     m_physical.setLensDegreesMax(m_lensDegreesMaxSpin->value());
@@ -161,6 +176,28 @@ QLCPhysical EditPhysical::physical()
     return m_physical;
 }
 
+void EditPhysical::setUnit(MeasurementUnits::LengthUnit unit)
+{
+    for (MeasurementEdit *e : { m_weightEdit, m_widthEdit, m_heightEdit, m_depthEdit })
+    {
+        e->commit();
+        e->setUnit(unit);
+    }
+    const MeasurementUnits::WeightUnit wu = MeasurementUnits::weightUnitFor(unit);
+    m_unitsNote->setText(tr("Shown in %1 and %2; type any unit (7.5\", 19 cm, 26 lb). "
+                            "Change it in qlcconsole: Settings, Units.")
+                         .arg(MeasurementUnits::symbol(unit), MeasurementUnits::symbol(wu)));
+}
+
+void EditPhysical::showEvent(QShowEvent *event)
+{
+    // The preference may have changed in qlcconsole since this page was made.
+    const MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength();
+    if (unit != m_widthEdit->unit())
+        setUnit(unit);
+    QWidget::showEvent(event);
+}
+
 void EditPhysical::slotCopyToClipboard()
 {
     emit copyToClipboard(m_physical);
@@ -176,10 +213,10 @@ void EditPhysical::pasteFromClipboard(QLCPhysical clipboard)
     m_bulbLumensSpin->setValue(clipboard.bulbLumens());
     m_bulbTypeCombo->setEditText(clipboard.bulbType());
     m_bulbTempCombo->setEditText(QString::number(clipboard.bulbColourTemperature()));
-    m_weightSpin->setValue(clipboard.weight());
-    m_widthSpin->setValue(clipboard.width());
-    m_heightSpin->setValue(clipboard.height());
-    m_depthSpin->setValue(clipboard.depth());
+    m_weightEdit->setValue(clipboard.weight());
+    m_widthEdit->setValue(clipboard.width());
+    m_heightEdit->setValue(clipboard.height());
+    m_depthEdit->setValue(clipboard.depth());
     m_lensNameCombo->setEditText(clipboard.lensName());
     m_lensDegreesMinSpin->setValue(clipboard.lensDegreesMin());
     m_lensDegreesMaxSpin->setValue(clipboard.lensDegreesMax());

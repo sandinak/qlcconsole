@@ -48,9 +48,9 @@ namespace
 /* The guides, in the order to read them. */
 const char *const kTopics[] = {
     "getting-started.md", "whats-new.md", "README.md", "lighting-studio.md",
-    "programming-tab.md", "fixture-manager.md", "stage-targets.md", "shows.md",
+    "programming-tab.md", "show-tree.md", "fixture-manager.md", "stage-targets.md", "shows.md",
     "show-control.md",
-    "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md",
+    "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md", "updates.md",
     "EFFECTSCRIPT_API.md"
 };
 
@@ -59,7 +59,12 @@ QString readGuide(const QString &file)
     QFile f(HelpBrowser::resourcePath(file));
     if (!f.open(QIODevice::ReadOnly))
         return QString();
-    return QString::fromUtf8(f.readAll());
+#if defined(Q_OS_MACOS)
+    const bool mac = true;
+#else
+    const bool mac = false;
+#endif
+    return HelpBrowser::keysForPlatform(QString::fromUtf8(f.readAll()), mac);
 }
 
 QString titleOf(const QString &file)
@@ -420,4 +425,80 @@ HelpBrowser *HelpBrowser::open(const QString &topic)
     help->raise();
     help->activateWindow();
     return help;
+}
+
+QString HelpBrowser::keysForPlatform(const QString &text, bool mac)
+{
+    if (mac)
+        return text;
+
+    static const QString glyphs = QStringLiteral("\u2303\u2325\u21E7\u2318");  // ⌃ ⌥ ⇧ ⌘
+    QString out;
+    out.reserve(text.size() + text.size() / 8);
+    int i = 0;
+    while (i < text.size())
+    {
+        if (glyphs.contains(text.at(i)) == false)
+        {
+            out += text.at(i++);
+            continue;
+        }
+
+        /* A run of modifiers, in whatever order the Mac writes them (⇧⌘),
+           said in the order Windows and Linux do (Ctrl+Alt+Shift). Control
+           and Command both come out as Ctrl: Qt maps ⌘ to Ctrl there. */
+        bool ctrl = false, alt = false, shift = false;
+        while (i < text.size() && glyphs.contains(text.at(i)))
+        {
+            const QChar g = text.at(i++);
+            if (g == QChar(0x2325))
+                alt = true;
+            else if (g == QChar(0x21E7))
+                shift = true;
+            else
+                ctrl = true;
+        }
+        QStringList mods;
+        if (ctrl)
+            mods << QStringLiteral("Ctrl");
+        if (alt)
+            mods << QStringLiteral("Alt");
+        if (shift)
+            mods << QStringLiteral("Shift");
+        out += mods.join(QLatin1Char('+'));
+
+        /* What follows: the key ("⌘Z", "⇧F1", "⌘↩", "⌥→", "⌘,"), or nothing
+           -- "⌘-click", "⌘+Shift+R", "⇧ snaps", the end of a cell. */
+        if (i >= text.size())
+            break;
+        const QChar next = text.at(i);
+        if (next.isSpace() || next == QLatin1Char('-') || next == QLatin1Char('+')
+            || next == QLatin1Char(')') || next == QLatin1Char('|') || next == QLatin1Char('/'))
+            continue;
+        out += QLatin1Char('+');
+        if (next.isLetterOrNumber())
+        {
+            while (i < text.size() && text.at(i).isLetterOrNumber())
+                out += text.at(i++);
+        }
+        else
+        {
+            if (next == QChar(0x21A9))          // ↩
+                out += QStringLiteral("Enter");
+            else if (next == QChar(0x238B))     // ⎋
+                out += QStringLiteral("Esc");
+            else if (next == QChar(0x232B))     // ⌫
+                out += QStringLiteral("Backspace");
+            else
+                out += next;
+            i++;
+        }
+    }
+
+    /* Written for both already ("Ctrl/⌘+Z"), and the one line that explains
+       the symbols, which off a Mac has nothing left to explain. */
+    out.replace(QStringLiteral("Ctrl/Ctrl+"), QStringLiteral("Ctrl+"));
+    out.replace(QStringLiteral("Ctrl is Ctrl on Windows and Linux; Alt is Alt."),
+                QStringLiteral("On a Mac, Ctrl is \u2318 and Alt is \u2325."));
+    return out;
 }

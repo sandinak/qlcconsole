@@ -96,6 +96,9 @@ public:
 
     /** Refresh fixtures & show current view */
     void updateView();
+    /** The person's unit changed (Settings -> Units): redraw the grid,
+     *  rulers and readouts here and in every Studio window */
+    void unitsChanged();
 
     /** Highlight the given fixtures (orange border) in the 2D graphics view.
      *  Passing an empty list clears all highlights. */
@@ -198,6 +201,19 @@ public:
     /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
     void undo();
 
+    /** Focus mode's current head: ring it on the plot and in the Rig
+     *  Overview. UINT_MAX clears it. */
+    void showFocusFixture(quint32 fid);
+    /** Open Focus mode (FocusModePanel) on the selected scene and the heads
+     *  selected on the plot or in the programmer. */
+    void openFocusMode();
+
+    /** A new curtain fixture (Generic > Stage Curtain, unpatched until it is
+     *  given an address) to drive the curtain @p sid, linked to it: a main
+     *  drape opens and flies, a traveler opens. Null if it is not a curtain
+     *  or the definition is missing. */
+    Fixture *addCurtainFixture(quint32 sid);
+
 protected:
     /** Create a new MonitorFixture* and append it to the layout */
     void createMonitorFixture(Fixture* fxi);
@@ -223,6 +239,9 @@ signals:
     void fixturesSelected(QList<quint32> fixtureIds);
 
 protected:
+    /** Holds the DMX and 2D toolbars, one shown (the main window's top bar
+     *  borrows it while this is the current tab) */
+    QWidget* m_toolsHolder = nullptr;
     QToolBar* m_DMXToolBar;
     QScrollArea* m_scrollArea;
     QWidget* m_monitorWidget;
@@ -310,7 +329,6 @@ protected slots:
     void slotGridHeightChanged(int value);
 
     /** Slot called when the unit metrics changes */
-    void slotGridUnitsChanged(int index);
 
     /** Slot called when the grid sub-divisions value changes */
     void slotGridSubdivisionsChanged(int value);
@@ -478,7 +496,11 @@ public:
     /** The same hanger as @p hid on every tower (standing truss or Tower)
      *  that lacks one at that height and direction. Returns how many. */
     int copyHangerToEveryTower(quint32 hid);
-protected:
+    /* Back to slots: a bare "protected:" here once ended the slots section,
+       and every string-connected slot below (Add Target, Add Person, Copy,
+       Paste...) silently stopped answering. monitor_test fails on "No such
+       slot" now. */
+protected slots:
 
     /** What a fixture is mounted on, in words -- shared by the Fixture
      *  Properties dialog and the Lighting Studio inspector so they cannot
@@ -510,6 +532,10 @@ protected:
     /** Add a new stage target and open its editor. */
     void slotAddTarget();
 
+    /** Add a line target (LINE_TARGET_DESIGN.md): straight across the stage,
+     *  4 m long, centred where the click was; then its editor. */
+    void slotAddTargetLine();
+
     /** Stand a person where the click was: a Person target, named and placed
      *  in one step, with no dialog in the way. Whoever it is, its height comes
      *  from the follow-spot subject height, so the views draw it at the size
@@ -518,6 +544,12 @@ protected:
 
     /** Open the target edit dialog for the given target ID. */
     void slotEditTarget(quint32 tid);
+
+private:
+    /** slotAddTarget() and slotAddTargetLine(): place, edit, link an Aim. */
+    void addTarget(bool line);
+
+protected slots:
 
     /** Open target edit on double-click. */
     void slotTargetDoubleClicked(quint32 tid);
@@ -555,7 +587,8 @@ protected:
     MonitorInventoryPanel* m_inventoryPanel;
     QSpinBox* m_gridWSpin;
     QSpinBox *m_gridHSpin;
-    QComboBox *m_unitsCombo;
+    QLabel *m_unitsLabel;   ///< the grid's unit, from Settings -> Units
+    void updateUnitsLabel();
     QSpinBox *m_gridSubdivSpin;
     QComboBox *m_snapCombo;
     QToolButton *m_snapToggle = nullptr;
@@ -646,6 +679,8 @@ private:
         QString name;
         float   x, y, z;            ///< metres
         QColor  color;
+        int     kind = 0;           ///< StageTarget::Kind
+        QVector<QVector3D> linePoints;   ///< a line's points, relative
     };
 
     QList<TrussClip>    m_trussClipboard;

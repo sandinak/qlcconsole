@@ -25,7 +25,20 @@
 #include <QTabWidget>
 #include <QTabBar>
 #include <QDialog>
+#include <QComboBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QCheckBox>
+#include <QPushButton>
+#include <QDialogButtonBox>
+#include <QXmlStreamReader>
+#include <QFile>
 
+#include "cuerunner.h"
+#include "showtreemodel.h"
+#include "showtreeview.h"
+#include "showtreecontroller.h"
+#include <QtMath>
 #include "appviews_test.h"
 
 #define private public
@@ -33,8 +46,13 @@
 #include "qlcfixturedef.h"
 #include "doc.h"
 #include "monitor.h"
+#include "monitorproperties.h"
 #define protected public
 #include "app.h"
+#include "appsettings.h"
+#include "shutterautoopen.h"
+#include <QTabWidget>
+#include "measurementunits.h"
 #include "functionmanager.h"
 #define private public
 #define protected public
@@ -42,6 +60,12 @@
 #undef protected
 #undef private
 #include "helpbrowser.h"
+#include "inputoutputmap.h"
+#include "networkroute.h"
+#include "outputpatch.h"
+#include "iopluginstub.h"
+#include "ioplugincache.h"
+#include "qlcfile.h"
 #undef protected
 #undef private
 
@@ -137,6 +161,10 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
     QCOMPARE(m_app->m_windowJumps.size(), views + 1);    // and Functions, which has no tab
+    // The Rig Overview is a window too: offered here as well as under View.
+    QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
+    QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
+             QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
 
     const QString label = tabs->tabBar()->tabData(2).toString();
     m_app->slotDetachContext(2);
@@ -368,6 +396,27 @@ void AppViews_Test::virtualConsoleKeysDontClashWithTheApp()
     vc->disableEdit();
 }
 
+void AppViews_Test::theRunTabIsTheCueRunner()
+{
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QLatin1String("Run"))
+            jump = a;
+    QVERIFY(jump != nullptr);
+    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+0"));
+    jump->trigger();
+    QWidget *page = m_app->m_tab->currentWidget();
+    CueRunner *runner = qobject_cast<CueRunner *>(page);
+    QVERIFY(runner != nullptr);
+    QCOMPARE(runner->runnerSize(), CueRunner::Full);
+    QCOMPARE(runner->follow(), ShowTree::invalidId());    // the current production
+    QCOMPARE(page->property("helpTopic").toString(), QString("show-tree.md#the-cue-runner"));
+    // The others keep their keys (⇧⌘9 is still Simple Desk).
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QLatin1String("Simple Desk"))
+            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+9"));
+}
+
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
 {
     QTabWidget *tabs = m_app->m_tab;
@@ -393,6 +442,11 @@ void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
     QTemporaryDir home;
     const QByteArray realHome = qgetenv("HOME");
     qputenv("HOME", home.path().toUtf8());
+#ifdef Q_OS_WIN
+    // Windows takes the home folder from USERPROFILE, not HOME.
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("USERPROFILE", home.path().toUtf8());
+#endif
 
     // A definition that is only in the show cache.
     QLCFixtureDefCache *defs = m_app->m_doc->fixtureDefCache();
@@ -423,6 +477,416 @@ void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
              "the show's definition did not come from the show cache");
 
     qputenv("HOME", realHome);
+#ifdef Q_OS_WIN
+
+    qputenv("USERPROFILE", realProfile);
+#endif
+}
+
+void AppViews_Test::settingsChoosesTheUnits()
+{
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Millimetres);
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        QVERIFY(units != nullptr);
+        QCOMPARE(units->count(), 5);
+        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Millimetres));
+        units->setCurrentIndex(units->findData(int(MeasurementUnits::Inches)));
+        dlg.accept();
+    }
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Inches));
+        dlg.reject();   // Cancel keeps it
+    }
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+}
+
+void AppViews_Test::settingsAdvancedHoldsAutoOpen()
+{
+    ShutterAutoOpen *ao = m_app->doc()->shutterAutoOpen();
+    QVERIFY(ao->isEnabled());
+    {
+        AppSettings dlg(m_app);
+        QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
+        QVERIFY(tabs != nullptr);
+        QCOMPARE(tabs->count(), 2);
+        QCOMPARE(tabs->tabText(1), QStringLiteral("Advanced"));
+        QWidget *adv = tabs->widget(1);
+        QCheckBox *box = adv->findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"));
+        QVERIFY(box != nullptr);
+        QVERIFY(box->isChecked());
+        // The expert settings moved there; everyday ones stay on General.
+        QVERIFY(adv->findChild<QPushButton *>(QStringLiteral("settingsOpenShowControl")) != nullptr);
+        QVERIFY(adv->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) == nullptr);
+        QVERIFY(tabs->widget(0)->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) != nullptr);
+        dlg.showAdvanced();
+        QCOMPARE(tabs->currentIndex(), 1);
+
+        box->setChecked(false);
+        dlg.reject();                   // Cancel keeps it
+    }
+    QVERIFY(ao->isEnabled());
+    {
+        AppSettings dlg(m_app);
+        dlg.findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"))->setChecked(false);
+        dlg.accept();
+    }
+    QVERIFY(ao->isEnabled() == false);
+    QVERIFY(m_app->doc()->isModified());
+    {
+        AppSettings dlg(m_app);
+        QVERIFY(dlg.findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"))->isChecked() == false);
+    }
+    ao->setEnabled(true);
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::theGridFollowsTheUnitPreference()
+{
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope,
+                       QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+    auto forget = [&settings]() {
+        settings.remove(MeasurementUnits::settingsKey());
+        settings.remove(QStringLiteral("units/seededFromShow"));
+    };
+    forget();
+
+    // A show as an older version saved it: a 40 x 30 ft stage, in feet.
+    QTemporaryDir dir;
+    const QString show = dir.filePath(QStringLiteral("feet.qxw"));
+    m_app->clearDocument();
+    MonitorProperties *mp = m_app->doc()->monitorProperties();
+    mp->setGridUnits(MonitorProperties::Feet);   // relabel, as a file says it
+    mp->setGridSize(QVector3D(40, 10, 30));
+    QCOMPARE(m_app->saveXML(show), QFile::NoError);
+
+    // Never chosen: the first show opened, in feet, makes it feet.
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    mp = m_app->doc()->monitorProperties();
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Feet);
+    QCOMPARE(mp->gridUnits(), MonitorProperties::Feet);
+    QCOMPARE(mp->gridSize(), QVector3D(40, 10, 30));
+    QLabel *label = Monitor::instance()->findChild<QLabel *>(QStringLiteral("monitorGridUnitsLabel"));
+    QVERIFY(label != nullptr);
+    QVERIFY(label->text().startsWith(QStringLiteral("Feet")));
+    QVERIFY(Monitor::instance()->findChild<QComboBox *>(QStringLiteral("monitorGridUnitsCombo")) == nullptr);
+
+    // Only once: chosen mm, the same show opens in metres, the same stage.
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    mp = m_app->doc()->monitorProperties();
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Millimetres);
+    QCOMPARE(mp->gridUnits(), MonitorProperties::Meters);
+    QVERIFY(qAbs(mp->gridSize().x() - 12.192f) < 1e-3f);
+    QVERIFY(qAbs(mp->gridSize().z() - 9.144f) < 1e-3f);
+    QVERIFY(label->text().startsWith(QStringLiteral("Metres")));
+
+    // Saved in the person's unit, whole numbers for older readers.
+    const QString saved = dir.filePath(QStringLiteral("metres.qxw"));
+    QCOMPARE(m_app->saveXML(saved), QFile::NoError);
+    QFile f(saved);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray xml = f.readAll();
+    QVERIFY(xml.contains("Units=\"0\""));
+    QVERIFY(xml.contains("Width=\"12\""));
+    QVERIFY(xml.contains("ExactWidth=\"12.192"));
+
+    // Changing it in Settings converts the open show and redraws.
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        units->setCurrentIndex(units->findData(int(MeasurementUnits::Inches)));
+        dlg.accept();
+    }
+    QCOMPARE(mp->gridUnits(), MonitorProperties::Feet);
+    QVERIFY(qAbs(mp->gridSize().x() - 40.0f) < 1e-3f);
+    QVERIFY(label->text().startsWith(QStringLiteral("Feet")));
+
+    // New: in the person's unit too.
+    m_app->clearDocument();
+    QCOMPARE(m_app->doc()->monitorProperties()->gridUnits(), MonitorProperties::Feet);
+
+    // (No second New straight after: MasterTimer::stop() right behind a
+    // start() can wait forever -- see TODO.md.)
+    forget();
+}
+
+void AppViews_Test::rigNetworkFooterSaysWhyOutputIsHeld()
+{
+    typedef InputOutputMap::TransmitGateStatus S;
+    S st;
+    st.state = S::Held;
+    st.held = 1;
+    st.networkOutputs = 1;
+    st.networks << "172.18.0.0/20";
+    st.connected << "en0 10.4.12.7";
+    bool alarm = false;
+    QCOMPARE(App::rigNetworkFooterText(st, &alarm),
+             QString("Output held — not on the rig network (172.18.0.0/20). "
+                     "Connected: en0 10.4.12.7"));
+    QVERIFY(alarm);
+    st.networkOutputs = 3;
+    QVERIFY(App::rigNetworkFooterText(st).startsWith("1 of 3 outputs held — not on the rig network"));
+    st.state = S::NotSet;
+    QVERIFY(App::rigNetworkFooterText(st, &alarm).startsWith("Rig network not set"));
+    QVERIFY(alarm == false);
+    st.state = S::Clear;
+    QVERIFY(App::rigNetworkFooterText(st).isEmpty());
+
+    /* The real footer, on a laptop at school, patched to the school's own
+       interface: the line is right there, and held. The plugin is the
+       engine's test stub dressed as Art-Net, so nothing is ever sent. */
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    if (cache->plugin(QStringLiteral("I/O Plugin Stub")) == nullptr)
+        cache->load(stubDir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(cache->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    stub->m_nameOverride = QStringLiteral("ArtNet");
+    stub->m_lineNames = QStringList() << QStringLiteral("10.4.12.7");
+    stub->m_openOutputs.clear();
+
+    NetworkRoute::LocalAddress school;
+    school.iface = "en0";
+    school.ip = QHostAddress("10.4.12.7");
+    school.prefix = 16;
+    NetworkRoute::setResolverForTest(
+        [school]() { return QList<NetworkRoute::LocalAddress>() << school; },
+        [](const QHostAddress &) { return QHostAddress("10.4.12.7"); });
+
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    QLabel *chip = m_app->findChild<QLabel *>("footerRigNetwork");
+    QVERIFY(chip != nullptr);
+    QVERIFY(chip->isHidden());
+
+    QXmlStreamReader xml(QStringLiteral(
+        "<InputOutputMap>\n"
+        " <RigNetwork>172.18.0.0/20</RigNetwork>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.12.7\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n"));
+    xml.readNextStartElement();
+    QVERIFY(iom->loadXML(xml));
+    QCOMPARE(iom->outputPatchesCount(0), 1);
+    QVERIFY(iom->outputPatch(0, 0)->isHeld());
+    QVERIFY(stub->m_openOutputs.isEmpty());
+    QVERIFY(chip->isHidden() == false);
+    QCOMPARE(chip->text(), QString("Output held — not on the rig network (172.18.0.0/20). "
+                                   "Connected: en0 10.4.12.7"));
+    QVERIFY(chip->styleSheet().contains("#e60000"));
+    QVERIFY(chip->toolTip().contains("Universe 1"));
+
+    // Lifting it for the session: the line opens, and the chip says so
+    iom->setTransmitOverride(true);
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 0);
+    QVERIFY(chip->text().startsWith("Transmitting anyway"));
+
+    // Unpatched: nothing left to say
+    iom->setTransmitOverride(false);
+    QVERIFY(stub->m_openOutputs.isEmpty());
+    iom->forgetOfflinePatches(0);
+    QVERIFY(chip->isHidden());
+    iom->setRigNetworks(QStringList());
+    m_app->clearDocument();
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
+    stub->m_nameOverride.clear();
+    stub->m_lineNames.clear();
+    stub->m_openOutputs.clear();
+}
+
+void AppViews_Test::rigNetworkSettingsRoundTrip()
+{
+    QSettings settings;
+    const QVariant before = settings.value(App::rigNetworkGateSettingKey());
+
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    iom->setRigNetworks(QStringList() << "172.18.0.0/20");
+    m_app->doc()->resetModified();
+    QVERIFY(m_app->doc()->isModified() == false);
+    {
+        AppSettings dlg(m_app);
+        QLineEdit *edit = dlg.findChild<QLineEdit *>("settingsRigNetworks");
+        QCheckBox *only = dlg.findChild<QCheckBox *>("settingsRigNetworkOnly");
+        QLabel *error = dlg.findChild<QLabel *>("settingsRigNetworksError");
+        QPushButton *anyway = dlg.findChild<QPushButton *>("settingsTransmitAnyway");
+        QDialogButtonBox *box = dlg.findChild<QDialogButtonBox *>();
+        QVERIFY(edit && only && error && anyway && box);
+        QCOMPARE(edit->text(), QString("172.18.0.0/20"));
+        QVERIFY(only->isChecked());
+        QVERIFY(anyway->isEnabled());
+
+        // Validated as typed: OK waits for something that parses
+        edit->setText("172.18.0.0/20, 172.18/20");
+        QVERIFY(error->isHidden() == false);
+        QVERIFY(error->text().contains("172.18/20"));
+        QVERIFY(box->button(QDialogButtonBox::Ok)->isEnabled() == false);
+
+        edit->setText("172.18.0.0/20, 10.20.1.9/16");
+        QVERIFY(error->isHidden());
+        QVERIFY(box->button(QDialogButtonBox::Ok)->isEnabled());
+        only->setChecked(false);
+        dlg.accept();
+    }
+    QCOMPARE(iom->rigNetworks(), QStringList() << "172.18.0.0/20" << "10.20.0.0/16");
+    QVERIFY(m_app->doc()->isModified());   // the networks are the show's
+    QVERIFY(iom->transmitGateEnabled() == false);
+    QCOMPARE(QSettings().value(App::rigNetworkGateSettingKey()).toBool(), false);
+
+    {
+        AppSettings dlg(m_app);
+        QCOMPARE(dlg.findChild<QLineEdit *>("settingsRigNetworks")->text(),
+                 QString("172.18.0.0/20, 10.20.0.0/16"));
+        QVERIFY(dlg.findChild<QCheckBox *>("settingsRigNetworkOnly")->isChecked() == false);
+        dlg.findChild<QCheckBox *>("settingsRigNetworkOnly")->setChecked(true);
+        dlg.reject();   // Cancel changes nothing
+    }
+    QVERIFY(iom->transmitGateEnabled() == false);
+
+    {
+        AppSettings dlg(m_app);
+        dlg.findChild<QCheckBox *>("settingsRigNetworkOnly")->setChecked(true);
+        dlg.accept();
+    }
+    QVERIFY(iom->transmitGateEnabled());
+
+    // A show with none but network patches is offered its own, not given them
+    m_app->clearDocument();
+    IOPluginStub *stub = static_cast<IOPluginStub *>(
+            m_app->doc()->ioPluginCache()->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY(stub != nullptr);   // loaded by the footer test before this one
+    stub->m_nameOverride = QStringLiteral("ArtNet");
+    stub->m_lineNames = QStringList() << QStringLiteral("10.4.12.7");
+    NetworkRoute::LocalAddress school;
+    school.iface = "en0";
+    school.ip = QHostAddress("10.4.12.7");
+    school.prefix = 16;
+    NetworkRoute::setResolverForTest(
+        [school]() { return QList<NetworkRoute::LocalAddress>() << school; },
+        [](const QHostAddress &) { return QHostAddress("10.4.12.7"); });
+    QXmlStreamReader xml(QStringLiteral(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"172.18.2.219\" Line=\"1\" Network=\"172.18.2.0/24\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n"));
+    xml.readNextStartElement();
+    QVERIFY(iom->loadXML(xml));
+    QCOMPARE(iom->outputPatchesCount(0), 1);
+    {
+        AppSettings dlg(m_app);
+        QLineEdit *edit = dlg.findChild<QLineEdit *>("settingsRigNetworks");
+        QVERIFY(edit->text().isEmpty());
+        QVERIFY(edit->placeholderText().contains("172.18.2.0/24"));
+        QPushButton *use = dlg.findChild<QPushButton *>("settingsRigUseSuggested");
+        QVERIFY(use != nullptr);
+        use->click();
+        QCOMPARE(edit->text(), QString("172.18.2.0/24"));
+        dlg.reject();
+        QVERIFY(iom->rigNetworks().isEmpty());
+    }
+    iom->forgetOfflinePatches(0);
+    iom->setRigNetworks(QStringList());
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
+    m_app->clearDocument();
+    stub->m_nameOverride.clear();
+    stub->m_lineNames.clear();
+    stub->m_openOutputs.clear();
+
+    if (before.isValid())
+        settings.setValue(App::rigNetworkGateSettingKey(), before);
+    else
+        settings.remove(App::rigNetworkGateSettingKey());
 }
 
 QTEST_MAIN(AppViews_Test)
+
+/* WCAG relative luminance and contrast. */
+static double luminance(QRgb c)
+{
+    auto lin = [](int v) {
+        const double s = v / 255.0;
+        return s <= 0.03928 ? s / 12.92 : qPow((s + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * lin(qRed(c)) + 0.7152 * lin(qGreen(c)) + 0.0722 * lin(qBlue(c));
+}
+
+static double contrast(QRgb a, QRgb b)
+{
+    const double la = luminance(a), lb = luminance(b);
+    return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+}
+
+void AppViews_Test::theDropAreaReadsInEveryTheme()
+{
+    ShowTreeController *st = m_app->doc()->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 cue = st->addCue(list, -1, "One");
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QVERIFY(view->selectNode(cue));
+    QLabel *zone = view->findChild<QLabel *>("stCueDropZone");
+    QVERIFY(zone != nullptr);
+    zone->resize(420, 90);
+
+    const int was = m_app->theme();
+    const int themes[] = { App::ThemeDefault, App::ThemeTan, App::ThemeBlue,
+                           App::ThemeQLCOriginal, App::ThemeRedShift, App::ThemeVSCodeDark };
+    for (int theme : themes)
+    {
+        m_app->setTheme(theme);
+        QCoreApplication::processEvents();
+        // The words, against what is behind them: the commonest colour is
+        // the page, the one furthest from it the text.
+        const QImage img = zone->grab().toImage();
+        QHash<QRgb, int> counts;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                ++counts[img.pixel(x, y) | 0xff000000];
+        QRgb bg = 0;
+        int most = -1;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            if (it.value() > most)
+            {
+                most = it.value();
+                bg = it.key();
+            }
+        double best = 1.0;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            best = qMax(best, contrast(it.key(), bg));
+        QVERIFY2(best >= 4.5, qPrintable(QString("theme %1: text contrast %2").arg(theme).arg(best)));
+    }
+    m_app->setTheme(was);
+    QVERIFY(st->removeProduction(st->productions().first().id));
+}
+
+void AppViews_Test::quittingWithTheShowTreeShowing()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    int at = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i) == view || tabs->widget(i)->isAncestorOf(view))
+            at = i;
+    QVERIFY(at >= 0);
+    tabs->setCurrentIndex(at);
+    m_app->showNormal();
+    QCoreApplication::processEvents();
+    QVERIFY(view->isVisible());
+
+    // Not hidden first: App goes while it is on screen, as at quit.
+    m_app->doc()->resetModified();
+    delete m_app;
+    m_app = nullptr;
+    QVERIFY(ShowTreeView::instance() == nullptr);
+}

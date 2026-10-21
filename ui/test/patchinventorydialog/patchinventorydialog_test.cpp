@@ -243,7 +243,7 @@ void PatchInventoryDialog_Test::aGenericDimmersChannelsAreChosenHere()
 
 void PatchInventoryDialog_Test::aModeIsChosenFromTheDefinitionsModes()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(m_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
 
@@ -264,7 +264,7 @@ void PatchInventoryDialog_Test::aModeIsChosenFromTheDefinitionsModes()
 
 void PatchInventoryDialog_Test::modesTheFixtureCannotMoveToAreOfferedButDisabled()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(m_doc, 4, 8, 8, &basic, &ext);   // Extended: 8 heads vs 1
     QVERIFY(f != nullptr);
     // On Extended, with a group laying out its 8 heads: Basic would lose 2..8.
@@ -303,7 +303,7 @@ void PatchInventoryDialog_Test::aSceneThatSetsChannelsLocksTheChannelCount()
 
 void PatchInventoryDialog_Test::replanKeepsTheModesChosen()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(m_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
     Fixture *d = staged(m_doc, 2, "Dimmer");
@@ -828,7 +828,7 @@ void PatchInventoryDialog_Test::whatHasNoRoomIsFlaggedAndCanCarryOn()
    should update the fixture" */
 void PatchInventoryDialog_Test::fitByChangingModesShrinksTheBiggestFirst()
 {
-    QLCFixtureMode *big1, *small1, *big2, *small2;
+    QLCFixtureMode *big1 = nullptr, *small1 = nullptr, *big2 = nullptr, *small2 = nullptr;
     Fixture *p = stagedTwoMode(m_doc, 200, 50, 1, &big1, &small1);   // Basic 200, Extended 50
     Fixture *q = stagedTwoMode(m_doc, 180, 40, 1, &big2, &small2);
     QVERIFY(p != nullptr && q != nullptr);

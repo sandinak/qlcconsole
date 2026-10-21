@@ -141,6 +141,23 @@ public:
      *  any missing levels, and return its node. */
     QTreeWidgetItem* ensurePaletteFolder(const QString& fullPath);
 
+    /** Palette folders are shared by all palette types. By default the tree
+     *  shows them first (top level = folders, any type inside). With
+     *  $enable it groups by type first (Color › 01-Song, Aim › 01-Song …),
+     *  the same folders under each type. Rebuilds the tree. */
+    void setPaletteTypesFirst(bool enable);
+    bool paletteTypesFirst() const { return m_paletteTypesFirst; }
+
+    /** Tree path of $p's folder ("Palettes/01-Song", or by type
+     *  "Palettes/Color/01-Song"). */
+    QString paletteDisplayPath(const QLCPalette *p) const;
+
+    /** The stored (type-independent) folder path for a tree folder path. */
+    QString paletteStorePath(const QString &displayPath) const;
+
+    /** File $p into the tree folder $displayFolder. */
+    void filePalette(QLCPalette *p, const QString &displayFolder);
+
 private:
     /** Update $item's contents from the given $function */
     void updateFunctionItem(QTreeWidgetItem* item, const Function* function);
@@ -155,6 +172,9 @@ private:
     /** Ensure the synthetic "Palettes" category item exists; returns it. */
     QTreeWidgetItem* palettesCategoryItem();
 
+    /** The type heading for palette type $type (grouping by type). */
+    QTreeWidgetItem* paletteTypeItem(int type);
+
 private:
     Doc* m_doc;
 
@@ -166,8 +186,53 @@ public:
 
     void deleteFolder(QTreeWidgetItem *item);
 
+    /** True if $item is a user folder (not a type category, the Palettes
+     *  category, a function or a palette): something that can be renamed,
+     *  deleted or dragged into another folder. */
+    bool isUserFolder(const QTreeWidgetItem *item) const;
+
+    /** Number of functions/palettes inside the folder $item, at any depth. */
+    int folderContentCount(const QTreeWidgetItem *item) const;
+
+    /** Remove the folder $item but keep what is in it: its functions/palettes
+     *  and sub-folders move up into its parent folder (nothing is deleted).
+     *  The tree is rebuilt asynchronously (folderContentsMoved()). */
+    void removeFolderKeepContents(QTreeWidgetItem *item);
+
+    /** Would dropping $mime on $target (NULL = empty space / top level) move
+     *  something into a folder or onto a collection? Drives dragMoveEvent. */
+    bool canDropMimeOn(const QMimeData *mime, QTreeWidgetItem *target);
+
+    /** Perform the drop of $mime on $target (external/Programming mode):
+     *  functions onto a Collection become members (functionsDroppedOnCollection);
+     *  functions, palettes and folders onto a folder/category/empty space move
+     *  there (paths change, the show is marked modified, the tree rebuilds
+     *  asynchronously and emits folderContentsMoved()). Returns true if the
+     *  drop was taken. */
+    bool dropMimeOn(const QMimeData *mime, QTreeWidgetItem *target);
+
 private:
     QTreeWidgetItem *folderItem(QString name);
+
+    /** Full, slash-free-ended folder path ("Scene/Act 1", "Palettes/Color")
+     *  that a drop on $target lands in for something of $kind/$typeName, or
+     *  an empty string if $target can't take it. */
+    QString dropFolderPath(QTreeWidgetItem *target, NodeKind kind,
+                           const QString &typeName) const;
+
+    /** Move everything under folder $oldPath to $newPath (both full paths,
+     *  same category), merging into $newPath if it exists. Returns the
+     *  re-rooted paths of the folders that existed under $oldPath (so the
+     *  empty ones can be recreated after the rebuild). */
+    QStringList reRootFolder(const QString &oldPath, const QString &newPath);
+
+    /** Shared by canDropMimeOn()/dropMimeOn(). */
+    bool handleFolderDrop(const QMimeData *mime, QTreeWidgetItem *target, bool apply);
+
+    /** Rebuild the tree on the next event-loop turn (never from inside a drop:
+     *  Qt's drag machinery still references the items), recreate $keepFolders
+     *  and reveal $revealPath. */
+    void scheduleRebuild(const QStringList &keepFolders, const QString &revealPath);
 
 private slots:
     void slotItemChanged(QTreeWidgetItem *item);
@@ -194,13 +259,17 @@ public:
      *  IDs (quint32). */
     static const char* paletteDragMimeType();
 
+    /** MIME type for dragging folders between folders. Payload is a stream
+     *  of (int NodeKind, QString full folder path) pairs. */
+    static const char* folderDragMimeType();
+
     /** Enable external drag mode - drags will always use external MIME type without modifier key */
     void setExternalDragMode(bool enable);
 
 signals:
-    /** Emitted (external/Programming mode) after dragged palettes are dropped
-     *  onto a folder, so the owner can refresh the tree. */
-    void paletteDroppedToFolder();
+    /** Emitted after functions/palettes/folders were moved into another folder
+     *  (by a drop or removeFolderKeepContents()) and the tree was rebuilt. */
+    void folderContentsMoved();
 
     /** Emitted (external/Programming mode) when function(s) are dropped onto a
      *  Collection node — @p containerId is the target collection, @p fids the
@@ -224,6 +293,10 @@ protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    void dragLeaveEvent(QDragLeaveEvent *event) override;
+    /** Paints the drop highlight around the folder/collection a drag would
+     *  land in (external mode, where Qt's own indicator never shows). */
+    void paintEvent(QPaintEvent *event) override;
 
     /** Override mimeData to provide function IDs for Qt's built-in drag */
     QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const
@@ -243,6 +316,11 @@ private:
     QList<QTreeWidgetItem *>m_draggedItems;
     QPoint m_dragStartPosition;
     bool m_externalDragMode;
+    /** Row highlighted as the drop destination (invalid = none; a valid
+     *  root-level drop highlights the whole viewport via m_dropOnRoot). */
+    QPersistentModelIndex m_dropHighlight;
+    bool m_dropOnRoot;
+    bool m_paletteTypesFirst;
 };
 
 /** @} */

@@ -58,7 +58,7 @@ where it is.
 | **Ballyhoo** | Wide, pseudo-random audience-scan sweeps |
 | **Diamond** / **Figure-8** / **Lissajous** | Shapes traced by each head |
 | **Drawn Path** | Heads follow a path you draw in the look editor |
-| **Fan** / **Orbit** / **Followspot** | Fan out, orbit, or follow a joystick's X/Y |
+| **Fan** / **Orbit** / **Followspot** | Fan out, orbit, or follow a joystick's X/Y. Followspot can fade a head out near its pan/tilt limit (**Fade Near Limit**) or while a drape, wall or riser is between it and the subject (**Fade When Blocked** — see [Line of sight](stage-targets.md#line-of-sight)) |
 | **Pan/Tilt Phaser** | Independent pan and tilt sines, phase-spread |
 | **Stage Shape** | Heads trace the outline of a shape (circle, polygon, star, line) round the look's Aim target, on the floor or stood up as a wall. With **Spread** on, the spread decides which head takes which point — Axis *stage left to right* puts the leftmost heads on the left of the line, no beams crossing |
 | **Sweep** | A synchronised pan or tilt scan with a cascade |
@@ -76,7 +76,8 @@ where it is.
 
 These draw on a **grid**: the look's group as laid out in its head layout
 (a run of strips, a matrix), or, across several groups, the rig as it
-stands on stage.
+stands on stage. For pixel boxes and panels see also
+[Matrix effects](#matrix-effects).
 
 | Effect | What it does |
 |---|---|
@@ -85,6 +86,80 @@ stands on stage.
 | **Plasma** | Smooth shifting colour fields |
 | **Text** | Words on the grid — scrolling, or still in the middle; see [Text](programming-tab.md#text) |
 | **Wand** | A bright wand sweeps across once, then clears |
+
+## Matrix effects
+
+Effects for **pixel boxes and panels** — the looks a pixel-mapping desk
+throws across a festival box rig, done as effects. Each draws on a
+**canvas**: the look's group as laid out in its head layout (eight boxes
+side by side are one 120 × 5 picture), the rig as it stands on stage for
+a look on several groups, or — a box in a look with no group — the box's
+own grid (an XL-450 is 15 × 5). They're under the **Matrix** tab of the
+effect browser, and work on any RGB matrix, strip or row of pars as well.
+
+| Effect | What it does | Main settings |
+|---|---|---|
+| **Matrix Bars** | Bars of colour scan across, up or down, or bounce between the edges | Direction, Bars, Width, Tail |
+| **Matrix Box Chase** | Whole boxes light in turn round the rig, a white hit as each comes on; on one box, its fifths take turns | Order (left to right, bounce, out from the middle, odd/even, random…), Lit, Fade, Flash |
+| **Matrix Checker** | A checkerboard that swaps on the beat — colours trade squares, squares go on and off, or crossfade | Swap, Square, Fade, Flash |
+| **Matrix Chevrons** | Arrows march the way they point: right, left, up, down, out from or in to the middle | Direction, Spacing, Thickness, Angle |
+| **Matrix EQ** | Equaliser bars with falling peak dots, from the live audio input — simulated on the beat while there's none | Source, Bar width, Gain, Peaks, From (bottom / middle), Colours |
+| **Matrix Iris** | An eye opens and closes in the middle — breathing, blinking, or snapping open on the beat | Motion, Shape (eye, circle, box, slit), Edge, Background |
+| **Matrix Noise** | Drifting clouds of colour sized for big pixels, with white glints at the peaks | Scale, Drift, Contrast, Palette (look, rainbow, fire, ocean), Glints |
+| **Matrix Radar** | A line (or two, three, four blades) turns round the middle with a fading wake | Blades, Width, Wake, Direction |
+| **Matrix Rain** | Drops fall down the columns with fading trails, each column at its own pace | Density, Trail, Direction |
+| **Matrix Ripple** | Rings spread out from the middle, an edge, or anywhere — free running or one a beat | Timing, Spacing, Width, Fade, Origin |
+| **Matrix Snake** | Snakes wind along a path: along the rows, up and down the columns, spiralling in, round the edge | Path, Snakes, Length, Colours |
+| **Matrix Sparkle** | Colour twinkles that fade, with quick white flashes | Density, Decay, Flashes, Background |
+| **Matrix Strobe** | Strobe hits on the beat: the whole canvas, alternate boxes, a random box, random blocks, halves or rows | Pattern, Colour, Flash length, Decay |
+| **Matrix Wipe** | Colour fills and empties — across, from the middle, diagonally, as a circle — or wipes each look colour over the last | Direction, Cycle, Edge |
+
+Colours come from the look, in its order (each bar, ring, chevron or step
+takes the next); with no colour in the look each has colours of its own.
+
+**Speed.** **speed** is in sweeps, rings or steps a second — or a beat
+when the look is on a speed master ([Speed masters](#speed-masters)).
+Effects with a **timing** setting can instead step **On the beat**, with a
+**division** (every bar, every 2 beats, every beat, twice or four times a
+beat); on the beat, every one lands on the same beat as the rest of the
+show. With no beat running they fall back to their speed.
+
+**Scope.** **Whole canvas** draws one picture across every box; **Each
+box** draws the same picture in each — a ripple from the middle of every
+box, a radar in each. Only a fixture that is itself a grid counts as a
+box: a strip in a matrix built of strips, or a par in a row of them, is
+just a place on the canvas.
+
+**Spread.** Matrix Noise and Matrix Box Chase take the look's
+[Spread](#spread) row: with it on, the spread decides where each head
+sits in the clouds (Noise) or which box goes when (Box Chase, in place of its Order).
+
+### The white pixels
+
+A box like the Warmdance XL-450 has rows of RGB pixels and rows of white
+ones (RGB, W, RGB, W, RGB). Every matrix effect has a **white** setting
+for them and a **whiteLevel** to scale them:
+
+| white | The white pixels… |
+|---|---|
+| **Colour + accents** (default) | carry the white part of the colour — none for a saturated red, all of it for white — plus the effect's **accents**: a bar's leading edge, a sparkle's flash, a drop's head, a strobe hit |
+| **Follow brightness** | light wherever the picture is lit (Matrix EQ's default, so the bars are solid) |
+| **Accents only** | light only for the accents |
+| **RGB only** | stay out of it; the accents go on the RGB pixels |
+| **White only** | show the picture; the RGB pixels stay out of it |
+
+It degrades gracefully: on a canvas with no white pixels (the XL-450 in its
+135ch RGB mode, any RGB matrix) the accents flash white on the RGB pixels,
+and **White only** draws the picture in white on them; on one with no RGB
+pixels (its 30ch white mode) the picture is drawn in white whatever the
+setting, and two-colour effects (the checker) go on and off instead.
+
+**Set the box up first.** The XL-450's 165ch mode numbers its 45 RGB heads
+before its 30 white ones, so its head map must say which row is which — see
+[Split by Head Type](fixture-manager.md#split-by-head-type) (or check with
+**Grid Probe**). Make one group of the boxes as they hang for a whole-rig
+canvas, or use a group per kind (RGB rows, white rows) when you want them
+driven apart.
 
 ## Music and control
 
@@ -202,6 +277,12 @@ the step's own) to the look it plays, a collection to its members — so the
 same look can run on Speed 1 in one chase and Speed 3 in another. With
 nothing set anywhere an effect keeps its own speed, as before.
 
+A look's **Speed** and its **Spread** belong to the look, not to the
+effect: trying other effects in the look editor's picker — a click or a
+double-click on a tile — keeps them, so you can audition effects without
+setting the master again. An effect preset that sets one of them still
+wins. The **One-shot length** stays with the effect it was set for.
+
 On the main clock or a master, an effect's **rate** (or **speed**) counts
 **cycles per beat** — 1 is once a beat, 0.25 once a bar — and the look
 editor labels it "(per beat)". It stays on the beat, follows the master's
@@ -246,7 +327,9 @@ Effects run over the base, in list order:
 - A **dimmer effect** (Breathe, Dimmer Phaser, Wave, Candle…) **scales**
   whatever is there: the fixture's master dimmer; else the head's own dimmer
   (a mover whose definition puts its Dimmer in its head); else, with no
-  dimmer at all, its colour. Half of a look at 50 % is 25 %.
+  dimmer at all, its colour. Half of a look at 50 % is 25 %. On a fixture
+  whose master dimmer serves several heads (a two-arm beam), the brightest
+  head sets it: one lit arm is enough.
 - A **movement effect** (Ballyhoo, Orbit, Figure 8…) moves round where the
   look's Aim or Pan/Tilt points each head ([Position](#position-moving-heads)),
   and leaves the colour and dimmer alone.
@@ -306,6 +389,13 @@ won't do what it seems to, with a line under the list saying how many:
 - **No Aim or Pan/Tilt** — a movement effect with nothing to move round.
 - **Colour 3 of the look** — a colour no fixture has a set for and no
   effect uses.
+- **Black** — a Colour look that is all zero (a "White" saved as
+  #000000): the heads it colours give no light, and an effect that takes the
+  look's colours (Confetti, a chase) gets black from it too.
+- **Can't move** — on an Aim, Pan/Tilt or movement look: a fixture whose
+  definition marks every Pan (or Tilt) channel Fine has no coarse channel to
+  turn the head, so it stays at 0 whatever the look says. Make the main
+  channel Coarse in the fixture definition.
 - **No targets** — the look lights nothing until fixtures or groups are
   added.
 
@@ -355,7 +445,8 @@ is checked end to end, through to DMX, on all four kinds of fixture.
 | Effect | What it does |
 |---|---|
 | **WLED device effect** | Any of the device's own effects, run on WLED fixtures themselves |
-| **WLED Android, Aurora, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase Flash, Chase Rainbow, Chunchun, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fill Noise, Fire 2012, Fire Flicker, Fireworks 1D, Flow, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, Juggle, Lake, Lightning, Loading, Meteor, Multi Comet, Noise Pal, Oscillate, Pacifica, Palette, Phased, Plasma, Police, Popcorn, Pride 2015, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Sparkle, Sparkle Dark, Spots, Spots Fade, Stream, Strobe, Strobe Rainbow, Sunrise, Sweep, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe** | WLED's effects with a qlcconsole version that runs on the look's other fixtures too, at WLED's speed, intensity, palette and colours |
+| **WLED Android, Aurora, Blends, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase 2, Chase 3, Chase Flash, Chase Flash Rnd, Chase Rainbow, Chase Random, Chunchun, Color Clouds, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Dissolve Rnd, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fairytwinkle, Fill Noise, Fire 2012, Fire Flicker, Fireworks, Fireworks 1D, Fireworks Starburst, Flow, Flow Stripe, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, ICU, Juggle, Lake, Lighthouse, Lightning, Loading, Meteor, Meteor Smooth, Multi Comet, Noise 1, Noise 2, Noise 3, Noise 4, Noise Pal, Oscillate, Pacifica, PacMan, Palette, Percent, Perlin Move, Phased, Phased Noise, Plasma, Police, Popcorn, Pride 2015, PS 1D Balance, PS Chase, PS Dancing Shadows, PS DripDrop, PS Fire 1D, PS Fireworks 1D, PS Hourglass, PS Pinball, PS Sparkler, PS Spray 1D, PS Springy, PS Starburst, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scan Dual, Scanner, Scanner Dual, Shimmer, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Solid Pattern, Solid Pattern Tri, Sparkle, Sparkle Dark, Sparkle+, Spots, Spots Fade, Stream, Stream 2, Strobe, Strobe Mega, Strobe Rainbow, Sunrise, Sweep, Sweep Random, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Twinkleup, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe, Wipe Random** | WLED's effects with a qlcconsole version that runs on the look's other fixtures too, at WLED's speed, intensity, palette and colours |
+| **WLED DJ Light, Freqmap, Freqpixels, Freqwave, Gravcenter, Gravcentric, Gravfreq, Gravimeter, Juggles, Matripix, Midnoise, Noisefire, Noisemeter, Noisemove, Plasmoid, PS GEQ 1D, PS Sonic Boom, PS Sonic Stream, Puddlepeak, Puddles, Ripple Peak, Rocktaves, Waterfall** | WLED's sound-reactive effects, the same way, following the audio input (Inputs/Outputs); dark with none |
 
 See [WLED effects](programming-tab.md#wled-effects).
 
@@ -369,7 +460,9 @@ as "&lt;name&gt; (RGB Matrix)".
 ## Writing your own
 
 An effect is a JavaScript file in your **EffectScripts** folder
-(`~/Library/Application Support/qlcconsole/EffectScripts` on a Mac); it
+(`~/Library/Application Support/qlcconsole/EffectScripts` on a Mac,
+`%USERPROFILE%\qlcconsole\EffectScripts` on Windows,
+`~/.qlcconsole/EffectScripts` on Linux); it
 appears in the browser next time the app starts. The script is handed every
 fixture (each head of a pixel fixture), the look's colours and its own
 settings each tick, and returns what each should do. See the

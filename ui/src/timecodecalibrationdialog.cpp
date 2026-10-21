@@ -542,10 +542,13 @@ void TimecodeCalibrationDialog::slotLiveRefresh()
     const double rate = tc->rateEstimate();
     const double jit = tc->jitterMs();
     QString verdict; QString colour;
-    if (!running) { verdict = tr("held"); colour = "#f39c12"; }
-    else if (qAbs(rate - 1.0) <= 0.05 && jit < 40.0) { verdict = tr("✓ healthy"); colour = "#27ae60"; }
-    else if (qAbs(rate - 1.0) <= 0.15 && jit < 120.0) { verdict = tr("~ usable"); colour = "#f39c12"; }
-    else { verdict = tr("⚠ unstable"); colour = "#c0392b"; }
+    switch (tc->health())
+    {
+        case TimecodeSource::Healthy:  verdict = tr("✓ healthy"); colour = "#27ae60"; break;
+        case TimecodeSource::Usable:   verdict = tr("~ usable"); colour = "#f39c12"; break;
+        case TimecodeSource::Unstable: verdict = tr("⚠ unstable"); colour = "#c0392b"; break;
+        default:                       verdict = tr("held"); colour = "#f39c12"; break;
+    }
 
     m_healthLabel->setText(tr("Feed: %1 · %2× · jitter %3 ms")
                            .arg(verdict).arg(rate, 0, 'f', 2).arg(qRound(jit)));

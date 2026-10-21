@@ -38,12 +38,15 @@ add_library(${module_name}
     chasereditor.cpp chasereditor.h chasereditor.ui
     colourswatchbutton.cpp colourswatchbutton.h
     wledconfigcheck.cpp wledconfigcheck.h
+    wleddevicesdialog.cpp wleddevicesdialog.h
     clickandgoslider.cpp clickandgoslider.h
     clickandgowidget.cpp clickandgowidget.h
     collectioneditor.cpp collectioneditor.h collectioneditor.ui
     consolechannel.cpp consolechannel.h
     createfixturegroup.cpp createfixturegroup.h createfixturegroup.ui
     headtypesdialog.cpp headtypesdialog.h
+    headtypegroups.cpp headtypegroups.h
+    creategroupsdialog.cpp creategroupsdialog.h
     stagegroupdialog.cpp stagegroupdialog.h
     ctkrangeslider.cpp ctkrangeslider.h
     cuestackmodel.cpp cuestackmodel.h
@@ -70,6 +73,7 @@ add_library(${module_name}
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
     inputoutputmanager.cpp inputoutputmanager.h
     connectionstree.cpp connectionstree.h
+    universepatcher.cpp universepatcher.h
     powerprofiledialog.cpp powerprofiledialog.h
     universeoutputview.cpp universeoutputview.h
     deviceprofile.cpp deviceprofile.h
@@ -83,6 +87,8 @@ add_library(${module_name}
     virtualconsole/programmermap.cpp virtualconsole/programmermap.h
     virtualconsole/programmerframewizard.cpp virtualconsole/programmerframewizard.h
     monitor/monitor.cpp monitor/monitor.h
+    monitor/focuscontrolmap.cpp monitor/focuscontrolmap.h
+    monitor/focusmodepanel.cpp monitor/focusmodepanel.h
     monitor/monitorbackgroundselection.cpp monitor/monitorbackgroundselection.h monitor/monitorbackgroundselection.ui
     monitor/monitorfixture.cpp monitor/monitorfixture.h
     monitor/monitorfixtureitem.cpp monitor/monitorfixtureitem.h
@@ -139,23 +145,36 @@ add_library(${module_name}
     effectbrowser.cpp effectbrowser.h
     fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h
+    mainbar.cpp mainbar.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     networkreportdialog.cpp networkreportdialog.h
+    patchlabelsdialog.cpp patchlabelsdialog.h
     patchlistdialog.cpp patchlistdialog.h
     speedmastersfooter.cpp speedmastersfooter.h
     speedmasterspanel.cpp speedmasterspanel.h
     spreadpreview.cpp spreadpreview.h
+    linespreadpreview.cpp linespreadpreview.h
+    lineplanview.cpp lineplanview.h
     networktopologydialog.cpp networktopologydialog.h
     patchinventorydialog.cpp patchinventorydialog.h
     helpbrowser.cpp helpbrowser.h
     helpshots.cpp helpshots.h
     showcontrollistener.cpp showcontrollistener.h
+    showcontrolsyncpage.cpp showcontrolsyncpage.h
     universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
+    showtreeview.cpp showtreeview.h
+    cuerunner.cpp cuerunner.h
+    updatechecker.cpp updatechecker.h
+    updatedialog.cpp updatedialog.h
+    updatedownloader.cpp updatedownloader.h
+    updateinstaller.cpp updateinstaller.h
+    updatemanager.cpp updatemanager.h
+    usedby.cpp usedby.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h
     scripteditor.cpp scripteditor.h scripteditor.ui
@@ -177,6 +196,7 @@ add_library(${module_name}
     showmanager/videoitem.cpp showmanager/videoitem.h
     showstatus.cpp showstatus.h
     showstatusdialog.cpp showstatusdialog.h
+    showdifferencesdialog.cpp showdifferencesdialog.h
     simpledesk.cpp simpledesk.h
     simpledeskengine.cpp simpledeskengine.h
     speeddial.cpp speeddial.h
@@ -194,6 +214,7 @@ add_library(${module_name}
     virtualconsole/vcclock.cpp virtualconsole/vcclock.h
     virtualconsole/vcclockproperties.cpp virtualconsole/vcclockproperties.h virtualconsole/vcclockproperties.ui
     virtualconsole/vcshowcontrol.cpp virtualconsole/vcshowcontrol.h
+    virtualconsole/vccuerunner.cpp virtualconsole/vccuerunner.h
     virtualconsole/vcshowcontrolproperties.cpp virtualconsole/vcshowcontrolproperties.h
     virtualconsole/vccuelist.cpp virtualconsole/vccuelist.h
     virtualconsole/vccuelistproperties.cpp virtualconsole/vccuelistproperties.h virtualconsole/vccuelistproperties.ui
@@ -254,7 +275,8 @@ target_link_libraries(${module_name} PUBLIC
 
 # Add resources and RGB Script deps
 target_link_libraries(${module_name} PUBLIC Qt6::Qml)
-qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
+qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc" "update.qrc"
+    "../../resources/icons/hicolor/appicons.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})
 
@@ -271,6 +293,13 @@ qt_add_shaders(${module_name} "rigshaders"
 
 if(WIN32)
     target_include_directories(${module_name} PUBLIC ../../hotplugmonitor/src)
+endif()
+
+# MinGW exports every symbol of a DLL by itself only while nothing in it is
+# marked dllexport; qlcui_export.h marks a few classes, so ask for the
+# rest explicitly.
+if(MINGW)
+    target_link_options(${module_name} PRIVATE -Wl,--export-all-symbols)
 endif()
 
 install(TARGETS ${module_name}

@@ -53,10 +53,18 @@ class UniversePatchGrid : public QWidget
 public:
     UniversePatchGrid(Doc *doc, QWidget *parent = nullptr);
 
+public slots:
     /** Rebuild every row from the current InputOutputMap state. */
     void reload();
 
 private slots:
+    /** reload() once the event loop is back: a universe added or removed
+     *  lands here (SIGNAL/SLOT by name -- a plain method there only logged
+     *  "No such slot" and the grid went stale). Deferred because a show
+     *  load adds its universes one by one: reloading for each rebuilt the
+     *  whole grid 94 times for a 94-universe show, which held the main thread
+     *  for minutes on Windows. */
+    void scheduleReload();
     void onItemChanged(QTableWidgetItem *item);
     void onModeChanged(int row, const QString &mode);
     void onMidiModeChanged(int row, const QString &mode);
@@ -86,7 +94,6 @@ private:
     void populateRow(int row, int uniIndex);
     void setupColumnSizing();
     void refreshOptionCaches();
-    void scheduleReload();
     bool isNetworkPlugin(const QString &pluginName) const;
     bool isMidiPlugin(const QString &pluginName) const;
     int  fixturesOnUniverse(int uniIndex) const;

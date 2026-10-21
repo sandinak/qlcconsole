@@ -22,6 +22,7 @@
 #define DOC_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QTimer>
 #include <QList>
 #include <QFile>
@@ -57,6 +58,7 @@ class ProgrammerFlasher;
 class ProgrammerController;
 class LastLookEffect;
 class EffectScriptRunner;
+class ShowEmbedding;
 
 /** @addtogroup engine Engine
  * @{
@@ -65,7 +67,7 @@ class EffectScriptRunner;
 #define KXMLQLCEngine QStringLiteral("Engine")
 #define KXMLQLCStartupFunction QStringLiteral("Autostart")
 
-class Doc final : public QObject
+class QLC_ENGINE_EXPORT Doc final : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY(Doc)
@@ -191,7 +193,10 @@ private:
     PowerDistribution *m_powerDist;
     SpeedMasters *m_speedMasters;
     class ShowControl *m_showControl;
+    class ShowTreeController *m_showTree = nullptr;
+    class PaletteOps *m_paletteOps = nullptr;
     class PowerLimiter *m_powerLimiter = nullptr;
+    class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
 
@@ -633,6 +638,11 @@ public:
     /** Drives all active EffectScript instances (tick, DMX, input routing).
         QObject child of Doc (auto-deleted). */
     EffectScriptRunner *effectScriptRunner() const { return m_effectScriptRunner; }
+
+    /** The definitions and scripts the show carries (SHOW_EMBEDDING_DESIGN.md):
+     *  its own copies in use while it is open; this computer's back when it
+     *  is cleared. QObject child of Doc (auto-deleted). */
+    ShowEmbedding *showEmbedding() const { return m_showEmbedding; }
     /** Effect looks that would not start, and why (palette id -> reason);
      *  the runner's failures(), for code that does not include it. */
     QHash<quint32, QString> effectFailures() const;
@@ -675,6 +685,7 @@ public:
 private:
     ProgrammerController *m_programmer = nullptr;
     EffectScriptRunner   *m_effectScriptRunner = nullptr;
+    ShowEmbedding        *m_showEmbedding = nullptr;
     LastLookEffect       *m_lastLook = nullptr;
     bool                  m_lastLookEnabled = true;
 
@@ -1129,8 +1140,22 @@ public:
     SpeedMasters *speedMasters() const { return m_speedMasters; }
     /** Cues fired from outside: MSC, OSC (ShowControl). Never null. */
     class ShowControl *showControl() const { return m_showControl; }
+    /** The Show Tree: productions and what they bake to
+     *  (ShowTreeController). Never null. */
+    class ShowTreeController *showTree() const { return m_showTree; }
+    /** The Show Tree's current production (P5): what GO, the footer, VC
+     *  and show control play. Forwarders only; ShowTreeController keeps it.
+     *  Invalid: none (GO plays the main cue list as it is set). */
+    quint32 currentProduction() const;
+    bool setCurrentProduction(quint32 productionId);
+    /** The everyday palette operations and their one undo stack, shared
+     *  by the Show Tree and the Programming tab (PaletteOps). Never null. */
+    class PaletteOps *paletteOps() const { return m_paletteOps; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
+
+    /** Opens a lit head's shutter when nothing sets it (the show's setting) */
+    class ShutterAutoOpen *shutterAutoOpen() const { return m_shutterAutoOpen; }
 
     /*********************************************************************
      * Network Topology

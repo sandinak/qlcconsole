@@ -28,6 +28,10 @@ class MonitorProperties_Test final : public QObject
 
 private slots:
     void defaults();
+    /** Settings -> Units: the stage keeps its size in a new unit, and is
+     *  saved in it with whole numbers older readers understand */
+    void gridUnitsConvertExactly();
+    void gridSizeSavedWholeAndExact();
     void fixtureItems();
     void genericItems();
     void layers();

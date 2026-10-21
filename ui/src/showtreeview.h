@@ -1,0 +1,706 @@
+/*
+  Q Light Controller Plus
+  showtreeview.h
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#ifndef SHOWTREEVIEW_H
+#define SHOWTREEVIEW_H
+
+#include <functional>
+#include <QPointer>
+#include <QWidget>
+#include <QPair>
+#include <QList>
+#include <QSet>
+
+#include "showtreecontroller.h"
+#include "showtreemodel.h"
+#include "qlcpalette.h"
+
+class QStackedWidget;
+class QListWidget;
+class ShowTreeCommand;
+class QDoubleSpinBox;
+class QTreeWidgetItem;
+class LookEditor;
+class QTreeWidget;
+class QPushButton;
+class QToolButton;
+class QGridLayout;
+class QComboBox;
+class QLineEdit;
+class QMimeData;
+class QTimer;
+class QCheckBox;
+class QFormLayout;
+class QTextBrowser;
+class QLabel;
+class QMenu;
+class Doc;
+
+/** @addtogroup ui UI
+ * @{
+ */
+
+/**
+ * The Show Tree tab (SHOW_TREE_DESIGN.md §6): the tree of productions, cue
+ * lists, cues and layers on the left; the selected cue or layer in the
+ * middle (a layer as one row per attribute, inherited values greyed with
+ * where they come from); the Library on the right (Recent, Pinned, All),
+ * everything in it draggable onto a cue or a layer.
+ *
+ * Every edit goes through the engine's ShowTreeController (one undo step
+ * each, then a bake); this view only shows the tree and turns clicks and
+ * drops into those calls.
+ */
+class ShowTreeView final : public QWidget
+{
+    Q_OBJECT
+    Q_DISABLE_COPY(ShowTreeView)
+
+public:
+    ShowTreeView(QWidget *parent, Doc *doc);
+    ~ShowTreeView();
+
+    enum NodeKind
+    {
+        NoNode = 0,
+        ProductionNode,
+        ListNode,
+        CueNode,
+        LayerNode,          //!< a cue's own layer
+        TrackedLayerNode,   //!< carried into the cue (tracked, included, base)
+        LookFolderNode      //!< a folder of a Looks section (R3): IdRole its list, FolderRole its path
+    };
+
+    /** Item roles in the tree and the Library. */
+    enum
+    {
+        KindRole = Qt::UserRole,
+        IdRole = Qt::UserRole + 1,
+        CueRole = Qt::UserRole + 2,     //!< a layer row's cue
+        TargetRole = Qt::UserRole + 3,  //!< a tracked layer's target signature
+        PathRole = Qt::UserRole + 4,    //!< a Library folder's path ("Groups/Movers/Front")
+        FolderRole = Qt::UserRole + 5   //!< a look folder's / palette folder's own path ("Hits")
+    };
+
+    /** Library item kinds. */
+    enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet, LibTarget,
+                       LibReusable, LibPaletteFolder };
+
+    QTreeWidget *tree() const { return m_tree; }
+    QTreeWidget *library() const { return m_library; }
+
+    /** Select the tree row of node @a id (a layer: in cue @a cueId). */
+    bool selectNode(quint32 id, quint32 cueId = ShowTree::invalidId());
+    NodeKind currentKind() const;
+    quint32 currentId() const;
+    quint32 currentCueId() const;
+
+    /************************************************************************
+     * What the mouse does (drops, pickers) -- public for the tests
+     ************************************************************************/
+public:
+    /** Groups / fixtures / group sets dropped on a cue: one layer on all
+     *  of them, or (@a separate, ⌥ held) one layer per group -- a set's
+     *  members each a layer of their own -- and one on the fixtures. */
+    bool dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures,
+                     bool separate = false, const QList<quint32> &sets = QList<quint32>());
+    /** Groups / fixtures / sets dropped on a layer: added to its target. */
+    bool dropTargetsOnLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
+                            const QList<quint32> &fixtures, const QList<quint32> &sets = QList<quint32>());
+    /** Groups / fixtures / sets dropped on a layer with ⇧ held: a child
+     *  layer on them (§3.5) -- or, @a separate (⌥⇧), one child each. Each
+     *  must be part of the layer's fixtures; refused (@a why) if not. */
+    bool dropChildLayers(quint32 cueId, quint32 parentId, const QList<quint32> &groups,
+                         const QList<quint32> &fixtures, const QList<quint32> &sets = QList<quint32>(),
+                         bool separate = false, QString *why = nullptr);
+    /** Make set (§1): the groups and fixtures selected in the Library as a
+     *  group set named @a name. Invalid: nothing selected. */
+    quint32 makeSetFromLibrary(const QString &name);
+    /** MIME type of group sets dragged from the Library (a stream of ids). */
+    static const char *setMimeType();
+    /** MIME type of stage targets (points, areas, lines) dragged from the
+     *  Library: dropped, a Position "Aim at" that target (§3B). */
+    static const char *targetMimeType();
+    /** MIME type of reusable layers and cues dragged from the Library (a
+     *  stream of ids): dropped on a cue, a use of each -- a layer in it, a
+     *  cue after it (P4). */
+    static const char *reusableMimeType();
+    /** Reusables dropped on cue @a cueId: each reusable layer a use in it,
+     *  each reusable cue a new cue (a use) after it. One undo step. */
+    bool dropReusables(quint32 cueId, const QList<quint32> &reusableIds);
+
+    /************************************************************************
+     * Reusable layers and cues; Detach a list; Convert to tracking (P4)
+     ************************************************************************/
+public:
+    /** Who uses reusable @a id, as text: each cue ("Full Show 0.0.3
+     *  Announcer"), and the VC widgets whose function is one of its uses'
+     *  cue or layer ("VC button “Walk-in”"). */
+    QStringList reusableUsedBy(quint32 id) const;
+    /** The Library's Reusable items, as text ("⟲ BackStage — layer, used
+     *  in 2"). */
+    QStringList reusableItems() const;
+    /** Delete a reusable: when it is used, asks first (its uses become
+     *  plain copies). */
+    bool deleteReusable(quint32 id);
+    /** Convert to tracking… for list @a listId: shows what would change
+     *  (the plan) and asks; one undo step. False: cancelled or nothing to
+     *  do (the reason in the hint line). */
+    bool convertListToTracking(quint32 listId);
+    /** Detach to plain chaser: asks, then the list leaves the tree and its
+     *  chaser is the show's own. */
+    bool detachListToChaser(quint32 listId);
+    /** In place of the confirmation dialogs (tests): @a title, @a text,
+     *  @a details; return false to cancel. */
+    typedef std::function<bool(const QString &title, const QString &text, const QString &details)> Confirm;
+    void setConfirm(const Confirm &confirm) { m_confirm = confirm; }
+    /** The reuse line on the cue / layer page, as text (tests). */
+    QString reuseLineText() const;
+
+    /** Functions dropped on a cue: opaque function layers. */
+    bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
+    /** Palettes dropped on a layer (or, with no layer, on the cue's looks;
+     *  with no layer but a @a target, on a layer only carried into the cue,
+     *  which then becomes the cue's own). */
+    bool dropPalettes(quint32 cueId, quint32 layerId, const QList<quint32> &palettes,
+                      const ShowTree::Target &target = ShowTree::Target());
+    /** Groups / fixtures dropped on a layer only carried into the cue
+     *  (tracked, included, base): it becomes the cue's own with them added,
+     *  keeping what it carried -- one undo step. */
+    bool dropTargetsOnTracked(quint32 cueId, const ShowTree::Target &target, const QList<quint32> &groups,
+                              const QList<quint32> &fixtures, const QList<quint32> &sets = QList<quint32>());
+    /** What a drop of @a mime on (@a cueId, @a layerId) would do, before it
+     *  is let go of: "Blue → cue look: reaches 2 of 3 layers". With no layer
+     *  but a @a target: onto a layer carried into the cue. */
+    QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime,
+                     bool separate = false, const ShowTree::Target &target = ShowTree::Target(),
+                     bool child = false) const;
+    /** A drop below the tree's last row, on the selected cue: "New layer
+     *  in 1.0.3 Out: Towers" (else what dropHint() says for the cue). */
+    QString dropHintBelow(quint32 cueId, const QMimeData *mime, bool separate = false) const;
+    /** Return or double-click in the Library: what is selected there acts on
+     *  the tree's selection, as a drop on it would -- on a cue: a new layer
+     *  (several: one; @a separate, ⌥: one each), a palette a cue look; on a
+     *  layer: added to it, a palette its look; functions a function layer.
+     *  One undo step. False: nothing to do. */
+    bool applyLibrarySelection(bool separate = false);
+    /** What Return in the Library would do now (the hint line says it). */
+    QString libraryReturnHint(bool separate = false) const;
+    /** ⌘F, or / in the tree: to the Library's filter. */
+    void focusLibraryFilter();
+    bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime,
+                     const ShowTree::Target &target = ShowTree::Target(), bool child = false) const;
+    /** Any drop on (@a cueId, @a layerId or carried-in @a target), as the
+     *  tree, the cue page and the layer page take it: palettes set looks,
+     *  groups / fixtures make a layer (⌥ @a separate: one each) or join
+     *  one, functions play as they are. @a stayOnCue: the cue stays
+     *  selected (a drop on the cue page), else the new layer is. */
+    bool dropMime(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate = false,
+                  const ShowTree::Target &target = ShowTree::Target(), bool stayOnCue = false,
+                  bool child = false);
+    /** The cue page's layer rows, as text ("⤳ Towers  Blue · tracked from 1
+     *  One"), and the list itself (it takes drops). */
+    QStringList cueLayerItems() const;
+    QListWidget *cueLayerList() const { return m_cueLayers; }
+    /** The target of the layer carried into cue @a cueId with @a signature
+     *  (empty: none such). */
+    ShowTree::Target carriedTarget(quint32 cueId, const QString &signature) const;
+    /** Select a layer carried into cue @a cueId, by its target signature. */
+    bool selectTracked(quint32 cueId, const QString &signature);
+
+    /** MIME type of cues dragged within the tree (a stream of cue ids). */
+    static const char *cueMimeType();
+    /** A cue dropped on another of its list: moved to its place, or (with
+        @a include, Alt held) included by it. */
+    bool dropCue(quint32 cueId, quint32 onCueId, bool include);
+    QString cueDropHint(quint32 cueId, quint32 onCueId, bool include) const;
+
+    /** A value picked (D21 as changed 2026-10-17): the palette that plays
+     *  exactly it (In this cue list, then Recent, then any), else a one-off
+     *  -- an inline palette on the layer (or cue), "Make reusable" a click
+     *  away on its row. */
+    bool setOneOffDimmer(quint32 cueId, quint32 layerId, int percent);
+    bool setOneOffColour(quint32 cueId, quint32 layerId, const QColor &colour);
+    /** The Library's Recent palettes, newest first. */
+    QList<quint32> recentPalettes() const;
+
+    /** + Layer: the groups / fixtures selected in the Library as one layer,
+     *  or (@a separate: ⌥-click, or its menu) one layer each -- as a drop. */
+    bool addLayersFromLibrary(bool separate);
+    /** Split a layer into one per group; merge layers of one cue. False /
+     *  invalid (and @a why) when refused. */
+    bool splitLayer(quint32 cueId, quint32 layerId, QString *why = nullptr);
+    quint32 mergeLayers(quint32 cueId, const QList<quint32> &layerIds, QString *why = nullptr);
+    /** The cue's own layers selected in the tree, when all are of one cue
+     *  (@a cueId); empty otherwise. */
+    QList<quint32> selectedLayers(quint32 *cueId = nullptr) const;
+    /** Every own layer selected in the tree, of any cue, in tree order:
+     *  (cue, layer). Two or more: the page edits them together. */
+    QList<QPair<quint32, quint32>> selectedLayerRefs() const;
+    /** The layers the page edits together now (two or more; else empty). */
+    QList<QPair<quint32, quint32>> multiLayers() const { return m_multi; }
+    /** Release on (or off) on every selected layer: one undo step. */
+    bool setReleaseOnSelected(bool release);
+    /** Delete the cues and own layers selected in the tree (two or more)
+     *  as one undo step; false (nothing done) when fewer, or a cue list
+     *  or production is among them. */
+    bool deleteSelected();
+
+    /************************************************************************
+     * Palettes in the Library (R2, P-D8): the everyday operations, through
+     * the shared PaletteOps (one undo history with the tree)
+     ************************************************************************/
+public:
+    /** + Palette: a new palette of @a type in the folder selected in the
+     *  Library (else where the show keeps that type), selected there and
+     *  opened in the Look Editor. */
+    quint32 newPaletteFromLibrary(QLCPalette::PaletteType type);
+    /** New folder in the Library (under the selected palette folder). */
+    bool newPaletteFolder(const QString &name);
+    /** The palette folder the Library's selection is in ("": none). */
+    QString libraryPaletteFolder() const;
+    /** F2 in the Library: rename the selected palette or palette folder in
+     *  place (Return commits, Esc cancels). False: nothing to rename. */
+    bool startLibraryRename();
+    bool isLibraryRenaming() const { return m_libRenaming; }
+    /** ⌫ in the Library: the selected palettes (asks, naming where each is
+     *  used), or the selected palette folder (what is in it moves up). */
+    bool deleteLibrarySelection();
+    /** Palettes dropped on a Library palette folder ("": none). */
+    bool dropPalettesOnFolder(const QList<quint32> &paletteIds, const QString &folder);
+    /** All → Palettes by type, folders under each (the default), or folders
+     *  first, any type in each (feat/palette-folders' view). Remembered. */
+    bool paletteGroupByType() const { return m_paletteByType; }
+    void setPaletteGroupByType(bool byType);
+    /** All → Palettes as text, one row per item, indented two spaces a
+     *  level: "Colour", "  01-Song/", "    Blue" (tests). */
+    QStringList libraryPaletteRows() const;
+    /** The Look Editor's Used by line, as text (tests). */
+    QString usedByText() const;
+
+    /************************************************************************
+     * The Looks section (R3, P-D5..P-D7)
+     ************************************************************************/
+public:
+    /** + Look: a new look after the selected one (in its folder), or in the
+     *  selected Looks section / folder; the section is made the first time.
+     *  Selected, its name field focused. */
+    quint32 newLook();
+    /** Looks dropped on a folder of their Looks section ("": the section
+     *  itself, no folder). One undo step. */
+    bool dropLooksOnFolder(const QList<quint32> &lookIds, quint32 listId, const QString &folder);
+    /** What that drop would do ("Hit 1 → Hits"); empty: refused. */
+    QString lookFolderDropHint(const QList<quint32> &lookIds, quint32 listId, const QString &folder) const;
+    /** Make VC page (P-D7): a frame on the Virtual Console with one Toggle
+     *  button per look in @a folder of Looks section @a listId ("": every
+     *  look), captioned with the look's name, coloured by its first colour.
+     *  False (and @a message why) when there is no VC or no look. */
+    bool makeVcPage(quint32 listId, const QString &folder, QString *message = nullptr);
+    /** The VC buttons that fire look @a lookId, as text. */
+    QStringList lookFiredBy(quint32 lookId) const;
+    /** Adopt as look (P-D16) scene @a functionId into the selected
+     *  production; offers to re-point the VC buttons that fire the scene to
+     *  the look. The look (invalid: refused, said in the hint). */
+    quint32 adoptAsLook(quint32 functionId);
+    /** The folder selected in the tree's Looks section ("": none). */
+    QString currentLookFolder() const;
+
+    /************************************************************************
+     * Record as new cue: which stage (selected / running / everything lit)
+     ************************************************************************/
+public:
+    typedef ShowTreeController::RecordSource RecordSource;
+    /** QSettings key of the default for Design (@a perform false) or
+     *  Perform: "ask" (default), "selected", "running" or "lit". */
+    static QString recordSettingKey(bool perform);
+    static QString recordSetting(bool perform);
+    /** Record as new cue from @a cueId: when the choices differ the
+     *  setting picks, or the dialog asks ("Don't ask again" writes the
+     *  setting). The new cue, selected (invalid: cancelled). */
+    quint32 recordFrom(quint32 cueId);
+    /** Pick among @a choices (two or more) as recordFrom() does. */
+    bool chooseRecordSource(quint32 cueId, const QList<RecordSource> &choices, RecordSource *chosen);
+    /** In place of the dialog (tests): false cancels; @a dontAsk set writes
+     *  the choice as the default for the mode. */
+    typedef std::function<bool(const QList<RecordSource> &choices, RecordSource *chosen, bool *dontAsk)> RecordAsker;
+    void setRecordAsker(const RecordAsker &asker) { m_recordAsker = asker; }
+    /** Clear an attribute on the layer/cue (it inherits again), or set it
+     *  None (off here). */
+    bool clearAttribute(quint32 cueId, quint32 layerId, const QString &key);
+    /** An effect's own Colour/Dimmer looks (they apply inside it only). */
+    bool setEffectOwn(quint32 cueId, quint32 layerId, const QString &effectKey,
+                      const QList<quint32> &palettes,
+                      const ShowTree::Target &target = ShowTree::Target());
+    bool setAttributeNone(quint32 cueId, quint32 layerId, const QString &key);
+
+    /** Set a line parameter look (@a key KeySpread / KeyGrouping /
+     *  KeyCross, @a value as typed; empty clears it) on the layer, the
+     *  carried-in @a target, or (no layer) the cue. */
+    bool setLineParam(quint32 cueId, quint32 layerId, const QString &key, const QString &value,
+                      const ShowTree::Target &target = ShowTree::Target());
+    /** The layer page's "Contains:" line, as text (tests). */
+    QString layerContentsText() const;
+    /** The order strip under a line aim's Position row (null: none). */
+    QWidget *lineStrip() const;
+    /** The plan view under it (D19), a LinePlanView (tests). */
+    QWidget *linePlan() const;
+    /** The attribute rows the inspector shows for the selected layer, as
+     *  text: "Colour | Blue | from cue 1" -- for the tests. */
+    QStringList attributeRows() const;
+    /** The Library's Recent items, newest first, as text. */
+    QStringList recentItems() const;
+    /** The Library's "In this cue list" items, most used first, as text
+     *  ("Towers ×6"). */
+    QStringList inListItems() const;
+
+    /** "Next cue receives", as the cue page shows it. */
+    QString nextCueText() const;
+    /** The cue page's includes, as text, in order. */
+    QStringList includeItems() const;
+
+    /** D22: a tracked value's picker -- where it was set, as a cue label
+     *  ("1.0.0 base"); empty when the value is this cue's own. */
+    QString updateSourceLabel(quint32 cueId, const ShowTree::Target &target, const QString &key) const;
+
+    /************************************************************************
+     * Command line (§6C, optional)
+     ************************************************************************/
+public:
+    /** The command line is always there (bottom of the tab); this gives it
+     *  the keyboard, as : in the tree does. */
+    void focusCommandLine();
+    bool isCommandLineVisible() const;
+    /** Run a command as if typed and Enter pressed: true when it ran. */
+    bool runCommand(const QString &line);
+    /** What the line under the command line says now. */
+    QString commandMessage() const;
+    QLineEdit *commandLine() const { return m_command; }
+    /** The help output over the command line (`help`, `?`), hidden until
+     *  asked for; Esc closes it. Its text, plain (tests). */
+    QString helpOutput() const;
+    bool isHelpShown() const;
+
+    /** ⌘C / ⌘V / ⌘D in the tree (Copy / Paste / Duplicate in its menu):
+     *  the selected cues (in list order) or own layers; paste puts cues as
+     *  a run after the selected cue, layers into it. One undo step. */
+    bool copySelection();
+    bool pasteClipboard();
+    bool duplicateSelection();
+
+    /** Open @a paletteId in the Look Editor under the tree. */
+    void editPalette(quint32 paletteId);
+    /** The palette the Look Editor shows (invalid: none). */
+    quint32 editedPalette() const;
+    LookEditor *lookEditor() const { return m_lookEditor; }
+
+    /** What the header says about the preview: "▶ On the rig: 1 One". */
+    QString previewText() const;
+
+    /************************************************************************
+     * D13: what the tree made is changed in the tree
+     ************************************************************************/
+public:
+    /** The Show Tree tab (null: none). */
+    static ShowTreeView *instance();
+    /** Bring the tab forward with generated function @a functionId's node
+     *  selected (a list's chaser: the list; a cue's collection: the cue; a
+     *  layer's scene: the layer). False: not in the tree. */
+    bool reveal(quint32 functionId);
+    /** A bar saying generated function @a functionId is the tree's
+     *  (ShowTreeController::lockedText() and what it plays), with **Show in
+     *  Show Tree** and, for a layer's scene, **Detach to plain scene**;
+     *  @a detached is told the new scene. Editors of a generated function
+     *  show it in place of (or, a chaser's, above) their controls. */
+    static QWidget *lockedBanner(QWidget *parent, Doc *doc, quint32 functionId,
+                                 const std::function<void(quint32)> &detached = nullptr);
+    /** When any of @a functionIds is generated: says so (a message titled
+     *  @a title naming them, with Show in Show Tree) and returns true -- the
+     *  caller then leaves them alone (deleting, renaming, adding to). */
+    static bool refuseGenerated(QWidget *parent, Doc *doc, const QList<quint32> &functionIds,
+                                const QString &title);
+    /** Detach the layer generated scene @a sceneId is (where it is a layer
+     *  of a cue's own): the new plain scene, invalid when there is none. */
+    static quint32 detachGenerated(Doc *doc, quint32 sceneId);
+
+    /** Rename the selected tree row in place, as the Programming tab does
+     *  (Return or F2 in the tree): a production, cue list, cue (its name,
+     *  not its number) or layer (empty: back to its groups' name). Return
+     *  commits, Esc cancels; one undo step. False: nothing to rename. */
+    bool startRename();
+    bool isRenaming() const { return m_renaming; }
+
+    bool isPinned(int kind, quint32 id) const;
+    void setPinned(int kind, quint32 id, bool pinned);
+
+public slots:
+    void reload();
+    void slotNewProduction();
+    void slotNewCueList();
+    void slotNewCue();
+    void slotAddLayer();
+    void slotRecordCue();
+    void slotDelete();
+    /** Merge layers: the layers selected in the tree (two or more, of one
+     *  cue), as the context menu's Merge. */
+    void slotMergeSelected();
+    void slotUndo();
+    void slotRedo();
+    /** Import a chaser as a cue list (§7): shows the report. */
+    void importChaser(quint32 chaserId, bool showReport = true);
+
+protected:
+    void showEvent(QShowEvent *ev) override;
+    void hideEvent(QHideEvent *ev) override;
+    /** A theme change re-colours the cue page's drop area. */
+    void changeEvent(QEvent *ev) override;
+
+private slots:
+    void slotTreeSelectionChanged();
+    void slotPreviewChanged();
+    void slotTreeContextMenu(const QPoint &pos);
+    void slotLibraryContextMenu(const QPoint &pos);
+    void slotImportMenuAboutToShow();
+    void slotCueEdited();
+    void slotListModeChanged(int index);
+    void slotListBaseChanged(int index);
+    void slotCueBaseToggled(bool on);
+    void slotCueMixToggled(bool on);
+    void slotLayerReleaseToggled(bool on);
+    void slotCommandEntered();
+    void slotFilterChanged(const QString &text);
+    void slotTreeChanged();
+    void reloadLibrary();
+
+private:
+    void buildTree();
+    void updateInspector();
+    void updateButtons();
+    void showCuePage(const ShowTree::CueList &list, int index);
+    void showLayerPage(const ShowTree::CueList &list, int index, const ShowTree::Layer *own,
+                       const ShowTree::ResolvedLayer *resolved);
+    /** Several layers selected: one page editing them together. */
+    void showMultiLayerPage(const QList<QPair<quint32, quint32>> &layers);
+    /** Whether (@a cueId, @a layerId) is one of several edited together. */
+    bool isMulti(quint32 cueId, quint32 layerId) const;
+    /** Run @a one on every layer edited together (one undo step, @a label),
+     *  or only on (@a cueId, @a layerId) when it isn't one of them. */
+    bool forEachEdited(quint32 cueId, quint32 layerId, const QString &label,
+                       const std::function<bool(quint32, quint32)> &one);
+    /** @a target: a carried-in layer's (set on it makes it the cue's own);
+     *  @a rowTarget: the row's layer, own or not (for "Update cue X"). */
+    void attributeMenu(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                       const ShowTree::Target &rowTarget, const QString &key, const QPoint &globalPos);
+    void includesMenu(QMenu *menu, quint32 cueId);
+    /** A line's Spread / Grouping / Cross (D16): submenus that set them on
+     *  the layer (or the carried-in @a target, or the cue). */
+    void lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                       const QString &onlyKey = QString());
+    void updateIncludeButtons();
+    /** The cue list the selection is in (invalid: none). */
+    quint32 currentListId() const;
+    bool eventFilter(QObject *obj, QEvent *ev) override;
+    /** Set @a look on the layer, on the carried-in @a target, or the cue. */
+    bool applyLook(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                   const ShowTree::Look &look);
+    quint32 inlinePalette(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                          QLCPalette::PaletteType type, const QVariantList &values, const QString &value);
+    /** The palette playing exactly @a values to reuse, else inlinePalette(). */
+    quint32 valuePalette(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                         QLCPalette::PaletteType type, const QVariantList &values, const QString &value);
+    bool askRecordSource(quint32 cueId, const QList<RecordSource> &choices, RecordSource *chosen,
+                         bool *dontAsk);
+    QString lookText(const ShowTree::Look &look) const;
+    QString originText(const ShowTree::CueList &list, const ShowTree::ResolvedValue &value) const;
+    QString paletteName(quint32 id) const;
+    /** The Look Editor changed @a paletteId (@a full: its name/icon too). */
+    void paletteEdited(quint32 paletteId, bool full);
+    void noteRecent(int kind, quint32 id, const QString &label = QString());
+    QTreeWidgetItem *findItem(quint32 id, quint32 cueId) const;
+    void saveExpanded();
+    /** Preview the selected cue (Design mode, tab on screen), else stop. */
+    void syncPreview();
+
+    Doc *m_doc;
+    /** The Doc's; guarded, so a hide event during teardown (the Doc gone
+     *  first) finds it null instead of freed. */
+    QPointer<ShowTreeController> m_st;
+
+    QToolButton *m_newProduction;
+    QToolButton *m_newList;
+    QToolButton *m_newCue;
+    QToolButton *m_addLayer;
+    QToolButton *m_delete;
+    QToolButton *m_undo;
+    QToolButton *m_redo;
+    QToolButton *m_import;
+    QToolButton *m_record;
+    QToolButton *m_merge;
+    QMenu *m_importMenu;
+    QLabel *m_hint;
+    QLabel *m_previewLabel;
+
+    QTreeWidget *m_tree;
+
+    // Inspector
+    QStackedWidget *m_pages;
+    QLabel *m_emptyPage;
+    QWidget *m_listPage;
+    /** P5: the production page (current, main list, timecode) and the
+     *  header's switcher of the current production. */
+    QWidget *m_prodPage = nullptr;
+    QLabel *m_prodTitle = nullptr;
+    QPushButton *m_prodCurrent = nullptr;
+    QComboBox *m_prodMainList = nullptr;
+    QComboBox *m_prodTimecode = nullptr;
+    QLabel *m_prodInfo = nullptr;
+    QComboBox *m_production = nullptr;
+    void showProductionPage(quint32 productionId);
+    void updateProductionSwitcher();
+    /** The timecode choices: (label, universe) -- the show's, any, each universe. */
+    QList<QPair<QString, qint32>> timecodeChoices() const;
+public:
+    QComboBox *productionSwitcher() const { return m_production; }
+private:
+    QLabel *m_listTitle;
+    QComboBox *m_listMode;
+    QComboBox *m_listBase;
+    QLabel *m_listInfo;
+    QWidget *m_cuePage;
+    QLineEdit *m_cueNumber;
+    QLineEdit *m_cueName;
+    QLineEdit *m_cueNote;
+    QComboBox *m_cueMode;
+    QCheckBox *m_cueBase;
+    QCheckBox *m_cueMix;
+    QListWidget *m_cueIncludes;
+    QToolButton *m_includeAdd;
+    QToolButton *m_includeRemove;
+    QToolButton *m_includeUp;
+    QToolButton *m_includeDown;
+    QDoubleSpinBox *m_cueFadeIn;
+    QDoubleSpinBox *m_cueFadeOut;
+    QDoubleSpinBox *m_cueHold;
+    /** P6: a sub-cue's advance (Sub GO / Auto-follow + wait); a cue's
+     *  sub-cues line (+ Sub-cue). */
+    QComboBox *m_cueAdvance = nullptr;
+    QDoubleSpinBox *m_cueWait = nullptr;
+    QWidget *m_cueAdvanceRow = nullptr;
+    QLabel *m_cueSubCues = nullptr;
+    QToolButton *m_newSubCue = nullptr;
+public:
+    /** + Sub-cue: a sub-cue of the selected cue (after the selected
+     *  sub-cue). Its id (invalid: none). */
+    quint32 newSubCue();
+private:
+    QLabel *m_cueLooks;
+    QListWidget *m_cueLayers;
+    QLabel *m_cueDropZone = nullptr;
+    /** Something is being dragged over the drop area. */
+    bool m_cueDropActive = false;
+    /** The drop area's look, from the current palette: the highlight while
+     *  a drag is over it, else a quiet colour that still reads as text on
+     *  every theme (palette(mid) all but vanishes on the dark ones). */
+    void styleCueDropZone();
+    QLabel *m_cueNext;
+    QWidget *m_layerPage;
+    QLabel *m_layerTitle;
+    QLabel *m_layerContents;
+    QCheckBox *m_layerRelease;
+    ShowTree::Target m_layerReleaseTarget;     //!< a carried-in layer's, for Release
+    QGridLayout *m_rows;
+    QWidget *m_rowsHost;
+    QStringList m_rowText;
+
+    LookEditor *m_lookEditor = nullptr;
+
+    // Library
+    QLineEdit *m_filter;
+    QTreeWidget *m_library;
+    QList<QPair<int, quint32>> m_recent;
+    QList<QPair<int, quint32>> m_pinned;
+    /** Library folders open before a filter was typed (it opens more). */
+    QSet<QString> m_openWithoutFilter;
+    bool m_filtering = false;
+
+    QTimer *m_libraryTimer = nullptr;
+    quint32 m_libraryList = 0xFFFFFFFF;    //!< the list "In this cue list" shows
+
+    // Command line
+    QWidget *m_commandBar = nullptr;
+    QLineEdit *m_command = nullptr;
+    QLabel *m_commandMsg = nullptr;
+    QTextBrowser *m_commandHelp = nullptr;
+    ShowTreeCommand *m_commander = nullptr;
+    QStringList m_commandHistory;
+    RecordAsker m_recordAsker;
+    Confirm m_confirm;
+    bool confirm(const QString &title, const QString &text, const QString &details = QString());
+    /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
+    QString reuseLine(quint32 cueId, quint32 layerId) const;
+    void reuseLinkActivated(const QString &link);
+    QLabel *m_layerReuse = nullptr;
+    QLabel *m_cueReuse = nullptr;
+    QPushButton *m_listConvert = nullptr;
+    QPushButton *m_listDetach = nullptr;
+    int m_historyAt = -1;
+    QList<quint32> m_expanded;
+    quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows
+    bool m_reloading = false;
+    bool m_renaming = false;
+    QList<QPair<quint32, quint32>> m_multi;
+    bool m_applyingMulti = false;
+    void slotTreeItemRenamed(QTreeWidgetItem *item, int column);
+    bool m_inspectorUpdating = false;
+
+    // R2: palettes in the Library
+    QToolButton *m_newPalette = nullptr;
+    bool m_paletteByType = true;
+    bool m_libRenaming = false;
+    QTreeWidgetItem *m_libRenameItem = nullptr;
+    void slotLibraryItemRenamed(QTreeWidgetItem *item, int column);
+    /** The Look Editor's Used by line for @a paletteId. */
+    void updateUsedBy(quint32 paletteId);
+    void usedByLinkActivated(const QString &link);
+    /** The Library's All → Palettes item for @a paletteId, selected. */
+    void selectLibraryPalette(quint32 paletteId);
+    /** + Palette's menu, by type: what Programming offers. */
+    void fillNewPaletteMenu(QMenu *menu, const QString &folder);
+    /** The Library's palette rows, under All. */
+    void buildLibraryPalettes(QTreeWidgetItem *all, const std::function<QTreeWidgetItem *(QTreeWidgetItem *, int, quint32)> &add);
+
+    // R3: the Looks section
+    QFormLayout *m_cueForm = nullptr;
+    QFormLayout *m_listForm = nullptr;
+    QLabel *m_lookFiredBy = nullptr;
+    QPushButton *m_listVcPage = nullptr;
+    QSet<QString> m_collapsedFolders;      //!< "listId:path" of look folders closed by hand
+    /** Whether the selection is in a Looks section (its node, a folder, a
+     *  look, a look's layer). */
+    bool selectionInLooks() const;
+    /** The production the selection is in (invalid: none). */
+    quint32 currentProductionId() const;
+    void showLooksPage(quint32 listId, const QString &folder);
+    void lookLinkActivated(const QString &link);
+    /** "Move to folder" for looks @a lookIds of Looks section @a listId. */
+    void lookFolderMenu(QMenu *menu, quint32 listId, const QList<quint32> &lookIds);
+};
+
+/** @} */
+
+#endif

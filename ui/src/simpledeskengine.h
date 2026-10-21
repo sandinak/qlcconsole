@@ -22,6 +22,7 @@
 #define SIMPLEDESKENGINE_H
 
 #include <QObject>
+#include "qlcui_export.h"
 #include <QMutex>
 #include <QHash>
 #include <QList>
@@ -29,10 +30,10 @@
 
 #include "dmxsource.h"
 #include "cue.h"
+#include "genericfader.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
-class GenericFader;
 class MasterTimer;
 class FadeChannel;
 class CueStack;
@@ -44,7 +45,7 @@ class Doc;
 
 #define KXMLQLCSimpleDeskEngine QStringLiteral("Engine")
 
-class SimpleDeskEngine final : public QObject, public DMXSource
+class QLC_UI_EXPORT SimpleDeskEngine final : public QObject, public DMXSource
 {
     Q_OBJECT
 
@@ -154,7 +155,7 @@ public:
     void writeDMX(MasterTimer* timer, QList<Universe*> ua) override;
 
 private:
-    FadeChannel *getFader(QList<Universe *> universes, quint32 universeID,
+    GenericFader::ChannelRef getFader(QList<Universe *> universes, quint32 universeID,
                           quint32 fixtureID, quint32 channel);
 
 private:

@@ -22,6 +22,7 @@
 #define APP_H
 
 #include <QMainWindow>
+#include <QKeySequence>
 #include <QApplication>
 #include <QString>
 #include <QList>
@@ -45,12 +46,16 @@ class QTabWidget;
 class QStatusBar;
 class WebAccess;
 class QToolBar;
+class MainBar;
+class ShowControls;
 class QPixmap;
 class QAction;
 class QLabel;
 class QSlider;
 class App;
 class StartupWindow;
+class Chaser;
+class ShowControl;
 
 /** @addtogroup ui UI
  * @{
@@ -115,7 +120,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 #if defined(WIN32) || defined(Q_OS_WIN)
-    bool nativeEvent(const QByteArray & eventType, void * message, long * result);
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
     void disableTimerResolutionThrottling();
 #endif
 
@@ -140,6 +145,25 @@ private:
     QList<QPair<QString, QIcon>> m_tabOriginals; // stored on first tab add
 
     /*********************************************************************
+     * Show controls placement (MainBar)
+     *********************************************************************/
+public:
+    /** Where Stop all / Blackout / Blind / Design|Operate sit: in the one
+     *  top bar beside the current tab's own tools (the default), or in the
+     *  status bar, leaving the top to the tab's tools alone. */
+    enum ShowControlsPlacement { ShowControlsInTopBar = 0, ShowControlsInStatusBar = 1 };
+
+    int showControlsPlacement() const { return m_showControlsPlacement; }
+    /** Saved, and applied at once (no restart) */
+    void setShowControlsPlacement(int placement);
+    static QString showControlsPlacementKey();
+
+private:
+    void applyShowControlsPlacement();
+
+    int m_showControlsPlacement = ShowControlsInTopBar;
+
+    /*********************************************************************
      * Backstage color theme
      *********************************************************************/
 public:
@@ -149,6 +173,9 @@ public:
     int theme() const;
     void setTheme(int theme);
     void applyTheme();
+    /** The palette @p theme gives, built on @p base (the native one for
+     *  ThemeDefault) -- what applyTheme() sets; a test renders with it. */
+    static QPalette themePalette(int theme, const QPalette &base);
 
 private:
     int m_theme = ThemeDefault;
@@ -213,9 +240,29 @@ private:
 public:
     void clearDocument();
 
+    /** Show the stage in the person's unit (Settings -> Units): metres for
+     *  mm/cm/m, feet for in/ft. After a show loads (@a fromShow: the first
+     *  show ever opened may seed an unset preference from its own grid unit),
+     *  after New, and when the preference changes. */
+    void applyUnitPreference(bool fromShow);
+
     Doc *doc();
     /** Show control's OSC listener and settings (QLab). */
     class ShowControlListener *showControlListener() const { return m_showControlListener; }
+    /** Open Connections at its Show control & sync page. */
+    void showShowControlSettings();
+
+    /** Open Settings at the show's rig networks (the rig network footer
+     *  chip's click). */
+    void showRigNetworkSettings();
+
+    /** The QSettings key of "Only transmit on rig networks" (default on) */
+    static QString rigNetworkGateSettingKey();
+
+    /** The rig network footer chip's text for @a st, and whether it is the
+     *  red kind (@a alarm) -- empty when there is nothing to say. */
+    static QString rigNetworkFooterText(const InputOutputMap::TransmitGateStatus &st,
+                                        bool *alarm = nullptr);
 
 private slots:
     void slotDocModified(bool state);
@@ -285,11 +332,17 @@ public slots:
     void slotFileImport();
     QFile::FileError slotFileSave();
     QFile::FileError slotFileSaveAs();
+    /** File → Collect for Transfer…: the show as a .qlcc in a folder of its
+     *  own, with Fixtures/, EffectScripts/, RGBScripts/ and HeadLayouts/
+     *  beside it (SHOW_EMBEDDING_DESIGN.md §6). */
+    void slotFileCollectForTransfer();
 
     void slotControlMonitor();
     /** Open the rig overview (View menu). Delegates to the Monitor, which owns
      *  the window, so the menu and the studio footer share one instance. */
     void slotRigOverview();
+    /** Focus mode: Monitor::openFocusMode(). */
+    void slotFocusMode();
     void slotAddressTool();
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */
@@ -371,6 +424,15 @@ public slots:
 
     void slotAppSettings();
 
+public:
+    /** Update checks and installs (nullptr without a GUI). */
+    class UpdateManager *updateManager() const { return m_updateManager; }
+private:
+    class UpdateManager *m_updateManager = nullptr;
+    /** Software Update's "Restart and Install": the close in progress
+     *  reopens the show once the update is in place. */
+    bool m_restartForUpdate = false;
+
 private:
     QAction* m_fileNewAction;
     QAction* m_fileOpenAction;
@@ -400,6 +462,8 @@ private:
     QAction* m_controlPanicAction;
     QAction* m_cueGoAction = nullptr;       ///< the main cue list's GO
     QAction* m_cueBackAction = nullptr;
+    QAction* m_cueSubGoAction = nullptr;    ///< its Sub GO (SUBCUES_DESIGN.md)
+    QAction* m_cueSubBackAction = nullptr;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
     QAction* m_liveEditVirtualConsoleAction;
@@ -416,12 +480,16 @@ private:
     QAction* m_helpIndexAction;
     QAction* m_helpContextAction = nullptr;
     QAction* m_helpAboutAction;
+    QAction* m_checkUpdatesAction = nullptr;    ///< Help → Check for Updates…
     QAction* m_quitAction;
     QMenu* m_fileOpenMenu;
     QMenu* m_fadeAndStopMenu;
 
 private:
-    QToolBar* m_toolbar;
+    /** The one top bar: holds m_mainBar (the tab's tools + show controls) */
+    QWidget* m_toolbar;
+    MainBar* m_mainBar = nullptr;
+    ShowControls* m_showControls = nullptr;
 
     /*********************************************************************
      * Utilities
@@ -589,6 +657,21 @@ private slots:
     /** Poll + refresh the global engine-load chip (and timecode chip). */
     void slotUpdateHealthFooter();
 
+public:
+    /** The footer's sub-cue part for @a list (SUBCUES_DESIGN.md): "Sub: 4.2"
+     *  (what Sub GO plays), "Sub: (end of 4)", or empty when the cue playing
+     *  has no sub-cues on Sub GO. */
+    static QString standbySubCueText(const Chaser *list);
+    /** The footer's "Next:" part for @a list: what GO plays -- a LOADed
+     *  sub-cue as its number and its own name ("Next: 4.2 — Wash"), a cue
+     *  as its number and its function's ("Next: 5 — Blackout") -- or
+     *  "Next: (end of <list>)". */
+    static QString standbyNextText(const ShowControl *sc, const Chaser *list);
+    /** Sub GO and Sub Back on the main cue list: ⌥⌘↩ and ⌥⌘⇧↩ on macOS
+     *  (beside GO ⌘↩ and Back ⌘⇧↩). */
+    static QKeySequence cueSubGoShortcut();
+    static QKeySequence cueSubBackShortcut();
+
 private:
     QLabel* m_statusModeLabel;
     /** Unsaved/Autosaved/Saved — one consolidated chip instead of three
@@ -603,6 +686,14 @@ private:
     QLabel* m_statusPadModeLabel;
     QLabel* m_statusShowLockLabel;
     QLabel* m_statusBlackoutLabel;
+    /** Rig network transmit gate: red while network output is held because
+     *  this machine is not on the show's rig network, amber when the show
+     *  has none set or the check is off/lifted. Click opens the setting. */
+    QLabel* m_statusRigNetLabel = nullptr;
+    void updateRigNetworkFooter();
+    /** "Update available: 0.1.1" -- driven by m_updateManager, hidden while
+     *  there is nothing to say; a click opens Software Update. */
+    QLabel* m_statusUpdateLabel = nullptr;
     /** Persistent Design/Operate indicator — the toolbar's mode-toggle
      *  button/icon always shows the mode a click would switch TO, not the
      *  current one (standard play/pause-style affordance), so there was no

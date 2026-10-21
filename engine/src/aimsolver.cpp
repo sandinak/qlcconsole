@@ -21,6 +21,7 @@
 #include <QDebug>
 
 #include "aimsolver.h"
+#include "linecurve.h"
 #include "righeads.h"
 #include "monitorproperties.h"
 #include "fixturegroup.h"
@@ -174,6 +175,47 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
     return out;
 }
 
+void AimSolver::intendedAngles(const FixtureRigProps &rp, double panCentredDeg,
+                               double tiltCentredDeg, double &panRelDeg, double &tiltRelDeg)
+{
+    /* solve() works in fixture degrees from 0; centred, the middle of the
+       range is 0 and mirroring about it is negation, which is what invert does
+       there. Undo it first, as solve() applied it last. */
+    bool invertPan = rp.panInvert;
+    if (floorMounted(rp))
+        invertPan = !invertPan;
+    double pan = invertPan ? -panCentredDeg : panCentredDeg;
+    double tilt = rp.tiltInvert ? -tiltCentredDeg : tiltCentredDeg;
+
+    // Then the calibration: solve() added it to correct the physical head.
+    panRelDeg = pan - double(rp.panOffsetDeg);
+    tiltRelDeg = tilt - double(rp.tiltOffsetDeg);
+}
+
+bool AimSolver::beamDirection(const FixtureRigProps &rp, double panCentredDeg,
+                              double tiltCentredDeg, QVector3D &dir)
+{
+    double panRel = 0.0, tiltRel = 0.0;
+    intendedAngles(rp, panCentredDeg, tiltCentredDeg, panRel, tiltRel);
+
+    const double yaw = qDegreesToRadians(double(rp.panZeroDir) + panRel);
+    /* Elevation of the beam above the horizon. A hanging head is centred on
+       straight down, a standing one on straight up -- which is why a head
+       standing on a truss top cannot point at its own feet however much tilt
+       it has. */
+    const double elevDeg = floorMounted(rp) ? (tiltRel + 90.0) : (tiltRel - 90.0);
+    const double elev = qDegreesToRadians(elevDeg);
+
+    // Horizontal bearing: 0 = downstage (+Y), turning clockwise from above.
+    dir = QVector3D(float(-qSin(yaw) * qCos(elev)),
+                    float(qCos(yaw) * qCos(elev)),
+                    float(qSin(elev)));
+    if (dir.length() < 1e-6f)
+        return false;
+    dir.normalize();
+    return true;
+}
+
 bool AimSolver::reach(Doc *doc, quint32 fixtureId, const QVector3D &targetWorld,
                       Solution &solution)
 {
@@ -224,55 +266,230 @@ bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
     return false;
 }
 
-QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
+QList<quint32> AimSolver::aimable(Doc *doc, const QList<quint32> &fixtures)
 {
-    QList<SceneAim> out;
-    if (doc == NULL || scene == NULL)
-        return out;
-    MonitorProperties *mProps = doc->monitorProperties();
-    if (mProps == NULL)
-        return out;
-
-    // The heads: the scene's fixtures and its groups' members, once each.
     QList<quint32> heads;
-    foreach (quint32 fid, scene->fixtures())
-        if (heads.contains(fid) == false)
-            heads << fid;
+    if (doc == NULL)
+        return heads;
+    MonitorProperties *mProps = doc->monitorProperties();
+    foreach (quint32 fid, fixtures)
+    {
+        if (heads.contains(fid))
+            continue;
+        Fixture *fxi = doc->fixture(fid);
+        if (fxi == NULL || (mProps != NULL && !mProps->containsFixture(fid)))
+            continue;
+        if (fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
+            && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
+            continue;               // nothing to point
+        heads << fid;
+    }
+    return heads;
+}
+
+QList<quint32> AimSolver::aimHeads(Doc *doc, const Scene *scene, quint32 paletteId)
+{
+    if (doc == NULL || scene == NULL)
+        return QList<quint32>();
+    if (paletteId == UINT_MAX)
+        return aimHeads(doc, scene);
+    /* What the look lays out over: a formation's span when it is one with
+       other scenes, less the heads a lower layer aims itself. */
+    return aimable(doc, scene->layoutFixtures(paletteId));
+}
+
+QList<quint32> AimSolver::aimHeads(Doc *doc, const Scene *scene)
+{
+    if (doc == NULL || scene == NULL)
+        return QList<quint32>();
+
+    QList<quint32> all;
     foreach (quint32 gid, scene->fixtureGroups())
     {
         FixtureGroup *fg = doc->fixtureGroup(gid);
         if (fg == NULL)
             continue;
         foreach (quint32 fid, fg->fixtureList())
-            if (heads.contains(fid) == false)
-                heads << fid;
+            all << fid;
     }
+    all << scene->fixtures();
+    return aimable(doc, all);
+}
 
-    const bool subject = sceneFollowsSubject(doc, scene);
+QList<quint32> AimSolver::orderedLineHeads(Doc *doc, const StageTarget *target,
+                                          const QList<quint32> &heads, LineSpread::Order order)
+{
+    if (doc == NULL || target == NULL || order != LineSpread::AlongLine)
+        return heads;
+    /* By where the heads hang, measured from the line's first end towards
+       its last: the stage-left head takes the stage-left end, so a full
+       spread never crosses beams by accident. */
+    const QVector<QVector3D> pts = target->linePoints();
+    if (pts.size() < 2)
+        return heads;
+    QVector<QVector3D> where;
+    foreach (quint32 fid, heads)
+    {
+        Frame f;
+        where << (frameFor(doc, fid, f) ? f.position : QVector3D());
+    }
+    QList<quint32> ordered;
+    foreach (int i, LineSpread::orderAlong(where, pts.first(), pts.last()))
+        ordered << heads.at(i);
+    return ordered;
+}
+
+QHash<quint32, double> AimSolver::lineFractions(Doc *doc, const StageTarget *target,
+                                                const QList<quint32> &heads,
+                                                const LineSpread::Settings &settings)
+{
+    QHash<quint32, double> out;
+    if (doc == NULL || target == NULL || !target->isLine() || heads.isEmpty())
+        return out;
+    const QList<quint32> ordered = orderedLineHeads(doc, target, heads, settings.order);
+    const QVector<double> fr = LineSpread::fractions(ordered.size(), settings);
+    for (int i = 0; i < ordered.size(); ++i)
+        out.insert(ordered.at(i), fr.at(i));
+    return out;
+}
+
+QVector3D AimSolver::linePoint(Doc *doc, const StageTarget *target, double fraction)
+{
+    MonitorProperties *mProps = (doc != NULL) ? doc->monitorProperties() : NULL;
+    if (mProps == NULL || target == NULL)
+        return QVector3D();
+    return LineCurve(mProps->targetLinePoints(target)).pointAt(fraction);
+}
+
+QHash<quint32, QVector3D> AimSolver::linePoints(Doc *doc, const QLCPalette *look,
+                                                const StageTarget *target,
+                                                const QList<quint32> &heads)
+{
+    QHash<quint32, QVector3D> out;
+    MonitorProperties *mProps = (doc != NULL) ? doc->monitorProperties() : NULL;
+    if (mProps == NULL || look == NULL || target == NULL || !target->isLine())
+        return out;
+    const LineSpread::Settings settings = LineSpread::fromParams(look->effectParamValues());
+    const QHash<quint32, double> fr = lineFractions(doc, target, heads, settings);
+    const LineCurve curve(mProps->targetLinePoints(target));
+    for (auto it = fr.constBegin(); it != fr.constEnd(); ++it)
+        out.insert(it.key(), curve.pointAt(it.value()));
+    return out;
+}
+
+BeamOcclusion::Hit AimSolver::lineOfSight(Doc *doc, const BeamOcclusion::Model &model,
+                                          quint32 fixtureId, const QVector3D &from,
+                                          const QVector3D &point)
+{
+    MonitorProperties *mProps = (doc != nullptr) ? doc->monitorProperties() : nullptr;
+    if (mProps == nullptr || model.isEmpty())
+    {
+        BeamOcclusion::Hit clear;
+        clear.clearance = BeamOcclusion::clearanceReach();
+        clear.distance = (point - from).length();
+        clear.point = point;
+        return clear;
+    }
+    return model.segment(from, point, BeamOcclusion::ownMounts(mProps, fixtureId));
+}
+
+BeamOcclusion::Hit AimSolver::lineOfSight(Doc *doc, quint32 fixtureId, const QVector3D &point,
+                                          const BeamOcclusion::Model *model)
+{
+    Frame frame;
+    MonitorProperties *mProps = (doc != nullptr) ? doc->monitorProperties() : nullptr;
+    if (mProps == nullptr || !frameFor(doc, fixtureId, frame))
+    {
+        BeamOcclusion::Hit clear;
+        clear.clearance = BeamOcclusion::clearanceReach();
+        clear.point = point;
+        return clear;
+    }
+    if (model != nullptr)
+        return lineOfSight(doc, *model, fixtureId, frame.position, point);
+    const BeamOcclusion::ModelPtr current = mProps->occlusionModel(doc);
+    return lineOfSight(doc, *current, fixtureId, frame.position, point);
+}
+
+static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool dimmingOnly)
+{
+    QList<AimSolver::SceneAim> out;
+    if (doc == NULL || scene == NULL)
+        return out;
+    MonitorProperties *mProps = doc->monitorProperties();
+    if (mProps == NULL)
+        return out;
+
+    const bool subject = AimSolver::sceneFollowsSubject(doc, scene);
+    BeamOcclusion::ModelPtr sightModel;
     foreach (quint32 pid, scene->runtimePalettes())   // a tried-on Aim draws too
     {
         QLCPalette *pal = doc->palette(pid);
         if (pal == NULL || pal->type() != QLCPalette::Aim)
             continue;
+        if (dimmingOnly && !pal->dimWhenBlocked())
+            continue;
+        if (sightModel.isNull())
+            sightModel = mProps->occlusionModel(doc);
         StageTarget *tgt = mProps->stageTarget(pal->stageTargetId());
         if (tgt == NULL)
             continue;
-        foreach (quint32 fid, heads)
+        // The heads it lays out over (a formation across several scenes:
+        // all of them) and the ones this scene writes (the scene's groups'
+        // members and its fixtures, less any it leaves out), once each.
+        const QList<quint32> heads = AimSolver::aimHeads(doc, scene, pid);
+        const QList<quint32> written = AimSolver::aimable(doc, scene->writtenFixtures(pid));
+        // A line gives each head its own point on it.
+        const QHash<quint32, QVector3D> onLine = AimSolver::linePoints(doc, pal, tgt, heads);
+        foreach (quint32 fid, written)
         {
-            Fixture *fxi = doc->fixture(fid);
-            if (fxi == NULL)
+            AimSolver::Frame frame;
+            if (!AimSolver::frameFor(doc, fid, frame))
                 continue;
-            if (fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
-                && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
-                continue;               // nothing to point
-            const QVector3D point = aimPointFor(doc, fid, tgt, subject);
-            SceneAim aim;
+            // A line target: the head's own point on the line is what it
+            // aims at, so that is the point whose sight is checked.
+            const QVector3D point = tgt->isLine()
+                    ? onLine.value(fid, mProps->targetAimPoint(tgt))
+                    : AimSolver::aimPointFor(doc, fid, tgt, subject);
+            AimSolver::SceneAim aim;
             aim.fixtureId = fid;
             aim.targetId = tgt->id();
+            aim.paletteId = pal->id();
             aim.point = point;
-            if (reach(doc, fid, point, aim.solution))
-                out << aim;
+            aim.solution = AimSolver::solve(frame, point);
+            aim.sight = AimSolver::lineOfSight(doc, *sightModel, fid, frame.position, point);
+            aim.dimsWhenBlocked = pal->dimWhenBlocked();
+            out << aim;
         }
     }
+    return out;
+}
+
+QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
+{
+    return collectAims(doc, scene, false);
+}
+
+QHash<quint32, BeamOcclusion::Hit> AimSolver::blockedDimmedHeads(Doc *doc, const Scene *scene)
+{
+    QHash<quint32, BeamOcclusion::Hit> out;
+    if (doc == NULL || scene == NULL)
+        return out;
+    // The cheap question first: does any Aim look here ask for it at all?
+    bool asked = false;
+    foreach (quint32 pid, scene->runtimePalettes())
+    {
+        QLCPalette *pal = doc->palette(pid);
+        if (pal != NULL && pal->type() == QLCPalette::Aim && pal->dimWhenBlocked())
+        {
+            asked = true;
+            break;
+        }
+    }
+    if (!asked)
+        return out;
+    foreach (const SceneAim &a, collectAims(doc, scene, true))
+        if (a.sight.blocked && !out.contains(a.fixtureId))
+            out.insert(a.fixtureId, a.sight);
     return out;
 }

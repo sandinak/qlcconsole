@@ -22,6 +22,7 @@
 
 #include <QNetworkAddressEntry>
 #include <QNetworkInterface>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QString>
 #include <QHash>
@@ -97,6 +98,13 @@ public:
     /** @reimp Patches carry outputIP + outputUni to aim at a node's port. */
     bool supportsOutputTargets() const override { return true; }
 
+    /** @reimp Outputs that can't send, nodes that stopped answering, and
+        ports that report a fault -- see SendHealth and ArtNetNodeWatch. */
+    QStringList targetProblems() const override;
+
+    /** @reimp The same, for one patched universe. */
+    QStringList outputProblems(quint32 output, quint32 universe) const override;
+
     /** @reimp Unicast an ArtPoll at one address. */
     bool probeTarget(const QString &address) override;
 
@@ -104,8 +112,47 @@ public:
         prefix length), used for probeTarget()'s own routing decision. */
     int lineOnSameSubnet(const QString &identity) const override;
 
+    /** @reimp Any Art-Net node heard on a line: its IP can be set. */
+    bool canConfigureDevice(const QString &address) const override;
+
+    /** @reimp The node network settings dialog (ArtIpProg). */
+    void configureDevice(const QString &address) override;
+
     /** @reimp */
     QString outputInfo(quint32 output) override;
+
+    /*********************************************************************
+     * Node network settings (ArtIpProg)
+     *********************************************************************/
+public:
+    /** The node heard at @a address (its own reported IP, or the address it
+     *  sent from), and the line it was heard on. False when none has. */
+    bool findNode(const QString &address, ArtNetNodeInfo *info = NULL,
+                  int *line = NULL) const;
+
+    /** The line whose own subnet contains @a address, i.e. the one a unicast
+     *  to it leaves by without a router; -1 when there is none. */
+    int lineReaching(const QHostAddress &address) const;
+
+    /** What a node at @a ip needs before it is usable from here, or empty:
+     *  "on its factory Art-Net address (2.x.x.x) -- set its IP" etc. */
+    static QString attentionFor(const QHostAddress &ip, bool reachable);
+
+    /** Send one ArtIpProg to the node at @a node, unicast through the line
+     *  whose subnet holds it. Refuses (false, @a why set) when no line does:
+     *  ArtIpProg carries no MAC or serial to pick one node out, so it must
+     *  never be broadcast -- every node on the cable that implements it
+     *  would take the new address. The answer arrives as ipProgReplied(). */
+    bool sendIpProg(const QString &node, const ArtNetIpProgRequest &request,
+                    QString *why = NULL);
+
+signals:
+    void ipProgReplied(const QString &sender, const ArtNetIpProgReply &reply);
+
+private:
+    /** The line's controller, created (inert: no timers, no universes) if it
+     *  has none, so that it can send and receive. */
+    ArtNetController *ensureController(int line);
 
     /** @reimp */
     void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
@@ -142,12 +189,18 @@ public:
     /** Get a list of the available Input/Output lines */
     QList<ArtNetIO> getIOMapping() const;
 
+    /** @reimp: every line's cached rig network gate decision, again */
+    void refreshTransmitGate() override;
+
 private:
     /** Map of the ArtNet plugin Input/Output lines */
     QList<ArtNetIO> m_IOmapping;
 
     /** Time to wait (in seconds) for interfaces to be ready */
     int m_ifaceWaitTime;
+
+    /** When init() last walked the network interfaces (see init()) */
+    QElapsedTimer m_ifaceScan;
 
     /********************************************************************
      * RDM

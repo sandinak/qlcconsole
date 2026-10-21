@@ -294,8 +294,8 @@ bool SimpleDeskEngine::saveXML(QXmlStreamWriter *doc) const
  * DMXSource
  ****************************************************************************/
 
-FadeChannel *SimpleDeskEngine::getFader(QList<Universe *> universes, quint32 universeID,
-                                        quint32 fixtureID, quint32 channel)
+GenericFader::ChannelRef SimpleDeskEngine::getFader(QList<Universe *> universes, quint32 universeID,
+                                                     quint32 fixtureID, quint32 channel)
 {
     // get the universe Fader first. If doesn't exist, create it
     QSharedPointer<GenericFader> fader = m_fadersMap.value(universeID, QSharedPointer<GenericFader>());
@@ -399,7 +399,7 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
             int uni = it.key() >> 9;
             int address = it.key();
             uchar value = it.value();
-            FadeChannel *fc = getFader(ua, uni, Fixture::invalidId(), address);
+            GenericFader::ChannelRef fc = getFader(ua, uni, Fixture::invalidId(), address);
             fc->setCurrent(value);
             fc->setTarget(value);
             fc->addFlag(FadeChannel::Override);

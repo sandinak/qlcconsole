@@ -27,6 +27,7 @@ add_library(${module_name} SHARED
     fixture.cpp fixture.h
     fixturepower.cpp fixturepower.h
     powerlimiter.cpp powerlimiter.h
+    shutterautoopen.cpp shutterautoopen.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h
     genericdmxsource.cpp genericdmxsource.h
@@ -42,14 +43,28 @@ add_library(${module_name} SHARED
     mastertimer.cpp mastertimer.h
     monitorproperties.cpp monitorproperties.h
     networkreport.cpp networkreport.h
+    patchlabels.cpp patchlabels.h
+    paletteops.cpp paletteops.h
     patchlist.cpp patchlist.h
     speedmasters.cpp speedmasters.h
     showcontrol.cpp showcontrol.h
+    showtreecommand.cpp showtreecommand.h
+    showtreecontroller.cpp showtreecontroller.h
+    showtreeconvert.cpp
+    showtreelooks.cpp
+    showtreeproductions.cpp
+    showtreesubcues.cpp
+    showtreerunner.cpp
+    showtreereusable.cpp
+    showtreemodel.cpp showtreemodel.h
     spreadlayer.cpp spreadlayer.h
+    linecurve.cpp linecurve.h
+    linespread.cpp linespread.h
     networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h
     aimsolver.cpp aimsolver.h
+    beamocclusion.cpp beamocclusion.h
     stageplatform.cpp stageplatform.h
     pipe.cpp pipe.h
     scenery.cpp scenery.h
@@ -65,6 +80,8 @@ add_library(${module_name} SHARED
     tower.cpp tower.h
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
+    networkroute.cpp networkroute.h
+    rignetwork.cpp rignetwork.h
     outputpatch.cpp outputpatch.h
     patchplanner.cpp patchplanner.h
     qlccapability.cpp qlccapability.h
@@ -82,6 +99,7 @@ add_library(${module_name} SHARED
     qlcinputsource.cpp qlcinputsource.h
     qlcmodifierscache.cpp qlcmodifierscache.h
     qlcpalette.cpp qlcpalette.h
+    measurementunits.cpp measurementunits.h
     qlcphysical.cpp qlcphysical.h
     qlcpoint.cpp qlcpoint.h
     qxwimporter.cpp qxwimporter.h
@@ -95,6 +113,8 @@ add_library(${module_name} SHARED
     rgbtext.cpp rgbtext.h
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
+    focussession.cpp focussession.h
+    gamepadrole.cpp gamepadrole.h
     parkeffect.cpp parkeffect.h
     markeffect.cpp markeffect.h
     cueoutput.cpp cueoutput.h
@@ -111,6 +131,7 @@ add_library(${module_name} SHARED
     bundlecache.cpp bundlecache.h
     effectinstance.cpp effectinstance.h
     effectscriptrunner.cpp effectscriptrunner.h
+    showembedding.cpp showembedding.h
     programmercontroller.cpp programmercontroller.h
     scene.cpp scene.h
     scenevalue.cpp scenevalue.h
@@ -133,6 +154,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt6::Core
     Qt6::Gui
     Qt6::Multimedia
+    Qt6::Network
 )
 
 target_link_libraries(${module_name} PRIVATE qlcplusaudio)
@@ -210,6 +232,13 @@ elseif(UNIX OR ANDROID OR IOS)
 endif()
 
 set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CONFIGFILE})
+
+# MinGW exports every symbol of a DLL by itself only while nothing in it is
+# marked dllexport; qlcengine_export.h marks a few classes, so ask for the
+# rest explicitly.
+if(MINGW)
+    target_link_options(${module_name} PRIVATE -Wl,--export-all-symbols)
+endif()
 
 install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${LIBSDIR}

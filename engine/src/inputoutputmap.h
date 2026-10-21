@@ -21,16 +21,19 @@
 #define INPUTOUTPUTMAP_H
 
 #include <QSharedPointer>
+#include "qlcengine_export.h"
 #include <QObject>
 #include <QMutex>
 #include <QDir>
 
 #include "qlcinputprofile.h"
+#include "universe.h"
 #include "grandmaster.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
 class QElapsedTimer;
+class QTimer;
 class QLCInputSource;
 class AudioCapture;
 class QLCIOPlugin;
@@ -47,8 +50,9 @@ class Doc;
 #define KXMLIOBeatGenerator     QStringLiteral("BeatGenerator")
 #define KXMLIOBeatType          QStringLiteral("BeatType")
 #define KXMLIOBeatsPerMinute    QStringLiteral("BPM")
+#define KXMLIORigNetwork        QStringLiteral("RigNetwork")
 
-class InputOutputMap final : public QObject
+class QLC_ENGINE_EXPORT InputOutputMap final : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY(InputOutputMap)
@@ -435,11 +439,154 @@ public:
         quint32 line;           //!< the line index the workspace asked for (out-of-range case)
         int availableLines;     //!< how many that plugin actually offers here (out-of-range case)
         QString missingInterface;   //!< the interface identity that did not resolve (pending case)
+        QString kind = QStringLiteral("output");   //!< "output", "input" or "feedback"
+        bool pluginMissing = false; //!< the plugin itself is not installed here
+        QString heldReason;         //!< pending because the rig network gate holds it
     };
 
     /** Output patches pointing at plugin lines this machine doesn't have.
      *  Empty means every patched universe can actually reach its output. */
     QList<DanglingPatch> danglingOutputPatches() const;
+
+    /**
+     * Apply one patch exactly as a workspace stored it (Universe::loadXML).
+     *
+     * Network lines are resolved by NETWORK, not by interface: see
+     * NetworkRoute::resolve(). A patch that cannot be opened on this
+     * machine -- interface/network not present, device unplugged, plugin
+     * not installed -- is KEPT (an output as OutputPatch::isPending(), an
+     * input/feedback or plugin-less one as a Universe::OfflinePatch), saved
+     * back unchanged, and reconnected by retryOfflinePatches() as soon as
+     * it resolves. It is never silently dropped.
+     */
+    void loadPatch(quint32 universe, const Universe::OfflinePatch &patch);
+
+    /** Try every kept (offline/pending) patch again; returns how many
+     *  reconnected. Runs by itself every few seconds while any exist. */
+    int retryOfflinePatches();
+
+    /** Are any patches being kept offline right now? */
+    bool hasOfflinePatches() const;
+
+    /** The user unpatched an offline universe: forget every kept patch on
+     *  it (pending outputs included). */
+    void forgetOfflinePatches(quint32 universe);
+
+    /** How a patch with saved identity @p uid would resolve here: a line
+     *  index, or -1 when nothing on this machine reaches it. */
+    int resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
+                         const QString &network, const QString &target) const;
+
+    /*********************************************************************
+     * Rig network transmit gate
+     *********************************************************************/
+public:
+    /**
+     * The show's rig networks ("172.18.0.0/20"), saved with the show: the
+     * networks its network output belongs on. While the gate is active
+     * (transmitGateActive()), a network output patch -- Art-Net, E1.31/sACN,
+     * OSC, WLED: any line named after a local address, or any patch aimed at
+     * IPv4 targets -- transmits only from a local interface whose address
+     * lies inside one of them. Anything else is HELD: kept as a pending
+     * patch (OutputPatch::isHeld()), its plugin line not opened, nothing
+     * sent, no unicast through the default route and no broadcast. The
+     * offline retry tick re-checks held patches with the reconnect check and
+     * they resume by themselves once this machine is on a rig network.
+     *
+     * Loopback (127.0.0.0/8) is never held, and patches that are not network
+     * output (USB DMX, MIDI, ...) are not looked at. With no rig networks
+     * set nothing is held -- an older show behaves as it always did -- and
+     * transmitGateStatus() says so, for the footer to suggest setting them.
+     *
+     * The plugins enforce the same list themselves for everything a line
+     * sends (QLCIOPlugin::setTransmitNetworks()), which also covers what a
+     * patch hold cannot see: an input line answering ArtPolls, a rescan's
+     * discovery polls. They keep the decision cached per line or device and
+     * work it out again when the list changes and on the retry tick, so the
+     * send path only reads a flag.
+     */
+    QStringList rigNetworks() const;
+
+    /** Set the rig networks; entries that do not parse are dropped (see
+     *  RigNetwork::normalise()). Re-applies the gate at once. */
+    void setRigNetworks(const QStringList &networks);
+
+    /** A starting suggestion for a show that has none: the distinct saved
+     *  Network values of its network patches (open, held, offline). */
+    QStringList suggestedRigNetworks() const;
+
+    /** "Only transmit on rig networks" (a preference of this machine,
+     *  default on). Re-applies the gate. */
+    bool transmitGateEnabled() const;
+    void setTransmitGateEnabled(bool enable);
+
+    /** "Transmit anyway, this session": lifts the gate until the app quits
+     *  or another show is opened. Never saved. */
+    bool transmitOverride() const;
+    void setTransmitOverride(bool override);
+
+    /** Enabled, not overridden, and the show has rig networks */
+    bool transmitGateActive() const;
+
+    /** Why a patch on @p lineName with @p params may not transmit right now,
+     *  or empty when it may (or is not network output at all). */
+    QString transmitHoldReason(const QString &lineName,
+                               const QMap<QString, QVariant> &params) const;
+
+    struct TransmitGateStatus
+    {
+        enum State
+        {
+            Clear,          //!< nothing to say: no network output, or all allowed
+            NotSet,         //!< network output, but the show has no rig networks
+            Held,           //!< network output is being held
+            Off,            //!< the check is switched off on this machine
+            Overridden      //!< "Transmit anyway, this session"
+        };
+        State state = Clear;
+        int held = 0;                   //!< network output patches held
+        int networkOutputs = 0;         //!< network output patches in all
+        QStringList networks;           //!< the rig networks
+        QStringList connected;          //!< "en0 10.4.12.7", this machine's own
+        QStringList reasons;            //!< "Universe 3: 10.4.12.7 is not on ..."
+    };
+
+    /** What the footer (and anything else asking) should say */
+    TransmitGateStatus transmitGateStatus() const;
+
+    /** Hold every open network output patch that may not transmit, push
+     *  the gate to the plugins, and resume held ones that may again.
+     *  Returns how many were newly held. Runs on the retry tick. */
+    int applyTransmitGate();
+
+signals:
+    /** The gate's settings or what it is holding changed */
+    void transmitGateChanged();
+
+private:
+    /** Hold output patch @p index of @p universe (open or not) */
+    void holdOutputPatch(quint32 universe, int index, QLCIOPlugin *plugin,
+                         const QString &uid, quint32 savedLine,
+                         const QString &network, const QString &reason);
+    /** Push the effective network list into every loaded plugin, and have
+     *  each work its cached per-line decisions out again */
+    void pushTransmitNetworks();
+    /** Is a patch on @p lineName with @p params network output (a line named
+     *  after a non-loopback local address, or aimed at IPv4 targets)? */
+    bool isNetworkOutput(const QString &lineName, const QMap<QString, QVariant> &params) const;
+    /** Has this machine an address on one of the rig networks? */
+    bool onRigNetwork() const;
+    /** Re-apply the gate after a setting changed, and announce it */
+    void reapplyTransmitGate();
+    /** Emit transmitGateChanged() when the status summary changed */
+    void noteTransmitGateStatus();
+
+    QStringList m_rigNetworks;
+    bool m_transmitGateEnabled = true;
+    bool m_transmitOverride = false;
+    QString m_lastGateSummary;
+
+public:
 
     /**
      * Get the feedback mapping for a QLC universe.
@@ -570,6 +717,10 @@ private:
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
     void slotPluginConfigurationChanged(QLCIOPlugin* plugin);
+    void slotRetryOfflinePatches();
+
+private:
+    QTimer *m_offlineRetry;
 
 signals:
     /** Signal emitted when a profile is changed */
@@ -577,6 +728,9 @@ signals:
 
     /** Notifies (InputOutputManager) of plugin configuration changes */
     void pluginConfigurationChanged(const QString& pluginName, bool success);
+
+    /** Kept offline patches reconnected (or were forgotten). */
+    void offlinePatchesChanged();
 
     /** Everyone interested in input data should connect to this signal */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);

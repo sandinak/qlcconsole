@@ -38,23 +38,43 @@ not opened — and saving then can write an empty workspace over it.
   often). If the app stops without saving,
   the next launch offers to **recover the unsaved work**. A clean quit
   removes the recovery copy.
-- A show keeps a copy of every **fixture definition** it uses that isn't
-  shipped with the app — the **show cache** — so it opens the same on
-  another computer. See
+- A .qlcc **carries its own copies** of every fixture definition, effect
+  script and RGB script it uses that isn't part of the app, so it opens
+  complete on another computer; where that computer's copy differs, the
+  show keeps its own until you choose. See
+  [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
+  **File → Collect for Transfer…** writes the show and those files into one
+  folder.
+- This computer also keeps a copy of every non-shipped definition a show
+  uses — the **show cache** — for shows saved as .qxw. See
   [Missing definitions and the show cache](fixture-manager.md#missing-definitions-and-the-show-cache).
 - A show kept in a **cloud folder** (iCloud, Dropbox, Synology…) is saved
   safely; see [Cloud storage](other-improvements.md#cloud-storage).
 
 ## Finding your way around
 
-![The main window: toolbar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
+![The main window: the top bar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
 
-1. **The toolbar** — **Stop ALL functions** (the panic button), **Blackout**,
-   **Blind**, and **Operate** to run the show.
+1. **The top bar** — one row. On the left, the open tab's own tools (here
+   Programming's Highlight, Flash, Park…); in a narrow window, what
+   doesn't fit is under **»**. On the right, the show controls:
+   **Stop all** (the panic button; hold it for **Fade and stop**),
+   **Blackout**, **Blind**, and the **Design | Operate** switch, the mode
+   you are in lit. **Blackout** lights red and **Blind** blue while they
+   are on.
 2. **The open tab** — here Programming, with a scene open.
 3. **The tabs**, along the bottom.
 4. **The footer** — is the show ready to run, how busy the output is, Design
    or Operate (below).
+
+**Settings → Show Controls** can put the show controls in the status bar
+instead, at its right end beside Ready and the other show chips: the top
+is then the tab's own tools alone. It changes at once, no restart, and the
+shortcuts are the same either way (⌘⇧Esc Stop all, ⌘F12 Design / Operate).
+There, they are icons only (their tooltips name them) unless
+**View → Toolbar Style** is **Text Only**, and the footer's own DESIGN and
+BLACKOUT chips step aside for them. A tab moved to a window of its own
+keeps its tools at its own top.
 
 The tabs follow the order a show is built in:
 
@@ -64,11 +84,12 @@ The tabs follow the order a show is built in:
 | **Fixtures** | The fixtures in the show, the inventory, groups and their head layouts, patching | [Fixture Manager](fixture-manager.md) |
 | **Lighting Studio** | The physical rig: structures, where every fixture hangs, the network, the 3D Rig Overview | [Lighting Studio](lighting-studio.md) |
 | **Programming** | Scenes built from looks, looks built from palettes and effects | [Programming Tab](programming-tab.md) |
+| **Show Tree** | A show as one tree: cue lists, cues and the layers in them; the scenes and chaser are made for you | [Show Tree](show-tree.md) |
 | **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
 | **Virtual Console** | The operator's surface | stock QLC+ |
 | **Simple Desk** | Raw channel faders | stock QLC+ |
 
-**Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘8). Double-click
+**Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘9). Double-click
 a tab to break it out into its own window; Window brings it back.
 **Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
 scripts, audio, video) has no tab: **Window → Functions** (⇧⌘4) opens it
@@ -165,9 +186,11 @@ hired rig with a patch sheet):
 
 ## Workflow 3 — bringing a show to a venue
 
-1. **Open the show** (⌘O, or `-o`). If the footer says definitions are
-   missing, click it: they come from the show cache, your library, or can
-   be repaired in the Fixture Editor.
+1. **Open the show** (⌘O, or `-o`). A .qlcc brings its own definitions
+   and scripts; if the footer says some **differ from this computer's**,
+   **Review…** them. If it says definitions are missing, click it: they
+   come from the show cache, your library, or can be repaired in the
+   Fixture Editor.
 2. **Connections**: are the nodes there? **Rescan**; check each universe
    goes where it should (**By universe** lists them in order with where
    each goes). Select a universe to watch what it sends.
@@ -202,17 +225,17 @@ Steps, towers and booms usually come in sets that should all be the same:
 
 ## Running the show
 
-- **Operate** (⌘F12) — the show runs; editing that would disturb it is
+- **Operate** (⌘F12, or the top bar's **Design | Operate** switch) — the show runs; editing that would disturb it is
   locked. **Show-mode Lock** (⌘L) locks the interface down further for an
   operator.
-- **Stop ALL functions** (⌘⇧Esc), or its menu's **Fade and stop**, is the
-  panic button.
+- **Stop all** (⌘⇧Esc), or its menu's **Fade and stop** (hold the button),
+  is the panic button.
 - **From QLab**: QLab (or anything that speaks MIDI Show Control or OSC)
   can GO a chase's cues by number. See
   [Show control (QLab)](show-control.md).
 - The Virtual Console, Simple Desk and Shows timeline work as in stock
-  QLC+; the **Programming** tab's toolbar has Highlight / Flash / Park /
-  Blind for working on a running show.
+  QLC+; the **Programming** tab's tools have Highlight / Flash / Park, and
+  the show controls Blind, for working on a running show.
 
 ### GO on the beat
 

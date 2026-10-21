@@ -261,6 +261,9 @@ def check_physical(absname, node, hasPan, hasTilt, hasZoom, errNum):
         lens_tag = phy_tag.find('{' + namespace + '}Lens')
         focus_tag = phy_tag.find('{' + namespace + '}Focus')
         tech_tag = phy_tag.find('{' + namespace + '}Technical')
+        body_tag = phy_tag.find('{' + namespace + '}Body')
+        # Not a light (a curtain): it may draw no power of its own
+        notLight = body_tag is not None and body_tag.attrib.get('Emission', '') == 'None'
 
         width = int(dim_tag.attrib.get('Width', 0))
         height = int(dim_tag.attrib.get('Height', 0))
@@ -289,7 +292,7 @@ def check_physical(absname, node, hasPan, hasTilt, hasZoom, errNum):
         if tech_tag is not None:
             connectorsArray = [ "3-pin", "5-pin", "3-pin and 5-pin", "3-pin IP65", "5-pin IP65", "3.5 mm stereo jack", "Wireless", "Other" ]
             power = int(tech_tag.attrib.get('PowerConsumption', 0))
-            if power == 0:
+            if power == 0 and not notLight:
                 print(absname + ": Invalid power consumption")
                 errNum += 1
             dmxConnector = tech_tag.attrib.get('DmxConnector', "")

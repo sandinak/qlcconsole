@@ -17,6 +17,7 @@
 #include "monitorimageitem.h"
 #include "monitorproperties.h"
 #include "doc.h"
+#include "apputil.h"
 
 static const qreal HANDLE = 9.0;   // corner handle size in scene px
 
@@ -61,7 +62,7 @@ void MonitorImageItem::setImageRotation(float degrees)
 void MonitorImageItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable);
-    setCursor(movable ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor(movable ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 QRectF MonitorImageItem::boundingRect() const

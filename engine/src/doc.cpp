@@ -39,6 +39,7 @@
 #include "qlcchannel.h"
 #include "programmerflasher.h"
 #include "effectscriptrunner.h"
+#include "showembedding.h"
 
 #include "monitorproperties.h"
 #include "powerdistribution.h"
@@ -60,8 +61,11 @@
 #include "show.h"
 #include "speedmasters.h"
 #include "showcontrol.h"
+#include "showtreecontroller.h"
+#include "paletteops.h"
 #include "doc.h"
 #include "powerlimiter.h"
+#include "shutterautoopen.h"
 #include "bus.h"
 #include "qlcpalette.h"
 #include "qlcphysical.h"
@@ -127,6 +131,8 @@ Doc::Doc(QObject* parent, int universes)
     // Cues fired from outside (QLab): MSC arrives as SysEx on a patched
     // MIDI input, as MTC does.
     m_showControl = new ShowControl(this, this);
+    m_paletteOps = new PaletteOps(this);
+    m_showTree = new ShowTreeController(this);
     connect(m_ioMap, &InputOutputMap::inputSysExReceived,
             m_showControl, &ShowControl::handleSysEx);
     // Which masters are used changes only with an edit: let them know.
@@ -141,6 +147,8 @@ Doc::Doc(QObject* parent, int universes)
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);
+    // Shutters opened for a lit head that nothing else opens.
+    m_shutterAutoOpen = new ShutterAutoOpen(this);
 
     // Track running Scenes for programmer edit-routing (LTP).
     // DirectConnection: the signal is emitted from MasterTimer's worker
@@ -175,6 +183,7 @@ Doc::Doc(QObject* parent, int universes)
     // because the runner only needs to know about starts/stops to create
     // or destroy instances; the actual DMX work is driven by its QTimer.
     m_effectScriptRunner = new EffectScriptRunner(this);
+    m_showEmbedding = new ShowEmbedding(this);
     connect(m_masterTimer, SIGNAL(functionStarted(quint32)),
             m_effectScriptRunner, SLOT(slotFunctionStarted(quint32)));
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
@@ -234,6 +243,8 @@ Doc::~Doc()
 {
     delete m_powerLimiter;
     m_powerLimiter = nullptr;
+    delete m_shutterAutoOpen;
+    m_shutterAutoOpen = nullptr;
 
     delete m_masterTimer;
     m_masterTimer = NULL;
@@ -283,7 +294,14 @@ void Doc::clearContents()
         m_powerDist->reset();
 
     m_speedMasters->reset();
+    if (m_shutterAutoOpen != nullptr)
+        m_shutterAutoOpen->reset();
     m_showControl->reset();
+    m_showTree->reset();
+    m_paletteOps->reset();
+    // The timecode source is the show's (a universe of its patch).
+    if (m_timecodeSource != NULL)
+        m_timecodeSource->setSourceUniverse(-1);
 
     if (m_networkTopology != NULL)
         m_networkTopology->reset();
@@ -361,6 +379,10 @@ void Doc::clearContents()
     m_loadStatus = Cleared;
 
     m_programmer->clearProgrammerSelection();
+
+    /* The show is gone: this computer's definitions and scripts again. */
+    if (m_showEmbedding != nullptr)
+        m_showEmbedding->restoreComputer();
 
     emit cleared();
 }
@@ -1638,6 +1660,9 @@ int Doc::totalPowerConsumption(int& fuzzy) const
         if (fxi->fixtureMode() != NULL)
         {
             QLCPhysical phys = fxi->fixtureMode()->physical();
+            // Not a light (a curtain): no load, and nothing missing either.
+            if (!phys.emitsLight())
+                continue;
             if (phys.powerConsumption() > 0)
                 totalPowerConsumption += phys.powerConsumption();
             else
@@ -1903,6 +1928,18 @@ bool Doc::deletePalette(quint32 id)
             Scene *s = qobject_cast<Scene*>(f);
             if (s != NULL && s->palettes().contains(id))
                 s->removePalette(id);
+        }
+        // ...and from any effect look that binds it to a slot, so a palette
+        // made later under the same id isn't picked up by it. (The effect
+        // then falls back to its look colours, as with no binding.)
+        foreach (QLCPalette *other, m_palettes)
+        {
+            if (other == NULL)
+                continue;
+            const QMap<QString, quint32> binds = other->effectPaletteBindings();
+            for (auto it = binds.constBegin(); it != binds.constEnd(); ++it)
+                if (it.value() == id)
+                    other->clearEffectPaletteBinding(it.key());
         }
 
         emit paletteRemoved(id);
@@ -2319,6 +2356,14 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_showControl->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCShowTree)
+        {
+            m_showTree->loadXML(doc);
+        }
+        else if (doc.name() == KXMLQLCTimecode)
+        {
+            timecodeSource()->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCPowerDistribution)
         {
             powerDistribution()->loadXML(doc, this);
@@ -2341,6 +2386,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             else
                 doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLQLCShutterAutoOpen)
+        {
+            m_shutterAutoOpen->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCMoveInBlack)
         {
             if (m_programmer != NULL)
@@ -2355,6 +2404,9 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         }
     }
 
+    // Palette folders from an older show, now the whole show is read.
+    QLCPalette::migrateLegacyPaths(palettes());
+
     postLoad();
 
     /* Locks are by layer now: objects pinned on their own move onto a locked
@@ -2363,6 +2415,17 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     {
         m_monitorProps->foldItemLocksIntoLayers(powerDistribution(), networkTopology());
         m_monitorProps->syncItemLocksToLayers(powerDistribution(), networkTopology());
+    }
+
+    /* A timecode source naming no universe of this show is as good as none:
+       "any", as before it was saved. */
+    if (m_timecodeSource != NULL && m_timecodeSource->sourceUniverse() >= 0)
+    {
+        bool found = false;
+        for (quint32 i = 0; i < m_ioMap->universesCount() && !found; i++)
+            found = (qint32(m_ioMap->getUniverseID(i)) == m_timecodeSource->sourceUniverse());
+        if (!found)
+            m_timecodeSource->setSourceUniverse(-1);
     }
 
     m_loadStatus = Loaded;
@@ -2432,7 +2495,11 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
         m_powerDist->saveXML(doc);
 
     m_speedMasters->saveXML(doc);
+    m_shutterAutoOpen->saveXML(doc);
     m_showControl->saveXML(doc);
+    m_showTree->saveXML(doc);
+    if (m_timecodeSource != NULL)
+        m_timecodeSource->saveXML(doc);
 
     if (m_networkTopology != NULL)
         m_networkTopology->saveXML(doc);
@@ -2490,4 +2557,18 @@ QHash<quint32, QString> Doc::effectFailures() const
     if (m_effectScriptRunner == nullptr)
         return QHash<quint32, QString>();
     return m_effectScriptRunner->failures();
+}
+
+/*****************************************************************************
+ * Show Tree: the current production (forwarders)
+ *****************************************************************************/
+
+quint32 Doc::currentProduction() const
+{
+    return m_showTree->currentProduction();
+}
+
+bool Doc::setCurrentProduction(quint32 productionId)
+{
+    return m_showTree->setCurrentProduction(productionId);
 }

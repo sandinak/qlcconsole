@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <future>
+#include <chrono>
 
 #define private public
 #include "mastertimer_test.h"
@@ -31,6 +33,41 @@
 #undef private
 
 #include "../common/resource_paths.h"
+
+/* A DMX source whose write takes longer than a tick, recording how many
+   ticks were inside it at once and which threads ran it. */
+class SlowSource final : public DMXSource
+{
+public:
+    explicit SlowSource(int ms) : m_ms(ms) {}
+
+    void writeDMX(MasterTimer* timer, QList<Universe*> universes) override
+    {
+        Q_UNUSED(timer)
+        Q_UNUSED(universes)
+
+        const int inside = m_inside.fetchAndAddOrdered(1) + 1;
+        int max = m_maxInside.loadAcquire();
+        while (inside > max && m_maxInside.testAndSetOrdered(max, inside) == false)
+            max = m_maxInside.loadAcquire();
+        {
+            QMutexLocker locker(&m_threadsMutex);
+            m_threads.insert(QThread::currentThreadId());
+        }
+
+        QThread::msleep(m_ms);
+
+        m_calls.fetchAndAddOrdered(1);
+        m_inside.fetchAndAddOrdered(-1);
+    }
+
+    int m_ms;
+    QAtomicInt m_inside = 0;
+    QAtomicInt m_maxInside = 0;
+    QAtomicInt m_calls = 0;
+    QMutex m_threadsMutex;
+    QSet<Qt::HANDLE> m_threads;
+};
 
 /* MasterTimer's tick is wall-clock: 20 ms nominal. Three tests below assert on
    how many ticks land in a given period -- interval() wants 40-60 in a second,
@@ -414,6 +451,95 @@ void MasterTimer_Test::restart()
     QVERIFY(mt->runningFunctions() == 3);
 
     mt->stopAllFunctions();
+}
+
+/* A tick that takes longer than the period must delay the next one, not
+   overlap it. The Windows timer used to hand every period to a thread-pool
+   worker whether or not the last tick had finished: under a heavy show the
+   overlapping ticks piled up on the tick lock, one new thread each (111 ->
+   872 threads in three minutes). Here a source takes three periods per write:
+   the ticks must all run on one thread, one at a time, the timer must keep
+   ticking, and once the slow source is gone there must be no burst of ticks
+   that were queued up behind it. */
+void MasterTimer_Test::anOverrunningTickRunsAlone()
+{
+    MasterTimer* mt = m_doc->masterTimer();
+    SlowSource slow(int(MasterTimer::tick()) * 3);
+    DMXSource_Stub fast;
+
+    mt->start();
+    mt->registerDMXSource(&slow);
+    QWAIT_MS(1000);
+    mt->unregisterDMXSource(&slow);
+
+    /* Every tick that piled up behind the slow one would now run at once */
+    QElapsedTimer elapsed;
+    elapsed.start();
+    mt->registerDMXSource(&fast);
+    QWAIT_MS(200);
+    mt->unregisterDMXSource(&fast);
+    const int fastWrites = fast.m_writeCalls;
+    const qint64 fastMs = elapsed.elapsed();
+
+    mt->stop();
+
+    QCOMPARE(slow.m_maxInside.loadAcquire(), 1);
+    QCOMPARE(slow.m_threads.size(), 1);
+    /* ~16 at 60 ms each in a second; anything well short of that means the
+       timer stalled rather than ran late */
+    QVERIFY2(slow.m_calls.loadAcquire() >= 5,
+             qPrintable(QString("only %1 slow ticks").arg(slow.m_calls.loadAcquire())));
+    QVERIFY2(fastWrites <= int(fastMs / MasterTimer::tick()) + 5,
+             qPrintable(QString("%1 ticks in %2 ms after the overrun").arg(fastWrites).arg(fastMs)));
+}
+
+/* stop() during a tick returns only once that tick is over, so whatever the
+   tick was using can be freed right after. */
+void MasterTimer_Test::stopWaitsForATickInProgress()
+{
+    MasterTimer* mt = m_doc->masterTimer();
+    SlowSource slow(100);
+    DMXSource_Stub fast;
+    /* A failed check returns early: never leave the timer holding these */
+    auto cleanup = qScopeGuard([&] {
+        mt->stop();
+        mt->unregisterDMXSource(&slow);
+        mt->unregisterDMXSource(&fast);
+    });
+
+    mt->start();
+    mt->registerDMXSource(&slow);
+    QTRY_VERIFY_WITH_TIMEOUT(slow.m_inside.loadAcquire() == 1, 5000);
+
+    mt->stop();
+    QCOMPARE(slow.m_inside.loadAcquire(), 0);
+    const int calls = slow.m_calls.loadAcquire();
+
+    QTest::qWait(300);
+    QCOMPARE(slow.m_calls.loadAcquire(), calls);
+    mt->unregisterDMXSource(&slow);
+
+    /* and it starts again */
+    mt->registerDMXSource(&fast);
+    mt->start();
+    QTRY_VERIFY_WITH_TIMEOUT(fast.m_writeCalls > 0, 5000);
+}
+
+/* stop() straight after start() must return: the run flag used to be set
+   by the new thread itself, so a stop() that beat it there was undone and
+   stop()'s wait() never returned (two App::clearDocument() in a row hung). */
+void MasterTimer_Test::stopRightAfterStartReturns()
+{
+    MasterTimer* mt = m_doc->masterTimer();
+    auto done = std::async(std::launch::async, [mt]() {
+        for (int i = 0; i < 500; i++)
+        {
+            mt->start();
+            mt->stop();
+        }
+    });
+    QVERIFY2(done.wait_for(std::chrono::seconds(20)) == std::future_status::ready,
+             "stop() right after start() did not return");
 }
 
 /* The beat clock (SPEED_SPREAD_DESIGN.md, S1): one running beat count every

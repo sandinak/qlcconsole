@@ -22,6 +22,7 @@
 
 #include <QNetworkAddressEntry>
 #include <QNetworkInterface>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QString>
 #include <QHash>
@@ -126,12 +127,18 @@ public:
     /** Get a list of the available Input/Output lines */
     QList<OSCIO> getIOMapping() const;
 
+    /** @reimp: every line's cached rig network gate decision, again */
+    void refreshTransmitGate() override;
+
 private:
     /** Map of the OSC plugin Input/Output lines */
     QList<OSCIO>m_IOmapping;
 
     /** Time to wait (in seconds) for interfaces to be ready */
     int m_ifaceWaitTime;
+
+    /** When init() last walked the network interfaces (see init()) */
+    QElapsedTimer m_ifaceScan;
 };
 
 #endif

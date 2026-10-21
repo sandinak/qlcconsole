@@ -38,6 +38,10 @@ public:
     AboutBox(QWidget* parent);
     ~AboutBox();
 
+    /** The release ("0.1.0"), and in small type under it the build id and
+     *  the commit: what the About box shows as the version. */
+    static QString versionText();
+
 private slots:
     void slotTimeout();
     void slotItemClicked();

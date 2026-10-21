@@ -54,6 +54,33 @@ private slots:
      *  mistaken for one and sent pending. */
     void noneSentinelDoesNotGoPending();
 
+    /* Patches follow the network, and are never lost offline */
+    void offlineShowSavesPatchesByteIdentical();
+    void offlinePatchIsInertAndListed();
+    void wledBackupsKeptOfflineUnchanged();
+    void followsNetworkToAnotherMachine();
+    void followsRoutedPath();
+    void defaultRouteIsNotTheShowNetwork();
+    void storedNetworkResolves();
+    void offlinePatchReconnectsWhenNetworkAppears();
+    void userUnpatchOfflineRemovesIt();
+    void inputAndFeedbackKeptOffline();
+    void missingPluginKept();
+    void routeLookupLoopback();
+
+    /* The rig network transmit gate */
+    void rigNetworkParsing();
+    void rigNetworkHeldOffTheRigNetwork();
+    void rigNetworkHeldPatchResumesOnTheRigNetwork();
+    void rigNetworkLivePatchAndSettingsHoldAndRelease();
+    void rigNetworkNoneSetBehavesAsBefore();
+    void rigNetworkLoopbackAndNonNetworkUnaffected();
+    void rigNetworkDeviceTargetsFollowTheRoute();
+    void rigNetworkSaveLoadRoundTrip();
+    void rigNetworkSuggestedFromPatchesNotWritten();
+    void rigNetworkDecisionRefreshedOnChangeAndTick();
+    void cleanup();
+
     void universeNames();
     void addUniverse();
     void removeUniverse();

@@ -142,7 +142,9 @@ protected slots:
     void slotDelete();
     void slotSelectAll();
 
-protected:
+protected slots:
+    /** Enable the actions for what's selected; a slot, since the tree's
+     *  selection changes reach it by name (it never did as a method). */
     void updateActionStatus();
 
 protected:

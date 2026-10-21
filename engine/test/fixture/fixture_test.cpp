@@ -1115,6 +1115,11 @@ void Fixture_Test::theShowCacheKeepsDefinitionsOnThisComputer()
     QTemporaryDir home;
     const QByteArray realHome = qgetenv("HOME");
     qputenv("HOME", home.path().toUtf8());
+#ifdef Q_OS_WIN
+    // Windows takes the home folder from USERPROFILE, not HOME.
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("USERPROFILE", home.path().toUtf8());
+#endif
 
     const QDir cache = QLCFixtureDefCache::showCacheDirectory();
     QVERIFY2(cache.absolutePath().startsWith(QFileInfo(home.path()).canonicalFilePath())
@@ -1160,6 +1165,10 @@ void Fixture_Test::theShowCacheKeepsDefinitionsOnThisComputer()
     QVERIFY(!m_doc->fixtureDefCache()->cacheForShows(src));
 
     qputenv("HOME", realHome);
+#ifdef Q_OS_WIN
+
+    qputenv("USERPROFILE", realProfile);
+#endif
 }
 
 QTEST_APPLESS_MAIN(Fixture_Test)

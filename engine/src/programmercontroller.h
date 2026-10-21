@@ -22,9 +22,11 @@
 #define PROGRAMMERCONTROLLER_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QList>
 #include <QSet>
 #include <QHash>
+#include <QMap>
 #include <QColor>
 #include <QRecursiveMutex>
 #include <QSharedPointer>
@@ -36,6 +38,7 @@
 
 class ProgrammerFlasher;
 class HighlightEffect;
+class FocusSession;
 class ParkEffect;
 class MarkEffect;
 class MarkPlanner;
@@ -56,7 +59,7 @@ class QXmlStreamWriter;
  * The controller is a QObject child of Doc (auto-deleted) and reaches
  * Doc only through Doc's public methods via the m_doc back-pointer.
  */
-class ProgrammerController final : public QObject
+class QLC_ENGINE_EXPORT ProgrammerController final : public QObject
 {
     Q_OBJECT
 
@@ -118,6 +121,28 @@ public:
         const QHash<quint32, QHash<quint32, uchar>> &values,
         quint32 excludeSceneId = (quint32)~0) const;
 
+    /** One place a palette or function is used, for "where is this used"
+     *  questions before a delete (and the look editor's "used by" line). */
+    struct Usage
+    {
+        enum Kind { SceneLook, EffectBinding, CollectionMember, ChaserStep, ShowItem };
+        Kind kind;
+        quint32 ownerId;   ///< the scene / effect palette / container using it
+        QString ownerName;
+        int position;      ///< 1-based look row / chaser step; slot-less = 0
+        QString slot;      ///< EffectBinding: the effect's palette slot
+    };
+
+    /** Scenes that have palette $pid as a look (with the look's row) and
+     *  effect looks that bind it to one of their slots. */
+    QList<Usage> paletteUsage(quint32 pid) const;
+
+    /** Collections, chasers (each step) and shows that use function $fid. */
+    QList<Usage> functionUsage(quint32 fid) const;
+
+    /** One readable line per use ("Scene “Base” — look 2"). */
+    static QStringList usageLines(const QList<Usage> &uses);
+
     QList<quint32> collectionsContaining(quint32 sceneId) const;
     bool replaceSceneInCollection(quint32 collectionId,
                                   quint32 oldSceneId,
@@ -134,6 +159,32 @@ public:
      *  full white on every DMX tick (bypasses running functions). */
     bool isHighlightActive() const;
     void setHighlightActive(bool active);
+
+    /*********************************************************************
+     * Focus mode (FOCUS_MODE_DESIGN.md)
+     *********************************************************************/
+public:
+    /** The rig-alignment session. While it is active it owns the
+     *  controller: the bound stick (the follow spot's path) nudges the
+     *  current head's calibration offsets instead of moving an aim target,
+     *  the right stick nudges finely, and the buttons step, save, revert...
+     *  by gamepad role. Never null. */
+    FocusSession *focusSession() const { return m_focusSession; }
+
+    /** The controller Focus mode would use: the patched input whose profile
+     *  names the controls Focus mode works with (by role, or the usual
+     *  names), preferring the one the follow-spot stick is bound to. */
+    struct FocusController
+    {
+        bool present = false;
+        quint32 universe = 0;
+        QString name;               ///< the device, as the input patch names it
+        QString profile;            ///< its controller profile, if it says
+        /** Each control found, GamepadRole::Role -> the profile's name for
+         *  it (empty when the profile names it only by role). */
+        QMap<int, QString> controls;
+    };
+    FocusController focusController() const;
 
     /*********************************************************************
      * Park (hold fixtures out of cue output)
@@ -383,6 +434,16 @@ public:
 signals:
     /** Emitted whenever the programmer selection changes. */
     void programmerSelectionChanged();
+    /** View + Menu (Back + Start) held together on the controller while
+     *  Focus mode is off: the UI opens it. */
+    void focusModeRequested();
+    /** A controller came or went, or its profile changed: ask
+     *  focusController() again. */
+    void focusControllerChanged();
+    /** While Focus mode runs on the controller: a control by gamepad role
+     *  moved -- 0 or 1 for a button, 0..1 (0.5 centred) for a stick axis --
+     *  so the panel can show it. */
+    void focusControllerInput(int role, float value);
     /** Emitted when highlight active state changes. */
     void highlightActiveChanged(bool active);
     /** Emitted when the parked-fixtures set changes. */
@@ -523,6 +584,16 @@ private:
     /** Persistent highlight DMXSource — holds selected fixtures at white. */
     HighlightEffect *m_highlightEffect = nullptr;
     bool m_highlightActive = false;
+    /** Focus mode: see focusSession(). */
+    FocusSession *m_focusSession = nullptr;
+    /** Controller buttons held, by gamepad role, for the View+Menu combo. */
+    QSet<int> m_heldRoles;
+    float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
+    /** The gamepad role of an input channel, from its device profile. */
+    int controllerRole(quint32 universe, quint32 channel) const;
+    /** Focus mode's share of slotControllerInputChanged(). True if it took
+     *  the event. */
+    bool routeFocusInput(quint32 universe, quint32 channel, uchar value);
     /** Persistent park DMXSource — holds parked fixtures at captured values. */
     ParkEffect *m_parkEffect = nullptr;
     /** Persistent mark DMXSource — pre-positions dark fixtures (non-intensity). */

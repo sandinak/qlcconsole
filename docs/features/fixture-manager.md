@@ -222,16 +222,48 @@ fixtures still in the inventory last:
 | **Fixture** | Its name. |
 | **Make / model**, **Mode** | From its definition. |
 | **Ch** | How many channels it takes. |
-| **Connection** | DMX, or a network fixture's transport and IP ("WLED 172.18.2.50"). |
-| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing. |
+| **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
+| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) · port 1 · universe 0:0:0" — port is the socket on the node, universe its Art-Net address), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
 
 - **Save CSV…** — every column plus the fixture ID, the first and last
   channel, X/Y/Z on the plot (in the plot's units) and a note, for a
-  spreadsheet or a label printer.
+  spreadsheet or another label program.
 - **Save PDF…** — a landscape Letter page, a table per universe headed
   with where that universe goes, the header row repeated on each page.
 - **Copy** — the CSV on the clipboard, to paste straight into a sheet.
+- **Labels…** — a label per fixture, as a PDF (below).
+
+#### Labels
+
+**Labels…** in the patch list makes a label to stick on each fixture (or
+its case), saved as a PDF to print from Preview. Each label has:
+
+- the fixture's **name**, large;
+- its **address**, large: universe and first channel, one-based — "U3 · 101"
+  ("not patched" for a fixture in the inventory, "clash · U1 · 12" for one
+  in an address clash) — with the universe's name, when it has one, smaller
+  beside it;
+- its **mode and channels** — "16-channel · 16 ch";
+- for a network fixture, a line of its own: its transport and the name its
+  IP goes by — "WLED · lantern-2" — or the IP when it has no name
+  ("WLED · 172.18.2.50");
+- **where it hangs**, the same words as the Mounted on column.
+
+A name too long for the label is set smaller, then cut short with "…";
+nothing runs off the edge.
+
+Pick the **stock** — the choice is remembered for next time:
+
+| Stock | What it is |
+|---|---|
+| **Avery 5160** (the default) | US Letter sheets, 30 labels (3 across, 10 down), each 2⅝ × 1 in. Avery's 5260, 5960, 8160 and other "30 per sheet" labels are the same layout. |
+| **62 mm roll** | A continuous 62 mm roll (Brother DK-22205 and the like), one 62 × 29 mm label a page; the printer cuts between them. |
+
+and **which fixtures**: all of them, or the rows selected in the list (the
+default when some are). The dialog says how many labels that is and, on
+sheets, how many sheets. Print the PDF at **100% / actual size** — "fit to
+page" shrinks it and the labels no longer line up with the sheet.
 
 ## The head-layout grid editor
 
@@ -291,22 +323,88 @@ group in a sub-folder underneath it — gets its path updated to match.
 
 - **Right-click "Fixture Groups" or any folder → "New Group..."** — an empty
   group at your chosen grid size.
-- **Select one or more fixtures or groups → "Create group from selection…"**
-  — for a pure fixture selection:
-  - If any of them are placed in the Lighting Studio, the **New Fixture
-    Group** dialog lays them out from where they really stand: **From the
-    front** (as the audience sees it — step fronts become one picture),
-    **From above** (the plan) or **Automatic**, with **"Close up the gaps"**
-    (on by default: each keeps its place relative to the others, empty
-    rows and columns dropped; off is the rig to scale). It previews the
-    size, and warns if a group with exactly these heads already exists —
-    keep it, or make another.
-  - Otherwise the app suggests a grid size from head count and you fill it.
-  - If the fixtures have more than one kind of head, you're first offered
-    **Split by Head Type** (below) or **One Group**.
+- **Select fixtures and/or groups → Group → "Create Group(s) from
+  Selection…"** — one group of the selection, a group per head type, or a
+  group per head type for each fixture, previewed before any is made
+  (below).
 
-  Selecting existing groups instead copies each one in as a tagged
-  sub-group block.
+### Create Group(s) from Selection
+
+One menu item, **Group → Create Group(s) from Selection…**, for one group
+or many. Take eight bars, each with 16 RGB pixels and 4 white strobe
+cells. It offers:
+
+1. **One group with every head** — all 160 heads in one group, made just
+   as the old one-click *Create Group from Selection* made it (below). On
+   by default when the fixtures have one type of head, or when groups are
+   selected.
+2. **A group per head type, across all the fixtures** — "Bar · RGB pixels"
+   (128 heads) and "Bar · White pixels" (32 heads). On by default when the
+   fixtures have more than one type of head.
+3. **A group per head type for each fixture** — "Bar 1 · RGB pixels",
+   "Bar 1 · White pixels", "Bar 2 · RGB pixels"… 16 groups, filed in a
+   folder named after the selection.
+
+**One group.** How the heads are laid out depends on what is selected:
+
+- **Groups selected** (with or without fixtures): with **Each group
+  selected as a block, as it is laid out** ticked (the default), each
+  group goes in keeping its own layout, one under the other, tagged as a
+  [sub-group](#sub-groups-pasted-blocks-with-provenance) so it moves as a
+  unit; fixtures selected as well go in a row below them (a head already
+  in one of the groups isn't added twice). It's what **Add to Group** does
+  into an empty group. Untick it to lay every fixture out afresh instead.
+- **Fixtures placed in the Lighting Studio**: laid out from where they
+  really stand — **From the front** (as the audience sees it — step fronts
+  become one picture), **From above** (the plan) or **Automatic**, with
+  **"Close up the gaps"** (on by default: each keeps its place relative to
+  the others, empty rows and columns dropped; off is the rig to scale).
+- **Otherwise**: the heads fill a **Grid** row by row, the fixtures in
+  their order on the 2D plot (top row first, left to right; ones not on
+  the plot after, as picked). The grid is suggested from the plot (a row
+  of fixtures per band of the plot), else a near-square of the head
+  count; change it there, or resize the group later.
+
+**What a head type is.** Fixture definitions don't name their heads'
+types, so it is read from each head's channels: its colours ("RGB",
+"RGBW", "White"; "Dimmer" for plain intensity) and whether it moves (pan
+or tilt in the head, or on the fixture's body: "RGBW movers"). Two heads
+are the same type when those match — whatever fixture model they are on,
+so the RGB pixels of a bar and of a strip share "· RGB pixels" in option
+2. Tick **Keep fixture models apart** to give each model its own group
+instead. A head with no colour, intensity or movement is "Other". A
+mover's head with only a dimmer (its colour on a wheel) is just
+**Movers**. A head whose only colour is a colour wheel or colour-macro
+channel — a mover's **colour ring** round the lens — is **Ring** on a
+fixture that moves and **Colour macro** elsewhere, so a mover with a ring
+as its own head makes a "· Movers" group and a "· Ring" group (see
+[Colour rings](show-tree.md#colour-rings)).
+
+**Strobe isn't a type.** A shutter or strobe channel doesn't make a head
+a different type: the bars' white strobe cells are "White", and an RGB
+head with its own strobe channel is still "RGB". Only colour, intensity
+and movement count.
+
+**Names.** Each group is named after what its fixtures' names share, less
+a trailing number ("Bar 1"…"Bar 8" → "Bar"), and its head type; a group
+per fixture takes the fixture's name. When every fixture in a group has
+more than one head of its type, the type is called **pixels** ("Bar · RGB
+pixels", "Bar · White pixels"); fixtures of one head of it keep the plain
+type ("Par · RGB"), and movers stay movers ("Spot · RGBW movers") however
+many heads they have. Type a **Name** to name them all after that
+instead. Selecting only groups names them after the groups. Every name in
+the list can be changed (double-click it) and any group unticked before
+**Create**. A group that already exists with exactly the same heads is
+shown as such: in options 2 and 3 it's left unticked; the one group of
+option 1, asked for, is still made unless you untick it. **Folder** files
+them all (empty: no folder).
+
+**Layout of a group per type.** Fixtures placed in the Lighting Studio are
+laid out where they stand, as for one group, each fixture's heads of that
+type turned the way it is rigged. Fixtures that aren't placed get a row
+each, one under the other, in their order on the 2D plot (a panel keeps
+its own grid); fixtures of one head each fill a near-square instead.
+Click a group in the list to see its layout.
 
 ### Split by Head Type
 
@@ -321,9 +419,11 @@ pattern, or click two heads to swap), name each kind's group, and pick the
 same From the front / From above / Close up the gaps choices. The head map
 you fix is remembered per model and mode, and copied into the show.
 
-It's offered when making a group from mixed fixtures (above), on the
-Lighting Studio plot's fixture menu, and on a fixture group's row in the
-Studio's Layers list.
+It's offered when making a group from mixed fixtures on the Lighting
+Studio plot's fixture menu, and on a fixture group's row in the Studio's
+Layers list. (In the Fixture Manager, option 2 of
+[Create Group(s) from Selection](#create-groups-from-selection) does the
+same job.)
 
 ### Lay Out from the Stage
 
@@ -347,31 +447,68 @@ source group's id. This is what lets the editor:
   by side, ordered by their position on the 2D plot. Useful for a group like
   "all step fronts" assembled from several smaller per-step groups.
 
+### Change Definition
+
+Select fixtures of one definition and right-click → **Change
+Definition…** to move them all to another definition of the same
+manufacturer that is a **drop-in**: every mode they use is there by name,
+with the same channels in the same order. Addresses, names, groups and
+everything programmed stay; only what the definition adds changes — a
+mover's colour ring made a head of its own, say. The item only shows when
+there is such a definition. Undo it the same way (the old definition is a
+drop-in for the new one).
+
 ## Context menu
 
 Right-click is laid out by what it is about, in the same order whatever is
 selected, and only offers what applies:
 
 1. **The fixture itself** — Fixture Properties…, Definition & Mode… and
-   Edit Fixture Definition… (one fixture).
+   Edit Fixture Definition… (one fixture), Change Definition… (fixtures of
+   one definition, when another is a drop-in for it).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….
 3. **Finding it on the rig** — Test Fixture…, Locate, Reset.
-4. **Organising it** — a **Group** submenu (Create Group from Selection…,
+4. **Organising it** — a **Group** submenu (Create Group(s) from Selection…,
    Add to Group ▸, Remove from Group; for a group: Move to Folder…, Remove
    Group (Keep Fixtures), Rebuild Composite), a **Power** submenu (Add to
    Circuit ▸, Remove from Circuit), and Channel Behaviour & Modifiers….
 5. **Deleting it** — Delete….
 
 Then what the clicked row offers — Add Fixture / Add RGB Panel on empty
-space, Delete Universe… on a universe, Add Power Source… / Add Circuit…,
+space, the universe's output and Delete Universe… on a universe (below),
+Add Power Source… / Add Circuit…,
 New Group… on a group folder, Number the Duplicates and Patch the Clashing
 Fixtures… on their roots, Add … to Inventory / Patch Inventory… on the
 inventory — and Expand All / Collapse All last.
 
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.
+
+### Patching a universe's output
+
+A universe row patches where the universe goes, with the same questions,
+rules and undo as the Connections tab (see
+[Connections &amp; patch](other-improvements.md#connections--patch)):
+
+- **Patch output…** — on a universe that goes nowhere yet: the protocol,
+  then the interface, then (Art-Net, WLED) the node port — the visible
+  devices' ports, free ones first, with **Another address…** and
+  **Broadcast**. A port another universe already uses is refused.
+- On a patched universe the menu says where it goes now, e.g. **Output:
+  ArtNet → CS1 (172.18.2.211) · port 1 · universe 0:0:0**, then **Change
+  interface / target…** (the interface asked again, the current one
+  preselected, then the port) and **Unpatch output**. A protocol without
+  targets (a USB widget) offers **Patch output…** again instead, which
+  replaces the patch.
+- With several universe rows selected: **Patch N selected universes to…**
+  puts them on a device's ports in the order you clicked them, and
+  **Unpatch N selected universes** takes them all off.
+- **Show in Connections** opens the Connections tab on that universe.
+
+Each is one step of **Undo Patch Change** in Connections, and the row's
+"— destination" updates as soon as the patch changes.
 
 ## Fixture definitions
 
@@ -416,6 +553,24 @@ editor on its definition. On top of stock QLC+'s editor:
   angle, no pan/tilt range, a pixel layout that doesn't hold the heads,
   values no capability covers. Double-click one to jump to it. Saving with
   errors asks first.
+- **Physical tab → Dimensions in your own units.** Width, height, depth
+  and weight show in the unit chosen in qlcconsole's **Settings → Units**
+  (millimetres, centimetres, metres, inches, or feet and inches; weight in
+  kg with the metric ones, lb with inches and feet). Type a bare number in
+  that unit, or any unit with the number and it's converted: `7.5"`,
+  `7.5 in`, `0.625'`, `0.625 ft`, `6' 3"`, `190.5 mm`, `19.05 cm`,
+  `0.19 m`; `12 kg`, `26.5 lb` (or `lbs`), `400 g`, `5 lb 4 oz`. With
+  inches set, `7.5"` stays **7.5 in**; with millimetres it becomes
+  **190.5 mm**. Something it can't read turns the field red, with a
+  tooltip saying what it accepts, and the value stays as it was.
+
+  The file is unchanged and still opens in stock QLC+: it keeps **whole
+  millimetres** (halves round up, so 7.5" = 190.5 mm is saved as
+  **191 mm**) and kilograms. The field's tooltip says what will be saved.
+  A saved size shows with the fewest decimals that mean the same
+  millimetre, so 191 mm reads 7.5 in again, not 7.52. The Fixture
+  Manager's information panel shows sizes and weight in the same unit, and
+  the Lighting Studio's grid follows it (metres or feet).
 - **Physical tab → "Look in the Lighting Studio"** — how the Lighting Studio and
   the Rig Overview draw it:
   - **Body**: Box, or Lantern (a cage glowing all round).
@@ -454,6 +609,65 @@ show opens, each definition comes from your library, else the show cache,
 else — if it's an online-only file in cloud storage — it's fetched (with a
 "Waiting for the cloud…" window you can Skip) and then cached.
 
+### Opening a show on another computer
+
+A **.qlcc carries its own copies** of every fixture definition, effect
+script and RGB Matrix script it uses that isn't part of the app — your own
+definitions, ones linked in from the old QLC+ folder, ones from the show
+cache. Saving writes each one into the show file exactly as it is on disk
+(a few KB each); the ones that ship with the app stay out. A **.qxw** is
+saved as before, without them, so stock QLC+ can still open it.
+
+When the show opens, each copy is compared with this computer's:
+
+| This computer… | What happens |
+|---|---|
+| has none | The show's copy is used while the show is open. The footer notes **"N definitions came with this show"** (a note — the show is still Ready); **Install on This Computer** puts them in your user folder. |
+| has the same, byte for byte | Nothing to say. |
+| has a **different** one | The **show's** copy is used — nothing changes under a patched rig by itself — and the footer warns **"N items in this show differ from this computer's"**. |
+
+**Review…** on that warning lists each difference with:
+
+- **Which looks newer** — "Updated on this computer since the show was
+  saved", "This computer has an older copy", or "Can't tell which is
+  newer" (from the file's time when it was saved into the show, and the
+  file's time here).
+- **Safe to switch?** — *Compatible* when every mode the show's fixtures
+  use is in this computer's copy with the same channels in the same order,
+  and every setting the show's looks and RGB matrices set is still there,
+  of the same kind. Otherwise *Not compatible*, naming the fixtures or
+  looks and what changed ("Mode “4ch” is 5 channels here, 4 in the show:
+  2 fixtures would need re-patching").
+- **Use This Computer's** — the show switches now (asking first when it's
+  not compatible) and carries this computer's copy from the next save.
+  A switch that would need re-patching — a mode that's gone, or fixtures
+  that would grow into the next one — is refused, naming them.
+  **Use This Computer's for All Compatible** does every safe one at once.
+- **Keep the Show's** — stop warning about it. Remembered in the show,
+  until this computer's copy changes again.
+- **Install the Show's** — writes the show's copy over this computer's
+  (asking first; the old file goes to the Trash), so every show opened here
+  uses it.
+
+**Save never swaps versions:** it writes the copy the show is using. A
+newer definition on this computer reaches the show only through **Use This
+Computer's**. Opening another show starts from this computer's copies
+again.
+
+#### Collect for Transfer
+
+**File → Collect for Transfer…** makes a folder named after the show
+holding the show as a .qlcc and, beside it, **Fixtures/**, **EffectScripts/**,
+**RGBScripts/** and **HeadLayouts/** (the show's LED maps) — everything it
+uses that isn't part of the app, as plain files. The show you have open
+stays as it is.
+
+Opening a show also looks in its own folder's **Fixtures/**,
+**EffectScripts/** and **RGBScripts/** for anything neither the show nor
+this computer has, so a collected folder opens complete even as a .qxw,
+and definitions kept beside a show are found. (A copy in the show file
+comes first, then this computer's, then the show's folder.)
+
 ## Terminology
 
 | Term | Meaning |
@@ -467,3 +681,4 @@ else — if it's an online-only file in cloud storage — it's fetched (with a
 | **Address clash** | A fixture the show file puts on channels another already uses; loaded unpatched and kept until re-patched. |
 | **Included / Local definition** | Shipped with the app, or your own file (which replaces an included one of the same make and model). |
 | **Show cache** | This computer's copy of every non-shipped definition a show uses, so the show opens without the original files. |
+| **The show's own copy** | A definition or script saved inside a .qlcc. Used when this computer has none or a different one, until you choose otherwise in **Review…**. |

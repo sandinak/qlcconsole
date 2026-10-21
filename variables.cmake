@@ -46,6 +46,33 @@ if(GIT_EXECUTABLE)
 endif()
 set(APPVERSION "${QLC_BASE_VERSION}+qlcconsole.${QLCCONSOLE_REV}")
 
+# The qlcconsole RELEASE -- VERSION at the repo root, bumped once a release
+# (RELEASE.md) -- and the commit it was built from: what the About box,
+# --version and the bundle's Info.plist show. APPVERSION above stays the
+# build id: it is what a saved show records as its creator's version.
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/VERSION" QLCCONSOLE_VERSION LIMIT_COUNT 1)
+# Bumping VERSION has to reconfigure: without this a build after the bump
+# kept the old release in qlcconfig.h, About, --version and Info.plist.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_LIST_DIR}/VERSION")
+if(NOT QLCCONSOLE_VERSION)
+    set(QLCCONSOLE_VERSION "0.0.0")
+endif()
+set(QLCCONSOLE_GITREV "unknown")
+if(GIT_EXECUTABLE)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _qlcconsole_gitrev
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE _qlcconsole_gitrev_result
+    )
+    if(_qlcconsole_gitrev_result EQUAL 0 AND NOT _qlcconsole_gitrev STREQUAL "")
+        set(QLCCONSOLE_GITREV "${_qlcconsole_gitrev}")
+    endif()
+endif()
+
 if(UNIX)
     set(OLA_GIT "/usr/src/ola") # OLA directories
 endif()
@@ -70,7 +97,11 @@ endif()
 if (WIN32)
     set(INSTALLROOT "$ENV{SystemDrive}/qlcconsole")
 elseif (APPLE)
-    set(INSTALLROOT "$ENV{HOME}/qlcconsole.app/Contents")
+    # The bundle `cmake --install` writes: ~/qlcconsole.app for a release
+    # (package-local.sh), ~/Applications/qlcconsole-dev.app for `make test`.
+    set(QLC_MACOS_BUNDLE "$ENV{HOME}/qlcconsole.app" CACHE PATH
+        "macOS: the .app bundle cmake --install writes")
+    set(INSTALLROOT "${QLC_MACOS_BUNDLE}/Contents")
 elseif (UNIX)
     set(INSTALLROOT "/usr")
 endif ()
@@ -179,6 +210,17 @@ if (ANDROID)
     set(INPUTPROFILEDIR "${DATADIR}/inputprofiles")
 elseif (IOS)
     set(INPUTPROFILEDIR "InputProfiles")
+endif ()
+
+# HID controller profiles (.qxhid): where plugins/hid/hidplugin.cpp looks,
+# Resources/HIDProfiles in the bundle. Unset, they landed in the install
+# root -- loose in Contents/, never found, and breaking a strict codesign.
+if (WIN32)
+    set(HIDPROFILEDIR "HIDProfiles")
+elseif (APPLE)
+    set(HIDPROFILEDIR "${DATADIR}/HIDProfiles")
+else ()
+    set(HIDPROFILEDIR "${DATADIR}/hidprofiles")
 endif ()
 
 # User input profiles
@@ -576,7 +618,14 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4456")   # Suppress warning C4456: declaration of '_container_' hides previous local declaration in foreach
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
 elseif(NOT APPLE AND NOT IOS)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+    # Not on MinGW: MSYS2 ships a rolling GCC (16.x at the time of writing),
+    # and every new release brings new default warnings -- in Qt's own
+    # headers and moc output as much as ours. -Werror there would turn the
+    # Windows build red on whatever GCC MSYS2 shipped that week. The
+    # warnings still print; the Linux jobs and check-all.sh are the gate.
+    if(NOT MINGW)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+    endif()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 endif()

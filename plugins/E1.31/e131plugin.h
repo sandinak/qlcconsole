@@ -22,6 +22,7 @@
 
 #include <QNetworkAddressEntry>
 #include <QNetworkInterface>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QString>
 #include <QHash>
@@ -89,6 +90,12 @@ public:
     /** @reimp */
     QStringList outputs() override;
 
+    /** @reimp Outputs whose sends are failing (see SendHealth) */
+    QStringList targetProblems() const override;
+
+    /** @reimp The same, for one patched universe */
+    QStringList outputProblems(quint32 output, quint32 universe) const override;
+
     /** @reimp */
     QString outputInfo(quint32 output) override;
 
@@ -127,12 +134,18 @@ public:
     /** Get a list of the available Input/Output lines */
     QList<E131IO> getIOMapping() const;
 
+    /** @reimp: every line's cached rig network gate decision, again */
+    void refreshTransmitGate() override;
+
 private:
     /** Map of the E131 plugin Input/Output lines */
     QList<E131IO> m_IOmapping;
 
     /** Time to wait (in seconds) for interfaces to be ready */
     int m_ifaceWaitTime;
+
+    /** When init() last walked the network interfaces (see init()) */
+    QElapsedTimer m_ifaceScan;
 };
 
 #endif

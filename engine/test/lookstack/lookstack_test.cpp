@@ -660,6 +660,49 @@ void LookStack_Test::theCheckerSaysWhatWontWork()
     got = issuesFor({ colour(kBlue), colour(kRed), third, dimmer(255) });
     QVERIFY2(about(got, third, "Colour 3"), qPrintable(dump(got)));
 
+    // A colour saved black (a "White" at #000000000000): it lights nothing,
+    // and confetti over it takes black from it.
+    QLCPalette *black = new QLCPalette(QLCPalette::Color, m_doc);
+    black->setValue(QStringLiteral("#000000000000"));
+    m_doc->addPalette(black);
+    got = issuesFor({ black, dimmer(62), effect("lookcolour.js") });
+    QVERIFY2(about(got, black, "Black"), qPrintable(dump(got)));
+    QLCPalette *white = new QLCPalette(QLCPalette::Color, m_doc);
+    white->setValue(QStringLiteral("#000000ff0000"));    // RGB off, the white LED on
+    m_doc->addPalette(white);
+    got = issuesFor({ white, dimmer(62) });
+    QVERIFY2(!about(got, white, "Black"), qPrintable(dump(got)));
+    // A definition whose only Pan channels are both Fine (a "Pan" saved with
+    // Byte="1", as the 36LED mover's was): an Aim can't turn it.
+    {
+        QLCFixtureDef *fd = new QLCFixtureDef();
+        QLCChannel *pan = new QLCChannel();
+        pan->setName("Pan");
+        pan->setGroup(QLCChannel::Pan);
+        pan->setControlByte(QLCChannel::LSB);
+        fd->addChannel(pan);
+        Fixture *fineOnly = make(m_doc, "FineOnly", QLCFixtureDef::MovingHead,
+                                 { pan, chan(fd, "Pan fine", QLCChannel::PositionPanFine),
+                                   chan(fd, "Tilt", QLCChannel::PositionTilt),
+                                   chan(fd, "Dimmer", QLCChannel::IntensityMasterDimmer) }, fd, 3, 60);
+        QCOMPARE(fineOnly->channelNumber(QLCChannel::Pan, QLCChannel::MSB), QLCChannel::invalid());
+        QLCPalette *aim = panTilt(90, 45);
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        scene->addFixture(fineOnly->id());
+        scene->addFixture(m_mover->id());
+        scene->addPalette(dimmer(255)->id());
+        scene->addPalette(aim->id());
+        got = LookStackCheck::check(m_doc, scene);
+        QVERIFY2(about(got, aim, "Can't move 1 fixture") && about(got, aim, "FineOnly's Pan"),
+                 qPrintable(dump(got)));
+        QVERIFY2(!about(got, aim, "Tilt") && !about(got, aim, "Mover"), qPrintable(dump(got)));
+    }
+
+    // The clean look above stays clean: a real colour is not black.
+    got = issuesFor({ colour(kBlue), dimmer(255) });
+    QVERIFY2(!about(got, nullptr, "Black"), qPrintable(dump(got)));
+
     // No targets.
     got = issuesFor({ colour(kBlue) }, false);
     QVERIFY2(about(got, nullptr, "No targets"), qPrintable(dump(got)));

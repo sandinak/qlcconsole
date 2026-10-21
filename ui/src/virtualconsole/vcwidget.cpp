@@ -49,6 +49,7 @@
 #include "inputpatch.h"
 #include "vcwidget.h"
 #include "doc.h"
+#include "apputil.h"
 
 #define GRID_RESOLUTION 5
 
@@ -151,6 +152,7 @@ QString VCWidget::typeToString(int type)
         case AnimationWidget: return QString(tr("Animation"));
         case ClockWidget: return QString(tr("Clock"));
         case ShowControlWidget: return QString(tr("Show control"));
+        case CueRunnerWidget: return QString(tr("Cue runner"));
         case UnknownWidget:
         default:
              return QString(tr("Unknown"));
@@ -174,6 +176,7 @@ QIcon VCWidget::typeToIcon(int type)
         case AnimationWidget: return QIcon(":/rgbmatrix.png");
         case ClockWidget: return QIcon(":/clock.png");
         case ShowControlWidget: return QIcon(":/show.png");
+        case CueRunnerWidget: return QIcon(":/chaser.png");
         case UnknownWidget:
         default:
              return QIcon(":/virtualconsole.png");
@@ -1428,12 +1431,12 @@ void VCWidget::mousePressEvent(QMouseEvent* e)
         {
             m_resizeMode = true;
             setMouseTracking(true);
-            setCursor(QCursor(Qt::SizeFDiagCursor));
+            setCursor(AppUtil::nativeCursorShape(Qt::SizeFDiagCursor, true));
         }
         else
         {
             m_mousePressPoint = QPoint(e->pos().x(), e->pos().y());
-            setCursor(QCursor(Qt::SizeAllCursor));
+            setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor, true));
         }
     }
     else if (e->button() & Qt::RightButton)

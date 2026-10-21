@@ -21,6 +21,7 @@
 #define NETWORKTOPOLOGYDIALOG_H
 
 #include <QDialog>
+#include "qlcui_export.h"
 #include <QList>
 
 #include "networktopology.h"
@@ -46,7 +47,7 @@ class Doc;
  * once from a settled list rather than chasing live edits. The warnings list is
  * NetworkTopology::warnings() run over the working copy on every change.
  */
-class NetworkTopologyDialog : public QDialog
+class QLC_UI_EXPORT NetworkTopologyDialog : public QDialog
 {
     Q_OBJECT
 

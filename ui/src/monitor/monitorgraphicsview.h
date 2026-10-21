@@ -21,6 +21,7 @@
 #define MONITORGRAPHICSVIEW_H
 
 #include <QElapsedTimer>
+#include "../qlcui_export.h"
 #include <QGraphicsView>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
@@ -32,9 +33,11 @@
 #include <QVector3D>
 
 #include "fixture.h"
+#include "scenery.h"
 #include "function.h"
 
 class MonitorProperties;
+class StageTarget;
 class MonitorFixtureItem;
 class TrussItem;
 class PlatformItem;
@@ -55,7 +58,7 @@ class Doc;
  * @{
  */
 
-class MonitorGraphicsView final : public QGraphicsView
+class QLC_UI_EXPORT MonitorGraphicsView final : public QGraphicsView
 {
     Q_OBJECT
 
@@ -386,6 +389,15 @@ public:
     void updateHangers();
 
     /** Rebuild the platform overlay items from MonitorProperties. */
+    /** Where a piece of scenery is drawn: a curtain driven by a fixture
+     *  where its channels put it, anything else as it stands. */
+    Scenery::Pose sceneryPose(const Scenery *sc) const;
+    /** Redraw one piece of scenery where it now is (its curtain moved). */
+    void refreshScenery(quint32 sceneryId);
+    /** Its outline in the current point of view: one polygon per stretch it
+     *  hangs in; @p flown says whether it is out of sight. */
+    QList<QPolygonF> sceneryParts(const Scenery *sc, const Scenery::Pose &pose, bool *flown) const;
+
     void updatePlatforms();
 
     /** Rebuild the power-source markers from the power-distribution model. */
@@ -448,6 +460,27 @@ public:
      *  (no recreate) — used when the joystick moves an aim target live so the
      *  marker tracks without the churn of updateTargets(). */
     void repositionTargetItems();
+
+    /** Put a line target's item on its centre and give it its curve and
+     *  handles in this view's projection -- in place, so it is safe from
+     *  inside the item's own mouse handlers. */
+    void refreshLineItem(TargetItem *item);
+    /** Running scenes aiming at @p targetId re-aim (positions only). */
+    void reaimScenesAimingAt(quint32 targetId);
+    /** One undoable edit of a line's points: record it, re-centre, tell
+     *  everything that aims at it. */
+    void commitLineEdit(StageTarget *t, const QVector3D &posBefore,
+                        const QVector<QVector3D> &pointsBefore);
+    /** The handle drag in progress. */
+    struct LineDrag
+    {
+        quint32 targetId = 0xFFFFFFFF;
+        int index = -1;
+        QVector3D posBefore;              ///< target position at the start
+        QVector<QVector3D> pointsBefore;  ///< its points at the start
+        QVector3D startWorld;             ///< the handle, metres
+        QPointF startScene;
+    } m_lineDrag;
 
     /** Rebuild the aim-line overlays for all selected TargetItems. */
     void updateAimLines();
@@ -893,6 +926,14 @@ protected slots:
     /** Slot called when a TargetItem is dropped after a drag */
     void slotTargetMoved(TargetItem *item);
 
+    /** Line targets (LINE_TARGET_DESIGN.md): a handle dragged, let go, a
+     *  point added or taken out. Each edit is one undo step. */
+    void slotLineHandleMoved(TargetItem *item, int index, QPointF scenePos,
+                             Qt::KeyboardModifiers modifiers);
+    void slotLineHandleReleased(TargetItem *item, int index);
+    void slotLineInsertPoint(TargetItem *item, double fraction);
+    void slotLineRemovePoint(TargetItem *item, int index);
+
     /** Slot called when a MonitorImageItem is dropped after a drag */
     void slotImageMoved(MonitorImageItem *item);
 
@@ -1186,6 +1227,8 @@ private:
      *  performed. */
     struct UndoEntry {
         enum Type { FixtureMove, TrussMove, PlatformMove, TargetMove,
+                    /** A line target's points: (position, points) before. */
+                    TargetLineEdit,
                     FeaturePaste,
                     /** Towers, stands, booms, scenery, power sources and
                      *  network nodes: (kind, id) -> old origin, metres. */
@@ -1203,6 +1246,8 @@ private:
         QHash<quint32, QVector3D> trussOrigins;     ///< type == TrussMove
         QHash<quint32, QPointF>   platformOrigins;  ///< type == PlatformMove (metres)
         QHash<quint32, QPointF>   targetPositions;  ///< type == TargetMove (metres)
+        QHash<quint32, float>     targetZ;          ///< type == TargetMove (metres)
+        QHash<quint32, QPair<QVector3D, QVector<QVector3D> > > targetLines; ///< TargetLineEdit
         // type == FeaturePaste: IDs created by a paste, removed on undo.
         QList<quint32> pastedTrussIds;
         QList<quint32> pastedPlatformIds;

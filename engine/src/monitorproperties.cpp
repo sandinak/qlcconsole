@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QLocale>
 #include "monitorproperties.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
@@ -49,12 +50,17 @@
 #define KXMLQLCMonitorGridWidth     QStringLiteral("Width")
 #define KXMLQLCMonitorGridHeight    QStringLiteral("Height")
 #define KXMLQLCMonitorGridDepth     QStringLiteral("Depth")
+#define KXMLQLCMonitorGridExactWidth  QStringLiteral("ExactWidth")
+#define KXMLQLCMonitorGridExactHeight QStringLiteral("ExactHeight")
+#define KXMLQLCMonitorGridExactDepth  QStringLiteral("ExactDepth")
 #define KXMLQLCMonitorGridUnits     QStringLiteral("Units")
 #define KXMLQLCMonitorGridSubdiv    QStringLiteral("Subdivisions")
 #define KXMLQLCMonitorPointOfView   QStringLiteral("POV")
 #define KXMLQLCMonitorLayoutLocked  QStringLiteral("LayoutLocked")
 #define KXMLQLCMonitorSnapDivisions QStringLiteral("SnapDivisions")
 #define KXMLQLCMonitorAimSubjectHeight QStringLiteral("AimSubjectHeight")
+#define KXMLQLCMonitorOcclusionKinds   QStringLiteral("OcclusionKinds")
+#define KXMLQLCMonitorOcclusionMinSize QStringLiteral("OcclusionMinSize")
 #define KXMLQLCMonitorOriginX       QStringLiteral("OriginX")
 #define KXMLQLCMonitorOriginY       QStringLiteral("OriginY")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
@@ -241,6 +247,28 @@ bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainD
     return ok;
 }
 
+void MonitorProperties::convertGridUnits(GridUnits units)
+{
+    if (units == m_gridUnits)
+        return;
+
+    /* Re-express the stage in the new unit WITHOUT re-quantising it: a 10 m
+       stage is 32.8084 ft, not 33 (which is 10.058 m -- the stage would grow
+       and everything on it shift against the grid). Positions are in mm and
+       don't change. */
+    const double factor = (units == Feet) ? 1.0 / 0.3048 : 0.3048;
+    const QVector3D cur = m_gridSize;
+    m_gridSize = QVector3D(float(qMax(0.001, cur.x() * factor)),
+                           float(cur.y() * factor),
+                           float(qMax(0.001, cur.z() * factor)));
+    m_gridUnits = units;
+}
+
+MonitorProperties::GridUnits MonitorProperties::gridUnitsFor(MeasurementUnits::LengthUnit unit)
+{
+    return MeasurementUnits::weightUnitFor(unit) == MeasurementUnits::Pounds ? Feet : Meters;
+}
+
 void MonitorProperties::reset()
 {
     m_gridSize = QVector3D(GRID_DEFAULT_WIDTH, GRID_DEFAULT_HEIGHT, GRID_DEFAULT_DEPTH);
@@ -251,6 +279,9 @@ void MonitorProperties::reset()
     m_gridSubdivisions = 1;
     m_snapDivisions = 0;
     m_aimSubjectHeight = 1.4f;
+    m_occlusionKinds = BeamOcclusion::defaultKinds();
+    m_occlusionMinSize = BeamOcclusion::defaultMinSize();
+    m_occlusion.clear();
     m_stageOrigin = QPointF(0, 0);
     m_showLabels = true;
     m_fixtureItems.clear();
@@ -1784,11 +1815,23 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
         }
     }
 
+    /* A line's points carry their own heights; an aim height would lift
+       the whole curve off the heights it was drawn at. */
+    if (t->isLine())
+        return p;
+
     const float above = targetAimHeight(t, subjectMode);
     if (above > 0.0f)
         p.setZ(platformHeightAt(p.x(), p.y()) + above);
 
     return p;
+}
+
+QVector<QVector3D> MonitorProperties::targetLinePoints(const StageTarget *t) const
+{
+    if (t == nullptr || !t->isLine())
+        return QVector<QVector3D>();
+    return t->linePointsAround(targetAimPoint(t));
 }
 
 QVector3D MonitorProperties::targetAimPointFor(const StageTarget *t, bool subjectMode,
@@ -2290,6 +2333,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
 
     if (attrs.hasAttribute(KXMLQLCMonitorAimSubjectHeight))
         setAimSubjectHeight(attrs.value(KXMLQLCMonitorAimSubjectHeight).toString().toFloat());
+    if (attrs.hasAttribute(KXMLQLCMonitorOcclusionKinds))
+        setOcclusionKinds(attrs.value(KXMLQLCMonitorOcclusionKinds).toString().toInt());
+    if (attrs.hasAttribute(KXMLQLCMonitorOcclusionMinSize))
+        setOcclusionMinSize(attrs.value(KXMLQLCMonitorOcclusionMinSize).toString().toFloat());
 
     if (attrs.hasAttribute(KXMLQLCMonitorOriginX) || attrs.hasAttribute(KXMLQLCMonitorOriginY))
         setStageOrigin(QPointF(attrs.value(KXMLQLCMonitorOriginX).toString().toDouble(),
@@ -2322,15 +2369,23 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         }
         else if (root.name() == KXMLQLCMonitorGrid)
         {
-            int w = 5, h = 3, d = 5;
-            if (tAttrs.hasAttribute(KXMLQLCMonitorGridWidth))
-                w = tAttrs.value(KXMLQLCMonitorGridWidth).toString().toInt();
-            if (tAttrs.hasAttribute(KXMLQLCMonitorGridHeight))
-                h = tAttrs.value(KXMLQLCMonitorGridHeight).toString().toInt();
-            if (tAttrs.hasAttribute(KXMLQLCMonitorGridDepth))
-                d = tAttrs.value(KXMLQLCMonitorGridDepth).toString().toInt();
-            else
-                d = h; // backward compatibility
+            /* The extent in the show's unit: whole numbers in Width/Height/
+               Depth (all older readers understand), the exact value -- a
+               stage converted between metres and feet -- in Exact*. Read as
+               a number, not an int: "32.8084" read with toInt() was 0. */
+            auto extent = [&tAttrs](const QString &exact, const QString &whole, double def) {
+                if (tAttrs.hasAttribute(exact))
+                    return QLocale::c().toDouble(tAttrs.value(exact).toString());
+                if (tAttrs.hasAttribute(whole))
+                    return QLocale::c().toDouble(tAttrs.value(whole).toString());
+                return def;
+            };
+            double w = extent(KXMLQLCMonitorGridExactWidth, KXMLQLCMonitorGridWidth, 5);
+            double h = extent(KXMLQLCMonitorGridExactHeight, KXMLQLCMonitorGridHeight, 3);
+            double d = (tAttrs.hasAttribute(KXMLQLCMonitorGridDepth)
+                        || tAttrs.hasAttribute(KXMLQLCMonitorGridExactDepth))
+                    ? extent(KXMLQLCMonitorGridExactDepth, KXMLQLCMonitorGridDepth, 5)
+                    : h; // backward compatibility
 
             if (tAttrs.hasAttribute(KXMLQLCMonitorGridUnits))
                 setGridUnits(GridUnits(tAttrs.value(KXMLQLCMonitorGridUnits).toString().toInt()));
@@ -2343,7 +2398,7 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             else
                 setPointOfView(Undefined);
 
-            setGridSize(QVector3D(w, h, d));
+            setGridSize(QVector3D(float(w), float(h), float(d)));
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCMonitorStageItem)
@@ -3130,6 +3185,11 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     // Written unconditionally, which is the behaviour every existing .qxw was
     // saved with, so the indentation is what's wrong here, not the logic.
     doc->writeAttribute(KXMLQLCMonitorAimSubjectHeight, QString::number(aimSubjectHeight()));
+    // Line of sight: only when not the default, so existing files are unchanged.
+    if (occlusionKinds() != BeamOcclusion::defaultKinds())
+        doc->writeAttribute(KXMLQLCMonitorOcclusionKinds, QString::number(occlusionKinds()));
+    if (!qFuzzyCompare(occlusionMinSize(), BeamOcclusion::defaultMinSize()))
+        doc->writeAttribute(KXMLQLCMonitorOcclusionMinSize, QString::number(double(occlusionMinSize())));
     if (!stageOrigin().isNull())
     {
         doc->writeAttribute(KXMLQLCMonitorOriginX, QString::number(stageOrigin().x()));
@@ -3166,9 +3226,20 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     }
 
     doc->writeStartElement(KXMLQLCMonitorGrid);
-    doc->writeAttribute(KXMLQLCMonitorGridWidth, QString::number(gridSize().x()));
-    doc->writeAttribute(KXMLQLCMonitorGridHeight, QString::number(gridSize().y()));
-    doc->writeAttribute(KXMLQLCMonitorGridDepth, QString::number(gridSize().z()));
+    /* Whole numbers where older readers look (they read them as int), the
+       exact extent beside them when it isn't whole. The unit is the person's
+       (Settings -> Units, applied on load), so an older qlcconsole or QLC+
+       shows the stage in it too. */
+    const QVector3D gs = gridSize();
+    const QString exactKeys[3] = { KXMLQLCMonitorGridExactWidth, KXMLQLCMonitorGridExactHeight,
+                                   KXMLQLCMonitorGridExactDepth };
+    const QString wholeKeys[3] = { KXMLQLCMonitorGridWidth, KXMLQLCMonitorGridHeight,
+                                   KXMLQLCMonitorGridDepth };
+    for (int i = 0; i < 3; i++)
+        doc->writeAttribute(wholeKeys[i], QString::number(qRound(gs[i])));
+    for (int i = 0; i < 3; i++)
+        if (qAbs(gs[i] - float(qRound(gs[i]))) > 1e-4f)
+            doc->writeAttribute(exactKeys[i], QLocale::c().toString(double(gs[i]), 'g', 7));
     doc->writeAttribute(KXMLQLCMonitorGridUnits, QString::number(gridUnits()));
     if (gridSubdivisions() > 1)
         doc->writeAttribute(KXMLQLCMonitorGridSubdiv, QString::number(gridSubdivisions()));

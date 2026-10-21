@@ -90,12 +90,30 @@ namespace HeadKinds
     QStringList kindsOf(const Fixture *fx);
     /** True when @p fx has heads of more than one kind (RGB and W, say). */
     bool isMixed(const Fixture *fx);
+
+    /** A head's TYPE, for making a group per type of head: its kind (above)
+     *  plus "/PT" when it moves -- pan or tilt in the head, or in the
+     *  fixture outside any head (a mover's one body moves all its heads).
+     *  "PT" for a head that only moves; "Ring" for one whose only colour
+     *  is a colour wheel/macro channel on a fixture that moves (a mover's
+     *  colour ring), "Macro" for such a head on one that doesn't; "Other"
+     *  for one with no colour, intensity or movement. Two heads are the same type when these match,
+     *  whatever fixture model they are on. Empty only for no such head. */
+    QString typeOf(const QLCFixtureMode *mode, int head);
+    /** The distinct types of @p fx's heads, in the order they first appear. */
+    QStringList typesOf(const Fixture *fx);
+    /** A type said plainly, for a group's name: "RGB", "White", "Dimmer",
+     *  "RGBW movers", "Movers" (a mover with only a dimmer, too), "Ring",
+     *  "Colour macro"... */
+    QString typeName(const QString &type);
 }
 
 namespace HeadLayoutLibrary
 {
     /** The operator's own maps, one JSON file per model and mode:
-     *  ~/Library/Application Support/qlcconsole/HeadLayouts on macOS. */
+     *  HeadLayouts in the per-platform user folder (~/Library/Application
+     *  Support/qlcconsole on macOS, %USERPROFILE%\qlcconsole on Windows,
+     *  ~/.qlcconsole on Linux). */
     QDir userDirectory();
     /** Point userDirectory() somewhere else (tests); empty restores it. */
     void setUserDirectoryOverride(const QString &path);
@@ -104,6 +122,11 @@ namespace HeadLayoutLibrary
     HeadLayout load(const QString &key);
     /** Keep @p layout in the library (replacing any for its key). */
     bool save(const HeadLayout &layout);
+    /** The file name a map for @p key is kept under ("Make|Model|Mode"
+     *  made safe for any file system, ".json"). */
+    QString fileNameFor(const QString &key);
+    /** @p layout as the library writes it. */
+    QByteArray toJson(const HeadLayout &layout);
 }
 
 /** @} */

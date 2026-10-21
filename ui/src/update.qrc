@@ -1,0 +1,5 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file alias="update/update-helper.sh">../../platforms/macos/update-helper.sh</file>
+</qresource>
+</RCC>

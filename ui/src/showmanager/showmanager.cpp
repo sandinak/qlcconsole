@@ -42,11 +42,14 @@
 #include <QDebug>
 #include <QUrl>
 
+#include "mainbar.h"
 #include "functionselection.h"
 #include "audioplugincache.h"
 #include "rgbmatrixeditor.h"
 #include "multitrackview.h"
 #include "chasereditor.h"
+#include "showtreecontroller.h"
+#include "showtreeview.h"
 #include "audioeditor.h"
 #include "efxeditor.h"
 #include "videoeditor.h"
@@ -413,6 +416,8 @@ void ShowManager::initToolbar()
     // fixturemanager.cpp's initToolBar for the full reasoning).
     m_toolbar->setIconSize(QSize(20, 20));
     layout()->addWidget(m_toolbar);
+    // On show in the main window's top bar while this is the current tab.
+    MainBar::registerTabTools(this, m_toolbar);
 
     // "Show" — which show container to work on: New/Rename/Delete. Distinct
     // from "Edit" below: this is about WHICH show, not what's in it.
@@ -792,7 +797,11 @@ void ShowManager::showRightEditor(Function *function)
     if (function->type() == Function::ChaserType)
     {
         Chaser *chaser = qobject_cast<Chaser*> (function);
-        m_currentEditor = new ChaserEditor(m_vsplitter->widget(1), chaser, m_doc);
+        ChaserEditor *ed = new ChaserEditor(m_vsplitter->widget(1), chaser, m_doc);
+        // A cue list's chaser (D13): its steps and name are the Show Tree's.
+        if (m_doc->showTree()->isGenerated(chaser->id()))
+            ed->setLocked(ShowTreeView::lockedBanner(ed, m_doc, chaser->id()));
+        m_currentEditor = ed;
         if (m_currentEditor != NULL)
         {
             connect(m_currentEditor, SIGNAL(stepSelectionChanged(int)),

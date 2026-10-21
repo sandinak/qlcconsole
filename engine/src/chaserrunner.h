@@ -53,6 +53,7 @@ typedef struct
     Universe::BlendMode m_blendMode;    //! The original Function blend mode
     int m_intensityOverrideId;          //! An ID to control the step intensity
     int m_pIntensityOverrideId;         //! An ID to control the step parent intensity
+    bool m_subCues;                     //! Its function is a chase held as sub-cues (Sub GO)
 } ChaserRunnerStep;
 
 class ChaserRunner final : public QObject
@@ -120,6 +121,18 @@ public:
     bool isExternalClock() const { return m_externalClock; }
 
     /**
+     * Held as sub-cues (SUBCUES_DESIGN.md): this chase plays as a step's
+     * sub-cues on a Sub GO. Its holds are not counted (a step changes only on
+     * an action), a step change lands at once (the outer chase quantizes Sub
+     * GO), and a step index is taken in list order, whatever the run order.
+     */
+    void setSubCueHeld(bool enable) { m_subCueHeld = enable; }
+    bool isSubCueHeld() const { return m_subCueHeld; }
+    /** Held, but a step with a finite hold still goes on by itself after it
+     *  (ChaserStep::SubGoFollow: auto-follow sub-cues). */
+    void setSubCueFollow(bool enable) { m_subCueFollow = enable; }
+
+    /**
      * Compute next step for manual fading
      */
     int computeNextStep(int currentStepIndex) const;
@@ -170,10 +183,19 @@ signals:
 private:
     Function::Direction m_direction;        //! Run-time direction (reversed by ping-pong)
     QList <ChaserRunnerStep *> m_runnerSteps;  //! Queue of the currently running steps
+    QList <ChaserRunnerStep *> m_leavingSteps; //! Left by a step change, not yet let go of (leaveSteps())
+    QList <ChaserRunnerStep *> m_handedOverSteps; //! Sharing with the new step: stopped on the next write
+    /** Handed over to (or from) a chase held as sub-cues: its Collection
+     *  claims what they share one write later than a Collection step does,
+     *  so these are stopped a write after that. */
+    QList <ChaserRunnerStep *> m_handedOverLater;
     quint32 m_startOffset;                  //! Start step offset time in milliseconds
     ChaserAction m_pendingAction;           //! Action to be performed on steps at the next write call
     int m_lastRunStepIdx;                   //! Index of the last step ran
     bool m_externalClock;                   //! If true, steps advance only on explicit action (show-clock driven)
+    bool m_subCueHeld = false;              //! Played as sub-cues: steps change only on an action
+    bool m_subCueFollow = false;            //! ...except a finite hold, which follows on (SubGoFollow)
+    ChaserAction m_pendingSubAction;        //! A Sub GO / Sub Back / jump to a sub-cue for the next write
     quint32 m_lastFunctionID;               //! ID of the last Function ran (Scene only)
     QElapsedTimer *m_roundTime;             //! Counts the time between steps
     /** On a speed master: its last whole beat counted (none yet: min). */
@@ -185,9 +207,24 @@ private:
     /** The clock a held GO waits on, in beats (or bars). */
     double goClockUnits() const;
 
+    /** GO on the beat for Sub GO: as m_goHeldIn. */
+    qint64 m_subGoHeldIn = std::numeric_limits<qint64>::min();
+
 public:
-    /** A GO is being held for the beat (the cue list shows it). */
-    bool goHeld() const { return m_goHeldIn != std::numeric_limits<qint64>::min(); }
+    /** A GO (or Sub GO) is being held for the beat (the cue list shows it). */
+    bool goHeld() const { return m_goHeldIn != std::numeric_limits<qint64>::min()
+                                 || m_subGoHeldIn != std::numeric_limits<qint64>::min(); }
+
+    /** The running step at the current index, or null. */
+    ChaserRunnerStep *currentIndexStep() const;
+private:
+    /** Stop a running step's function; a chase held as its sub-cues is let
+     *  go of (no longer held). */
+    void stopStepFunction(ChaserRunnerStep *step, bool preserveAttributes = false);
+    /** Pass a pending Sub GO / Sub Back / sub-cue jump on to the chase
+     *  playing as the current step's sub-cues. */
+    void applySubAction(const ChaserAction &action);
+
 private:
     QVector<int> m_order;                   //! Array of step indices in a randomized order
 
@@ -203,9 +240,33 @@ public:
      ************************************************************************/
 private:
     /**
-     * Stop every running Function and clear the running list
+     * Stop every running Function and clear the running list.
+     *
+     * @a handOver: a step change. A step whose function is a Collection is
+     * not stopped here but left for leaveSteps(), once the new step is
+     * known (SHOW_TREE_DESIGN.md §4: a Scene two consecutive cues share
+     * keeps running across GO). Anything else -- the chaser stopping -- stops
+     * everything at once, those left too.
      */
-    void clearRunningList();
+    void clearRunningList(bool handOver = false);
+
+    /**
+     * Let go of the steps a step change left (m_leavingSteps), now that the
+     * new step has started. One whose Collection shares a member with the
+     * new step's is stopped on the next write() instead, when the new step's
+     * Collection has started and claimed that member too: stopped now, it
+     * would stop the shared member before the new step could take it over,
+     * and that member would start again from nothing (a re-fade, an effect
+     * from its first frame). The rest stop at once, as before.
+     */
+    void leaveSteps();
+
+    /** Stop and forget the steps held over by leaveSteps() a write ago. */
+    void stopHandedOverSteps();
+
+    /** Whether @a from and @a to are Collections with a member in common
+     *  (at any depth), or one holds the other. */
+    static bool sharesMembers(const Function *from, const Function *to);
 
     /**
      * Start a Chaser step Function with the given $index, at the given

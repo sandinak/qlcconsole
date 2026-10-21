@@ -22,10 +22,16 @@
 #define UNIVERSE_H
 
 #include <QScopedPointer>
+#include "qlcengine_export.h"
 #include <QSemaphore>
 #include <QByteArray>
 #include <QThread>
 #include <QSet>
+#include <QMap>
+#include <QVariant>
+#include <climits>
+#include <atomic>
+#include <memory>
 
 #include "inputpatch.h"
 #include "qlcchannel.h"
@@ -66,10 +72,11 @@ class Doc;
 #define KXMLQLCUniverseProfileName      QStringLiteral("Profile")
 #define KXMLQLCUniverseHIDProfileName   QStringLiteral("HIDProfile")
 #define KXMLQLCUniversePluginParameters QStringLiteral("PluginParameters")
+#define KXMLQLCUniverseNetwork          QStringLiteral("Network")
 
 /** Universe class contains input/output data for one DMX universe
  */
-class Universe : public QThread
+class QLC_ENGINE_EXPORT Universe : public QThread
 {
     Q_OBJECT
     Q_DISABLE_COPY(Universe)
@@ -227,7 +234,8 @@ public:
      *  offers -- see OutputPatch::setPending(). Never deletes: unlike
      *  setOutputPatch(), there is no "clear this patch" meaning here, only
      *  "remember it, unresolved". */
-    bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0);
+    bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0,
+                               quint32 savedLine = UINT_MAX, const QString &network = QString());
 
     /** Sets a feedback patch for this Universe */
     bool setFeedbackPatch(QLCIOPlugin *plugin, quint32 output);
@@ -424,6 +432,70 @@ private:
     QHash<quint32, QPair<double, double> > m_powerHeldBack;
     QByteArray m_lastLimited;
 
+    /*********************************************************************
+     * Auto-open shutters
+     *********************************************************************/
+public:
+    /** One head's level: lit when every gate is above zero and, if there
+     *  are any, at least one of anyOf too -- and something gave it that
+     *  level lately (a resting default is not a level). */
+    struct AutoOpenHead
+    {
+        QVector<int> gates;
+        QVector<int> anyOf;
+    };
+
+    /** A shutter channel opened while any of its heads has a level and
+     *  nothing sets the shutter itself (ShutterAutoOpen). */
+    struct AutoOpenRule
+    {
+        int shutter;
+        uchar open;
+        QVector<AutoOpenHead> heads;
+    };
+
+    /** The shutters to auto-open in this universe; empty turns it off. Safe
+     *  from any thread: applied on the universe's own, on the next frame. */
+    void setAutoOpenRules(const QVector<AutoOpenRule> &rules);
+
+    /** A one-shot writer (a slider, a programmer edit) left @p count
+     *  channels from @p address where it put them: they count as set until
+     *  something else writes them (GenericFader, on auto-removing them). */
+    void holdChannels(int address, int count);
+
+    /** True when @p address was written in this frame or the one before,
+     *  or is held (holdChannels()). */
+    bool isChannelSet(int address) const;
+
+private:
+    void markWritten(int address)
+    {
+        m_writtenFrame[address].store(m_frame.load(std::memory_order_relaxed),
+                                      std::memory_order_relaxed);
+        m_held[address].store(0, std::memory_order_relaxed);
+    }
+    bool writtenRecently(int address) const
+    {
+        return quint32(m_frame.load(std::memory_order_relaxed)
+                       - m_writtenFrame[address].load(std::memory_order_relaxed)) <= 1;
+    }
+    /** After the faders, before the output: open the shutters whose heads
+     *  have a level and that nothing sets; put back the ones that no
+     *  longer should be. Works on the post-GM values, never the stored
+     *  pre-GM ones, so turning it off leaves the show exactly as it was. */
+    void applyAutoOpen();
+
+    QMutex m_autoOpenMutex;
+    QVector<AutoOpenRule> m_autoOpenRules;
+    /** Shutters a previous rule set may have opened: put back next frame */
+    QVector<int> m_autoOpenRestore;
+    /** The frame each channel was last written in (m_frame) */
+    std::unique_ptr<std::atomic<quint32>[]> m_writtenFrame;
+    /** Channels a one-shot writer left set (holdChannels()) */
+    std::unique_ptr<std::atomic<quint8>[]> m_held;
+    /** Counts processFaders() frames; starts past 1 so nothing is "recent" */
+    std::atomic<quint32> m_frame { 16 };
+
 signals:
     void universeWritten(quint32 universeID, const QByteArray& universeData);
 
@@ -537,6 +609,8 @@ protected:
     QVector<int> m_nonIntensityChannels;
     /** Array of values BEFORE the Grand Master changes */
     QScopedPointer<QByteArray> m_preGMValues;
+    /** Channels an Override fader wrote this frame (writeOverride) */
+    QByteArray m_overrideWritten;
     /** Array of values AFTER the Grand Master changes (applyGM) */
     QScopedPointer<QByteArray> m_postGMValues;
     /** Array of the last preGM values written before the zeroIntensityChannels call  */
@@ -582,6 +656,15 @@ public:
      * @return true if successful, otherwise false
      */
     bool write(int address, uchar value, bool forceLTP = false);
+
+    /**
+     * Write a channel from an Override fader (an edit preview over whatever
+     * runs): it replaces what lower-priority faders wrote, LTP -- but on an
+     * HTP channel two Override faders in the same frame take the higher, as
+     * the same functions would played at Auto (the Show Tree's Design
+     * preview of a cue that mixes plays what GO plays).
+     */
+    bool writeOverride(int address, uchar value);
 
     /**
      * Write a value representing one or multiple channels
@@ -638,6 +721,40 @@ public:
     bool loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap);
 
     /**
+     * One patch exactly as a workspace described it: plugin, line UID and
+     * index, the network it was built on, profile names and every plugin
+     * parameter. Used to hand a just-parsed patch to InputOutputMap, and to
+     * KEEP one that cannot be opened on this machine -- an input or
+     * feedback patch whose interface/device is not present, or any patch
+     * whose plugin is not installed here. Kept patches are written back by
+     * saveXML() unchanged and retried by InputOutputMap until they resolve.
+     * (Output patches whose plugin IS present use OutputPatch::isPending()
+     * instead, which the Connections view already shows.)
+     */
+    struct OfflinePatch
+    {
+        PatchTagType tag = OutputPatchTag;
+        QString plugin;
+        QString uid;
+        quint32 line = UINT_MAX;
+        QString profile;
+        QString hidProfile;
+        QString network;
+        QMap<QString, QVariant> params;
+    };
+
+    QList<OfflinePatch> offlinePatches() const;
+    void addOfflinePatch(const OfflinePatch &patch);
+    void removeOfflinePatch(int index);
+    /** Drop every kept patch of @p tag (the user re-patched/unpatched it). */
+    void clearOfflinePatches(PatchTagType tag);
+
+private:
+    QList<OfflinePatch> m_offlinePatches;
+
+public:
+
+    /**
      * Load an optional tag defining the plugin specific parameters
      * @param root An XML subtree containing the plugin parameters contents
      * @param currentTag The type of Patch where the parameters should be set
@@ -671,7 +788,8 @@ public:
         quint32 line,
         QString profileName,
         QMap<QString, QVariant>parameters,
-        const QString &hidProfileName = QString()) const;
+        const QString &hidProfileName = QString(),
+        const QString &network = QString()) const;
 
     /**
      * Save a plugin custom parameters (if available) into a tag nested

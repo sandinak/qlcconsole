@@ -1,76 +1,22 @@
 #!/bin/bash
-# Cut a qlcconsole release: build + bundle, Developer ID sign + notarize,
-# tag, and publish a GitHub Release with the signed DMG attached.
+# Kept so old habits still work: publishing is `make beta` / `make release`
+# (platforms/macos/publish.sh), the one way to publish -- see RELEASE.md.
 #
-# See RELEASE.md for the full process (version bump policy, prerequisites).
-# This script performs real, externally-visible actions (git tag push,
-# public GitHub Release) — run it deliberately, not as part of iteration.
+#   ./release.sh                      = make release  (full GitHub release)
+#   PRERELEASE=1 ./release.sh         = make beta     (GitHub pre-release)
+#   ./release.sh attach FILE...       = make attach FILES="FILE..."
 #
-#   ./release.sh            # uses the version in VERSION
-#   ./release.sh 0.2.0      # override
+# TITLE, DRYRUN, SKIP_GATE, REPLACE, DMG ... pass through (publish.sh).
+# CI does not use this script.
 set -euo pipefail
-
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$REPO"
 
-VERSION="${1:-$(cat VERSION)}"
-TAG="v${VERSION}"
-
-step() { echo; echo "===== $* ====="; }
-
-command -v gh >/dev/null || { echo "gh (GitHub CLI) not found. Install it and run 'gh auth login' first."; exit 1; }
-gh auth status >/dev/null 2>&1 || { echo "gh is not authenticated. Run 'gh auth login' first."; exit 1; }
-
-if git rev-parse "$TAG" >/dev/null 2>&1; then
-  echo "Tag $TAG already exists. Bump VERSION (or pass a version override) first."
-  exit 1
+if [ "${1:-}" = attach ]; then
+  shift
+  exec "$REPO/platforms/macos/publish.sh" attach "$@"
 fi
-
-if ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
-  echo "CHANGELOG.md has no '## [${VERSION}]' section. Add one before releasing."
-  exit 1
+[ -z "${1:-}" ] || { echo "The version comes from the VERSION file now: bump it and commit."; exit 1; }
+if [ "${PRERELEASE:-0}" = 1 ]; then
+  exec "$REPO/platforms/macos/publish.sh" beta
 fi
-
-step "1/6 Test gate (cmake --build build --target check)"
-# Fast pre-flight against the standard dev build dir (Debug, iterated on all
-# session) rather than package-local.sh's separate Release build-package/ —
-# this is a correctness gate on the codebase, not a rebuild of the exact
-# shipping bits, so it should stay cheap and reuse whatever's already built.
-# set -e means a non-zero exit here (a real test failure) aborts the whole
-# release right here, before any of the expensive/external steps below.
-[ -d build ] || cmake -S . -B build
-cmake --build build -j"$(sysctl -n hw.ncpu)"
-cmake --build build --target check
-
-step "2/6 Build + bundle (platforms/macos/package-local.sh)"
-platforms/macos/package-local.sh
-
-step "3/6 Sign + notarize + staple (platforms/macos/sign-notarize.sh)"
-platforms/macos/sign-notarize.sh
-
-DMG=$(ls -t dist/qlcconsole-*.dmg 2>/dev/null | head -1)
-[ -n "$DMG" ] || { echo "No DMG found in dist/ after sign-notarize.sh. Aborting."; exit 1; }
-echo "Release artifact: $DMG"
-
-step "4/6 Extract release notes from CHANGELOG.md"
-NOTES_FILE="$(mktemp)"
-awk -v ver="$VERSION" '
-  $0 ~ "^## \\[" ver "\\]" { found=1; next }
-  found && /^## \[/ { exit }
-  found { print }
-' CHANGELOG.md > "$NOTES_FILE"
-
-step "5/6 Tag and push"
-git tag -a "$TAG" -m "qlcconsole $TAG"
-git push origin "$TAG"
-
-step "6/6 Publish GitHub Release"
-gh release create "$TAG" "$DMG" \
-  --title "qlcconsole $TAG" \
-  --notes-file "$NOTES_FILE"
-
-rm -f "$NOTES_FILE"
-
-echo
-echo "Released $TAG: $DMG"
-gh release view "$TAG" --web
+exec "$REPO/platforms/macos/publish.sh" release
