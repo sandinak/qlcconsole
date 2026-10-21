@@ -11,35 +11,36 @@ nav_order: 2
 
 ## Today you will
 
-- turn a song into a list of moments (**cues**);
-- build three cues in the Show Tree, each with a group of lights in a
-  colour at a level;
-- play your cues with **GO**.
+- break a song down into the moments where the lighting changes (its
+  **cues**);
+- program three cues in the Show Tree, each one a group of lights at a
+  colour and a level;
+- play the cues back with **GO**.
 
 ## Words for today
 
 | Word | Means |
 |---|---|
-| **Cue** | A moment in the song where the light changes. Each cue has a number (1.0.0, 1.0.1…) and a name. |
-| **Cue list** | All the cues for one song, in order. |
-| **Production** | The whole show: all its cue lists. |
-| **Group** | A set of lights we always use together, like *Steps* or *TrussC-RGB*. |
-| **Our group names** | **Trusses** are the four upright trusses across the back. **TrussC-RGB** = the colour (RGB) pixels of the boxes on the trusses that light the **C**yc; **TrussW-RGB** = the ones that **W**ash out over the stage. **Steps** = the LED strips on the front of each riser step (rows **US**, **CS**, **DS**); **StepTops** = the bars on top of the steps. |
-| **Layer** | One group doing one thing in a cue: "the TrussC-RGB, blue, full". |
+| **Cue** | A planned lighting change, tied to a moment in the song. Each cue has a number (1.0.0, 1.0.1…) and a name. |
+| **Cue list** | All of one song's cues, in order. |
+| **Production** | The whole show: every cue list in it. |
+| **Group** | A named set of lights that are always used together, like *Steps* or *TrussC-RGB*. |
+| **Our group names** | **Trusses** are the four upright trusses across the back. **TrussC-RGB** is the colour (RGB) pixels of the truss boxes that light the **C**yc; **TrussW-RGB** is the ones that **W**ash out over the stage. **Steps** is the LED strips on the front of each riser step (rows **US**, **CS** and **DS**), and **StepTops** is the bars on top of the steps. |
+| **Layer** | One group doing one thing in a cue, such as "TrussC-RGB, blue, at full". |
 | **Look** | What a layer does: its **colour** and its **intensity** (level). |
-| **Palette** | A saved colour or level with a name, like *Blue* or *Half*. You drag it onto a layer. |
-| **Intensity** | How bright. *Full* is all the way up; *Out* is off. |
-| **Cyc** | The big white cloth at the back of the stage (say "sike"). Light paints it. |
-| **Track / tracked** | A light stays on in the next cue until you change it. |
+| **Palette** | A saved, named colour or level, such as *Blue* or *Half*, that you drag onto a layer. |
+| **Intensity** | How bright, from **Full** down to **Out**. |
+| **Cyc** (cyclorama, pronounced "sike") | The white cloth across the back of the stage, lit to fill the background with colour. |
+| **Tracking** | A light holds its state into the following cues until a cue changes it. A value carried on that way is **tracked**. |
 | **GO** | The button that plays the next cue. |
 
 ## Part 1 — Design it (on paper, everyone)
 
-Our song: **"Everybody Scream"**. We light its first three moments: the
-**pose** before the first note (the choir frozen on the risers), the first
-**verse**, and the first **chorus**.
+Our song is **"Everybody Scream"**, and today we light its first three
+moments: the **pose** before the first note, with the choir frozen on the
+risers; the first **verse**; and the first **chorus**.
 
-Fill in the **Why** column — what should the audience feel?
+Fill in the **Why** column: what should the audience feel at each moment?
 
 | Cue | When | Why (feel) | Lights |
 |---|---|---|---|
@@ -57,104 +58,111 @@ Switch roles after each cue.
 
 ### Get ready
 
-1. Open qlcconsole. **File → Open** → `lesson-1-1-start.qlcc`.
+1. Open qlcconsole, choose **File → Open** and open
+   `lesson-1-1-start.qlcc`.
 2. Click the **Show Tree** tab at the bottom (or press ⇧⌘6).
-3. Open the stage: **View → Rig Overview** (⇧⌘R). Move it so you can see
-   it and the Show Tree together.
+3. Open the stage with **View → Rig Overview** (⇧⌘R), and arrange it so
+   you can see it and the Show Tree together.
    - *You should see:* a dark stage with three rows of risers, a white cyc
-     at the back, trusses across the back on both sides.
-   - The footer says **Not ready** in red. That's normal in class: this
-     show isn't connected to real lights.
+     at the back and trusses across the back on both sides.
+   - The footer says **Not ready** in red. That's expected in class,
+     because the course show isn't connected to real lights.
 
 ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
-The tab has: **(1)** the buttons that make things, **(2)** the
-**Library** — groups and palettes to drag, **(3)** the **tree** of your
-show, **(4)** the **page** for what you clicked, **(5)** the command line
-(for later), **(6)** the tabs.
+The tab is laid out as **(1)** the buttons that create things, **(2)**
+the **Library** of groups and palettes to drag from, **(3)** the **tree**
+of your show, **(4)** the **page** for whatever you've selected, **(5)**
+the command line (for later), and **(6)** the tabs.
 
 ### Make the song
 
-4. Click **+ Production**. Type `Spring Show`, click **OK**.
+4. Click **+ Production**, type `Spring Show` and click **OK**.
    - *You should see:* **Spring Show** in the tree, selected.
-5. Click **+ Cue list**. Type `01-Everybody Scream`, click **OK**.
-   - *You should see:* **01-Everybody Scream** under Spring Show, marked *Tracking*.
-   - The `01` means its cues start at **1.0.0**.
+5. Click **+ Cue list**, type `01-Everybody Scream` and click **OK**.
+   - *You should see:* **01-Everybody Scream** under Spring Show, marked
+     *Tracking*. The `01` sets its cue numbers to start at **1.0.0**.
 
 ### Cue 1.0.0 — Pose
 
-6. Click **+ Cue**. The **Name** box on the page is ready: type `Pose`
-   and press **Return**.
+6. Click **+ Cue**. The **Name** box on the page is ready for typing, so
+   type `Pose` and press **Return**.
    - *You should see:* **1.0.0 Pose** in the tree.
 
 ![A new cue](../../images/lesson-1-1/new-cue.png)
 
-   **(1)** + Cue, **(2)** the Name box, **(3)** the dashed box under
-   **Layers**, *"Drag groups or fixtures here to add a layer"* — the drop area, **(4)** your cue in the tree.
+   **(1)** + Cue, **(2)** the Name box, **(3)** the drop area: the dashed
+   box under **Layers** that reads *"Drag groups or fixtures here to add
+   a layer"*, and **(4)** your cue in the tree.
 
-7. In the Library, open **All → Groups → Trusses**. Drag **TrussC-RGB**
+7. In the Library, open **All → Groups → Trusses** and drag **TrussC-RGB**
    onto the dashed box under **Layers** (3).
-   - While you drag, the top right says *"a new layer on TrussC-RGB in
+   - While you drag, the top right reads *"a new layer on TrussC-RGB in
      1.0.0 Pose"*.
-   - *You should see:* a row **TrussC-RGB** under Layers.
+   - *You should see:* a **TrussC-RGB** row under Layers.
 
 ![Dragging a group onto the cue](../../images/lesson-1-1/drop-group.png)
 
-8. Open **All → Palettes → Colour**. Drag **Blue** onto the
-   **TrussC-RGB** row. Then open **Dimmer** and drag **Full** onto the same row.
-   - *You should see:* the row says **TrussC-RGB   Blue, Full**, and in the
-     Rig Overview the cyc turns a clear blue, brightest at the top (the cyc
-     boxes aim upward).
+8. Open **All → Palettes → Colour** and drag **Blue** onto the
+   **TrussC-RGB** row. Then open **Dimmer** and drag **Full** onto the
+   same row.
+   - *You should see:* the row reads **TrussC-RGB   Blue, Full**, and in
+     the Rig Overview the cyc turns a clear blue, brightest at the top
+     because the cyc boxes aim upward.
 
 ![Colour and level on the layer](../../images/lesson-1-1/drop-palettes.png)
 
-   **(1)** the palette in the Library, **(2)** the layer it lands on,
-   **(3)** the top right says what changed.
+   **(1)** the palette in the Library, **(2)** the layer it lands on, and
+   **(3)** the note at the top right saying what changed.
 
-   **Always give a layer a colour *and* a level.** These LED lights show
-   a colour at full by themselves, but lights with a dimmer (like the
-   AT-W-ALL front washes, in a later lesson) stay dark with only a colour — and a level
-   you chose is part of your design.
+   **Always give a layer both a colour *and* a level.** These LED
+   fixtures show a colour at full on their own, but fixtures with a
+   dimmer channel (like the AT-W-ALL front washes in a later lesson) stay
+   dark with a colour alone. The level is also part of your design, so
+   choose it deliberately.
 
 ### Cue 1.0.1 — Verse
 
-9. Click **+ Cue**, type `Verse`, press **Return**.
-   - *You should see:* **1.0.1 Verse**. On its page a grey row
-     **⤳ TrussC-RGB … tracked from 1.0.0 Pose** — the cyc *stays* blue.
-     Lights stay on until you change them.
-10. From **Groups → Steps**, drag **StepTops** onto the drop area. Drag
-    **Warm White** and **75%** onto the **StepTops** row.
-    - *You should see:* the risers lit warm from the step tops, the cyc
-      still blue.
+9. Click **+ Cue**, type `Verse` and press **Return**.
+   - *You should see:* **1.0.1 Verse**, and on its page a grey row,
+     **⤳ TrussC-RGB … tracked from 1.0.0 Pose**. The cyc stays blue
+     because it tracks: lights hold their state until a cue changes them.
+10. From **Groups → Steps**, drag **StepTops** onto the drop area, then
+    drag **Warm White** and **75%** onto the **StepTops** row.
+    - *You should see:* the risers lit warm from the step tops, with the
+      cyc still blue.
 
 ![The verse: a grey tracked row and a new layer](../../images/lesson-1-1/tracked-row.png)
 
-   **(1)** the cyc, carried on from Pose (grey), **(2)** your new layer,
-   **(3)** the same grey row in the tree.
+   **(1)** the cyc, tracked from Pose (in grey), **(2)** your new layer,
+   and **(3)** the same grey row in the tree.
 
 ### Cue 1.0.2 — Chorus
 
-11. Click **+ Cue**, type `Chorus`, press **Return**.
-12. From **Groups → Steps**, drag **Steps** onto the drop area. Drag
+11. Click **+ Cue**, type `Chorus` and press **Return**.
+12. From **Groups → Steps**, drag **Steps** onto the drop area, then drag
     **Magenta** and **Full** onto the **Steps** row.
-    - *You should see:* bright magenta lines on the front of every riser,
-      warm risers, blue cyc.
+    - *You should see:* bright magenta lines across the front of every
+      riser, warm riser tops and a blue cyc.
 
 ### Play it
 
 Your production is already the one GO plays: the tree marks it
-**▶ current**. (Don't click its **Current** button — that would turn it
-off.)
+**▶ current**. Leave its **Current** button alone, because clicking it
+would turn that off.
 
-13. Click the **Run** tab (⇧⌘0). Press **GO** (or **Space**) three times.
-    - *You should see:* NEXT moves down the list; the stage goes Pose →
-      Verse → Chorus.
+13. Click the **Run** tab (⇧⌘0) and press **GO** (or **Space**) three
+    times.
+    - *You should see:* NEXT steps down the list as the stage goes from
+      Pose to Verse to Chorus.
 
 ![The Run tab](../../images/lesson-1-1/run-tab.png)
 
-   **(1)** GO, **(2)** your cues, **(3)** what the next GO will change.
+   **(1)** GO, **(2)** your cues, and **(3)** what the next GO will
+   change.
 
-14. **Save** with your name: **File → Save As** → `Lesson01-yourname.qlcc`.
+14. **Save** under your own name with **File → Save As** →
+    `Lesson01-yourname.qlcc`.
 
 ## What it should look like
 
@@ -166,20 +174,20 @@ off.)
 
 | Problem | Try |
 |---|---|
-| A dialog asked something you didn't expect | Cancel, then click the right row in the tree first (the production for + Cue list). |
-| The group landed in the wrong cue | **Undo** (⌘Z) and click the right cue first. |
-| GO does nothing | Is **Spring Show** marked **▶ current** in the tree? If not, click it and click its **Current** button once. |
-| Nothing lights in the Rig Overview | Is a **cue** selected in the tree (the stage shows the selected cue)? Is **Live** on in the Rig Overview? |
+| A dialog asked something unexpected | Cancel it, select the right row in the tree first (the production, for + Cue list), and try again. |
+| The group landed in the wrong cue | **Undo** (⌘Z), click the right cue, and drag again. |
+| GO does nothing | Check that **Spring Show** is marked **▶ current** in the tree. If it isn't, click it and click its **Current** button once. |
+| Nothing lights in the Rig Overview | The stage shows the selected cue, so make sure a **cue** is selected in the tree, and that **Live** is on in the Rig Overview. |
 | You can't find a palette | Type its name in **Filter the Library** at the top left. |
 
 ## Done early? (Extension)
 
-1. Change the chorus so the **cyc goes magenta too**: click **1.0.2
+1. Make the **cyc go magenta in the chorus** as well. Click **1.0.2
    Chorus**, click the grey **TrussC-RGB** row, and on its Colour row use
-   **⋯ → Set in this cue → Magenta**. Watch the tree: TrussC-RGB is now
-   the chorus's own layer.
-2. **Type it.** Open `lesson-1-1-start.qlcc` again and build the same three
-   cues by typing in the **Command** line at the bottom (click it, type a
+   **⋯ → Set in this cue → Magenta**. In the tree, TrussC-RGB is now a
+   layer of the chorus itself rather than a tracked one.
+2. **Type it.** Open `lesson-1-1-start.qlcc` again and build the same
+   three cues from the **Command** line at the bottom (click it, type a
    line, press Enter):
 
    ```
@@ -193,6 +201,7 @@ off.)
    Steps colour Magenta dimmer Full
    ```
 
-   Names with spaces go in quotes. `dimmer 75` finds the palette **75%**.
-3. Add a fourth cue, **1.0.3 Button** — the big final hit. What would you
-   light?
+   Names with spaces go in quotes, and `dimmer 75` finds the palette
+   **75%**.
+3. Add a fourth cue, **1.0.3 Button**, for the final hit of the song (the
+   **button**). What would you light, and how?
