@@ -11,25 +11,23 @@ Do **one** of these.
 
 ## A. On your computer (Mac, Windows, or Linux)
 
-1. Install qlcconsole if you haven't: [Install](../../install.md).
+1. Install qlcconsole if you haven't yet (see [Install](../../install.md)).
 2. Download [`lesson-1-4-finish.qlcc`](../../shows/lesson-1-4-finish.qlcc)
-   (on GitHub: open it, then **Download raw file**).
-3. Play "Everybody Scream" (or any song) and the cue list together:
-   **GO** on each moment, from the **Run** tab.
-4. Change the **Fade in**, **Fade out** and **Hold** times until the light
-   moves with the music. Write down what you changed and why.
-5. Save it as `Lesson1-4-Home-yourname.qlcc` and bring it (USB stick or the
-   class folder), with your notes.
-
-Nothing you do can harm real lights: the course show isn't connected to
-any.
+   (on GitHub, open it and click **Download raw file**).
+3. Play "Everybody Scream" (or another song) and run the cue list along
+   with it from the **Run** tab, pressing **GO** on each moment.
+4. Adjust the **Fade in**, **Fade out** and **Hold** times until the
+   lighting moves with the music, and note what you changed and why.
+5. Save it as `Lesson1-4-Home-yourname.qlcc` and bring it in (on a USB
+   stick or in the class folder) with your notes.
 
 ## B. On paper (no computer, or a Chromebook without Linux)
 
-1. Pick a song you like (school-appropriate). Listen to the first minute
-   with a stopwatch (a phone works).
-2. Write **four** moments where the light should change, with the time in
-   the song, and for each: **snap** or **fade**, how many seconds, and why.
+1. Choose a song (school-appropriate) and time its first minute with a
+   stopwatch or phone.
+2. Pick **four** moments where the lighting should change. For each, note
+   the time in the song, whether it's a **snap** or a **fade** (and how
+   many seconds), and why.
 
    | Moment | Time in the song | Snap or fade? Seconds | Why |
    |---|---|---|---|
