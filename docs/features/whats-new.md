@@ -7,6 +7,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **The version on the boot window.** While qlcconsole starts, its window
   shows the release — "qlcconsole 0.2.2" — and below it the build and
   commit, so you can tell which version is starting.
+- **The Cue Runner widget, mapped and less crowded.** Each of its actions
+  (GO, Sub GO, Back, Sub Back, Pause, Stop, Load next / previous) takes a
+  controller input and a key in its properties' new **External Input**
+  tab, with feedback that lights GO while there's a cue to GO to and Sub
+  GO while a sub-cue waits. The info now gets the room: made bigger, the
+  cue name grows and more of the cues to come show, while GO and Sub GO
+  keep their height. In Design mode, handles inside it set the buttons'
+  height and the GO / Sub GO split. See
+  [The cue runner](show-tree.md#the-cue-runner).
 - **No false warning for a curtain.** A show with a stage curtain no longer
   lists it under "fixture types declare no light output": a curtain is not
   a light. Hazers, smoke machines and fans with no light of their own are

@@ -1275,10 +1275,41 @@ Console widget is the same runner on a VC page.
 Its properties (double-click in Design) choose what it **plays** (the
 current production, or one list -- several widgets can each follow a
 different list or production) and its **size**: **Compact** (on now, next,
-big GO and Sub GO) or **List** (the whole runner). The old **Cue List**
+GO and Sub GO) or **List** (the whole runner). The old **Cue List**
 widget stays for plain chasers. **Edit → Swap Widget** turns a Cue List
 playing a Show Tree list into a Cue Runner on it, in the same place (and a
 Cue Runner back into a Cue List).
+
+- **The info on top, the buttons under it.** The header is the
+  production and list, with small **LIVE** / **DESIGN** and timecode chips
+  (the timecode only while there is a source). Under it: the cue on now,
+  large, with a thin fade bar while it fades; **NEXT** and what it
+  changes; **SUB NEXT** while a sub-cue waits; then, in the compact size,
+  the cues after NEXT ("then 3 Chorus"). Under the info: **GO** and **Sub
+  GO** (dimmed until a sub-cue waits), and **Back** and **Stop** as small
+  buttons (the list size adds **Sub Back** and **Pause**).
+- **Make it bigger and the info grows**: a larger cue name, NEXT on up to
+  three lines, more of the cues to come. The buttons keep their height.
+  Made smaller, the lines elide (the whole line is in the tooltip), the
+  small buttons go first, and the widget stops at a minimum size where GO
+  still works.
+- **Handles inside it.** In Design mode, drag the dotted bar between the
+  info and the buttons to set the buttons' height, and the one between GO
+  and Sub GO to share the row. Both are saved with the show. In Operate
+  they're hidden and locked.
+- **What it shows.** The properties' **General** tab: how many **upcoming
+  cues** to list (0-5, as the room allows), and whether to show the
+  **timecode**, **Sub GO** and **Back and Stop**.
+- **External Input.** The properties' **External Input** tab maps each
+  action: **GO**, **Sub GO**, **Back**, **Sub Back**, **Pause / Resume**,
+  **Stop**, **Load next** and **Load previous** (they move STANDBY one
+  main cue). Each one takes a controller input and a key, as a Cue List's
+  buttons do: auto-detect or choose the input, the input profile's
+  settings and custom feedback values. They act in Operate mode only. A
+  mapped control with feedback is lit while its action can do something:
+  GO while there is a cue to GO to, Sub GO while a sub-cue waits, Back and
+  Stop while the list runs, Load next / previous while there is a cue to
+  load, and Pause while paused.
 
 ## Playing it
 
@@ -1378,8 +1409,6 @@ Cue Runner back into a Cue List).
 - **Sub-cues are one level** (no 4.1.1), have no includes, mode or base, and
   the first plays with GO (its Advance is ignored). Convert to tracking and
   Detach to plain chaser leave a list with sub-cues alone.
-- **The Cue Runner widget has no MIDI / key inputs of its own** yet: GO
-  comes from the app's keys, the footer, show control and its buttons.
 - **No tracking sheet** yet (so no sub-cue columns in it); the Run tab's
   list and *what changes* line read the tracking instead.
 - **An effect laid out over several layers** writes each layer's part from

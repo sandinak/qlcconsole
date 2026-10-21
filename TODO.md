@@ -199,7 +199,9 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   ⇧⌘0, Cue Runner VC widget, Swap widget, "what changes", OSC
   `/subgo` `/subback`). **Open (§10, 27–35):** switching production while a
   list runs; no current production by default; a sub-cue's wait from fade-in
-  or start; the cue's own fade with sub-cues; Run-tab keys; VC widget inputs;
+  or start; the cue's own fade with sub-cues; Run-tab keys; ~~VC widget inputs~~
+  (done 2026-10-21, feat/vc-cuerunner-layout: External Input per action, info-first
+  layout, Design-mode handles);
   Swap's follow rule; Convert/Detach/import with sub-cues; the tracking
   sheet. **Mac:** `./check-all.sh` legs not run yet (Linux only). **Try:**
   two productions, switch, ⌘↩; + Sub-cue, Sub GO, auto-follow; the Run tab;
