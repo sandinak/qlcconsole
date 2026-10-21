@@ -748,7 +748,7 @@ EffectBrowser::Preview EffectBrowser::previewWith(Run *run, double t, bool steer
 
     QJSValue params = eng->newObject();
     for (const EffectScript::ParamDef &d : run->script.paramDefs())
-        if (d.type != QLatin1String("path"))
+        if (d.type != QLatin1String("path") && d.type != QLatin1String("image"))
             params.setProperty(d.name, double(d.defaultValue));
 
     const QJSValue result = run->script.callTick(fixtures, inputs, palettes, params, run->state,
@@ -900,7 +900,7 @@ EffectBrowser::Preview EffectBrowser::previewMatrix(Run *run, double t)
     palettes.setProperty(QStringLiteral("look"), look);
     QJSValue params = eng->newObject();
     for (const EffectScript::ParamDef &d : run->script.paramDefs())
-        if (d.type != QLatin1String("path"))
+        if (d.type != QLatin1String("path") && d.type != QLatin1String("image"))
             params.setProperty(d.name, double(d.defaultValue));
 
     const QJSValue result = run->script.callTick(fixtures, inputs, palettes, params, run->state,

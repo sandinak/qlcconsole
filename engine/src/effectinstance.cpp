@@ -10,6 +10,7 @@
 #include "spreadlayer.h"
 #include "wledfixture.h"
 #include "aimsolver.h"
+#include "matriximage.h"
 
 #include "doc.h"
 #include "scene.h"
@@ -96,7 +97,7 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
     {
         if (d.type == QLatin1String("path"))
             continue;  // path params seeded from string params below
-        if (d.type == QLatin1String("text"))
+        if (d.type == QLatin1String("text") || d.type == QLatin1String("image"))
         {
             // Words, not a number: the script's own until the look says else
             m_stringParamValues[d.name] = d.defaultText;
@@ -1808,10 +1809,15 @@ QJSValue EffectInstance::buildParamsObject() const
         obj.setProperty(it.key(), it.value());
 
     // Determine which params are path-typed so we can emit JS arrays for them
-    QSet<QString> pathParams;
+    // (and which are pictures, handed over decoded)
+    QSet<QString> pathParams, imageParams;
     for (const EffectScript::ParamDef &d : m_script.paramDefs())
+    {
         if (d.type == QLatin1String("path"))
             pathParams.insert(d.name);
+        else if (d.type == QLatin1String("image"))
+            imageParams.insert(d.name);
+    }
 
     // String/path params
     for (auto it = m_stringParamValues.constBegin(); it != m_stringParamValues.constEnd(); ++it)
@@ -1836,6 +1842,10 @@ QJSValue EffectInstance::buildParamsObject() const
             arr.setProperty("length", idx);
             obj.setProperty(it.key(), arr);
         }
+        else if (imageParams.contains(it.key()))
+        {
+            obj.setProperty(it.key(), imageParamObject(it.key(), it.value()));
+        }
         else
         {
             obj.setProperty(it.key(), it.value());
@@ -1843,6 +1853,22 @@ QJSValue EffectInstance::buildParamsObject() const
     }
 
     return obj;
+}
+
+QJSValue EffectInstance::imageParamObject(const QString &name, const QString &value) const
+{
+    ImageParam &ip = m_imageParams[name];
+    // The same text (usually the very same string, shared): the same object.
+    if (!ip.js.isUndefined() && (ip.value.constData() == value.constData() || ip.value == value))
+        return ip.js;
+    ip.value = value;
+    ip.js = QJSValue(QJSValue::NullValue);
+    QSharedPointer<const MatrixImage::Frames> f = MatrixImage::decode(value);
+    if (f.isNull())
+        return ip.js;
+    QJSValue o = MatrixImage::toScript(m_script.engine(), *f);
+    ip.js = o;
+    return ip.js;
 }
 
 QJSValue EffectInstance::buildDataChannelsObject() const

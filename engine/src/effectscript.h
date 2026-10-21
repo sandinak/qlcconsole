@@ -175,8 +175,9 @@ public:
     };
     struct ParamDef {
         QString name, description;
-        QString type;           // "" or "path" (XY drawn path) or "text" (words to show);
-                                // "path" and "text" params ignore min/max
+        QString type;           // "" or "path" (XY drawn path) or "text" (words to show)
+                                // or "image" (a picture kept in the show: MatrixImage);
+                                // "path", "text" and "image" params ignore min/max
         float min = 0.0f, max = 1.0f, defaultValue = 0.5f;
         QString defaultText;    // a "text" param's defaultValue
         QStringList enumValues; // non-empty → render as dropdown; value is integer index

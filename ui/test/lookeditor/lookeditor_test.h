@@ -53,6 +53,7 @@ private slots:
     void effectsArePickedFromABrowserWithWledsOwn();
     /** "can we put the sets in alpha order?" */
     void anEffectsTextIsTypedIn();
+    void anEffectsPictureIsShownAndCleared();
     void previewsShowWhatEachEffectDoes();
     void anEffectIsPutOnASpeedMaster();
     void aLooksSpeedMasterAndSpreadSurviveADoubleClick();

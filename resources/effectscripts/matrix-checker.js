@@ -13,7 +13,7 @@
     effect.author      = "qlcconsole";
     effect.requires    = ["matrix"];
     effect.fixtureTypes = ["matrix", "rgb", "dimmer"];
-    effect.notes = "A checkerboard of the look's first two colours (or the first and dark) that swaps squares. Swap: colours trade places, the lit squares and the dark ones trade, or a smooth crossfade. Timing: on the beat (Division: how often) or free at Speed swaps a second. Square: its size in pixels. Fade: how much of each step the change takes. Scope: squares counted from each box's corner, or across the whole canvas. Flash: a white flash on each change (the accent).";
+    effect.notes = "A checkerboard of the look's first two colours (or the first and dark) that swaps squares. Swap: colours trade places, the lit squares and the dark ones trade, or a smooth crossfade. Timing: on the beat (Division: how often) or free at Speed swaps a second. Square: its size in pixels. Fade: how much of each step the change takes. Scope: squares counted from each box's corner, or across the whole canvas. Flash: a white flash on each change (the accent). Each box, staggered: the same in every box, each a little behind the last, so it rolls across the rig -- Stagger order: left to right, right to left, out from the middle or random; Stagger: how far behind, as a fraction of a swap and back.";
 
     effect.parameters = [
         { name: "timing",   description: "Swap on the beat, or free at Speed", defaultValue: 0, values: MATRIX.TIMINGS },
@@ -24,57 +24,61 @@
         { name: "fade",     description: "How much of each step the change takes", min: 0, max: 1, defaultValue: 0.1 },
         { name: "flash",    description: "White flash on each change", min: 0, max: 1, defaultValue: 0.5 },
         { name: "scope",    description: "Squares from each box's corner, or across the canvas", defaultValue: 1, values: MATRIX.SCOPES }
-    ].concat(MATRIX.whiteParams(0));
+    ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
-    effect.tick = function(fixtures, inputs, palettes, params, state) {
+    effect.tick = function(fixtures, inputs, palettes, params, state, data) {
         if (fixtures.length === 0) return [];
         var cv = MATRIX.canvas(fixtures);
-        var num = MATRIX.num;
-        var onBeat = Math.round(num(params.timing, 0)) === 0;
-        var clk = MATRIX.clock(inputs, num(params.speed, 2), onBeat, MATRIX.perBeat(params.division));
-        var step = Math.floor(clk.pos), fr = clk.pos - step;
-        var swap = Math.round(num(params.swap, 0));
-        // Drawn only in white (a box in its white mode, or White only): two
-        // colours would be one, so the squares go on and off instead.
-        if (swap === 0 && (!cv.anyRGB || Math.round(num(params.white, 0)) === 4))
-            swap = 1;
-        var sq = Math.max(1, Math.round(num(params.square, 1)));
-        var fade = MATRIX.clamp(num(params.fade, 0.1), 0, 1);
-        var flash = MATRIX.clamp(num(params.flash, 0.5), 0, 1);
-        var perBox = Math.round(num(params.scope, 1)) === 1;
-        var C = MATRIX.colours(palettes, [{ r: 255, g: 0, b: 80 }, { r: 0, g: 60, b: 255 }]);
-        var a = C[0], b = C.length > 1 ? C[1] : null;
-        var black = { r: 0, g: 0, b: 0 };
+        return MATRIX.scoped(cv, fixtures, inputs, params, state,
+                             MATRIX.cycle(2, MATRIX.num(params.speed, 2), MATRIX.perBeat(params.division)),
+                             function(fixtures, inputs, state, root) {
+            var num = MATRIX.num;
+            var onBeat = Math.round(num(params.timing, 0)) === 0;
+            var clk = MATRIX.clock(inputs, num(params.speed, 2), onBeat, MATRIX.perBeat(params.division));
+            var step = Math.floor(clk.pos), fr = clk.pos - step;
+            var swap = Math.round(num(params.swap, 0));
+            // Drawn only in white (a box in its white mode, or White only): two
+            // colours would be one, so the squares go on and off instead.
+            if (swap === 0 && (!cv.anyRGB || Math.round(num(params.white, 0)) === 4))
+                swap = 1;
+            var sq = Math.max(1, Math.round(num(params.square, 1)));
+            var fade = MATRIX.clamp(num(params.fade, 0.1), 0, 1);
+            var flash = MATRIX.clamp(num(params.flash, 0.5), 0, 1);
+            var perBox = MATRIX.perBox(params, 1);
+            var C = MATRIX.colours(palettes, [{ r: 255, g: 0, b: 80 }, { r: 0, g: 60, b: 255 }]);
+            var a = C[0], b = C.length > 1 ? C[1] : null;
+            var black = { r: 0, g: 0, b: 0 };
 
-        // How far into the change: 0 = just swapped, 1 = settled.
-        var into = fade > 0 ? MATRIX.smooth(0, fade, fr) : 1;
-        var hit = flash * Math.max(0, 1 - fr / 0.2);
+            // How far into the change: 0 = just swapped, 1 = settled.
+            var into = fade > 0 ? MATRIX.smooth(0, fade, fr) : 1;
+            var hit = flash * Math.max(0, 1 - fr / 0.2);
 
-        function cellAt(parity, k) {
-            // { colour, level } of a square of @p parity at step @p k.
-            var on = ((parity + k) & 1) === 0;
-            if (swap === 1 || !b)
-                return on ? { c: a, l: 1 } : { c: a, l: 0 };
-            return { c: on ? a : b, l: 1 };
-        }
-
-        return fixtures.map(function(f) {
-            var p = MATRIX.point(f, cv, perBox);
-            var parity = (Math.floor(p.x / sq) + Math.floor(p.y / sq)) & 1;
-            var colour, lvl, acc = 0;
-            if (swap === 2) {
-                var w = 0.5 - 0.5 * Math.cos(Math.PI * 2 * (clk.pos / 2));
-                var x = parity ? w : 1 - w;
-                if (b) { colour = MATRIX.mix(a, b, x); lvl = 1; }
-                else { colour = a; lvl = 1 - x; }
-            } else {
-                var now = cellAt(parity, step), was = cellAt(parity, step - 1);
-                var ca = MATRIX.mix(was.c === null ? black : was.c, now.c, into);
-                colour = ca;
-                lvl = was.l + (now.l - was.l) * into;
-                if (now.l > 0 && (now.c !== was.c || now.l !== was.l)) acc = hit;
+            function cellAt(parity, k) {
+                // { colour, level } of a square of @p parity at step @p k.
+                var on = ((parity + k) & 1) === 0;
+                if (swap === 1 || !b)
+                    return on ? { c: a, l: 1 } : { c: a, l: 0 };
+                return { c: on ? a : b, l: 1 };
             }
-            return MATRIX.out(f, cv, colour, lvl, acc, params);
+
+            return fixtures.map(function(f) {
+                var p = MATRIX.point(f, cv, perBox);
+                var parity = (Math.floor(p.x / sq) + Math.floor(p.y / sq)) & 1;
+                var colour, lvl, acc = 0;
+                if (swap === 2) {
+                    var w = 0.5 - 0.5 * Math.cos(Math.PI * 2 * (clk.pos / 2));
+                    var x = parity ? w : 1 - w;
+                    if (b) { colour = MATRIX.mix(a, b, x); lvl = 1; }
+                    else { colour = a; lvl = 1 - x; }
+                } else {
+                    var now = cellAt(parity, step), was = cellAt(parity, step - 1);
+                    var ca = MATRIX.mix(was.c === null ? black : was.c, now.c, into);
+                    colour = ca;
+                    lvl = was.l + (now.l - was.l) * into;
+                    if (now.l > 0 && (now.c !== was.c || now.l !== was.l)) acc = hit;
+                }
+                return MATRIX.out(f, cv, colour, lvl, acc, params);
+            });
         });
     };
 
