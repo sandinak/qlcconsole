@@ -68,6 +68,20 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Back, then GO, keeps the colours the cues set.** Going Back (or jumping
+  to a cue) played the cue's own layers but left everything else as the
+  cue played before it had it: a fixture the cue leaves dark, or lights with
+  only a dimmer, kept the later cue's colour wheel, position, gobo or
+  shutter, and GO on from there carried it forward. For example: cue 3 sets
+  the Sharpys green, cue 4 is a Block cue lighting them at half with no
+  colour of its own, cue 6 turns them blue -- played from the top they are
+  green in cue 4, but GO to cue 6, Back, Back left them blue in cue 4, and
+  GO to cue 5 kept them blue. Now Back and a jump walk back up the list and
+  put back what the cues before set last (or, for a setting only later cues
+  make, what the stage had when the list started), so every cue looks the
+  same however you get to it. In a cue that mixes, a layer that stayed on
+  from the cue before could also win over one the cue lists after it; the
+  cue's own order now decides, however you got there.
 - **No "declares no light output" warning for a curtain.** Opening a show
   with a Generic Stage Curtain listed it in the footer's Not ready list as
   a fixture type that declares no light output. Only a light is asked for

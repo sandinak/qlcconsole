@@ -498,6 +498,14 @@ public:
     void setEditOverride(bool on);
     bool editOverride() const;
 
+    /** Put this scene's faders on top of the others at their priority, so
+     *  it wins an LTP channel it shares with a scene that started after it.
+     *  A cue list does this for its cue's members, in the cue's order, when
+     *  the cue starts: a member that kept running from the cue before
+     *  would otherwise stay under the ones the cue started (a cue that
+     *  mixes, SHOW_TREE_DESIGN.md). DMX thread. */
+    void raiseFaders(QList<Universe *> ua);
+
 private:
     /** Bring the faders in line with setEditOverride(). Under
      *  m_valueListMutex. */

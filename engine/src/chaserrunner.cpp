@@ -27,8 +27,14 @@
 #include "speedmasters.h"
 #include <cmath>
 #include "mastertimer.h"
+#include "genericfader.h"
+#include "fadechannel.h"
 #include "chaserstep.h"
+#include "collection.h"
+#include "cueoutput.h"
 #include "qlcmacros.h"
+#include "universe.h"
+#include "fixture.h"
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
@@ -518,6 +524,10 @@ void ChaserRunner::clearRunningList(bool handOver)
 {
     if (handOver == false)
     {
+        // Stopping: the restacked state is let go of with the rest.
+        dismissRestack();
+        m_restackFrom = -1;
+        m_raiseFor = 0;
         stopHandedOverSteps();
         stopHandedOverSteps();
         // Nothing new is coming: what a step change left goes now too.
@@ -612,6 +622,245 @@ void ChaserRunner::stopHandedOverSteps()
     }
     m_handedOverSteps = m_handedOverLater;
     m_handedOverLater.clear();
+}
+
+/****************************************************************************
+ * Tracked state (Back, a jump)
+ ****************************************************************************/
+
+void ChaserRunner::stepStarted(int index, QList<Universe *> universes, bool jump)
+{
+    // Whatever was restacked for the cue before goes now: its channels keep
+    // their values, as forward playback leaves them.
+    dismissRestack();
+
+    const int from = m_restackFrom;
+    m_restackFrom = index;
+    if (from < 0)
+    {
+        m_visited.clear();
+        m_touched.clear();
+        // The stage as the list found it: what a channel only later cues
+        // set goes back to.
+        m_startStage.clear();
+        for (Universe *u : universes)
+            m_startStage << (u != NULL ? u->preGMValues() : QByteArray());
+    }
+
+    const QList<ChaserStep> steps = m_chaser->steps();
+    if (index < 0 || index >= steps.count())
+        return;
+    const ChaserStep &step = steps.at(index);
+    const Function *f = m_doc->function(step.fid);
+    const bool cue = f != NULL && (f->type() == Function::CollectionType
+                                   || (step.subCues != ChaserStep::Auto && f->type() == Function::ChaserType));
+    if (!cue)
+        return;
+    m_raiseFor = 4;
+    if (!isNextStep(from, index, jump == false))
+        restack(index, universes);
+    m_visited.insert(index);
+}
+
+bool ChaserRunner::isNextStep(int from, int to, bool wrap) const
+{
+    if (m_chaser->direction() != Function::Forward
+        || (m_chaser->runOrder() != Function::SingleShot && m_chaser->runOrder() != Function::Loop))
+        return true;
+    if (from < 0)
+        return to == m_chaser->firstPlayableStep();
+    const int count = m_chaser->stepsCount();
+    int next = from + 1;
+    while (next < count && m_chaser->isStepSkipped(next))
+        ++next;
+    if (next >= count)
+        next = wrap && m_chaser->runOrder() == Function::Loop ? m_chaser->firstPlayableStep() : -1;
+    return to == next;
+}
+
+QList<quint32> ChaserRunner::stepLooks(const ChaserStep &step, bool every) const
+{
+    const Chaser *inner = step.subCues != ChaserStep::Auto
+                          ? qobject_cast<const Chaser *>(m_doc->function(step.fid)) : NULL;
+    if (inner == NULL)
+        return QList<quint32>() << step.fid;
+    // Sub-cues: the first plays with GO; ones that follow on by themselves
+    // all play, in order.
+    QList<quint32> looks;
+    const QList<ChaserStep> subs = inner->steps();
+    for (int i = 0; i < subs.count(); ++i)
+    {
+        if (inner->isStepSkipped(i))
+            continue;
+        looks << subs.at(i).fid;
+        if (!every && step.subCues != ChaserStep::SubGoFollow)
+            break;
+    }
+    return looks;
+}
+
+/* The Scenes @a fid plays, in the order they start (a later one wins an LTP
+   channel they share): a Collection's members, at any depth. Other kinds
+   of function move by themselves, so have no one value to put back. */
+static void sceneLeaves(const Doc *doc, quint32 fid, QList<quint32> &out, int depth = 0)
+{
+    const Function *f = doc->function(fid);
+    if (f == NULL || depth > 8)
+        return;
+    if (f->type() == Function::SceneType)
+        out << fid;
+    else if (const Collection *coll = qobject_cast<const Collection *>(f))
+        for (quint32 member : coll->functions())
+            sceneLeaves(doc, member, out, depth + 1);
+}
+
+void ChaserRunner::restack(int index, QList<Universe *> universes)
+{
+    typedef QPair<quint32, quint32> Key;   // fixture, channel
+    // What a scene sets (CueOutput), once per restack: a layer that tracks
+    // through many cues is one Scene in each.
+    QHash<quint32, QList<QPair<Key, uchar> > > outputs;
+    auto output = [&](quint32 sid) -> const QList<QPair<Key, uchar> > & {
+        auto it = outputs.find(sid);
+        if (it != outputs.end())
+            return it.value();
+        QList<QPair<Key, uchar> > flat;
+        const QHash<quint32, QHash<quint32, uchar> > out = CueOutput::compute(const_cast<Doc *>(m_doc), sid);
+        for (auto fx = out.constBegin(); fx != out.constEnd(); ++fx)
+            for (auto ch = fx.value().constBegin(); ch != fx.value().constEnd(); ++ch)
+                flat << qMakePair(Key(fx.key(), ch.key()), ch.value());
+        return outputs.insert(sid, flat).value();
+    };
+    auto leavesOf = [&](const ChaserStep &step, bool every) {
+        QList<quint32> leaves;
+        for (quint32 fid : stepLooks(step, every))
+            sceneLeaves(m_doc, fid, leaves);
+        return leaves;
+    };
+
+    const QList<ChaserStep> steps = m_chaser->steps();
+    if (index < 0 || index >= steps.count())
+        return;
+
+    // What the target sets itself: its own scenes play it.
+    QSet<Key> own;
+    for (quint32 sid : leavesOf(steps.at(index), false))
+        for (const QPair<Key, uchar> &kv : output(sid))
+            own.insert(kv.first);
+
+    // Walking back up the list to its start: the last step before the
+    // target to set a channel gives its value (inside a step, its last
+    // scene to). A scene met again further up has nothing left to give.
+    QHash<Key, uchar> value;
+    QSet<quint32> seen;
+    for (int k = index - 1; k >= 0; --k)
+    {
+        if (m_chaser->isStepSkipped(k))
+            continue;
+        const QList<quint32> leaves = leavesOf(steps.at(k), false);
+        for (int i = leaves.count() - 1; i >= 0; --i)
+        {
+            const quint32 sid = leaves.at(i);
+            if (seen.contains(sid))
+                continue;
+            seen.insert(sid);
+            for (const QPair<Key, uchar> &kv : output(sid))
+                if (!own.contains(kv.first) && !value.contains(kv.first))
+                    value.insert(kv.first, kv.second);
+        }
+    }
+
+    // And what the steps played since the list started set, or a restack
+    // before this one put back, that none of those does: back to what it
+    // was when the list started. (Nothing else of the list has touched
+    // the stage.)
+    QSet<Key> needed(value.keyBegin(), value.keyEnd());
+    for (const Key &key : std::as_const(m_touched))
+        if (!own.contains(key))
+            needed.insert(key);
+    seen.clear();
+    for (int k : std::as_const(m_visited))
+    {
+        if (k <= index || k >= steps.count())
+            continue;
+        for (quint32 sid : leavesOf(steps.at(k), true))
+        {
+            if (seen.contains(sid))
+                continue;
+            seen.insert(sid);
+            for (const QPair<Key, uchar> &kv : output(sid))
+                if (!own.contains(kv.first))
+                    needed.insert(kv.first);
+        }
+    }
+
+    m_touched.unite(needed);
+
+    // Under everything, until the next step change. A channel no step
+    // before the target sets goes back to what it was when the list
+    // started.
+    QHash<int, QSharedPointer<GenericFader> > faders;
+    for (const Key &key : std::as_const(needed))
+    {
+        const Fixture *fxi = m_doc->fixture(key.first);
+        if (fxi == NULL || fxi->universe() >= quint32(universes.count()) || key.second >= fxi->channels())
+            continue;
+        const quint32 address = fxi->address() + key.second;
+        const int uni = int(fxi->universe());
+        Universe *universe = universes.at(uni);
+        if (universe == NULL || address >= UNIVERSE_SIZE)
+            continue;
+        // HTP intensity starts from zero every frame: nothing stays on it.
+        FadeChannel probe(m_doc, key.first, key.second);
+        if (probe.flags() & FadeChannel::HTP)
+            continue;
+
+        uchar v = 0;
+        if (value.contains(key))
+            v = value.value(key);
+        else if (uni < m_startStage.count() && int(address) < m_startStage.at(uni).size())
+            v = uchar(m_startStage.at(uni).at(int(address)));
+
+        QSharedPointer<GenericFader> fader = faders.value(uni);
+        if (fader.isNull())
+        {
+            fader = universe->requestFader(Universe::Tracked);
+            fader->setName(QStringLiteral("%1 (tracked)").arg(m_chaser->name()));
+            faders.insert(uni, fader);
+            m_restackFaders << qMakePair(universe, fader);
+        }
+        GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universe, key.first, key.second);
+        fc->setStart(quint32(v));
+        fc->setCurrent(quint32(v));
+        fc->setTarget(quint32(v));
+        fc->setFadeTime(0);
+        fc->setReady(true);
+    }
+}
+
+void ChaserRunner::dismissRestack()
+{
+    for (const QPair<Universe *, QSharedPointer<GenericFader> > &uf : std::as_const(m_restackFaders))
+        if (uf.first != NULL)
+            uf.first->dismissFader(uf.second);
+    m_restackFaders.clear();
+}
+
+void ChaserRunner::raiseMembers(const Function *f, QList<Universe *> universes, int depth)
+{
+    const Collection *coll = qobject_cast<const Collection *>(f);
+    if (coll == NULL || depth > 8)
+        return;
+    for (quint32 fid : coll->functions())
+    {
+        Function *member = m_doc->function(fid);
+        if (member == NULL || !member->isRunning())
+            continue;
+        if (Scene *scene = qobject_cast<Scene *>(member))
+            scene->raiseFaders(universes);
+        else
+            raiseMembers(member, universes, depth + 1);
+    }
 }
 
 void ChaserRunner::stopStepFunction(ChaserRunnerStep *step, bool preserveAttributes)
@@ -1050,6 +1299,15 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     // share by now, so it can go.
     stopHandedOverSteps();
 
+    // The cue started lately: its members in its order, once they have
+    // started (a member kept from the cue before is otherwise under them).
+    if (m_raiseFor > 0)
+    {
+        --m_raiseFor;
+        if (const ChaserRunnerStep *now = currentIndexStep())
+            raiseMembers(now->m_function, universes);
+    }
+
     switch (m_pendingAction.m_action)
     {
         case ChaserNextStep:
@@ -1069,6 +1327,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
                 qDebug() << "[ChaserRunner] Starting from step" << m_lastRunStepIdx << "@ offset" << m_startOffset;
                 startNewStep(m_lastRunStepIdx, timer, m_pendingAction.m_masterIntensity,
                              m_pendingAction.m_stepIntensity, m_pendingAction.m_fadeMode);
+                stepStarted(m_lastRunStepIdx, universes, true);
                 emit currentStepChanged(m_lastRunStepIdx);
             }
         break;
@@ -1177,6 +1436,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
 
             startNewStep(m_lastRunStepIdx, timer, m_pendingAction.m_masterIntensity,
                          m_pendingAction.m_stepIntensity, blend, prevStepRoundElapsed);
+            stepStarted(m_lastRunStepIdx, universes, false);
             emit currentStepChanged(m_lastRunStepIdx);
         }
         else

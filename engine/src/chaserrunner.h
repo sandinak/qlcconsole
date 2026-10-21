@@ -25,11 +25,14 @@
 #include <limits>
 #include <QList>
 #include <QMap>
+#include <QSharedPointer>
+#include <QSet>
 
 #include "function.h"
 #include "chaseraction.h"
 
 class QElapsedTimer;
+class GenericFader;
 class FadeChannel;
 class ChaserStep;
 class Function;
@@ -263,6 +266,54 @@ private:
 
     /** Stop and forget the steps held over by leaveSteps() a write ago. */
     void stopHandedOverSteps();
+
+    /************************************************************************
+     * Tracked state (Back, a jump)
+     ************************************************************************/
+private:
+    /**
+     * A step started from write(): restack the stage as the list played
+     * from the top would have left it, unless this is the step forward
+     * playback goes to next (GO, auto-follow), and put the step's members'
+     * faders in its order (raiseMembers()).
+     *
+     * Only for a step that plays a Collection (a Show Tree cue, or a chase
+     * held as its sub-cues): each is the cue's whole look, but an LTP
+     * channel the cue doesn't set -- the colour of a fixture it leaves dark,
+     * or lights with only a dimmer -- keeps what the stage had. GO from the
+     * cue before leaves it what the cues before set last; Back, or a jump,
+     * left what the cue played before the jump set. restack() writes what
+     * the cues before set last on those channels (or, for a channel only
+     * later cues set, what it was when the list started), under every
+     * fader, until the next step change: a leaving cue's fade-out ends in
+     * it, and the next GO carries on from it as from forward playback.
+     * Single Shot and Loop lists, played forward; other run orders have no
+     * "from the top" and are left as they were.
+     */
+    void stepStarted(int index, QList<Universe *> universes, bool jump);
+    /** Whether @a to is the step forward playback goes to from @a from
+     *  (-1: the list starting); @a wrap: round from the last step of a
+     *  Loop list to its first too (GO, auto-follow -- not a jump, which
+     *  plays the first cue as from the top). */
+    bool isNextStep(int from, int to, bool wrap) const;
+    /** What step @a step plays its look with: its Collection; for sub-cues
+     *  the first, or all of them, in order, when they follow on by
+     *  themselves -- or @a every (what Sub GO may have played). */
+    QList<quint32> stepLooks(const ChaserStep &step, bool every) const;
+    void restack(int index, QList<Universe *> universes);
+    /** Let go of the restacked state: its channels keep their values (LTP). */
+    void dismissRestack();
+    /** The faders of @a f's members (at any depth), in member order, on top
+     *  of their priority, so the later member wins what they both set
+     *  whichever of them was running first. */
+    void raiseMembers(const Function *f, QList<Universe *> universes, int depth = 0);
+
+    int m_restackFrom = -1;                 //! The step started last (-1: none yet)
+    QSet<int> m_visited;                    //! The steps started since the list started
+    QSet<QPair<quint32, quint32> > m_touched; //! Fixture channels a restack has put back
+    QList<QByteArray> m_startStage;         //! The universes when the list started
+    QList<QPair<Universe *, QSharedPointer<GenericFader> > > m_restackFaders;
+    int m_raiseFor = 0;                     //! Writes left to keep the current step's members in order
 
     /** Whether @a from and @a to are Collections with a member in common
      *  (at any depth), or one holds the other. */

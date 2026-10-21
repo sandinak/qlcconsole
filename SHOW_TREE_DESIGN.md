@@ -408,6 +408,27 @@ carry `Generated="ShowTree"` and their node id.
   chaserrunner, collection, sub-cues, show, showrunner, cuestack and show
   control tests unchanged and green. Cost: the old cue's own scenes start
   their fade-out one tick later when it shares something with the new cue.
+- **Back and jumps restack the tracked state (2026-10-21,
+  `engine/test/trackback`).** A Collection holds every layer the cue
+  plays, but not the LTP channels it doesn't set (a fixture it leaves dark,
+  or lights with only a dimmer): those keep what the stage had. Played from
+  the top that is what the cues before set last; after Back or a jump it
+  was what the cue left set. `ChaserRunner` now, on a step change that is
+  not the next step (Back, a jump, a start past the first cue) into a
+  Collection step, walks back up the list to its start (through Block
+  cues: what they don't set stays on stage too) and writes, for each
+  channel the cues before set, the last value set, and for one only the
+  cues played since the start (or an earlier restack) set, the value at the
+  start -- on a `Universe::Tracked` fader under every other, until the next
+  step change, so the leaving cue's LTP fade-out ends in it and the next GO
+  carries on from it. Values come from `CueOutput` per scene, each scene
+  once (a tracked layer is one Scene in many cues); effects are left out
+  (they move). Also on every step change the cue's members' faders are put
+  in member order (`Scene::raiseFaders`): a shared scene kept from the cue
+  before stayed under the ones the cue started, so in a cue that mixes the
+  winner of an LTP channel depended on the way in. Single Shot and Loop
+  lists played forward; a Loop's wrap with GO carries on, a jump to cue 1
+  plays it as from the top.
 - A changed layer is a new scene crossfading against the old one: colour LTP,
   intensity HTP — identical dimmers don't dip.
 - VC, footer GO, timecode, sub-cues, move-in-black look-ahead, show control and

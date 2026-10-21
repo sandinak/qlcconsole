@@ -361,6 +361,8 @@ protected:
 public:
     enum FaderPriority
     {
+        Tracked = -2,    /** Under everything: a cue list's tracked state put back
+                            after Back or a jump (ChaserRunner::restack) */
         Background = -1, /** Below Auto: the Show timeline's base layer, so a
                             Virtual Console action at Auto overrides it per-channel */
         Auto = 0,
