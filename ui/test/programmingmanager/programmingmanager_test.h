@@ -66,6 +66,7 @@ private slots:
     void unpatchedTargetsAreFlaggedInTheProgrammingView();
     void anEffectIsALookForWhatItDrives();
     void unpatchedAndSilentFixturesAreInTheFooter();
+    void aCurtainIsNotAskedForLightOutput();
     void theReadinessDialogFixesWhatIsSelected();
     void otherRigProblemsAreInTheFooter();
     void readinessItemsSitUnderHeadingsWithMoreThanOneFix();

@@ -17,6 +17,7 @@
 #include <QList>
 
 class QLCFixtureDef;
+class QLCFixtureMode;
 
 /** What is wrong with a fixture definition, and how to put it right.
  *
@@ -90,6 +91,13 @@ namespace FixtureDefCheck
 
     /** Everything wrong with or missing from @p def, errors first. */
     QList<Issue> check(const QLCFixtureDef *def);
+
+    /** Whether @p mode is a light at all, so that a missing light output
+     *  (lumens or power) or beam angle is worth a warning. Not one: a mode
+     *  whose definition says Emission="None" (a curtain, a motor, a relay),
+     *  and a fan, hazer or smoke machine with no intensity channel -- the
+     *  same answer for the definition check and the show's footer. */
+    bool expectsLight(const QLCFixtureMode *mode);
 }
 
 #endif

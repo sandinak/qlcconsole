@@ -50,18 +50,26 @@ StartupWindow::StartupWindow(int totalSteps, QWidget *parent)
     // the window, instead of pinning it to the left edge.
     header->addStretch();
     QLabel *icon = new QLabel(this);
-    icon->setPixmap(QIcon(":/qlcconsole.png").pixmap(48, 48));
+    // Drawn for the screen's pixel ratio, so it is sharp on a HiDPI display.
+    icon->setPixmap(QIcon(":/qlcconsole.png").pixmap(QSize(48, 48), devicePixelRatioF()));
     header->addWidget(icon);
 
     QVBoxLayout *titleBox = new QVBoxLayout;
-    QLabel *name = new QLabel(QStringLiteral(APPNAME), this);
+    // The release, as --version and the About box give it: "qlcconsole
+    // 0.2.2" -- what a user quotes when asking for help.
+    QLabel *name = new QLabel(QStringLiteral(APPNAME " " QLCCONSOLE_VERSION), this);
+    name->setObjectName(QStringLiteral("startupVersion"));
     name->setAlignment(Qt::AlignHCenter);
     QFont nameFont = name->font();
     nameFont.setBold(true);
     nameFont.setPointSize(nameFont.pointSize() + 4);
     name->setFont(nameFont);
-    QLabel *version = new QLabel(QStringLiteral(APPVERSION), this);
+    // The build it is, as the About box gives it: the build id and the
+    // commit, smaller.
+    QLabel *version = new QLabel(QStringLiteral("build " APPVERSION " (" QLCCONSOLE_GITREV ")"), this);
+    version->setObjectName(QStringLiteral("startupBuild"));
     version->setAlignment(Qt::AlignHCenter);
+    version->setTextInteractionFlags(Qt::TextSelectableByMouse);
     // Every theme in App::applyTheme() sets WindowText explicitly for
     // exactly this reason -- it's guaranteed readable against Window.
     // palette(mid) (shadow/groove tone, never meant for text) was tried

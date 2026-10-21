@@ -419,7 +419,10 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
         if (fx->isPatched() == false && fx->addressClash() == false)
             unpatched << fx;
         const QLCFixtureMode *mode = fx->fixtureMode();
-        if (mode != NULL && mode->physical().declaresOutput() == false)
+        // A curtain or a hazer declares no light output because it has
+        // none: only a light is asked for one.
+        if (mode != NULL && mode->physical().declaresOutput() == false
+            && FixtureDefCheck::expectsLight(mode))
         {
             const QLCFixtureDef *def = fx->fixtureDef();
             const QString type = (def != NULL)
