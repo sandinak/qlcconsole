@@ -58,7 +58,7 @@ QString ShowTreeCommand::grammar()
               "US in Steps colour Red (a child layer) · set \"Towers\" SL SR · "
               "Towers aim DS-Edge spread 0 group pairs cross mirror · cue look spread +5 · "
               "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · "
-              "name \"Hero\" · T1-CW … (a fixture) · function Haze · include 0.0.3 · "
+              "name \"Hero\" · T1-CW … (a fixture) · function Haze · include 0.0.3 · skip 0.0.3 [thru 0.0.5] · unskip · "
               "record [selected|running|lit] · list \"name\" · dup · reusable · use BackStage · unlink · "
               "detach [list] · convert [apply] · undo — Tab completes every word "
               "(again: the next), ↑ recalls");
@@ -203,6 +203,14 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
         add("release", "tracking", "release <groups> [, <groups>…]",
             "Turns Release on the cue's layer on, or off again: leaving the cue it goes back to the "
             "base cue, else dark.", { "release Towers" }, { "base" });
+        add("skip", "tracking", "skip [<cue> [thru <cue>]] [, <cue>…]",
+            "Skips cues (the selected one when none is named): GO, auto-follow and Back pass over them, and "
+            "they track as if they weren't in the list. A jump straight to one still plays it. Greyed and "
+            "struck through in the tree; unskip puts them back. ⌘/ in the tree toggles the selected cues.",
+            { "skip", "skip 0.0.3", "skip 0.0.3 thru 0.0.5", "skip 0.0.3, 0.0.7" }, { "unskip", "track" });
+        add("unskip", "tracking", "unskip [<cue> [thru <cue>]] [, <cue>…]",
+            "Puts skipped cues back (the selected one when none is named): GO plays them again.",
+            { "unskip", "unskip 0.0.3", "unskip 0.0.3 thru 0.0.5" }, { "skip" });
         add("include", "tracking", "include <cue number>",
             "Includes that cue's output (as if standing in it); again, takes it out.",
             { "include 0.0.3" }, { "track" });
@@ -1524,6 +1532,87 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             ctx.cue = invalidId();
         }
     }
+    else if (w0 == QLatin1String("skip") || w0 == QLatin1String("unskip"))
+    {
+        // skip [<cue> [thru <cue>]] [, <cue>…]: the cues named (a range in
+        // list order), else the selected one. One undo step.
+        r.word();
+        const bool skip = w0 == QLatin1String("skip");
+        QString rest = r.src.mid(r.i);
+        rest.replace(QLatin1Char(','), QStringLiteral(" , "));
+        const QStringList tokens = rest.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        r.i = int(r.src.length());
+        // A cue by number: in the selected list, its main list (from a
+        // sub-cue), or a sub-cue of it ("4.2").
+        const CueList *main = list->isSubCues() ? m_st->listOfCue(list->subOf) : list;
+        auto find = [&](const QString &num, const CueList **in) -> int {
+            for (const CueList *l : { list, main })
+            {
+                if (l == nullptr)
+                    continue;
+                for (int k = 0; k < l->cues.count(); ++k)
+                    if (compareCueNumbers(m_st->cueNumber(*l, k), num) == 0)
+                    {
+                        *in = l;
+                        return k;
+                    }
+            }
+            if (main != nullptr)
+                for (const Production &p : m_st->productions())
+                    for (const CueList &sl : p.lists)
+                        if (sl.isSubCues() && main->indexOf(sl.subOf) >= 0)
+                            for (int k = 0; k < sl.cues.count(); ++k)
+                                if (compareCueNumbers(m_st->cueNumber(sl, k), num) == 0)
+                                {
+                                    *in = &sl;
+                                    return k;
+                                }
+            return -1;
+        };
+        QList<quint32> cues;
+        for (int t = 0; t < tokens.count() && error.isEmpty(); ++t)
+        {
+            const QString &tok = tokens.at(t);
+            if (tok == QLatin1String(","))
+                continue;
+            const CueList *in = nullptr;
+            const int from = find(tok, &in);
+            if (from < 0)
+            {
+                error = tr("%1 <cue> [thru <cue>]: no cue %2").arg(w0, tok);
+                break;
+            }
+            int to = from;
+            if (t + 1 < tokens.count()
+                && tokens.at(t + 1).compare(QLatin1String("thru"), Qt::CaseInsensitive) == 0)
+            {
+                const CueList *in2 = nullptr;
+                to = t + 2 < tokens.count() ? find(tokens.at(t + 2), &in2) : -1;
+                if (to < 0 || in2 != in)
+                {
+                    error = tr("%1 <cue> thru <cue>: both cues of one list").arg(w0);
+                    break;
+                }
+                t += 2;
+            }
+            for (int k = qMin(from, to); k <= qMax(from, to); ++k)
+                if (!cues.contains(in->cues.at(k).id))
+                    cues << in->cues.at(k).id;
+        }
+        if (error.isEmpty() && tokens.isEmpty())
+        {
+            if (ctx.cue == invalidId() || list->indexOf(ctx.cue) < 0)
+                error = tr("Select a cue first (or: %1 0.0.3).").arg(w0);
+            else
+                cues << ctx.cue;
+        }
+        if (error.isEmpty() && !m_st->setCuesSkipped(cues, skip))
+            res.message = skip ? tr("already skipped") : tr("not skipped");
+        else if (error.isEmpty())
+            res.message = (skip ? tr("skipped %1: GO passes over") : tr("unskipped %1"))
+                          .arg(cues.count() == 1 ? QStringLiteral("1 cue") : tr("%1 cues").arg(cues.count()));
+        res.keepSelection = true;
+    }
     else if (w0 == QLatin1String("cue"))
     {
         r.word();
@@ -1954,7 +2043,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         if (ts.isEmpty())
         {
             const QString near = nearestWord(r.peek());
-            error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, "
+            error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, skip, "
                        "function, record, list, set, name, copy, paste, dup, reusable, use, unlink, detach, "
                        "convert, undo — type help.")
                     .arg(r.peek(), near.isEmpty() ? QString() : tr(" Did you mean “%1”? (help %1)").arg(near));
@@ -2735,6 +2824,19 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         r.word();
         if (r.atEnd())
             *out = cueNumbers(context);
+        return true;
+    }
+    if (w0 == QLatin1String("skip") || w0 == QLatin1String("unskip"))
+    {
+        // Cue numbers; after one, thru (or another).
+        r.word();
+        QString rest = r.src.mid(r.i);
+        rest.replace(QLatin1Char(','), QStringLiteral(" , "));
+        const QStringList tokens = rest.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        *out = cueNumbers(context);
+        if (!tokens.isEmpty() && tokens.last() != QLatin1String(",")
+            && tokens.last().compare(QLatin1String("thru"), Qt::CaseInsensitive) != 0)
+            out->prepend(QStringLiteral("thru"));
         return true;
     }
     if (w0 == QLatin1String("function") || w0 == QLatin1String("fn"))

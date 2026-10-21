@@ -167,6 +167,13 @@ private slots:
     void oneRuleUpAndDownTheChain();
     void aChildDimmerDimsItsParentsColourWithoutADimmer();
     void previewPlaysWhatGoPlays();
+    // Skipped cues (2026-10-21)
+    void skippedCuesTrackAsIfNotThere();
+    void aSkippedCueStillPlaysWhenJumpedToAndIncluded();
+    void skippedCuesBakeToSkippedSteps();
+    void skippedCuesSaveLoadAndUndo();
+    void skipAndUnskipTyped();
+    void importAndConvertKeepTheSkip();
 
 private:
     /** What a dry run of the import on a show file found (importARealShow). */

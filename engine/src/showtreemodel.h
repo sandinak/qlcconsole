@@ -231,6 +231,13 @@ namespace ShowTree
          *  it waits for Sub GO. The first sub-cue plays with GO. */
         bool follow = false;
         uint wait = 0;
+        /** Skipped (rehearsals, a cut song): GO, auto-follow and Back pass
+         *  over it, and it tracks as if it weren't in the list -- nothing
+         *  of it passes on, the cue after starts from the cue before it.
+         *  A jump straight to it still plays it (as from the cue before).
+         *  Its chaser step is skipped (ChaserStep::skip). Kept so it can
+         *  be put back; this use's, like its number (not a reusable's). */
+        bool skip = false;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);
@@ -404,7 +411,12 @@ namespace ShowTree
 
     /** Resolve every cue of @a list, in list order. Pure: no Doc. A list of
      *  sub-cues (CueList::subOf) starts from @a start: what its cue puts
-     *  on stage (that cue's ResolvedCue::layers). */
+     *  on stage (that cue's ResolvedCue::layers).
+     *
+     *  A skipped cue (Cue::skip) is resolved as a jump to it plays it --
+     *  from what the cue before it passes on -- but passes on nothing of
+     *  its own: its ResolvedCue::passOn is what it was handed, so every
+     *  cue after it resolves as if it weren't in the list. */
     QLC_ENGINE_EXPORT QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim = LineAimTest(),
                                                  const QList<ResolvedLayer> *start = nullptr);
 
@@ -428,6 +440,12 @@ namespace ShowTree
      *  Track or Block; a look of a Looks section is always Block, a sub-cue
      *  always Track). */
     QLC_ENGINE_EXPORT CueMode effectiveMode(const CueList &list, const Cue &cue);
+
+    /** The cue a cue at @a index starts from when it tracks: the nearest
+     *  cue before it that isn't skipped (-1: none, it is the first played). */
+    QLC_ENGINE_EXPORT int playedBefore(const CueList &list, int index);
+    /** The next cue after @a index that isn't skipped (-1: none). */
+    QLC_ENGINE_EXPORT int playedAfter(const CueList &list, int index);
 
     /** Whether resolving cue @a fromCue needs cue @a onCue, at any depth:
      *  it tracks from the cue before it (Track, Cue-only), it includes a

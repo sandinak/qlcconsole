@@ -294,7 +294,9 @@ private:
     /** Whether @a to is the step forward playback goes to from @a from
      *  (-1: the list starting); @a wrap: round from the last step of a
      *  Loop list to its first too (GO, auto-follow -- not a jump, which
-     *  plays the first cue as from the top). */
+     *  plays the first cue as from the top). Never out of a skipped step
+     *  (a jump played it): what it set is restacked away, as if it weren't
+     *  in the list. */
     bool isNextStep(int from, int to, bool wrap) const;
     /** What step @a step plays its look with: its Collection; for sub-cues
      *  the first, or all of them, in order, when they follow on by

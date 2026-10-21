@@ -291,9 +291,11 @@ ShowTreeController::ConvertPlan ShowTreeController::planConvertToTracking(quint3
     for (int i = 1; i < work.cues.count(); ++i)
     {
         const Cue &c = work.cues.at(i);
-        if (c.mode != CueMode::Block || c.reusable != invalidId())
+        // The cue before as it plays: past skipped ones (they pass nothing on).
+        const int p = playedBefore(work, i);
+        if (c.mode != CueMode::Block || c.reusable != invalidId() || p < 0)
             continue;
-        const quint32 prevId = work.cues.at(i - 1).id;
+        const quint32 prevId = work.cues.at(p).id;
         const QList<ResolvedCue> now = resolve(work, aimTest);
         QSet<QString> lit;
         for (const ResolvedLayer &rl : now.at(i).layers)
@@ -302,11 +304,11 @@ ShowTreeController::ConvertPlan ShowTreeController::planConvertToTracking(quint3
         auto attempt = [&](bool dropInclude, QStringList *said, int *releases, bool *dropped) -> bool {
             CueList cand = work;
             Cue &cc = cand.cues[i];
-            Cue &prev = cand.cues[i - 1];
+            Cue &prev = cand.cues[p];
             cc.mode = CueMode::ListDefault;
             *dropped = dropInclude && cc.includes.removeAll(prevId) > 0;
             *releases = 0;
-            for (const ResolvedLayer &pl : now.at(i - 1).passOn)
+            for (const ResolvedLayer &pl : now.at(p).passOn)
             {
                 if (lit.contains(pl.target.signature()))
                     continue;
@@ -462,7 +464,8 @@ ShowTreeController::ConvertPlan ShowTreeController::planConvertToTracking(quint3
     {
         const Cue &c = work.cues.at(i);
         if (c.reusable != invalidId() || work.cues.at(i + 1).reusable != invalidId()
-            || effectiveMode(work, c) != CueMode::Track)
+            || effectiveMode(work, c) != CueMode::Track
+            || c.skip || work.cues.at(i + 1).skip || work.cues.at(i - 1).skip)
             continue;
         const bool nextBlock = effectiveMode(work, work.cues.at(i + 1)) == CueMode::Block;
         CueList best;

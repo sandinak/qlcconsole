@@ -293,6 +293,13 @@ public:
     bool setListMode(quint32 listId, ShowTree::ListMode mode);
     bool setBaseCue(quint32 listId, quint32 cueId);
     bool setCueMode(quint32 cueId, ShowTree::CueMode mode);
+    /** Skip cues (Cue::skip), or put them back: GO, auto-follow and Back
+     *  pass over a skipped cue, and it tracks as if it weren't in the list;
+     *  a jump to it still plays it. Cues of a Looks section are left
+     *  alone. One undo step for them all ("Skip cue" / "Unskip cue");
+     *  false when none changed. */
+    bool setCuesSkipped(const QList<quint32> &cueIds, bool skip);
+    bool isCueSkipped(quint32 cueId) const;
     /** Layers of the cue on fixtures in common: the lower wins what both
      *  set (false, the tree's rule), or they mix as a chaser's collection
      *  does (true, how an import keeps them). One undo step. */

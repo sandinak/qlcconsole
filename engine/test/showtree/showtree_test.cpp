@@ -32,6 +32,7 @@
 #undef private
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
+#include "showcontrol.h"
 #include "paletteops.h"
 #include "inputoutputmap.h"
 #include "functionparent.h"
@@ -6274,4 +6275,476 @@ void ShowTree_Test::previewPlaysWhatGoPlays()
     QCOMPARE(int(over.value(0)), 255);
     QCOMPARE(int(over.value(2)), 40);
     st->stopPreview();
+}
+
+/****************************************************************************
+ * Skipped cues (2026-10-21)
+ ****************************************************************************/
+
+/* Branson: "in the show-tree we need a way to disable cues inline and skip
+   them". A skipped cue tracks as if it weren't in the list: every cue left
+   plays exactly what it plays with the skipped ones deleted -- for every
+   choice of cues to skip, whatever their mode (Block, Cue-only, Release). */
+void ShowTree_Test::skippedCuesTrackAsIfNotThere()
+{
+    CueList full;
+    full.mode = ListMode::Tracking;
+    full.cues << cue(1, "1", CueMode::ListDefault,
+                     { layer(11, Towers, { look(KeyColour, { Blue }), look(KeyDimmer, { Full }) }) });
+    full.cues << cue(2, "2", CueMode::ListDefault,
+                     { layer(21, USTs, { look(KeyColour, { Red }) }),
+                       layer(22, Towers, { look(KeyDimmer, { D45 }) }, true) });
+    full.cues << cue(3, "3", CueMode::Block, { layer(31, ATSpots, { look(KeyDimmer, { Full }) }) });
+    full.cues << cue(4, "4", CueMode::CueOnly, { layer(41, Towers, { look(KeyColour, { Green }) }) });
+    full.cues << cue(5, "5", CueMode::ListDefault, { layer(51, USTs, { look(KeyDimmer, { D45 }) }) },
+                     { look(KeyColour, { White }) });
+    full.cues << cue(6, "6", CueMode::ListDefault, { layer(61, StepTops, { look(KeyColour, { White }) }) });
+    const int n = int(full.cues.count());
+
+    for (int mask = 1; mask < (1 << n); ++mask)
+    {
+        CueList skipped = full, deleted = full;
+        for (int k = n - 1; k >= 0; --k)
+            if (mask & (1 << k))
+            {
+                skipped.cues[k].skip = true;
+                deleted.cues.removeAt(k);
+            }
+        const QList<ResolvedCue> rs = resolve(skipped), rd = resolve(deleted);
+        QCOMPARE(rs.count(), n);
+        int d = 0;
+        for (int k = 0; k < n; ++k)
+        {
+            if (mask & (1 << k))
+                continue;
+            QVERIFY2(stageOf(rs.at(k)) == stageOf(rd.at(d)),
+                     qPrintable(QString("skip mask %1: cue %2 plays differently").arg(mask).arg(k + 1)));
+            QVERIFY(stageOf(ResolvedCue { 0, rs.at(k).passOn, {}, {} })
+                    == stageOf(ResolvedCue { 0, rd.at(d).passOn, {}, {} }));
+            ++d;
+        }
+        // The cue after a skipped one tracks from a cue that plays.
+        for (int k = 0; k < n; ++k)
+            for (const ResolvedLayer &rl : rs.at(k).layers)
+                if (!rl.own)
+                    QVERIFY(!skipped.cue(rl.fromCue)->skip);
+    }
+
+    // What a skipped cue itself plays (a jump to it): from the cue before
+    // it that plays; it passes on what it was handed.
+    CueList list = full;
+    list.cues[1].skip = true;           // 2 skipped
+    list.cues[2].mode = CueMode::Track; // 3 tracks
+    list.cues[2].skip = true;           // and is skipped too
+    const QList<ResolvedCue> r = resolve(list);
+    CHECK_VALUE(r[1], Towers, KeyColour, Blue, Origin::Tracked, 1);
+    CHECK_VALUE(r[1], USTs, KeyColour, Red, Origin::Own, 2);
+    CHECK_VALUE(r[2], Towers, KeyColour, Blue, Origin::Tracked, 1);     // past 2, also skipped
+    QVERIFY(r[2].layer(groupTarget(USTs)) == nullptr);
+    CHECK_VALUE(r[3], Towers, KeyColour, Green, Origin::Own, 4);
+    CHECK_VALUE(r[3], Towers, KeyDimmer, Full, Origin::Tracked, 1);     // 2's release never happened
+    QCOMPARE(r[1].passOn.count(), r[0].passOn.count());
+
+    // The first played, the next played; a skipped Block cue is no block.
+    QCOMPARE(playedBefore(list, 3), 0);
+    QCOMPARE(playedAfter(list, 0), 3);
+    QCOMPARE(playedBefore(list, 0), -1);
+    QCOMPARE(playedAfter(list, 5), -1);
+    list.cues[0].skip = true;
+    QCOMPARE(playedBefore(list, 3), -1);
+
+    // The rebake chain: an edit to a cue reaches the skipped ones after it
+    // and the next one played; one to a skipped cue only itself.
+    CueList chain;
+    chain.mode = ListMode::Tracking;
+    for (quint32 id = 1; id <= 4; ++id)
+        chain.cues << cue(id, QString::number(id), CueMode::ListDefault,
+                          { layer(id * 10, Towers, { look(KeyDimmer, { Full }) }) });
+    chain.cues[1].skip = true;
+    QCOMPARE(rebakeChain(chain, 1), QList<quint32>({ 1, 2, 3, 4 }));
+    QCOMPARE(rebakeChain(chain, 2), QList<quint32>({ 2 }));
+    QVERIFY(!dependsOn(chain, 3, 2));
+    QVERIFY(dependsOn(chain, 3, 1));
+
+    // A skipped base cue is still what Release goes back to.
+    CueList based;
+    based.mode = ListMode::Tracking;
+    based.baseCue = 1;
+    based.cues << cue(1, "1", CueMode::Block, { layer(11, Towers, { look(KeyDimmer, { BaseDim }) }) });
+    based.cues << cue(2, "2", CueMode::Block, { layer(21, Towers, { look(KeyDimmer, { Full }) }, true) });
+    based.cues << cue(3, "3", CueMode::ListDefault, {});
+    based.cues[0].skip = true;
+    const QList<ResolvedCue> rbased = resolve(based);
+    CHECK_VALUE(rbased[2], Towers, KeyDimmer, BaseDim, Origin::Base, 1);
+
+    // Sub-cues: a skipped one is passed over too (4.3 from 4.1).
+    CueList subs;
+    subs.subOf = 99;
+    subs.mode = ListMode::Tracking;
+    subs.cues << cue(1, "", CueMode::ListDefault, { layer(11, Towers, { look(KeyColour, { Red }) }) });
+    subs.cues << cue(2, "", CueMode::ListDefault, { layer(21, Towers, { look(KeyColour, { Green }) }) });
+    subs.cues << cue(3, "", CueMode::ListDefault, { layer(31, USTs, { look(KeyColour, { Blue }) }) });
+    subs.cues[1].skip = true;
+    const QList<ResolvedCue> rsub = resolve(subs);
+    CHECK_VALUE(rsub[2], Towers, KeyColour, Red, Origin::Tracked, 1);
+    // ... and the first skipped: the next starts from what its cue plays.
+    subs.cues[1].skip = false;
+    subs.cues[0].skip = true;
+    ResolvedLayer parentLayer;
+    parentLayer.target = groupTarget(StepTops);
+    parentLayer.values.insert(KeyDimmer, ResolvedValue { look(KeyDimmer, { Full }), Origin::Own, 50 });
+    const QList<ResolvedLayer> start { parentLayer };
+    const QList<ResolvedCue> rsub2 = resolve(subs, LineAimTest(), &start);
+    QVERIFY(rsub2[1].layer(groupTarget(StepTops)) != nullptr);
+    QVERIFY(rsub2[1].layer(groupTarget(StepTops))->values.contains(KeyDimmer));
+    QVERIFY(rsub2[1].layer(groupTarget(Towers))->values.value(KeyColour).look.palettes == QList<quint32>({ Green }));
+
+    // Every cue skipped: each still resolves (a jump plays it), nothing
+    // passes on.
+    CueList all = full;
+    for (Cue &c : all.cues)
+        c.skip = true;
+    const QList<ResolvedCue> rall = resolve(all);
+    for (const ResolvedCue &rc : rall)
+        QVERIFY(rc.passOn.isEmpty());
+    QVERIFY(rall[0].layer(groupTarget(Towers)) != nullptr);
+}
+
+/* A jump to a skipped cue plays it -- what it has, from the cue before it
+   that plays; a cue that includes it plays its output as before. */
+void ShowTree_Test::aSkippedCueStillPlaysWhenJumpedToAndIncluded()
+{
+    CueList list;
+    list.mode = ListMode::Tracking;
+    list.cues << cue(1, "1", CueMode::ListDefault, { layer(11, Towers, { look(KeyDimmer, { Full }) }) });
+    list.cues << cue(2, "2", CueMode::Block, { layer(21, USTs, { look(KeyColour, { Red }) }) });
+    list.cues << cue(3, "3", CueMode::ListDefault, {}, {}, { 2 });
+    list.cues[1].skip = true;
+    const QList<ResolvedCue> r = resolve(list);
+    CHECK_VALUE(r[1], USTs, KeyColour, Red, Origin::Own, 2);
+    QVERIFY(r[1].layer(groupTarget(Towers)) == nullptr);                // Block: from nothing
+    CHECK_VALUE(r[2], USTs, KeyColour, Red, Origin::Included, 2);       // the include plays it
+    CHECK_VALUE(r[2], Towers, KeyDimmer, Full, Origin::Tracked, 1);     // tracks past it
+    QVERIFY(canInclude(list, 1, 2));
+}
+
+/* Baked: the cue's chaser step is skipped, so GO, Back and auto-follow pass
+   over it (the runner) and a jump plays it; GO from stopped with the first
+   skipped starts at the second; every cue skipped, GO does nothing. */
+void ShowTree_Test::skippedCuesBakeToSkippedSteps()
+{
+    QList<FixtureGroup *> g;
+    QList<quint32> d;
+    for (int i = 0; i < 4; ++i)
+    {
+        g << group(QString("G%1").arg(i), { m_fixtures[i] });
+        d << dimmer(50 * (i + 1), QString("D%1").arg(i));
+    }
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 4; ++i)
+    {
+        c << st->addCue(listId, i - 1, QString("C%1").arg(i + 1));
+        QVERIFY(st->setLayerLook(c[i], st->addLayer(c[i], groupTarget(g[i]->id())), st->lookForPalette(d[i])));
+    }
+    QVERIFY(st->setCuesSkipped({ c[2] }, true));
+    QCOMPARE(st->undoText(), QString("Skip cue"));
+    QVERIFY(!st->setCuesSkipped({ c[2] }, true));       // already: nothing, no step
+    QVERIFY(st->isCueSkipped(c[2]));
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(ch != nullptr);
+    QCOMPARE(ch->stepsCount(), 4);
+    QVERIFY(!ch->isStepSkipped(0) && !ch->isStepSkipped(1) && ch->isStepSkipped(2) && !ch->isStepSkipped(3));
+    // The skipped cue's collection is still there (a jump plays it).
+    QVERIFY(m_doc->function(st->cue(c[2])->collection) != nullptr);
+
+    // GO, GO, GO: 1, 2, 4 -- 3 passed over, its level never on stage.
+    go(ch);
+    QHash<quint32, uchar> out = settle(6);
+    QCOMPARE(ch->currentStepIndex(), 0);
+    go(ch);
+    out = settle(6);
+    QCOMPARE(ch->currentStepIndex(), 1);
+    go(ch);
+    out = settle(6);
+    QCOMPARE(ch->currentStepIndex(), 3);
+    QCOMPARE(int(out.value(2)), 0);
+    QCOMPARE(int(out.value(3)), 200);
+    QCOMPARE(int(out.value(1)), 100);               // tracked through
+    // Back: 2, not 3.
+    {
+        ChaserAction back;
+        back.m_action = ChaserPreviousStep;
+        back.m_masterIntensity = 1.0;
+        back.m_stepIntensity = 1.0;
+        back.m_fadeMode = Chaser::FromFunction;
+        ch->setAction(back);
+        settle(6);
+        QCOMPARE(ch->currentStepIndex(), 1);
+    }
+    // A jump to it (a double-click, show control's GO 3): it plays.
+    {
+        ChaserAction jump;
+        jump.m_action = ChaserSetStepIndex;
+        jump.m_stepIndex = 2;
+        jump.m_masterIntensity = 1.0;
+        jump.m_stepIntensity = 1.0;
+        jump.m_fadeMode = Chaser::FromFunction;
+        ch->setAction(jump);
+        out = settle(6);
+        QCOMPARE(ch->currentStepIndex(), 2);
+        QCOMPARE(int(out.value(2)), 150);
+    }
+    // Show control names it: played, and says so.
+    {
+        QSignalSpy said(m_doc->showControl(), &ShowControl::commandHandled);
+        ShowControl::Request req;
+        req.command = ShowControl::Go;
+        req.chaser = ch->id();
+        req.cue = QStringLiteral("3");
+        QVERIFY(m_doc->showControl()->execute(req));
+        QVERIFY(!said.isEmpty());
+        QVERIFY2(said.last().first().toString().contains("skipped"), qPrintable(said.last().first().toString()));
+    }
+    stopAll();
+
+    // Auto-follow passes over it too: 2 follows on by itself, into 4.
+    {
+        Cue two = *st->cue(c[1]);
+        two.hold = 100;
+        QVERIFY(st->setCue(two));
+        ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+        go(ch);
+        settle(4);
+        go(ch);
+        settle(30);
+        QCOMPARE(ch->currentStepIndex(), 3);
+        stopAll();
+        QVERIFY(st->undo());
+    }
+
+    // The first skipped: GO from stopped plays the second.
+    QVERIFY(st->setCuesSkipped({ c[0] }, true));
+    ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(ch);
+    out = settle(6);
+    QCOMPARE(ch->currentStepIndex(), 1);
+    QCOMPARE(int(out.value(0)), 0);
+    stopAll();
+
+    // Every cue skipped: GO plays nothing (show control says why).
+    QVERIFY(st->setCuesSkipped(c, true));
+    QCOMPARE(st->undoText(), QString("Skip 4 cues"));
+    ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    {
+        ShowControl::Request req;
+        req.command = ShowControl::Go;
+        req.chaser = ch->id();
+        QVERIFY(!m_doc->showControl()->execute(req));
+    }
+    // Put back, all at once: one step.
+    QVERIFY(st->setCuesSkipped(c, false));
+    QCOMPARE(st->undoText(), QString("Unskip 4 cues"));
+    for (int i = 0; i < 4; ++i)
+        QVERIFY(!ch->isStepSkipped(i));
+
+    // A look of a Looks section isn't skipped (it is fired, not GOne through).
+    const quint32 look = st->addLook(st->productions().first().id, "Hit");
+    if (look != invalidId())
+    {
+        QVERIFY(!st->setCuesSkipped({ look }, true));
+        QVERIFY(!st->isCueSkipped(look));
+    }
+}
+
+/* Saved with the show (the cue's Skip and its step's), undone and redone
+   as one step; a show from before loads with nothing skipped. */
+void ShowTree_Test::skippedCuesSaveLoadAndUndo()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(half));
+    Q_UNUSED(c3);
+
+    QVERIFY(st->setCuesSkipped({ c2 }, true));
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(st->undo());
+    QVERIFY(!st->isCueSkipped(c2));
+    QVERIFY(!ch->isStepSkipped(1));
+    QVERIFY(st->redo());
+    QVERIFY(st->isCueSkipped(c2));
+    QVERIFY(ch->isStepSkipped(1));
+
+    const QByteArray xml = engineXml(m_doc);
+    QVERIFY(xml.contains("Skip=\"1\""));
+    Doc *other = new Doc(this);
+    {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+    }
+    QVERIFY(other->showTree()->isCueSkipped(c2));
+    QVERIFY(!other->showTree()->isCueSkipped(c1));
+    Chaser *och = qobject_cast<Chaser *>(other->function(ch->id()));
+    QVERIFY(och != nullptr && och->isStepSkipped(1));
+    QCOMPARE(productionXml(other->showTree()->productions().first()), productionXml(st->productions().first()));
+    delete other;
+
+    // Before skipping existed: no Skip anywhere, nothing skipped.
+    QByteArray old = xml;
+    old.replace(" Skip=\"1\"", "");
+    Doc *older = new Doc(this);
+    {
+        QXmlStreamReader r(old);
+        r.readNextStartElement();
+        QVERIFY(older->loadXML(r, false));
+    }
+    for (const Production &p : older->showTree()->productions())
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                QVERIFY(!c.skip);
+    delete older;
+}
+
+/* skip 0.0.3 · skip 0.0.3 thru 0.0.5 · skip 0.0.1, 0.0.6 · unskip · on a
+   sub-cue; Tab offers cue numbers and thru. One undo step each. */
+void ShowTree_Test::skipAndUnskipTyped()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ShowTreeCommand::Result r = cmd.run("list \"Show\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    QList<quint32> c;
+    for (int i = 1; i <= 6; ++i)
+        c << st->addCueNumbered(ctx.list, QString("0.0.%1").arg(i), QString("C%1").arg(i));
+    auto skipped = [&]() {
+        QList<int> out;
+        for (int i = 0; i < c.count(); ++i)
+            if (st->isCueSkipped(c[i]))
+                out << i + 1;
+        return out;
+    };
+
+    r = cmd.run("skip 0.0.3", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(skipped(), QList<int>({ 3 }));
+    QCOMPARE(st->undoText(), QString("skip 0.0.3"));
+
+    r = cmd.run("skip 0.0.3 thru 0.0.5", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(skipped(), QList<int>({ 3, 4, 5 }));
+    QVERIFY(st->undo());                                // one step for the range
+    QCOMPARE(skipped(), QList<int>({ 3 }));
+    QVERIFY(st->redo());
+
+    r = cmd.run("unskip 0.0.4", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(skipped(), QList<int>({ 3, 5 }));
+
+    r = cmd.run("skip 0.0.1, 0.0.6", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(skipped(), QList<int>({ 1, 3, 5, 6 }));
+
+    r = cmd.run("unskip 0.0.6 thru 0.0.1", ctx);       // either way round
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(skipped(), QList<int>());
+
+    // None named: the selected cue.
+    ctx.cue = c[1];
+    r = cmd.run("skip", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(skipped(), QList<int>({ 2 }));
+    r = cmd.run("unskip", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(skipped(), QList<int>());
+    r = cmd.run("unskip", ctx);
+    QVERIFY(r.ok);
+    QVERIFY(r.message.contains("not skipped"));
+
+    // Wrong: nothing changes.
+    const QString before = st->undoText();
+    r = cmd.run("skip 9.9.9", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("no cue 9.9.9"));
+    r = cmd.run("skip 0.0.2 thru", ctx);
+    QVERIFY(!r.ok);
+    QCOMPARE(st->undoText(), before);
+    QCOMPARE(skipped(), QList<int>());
+
+    // A sub-cue by its number: its sub-chaser's step.
+    const quint32 sub1 = st->addSubCue(c[1], "Hit");
+    const quint32 sub2 = st->addSubCue(c[1], "Sweep", sub1);
+    QVERIFY(sub2 != invalidId());
+    r = cmd.run("skip 0.0.2.2", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(st->isCueSkipped(sub2));
+    const CueList *subs = st->cueList(st->subCueList(c[1]));
+    QVERIFY(subs != nullptr);
+    Chaser *subChaser = qobject_cast<Chaser *>(m_doc->function(subs->chaser));
+    QVERIFY(subChaser != nullptr && subChaser->isStepSkipped(1));
+
+    // Tab: cue numbers, then thru.
+    QStringList options;
+    QVERIFY(cmd.candidates("skip ", ctx, &options));
+    QVERIFY(options.contains("0.0.3"));
+    QVERIFY(cmd.candidates("skip 0.0.3 ", ctx, &options));
+    QVERIFY(options.contains("thru"));
+    QVERIFY(ShowTreeCommand::helpText("skip").contains("thru"));
+    QVERIFY(ShowTreeCommand::grammar().contains("skip 0.0.3"));
+}
+
+/* Import: a step skipped in the chaser is a skipped cue. Convert to
+   tracking keeps it, and every cue plays as before. */
+void ShowTree_Test::importAndConvertKeepTheSkip()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[1] });
+    const quint32 dA = dimmer(100, "A");
+    const quint32 dB = dimmer(200, "B");
+    Scene *sA = groupScene(m_doc, "TowersA", a->id(), { dA });
+    Scene *sB = groupScene(m_doc, "USTsB", b->id(), { dB });
+    Collection *one = collection(m_doc, "0.0.1-One", { sA->id() });
+    Collection *two = collection(m_doc, "0.0.2-Two", { sA->id(), sB->id() });
+    Collection *three = collection(m_doc, "0.0.3-Three", { sA->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    ChaserStep s2(two->id(), 0, Function::infiniteSpeed(), 0);
+    s2.skip = true;
+    chaser->addStep(s2);
+    chaser->addStep(ChaserStep(three->id(), 0, Function::infiniteSpeed(), 0));
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    const CueList *list = st->cueList(rep.list);
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->cues.count(), 3);
+    QVERIFY(!list->cues.at(0).skip);
+    QVERIFY(list->cues.at(1).skip);
+    QVERIFY(!list->cues.at(2).skip);
+    for (const QString &note : rep.notes)
+        QVERIFY2(!note.contains("skipped"), qPrintable(note));
+    Chaser *made = qobject_cast<Chaser *>(m_doc->function(list->chaser));
+    QVERIFY(made != nullptr && made->isStepSkipped(1));
+
+    const quint32 skippedId = list->cues.at(1).id;
+    ShowTreeController::ConvertPlan plan = st->planConvertToTracking(rep.list);
+    QVERIFY2(plan.ok, qPrintable(plan.why));
+    QVERIFY(st->convertToTracking(rep.list, &plan));
+    QVERIFY(st->isCueSkipped(skippedId));
+    list = st->cueList(rep.list);
+    QCOMPARE(list->mode, ListMode::Tracking);
+    made = qobject_cast<Chaser *>(m_doc->function(list->chaser));
+    QVERIFY(made != nullptr && made->isStepSkipped(1));
 }

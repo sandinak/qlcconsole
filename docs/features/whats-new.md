@@ -41,6 +41,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   rolls from box to box. **stagger** sets how far, as a part of the
   effect's cycle.
 
+### Show Tree: skip a cue
+
+- **Skip a cue without deleting it.** Untick the box on a cue's row (or
+  right-click → **Skip cue**, or **⌘/**, or type `skip 0.0.3` or
+  `skip 0.0.3 thru 0.0.5`) and GO, auto-follow and Back pass over it. It
+  turns grey and struck through; untick it again, or `unskip`, to put it
+  back. Its changes don't track on: the next cue plays as if it weren't in
+  the list. A jump straight to it still plays it. See
+  [Skipping cues](show-tree.md#skipping-cues).
+
 ### Definition updates
 
 - **Old definitions, brought up to date.** **Fixtures → Definition

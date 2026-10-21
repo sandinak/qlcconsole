@@ -669,6 +669,10 @@ bool ChaserRunner::isNextStep(int from, int to, bool wrap) const
         return true;
     if (from < 0)
         return to == m_chaser->firstPlayableStep();
+    // Out of a skipped step (a jump played it): played from the top it
+    // wasn't there, so what it set is put back as the cues before had it.
+    if (m_chaser->isStepSkipped(from))
+        return false;
     const int count = m_chaser->stepsCount();
     int next = from + 1;
     while (next < count && m_chaser->isStepSkipped(next))
@@ -781,7 +785,9 @@ void ChaserRunner::restack(int index, QList<Universe *> universes)
     seen.clear();
     for (int k : std::as_const(m_visited))
     {
-        if (k <= index || k >= steps.count())
+        // Steps played after the target, and skipped ones played before it
+        // (a jump): from the top, neither has set anything yet.
+        if (k == index || k >= steps.count() || (k < index && !m_chaser->isStepSkipped(k)))
             continue;
         for (quint32 sid : leavesOf(steps.at(k), true))
         {

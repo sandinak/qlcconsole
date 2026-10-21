@@ -114,6 +114,12 @@ private slots:
     void trackingIsABadgeWithDetailsOnHover();
     void theTreeColumnsResizeAndAreRemembered();
 
+    // Skipped cues (2026-10-21)
+    void skipCuesInTheTree();
+    /** A picture of a real show with cues skipped: QLC_SKIPCUE_SHOW (a
+     *  .qlcc, read only) and QLC_SKIPCUE_SHOT (a .png). */
+    void pictureOfSkippedCues();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

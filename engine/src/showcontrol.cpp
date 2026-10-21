@@ -248,6 +248,9 @@ bool ShowControl::execute(const Request &request)
                 go(chaser, step);
             if (step >= 0 && cue.isEmpty())
                 what += tr(" cue %1").arg(cueName(chaser, step, sub));
+            // A skipped cue named: played, as asked (GO alone passes over it).
+            else if (!cue.isEmpty() && sub < 0 && chaser->isStepSkipped(step))
+                what += tr(" (skipped: played as named)");
             return finish(true, name);
 
         case Load:
