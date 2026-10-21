@@ -59,6 +59,7 @@
 #include "qlcphysical.h"
 #include "showstatus.h"
 #include "showembedding.h"
+#include "fixturedefupdates.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
 #include "fixturedefcheck.h"
@@ -1031,6 +1032,43 @@ void AppUtil::updateShowEmbeddingStatus(Doc *doc)
                                             "", problems.count()),
                 QString(), problems);
     }
+}
+
+void AppUtil::updateDefinitionUpdatesStatus(Doc *doc)
+{
+    ShowStatus *status = ShowStatus::instance();
+    if (doc == nullptr)
+    {
+        status->clearStatus("definitions.outofdate");
+        return;
+    }
+    const FixtureDefUpdates::Scan scan = FixtureDefUpdates::scan(doc);
+    QStringList items, groups;
+    QVariantList files;
+    bool used = false;
+    foreach (const FixtureDefUpdates::Candidate &c, scan.candidates)
+    {
+        if (c.verdict != FixtureDefUpdates::OutOfDate)
+            continue;
+        used = used || c.usedByShow;
+        items << QStringLiteral("%1 — %2 (%3 → %4)")
+                     .arg(c.mine.manufacturer + QLatin1Char(' ') + c.mine.model,
+                          QFileInfo(c.mine.path).fileName(),
+                          c.mine.versionText(), c.current.versionText());
+        groups << (c.usedByShow ? QCoreApplication::translate("AppUtil", "Used by this show")
+                                : QCoreApplication::translate("AppUtil", "Not used by this show"));
+        files << c.mine.path;
+    }
+    if (items.isEmpty())
+        status->clearStatus("definitions.outofdate");
+    else
+        status->setStatus("definitions.outofdate", used ? ShowStatus::Warning : ShowStatus::Ok,
+            QCoreApplication::translate("AppUtil", "%n of your fixture definition(s) are older than "
+                                        "the current version", "", items.count()),
+            QCoreApplication::translate("AppUtil", "A newer version of the same fixture comes with "
+                                        "qlcconsole or is in your folder. Review… shows what an "
+                                        "update changes; the old file is kept, and can be put back."),
+            items, files, groups);
 }
 
 void AppUtil::updateLoadProblems(const QString &errorLog)

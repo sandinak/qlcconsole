@@ -12,6 +12,35 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+### Added
+- **Definition updates.** Fixtures → **Definition Updates…** lists the
+  user folder's fixture definitions that are older than the current version
+  of the same Manufacturer/Model (the shipped one, or a newer user copy,
+  including stale originals left in the synced QLC+ folder that no link
+  leads to), split into used by the open show / not used, with a diff
+  (modes and channels added, removed, changed; a mode whose channel layout
+  changes is flagged) and **Update from Current**, **Update All**, **Keep
+  Mine**, **Ignore This Version**, **Undo Last Update**. "Older" is
+  decided conservatively: same bytes → nothing; another author, or a
+  channel/mode the current one lacks → customised, never "old"; otherwise
+  the Creator version (a qlcconsole build vs a later QLC+ release is
+  "can't tell"), then — between the user's own files only — the file time.
+  Every update backs the old files up to `Fixtures/.backup/<date>/` with a
+  manifest, and undo restores them (dates included) unless changed since.
+  Links into the QLC+ folder: update the linked (synced) original, or
+  replace the link with a local file; shipped files are never written. A
+  definition the open show uses is swapped in place (fixtures keep their
+  mode by name); a missing mode or a changed channel count is refused, a
+  changed channel kind needs confirming with the fixtures and functions
+  listed. Footer entry `definitions.outofdate` with **Review…**.
+  `FixtureDefUpdates` (engine), `DefinitionUpdatesDialog`.
+- **File → Show Definitions…** lists everything a .qlcc carries and how it
+  compares with this computer's, with a per-definition diff. "Which looks
+  newer" now compares the Creator versions before the file times. **Undo**
+  after Use This Computer's (one step, however many rows), and the
+  compatibility lines name the functions using the affected fixtures.
+  `ShowEmbedding::clearUndo()` / `undoChoices()` / `computerFileChanged()`.
+
 ### Changed
 - **The boot window shows the version.** The window shown while qlcconsole
   starts names the release ("qlcconsole 0.2.2") and, smaller below it, the

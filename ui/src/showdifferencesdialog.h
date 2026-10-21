@@ -27,6 +27,10 @@ class QLabel;
 class Doc;
 
 /**
+ * File → Show Definitions… lists everything the show carries, each with how
+ * it compares with this computer's (@p everything); the footer's Review…
+ * lists only what differs and is not dealt with.
+ *
  * Review… for the footer's "N items in this show differ from this
  * computer's" (SHOW_EMBEDDING_DESIGN.md §4): one row per difference -- what
  * it is, which side looks newer, and whether switching to this computer's
@@ -38,7 +42,13 @@ class ShowDifferencesDialog final : public QDialog
     Q_OBJECT
 
 public:
-    explicit ShowDifferencesDialog(Doc *doc, QWidget *parent = nullptr);
+    explicit ShowDifferencesDialog(Doc *doc, QWidget *parent = nullptr, bool everything = false);
+
+    /** Tests: answer every question with @p yes instead of asking, and say
+     *  nothing afterwards; -1 asks again. */
+    static void setAutoAnswer(int yes);
+    /** The detail shown for the selected row (tests). */
+    QString detailText() const;
 
     /** The rows' keys, in order (tests). */
     QStringList keys() const;
@@ -56,6 +66,8 @@ public slots:
     /** Write the show's copy over this computer's for the selected rows
      *  (asks first). */
     void installShows();
+    /** Undo the last Use This Computer's (one or many rows), in one step. */
+    void undoChoices();
 
 private slots:
     void rebuild();
@@ -63,10 +75,14 @@ private slots:
 
 private:
     QStringList selectedKeys() const;
+    bool ask(const QString &title, const QString &text);
+    void tell(const QString &title, const QString &text);
 
     Doc *m_doc;
+    bool m_everything;
     QTreeWidget *m_tree;
     QLabel *m_detail;
+    QPushButton *m_undo;
     QPushButton *m_use;
     QPushButton *m_useAll;
     QPushButton *m_keep;

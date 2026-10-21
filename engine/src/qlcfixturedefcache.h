@@ -244,6 +244,13 @@ public:
     /** Take @p def out of the cache without deleting it. False when it was
      *  not in it. */
     bool take(QLCFixtureDef *def);
+    /** Take @p def out of the cache and keep it until the cache goes: a
+     *  definition replaced while something may still point at it (an
+     *  update from FixtureDefUpdates). */
+    void retire(QLCFixtureDef *def);
+    /** The file @p path was rewritten: whether it is the same as the other
+     *  local file of its fixture (duplicates()) is checked again. */
+    void noteFileChanged(const QString &path);
 
     /** Files under @p path are a show's own copies (the show embedding's
      *  working folder): never copied into the show cache. Empty: none. */
@@ -262,6 +269,7 @@ private:
     QMap<QString, QString> m_failedDefinitions;   //!< path -> why it failed
     QList<Duplicate> m_duplicates;
     QString m_showCopiesDir;
+    QList<QLCFixtureDef *> m_retired;
 };
 
 /** @} */

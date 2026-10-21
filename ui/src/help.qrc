@@ -1,6 +1,7 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource>
     <file alias="help/README.md">../../docs/features/README.md</file>
+    <file alias="help/definition-updates.md">../../docs/features/definition-updates.md</file>
     <file alias="help/effects.md">../../docs/features/effects.md</file>
     <file alias="help/fixture-manager.md">../../docs/features/fixture-manager.md</file>
     <file alias="help/getting-started.md">../../docs/features/getting-started.md</file>

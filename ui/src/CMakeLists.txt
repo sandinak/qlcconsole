@@ -197,6 +197,7 @@ add_library(${module_name}
     showstatus.cpp showstatus.h
     showstatusdialog.cpp showstatusdialog.h
     showdifferencesdialog.cpp showdifferencesdialog.h
+    definitionupdatesdialog.cpp definitionupdatesdialog.h
     simpledesk.cpp simpledesk.h
     simpledeskengine.cpp simpledeskengine.h
     speeddial.cpp speeddial.h

@@ -12,6 +12,31 @@ The latest changes, newest first. Each links to the guide with the detail.
   a light. Hazers, smoke machines and fans with no light of their own are
   left out too; a real light with no output set is still listed.
 
+### Definition updates
+
+- **Old definitions, brought up to date.** **Fixtures → Definition
+  Updates…** lists your fixture definitions that are older than the
+  current version of the same fixture — the included one, or a newer copy
+  of your own — the ones the open show uses first. Each says what an
+  update changes (modes and channels added, removed or changed), and
+  **Update from Current**, **Update All**, **Keep Mine** or **Ignore This
+  Version**. Every update keeps the old files in a dated backup, and **Undo
+  Last Update** puts them back. A copy someone changed on purpose is never
+  called old. The footer says when there are any. See
+  [Definition Updates](definition-updates.md).
+- **Synced QLC+ folder.** Links into the old QLC+ folder are handled
+  explicitly: update the synced original (every computer gets it), or
+  replace the link with a file of its own. Old originals left behind there
+  are found too.
+- **Old copies inside a show.** **File → Show Definitions…** lists what a
+  .qlcc carries and how each compares with this computer's — which is
+  newer (by the version that saved it, then the dates), and what changes.
+  **Use This Computer's** updates the show's copy, each fixture keeping its
+  mode by name; a changed channel layout names the fixtures and functions
+  it touches and asks first; **Undo** goes back in one step. When the
+  show's copy is the newer one, **Install the Show's** puts it in your
+  folder. See [Old definitions inside a show](definition-updates.md#old-definitions-inside-a-show).
+
 ## 0.2.1 (October 2026)
 
 ### Focus mode: the controller on screen

@@ -528,6 +528,16 @@ If you have two local files for one fixture, the most recently changed is
 used, and the footer lists the unused ones ("same as X" / "older than X,
 not used") with **Move to Trash**.
 
+### Out-of-date definitions
+
+**Fixtures → Definition Updates…** lists your definitions that are older
+than the current version of the same fixture — the included one, or a
+newer copy of your own — split into those the open show uses and the rest,
+with what an update would change. **Update from Current** keeps a backup
+and can be undone; linked files in the synced QLC+ folder are handled
+explicitly; a customised copy is never called old. The footer says when
+there are any. See [Definition Updates](definition-updates.md).
+
 ### The fixture editor
 
 **"Edit Fixture Definition..."** (right-click a fixture) opens the fixture
@@ -630,24 +640,30 @@ When the show opens, each copy is compared with this computer's:
 
 - **Which looks newer** — "Updated on this computer since the show was
   saved", "This computer has an older copy", or "Can't tell which is
-  newer" (from the file's time when it was saved into the show, and the
-  file's time here).
+  newer" (from the version that saved each copy, then the file's time when
+  it was saved into the show and the file's time here). Pick a row to see
+  what changes, mode by mode and channel by channel.
 - **Safe to switch?** — *Compatible* when every mode the show's fixtures
   use is in this computer's copy with the same channels in the same order,
   and every setting the show's looks and RGB matrices set is still there,
-  of the same kind. Otherwise *Not compatible*, naming the fixtures or
-  looks and what changed ("Mode “4ch” is 5 channels here, 4 in the show:
-  2 fixtures would need re-patching").
+  of the same kind. Otherwise *Not compatible*, naming the fixtures, the
+  functions that use them, or the looks, and what changed ("Mode “4ch”
+  goes 4 → 5 channels: 2 fixtures would need re-patching").
 - **Use This Computer's** — the show switches now (asking first when it's
   not compatible) and carries this computer's copy from the next save.
   A switch that would need re-patching — a mode that's gone, or fixtures
   that would grow into the next one — is refused, naming them.
-  **Use This Computer's for All Compatible** does every safe one at once.
+  **Use This Computer's for All Compatible** does every safe one at once,
+  and **Undo** goes back to the show's copies in one step.
 - **Keep the Show's** — stop warning about it. Remembered in the show,
   until this computer's copy changes again.
 - **Install the Show's** — writes the show's copy over this computer's
   (asking first; the old file goes to the Trash), so every show opened here
   uses it.
+
+**File → Show Definitions…** lists everything the show carries, whether
+or not it differs, with the same choices. See
+[Old definitions inside a show](definition-updates.md#old-definitions-inside-a-show).
 
 **Save never swaps versions:** it writes the copy the show is using. A
 newer definition on this computer reaches the show only through **Use This

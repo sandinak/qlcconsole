@@ -28,6 +28,7 @@
 
 #include "showembedding.h"
 #include "qlcfixturedefcache.h"
+#include "fixturedefupdates.h"
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "rgbscriptscache.h"
@@ -146,29 +147,6 @@ namespace
             case ShowEmbedding::RGBScript:         return QStringLiteral("RGBScripts");
         }
         return QString();
-    }
-
-    /* What a channel IS, for "the same channels in the same order". */
-    QString channelKind(const QLCChannel *ch)
-    {
-        if (ch == nullptr)
-            return QString();
-        QString k = QLCChannel::groupToString(ch->group());
-        if (ch->group() == QLCChannel::Intensity && ch->colour() != QLCChannel::NoColour)
-            k += QLatin1Char(' ') + QLCChannel::colourToString(ch->colour());
-        if (ch->controlByte() == QLCChannel::LSB)
-            k += QObject::tr(" (fine)");
-        return k;
-    }
-
-    QString namesOf(const QList<Fixture *> &fixtures)
-    {
-        QStringList names;
-        for (int i = 0; i < fixtures.size() && i < 4; ++i)
-            names << fixtures.at(i)->name();
-        if (fixtures.size() > 4)
-            names << QObject::tr("%n more", "", fixtures.size() - 4);
-        return names.join(QStringLiteral(", "));
     }
 
     QString paramKind(const EffectScript::ParamDef &d)
@@ -793,6 +771,7 @@ void ShowEmbedding::restoreComputer()
     }
     m_showDefs.clear();
     m_displaced.clear();
+    m_undo.clear();
     if (m_doc->rgbScriptsCache() != nullptr)
         m_doc->rgbScriptsCache()->clearShowScripts();
     if (cache != nullptr)
@@ -954,6 +933,21 @@ void ShowEmbedding::collect()
 
 ShowEmbedding::Newer ShowEmbedding::newer(const Item &item) const
 {
+    /* A definition says which version saved it: that first (an embedded
+       copy is the same bytes as the file it came from). */
+    if (item.kind == FixtureDefinition && !item.computerPath.isEmpty())
+    {
+        QFile f(item.computerPath);
+        if (f.open(QIODevice::ReadOnly))
+        {
+            bool known = false;
+            const int v = FixtureDefUpdates::compareVersions(
+                FixtureDefUpdates::infoFromBytes(item.bytes).creatorVersion,
+                FixtureDefUpdates::infoFromBytes(f.readAll()).creatorVersion, &known);
+            if (known && v != 0)
+                return v < 0 ? ComputerNewer : ShowNewer;
+        }
+    }
     if (!item.fromModified.isValid() || item.computerPath.isEmpty())
         return NewerUnknown;
     const QDateTime here = QFileInfo(item.computerPath).lastModified();
@@ -991,44 +985,11 @@ ShowEmbedding::Compatibility ShowEmbedding::compatibility(const QString &key) co
         const QLCFixtureDef *to = m_displaced.value(key);
         if (from == nullptr || to == nullptr)
             return c;
-        QMap<QString, QList<Fixture *> > byMode;
-        foreach (Fixture *fx, m_doc->fixtures())
-            if (fx != nullptr && fx->fixtureDef() == from && fx->fixtureMode() != nullptr)
-                byMode[fx->fixtureMode()->name()] << fx;
-        for (auto m = byMode.constBegin(); m != byMode.constEnd(); ++m)
-        {
-            const QLCFixtureMode *a = const_cast<QLCFixtureDef *>(from)->mode(m.key());
-            const QLCFixtureMode *b = const_cast<QLCFixtureDef *>(to)->mode(m.key());
-            const int n = m.value().size();
-            if (b == nullptr)
-            {
-                c.problems << tr("Mode “%1” is not in this computer's copy: %n fixture(s) would "
-                                 "lose their mode (%2)", "", n).arg(m.key(), namesOf(m.value()));
-                continue;
-            }
-            if (a == nullptr)
-                continue;
-            if (a->channels().size() != b->channels().size())
-            {
-                c.problems << tr("Mode “%1” is %2 channels here, %3 in the show: %n fixture(s) "
-                                 "would need re-patching (%4)", "", n)
-                                  .arg(m.key()).arg(b->channels().size()).arg(a->channels().size())
-                                  .arg(namesOf(m.value()));
-                continue;
-            }
-            for (int i = 0; i < a->channels().size(); ++i)
-            {
-                const QString ka = channelKind(a->channel(quint32(i)));
-                const QString kb = channelKind(b->channel(quint32(i)));
-                if (ka != kb)
-                {
-                    c.problems << tr("Mode “%1” channel %2 is %3 here, %4 in the show: %n "
-                                     "fixture(s) would do something else (%5)", "", n)
-                                      .arg(m.key()).arg(i + 1).arg(kb, ka, namesOf(m.value()));
-                    break;
-                }
-            }
-        }
+        /* Every mode the fixtures use: missing, or a different number of
+           channels, needs re-patching; a channel that does something else
+           names the fixtures and the functions it would change. */
+        const FixtureDefUpdates::Impact im = FixtureDefUpdates::impact(m_doc, from, to, tr("this computer's copy"));
+        c.problems << im.refused << im.confirm;
         c.compatible = c.problems.isEmpty();
         return c;
     }
@@ -1232,6 +1193,13 @@ bool ShowEmbedding::useComputers(const QString &key, QString *error)
                             "copy:\n\n%1").arg(blocked.join(QLatin1Char('\n')));
             return false;
         }
+        Switched undo;
+        undo.key = key;
+        undo.show = from;
+        undo.computer = to;
+        for (Fixture *fx : users)
+            undo.modes.insert(fx->id(), fx->fixtureMode()->name());
+        m_undo << undo;
         QLCFixtureDefCache *cache = m_doc->fixtureDefCache();
         cache->substitute(to);
         m_retired << from;
@@ -1242,6 +1210,9 @@ bool ShowEmbedding::useComputers(const QString &key, QString *error)
     }
     else
     {
+        Switched undo;
+        undo.key = key;
+        m_undo << undo;
         const QString show = it->showPath;
         if (!it->fromShowFolder)
             QFile::remove(show);
@@ -1255,6 +1226,94 @@ bool ShowEmbedding::useComputers(const QString &key, QString *error)
     m_doc->setModified();
     emit changed();
     return true;
+}
+
+void ShowEmbedding::clearUndo()
+{
+    m_undo.clear();
+}
+
+bool ShowEmbedding::undoChoices()
+{
+    if (m_undo.isEmpty())
+        return false;
+    QLCFixtureDefCache *cache = m_doc->fixtureDefCache();
+    while (!m_undo.isEmpty())
+    {
+        const Switched sw = m_undo.takeLast();
+        Item *it = find(sw.key);
+        if (it == nullptr || it->usingShow)
+            continue;
+        if (it->kind == FixtureDefinition)
+        {
+            if (sw.show == nullptr || cache == nullptr)
+                continue;
+            m_retired.removeAll(sw.show);
+            cache->substitute(sw.show);
+            m_showDefs.insert(sw.key, sw.show);
+            if (sw.computer != nullptr)
+                m_displaced.insert(sw.key, sw.computer);
+            for (auto m = sw.modes.constBegin(); m != sw.modes.constEnd(); ++m)
+            {
+                Fixture *fx = m_doc->fixture(m.key());
+                if (fx != nullptr && fx->fixtureDef() == sw.computer)
+                    fx->setFixtureDefinition(sw.show, sw.show->mode(m.value()));
+            }
+        }
+        else
+        {
+            const QString computer = it->computerPath;
+            if (!it->fromShowFolder && materialize(*it).isEmpty())
+                continue;
+            if (it->kind == RGBScript && !it->name.isEmpty() && m_doc->rgbScriptsCache() != nullptr)
+                m_doc->rgbScriptsCache()->setShowScript(it->name, it->showPath);
+            refreshScripts();
+            repointScripts(computer, it->showPath, *it);
+        }
+        it->usingShow = true;
+    }
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+void ShowEmbedding::computerFileChanged(const QString &path)
+{
+    bool any = false;
+    for (Item &it : m_items)
+    {
+        if (it.kind != FixtureDefinition || !samePath(it.computerPath, path))
+            continue;
+        bool ok = false;
+        const QByteArray bytes = readFile(path, &ok);
+        if (!ok)
+            continue;
+        any = true;
+        it.computerSha = sha256(bytes);
+        it.state = it.computerSha == it.sha256 ? Identical : Different;
+        /* The copy set aside while the show's is in use: the new one, for
+           Use This Computer's and for when the show closes. */
+        if (QLCFixtureDef *old = m_displaced.value(it.key()))
+        {
+            QLCFixtureDef *fresh = new QLCFixtureDef();
+            if (fresh->loadXMLData(bytes) && fresh->manufacturer() == it.manufacturer
+                && fresh->model() == it.model)
+            {
+                fresh->setIsUser(true);
+                fresh->setDefinitionSourceFile(old->definitionSourceFile());
+                fresh->setLoaded(true);
+                m_displaced.insert(it.key(), fresh);
+                m_retired << old;
+                for (Switched &sw : m_undo)
+                    if (sw.computer == old)
+                        sw.computer = fresh;
+            }
+            else
+                delete fresh;
+        }
+    }
+    if (any)
+        emit changed();
 }
 
 void ShowEmbedding::keepShows(const QString &key)

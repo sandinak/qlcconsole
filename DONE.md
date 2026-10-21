@@ -6,6 +6,46 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-21 — Definition updates: user folder and show-embedded *(feat/definition-updates)*
+
+Branson: "for old definitions we should have a way to update them in place
+from current as a fix option ... ALSO need the same for the showfile stored
+definitions". `FixtureDefUpdates` (engine/src/fixturedefupdates.*): `scan()`
+groups the user folder's .qxf by Manufacturer/Model with the shipped copy
+(cache definitions()/duplicates()) and the QLC+ folder's unlinked copies;
+the current one is the newest by `compare()` (Creator version, then — user
+files only — mtime); `judge()` says Identical / OutOfDate / Customised /
+Newer (another author or a channel/mode the current lacks → Customised;
+`compareVersions()` treats a qlcconsole build vs a later QLC+ release as
+unknown). `diff()`/`modeFit()`/`impact()` (refused: missing mode or channel
+count; confirm: same count, a channel's kind changed — names fixtures and
+functions via Scene values/targets/groups, EFX, RGBMatrix groups).
+`update()` backs up to `Fixtures/.backup/<stamp>/` + manifest.json, writes
+via QSaveFile to the link's target (UpdateLinkedOriginal) or replaces the
+link (ReplaceLink; forced for shipped targets), swaps the cache def and
+remaps the doc's fixtures by mode name (`QLCFixtureDefCache::retire()` keeps
+the old def alive), tells ShowEmbedding (`computerFileChanged()`); `undo()`
+restores bytes + mtime, refuses a file changed since. Keep Mine / Ignore
+This Version in QSettings (`FixtureDefUpdates/keep|ignore/<path hash>`).
+UI: `DefinitionUpdatesDialog` (Fixtures → Definition Updates…, footer
+`definitions.outofdate` → Review…); `ShowDifferencesDialog` gets an
+"everything" mode (File → Show Definitions…), a per-definition diff, and
+Undo (`ShowEmbedding::clearUndo()/undoChoices()`); `ShowEmbedding::newer()`
+compares Creator versions first; `compatibility()` now uses `impact()`.
+Tests: fixturedefupdates_test (engine, 19 + an opt-in real-data case via
+QLC_DEFUPDATE_REAL_HOME/SHOW), definitionupdates_test (UI). Guide:
+docs/features/definition-updates.md.
+
+Real data (read-only scan of copies, 2026-10-21): DanceHysteria-0.6 already
+embeds the fixed 36LED (identical); 0.4/0.5 embed the old one (Pan fine) →
+"Updated on this computer", not compatible (channel 1 Pan (fine) → Pan;
+AT1/AT2-36 fixtures and their scenes listed), Use This Computer's works and
+undoes. On ender, `~/Library/Application Support/QLC+` points at
+`~/Crew/SynologyDrive/QLC+`, which no longer exists (the folder is
+`~/Crew/QLC+`): 51 of 52 legacy links in the user folder dangle. With the
+link valid, 12 stale copies show in the QLC+ folder, including both
+Branson-36LED-Moving-Head(.qxf, " 2.qxf") at 4.12.6.
+
 ### 2026-10-21 — Auto-open shutters; Settings → Advanced *(feat/shutter-auto-open)*
 
 Board Q10 (Branson: "configurable option with default to open ... a tab for
