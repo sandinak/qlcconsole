@@ -26,6 +26,8 @@
 #include <QLabel>
 #include <QPointer>
 #include <QSettings>
+#include <QClipboard>
+#include <QTreeWidget>
 
 #include "focusmode_test.h"
 #include "iopluginstub.h"
@@ -36,6 +38,8 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
+#include "controllertestdialog.h"
+#include "controllerkeepalive.h"
 #include "focuscontrolmap.h"
 #include "focusmodepanel.h"
 #include "focussession.h"
@@ -428,6 +432,124 @@ void FocusMode_Test::aDisconnectFallsBackToTheKeyboard()
     QCOMPARE(panel->controlMap()->mode(), FocusControlMap::ControllerMap);
     QVERIFY(!note->isVisible());
     QVERIFY(!back->isVisible());
+}
+
+namespace
+{
+/** The keep-alive's platform side, inert: no real activity in a test. */
+class QuietBackend final : public ControllerKeepAlive::Backend
+{
+public:
+    void beginActivity(const QString &) override {}
+    void endActivity() override {}
+    ControllerKeepAlive::Permission inputMonitoring() const override
+    { return ControllerKeepAlive::PermissionGranted; }
+};
+}
+
+void FocusMode_Test::aPausedControllerSaysWhy()
+{
+    ControllerKeepAlive *keep = m_doc->programmer()->controllerKeepAlive();
+    keep->setBackend(new QuietBackend);
+    plugInPad();
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why, int(FocusSession::ControllerInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    panel->show();
+    // A tool window that a Mac would otherwise hide whenever the app is not in front.
+    QVERIFY(panel->testAttribute(Qt::WA_MacAlwaysShowToolWindow));
+    QVERIFY(keep->isHeld());
+
+    QLabel *paused = panel->findChild<QLabel *>("focusPausedNote");
+    QVERIFY(paused != nullptr);
+    QVERIFY(!paused->isVisible());
+
+    // The plugin knows the controller cannot be read: said, with its reason.
+    m_stub->m_inputProblems = { { 0, "macOS is not letting qlcconsole read the controller." } };
+    emit m_doc->programmer()->focusControllerChanged();
+    QVERIFY(paused->isVisible());
+    QCOMPARE(paused->text(), QString("Controller paused: macOS is not letting qlcconsole read "
+                                     "the controller."));
+    m_stub->m_inputProblems.clear();
+    emit m_doc->programmer()->focusControllerChanged();
+    QVERIFY(!paused->isVisible());
+
+    // Asleep, then found again by a press.
+    keep->setSystemState(ControllerKeepAlive::Asleep);
+    QVERIFY(paused->isVisible());
+    QVERIFY2(paused->text().contains("asleep"), qPrintable(paused->text()));
+    keep->setSystemState(ControllerKeepAlive::Waking);
+    QVERIFY2(paused->text().contains("after the Mac slept"), qPrintable(paused->text()));
+    emit m_doc->inputOutputMap()->inputValueChanged(0, BtnLB, 0, QString());
+    QVERIFY(!paused->isVisible());
+
+    // On the keyboard the controller is not in use: nothing to say.
+    keep->setSystemState(ControllerKeepAlive::Asleep);
+    panel->setInputDevice(FocusSession::KeyboardInput, false);
+    QVERIFY(!paused->isVisible());
+    keep->setSystemState(ControllerKeepAlive::Awake);
+
+    m_doc->programmer()->focusSession()->discardAll();
+    panel->requestExit();
+    QTRY_VERIFY(panel.isNull());
+    QVERIFY(!keep->isHeld());
+}
+
+void FocusMode_Test::theControllerTestListsEachInput()
+{
+    plugInPad();
+    m_stub->m_connectionInfo = { { 0, "Bluetooth LE \302\267 Xbox Series X|S Controller (045E:0B13)" } };
+    const int before = m_stub->m_diagnostics;
+    FocusModeSetupDialog setup(m_doc, 0, m_heads);
+    QPushButton *test = setup.findChild<QPushButton *>("focusControllerTest");
+    QVERIFY(test != nullptr);
+    test->click();
+    QPointer<ControllerTestDialog> dlg = ControllerTestDialog::instance();
+    QVERIFY(dlg != nullptr);
+    QCOMPARE(m_stub->m_diagnostics, before + 1);
+    QVERIFY(dlg->pluginCount() >= 1);
+    QLabel *devices = dlg->findChild<QLabel *>("controllerTestDevices");
+    QVERIFY(devices != nullptr);
+    QVERIFY2(devices->text().contains("045E:0B13"), qPrintable(devices->text()));
+
+    const QString dev = "Xbox Wireless Controller";
+    const QString conn = "Bluetooth LE";
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 1, BtnA, 255);
+    m_stub->emitDiagnostic(0, dev, conn, "Button 1", 0, BtnA, 0);
+    m_stub->emitDiagnostic(0, dev, conn, "X", 65535, LX, 255);
+    m_stub->emitDiagnostic(0, dev, conn, "Consumer 0xb2 (Record)", 1, -1, -1);
+    QCOMPARE(dlg->rowCount(), 3);   // one row per element, however often
+
+    QTreeWidget *tree = dlg->findChild<QTreeWidget *>("controllerTestInputs");
+    QVERIFY(tree != nullptr);
+    const QTreeWidgetItem *a = tree->topLevelItem(0);
+    QCOMPARE(a->text(2), QString("Button 1"));
+    QCOMPARE(a->text(8), QString("2"));           // seen twice
+    QCOMPARE(a->text(4), QString("0 \342\200\246 1"));     // the raw values seen
+    QVERIFY2(a->text(7).contains("role a"), qPrintable(a->text(7)));
+    QVERIFY2(a->text(7).contains("Focus: Save"), qPrintable(a->text(7)));
+    QVERIFY2(tree->topLevelItem(1)->text(7).contains("Focus: Nudge"),
+             qPrintable(tree->topLevelItem(1)->text(7)));
+    QVERIFY2(tree->topLevelItem(2)->text(7).startsWith("nothing"),
+             qPrintable(tree->topLevelItem(2)->text(7)));
+
+    // The log: the devices, a row per element, every event in order.
+    const QString log = dlg->logText();
+    QVERIFY(log.contains("045E:0B13"));
+    QVERIFY(log.contains("Button 1\t"));
+    QVERIFY(log.contains("Consumer 0xb2 (Record)"));
+    QCOMPARE(log.count("Xbox Wireless Controller  Button 1 = "), 2);
+    QPushButton *copy = dlg->findChild<QPushButton *>("controllerTestCopy");
+    QVERIFY(copy != nullptr);
+    copy->click();
+    QCOMPARE(QGuiApplication::clipboard()->text(), log);
+
+    // Closed: the plugins stop reporting.
+    dlg->close();
+    QTRY_VERIFY(dlg.isNull());
+    QCOMPARE(m_stub->m_diagnostics, before);
+    m_stub->m_connectionInfo.clear();
 }
 
 void FocusMode_Test::shots()

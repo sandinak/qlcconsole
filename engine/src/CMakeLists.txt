@@ -114,6 +114,7 @@ add_library(${module_name} SHARED
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
     focussession.cpp focussession.h
+    controllerkeepalive.cpp controllerkeepalive.h
     gamepadrole.cpp gamepadrole.h
     parkeffect.cpp parkeffect.h
     markeffect.cpp markeffect.h
@@ -196,10 +197,18 @@ if(APPLE)
     set_target_properties(${module_name} PROPERTIES
         MACOSX_BUNDLE FALSE
     )
+    # ControllerKeepAlive's macOS side: App Nap, sleep/wake, Input Monitoring.
+    target_sources(${module_name} PRIVATE controllerkeepalive_mac.mm)
+    set_source_files_properties(controllerkeepalive_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_link_libraries(${module_name} PUBLIC
         "-framework AudioToolbox"
         "-framework CoreAudio"
         "-framework CoreFoundation"
+    )
+    target_link_libraries(${module_name} PRIVATE
+        "-framework AppKit"
+        "-framework Foundation"
+        "-framework IOKit"
     )
 endif()
 

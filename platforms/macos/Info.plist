@@ -42,6 +42,11 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Access the local network for DMX-related protocols</string>
 
+	<!-- Game controllers (Focus mode, the follow spot) need no key here and
+	     no entitlement under the hardened runtime, in the foreground or the
+	     background: there is no usage-description key for Input Monitoring,
+	     whose prompt (when macOS asks at all) has fixed text. -->
+
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

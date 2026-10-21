@@ -24,6 +24,7 @@
 #include "qlcioplugin.h"
 #include "qlcfile.h"
 #include "programmercontroller.h"
+#include "controllerkeepalive.h"
 #include "monitorproperties.h"
 #include "inputoutputmap.h"
 #include "qlcfixturedef.h"
@@ -651,6 +652,68 @@ void FocusSession_Test::performEndsIt()
     QVERIFY(!s->isActive());
     QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(a->id()).panOffsetDeg, 1.0f);
     m_doc->setMode(Doc::Design);
+}
+
+namespace
+{
+class CountingBackend final : public ControllerKeepAlive::Backend
+{
+public:
+    CountingBackend(int *begun, int *ended) : m_begun(begun), m_ended(ended) {}
+    void beginActivity(const QString &) override { ++*m_begun; }
+    void endActivity() override { ++*m_ended; }
+    ControllerKeepAlive::Permission inputMonitoring() const override
+    { return ControllerKeepAlive::PermissionGranted; }
+
+private:
+    int *m_begun;
+    int *m_ended;
+};
+}
+
+void FocusSession_Test::theSessionKeepsTheControllerAwake()
+{
+    int begun = 0, ended = 0;
+    ControllerKeepAlive *keep = m_doc->programmer()->controllerKeepAlive();
+    QVERIFY(keep != nullptr);
+    keep->setBackend(new CountingBackend(&begun, &ended));
+
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    StageTarget *t = makeTarget(m_doc, "Centre", QVector3D(3.0f, 4.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+
+    QVERIFY(!keep->isHeld());
+    QVERIFY(s->start(optionsFor({ a->id() }, t->id())));
+    QVERIFY(keep->isHeld());
+    QCOMPARE(begun, 1);
+    // No controller patched: paused, and said why.
+    QVERIFY(keep->isPaused());
+    QVERIFY2(keep->pauseReason().contains("no controller"), qPrintable(keep->pauseReason()));
+    s->stop();
+    QVERIFY(!keep->isHeld());
+    QCOMPARE(ended, 1);
+    QVERIFY(!keep->isPaused());
+
+    // A controller the plugin cannot read: the plugin's reason is the one said.
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 14, "lb" }, { 15, "rb" } };
+    stub->m_inputProblems = { { 0, "macOS is not letting qlcconsole read the controller." } };
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(s->start(optionsFor({ a->id() }, t->id())));
+    QVERIFY(keep->isHeld());
+    QCOMPARE(keep->pauseReason(), QString("macOS is not letting qlcconsole read the controller."));
+    // Readable again: the next look (the programmer asks every 2 s) clears it.
+    stub->m_inputProblems.clear();
+    emit m_doc->programmer()->focusControllerChanged();
+    QVERIFY(!keep->isPaused());
+    s->stop();
+    QCOMPARE(begun, 2);
+    QCOMPARE(ended, 2);
+    stub->m_channelRoles.clear();
 }
 
 QTEST_MAIN(FocusSession_Test)

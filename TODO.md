@@ -302,6 +302,17 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   and plugging it back offers it (does HID's rescan emit
   configurationChanged on unplug on macOS, and how quickly?); that on
   Keyboard a resting / knocked pad moves nothing.
+  **Background input and mappings (2026-10-21,
+  fix/controller-background-mapping):** built and tested offscreen only.
+  With the real pad, on USB and on Bluetooth: open **Controller test…**,
+  press everything once, Save the log -- every row's *Maps to* must be the
+  control pressed (it says whether GameController or which report layout
+  read it); then in Focus mode switch to another app, let the display
+  sleep, lock the screen, sleep the Mac, and let the pad switch itself off
+  (15 min) and back on: the stick must keep moving the head behind other
+  apps, and after each the pad must work again with no restart (or the
+  panel says **Controller paused:** why). Check `pmset -g assertions` shows
+  qlcconsole's activity only while Focus mode / a bound follow spot is on.
 
 - **Matrix effects on the XL-450s (built 2026-10-18, feat/matrix-effects)**
   — the fourteen Matrix effects were checked offscreen only (no DMX from

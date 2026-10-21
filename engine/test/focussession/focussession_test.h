@@ -64,6 +64,9 @@ private slots:
      *  the device profile, View+Menu asks for Focus mode, and while it is on
      *  the buttons and sticks are its own (no chaser step, no follow spot). */
     void theControllerReachesItThroughTheProgrammer();
+    /** The session keeps the app out of App Nap while it runs, and says
+     *  when its controller is paused -- with the plugin's reason. */
+    void theSessionKeepsTheControllerAwake();
     /** Going into Perform ends Focus mode and drops unsaved nudges. */
     void performEndsIt();
     /** What the views draw for the focused head is where it is MEANT to

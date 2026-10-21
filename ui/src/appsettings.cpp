@@ -34,6 +34,7 @@
 #include <QTabWidget>
 
 #include "appsettings.h"
+#include "controllertestdialog.h"
 #include "showtreeview.h"
 #include "measurementunits.h"
 #include "monitor.h"
@@ -91,6 +92,24 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     outInfo->setStyleSheet("color: gray; font-size: 10px;");
     outLayout->addWidget(outInfo);
     advLayout->addWidget(outGroup);
+
+    // --- Advanced: Game controllers ---
+    QGroupBox *padGroup = new QGroupBox(tr("Game controllers"), advancedPage);
+    padGroup->setObjectName(QStringLiteral("settingsControllers"));
+    padGroup->setProperty("helpTopic", QStringLiteral("lighting-studio.md#controller-test"));
+    QHBoxLayout *padLayout = new QHBoxLayout(padGroup);
+    QLabel *padInfo = new QLabel(tr("See every input a controller sends and what it maps to."),
+                                 padGroup);
+    padInfo->setWordWrap(true);
+    padLayout->addWidget(padInfo, 1);
+    QPushButton *padTest = new QPushButton(tr("Controller test\342\200\246"), padGroup);
+    padTest->setObjectName(QStringLiteral("settingsControllerTest"));
+    padTest->setAutoDefault(false);
+    connect(padTest, &QPushButton::clicked, this, [this]() {
+        ControllerTestDialog::open(m_app->doc(), this);
+    });
+    padLayout->addWidget(padTest);
+    advLayout->addWidget(padGroup);
 
     // Autosave Group
     QGroupBox *autosaveGroup = new QGroupBox(tr("Autosave"), this);

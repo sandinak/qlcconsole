@@ -2,7 +2,10 @@
 <!DOCTYPE HIDProfile>
 <HIDProfile>
   <Name>Microsoft Xbox Controller</Name>
-  <!-- Matches all wired Xbox 360 / One / Series controllers by Microsoft VID -->
+  <!-- Every Xbox 360 / One / Series / Elite controller, wired and wireless.
+       Each Bluetooth firmware has its own product ID, so they are all listed:
+       on a Mac the HID plugin reads every one of them (USB, Bluetooth,
+       Bluetooth LE) into the layout below. -->
   <Vendor id="0x045E" name="Microsoft"/>
   <Settings sensitivity="1.00" deadzone="0.050"/>
   <Products>
@@ -13,6 +16,16 @@
     <Product id="0x02E3" name="Xbox One Elite"/>
     <Product id="0x02EA" name="Xbox One S"/>
     <Product id="0x0B12" name="Xbox Series X/S"/>
+    <Product id="0x0B00" name="Xbox Elite Series 2"/>
+    <Product id="0x0B0A" name="Xbox Adaptive"/>
+    <Product id="0x02E0" name="Xbox One S (Bluetooth, first firmware)"/>
+    <Product id="0x02FD" name="Xbox One S (Bluetooth)"/>
+    <Product id="0x0B05" name="Xbox Elite Series 2 (Bluetooth)"/>
+    <Product id="0x0B0C" name="Xbox Adaptive (Bluetooth)"/>
+    <Product id="0x0B13" name="Xbox Series X/S (Bluetooth LE)"/>
+    <Product id="0x0B20" name="Xbox One S (Bluetooth LE)"/>
+    <Product id="0x0B21" name="Xbox Adaptive (Bluetooth LE)"/>
+    <Product id="0x0B22" name="Xbox Elite Series 2 (Bluetooth LE)"/>
   </Products>
   <!-- role= is the control's standard gamepad role (QLCIOPlugin::inputChannelRole):
        tools that use the controller as a gamepad, such as Focus mode, map by
@@ -42,5 +55,6 @@
     <Button index="12" role="dpad_down">D-pad Down</Button>
     <Button index="13" role="dpad_left">D-pad Left</Button>
     <Button index="14" role="dpad_right">D-pad Right</Button>
+    <Button index="15">Share</Button>
   </Buttons>
 </HIDProfile>

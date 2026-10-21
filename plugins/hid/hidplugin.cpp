@@ -20,6 +20,7 @@
 #include <QApplication>
 #include <QMessageBox>
 #include <QStringList>
+#include <QTimer>
 #include <QDebug>
 #include <QDir>
 
@@ -42,6 +43,7 @@
   #include "win32/hidwindowsjoystick.h"
 #elif defined (__APPLE__) || defined(Q_OS_MACOS)
   #include "hidosxjoystick.h"
+  #include "hidosxhotplug.h"
 #endif
 
 /*****************************************************************************
@@ -53,7 +55,35 @@ void HIDPlugin::init()
     loadProfiles(QLCFile::systemDirectory(QString(HIDPROFILEDIR), QString(".qxhid")));
     loadProfiles(QLCFile::userDirectory(QString(USERHIDPROFILEDIR), QString(HIDPROFILEDIR),
                                         QStringList() << "*.qxhid"));
+
+    m_rescanTimer = new QTimer(this);
+    m_rescanTimer->setSingleShot(true);
+    connect(m_rescanTimer, &QTimer::timeout, this, &HIDPlugin::rescanDevices);
+
     rescanDevices();
+
+#if defined (__APPLE__) || defined(Q_OS_MACOS)
+    /* The app's hotplug monitor sees USB only: a Bluetooth pad switched off
+       and on again, or back after the Mac slept, was never picked up again.
+       Rescan when one comes or goes, and after a wake -- when it takes a
+       few seconds to reconnect, so twice. */
+    m_osxHotplug = new HIDOSXHotplug([this]() { scheduleRescan(); },
+                                     [this]() {
+                                         scheduleRescan(1500);
+                                         QTimer::singleShot(6000, this, [this]() { scheduleRescan(0); });
+                                     });
+#endif
+}
+
+void HIDPlugin::scheduleRescan(int ms)
+{
+    if (m_rescanTimer == nullptr)
+        return;
+    /* A pending sooner rescan stays sooner; otherwise this one waits for
+       the burst (a device's arrival is several callbacks) to settle. */
+    if (m_rescanTimer->isActive() && m_rescanTimer->remainingTime() <= ms)
+        return;
+    m_rescanTimer->start(ms);
 }
 
 void HIDPlugin::loadProfiles(const QDir &dir)
@@ -175,6 +205,81 @@ QString HIDPlugin::inputChannelName(quint32 input, quint32 channel) const
     return QString();
 }
 
+QString HIDPlugin::inputConnectionInfo(quint32 input) const
+{
+    HIDDevice *dev = device(input);
+    return dev != nullptr ? dev->connectionInfo() : QString();
+}
+
+QString HIDPlugin::inputProblem(quint32 input) const
+{
+    HIDDevice *dev = device(input);
+    return dev != nullptr ? dev->inputProblem() : QString();
+}
+
+bool HIDPlugin::isPatchedInput(quint32 line) const
+{
+    for (const PluginUniverseDescriptor &d : m_universesMap)
+        if (d.inputLine == line)
+            return true;
+    return false;
+}
+
+void HIDPlugin::setupDiagnostics(HIDDevice *dev)
+{
+    if (dev == nullptr || dev->axisCount() < 0)   // joysticks only
+        return;
+    connect(dev, &HIDDevice::rawInput, this, &HIDPlugin::slotRawInput, Qt::UniqueConnection);
+    dev->setDiagnostics(m_diagnostics > 0);
+    if (m_diagnostics > 0 && !dev->isRunning())
+    {
+        /* Not patched: run it for the test window alone. Its values go
+           nowhere -- nothing is connected to them. */
+        dev->openInput();
+        m_diagnosticsStarted.insert(dev);
+    }
+}
+
+bool HIDPlugin::setInputDiagnostics(bool enable)
+{
+    const bool wasOn = m_diagnostics > 0;
+    m_diagnostics = qMax(0, m_diagnostics + (enable ? 1 : -1));
+    const bool on = m_diagnostics > 0;
+    if (on == wasOn)
+        return true;
+
+    if (on)
+    {
+        for (HIDDevice *dev : std::as_const(m_devices))
+            setupDiagnostics(dev);
+    }
+    else
+    {
+        for (HIDDevice *dev : std::as_const(m_devices))
+            dev->setDiagnostics(false);
+        for (HIDDevice *dev : std::as_const(m_diagnosticsStarted))
+            if (m_devices.contains(dev) && !isPatchedInput(quint32(m_devices.indexOf(dev))))
+                dev->closeInput();
+        m_diagnosticsStarted.clear();
+    }
+    return true;
+}
+
+void HIDPlugin::slotRawInput(quint32 line, const QString &element, int raw, int channel, int value)
+{
+    /* Queued from the device's thread: find it by its line, since it may
+       have been replaced since (never dereference the sender). */
+    for (int i = 0; i < m_devices.size(); ++i)
+    {
+        HIDDevice *dev = m_devices.at(i);
+        if (dev->line() != line || dev->axisCount() < 0)
+            continue;
+        emit inputDiagnostic(quint32(i), dev->name(), dev->connectionInfo(),
+                             element, raw, channel, value);
+        return;
+    }
+}
+
 QString HIDPlugin::inputChannelRole(quint32 input, quint32 channel) const
 {
     HIDDevice *dev = device(input);
@@ -193,6 +298,10 @@ QString HIDPlugin::inputChannelRole(quint32 input, quint32 channel) const
 
 HIDPlugin::~HIDPlugin()
 {
+#if defined (__APPLE__) || defined(Q_OS_MACOS)
+    delete m_osxHotplug;
+    m_osxHotplug = nullptr;
+#endif
     while (m_devices.isEmpty() == false)
         delete m_devices.takeFirst();
 }
@@ -386,12 +495,54 @@ bool HIDPlugin::canConfigure() const
  * Devices
  *****************************************************************************/
 
+/** A joystick for @p info on this platform, or null when it is not one. */
+static HIDDevice *makeJoystick(HIDPlugin *plugin, quint32 line, struct hid_device_info *info)
+{
+    HIDDevice *dev = NULL;
+#if defined(Q_WS_X11) || defined(Q_OS_LINUX)
+    if (QString(info->path).contains("js"))
+        dev = new HIDLinuxJoystick(plugin, line, info);
+#elif defined(WIN32) || defined (Q_OS_WIN)
+    if (HIDWindowsJoystick::isJoystick(info->vendor_id, info->product_id) == true)
+        dev = new HIDWindowsJoystick(plugin, line, info);
+#elif defined (__APPLE__) || defined(Q_OS_MACOS)
+    if (HIDOSXJoystick::isJoystick(info->usage) == true)
+        dev = new HIDOSXJoystick(plugin, line, info);
+#endif
+    /* Matched a joystick-shaped top-level HID usage (why the isJoystick()
+       check above passed) but turned out, once its actual report descriptor
+       was parsed, to have neither an axis nor a button. Apple's HID stack
+       exposes several of its own internal devices (trackpad/keyboard
+       auxiliary interfaces, wrapper nodes around the real device) this way,
+       typically with no product string either -- just a bare manufacturer
+       name and nothing to tell them apart or patch to. Not a real control
+       surface, so do not list it as if it might be one. */
+    if (dev != NULL && dev->axisCount() <= 0 && dev->buttonCount() <= 0)
+    {
+        delete dev;
+        dev = NULL;
+    }
+    return dev;
+}
+
+static bool isDMXInterface(const struct hid_device_info *info)
+{
+    return (info->vendor_id == HID_DMX_INTERFACE_VENDOR_ID
+            && info->product_id == HID_DMX_INTERFACE_PRODUCT_ID) ||
+           (info->vendor_id == HID_DMX_INTERFACE_VENDOR_ID_2
+            && info->product_id == HID_DMX_INTERFACE_PRODUCT_ID_2) ||
+           (info->vendor_id == HID_DMX_INTERFACE_VENDOR_ID_3
+            && info->product_id == HID_DMX_INTERFACE_PRODUCT_ID_3) ||
+           (info->vendor_id == HID_DMX_INTERFACE_VENDOR_ID_4
+            && info->product_id == HID_DMX_INTERFACE_PRODUCT_ID_4);
+}
+
 void HIDPlugin::rescanDevices()
 {
     /* Treat all devices as dead first, until we find them again. Those
        that aren't found, get destroyed at the end of this function. */
     QList <HIDDevice*> destroyList(m_devices);
-    int devCount = m_devices.count();
+    bool changed = false;
 
     struct hid_device_info *devs, *cur_dev;
     quint32 line = 0;
@@ -405,19 +556,34 @@ void HIDPlugin::rescanDevices()
         //qDebug() << "[HID Device found] path:" << QString(cur_dev->path) << ", name:" << QString::fromWCharArray(cur_dev->product_string);
 
         HIDDevice* dev = device(QString(cur_dev->path));
-        if (dev != NULL)
+        if (dev != NULL && dev->isStale())
+        {
+            /* Same path, but not the device it was opened on: a controller
+               switched off and on again, or reconnected after the Mac slept.
+               The old one reads nothing any more. Replace it where it is, so
+               the input line -- and the patch on it -- stays the same; the
+               configurationChanged() below reopens it. */
+            destroyList.removeAll(dev);
+            HIDDevice *fresh = makeJoystick(this, dev->line(), cur_dev);
+            if (fresh != NULL)
+            {
+                qDebug() << Q_FUNC_INFO << "reconnected:" << fresh->name();
+                const int index = m_devices.indexOf(dev);
+                m_devices[index] = fresh;
+                m_diagnosticsStarted.remove(dev);
+                emit deviceRemoved(dev);
+                delete dev;
+                emit deviceAdded(fresh);
+                setupDiagnostics(fresh);
+                changed = true;
+            }
+        }
+        else if (dev != NULL)
         {
             /** Device already exists, delete from remove list */
             destroyList.removeAll(dev);
         }
-        else if ((cur_dev->vendor_id == HID_DMX_INTERFACE_VENDOR_ID
-                && cur_dev->product_id == HID_DMX_INTERFACE_PRODUCT_ID) ||
-                (cur_dev->vendor_id == HID_DMX_INTERFACE_VENDOR_ID_2
-                && cur_dev->product_id == HID_DMX_INTERFACE_PRODUCT_ID_2) ||
-                (cur_dev->vendor_id == HID_DMX_INTERFACE_VENDOR_ID_3
-                && cur_dev->product_id == HID_DMX_INTERFACE_PRODUCT_ID_3) ||
-                (cur_dev->vendor_id == HID_DMX_INTERFACE_VENDOR_ID_4
-                && cur_dev->product_id == HID_DMX_INTERFACE_PRODUCT_ID_4))
+        else if (isDMXInterface(cur_dev))
         {
             /* Device is a USB DMX Interface, add it */
             dev = new HIDDMXDevice(this, line++,
@@ -427,32 +593,15 @@ void HIDPlugin::rescanDevices()
                                    QString(cur_dev->path));
             addDevice(dev);
         }
-#if defined(Q_WS_X11) || defined(Q_OS_LINUX)
-        else if (QString(cur_dev->path).contains("js"))
+        else
         {
-            dev = new HIDLinuxJoystick(this, line++, cur_dev);
-#elif defined(WIN32) || defined (Q_OS_WIN)
-        else if (HIDWindowsJoystick::isJoystick(cur_dev->vendor_id, cur_dev->product_id) == true)
-        {
-            dev = new HIDWindowsJoystick(this, line++, cur_dev);
-#elif defined (__APPLE__) || defined(Q_OS_MACOS)
-        else if (HIDOSXJoystick::isJoystick(cur_dev->usage) == true)
-        {
-            dev = new HIDOSXJoystick(this, line++, cur_dev);
-#endif
-            /* Matched a joystick-shaped top-level HID usage (why the
-               isJoystick() check above passed) but turned out, once its
-               actual report descriptor was parsed, to have neither an axis
-               nor a button. Apple's HID stack exposes several of its own
-               internal devices (trackpad/keyboard auxiliary interfaces,
-               wrapper nodes around the real device) this way, typically
-               with no product string either -- just a bare manufacturer
-               name and nothing to tell them apart or patch to. Not a real
-               control surface, so do not list it as if it might be one. */
-            if (dev != NULL && dev->axisCount() <= 0 && dev->buttonCount() <= 0)
-                delete dev;
-            else
+            dev = makeJoystick(this, line, cur_dev);
+            if (dev != NULL)
+            {
+                line++;
                 addDevice(dev);
+                setupDiagnostics(dev);
+            }
         }
 
         cur_dev = cur_dev->next;
@@ -465,10 +614,22 @@ void HIDPlugin::rescanDevices()
     {
         HIDDevice* dev = destroyList.takeFirst();
         m_devices.removeAll(dev);
+        m_diagnosticsStarted.remove(dev);
         delete dev;
+        changed = true;
     }
 
-    if (m_devices.count() != devCount)
+    /* An input line is a device's place in this list (device(index)), and
+       InputPatch only takes values whose line matches the one it opened.
+       Numbering devices as they were found did not keep to that: a device
+       skipped above (Apple's internal ones) still used a number up, and a
+       rescan numbered new devices from 0 again -- so a controller found
+       after them, or back after being switched off, sent its input under a
+       line no patch listens to. Keep them in step. */
+    for (int i = 0; i < m_devices.size(); ++i)
+        m_devices.at(i)->setLine(quint32(i));
+
+    if (changed)
         emit configurationChanged();
 }
 
@@ -516,6 +677,7 @@ void HIDPlugin::addDevice(HIDDevice* device)
 {
     Q_ASSERT(device != NULL);
 
+    device->setLine(quint32(m_devices.count()));
     m_devices.append(device);
     emit deviceAdded(device);
 

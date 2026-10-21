@@ -613,6 +613,32 @@ public:
     { Q_UNUSED(input); return 0.05f; }
 
     /**
+     * How input line @p input is connected and read, for a person: the
+     * transport, the model and how its reports are read ("Bluetooth LE ·
+     * Xbox Series X|S Controller (045E:0B13) · read via GameController
+     * framework"). Empty when the plugin can't tell.
+     */
+    virtual QString inputConnectionInfo(quint32 input) const
+    { Q_UNUSED(input); return QString(); }
+
+    /**
+     * Why input line @p input is not delivering input, for a person ("macOS
+     * is not letting qlcconsole read the controller..."), when the plugin
+     * knows it is not; empty when it is, or might be.
+     */
+    virtual QString inputProblem(quint32 input) const
+    { Q_UNUSED(input); return QString(); }
+
+    /**
+     * Diagnostics, for the Controller test window: while on, report every
+     * raw input every device reads -- patched or not -- through
+     * inputDiagnostic(). Returns false when the plugin has none to give
+     * (the default). Calls are counted: each true needs a false.
+     */
+    virtual bool setInputDiagnostics(bool enable)
+    { Q_UNUSED(enable); return false; }
+
+    /**
      * Set an arbitrary parameter useful for the plugin. This is similar
      * to Qt's setProperty
      *
@@ -661,6 +687,16 @@ signals:
     /** A device on @p universe has said what its LEDs are showing
      *  (targetPixels()). */
     void targetPixelsChanged(quint32 universe);
+
+    /**
+     * Diagnostics (setInputDiagnostics()): input line @p input, @p device
+     * connected as @p connection (inputConnectionInfo()), reported its raw
+     * input @p element ("Button 4", "Rz", "USB report byte 4 bit 4",
+     * "GameController buttonA") as @p raw. It feeds @p channel (-1: none),
+     * which now reads @p value (0..255; -1 for none).
+     */
+    void inputDiagnostic(quint32 input, const QString &device, const QString &connection,
+                         const QString &element, int raw, int channel, int value);
 
 protected:
     /**

@@ -20,6 +20,7 @@
 #ifndef HIDDEVICE_H
 #define HIDDEVICE_H
 
+#include <QAtomicInteger>
 #include <QThread>
 #include <QFile>
 
@@ -114,6 +115,10 @@ public:
     quint32 line() const {
         return m_line;
     }
+    /** HIDPlugin keeps a device's line equal to its place in the plugin's
+     *  list -- the input number a patch opens it by, and which InputPatch
+     *  takes its values for. */
+    void setLine(quint32 line) { m_line = line; }
 
     virtual bool hasInput() const { return false; }
     virtual bool hasOutput() const { return false; }
@@ -125,6 +130,20 @@ public:
     virtual int axisCount() const { return -1; }
     /** Number of buttons on joystick devices; -1 for non-joystick. */
     virtual int buttonCount() const { return -1; }
+
+    /** True when the hardware this object was made for has gone -- the
+     *  controller was switched off, or reconnected after the Mac slept, and
+     *  is now a different device at the same path. HIDPlugin replaces it. */
+    virtual bool isStale() const { return false; }
+
+    /** How the device is connected and read, for a person ("Bluetooth LE ·
+     *  Xbox Series X|S Controller (045E:0B13) · GameController framework").
+     *  Empty when there is nothing to say. */
+    virtual QString connectionInfo() const { return QString(); }
+
+    /** Why input from it is not being read, for a person; empty when it
+     *  is (or might be). */
+    virtual QString inputProblem() const { return QString(); }
 
 protected:
     quint32 m_line;
@@ -160,6 +179,24 @@ signals:
      * @param value The changed value
      */
     void valueChanged(quint32 universe, quint32 line, quint32 channel, uchar value);
+
+    /**
+     * Diagnostics (setDiagnostics()): one raw input as the device reported
+     * it, before any mapping -- @p element names it ("Button 4", "Rz",
+     * "USB report byte 4 bit 4", "GameController buttonA"), @p raw is its
+     * value as read, @p channel the channel it feeds (-1: none) and @p value
+     * what that channel now says (0..255).
+     */
+    void rawInput(quint32 line, const QString &element, int raw, int channel, int value);
+
+public:
+    /** Report every raw input through rawInput() while on (the Controller
+     *  test window). Costs nothing while off. */
+    void setDiagnostics(bool on) { m_diagnostics.storeRelaxed(on); }
+    bool diagnostics() const { return m_diagnostics.loadRelaxed(); }
+
+protected:
+    QAtomicInteger<bool> m_diagnostics { false };
 
 public:
     /**

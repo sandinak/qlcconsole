@@ -31,6 +31,7 @@
 #include <QRecursiveMutex>
 #include <QSharedPointer>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QVector3D>
 
 #include "scenevalue.h"
@@ -39,6 +40,7 @@
 class ProgrammerFlasher;
 class HighlightEffect;
 class FocusSession;
+class ControllerKeepAlive;
 class ParkEffect;
 class MarkEffect;
 class MarkPlanner;
@@ -171,6 +173,10 @@ public:
      *  by gamepad role. Never null. */
     FocusSession *focusSession() const { return m_focusSession; }
 
+    /** Keeps the controller read while Focus mode or the follow spot uses
+     *  it (no App Nap), and says when it is paused and why. Never null. */
+    ControllerKeepAlive *controllerKeepAlive() const { return m_keepAlive; }
+
     /** The controller Focus mode would use: the patched input whose profile
      *  names the controls Focus mode works with (by role, or the usual
      *  names), preferring the one the follow-spot stick is bound to. */
@@ -180,6 +186,9 @@ public:
         quint32 universe = 0;
         QString name;               ///< the device, as the input patch names it
         QString profile;            ///< its controller profile, if it says
+        /** Why its input is not arriving, when the plugin knows
+         *  (QLCIOPlugin::inputProblem()); empty otherwise. */
+        QString problem;
         /** Each control found, GamepadRole::Role -> the profile's name for
          *  it (empty when the profile names it only by role). */
         QMap<int, QString> controls;
@@ -499,6 +508,8 @@ private slots:
     void slotRigPropsChanged(quint32 fid);
 
 private:
+    /** Tell the keep-alive who needs the controller and how it is. */
+    void refreshControllerKeepAlive();
     void connectControllerInput();
     /** Push pan/tilt binding into any followspot.js palette so EffectScriptRunner
      *  routes values to them via its normal universe/channel mechanism. */
@@ -586,6 +597,13 @@ private:
     bool m_highlightActive = false;
     /** Focus mode: see focusSession(). */
     FocusSession *m_focusSession = nullptr;
+    /** See controllerKeepAlive(). */
+    ControllerKeepAlive *m_keepAlive = nullptr;
+    /** Asks the controller how it is while it is wanted: a plugin does not
+     *  announce every change (a GameController claim, a refused open). */
+    QTimer *m_keepAliveTimer = nullptr;
+    /** When the joystick tick last ran, for Focus mode's dt. */
+    QElapsedTimer m_joyTickClock;
     /** Controller buttons held, by gamepad role, for the View+Menu combo. */
     QSet<int> m_heldRoles;
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
