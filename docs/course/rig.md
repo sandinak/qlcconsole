@@ -6,7 +6,7 @@ nav_order: 8
 # The teaching show: our virtual stage
 
 `shows/ShowChoir-Classroom.qlcc` is a show choir stage built from a real
-one (DanceHysteria), made smaller and simpler for class. It has the rig,
+one (DanceHysteria), scaled down for class. It has the rig,
 the groups, a few stage targets and a set of colours and levels — and no
 show yet: students build that.
 
@@ -20,7 +20,7 @@ network. The **Rig Overview** (View → Rig Overview, ⇧⌘R) is the stage.
 
 - **Risers (steps):** three rows — **US** (top, at the back), **CS**,
   **DS** (front) — of four units each, numbered **1–4 from stage right**.
-- **Cyc:** the white cloth upstage.
+- **Cyc** (cyclorama): the white cloth upstage.
 - **Trusses:** four upright trusses across the back, two each side. On each
   side **1 is the outside truss** (nearest the wings), 2 the inside one.
 - **Audience towers (AT1 SR, AT2 SL):** one each side, in the house.

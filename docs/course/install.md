@@ -5,12 +5,13 @@ nav_order: 3
 
 # Install qlcconsole
 
-qlcconsole is free. It runs on **Mac**, **Windows** and **Linux**
-computers. You don't need any lights: the course stage is on the screen.
+qlcconsole is free and runs on **Mac**, **Windows** and **Linux**. You
+don't need any lighting hardware: the course stage is a 3D model on
+screen.
 
 **Download qlcconsole 0.2.0 (or later) from the
 [qlcconsole Releases page](https://github.com/sandinak/qlcconsole/releases).**
-The lessons are checked on 0.2.0.
+The lessons are checked against 0.2.0.
 The course uses the newest **pre-release** whose name starts with
 **Show Tree** (it has a *Pre-release* badge; the "Latest" release above it
 may be an older build without the Show Tree). Under its **Assets**, pick
@@ -37,8 +38,8 @@ the file for your computer:
    signed yet). Click **More info → Run anyway**.
 3. Follow the installer, then open **qlcconsole** from the Start menu.
 
-On a school-managed laptop you may not be allowed to install programs: ask
-your teacher.
+School-managed laptops often block installing programs; if yours does,
+ask your teacher.
 
 ## Linux
 
@@ -55,9 +56,10 @@ A Chromebook can run it only if **both** are true:
 - it has an **Intel or AMD** chip (Settings → About ChromeOS → Additional
   details). The Linux version doesn't run on ARM Chromebooks.
 
-If so, download the `.AppImage`, move it into **Linux files**, and follow
-the Linux steps in the Linux terminal. If not, do the **paper version** of
-each homework (every lesson's *At home* page has one).
+If both are true, download the `.AppImage`, move it into **Linux files**
+and follow the Linux steps in the Linux terminal. If not, use the
+**paper version** of each at-home task (every lesson's *At home* page has
+one).
 
 ## Get the course files
 
@@ -65,15 +67,15 @@ Each lesson links its show files (`.qlcc`). On GitHub: click the file,
 then the **Download raw file** button (↓). In qlcconsole: **File → Open**
 and pick it.
 
-Open shows with **File → Open**. Save your own work with **File → Save
-As** under a new name, so the course file stays as it was.
+Save your own work with **File → Save As** under a new name, so the
+course file stays unchanged.
 
 ## Saving your work
 
-Save your shows **on your own computer**. qlcconsole has no folder of its
-own for shows: the first time, the Save dialog starts wherever your
-computer starts; after that it remembers the last folder you used. So make
-one folder and always save there:
+Save your shows **on your own computer**. qlcconsole has no shows folder
+of its own: the first time, the Save dialog opens in your computer's
+default location, and after that it remembers the last folder you used.
+Make one folder for the course and always save there:
 
 | Computer | Make this folder |
 |---|---|
@@ -82,15 +84,14 @@ one folder and always save there:
 | Linux | `~/Documents/qlcconsole` |
 | Chromebook (Linux on) | **Linux files → qlcconsole** |
 
-Name files `Lesson01-yourname.qlcc`. A `.qlcc` file carries everything the
-show needs, so it opens on any computer.
+Name files like `Lesson01-yourname.qlcc`. A `.qlcc` file carries
+everything the show needs, so it opens on any computer.
 
 **Bringing a show to class:** copy the `.qlcc` to a USB stick, upload it to
 the school's cloud drive (Google Drive / OneDrive), or email it to
 yourself. In class, download it and **File → Open** it.
 
-## Is it safe?
+## Real lights and the network
 
-Yes. The course shows aren't connected to any real lights or network.
-The footer will say **Not ready** in red for that reason — that's
-expected.
+The course shows aren't connected to any real lights and send nothing
+on the network. That's why the footer reads **Not ready** in red.
