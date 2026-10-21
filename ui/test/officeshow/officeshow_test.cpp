@@ -465,7 +465,7 @@ void OfficeShow_Test::verifyTheShow()
         QCOMPARE(fx->universe(), quint32(0));
     }
 
-    for (const QString &g : { "All", "Movers", "Pars", "Spots", "Ring" })
+    for (const QString g : { "All", "Movers", "Pars", "Spots", "Ring" })
         QVERIFY2(groupNamed(doc, g) != nullptr, qPrintable(g));
     for (const QString &cmd : kPaletteCommands)
         QVERIFY2(paletteNamed(doc, cmd.section('"', 1, 1)) != nullptr, qPrintable(cmd));
@@ -526,7 +526,7 @@ void OfficeShow_Test::verifyTheShow()
         if (i == 0)
         {
             for (const QString &p : { kPar1, kPar2 })
-                for (const QString &ch : { "Red", "Green", "Blue", "Tilt" })
+                for (const QString ch : { "Red", "Green", "Blue", "Tilt" })
                     lit(p, ch);
         }
         if (i == 1)
