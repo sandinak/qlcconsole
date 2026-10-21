@@ -12,6 +12,18 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+### Fixed
+- **Focus mode draws where the light should point.** While you nudge a
+  head, the Rig Overview (CPU and GPU), the Studio's beams and aim traces,
+  the plot's footprints, line-of-sight rays and pan/tilt gauges keep the
+  focused head's beam on its reference instead of reading back the nudged
+  DMX, which made the drawn beam creep and jump with every nudge (rounded to
+  DMX steps and a frame behind the offset). This holds through Save,
+  Revert, Zero, Undo and leaving without saving; only the panel's numbers
+  show the nudge. A Rig Overview opened during a session now rings the
+  head being focused, and a selected scene's aim no longer overrides the
+  focused head there or on the plot.
+
 ## [0.2.1] - 2026-10-21
 
 A point release of the Show Tree beta: one top bar, auto-open shutters,

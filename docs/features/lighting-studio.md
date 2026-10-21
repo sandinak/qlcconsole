@@ -767,9 +767,17 @@ ends it (unsaved nudges go back). If functions are running it says so — it
 takes over only the heads it is focusing.
 
 Each head in turn is aimed at its reference, lit white with its shutter
-open, and ringed on the plot and in the Rig Overview. Nudge it until the
-real light lands on the mark: the light moves, and the views keep drawing
-the intended aim while the panel shows the offsets.
+open, and ringed on the plot and in the Rig Overview (also when you open the
+Rig Overview in the middle of a session). The other heads go dark, dimmed or
+stay as they are, as you chose. Nudge the head until the real light lands on
+the mark: the light moves, but **the views keep drawing where the light
+should point, not the nudged beam**. The beam, its pool, the trace to the
+reference and the plot's pan/tilt gauges stay on the reference while you
+nudge, after Save, Revert, Zero and Undo, and when you leave without saving.
+Only the panel's numbers show the nudge. (The views draw the head's aim at
+its reference directly, not its DMX read back: that would carry the nudge,
+rounded to whole DMX steps and a frame behind, so the drawn beam would creep
+and jump as you nudged.)
 
 | Do | Controller | Keyboard |
 |---|---|---|

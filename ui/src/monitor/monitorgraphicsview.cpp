@@ -8662,8 +8662,13 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
     /* ...until it RUNS: then the heads go where the DMX sends them, which an
        effect on the Aim look (Stage Shape round the target, an orbit) makes
        somewhere other than the target itself. */
+    /* Focus mode's head is where the session is aiming it, whatever scene
+       is selected: at its reference, without the nudge (fixtureAimDirection()
+       says the same, for when nothing is selected). */
+    if (focusIntentDirection(m_doc, fid, dir))
+        aimed = true;
     Scene *active = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
-    if (active != nullptr && !active->isRunning())
+    if (!aimed && active != nullptr && !active->isRunning())
     {
         foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, active))
         {

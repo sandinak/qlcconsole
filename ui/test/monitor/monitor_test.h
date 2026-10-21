@@ -507,6 +507,13 @@ private slots:
     /** Focus mode end to end from the keyboard: nudge, save, next, revert,
      *  step size, zero, Esc asks about unsaved, the plot ring, one undo. */
     void focusModeRunsFromTheKeyboard();
+    /** Focus mode: through a big unsaved nudge, Save, Revert and a discard,
+     *  the focused head's beam, footprint and Studio aim stay on its
+     *  reference -- what it is meant to do, not its nudged, rounded DMX. */
+    void focusDrawsTheIntentNotTheNudge();
+    /** Focus mode: the head being focused is lit and ringed in the Rig
+     *  Overview, opened before or during the session, on the CPU and GPU. */
+    void focusLightsAndRingsTheHeadInTheRigOverview();
     /** A head standing on a truss top cannot point at its own feet. */
     void anUprightHeadCannotPointBesideItself();
     /** A par or bar throws light as well -- beams were movers-only. */

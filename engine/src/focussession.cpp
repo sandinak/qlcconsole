@@ -285,6 +285,53 @@ bool FocusSession::referencePoint(quint32 fid, QVector3D &point) const
     return true;
 }
 
+/*****************************************************************************
+ * What the views draw
+ *****************************************************************************/
+
+bool FocusSession::intendedCentred(quint32 fid, FixtureRigProps &rp,
+                                   double &panCentredDeg, double &tiltCentredDeg) const
+{
+    if (!m_active || fid != currentFixture())
+        return false;
+    QVector3D point;
+    if (!referencePoint(fid, point))
+        return false;
+    AimSolver::Frame frame;
+    if (!AimSolver::frameFor(m_doc, fid, frame))
+        return false;
+    /* Solved as though the head were true: the offsets correct the PHYSICAL
+       head, so they are in the DMX and nowhere in what it is meant to do. */
+    frame.panOffsetDeg = 0.0f;
+    frame.tiltOffsetDeg = 0.0f;
+    const AimSolver::Solution sol = AimSolver::solve(frame, point);
+    panCentredDeg = double(sol.panDeg) - double(frame.panMax) / 2.0;
+    tiltCentredDeg = double(sol.tiltDeg) - double(frame.tiltMax) / 2.0;
+    rp = m_doc->monitorProperties()->fixtureRigProps(fid);
+    rp.panOffsetDeg = 0.0f;
+    rp.tiltOffsetDeg = 0.0f;
+    return true;
+}
+
+bool FocusSession::intendedAngles(quint32 fid, double &panRelDeg, double &tiltRelDeg) const
+{
+    FixtureRigProps rp;
+    double pan = 0.0, tilt = 0.0;
+    if (!intendedCentred(fid, rp, pan, tilt))
+        return false;
+    AimSolver::intendedAngles(rp, pan, tilt, panRelDeg, tiltRelDeg);
+    return true;
+}
+
+bool FocusSession::intendedDirection(quint32 fid, QVector3D &dir) const
+{
+    FixtureRigProps rp;
+    double pan = 0.0, tilt = 0.0;
+    if (!intendedCentred(fid, rp, pan, tilt))
+        return false;
+    return AimSolver::beamDirection(rp, pan, tilt, dir);
+}
+
 QString FocusSession::referenceName() const
 {
     const Reference &ref = (m_useSecond && m_options.second.isValid())

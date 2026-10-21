@@ -66,6 +66,10 @@ private slots:
     void theControllerReachesItThroughTheProgrammer();
     /** Going into Perform ends Focus mode and drops unsaved nudges. */
     void performEndsIt();
+    /** What the views draw for the focused head is where it is MEANT to
+     *  point -- at its reference -- through a nudge, Save, Revert, Zero, Undo
+     *  and a discard; nothing for any other head, or once it stops. */
+    void theViewsAreToldTheIntentNotTheNudge();
 
 private:
     Doc *m_doc = nullptr;

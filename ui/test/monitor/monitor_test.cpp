@@ -11061,6 +11061,254 @@ void Monitor_Test::focusModeRunsFromTheKeyboard()
     delete doc;
 }
 
+/* What App::slotUniverseWritten() does with the session's DMX: the universes
+   as Focus mode writes them, into the fixtures the views read. */
+static void pushFocusDmx(Doc *doc, FocusSession *s)
+{
+    QHash<int, QByteArray> unis;
+    const QHash<QPair<int, int>, uchar> writes = s->pendingWrites();
+    for (auto it = writes.constBegin(); it != writes.constEnd(); ++it)
+    {
+        QByteArray &u = unis[it.key().first];
+        if (u.isEmpty())
+            u = QByteArray(512, char(0));
+        u[it.key().second] = char(it.value());
+    }
+    foreach (Fixture *fx, doc->fixtures())
+        if (unis.contains(int(fx->universe())))
+            fx->setChannelValues(unis.value(int(fx->universe())));
+}
+
+void Monitor_Test::focusDrawsTheIntentNotTheNudge()
+{
+    /* "When running focus I should see the visual on the rig view .. BUT it
+       should show intent .. like where the light should be pointing .. not
+       reality that show any skew on movement." The real head moves with every
+       nudge; the drawn one stays on its mark. It did not: the views turned
+       the DMX back into a direction and took the rig's (live) offset out of
+       it, so the beam crept and jumped -- the DMX is whole steps (truncated,
+       for a 16-bit head read from its coarse byte) and a frame behind the
+       offset the nudge has already put in the rig. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *a = makeMover(doc, 10.0, 0, "FA", QVector3D(2.0f, 6.0f, 5.0f));
+    Fixture *b = makeMover(doc, 10.0, 16, "FB", QVector3D(6.0f, 6.0f, 5.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 4.0f;                     // a saved calibration as well
+    rp.tiltOffsetDeg = -2.0f;
+    props->setFixtureRigProps(a->id(), rp);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(4.5f, 3.0f, 0.0f));
+
+    FocusSession *s = doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = mark->id();
+    QString why;
+    QVERIFY2(s->start(o, &why), qPrintable(why));
+    QCOMPARE(s->currentFixture(), a->id());
+    pushFocusDmx(doc, s);
+
+    // The plot, as aCalibratedHeadsPoolLandsOnItsMark() has it.
+    MonitorGraphicsView plot(doc);
+    plot.resize(1000, 700);
+    plot.setGridMetrics(1000.0);
+    plot.setGridSize(QSize(10, 8));
+    plot.addFixture(a->id(), QPointF(2000.0, 6000.0));
+    plot.setViewPOV(MonitorGraphicsView::PovTop);
+    // The Studio's rig view, live.
+    StructureStudioView studio(doc, StructureStudioView::StageKind, 0);
+    studio.resize(640, 420);
+    studio.reload();
+    studio.setLiveValues(true);
+
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(doc, a->id(), frame));
+    const QVector3D want = (mark->position() - frame.position).normalized();
+    auto degOff = [&](const QVector3D &d) {
+        if (d.isNull())
+            return 180.0;
+        return qRadiansToDegrees(qAcos(qBound(-1.0, double(QVector3D::dotProduct(d.normalized(), want)), 1.0)));
+    };
+    auto pool = [&]() {
+        const QPolygonF poly = plot.fixtureProjection(a->id());
+        return poly.size() < 3 ? QPointF(-1e6, -1e6) : poly.boundingRect().center();
+    };
+    const QPointF markPx = plot.realPositionToPixels(double(mark->position().x()) * 1000.0,
+                                                     double(mark->position().y()) * 1000.0);
+    const QPointF startPool = pool();
+    QVERIFY2(QLineF(startPool, markPx).length() / plot.m_cellPixels < 0.5,
+             "at the start the pool is not on the mark");
+
+    auto check = [&](const char *when) {
+        QVector3D d;
+        const bool got = fixtureAimDirection(a, props->fixtureRigProps(a->id()), d);
+        const double beam = got ? degOff(d) : 180.0;
+        const double studioAim = degOff(studio.moverAim(a->id()));
+        const double poolMoved = QLineF(pool(), startPool).length() / plot.m_cellPixels;
+        QVERIFY2(beam < 0.1 && studioAim < 0.1 && poolMoved < 0.01,
+                 qPrintable(QString("%1: beam %2 deg off its mark, Studio aim %3 deg off, "
+                                    "plot pool moved %4 m")
+                            .arg(when).arg(beam).arg(studioAim).arg(poolMoved)));
+    };
+
+    check("at the start");
+    s->nudge(23.7f, -11.3f);                    // big, and not saved
+    QVERIFY(s->isDirty(a->id()));
+    check("nudged, before the DMX catches up");
+    pushFocusDmx(doc, s);
+    check("nudged");
+    s->save();
+    pushFocusDmx(doc, s);
+    check("saved");
+    s->nudge(-9.1f, 6.4f);
+    pushFocusDmx(doc, s);
+    check("nudged again");
+    s->revert();
+    check("reverted, before the DMX catches up");
+    pushFocusDmx(doc, s);
+    check("reverted");
+    s->nudge(3.3f, 3.3f);
+    pushFocusDmx(doc, s);
+    s->discardAll();
+    check("discarded, before the DMX catches up");
+    pushFocusDmx(doc, s);
+    check("discarded");
+
+    // Ended: the saved offsets stay, and the head is read from its DMX again.
+    s->nudge(7.0f, 0.0f);
+    s->stop();
+    QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 4.0f + 23.7f);
+    QCOMPARE(props->fixtureRigProps(a->id()).tiltOffsetDeg, -2.0f - 11.3f);
+    delete doc;
+}
+
+void Monitor_Test::focusLightsAndRingsTheHeadInTheRigOverview()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(0.0f, 4.0f, 5.0f));
+    bar->setLength(8.0f);
+    Fixture *a = makeMover(doc, 12.0, 0, "FA", QVector3D(2.0f, 4.0f, 5.0f));
+    Fixture *b = makeMover(doc, 12.0, 16, "FB", QVector3D(6.0f, 4.0f, 5.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+    for (Fixture *fx : { a, b })
+    {
+        FixtureRigProps rp;
+        rp.trussId = bar->id();
+        rp.trussOffset = (fx == a) ? 2.0f : 6.0f;
+        rp.mountingType = Truss::TopHung;
+        props->setFixtureRigProps(fx->id(), rp);
+    }
+    // Both lit before Focus starts, the way a look would leave them.
+    QByteArray before(512, char(0));
+    for (Fixture *fx : { a, b })
+        for (int c = 2; c < 6; ++c)
+            before[int(fx->address()) + c] = char(255);
+    a->setChannelValues(before);
+    b->setChannelValues(before);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(3.0f, 1.5f, 0.0f));
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    FocusSession *s = doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = mark->id();
+    o.others = FocusSession::OthersDark;
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(doc, &parent, o, &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    s->nudge(15.0f, -8.0f);                     // the real head is well off; the view is not
+    pushFocusDmx(doc, s);
+
+    // Opened during the session: the head being focused is ringed at once.
+    mon->showStageOverview();
+    StructureStudioView *ov = mon->m_overviewView;
+    QVERIFY(ov != nullptr);
+    QVERIFY2(ov->m_highlight.contains(a->id()),
+             "the Rig Overview opened during Focus mode does not ring the head");
+    QVERIFY(!ov->m_highlight.contains(b->id()));
+    QVERIFY(ov->m_liveValues);
+
+    // The focused head is white and open; the other is dark ("Dark").
+    QColor colour; uchar dim = 0;
+    QVERIFY(fixtureLiveState(a, ov->valuesForDrawing(a), colour, dim));
+    QVERIFY2(dim > 150 && colour.red() > 200 && colour.green() > 200 && colour.blue() > 200,
+             qPrintable(QString("the focused head draws %1 at %2").arg(colour.name()).arg(dim)));
+    QColor other; uchar otherDim = 255;
+    const bool otherShows = fixtureLiveState(b, ov->valuesForDrawing(b), other, otherDim);
+    QVERIFY2(!otherShows || otherDim == 0, "the other head is still lit");
+
+    ov->resize(900, 600);
+    ov->setPlane(StructureStudioView::Angled);
+    ov->setAngledView(-15.0, 25.0);
+    ov->setAmbient(0.3);
+    ov->setHaze(1.0);
+    const QByteArray was = qgetenv("QLC_RIG_GPU");
+    auto restore = qScopeGuard([&]() {
+        if (was.isNull()) qunsetenv("QLC_RIG_GPU"); else qputenv("QLC_RIG_GPU", was);
+    });
+    qputenv("QLC_RIG_GPU", "1");
+    QList<bool> gpus { false };
+    if (RhiRaster::available())
+        gpus << true;
+    const QString shots = qEnvironmentVariable("FOCUS_SHOTS");
+    for (bool gpu : gpus)
+    {
+        ov->setGpu(gpu);
+        const QImage img = ov->grab().toImage().convertToFormat(QImage::Format_ARGB32);
+        if (gpu)
+            QVERIFY2(ov->drewOnGpu(), "the GPU fell back to the CPU");
+        if (!shots.isEmpty())
+            img.save(QString("%1/rig-overview-%2.png").arg(shots).arg(gpu ? "gpu" : "cpu"));
+        /* The ring: the Studio's highlight green on the head's body. The
+           light: near-white pixels in the haze, from the only head lit. */
+        int ring = 0, white = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor q = img.pixelColor(x, y);
+                if (q.green() > q.red() + 50 && q.green() > q.blue() + 30)
+                    ++ring;
+                if (q.red() > 170 && q.green() > 170 && q.blue() > 170
+                    && qMax(q.red(), qMax(q.green(), q.blue())) - qMin(q.red(), qMin(q.green(), q.blue())) < 40)
+                    ++white;
+            }
+        qInfo() << (gpu ? "gpu" : "cpu") << "ring px" << ring << "white px" << white;
+        QVERIFY2(ring > 150, qPrintable(QString("%1: the focused head is not ringed").arg(gpu ? "GPU" : "CPU")));
+        QVERIFY2(white > 200, qPrintable(QString("%1: the focused head is not lit").arg(gpu ? "GPU" : "CPU")));
+    }
+    if (!shots.isEmpty())
+    {
+        // Mid-nudge, the DMX a frame behind: the beam stays where it was.
+        ov->setGpu(false);
+        s->nudge(-12.0f, 9.0f);
+        ov->grab().toImage().save(QString("%1/rig-overview-cpu-mid-nudge.png").arg(shots));
+        pushFocusDmx(doc, s);
+    }
+
+    // Stepping on rings the next head there too.
+    s->next();
+    QVERIFY(ov->m_highlight.contains(b->id()));
+    QVERIFY(!ov->m_highlight.contains(a->id()));
+
+    s->stop();
+    QTRY_VERIFY(panel.isNull());
+    delete mon;
+    delete doc;
+}
+
 void Monitor_Test::anUprightHeadCannotPointBesideItself()
 {
     /* Branson's physics: a head standing upright on top of a truss has its

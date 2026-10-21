@@ -33,6 +33,7 @@
 #include "dmxsource.h"
 
 class Doc;
+struct FixtureRigProps;
 
 /** @addtogroup engine Engine
  * @{
@@ -45,9 +46,10 @@ class Doc;
  * and aimed at its REFERENCE -- the point it should hit, from a scene's Aim
  * look or a stage target -- through the aim solver, with its calibration
  * offsets as they stand right now. Nudging changes those offsets live, so the
- * real light moves while the rig views (which take calibration out, see
- * AimSolver::beamDirection()) keep drawing the intended aim. Saving makes a
- * head's offsets the saved ones; reverting puts them back.
+ * real light moves while the rig views keep drawing the intended aim: for
+ * the head being focused they draw intendedDirection(), not its DMX read
+ * back. Saving makes a head's offsets the saved ones; reverting puts them
+ * back.
  *
  * It is a TOOL, not an effect (FOCUS_MODE_DESIGN.md): it runs on the main
  * thread and its writes to the rig are ordinary edits there. It takes its
@@ -171,6 +173,28 @@ public:
     QString referenceName() const;
 
     /*********************************************************************
+     * What the views draw
+     *********************************************************************/
+public:
+    /** Where head @p fid is MEANT to point while the session aims it -- the
+     *  current head, at its reference -- as AimSolver::intendedAngles() gives
+     *  a direction: pan and tilt relative to home, calibration and invert
+     *  taken out.
+     *
+     *  The rig views draw this instead of turning the head's DMX back into a
+     *  direction. The DMX carries the live, unsaved nudge and is rounded to
+     *  whole DMX steps and a frame behind the rig props, so a beam read back
+     *  from it crept and jumped with every nudge while the real head moved
+     *  smoothly. This is solved with no offset at all, so the drawn beam stays
+     *  on the reference however far the head is nudged, before and after
+     *  Save, Revert, Zero, Undo or a discard.
+     *
+     *  False for any other head, or when the session is not running. */
+    bool intendedAngles(quint32 fid, double &panRelDeg, double &tiltRelDeg) const;
+    /** The same as a world direction (AimSolver::beamDirection()). */
+    bool intendedDirection(quint32 fid, QVector3D &dir) const;
+
+    /*********************************************************************
      * Offsets
      *********************************************************************/
 public:
@@ -280,6 +304,11 @@ private:
     };
 
     void resolveReferences();
+    /** The calibration-free aim of @p fid, centred fixture degrees as DMX
+     *  would carry them, and its rig props with the offsets zeroed to read
+     *  them with. */
+    bool intendedCentred(quint32 fid, FixtureRigProps &rp,
+                         double &panCentredDeg, double &tiltCentredDeg) const;
     QHash<quint32, QVector3D> resolve(const Reference &ref) const;
     /** Write @p offset into the rig for @p fid (the solver and the views
      *  read it from there). */

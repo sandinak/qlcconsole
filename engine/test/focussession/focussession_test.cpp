@@ -17,6 +17,7 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QtMath>
 
 #include "focussession_test.h"
 #include "iopluginstub.h"
@@ -653,3 +654,75 @@ void FocusSession_Test::performEndsIt()
 }
 
 QTEST_MAIN(FocusSession_Test)
+
+void FocusSession_Test::theViewsAreToldTheIntentNotTheNudge()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 6.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(5.0f, 6.0f, 0.0f));
+    // A saved calibration already: the intent must not carry it either.
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 3.0f;
+    rp.tiltOffsetDeg = -1.5f;
+    m_doc->monitorProperties()->setFixtureRigProps(a->id(), rp);
+
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVector3D dir;
+    QVERIFY(!s->intendedDirection(a->id(), dir));          // not running
+    FocusSession::Options o = optionsFor({ a->id(), b->id() }, mark->id());
+    o.order = FocusSession::AsGiven;
+    QVERIFY(s->start(o));
+    QCOMPARE(s->currentFixture(), a->id());
+
+    AimSolver::Frame frame;
+    QVERIFY(AimSolver::frameFor(m_doc, a->id(), frame));
+    const QVector3D want = (mark->position() - frame.position).normalized();
+    auto offBy = [&](const char *when) {
+        QVector3D d;
+        if (!s->intendedDirection(a->id(), d))
+        {
+            qWarning() << when << ": no intended direction";
+            return 180.0;
+        }
+        const double cosA = qBound(-1.0, double(QVector3D::dotProduct(d.normalized(), want)), 1.0);
+        return qRadiansToDegrees(qAcos(cosA));
+    };
+    auto check = [&](const char *when) {
+        const double deg = offBy(when);
+        QVERIFY2(deg < 0.05, qPrintable(QString("%1: the drawn aim is %2 degrees off its mark")
+                                        .arg(when).arg(deg)));
+    };
+
+    check("at the start");
+    s->nudge(23.7f, -11.3f);                                 // a big, unsaved nudge
+    QVERIFY(s->isDirty(a->id()));
+    check("nudged");
+    // Its gauges read the same intent: a pan and tilt the nudge is not in.
+    double pan = 0.0, tilt = 0.0, pan0 = 0.0, tilt0 = 0.0;
+    QVERIFY(s->intendedAngles(a->id(), pan, tilt));
+    s->save();
+    check("saved");
+    QVERIFY(s->intendedAngles(a->id(), pan0, tilt0));
+    QCOMPARE(pan0, pan);
+    QCOMPARE(tilt0, tilt);
+    s->nudge(-7.0f, 4.0f);
+    check("nudged again");
+    s->revert();
+    check("reverted");
+    s->zero();
+    check("zeroed");
+    s->revert();
+    QVERIFY(s->undoSave());
+    check("undone");
+    s->nudge(5.0f, 5.0f);
+    s->discardAll();
+    check("discarded");
+
+    // Only the head being focused.
+    QVERIFY(!s->intendedDirection(b->id(), dir));
+    s->next();
+    QVERIFY(!s->intendedDirection(a->id(), dir));
+    QVERIFY(s->intendedDirection(b->id(), dir));
+    s->stop();
+    QVERIFY(!s->intendedDirection(b->id(), dir));
+}

@@ -1035,11 +1035,16 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
        turns DMX back into a direction: AimSolver::intendedAngles(). */
     const FixtureRigProps rigProps = m_doc->monitorProperties() != NULL
         ? m_doc->monitorProperties()->fixtureRigProps(m_fid) : FixtureRigProps();
+    /* The head Focus mode is aiming reads where it is MEANT to point, not its
+       nudged DMX, the same as its beam (focusIntentAngles()). */
+    double focusPan = 0.0, focusTilt = 0.0;
+    const bool focused = focusIntentAngles(m_doc, m_fid, focusPan, focusTilt);
     foreach (FixtureHead *head, m_heads)
     {
-        double panShown = 0.0, tiltShown = 0.0;
-        AimSolver::intendedAngles(rigProps, head->m_panDegrees, head->m_tiltDegrees,
-                                  panShown, tiltShown);
+        double panShown = focusPan, tiltShown = focusTilt;
+        if (!focused)
+            AimSolver::intendedAngles(rigProps, head->m_panDegrees, head->m_tiltDegrees,
+                                      panShown, tiltShown);
         QRectF rect = shapeRect(head->m_item);
         const QPointF rc = rect.center();
 
