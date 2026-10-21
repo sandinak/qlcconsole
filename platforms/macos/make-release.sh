@@ -1,5 +1,6 @@
 #!/bin/bash
-# `make release`: the signed, notarized, stapled universal DMG of HEAD.
+# `make dmg` (and the build step of `make beta` / `make release`): the
+# signed, notarized, stapled universal DMG of HEAD.
 #
 #   package-local.sh   universal Release build -> ~/qlcconsole.app (the old
 #                      one kept as ~/qlcconsole.app.prev) + an ad-hoc DMG
@@ -12,7 +13,9 @@
 # them. (test-workspaces/ isn't part of the app and is ignored here.)
 # ALLOW_DIRTY=1 builds anyway, for a DMG that is not for release.
 #
-# It tags and publishes nothing; that's ./release.sh (RELEASE.md).
+# It tags and publishes nothing; publish.sh does that (make beta / make
+# release, RELEASE.md). PREFLIGHT_ONLY=1 runs only the checks below and
+# stops: publish.sh uses it before the long test gate.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -44,6 +47,11 @@ xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 ||
   { echo "ERROR: notarytool profile '$NOTARY_PROFILE' missing or not working:"
     echo "  xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <Apple ID> --team-id B4N7HJ7VZ6"; exit 1; }
 echo "  signing identity and notary profile OK"
+if pgrep -f "^$APP/Contents/MacOS/" >/dev/null; then
+  echo "ERROR: $APP is running -- quit it first (the build replaces it)."
+  exit 1
+fi
+[ "${PREFLIGHT_ONLY:-0}" = 1 ] && exit 0
 echo "  ~/qlcconsole.app will be replaced (backup: ~/qlcconsole.app.prev)"
 
 step "Build + bundle (package-local.sh)"
@@ -57,7 +65,7 @@ DMG="$(ls -t "$REPO"/dist/qlcconsole-"$VERSION"-universal-*-"$REV".dmg 2>/dev/nu
 [ -n "$DMG" ] || { echo "ERROR: no dist/qlcconsole-$VERSION-universal-*-$REV.dmg after signing."; exit 1; }
 
 step "Checksums + verification"
-# The format release.sh uploads, and the in-app updater checks against.
+# The format publish.sh uploads, and the in-app updater checks against.
 ( cd "$REPO/dist" && shasum -a 256 "$(basename "$DMG")" ) > "$REPO/dist/SHA256SUMS"
 cat "$REPO/dist/SHA256SUMS"
 xcrun stapler validate "$DMG"
@@ -72,4 +80,4 @@ echo "Installed:  $APP  (previous: $APP.prev)"
 echo "/Applications/qlcconsole.app is untouched. To update it: quit qlcconsole, then"
 echo "  open \"$DMG\"   and drag qlcconsole onto Applications (Replace), or"
 echo "  rm -rf /Applications/qlcconsole.app && ditto \"$APP\" /Applications/qlcconsole.app"
-echo "Publishing is separate: make publish / ./release.sh (RELEASE.md)."
+echo "Nothing was published. To publish: make beta / make release (RELEASE.md)."
