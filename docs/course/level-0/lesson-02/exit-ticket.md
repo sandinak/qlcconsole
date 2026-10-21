@@ -9,9 +9,8 @@ nav_order: 4
 
 Name: ______________________
 
-This is our stage, seen from above, with the audience at the bottom.
-Write the name of each numbered part, and fill in the four directions
-**A–D**.
+This is a plan of our stage, seen from above, with the audience at the
+bottom. Name each numbered part and fill in the four directions **A–D**.
 
 ![Our stage from above, to label](../../images/lesson-0-2/stage-plan.svg)
 
@@ -31,7 +30,7 @@ Write the name of each numbered part, and fill in the four directions
 | C | |
 | D | |
 
-1. Stage left is whose left?
+1. Stage left is *whose* left?
 
    ____________________________________________________________
 
@@ -40,6 +39,6 @@ Write the name of each numbered part, and fill in the four directions
 
    ____________________________________________________________
 
-3. In qlcconsole, where do you see what the lights are doing?
+3. In qlcconsole, where can you see what the lights are doing?
 
    ____________________________________________________________
