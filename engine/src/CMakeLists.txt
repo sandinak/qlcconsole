@@ -27,6 +27,7 @@ add_library(${module_name} SHARED
     fixture.cpp fixture.h
     fixturepower.cpp fixturepower.h
     powerlimiter.cpp powerlimiter.h
+    shutterautoopen.cpp shutterautoopen.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h
     genericdmxsource.cpp genericdmxsource.h

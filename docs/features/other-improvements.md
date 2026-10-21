@@ -618,6 +618,58 @@ panel's footer names the fixtures being held back. A fixture with a maximum
 but no readings isn't limited, and says so. The live and full-load
 estimates use the readings (and the cap) wherever a fixture has them.
 
+## Advanced settings
+
+**Settings** has two tabs. **General** holds what everyone sets: autosave,
+the tab bar, units, the Show Tree's Record choices, the rig network and
+software updates. **Advanced** holds settings for experienced users and
+the show's output behaviour:
+
+- **Output (saved with this show)**: **Auto-open shutters when a light is
+  given a level** (below).
+- **Effects**: which editor opens an effect script (the in-app editor, or
+  your computer's editor for .js files). It used to be on the one Settings
+  page.
+- **Show control (QLab)**: the **Open** button that takes you to
+  Connections → Show control &amp; sync. It used to be on the one Settings
+  page too.
+
+### Auto-open shutters
+
+A moving spot has a **shutter**: a blade that blocks the beam. Many spots
+rest with it **closed**. The AT-Spots in the classroom show and
+DanceHysteria (American DJ Focus Spot Three Z) are like this: their shutter
+channel sits at 0, *Off*. Before auto-open, a look of White at Full left
+them dark until a **Shutter → Open** look was added too.
+
+With **Auto-open shutters** on, qlcconsole works like a lighting console's
+"auto open":
+
+- A light **given a level** (a dimmer, or a colour on a light with no
+  dimmer) by a look, a layer, a cue, a slider or the programmer, **whose
+  shutter nothing sets**, has its shutter **opened** on output.
+- The open value comes from the fixture definition: the shutter's default
+  when that is already open, otherwise its **Open** / **Shutter open**
+  capability. A plain strobe channel opens at 0. Iris channels are never
+  touched.
+- **An explicit shutter value always wins.** A look, slider or programmer
+  edit that sets the shutter to Closed, Strobe or anything else keeps it
+  there.
+- **A light with no level is left alone**, so nothing lights by itself. A
+  dimmer that only rests at full because of its definition's default does
+  not count as a level.
+- It applies to everything that goes out: the DMX output, the 2D view and
+  the Rig Overview all show the same thing. It changes only what is sent:
+  the values your looks store are unchanged, and turning it off puts every
+  shutter back to what the show sets.
+
+It is **on** for new shows and for shows saved before it existed. It is
+**saved with the show**, not with this computer, because it changes what
+the rig does: a show programmed with it on looks the same on any computer.
+Turn it off when a show wants every shutter to be programmed by hand, as
+in QLC+. While it is on, the Programming tab no longer warns "no look for:
+shutter".
+
 ## Show timeline &amp; MTC follow
 
 The Show Manager tab and the Programming tab's embedded timeline editor

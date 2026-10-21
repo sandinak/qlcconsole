@@ -6,6 +6,33 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-21 — Auto-open shutters; Settings → Advanced *(feat/shutter-auto-open)*
+
+Board Q10 (Branson: "configurable option with default to open ... a tab for
+advanced config"). `ShutterAutoOpen` (engine, owned by Doc, built like
+PowerLimiter) turns each patched fixture into per-universe
+`Universe::AutoOpenRule`s: shutter address, open value
+(`ShutterAutoOpen::openValue()`: open default, else ShutterOpen preset,
+else a plain "Open"/"Shutter open" name; strobe preset 0; never iris) and
+the heads' levels (master + head dimmer as gates, colours when a head has
+no dimmer). `Universe::applyAutoOpen()` runs in `processFaders()` after the
+faders, under `m_autoOpenMutex`, on the post-GM buffer only: open when a
+head is lit by something written in the last two frames and the shutter
+itself is neither written lately nor held. Per-channel frame stamps
+(`std::atomic`) are set in write / writeMultiple / writeRelative; a
+GenericFader AutoRemove channel (slider, programmer edit; not a fade-out)
+leaves it held via `holdChannels()`. Saved per show as
+`<ShutterAutoOpen Enabled="0"/>`, only when off. AppSettings is now General
+| Advanced; Advanced holds it plus the effect script editor and the Show
+control (QLab) pointer. Programming tab's "no look for: shutter" is skipped
+while on. Tests: engine/test/shutterautoopen, appviews
+`settingsAdvancedHoldsAutoOpen`; both AT-Spots in copies of the classroom
+show and DanceHysteria-0.6 light at Full from a dimmer-only scene (shutter
+11) and stay at 0 with it off.
+
+- **Course:** Lesson 1.3's Shutter → Open step can go once this lands (the
+  course branch is untouched).
+
 ### 2026-10-16 — Sub-cues P3: show control by sub-cue number *(feat/sub-cues-p3, merged into feat/show-tree 2026-10-21)*
 
 SUBCUES_DESIGN.md §4.1. `ShowControl` reads a cue by number as

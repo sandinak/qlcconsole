@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.0 — Show Tree (October 2026)
 
+### Shutters open by themselves
+
+- **Auto-open shutters.** A spot whose shutter rests closed now lights
+  from a level alone: give it White at Full and it opens its shutter, as a
+  lighting console does. A shutter look (Closed, Strobe...) still wins, and
+  a light with no level stays as it is. It is on for every show, saved
+  with the show, and turned off in the new **Settings → Advanced** tab,
+  which also now holds the effect script editor choice and the Show control
+  (QLab) button. See [Auto-open shutters](other-improvements.md#auto-open-shutters).
+
 ### Software updates
 
 - **Update check and install.** qlcconsole checks GitHub Releases once a day

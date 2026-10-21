@@ -29,6 +29,7 @@ class QLineEdit;
 class QLabel;
 class QPushButton;
 class QDialogButtonBox;
+class QTabWidget;
 class App;
 
 /** @addtogroup ui UI
@@ -46,6 +47,9 @@ public:
     /** Put the cursor in the show's rig networks (the footer chip's click) */
     void focusRigNetworks();
 
+    /** Open on the Advanced tab */
+    void showAdvanced();
+
 protected slots:
     void accept() override;
 
@@ -58,6 +62,9 @@ private slots:
 
 private:
     App *m_app;
+    QTabWidget *m_tabs = nullptr;
+    // Advanced: the show's auto-open shutters (ShutterAutoOpen)
+    QCheckBox *m_autoOpenCheck = nullptr;
 
     // Autosave widgets
     QCheckBox *m_autosaveEnabledCheck;
