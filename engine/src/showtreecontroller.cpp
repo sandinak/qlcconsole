@@ -4570,7 +4570,9 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
     report.cues = int(list.cues.count());
 
     // Two scenes on the same target in one cue: the chaser ran both, the
-    // tree keeps one value per attribute (the later one).
+    // tree keeps one value per attribute (the later one) -- unless the cue
+    // ends up mixing (below), when it plays as the chaser did.
+    QList<QPair<int, QString>> htp;     // cue index (-1 - it: own scenes only), text
     for (int i = 0; i < list.cues.count(); ++i)
     {
         const Cue &cue = list.cues.at(i);
@@ -4602,11 +4604,11 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
         std::sort(sigs.begin(), sigs.end());
         for (const QString &sig : sigs)
             if (sources.value(sig).count() > 1)
-                report.htpConflicts << tr("Cue %1: %2 is set by %3; the chaser ran them all "
+                htp << qMakePair(sources.value(sig).count(tr("its own scene")) > 1 ? -1 - i : i, tr("Cue %1: %2 is set by %3; the chaser ran them all "
                                           "(the brighter intensity won), the cue list keeps "
                                           "the last one's value for each attribute.")
                                        .arg(cueLabel(list, i), targetLabel(targets.value(sig)),
-                                            sources.value(sig).join(tr(" and ")));
+                                            sources.value(sig).join(tr(" and "))));
     }
 
     // Two scenes on fixtures in common (different targets) setting the same
@@ -4661,6 +4663,69 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
             }
         }
     }
+
+    // An include at full beside the cue's own scenes: the chaser ran the
+    // included collection and the cue's scenes together, highest-wins on
+    // intensity, so an included level above the cue's own showed; the tree's
+    // rule plays the cue's own (own > included). Only where that changes the
+    // output -- the cue's static values or where an effect plays, as Convert
+    // compares them (staticCueOutput) -- the cue mixes instead (Overlap:
+    // Mix), so it plays as it did. Again until nothing changes: a cue that
+    // includes one that now mixes may change in turn.
+    {
+        const LineAimTest aimTest = lineAimTest();
+        bool changed = true;
+        for (int round = 0; changed && round <= list.cues.count(); ++round)
+        {
+            changed = false;
+            for (int i = 0; i < list.cues.count(); ++i)
+            {
+                if (list.cues.at(i).mixOverlap || list.cues.at(i).includes.isEmpty())
+                    continue;
+                CueList cand = list;
+                cand.cues[i].mixOverlap = true;
+                QStringList e0, e1;
+                const QHash<quint64, uchar> o0 = staticCueOutput(list, resolve(list, aimTest), i, &e0);
+                const QHash<quint64, uchar> o1 = staticCueOutput(cand, resolve(cand, aimTest), i, &e1);
+                if (o0 == o1 && e0 == e1)
+                    continue;
+                int n = 0;
+                QSet<quint32> fixtures;
+                QSet<quint64> keys;
+                for (auto it = o0.constBegin(); it != o0.constEnd(); ++it)
+                    keys.insert(it.key());
+                for (auto it = o1.constBegin(); it != o1.constEnd(); ++it)
+                    keys.insert(it.key());
+                for (quint64 k : keys)
+                    if (o0.value(k) != o1.value(k))
+                    {
+                        ++n;
+                        fixtures.insert(quint32(k >> 32));
+                    }
+                list.cues[i].mixOverlap = true;
+                changed = true;
+                QStringList inc;
+                for (quint32 id : list.cues.at(i).includes)
+                    inc << cueLabel(list, list.indexOf(id));
+                const QString line = n > 0
+                        ? tr("Cue %1: the cue it includes (%2) plays beside its own scenes, as in the chaser; "
+                             "the one rule would change %n channel(s)", "", n)
+                          .arg(cueLabel(list, i), inc.join(QStringLiteral(", ")))
+                          + tr(" on %n fixture(s), so it mixes (Overlap: Mix on the cue page).", "",
+                               int(fixtures.count()))
+                        : tr("Cue %1: the cue it includes (%2) plays beside its own scenes, as in the chaser; "
+                             "the one rule would change where an effect plays, so it mixes (Overlap: Mix "
+                             "on the cue page).").arg(cueLabel(list, i), inc.join(QStringLiteral(", ")));
+                report.mixedIncludes << line;
+                report.notes << line;
+            }
+        }
+    }
+    // A cue that mixes plays an include beside its own scene; two of its
+    // own scenes on one target still merge (-1 - index: those).
+    for (const auto &h : htp)
+        if (h.first < 0 || !list.cues.at(h.first).mixOverlap)
+            report.htpConflicts << h.second;
 
     // The generated chaser starts as a copy, so it plays the way the
     // original does: run order, speed modes, tempo, GO on the beat.

@@ -1304,6 +1304,38 @@ highest-wins — the tree's rule made it Red (1056 channels). So
 scenes set the same attribute and says so in the report; the cue page's
 check box turns it off. Dry run: 0 channels differ in all 8 cues.
 
+**An include brighter than the cue's own (2026-10-21, Branson: "Yes, do
+both").** The DanceHysteria-0.6 dry run: Full Show 0.0.5 includes 0.0.4
+(StepTops White, full) and sets StepTops at 45% itself; the chaser ran both
+and HTP showed full, the tree's rule (own > included) played 45% -- 1410
+channels in 0.0.5-0.0.7. Two changes:
+- *Mix reaches includes.* In a Mix cue (`Cue::mixOverlap`) the resolver no
+  longer lets an own layer take an *included* layer's place, nor merges one
+  include's layer into another's: they sit side by side (included first, so
+  the cue's own is the later LTP writer), and the bake plays both as the
+  nested collection did. A tracked layer is still taken over as before.
+  What the cue passes on is merged by target (later values over earlier),
+  i.e. the rule's; `ResolvedCue::layer()` finds the later (own) one.
+- *The importer marks it.* After the overlap check, each non-Mix cue with
+  includes is tried as Mix; it is marked only if `staticCueOutput()` (or
+  where an effect plays) differs between the two -- the same test Convert's
+  step 0 uses -- repeated until nothing changes (a cue that includes one
+  now mixing). `ImportReport::mixedIncludes` says which cues and how many
+  channels; a same-target HTP note for a cue now mixing is dropped (two of
+  its *own* scenes on one target still merge and are still listed).
+DanceHysteria-0.6: Full Show 0.0.5 marked (0.0.6 / 0.0.7 already Mix by the
+overlap check); 0 channels differ in all 18 cues of the four lists. The dry
+run (`importARealShow`) now opens the copy as App does -- `ShowEmbedding`
+`readWorkspace()` + `apply()` before `<Engine>`, with HOME pointed at an
+empty folder -- so the show's embedded definitions load and the compare is
+the same on any machine (10 of DanceHysteria-0.6's come from the show). It
+starts each playback from the idle rig: universes cleared *and* every
+fixture's channel defaults and modifiers put back (clearing alone left the
+first chaser with a mover's Pan 128 / Tilt 32 defaults and the next run
+without -- 12 phantom channels in New Chaser 8 once the movers' definitions
+loaded). It now fails unless 0 channels differ. Tests `importAnIncludeBrighterThanTheCuesOwnMixes`,
+`dryRunUsesTheShowsOwnDefinitions`.
+
 **Group sets (§1).** `ShowTree::GroupSet` in `<ShowTree>` (`<GroupSet ID
 Name Groups Fixtures>`), in the undo snapshot and rolled back with a failed
 command. `Target::sets`: the set is the layer's identity (signature

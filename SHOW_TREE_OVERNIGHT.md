@@ -1029,6 +1029,12 @@ Show Tree (§10):
   scene on the same group (see above). The tree plays the cue's own value;
   the chaser played the brighter one. Keep the rule (and the 45% you set
   in 0.0.5 now shows), or have the import keep what the chaser did?
+  **Answered 2026-10-21 ("Yes, do both"):** the import makes such a cue
+  Mix where the rule would change it (Full Show 0.0.5), Mix plays an
+  include beside the cue's own layer, and the dry run loads the show's
+  embedded definitions: 0 channels differ in all 18 cues
+  (`fix/import-mix-cues`; SHOW_TREE_DESIGN.md, "An include brighter than
+  the cue's own").
 
 Other branches:
 - **Colour ring** doesn't follow the spot's dimmer (a ring stays lit with

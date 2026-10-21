@@ -208,7 +208,11 @@ namespace ShowTree
          *  lower layer wins what both set, the upper isn't lit there for it
          *  (Scene::excludedFixtures); true -- they mix as a plain collection
          *  does (intensity and RGB highest-wins), which an imported cue keeps
-         *  so it plays as its chaser did. Child layers always win. */
+         *  so it plays as its chaser did. Child layers always win. In a
+         *  cue that mixes, an included cue's layers also play beside this
+         *  cue's own on the same target (and beside another include's),
+         *  as the chaser's nested collection did, instead of the own layer
+         *  taking their place; what it passes on is the one rule's. */
         bool mixOverlap = false;
         /** A use of a reusable cue (ReusableCue id, P4): its name, mode,
          *  overlap, cue looks and layers are the reusable's, kept the same
@@ -389,6 +393,8 @@ namespace ShowTree
         /** Includes that were left out (one that would loop). */
         QList<quint32> skippedIncludes;
 
+        /** The layer on @a target; in a cue that mixes, where an include
+         *  plays beside the cue's own layer on it, the later (the own). */
         const ResolvedLayer *layer(const Target &target) const;
     };
 

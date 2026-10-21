@@ -343,9 +343,9 @@ bool ResolvedLayer::isDark() const
 const ResolvedLayer *ResolvedCue::layer(const Target &target) const
 {
     const QString sig = target.signature();
-    for (const ResolvedLayer &l : layers)
-        if (l.target.signature() == sig)
-            return &l;
+    for (int i = layers.count() - 1; i >= 0; --i)
+        if (layers.at(i).target.signature() == sig)
+            return &layers.at(i);
     return nullptr;
 }
 
@@ -442,6 +442,31 @@ QList<ResolvedLayer> carried(const QList<ResolvedLayer> &from)
     return out;
 }
 
+/** A cue that mixes can hold an included layer and its own on the same
+    target, side by side (Cue::mixOverlap). What it passes on is one layer
+    per target, as the one rule merges them: the later's values over the
+    earlier's, in the later's place. */
+QList<ResolvedLayer> mergedByTarget(const QList<ResolvedLayer> &from)
+{
+    QList<ResolvedLayer> out;
+    for (const ResolvedLayer &l : from)
+    {
+        const int at = indexOfTarget(out, l.target.signature());
+        if (at < 0)
+        {
+            out << l;
+            continue;
+        }
+        ResolvedLayer merged = l;
+        const ResolvedLayer earlier = out.takeAt(at);
+        for (auto it = earlier.values.constBegin(); it != earlier.values.constEnd(); ++it)
+            if (!merged.values.contains(it.key()))
+                merged.values.insert(it.key(), it.value());
+        out << merged;
+    }
+    return out;
+}
+
 /** passOn as it leaves a cue: a layer that was Base in it is plain tracked
     from then on. */
 QList<ResolvedLayer> settled(const QList<ResolvedLayer> &from)
@@ -496,6 +521,18 @@ struct Resolver
 
         QList<ResolvedLayer> layers = start;
 
+        // A cue that mixes plays an included cue's layers beside its own and
+        // beside another include's, as the chaser's nested collection did:
+        // they take no included layer's place (tracked ones as usual).
+        const bool mix = cue.mixOverlap;
+        auto carriedAt = [&](const QString &sig) {
+            for (int k = 0; k < layers.count(); ++k)
+                if (layers.at(k).target.signature() == sig
+                    && !(mix && layers.at(k).origin == Origin::Included))
+                    return k;
+            return -1;
+        };
+
         // Includes: the included cue's output, as if standing in it (D8).
         for (quint32 inc : cue.includes)
         {
@@ -511,7 +548,7 @@ struct Resolver
             for (const ResolvedLayer &il : out.at(j).layers)
             {
                 const QString sig = il.target.signature();
-                int k = indexOfTarget(layers, sig);
+                int k = carriedAt(sig);
                 if (k < 0)
                 {
                     ResolvedLayer copy = il;
@@ -548,7 +585,7 @@ struct Resolver
             // starts from it.
             auto take = [&](const Target &t, ResolvedLayer *into) -> bool {
                 const QString tsig = t.signature();
-                const int at = indexOfTarget(layers, tsig);
+                const int at = carriedAt(tsig);
                 if (at >= 0)
                 {
                     *into = layers.takeAt(at);
@@ -661,7 +698,8 @@ struct Resolver
 
         // What the next cue starts from. A layer that came back to the base
         // in this cue is plain tracked from here on.
-        QList<ResolvedLayer> pass = settled((mode == CueMode::CueOnly) ? start : layers);
+        QList<ResolvedLayer> pass = settled((mode == CueMode::CueOnly) ? start
+                                            : mix ? mergedByTarget(layers) : layers);
         if (mode != CueMode::CueOnly)
         {
             const int baseIdx = list.indexOf(list.baseCue);

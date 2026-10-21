@@ -899,6 +899,12 @@ public:
         /** Cues where two scenes set the same target: the chaser ran both
          *  (intensity HTP); the tree keeps the later one's values. */
         QStringList htpConflicts;
+        /** Cues made to mix (Cue::mixOverlap) because an include at full
+         *  beside the cue's own scenes would, under the tree's rule, play
+         *  differently from the chaser: one line each, with how many
+         *  channels the rule would change. Their two-scene conflicts are
+         *  not in @a htpConflicts (they play as the chaser did). */
+        QStringList mixedIncludes;
         QStringList notes;
     };
 
