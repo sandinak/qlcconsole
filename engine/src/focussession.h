@@ -113,6 +113,11 @@ public:
     /** The stick a reading came from. */
     enum Stick { Coarse, Fine };
 
+    /** What drives the nudges. The keyboard always works; with
+     *  KeyboardInput the controller is ignored altogether, so a resting
+     *  controller cannot drift a head. */
+    enum InputDevice { ControllerInput, KeyboardInput };
+
     FocusSession(Doc *doc, QObject *parent = nullptr);
     ~FocusSession() override;
 
@@ -227,6 +232,11 @@ public:
      *  the sensitivity. Called from the programmer's joystick tick. */
     void tick(double dt);
 
+    /** Which device drives the nudges (see InputDevice). Switching to the
+     *  keyboard centres the sticks. Kept across sessions. */
+    InputDevice inputDevice() const { return m_input; }
+    void setInputDevice(InputDevice device);
+
     static constexpr float coarseRate() { return 8.0f; }
     static constexpr float fineRate() { return 1.0f; }
 
@@ -250,6 +260,7 @@ signals:
     void referenceChanged();
     /** Exit was pressed: the UI asks about unsaved offsets, then stop()s. */
     void exitRequested();
+    void inputDeviceChanged(FocusSession::InputDevice device);
 
 private:
     struct Head
@@ -287,6 +298,7 @@ private:
     QSet<quint32> m_checked;
     QList<UndoEntry> m_undo;
     float m_step = 0.1f;
+    InputDevice m_input = ControllerInput;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };
     float m_deadzone = 0.05f;

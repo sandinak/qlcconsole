@@ -759,6 +759,8 @@ Menu** on the controller. Choose:
   offsets somewhere else across the stage.
 - **The other heads** — dark, dimmed, or left as they are; and how bright
   to light the head being focused.
+- **Use** — **Controller** or **Keyboard**: which device nudges the heads
+  (see [Controller or keyboard](#controller-or-keyboard) below).
 
 It is a Design-mode tool: in Perform it refuses, and switching to Perform
 ends it (unsaved nudges go back). If functions are running it says so — it
@@ -782,6 +784,52 @@ the intended aim while the panel shows the offsets.
 | The other reference | Y | R |
 | Undo the last save | View | ⌘Z |
 | Leave | Menu | Esc |
+
+### The controller map
+
+The panel draws the device it is using, with each control labelled by what
+it does in Focus mode — **Next head** on RB, **Save** on A, **Nudge** on the
+left stick, **Fine nudge** on the right, the step size on the D-pad — and,
+under each, the controller's own name for it. Here RB is held and the left
+stick pushed up and to the right:
+
+![Focus mode's controller map: each control labelled with its action](../images/focus-mode-controller-map.png)
+
+- **It is live.** A button lights while you hold it and a stick's cap
+  follows the stick, so you can check on the real controller that each
+  control does what the map says.
+- **It is the controller's own mapping.** The labels come from the
+  controller profile's roles (see **Controllers** below), not from a fixed
+  picture: another make of pad is drawn the same way with its own names
+  (Cross, Circle, R1, Options…), and a control its profile does not have is
+  greyed and marked *not on this controller*. The triggers, the stick clicks
+  and the Guide button are not used and are always grey.
+- **Click a control** on the map to do what pressing it would.
+
+### Controller or keyboard
+
+**Use: Controller | Keyboard**, in the setup and at the top of the panel,
+picks which device drives the nudges and which map is shown.
+
+- **The default** is **Controller** when a controller Focus mode can use is
+  connected (its profile names the buttons it needs), otherwise
+  **Keyboard**. The choice you make is remembered on this computer: once
+  you pick Keyboard, Focus mode starts on the keyboard until you pick the
+  controller again.
+- **On the keyboard,** the map shows the keys Focus mode uses, each
+  labelled with its action, and each lights while it is pressed (below,
+  ⇧ and ↑). A controller that is also connected is **ignored** — its
+  buttons and sticks do nothing — so a controller resting on the desk
+  cannot drift a head.
+- **The keys work either way.** With the controller chosen, every keyboard
+  shortcut in the table above still works.
+- **If the controller disconnects** in the middle of a session, Focus mode
+  switches to the keyboard and says so. When it comes back, the panel
+  offers **Use the controller**; it does not switch back on its own.
+
+![Focus mode's keyboard map, with Shift and Up held](../images/focus-mode-keyboard-map.png)
+
+### Sticks, saving and profiles
 
 The sticks feel like the follow spot's — they are the same stick, with the
 controller profile's deadzone and sensitivity — scaled for alignment: full

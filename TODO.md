@@ -280,6 +280,14 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   profile names them); stick right/up feel on hung, standing and inverted
   heads; 8°/s and 1°/s rates feel right; the offsets land the light on a
   real mark from two references across the stage.
+  **Controller map and Use: Controller | Keyboard (2026-10-21,
+  feat/focus-controller-map):** that each control on the panel's map lights
+  as the real button is pressed (and the D-pad arms the right way round),
+  that the stick caps follow the sticks the right way (up is up); that
+  unplugging the pad mid-session switches to the keyboard with the note
+  and plugging it back offers it (does HID's rescan emit
+  configurationChanged on unplug on macOS, and how quickly?); that on
+  Keyboard a resting / knocked pad moves nothing.
 
 - **Matrix effects on the XL-450s (built 2026-10-18, feat/matrix-effects)**
   — the fourteen Matrix effects were checked offscreen only (no DMX from

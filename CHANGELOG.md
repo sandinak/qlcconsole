@@ -22,6 +22,24 @@ for pixel boxes; backup WLED lanterns; and output held off the rig
 network. Everything in 0.1.0 is in it too.
 
 ### Added
+- **Focus mode controller map and device choice.** The Focus mode panel
+  draws the controller (an Xbox-style layout, vector, following the theme)
+  with each control labelled by its Focus mode action, taken from the
+  profile's gamepad roles rather than fixed text: a profile with other names
+  (Cross, R1, Options…) shows them, a control it lacks is greyed, unused
+  ones (triggers, stick clicks, Guide) are grey. Buttons light while held
+  and the stick caps follow the sticks; a click on a control does it.
+  **Use: Controller | Keyboard** in the setup dialog and the panel picks
+  the device that drives the nudges and the map shown (the keys, labelled
+  and lit as pressed, in Keyboard). Default: the controller when one Focus
+  mode can use is connected, else the keyboard; the user's choice is kept
+  per machine (`focusmode/input`). On the keyboard every controller input
+  is swallowed and ignored -- sticks centred, nothing applied -- so a
+  resting pad cannot drift a head; keyboard shortcuts work in both. A
+  controller disconnecting mid-session switches to the keyboard with a
+  note, and returning offers **Use the controller**.
+  `ProgrammerController::focusController()` / `focusControllerChanged()` /
+  `focusControllerInput()`, `FocusSession::setInputDevice()`.
 - **Auto-open shutters** (Settings → Advanced, saved with the show, on by
   default). Like a console's auto open: a head given a level (its dimmer,
   or a colour when it has no dimmer) by any look, layer, cue, slider or

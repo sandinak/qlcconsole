@@ -575,6 +575,8 @@ float FocusSession::stickVelocity(float norm, float deadzone)
 
 void FocusSession::setStick(Stick stick, float xNorm, float yNorm)
 {
+    if (m_input == KeyboardInput)
+        return;
     m_stick[stick][0] = qBound(0.0f, xNorm, 1.0f);
     m_stick[stick][1] = qBound(0.0f, yNorm, 1.0f);
 }
@@ -585,9 +587,24 @@ void FocusSession::setStickResponse(float deadzone, float sensitivity)
     m_sensitivity = sensitivity > 0.0f ? sensitivity : 1.0f;
 }
 
+void FocusSession::setInputDevice(InputDevice device)
+{
+    if (device == m_input)
+        return;
+    m_input = device;
+    if (device == KeyboardInput)
+    {
+        // Whatever the stick last said, it says nothing now.
+        for (int s = 0; s < 2; ++s)
+            m_stick[s][0] = m_stick[s][1] = 0.5f;
+        m_carryPan = m_carryTilt = 0.0f;
+    }
+    emit inputDeviceChanged(device);
+}
+
 void FocusSession::tick(double dt)
 {
-    if (!m_active)
+    if (!m_active || m_input == KeyboardInput)
         return;
     float dPan = 0.0f, dTilt = 0.0f;
     for (int s = 0; s < 2; ++s)

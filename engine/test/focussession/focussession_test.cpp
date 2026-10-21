@@ -602,6 +602,38 @@ void FocusSession_Test::theControllerReachesItThroughTheProgrammer()
     QSignalSpy exitAsked(s, &FocusSession::exitRequested);
     press(17);
     QCOMPARE(exitAsked.count(), 1);
+
+    // What the panel draws: the controller found by its roles, and its input.
+    const ProgrammerController::FocusController pad = pc->focusController();
+    QVERIFY(pad.present);
+    QCOMPARE(pad.universe, 0u);
+    QVERIFY(pad.controls.contains(GamepadRole::RB) && pad.controls.contains(GamepadRole::RightY));
+    QVERIFY(!pad.controls.contains(GamepadRole::Y));
+    QSignalSpy shown(pc, &ProgrammerController::focusControllerInput);
+    press(15);
+    QCOMPARE(shown.count(), 2);
+    QCOMPARE(shown.at(0).at(0).toInt(), int(GamepadRole::RB));
+    QCOMPARE(shown.at(0).at(1).toFloat(), 1.0f);
+
+    // On the keyboard the controller does nothing at all -- and still
+    // reaches nothing else.
+    s->setInputDevice(FocusSession::KeyboardInput);
+    const quint32 at = s->currentFixture();
+    const FocusSession::Offset before = s->liveOffset(at);
+    shown.clear();
+    press(21);
+    press(15);
+    press(17);
+    emit iom->inputValueChanged(0, 0, 255, QString());
+    for (int i = 0; i < 10; ++i)
+        pc->applyDesignJoystick();
+    QCOMPARE(s->currentFixture(), at);
+    QVERIFY(s->liveOffset(at) == before);
+    QCOMPARE(exitAsked.count(), 1);
+    QCOMPARE(shown.count(), 0);
+    QCOMPARE(actions.count(), 0);
+    emit iom->inputValueChanged(0, 0, 128, QString());
+    s->setInputDevice(FocusSession::ControllerInput);
     s->stop();
 }
 

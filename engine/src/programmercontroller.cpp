@@ -1671,6 +1671,12 @@ void ProgrammerController::connectControllerInput()
             SIGNAL(inputValueChanged(quint32, quint32, uchar, const QString&)),
             this,
             SLOT(slotControllerInputChanged(quint32, quint32, uchar, const QString&)));
+    /* A controller unplugged or plugged back in is a plugin configuration
+       change (HID rescans); a profile reassigned is a profile change. */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::pluginConfigurationChanged,
+            this, &ProgrammerController::focusControllerChanged);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged,
+            this, &ProgrammerController::focusControllerChanged);
     m_controllerInputConnected = true;
 }
 
@@ -1901,6 +1907,66 @@ int ProgrammerController::controllerRole(quint32 universe, quint32 channel) cons
                                     ip->plugin()->inputChannelName(ip->input(), channel));
 }
 
+ProgrammerController::FocusController ProgrammerController::focusController() const
+{
+    /* Controls numbered past this are not a gamepad's: HID channels are
+       the axes, then the buttons, and no profile goes near it. */
+    const quint32 kMaxChannel = 128;
+
+    FocusController best;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return best;
+    int bestScore = 0;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || ip->plugin() == nullptr)
+            continue;
+        QLCIOPlugin *plugin = ip->plugin();
+        FocusController c;
+        c.universe = u;
+        c.name = ip->inputName();
+        c.profile = ip->hidProfileName();
+        int used = 0;
+        for (quint32 ch = 0; ch < kMaxChannel; ++ch)
+        {
+            const QString name = plugin->inputChannelName(ip->input(), ch);
+            const GamepadRole::Role role =
+                GamepadRole::fromProfile(plugin->inputChannelRole(ip->input(), ch), name);
+            if (role == GamepadRole::None || c.controls.contains(role))
+                continue;
+            c.controls.insert(role, name);
+            if (FocusSession::controlFor(role) != FocusSession::NoControl
+                || role == GamepadRole::LeftX || role == GamepadRole::LeftY
+                || role == GamepadRole::RightX || role == GamepadRole::RightY)
+                ++used;
+        }
+        // The follow spot's bound stick is the left stick here, named or not.
+        if (m_panBound && m_panUniverse == u && !c.controls.contains(GamepadRole::LeftX))
+        {
+            c.controls.insert(GamepadRole::LeftX, plugin->inputChannelName(ip->input(), m_panChannel));
+            ++used;
+        }
+        if (m_tiltBound && m_tiltUniverse == u && !c.controls.contains(GamepadRole::LeftY))
+        {
+            c.controls.insert(GamepadRole::LeftY, plugin->inputChannelName(ip->input(), m_tiltChannel));
+            ++used;
+        }
+        if (used == 0)
+            continue;
+        // Most of what Focus mode uses wins; the follow spot's breaks a tie.
+        const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0);
+        if (score > bestScore)
+        {
+            bestScore = score;
+            best = c;
+            best.present = true;
+        }
+    }
+    return best;
+}
+
 bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
 {
     const float norm = value / 255.0f;
@@ -1932,6 +1998,18 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
     if (!active)
         return false;
+
+    /* On the keyboard the controller is ignored -- but still kept from the
+       follow spot and the rest -- so a resting stick cannot drift a head. */
+    if (m_focusSession->inputDevice() == FocusSession::KeyboardInput)
+        return true;
+
+    // What the panel lights: the stick by its role even when it is only bound.
+    const GamepadRole::Role shown = isPan ? GamepadRole::LeftX
+                                  : isTilt ? GamepadRole::LeftY : role;
+    if (shown != GamepadRole::None)
+        emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
+                                                                        : (value > 0 ? 1.0f : 0.0f));
 
     // Focus mode owns the controller: everything stops here.
     if (isPan || role == GamepadRole::LeftX)

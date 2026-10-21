@@ -24,12 +24,16 @@
 #include <QFormLayout>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QGridLayout>
+#include <QStandardItemModel>
 #include <QCloseEvent>
+#include <QButtonGroup>
+#include <QToolButton>
 #include <QComboBox>
 #include <QKeyEvent>
+#include <QSettings>
 #include <QLabel>
 
+#include "focuscontrolmap.h"
 #include "focusmodepanel.h"
 #include "programmercontroller.h"
 #include "monitorproperties.h"
@@ -45,6 +49,8 @@ QPointer<FocusModePanel> FocusModePanel::s_instance;
 
 namespace
 {
+const char kInputSetting[] = "focusmode/input";
+
 QString signedDegrees(float v)
 {
     return QString::fromUtf8("%1%2\302\260").arg(v >= 0.0f ? "+" : "").arg(double(v), 0, 'f', 2);
@@ -121,6 +127,27 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     m_levelSpin->setValue(80);
     form->addRow(tr("Light the head at:"), m_levelSpin);
 
+    /* What drives the nudges. The keys work either way; on the keyboard a
+       controller lying on the desk is ignored, so it cannot drift a head. */
+    m_inputCombo = new QComboBox(this);
+    m_inputCombo->setObjectName(QStringLiteral("focusInput"));
+    const ProgrammerController::FocusController pad = m_doc->programmer()->focusController();
+    m_inputCombo->addItem(pad.present ? tr("Controller \342\200\224 %1").arg(pad.name)
+                                      : tr("Controller (none connected)"),
+                          int(FocusSession::ControllerInput));
+    m_inputCombo->addItem(tr("Keyboard"), int(FocusSession::KeyboardInput));
+    if (!pad.present)
+    {
+        // Not choosable without one.
+        if (QStandardItemModel *m = qobject_cast<QStandardItemModel *>(m_inputCombo->model()))
+            m->item(0)->setEnabled(false);
+    }
+    m_inputCombo->setCurrentIndex(
+        m_inputCombo->findData(int(FocusModePanel::defaultInput(m_doc))));
+    m_inputCombo->setToolTip(tr("Which device nudges the heads. The keyboard shortcuts work "
+                                "with either; on the keyboard the controller is ignored."));
+    form->addRow(tr("Use:"), m_inputCombo);
+
     /* Perform is refused by the session itself; in Design, say what is
        running -- Focus mode overrides the heads it uses, nothing else. */
     const int running = m_doc->masterTimer() != nullptr ? m_doc->masterTimer()->runningFunctions() : 0;
@@ -173,6 +200,11 @@ FocusSession::Reference FocusModeSetupDialog::referenceOf(const QComboBox *combo
     return ref;
 }
 
+FocusSession::InputDevice FocusModeSetupDialog::inputDevice() const
+{
+    return FocusSession::InputDevice(m_inputCombo->currentData().toInt());
+}
+
 FocusSession::Options FocusModeSetupDialog::options() const
 {
     FocusSession::Options o;
@@ -215,15 +247,36 @@ FocusModePanel *FocusModePanel::open(Doc *doc, QWidget *parent, quint32 sceneId,
     if (setup.exec() != QDialog::Accepted)
         return nullptr;
 
+    // The choice made here is this machine's from now on.
+    rememberInput(setup.inputDevice());
     QString why;
-    FocusModePanel *panel = startWith(doc, parent, setup.options(), &why);
+    FocusModePanel *panel = startWith(doc, parent, setup.options(), &why, int(setup.inputDevice()));
     if (panel == nullptr)
         QMessageBox::warning(parent, tr("Focus Mode"), why);
     return panel;
 }
 
+FocusSession::InputDevice FocusModePanel::defaultInput(Doc *doc)
+{
+    QSettings settings;
+    if (settings.value(kInputSetting).toString() == QLatin1String("keyboard"))
+        return FocusSession::KeyboardInput;
+    if (doc != nullptr && doc->programmer() != nullptr
+        && doc->programmer()->focusController().present)
+        return FocusSession::ControllerInput;
+    return FocusSession::KeyboardInput;
+}
+
+void FocusModePanel::rememberInput(FocusSession::InputDevice device)
+{
+    QSettings settings;
+    settings.setValue(kInputSetting, device == FocusSession::KeyboardInput
+                                     ? QStringLiteral("keyboard") : QStringLiteral("controller"));
+}
+
 FocusModePanel *FocusModePanel::startWith(Doc *doc, QWidget *parent,
-                                          const FocusSession::Options &options, QString *why)
+                                          const FocusSession::Options &options, QString *why,
+                                          int input)
 {
     /* The rig as it was, so the whole session can be one step on the
        Lighting Studio's undo once it ends. */
@@ -236,6 +289,8 @@ FocusModePanel *FocusModePanel::startWith(Doc *doc, QWidget *parent,
     FocusModePanel *panel = new FocusModePanel(doc, parent);
     panel->m_rigBefore = before;
     s_instance = panel;
+    panel->setInputDevice(input < 0 ? defaultInput(doc) : FocusSession::InputDevice(input), false);
+    panel->refreshController();
     panel->refresh();
     panel->showHighlight(panel->m_session->currentFixture());
     panel->show();
@@ -290,39 +345,84 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     meta->addWidget(m_progressLabel);
     vl->addLayout(meta);
 
-    /* The buttons do what the controller and keys do. NoFocus: the panel
-       keeps the keyboard, so arrows always nudge. */
-    QGridLayout *grid = new QGridLayout;
-    auto button = [this, grid](const QString &text, const QString &key, int row, int col,
-                               FocusSession::Control c) {
-        QPushButton *b = new QPushButton(QStringLiteral("%1\n%2").arg(text, key), this);
+    /* What drives the nudges, and the map of it: the controller drawn with
+       each control labelled by what it does here, or the keys. */
+    QHBoxLayout *use = new QHBoxLayout;
+    use->addWidget(new QLabel(tr("Use:"), this));
+    m_useController = new QToolButton(this);
+    m_useController->setObjectName(QStringLiteral("focusUseController"));
+    m_useController->setText(tr("Controller"));
+    m_useKeyboard = new QToolButton(this);
+    m_useKeyboard->setObjectName(QStringLiteral("focusUseKeyboard"));
+    m_useKeyboard->setText(tr("Keyboard"));
+    QButtonGroup *useGroup = new QButtonGroup(this);
+    for (QToolButton *b : { m_useController, m_useKeyboard })
+    {
+        b->setCheckable(true);
         b->setFocusPolicy(Qt::NoFocus);
-        b->setObjectName(QStringLiteral("focusButton%1").arg(int(c)));
-        grid->addWidget(b, row, col);
-        connect(b, &QPushButton::clicked, this, [this, c]() { m_session->apply(c); });
-        return b;
-    };
-    button(tr("Previous"), tr("LB  ·  ["), 0, 0, FocusSession::Previous);
-    button(tr("Next"), tr("RB  ·  ]"), 0, 1, FocusSession::Next);
-    m_refButton = button(tr("Other reference"), tr("Y  ·  R"), 0, 2, FocusSession::ToggleReference);
-    button(tr("Save"), tr("A  ·  Enter"), 1, 0, FocusSession::Save);
-    button(tr("Revert"), tr("B  ·  Backspace"), 1, 1, FocusSession::Revert);
-    button(tr("Zero"), tr("X  ·  0"), 1, 2, FocusSession::Zero);
-    m_undoButton = button(tr("Undo save"), tr("View  ·  \342\214\230Z"), 2, 0, FocusSession::UndoSave);
-    QPushButton *exitBtn = new QPushButton(tr("Exit\nMenu  \302\267  Esc"), this);
+        b->setAutoRaise(false);
+        useGroup->addButton(b);
+        use->addWidget(b);
+    }
+    styleUseButtons();
+    m_useKeyboard->setToolTip(tr("Nudge from the keyboard; the controller is ignored"));
+    connect(m_useController, &QToolButton::clicked, this, [this]() {
+        setInputDevice(FocusSession::ControllerInput);
+    });
+    connect(m_useKeyboard, &QToolButton::clicked, this, [this]() {
+        setInputDevice(FocusSession::KeyboardInput);
+    });
+    m_deviceLabel = new QLabel(this);
+    m_deviceLabel->setObjectName(QStringLiteral("focusDevice"));
+    m_deviceLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    use->addWidget(m_deviceLabel, 1);
+    vl->addLayout(use);
+
+    QHBoxLayout *note = new QHBoxLayout;
+    m_noteLabel = new QLabel(this);
+    m_noteLabel->setObjectName(QStringLiteral("focusInputNote"));
+    m_noteLabel->setWordWrap(true);
+    m_noteLabel->setStyleSheet(QStringLiteral("color: #d08a1c;"));
+    m_noteLabel->hide();
+    note->addWidget(m_noteLabel, 1);
+    m_backButton = new QPushButton(tr("Use the controller"), this);
+    m_backButton->setObjectName(QStringLiteral("focusControllerBack"));
+    m_backButton->setFocusPolicy(Qt::NoFocus);
+    m_backButton->hide();
+    connect(m_backButton, &QPushButton::clicked, this, [this]() {
+        setInputDevice(FocusSession::ControllerInput);
+    });
+    note->addWidget(m_backButton);
+    vl->addLayout(note);
+
+    m_map = new FocusControlMap(this);
+    m_map->setFocusPolicy(Qt::NoFocus);
+    vl->addWidget(m_map, 1);
+    // A click on a control does what it would.
+    connect(m_map, &FocusControlMap::controlClicked, this, [this](int role) {
+        m_session->apply(FocusSession::controlFor(GamepadRole::Role(role)));
+    });
+    connect(m_map, &FocusControlMap::keyClicked, this, [this](int key) {
+        handleKey(key, key == Qt::Key_Z ? Qt::KeyboardModifiers(Qt::ControlModifier)
+                                        : Qt::KeyboardModifiers());
+    });
+
+    QHBoxLayout *bottom = new QHBoxLayout;
+    bottom->addStretch();
+    QPushButton *exitBtn = new QPushButton(tr("Exit"), this);
     exitBtn->setObjectName(QStringLiteral("focusExit"));
     exitBtn->setFocusPolicy(Qt::NoFocus);
-    grid->addWidget(exitBtn, 2, 2);
     connect(exitBtn, &QPushButton::clicked, this, [this]() { requestExit(); });
-    vl->addLayout(grid);
+    bottom->addWidget(exitBtn);
+    vl->addLayout(bottom);
 
-    QLabel *legend = new QLabel(tr("Left stick or Shift+arrows: nudge (coarse)  \302\267  "
-                                   "right stick: fine  \302\267  D-pad or arrows: one step  \302\267  "
-                                   "+ / \342\210\222: step size"), this);
-    legend->setObjectName(QStringLiteral("focusLegend"));
-    legend->setWordWrap(true);
-    legend->setStyleSheet(QStringLiteral("color: palette(mid);"));
-    vl->addWidget(legend);
+    ProgrammerController *pc = m_doc->programmer();
+    connect(pc, &ProgrammerController::focusControllerChanged,
+            this, &FocusModePanel::refreshController);
+    connect(pc, &ProgrammerController::focusControllerInput, this, [this](int role, float value) {
+        if (m_session->inputDevice() == FocusSession::ControllerInput)
+            m_map->setControlValue(role, value);
+    });
 
     connect(m_session, &FocusSession::currentChanged, this, [this](quint32 fid) {
         showHighlight(fid);
@@ -379,8 +479,74 @@ void FocusModePanel::refresh()
     }
     m_stepLabel->setText(tr("Step %1\302\260").arg(double(m_session->stepDegrees()), 0, 'g', 3));
     m_progressLabel->setText(tr("%1 of %2 checked").arg(m_session->checkedCount()).arg(m_session->count()));
-    m_undoButton->setEnabled(m_session->canUndo());
-    m_refButton->setEnabled(m_session->options().second.isValid());
+    m_map->setStepDegrees(m_session->stepDegrees());
+}
+
+void FocusModePanel::setInputDevice(FocusSession::InputDevice device, bool remember)
+{
+    // No controller to have: the keyboard, but not as anyone's choice.
+    if (device == FocusSession::ControllerInput
+        && !m_doc->programmer()->focusController().present)
+    {
+        device = FocusSession::KeyboardInput;
+        remember = false;
+    }
+    m_session->setInputDevice(device);
+    if (remember)
+    {
+        rememberInput(device);
+        m_fellBack = false;
+    }
+    if (device == FocusSession::ControllerInput)
+        m_fellBack = false;
+    if (!m_fellBack)
+    {
+        m_noteLabel->hide();
+        m_backButton->hide();
+    }
+    m_useController->setChecked(device == FocusSession::ControllerInput);
+    m_useKeyboard->setChecked(device == FocusSession::KeyboardInput);
+    m_map->clearInput();
+    const FocusControlMap::Mode mode = device == FocusSession::KeyboardInput
+                                       ? FocusControlMap::KeyboardMap : FocusControlMap::ControllerMap;
+    if (mode != m_map->mode())
+    {
+        m_map->setMode(mode);
+        // The keys take less room than the controller.
+        if (isVisible())
+            resize(width(), qMax(minimumSizeHint().height(), sizeHint().height()));
+    }
+}
+
+void FocusModePanel::refreshController()
+{
+    const ProgrammerController::FocusController pad = m_doc->programmer()->focusController();
+    m_map->setControls(pad.controls);
+    m_useController->setEnabled(pad.present);
+    m_useController->setToolTip(pad.present ? tr("Nudge from %1").arg(pad.name)
+                                            : tr("No controller Focus mode can use is connected"));
+    m_deviceLabel->setText(pad.present ? pad.name : tr("No controller connected"));
+
+    if (!pad.present && m_session->inputDevice() == FocusSession::ControllerInput)
+    {
+        // Gone mid-session: the keyboard has it now, and nothing drifts.
+        m_fellBack = true;
+        setInputDevice(FocusSession::KeyboardInput, false);
+        m_noteLabel->setText(tr("The controller disconnected: switched to the keyboard."));
+        m_noteLabel->show();
+        m_backButton->hide();
+    }
+    else if (pad.present && m_fellBack && m_session->inputDevice() == FocusSession::KeyboardInput)
+    {
+        m_noteLabel->setText(tr("The controller is back."));
+        m_noteLabel->show();
+        m_backButton->show();
+    }
+    else if (!pad.present && m_fellBack)
+    {
+        m_noteLabel->setText(tr("The controller disconnected: switched to the keyboard."));
+        m_backButton->hide();
+    }
 }
 
 void FocusModePanel::showHighlight(quint32 fid)
@@ -389,16 +555,11 @@ void FocusModePanel::showHighlight(quint32 fid)
         mon->showFocusFixture(fid);
 }
 
-void FocusModePanel::keyPressEvent(QKeyEvent *event)
+bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
 {
-    if (!m_session->isActive())
-    {
-        QWidget::keyPressEvent(event);
-        return;
-    }
-    const bool shift = event->modifiers() & Qt::ShiftModifier;
+    const bool shift = modifiers & Qt::ShiftModifier;
     const float step = shift ? 1.0f : m_session->stepDegrees();
-    switch (event->key())
+    switch (key)
     {
         case Qt::Key_Left:  m_session->nudge(-step, 0.0f); break;
         case Qt::Key_Right: m_session->nudge(step, 0.0f); break;
@@ -425,18 +586,46 @@ void FocusModePanel::keyPressEvent(QKeyEvent *event)
             break;
         case Qt::Key_Escape:   requestExit(); break;
         case Qt::Key_Z:
-            if (event->modifiers() & Qt::ControlModifier)
-            {
-                m_session->undoSave();
-                break;
-            }
-            QWidget::keyPressEvent(event);
-            return;
+            if (!(modifiers & Qt::ControlModifier))
+                return false;
+            m_session->undoSave();
+            break;
         default:
-            QWidget::keyPressEvent(event);
-            return;
+            return false;
+    }
+    return true;
+}
+
+void FocusModePanel::keyPressEvent(QKeyEvent *event)
+{
+    if (!m_session->isActive())
+    {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    // The map lights the key, and the modifiers held with it.
+    m_map->setKeyDown(event->key(), true);
+    m_map->setKeyDown(Qt::Key_Shift, event->modifiers() & Qt::ShiftModifier);
+    m_map->setKeyDown(Qt::Key_Control, event->modifiers() & Qt::ControlModifier);
+    if (!handleKey(event->key(), event->modifiers()))
+    {
+        QWidget::keyPressEvent(event);
+        return;
     }
     event->accept();
+}
+
+void FocusModePanel::keyReleaseEvent(QKeyEvent *event)
+{
+    if (!event->isAutoRepeat())
+    {
+        m_map->setKeyDown(event->key(), false);
+        m_map->setKeyDown(Qt::Key_Shift, event->modifiers() & Qt::ShiftModifier
+                                         && event->key() != Qt::Key_Shift);
+        m_map->setKeyDown(Qt::Key_Control, event->modifiers() & Qt::ControlModifier
+                                           && event->key() != Qt::Key_Control);
+    }
+    QWidget::keyReleaseEvent(event);
 }
 
 bool FocusModePanel::requestExit()
@@ -473,6 +662,30 @@ void FocusModePanel::finish()
     if (Monitor *mon = Monitor::instance())
         mon->pushRigUndo(m_rigBefore);
     m_rigBefore.clear();
+}
+
+void FocusModePanel::styleUseButtons()
+{
+    /* A segmented choice, the chosen one in the highlight. Set again on a
+       theme change: a style sheet's palette() is read when it is set. */
+    const QString css = QStringLiteral(
+        "QToolButton { background-color: palette(button); color: palette(button-text);"
+        " border: 1px solid palette(mid); border-radius: 4px; padding: 3px 10px; }"
+        "QToolButton:checked { background-color: palette(highlight);"
+        " color: palette(highlighted-text); border-color: palette(highlight); }"
+        "QToolButton:disabled { color: palette(mid); }");
+    for (QToolButton *b : { m_useController, m_useKeyboard })
+    {
+        b->setStyleSheet(QString());
+        b->setStyleSheet(css);
+    }
+}
+
+void FocusModePanel::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::ApplicationPaletteChange || event->type() == QEvent::PaletteChange)
+        styleUseButtons();
+    QWidget::changeEvent(event);
 }
 
 void FocusModePanel::closeEvent(QCloseEvent *event)
