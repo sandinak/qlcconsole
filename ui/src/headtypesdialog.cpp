@@ -10,7 +10,6 @@
 */
 
 #include <QDialogButtonBox>
-#include <QMouseEvent>
 #include <QPushButton>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -18,7 +17,6 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QLineEdit>
-#include <QPainter>
 #include <QLabel>
 #include <QFrame>
 #include <QMessageBox>
@@ -28,110 +26,12 @@
 #include "createfixturegroup.h"
 #include "monitorproperties.h"
 #include "headtypesdialog.h"
+#include "ledlayouteditor.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
-
-static const double kCell = 26.0;   // px per LED cell
-
-/* A head kind's colour in the grid. RGB is drawn as its three stripes. */
-static QColor kindColour(const QString &kind)
-{
-    if (kind == QLatin1String("W"))  return QColor(236, 236, 228);
-    if (kind == QLatin1String("A"))  return QColor(255, 160, 40);
-    if (kind == QLatin1String("UV")) return QColor(140, 60, 220);
-    if (kind == QLatin1String("I"))  return QColor(200, 200, 120);
-    if (kind.contains(QLatin1Char('W')) && kind.startsWith(QLatin1String("RGB")))
-        return QColor(250, 230, 240);
-    return QColor::fromHsv(int(qHash(kind) % 360), 120, 220);
-}
-
-/*****************************************************************************
- * LedMapWidget
- *****************************************************************************/
-
-LedMapWidget::LedMapWidget(QWidget *parent)
-    : QWidget(parent)
-{
-    setMinimumHeight(60);
-}
-
-void LedMapWidget::setMap(const Fixture *like, const HeadLayout &map)
-{
-    m_like = like;
-    m_map = map;
-    m_picked = -1;
-    updateGeometry();
-    update();
-}
-
-QSize LedMapWidget::sizeHint() const
-{
-    return QSize(int(m_map.size.width() * kCell) + 2, int(m_map.size.height() * kCell) + 2);
-}
-
-QRectF LedMapWidget::cellRect(const QPoint &cell) const
-{
-    return QRectF(1 + cell.x() * kCell, 1 + cell.y() * kCell, kCell - 2, kCell - 2);
-}
-
-int LedMapWidget::headAt(const QPointF &pos) const
-{
-    for (int h = 0; h < m_map.cells.size(); ++h)
-        if (cellRect(m_map.cells.at(h)).contains(pos))
-            return h;
-    return -1;
-}
-
-void LedMapWidget::paintEvent(QPaintEvent *)
-{
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    p.fillRect(rect(), QColor(28, 30, 36));
-    const QLCFixtureMode *mode = m_like != nullptr ? m_like->fixtureMode() : nullptr;
-    QFont f = p.font();
-    f.setPixelSize(9);
-    p.setFont(f);
-    for (int h = 0; h < m_map.cells.size(); ++h)
-    {
-        const QRectF r = cellRect(m_map.cells.at(h));
-        const QString kind = HeadKinds::kindOf(mode, h);
-        if (kind.startsWith(QLatin1String("RGB")) && !kind.contains(QLatin1Char('W')))
-        {
-            const double w = r.width() / 3.0;
-            p.fillRect(QRectF(r.left(), r.top(), w, r.height()), QColor(200, 60, 60));
-            p.fillRect(QRectF(r.left() + w, r.top(), w, r.height()), QColor(60, 170, 70));
-            p.fillRect(QRectF(r.left() + 2 * w, r.top(), w, r.height()), QColor(60, 90, 210));
-        }
-        else
-            p.fillRect(r, kindColour(kind));
-        p.setPen(h == m_picked ? QPen(QColor(255, 200, 0), 2.5) : QPen(QColor(0, 0, 0, 120), 1.0));
-        p.setBrush(Qt::NoBrush);
-        p.drawRect(r);
-        p.setPen(kind == QLatin1String("W") ? Qt::black : Qt::white);
-        p.drawText(r, Qt::AlignCenter, QString::number(h + 1));
-    }
-}
-
-void LedMapWidget::mousePressEvent(QMouseEvent *e)
-{
-    const int h = headAt(e->position());
-    if (h < 0)
-        return;
-    if (m_picked < 0 || m_picked == h)
-    {
-        m_picked = (m_picked == h) ? -1 : h;
-        update();
-        return;
-    }
-    // The second click: the two heads trade cells.
-    qSwap(m_map.cells[m_picked], m_map.cells[h]);
-    m_picked = -1;
-    update();
-    emit mapEdited();
-}
 
 /*****************************************************************************
  * HeadTypesDialog
@@ -209,6 +109,7 @@ HeadTypesDialog::HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds,
     , m_ids(fixtureIds)
 {
     setWindowTitle(tr("Split by Head Type"));
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md#split-by-head-type"));
     MonitorProperties *mp = m_doc->monitorProperties();
 
     // The mixed models among the fixtures, and every kind of head there is.
@@ -230,8 +131,9 @@ HeadTypesDialog::HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds,
 
     QVBoxLayout *root = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("These fixtures have more than one kind of head. Check where each "
-                                  "head really is -- the LED map -- then make a fixture group per "
-                                  "kind. The map is kept in your library and in this show."), this);
+                                  "head really is -- the LED layout -- then make a fixture group per "
+                                  "kind. The layout is kept in this show (and, below, as your "
+                                  "default for the model)."), this);
     intro->setWordWrap(true);
     root->addWidget(intro);
 
@@ -247,29 +149,13 @@ HeadTypesDialog::HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds,
     m_modelInfo = new QLabel(this);
     root->addWidget(m_modelInfo);
 
-    m_grid = new LedMapWidget(this);
-    root->addWidget(m_grid, 0, Qt::AlignLeft);
-    QLabel *gridHint = new QLabel(tr("Numbers are head numbers. Click two cells to swap their heads."), this);
-    gridHint->setEnabled(false);
-    root->addWidget(gridHint);
-
-    QHBoxLayout *rowsLine = new QHBoxLayout;
-    rowsLine->addWidget(new QLabel(tr("Rows, top to bottom:"), this));
-    m_rowsBox = new QHBoxLayout;
-    rowsLine->addLayout(m_rowsBox);
-    QPushButton *apply = new QPushButton(tr("Apply Rows"), this);
-    apply->setToolTip(tr("Fill each row with the next heads of its kind, in head order"));
-    rowsLine->addWidget(apply);
-    QPushButton *order = new QPushButton(tr("Head Order"), this);
-    order->setToolTip(tr("Back to the heads in number order, row by row -- what the "
-                         "definition alone says"));
-    rowsLine->addWidget(order);
-    rowsLine->addStretch();
-    root->addLayout(rowsLine);
-    m_rowNote = new QLabel(this);
-    m_rowNote->setStyleSheet("color:#e07070;");
-    m_rowNote->hide();
-    root->addWidget(m_rowNote);
+    m_editor = new LedLayoutEditor(m_doc, this);
+    root->addWidget(m_editor, 1);
+    m_saveDefault = new QCheckBox(tr("Also save as the default for this model"), this);
+    m_saveDefault->setToolTip(tr("Keep the map on this computer too, for new shows and shows "
+                                 "with no map of their own for this model"));
+    m_saveDefault->setChecked(true);
+    root->addWidget(m_saveDefault);
 
     QFrame *sep = new QFrame(this);
     sep->setFrameShape(QFrame::HLine);
@@ -308,9 +194,7 @@ HeadTypesDialog::HeadTypesDialog(Doc *doc, const QList<quint32> &fixtureIds,
 
     connect(m_modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &HeadTypesDialog::slotModelChanged);
-    connect(apply, &QPushButton::clicked, this, &HeadTypesDialog::slotApplyRows);
-    connect(order, &QPushButton::clicked, this, &HeadTypesDialog::slotHeadOrder);
-    connect(m_grid, &LedMapWidget::mapEdited, this, &HeadTypesDialog::slotMapEdited);
+    connect(m_editor, &LedLayoutEditor::layoutChanged, this, &HeadTypesDialog::slotMapEdited);
     connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
@@ -345,79 +229,12 @@ void HeadTypesDialog::showModel(const QString &key)
             n++;
     m_modelInfo->setText(tr("%1 of these, %2 heads each: %3")
                              .arg(n).arg(mode->heads().size()).arg(parts.join(QStringLiteral(" + "))));
-    m_grid->setMap(fx, m_maps.value(key));
-    m_rowNote->hide();
-    fillRowCombos();
-}
-
-void HeadTypesDialog::fillRowCombos()
-{
-    const QString key = m_modelCombo->currentData().toString();
-    const Fixture *fx = likeFor(key);
-    qDeleteAll(m_rowCombos);
-    m_rowCombos.clear();
-    if (fx == nullptr)
-        return;
-    const QStringList kinds = HeadKinds::kindsOf(fx);
-    const HeadLayout map = m_maps.value(key);
-    const QStringList rows = map.rowKinds(fx);
-    for (int r = 0; r < map.size.height(); ++r)
-    {
-        QComboBox *cb = new QComboBox(this);
-        cb->addItems(kinds);
-        const int at = kinds.indexOf(rows.value(r));
-        cb->setCurrentIndex(at >= 0 ? at : 0);
-        m_rowsBox->addWidget(cb);
-        m_rowCombos << cb;
-    }
-}
-
-void HeadTypesDialog::slotApplyRows()
-{
-    const QString key = m_modelCombo->currentData().toString();
-    const Fixture *fx = likeFor(key);
-    if (fx == nullptr)
-        return;
-    QStringList rows;
-    foreach (QComboBox *cb, m_rowCombos)
-        rows << cb->currentText();
-    const HeadLayout l = HeadLayout::fromRowPattern(fx, rows);
-    if (!l.isValid())
-    {
-        // Say what does not fit, rather than guess.
-        const QLCFixtureMode *mode = fx->fixtureMode();
-        QMap<QString, int> heads, cells;
-        for (int h = 0; h < mode->heads().size(); ++h)
-            heads[HeadKinds::kindOf(mode, h)]++;
-        foreach (const QString &k, rows)
-            cells[k] += m_maps.value(key).size.width();
-        QStringList why;
-        for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
-            if (cells.value(it.key()) != it.value())
-                why << tr("%1 rows hold %2 heads, it has %3").arg(it.key())
-                           .arg(cells.value(it.key())).arg(it.value());
-        m_rowNote->setText(tr("Those rows do not fit: %1.").arg(why.join(QStringLiteral("; "))));
-        m_rowNote->show();
-        return;
-    }
-    m_rowNote->hide();
-    m_maps.insert(key, l);
-    m_grid->setMap(fx, l);
-}
-
-void HeadTypesDialog::slotHeadOrder()
-{
-    const QString key = m_modelCombo->currentData().toString();
-    const Fixture *fx = likeFor(key);
-    if (fx == nullptr)
-        return;
-    m_maps.insert(key, HeadLayout::headOrder(fx));
-    showModel(key);
+    m_editor->setFixture(fx, m_maps.value(key));
 }
 
 void HeadTypesDialog::slotMapEdited()
 {
-    m_maps.insert(m_modelCombo->currentData().toString(), m_grid->map());
+    m_maps.insert(m_modelCombo->currentData().toString(), m_editor->layout());
 }
 
 void HeadTypesDialog::accept()
@@ -427,7 +244,8 @@ void HeadTypesDialog::accept()
     for (auto it = m_maps.constBegin(); it != m_maps.constEnd(); ++it)
     {
         mp->setHeadLayout(it.value());
-        HeadLayoutLibrary::save(it.value());
+        if (m_saveDefault->isChecked())
+            HeadLayoutLibrary::save(it.value());
     }
     const int view = m_viewCombo->currentData().toInt();
     const bool gaps = m_closeGaps->isChecked();

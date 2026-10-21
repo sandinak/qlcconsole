@@ -108,6 +108,10 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
        visible change. */
     // Fixture names are drawn beside them: a rename shows at once.
     connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { update(); });
+    // An LED map edited: its heads move at once.
+    if (m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::headLayoutChanged, this,
+                [this](const QString &) { update(); });
     connect(m_doc, &Doc::functionChanged, this, [this](quint32 fid) {
         if (fid != m_activeSceneId || m_lookRefreshPending)
             return;
@@ -5645,8 +5649,9 @@ void StructureStudioView::collectInsideLight(QPainter &p) const
         const double len = fixtureLenM(fx->id());
 
         const int heads = qMax(1, traits.headCount);
-        const int cols = traits.layout.isValid() ? traits.layout.width() : heads;
-        const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
+        const QSize grid = headGrid(fx, traits);
+        const int cols = grid.width();
+        const int rows = grid.height();
         const QVector<int> cellHead = headsByCell(fx, cols, rows, heads);
         const int master = fixtureMasterLevel(fx, vals);
 
@@ -6453,8 +6458,9 @@ QVector<StructureStudioView::BarLight> StructureStudioView::barLights(Fixture *f
 {
     QVector<BarLight> out;
     const int heads = qMax(1, traits.headCount);
-    const int cols = traits.layout.isValid() ? traits.layout.width() : heads;
-    const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
+    const QSize grid = headGrid(fx, traits);
+    const int cols = grid.width();
+    const int rows = grid.height();
     const QVector<int> cellHead = headsByCell(fx, cols, rows, heads);
     const int master = fixtureMasterLevel(fx, vals);
     QVector3D L, N, H;
@@ -7267,9 +7273,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            every multi-head bar whose definition omits <Layout> (the wall
            washers, for instance) as a blank dark housing in the angled view
            while the same fixture showed its heads in the flat views. */
-        const int cols = traits.layout.isValid() ? traits.layout.width()
-                                                 : qMax(1, traits.headCount);
-        const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
+        const QSize grid = headGrid(fx, traits);
+        const int cols = grid.width();
+        const int rows = grid.height();
         const double pxPerPixel = QLineF(w2s(corner[0]), w2s(corner[1])).length()
                                   / qMax(1, cols);
         const QVector<int> cellHead = headsByCell(fx, cols, rows, traits.headCount);
@@ -7749,9 +7755,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
 
         /* The heads. A declared grid wins; otherwise a single row of however
            many heads there are, which is what a strip actually is. */
-        const int cols = traits.layout.isValid() ? traits.layout.width()
-                                                 : qMax(1, traits.headCount);
-        const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
+        const QSize grid = headGrid(fx, traits);
+        const int cols = grid.width();
+        const int rows = grid.height();
         const double cellW = boxPx.width() / qMax(1, cols);
         const double cellH = boxPx.height() / qMax(1, rows);
         const double rad = qBound(0.7, qMin(cellW, cellH) * 0.40, 3.0);
@@ -7800,6 +7806,21 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         if (nameEveryone || hi)
             p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
     }
+}
+
+QSize StructureStudioView::headGrid(Fixture *fx, const FixtureVisualTraits &traits) const
+{
+    const int heads = qMax(1, traits.headCount);
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (fx != nullptr && heads > 1 && props->hasHeadLayout(fx))
+    {
+        const HeadLayout map = props->headLayoutFor(fx);
+        if (map.isValid() && map.cells.size() >= fx->heads())
+            return map.size;
+    }
+    if (traits.layout.isValid())
+        return traits.layout;
+    return QSize(heads, 1);
 }
 
 QVector<int> StructureStudioView::headsByCell(Fixture *fx, int cols, int rows, int headCount) const

@@ -27,7 +27,7 @@ class QComboBox;
 class QCheckBox;
 class QLineEdit;
 class QLabel;
-class QHBoxLayout;
+class LedLayoutEditor;
 class FixtureGroup;
 class Fixture;
 class Doc;
@@ -35,33 +35,6 @@ class Doc;
 /** @addtogroup ui_fixtures
  * @{
  */
-
-/** The LED grid of one model: a cell per head, coloured by its kind and
- *  numbered. Click one cell, then another, to swap the heads in them. */
-class LedMapWidget final : public QWidget
-{
-    Q_OBJECT
-public:
-    explicit LedMapWidget(QWidget *parent = nullptr);
-    void setMap(const Fixture *like, const HeadLayout &map);
-    HeadLayout map() const { return m_map; }
-    QSize sizeHint() const override;
-
-signals:
-    void mapEdited();
-
-protected:
-    void paintEvent(QPaintEvent *) override;
-    void mousePressEvent(QMouseEvent *e) override;
-
-private:
-    QRectF cellRect(const QPoint &cell) const;
-    int headAt(const QPointF &pos) const;
-
-    const Fixture *m_like = nullptr;
-    HeadLayout m_map;
-    int m_picked = -1;          ///< head clicked first, waiting for a swap
-};
 
 class HeadTypesDialog final : public QDialog
 {
@@ -93,13 +66,10 @@ public slots:
 
 private slots:
     void slotModelChanged();
-    void slotApplyRows();
-    void slotHeadOrder();
     void slotMapEdited();
 
 private:
     void showModel(const QString &key);
-    void fillRowCombos();
     const Fixture *likeFor(const QString &key) const;
 
 private:
@@ -109,10 +79,8 @@ private:
     QHash<QString, quint32> m_like;        ///< per model key: one of its fixtures
     QComboBox *m_modelCombo;
     QLabel *m_modelInfo;
-    LedMapWidget *m_grid;
-    QHBoxLayout *m_rowsBox;
-    QList<QComboBox *> m_rowCombos;
-    QLabel *m_rowNote;
+    LedLayoutEditor *m_editor;          ///< the shared LED Layout editor
+    QCheckBox *m_saveDefault;           ///< also keep the maps as the defaults
     QList<QCheckBox *> m_kindChecks;
     QList<QLineEdit *> m_kindNames;     ///< the exact name of each kind's group
     QComboBox *m_viewCombo;             ///< from the front / from above / auto

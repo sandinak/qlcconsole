@@ -149,6 +149,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "ledlayouteditor.h"
 #include "beamocclusion.h"
 #include "fountaindiagram.h"
 #include "fixturemanager.h"
@@ -2429,6 +2430,23 @@ void Monitor::showStageOverview()
     view->setLocked(true);
     m_overviewView = view;
     view->setActiveScene(m_activeSceneId);
+    /* Read-only, but a fixture can still be looked into: its properties,
+       and where each of its heads is (the LED layout). */
+    connect(view, &StructureStudioView::canvasContextMenu, &dlg,
+            [this, ovDlg = &dlg](const QPoint &globalPos, quint32 fidUnder) {
+        if (m_doc->fixture(fidUnder) == nullptr)
+            return;
+        QMenu m(ovDlg);
+        m.addAction(tr("Fixture Properties…"), this, [this, fidUnder]() {
+            editFixtureProperties(fidUnder);
+        });
+        QAction *led = m.addAction(tr("LED Layout…"), this, [this, fidUnder, ovDlg]() {
+            LedLayoutDialog::edit(m_doc, fidUnder, ovDlg);
+        });
+        led->setObjectName(QStringLiteral("ledLayoutAction"));
+        led->setEnabled(LedLayoutDialog::canEdit(m_doc, fidUnder));
+        m.exec(globalPos);
+    });
 
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(new QLabel(tr("View:"), &dlg));
@@ -9445,6 +9463,19 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
             typeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
             typeLabel->setStyleSheet(QStringLiteral("color: #aaa; font-size: 10px;"));
             headerRow->addWidget(typeLabel, 1);
+        }
+        // Where each of its heads really is: the model's LED layout.
+        if (fxi != nullptr && LedLayoutDialog::canEdit(m_doc, fxi->id()))
+        {
+            QPushButton *ledBtn = new QPushButton(tr("LED Layout…"));
+            ledBtn->setObjectName(QStringLiteral("ledLayoutButton"));
+            ledBtn->setToolTip(tr("Where each of this model's %n head(s) is in the fixture", "",
+                                  fxi->heads()));
+            const quint32 ledFid = fxi->id();
+            connect(ledBtn, &QPushButton::clicked, &dlg, [this, ledFid, propsDlg = &dlg]() {
+                LedLayoutDialog::edit(m_doc, ledFid, propsDlg);
+            });
+            headerRow->addWidget(ledBtn);
         }
         vl->addLayout(headerRow);
     }

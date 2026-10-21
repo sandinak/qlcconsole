@@ -12,6 +12,32 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+### Added
+- **LED Layout editor.** A direct **LED Layout…** action for a multi-head
+  fixture — on its right-click menu in the Fixture Manager, the Lighting
+  Studio plot and Layers tree and the Rig Overview, and as a button in
+  Fixture Properties — edits where each head of its model and mode really
+  is, without making a group. The grid shows every head in its cell, both
+  kinds at once (colour kinds as a gradient in head order, white, amber,
+  UV), with a typed row pattern (`RGB, W, RGB, W, RGB`), click-to-swap and
+  move-to-empty-cell, flips, grid size, Head Order, and an order preview
+  that can light each head on the real fixture. **Save to Show** keeps it
+  in the show; **Save as Default for This Model** also writes it to the
+  user data folder's `HeadLayouts/` (one JSON file per model and mode) for
+  new shows and shows without their own, which still win. The Split by Head
+  Type wizard uses the same editor, with its save-as-default now a checkbox.
+
+### Changed
+- The Lighting Studio plot now draws a pixel fixture's heads in the cells
+  its LED layout gives (it used head order on the declared grid), and the
+  plot, Rig Overview/Angled views and beam origins use the layout's grid
+  size when it has one (a strip laid out in rows by hand). All of them
+  redraw as soon as a layout is saved.
+
+### Fixed
+- The show's LED layouts are now guarded against being read by a running
+  matrix effect while they are edited.
+
 ## [0.2.1] - 2026-10-21
 
 A point release of the Show Tree beta: one top bar, auto-open shutters,

@@ -174,6 +174,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
         if (i == m_traits.ringHead && fxi->heads() > 1)
             continue;
         FixtureHead *fxiItem = new FixtureHead;
+        fxiItem->m_index = i;
         fxiItem->m_item = denseHeads
             ? static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsRectItem(this))
             : static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsEllipseItem(this));
@@ -454,7 +455,25 @@ void MonitorFixtureItem::setSize(QSize size)
     const int n = m_heads.count();
     int columns = 0, rows = 0;
 
-    /* The fixture definition may DECLARE its pixel layout (the Physical tab's
+    /* The model's LED map, when the show or the library has one (the LED
+       Layout editor): its grid, and each head in its cell -- an XL-450's
+       white heads are its 2nd and 4th rows, not the last two. */
+    QVector<QPoint> mapped;
+    if (Fixture *fxi = m_doc->fixture(m_fid))
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        if (n > 1 && props != nullptr && props->hasHeadLayout(fxi))
+        {
+            const HeadLayout map = props->headLayoutFor(fxi);
+            if (map.isValid() && map.cells.size() >= fxi->heads())
+            {
+                columns = map.size.width();
+                rows = map.size.height();
+                mapped = map.cells;
+            }
+        }
+    }
+    /* Else the fixture definition may DECLARE its pixel layout (the Physical tab's
        "Layout (Columns x Rows)" -- an XL-450 says 15 x 5). That is the real
        arrangement of the LEDs in the housing, so honour it rather than
        re-deriving a guess: the guess below infers a grid from head count and
@@ -463,7 +482,7 @@ void MonitorFixtureItem::setSize(QSize size)
        Only trust it when it can actually hold the heads this mode has --
        layoutSize() defaults to 1x1 and some definitions declare a layout for a
        different mode's head count. */
-    if (Fixture *fxi = m_doc->fixture(m_fid))
+    if (Fixture *fxi = (columns == 0) ? m_doc->fixture(m_fid) : nullptr)
     {
         if (const QLCFixtureMode *mode = fxi->fixtureMode())
         {
@@ -515,12 +534,19 @@ void MonitorFixtureItem::setSize(QSize size)
     // colour fills the space, like pixels.
     const bool dense = (m_heads.count() > 16) || (headDiam < 8.0);
 
-    for (int i = 0; i < rows; i++)
+    for (int index = 0; index < m_heads.size(); index++)
     {
-        for (int j = 0; j < columns; j++)
+        int i = index / columns, j = index % columns;
+        if (!mapped.isEmpty())
         {
-            int index = i * columns + j;
-            if (index < m_heads.size())
+            const QPoint cell = mapped.value(m_heads.at(index)->m_index, QPoint(-1, -1));
+            if (cell.x() < 0 || cell.y() < 0 || cell.x() >= columns || cell.y() >= rows)
+                continue;
+            i = cell.y();
+            j = cell.x();
+        }
+        if (i < rows)
+        {
             {
                 const double cellLeft = j * cellWidth;
                 const double cellTop  = i * cellHeight;

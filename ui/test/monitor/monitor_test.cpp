@@ -53,6 +53,7 @@
 #include "righeads.h"
 #include "colourswatchbutton.h"
 #include "headtypesdialog.h"
+#include "ledlayouteditor.h"
 #include "stagegroupdialog.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
@@ -19472,23 +19473,17 @@ void Monitor_Test::theSplitWizardMapsRowsAndMakesAGroupPerKind()
         dlg.m_kindNames[1]->setText("FART-SR Whites");
         QCOMPARE(dlg.m_modelCombo->count(), 1);
         // Head order, as the definition alone says: RGB, RGB, RGB, W, W.
-        QCOMPARE(dlg.m_rowCombos.size(), 5);
-        QCOMPARE(dlg.m_rowCombos[3]->currentText(), QString("W"));
+        QCOMPARE(dlg.m_editor->rowPatternText(), QString("RGB, RGB, RGB, W, W"));
 
         // A pattern that cannot hold the heads is refused, with the reason.
-        dlg.m_rowCombos[1]->setCurrentText("RGB");
-        dlg.m_rowCombos[3]->setCurrentText("RGB");
-        dlg.slotApplyRows();
-        QVERIFY(!dlg.m_rowNote->isHidden());
-        QVERIFY(dlg.m_rowNote->text().contains("RGB rows hold 60 heads, it has 45"));
+        QVERIFY(!dlg.m_editor->applyRowPattern("RGB, RGB, RGB, RGB, W"));
+        QVERIFY2(dlg.m_editor->rowProblem().contains("RGB rows hold 60 heads, it has 45"),
+                 qPrintable(dlg.m_editor->rowProblem()));
 
         // As built.
-        const QStringList built = { "RGB", "W", "RGB", "W", "RGB" };
-        for (int r = 0; r < 5; ++r)
-            dlg.m_rowCombos[r]->setCurrentText(built[r]);
-        dlg.slotApplyRows();
-        QVERIFY(dlg.m_rowNote->isHidden());
-        QCOMPARE(dlg.m_grid->map().cellOf(45), QPoint(0, 1));   // W 1 on the 2nd row
+        QVERIFY(dlg.m_editor->applyRowPattern("RGB, W, RGB, W, RGB"));
+        QVERIFY(dlg.m_editor->rowProblem().isEmpty());
+        QCOMPARE(dlg.m_editor->layout().cellOf(45), QPoint(0, 1));   // W 1 on the 2nd row
 
         dlg.accept();
         QCOMPARE(dlg.createdGroups().size(), 2);

@@ -155,9 +155,11 @@ pixels (its 30ch white mode) the picture is drawn in white whatever the
 setting, and two-colour effects (the checker) go on and off instead.
 
 **Set the box up first.** The XL-450's 165ch mode numbers its 45 RGB heads
-before its 30 white ones, so its head map must say which row is which — see
-[Split by Head Type](fixture-manager.md#split-by-head-type) (or check with
-**Grid Probe**). Make one group of the boxes as they hang for a whole-rig
+before its 30 white ones, so its LED layout must say which row is which:
+right-click the fixture → **LED Layout…**, type `RGB, W, RGB, W, RGB`,
+**Save to Show** — see [LED Layout](fixture-manager.md#led-layout) (or
+check with **Grid Probe**). The canvas follows the layout as soon as it is
+saved, a loose box as its own 15 × 5 grid. Make one group of the boxes as they hang for a whole-rig
 canvas, or use a group per kind (RGB rows, white rows) when you want them
 driven apart.
 

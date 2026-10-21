@@ -41,6 +41,9 @@ struct FixtureHead
     QAbstractGraphicsShapeItem *m_item;
     QAbstractGraphicsShapeItem *m_back;
 
+    //! the fixture's head number this draws (a colour ring is not in the list)
+    int m_index = -1;
+
     //! cached rgb channels (channel indices)
     QList <quint32> m_rgb;
 
@@ -125,6 +128,9 @@ public:
 
     /** Sets the dimension of this fixture */
     void setSize(QSize size);
+    /** Lay the heads out again at the same size: the model's LED layout
+     *  changed (MonitorProperties::headLayoutChanged()). */
+    void relayoutHeads() { setSize(QSize(m_width, m_height)); }
 
     /** The fixture cell size in scene pixels (its head-layout rectangle, drawn
      *  from the item origin). Half of this centres the icon on a point. */

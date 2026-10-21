@@ -2,6 +2,22 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
+## Unreleased
+
+### LED Layout: a pixel fixture as it is built
+
+- **LED Layout…** on a fixture's right-click menu (Fixture Manager, the
+  Lighting Studio plot and Layers tree, the Rig Overview) and in Fixture
+  Properties opens the layout of its model: every head in its cell,
+  numbered, coloured by kind — RGB rows a rainbow in head order, white rows
+  white. Type the rows (`RGB, W, RGB, W, RGB` for an XL-450), click to swap
+  or move heads, flip, resize the grid, and **Preview Order** walks the
+  heads one by one — on the real fixture too — to check it. No group is
+  made. **Save to Show**, and **Save as Default for This Model** to use it
+  in new shows; a show's own layout still wins. Matrix effects, groups by
+  head type, the plot and the Rig Overview all draw from it. See
+  [LED Layout](fixture-manager.md#led-layout).
+
 ## 0.2.1 (October 2026)
 
 ### Focus mode: the controller on screen

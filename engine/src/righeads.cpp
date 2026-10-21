@@ -174,16 +174,20 @@ QVector<QVector3D> RigHeads::headPositions(Doc *doc, quint32 fid)
     const double seat = (rp.placement == FixtureRigProps::Inside) ? 0.0 : 0.5;
     const QVector3D c2 = c + N * float(d * seat);
 
-    // Its pixel grid, and which head is in which cell (StructureStudioView::headsByCell()).
-    const int cols = grid.isValid() ? grid.width() : heads;
-    const int rows = grid.isValid() ? grid.height() : 1;
+    /* Its pixel grid, and which head is in which cell
+       (StructureStudioView::headGrid() and headsByCell()): the LED map's
+       when there is one, else the declared grid, else one row. */
+    int cols = grid.isValid() ? grid.width() : heads;
+    int rows = grid.isValid() ? grid.height() : 1;
     QVector<QPoint> cellOf(heads, QPoint(-1, -1));
     bool mapped = false;
-    if (props->hasHeadLayout(fx))
+    if (heads > 1 && props->hasHeadLayout(fx))
     {
         const HeadLayout map = props->headLayoutFor(fx);
-        if (map.size == QSize(cols, rows))
+        if (map.isValid() && map.cells.size() >= heads)
         {
+            cols = map.size.width();
+            rows = map.size.height();
             for (int hd = 0; hd < heads; ++hd)
                 cellOf[hd] = map.cellOf(hd);
             mapped = true;

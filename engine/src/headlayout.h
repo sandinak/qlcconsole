@@ -74,6 +74,25 @@ struct HeadLayout
      *  order, fill the rows of that kind left to right. Invalid when the rows
      *  cannot hold exactly the heads there are of each kind. */
     static HeadLayout fromRowPattern(const Fixture *fx, const QStringList &rowKinds);
+    /** The same, on a grid @p cols wide (0: the model's own width, as
+     *  headOrder() has it) -- for a strip laid out by hand in rows. */
+    static HeadLayout fromRowPattern(const Fixture *fx, const QStringList &rowKinds, int cols);
+
+    /** A row pattern as typed: "RGB, W, RGB, W, RGB", "RGB/W/RGB/W/RGB" or
+     *  "rgb w rgb w rgb" -> RGB, W, RGB, W, RGB. Each word is matched
+     *  without case to one of @p known (the model's kinds, kept as they are
+     *  spelled there); "White", "Amber" and "Dimmer" are read as W, A and I.
+     *  A word that matches none is kept as typed, for the caller to refuse. */
+    static QStringList parseRowKinds(const QString &text, const QStringList &known = QStringList());
+
+    /** Mirrored left to right (the fixture seen from behind). */
+    HeadLayout flippedHorizontally() const;
+    /** Mirrored top to bottom (the fixture hung upside down). */
+    HeadLayout flippedVertically() const;
+    /** The same heads on a grid of @p size: each keeps its cell where the
+     *  grid still has it, the rest take the free cells in head order.
+     *  Invalid when the grid has fewer cells than there are heads. */
+    HeadLayout resized(const QSize &size) const;
 
     /** The kind of each row of this map, read from the heads in it (empty
      *  for a row whose heads are of mixed kinds). For seeding a row pattern. */
