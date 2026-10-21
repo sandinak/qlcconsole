@@ -13,6 +13,32 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Twelve more Matrix effects** (`resources/effectscripts/matrix-*.js`):
+  Fire, Starfield, Spiral, Lissajous, Kaleidoscope, Bouncing Balls,
+  Fireworks, Scanner, Dissolve, Gradient Sweep, Box VU and Image. Pure
+  functions of the clock (randomness from a hash), anti-aliased for big
+  pixels, the look's colours in order or their own palette, speed in units
+  a second or on the beat with divisions; each obeys the white-pixel
+  settings. Matrix Image plays a still or animated GIF: a new `image`
+  effect setting type holds the file as a data URI in the look
+  (`EffectStringParam`, so it travels with the show and its .qlcc), up to
+  2 MB; `MatrixImage` (engine) decodes it once into frames of at most
+  160 × 160 (240 frames), premultiplied on black, shared and thread-safe,
+  and `EffectInstance` hands them to the script as ArrayBuffers, cached
+  until the setting changes. The look editor shows the picture's name,
+  size and frames with **Choose…** / **Clear**.
+- **Each box, staggered** scope for every scoped Matrix effect (the nine
+  existing and the new ones): the same picture in each box, each box's
+  clock moved back by `stagger` × the effect's cycle, in `staggerOrder`
+  (left to right, right to left, out from the middle, random).
+  `MATRIX.scoped()` draws once per place in the run with the shifted
+  inputs and a state of its own per place; Matrix EQ and Box VU keep a few
+  seconds of the live audio (`MATRIX.record()` / `recalled()`) so a
+  staggered box hears its own moment.
+- **Matrix timing check**: every matrix effect, in each scope, on eight
+  XL-450s through the host (`matrixEffectsKeepTimeOnEightBoxes`, 12 ms
+  budget a tick, `QLC_MATRIX_BUDGET_MS`); `QLC_MATRIX_PREVIEW_DIR` writes
+  frames of each new effect for a look.
 - **Definition updates.** Fixtures → **Definition Updates…** lists the
   user folder's fixture definitions that are older than the current version
   of the same Manufacturer/Model (the shipped one, or a newer user copy,

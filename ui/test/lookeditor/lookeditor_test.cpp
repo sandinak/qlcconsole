@@ -37,6 +37,7 @@
 
 #define private public
 #include "lookeditor.h"
+#include "matriximage.h"
 #include "effectbrowser.h"
 #undef private
 #include <QListWidget>
@@ -544,6 +545,62 @@ void LookEditor_Test::anEffectsTextIsTypedIn()
     QCOMPARE(box->text(), QString("HELLO"));
     box->setText("SHOW TIME");
     QCOMPARE(look->effectStringParam("text"), QString("SHOW TIME"));
+}
+
+/* Matrix Image's picture: what it is, shown beside the buttons to choose
+   one or clear it; kept in the look itself (MatrixImage). */
+void LookEditor_Test::anEffectsPictureIsShownAndCleared()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Logo");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->setText("Matrix Image");
+    QApplication::processEvents();
+    QListWidgetItem *item = nullptr;
+    for (int i = 0; i < browser->list()->count() && item == nullptr; ++i)
+        if (browser->list()->item(i)->text() == QLatin1String("Matrix Image"))
+            item = browser->list()->item(i);
+    QVERIFY2(item != nullptr, "Matrix Image should be in the list");
+    browser->pick(item);
+    QApplication::processEvents();
+    QVERIFY(look->scriptPath().endsWith("matrix-image.js"));
+
+    QLabel *what = ed.m_effectDynWidget->findChild<QLabel *>("effectImageLabel_image");
+    QPushButton *clear = ed.m_effectDynWidget->findChild<QPushButton *>("effectImageClear_image");
+    QVERIFY2(what != nullptr && clear != nullptr, "a picture setting should say what it is, with buttons");
+    QVERIFY(ed.m_effectDynWidget->findChild<QPushButton *>("effectImageChoose_image") != nullptr);
+    QVERIFY(what->text().contains("No picture"));
+    QVERIFY(!clear->isEnabled());
+
+    // A picture in the look: its name, size and frames.
+    const QByteArray gif = QByteArray::fromBase64(
+        "R0lGODlhBAACAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQACgAAACwAAAAABAACAAAIBwABCBwoMCAAIfkEARQAAQAs"
+        "AAAAAAQAAgCBAP8AAAAAAAAAAAAACAcAAQgcKDAgACH5BAEeAAEALAAAAAAEAAIAgQAA/wAAAAAAAAAAAAgHAAEIHCgwIAA7");
+    QLCPalette *logo = new QLCPalette(QLCPalette::Effect, &doc);
+    logo->setName("Logo 2");
+    logo->setScriptPath(look->scriptPath());
+    logo->setEffectStringParam("image", MatrixImage::fromBytes(gif, "tiny.gif"));
+    QVERIFY(doc.addPalette(logo));
+    ed.setPalette(logo->id());
+    QApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    look = logo;
+    what = ed.m_effectDynWidget->findChild<QLabel *>("effectImageLabel_image");
+    clear = ed.m_effectDynWidget->findChild<QPushButton *>("effectImageClear_image");
+    QVERIFY(what != nullptr && clear != nullptr);
+    QVERIFY2(what->text().contains("tiny.gif") && what->text().contains("3 frames"), qPrintable(what->text()));
+    QVERIFY(clear->isEnabled());
+
+    clear->click();
+    QVERIFY(look->effectStringParam("image").isEmpty());
+    QVERIFY(what->text().contains("No picture"));
 }
 
 /* "Speed:" puts the effect on the main clock or a speed master; its rate then

@@ -12,6 +12,26 @@ The latest changes, newest first. Each links to the guide with the detail.
   a light. Hazers, smoke machines and fans with no light of their own are
   left out too; a real light with no output set is still listed.
 
+### More Matrix effects, and staggered boxes
+
+- **Twelve more Matrix effects** for pixel boxes, in the effect browser's
+  **Matrix** tab: **Fire** (flames from the bottom, classic, blue or the
+  look's colours), **Starfield** (warp speed out of a point), **Spiral**,
+  **Lissajous** (a figure-8 with a fading trail), **Kaleidoscope** (2 to
+  8-fold, from clouds or bars), **Bouncing Balls** (with or without
+  gravity), **Fireworks** (bursting on the beat), **Scanner** (KITT),
+  **Dissolve**, **Gradient Sweep**, **Box VU** (each box a VU meter from
+  the audio input) and **Image** — a picture or animated GIF, kept inside
+  the show. Each takes the look's colours in order (its own when the look
+  has none), and keeps the white rows of a box like the XL-450 lit as they
+  should be. See [Matrix effects](effects.md#matrix-effects) and
+  [Pictures and GIFs](effects.md#pictures-and-gifs).
+- **Each box, staggered.** A new scope for every Matrix effect that has
+  one: the same picture in every box, each a little behind the last — left
+  to right, right to left, out from the middle or at random — so a ripple
+  rolls from box to box. **stagger** sets how far, as a part of the
+  effect's cycle.
+
 ### Definition updates
 
 - **Old definitions, brought up to date.** **Fixtures → Definition

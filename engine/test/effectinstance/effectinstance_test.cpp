@@ -16,6 +16,8 @@
 #include <QXmlStreamWriter>
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QImage>
+#include <functional>
 
 #include "effectinstance_test.h"
 #define private public                  // MasterTimer::timerTick(), and the instance's insides
@@ -37,6 +39,7 @@
 #include "effectscript.h"
 #include "effectscriptcache.h"
 #include "wledfixture.h"
+#include "matriximage.h"
 #undef private
 #include "monitorproperties.h"
 #include "righeads.h"
@@ -2274,7 +2277,19 @@ namespace
 const QStringList kMatrixScripts = {
     "matrix-bars.js", "matrix-box-chase.js", "matrix-checker.js", "matrix-chevrons.js",
     "matrix-eq.js", "matrix-iris.js", "matrix-noise.js", "matrix-radar.js", "matrix-rain.js",
-    "matrix-ripple.js", "matrix-snake.js", "matrix-sparkle.js", "matrix-strobe.js", "matrix-wipe.js"
+    "matrix-ripple.js", "matrix-snake.js", "matrix-sparkle.js", "matrix-strobe.js", "matrix-wipe.js",
+    // The second set
+    "matrix-balls.js", "matrix-dissolve.js", "matrix-fire.js", "matrix-fireworks.js",
+    "matrix-gradient.js", "matrix-image.js", "matrix-kaleidoscope.js", "matrix-lissajous.js",
+    "matrix-scanner.js", "matrix-spiral.js", "matrix-starfield.js", "matrix-vu.js"
+};
+/* The matrix effects with a scope: Whole canvas, Each box, Each box staggered. */
+const QStringList kScopedMatrixScripts = {
+    "matrix-bars.js", "matrix-checker.js", "matrix-chevrons.js", "matrix-eq.js", "matrix-iris.js",
+    "matrix-radar.js", "matrix-ripple.js", "matrix-snake.js", "matrix-wipe.js",
+    "matrix-balls.js", "matrix-dissolve.js", "matrix-fire.js", "matrix-fireworks.js",
+    "matrix-gradient.js", "matrix-image.js", "matrix-kaleidoscope.js", "matrix-lissajous.js",
+    "matrix-scanner.js", "matrix-spiral.js", "matrix-starfield.js", "matrix-vu.js"
 };
 
 /* The Warmdance XL-450 in its 165ch mode: 45 RGB heads, then 30 white, on a
@@ -2353,8 +2368,12 @@ MatrixLayout matrixLayout(const QString &name)
 /* One frame of @p es on @p l at @p t: each head's intent as "r,g,b,w,d"
    (a dash for a key it leaves out), or an empty list if any is out of range
    or the script failed. */
+/* Changes to one frame's inputs, settings and palettes before the tick. */
+using FrameTweak = std::function<void(QJSEngine *, QJSValue &inputs, QJSValue &params, QJSValue &palettes)>;
+
 QStringList matrixFrame(EffectScript &es, const MatrixLayout &l, double t, int white,
-                        const QMap<QString, double> &extra = QMap<QString, double>())
+                        const QMap<QString, double> &extra = QMap<QString, double>(),
+                        const FrameTweak &tweak = FrameTweak())
 {
     QJSEngine *eng = es.engine();
     QJSValue fixtures = eng->newArray(uint(l.heads.size()));
@@ -2391,6 +2410,8 @@ QStringList matrixFrame(EffectScript &es, const MatrixLayout &l, double t, int w
     QJSValue look = eng->newObject();
     look.setProperty("colors", eng->newArray(0));
     palettes.setProperty("look", look);
+    if (tweak)
+        tweak(eng, inputs, params, palettes);
     QJSValue state = es.newState();
     const QJSValue r = es.callTick(fixtures, inputs, palettes, params, state, eng->newObject());
     if (!r.isArray() || r.property("length").toInt() != l.heads.size())
@@ -2661,6 +2682,610 @@ void EffectInstance_Test::matrixEffectsRunOnBoxesAndTheirModes()
         QCOMPARE(full.size(), rig.count * fx.first()->channels());
         scene->stop(FunctionParent::master());
         timer.timerTick();
+    }
+}
+
+namespace
+{
+/* The new matrix effects. */
+const QStringList kSecondMatrixScripts = {
+    "matrix-balls.js", "matrix-dissolve.js", "matrix-fire.js", "matrix-fireworks.js",
+    "matrix-gradient.js", "matrix-image.js", "matrix-kaleidoscope.js", "matrix-lissajous.js",
+    "matrix-scanner.js", "matrix-spiral.js", "matrix-starfield.js", "matrix-vu.js"
+};
+
+/* A tiny animated GIF: three 4 x 2 frames, red for 100ms, green for 200ms,
+   blue for 300ms. */
+const char *kTinyGif =
+    "R0lGODlhBAACAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQACgAAACwAAAAABAACAAAIBwABCBwoMCAAIfkEARQAAQAs"
+    "AAAAAAQAAgCBAP8AAAAAAAAAAAAACAcAAQgcKDAgACH5BAEeAAEALAAAAAAEAAIAgQAA/wAAAAAAAAAAAAgHAAEIHCgwIAA7";
+
+QString tinyGifSetting()
+{
+    QString why;
+    const QString v = MatrixImage::fromBytes(QByteArray::fromBase64(kTinyGif), "tiny.gif", &why);
+    return v;
+}
+
+/* Box @p b's heads' intents (in head order) from a frame on the rig. */
+QStringList boxOf(const MatrixLayout &l, const QStringList &frame, int b)
+{
+    QStringList out;
+    for (int i = 0; i < l.heads.size(); ++i)
+        if (l.heads.at(i).id == 10 + b)
+            out << frame.at(i);
+    return out;
+}
+
+FrameTweak lookColours(const QList<QColor> &cols)
+{
+    return [cols](QJSEngine *eng, QJSValue &, QJSValue &, QJSValue &palettes) {
+        QJSValue arr = eng->newArray(uint(cols.size()));
+        for (int i = 0; i < cols.size(); ++i)
+        {
+            QJSValue c = eng->newObject();
+            c.setProperty("r", cols.at(i).red());
+            c.setProperty("g", cols.at(i).green());
+            c.setProperty("b", cols.at(i).blue());
+            arr.setProperty(uint(i), c);
+        }
+        QJSValue look = eng->newObject();
+        look.setProperty("colors", arr);
+        palettes.setProperty("look", look);
+    };
+}
+
+FrameTweak withImage(const QString &setting)
+{
+    return [setting](QJSEngine *eng, QJSValue &, QJSValue &params, QJSValue &) {
+        QSharedPointer<const MatrixImage::Frames> f = MatrixImage::decode(setting);
+        params.setProperty("image", f.isNull() ? QJSValue(QJSValue::NullValue) : MatrixImage::toScript(eng, *f));
+    };
+}
+
+/* An RGB head's "r,g,b" as numbers. */
+QColor rgbOf(const QString &intent)
+{
+    const QStringList p = intent.split(',');
+    auto v = [&p](int k) { return p.at(k) == "-" ? 0 : p.at(k).toInt(); };
+    return QColor(v(0), v(1), v(2));
+}
+}
+
+void EffectInstance_Test::matrixEffectsTakeTheLooksColoursAndKeepTime()
+{
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    const MatrixLayout box = matrixLayout("box");
+    const QList<double> times = { 0.1, 0.45, 0.8, 1.3, 2.2, 3.7 };
+
+    for (const QString &file : kSecondMatrixScripts)
+    {
+        EffectScript es;
+        QVERIFY2(es.load(dir + file), qPrintable(file + ": " + es.lastError()));
+        bool scoped = false;
+        for (const EffectScript::ParamDef &d : es.paramDefs())
+            if (d.name == "scope")
+                scoped = d.enumValues.size() == 3;
+        QVERIFY2(scoped, qPrintable(file + ": no Each box, staggered"));
+
+        /* The look's red and green: every RGB pixel some mix of the two
+           (the accents go to the white pixels); both of them seen. */
+        QMap<QString, double> extra;
+        if (file == "matrix-vu.js") { extra["colours"] = 1; extra["gain"] = 2; }   // the look's colours up a full meter
+        if (file == "matrix-scanner.js") extra["count"] = 2;        // a bar a colour
+        bool red = false, green = false;               // a pixel more red than green, and one more green
+        for (double t : times)
+        {
+            const QStringList f = matrixFrame(es, box, t, 0, extra,
+                                              lookColours({ QColor(255, 0, 0), QColor(0, 255, 0) }));
+            QVERIFY2(f.size() == box.heads.size(), qPrintable(file));
+            for (int i = 0; i < f.size(); ++i)
+            {
+                if (!box.heads.at(i).rgb)
+                    continue;
+                const QColor c = rgbOf(f.at(i));
+                QVERIFY2(c.blue() == 0, qPrintable(QString("%1 at %2: blue in a red and green look (%3)")
+                                                   .arg(file).arg(t).arg(f.at(i))));
+                red = red || c.red() > c.green() + 20;
+                green = green || c.green() > c.red() + 20;
+            }
+        }
+        if (file != "matrix-image.js")                 // the heart is the first colour only
+            QVERIFY2(red && green, qPrintable(file + ": not both of the look's colours"));
+        else
+            QVERIFY2(red, qPrintable(file + ": not the look's colour"));
+    }
+
+    /* Speed: twice the speed, half the time -- the same frame. */
+    const QMap<QString, QMap<QString, double>> scaled = {
+        { "matrix-balls.js", {} }, { "matrix-fire.js", {} }, { "matrix-starfield.js", {} },
+        { "matrix-spiral.js", {} }, { "matrix-lissajous.js", {} }, { "matrix-kaleidoscope.js", { { "spin", 0 } } },
+        { "matrix-scanner.js", {} }, { "matrix-dissolve.js", { { "timing", 1 } } }, { "matrix-gradient.js", {} },
+        { "matrix-fireworks.js", { { "timing", 1 }, { "rise", 0 }, { "fade", 1 } } }
+    };
+    for (auto it = scaled.constBegin(); it != scaled.constEnd(); ++it)
+    {
+        EffectScript es;
+        QVERIFY(es.load(dir + it.key()));
+        double sp = 0.5;
+        for (const EffectScript::ParamDef &d : es.paramDefs())
+            if (d.name == "speed")
+                sp = qMax(double(d.min), 0.4);
+        for (double t : { 0.7, 1.9 })
+        {
+            QMap<QString, double> slow = it.value(), fast = it.value();
+            slow["speed"] = sp;
+            fast["speed"] = sp * 2;
+            if (it.key() == "matrix-fireworks.js")
+            {
+                // Its rise and fade are seconds: halve them with the time.
+                fast["fade"] = 0.5;
+            }
+            const QStringList a = matrixFrame(es, box, t * 2, 0, slow);
+            const QStringList b = matrixFrame(es, box, t, 0, fast);
+            QVERIFY2(!a.isEmpty() && a == b, qPrintable(it.key() + ": speed doesn't scale its time"));
+        }
+    }
+
+    /* On the beat: the beat clock, not the time, says where it is; and a
+       firework bursts on the beat -- its flash lights the white pixels. */
+    for (const QString &file : { QString("matrix-dissolve.js"), QString("matrix-fireworks.js") })
+    {
+        EffectScript es;
+        QVERIFY(es.load(dir + file));
+        auto atBeat = [](double beatPos, double time) {
+            return [beatPos, time](QJSEngine *, QJSValue &inputs, QJSValue &, QJSValue &) {
+                inputs.setProperty("_time", time);
+                inputs.setProperty("_beatPos", beatPos);
+                inputs.setProperty("_beat", beatPos - std::floor(beatPos));
+                inputs.setProperty("_beatCount", int(std::floor(beatPos)));
+            };
+        };
+        const QMap<QString, double> beat = { { "timing", 0 } };
+        QCOMPARE(matrixFrame(es, box, 0, 0, beat, atBeat(3.3, 1.0)),
+                 matrixFrame(es, box, 0, 0, beat, atBeat(3.3, 7.0)));
+        QVERIFY(matrixFrame(es, box, 0, 0, beat, atBeat(3.3, 1.0)) != matrixFrame(es, box, 0, 0, beat, atBeat(3.6, 1.0)));
+        if (file == "matrix-fireworks.js")
+        {
+            auto whites = [&](double bp) {
+                int n = 0;
+                const QStringList f = matrixFrame(es, box, 0, 2, beat, atBeat(bp, 0));   // accents only
+                for (int i = 0; i < f.size(); ++i)
+                    if (box.heads.at(i).white && f.at(i).split(',').at(3).toInt() > 0)
+                        ++n;
+                return n;
+            };
+            // Every 2 beats: a burst on beat 4, nothing on 3.
+            QVERIFY2(whites(4.03) > whites(3.0), qPrintable(QString("%1 vs %2").arg(whites(4.03)).arg(whites(3.0))));
+        }
+    }
+}
+
+void EffectInstance_Test::matrixEffectsStaggerBoxToBox()
+{
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    const MatrixLayout rig = matrixLayout("rig");
+    const QString gif = tinyGifSetting();
+    QVERIFY(!gif.isEmpty());
+
+    for (const QString &file : kScopedMatrixScripts)
+    {
+        EffectScript es;
+        QVERIFY2(es.load(dir + file), qPrintable(file));
+        const FrameTweak tw = file == "matrix-image.js" ? withImage(gif) : FrameTweak();
+        for (double t : { 0.9, 2.35 })
+        {
+            const QString where = QString("%1 at %2").arg(file).arg(t);
+            QMap<QString, double> each = { { "scope", 1 } };
+            const QStringList eachF = matrixFrame(es, rig, t, 0, each, tw);
+            // No stagger is the same as Each box.
+            QMap<QString, double> none = { { "scope", 2 }, { "stagger", 0 } };
+            QCOMPARE(matrixFrame(es, rig, t, 0, none, tw), eachF);
+
+            auto staggered = [&](int order, double off) {
+                QMap<QString, double> m = { { "scope", 2 }, { "staggerOrder", order }, { "stagger", off } };
+                return matrixFrame(es, rig, t, 0, m, tw);
+            };
+            const QStringList l2r = staggered(0, 0.3), r2l = staggered(1, 0.3);
+            const QStringList mid = staggered(2, 0.3), rnd = staggered(3, 0.3);
+            QVERIFY2(l2r.size() == rig.heads.size(), qPrintable(where));
+            // The first box goes as it would on its own; the last, right to left.
+            QVERIFY2(boxOf(rig, l2r, 0) == boxOf(rig, eachF, 0), qPrintable(where + ": first box lags"));
+            QVERIFY2(boxOf(rig, r2l, 7) == boxOf(rig, eachF, 7), qPrintable(where + ": right to left"));
+            // Out from the middle: the middle two lead, and mirror boxes go together.
+            QVERIFY2(boxOf(rig, mid, 3) == boxOf(rig, eachF, 3), qPrintable(where + ": middle"));
+            QVERIFY2(boxOf(rig, mid, 4) == boxOf(rig, eachF, 4), qPrintable(where + ": middle"));
+
+            bool alike = true;                         // Each box: every box the same?
+            for (int b = 1; b < 8; ++b)
+                alike = alike && boxOf(rig, eachF, b) == boxOf(rig, eachF, 0);
+            if (!alike)
+                continue;                              // boxes of their own (a meter a band)
+            QVERIFY2(boxOf(rig, mid, 2) == boxOf(rig, mid, 5), qPrintable(where + ": mirror boxes"));
+            QVERIFY2(boxOf(rig, l2r, 1) == boxOf(rig, r2l, 6), qPrintable(where + ": second from each end"));
+            // Random: the same pictures, shuffled.
+            QStringList a, b;
+            for (int k = 0; k < 8; ++k)
+            {
+                a << boxOf(rig, l2r, k).join(' ');
+                b << boxOf(rig, rnd, k).join(' ');
+            }
+            QSet<QString> sa(a.begin(), a.end()), sb(b.begin(), b.end());
+            QVERIFY2(sa == sb, qPrintable(where + ": random isn't the same pictures"));
+            if (sa.size() > 2)
+                QVERIFY2(a != b, qPrintable(where + ": random is left to right"));
+        }
+    }
+
+    /* The lag itself: a free ripple, a ring a second, a quarter of a ring
+       a box -- box 3 shows now what box 0 showed three quarters of a
+       second ago. A radar at half a turn a second: an eighth of a turn,
+       a quarter second, a box. */
+    struct Lag { QString file; QMap<QString, double> set; double secondsPerBox; };
+    const QList<Lag> lags = {
+        { "matrix-ripple.js", { { "timing", 1 }, { "speed", 1 }, { "stagger", 0.25 } }, 0.25 },
+        { "matrix-radar.js", { { "speed", 0.5 }, { "stagger", 0.125 } }, 0.25 },
+        { "matrix-fire.js", { { "speed", 2 }, { "stagger", 0.5 } }, 0.25 },
+        { "matrix-spiral.js", { { "speed", 0.25 }, { "stagger", 0.25 } }, 1.0 }
+    };
+    for (const Lag &lag : lags)
+    {
+        EffectScript es;
+        QVERIFY(es.load(dir + lag.file));
+        QMap<QString, double> st = lag.set, each = lag.set;
+        st["scope"] = 2;
+        st["staggerOrder"] = 0;
+        each["scope"] = 1;
+        const double t = 5.0;
+        const QStringList f = matrixFrame(es, rig, t, 0, st);
+        for (int b = 0; b < 8; ++b)
+            QVERIFY2(boxOf(rig, f, b) == boxOf(rig, matrixFrame(es, rig, t - b * lag.secondsPerBox, 0, each), b),
+                     qPrintable(QString("%1: box %2").arg(lag.file).arg(b)));
+    }
+}
+
+void EffectInstance_Test::matrixImagePlaysAGifKeptInTheShow()
+{
+    MatrixImage::clearCache();
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    const QString gif = tinyGifSetting();
+    QVERIFY(MatrixImage::isImage(gif));
+    QVERIFY(gif.startsWith("data:image/gif;name=tiny.gif;base64,"));
+
+    // Its frames: three, 4 x 2, at their own times.
+    QSharedPointer<const MatrixImage::Frames> f = MatrixImage::decode(gif);
+    QVERIFY(!f.isNull());
+    QCOMPARE(f->rgba.size(), 3);
+    QCOMPARE(QSize(f->width, f->height), QSize(4, 2));
+    QCOMPARE(f->delaysMs, QVector<int>({ 100, 200, 300 }));
+    QCOMPARE(f->totalMs, 600);
+    QCOMPARE(f->rgba.at(1).size(), 4 * 2 * 4);
+    QCOMPARE(quint8(f->rgba.at(1).at(1)), quint8(255));            // frame 2 is green
+    QVERIFY(MatrixImage::describe(gif).contains("3 frames"));
+    QCOMPARE(MatrixImage::decode(gif).data(), f.data());           // decoded once
+
+    // What it won't take.
+    QString why;
+    QVERIFY(MatrixImage::fromBytes(QByteArray(MatrixImage::kMaxFileBytes + 1, 'x'), "big.gif", &why).isEmpty());
+    QVERIFY(why.contains("KB"));
+    QVERIFY(MatrixImage::fromBytes("not a picture", "x.png", &why).isEmpty());
+    QVERIFY(MatrixImage::decode("hello").isNull());
+
+    // A big picture comes down to kMaxSide.
+    QImage big(800, 400, QImage::Format_RGB32);
+    big.fill(Qt::blue);
+    QByteArray png;
+    QBuffer pb(&png);
+    pb.open(QIODevice::WriteOnly);
+    big.save(&pb, "PNG");
+    QSharedPointer<const MatrixImage::Frames> bf = MatrixImage::decode(MatrixImage::fromBytes(png, "big.png"));
+    QVERIFY(!bf.isNull());
+    QCOMPARE(QSize(bf->width, bf->height), QSize(MatrixImage::kMaxSide, MatrixImage::kMaxSide / 2));
+    QCOMPARE(bf->rgba.size(), 1);
+
+    /* Played on a box: red, green, blue at their own times, round again;
+       twice as fast, twice as soon; a frame a beat on the beat. */
+    EffectScript es;
+    QVERIFY(es.load(dir + "matrix-image.js"));
+    const MatrixLayout box = matrixLayout("box");
+    auto colourAt = [&](double t, const QMap<QString, double> &set) {
+        const QStringList fr = matrixFrame(es, box, t, 0, set, withImage(gif));
+        // The middle RGB head: row 2, column 7.
+        for (int i = 0; i < box.heads.size(); ++i)
+            if (box.heads.at(i).rgb && box.heads.at(i).col == 7 && box.heads.at(i).row == 2)
+                return rgbOf(fr.at(i));
+        return QColor();
+    };
+    const QMap<QString, double> own = { { "fit", 2 } };
+    QCOMPARE(colourAt(0.05, own), QColor(255, 0, 0));
+    QCOMPARE(colourAt(0.15, own), QColor(0, 255, 0));
+    QCOMPARE(colourAt(0.35, own), QColor(0, 0, 255));
+    QCOMPARE(colourAt(0.65, own), QColor(255, 0, 0));
+    QCOMPARE(colourAt(0.075, { { "fit", 2 }, { "speed", 2 } }), QColor(0, 255, 0));
+    // On the beat (120bpm, a frame a beat): beat 4 is the second frame of the round.
+    QCOMPARE(colourAt(2.1, { { "fit", 2 }, { "timing", 1 }, { "division", 2 } }), QColor(0, 255, 0));
+
+    // Fit letterboxes (4 x 2 into 15 x 5 is 10 x 5, in the middle); fill and stretch fill.
+    auto edgeLit = [&](int fit) {
+        const QStringList fr = matrixFrame(es, box, 0.05, 0, { { "fit", fit } }, withImage(gif));
+        for (int i = 0; i < box.heads.size(); ++i)
+            if (box.heads.at(i).rgb && box.heads.at(i).col == 0 && box.heads.at(i).row == 0)
+                return headLit(fr.at(i));
+        return false;
+    };
+    QVERIFY(!edgeLit(0));
+    QVERIFY(edgeLit(1));
+    QVERIFY(edgeLit(2));
+
+    /* Kept in the show: through a look's save and load, and out on DMX. */
+    MasterTimer timer(m_doc);
+    QLCFixtureDef *def = makePixelDef("XL image", 45, 30);
+    m_doc->fixtureDefCache()->addFixtureDef(def);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setSize(QSize(15, 5));
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, def->modes().first());
+    fx->setUniverse(1);
+    fx->setAddress(0);
+    QVERIFY(m_doc->addFixture(fx));
+    for (int h = 0; h < fx->heads(); ++h)
+    {
+        const QPoint at = xl165Cell(h);
+        grp->assignHead(QLCPoint(at.x(), at.y()), GroupHead(fx->id(), h));
+    }
+    m_doc->addFixtureGroup(grp);
+
+    QLCPalette *pal = new QLCPalette(QLCPalette::Effect, m_doc);
+    pal->setScriptPath(dir + "matrix-image.js");
+    pal->setEffectStringParam("image", gif);
+    pal->setEffectParamValue("fit", 2);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    w.writeStartDocument();
+    QVERIFY(pal->saveXML(&w));
+    w.writeEndDocument();
+    buf.close();
+    QXmlStreamReader r(buf.data());
+    r.readNextStartElement();
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(dir));
+    delete pal;
+    QVERIFY(QLCPalette::loader(r, m_doc));            // as a show loads it: the script by name
+    QLCPalette *back = nullptr;
+    for (QLCPalette *pp : m_doc->palettes())
+        if (pp->type() == QLCPalette::Effect && pp->scriptPath().endsWith("matrix-image.js"))
+            back = pp;
+    QVERIFY(back != nullptr);
+    QCOMPARE(back->effectStringParam("image"), gif);
+
+    Scene *scene = new Scene(m_doc);
+    scene->addFixtureGroup(grp->id());
+    scene->addFixture(fx->id());
+    scene->addPalette(back->id());
+    m_doc->addFunction(scene);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    EffectInstance inst(m_doc, scene->id(), back->id());
+    QVERIFY(inst.isValid());
+    inst.runTick();
+    // Just started: the red frame -- every RGB head's red full, its green none.
+    int reds = 0, greens = 0;
+    for (const EffectInstance::DmxWrite &dw : inst.dmxWrites())
+    {
+        if (dw.channel >= 45 * 3)
+            continue;
+        if (dw.channel % 3 == 0 && dw.value == 255) ++reds;
+        if (dw.channel % 3 == 1 && dw.value > 0) ++greens;
+    }
+    QCOMPARE(reds, 45);
+    QCOMPARE(greens, 0);
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+/* How long each matrix effect takes a tick on a rig of eight XL-450s
+   (600 pixels): each scope it has, through the host. The engine ticks
+   at 50 a second, every effect on the one thread: an effect taking a
+   good part of the 20ms would starve the rest. */
+void EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()
+{
+    MasterTimer timer(m_doc);
+    QLCFixtureDef *def = makePixelDef("XL timing", 45, 30);
+    m_doc->fixtureDefCache()->addFixtureDef(def);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setSize(QSize(120, 5));
+    QList<Fixture *> fx;
+    for (int b = 0; b < 8; ++b)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setUniverse(quint32(b + 1));
+        f->setAddress(0);
+        QVERIFY(m_doc->addFixture(f));
+        fx << f;
+        for (int h = 0; h < f->heads(); ++h)
+        {
+            const QPoint at = xl165Cell(h) + QPoint(b * 15, 0);
+            grp->assignHead(QLCPoint(at.x(), at.y()), GroupHead(f->id(), h));
+        }
+    }
+    m_doc->addFixtureGroup(grp);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixtureGroup(grp->id());
+    for (Fixture *f : fx)
+        scene->addFixture(f->id());
+    m_doc->addFunction(scene);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    // A big picture for the image: the most it has to average.
+    QImage pic(MatrixImage::kMaxSide, MatrixImage::kMaxSide, QImage::Format_RGB32);
+    for (int y = 0; y < pic.height(); ++y)
+        for (int x = 0; x < pic.width(); ++x)
+            pic.setPixel(x, y, qRgb(x * 255 / pic.width(), y * 255 / pic.height(), (x ^ y) & 255));
+    QByteArray png;
+    QBuffer pb(&png);
+    pb.open(QIODevice::WriteOnly);
+    pic.save(&pb, "PNG");
+    const QString picture = MatrixImage::fromBytes(png, "timing.png");
+    QVERIFY(!picture.isEmpty());
+
+    const int ticks = qMax(30, qEnvironmentVariableIntValue("QLC_MATRIX_TICKS"));
+    const double budget = qEnvironmentVariableIsSet("QLC_MATRIX_BUDGET_MS")
+        ? qEnvironmentVariable("QLC_MATRIX_BUDGET_MS").toDouble() : 12.0;
+    QStringList slow, table;
+    double worst = 0;
+    for (const QString &file : kMatrixScripts)
+    {
+        const int scopes = kScopedMatrixScripts.contains(file) ? 3 : 1;
+        QStringList row;
+        for (int scope = 0; scope < scopes; ++scope)
+        {
+            QLCPalette *pal = new QLCPalette(QLCPalette::Effect, m_doc);
+            pal->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/" + file);
+            if (scopes > 1)
+                pal->setEffectParamValue("scope", scope);
+            if (file == "matrix-image.js")
+                pal->setEffectStringParam("image", picture);
+            QVERIFY(m_doc->addPalette(pal));
+            scene->addPalette(pal->id());
+            EffectInstance inst(m_doc, scene->id(), pal->id());
+            QVERIFY2(inst.isValid(), qPrintable(file));
+            inst.runTick();                            // the first: the canvas, the picture
+            if (file != "matrix-strobe.js")             // between hits, rightly dark
+                QVERIFY2(!inst.dmxWrites().isEmpty(), qPrintable(file + ": nothing out"));
+            QElapsedTimer clock;
+            clock.start();
+            for (int i = 0; i < ticks; ++i)
+                inst.runTick();
+            const double ms = double(clock.nsecsElapsed()) / 1e6 / ticks;
+            worst = qMax(worst, ms);
+            row << QString::number(ms, 'f', 2);
+            if (budget > 0 && ms > budget)
+                slow << QString("%1 (scope %2): %3 ms").arg(file).arg(scope).arg(ms, 0, 'f', 2);
+            scene->removePalette(pal->id());
+        }
+        table << QString("%1 %2").arg(file, -26).arg(row.join(" / "));
+    }
+    qInfo().noquote() << "8 x XL-450, ms a tick (whole canvas / each box / staggered):\n  "
+                         + table.join("\n  ");
+    QVERIFY2(slow.isEmpty(), qPrintable(slow.join("; ")));
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+/* Not a check: with QLC_MATRIX_PREVIEW_DIR set, a few seconds of each new
+   matrix effect on eight XL-450s, frame by frame, as PNGs to look at. */
+void EffectInstance_Test::matrixEffectPreviews()
+{
+    const QString out = qEnvironmentVariable("QLC_MATRIX_PREVIEW_DIR");
+    if (out.isEmpty())
+        QSKIP("QLC_MATRIX_PREVIEW_DIR not set");
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    const MatrixLayout rig = matrixLayout("rig");
+    QString gif = tinyGifSetting();
+    const QString wheel = qEnvironmentVariable("QLC_MATRIX_PREVIEW_GIF");
+    if (!wheel.isEmpty())
+        gif = MatrixImage::fromFile(wheel);
+
+    struct Show { QString name, file; QMap<QString, double> set; QList<QColor> look; };
+    const QList<QColor> pinkBlue = { QColor(255, 0, 140), QColor(0, 120, 255) };
+    const QList<Show> shows = {
+        { "fire", "matrix-fire.js", {}, {} },
+        { "fire-blue-each-box", "matrix-fire.js", { { "palette", 2 }, { "scope", 1 } }, {} },
+        { "starfield", "matrix-starfield.js", {}, {} },
+        { "starfield-warp-whole", "matrix-starfield.js", { { "scope", 0 }, { "trails", 1 }, { "speed", 1.2 } }, {} },
+        { "spiral", "matrix-spiral.js", {}, pinkBlue },
+        { "lissajous", "matrix-lissajous.js", {}, {} },
+        { "kaleidoscope", "matrix-kaleidoscope.js", {}, {} },
+        { "kaleidoscope-bars", "matrix-kaleidoscope.js", { { "pattern", 1 }, { "folds", 3 } }, pinkBlue },
+        { "balls", "matrix-balls.js", {}, {} },
+        { "fireworks", "matrix-fireworks.js", {}, {} },
+        { "scanner", "matrix-scanner.js", {}, {} },
+        { "scanner-whole-3", "matrix-scanner.js", { { "scope", 0 }, { "count", 3 } }, pinkBlue },
+        { "dissolve", "matrix-dissolve.js", { { "speed", 0.7 } }, {} },
+        { "image-gif-fill", "matrix-image.js", { { "fit", 1 } }, {} },
+        { "image-gif-each-box-fit", "matrix-image.js", { { "fit", 0 }, { "scope", 1 } }, {} },
+        { "image-no-picture", "matrix-image.js", { { "scope", 1 } }, {} },
+        { "gradient", "matrix-gradient.js", { { "angle", 20 } }, {} },
+        { "vu", "matrix-vu.js", {}, {} },
+        { "vu-staggered", "matrix-vu.js", { { "scope", 2 }, { "band", 0 } }, {} },
+        { "ripple-staggered", "matrix-ripple.js", { { "scope", 2 }, { "timing", 1 }, { "speed", 0.6 } }, {} },
+        { "ripple-staggered-middle", "matrix-ripple.js", { { "scope", 2 }, { "timing", 1 }, { "speed", 0.6 }, { "staggerOrder", 2 } }, {} },
+        { "radar-staggered", "matrix-radar.js", { { "scope", 2 } }, {} },
+        { "spiral-staggered-random", "matrix-spiral.js", { { "scope", 2 }, { "staggerOrder", 3 } }, pinkBlue },
+        { "scanner-staggered", "matrix-scanner.js", { { "scope", 2 } }, {} },
+        { "iris-staggered", "matrix-iris.js", { { "scope", 2 } }, {} }
+    };
+    const int cell = 9, gap = 1, boxGap = 6;
+    const int W = rig.cols * (cell + gap) + 7 * boxGap + gap, H = rig.rows * (cell + gap) + gap;
+    for (const Show &sh : shows)
+    {
+        EffectScript es;
+        QVERIFY(es.load(dir + sh.file));
+        QDir().mkpath(out + "/" + sh.name);
+        FrameTweak tw = [&](QJSEngine *eng, QJSValue &in, QJSValue &pa, QJSValue &pal) {
+            if (!sh.look.isEmpty())
+                lookColours(sh.look)(eng, in, pa, pal);
+            if (sh.file == "matrix-image.js" && sh.name != "image-no-picture")
+                withImage(gif)(eng, in, pa, pal);
+        };
+        // State carried frame to frame, as the host does.
+        QJSEngine *eng = es.engine();
+        QJSValue state = es.newState();
+        for (int i = 0; i < 100; ++i)
+        {
+            const double t = 1.0 + i * 0.04;
+            QJSValue fixtures = eng->newArray(uint(rig.heads.size()));
+            for (int h = 0; h < rig.heads.size(); ++h)
+            {
+                const MatrixHead &m = rig.heads.at(h);
+                QJSValue o = eng->newObject();
+                o.setProperty("id", m.id); o.setProperty("head", m.head);
+                o.setProperty("hasRGB", true); o.setProperty("hasDimmer", m.dimmer);
+                o.setProperty("headRGB", m.rgb); o.setProperty("headWhite", m.white);
+                QJSValue g = eng->newObject();
+                g.setProperty("col", m.col); g.setProperty("row", m.row);
+                g.setProperty("cols", rig.cols); g.setProperty("rows", rig.rows);
+                o.setProperty("grid", g);
+                fixtures.setProperty(uint(h), o);
+            }
+            QJSValue inputs = eng->newObject();
+            inputs.setProperty("_time", t);
+            inputs.setProperty("_bpm", 120);
+            inputs.setProperty("_beatPos", t * 2);
+            inputs.setProperty("_beat", t * 2 - std::floor(t * 2));
+            inputs.setProperty("_beatCount", int(std::floor(t * 2)));
+            QJSValue params = eng->newObject();
+            for (const EffectScript::ParamDef &d : es.paramDefs())
+                if (d.type.isEmpty() || d.type == "direction")
+                    params.setProperty(d.name, double(d.defaultValue));
+            for (auto it = sh.set.constBegin(); it != sh.set.constEnd(); ++it)
+                params.setProperty(it.key(), it.value());
+            QJSValue palettes = eng->newObject();
+            QJSValue look = eng->newObject();
+            look.setProperty("colors", eng->newArray(0));
+            palettes.setProperty("look", look);
+            tw(eng, inputs, params, palettes);
+            const QJSValue r = es.callTick(fixtures, inputs, palettes, params, state, eng->newObject());
+            QVERIFY2(r.isArray(), qPrintable(sh.name));
+            QImage img(W, H, QImage::Format_RGB32);
+            img.fill(QColor(18, 18, 18));
+            for (int h = 0; h < rig.heads.size(); ++h)
+            {
+                const MatrixHead &m = rig.heads.at(h);
+                const QJSValue o = r.property(uint(h));
+                auto v = [&o](const char *k) { return o.property(k).isUndefined() ? 0 : o.property(k).toInt(); };
+                QColor c = m.rgb ? QColor(v("r"), v("g"), v("b"))
+                                 : QColor(v("w"), v("w"), qMin(255, int(v("w") * 0.92)));
+                const int x0 = gap + m.col * (cell + gap) + (m.col / 15) * boxGap;
+                const int y0 = gap + m.row * (cell + gap);
+                for (int yy = 0; yy < cell; ++yy)
+                    for (int xx = 0; xx < cell; ++xx)
+                        img.setPixel(x0 + xx, y0 + yy, c.rgb());
+            }
+            img.save(QString("%1/%2/%3.png").arg(out, sh.name).arg(i, 3, 10, QChar('0')));
+        }
     }
 }
 
