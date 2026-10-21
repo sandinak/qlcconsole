@@ -694,6 +694,57 @@ so their channels go on from wherever they are. A Loop list that goes round
 carries on from its last cue; a jump to its first cue plays it as from the
 top.
 
+### Skipping cues
+
+A cue can be **skipped** without deleting it: a song cut from tonight's
+set, a cue you are not ready for in rehearsal. Put it back the same way.
+
+- **To skip a cue:**
+  - untick the box at the start of its row in the tree (every cue row has
+    one; ticked means it plays);
+  - right-click it → **Skip cue** (on a skipped cue: **Unskip cue**);
+  - select it and press **⌘/**;
+  - tick **Skip: GO passes over it** on its page;
+  - type `skip 0.0.3`, `skip 0.0.3 thru 0.0.5` or `skip 0.0.3, 0.0.7`
+    (`unskip` puts them back; with no number, the selected cue).
+- **Several at once.** With several cues selected, unticking one of them,
+  the menu and ⌘/ act on them all. ⌘/ skips them, or puts them back when
+  every one is skipped already. Each change is **one undo step**, and it is
+  saved with the show.
+- **How it looks.** A skipped cue is grey and struck through, with **⦸
+  skip** in the badge column, and everything under it (its layers, what
+  tracks in, its sub-cues) is grey too. Its tooltip says *Skipped: GO
+  passes over it*.
+- **Playing.** **GO**, **auto-follow** and **Back** pass over a skipped
+  cue. **NEXT** (in the Run tab, the footer's menu and the Cue Runner)
+  names the next cue that plays.
+- **A jump still plays it.** Double-click it in the Run tab or a Cue
+  Runner, fire it by number from show control (`GO 3`), or select it in
+  the tree in Design: it plays, because you asked for it. Show control's
+  log says *(skipped: played as named)*. The preview line says *(skipped:
+  GO passes over it; played as picked)*. GO from there goes on to the next
+  cue that plays, and that cue looks as it does played from the top.
+- **Tracking: as if it weren't in the list.** Nothing of a skipped cue
+  passes on: the cue after it starts from the cue before it, so its
+  changes don't track forward and its releases don't happen. A skipped
+  **Block** cue blocks nothing. Every other cue plays exactly what it
+  would with the skipped cues deleted. The **⤳** badges, the tooltips and
+  **Next cue receives** all read it so. A jump to a skipped cue plays it
+  as from the cue before it that plays.
+- **The edges.**
+  - The first cue skipped: GO from stopped starts at the first cue that
+    plays.
+  - The last cue skipped: GO on the cue before it ends the list.
+  - Every cue skipped: GO does nothing (show control says *every cue is
+    skipped*).
+  - A skipped cue's **sub-cues** don't play from GO either. A sub-cue can
+    be skipped on its own: Sub GO passes over it.
+  - A cue that **includes** a skipped cue still plays its output.
+  - A skipped **base cue** is still what Release goes back to.
+  - Looks (busking) can't be skipped; they are fired, not GOne through.
+- **Import and Convert.** Importing a chaser keeps each step's skip flag,
+  and **Convert to tracking** keeps it.
+
 ### Changing a tracked value
 
 A grey value came from an earlier cue. On its row, **⋯** offers two
@@ -829,6 +880,8 @@ is always there and calls the same operations as the mouse.
 | `function Haze look, House lights` | Functions played as they are, a layer each |
 | `release Towers` | Turns Release on, or off again |
 | `include 0.0.3` | Includes that cue; again, takes it out |
+| `skip 0.0.3` · `skip 0.0.3 thru 0.0.5` · `skip 0.0.3, 0.0.7` · `skip` | **Skips** those cues (none named: the selected one); [Skipping cues](#skipping-cues) |
+| `unskip 0.0.3` · `unskip 0.0.3 thru 0.0.5` · `unskip` | Puts them back: GO plays them again |
 | `record` | Record as new cue, as the button does (your setting, or it asks) |
 | `record selected` · `record running` · `record lit` | Records what the word says |
 | `US in Steps colour Red` | A **child layer** on US under the cue's Steps layer |
@@ -1362,6 +1415,7 @@ Cue Runner back into a Cue List).
 | **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
+| **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag a cue onto another cue | Move it there; with **⌥**, include it |
 | Click / **⌘-click** / **⇧-click** (in the tree) | Select a row / add or remove one / take the rows between |
@@ -1405,8 +1459,8 @@ Cue Runner back into a Cue List).
   Design) is still to be decided. Today only the app's Blind, which mutes
   the whole rig, does that.
 - **Edits in Operate are blind** and reach the stage on the cue's next GO.
-- **Import** doesn't carry a step's skip flag, its own speed master or Sub GO
-  steps (a chaser step plays as a function layer).
+- **Import** doesn't carry a step's own speed master or Sub GO steps (a
+  chaser step plays as a function layer).
 - **Sub-cues are one level** (no 4.1.1), have no includes, mode or base, and
   the first plays with GO (its Advance is ignored). Convert to tracking and
   Detach to plain chaser leave a list with sub-cues alone.

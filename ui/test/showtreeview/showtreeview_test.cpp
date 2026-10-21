@@ -4837,4 +4837,244 @@ void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
     settings.remove("showtree/badgeColumn");
 }
 
+/****************************************************************************
+ * Skipped cues (2026-10-21)
+ ****************************************************************************/
+
+/* Branson: "in the show-tree we need a way to disable cues inline and skip
+   them". The tick on a cue row, the menu's Skip cue / Unskip cue, ⌘/, the
+   cue page's Skip and the command line -- each one undo step, on every
+   selected cue; a skipped cue greyed and struck through, its layers greyed,
+   ⦸ in the badges, and what the next cue receives said past it. */
+void ShowTreeView_Test::skipCuesInTheTree()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 4; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->setLayerLook(c[0], st->addLayer(c[0], groupTarget(towers->id())), st->lookForPalette(blue));
+    st->setLayerLook(c[1], st->addLayer(c[1], groupTarget(usts->id())), st->lookForPalette(half));
+    st->setLayerLook(c[2], st->addLayer(c[2], groupTarget(towers->id())), st->lookForPalette(half));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    // Every cue row has the tick, ticked: it plays.
+    for (quint32 id : c)
+    {
+        QTreeWidgetItem *row = cueRow(tree, id);
+        QVERIFY(row != nullptr);
+        QVERIFY(row->flags() & Qt::ItemIsUserCheckable);
+        QVERIFY(row->data(0, Qt::CheckStateRole).isValid());
+        QCOMPARE(row->checkState(0), Qt::Checked);
+    }
+
+    // Unticked inline: skipped, one undo step.
+    cueRow(tree, c[1])->setCheckState(0, Qt::Unchecked);
+    QTRY_VERIFY(st->isCueSkipped(c[1]));
+    QCOMPARE(st->undoText(), QString("Skip cue"));
+    tree->expandAll();
+    QTreeWidgetItem *row = cueRow(tree, c[1]);
+    QCOMPARE(row->checkState(0), Qt::Unchecked);
+    QVERIFY2(row->text(1).startsWith("⦸ skip"), qPrintable(row->text(1)));
+    QVERIFY(row->font(0).strikeOut());
+    const QColor skipGrey = row->foreground(0).color();
+    QVERIFY(skipGrey != tree->palette().color(QPalette::Text));
+    QVERIFY(row->toolTip(0).startsWith("Skipped: GO passes over it"));
+    QVERIFY(row->toolTip(1).startsWith("Skipped: GO passes over it"));
+    QVERIFY(row->childCount() > 0);
+    for (int k = 0; k < row->childCount(); ++k)
+        QCOMPARE(row->child(k)->foreground(0).color(), skipGrey);
+    QVERIFY(!cueRow(tree, c[0])->font(0).strikeOut());
+    // What the next cue receives -- and the cue before, past it.
+    QVERIFY2(view.nextCueText(c[0]).startsWith("(3 C3, past the skipped) "), qPrintable(view.nextCueText(c[0])));
+    QVERIFY2(view.nextCueText(c[1]).contains("nothing of this cue (skipped): what 1 C1 passes on"),
+             qPrintable(view.nextCueText(c[1])));
+    QVERIFY(view.cueTrackingTip(c[1]).contains("⦸ Skipped"));
+    // 3 tracks from 1, not from 2: the USTs never come in.
+    QVERIFY(trackedRow(tree, c[2], "USTs") == nullptr);
+    QVERIFY(st->undo());
+    QVERIFY(!st->isCueSkipped(c[1]));
+    tree->expandAll();
+    QVERIFY(trackedRow(tree, c[2], "USTs") != nullptr);
+
+    // Several selected, one unticked: all of them, one step.
+    tree->clearSelection();
+    cueRow(tree, c[1])->setSelected(true);
+    cueRow(tree, c[2])->setSelected(true);
+    cueRow(tree, c[2])->setCheckState(0, Qt::Unchecked);
+    QTRY_VERIFY(st->isCueSkipped(c[1]) && st->isCueSkipped(c[2]));
+    QCOMPARE(st->undoText(), QString("Skip 2 cues"));
+
+    // ⌘/ on the selection: every one skipped already -- put back.
+    tree->setFocus();
+    tree->clearSelection();
+    cueRow(tree, c[1])->setSelected(true);
+    cueRow(tree, c[2])->setSelected(true);
+    QTest::keyClick(tree, Qt::Key_Slash, Qt::ControlModifier);
+    QVERIFY(!st->isCueSkipped(c[1]) && !st->isCueSkipped(c[2]));
+    QCOMPARE(st->undoText(), QString("Unskip 2 cues"));
+    // ... one of them not: all skipped.
+    tree->clearSelection();
+    cueRow(tree, c[0])->setSelected(true);
+    cueRow(tree, c[3])->setSelected(true);
+    QVERIFY(st->setCuesSkipped({ c[3] }, true));
+    tree->clearSelection();
+    cueRow(tree, c[0])->setSelected(true);
+    cueRow(tree, c[3])->setSelected(true);
+    QTest::keyClick(tree, Qt::Key_Slash, Qt::ControlModifier);
+    QVERIFY(st->isCueSkipped(c[0]) && st->isCueSkipped(c[3]));
+    QVERIFY(view.setCuesSkipped({ c[0], c[3] }, false));
+    // A plain / still goes to the Library's filter.
+    QVERIFY(view.selectNode(c[0]));
+    QTest::keyClick(tree, Qt::Key_Slash);
+    QVERIFY(!st->isCueSkipped(c[0]));
+
+    // Right-click: Skip cue, then Unskip cue.
+    for (const bool skipped : { false, true })
+    {
+        QString seen;
+        ModalCloser closer([&](QWidget *w) {
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                for (QAction *act : m->actions())
+                    if (act->objectName() == QLatin1String("stSkipCue"))
+                    {
+                        seen = act->text();
+                        m->close();
+                        act->trigger();
+                        return true;
+                    }
+            return false;
+        });
+        QVERIFY(view.selectNode(c[2]));
+        QTreeWidgetItem *r = cueRow(tree, c[2]);
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, tree->visualItemRect(r).center()));
+        QCOMPARE(seen, skipped ? QString("Unskip cue") : QString("Skip cue"));
+        QCOMPARE(st->isCueSkipped(c[2]), !skipped);
+    }
+
+    // The cue page's Skip.
+    QVERIFY(view.selectNode(c[3]));
+    QCheckBox *skipBox = view.findChild<QCheckBox *>("stCueSkip");
+    QVERIFY(skipBox != nullptr && skipBox->isVisibleTo(&view));
+    QVERIFY(!skipBox->isChecked());
+    skipBox->setChecked(true);
+    QVERIFY(st->isCueSkipped(c[3]));
+    QVERIFY(view.selectNode(c[3]));
+    QVERIFY(view.findChild<QCheckBox *>("stCueSkip")->isChecked());
+    QVERIFY(st->undo());
+
+    // The command line.
+    QVERIFY(view.runCommand("skip 2 thru 3"));
+    QVERIFY(st->isCueSkipped(c[1]) && st->isCueSkipped(c[2]));
+    QCOMPARE(st->undoText(), QString("skip 2 thru 3"));
+    QVERIFY(view.commandMessage().contains("skipped 2 cues"));
+    QVERIFY(view.runCommand("unskip 2, 3"));
+    QVERIFY(!st->isCueSkipped(c[1]) && !st->isCueSkipped(c[2]));
+
+    // Picked, a skipped cue still plays (the preview says so).
+    QVERIFY(st->setCuesSkipped({ c[1] }, true));
+    QVERIFY(view.selectNode(c[1]));
+    QTest::qWait(20);
+    QVERIFY2(view.previewText().contains("skipped"), qPrintable(view.previewText()));
+
+    // A busking look has no tick: it is fired, not GOne through.
+    const quint32 look = st->addLook(st->productions().first().id, "Hit");
+    QVERIFY(look != invalidId());
+    QTreeWidgetItem *lookRow = cueRow(tree, look);
+    QVERIFY(lookRow != nullptr);
+    QVERIFY(!lookRow->data(0, Qt::CheckStateRole).isValid());
+    view.hide();
+}
+
+/* A real show (read only) with cues skipped: the tree, and the skipped
+   cue's row tooltip as text beside it. */
+void ShowTreeView_Test::pictureOfSkippedCues()
+{
+    const QString path = qEnvironmentVariable("QLC_SKIPCUE_SHOW");
+    const QString shot = qEnvironmentVariable("QLC_SKIPCUE_SHOT");
+    if (path.isEmpty() || shot.isEmpty())
+        QSKIP("set QLC_SKIPCUE_SHOW and QLC_SKIPCUE_SHOT to picture a show with cues skipped");
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlStreamReader r(&file);
+    bool loaded = false;
+    while (!r.atEnd() && !loaded)
+        if (r.readNextStartElement() && r.name() == QLatin1String("Engine"))
+            loaded = m_doc->loadXML(r, false);
+    QVERIFY(loaded);
+    ShowTreeController *st = m_doc->showTree();
+    auto longest = [st]() {
+        const CueList *list = nullptr;
+        for (const Production &p : st->productions())
+            for (const CueList &l : p.lists)
+                if (!l.looks && !l.isSubCues() && (list == nullptr || l.cues.count() > list->cues.count()))
+                    list = &l;
+        return list;
+    };
+    const CueList *list = longest();
+    if (list == nullptr || list->cues.count() < 6)
+    {
+        // Too short a tree: the show's chaser (QLC_SKIPCUE_CHASER, else
+        // "Full Show") imported and made Tracking, as Convert would.
+        for (Function *f : m_doc->functions())
+            if (f->type() == Function::ChaserType && !st->isGenerated(f->id())
+                && f->name() == qEnvironmentVariable("QLC_SKIPCUE_CHASER", "Full Show"))
+            {
+                const ShowTreeController::ImportReport rep = st->importChaser(f->id());
+                ShowTreeController::ConvertPlan plan = st->planConvertToTracking(rep.list);
+                if (plan.ok)
+                    st->convertToTracking(rep.list, &plan);
+                else
+                    st->setListMode(rep.list, ListMode::Tracking);
+                break;
+            }
+        list = longest();
+    }
+    QVERIFY(list != nullptr && list->cues.count() >= 6);
+    const quint32 listId = list->id;
+    const quint32 one = list->cues.at(1).id, two = list->cues.at(2).id;
+    const quint32 three = list->cues.at(3).id, four = list->cues.at(4).id;
+    QVERIFY(st->setCuesSkipped({ two }, true));
+    QVERIFY(st->setCuesSkipped({ four }, true));
+    list = st->cueList(listId);
+
+    QSettings().remove(QStringLiteral("showtree/splitter2"));
+    QSettings().remove(QStringLiteral("showtree/badgeColumn"));
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 760);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.tree()->collapseAll();
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::CueNode)
+            (*it)->setExpanded(true);
+    cueRow(view.tree(), two)->setExpanded(true);
+    view.selectNode(one);
+    QTest::qWait(50);
+    QVERIFY(view.grab().save(shot));
+    QVERIFY(view.tree()->grab().save(QString(shot).replace(".png", "-tree.png")));
+    view.selectNode(two);
+    QTest::qWait(50);
+    QVERIFY(view.grab().save(QString(shot).replace(".png", "-cue.png")));
+    QFile tip(QString(shot).replace(".png", "-tooltip.txt"));
+    QVERIFY(tip.open(QIODevice::WriteOnly));
+    tip.write(cueRow(view.tree(), two)->toolTip(0).toUtf8());
+    tip.write("\n\n---- next cue receives, from the cue before ----\n");
+    tip.write(view.nextCueText(one).toUtf8());
+    tip.write("\n");
+    tip.write(view.nextCueText(three).toUtf8());
+    view.hide();
+}
+
 QTEST_MAIN(ShowTreeView_Test)

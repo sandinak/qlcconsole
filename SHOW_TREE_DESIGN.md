@@ -2002,6 +2002,55 @@ redo = the post-delete XML), showtreeview_test
 `aPaletteDeletedFromTheLibraryComesBackWithUndo` (no *(missing)*),
 programmingmanager_test `deletingHereClearsTheShowTreesUses` (⌘Z there).
 
+### 10.21 Skipped cues (2026-10-21)
+
+Branson: "in the show-tree we need a way to disable cues inline and skip
+them". Built on the chaser's own skip (`ChaserStep::skip`, which the runner
+already passed over for GO, Next, Back and auto-follow, and which a jump
+still plays).
+
+- **Model.** `Cue::skip`, saved `Skip="1"` on `<Cue>` (old shows: nothing
+  skipped); per use, like the number, not a reusable cue's content. A look
+  of a Looks section is never skipped (`normalizeLooks`).
+- **Tracking — decided: as if it weren't in the list.** A cue starts from
+  the nearest cue before it that isn't skipped (`playedBefore()`); a
+  skipped cue's `passOn` is what it was handed. So its changes don't track
+  forward, its releases don't happen, a skipped Block cue blocks nothing,
+  and every other cue's stage equals the list's with the skipped cues
+  deleted (tested over every subset of a six-cue list with Track, Block,
+  Cue-only and Release cues). The skipped cue itself resolves as a jump
+  plays it: from the cue before it that plays. Includes of it still play
+  it; a skipped base cue is still what Release goes back to (it defines
+  values, it isn't played through). `needs()`, `rebakeChain()` and
+  `releasesToBase()` follow the same rule. Sub-cue lists too (Sub GO passes
+  over a skipped sub-cue; the first played starts from its cue).
+- **Bake.** The cue still bakes to its Collection (a jump plays it); its
+  step (or sub-chaser step) gets `skip`. `sameSteps()` compares it.
+- **Playback.** GO / auto-follow / Back: the runner. NEXT everywhere goes
+  through `ShowControl::standbyStep()` → `Chaser::computeNextStep()`, which
+  skips — the Run tab, the footer and the VC Cue Runner need no change. A
+  jump to a skipped cue plays it (double-click, `GO <cue>` from show
+  control — its log line adds *(skipped: played as named)* — or picking it
+  in Design, whose preview line says so).
+- **Restack.** `ChaserRunner::isNextStep()` is false out of a skipped step,
+  so GO after a jump to one restacks; `restack()` counts skipped steps
+  played before the target among what the run from the top never set.
+  `engine/test/trackback` `skippedCuesPlayAsIfDeleted`: each cue and each
+  pair skipped in the colour and every-mode lists, played from the top =
+  the list with them deleted (0 channels differ), every GO/Back/jump walk
+  lands as from the top, a jump to the skipped cue = its unskipped run.
+- **UI.** A tick on every cue row (unticked = skipped; on a selected row it
+  acts on the selection), right-click **Skip cue** / **Unskip cue** (not
+  "Include cue": that name is the includes submenu), **⌘/** (toggle: all
+  skipped → put back, else skip; plain `/` still goes to the Library
+  filter), the cue page's **Skip**, and `skip` / `unskip [<cue> [thru
+  <cue>]] [, <cue>…]` typed. One undo step each ("Skip cue", "Skip 2
+  cues", "Unskip …"; typed: the command). Struck through and greyed with
+  ⦸ skip, the rows under it greyed, the tree re-greyed on a theme change.
+- **Import / Convert.** Import keeps the step's flag (it used to drop it
+  with a note). Convert to tracking keeps it and, where it tracks a Block
+  cue, tracks from the cue before that plays.
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;

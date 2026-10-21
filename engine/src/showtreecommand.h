@@ -58,6 +58,8 @@ class Doc;
  *   function Haze look           a function played as it is (opaque layer)
  *   release Towers               toggle Release on the cue's Towers layer
  *   include 0.0.3                include a cue (again: take it out)
+ *   skip 0.0.3 [thru 0.0.5] [, 0.0.7]   skip cues (none named: the selected
+ *                                one): GO passes over; unskip puts back
  *   record [selected|running|lit]   Record as new cue: the setting says
  *                                which when the choices differ (or asks)
  *   list "01-Opener"             select that cue list, or make it

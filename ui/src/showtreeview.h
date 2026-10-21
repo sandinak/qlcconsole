@@ -257,6 +257,16 @@ public:
     QList<QPair<quint32, quint32>> multiLayers() const { return m_multi; }
     /** Release on (or off) on every selected layer: one undo step. */
     bool setReleaseOnSelected(bool release);
+    /** The cues selected in the tree (cue lists and sub-cues; not looks),
+     *  in tree order. */
+    QList<quint32> selectedCues() const;
+    /** Skip (or, @a skip false, put back) cues @a cueIds: one undo step.
+     *  The tree's tick, the menu's Skip cue / Unskip cue, ⌘/ and the cue
+     *  page's Skip all come here. */
+    bool setCuesSkipped(const QList<quint32> &cueIds, bool skip);
+    /** ⌘/ in the tree: the selected cues skipped -- or, when every one of
+     *  them is skipped already, put back. False: no cue selected. */
+    bool toggleSkipSelected();
     /** Delete the cues and own layers selected in the tree (two or more)
      *  as one undo step; false (nothing done) when fewer, or a cue list
      *  or production is among them. */
@@ -495,6 +505,7 @@ private slots:
     void slotListBaseChanged(int index);
     void slotCueBaseToggled(bool on);
     void slotCueMixToggled(bool on);
+    void slotCueSkipToggled(bool on);
     void slotLayerReleaseToggled(bool on);
     void slotCommandEntered();
     void slotFilterChanged(const QString &text);
@@ -613,6 +624,7 @@ private:
     QComboBox *m_cueMode;
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
+    QCheckBox *m_cueSkip = nullptr;
     QListWidget *m_cueIncludes;
     QToolButton *m_includeAdd;
     QToolButton *m_includeRemove;

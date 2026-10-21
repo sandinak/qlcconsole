@@ -599,6 +599,101 @@ void TrackBack_Test::blockCueOnlyReleaseIncludesAndMix()
     QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1 in all; first: %2").arg(differ).arg(why)));
 }
 
+void TrackBack_Test::skippedCuesPlayAsIfDeleted()
+{
+    for (int which = 0; which < 2; ++which)
+    {
+        if (which > 0)
+        {
+            cleanup();
+            init();
+        }
+        Chaser *c = which == 0 ? colourList() : everyModeList();
+        QVERIFY(c != nullptr);
+        ShowTreeController *st = m_doc->showTree();
+        const QList<Cue> cues = st->cueList(m_list)->cues;
+        const int n = int(cues.count());
+        const QMap<int, QByteArray> plain = straightRun(c);
+
+        // Each cue alone, and each two in a row -- not one another cue
+        // includes (deleting it would take the include away too).
+        QList<QList<int>> sets;
+        for (int k = 0; k < n; ++k)
+            sets << QList<int>({ k });
+        for (int k = 0; k + 1 < n; ++k)
+            sets << QList<int>({ k, k + 1 });
+        for (const QList<int> &skip : sets)
+        {
+            bool included = false;
+            QList<quint32> ids;
+            for (int k : skip)
+            {
+                ids << cues.at(k).id;
+                for (const Cue &other : cues)
+                    included = included || other.includes.contains(cues.at(k).id);
+            }
+            if (included)
+                continue;
+            const QString what = QStringLiteral("%1 list, cues %2 skipped").arg(which == 0 ? "colour" : "every-mode")
+                                 .arg(QString::number(skip.first() + 1) + (skip.count() > 1 ? "+" : ""));
+            QVERIFY(st->setCuesSkipped(ids, true));
+            c = chaserOf(m_list);
+            const QMap<int, QByteArray> skipped = straightRun(c);
+            for (int k : skip)
+                QVERIFY2(!skipped.contains(k), qPrintable(what));
+
+            // A jump straight to the (first) skipped cue from a dark stage
+            // plays it, as the cues before it left the stage: what the
+            // list played there with nothing skipped.
+            if (plain.contains(skip.first()))
+            {
+                stopAll();
+                act(c, { Jump, skip.first() });
+                const QByteArray out = land(c);
+                QCOMPARE(c->currentStepIndex(), skip.first());
+                int differ = 0;
+                for (int i = 0; i < qMin(out.size(), plain[skip.first()].size()); ++i)
+                    differ += out.at(i) != plain[skip.first()].at(i) ? 1 : 0;
+                QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1: jump: %2 channels differ").arg(what).arg(differ)));
+            }
+
+            // GO, Back and jumps -- into the skipped cues too -- land on
+            // every cue as GO from the top does.
+            if (skip.count() == 1)
+            {
+                QString why;
+                const int differ = everyWay(c, 6, &why);
+                QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1: %2 in all; first: %3").arg(what).arg(differ).arg(why)));
+            }
+
+            // Deleted instead: the same, channel for channel.
+            for (quint32 id : ids)
+                QVERIFY(st->removeCue(id));
+            c = chaserOf(m_list);
+            const QMap<int, QByteArray> deleted = straightRun(c);
+            int d = 0, differ = 0;
+            for (int k = 0; k < n; ++k)
+            {
+                if (skip.contains(k))
+                    continue;
+                QVERIFY2(skipped.contains(k) == deleted.contains(d), qPrintable(what));
+                if (skipped.contains(k))
+                    for (int i = 0; i < qMin(skipped[k].size(), deleted[d].size()); ++i)
+                        differ += skipped[k].at(i) != deleted[d].at(i) ? 1 : 0;
+                ++d;
+            }
+            QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1: %2 channels differ from the list without them")
+                                             .arg(what).arg(differ)));
+            for (int u = 0; u < ids.count() + 1; ++u)
+                QVERIFY(st->undo());
+            QCOMPARE(st->cueList(m_list)->cues.count(), n);
+            for (const Cue &cue : st->cueList(m_list)->cues)
+                QVERIFY(!cue.skip);
+            c = chaserOf(m_list);
+        }
+    }
+}
+
 bool TrackBack_Test::loadShow(const QString &path)
 {
     stopAll();

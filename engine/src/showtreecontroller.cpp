@@ -336,6 +336,7 @@ static void normalizeLooks(QList<Production> &ps)
             {
                 c.mode = CueMode::ListDefault;
                 c.includes.clear();
+                c.skip = false;                 // a look is fired, not GOne through
             }
         }
 }
@@ -839,6 +840,31 @@ bool ShowTreeController::setCueMode(quint32 cueId, CueMode mode)
         c->mode = mode;
         return true;
     });
+}
+
+bool ShowTreeController::setCuesSkipped(const QList<quint32> &cueIds, bool skip)
+{
+    const QString label = skip ? (cueIds.count() == 1 ? tr("Skip cue") : tr("Skip %1 cues").arg(cueIds.count()))
+                               : (cueIds.count() == 1 ? tr("Unskip cue") : tr("Unskip %1 cues").arg(cueIds.count()));
+    return edit(label, [&](QList<Production> &ps) {
+        bool changed = false;
+        for (quint32 cueId : cueIds)
+        {
+            CueList *l = nullptr;
+            Cue *c = cueIn(ps, cueId, &l);
+            if (c == nullptr || l->looks || c->skip == skip)
+                continue;
+            c->skip = skip;
+            changed = true;
+        }
+        return changed;
+    });
+}
+
+bool ShowTreeController::isCueSkipped(quint32 cueId) const
+{
+    const Cue *c = cue(cueId);
+    return c != nullptr && c->skip;
 }
 
 bool ShowTreeController::setCueMixOverlap(quint32 cueId, bool mix)
@@ -3767,7 +3793,7 @@ static bool sameSteps(const QList<ChaserStep> &a, const QList<ChaserStep> &b)
         const ChaserStep &x = a.at(i), &y = b.at(i);
         if (x.fid != y.fid || x.fadeIn != y.fadeIn || x.hold != y.hold || x.fadeOut != y.fadeOut
             || x.duration != y.duration || x.note != y.note || x.cueNumber != y.cueNumber
-            || x.subCues != y.subCues)
+            || x.subCues != y.subCues || x.skip != y.skip)
             return false;
     }
     return true;
@@ -4017,6 +4043,7 @@ void ShowTreeController::bake()
                     step.duration = nextFollows ? cue.fadeIn + hold : hold;
                     step.note = cue.note;
                     step.cueNumber = number;
+                    step.skip = cue.skip;
                     steps << step;
                     continue;
                 }
@@ -4027,6 +4054,9 @@ void ShowTreeController::bake()
                 step.duration = int(cue.hold) < 0 ? cue.hold : cue.fadeIn + cue.hold;
                 step.note = cue.note;
                 step.cueNumber = cue.number;
+                // Skipped: GO, auto-follow and Back pass over it (the
+                // runner), a jump still plays it.
+                step.skip = cue.skip;
                 // With sub-cues (P6): the step plays their chaser, held on
                 // Sub GO; the first sub-cue plays with GO.
                 for (const CueList &s : prod.lists)
@@ -4506,9 +4536,9 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
         {
             cue.name = fname;
         }
-        if (step.skip)
-            report.notes << tr("Cue %1 was skipped in the chaser; it plays in the cue list.")
-                            .arg(cueLabel(list, i).isEmpty() ? QString::number(i + 1) : fname);
+        // Skipped in the chaser: skipped in the list too (put back with
+        // Include cue).
+        cue.skip = step.skip;
         if (step.speedMaster != SpeedMasters::Inherit)
             report.notes << tr("%1: its own speed master is not carried over.").arg(fname);
         if (step.subCues != ChaserStep::Auto)

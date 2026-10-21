@@ -42,6 +42,10 @@ private slots:
     void fadesHoldsAndLoop();
     void blockCueOnlyReleaseIncludesAndMix();
     void aLongList();
+    /** Skipped cues (2026-10-21): GO from the top plays exactly what the
+     *  list with them deleted plays; every way of arriving lands the same
+     *  (the restack walks past them); a jump to one plays it. */
+    void skippedCuesPlayAsIfDeleted();
     void courseShows();
     void aRealShow();
 

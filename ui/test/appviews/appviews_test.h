@@ -71,6 +71,10 @@ private slots:
      *  ships: its words stand out from the page (they were palette(mid),
      *  all but the page's own colour on the dark themes). */
     void theDropAreaReadsInEveryTheme();
+    /** A skipped cue's row in the Show Tree (greyed, struck through, ⦸)
+     *  still reads in every theme; QLC_SKIPCUE_THEMES (a folder) keeps a
+     *  picture of the tree in each. */
+    void aSkippedCueReadsInEveryTheme();
 
     /** The rig network gate: the footer's red "Output held" says where the
      *  show belongs and where this machine is; Settings -> Network edits the

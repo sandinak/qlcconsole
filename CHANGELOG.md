@@ -13,6 +13,24 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Skip cues in the Show Tree.** A cue can be skipped without deleting it
+  and put back later: untick the box on its row, right-click → **Skip cue**
+  / **Unskip cue**, **⌘/** on the selected cues, **Skip** on the cue page,
+  or type `skip 0.0.3`, `skip 0.0.3 thru 0.0.5`, `skip 0.0.3, 0.0.7`,
+  `unskip …`. Several selected cues change together; each change is one
+  undo step and is saved with the show (`Skip="1"` on the cue, and on its
+  chaser step). A skipped cue is grey and struck through with a ⦸ badge,
+  its layers greyed. GO, auto-follow and Back pass over it, and NEXT (Run
+  tab, footer, Cue Runner) names the next cue that plays. It tracks as if
+  it weren't in the list: nothing of it passes on, so the cue after starts
+  from the cue before (a skipped Block cue blocks nothing). A jump to it
+  (a double-click, show control, picking it in Design) still plays it,
+  from the cue before it; GO from there restacks to what the list played
+  from the top shows. Import keeps a chaser step's skip flag (it used to be
+  dropped with a note), and Convert to tracking keeps it. Engine:
+  `ShowTree::Cue::skip`, `playedBefore()` / `playedAfter()`,
+  `ShowTreeController::setCuesSkipped()`; `ChaserRunner` restacks when
+  leaving a skipped step.
 - **Definition updates.** Fixtures → **Definition Updates…** lists the
   user folder's fixture definitions that are older than the current version
   of the same Manufacturer/Model (the shipped one, or a newer user copy,
