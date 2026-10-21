@@ -13,8 +13,7 @@ nav_order: 2
 
 - add front light so the audience can see the singers' faces;
 - aim moving lights at a spot on stage;
-- build a solo: a dark stage with two followspot-style spots on one
-  singer.
+- build a solo: a dark stage with two spots on one singer.
 
 ## Words for today
 
@@ -23,13 +22,13 @@ nav_order: 2
 | **Front light** | Light from the audience side, which is what shows faces. Ours comes from the **audience towers**. |
 | **Back light** | Light from behind the performers, which outlines them and separates them from the background. |
 | **Side light** | Light from the side, which sculpts bodies and is a staple of dance lighting. |
-| **Uplight** | Light from below: dramatic, and at its extreme, unsettling. Our step tops uplight the choir. |
+| **Uplight** | Light from below: dramatic, and sometimes eerie. Our step tops uplight the choir. |
 | **Moving light (mover)** | A fixture that can be pointed remotely: it **pans** (turns left and right) and **tilts** (up and down). |
 | **Position** | Where a moving light points. Until you give it one, it points wherever it was last left. |
 | **Stage target** | A named spot on our stage that lights can aim at: **Center** (the middle of the CS row) and **Soloist DS** (downstage centre, in front of the risers). |
 | **Aim** | Point moving lights at a stage target. |
-| **Spot** | A narrow, hard-edged light for one performer. Our two **AT-Spots** are spots. |
-| **Shutter** | A mechanical blade inside a spot that blocks the beam. With the shutter closed, no light comes out, however high the level. |
+| **Spot** | A narrow, hard-edged light for one performer, like our two **AT-Spots**. |
+| **Shutter** | A spot's built-in shutter blocks the beam. While it's closed, no light comes out, however high the level. |
 | **Block cue** | A cue that starts from a dark stage, with nothing tracking into it: only what you put in it is on. |
 
 ## Part 1 — Design it (on paper, everyone)
