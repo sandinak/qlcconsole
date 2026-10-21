@@ -18494,6 +18494,16 @@ void Monitor_Test::aBigPixelRigPaintsInGoodTime()
         m->setChannelValues(vals);
         rig << m;
     }
+    /* A run of risers under the bars and in the movers' light: every beam
+       that comes down on one stops on it, and seen level its shadow is cut
+       out of the beam (aWashStopsOnARiserSeenFromTheSide). */
+    for (int i = 0; i < 4; ++i)
+    {
+        StagePlatform *pl = props->addPlatform();
+        pl->setName(QString("Riser %1").arg(i));
+        pl->setOriginX(0.5f + 2.8f * i); pl->setOriginY(0.5f);
+        pl->setWidth(2.4f); pl->setDepth(3.0f); pl->setHeight(0.4f + 0.2f * i);
+    }
 
     /* Classifying every fixture: what each paint and each rebuild starts
        from, several times over. Ten passes over the rig: well under a
@@ -18515,18 +18525,27 @@ void Monitor_Test::aBigPixelRigPaintsInGoodTime()
         if (was.isNull()) qunsetenv("QLC_RIG_GPU"); else qputenv("QLC_RIG_GPU", was);
     });
     qunsetenv("QLC_RIG_GPU");
-    for (StructureStudioView::Plane plane : { StructureStudioView::Top, StructureStudioView::Angled })
+    /* From above, the overview's own angle, and side-on at eye level -- an
+       elevation, where beams are cut round the risers. */
+    struct Camera { StructureStudioView::Plane plane; double az, el; };
+    for (const Camera &cam : { Camera{ StructureStudioView::Top, 0.0, 0.0 },
+                               Camera{ StructureStudioView::Angled, 20.0, 30.0 },
+                               Camera{ StructureStudioView::Angled, 90.0, 0.0 } })
         for (int quality : { 1, 2 })
         {
+            const StructureStudioView::Plane plane = cam.plane;
             StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
             v.resize(1100, 680);
             v.setPlane(plane);
+            v.setAngledView(cam.az, cam.el);
             v.setLiveValues(true);
             v.setBeams(true);
             v.setHaze(1.0);
             v.setGpu(false);
             v.setSupersample(quality);
+            clock.start();
             (void)v.grab();                  // the first frame builds what it keeps
+            const qint64 first = clock.elapsed();
             qint64 slowest = 0;
             for (int frame = 0; frame < 3; ++frame)
             {
@@ -18535,11 +18554,277 @@ void Monitor_Test::aBigPixelRigPaintsInGoodTime()
                 (void)v.grab();
                 slowest = qMax(slowest, clock.elapsed());
             }
-            qInfo().noquote() << QString("plane %1, quality %2: slowest paint %3 ms")
-                                 .arg(int(plane)).arg(quality).arg(slowest);
+            qInfo().noquote() << QString("plane %1 (%2/%3), quality %4: slowest paint %5 ms")
+                                 .arg(int(plane)).arg(cam.az).arg(cam.el).arg(quality).arg(slowest)
+                              + QString(" (first %1 ms)").arg(first);
             QVERIFY2(slowest < 1500, qPrintable(QString("plane %1, quality %2: a paint took %3 ms")
                                                 .arg(int(plane)).arg(quality).arg(slowest)));
         }
+}
+
+/* A blue wash on a pole upstage of a riser, thrown across the stage and a
+   little up, so its lower edge comes down on the riser and on the floor past
+   it. @p alongX turns the whole thing a quarter, the beam running across the
+   stage instead of down it -- what a front elevation sees side-on. @p clear
+   puts the riser beside the beam instead, out of its way. */
+namespace
+{
+struct WashOverRiser
+{
+    Fixture *wash = nullptr;
+    StagePlatform *riser = nullptr;
+    Scene *scene = nullptr;
+    // Along the beam's run (Y, or X turned): lens, riser's near and far side.
+    float lensAt = 0.0f, riserNear = 2.0f, riserFar = 4.0f;
+    float riserTop = 0.8f;
+};
+}
+
+static WashOverRiser buildWashOverRiser(Doc *doc, bool alongX, bool clear)
+{
+    WashOverRiser r;
+    MonitorProperties *props = doc->monitorProperties();
+    // In the run/across frame: the run is +Y (+X turned), the riser 8 m wide.
+    auto at = [alongX](float run, float across, float z) {
+        return alongX ? QVector3D(run - 4.0f, across, z) : QVector3D(across, run, z);
+    };
+    r.riser = props->addPlatform();
+    r.riser->setName("Riser");
+    const float acrossFrom = clear ? 6.0f : -4.0f;      // clear: beside the beam
+    const QVector3D c0 = at(r.riserNear, acrossFrom, 0.0f);
+    r.riser->setOriginX(c0.x());
+    r.riser->setOriginY(c0.y());
+    r.riser->setWidth(alongX ? r.riserFar - r.riserNear : 8.0f);
+    r.riser->setDepth(alongX ? 8.0f : r.riserFar - r.riserNear);
+    if (clear)
+        r.riserTop = 2.0f;          // tall: drawn well across the beam, from the side
+    r.riser->setHeight(r.riserTop);
+    r.riser->setColor(QColor(110, 40, 40));
+    if (alongX)
+        r.lensAt = -4.0f;
+    /* A low tower well off to the side, past the riser: only so the view,
+       which frames what is on stage, shows the floor beyond the riser too. */
+    Tower *tw = props->addTower();
+    tw->setName("Marker");
+    const QVector3D m = at(9.0f, 25.0f, 0.0f);
+    tw->setOriginX(m.x()); tw->setOriginY(m.y());
+    tw->setWidth(0.3f); tw->setDepth(0.3f); tw->setHeight(0.3f);
+
+    // 80 degrees, its middle five degrees up: it lands on nothing, its lower
+    // edge 35 degrees down.
+    const QVector3D lens = at(0.0f, 0.0f, 3.0f);
+    r.wash = makeMover(doc, 80.0, 0, "Wash", lens);
+    StageTarget *t = props->addStageTarget();
+    t->setName("Out");
+    t->setPosition(lens + (at(10.0f, 0.0f, 0.0f) - at(0.0f, 0.0f, 0.0f))
+                   + QVector3D(0.0f, 0.0f, 10.0f * float(qTan(qDegreesToRadians(5.0)))));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(t->id());
+    doc->addPalette(aim);
+    r.scene = new Scene(doc);
+    r.scene->setName("Wash");
+    r.scene->addFixture(r.wash->id());
+    r.scene->addPalette(aim->id());
+    doc->addFunction(r.scene);
+
+    QByteArray u(512, char(0));
+    u[2] = char(255);           // dimmer
+    u[5] = char(255);           // blue
+    r.wash->setChannelValues(u);
+    return r;
+}
+
+/* The wash's blue, against the dark: beam, pool or band. */
+static bool isWashBlue(const QColor &c)
+{
+    return c.blue() > c.red() + 14 && c.blue() > c.green() + 14;
+}
+
+static void washStopsOnTheRiser(QObject *parent, bool front)
+{
+    Doc *doc = new Doc(parent);
+    auto cleanup = qScopeGuard([doc]() { delete doc; });
+    const WashOverRiser r = buildWashOverRiser(doc, front, false);
+    QVERIFY(r.wash != nullptr);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(1100, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(front ? 0.0 : 90.0, 0.0);       // level: an elevation
+    v.setActiveScene(r.scene->id());
+    v.setLiveValues(true);
+    v.setBeams(true);
+    v.setHaze(1.0);
+    v.setAmbient(0.0);
+    v.setGpu(false);
+    const QImage img = v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    if (!qEnvironmentVariableIsEmpty("RISER_PNG"))
+        img.save(qEnvironmentVariable("RISER_PNG").replace(".png", front ? "-front.png" : "-side.png"));
+    const double dpr = img.devicePixelRatio();
+    auto at = [front](float run, float z) {
+        return front ? QVector3D(run - 4.0f, 0.0f, z) : QVector3D(0.0f, run, z);
+    };
+    auto px = [&](const QVector3D &w) { return (v.w2s(w) * dpr).toPoint(); };
+    // Not the axis tripod in the corner: its labels are coloured.
+    const QRect tripod(img.width() - int(140 * dpr), img.height() - int(120 * dpr),
+                       int(140 * dpr), int(120 * dpr));
+
+    // Where the beam really goes, in the plane seen: along its run, and up.
+    QVERIFY(v.m_frameBeams.size() == 1);
+    const StructureStudioView::FrameBeam fb = v.m_frameBeams.first();
+    auto runOf = [front](const QVector3D &w) { return front ? w.x() + 4.0f : w.y(); };
+    const double run0 = runOf(fb.apex), z0 = fb.apex.z();
+    const double up = qAtan2(double(fb.dir.z()), double(runOf(fb.dir) - runOf(QVector3D())));
+    const double lowEdge = qTan(up - fb.halfAngle);      // slope of its lower edge
+    QVERIFY2(lowEdge < -0.2, "the beam's lower edge does not come down");
+    auto shown = [&](const QPoint &q) { return img.rect().contains(q) && !tripod.contains(q); };
+
+    // The beam is there, in the air.
+    QVERIFY2(isWashBlue(img.pixelColor(px(fb.apex + fb.dir.normalized() * 2.0f))),
+             "no beam in the air at all");
+
+    // Nothing below the floor line.
+    const int floorY = px(QVector3D(0, 0, 0)).y();
+    int below = 0;
+    for (int y = floorY + int(3 * dpr); y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+            if (!tripod.contains(x, y) && isWashBlue(img.pixelColor(x, y)))
+                ++below;
+    QVERIFY2(below == 0, qPrintable(QString("%1 px of the beam below the floor").arg(below)));
+
+    // Nothing inside the riser, short of the band of light on its top and
+    // lit side: its outline, well in from every edge.
+    const QPoint a = px(at(r.riserNear, r.riserTop)), b = px(at(r.riserFar, 0.0f));
+    const QRect box = QRect(a, b).normalized().adjusted(int(12 * dpr), int(12 * dpr),
+                                                        -int(12 * dpr), -int(4 * dpr));
+    int inside = 0;
+    for (int y = box.top(); y <= box.bottom(); ++y)
+        for (int x = box.left(); x <= box.right(); ++x)
+            if (isWashBlue(img.pixelColor(x, y)))
+                ++inside;
+    QVERIFY2(inside == 0, qPrintable(QString("%1 px of the beam inside the riser").arg(inside)));
+
+    /* Nor in the riser's shadow: past it, below the line from the lens over
+       its far top edge -- where the light would have had to come through it
+       -- and above the beam's lower edge, so in the beam but for the riser. */
+    int shaded = 0;
+    for (double run : { 0.3, 0.6, 1.0, 1.5 })
+    {
+        run += r.riserFar;
+        const double graze = z0 + (run - run0) * (r.riserTop - z0) / (r.riserFar - run0);
+        const double edge = qMax(0.0, z0 + (run - run0) * lowEdge);
+        if (graze - edge < 0.1)
+            continue;
+        const QVector3D w = at(float(run), float(edge + 0.4 * (graze - edge)));
+        const QPoint q = px(w);
+        if (!shown(q))
+            continue;
+        ++shaded;
+        const QColor c = img.pixelColor(q);
+        QVERIFY2(!isWashBlue(c),
+                 qPrintable(QString("lit behind the riser at run %1, height %2: %3")
+                            .arg(run).arg(w.z()).arg(c.name())));
+    }
+    QVERIFY2(shaded >= 2, qPrintable(QString("only %1 points behind the riser to look at")
+                                     .arg(shaded)));
+
+    // And it washes the riser's top, where its lower edge comes down on it:
+    // a band just inside the top edge, brighter than the air above it.
+    const double lands = qMax(double(r.riserNear), run0 + (r.riserTop - z0) / lowEdge);
+    QVERIFY2(lands < r.riserFar - 0.3, "the beam does not reach the riser's top");
+    const QPoint topAt = px(at(float((lands + r.riserFar) / 2.0), r.riserTop));
+    const QColor band = img.pixelColor(topAt + QPoint(0, int(2 * dpr)));
+    const QColor air = img.pixelColor(topAt - QPoint(0, int(4 * dpr)));
+    QVERIFY2(isWashBlue(band) && band.blue() > air.blue(),
+             qPrintable(QString("no wash on the riser's top: %1 on it, %2 in the air above")
+                        .arg(band.name(), air.name())));
+}
+
+/* "The TrussW are going thru the platforms .. should wash on them vs thru
+   them." A side elevation of the rig: a wash thrown across a riser stops on
+   it -- its top lit, nothing of the beam inside it, behind it or below the
+   floor. Its edge rays used to be followed down to the plane its middle
+   landed on, through the riser and the floor. */
+void Monitor_Test::aWashStopsOnARiserSeenFromTheSide()
+{
+    washStopsOnTheRiser(this, false);
+}
+
+// The same, seen from the front: the beam running across the stage.
+void Monitor_Test::aWashStopsOnARiserSeenFromTheFront()
+{
+    washStopsOnTheRiser(this, true);
+}
+
+/* A riser beside a beam, out of its way, takes nothing from it: in the side
+   elevation it is drawn across the beam, and a beam cut by every riser it
+   happens to cross on screen would lose light it has. The beam is as it is
+   with the riser hidden -- and none of it goes below the floor. */
+void Monitor_Test::aBeamClearOfTheRisersIsLeftAlone()
+{
+    Doc *doc = new Doc(this);
+    auto cleanup = qScopeGuard([doc]() { delete doc; });
+    MonitorProperties *props = doc->monitorProperties();
+    const WashOverRiser r = buildWashOverRiser(doc, false, true);
+    QVERIFY(r.wash != nullptr);
+    const quint32 layer = props->addLayer("Risers");
+    r.riser->setLayerId(layer);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(900, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(90.0, 0.0);
+    v.setActiveScene(r.scene->id());
+    v.setLiveValues(true);
+    v.setBeams(true);
+    v.setHaze(1.0);
+    v.setAmbient(0.0);
+    v.setGpu(false);
+    const QImage with = v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    v.m_zoomed = true;                          // the same framing for both
+    props->setLayerVisible(layer, false);
+    const QImage without = v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    if (!qEnvironmentVariableIsEmpty("RISER_PNG"))
+    {
+        with.save(qEnvironmentVariable("RISER_PNG").replace(".png", "-clear-with.png"));
+        without.save(qEnvironmentVariable("RISER_PNG").replace(".png", "-clear-without.png"));
+    }
+    const double dpr = with.devicePixelRatio();
+    auto px = [&](const QVector3D &w) { return (v.w2s(w) * dpr).toPoint(); };
+
+    // Where the riser itself is drawn differs, of course; nothing else may.
+    const QRect riser = QRect(px(QVector3D(0, r.riserNear, r.riserTop)),
+                              px(QVector3D(0, r.riserFar, 0))).normalized()
+                            .adjusted(-int(4 * dpr), -int(4 * dpr), int(4 * dpr), int(4 * dpr));
+    int differ = 0, lit = 0;
+    for (int y = 0; y < with.height(); ++y)
+        for (int x = 0; x < with.width(); ++x)
+        {
+            if (riser.contains(x, y))
+                continue;
+            const QColor a = with.pixelColor(x, y), b = without.pixelColor(x, y);
+            if (qAbs(a.red() - b.red()) > 2 || qAbs(a.green() - b.green()) > 2
+                || qAbs(a.blue() - b.blue()) > 2)
+                ++differ;
+            if (isWashBlue(a))
+                ++lit;
+        }
+    QVERIFY2(lit > 5000, qPrintable(QString("only %1 px of beam drawn").arg(lit)));
+    QVERIFY2(differ == 0, qPrintable(QString("%1 px of the beam changed by a riser it "
+                                             "never reaches").arg(differ)));
+
+    // Still: nothing below the floor.
+    const int floorY = px(QVector3D(0, 0, 0)).y();
+    const QRect tripod(with.width() - int(140 * dpr), with.height() - int(120 * dpr),
+                       int(140 * dpr), int(120 * dpr));
+    int below = 0;
+    for (int y = floorY + int(3 * dpr); y < with.height(); ++y)
+        for (int x = 0; x < with.width(); ++x)
+            if (!tripod.contains(x, y) && isWashBlue(with.pixelColor(x, y)))
+                ++below;
+    QVERIFY2(below == 0, qPrintable(QString("%1 px of the beam below the floor").arg(below)));
 }
 
 void Monitor_Test::doubleClickingAFixtureOpensItWhereverItIs()
