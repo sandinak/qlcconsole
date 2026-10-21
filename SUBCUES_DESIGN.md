@@ -1,6 +1,7 @@
 # Sub-cues — design
 
-*Status: proposal for review (2026-10-15). Branch `feat/sub-cues`.*
+*Status: approved 2026-10-15. P1+P2 merged (`feat/sub-cues`); P3 built on
+`feat/sub-cues-p3` (2026-10-16), decisions in §4.1.*
 
 A cue that has cues inside it: cue 4 brings up a look, and **4.1, 4.2, 4.3**
 step through changes within it — on a second button, **Sub GO** — while the
@@ -93,6 +94,24 @@ a cue list that has any `SubGo` step; a sub-cue can be clicked to jump to it.
   documented; QLab sends them as plain Network cues). MSC has no sub-GO
   command; a numbered MSC GO covers it.
 - `LOAD 4.2` puts the sub-cue on standby; Next shows it.
+
+### 4.1 P3 as built (2026-10-16)
+
+Where §4 left it open:
+
+- **LOAD 4.2 is for GO, not Sub GO.** The loaded sub-cue is what "Next:"
+  shows and what the next GO without a cue plays (its cue first); Sub GO
+  keeps stepping the cue playing, so the footer can read "Sub: 4.3 · Next:
+  4.2". A LOAD of a main cue replaces it; RESET and ALL OFF forget it.
+- **`/subgo` and `/subback` take no cue.** An argument is ignored, as for
+  `/pause` (a button's 1 isn't a cue); a numbered GO is the jump.
+- **STOP 4.2** stops the list only when 4.2 is the sub-cue playing, as
+  STOP 4 does for a main cue.
+- **Sub GO from the keys and the footer go through `ShowControl`**, as GO
+  does, so a Sub GO that can't ("end of 4") is reported in Connections like
+  any other command. The Virtual Console's buttons still drive the chase
+  directly, as its GO does.
+- The footer's **Load ▸** menu lists the sub-cues of a Sub GO cue, indented.
 
 ## 5. Step-based effects (later phase)
 

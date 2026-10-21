@@ -6,6 +6,31 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Sub-cues P3: show control by sub-cue number *(feat/sub-cues-p3, merged into feat/show-tree 2026-10-21)*
+
+SUBCUES_DESIGN.md §4.1. `ShowControl` reads a cue by number as
+`Chaser::findCueOrSubCue()` does (a main "4.2" wins); GO 4.2 over OSC / MSC
+jumps there, its cue first; new `SubGo` / `SubBack` commands (OSC `/subgo`,
+`/subback`); LOAD 4.2 keeps the sub-cue on standby (`Standby { step, subCue }`,
+`loadedSubCue()`, `standbySubCue()`, `cueName()`), shown on the footer's and
+the VC cue list's **Next:**; STOP 4.2 only when it's the one playing. ⌥⌘↩ /
+⌥⌘⇧↩ go through ShowControl. Fixes: OSC float cues read to their 7 digits;
+`Chaser::write` unpauses the runner directly so a GO by number on a paused
+list isn't swallowed.
+
+- **Merge note:** show-tree's P7 had already added a smaller Sub GO / LOAD
+  4.2 to ShowControl (a parallel `m_loadedSub` hash). P3's version replaces
+  it; show-tree's `Request::chaser` and `mainCueListChanged()` stay.
+
+### 2026-10-16 — Confetti on two-arm beams; Black and Can't-move look warnings *(fix/programming-confetti-look, merged into feat/show-tree 2026-10-21)*
+
+- `EffectInstance::parseIntents()`: one effect's heads writing a shared
+  master dimmer collapse to the brightest (they were multiplied as two
+  effects would be; confetti's dark arm zeroed the beam).
+- `LookStackCheck` checks 6 and 7: a Colour look that is all zero (**Black**),
+  and a position look on fixtures whose Pan or Tilt channels are all Fine
+  (**Can't move**, e.g. the AT-W-Bottom movers' definition).
+
 ### 2026-10-20 — Beams stop at risers and the floor *(fix/beams-stop-at-platforms, off feat/show-tree, not merged)*
 
 "The TrussW are going thru the platforms .. should wash on them vs thru

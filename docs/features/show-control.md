@@ -81,12 +81,6 @@ GO still goes on to cue 5.
 
 One level only: a sub-cue's own chase steps run on their own timing.
 
-- **From outside.** A sub-cue answers to its number: `/go 4.2`,
-  `/cue/4.2/start`, MSC GO 4.2 (a main cue numbered 4.2 wins) play its cue
-  first if it isn't the one playing, then it; `/load 4.2` puts it on
-  standby. **`/subgo`** and **`/subback`** step through the sub-cues of the
-  cue playing (QLab: plain Network cues). MSC has no Sub GO: a numbered GO
-  covers it.
 - **In the Show Tree,** sub-cues are made in the tree (+ Sub-cue) and can
   **auto-follow**: see [Sub-cues](show-tree.md#sub-cues).
 - **The current production.** With Show Tree productions, a command with no
@@ -95,15 +89,34 @@ One level only: a sub-cue's own chase steps run on their own timing.
   [Productions](show-tree.md#productions) and
   [The cue runner](show-tree.md#the-cue-runner).
 
+### Sub-cues from QLab
+
+- **By number.** `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play sub-cue 4.2
+  — cue 4 first, if another cue is playing or the list is stopped. A main
+  cue numbered "4.2" of its own wins; otherwise "4.2" is sub-cue 2 of cue
+  4, or a sub-cue whose own number is 4.2.
+- **Sub GO and Sub Back** over OSC: `/subgo` and `/subback` (send them from
+  a QLab Network cue). They step the cue playing, as ⌥⌘↩ does; an
+  argument is ignored. MSC has no Sub GO command — send a numbered GO
+  (GO 4.2) instead.
+- **LOAD 4.2** (`/cue/4.2/load`, MSC LOAD) puts the sub-cue on standby:
+  **Next:** in the footer and in the cue list shows it — "Next: 4.2 —
+  Wash" — and the next GO plays it. The footer's **Load ▸** menu lists the
+  sub-cues of a cue on Sub GO under it, too.
+- **STOP 4.2** stops the list only when 4.2 is the sub-cue playing.
+- When Sub GO can't, **Connections → Show control &amp; sync** says why:
+  "cue 1 has no sub-cues on Sub GO", "end of 4", "4 is at its first
+  sub-cue".
+
 ## What a command does
 
 | Command | What happens |
 |---|---|
-| **GO** | With a cue: that cue. Without: the cue on standby (LOAD) if there is one, else the next not skipped — the first, if the list isn't playing. Starts the list if it's stopped. A chase set to **GO on the beat** still waits for its beat. |
+| **GO** | With a cue: that cue (or sub-cue, 4.2). Without: the cue on standby (LOAD) if there is one, else the next not skipped — the first, if the list isn't playing. Starts the list if it's stopped. A chase set to **GO on the beat** still waits for its beat. |
 | **LOAD** | Puts a cue on standby: the next GO without a cue goes there. Nothing changes on stage. |
 | **STOP** | Stops the list. With a cue, only if that cue is the one playing. |
 | **BACK** | The cue before the one playing (past skipped ones). |
-| **SUB GO** / **SUB BACK** | The next / previous sub-cue of the cue playing; nothing at the ends. |
+| **SUB GO** / **SUB BACK** | The next / previous [sub-cue](#sub-cues) of the cue playing; nothing at the ends. |
 | **PAUSE** / **RESUME** | Holds the list where it is, and carries on. |
 | **RESET** | Stops the list and forgets what's on standby. |
 | **ALL OFF** | Stops everything that's running — the panic button. |
@@ -126,6 +139,8 @@ One level only: a sub-cue's own chase steps run on their own timing.
 | `/cue/12.5/start`, `/cue/12.5/go` | GO cue 12.5 |
 | `/cue/12.5/load`, `/load 12.5` | LOAD cue 12.5 |
 | `/cue/12.5/stop` | STOP, if cue 12.5 is playing |
+| `/go 4.2`, `/cue/4.2/go` | GO sub-cue 4.2 (cue 4 first if need be) |
+| `/subgo`, `/subback` | Sub GO, Sub Back in the cue playing |
 | `/stop`, `/pause`, `/resume`, `/reset`, `/back` | as named |
 | `/subgo`, `/subback` | SUB GO / SUB BACK |
 | `/go 4.2`, `/load 4.2` | a sub-cue by its number: GO it (its cue first), or LOAD it |
@@ -133,7 +148,8 @@ One level only: a sub-cue's own chase steps run on their own timing.
 
 Put `/list/2` in front for cue list 2 (`/list/2/cue/5/start`), and
 `/qlcconsole` in front of either if you like (`/qlcconsole/go`). A cue
-given as an argument can be a number or text.
+given as an argument can be a number or text; a float is read to the
+digits it holds (4.2, not 4.199999809).
 
 ## MIDI Show Control — QLab's MIDI cue
 

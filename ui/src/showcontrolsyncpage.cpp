@@ -128,7 +128,7 @@ QGroupBox *ShowControlSyncPage::buildOscGroup()
     m_oscCheck = new QCheckBox(tr("Listen for OSC cue commands on port"), box);
     m_oscCheck->setObjectName(QStringLiteral("scOscEnabled"));
     m_oscCheck->setToolTip(tr("QLab's Network cue (or anything that sends OSC) can GO a cue: "
-                              "/go, /cue/12/start, /stop... Anyone on the network can, so it's off "
+                              "/go, /cue/12/start, /subgo, /stop... Anyone on the network can, so it's off "
                               "until you turn it on."));
     m_oscPortSpin = new QSpinBox(box);
     m_oscPortSpin->setObjectName(QStringLiteral("scOscPort"));

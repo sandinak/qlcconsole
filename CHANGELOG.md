@@ -124,6 +124,15 @@ network. Everything in 0.1.0 is in it too.
   `blockedKind` / `blockedAt` / `clearance` (also on `aimAt` slots). A
   line target checks each head's own point on the line; a curtain driven by
   a fixture blocks where that fixture has it now.
+- **Sub-cues from QLab.** OSC `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play
+  a sub-cue (its cue first); `/subgo` and `/subback` say why when they
+  can't; LOAD 4.2 puts a sub-cue on standby and **Next:** in the footer
+  and the cue list shows it ("Next: 4.2 — Wash"); STOP 4.2 stops the list
+  only while 4.2 is the one playing. ⌥⌘↩ / ⌥⌘⇧↩ go through show control, so their result is
+  reported with the rest.
+- **Two new look warnings.** The Looks list marks a Colour look that is all
+  zero (**Black**), and a position look on fixtures whose definition marks
+  every Pan or Tilt channel Fine (**Can't move**: the head stays at 0).
 
 ### Changed
 - **A new production is current when nothing else has GO.** In the Show
@@ -161,6 +170,14 @@ network. Everything in 0.1.0 is in it too.
 - **Chaser teardown use-after-free.** Deleting a chaser while its runner was
   still running freed the steps the runner reads (an intermittent "double
   free" on Linux).
+- **A dimmer effect on a two-arm beam went black.** One master dimmer
+  serving several heads got one scaled write per head, multiplied together:
+  confetti's lit arm times its dark one was 0. The brightest head now sets
+  it.
+- **GO by number on a paused list resumed it and stayed put.** It now plays
+  that cue.
+- **An OSC float cue number matched nothing.** 2.2 sent as a float read as
+  2.200000048; floats now read to the digits they hold.
 
 ## [0.1.0] - Unreleased
 
