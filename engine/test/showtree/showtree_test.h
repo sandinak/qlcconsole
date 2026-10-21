@@ -82,6 +82,8 @@ private slots:
     void importedListPlaysAsTheChaserDid();
     void importListsHtpConflicts();
     void importARealShow();
+    void importAnIncludeBrighterThanTheCuesOwnMixes();
+    void dryRunUsesTheShowsOwnDefinitions();
 
     // P2: tracking in the tab, D22/D23, the Library's list usage, the
     // command line
@@ -167,6 +169,25 @@ private slots:
     void previewPlaysWhatGoPlays();
 
 private:
+    /** What a dry run of the import on a show file found (importARealShow). */
+    struct DryRun
+    {
+        struct Played
+        {
+            QString list, cue;
+            int lit = 0, differ = 0;
+        };
+        bool loaded = false;
+        int lists = 0, cues = 0;
+        int differ = 0;             //!< channels, imported vs the chaser, all cues
+        int convertedDiffer = 0;    //!< channels, converted vs imported
+        int showDefinitions = 0;    //!< fixture definitions used from the show
+        QList<Played> played;
+        QStringList mixedIncludes;
+        QStringList problems;
+    };
+    DryRun dryRunImport(const QString &path);
+
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);

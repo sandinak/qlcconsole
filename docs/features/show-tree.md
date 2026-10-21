@@ -106,6 +106,13 @@ The dividers between them can be dragged; their places are kept.
    - Where two scenes in one cue set the same group, the chaser ran both:
      HTP on intensity, LTP on the rest. The report lists these cues, and the
      cue list keeps the later scene's values.
+   - Where a cue includes another at full and sets the same fixtures lower
+     itself (0.0.5 includes 0.0.4's StepTops at full and has its own at
+     45%), the chaser showed the brighter level. Where the tree's rule
+     would change that, the cue **mixes** (see [Who wins](#who-wins)):
+     the include plays beside its own scene, so it looks as it did. The
+     report names each such cue and how many channels the rule would
+     change. Cues where the rule plays the same are left alone.
 3. Click a cue. In Design mode it plays on the rig. Open a layer and change
    it.
 
@@ -421,7 +428,11 @@ fixtures itself.)
 
 **The one place it doesn't apply: a cue that mixes.** A cue made by
 **Import chaser** whose scenes overlap plays them both at once, as the
-chaser did (the highest intensity wins). Its page has **Overlapping layers
+chaser did (the highest intensity wins). So does a cue that includes
+another at a level above its own on the same fixtures: in a cue that
+mixes, an included cue's layers play beside the cue's own instead of
+giving way to them (what it passes on to a tracking cue is the rule's).
+Its page has **Overlapping layers
 mix (as a chaser)** ticked and the tree marks it **≈ mix**, with a tooltip.
 **Convert to tracking** puts every such cue on the rule where that plays
 exactly the same, and lists the ones where it would not, which keep mixing.

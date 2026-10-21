@@ -58,6 +58,7 @@
 #include "qlcchannel.h"
 #include "stagetarget.h"
 #include "aimsolver.h"
+#include "showembedding.h"
 #include <QTemporaryDir>
 
 #include "showtree_test.h"
@@ -1700,27 +1701,291 @@ void ShowTree_Test::importListsHtpConflicts()
              QList<quint32>({ bright }));
 }
 
+/* DanceHysteria-0.6's Full Show 0.0.5: it includes 0.0.4 (StepTops at
+   full) and sets StepTops at 45% itself. The chaser ran both, highest-wins on
+   intensity, so full showed; the tree's rule plays the cue's own 45% (own
+   over included). The importer makes such a cue mix -- only where the output
+   would change -- and then it plays as the chaser did. */
+void ShowTree_Test::importAnIncludeBrighterThanTheCuesOwnMixes()
+{
+    FixtureGroup *tops = group("StepTops", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *bar = group("Bar", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 low = dimmer(115, "Intensity 45%");
+    Scene *topsFull = groupScene(m_doc, "StepTops-Full", tops->id(), { full });
+    Scene *topsLow = groupScene(m_doc, "StepTops-45", tops->id(), { low });
+    Scene *barLow = groupScene(m_doc, "Bar-45", bar->id(), { low });
+    Collection *shout = collection(m_doc, "0.0.4-SHOUT", { topsFull->id() });
+    // The include at full beside its own StepTops at 45%: the rule changes it.
+    Collection *who = collection(m_doc, "0.0.5-WHO ARE WE", { shout->id(), topsLow->id() });
+    // An include beside its own scene on other fixtures: the rule plays the same.
+    Collection *calm = collection(m_doc, "0.0.6-CALM", { shout->id(), barLow->id() });
+    // Only the cue that mixes, included: as a plain include it would be 45%.
+    Collection *stomp = collection(m_doc, "0.0.7-STOMP", { who->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    chaser->setDurationMode(Chaser::PerStep);   // each step holds until GO
+    m_doc->addFunction(chaser);
+    for (Collection *coll : { shout, who, calm, stomp })
+        chaser->addStep(ChaserStep(coll->id(), 0, Function::infiniteSpeed(), 0));
+
+    const QList<QHash<quint32, uchar>> original = playAll(chaser);
+    QCOMPARE(int(original[1][0]), 255);         // 0.0.5: the include's full won (HTP)
+    QCOMPARE(int(original[3][1]), 255);         // 0.0.7, through it
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    const CueList *list = st->cueList(rep.list);
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->cues.count(), 4);
+    QVERIFY(!list->cues[0].mixOverlap);
+    QVERIFY(list->cues[1].mixOverlap);
+    QVERIFY(!list->cues[2].mixOverlap);         // only where the output would differ
+    QVERIFY(list->cues[3].mixOverlap);
+    QCOMPARE(rep.mixedIncludes.count(), 2);
+    QVERIFY2(rep.mixedIncludes.first().contains("0.0.5 WHO ARE WE")
+             && rep.mixedIncludes.first().contains("0.0.4 SHOUT")
+             && rep.mixedIncludes.first().contains("2 channel(s)"), qPrintable(rep.mixedIncludes.first()));
+    QVERIFY(rep.notes.contains(rep.mixedIncludes.first()));
+    // It plays as the chaser did, so it's no longer listed as a conflict.
+    QVERIFY2(rep.htpConflicts.isEmpty(), qPrintable(rep.htpConflicts.join(" | ")));
+
+    Chaser *imported = qobject_cast<Chaser *>(m_doc->function(list->chaser));
+    QVERIFY(imported != nullptr);
+    const QList<QHash<quint32, uchar>> now = playAll(imported);
+    QCOMPARE(now.count(), original.count());
+    for (int i = 0; i < now.count(); ++i)
+        for (quint32 ch = 0; ch < quint32(m_fixtures.count()); ++ch)
+            QVERIFY2(now[i].value(ch) == original[i].value(ch),
+                     qPrintable(QString("cue %1, channel %2: %3, the chaser gave %4")
+                                .arg(i + 1).arg(ch).arg(now[i].value(ch)).arg(original[i].value(ch))));
+
+    // Its stage holds both levels (HTP), and its own layer is the one found.
+    const QList<ResolvedCue> r = resolve(*list);
+    QCOMPARE(ShowTreeController::scenePalettes(*r[1].layer(groupTarget(tops->id()))),
+             QList<quint32>({ low }));
+    QCOMPARE(stageOf(r[1]).value(QString("g:%1").arg(tops->id())).value(KeyDimmer).count(), 2);
+    // What it passes on is the one rule's: one layer per target.
+    int onTops = 0;
+    for (const ResolvedLayer &l : r[1].passOn)
+        onTops += l.target == groupTarget(tops->id()) ? 1 : 0;
+    QCOMPARE(onTops, 1);
+
+    // On the tree's rule the cue's own 45% plays (what the mix keeps away).
+    const quint32 whoId = list->cues[1].id;
+    QVERIFY(st->setCueMixOverlap(whoId, false));
+    const QList<QHash<quint32, uchar>> rule = playAll(imported);
+    QCOMPARE(int(rule[1][0]), 115);
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(whoId)->mixOverlap);
+}
+
+/* The dry run reads the show's own definitions, as App does when it opens
+   one: a show whose fixtures' definition lives only in its author's user
+   folder compares channel for channel on a computer without it. */
+void ShowTree_Test::dryRunUsesTheShowsOwnDefinitions()
+{
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    struct Restore
+    {
+        QByteArray h = qgetenv("HOME"), p = qgetenv("USERPROFILE");
+        ~Restore()
+        {
+            qputenv("HOME", h);
+            if (p.isEmpty())
+                qunsetenv("USERPROFILE");
+            else
+                qputenv("USERPROFILE", p);
+        }
+    } restore;
+    // The author's computer: the definition only in the user folder.
+    const QString author = root.filePath("author");
+    QVERIFY(QDir().mkpath(author));
+    qputenv("HOME", author.toUtf8());
+    qputenv("USERPROFILE", author.toUtf8());
+    const QDir userDefs = QLCFixtureDefCache::userDefinitionDirectory();
+    QVERIFY(QDir().mkpath(userDefs.absolutePath()));
+    {
+        const QByteArray qxf =
+            "<?xml version='1.0' encoding='UTF-8'?>\n<!DOCTYPE FixtureDefinition>\n"
+            "<FixtureDefinition xmlns=\"http://www.qlcplus.org/FixtureDefinition\">\n"
+            " <Creator>\n  <Name>Q Light Controller Plus</Name>\n  <Version>4</Version>\n"
+            "  <Author>test</Author>\n </Creator>\n"
+            " <Manufacturer>Test Maker</Manufacturer>\n <Model>Step Top</Model>\n"
+            " <Type>Color Changer</Type>\n"
+            " <Channel Name=\"Dimmer\" Preset=\"IntensityMasterDimmer\"/>\n"
+            " <Channel Name=\"Red\" Preset=\"IntensityRed\"/>\n"
+            " <Channel Name=\"Green\" Preset=\"IntensityGreen\"/>\n"
+            " <Channel Name=\"Blue\" Preset=\"IntensityBlue\"/>\n"
+            " <Mode Name=\"4ch\">\n"
+            "  <Channel Number=\"0\">Dimmer</Channel>\n  <Channel Number=\"1\">Red</Channel>\n"
+            "  <Channel Number=\"2\">Green</Channel>\n  <Channel Number=\"3\">Blue</Channel>\n"
+            " </Mode>\n</FixtureDefinition>\n";
+        QFile f(userDefs.absoluteFilePath("Test-Maker-Step-Top.qxf"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QCOMPARE(f.write(qxf), qint64(qxf.size()));
+    }
+
+    // The show, saved there as a .qlcc (DanceHysteria's 0.0.4 / 0.0.5).
+    const QString showPath = root.filePath("show/Step Show.qlcc");
+    QVERIFY(QDir().mkpath(QFileInfo(showPath).absolutePath()));
+    {
+        Doc *doc = new Doc(this);
+        doc->fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
+        doc->fixtureDefCache()->loadMap(QDir(INTERNAL_FIXTUREDIR));
+        QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef("Test Maker", "Step Top");
+        QVERIFY(def != nullptr && def->mode("4ch") != nullptr);
+        FixtureGroup *tops = new FixtureGroup(doc);
+        tops->setName("StepTops");
+        doc->addFixtureGroup(tops);
+        for (int i = 0; i < 2; ++i)
+        {
+            Fixture *fx = new Fixture(doc);
+            fx->setName(QString("Top %1").arg(i + 1));
+            fx->setUniverse(0);
+            fx->setAddress(quint32(i * 4));
+            fx->setFixtureDefinition(def, def->mode("4ch"));
+            doc->addFixture(fx);
+            tops->assignFixture(fx->id());
+        }
+        auto palette = [doc](QLCPalette::PaletteType type, const QString &name, const QVariant &value) {
+            QLCPalette *p = new QLCPalette(type, doc);
+            p->setName(name);
+            p->setValue(value);
+            doc->addPalette(p);
+            return p->id();
+        };
+        const quint32 white = palette(QLCPalette::Color, "White",
+                                      QLCPalette::colorToString(QColor(Qt::white), QColor(Qt::black)));
+        const quint32 full = palette(QLCPalette::Dimmer, "Full", 255);
+        const quint32 low = palette(QLCPalette::Dimmer, "Intensity 45%", 115);
+        Scene *shoutScene = groupScene(doc, "StepTops White", tops->id(), { white, full });
+        Scene *whoScene = groupScene(doc, "StepTops White 45%", tops->id(), { white, low });
+        Collection *shout = collection(doc, "0.0.4-SHOUT", { shoutScene->id() });
+        Collection *who = collection(doc, "0.0.5-WHO ARE WE", { shout->id(), whoScene->id() });
+        Chaser *chaser = new Chaser(doc);
+        chaser->setName("Full Show");
+        chaser->setDurationMode(Chaser::PerStep);
+        doc->addFunction(chaser);
+        chaser->addStep(ChaserStep(shout->id(), 0, Function::infiniteSpeed(), 0));
+        chaser->addStep(ChaserStep(who->id(), 0, Function::infiniteSpeed(), 0));
+
+        doc->showEmbedding()->collect();
+        QCOMPARE(doc->showEmbedding()->items().count(), 1);
+        QFile f(showPath);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QXmlStreamWriter w(&f);
+        w.writeStartDocument();
+        w.writeDTD(QStringLiteral("<!DOCTYPE Workspace>"));
+        w.writeStartElement(QStringLiteral("Workspace"));
+        doc->showEmbedding()->saveXML(&w);
+        doc->saveXML(&w);
+        w.writeEndElement();
+        w.writeEndDocument();
+        f.close();
+        delete doc;
+    }
+
+    // The dry run: no user folder with the definition (it hides this
+    // computer's), so the show's copy is the only one.
+    const DryRun run = dryRunImport(showPath);
+    QVERIFY2(run.loaded, qPrintable(run.problems.join(" | ")));
+    QVERIFY2(run.problems.isEmpty(), qPrintable(run.problems.join(" | ")));
+    QCOMPARE(run.showDefinitions, 1);
+    QCOMPARE(m_doc->fixtures().count(), 2);
+    for (Fixture *fx : m_doc->fixtures())
+    {
+        QVERIFY(fx->fixtureDef() != nullptr);
+        QCOMPARE(fx->fixtureDef()->manufacturer(), QString("Test Maker"));
+        QCOMPARE(fx->channels(), quint32(4));
+    }
+    QCOMPARE(run.lists, 1);
+    QCOMPARE(run.cues, 2);
+    for (const DryRun::Played &p : run.played)
+    {
+        QVERIFY2(p.lit == 8, qPrintable(QString("%1: %2 lit").arg(p.cue).arg(p.lit)));
+        QCOMPARE(p.differ, 0);
+    }
+    QCOMPARE(run.differ, 0);
+    QCOMPARE(run.convertedDiffer, 0);
+    QCOMPARE(run.mixedIncludes.count(), 1);
+}
+
 /* A dry run on a real show: QLC_SHOWTREE_IMPORT=<a COPY of a .qxw/.qlcc>.
-   Every chaser in it is imported (in memory only -- nothing is saved) and
-   the report printed: layers vs opaque layers, HTP conflicts, generated
-   scenes. Skipped without the variable. */
+   The show is opened as App opens it (its embedded definitions first, the
+   user folder kept out); every chaser in it is imported (in memory only --
+   nothing is saved), the report printed (layers vs opaque layers, HTP
+   conflicts, cues made to mix, generated scenes), and the imported and the
+   converted lists played against the chaser: it fails unless 0 channels
+   differ in every cue. Skipped without the variable. */
 void ShowTree_Test::importARealShow()
 {
     const QString path = qEnvironmentVariable("QLC_SHOWTREE_IMPORT");
     if (path.isEmpty())
         QSKIP("set QLC_SHOWTREE_IMPORT to a copy of a show to dry-run the import");
+    const DryRun run = dryRunImport(path);
+    QVERIFY2(run.loaded, qPrintable(run.problems.join(" | ")));
+    qInfo().noquote() << QString("DRY RUN: %1 cues in %2 lists, %3 channels differ imported vs chaser, "
+                                 "%4 converted vs imported; %5 definitions from the show")
+                         .arg(run.cues).arg(run.lists).arg(run.differ).arg(run.convertedDiffer)
+                         .arg(run.showDefinitions);
+    QCOMPARE(run.differ, 0);
+    QCOMPARE(run.convertedDiffer, 0);
+}
+
+/* The dry run as App opens a show: the show's own definitions first (its
+   <Embedded> copies, then its folder's), then its contents -- with this
+   computer's user folder out of the way (HOME pointed at an empty folder),
+   so it compares the same on any machine, with or without the show's
+   author's fixture files. */
+ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
+{
+    DryRun run;
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME"), realProfile = qgetenv("USERPROFILE");
+    qputenv("HOME", home.path().toUtf8());
+    qputenv("USERPROFILE", home.path().toUtf8());
+    struct Restore
+    {
+        QByteArray h, p;
+        ~Restore()
+        {
+            qputenv("HOME", h);
+            if (p.isEmpty())
+                qunsetenv("USERPROFILE");
+            else
+                qputenv("USERPROFILE", p);
+        }
+    } restore { realHome, realProfile };
+
+    stopAll();
+    m_doc->clearContents();
+    m_fixtures.clear();
+    const QString folder = QFileInfo(path).absolutePath();
+    m_doc->setWorkspacePath(folder);
+    if (m_doc->showEmbedding()->readWorkspace(path))
+        m_doc->showEmbedding()->apply(folder);
+    for (const ShowEmbedding::Item &it : m_doc->showEmbedding()->items())
+        if (it.kind == ShowEmbedding::FixtureDefinition && it.usingShow)
+            ++run.showDefinitions;
+    run.problems << m_doc->showEmbedding()->problems();
 
     QFile file(path);
-    QVERIFY(file.open(QIODevice::ReadOnly));
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        run.problems << QString("can't read %1").arg(path);
+        return run;
+    }
     QXmlStreamReader r(&file);
-    bool loaded = false;
-    while (!r.atEnd() && !loaded)
+    while (!r.atEnd() && !run.loaded)
     {
         if (r.readNextStartElement() && r.name() == QLatin1String("Engine"))
-            loaded = m_doc->loadXML(r, false);
+            run.loaded = m_doc->loadXML(r, false);
     }
-    QVERIFY(loaded);
     file.close();
+    if (!run.loaded)
+        return run;
 
     QList<quint32> chasers;
     for (Function *f : m_doc->functions())
@@ -1731,6 +1996,8 @@ void ShowTree_Test::importARealShow()
     {
         const QString name = m_doc->function(id)->name();
         const ShowTreeController::ImportReport rep = m_doc->showTree()->importChaser(id);
+        ++run.lists;
+        run.mixedIncludes << rep.mixedIncludes;
         qInfo().noquote() << QString("IMPORT \"%1\": %2 cues, %3 layers, %4 opaque layers, "
                                      "%5 includes, %6 generated scenes, %7 HTP conflicts")
                              .arg(name).arg(rep.cues).arg(rep.layers).arg(rep.opaqueLayers)
@@ -1767,7 +2034,18 @@ void ShowTree_Test::importARealShow()
 
         // Play both, cue by cue, and compare every channel of every universe
         // (static looks only: effects run on the effect runner's own timer).
-        auto playAll = [this](Chaser *c) {
+        // Each from the idle rig: universes cleared, then every fixture's
+        // channel defaults (a mover's Pan 128) and modifiers put back, as
+        // patching does -- clearing alone would leave the first run with
+        // the defaults and the next without.
+        auto idle = [this]() {
+            m_doc->inputOutputMap()->resetUniverses();
+            for (Fixture *fx : m_doc->fixtures())
+                m_doc->updateFixtureChannelCapabilities(fx->id(), fx->forcedHTPChannels(),
+                                                        fx->forcedLTPChannels());
+        };
+        auto playAll = [this, idle](Chaser *c) {
+            idle();
             QList<QByteArray> states;
             for (int i = 0; i < c->stepsCount(); ++i)
             {
@@ -1797,15 +2075,25 @@ void ShowTree_Test::importARealShow()
             }
             stopAll();
             tick(100);
-            m_doc->inputOutputMap()->resetUniverses();
+            idle();
             return states;
         };
         Chaser *original = qobject_cast<Chaser *>(m_doc->function(id));
         Chaser *imported = qobject_cast<Chaser *>(m_doc->function(list->chaser));
-        QVERIFY(original != nullptr && imported != nullptr);
+        if (original == nullptr || imported == nullptr)
+        {
+            run.problems << QString("%1: no imported chaser").arg(name);
+            run.differ = qMax(run.differ, 1);
+            continue;
+        }
         const QList<QByteArray> a = playAll(original);
         const QList<QByteArray> b = playAll(imported);
-        QCOMPARE(a.count(), b.count());
+        if (a.count() != b.count())
+        {
+            run.problems << QString("%1: %2 steps, the list has %3").arg(name).arg(a.count()).arg(b.count());
+            run.differ = qMax(run.differ, 1);
+            continue;
+        }
         for (int i = 0; i < a.count(); ++i)
         {
             int lit = 0, differ = 0;
@@ -1826,6 +2114,9 @@ void ShowTree_Test::importARealShow()
                 qInfo().noquote() << "    first differences (chaser vs list):" << first.join(", ");
             qInfo().noquote() << QString("  play cue %1: %2 channels lit by the chaser, %3 differ in the cue list")
                                  .arg(m_doc->showTree()->cueLabel(*list, i)).arg(lit).arg(differ);
+            run.played << DryRun::Played { name, m_doc->showTree()->cueLabel(*list, i), lit, differ };
+            ++run.cues;
+            run.differ += differ;
         }
 
         // Convert to tracking (P4) and play it again: the converted list
@@ -1845,9 +2136,19 @@ void ShowTree_Test::importARealShow()
             qInfo().noquote() << "    " << line;
         const CueList *conv = m_doc->showTree()->cueList(listId);
         Chaser *converted = qobject_cast<Chaser *>(m_doc->function(conv->chaser));
-        QVERIFY(converted != nullptr);
+        if (converted == nullptr)
+        {
+            run.problems << QString("%1: no converted chaser").arg(name);
+            run.convertedDiffer = qMax(run.convertedDiffer, 1);
+            continue;
+        }
         const QList<QByteArray> c = playAll(converted);
-        QCOMPARE(c.count(), b.count());
+        if (c.count() != b.count())
+        {
+            run.problems << QString("%1: the converted list has %2 cues").arg(name).arg(c.count());
+            run.convertedDiffer = qMax(run.convertedDiffer, 1);
+            continue;
+        }
         int total = 0;
         for (int i = 0; i < c.count(); ++i)
         {
@@ -1859,8 +2160,9 @@ void ShowTree_Test::importARealShow()
             qInfo().noquote() << QString("  converted cue %1: %2 channels differ from the imported list")
                                  .arg(m_doc->showTree()->cueLabel(*conv, i)).arg(differ);
         }
-        QCOMPARE(total, 0);
+        run.convertedDiffer += total;
     }
+    return run;
 }
 
 /****************************************************************************
@@ -2285,12 +2587,23 @@ void ShowTree_Test::convertAnImportToTracking()
     QCOMPARE(st->cue(c[3])->includes, QList<quint32>({ c[2] }));
     Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
 
-    // As imported it plays as the chaser did, but where two scenes fought
-    // over a level (0.0.5, 0.0.6, 0.0.7, 0.0.9): there the later one wins.
+    // As imported it plays as the chaser did, every cue: where an include
+    // at full and the cue's own lower level fought (0.0.5, 0.0.6, 0.0.7,
+    // 0.0.9) the cue mixes, so the brighter still wins.
     QList<QHash<quint32, uchar>> v = playAll(list);
-    for (int i : { 0, 1, 2 })
+    for (int i = 0; i < 7; ++i)
         for (quint32 ch = 0; ch < 5; ++ch)
             QCOMPARE(int(v[i][ch]), int(original[i][ch]));
+    QCOMPARE(rep.mixedIncludes.count(), 4);
+    for (int i : { 3, 4, 5, 6 })
+        QVERIFY(st->cue(c[i])->mixOverlap);
+    QCOMPARE(int(v[3][3]), 255);
+
+    // On the tree's rule instead (the cue page's Overlap box): the later
+    // one -- the cue's own -- wins.
+    for (int i : { 3, 4, 5, 6 })
+        QVERIFY(st->setCueMixOverlap(c[i], false));
+    v = playAll(list);
     QCOMPARE(int(v[3][3]), 115);
 
     // Convert by hand: Tracking; 0.0.0 is the base; AT-Spots released in
@@ -4722,8 +5035,23 @@ void ShowTree_Test::convertToTrackingPlaysTheSame()
     const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
     const quint32 listId = rep.list;
     Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
-    const QList<QHash<quint32, uchar>> imported = playAll(list);
     const QList<quint32> c = cueIds(st->cueList(listId));
+
+    // As imported, the cues where an include at full meets their own lower
+    // level mix (as the chaser played them): Convert keeps them as they are.
+    {
+        const ShowTreeController::ConvertPlan mixed = st->planConvertToTracking(listId);
+        QVERIFY2(mixed.ok, qPrintable(mixed.why));
+        QCOMPARE(mixed.mixKept.count(), 4);
+        QCOMPARE(mixed.mixCleared, 0);
+    }
+    // The rest is about the tree's rule: put them on it.
+    for (int i : { 3, 4, 5, 6 })
+    {
+        QVERIFY(st->cue(c[i])->mixOverlap);
+        QVERIFY(st->setCueMixOverlap(c[i], false));
+    }
+    const QList<QHash<quint32, uchar>> imported = playAll(list);
 
     // The plan first: nothing changes yet.
     const QByteArray treeBefore = productionXml(*st->production(rep.production));

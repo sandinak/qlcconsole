@@ -147,6 +147,23 @@ network. Everything in 0.1.0 is in it too.
   strips, drapes) keep their own colour.
 
 ### Fixed
+- **Import chaser keeps an include brighter than the cue's own level.** A
+  cue that includes another at full and sets the same fixtures lower itself
+  (DanceHysteria's Full Show 0.0.5: 0.0.4's StepTops at full, its own at
+  45%) played the 45% after import; the chaser had run both and the full
+  level won. The importer now makes such a cue **mix** (Overlap: Mix, *≈
+  mix* in the tree) — only where the tree's rule would change its output,
+  checked channel by channel — and in a cue that mixes an include plays
+  beside the cue's own layers on the same group instead of giving way to
+  them, so it plays as the chaser did. The report says which cues and how
+  many channels; Convert to tracking keeps them mixing. On DanceHysteria-0.6
+  the import dry run is 0 channels different in every cue (Full Show 0.0.5
+  marked; 0.0.6 and 0.0.7 already mixed and now match too). The dry run
+  (`showtree_test importARealShow`) reads the show's embedded fixture
+  definitions, as opening it does, with the user folder kept out, so it
+  compares the same on a machine without the author's fixture files, starts
+  each playback from the idle rig with channel defaults put back, and fails
+  unless 0 channels differ.
 - **Beams stop at risers and the floor in the rig views.** A wash thrown
   across a riser went through it, lighting the air behind it, and its cone
   carried on below the stage floor (the cone's edge was followed to the
