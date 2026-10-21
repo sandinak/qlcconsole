@@ -26,6 +26,7 @@
 #include <QList>
 #include <QSet>
 #include <QHash>
+#include <QMap>
 #include <QColor>
 #include <QRecursiveMutex>
 #include <QSharedPointer>
@@ -169,6 +170,21 @@ public:
      *  the right stick nudges finely, and the buttons step, save, revert...
      *  by gamepad role. Never null. */
     FocusSession *focusSession() const { return m_focusSession; }
+
+    /** The controller Focus mode would use: the patched input whose profile
+     *  names the controls Focus mode works with (by role, or the usual
+     *  names), preferring the one the follow-spot stick is bound to. */
+    struct FocusController
+    {
+        bool present = false;
+        quint32 universe = 0;
+        QString name;               ///< the device, as the input patch names it
+        QString profile;            ///< its controller profile, if it says
+        /** Each control found, GamepadRole::Role -> the profile's name for
+         *  it (empty when the profile names it only by role). */
+        QMap<int, QString> controls;
+    };
+    FocusController focusController() const;
 
     /*********************************************************************
      * Park (hold fixtures out of cue output)
@@ -421,6 +437,13 @@ signals:
     /** View + Menu (Back + Start) held together on the controller while
      *  Focus mode is off: the UI opens it. */
     void focusModeRequested();
+    /** A controller came or went, or its profile changed: ask
+     *  focusController() again. */
+    void focusControllerChanged();
+    /** While Focus mode runs on the controller: a control by gamepad role
+     *  moved -- 0 or 1 for a button, 0..1 (0.5 centred) for a stick axis --
+     *  so the panel can show it. */
+    void focusControllerInput(int role, float value);
     /** Emitted when highlight active state changes. */
     void highlightActiveChanged(bool active);
     /** Emitted when the parked-fixtures set changes. */

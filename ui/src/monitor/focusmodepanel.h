@@ -26,8 +26,10 @@
 
 #include "focussession.h"
 
+class FocusControlMap;
 class QDoubleSpinBox;
 class QPushButton;
+class QToolButton;
 class QComboBox;
 class QCheckBox;
 class QLabel;
@@ -52,6 +54,8 @@ public:
                          QWidget *parent = nullptr);
 
     FocusSession::Options options() const;
+    /** The device chosen to drive the nudges. */
+    FocusSession::InputDevice inputDevice() const;
 
 private:
     void fillReferences(QComboBox *combo, bool optional);
@@ -67,6 +71,7 @@ private:
     QComboBox *m_secondCombo;
     QComboBox *m_othersCombo;
     QDoubleSpinBox *m_levelSpin;
+    QComboBox *m_inputCombo;
 };
 
 /**
@@ -87,7 +92,15 @@ public:
     /** Start Focus mode on @p options without asking (open() after its
      *  setup dialog; a test). Null, with @p why, if the session refused. */
     static FocusModePanel *startWith(Doc *doc, QWidget *parent,
-                                     const FocusSession::Options &options, QString *why = nullptr);
+                                     const FocusSession::Options &options, QString *why = nullptr,
+                                     int input = -1);
+    /** The device Focus mode starts on (@p input of startWith() when it is
+     *  -1): the controller if one Focus mode can use is connected and the
+     *  keyboard was not the last choice on this machine, else the
+     *  keyboard. */
+    static FocusSession::InputDevice defaultInput(Doc *doc);
+    /** Remember @p device as this machine's choice. */
+    static void rememberInput(FocusSession::InputDevice device);
     /** The running panel, if any. */
     static FocusModePanel *instance();
 
@@ -97,8 +110,15 @@ public:
      *  answer was Cancel. */
     bool requestExit();
 
+    /** Drive the nudges from @p device (the map follows). @p remember: it
+     *  was the user's choice, kept for next time. */
+    void setInputDevice(FocusSession::InputDevice device, bool remember = true);
+    FocusControlMap *controlMap() const { return m_map; }
+
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
+    void changeEvent(QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
 
 private:
@@ -106,6 +126,12 @@ private:
     void refresh();
     void showHighlight(quint32 fid);
     void finish();
+    /** The controller came, went or changed: the map, the choice, and the
+     *  fall back to the keyboard. */
+    void refreshController();
+    void styleUseButtons();
+    /** What a key does here; false for a key Focus mode does not use. */
+    bool handleKey(int key, Qt::KeyboardModifiers modifiers);
 
 private:
     Doc *m_doc;
@@ -120,8 +146,15 @@ private:
     QLabel *m_savedLabel;
     QLabel *m_stepLabel;
     QLabel *m_progressLabel;
-    QPushButton *m_undoButton;
-    QPushButton *m_refButton;
+    QToolButton *m_useController;
+    QToolButton *m_useKeyboard;
+    QLabel *m_deviceLabel;
+    QLabel *m_noteLabel;
+    QPushButton *m_backButton;
+    FocusControlMap *m_map;
+    /** Switched to the keyboard because the controller went: offer it
+     *  back when it returns. */
+    bool m_fellBack = false;
 
     static QPointer<FocusModePanel> s_instance;
 };

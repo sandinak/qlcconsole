@@ -4310,9 +4310,18 @@ void App::applyTheme()
     // boxes with no QSS of their own) only partially does, since this app
     // uses the native widget style outside of default.qss's reach — a
     // known Qt/macOS behavior, not a bug here.
-    QPalette pal = m_defaultPalette;
+    qApp->setPalette(themePalette(m_theme, m_defaultPalette));
 
-    switch (m_theme)
+    // Qt doesn't always re-evaluate palette(...)-based QSS on a palette
+    // change alone — force the chrome stylesheet to re-polish against it.
+    this->setStyleSheet(AppUtil::getStyleSheet("MAIN"));
+}
+
+QPalette App::themePalette(int theme, const QPalette &base)
+{
+    QPalette pal = base;
+
+    switch (theme)
     {
     case ThemeTan:
     {
@@ -4430,7 +4439,7 @@ void App::applyTheme()
        own Button/Window colours, as QPalette(button, window) would, and make
        the accent the theme's highlight rather than the system accent colour.
        The native macOS style is left exactly as it was. */
-    if (m_theme != ThemeDefault
+    if (theme != ThemeDefault
         && QApplication::style()->name().compare(QLatin1String("fusion"), Qt::CaseInsensitive) == 0)
     {
         const QPalette derived(pal.color(QPalette::Button), pal.color(QPalette::Window));
@@ -4448,11 +4457,7 @@ void App::applyTheme()
         pal.setColor(QPalette::Link, pal.color(QPalette::Highlight).lighter(130));
     }
 
-    qApp->setPalette(pal);
-
-    // Qt doesn't always re-evaluate palette(...)-based QSS on a palette
-    // change alone — force the chrome stylesheet to re-polish against it.
-    this->setStyleSheet(AppUtil::getStyleSheet("MAIN"));
+    return pal;
 }
 
 QString App::autosaveFilePath() const

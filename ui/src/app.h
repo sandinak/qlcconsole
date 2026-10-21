@@ -152,6 +152,9 @@ public:
     int theme() const;
     void setTheme(int theme);
     void applyTheme();
+    /** The palette @p theme gives, built on @p base (the native one for
+     *  ThemeDefault) -- what applyTheme() sets; a test renders with it. */
+    static QPalette themePalette(int theme, const QPalette &base);
 
 private:
     int m_theme = ThemeDefault;

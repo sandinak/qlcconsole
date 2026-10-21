@@ -92,11 +92,17 @@ public:
     QString inputChannelRole(quint32 input, quint32 channel) const override
     { Q_UNUSED(input) return m_channelRoles.value(channel); }
 
+    /** @reimp m_channelNames for @p channel, whatever the line */
+    QString inputChannelName(quint32 input, quint32 channel) const override
+    { Q_UNUSED(input) return m_channelNames.value(channel); }
+
 public:
     /** What outputProblems() reports, by universe */
     QMap<quint32, QStringList> m_outputProblems;
     /** What inputChannelRole() reports, by channel ("a", "lb", "rx"...) */
     QMap<quint32, QString> m_channelRoles;
+    /** What inputChannelName() reports, by channel ("Cross", "L1"...) */
+    QMap<quint32, QString> m_channelNames;
     QList<Device> m_devices;
     QMap<int, QString> m_lineDescriptions;
     bool m_linesAreHardware;

@@ -4,6 +4,23 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.0 — Show Tree (October 2026)
 
+### Focus mode: the controller on screen
+
+- **A map of the controller.** The Focus mode panel now draws the
+  controller, each control labelled with what it does there — Next head on
+  RB, Save on A, Nudge on the left stick, Fine on the right, the step on the
+  D-pad. Buttons light while held and the sticks show where they are, so
+  the mapping can be checked on the real pad. The labels come from the
+  controller profile's roles: another make of pad shows its own names, and
+  what it lacks is greyed. Click a control to do it.
+- **Controller or keyboard.** **Use: Controller | Keyboard**, in the setup
+  and the panel. It starts on the controller when one is connected,
+  otherwise the keyboard, and remembers your choice. On the keyboard the
+  map shows the keys and the controller is ignored, so a resting pad can't
+  drift a head; the keys work with either. A controller unplugged
+  mid-session hands over to the keyboard, and is offered back when it
+  returns. See [Controller or keyboard](lighting-studio.md#controller-or-keyboard).
+
 ### Shutters open by themselves
 
 - **Auto-open shutters.** A spot whose shutter rests closed now lights
