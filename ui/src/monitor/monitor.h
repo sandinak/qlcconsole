@@ -239,6 +239,9 @@ signals:
     void fixturesSelected(QList<quint32> fixtureIds);
 
 protected:
+    /** Holds the DMX and 2D toolbars, one shown (the main window's top bar
+     *  borrows it while this is the current tab) */
+    QWidget* m_toolsHolder = nullptr;
     QToolBar* m_DMXToolBar;
     QScrollArea* m_scrollArea;
     QWidget* m_monitorWidget;

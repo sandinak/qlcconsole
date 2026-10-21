@@ -72,6 +72,8 @@ private:
 
     // Tab label mode
     QComboBox *m_tabLabelModeCombo;
+    // Show controls: top bar or status bar (App::ShowControlsPlacement)
+    QComboBox *m_showControlsCombo;
     QComboBox *m_scriptEditorCombo;
 
     // Show Tree: Record as new cue, when the choices differ

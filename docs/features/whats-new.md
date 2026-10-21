@@ -14,6 +14,17 @@ The latest changes, newest first. Each links to the guide with the detail.
   which also now holds the effect script editor choice and the Show control
   (QLab) button. See [Auto-open shutters](other-improvements.md#auto-open-shutters).
 
+### The window
+
+- **One top bar instead of two.** The open tab's own tools and the show
+  controls share one row: the tab's tools on the left (**»** holds what
+  doesn't fit in a narrow window), and on the right **Stop all**,
+  **Blackout**, **Blind** and a **Design | Operate** switch with the mode
+  you are in lit. Blackout lights red and Blind blue while they are on.
+  About 57 px more for the tab on every tab. **Settings → Show Controls**
+  can move the show controls to the status bar instead; it changes at
+  once. See [Finding your way around](getting-started.md#finding-your-way-around).
+
 ### Software updates
 
 - **Update check and install.** qlcconsole checks GitHub Releases once a day

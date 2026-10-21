@@ -111,6 +111,10 @@
 #include "showdifferencesdialog.h"
 #include "qlcioplugin.h"
 #include "startupwindow.h"
+#include "mainbar.h"
+#include <QFrame>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -256,6 +260,10 @@ App::~App()
     else
         settings.setValue(SETTINGS_GEOMETRY, QVariant());
 
+    // A tab's borrowed tools go home before the tabs go.
+    if (m_mainBar != NULL)
+        m_mainBar->setHosting(false);
+
     if (Monitor::instance() != NULL)
         delete Monitor::instance();
 
@@ -389,10 +397,20 @@ void App::init()
     if (m_startupWindow != NULL)
         m_startupWindow->beginStep(tr("Restoring window state"));
 
-    m_tab = new QTabWidget(this);
+    // The top bar (initToolBar()) and the tabs, one above the other. The
+    // bar is a plain row here rather than a QMainWindow toolbar: it holds a
+    // tab's own QToolBar, and a toolbar inside a toolbar pays both their
+    // margins (8 px of the height this bar exists to save).
+    QWidget *central = new QWidget(this);
+    central->setObjectName("MainCentral");
+    QVBoxLayout *centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    m_tab = new QTabWidget(central);
     m_tab->setObjectName("MainTabs");
     m_tab->setTabPosition(QTabWidget::South);
-    setCentralWidget(m_tab);
+    centralLayout->addWidget(m_tab, 1);
+    setCentralWidget(central);
 
 #if defined(__APPLE__) || defined(Q_OS_MAC)
     m_tab->setElideMode(Qt::TextElideMode::ElideNone);
@@ -645,6 +663,9 @@ void App::init()
        was a double-click, which broke views out by accident. */
     m_tab->tabBar()->installEventFilter(this);
     connect(m_tab, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
+    // The tab on show lends its own tools to the top bar.
+    if (m_mainBar != NULL)
+        m_mainBar->hostTabTools(m_tab->currentWidget());
 
     // Listen to blackout changes and toggle m_controlBlackoutAction
     connect(m_doc->inputOutputMap(), SIGNAL(blackoutChanged(bool)), this, SLOT(slotBlackoutChanged(bool)));
@@ -684,6 +705,12 @@ void App::init()
 
     // Initialize status bar
     initStatusBar();
+
+    // The show controls: top bar (default) or status bar. After the status
+    // bar, which the second puts them in.
+    m_showControlsPlacement = QSettings().value(showControlsPlacementKey(),
+                                                ShowControlsInTopBar).toInt();
+    applyShowControlsPlacement();
 
     // Initialize autosave
     initAutosave();
@@ -1434,6 +1461,10 @@ void App::updateWindowTitle()
 void App::slotTabChanged(int index)
 {
     Q_UNUSED(index)
+    // Also how a tab moved to its own window (or put away) gets its tools
+    // back: it stops being current first.
+    if (m_mainBar != NULL)
+        m_mainBar->hostTabTools(m_tab->currentWidget());
     updateWindowTitle();
 }
 
@@ -1473,9 +1504,15 @@ void App::enableKioskMode()
     // Hide the tab bar to save some pixels
     m_tab->tabBar()->hide();
 
-    // No need for the toolbar
+    // No need for the toolbar, nor the show controls (in it, or in the
+    // status bar). The tab's tools go home first.
+    if (m_mainBar != NULL)
+        m_mainBar->setHosting(false);
+    delete m_showControls;
+    m_showControls = NULL;
     delete m_toolbar;
     m_toolbar = NULL;
+    m_mainBar = NULL;   // was m_toolbar's
 }
 
 void App::createKioskCloseButton(const QRect& rect)
@@ -1669,6 +1706,9 @@ void App::initActions()
 
     m_controlBlackoutAction = new QAction(QIcon(":/blackout.png"), tr("Toggle &Blackout"), this);
     m_controlBlackoutAction->setCheckable(true);
+    m_controlBlackoutAction->setIconText(tr("Blackout"));
+    m_controlBlackoutAction->setToolTip(tr("Blackout: every output to zero, whatever is running. "
+                                           "Lit red while on."));
     connect(m_controlBlackoutAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlackout()));
     m_controlBlackoutAction->setChecked(m_doc->inputOutputMap()->blackout());
 
@@ -1677,10 +1717,11 @@ void App::initActions()
     // only (disabled in Operate; forced off on →Operate). Sibling of Blackout.
     m_controlBlindAction = new QAction(QIcon(":/blind.png"), tr("Toggle Bl&ind"), this);
     m_controlBlindAction->setCheckable(true);
+    m_controlBlindAction->setIconText(tr("Blind"));
     m_controlBlindAction->setToolTip(tr(
         "Blind: mute the physical rig but keep the 2D preview live, so you can "
         "build a look without hitting the stage. Turn off to take it live. "
-        "Design mode only."));
+        "Design mode only. Lit blue while on."));
     connect(m_controlBlindAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlind(bool)));
     m_controlBlindAction->setChecked(m_doc->inputOutputMap()->outputInhibited());
 
@@ -1781,6 +1822,11 @@ void App::initActions()
 
     m_controlPanicAction = new QAction(QIcon(":/panic.png"), tr("Stop ALL functions!"), this);
     m_controlPanicAction->setShortcut(QKeySequence("CTRL+SHIFT+ESC"));
+    // The show controls' button says the short form (iconText); the Control
+    // menu keeps the full name.
+    m_controlPanicAction->setIconText(tr("Stop all"));
+    m_controlPanicAction->setToolTip(tr("Stop ALL functions (%1). Hold for Fade and stop.")
+            .arg(m_controlPanicAction->shortcut().toString(QKeySequence::NativeText)));
     connect(m_controlPanicAction, SIGNAL(triggered(bool)), this, SLOT(slotControlPanic()));
 
     m_fadeAndStopMenu = new QMenu();
@@ -1884,17 +1930,27 @@ void App::initActions()
 
 void App::initToolBar()
 {
-    m_toolbar = new QToolBar(tr("Workspace"), this);
+    m_toolbar = new QWidget(this);
     m_toolbar->setObjectName("MainToolBar");
-    m_toolbar->setFloatable(false);
-    m_toolbar->setMovable(false);
-    m_toolbar->setAllowedAreas(Qt::TopToolBarArea);
-    m_toolbar->setContextMenuPolicy(Qt::CustomContextMenu);
-    // Matches every per-manager toolbar's icon size (Fixture/Function/Show
-    // Manager, Connections, ...), all already 20x20 — this was the one
-    // toolbar still at the tab bar's larger 24x24.
-    m_toolbar->setIconSize(QSize(20, 20));
-    addToolBar(m_toolbar);
+    // Its own height, never a share of the window's: the tabs take the rest.
+    m_toolbar->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    QVBoxLayout *column = new QVBoxLayout(m_toolbar);
+    column->setContentsMargins(0, 0, 0, 0);
+    column->setSpacing(0);
+    QWidget *row = new QWidget(m_toolbar);
+    QHBoxLayout *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(4, 0, 4, 0);
+    column->addWidget(row);
+    // A hairline under it, as under a QMainWindow toolbar area.
+    QFrame *line = new QFrame(m_toolbar);
+    line->setObjectName("MainToolBarLine");
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Plain);
+    line->setFixedHeight(1);
+    line->setForegroundRole(QPalette::Mid);
+    column->addWidget(line);
+    if (QVBoxLayout *central = qobject_cast<QVBoxLayout *>(centralWidget()->layout()))
+        central->insertWidget(0, m_toolbar);
 
     // A macOS-native "unified title bar" merge (icons sitting level with the
     // window title, like Safari/Mail) was attempted here and repeatedly
@@ -1910,30 +1966,81 @@ void App::initToolBar()
     // NSToolbar built in Objective-C++; deliberately not pursued (Branson's
     // call) since it's macOS-only new surface area and Windows/Linux have no
     // equivalent "unified title bar" concept to begin with -- a toolbar as
-    // its own row is already the normal, correct look there. This toolbar
-    // is now a plain, ordinary QMainWindow toolbar on every platform,
-    // following the same "Toolbar Style" preference as everything else
-    // (applyTabLabelMode()) instead of being locked to icon-only.
+    // its own row is already the normal, correct look there. This bar is
+    // an ordinary row on every platform (since 2026-10 not even a
+    // QMainWindow toolbar, see above), following the same "Toolbar Style"
+    // preference as everything else (applyTabLabelMode()).
 
     // Native-first layout: the full command set lives in the menu bar (see
-    // initMenuBar). The toolbar keeps only the handful of live show controls
-    // you reach for mid-show. A flexible spacer flushes them to the right so
-    // they sit away from the workspace tabs, where the Operate button has
-    // always been.
-    QWidget* spacer = new QWidget(this);
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_toolbar->addWidget(spacer);
+    // initMenuBar). This bar is the ONE row above the tabs (MainBar): the
+    // current tab's own tools on the left, borrowed from the tab while it
+    // is on show, and the live show controls pinned on the right. It used
+    // to be two rows -- this bar's big icon-over-word show buttons (~58 px)
+    // and then each tab's own toolbar (~36 px) -- about 94 px before any
+    // content. Settings can move the show controls to the status bar
+    // instead (applyShowControlsPlacement()).
+    m_mainBar = new MainBar(row);
+    rowLayout->addWidget(m_mainBar);
 
-    m_toolbar->addAction(m_controlPanicAction);   // Stop ALL (hold = fade menu)
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_controlBlackoutAction);
-    m_toolbar->addAction(m_controlBlindAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_modeToggleAction);      // Design/Operate (rightmost)
+    m_showControls = new ShowControls(m_doc, m_controlPanicAction, m_controlBlackoutAction,
+                                      m_controlBlindAction, m_modeToggleAction, m_mainBar);
+    m_mainBar->setShowControls(m_showControls, m_showControls->modeSwitch());
+}
 
-    QToolButton* btn = qobject_cast<QToolButton*>(m_toolbar->widgetForAction(m_controlPanicAction));
-    if (btn != NULL)
-        btn->setPopupMode(QToolButton::DelayedPopup); // click = stop, hold = fade menu
+QString App::showControlsPlacementKey()
+{
+    return QStringLiteral("workspace/showControlsPlacement");
+}
+
+void App::setShowControlsPlacement(int placement)
+{
+    if (placement != ShowControlsInStatusBar)
+        placement = ShowControlsInTopBar;
+    QSettings().setValue(showControlsPlacementKey(), placement);
+    if (placement == m_showControlsPlacement)
+        return;
+    m_showControlsPlacement = placement;
+    applyShowControlsPlacement();
+}
+
+void App::applyShowControlsPlacement()
+{
+    if (m_toolbar == NULL || m_mainBar == NULL || m_showControls == NULL)
+        return;     // kiosk: neither
+
+    if (m_showControlsPlacement == ShowControlsInStatusBar)
+    {
+        // The top is the tab's alone again: its tools go home to its own
+        // top edge, and this bar has nothing left to show.
+        m_mainBar->setHosting(false);
+        m_toolbar->hide();
+        m_showControls->setInStatusBar(true);
+        statusBar()->addPermanentWidget(m_showControls);     // last: rightmost
+        statusBar()->addPermanentWidget(m_showControls->modeSwitch());
+        m_showControls->show();
+        m_showControls->modeSwitch()->show();
+        // The switch says the mode right here, and Blackout lights up: the
+        // DESIGN / BLACKOUT chips would say it all twice, in a footer short
+        // of room.
+        if (m_statusModeChipLabel != NULL)
+            m_statusModeChipLabel->hide();
+        if (m_statusBlackoutLabel != NULL)
+            m_statusBlackoutLabel->hide();
+    }
+    else
+    {
+        statusBar()->removeWidget(m_showControls);
+        statusBar()->removeWidget(m_showControls->modeSwitch());
+        m_showControls->setInStatusBar(false);
+        m_mainBar->setShowControls(m_showControls, m_showControls->modeSwitch());
+        if (m_statusModeChipLabel != NULL)
+            m_statusModeChipLabel->show();
+        if (m_statusBlackoutLabel != NULL)
+            m_statusBlackoutLabel->setVisible(m_doc->inputOutputMap()->blackout());
+        m_mainBar->setHosting(true);
+        m_mainBar->hostTabTools(m_tab != NULL ? m_tab->currentWidget() : NULL);
+        m_toolbar->show();
+    }
 }
 
 void App::initMenuBar()
@@ -2899,7 +3006,11 @@ void App::slotBlackoutChanged(bool state)
     if (m_statusBlackoutLabel != NULL)
     {
         m_statusBlackoutLabel->setText(state ? tr("● BLACKOUT ") : QString());
-        m_statusBlackoutLabel->setVisible(state);
+        // With the show controls in the status bar, their Blackout button
+        // is lit red right beside it: the chip would say it twice, in a
+        // footer short of room.
+        m_statusBlackoutLabel->setVisible(state
+                && m_showControlsPlacement != ShowControlsInStatusBar);
     }
 }
 
@@ -4229,28 +4340,9 @@ void App::applyTabLabelMode()
         }
     }
 
-    // Apply the same mode to the main toolbar so "Text only" hides toolbar
-    // icons and "Icons only" hides toolbar text labels. Used to be locked to
-    // icon-only on macOS while this toolbar was (unsuccessfully) trying to
-    // merge into the native title bar -- that attempt is gone (see
-    // initToolBar()'s comment: no real NSToolbar was ever involved, so
-    // nothing was actually merging), so this toolbar now follows the same
-    // general preference as every other toolbar and platform.
-    if (m_toolbar)
-    {
-        switch (m_tabLabelMode)
-        {
-        case TabIconOnly:
-            m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-            break;
-        case TabTextOnly:
-            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            break;
-        default:
-            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-            break;
-        }
-    }
+    // The same mode for the show controls (Design | Operate stays words).
+    if (m_showControls != NULL)
+        m_showControls->setLabelMode(m_tabLabelMode);
 
     // Keep the 2D monitor window's toolbars in sync if it is open.
     if (Monitor::instance() != NULL)
@@ -4271,6 +4363,11 @@ void App::applyTabLabelMode()
         ShowManager::instance()->applyToolbarLabelMode();
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         pm->applyToolbarLabelMode();
+
+    // A tab's tools in the top bar keep their words beside the icons there,
+    // whatever the tab just set.
+    if (m_mainBar != NULL)
+        m_mainBar->restyleHostedTools();
 }
 
 void App::switchToTabContaining(QWidget *w)

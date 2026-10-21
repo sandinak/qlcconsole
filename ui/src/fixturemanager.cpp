@@ -47,6 +47,7 @@
 #include <QtGui>
 #include <climits>
 
+#include "mainbar.h"
 #include "patchlistdialog.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -1605,6 +1606,8 @@ void FixtureManager::initToolBar()
     // extended here to the other manager toolbars that never set one.
     toolbar->setIconSize(QSize(20, 20));
     layout()->setMenuBar(toolbar);
+    // On show in the main window's top bar while this is the current tab.
+    MainBar::registerTabTools(this, toolbar);
 
     // Trimmed to creation-only actions (2026-09-03 modernization pass):
     // Properties/Test/Remove/Ungroup/Move Up/Down are all selection- or

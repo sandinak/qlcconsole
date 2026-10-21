@@ -42,6 +42,7 @@
 #include <QDebug>
 #include <QUrl>
 
+#include "mainbar.h"
 #include "functionselection.h"
 #include "audioplugincache.h"
 #include "rgbmatrixeditor.h"
@@ -415,6 +416,8 @@ void ShowManager::initToolbar()
     // fixturemanager.cpp's initToolBar for the full reasoning).
     m_toolbar->setIconSize(QSize(20, 20));
     layout()->addWidget(m_toolbar);
+    // On show in the main window's top bar while this is the current tab.
+    MainBar::registerTabTools(this, m_toolbar);
 
     // "Show" — which show container to work on: New/Rename/Delete. Distinct
     // from "Edit" below: this is about WHICH show, not what's in it.

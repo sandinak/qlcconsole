@@ -53,14 +53,28 @@ not opened — and saving then can write an empty workspace over it.
 
 ## Finding your way around
 
-![The main window: toolbar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
+![The main window: the top bar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
 
-1. **The toolbar** — **Stop ALL functions** (the panic button), **Blackout**,
-   **Blind**, and **Operate** to run the show.
+1. **The top bar** — one row. On the left, the open tab's own tools (here
+   Programming's Highlight, Flash, Park…); in a narrow window, what
+   doesn't fit is under **»**. On the right, the show controls:
+   **Stop all** (the panic button; hold it for **Fade and stop**),
+   **Blackout**, **Blind**, and the **Design | Operate** switch, the mode
+   you are in lit. **Blackout** lights red and **Blind** blue while they
+   are on.
 2. **The open tab** — here Programming, with a scene open.
 3. **The tabs**, along the bottom.
 4. **The footer** — is the show ready to run, how busy the output is, Design
    or Operate (below).
+
+**Settings → Show Controls** can put the show controls in the status bar
+instead, at its right end beside Ready and the other show chips: the top
+is then the tab's own tools alone. It changes at once, no restart, and the
+shortcuts are the same either way (⌘⇧Esc Stop all, ⌘F12 Design / Operate).
+There, they are icons only (their tooltips name them) unless
+**View → Toolbar Style** is **Text Only**, and the footer's own DESIGN and
+BLACKOUT chips step aside for them. A tab moved to a window of its own
+keeps its tools at its own top.
 
 The tabs follow the order a show is built in:
 
@@ -211,17 +225,17 @@ Steps, towers and booms usually come in sets that should all be the same:
 
 ## Running the show
 
-- **Operate** (⌘F12) — the show runs; editing that would disturb it is
+- **Operate** (⌘F12, or the top bar's **Design | Operate** switch) — the show runs; editing that would disturb it is
   locked. **Show-mode Lock** (⌘L) locks the interface down further for an
   operator.
-- **Stop ALL functions** (⌘⇧Esc), or its menu's **Fade and stop**, is the
-  panic button.
+- **Stop all** (⌘⇧Esc), or its menu's **Fade and stop** (hold the button),
+  is the panic button.
 - **From QLab**: QLab (or anything that speaks MIDI Show Control or OSC)
   can GO a chase's cues by number. See
   [Show control (QLab)](show-control.md).
 - The Virtual Console, Simple Desk and Shows timeline work as in stock
-  QLC+; the **Programming** tab's toolbar has Highlight / Flash / Park /
-  Blind for working on a running show.
+  QLC+; the **Programming** tab's tools have Highlight / Flash / Park, and
+  the show controls Blind, for working on a running show.
 
 ### GO on the beat
 

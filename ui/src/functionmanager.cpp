@@ -39,6 +39,7 @@
 #include <QIcon>
 #include <QTimer>
 
+#include "mainbar.h"
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
@@ -371,6 +372,8 @@ void FunctionManager::initToolbar()
     // fixturemanager.cpp's initToolBar for the full reasoning).
     m_toolbar->setIconSize(QSize(20, 20));
     layout()->addWidget(m_toolbar);
+    // On show in the main window's top bar while this is the current tab.
+    MainBar::registerTabTools(this, m_toolbar);
 
     // "Add" consolidates the New Scene/Chaser/…/Folder actions that used to
     // be spelled out as ten separate toolbar buttons — same QActions (same

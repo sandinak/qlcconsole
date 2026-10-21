@@ -548,8 +548,9 @@ view's beam/footprint overlays):
 
 ## Blind / Park / Highlight / Flash
 
-A classroom-safety and rigging-focus trio, available from the Programming
-tab toolbar and Control menu:
+A classroom-safety and rigging-focus trio: Blind from the show controls
+(top bar, or status bar) and the Control menu, the rest from the
+Programming tab's tools:
 
 - **Blind** mutes physical DMX output while the 2D preview keeps updating —
   build and check a look with the room dark. Design-mode only; force-cleared

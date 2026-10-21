@@ -38,12 +38,16 @@ Three panes:
   (Scene/Chaser/Collection/EFX/RGB Matrix/Show) in folders. Single-click
   selects; double-click opens it in the canvas. See
   [Filing into folders](#filing-into-folders).
-- **Center — canvas.** A toolbar — **Highlight**, **Flash**, **Tap** and
+- **The tab's tools**, in the top bar beside the show controls (or over
+  the canvas, with the show controls in the status bar, or the tab in a
+  window of its own): **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
   **Move in black** (mark, unmark, auto move-in-black and its lead time),
   **Beat** (internal beat on, BPM, speed masters — the button reads the
-  tempo) and **More** (snapshot live output, jog speed) as drop-downs —
-  then either an empty-state placeholder or the loaded editor. For
+  tempo) and **More** (snapshot live output, jog speed) as drop-downs.
+  In a narrow window, what doesn't fit is under **»**.
+- **Center — canvas.** Either an empty-state placeholder or the loaded
+  editor. For
   a Scene, that's the **Targets** panel (left half) and **Looks** panel
   (right half) shown above. Other function types (Chaser, Collection, EFX,
   RGB Matrix, Show) open their own stock editors here instead. Below the
