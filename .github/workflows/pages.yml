@@ -1,0 +1,44 @@
+# The Show Tree course website (GitHub Pages): builds docs/course ONLY --
+# Jekyll with the just-the-docs remote theme, docs/course/_config.yml -- and
+# deploys it. Runs from the default branch: on a push to main that touches
+# docs/course (or this file), or by hand (Actions -> Course site -> Run
+# workflow). Needs Settings -> Pages -> Source: GitHub Actions; see
+# docs/course/COURSE_PLAN.md section 6.
+name: Course site
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/course/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: course-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs/course
+          destination: ./_site
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

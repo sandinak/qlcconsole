@@ -1,0 +1,21 @@
+# The course website (GitHub Pages), built by .github/workflows/pages.yml
+# from main. See COURSE_PLAN.md section 6.
+title: Show Tree course
+description: Lighting a show choir with qlcconsole's Show Tree — a course for high-school tech crews.
+remote_theme: just-the-docs/just-the-docs@v0.10.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
+search_enabled: true
+color_scheme: dark
+aux_links:
+  "qlcconsole on GitHub": "https://github.com/sandinak/qlcconsole"
+exclude:
+  - tools/
+  - shows/README.md
+  - Gemfile
+  - Gemfile.lock
+footer_content: "Course text and pictures: CC BY 4.0. Show files and scripts: Apache-2.0, as qlcconsole is."
