@@ -371,6 +371,20 @@ public:
 
     /** "Next cue receives", as the cue page shows it. */
     QString nextCueText() const;
+    /** ... for cue @a cueId (empty: not a cue of a list). */
+    QString nextCueText(quint32 cueId) const;
+    /** The cue page's "Tracked in" list, as text: one line per carried-in
+     *  layer ("Towers — tracked from 1 One"), then one per value under it
+     *  ("    Colour: Blue"). Empty when nothing tracks in. */
+    QString cueTrackedText() const;
+    /** What tracks into cue @a cueId, its own changes, what the next cue
+     *  receives and whether the last edit changed it: the cue row's
+     *  tooltip in the tree. */
+    QString cueTrackingTip(quint32 cueId) const;
+    /** The tree's badge column (the second): its width, kept as the tree
+     *  pane is resized, set by dragging the line between the columns and
+     *  remembered (QSettings). */
+    int badgeColumnWidth() const { return m_badgeWidth; }
     /** The cue page's includes, as text, in order. */
     QStringList includeItems() const;
 
@@ -527,6 +541,15 @@ private:
                          bool *dontAsk);
     QString lookText(const ShowTree::Look &look) const;
     QString originText(const ShowTree::CueList &list, const ShowTree::ResolvedValue &value) const;
+    /** Where a carried-in layer (or one of its values) came from, by
+     *  its cue, wherever that cue is ("tracked from 1 One"). */
+    QString carriedOrigin(ShowTree::Origin origin, quint32 fromCue) const;
+    /** A carried-in layer, for a tooltip or the cue page: its name and
+     *  where it came from, then each value ("    Colour: Blue"), with its
+     *  own origin when that is another cue. */
+    QString carriedDetail(const ShowTree::ResolvedLayer &layer) const;
+    /** The tree's columns: the names get all but the badge column. */
+    void fitTreeColumns();
     QString paletteName(quint32 id) const;
     /** The Look Editor changed @a paletteId (@a full: its name/icon too). */
     void paletteEdited(quint32 paletteId, bool full);
@@ -555,7 +578,9 @@ private:
     QLabel *m_hint;
     QLabel *m_previewLabel;
 
-    QTreeWidget *m_tree;
+    QTreeWidget *m_tree = nullptr;
+    int m_badgeWidth = 0;               //!< the badge column's width
+    bool m_fittingColumns = false;
 
     // Inspector
     QStackedWidget *m_pages;
@@ -618,6 +643,7 @@ private:
      *  every theme (palette(mid) all but vanishes on the dark ones). */
     void styleCueDropZone();
     QLabel *m_cueNext;
+    QLabel *m_cueTracked = nullptr;     //!< what tracks in, value by value
     QWidget *m_layerPage;
     QLabel *m_layerTitle;
     QLabel *m_layerContents;

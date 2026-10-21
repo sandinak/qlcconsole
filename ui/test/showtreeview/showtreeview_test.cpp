@@ -34,6 +34,8 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QSplitter>
+#include <QHeaderView>
+#include <QScrollBar>
 #include <QTextBrowser>
 #include <QListWidget>
 #include <QToolButton>
@@ -218,7 +220,9 @@ void ShowTreeView_Test::trackedLayersShowGreyWithWhereTheyCameFrom()
 
     ShowTreeView view(nullptr, m_doc);
     const QStringList text = treeText(view.tree());
-    QVERIFY2(text.contains("      ⤳ Towers [tracked from 1 One]"), qPrintable(text.join("\n")));
+    // The row says where by the cue's number; the tooltip says the rest.
+    QVERIFY2(text.contains("      ⤳ Towers [1]"), qPrintable(text.join("\n")));
+    QVERIFY2(text.contains("    2 Two [● 1  ⤳ 1]"), qPrintable(text.join("\n")));
 
     // Selecting the tracked row shows it, read from where it was set.
     QTreeWidgetItem *tracked = nullptr;
@@ -1154,7 +1158,7 @@ void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
     base->setCurrentIndex(1);
     emit base->activated(1);
     QCOMPARE(st->cueList(list)->baseCue, c1);
-    QVERIFY(treeText(view.tree()).contains("    1 One [■ base]"));
+    QVERIFY(treeText(view.tree()).contains("    1 One [● 1  ■ base]"));
     // ...and from the cue page's check box.
     QVERIFY(view.selectNode(c2));
     QCheckBox *isBase = view.findChild<QCheckBox *>("stCueBase");
@@ -1219,7 +1223,8 @@ void ShowTreeView_Test::includesAddMoveRemoveAndNoLoops()
     QCOMPARE(view.includeItems(), QStringList({ "1 One" }));
     // The included cue's layer shows in it, greyed with where it came from.
     QVERIFY(trackedRow(view.tree(), c3, "Towers") != nullptr);
-    QCOMPARE(trackedRow(view.tree(), c3, "Towers")->text(1), QString("included from 1 One"));
+    QCOMPARE(trackedRow(view.tree(), c3, "Towers")->text(1), QString("⊕ 1"));
+    QVERIFY(trackedRow(view.tree(), c3, "Towers")->toolTip(1).contains("included from 1 One"));
 }
 
 void ShowTreeView_Test::nextCueReceivesSaysWhatPassesOn()
@@ -1339,7 +1344,7 @@ void ShowTreeView_Test::recordAsNewCueFromTheHeader()
     QCOMPARE(rec.number, QString("3"));
     QCOMPARE(rec.mode, CueMode::Block);
     QCOMPARE(rec.layers.count(), 2);                 // Towers (tracked) and USTs, now its own
-    QVERIFY(treeText(view.tree()).contains("    3 Two (recorded) [⊘ block]"));
+    QVERIFY(treeText(view.tree()).contains("    3 Two (recorded) [● 2  ⊘ block]"));
     // What changed on stage: only the new cue.
     QCOMPARE(view.findChild<QLabel *>("stDropHint")->text(), QString("Changed: 3 Two (recorded)"));
 }
@@ -1871,6 +1876,64 @@ void ShowTreeView_Test::pictureOfARealShow()
     view.selectNode(cue.id);
     QTest::qWait(50);
     QVERIFY(view.grab().save(QString(shot).replace(".png", "-cue.png")));
+}
+
+/* A picture of a real show's tree with its tracking expanded:
+   QLC_TRACKTREE_SHOW (a .qlcc, read only) and QLC_TRACKTREE_SHOT (a .png).
+   The tree pane is kept at its default share of a 1280-wide tab, every cue
+   open, the second cue selected -- what tracks into it is what shows. */
+void ShowTreeView_Test::pictureOfTrackingInTheTree()
+{
+    const QString path = qEnvironmentVariable("QLC_TRACKTREE_SHOW");
+    const QString shot = qEnvironmentVariable("QLC_TRACKTREE_SHOT");
+    if (path.isEmpty() || shot.isEmpty())
+        QSKIP("set QLC_TRACKTREE_SHOW and QLC_TRACKTREE_SHOT to picture a show's tracking");
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlStreamReader r(&file);
+    bool loaded = false;
+    while (!r.atEnd() && !loaded)
+        if (r.readNextStartElement() && r.name() == QLatin1String("Engine"))
+            loaded = m_doc->loadXML(r, false);
+    QVERIFY(loaded);
+
+    // QLC_TRACKTREE_LONG=1: (in memory) nothing released, every cue's
+    // layers carried on -- a long list of what tracks in.
+    if (!qEnvironmentVariableIsEmpty("QLC_TRACKTREE_LONG"))
+    {
+        ShowTreeController *st = m_doc->showTree();
+        QList<QPair<quint32, quint32>> released;
+        for (const Production &p : st->productions())
+            for (const CueList &l : p.lists)
+                for (const Cue &c : l.cues)
+                    for (const Layer &y : c.layers)
+                        if (y.release)
+                            released << qMakePair(c.id, y.id);
+        for (const auto &r : released)
+            QVERIFY(st->setLayerRelease(r.first, r.second, false));
+    }
+    QSettings().remove(QStringLiteral("showtree/splitter2"));
+    QSettings().remove(QStringLiteral("showtree/badgeColumn"));
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 760);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    const CueList *list = nullptr;
+    for (const Production &p : m_doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            if (list == nullptr && l.cues.count() > 1)
+                list = &l;
+    QVERIFY(list != nullptr);
+    view.selectNode(list->cues.at(1).id);
+    view.tree()->expandAll();
+    QTest::qWait(50);
+    QVERIFY(view.grab().save(shot));
+    QVERIFY(view.tree()->grab().save(QString(shot).replace(".png", "-tree.png")));
+    // The cue row's tooltip, as text beside the picture.
+    QFile tip(QString(shot).replace(".png", "-tooltip.txt"));
+    QVERIFY(tip.open(QIODevice::WriteOnly));
+    tip.write(view.cueTrackingTip(list->cues.at(1).id).toUtf8());
 }
 
 /****************************************************************************
@@ -4571,8 +4634,10 @@ void ShowTreeView_Test::subCuesInTheTree()
     bool fromSub = false, fromCue = false;
     for (int i = 0; i < r2->childCount(); ++i)
     {
-        fromSub = fromSub || r2->child(i)->text(1) == QString("from sub-cue 1.1");
-        fromCue = fromCue || r2->child(i)->text(1) == QString("tracked from 1 One");
+        fromSub = fromSub || (r2->child(i)->text(1) == QString("↳ 1.1")
+                              && r2->child(i)->toolTip(1).contains("from sub-cue 1.1"));
+        fromCue = fromCue || (r2->child(i)->text(1) == QString("1")
+                              && r2->child(i)->toolTip(1).contains("tracked from 1 One"));
     }
     QVERIFY(fromSub);
     QVERIFY(fromCue);
@@ -4605,6 +4670,171 @@ void ShowTreeView_Test::subCuesInTheTree()
     QCOMPARE(st->cueList(st->subCueList(c1))->cues.count(), 3);
     QVERIFY(view.runCommand("help sub"));
     view.hide();
+}
+
+/****************************************************************************
+ * Tracking in the tree: a badge, details on hover (2026-10-21)
+ ****************************************************************************/
+
+namespace
+{
+QTreeWidgetItem *cueRow(QTreeWidget *tree, quint32 cueId)
+{
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == cueId)
+            return *it;
+    return nullptr;
+}
+}
+
+/* Branson: "when the tree starts printing details of what's being tracked
+   it overflows over the tree so you can't read everything about the
+   layers". A cue row counts what it sets (●), releases (○) and what
+   tracks in (⤳); a carried-in row says only its cue's number; the rest is
+   in the tooltip and on the cue page. However long the names, the layer
+   names keep their column. */
+void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    FixtureGroup *spots = group("Spots", 4, 2);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const QString longName = QString("Opening with every wash, spot and UST in the rig set by hand for the long "
+                                     "walk-in before the house opens");
+    const quint32 c1 = st->addCue(list, -1, longName);
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    const quint32 t1 = st->addLayer(c1, groupTarget(towers->id()));
+    st->setLayerLook(c1, t1, st->lookForPalette(blue));
+    st->setLayerLook(c1, t1, st->lookForPalette(half));
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(spots->id())), st->lookForPalette(half));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(usts->id())), st->lookForPalette(half));
+    const quint32 rel = st->addLayer(c2, groupTarget(spots->id()));
+    QVERIFY(st->setLayerRelease(c2, rel, true));
+    QVERIFY(st->setCueMode(c3, CueMode::Block));
+
+    QSettings().remove("showtree/splitter2");
+    QSettings().remove("showtree/badgeColumn");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 500);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.tree()->expandAll();
+    QTest::qWait(20);
+
+    // The kinds: ● set here, ○ released, ⤳ tracked in, ⊘ a Block cue.
+    QCOMPARE(cueRow(view.tree(), c1)->text(1), QString("● 2"));
+    QCOMPARE(cueRow(view.tree(), c2)->text(1), QString("● 1  ○ 1  ⤳ 1"));
+    QVERIFY(cueRow(view.tree(), c3)->text(1).contains("⊘ block"));
+    QVERIFY(!cueRow(view.tree(), c3)->text(1).contains("⤳"));
+    QVERIFY(cueRow(view.tree(), c3)->toolTip(1).contains("⊘ Block"));
+    QTreeWidgetItem *carried = trackedRow(view.tree(), c2, "Towers");
+    QVERIFY(carried != nullptr);
+    QCOMPARE(carried->text(0), QString("⤳ Towers"));
+    QCOMPARE(carried->text(1), QString("1"));
+    bool released = false;
+    for (int i = 0; i < cueRow(view.tree(), c2)->childCount(); ++i)
+        released = released || cueRow(view.tree(), c2)->child(i)->text(1) == QString("○ release");
+    QVERIFY(released);
+
+    // On hover: the group, each attribute's value, and the cue it came from.
+    const QString rowTip = carried->toolTip(1);
+    QVERIFY2(rowTip.startsWith(QString("⤳ Towers — tracked from 1 %1").arg(longName)), qPrintable(rowTip));
+    QVERIFY2(rowTip.contains("    Colour: Blue"), qPrintable(rowTip));
+    QVERIFY2(rowTip.contains("    Dimmer: Half"), qPrintable(rowTip));
+    const QString cueTip = cueRow(view.tree(), c2)->toolTip(1);
+    QVERIFY2(cueTip.contains("Tracked in (1):\n⤳ Towers — tracked from 1 "), qPrintable(cueTip));
+    QVERIFY2(cueTip.contains("Set here (2): ● USTs, ○ Spots (released)"), qPrintable(cueTip));
+    QVERIFY2(cueTip.contains("Next cue receives:\n    nothing: 3 Three is a Block cue"), qPrintable(cueTip));
+    QCOMPARE(cueRow(view.tree(), c2)->toolTip(0), cueTip);      // the row's name too
+    QCOMPARE(view.cueTrackingTip(c2), cueTip);
+
+    // The cue page lists it in full.
+    QVERIFY(view.selectNode(c2));
+    QVERIFY(view.cueTrackedText().contains("⤳ Towers — tracked from 1 "));
+    QVERIFY(view.cueTrackedText().contains("    Dimmer: Half"));
+    QLabel *page = view.findChild<QLabel *>("stCueTracked");
+    QVERIFY(page != nullptr && page->isVisibleTo(&view));
+    QVERIFY(page->text().contains("    Colour: Blue"));
+
+    // However long the text, the names keep their column: the badge
+    // column stays narrow, nothing runs past the pane, and every layer's
+    // name fits beside it (a long cue name ends in "…" within its own).
+    QTreeWidget *tree = view.tree();
+    const int room = tree->viewport()->width();
+    QVERIFY(tree->header()->sectionSize(0) >= room * 3 / 5 - 1);
+    QVERIFY(tree->header()->sectionSize(0) + tree->header()->sectionSize(1) <= room);
+    QVERIFY(!tree->horizontalScrollBar()->isVisible());
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+    {
+        const QRect name = tree->visualItemRect(*it).intersected(
+            QRect(tree->header()->sectionViewportPosition(0), 0, tree->header()->sectionSize(0), 1 << 20));
+        const QRect badge = tree->visualItemRect(*it).intersected(
+            QRect(tree->header()->sectionViewportPosition(1), 0, tree->header()->sectionSize(1), 1 << 20));
+        QVERIFY(!name.intersects(badge));
+        const int kind = (*it)->data(0, ShowTreeView::KindRole).toInt();
+        if (kind == ShowTreeView::LayerNode || kind == ShowTreeView::TrackedLayerNode)
+            QVERIFY2(tree->fontMetrics().horizontalAdvance((*it)->text(0)) < name.width() - tree->indentation(),
+                     qPrintable((*it)->text(0)));
+        // The badge text fits its column, or ends in "…" there: never wider.
+        QVERIFY(tree->header()->sectionSize(1) < room / 2);
+    }
+    QVERIFY(tree->fontMetrics().horizontalAdvance(cueRow(tree, c1)->text(0)) > tree->header()->sectionSize(0));
+    QCOMPARE(tree->textElideMode(), Qt::ElideRight);
+    view.hide();
+}
+
+/* The Library | Tree | Editor splitter is remembered; so is the tree's
+   badge column, set by dragging the line between its columns, and kept as
+   the pane is resized (the names take the change). */
+void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
+{
+    QSettings settings;
+    settings.remove("showtree/badgeColumn");
+    ShowTreeController *st = m_doc->showTree();
+    st->addCue(st->addCueList(st->addProduction("P"), "L", ListMode::Tracking), -1, "One");
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(1000, 500);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QSplitter *split = view.findChild<QSplitter *>("stSplitter");
+        QVERIFY(split != nullptr && split->widget(1) == view.tree());
+        QVERIFY(!split->widget(1)->isHidden());
+        QHeaderView *header = view.tree()->header();
+        QCOMPARE(header->sectionResizeMode(0), QHeaderView::Interactive);
+        QCOMPARE(header->sectionResizeMode(1), QHeaderView::Interactive);
+
+        // Dragging the line between the columns (a user resize).
+        const int room = view.tree()->viewport()->width();
+        header->resizeSection(0, room - 70);
+        QCOMPARE(view.badgeColumnWidth(), 70);
+        QCOMPARE(settings.value("showtree/badgeColumn").toInt(), 70);
+        QCOMPARE(header->sectionSize(1), 70);
+
+        // A wider pane: the names take it, the badges keep their width.
+        QList<int> sizes = split->sizes();
+        sizes[1] += 120;
+        sizes[2] -= 120;
+        split->setSizes(sizes);
+        QTest::qWait(20);
+        QCOMPARE(header->sectionSize(1), 70);
+        QCOMPARE(header->sectionSize(0), view.tree()->viewport()->width() - 70);
+        view.hide();
+    }
+    // A new view (the next start): as it was left.
+    ShowTreeView again(nullptr, m_doc);
+    again.resize(1000, 500);
+    again.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&again));
+    QCOMPARE(again.badgeColumnWidth(), 70);
+    QCOMPARE(again.tree()->header()->sectionSize(1), 70);
+    again.hide();
+    settings.remove("showtree/badgeColumn");
 }
 
 QTEST_MAIN(ShowTreeView_Test)

@@ -13,6 +13,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Changed
+- **The Show Tree shows tracking as badges, with the details on hover.** A
+  cue's tracked-in layers used to say *tracked from 0.0.1 Setup* in a column
+  that grew to fit, covering the layer names. Now a cue row counts what it
+  sets (● 2), releases (○ 1) and what tracks in (⤳ 5); a grey row shows only
+  the number of the cue it came from. Hold the pointer over either for the
+  group, each attribute's value and its cue, and what the next cue
+  receives; the cue page lists the same under **Tracked in**. The badge
+  column keeps its width as the tree is resized, can be dragged wider or
+  narrower, and is remembered; long text ends in "…".
 - **The boot window shows the version.** The window shown while qlcconsole
   starts names the release ("qlcconsole 0.2.2") and, smaller below it, the
   build and the commit it was built from, as `--version` and the About box

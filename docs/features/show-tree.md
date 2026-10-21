@@ -58,9 +58,24 @@ from the Library lands in the tree right beside it.
   [Adding layers](#adding-layers)).
 - **Middle: the tree.** It shows productions, cue lists, cues, and each cue's
   layers. Grey **⤳** rows under a cue are layers it doesn't hold itself but
-  that are on stage in it. They are marked *tracked from*, *included from*
-  or *base*. A cue's badges are **■ base**, **⊘ block**, **◐ cue-only** and
-  *includes N*. A layer that plays a function as it is shows **▣**. A use
+  that are on stage in it. Beside each is only the number of the cue it
+  came from: plain for *tracked from*, **⊕ 1.0.0** for *included from*,
+  **↳ 4.1** for a sub-cue, **■ base** for the base. A tracking cue's row
+  counts its layers: **● 2** set in this cue, **○ 1** released here, **⤳ 5**
+  tracked in. Its other badges are **■ base**, **⊘ block**, **◐ cue-only**
+  and **⊕ N** (includes N). On a layer row, **●** means it sets values here
+  and **○ release** that it lets them go.
+- **Hover for the details.** A grey row's tooltip names the layer, where
+  it came from, and each value it brings (*Colour: Blue*, *Dimmer: Full*),
+  with its own cue when a value came from somewhere else. A cue row's
+  tooltip lists everything that tracks in, what the cue sets or releases,
+  what the next cue receives, and whether the last edit changed it. The
+  cue page has the same list in full under **Tracked in**.
+- **Sizing the tree.** Drag the lines between the Library, the tree and
+  the page to share the room; drag the line between the tree's two columns
+  to make the badge column wider or narrower. The names get the rest, and
+  text too long for its column ends in "…". Both are remembered. A layer
+  that plays a function as it is shows **▣**. A use
   of a [reusable](#reusable-layers-and-cues) layer or cue shows **⟲** and
   how many uses there are. Under the cue lists, **Looks** holds the
   production's busking looks, in their folders; a look a VC button fires
@@ -1232,7 +1247,8 @@ strobe inside a chorus.
   faded in. The tree says *Sub GO* or *auto 0.5s*, and its fade. **The first
   plays with GO**: GO into cue 4 plays 4.1 and holds there.
 - **Tracking:** 4.1 starts from what cue 4 puts on stage, 4.2 from 4.1. A
-  value set in 4.1 shows grey in 4.2 *from sub-cue 4.1*.
+  value set in 4.1 shows grey in 4.2, marked **↳ 4.1** (*from sub-cue 4.1*
+  in its tooltip).
 - **Cue-only:** what the sub-cues change doesn't pass on. Cue 5 starts from
   cue 4's own state, however far Sub GO got (D9).
 - **Back** (⌘⇧↩) goes to the previous main cue; **Sub Back** (⌥⌘⇧↩) to the
