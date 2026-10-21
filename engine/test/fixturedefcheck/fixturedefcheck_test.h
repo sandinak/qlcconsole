@@ -34,6 +34,7 @@ private slots:
     void slashMistakesAreFixedWithoutAsking();
     void theWledLanternLoadsAsALantern();
     void missingDataIsAWarning();
+    void onlyALightIsAskedForLightOutput();
 };
 
 #endif

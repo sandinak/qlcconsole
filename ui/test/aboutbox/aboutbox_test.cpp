@@ -18,9 +18,11 @@
 */
 
 #include <QtTest>
+#include <QLabel>
 
 #include "qlcconfig.h"
 #include "aboutbox_test.h"
+#include "startupwindow.h"
 #include "apputil.h"
 #define private public
 #include "aboutbox.h"
@@ -125,6 +127,31 @@ void AboutBox_Test::applicationIdentity()
     QWidget w;
     QCOMPARE(w.windowIcon().availableSizes().size(), sizes.size());
 #endif
+}
+
+/* The boot window names the release, and below it the build and commit --
+   the same as --version and the About box. */
+void AboutBox_Test::startupWindowShowsTheVersion()
+{
+    StartupWindow sw(3);
+    QLabel *release = sw.findChild<QLabel *>("startupVersion");
+    QLabel *build = sw.findChild<QLabel *>("startupBuild");
+    QVERIFY(release != nullptr && build != nullptr);
+    QCOMPARE(release->text(), QString(APPNAME " " QLCCONSOLE_VERSION));
+    QVERIFY2(build->text().contains(APPVERSION), qPrintable(build->text()));
+    QVERIFY2(build->text().contains(QLCCONSOLE_GITREV), qPrintable(build->text()));
+    QVERIFY(build->font().pointSizeF() < release->font().pointSizeF());
+
+    sw.show();
+    sw.beginStep("Loading fixtures");
+    QVERIFY(release->isVisible() && build->isVisible());
+    // Room for the whole line, not elided or clipped.
+    QVERIFY(release->width() >= release->sizeHint().width());
+    QVERIFY(build->width() >= build->sizeHint().width());
+
+    const QString shot = qEnvironmentVariable("STARTUP_WINDOW_SHOT");
+    if (!shot.isEmpty())
+        QVERIFY(sw.grab().save(shot));
 }
 
 QTEST_MAIN(AboutBox_Test)

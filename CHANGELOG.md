@@ -12,6 +12,21 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+### Changed
+- **The boot window shows the version.** The window shown while qlcconsole
+  starts names the release ("qlcconsole 0.2.2") and, smaller below it, the
+  build and the commit it was built from, as `--version` and the About box
+  give them.
+
+### Fixed
+- **No "declares no light output" warning for a curtain.** Opening a show
+  with a Generic Stage Curtain listed it in the footer's Not ready list as
+  a fixture type that declares no light output. Only a light is asked for
+  one now: a fixture whose definition says it gives no light (Emission
+  None: a curtain, a motor) and a fan, hazer or smoke machine with no
+  intensity channel are left out, in the footer and in the fixture
+  editor's check alike. A light with no output declared is still listed.
+
 ## [0.2.1] - 2026-10-21
 
 A point release of the Show Tree beta: one top bar, auto-open shutters,

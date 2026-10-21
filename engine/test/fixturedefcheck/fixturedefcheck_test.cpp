@@ -396,4 +396,42 @@ void FixtureDefCheck_Test::theWledLanternLoadsAsALantern()
     QVERIFY(!hasIssue(issues, Issue::Warning, "No light output"));
 }
 
+/* Only a light is asked for its light output: the stage curtain (it says
+   Emission="None") and a hazer with no intensity channel are not; a hazer
+   with LEDs on it, and a light, still are. */
+void FixtureDefCheck_Test::onlyALightIsAskedForLightOutput()
+{
+    const QByteArray curtainXml = readFile(QString("%1/Generic/Generic-Stage-Curtain.qxf").arg(INTERNAL_FIXTUREDIR));
+    QVERIFY(!curtainXml.isEmpty());
+    QLCFixtureDef curtain;
+    QVERIFY(curtain.loadXMLData(curtainXml));
+    QVERIFY(!curtain.modes().isEmpty());
+    foreach (QLCFixtureMode *mode, curtain.modes())
+        QVERIFY2(!expectsLight(mode), qPrintable(mode->name()));
+    QList<Issue> issues = check(&curtain);
+    QVERIFY(!hasIssue(issues, Issue::Warning, "No light output"));
+    QVERIFY(!hasIssue(issues, Issue::Warning, "No beam angle"));
+
+    QByteArray hazerXml = goodXml;
+    hazerXml.replace("<Type>Color Changer</Type>", "<Type>Hazer</Type>");
+    hazerXml.replace("<Channel Name=\"Dimmer\" Preset=\"IntensityDimmer\"/>",
+                     "<Channel Name=\"Dimmer\"><Group Byte=\"0\">Effect</Group></Channel>");
+    QLCFixtureDef hazer;
+    QVERIFY(hazer.loadXMLData(hazerXml));
+    QVERIFY(!expectsLight(hazer.modes().first()));
+    QVERIFY(!hasIssue(check(&hazer), Issue::Warning, "No light output"));
+
+    QByteArray ledHazerXml = goodXml;
+    ledHazerXml.replace("<Type>Color Changer</Type>", "<Type>Hazer</Type>");
+    QLCFixtureDef ledHazer;
+    QVERIFY(ledHazer.loadXMLData(ledHazerXml));
+    QVERIFY(expectsLight(ledHazer.modes().first()));
+    QVERIFY(hasIssue(check(&ledHazer), Issue::Warning, "No light output"));
+
+    QLCFixtureDef light;
+    QVERIFY(light.loadXMLData(goodXml));
+    QVERIFY(expectsLight(light.modes().first()));
+    QVERIFY(hasIssue(check(&light), Issue::Warning, "No light output"));
+}
+
 QTEST_APPLESS_MAIN(FixtureDefCheck_Test)

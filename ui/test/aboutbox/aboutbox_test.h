@@ -31,6 +31,7 @@ private slots:
     void slotTimeout();
     void itemClick();
     void applicationIdentity();
+    void startupWindowShowsTheVersion();
 };
 
 #endif

@@ -903,8 +903,8 @@ QList<Issue> FixtureDefCheck::check(const QLCFixtureDef *def)
 
         if (phys.width() <= 0 || phys.height() <= 0 || phys.depth() <= 0)
             physicalGaps[QStringLiteral("No size (width, height, depth): the rig view draws it at a guess.")] << mode->name();
-        if (!phys.emitsLight())
-            continue;                   // a curtain: nothing about light applies
+        if (!expectsLight(mode))
+            continue;                   // a curtain, a hazer: nothing about light applies
         if (!phys.declaresOutput())
             physicalGaps[QStringLiteral("No light output (lumens or power): the rig view draws its light at a guess.")] << mode->name();
         if (phys.lensDegreesMax() <= 0.0 && phys.emission() != QLCPhysical::OmniEmission)
@@ -918,6 +918,30 @@ QList<Issue> FixtureDefCheck::check(const QLCFixtureDef *def)
             it.key());
 
     return errors + warnings;
+}
+
+bool FixtureDefCheck::expectsLight(const QLCFixtureMode *mode)
+{
+    if (mode == nullptr)
+        return true;
+    if (!mode->physical().emitsLight())
+        return false;
+    const QLCFixtureDef *def = mode->fixtureDef();
+    if (def == nullptr)
+        return true;
+    switch (def->type())
+    {
+        case QLCFixtureDef::Fan:
+        case QLCFixtureDef::Hazer:
+        case QLCFixtureDef::Smoke:
+            // An effects machine with LEDs on it is still a light.
+            foreach (QLCChannel *ch, mode->channels())
+                if (ch != nullptr && ch->group() == QLCChannel::Intensity)
+                    return true;
+            return false;
+        default:
+            return true;
+    }
 }
 
 QByteArray FixtureDefCheck::autoRepair(const QByteArray &xml, QStringList *applied)

@@ -2,6 +2,16 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
+## 0.2.2 (next update)
+
+- **The version on the boot window.** While qlcconsole starts, its window
+  shows the release — "qlcconsole 0.2.2" — and below it the build and
+  commit, so you can tell which version is starting.
+- **No false warning for a curtain.** A show with a stage curtain no longer
+  lists it under "fixture types declare no light output": a curtain is not
+  a light. Hazers, smoke machines and fans with no light of their own are
+  left out too; a real light with no output set is still listed.
+
 ## 0.2.1 (October 2026)
 
 ### Focus mode: the controller on screen

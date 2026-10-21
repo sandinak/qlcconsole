@@ -1572,6 +1572,52 @@ void ProgrammingManager_Test::unpatchedAndSilentFixturesAreInTheFooter()
     QVERIFY(entry("fixtures.output").key.isEmpty());
 }
 
+/* "getting an error on boot about generic curtain has no light output ..
+   that's true and should be true": a show that loads a curtain (its
+   definition says Emission="None") lists no light output missing for it,
+   while a light that declares none -- a generic dimmer -- still does. */
+void ProgrammingManager_Test::aCurtainIsNotAskedForLightOutput()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    QVERIFY(m_doc->fixtureDefCache()->load(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/Generic")));
+    QVERIFY(m_doc->fixtureDefCache()->fixtureDef("Generic", "Stage Curtain") != nullptr);
+    const QByteArray show =
+        "<Engine>"
+        " <Fixture><Manufacturer>Generic</Manufacturer><Model>Stage Curtain</Model>"
+        "  <Mode>Open + Fly</Mode><ID>182</ID><Name>Main drape 2 curtain</Name>"
+        "  <Universe>0</Universe><Address>0</Address><Channels>2</Channels></Fixture>"
+        "</Engine>";
+    {
+        QXmlStreamReader r(show);
+        r.readNextStartElement();
+        QVERIFY(m_doc->loadXML(r, false));
+    }
+    Fixture *curtain = m_doc->fixture(182);
+    QVERIFY(curtain != nullptr && curtain->fixtureMode() != nullptr);
+    QVERIFY(!curtain->fixtureMode()->physical().declaresOutput());
+
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY2(entry("fixtures.output").key.isEmpty(), qPrintable(entry("fixtures.output").items.join("; ")));
+
+    // A light with no output declared is still listed -- and only it.
+    Fixture *dimmer = new Fixture(m_doc);
+    dimmer->setName("Dimmer 1");
+    dimmer->setChannels(1);
+    dimmer->setAddress(10);
+    QVERIFY(m_doc->addFixture(dimmer));
+    AppUtil::updateFixtureReadiness(m_doc);
+    const ShowStatus::Entry silent = entry("fixtures.output");
+    QVERIFY2(silent.summary.contains("1 fixture type"), qPrintable(silent.summary));
+    QCOMPARE(silent.items.size(), 1);
+    QVERIFY2(!silent.items.first().contains("Curtain"), qPrintable(silent.items.first()));
+}
+
 /* The footer's detail dialog fixes problems in place: select rows -- a
    shift-click range, or an entry's own row for all of it -- and its action
    runs on exactly those; a problem nothing can fix is not selectable, a
