@@ -19,19 +19,18 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
-#include <QDialogButtonBox>
-#include <QFormLayout>
 #include <QVBoxLayout>
-#include <QComboBox>
-#include <QLineEdit>
-#include <QDialog>
 #include <QDebug>
 
+#include "vccuerunnerproperties.h"
 #include "showtreecontroller.h"
+#include "qlcinputsource.h"
 #include "vccuerunner.h"
 #include "doc.h"
 
 using namespace ShowTree;
+
+#define HYSTERESIS 3 // as a VC Cue List's: a fader must fall to 0 between hits
 
 VCCueRunner::VCCueRunner(QWidget *parent, Doc *doc)
     : VCWidget(parent, doc)
@@ -43,8 +42,17 @@ VCCueRunner::VCCueRunner(QWidget *parent, Doc *doc)
     QVBoxLayout *v = new QVBoxLayout(this);
     v->setContentsMargins(2, 2, 2, 2);
     v->addWidget(m_runner);
-    resize(QSize(300, 140));
+    for (int a = 0; a < ActionCount; ++a)
+    {
+        m_latestValue[a] = 0;
+        m_lastFeedback[a] = -1;
+    }
+    resize(QSize(300, 160));
     connect(m_runner, &CueRunner::followChanged, this, [this]() { m_doc->setModified(); });
+    connect(m_runner, &CueRunner::layoutEdited, this, [this]() { m_doc->setModified(); });
+    connect(m_runner, &CueRunner::statesChanged, this, [this]() { sendActionFeedback(false); });
+    syncMinimumSize();
+    slotModeChanged(m_doc->mode());
 }
 
 VCCueRunner::~VCCueRunner()
@@ -78,6 +86,177 @@ void VCCueRunner::setRunnerSize(CueRunner::Size size)
     if (size == CueRunner::Full)
         size = CueRunner::List;             // full is the Run tab's
     m_runner->setRunnerSize(size);
+    syncMinimumSize();
+    enableWidgetUI(mode() == Doc::Operate && !isDisabled());
+}
+
+void VCCueRunner::syncMinimumSize()
+{
+    const QMargins m = layout()->contentsMargins();
+    setMinimumSize(m_runner->minimumSize() + QSize(m.left() + m.right(), m.top() + m.bottom()));
+}
+
+/*********************************************************************
+ * Actions: external input, keys, feedback
+ *********************************************************************/
+
+QString VCCueRunner::actionName(Action action)
+{
+    switch (action)
+    {
+        case Go: return tr("GO");
+        case SubGo: return tr("Sub GO");
+        case Back: return tr("Back");
+        case SubBack: return tr("Sub Back");
+        case Pause: return tr("Pause / Resume");
+        case Stop: return tr("Stop");
+        case LoadNext: return tr("Load next");
+        case LoadPrevious: return tr("Load previous");
+        default: return QString();
+    }
+}
+
+QString VCCueRunner::actionTag(Action action)
+{
+    switch (action)
+    {
+        case Go: return QStringLiteral("Go");
+        case SubGo: return QStringLiteral("SubGo");
+        case Back: return QStringLiteral("Back");
+        case SubBack: return QStringLiteral("SubBack");
+        case Pause: return QStringLiteral("Pause");
+        case Stop: return QStringLiteral("Stop");
+        case LoadNext: return QStringLiteral("LoadNext");
+        case LoadPrevious: return QStringLiteral("LoadPrevious");
+        default: return QString();
+    }
+}
+
+QKeySequence VCCueRunner::keySequence(Action action) const
+{
+    return action >= 0 && action < ActionCount ? m_keys[action] : QKeySequence();
+}
+
+void VCCueRunner::setKeySequence(Action action, const QKeySequence &keySequence)
+{
+    if (action >= 0 && action < ActionCount)
+        m_keys[action] = keySequence.isEmpty() ? QKeySequence() : stripKeySequence(keySequence);
+}
+
+void VCCueRunner::trigger(Action action)
+{
+    switch (action)
+    {
+        case Go: m_runner->go(); break;
+        case SubGo: m_runner->subGo(); break;
+        case Back: m_runner->back(); break;
+        case SubBack: m_runner->subBack(); break;
+        case Pause: m_runner->pauseResume(); break;
+        case Stop: m_runner->stop(); break;
+        case LoadNext: m_runner->loadNext(); break;
+        case LoadPrevious: m_runner->loadPrevious(); break;
+        default: break;
+    }
+}
+
+bool VCCueRunner::feedbackOn(Action action) const
+{
+    switch (action)
+    {
+        case Go: return m_runner->canGo();
+        case SubGo: return m_runner->canSubGo();
+        case Back: return m_runner->canBack();
+        case SubBack: return m_runner->canSubBack();
+        case Pause: return m_runner->isPaused();
+        case Stop: return m_runner->canStop();
+        case LoadNext: return m_runner->canLoadNext();
+        case LoadPrevious: return m_runner->canLoadPrevious();
+        default: return false;
+    }
+}
+
+void VCCueRunner::updateFeedback()
+{
+    sendActionFeedback(true);
+}
+
+void VCCueRunner::sendActionFeedback(bool force)
+{
+    if (acceptsInput() == false)
+        return;
+    for (int a = 0; a < ActionCount; ++a)
+    {
+        QSharedPointer<QLCInputSource> src = inputSource(quint8(a));
+        if (src.isNull() || !src->isValid())
+            continue;
+        const QLCInputFeedback::FeedbackType type = feedbackOn(Action(a)) ? QLCInputFeedback::UpperValue
+                                                                          : QLCInputFeedback::LowerValue;
+        const int value = src->feedbackValue(type);
+        if (!force && value == m_lastFeedback[a])
+            continue;
+        m_lastFeedback[a] = value;
+        sendFeedback(value, src, src->feedbackExtraParams(type));
+    }
+}
+
+void VCCueRunner::slotKeyPressed(const QKeySequence &keySequence)
+{
+    if (acceptsInput() == false || keySequence.isEmpty())
+        return;
+    for (int a = 0; a < ActionCount; ++a)
+    {
+        if (m_keys[a] == keySequence)
+        {
+            trigger(Action(a));
+            return;
+        }
+    }
+}
+
+void VCCueRunner::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
+{
+    /* Don't let input data through in design mode or if disabled */
+    if (acceptsInput() == false)
+        return;
+
+    const quint32 pagedCh = (page() << 16) | channel;
+    for (int a = 0; a < ActionCount; ++a)
+    {
+        if (!checkInputSource(universe, pagedCh, value, sender(), quint8(a)))
+            continue;
+        // A press fires once: from a fader, the value has to fall back to
+        // zero before the next non-zero value counts (as a VC Cue List).
+        uchar &latest = m_latestValue[a];
+        if (latest == 0 && value > 0)
+        {
+            trigger(Action(a));
+            latest = value;
+        }
+        else if (latest > HYSTERESIS && value == 0)
+        {
+            latest = 0;
+        }
+        if (value > HYSTERESIS)
+            latest = value;
+        return;
+    }
+}
+
+void VCCueRunner::enableWidgetUI(bool enable)
+{
+    // Operate: the buttons and the list are live, the handles locked.
+    // Design (and live edit): the mouse moves and sizes the widget, the
+    // handles size the info and the buttons.
+    m_runner->setControlsInteractive(enable);
+    m_runner->setHandlesLocked(mode() != Doc::Design);
+}
+
+void VCCueRunner::slotModeChanged(Doc::Mode mode)
+{
+    enableWidgetUI(mode == Doc::Operate && !isDisabled());
+    VCWidget::slotModeChanged(mode);
+    if (mode == Doc::Operate)
+        updateFeedback();
 }
 
 /*********************************************************************
@@ -103,6 +282,15 @@ bool VCCueRunner::copyFrom(const VCWidget *widget)
         return false;
     setRunnerSize(r->runnerSize());
     setFollow(r->follow());
+    CueRunner *from = r->runner();
+    m_runner->setUpcomingCount(from->upcomingCount());
+    m_runner->setShowTimecode(from->showTimecode());
+    m_runner->setShowSecondary(from->showSecondary());
+    m_runner->setShowSubGo(from->showSubGo());
+    m_runner->setButtonHeight(from->buttonHeight());
+    m_runner->setGoShare(from->goShare());
+    for (int a = 0; a < ActionCount; ++a)
+        m_keys[a] = r->m_keys[a];
     return VCWidget::copyFrom(widget);
 }
 
@@ -112,37 +300,9 @@ bool VCCueRunner::copyFrom(const VCWidget *widget)
 
 void VCCueRunner::editProperties()
 {
-    QDialog d(this);
-    d.setObjectName(QStringLiteral("cueRunnerProperties"));
-    d.setWindowTitle(tr("Cue Runner properties"));
-    QFormLayout *f = new QFormLayout(&d);
-    QLineEdit *caption = new QLineEdit(this->caption(), &d);
-    f->addRow(tr("Caption"), caption);
-    QComboBox *follow = new QComboBox(&d);
-    follow->setObjectName(QStringLiteral("crPropFollow"));
-    ShowTreeController *st = m_doc->showTree();
-    follow->addItem(tr("The current production"), invalidId());
-    for (const Production &p : st->productions())
-        for (quint32 lid : st->playableLists(p.id))
-            follow->addItem(QStringLiteral("%1 · %2").arg(p.name, st->cueList(lid)->name), lid);
-    follow->setCurrentIndex(qMax(0, follow->findData(this->follow())));
-    f->addRow(tr("Plays"), follow);
-    QComboBox *size = new QComboBox(&d);
-    size->setObjectName(QStringLiteral("crPropSize"));
-    size->addItem(tr("Compact: on now, next, GO and Sub GO"), int(CueRunner::Compact));
-    size->addItem(tr("List: the whole runner"), int(CueRunner::List));
-    size->setCurrentIndex(runnerSize() == CueRunner::List ? 1 : 0);
-    f->addRow(tr("Size"), size);
-    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &d);
-    connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
-    connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
-    f->addRow(bb);
-    if (d.exec() != QDialog::Accepted)
-        return;
-    setCaption(caption->text());
-    setRunnerSize(CueRunner::Size(size->currentData().toInt()));
-    setFollow(follow->currentData().toUInt());
-    m_doc->setModified();
+    VCCueRunnerProperties prop(this, m_doc);
+    if (prop.exec() == QDialog::Accepted)
+        m_doc->setModified();
 }
 
 /*********************************************************************
@@ -162,6 +322,18 @@ bool VCCueRunner::loadXML(QXmlStreamReader &root)
     bool ok = false;
     const quint32 lid = attrs.value(KXMLQLCVCCueRunnerFollow).toString().toUInt(&ok);
     setFollow(ok ? lid : invalidId());
+    auto number = [&attrs](const QString &name, int fallback) {
+        bool isNumber = false;
+        const int n = attrs.value(name).toString().toInt(&isNumber);
+        return isNumber ? n : fallback;
+    };
+    // Older workspaces have none of these: the defaults.
+    m_runner->setUpcomingCount(number(KXMLQLCVCCueRunnerUpcoming, 2));
+    m_runner->setShowTimecode(number(KXMLQLCVCCueRunnerTimecode, 1) != 0);
+    m_runner->setShowSecondary(number(KXMLQLCVCCueRunnerSecondary, 1) != 0);
+    m_runner->setShowSubGo(number(KXMLQLCVCCueRunnerSubGo, 1) != 0);
+    m_runner->setButtonHeight(number(KXMLQLCVCCueRunnerButtonHeight, 64));
+    m_runner->setGoShare(number(KXMLQLCVCCueRunnerGoShare, 70));
 
     while (root.readNextStartElement())
     {
@@ -178,7 +350,17 @@ bool VCCueRunner::loadXML(QXmlStreamReader &root)
         }
         else
         {
-            root.skipCurrentElement();
+            bool known = false;
+            for (int a = 0; a < ActionCount && !known; ++a)
+            {
+                if (root.name() != actionTag(Action(a)))
+                    continue;
+                known = true;
+                const QString key = loadXMLSources(root, quint8(a));
+                setKeySequence(Action(a), key.isEmpty() ? QKeySequence() : QKeySequence(key));
+            }
+            if (!known)
+                root.skipCurrentElement();
         }
     }
     return true;
@@ -191,9 +373,30 @@ bool VCCueRunner::saveXML(QXmlStreamWriter *doc)
     if (follow() != invalidId())
         doc->writeAttribute(KXMLQLCVCCueRunnerFollow, QString::number(follow()));
     doc->writeAttribute(KXMLQLCVCCueRunnerSize, CueRunner::sizeToString(runnerSize()));
+    doc->writeAttribute(KXMLQLCVCCueRunnerUpcoming, QString::number(m_runner->upcomingCount()));
+    doc->writeAttribute(KXMLQLCVCCueRunnerTimecode, m_runner->showTimecode() ? "1" : "0");
+    doc->writeAttribute(KXMLQLCVCCueRunnerSecondary, m_runner->showSecondary() ? "1" : "0");
+    doc->writeAttribute(KXMLQLCVCCueRunnerSubGo, m_runner->showSubGo() ? "1" : "0");
+    doc->writeAttribute(KXMLQLCVCCueRunnerButtonHeight, QString::number(m_runner->buttonHeight()));
+    doc->writeAttribute(KXMLQLCVCCueRunnerGoShare, QString::number(m_runner->goShare()));
     saveXMLCommon(doc);
     saveXMLWindowState(doc);
     saveXMLAppearance(doc);
+
+    /* Each action's key and input, as a VC Cue List's */
+    for (int a = 0; a < ActionCount; ++a)
+    {
+        QSharedPointer<QLCInputSource> src = inputSource(quint8(a));
+        const bool hasInput = !src.isNull() && src->isValid();
+        if (m_keys[a].isEmpty() && !hasInput)
+            continue;
+        doc->writeStartElement(actionTag(Action(a)));
+        if (!m_keys[a].isEmpty())
+            doc->writeTextElement(KXMLQLCVCWidgetKey, m_keys[a].toString());
+        if (hasInput)
+            saveXMLInput(doc, src);
+        doc->writeEndElement();
+    }
     doc->writeEndElement();
     return true;
 }

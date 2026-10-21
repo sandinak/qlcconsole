@@ -25,6 +25,8 @@
 #include "showcontrol.h"
 
 class QTreeWidgetItem;
+class CueRunnerHandle;
+class QProgressBar;
 class QTreeWidget;
 class QToolButton;
 class QComboBox;
@@ -51,6 +53,12 @@ class Doc;
  * sub-cue: its cue first). GO plays the loaded cue, else the next; into a
  * cue with sub-cues it plays the first and holds; Sub GO the next sub-cue;
  * Back the previous main cue; Sub Back the previous sub-cue.
+ *
+ * The VC sizes (compact, list) are an info area over a button area: the
+ * info takes what the widget grows by (a larger cue name, more upcoming
+ * cues), the buttons keep the height set for them. Two handles size them
+ * -- between the info and the buttons, and between GO and Sub GO -- while
+ * unlocked (the VC widget unlocks them in Design mode only).
  */
 class CueRunner final : public QWidget
 {
@@ -93,6 +101,65 @@ public:
     static QString sizeToString(Size size);
     static Size stringToSize(const QString &str);
 
+    /*********************************************************************
+     * The VC sizes' layout (compact, list; the Run tab ignores these)
+     *********************************************************************/
+    /** How many cues after NEXT the compact runner lists, room allowing
+     *  (0..kMaxUpcoming). */
+    int upcomingCount() const { return m_upcomingCount; }
+    void setUpcomingCount(int count);
+    /** The timecode chip (shown only while there is a source). */
+    bool showTimecode() const { return m_showTimecode; }
+    void setShowTimecode(bool show);
+    /** The small secondary buttons: Back and Stop (list: Sub Back and
+     *  Pause too). */
+    bool showSecondary() const { return m_showSecondary; }
+    void setShowSecondary(bool show);
+    bool showSubGo() const { return m_showSubGo; }
+    void setShowSubGo(bool show);
+    /** The button area's height in pixels (it shrinks below this only
+     *  when the widget is too small for it and the info). */
+    int buttonHeight() const { return m_buttonHeight; }
+    void setButtonHeight(int px);
+    /** GO's share of the GO | Sub GO row, in percent. */
+    int goShare() const { return m_goShare; }
+    void setGoShare(int percent);
+    /** Locked: the handles are hidden and do nothing. */
+    bool handlesLocked() const { return m_handlesLocked; }
+    void setHandlesLocked(bool locked);
+    /** Not interactive: the buttons and the list let the mouse through
+     *  (to the VC widget under them, in Design mode). */
+    void setControlsInteractive(bool interactive);
+    bool controlsInteractive() const { return m_interactive; }
+
+    /** The parts, for the VC widget and the tests (null in the Run tab). */
+    QWidget *infoArea() const { return m_info; }
+    QWidget *buttonArea() const { return m_buttons; }
+    QWidget *infoHandle() const;
+    QWidget *goHandle() const;
+    QToolButton *goButton() const { return m_go; }
+    QToolButton *subGoButton() const { return m_subGo; }
+    /** The upcoming lines shown now. */
+    QStringList upcomingTexts() const;
+
+    static const int kMaxUpcoming = 5;
+    static const int kMinButtonHeight = 32;
+    static const int kMaxButtonHeight = 240;
+    static const int kMinGoShare = 40;
+    static const int kMaxGoShare = 90;
+
+    /*********************************************************************
+     * What each action can do now (the VC widget's feedback)
+     *********************************************************************/
+    bool canGo() const { return m_flags & FlagGo; }
+    bool canSubGo() const { return m_flags & FlagSubGo; }
+    bool canBack() const { return m_flags & FlagBack; }
+    bool canSubBack() const { return m_flags & FlagSubBack; }
+    bool isPaused() const { return m_flags & FlagPaused; }
+    bool canStop() const { return m_flags & FlagStop; }
+    bool canLoadNext() const { return m_flags & FlagLoadNext; }
+    bool canLoadPrevious() const { return m_flags & FlagLoadPrevious; }
+
 public slots:
     void go();
     void back();
@@ -100,6 +167,9 @@ public slots:
     void subBack();
     void pauseResume();
     void stop();
+    /** LOAD the main cue after (before) the one on standby. */
+    void loadNext();
+    void loadPrevious();
     /** Click: LOAD the cue (or sub-cue) numbered @a cue. */
     void load(const QString &cue);
     /** Double-click: jump to it now. */
@@ -110,14 +180,38 @@ public slots:
 signals:
     /** It follows another list (the VC widget saves it). */
     void followChanged();
+    /** A handle was dragged (the VC widget saves the new sizes). */
+    void layoutEdited();
+    /** What the actions can do changed (canGo() ...). */
+    void statesChanged();
 
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
+    void resizeEvent(QResizeEvent *ev) override;
 
 private:
+    enum Flag
+    {
+        FlagGo = 1 << 0, FlagSubGo = 1 << 1, FlagBack = 1 << 2, FlagSubBack = 1 << 3,
+        FlagPaused = 1 << 4, FlagStop = 1 << 5, FlagLoadNext = 1 << 6, FlagLoadPrevious = 1 << 7
+    };
+
     bool execute(ShowControl::Command command, const QString &cue = QString());
     void buildLayout();
+    void buildFullLayout();
+    QToolButton *makeButton(const QString &text, const QString &tip, const char *name);
+    void makeButtons();
+    void makeFollowBox();
+    void makeTree();
+    void buildPanelLayout();
+    /** Sizes the button area, the GO row and the info's fonts and lines to
+     *  the room there is (VC sizes). */
+    void layoutPanel();
+    void applyVisibility();
+    void applyInteractive();
+    /** The cue number LOAD takes for main cue @a step. */
+    QString stepCue(int step) const;
     void rebuildTree();
     void updateStates();
     void fillFollowBox();
@@ -147,6 +241,27 @@ private:
     QToolButton *m_back = nullptr;
     QToolButton *m_pause = nullptr;
     QToolButton *m_stop = nullptr;
+
+    // The VC sizes.
+    QWidget *m_info = nullptr;
+    QWidget *m_buttons = nullptr;
+    QWidget *m_secondary = nullptr;
+    QProgressBar *m_fade = nullptr;
+    CueRunnerHandle *m_infoHandle = nullptr;
+    CueRunnerHandle *m_goHandle = nullptr;
+    QList<QLabel *> m_upcoming;
+    QStringList m_upcomingTexts;
+    int m_upcomingCount = 2;
+    bool m_showTimecode = true;
+    bool m_showSecondary = true;
+    bool m_showSubGo = true;
+    int m_buttonHeight = 64;
+    int m_goShare = 70;
+    bool m_handlesLocked = false;
+    bool m_interactive = true;
+    int m_flags = 0;
+    /** A handle's drag: the height or share it started from. */
+    int m_dragFrom = 0;
 };
 
 /** @} */

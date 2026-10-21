@@ -39,6 +39,21 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   XL-450s through the host (`matrixEffectsKeepTimeOnEightBoxes`, 12 ms
   budget a tick, `QLC_MATRIX_BUDGET_MS`); `QLC_MATRIX_PREVIEW_DIR` writes
   frames of each new effect for a look.
+- **Cue Runner VC widget: external input and a calmer layout.** Its
+  properties gain an **External Input** tab (as the VC Cue List's): GO,
+  Sub GO, Back, Sub Back, Pause / Resume, Stop, Load next and Load
+  previous each take an input source (auto-detect, profiles, custom
+  feedback) and a key, saved with the workspace, acting in Operate only.
+  Feedback lights each mapped control while its action can do something
+  (GO: a cue to GO to; Sub GO: a sub-cue waiting; Pause: paused). The
+  widget is now an info area over a button area: the info takes the room
+  as it grows (a larger cue name, NEXT on up to three lines, the next cues
+  listed), the buttons keep their height, small chips for LIVE / DESIGN
+  and the timecode, Back and Stop as small buttons, and a minimum size.
+  In Design mode two handles inside it set the buttons' height and the
+  GO / Sub GO split (saved; hidden and locked in Operate). The properties
+  choose the number of upcoming cues and whether to show the timecode,
+  Sub GO and Back / Stop.
 - **Definition updates.** Fixtures → **Definition Updates…** lists the
   user folder's fixture definitions that are older than the current version
   of the same Manufacturer/Model (the shipped one, or a newer user copy,

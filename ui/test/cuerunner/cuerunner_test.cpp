@@ -22,7 +22,13 @@
 #include <QTreeWidget>
 #include <QToolButton>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QSpinBox>
+#include <QLineEdit>
+#include <QTabWidget>
 #include <QBuffer>
+#include <QFile>
+#include <QDir>
 #include <QtTest>
 
 #define private public
@@ -38,6 +44,9 @@
 #include "virtualconsole.h"
 #include "fixturegroup.h"
 #include "showcontrol.h"
+#include "vccuerunnerproperties.h"
+#include "inputselectionwidget.h"
+#include "qlcinputsource.h"
 #include "vccuerunner.h"
 #include "cuerunner.h"
 #include "qlcpalette.h"
@@ -66,6 +75,39 @@ QTreeWidgetItem *rowFor(QTreeWidget *tree, const QString &cue)
         if ((*it)->text(1) == cue)
             return *it;
     return nullptr;
+}
+
+QByteArray saved(VCWidget *w)
+{
+    QByteArray xml;
+    QBuffer buf(&xml);
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter wr(&buf);
+    w->saveXML(&wr);
+    return xml;
+}
+
+bool loadInto(VCWidget *w, QByteArray xml)
+{
+    QBuffer in(&xml);
+    in.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&in);
+    r.readNextStartElement();
+    return w->loadXML(r);
+}
+
+/* A drag of @a by on @a handle, as the mouse does it. */
+void drag(QWidget *handle, const QPoint &by)
+{
+    const QPoint at = handle->rect().center();
+    const QPoint g = handle->mapToGlobal(at);
+    QMouseEvent press(QEvent::MouseButtonPress, at, g, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(handle, &press);
+    QMouseEvent move(QEvent::MouseMove, at + by, g + by, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(handle, &move);
+    QMouseEvent release(QEvent::MouseButtonRelease, at + by, g + by, Qt::LeftButton, Qt::NoButton,
+                        Qt::NoModifier);
+    QApplication::sendEvent(handle, &release);
 }
 
 struct ScopedVc
@@ -185,10 +227,16 @@ void CueRunner_Test::theRunnerShowsTheListAndItsSubCues()
     QVERIFY(m_doc->showTree()->setSubCueFollow(ids[5], true, 500));
     runner.refresh();
     QCOMPARE(tree->topLevelItem(1)->child(1)->text(3), QString("auto 0.5s"));
-    // The compact one: no list, GO and Sub GO only.
+    // The compact one: no list; GO and Sub GO, Back and Stop small under
+    // them (Sub Back and Pause: the list size's).
     CueRunner compact(m_doc, CueRunner::Compact);
     QVERIFY(compact.cueTree() == nullptr);
     QVERIFY(compact.findChild<QToolButton *>("crGo")->isVisibleTo(&compact));
+    QVERIFY(compact.findChild<QToolButton *>("crBack")->isVisibleTo(&compact));
+    QVERIFY(compact.findChild<QToolButton *>("crStop")->isVisibleTo(&compact));
+    QVERIFY(!compact.findChild<QToolButton *>("crSubBack")->isVisibleTo(&compact));
+    QVERIFY(!compact.findChild<QToolButton *>("crPause")->isVisibleTo(&compact));
+    compact.setShowSecondary(false);
     QVERIFY(!compact.findChild<QToolButton *>("crBack")->isVisibleTo(&compact));
 }
 
@@ -501,6 +549,404 @@ void CueRunner_Test::swapWidgetOnAPage()
     pl->setChaser(plain->id());
     QVERIFY(console->swapWidget(pl) == nullptr);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+}
+
+/* Every action fires from a mapped input source and from its key -- in
+   Operate only, as any VC widget's. */
+void CueRunner_Test::vcActionsFromInputsAndKeys()
+{
+    show();
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCCueRunner *w = new VCCueRunner(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(w, contents);
+    using A = VCCueRunner;
+    for (int a = 0; a < A::ActionCount; ++a)
+    {
+        w->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, quint32(10 + a))), quint8(a));
+        w->setKeySequence(A::Action(a), QKeySequence(QString("Shift+F%1").arg(a + 1)));
+    }
+    InputOutputMap *io = m_doc->inputOutputMap();
+    auto press = [&](A::Action a) {
+        emit io->inputValueChanged(0, quint32(10 + a), 255);
+        emit io->inputValueChanged(0, quint32(10 + a), 0);
+        settle();
+        w->runner()->refresh();
+    };
+    auto key = [&](A::Action a) {
+        emit VirtualConsole::instance()->keyPressed(w->keySequence(a));
+        settle();
+        w->runner()->refresh();
+    };
+    Chaser *ch = w->runner()->chaser();
+    ShowControl *sc = m_doc->showControl();
+
+    // Design mode: nothing fires.
+    press(A::Go);
+    key(A::Go);
+    QVERIFY(!ch->isRunning());
+
+    m_doc->setMode(Doc::Operate);
+    press(A::Go);
+    QVERIFY(ch->isRunning());
+    QCOMPARE(ch->currentStepIndex(), 0);
+    key(A::Go);
+    QCOMPARE(ch->currentStepIndex(), 1);
+    QCOMPARE(ch->currentSubCueIndex(), 0);
+    press(A::SubGo);
+    QCOMPARE(ch->currentSubCueIndex(), 1);
+    key(A::SubBack);
+    QCOMPARE(ch->currentSubCueIndex(), 0);
+    key(A::SubGo);
+    QCOMPARE(ch->currentSubCueIndex(), 1);
+    press(A::SubBack);
+    QCOMPARE(ch->currentSubCueIndex(), 0);
+    key(A::Pause);
+    QVERIFY(ch->isPaused());
+    press(A::Pause);
+    QVERIFY(!ch->isPaused());
+    press(A::Back);
+    QCOMPARE(ch->currentStepIndex(), 0);
+    key(A::Go);
+    QCOMPARE(ch->currentStepIndex(), 1);
+    key(A::Back);
+    QCOMPARE(ch->currentStepIndex(), 0);
+
+    // LOAD next / previous move the standby, main cues only.
+    key(A::LoadNext);
+    QCOMPARE(sc->loadedStep(ch->id()), 2);
+    press(A::LoadPrevious);
+    QCOMPARE(sc->loadedStep(ch->id()), 1);
+    key(A::LoadPrevious);
+    QCOMPARE(sc->loadedStep(ch->id()), 0);
+    press(A::LoadNext);
+    QCOMPARE(sc->loadedStep(ch->id()), 1);
+
+    key(A::Stop);
+    QVERIFY(!ch->isRunning());
+    press(A::Go);
+    QVERIFY(ch->isRunning());
+    press(A::Stop);
+    QVERIFY(!ch->isRunning());
+
+    // A fader held up fires once, not on every value.
+    emit io->inputValueChanged(0, 10, 200);
+    emit io->inputValueChanged(0, 10, 220);
+    settle();
+    QCOMPARE(ch->currentStepIndex(), 0);
+    emit io->inputValueChanged(0, 10, 0);
+    m_doc->setMode(Doc::Design);
+}
+
+/* Feedback: a mapped control is lit while its action can do something,
+   and follows the cue as it changes. */
+void CueRunner_Test::vcFeedbackFollowsTheCue()
+{
+    show();
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCCueRunner *w = new VCCueRunner(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(w, contents);
+    using A = VCCueRunner;
+    for (A::Action a : { A::Go, A::SubGo, A::Pause, A::Stop, A::LoadNext })
+    {
+        QSharedPointer<QLCInputSource> src(new QLCInputSource(0, quint32(20 + a)));
+        src->setFeedbackValue(QLCInputFeedback::UpperValue, 200);
+        src->setFeedbackValue(QLCInputFeedback::LowerValue, 5);
+        w->setInputSource(src, quint8(a));
+    }
+    // Design: nothing is sent.
+    w->updateFeedback();
+    QCOMPARE(w->lastFeedback(A::Go), -1);
+
+    m_doc->setMode(Doc::Operate);
+    QCOMPARE(w->lastFeedback(A::Go), 200);          // cue 1 to GO to
+    QCOMPARE(w->lastFeedback(A::SubGo), 5);
+    QCOMPARE(w->lastFeedback(A::Stop), 5);
+    QCOMPARE(w->lastFeedback(A::LoadNext), 200);
+    QCOMPARE(w->lastFeedback(A::Back), -1);         // not mapped
+
+    w->runner()->go();
+    settle();
+    w->runner()->refresh();
+    QCOMPARE(w->lastFeedback(A::Stop), 200);
+    QCOMPARE(w->lastFeedback(A::SubGo), 5);
+    w->runner()->go();                              // into cue 2: 2.1, 2.2 waits
+    settle();
+    w->runner()->refresh();
+    QCOMPARE(w->lastFeedback(A::SubGo), 200);
+    QCOMPARE(w->lastFeedback(A::LoadNext), 5);      // cue 3 is the last
+    w->runner()->subGo();
+    settle();
+    w->runner()->refresh();
+    QCOMPARE(w->lastFeedback(A::SubGo), 5);
+    w->runner()->pauseResume();
+    settle(2);
+    w->runner()->refresh();
+    QCOMPARE(w->lastFeedback(A::Pause), 200);
+    w->runner()->pauseResume();
+    settle(2);
+    w->runner()->refresh();
+    QCOMPARE(w->lastFeedback(A::Pause), 5);
+    w->runner()->stop();
+    settle();
+    w->runner()->refresh();
+    QCOMPARE(w->lastFeedback(A::Stop), 5);
+    QCOMPARE(w->lastFeedback(A::Go), 200);
+    m_doc->setMode(Doc::Design);
+}
+
+/* Bigger: the info grows (a larger cue name, more of what's coming), the
+   buttons keep their height. Smaller: down to a minimum, buttons usable. */
+void CueRunner_Test::vcResizeGrowsTheInfo()
+{
+    show();
+    ScopedVc vc(m_doc);
+    VirtualConsole *console = VirtualConsole::instance();
+    VCFrame *contents = console->contents();
+    VCCueRunner *w = new VCCueRunner(contents, m_doc);
+    console->placeWidget(w, contents);
+    w->move(QPoint(0, 0));
+    console->resize(900, 700);
+    console->show();
+    QVERIFY(QTest::qWaitForWindowExposed(console));
+    m_doc->setMode(Doc::Operate);
+    CueRunner *r = w->runner();
+    QWidget *info = r->infoArea();
+    QToolButton *go = r->goButton();
+    QVERIFY(info != nullptr);
+
+    w->resize(QSize(300, 160));
+    QTest::qWait(20);
+    const int goSmall = go->height();
+    const int infoSmall = info->height();
+    const int nowSmall = r->findChild<QLabel *>("crNow")->font().pixelSize();
+    QVERIFY(goSmall >= CueRunner::kMinButtonHeight);
+    QVERIFY(goSmall <= CueRunner::kMaxButtonHeight);
+
+    w->resize(QSize(600, 440));
+    QTest::qWait(20);
+    QCOMPARE(go->height(), goSmall);                // the buttons stay
+    QVERIFY(info->height() > infoSmall + 200);      // the info takes it
+    QVERIFY(r->findChild<QLabel *>("crNow")->font().pixelSize() > nowSmall);
+    // Stopped: NEXT is cue 1, then 2 and 3.
+    QCOMPARE(r->upcomingTexts(), QStringList({ "then 2 Two", "then 3 Three" }));
+    r->setUpcomingCount(1);
+    QCOMPARE(r->upcomingTexts(), QStringList({ "then 2 Two" }));
+
+    // Down to its minimum: no smaller, the buttons still there.
+    w->resize(QSize(40, 40));
+    QTest::qWait(20);
+    QCOMPARE(w->size(), w->minimumSize());
+    QVERIFY(w->minimumSize().width() >= 160);
+    QVERIFY(go->height() >= 24);
+    QVERIFY(info->height() > 0);
+    m_doc->setMode(Doc::Design);
+    console->hide();
+}
+
+/* The handles: dragged in Design (and saved), hidden and inert in Operate. */
+void CueRunner_Test::vcHandlesSizeAndPersist()
+{
+    show();
+    ScopedVc vc(m_doc);
+    VirtualConsole *console = VirtualConsole::instance();
+    VCFrame *contents = console->contents();
+    VCCueRunner *w = new VCCueRunner(contents, m_doc);
+    console->placeWidget(w, contents);
+    w->move(QPoint(0, 0));
+    w->resize(QSize(400, 300));
+    console->resize(900, 700);
+    console->show();
+    QVERIFY(QTest::qWaitForWindowExposed(console));
+    CueRunner *r = w->runner();
+    QWidget *infoHandle = r->infoHandle();
+    QWidget *goHandle = r->goHandle();
+
+    // Design: shown, and the buttons let the mouse through to the widget.
+    QVERIFY(infoHandle->isVisible());
+    QVERIFY(goHandle->isVisible());
+    QVERIFY(r->goButton()->testAttribute(Qt::WA_TransparentForMouseEvents));
+    const int height = r->goButton()->height();
+    const int share = r->goShare();
+    m_doc->resetModified();
+    drag(infoHandle, QPoint(0, -30));               // up: taller buttons
+    QTest::qWait(20);
+    QCOMPARE(r->buttonHeight(), height + 30);
+    QCOMPARE(r->goButton()->height(), height + 30);
+    drag(goHandle, QPoint(-40, 0));                 // left: GO narrower
+    QVERIFY(r->goShare() < share);
+    QVERIFY(m_doc->isModified());
+    // Clamped.
+    drag(infoHandle, QPoint(0, -2000));
+    QCOMPARE(r->buttonHeight(), int(CueRunner::kMaxButtonHeight));
+    r->setButtonHeight(height + 30);
+
+    VCCueRunner *loaded = new VCCueRunner(contents, m_doc);
+    QVERIFY(loadInto(loaded, saved(w)));
+    QCOMPARE(loaded->runner()->buttonHeight(), height + 30);
+    QCOMPARE(loaded->runner()->goShare(), r->goShare());
+    VCCueRunner *copy = qobject_cast<VCCueRunner *>(w->createCopy(contents));
+    QCOMPARE(copy->runner()->buttonHeight(), height + 30);
+    QCOMPARE(copy->runner()->goShare(), r->goShare());
+    delete copy;
+    delete loaded;
+
+    // Operate: hidden, and a drag does nothing; the buttons are live.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!infoHandle->isVisible());
+    QVERIFY(!goHandle->isVisible());
+    QVERIFY(!r->goButton()->testAttribute(Qt::WA_TransparentForMouseEvents));
+    const int before = r->buttonHeight();
+    const int shareBefore = r->goShare();
+    drag(infoHandle, QPoint(0, -30));
+    drag(goHandle, QPoint(30, 0));
+    QCOMPARE(r->buttonHeight(), before);
+    QCOMPARE(r->goShare(), shareBefore);
+    m_doc->setMode(Doc::Design);
+    QVERIFY(infoHandle->isVisible());
+    console->hide();
+}
+
+/* The properties: what it shows, each action's key and input -- through the
+   dialog, saved and loaded, copied. */
+void CueRunner_Test::vcPropertiesRoundTrip()
+{
+    show();
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCCueRunner *w = new VCCueRunner(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(w, contents);
+    CueRunner *r = w->runner();
+    QCOMPARE(r->upcomingCount(), 2);
+    QVERIFY(r->showTimecode() && r->showSecondary() && r->showSubGo());
+
+    {
+        VCCueRunnerProperties prop(w, m_doc);
+        QCOMPARE(prop.tabs()->count(), 2);
+        prop.findChild<QSpinBox *>("crPropUpcoming")->setValue(4);
+        prop.findChild<QCheckBox *>("crPropTimecode")->setChecked(false);
+        prop.findChild<QCheckBox *>("crPropBackStop")->setChecked(false);
+        prop.findChild<QCheckBox *>("crPropSubGo")->setChecked(false);
+        prop.inputWidget(VCCueRunner::Go)->setKeySequence(QKeySequence("G"));
+        prop.inputWidget(VCCueRunner::Go)->setInputSource(
+            QSharedPointer<QLCInputSource>(new QLCInputSource(1, 42)));
+        prop.inputWidget(VCCueRunner::LoadPrevious)->setKeySequence(QKeySequence("Shift+P"));
+        prop.accept();
+    }
+    QCOMPARE(r->upcomingCount(), 4);
+    QVERIFY(!r->showTimecode());
+    QVERIFY(!r->showSecondary());
+    QVERIFY(!r->showSubGo());
+    QVERIFY(!r->subGoButton()->isVisibleTo(r));
+    QVERIFY(!r->findChild<QToolButton *>("crBack")->isVisibleTo(r));
+    QCOMPARE(w->keySequence(VCCueRunner::Go), QKeySequence("G"));
+    QCOMPARE(w->inputSource(VCCueRunner::Go)->channel(), quint32(42));
+    QCOMPARE(w->keySequence(VCCueRunner::LoadPrevious), QKeySequence("Shift+P"));
+
+    const QByteArray xml = saved(w);
+    QVERIFY(xml.contains("Upcoming=\"4\""));
+    QVERIFY(xml.contains("<Go>"));
+    QVERIFY(xml.contains("<LoadPrevious>"));
+    QVERIFY(!xml.contains("<Stop>"));               // nothing mapped: not written
+    VCCueRunner *loaded = new VCCueRunner(contents, m_doc);
+    QVERIFY(loadInto(loaded, xml));
+    CueRunner *lr = loaded->runner();
+    QCOMPARE(lr->upcomingCount(), 4);
+    QVERIFY(!lr->showTimecode());
+    QVERIFY(!lr->showSecondary());
+    QVERIFY(!lr->showSubGo());
+    QCOMPARE(loaded->keySequence(VCCueRunner::Go), QKeySequence("G"));
+    QCOMPARE(loaded->inputSource(VCCueRunner::Go)->universe(), quint32(1));
+    QCOMPARE(loaded->inputSource(VCCueRunner::Go)->channel(), quint32(42));
+    QCOMPARE(loaded->keySequence(VCCueRunner::LoadPrevious), QKeySequence("Shift+P"));
+
+    VCCueRunner *copy = qobject_cast<VCCueRunner *>(w->createCopy(contents));
+    QCOMPARE(copy->runner()->upcomingCount(), 4);
+    QVERIFY(!copy->runner()->showSubGo());
+    QCOMPARE(copy->keySequence(VCCueRunner::Go), QKeySequence("G"));
+    QCOMPARE(copy->inputSource(VCCueRunner::Go)->channel(), quint32(42));
+    delete copy;
+
+    // An older workspace (none of these): the defaults.
+    VCCueRunner *old = new VCCueRunner(contents, m_doc);
+    QVERIFY(loadInto(old, "<CueRunner Size=\"Compact\"/>"));
+    QCOMPARE(old->runner()->upcomingCount(), 2);
+    QVERIFY(old->runner()->showSubGo());
+    QCOMPARE(old->runner()->buttonHeight(), 64);
+    QVERIFY(old->keySequence(VCCueRunner::Go).isEmpty());
+    delete old;
+    delete loaded;
+}
+
+/* Pictures of the VC widget on a real show, small and large, Design and
+   Operate -- only when asked (QLC_CUERUNNER_SHOTS = the folder,
+   QLC_CUERUNNER_WS = a copy of a workspace, QLC_CUERUNNER_SHOTS_TAG = a
+   prefix). Offscreen, no output plugins: nothing is sent. */
+void CueRunner_Test::screenshots()
+{
+    const QString dir = qEnvironmentVariable("QLC_CUERUNNER_SHOTS");
+    const QString ws = qEnvironmentVariable("QLC_CUERUNNER_WS");
+    if (dir.isEmpty() || ws.isEmpty())
+        QSKIP("QLC_CUERUNNER_SHOTS / QLC_CUERUNNER_WS not set");
+    const QString tag = qEnvironmentVariable("QLC_CUERUNNER_SHOTS_TAG", "shot");
+    QDir().mkpath(dir);
+
+    delete m_doc;
+    m_doc = new Doc(this);
+    QFile file(ws);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlStreamReader r(&file);
+    bool loaded = false;
+    if (r.readNextStartElement())
+    {
+        while (r.readNextStartElement())
+        {
+            if (r.name() == QLatin1String("Engine"))
+            {
+                loaded = m_doc->loadXML(r, false);
+                break;
+            }
+            r.skipCurrentElement();
+        }
+    }
+    QVERIFY(loaded);
+
+    ScopedVc vc(m_doc);
+    VirtualConsole *console = VirtualConsole::instance();
+    VCFrame *contents = console->contents();
+    VCCueRunner *w = new VCCueRunner(contents, m_doc);
+    console->placeWidget(w, contents);
+    w->move(QPoint(0, 0));
+    console->resize(900, 700);
+    console->show();
+    QVERIFY(QTest::qWaitForWindowExposed(console));
+    w->runner()->go();                      // the first cue plays, more to come
+    settle(3);
+    const QList<QSize> sizes { QSize(300, 140), QSize(560, 380) };
+    for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        m_doc->setMode(mode);
+        for (const QSize &sz : sizes)
+        {
+            w->resize(sz);
+            w->runner()->refresh();
+            QTest::qWait(50);
+            const QString name = QStringLiteral("%1/%2-%3-%4x%5.png").arg(dir, tag,
+                                 mode == Doc::Design ? "design" : "operate")
+                                 .arg(sz.width()).arg(sz.height());
+            QVERIFY(w->grab().save(name));
+        }
+    }
+    // The list size, large.
+    w->setRunnerSize(CueRunner::List);
+    w->resize(sizes.last());
+    w->runner()->refresh();
+    QTest::qWait(50);
+    QVERIFY(w->grab().save(QStringLiteral("%1/%2-operate-list-%3x%4.png").arg(dir, tag)
+                           .arg(sizes.last().width()).arg(sizes.last().height())));
+    m_doc->setMode(Doc::Design);
+    console->hide();
 }
 
 QTEST_MAIN(CueRunner_Test)

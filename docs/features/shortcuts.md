@@ -135,3 +135,4 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | ⇧B / ⇧I / ⇧F / ⇧O | Background colour / image, foreground colour, font (⇧⌥ resets) |
 | ⇧S / ⇧R / ⇧⌥S | Sunken / raised / no frame |
 | ⇧↑ / ⇧↓ | Raise / lower |
+| Drag a Cue Runner's dotted bars | Its buttons' height; GO's share of the row ([the cue runner](show-tree.md#the-cue-runner)) |

@@ -20,12 +20,20 @@
 #ifndef VCCUERUNNER_H
 #define VCCUERUNNER_H
 
+#include <QKeySequence>
+
 #include "vcwidget.h"
 #include "cuerunner.h"
 
-#define KXMLQLCVCCueRunner          QStringLiteral("CueRunner")
-#define KXMLQLCVCCueRunnerFollow    QStringLiteral("Follow")
-#define KXMLQLCVCCueRunnerSize      QStringLiteral("Size")
+#define KXMLQLCVCCueRunner              QStringLiteral("CueRunner")
+#define KXMLQLCVCCueRunnerFollow        QStringLiteral("Follow")
+#define KXMLQLCVCCueRunnerSize          QStringLiteral("Size")
+#define KXMLQLCVCCueRunnerUpcoming      QStringLiteral("Upcoming")
+#define KXMLQLCVCCueRunnerTimecode      QStringLiteral("Timecode")
+#define KXMLQLCVCCueRunnerSecondary     QStringLiteral("BackStop")
+#define KXMLQLCVCCueRunnerSubGo         QStringLiteral("SubGo")
+#define KXMLQLCVCCueRunnerButtonHeight  QStringLiteral("ButtonHeight")
+#define KXMLQLCVCCueRunnerGoShare       QStringLiteral("GoShare")
 
 /** @addtogroup ui_vc_widgets
  * @{
@@ -40,6 +48,12 @@
  * the state is the list's chaser and ShowControl's. The VC Cue List stays
  * for plain chasers; Swap widget (VirtualConsole::swapWidget) turns one into
  * the other in place.
+ *
+ * Each action (GO, Sub GO, Back, Sub Back, Pause, Stop, LOAD next / previous)
+ * takes an external input source and a key, as a VC Cue List's buttons do,
+ * with feedback: lit while the action can do something (Pause: while
+ * paused). Design mode sizes the info and the buttons with the handles
+ * inside; Operate locks them and runs the show.
  */
 class VCCueRunner final : public VCWidget
 {
@@ -60,9 +74,56 @@ public:
     void setRunnerSize(CueRunner::Size size);
     CueRunner *runner() const { return m_runner; }
 
-    /** No external input of its own (yet): GO comes from show control,
-     *  the keys and the footer, as for the Run tab. */
-    void updateFeedback() override {}
+    /*********************************************************************
+     * Actions: external input, keys, feedback
+     *********************************************************************/
+public:
+    /** The mappable actions; each is also its input source id. */
+    enum Action
+    {
+        Go = 0,
+        SubGo,
+        Back,
+        SubBack,
+        Pause,
+        Stop,
+        LoadNext,
+        LoadPrevious,
+        ActionCount
+    };
+
+    static QString actionName(Action action);
+    /** The XML tag of an action's key and input. */
+    static QString actionTag(Action action);
+
+    QKeySequence keySequence(Action action) const;
+    void setKeySequence(Action action, const QKeySequence &keySequence);
+
+    /** Do @a action now (an input, a key). */
+    void trigger(Action action);
+
+    /** Lit: the action can do something now (Pause: paused). */
+    bool feedbackOn(Action action) const;
+    /** The value last sent to @a action's feedback (-1: none yet). */
+    int lastFeedback(Action action) const { return m_lastFeedback[action]; }
+
+    void updateFeedback() override;
+
+protected:
+    void enableWidgetUI(bool enable) override;
+
+protected slots:
+    void slotKeyPressed(const QKeySequence &keySequence) override;
+    void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
+    void slotModeChanged(Doc::Mode mode) override;
+
+private:
+    /** Send what changed (@a force: all of it). */
+    void sendActionFeedback(bool force);
+
+    QKeySequence m_keys[ActionCount];
+    uchar m_latestValue[ActionCount];
+    int m_lastFeedback[ActionCount];
 
     /*********************************************************************
      * Clipboard
@@ -85,6 +146,9 @@ public:
     bool saveXML(QXmlStreamWriter *doc) override;
 
 private:
+    /** The runner's minimum, plus the margins. */
+    void syncMinimumSize();
+
     CueRunner *m_runner;
 };
 
