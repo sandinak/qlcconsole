@@ -9,7 +9,7 @@ nav_order: 4
 
 Name: ______________________
 
-1. Which of our lights light the singers' **faces**? From which
+1. Which of our lights light the singers' **faces**, and from which
    direction?
 
    ____________________________________________________________
@@ -18,8 +18,8 @@ Name: ______________________
 
    ____________________________________________________________
 
-3. In the Solo, the spots were set to White at Full but stayed dark. Why,
-   and how did you fix it?
+3. In the Solo, the spots were at White, Full and still dark. Why, and
+   how did you fix it?
 
    ____________________________________________________________
 
