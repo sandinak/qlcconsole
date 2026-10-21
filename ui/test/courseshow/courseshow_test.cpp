@@ -158,6 +158,29 @@ void settle(int ms = 0)
         QTest::qWait(ms);
 }
 
+/* How long a check waits for the rig to show a change. The engine writes
+   the universes on its own timer thread, a frame or more after the UI
+   asks -- and much later when the machine is busy (parallel gates). So a
+   check of what the rig sends polls until it's there (waitUntil, QTRY_*
+   with kRigWait); it never reads once after a fixed sleep. */
+const int kRigWait = 5000;
+
+/* Waits (up to @a ms) until @a ok holds, as the rig shows a change a
+   frame or two (or, on a loaded machine, many) after it's made. */
+template <typename F>
+bool waitUntil(F ok, int ms = kRigWait)
+{
+    QElapsedTimer t;
+    t.start();
+    while (!ok())
+    {
+        if (t.elapsed() > ms)
+            return false;
+        QTest::qWait(20);
+    }
+    return true;
+}
+
 /* A Show Tree widget by its object name, wherever it is now: on the view,
    or in its header (+ Production, Undo, the hint at the top right), which
    the main window's top bar (MainBar) borrows while the Show Tree is the
@@ -921,8 +944,7 @@ void CourseShow_Test::lessonOneSetInThisCue()
     QCOMPARE(d.last(), QStringLiteral("1.0.2 Chorus: Steps [Colour Magenta, Dimmer Full]; "
                                       "TrussC-RGB [Colour Magenta]"));
     QVERIFY(view->selectNode(chorus));
-    settle(500);
-    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\xff\x00\xff", 3));
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\xff\x00\xff", 3), kRigWait);
     doc->resetModified();
 }
 
@@ -943,7 +965,6 @@ void CourseShow_Test::lessonOneTyped()
         QVERIFY(view->runCommand(QStringLiteral("cue + \"Probe %1\" block").arg(g)));
         QVERIFY(view->runCommand(QStringLiteral("\"%1\" colour Blue").arg(g)));
         QVERIFY(view->selectNode(view->currentCueId()));
-        settle(400);
         const QString name = g == "TrussC-RGB" ? "SR Truss Cyc 1" : g == "StepTops" ? "US Step 1 Top SR"
                              : g == "Steps" ? "US Step 1" : "SR AT Wash 1";
         Fixture *fx = nullptr;
@@ -951,7 +972,17 @@ void CourseShow_Test::lessonOneTyped()
             if (f->name() == name)
                 fx = f;
         QVERIFY(fx != nullptr);
-        const QByteArray v = sends(m_app->doc(), name, int(fx->channels()));
+        // Wait for the probe's blue to reach the rig, then read it all.
+        Doc *doc = m_app->doc();
+        const bool blue = waitUntil([doc, fx, name]() {
+            const QByteArray now = sends(doc, name, int(fx->channels()));
+            for (quint32 c = 0; c < fx->channels(); ++c)
+                if (fx->channel(c)->name().contains(QLatin1String("Blue")) && uchar(now.at(int(c))) == 255)
+                    return true;
+            return now.left(3) == QByteArray("\x00\x00\xff", 3);
+        });
+        const QByteArray v = sends(doc, name, int(fx->channels()));
+        QVERIFY2(blue, qPrintable(name + " " + v.toHex(' ')));
         const quint32 dim = fx->masterIntensityChannel();
         if (g == "AT-W-ALL")
         {
@@ -1041,16 +1072,15 @@ void CourseShow_Test::lessonOnePlaysInTheRunTab()
     for (const Expect &e : expect)
     {
         run->findChild<QToolButton *>("crGo")->click();
-        settle(600);
-        QVERIFY2(run->nowText().contains(e.cue), qPrintable(run->nowText()));
-        const QByteArray v = sends(doc, e.fixture);
-        if (e.rgb.isEmpty())
-            QVERIFY2(v.count(char(0)) < v.size(), qPrintable(e.fixture + " " + v.toHex(' ')));
-        else
-            QVERIFY2(v == e.rgb, qPrintable(e.fixture + " " + v.toHex(' ')));
+        QTRY_VERIFY2_WITH_TIMEOUT(run->nowText().contains(e.cue), qPrintable(run->nowText()), kRigWait);
+        const auto lit = [doc, &e]() {
+            const QByteArray v = sends(doc, e.fixture);
+            return e.rgb.isEmpty() ? v.count(char(0)) < v.size() : v == e.rgb;
+        };
+        QVERIFY2(waitUntil(lit), qPrintable(e.fixture + " " + sends(doc, e.fixture).toHex(' ')));
     }
     // Tracking: in the chorus the cyc is still blue (from 1.0.0).
-    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), kRigWait);
     run->findChild<QToolButton *>("crStop")->click();
     settle(100);
 }
@@ -1101,22 +1131,6 @@ static void closeRig()
             mon->m_overviewDlg->close();
         }
     settle();
-}
-
-/* Waits (up to @a ms) until @a ok holds, as the preview reaches the rig
-   a frame or two after a change. */
-template <typename F>
-static bool waitUntil(F ok, int ms = 3000)
-{
-    QElapsedTimer t;
-    t.start();
-    while (!ok())
-    {
-        if (t.elapsed() > ms)
-            return false;
-        QTest::qWait(20);
-    }
-    return true;
 }
 
 #define LESSON_STEP(cond, what) \
@@ -1298,7 +1312,8 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     LESSON_STEP(waitUntil([doc]() { return outputValue(doc, "SR AT Spot", "Strobe/Shutter") < 8; }), "auto-open off, shutter still open");
     doc->shutterAutoOpen()->setEnabled(true);
     LESSON_STEP(waitUntil([doc]() { return outputValue(doc, "SR AT Spot", "Strobe/Shutter") >= 8; }), "auto-open on again, shutter closed");
-    LESSON_STEP(panTilt(doc, "SR AT Spot") == qMakePair(0, 0), "the spot has a position already");
+    LESSON_STEP(waitUntil([doc]() { return panTilt(doc, "SR AT Spot") == qMakePair(0, 0); }),
+                "the spot has a position already");
     shot(QStringLiteral("rig-solo-floor"));
     {
         const QString said = dropTargetOnRow(doc, view, "AT-Spots", "Soloist DS");
@@ -1428,9 +1443,7 @@ void CourseShow_Test::lessonFourPlaysTheFades()
         // for GO (the handout says so).
         ShowTreeView *view = showTree();
         QVERIFY(view->selectNode(cueNumbered(doc, "1.0.0")));
-        QTest::qWait(500);
-        qInfo().noquote() << "[L4] Pose clicked, 0.5 s:" << sends(doc, "SR Truss Cyc 1").toHex(' ');
-        QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
+        QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), kRigWait);
         QVERIFY(view->selectNode(doc->showTree()->productions().first().id));
         settle(300);
     }
@@ -1441,26 +1454,29 @@ void CourseShow_Test::lessonFourPlaysTheFades()
         timing << (*it)->text(1) + " " + (*it)->text(3);
     qInfo().noquote() << "[L4] Run tab timing:" << timing.join(" | ");
 
-    // GO: the Pose fades in over 3 s -- part way after 1 s, all there by 3.5.
+    // GO: the Pose fades in over 3 s -- seen part way (not a snap), then
+    // all there. Polled: on a busy machine the fade's frames come late.
     press(run, "crGo");
-    QTest::qWait(1200);
-    const uchar mid = uchar(sends(doc, "SR Truss Cyc 1").at(2));
-    qInfo() << "[L4] cyc blue after 1.2 s" << mid;
-    QVERIFY2(mid > 20 && mid < 235, qPrintable(QString::number(mid)));
-    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), 4000);
+    const auto partWay = [doc]() {
+        const uchar b = uchar(sends(doc, "SR Truss Cyc 1").at(2));
+        return b > 20 && b < 235;
+    };
+    QVERIFY2(waitUntil(partWay), qPrintable(sends(doc, "SR Truss Cyc 1").toHex(' ')));
+    qInfo() << "[L4] cyc blue part way" << uchar(sends(doc, "SR Truss Cyc 1").at(2));
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), kRigWait);
 
     // GO, GO: Verse (2 s), Chorus (a snap).
     press(run, "crGo");
     QTest::qWait(2600);
     press(run, "crGo");
-    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3), kRigWait);
 
     // GO: the Scream snaps in, holds 2 s, then the Solo comes by itself.
     press(run, "crGo");
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.3"), 1500);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.3"), kRigWait);
     qInfo().noquote() << "[L4] scream now:" << run->nowText() << "| next:" << run->nextText();
-    QTRY_VERIFY_WITH_TIMEOUT(uchar(sends(doc, "SR Truss Wash 1").at(0)) > 200, 1500);
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.4"), 4000);
+    QTRY_VERIFY_WITH_TIMEOUT(uchar(sends(doc, "SR Truss Wash 1").at(0)) > 200, kRigWait);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.4"), kRigWait);
     qInfo().noquote() << "[L4] after the hold:" << run->nowText() << "| wash" << sends(doc, "SR Truss Wash 1").toHex(' ')
                       << "| spot dimmer" << channelValue(doc, "SR AT Spot", "Master Dimmer");
     QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Wash 1", 3), QByteArray("\x00\x00\x00", 3), 6000);
@@ -1480,21 +1496,21 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     m_app->m_modeToggleAction->trigger();
     settle(100);
     QCOMPARE(doc->mode(), Doc::Operate);
-    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("LIVE"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("LIVE"), kRigWait);
     qInfo().noquote() << "[L5] mode:" << run->modeText() << "| header:" << run->headerText()
                       << "| next:" << run->nextText();
     QVERIFY2(run->nextText().contains("1.0.0"), qPrintable(run->nextText()));
 
     // "GO" twice: Pose, Verse.
     press(run, "crGo");
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), kRigWait);
     QTest::qWait(3300);
     press(run, "crGo");
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.1"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.1"), kRigWait);
     QTest::qWait(2300);
     // Back: the Pose again.
     press(run, "crBack");
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), kRigWait);
     QTest::qWait(500);
     qInfo().noquote() << "[L5] after Back:" << run->nowText() << "| next:" << run->nextText();
     QVERIFY2(run->nowText().contains("1.0.0"), qPrintable(run->nowText()));
@@ -1510,8 +1526,8 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     QVERIFY2(chorus->text(0).contains("STANDBY"), qPrintable(chorus->text(0)));
     // "GO": the chorus, though the verse was next.
     press(run, "crGo");
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.2"), 2000);
-    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.2"), kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3), kRigWait);
 
     // Double-click the Solo: jump there now.
     QTreeWidgetItem *solo = runRow(run, "1.0.4");
@@ -1521,15 +1537,15 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     QTest::mouseClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier, at);
     QTest::mouseDClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier, at);
     settle(50);
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.4"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.4"), kRigWait);
     QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 255, 6000);
     qInfo().noquote() << "[L5] after the jump:" << run->nowText() << "| next:" << run->nextText();
 
     // Stop: the stage goes dark.
     press(run, "crStop");
-    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 0, 3000);
-    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\x00\x00\x00", 3), 3000);
-    QTRY_VERIFY_WITH_TIMEOUT(run->nextText().contains("1.0.0"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 0, kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nextText().contains("1.0.0"), kRigWait);
     qInfo().noquote() << "[L5] after Stop:" << run->nowText() << "| next:" << run->nextText();
     // Back to Design: nothing runs, so it doesn't ask.
     settle(300);
@@ -1617,8 +1633,7 @@ void CourseShow_Test::lessonZeroTwoTheVirtualStage()
     for (const QString cue : { "1.0.0", "1.0.1", "1.0.2" })
     {
         press(run, "crGo");
-        settle(400);
-        QVERIFY2(run->nowText().contains(cue), qPrintable(run->nowText()));
+        QTRY_VERIFY2_WITH_TIMEOUT(run->nowText().contains(cue), qPrintable(run->nowText()), kRigWait);
     }
     press(run, "crStop");
     settle(200);
@@ -1666,7 +1681,7 @@ void CourseShow_Test::lessonTwoColourPicker()
     const QString said = dropPaletteOnZone(doc, view, "Green");
     qInfo().noquote() << "[L2] Green on the Pose:" << said;
     QCOMPARE(said, QStringLiteral("Green → cue look on 1.0.0 Pose: reaches 0 of 1 layers"));
-    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), kRigWait);
     doc->resetModified();
 }
 
@@ -1684,10 +1699,10 @@ void CourseShow_Test::lessonThreeExtension()
     QVERIFY(rowMenu(view, KeyPosition, "Set to", "Aim Center"));
     settle(300);
     QVERIFY2(rowText(view, KeyPosition).startsWith("Aim Center"), qPrintable(rowText(view, KeyPosition)));
-    QVERIFY(panTilt(doc, "SR AT Spot") != soloist);
+    QTRY_VERIFY_WITH_TIMEOUT(panTilt(doc, "SR AT Spot") != soloist, kRigWait);
     stFind<QToolButton>(view, "stUndo")->click();
     settle(300);
-    QCOMPARE(panTilt(doc, "SR AT Spot"), soloist);
+    QTRY_COMPARE_WITH_TIMEOUT(panTilt(doc, "SR AT Spot"), soloist, kRigWait);
 
     QVERIFY(view->selectNode(cueNumbered(doc, "1.0.4")));
     settle(50);
@@ -1697,8 +1712,11 @@ void CourseShow_Test::lessonThreeExtension()
     settle(300);
     QVERIFY2(cueRow(view, "TrussW-RGB") != nullptr && cueRow(view, "TrussW-RGB")->text().contains("Blue, 25%"),
              qPrintable(view->cueLayerItems().join(" | ")));
-    const QByteArray wash = sends(doc, "SR Truss Wash 1");
-    QVERIFY2(uchar(wash.at(0)) == 0 && uchar(wash.at(2)) > 40 && uchar(wash.at(2)) < 90, qPrintable(wash.toHex(' ')));
+    const auto blue25 = [doc]() {
+        const QByteArray wash = sends(doc, "SR Truss Wash 1");
+        return uchar(wash.at(0)) == 0 && uchar(wash.at(2)) > 40 && uchar(wash.at(2)) < 90;
+    };
+    QVERIFY2(waitUntil(blue25), qPrintable(sends(doc, "SR Truss Wash 1").toHex(' ')));
     doc->resetModified();
 }
 
@@ -1716,11 +1734,11 @@ void CourseShow_Test::lessonFiveOperate()
     QCOMPARE(m_app->m_modeToggleAction->text(), QStringLiteral("Design"));
     CueRunner *run = runTab(m_app);
     QVERIFY(run != nullptr);
-    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("LIVE"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("LIVE"), kRigWait);
     QVERIFY(!m_app->m_fileOpenAction->isEnabled());
 
     press(run, "crGo");
-    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), kRigWait);
     QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), 5000);
     // In LIVE, the Show Tree shows nothing new on stage: the Scream clicked
     // there doesn't turn the stage red.
@@ -1734,12 +1752,12 @@ void CourseShow_Test::lessonFiveOperate()
 
     run = runTab(m_app);
     press(run, "crStop");
-    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\x00", 3), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
     settle(300);
     m_app->m_modeToggleAction->trigger();
     settle(100);
     QCOMPARE(doc->mode(), Doc::Design);
-    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("DESIGN"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("DESIGN"), kRigWait);
     doc->resetModified();
 }
 
