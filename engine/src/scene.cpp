@@ -1822,6 +1822,19 @@ void Scene::applyEditOverride(QList<Universe *> ua)
     }
 }
 
+void Scene::raiseFaders(QList<Universe *> ua)
+{
+    QMutexLocker locker(&m_valueListMutex);
+    for (auto it = m_fadersMap.constBegin(); it != m_fadersMap.constEnd(); ++it)
+    {
+        if (it.value().isNull() || it.value()->isFadingOut())
+            continue;
+        if (it.key() < quint32(ua.count()) && ua.at(int(it.key())) != nullptr)
+            ua.at(int(it.key()))->requestFaderPriority(it.value(),
+                                                       Universe::FaderPriority(it.value()->priority()));
+    }
+}
+
 void Scene::postRun(MasterTimer* timer, QList<Universe *> ua)
 {
     qDebug() << "[Scene] postRun:" << id() << name();

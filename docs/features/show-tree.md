@@ -665,6 +665,20 @@ Block cue), and every cue that includes one of those.
 **Hold.** A new cue holds **∞**: it waits for GO. A cue with a set hold
 follows on by itself when the hold runs out, as a chaser step does.
 
+**However you get to a cue, it looks the same.** A cue shows what the list
+played from the top would show there, whether you got to it with GO, with
+**Back**, or by a jump (a double-click, show control, timecode). That goes
+for what the cue doesn't set itself too: a fixture it leaves dark, or lights
+with only a dimmer, keeps the colour, position and beam the cues before it
+left on it, as it would played from the top. A setting only later cues
+make goes back to what the stage had when the list started. GO from there
+carries on as from the top. Back plays the cue's own fade; what it doesn't
+set goes back under the leaving cue's fade-out. This holds for Block,
+Cue-only, Release, includes and cues that mix. Effects move by themselves,
+so their channels go on from wherever they are. A Loop list that goes round
+carries on from its last cue; a jump to its first cue plays it as from the
+top.
+
 ### Changing a tracked value
 
 A grey value came from an earlier cue. On its row, **⋯** offers two
@@ -1265,6 +1279,8 @@ Console widget is the same runner on a VC page.
 - **Buttons:** **GO** (⌘↩; **Space** in the Run tab), **Sub GO** (⌥⌘↩),
   **Sub Back** (⌥⌘⇧↩), **Back** (⌘⇧↩), **Pause** / **Resume** (holds the
   fade and an auto-follow's wait) and **Stop** (⌘⇧Esc stops everything).
+  Back and a jump land on the cue as GO from the top would
+  ([Tracking](#tracking)).
 - **Click a cue: LOAD** -- it becomes STANDBY, what the next GO plays.
   **Double-click: jump** to it now (a sub-cue: its cue first).
 - **One state everywhere.** The Run tab, every Cue Runner widget, the
