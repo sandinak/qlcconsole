@@ -4,7 +4,6 @@
 #
 #   ./release.sh                      = make release  (full GitHub release)
 #   PRERELEASE=1 ./release.sh         = make beta     (GitHub pre-release)
-#   ./release.sh 0.2.1                the same, for VERSION=0.2.1
 #   ./release.sh attach FILE...       = make attach FILES="FILE..."
 #
 # TITLE, DRYRUN, SKIP_GATE, REPLACE, DMG ... pass through (publish.sh).
@@ -16,7 +15,7 @@ if [ "${1:-}" = attach ]; then
   shift
   exec "$REPO/platforms/macos/publish.sh" attach "$@"
 fi
-[ -z "${1:-}" ] || export VERSION="$1"
+[ -z "${1:-}" ] || { echo "The version comes from the VERSION file now: bump it and commit."; exit 1; }
 if [ "${PRERELEASE:-0}" = 1 ]; then
   exec "$REPO/platforms/macos/publish.sh" beta
 fi

@@ -43,7 +43,8 @@
 #   NOTES_FILE=  notes body instead of the CHANGELOG section
 #   DRAFT=1      stop at step 6: leave a draft (for testing this script)
 #   GH_REPO      owner/name (default sandinak/qlcconsole)
-#   VERSION, TAG override VERSION and v<VERSION>
+#   TAG          another tag than v<VERSION> (for testing; VERSION itself
+#                must match the VERSION file, which names the DMG)
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -227,6 +228,8 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 step "Pre-flight ($KIND $TAG, $BRANCH @ $REV)"
 problems=()
 gh_ready
+[ "$VERSION" = "$(cat VERSION)" ] ||
+  problems+=("VERSION=$VERSION but the VERSION file says $(cat VERSION): the build names the DMG from the file -- bump it and commit")
 [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]] || problems+=("$TAG is not vX.Y.Z (the updater ignores it)")
 
 if ! git diff --quiet HEAD -- . ':(exclude)test-workspaces'; then
