@@ -6,7 +6,7 @@
 # with absolute paths, so the bundle holds only qlcconsole's own binaries,
 # plugins and resources, plus the Qt plugins (the app only looks for those
 # inside its bundle). It runs on this Mac, with Homebrew's Qt installed; it is
-# not something to hand to anyone else -- that's `make release`.
+# not something to hand to anyone else -- that's `make dmg`.
 #
 # It has its own bundle id and name ("qlcconsole (dev)"), so macOS keeps it
 # apart from the release app. Its show-file types rank "Alternate": a

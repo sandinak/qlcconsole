@@ -72,7 +72,7 @@ written, known issues included.
   (scaled + rough), and diff kronk's `--heap-track` snapshots.
 - **Rig test pass** — `RIG_TEST_PLAN.md`, section K first (the 0.1.0
   work), on the office rig with kronk.
-- Then: merge `release/0.1.0` to main, `./release.sh`, attach the Windows
+- Then: merge `release/0.1.0` to main, `make release`, `make attach` the Windows
   installer and Linux AppImage from CI (RELEASE.md).
 
 ## Platforms and soak findings — open (2026-10-16)

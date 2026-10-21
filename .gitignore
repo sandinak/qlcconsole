@@ -22,7 +22,7 @@
 moc_*.cpp
 qrc_*.cpp
 Makefile
-# ...but not the hand-written one at the root (make test / make release)
+# ...but not the hand-written one at the root (make test / dmg / beta / release)
 !/Makefile
 Makefile.*
 *-build-*
