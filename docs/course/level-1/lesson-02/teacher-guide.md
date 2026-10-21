@@ -75,7 +75,7 @@ On the projector, the class telling you what to click:
 
 1. Click **1.0.1 Verse**, then its **StepTops** row on the page: the
    layer's own page, one row per attribute.
-2. On the **Colour** row, **⋯ → Set to → Lavender**. Read the top right
+2. On the **Colour** row, **⋯ → Set to → Lavender**. Read the note in the top bar
    aloud: *"Changed: 1.0.1 Verse, 1.0.2 Chorus"*. "Why did the chorus
    change? (*StepTops tracks into it.*)"
 3. On the **Dimmer** row, **⋯ → Level…**, type **40**, OK. The row says
@@ -98,7 +98,7 @@ Stop there; the students do the rest, including the scream.
 | You see | Likely cause | Say |
 |---|---|---|
 | No ⋯ buttons | The cue's page is showing, not the layer's | "Click the **StepTops** row on the page first." |
-| The palette went on the wrong layer | Dropped on a row instead of the dashed area (or the other way) | "Undo, and look at the top right while you drag: it says where it goes." |
+| The palette went on the wrong layer | Dropped on a row instead of the dashed area (or the other way) | "Undo, and read the note in the top bar while you drag: it says where it goes." |
 | The Scream's rows have no colour after the drop | Red was dropped on the grey row of another layer | "Drop it on the **dashed area**, below the rows." |
 | "My chorus changed too!" | Tracking | "Good! StepTops carries on until a cue changes it." |
 | A dialog with a number | **Level…** | "Type 40 and click OK." |

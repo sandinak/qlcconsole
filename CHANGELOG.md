@@ -201,6 +201,13 @@ network. Everything in 0.1.0 is in it too.
   strips, drapes) keep their own colour.
 
 ### Fixed
+- **The Show Tree's drop hint stays in sight in the shared top bar.** The
+  note that says where a drag will land (and, after a change, what it
+  changed) sat at the end of the Show Tree's toolbar, so once the toolbar
+  shared the top bar with the show controls it folded into **»** at any
+  window narrower than about 1900 px — every laptop. It now stands beside
+  the toolbar, just left of **Stop all**, and keeps up to 420 px; the
+  buttons fold first.
 - **Import chaser keeps an include brighter than the cue's own level.** A
   cue that includes another at full and sets the same fixtures lower itself
   (DanceHysteria's Full Show 0.0.5: 0.0.4's StepTops at full, its own at

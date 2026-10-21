@@ -64,8 +64,8 @@ teacher says. It can be turned into a deck as it is.*
 ## 9. Drag a group, then a colour and a level
 
 - Pictures: `drop-group.png`, `drop-palettes.png`
-- *Say:* "Read the top right while you drag: it tells you what will
-  happen."
+- *Say:* "Read the note in the top bar, just left of Stop all, while
+  you drag: it tells you what will happen."
 
 ## 10. Lights stay on: tracking
 

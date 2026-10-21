@@ -758,6 +758,26 @@ QString cueModeLabel(CueMode mode)
     return ShowTreeView::tr("List default");
 }
 
+/* The drop hint at the top right: while dragging, the one place that says
+   where a drop goes, and after a change, what it changed. The Show Tree's
+   tools share the window's top bar with the show controls while the tab is
+   on show (MainBar), and a toolbar folds its end into » first -- which, at
+   any laptop's width, was the hint. So the hint stands outside the toolbar
+   and keeps its room (up to kHintRoom); the buttons fold instead. */
+const int kHintRoom = 420;
+
+class DropHintLabel final : public QLabel
+{
+public:
+    explicit DropHintLabel(QWidget *parent) : QLabel(parent) {}
+
+    QSize minimumSizeHint() const override
+    {
+        const QSize s = QLabel::sizeHint();
+        return QSize(qMin(s.width(), kHintRoom), s.height());
+    }
+};
+
 } // namespace
 
 /****************************************************************************
@@ -778,8 +798,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
     // Header: a toolbar, so the main window's top bar can borrow it while
     // this is the current tab (MainBar), and a narrow window folds its end
-    // into the toolbar's » menu instead of cutting it off.
-    QToolBar *bar = new QToolBar(this);
+    // into the toolbar's » menu instead of cutting it off. The drop hint
+    // stands beside it, never folded (DropHintLabel).
+    QWidget *header = new QWidget(this);
+    header->setObjectName(QStringLiteral("stHeader"));
+    QHBoxLayout *headerRow = new QHBoxLayout(header);
+    headerRow->setContentsMargins(0, 0, 0, 0);
+    headerRow->setSpacing(0);
+    QToolBar *bar = new QToolBar(header);
     bar->setObjectName(QStringLiteral("stToolBar"));
     bar->setMovable(false);
     bar->setFloatable(false);
@@ -861,16 +887,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_previewLabel = new QLabel(this);
     m_previewLabel->setObjectName("stPreview");
     bar->addWidget(m_previewLabel);
-    {
-        QWidget *gap = new QWidget(bar);
-        gap->setFixedWidth(12);
-        bar->addWidget(gap);
-    }
-    m_hint = new QLabel(this);
+    headerRow->addWidget(bar, 1);
+    headerRow->addSpacing(12);
+    m_hint = new DropHintLabel(header);
     m_hint->setObjectName("stDropHint");
-    bar->addWidget(m_hint);
-    main->addWidget(bar);
-    MainBar::registerTabTools(this, bar);
+    headerRow->addWidget(m_hint);
+    main->addWidget(header);
+    MainBar::registerTabTools(this, header);
 
     // The command line (§6C): optional, hidden until asked for.
     m_commander = new ShowTreeCommand(m_doc, m_st);

@@ -52,6 +52,7 @@
 #include "app.h"
 #include "monitor.h"
 #include "fixturemanager.h"
+#include "mainbar.h"
 #include "showtreeview.h"
 #undef protected
 #undef private
@@ -155,6 +156,23 @@ void settle(int ms = 0)
     }
     if (ms > 0)
         QTest::qWait(ms);
+}
+
+/* A Show Tree widget by its object name, wherever it is now: on the view,
+   or in its header (+ Production, Undo, the hint at the top right), which
+   the main window's top bar (MainBar) borrows while the Show Tree is the
+   tab on show. */
+template <typename T>
+T *stFind(ShowTreeView *view, const QString &name)
+{
+    if (T *w = view->findChild<T *>(name))
+        return w;
+    QWidget *tools = MainBar::tabTools(view);
+    if (tools == nullptr)
+        return nullptr;
+    if (tools->objectName() == name)
+        return qobject_cast<T *>(tools);
+    return tools->findChild<T *>(name);
 }
 
 /* Answers the next QInputDialog with @a text (OK), as a student types it. */
@@ -324,15 +342,15 @@ void answerNextIntDialog(int value)
 
 QLabel *hintOf(ShowTreeView *view)
 {
-    return view->findChild<QLabel *>("stDropHint");
+    return stFind<QLabel>(view, "stDropHint");
 }
 
 /* + Cue, then its name typed in the Name box and Return. */
 bool newCueNamed(ShowTreeView *view, const QString &name)
 {
-    view->findChild<QToolButton *>("stNewCue")->click();
+    stFind<QToolButton>(view, "stNewCue")->click();
     settle();
-    QLineEdit *box = view->findChild<QLineEdit *>("stCueName");
+    QLineEdit *box = stFind<QLineEdit>(view, "stCueName");
     if (view->currentKind() != ShowTreeView::CueNode || box == nullptr)
         return false;
     box->setText(name);
@@ -345,8 +363,8 @@ bool newCueNamed(ShowTreeView *view, const QString &name)
 /* The selected cue's page: a drop on the dashed area. */
 QString dropOnZone(ShowTreeView *view, QMimeData *mime)
 {
-    QWidget *page = view->findChild<QWidget *>("stCuePage");
-    QLabel *zone = view->findChild<QLabel *>("stCueDropZone");
+    QWidget *page = stFind<QWidget>(view, "stCuePage");
+    QLabel *zone = stFind<QLabel>(view, "stCueDropZone");
     return dragAndDrop(page, zone->mapTo(page, zone->rect().center()), mime, hintOf(view));
 }
 
@@ -426,14 +444,14 @@ bool clickCueRow(ShowTreeView *view, const QString &start)
 /* On a layer's page, the text of its @a key row (Colour, Dimmer…). */
 QString rowText(ShowTreeView *view, const QString &key)
 {
-    QLabel *l = view->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(key));
+    QLabel *l = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(key));
     return l == nullptr ? QString() : l->text();
 }
 
 /* On a layer's page: the ⋯ button of the @a key row. */
 QToolButton *moreButton(ShowTreeView *view, const QString &key)
 {
-    QLabel *row = view->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(key));
+    QLabel *row = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(key));
     if (row == nullptr)
         return nullptr;
     const int y = row->mapToGlobal(row->rect().center()).y();
@@ -635,16 +653,16 @@ ShowTreeView *CourseShow_Test::showTree() const
 static bool lessonOneByMouse(Doc *doc, ShowTreeView *view)
 {
     ShowTreeController *st = doc->showTree();
-    QLabel *hint = view->findChild<QLabel *>("stDropHint");
-    QWidget *page = view->findChild<QWidget *>("stCuePage");
-    QLabel *zone = view->findChild<QLabel *>("stCueDropZone");
-    QLineEdit *name = view->findChild<QLineEdit *>("stCueName");
+    QLabel *hint = stFind<QLabel>(view, "stDropHint");
+    QWidget *page = stFind<QWidget>(view, "stCuePage");
+    QLabel *zone = stFind<QLabel>(view, "stCueDropZone");
+    QLineEdit *name = stFind<QLineEdit>(view, "stCueName");
     if (hint == nullptr || page == nullptr || zone == nullptr || name == nullptr)
         { qWarning() << "lesson 1 by mouse: step failed at line" << __LINE__ << describe(doc); return false; }
 
     // Step 1: + Production, "Spring Show".
     answerNextInputDialog(QStringLiteral("Spring Show"));
-    view->findChild<QToolButton *>("stNewProduction")->click();
+    stFind<QToolButton>(view, "stNewProduction")->click();
     settle();
     if (st->productions().count() != 1 || st->productions().first().name != "Spring Show"
         || view->currentKind() != ShowTreeView::ProductionNode)
@@ -652,7 +670,7 @@ static bool lessonOneByMouse(Doc *doc, ShowTreeView *view)
 
     // Step 2: + Cue list, "01-Everybody Scream" -- Tracking.
     answerNextInputDialog(QStringLiteral("01-Everybody Scream"));
-    view->findChild<QToolButton *>("stNewList")->click();
+    stFind<QToolButton>(view, "stNewList")->click();
     settle();
     if (view->currentKind() != ShowTreeView::ListNode
         || st->productions().first().lists.count() != 1
@@ -669,7 +687,7 @@ static bool lessonOneByMouse(Doc *doc, ShowTreeView *view)
     };
     for (const Step &s : steps)
     {
-        view->findChild<QToolButton *>("stNewCue")->click();
+        stFind<QToolButton>(view, "stNewCue")->click();
         settle();
         const Cue *cue = st->cue(view->currentCueId());
         if (view->currentKind() != ShowTreeView::CueNode || cue == nullptr || cue->number != s.number)
@@ -868,7 +886,7 @@ void CourseShow_Test::lessonOneSetInThisCue()
     QCOMPARE(view->currentKind(), ShowTreeView::TrackedLayerNode);
 
     // Its Colour row: Blue, grey, from 1.0.0. ⋯ → Set in this cue → Magenta.
-    QLabel *colour = view->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyColour));
+    QLabel *colour = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeyColour));
     QVERIFY(colour != nullptr);
     QVERIFY2(colour->text().contains("Blue"), qPrintable(colour->text()));
     QToolButton *more = nullptr;
@@ -1132,7 +1150,7 @@ static bool lessonTwoByMouse(Doc *doc, ShowTreeView *view)
     LESSON_STEP(rowText(view, KeyDimmer).startsWith("40%"), rowText(view, KeyDimmer));
 
     // Step 5: Make reusable: 40% joins the palettes.
-    QLabel *reuse = view->findChild<QLabel *>(QStringLiteral("stReuse:%1").arg(KeyDimmer));
+    QLabel *reuse = stFind<QLabel>(view, QStringLiteral("stReuse:%1").arg(KeyDimmer));
     LESSON_STEP(reuse != nullptr && reuse->isVisible(), "Make reusable link");
     emit reuse->linkActivated(QStringLiteral("reuse"));
     settle(50);
@@ -1153,7 +1171,7 @@ static bool lessonTwoByMouse(Doc *doc, ShowTreeView *view)
     // Undo three times: the warm verse is back; Redo three times: the cool one.
     for (int i = 0; i < 3; ++i)
     {
-        view->findChild<QToolButton *>("stUndo")->click();
+        stFind<QToolButton>(view, "stUndo")->click();
         settle(50);
     }
     {
@@ -1162,7 +1180,7 @@ static bool lessonTwoByMouse(Doc *doc, ShowTreeView *view)
     }
     for (int i = 0; i < 3; ++i)
     {
-        view->findChild<QToolButton *>("stRedo")->click();
+        stFind<QToolButton>(view, "stRedo")->click();
         settle(50);
     }
     {
@@ -1190,7 +1208,7 @@ static bool lessonTwoByMouse(Doc *doc, ShowTreeView *view)
         LESSON_STEP(said == QStringLiteral("%1 → cue look on 1.0.3 Scream: reaches 2 of 2 layers").arg(pal), said);
     }
     qInfo().noquote() << "[L2] rows:" << view->cueLayerItems().join(" | ");
-    QLabel *looks = view->findChild<QLabel *>("stCueLooks");
+    QLabel *looks = stFind<QLabel>(view, "stCueLooks");
     qInfo().noquote() << "[L2] cue looks:" << (looks ? looks->text() : QString());
     return true;
 }
@@ -1245,7 +1263,7 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.4", st->cue(view->currentCueId())->number);
     // Mode: Block -- the solo starts from a dark stage.
     {
-        QComboBox *mode = view->findChild<QComboBox *>("stCueMode");
+        QComboBox *mode = stFind<QComboBox>(view, "stCueMode");
         LESSON_STEP(mode != nullptr, "Mode box");
         const int block = mode->findText(QStringLiteral("Block"), Qt::MatchStartsWith);
         LESSON_STEP(block >= 0, "no Block in Mode");
@@ -1639,7 +1657,7 @@ void CourseShow_Test::lessonTwoColourPicker()
     QVERIFY(answered);
     qInfo().noquote() << "[L2] picked colour row:" << rowText(view, KeyColour);
     QVERIFY2(rowText(view, KeyColour).startsWith("#6a0dad"), qPrintable(rowText(view, KeyColour)));
-    QVERIFY(view->findChild<QLabel *>(QStringLiteral("stReuse:%1").arg(KeyColour)) != nullptr);
+    QVERIFY(stFind<QLabel>(view, QStringLiteral("stReuse:%1").arg(KeyColour)) != nullptr);
 
     // The puzzle: a cue look on the Pose reaches none of its layers (its
     // one layer sets its own colour).
@@ -1667,7 +1685,7 @@ void CourseShow_Test::lessonThreeExtension()
     settle(300);
     QVERIFY2(rowText(view, KeyPosition).startsWith("Aim Center"), qPrintable(rowText(view, KeyPosition)));
     QVERIFY(panTilt(doc, "SR AT Spot") != soloist);
-    view->findChild<QToolButton *>("stUndo")->click();
+    stFind<QToolButton>(view, "stUndo")->click();
     settle(300);
     QCOMPARE(panTilt(doc, "SR AT Spot"), soloist);
 
@@ -1712,7 +1730,7 @@ void CourseShow_Test::lessonFiveOperate()
     QCOMPARE(sends(doc, "SR Truss Wash 1"), QByteArray("\x00\x00\x00", 3));
     QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
     qInfo().noquote() << "[L5] Show Tree in LIVE says:" << hintOf(view)->text()
-                      << "|" << view->findChild<QLabel *>("stPreview")->text();
+                      << "|" << stFind<QLabel>(view, "stPreview")->text();
 
     run = runTab(m_app);
     press(run, "crStop");
@@ -1778,7 +1796,7 @@ bool shoot(const HelpShots::Frame &f, const QString &dir, const QString &name)
     // Room for the cue names in the tree, as a student would drag it.
     if (ShowTreeView *v = ShowTreeView::instance())
     {
-        if (QSplitter *split = v->findChild<QSplitter *>("stSplitter"))
+        if (QSplitter *split = stFind<QSplitter>(v, "stSplitter"))
         {
             const int w = split->width();
             split->setSizes(QList<int>() << 300 << 420 << w - 720);
@@ -1786,13 +1804,30 @@ bool shoot(const HelpShots::Frame &f, const QString &dir, const QString &name)
         v->tree()->setColumnWidth(0, 250);
     }
     settle();
+    // A widget outside the grab would be left out without a word: the
+    // Show Tree's header, say, which the top bar holds while it's on show.
     for (const HelpShots::Callout &c : f.callouts)
-        if (c.widget.isNull() ? c.rect.isEmpty() : !c.widget->isVisible())
+        if (c.widget.isNull() ? c.rect.isEmpty()
+                              : (!c.widget->isVisible() || !f.grab->isAncestorOf(c.widget)))
         {
             qWarning() << name << "callout" << c.number << "has nothing on show";
             return false;
         }
     return save(HelpShots::annotate(f.grab->grab().toImage(), f), dir, name);
+}
+/* A picture of the Show Tree as a student sees it: the tab and, above it,
+   the window's top bar, which holds the tab's header (+ Production, + Cue,
+   Undo, the hint) while the Show Tree is the tab on show. The grab is the
+   whole window, cropped to those two. */
+HelpShots::Frame showTreeFrame(App *app, ShowTreeView *v)
+{
+    HelpShots::Frame f;
+    f.grab = app;
+    QRect r(v->mapTo(app, QPoint(0, 0)), v->size());
+    if (app->m_toolbar != nullptr && app->m_toolbar->isVisible())
+        r |= QRect(app->m_toolbar->mapTo(app, QPoint(0, 0)), app->m_toolbar->size());
+    f.crop = r;
+    return f;
 }
 }
 
@@ -1849,28 +1884,27 @@ void CourseShow_Test::lessonPictures()
     settle();
     view->m_newCue->click();
     settle();
-    QLineEdit *name = view->findChild<QLineEdit *>("stCueName");
+    QLineEdit *name = stFind<QLineEdit>(view, "stCueName");
     name->setText(QStringLiteral("Pose"));
     QTest::keyClick(name, Qt::Key_Return);
     settle(100);
     {
-        HelpShots::Frame f;
-        f.grab = view;
+        HelpShots::Frame f = showTreeFrame(m_app, view);
         f.callouts << mark(view->m_newCue, 1) << mark(name, 2)
-                   << mark(view->findChild<QLabel *>("stCueDropZone"), 3);
+                   << mark(stFind<QLabel>(view, "stCueDropZone"), 3);
         QTreeWidgetItem *cueRow = nullptr;
         for (QTreeWidgetItemIterator it(tree); *it; ++it)
             if ((*it)->text(0).contains(QLatin1String("Pose")))
                 cueRow = *it;
         QVERIFY(cueRow != nullptr);
-        f.callouts << markRect(tree->viewport(), tree->visualItemRect(cueRow), view, 4);
+        f.callouts << markRect(tree->viewport(), tree->visualItemRect(cueRow), m_app, 4);
         QVERIFY(shoot(f, dir, "new-cue"));
     }
 
     // Drag TrussC-RGB onto the dashed area.
-    QLabel *hint = view->findChild<QLabel *>("stDropHint");
-    QWidget *page = view->findChild<QWidget *>("stCuePage");
-    QLabel *zone = view->findChild<QLabel *>("stCueDropZone");
+    QLabel *hint = stFind<QLabel>(view, "stDropHint");
+    QWidget *page = stFind<QWidget>(view, "stCuePage");
+    QLabel *zone = stFind<QLabel>(view, "stCueDropZone");
     QTreeWidgetItem *cyc = showLibraryRow(view->library(), "TrussC-RGB");
     QVERIFY(cyc != nullptr);
     dragAndDrop(page, zone->mapTo(page, zone->rect().center()),
@@ -1884,11 +1918,10 @@ void CourseShow_Test::lessonPictures()
         return QRect();
     };
     {
-        HelpShots::Frame f;
-        f.grab = view;
+        HelpShots::Frame f = showTreeFrame(m_app, view);
         cyc = showLibraryRow(view->library(), "TrussC-RGB");
-        f.callouts << markRect(view->library()->viewport(), view->library()->visualItemRect(cyc), view, 1)
-                   << markRect(rows->viewport(), rowRect("TrussC-RGB"), view, 2);
+        f.callouts << markRect(view->library()->viewport(), view->library()->visualItemRect(cyc), m_app, 1)
+                   << markRect(rows->viewport(), rowRect("TrussC-RGB"), m_app, 2);
         QVERIFY(shoot(f, dir, "drop-group"));
     }
     // Blue and Full onto the row.
@@ -1897,12 +1930,11 @@ void CourseShow_Test::lessonPictures()
                     idsMime(FunctionsTreeWidget::paletteDragMimeType(), { paletteNamed(doc, pal)->id() }), hint);
     settle(100);
     {
-        HelpShots::Frame f;
-        f.grab = view;
+        HelpShots::Frame f = showTreeFrame(m_app, view);
         QTreeWidgetItem *blue = showLibraryRow(view->library(), "Blue");
         QRect r = view->library()->visualItemRect(blue);
-        f.callouts << markRect(view->library()->viewport(), r, view, 1)
-                   << markRect(rows->viewport(), rowRect("TrussC-RGB"), view, 2)
+        f.callouts << markRect(view->library()->viewport(), r, m_app, 1)
+                   << markRect(rows->viewport(), rowRect("TrussC-RGB"), m_app, 2)
                    << mark(hint, 3);
         QVERIFY(shoot(f, dir, "drop-palettes"));
     }
@@ -1919,17 +1951,16 @@ void CourseShow_Test::lessonPictures()
     QVERIFY(view->selectNode(verse));
     settle(200);
     {
-        HelpShots::Frame f;
-        f.grab = view;
-        f.callouts << markRect(rows->viewport(), rowRect("⤳ TrussC-RGB"), view, 1)
-                   << markRect(rows->viewport(), rowRect("StepTops"), view, 2);
+        HelpShots::Frame f = showTreeFrame(m_app, view);
+        f.callouts << markRect(rows->viewport(), rowRect("⤳ TrussC-RGB"), m_app, 1)
+                   << markRect(rows->viewport(), rowRect("StepTops"), m_app, 2);
         QTreeWidgetItem *grey = nullptr;
         for (QTreeWidgetItemIterator it(tree); *it; ++it)
             if ((*it)->text(0).contains(QStringLiteral("⤳")) && (*it)->parent()
                 && (*it)->parent()->text(0).contains(QLatin1String("1.0.1")))
                 grey = *it;
         if (grey != nullptr)
-            f.callouts << markRect(tree->viewport(), tree->visualItemRect(grey), view, 3);
+            f.callouts << markRect(tree->viewport(), tree->visualItemRect(grey), m_app, 3);
         QVERIFY(shoot(f, dir, "tracked-row"));
     }
     // The Rig Overview of each cue, as Design shows it while it's selected.
@@ -2016,11 +2047,10 @@ void CourseShow_Test::lessonPictures()
         QVERIFY(clickCueRow(v, "StepTops"));
         settle(100);
         {
-            HelpShots::Frame f;
-            f.grab = v;
-            f.callouts << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyColour)), 1)
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(stFind<QLabel>(v, QStringLiteral("stRow:%1").arg(KeyColour)), 1)
                        << mark(moreButton(v, KeyColour), 2)
-                       << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyDimmer)), 3)
+                       << mark(stFind<QLabel>(v, QStringLiteral("stRow:%1").arg(KeyDimmer)), 3)
                        << mark(moreButton(v, KeyDimmer), 4);
             QVERIFY(shoot(f, d, "layer-page"));
         }
@@ -2029,11 +2059,10 @@ void CourseShow_Test::lessonPictures()
         QVERIFY(rowMenu(v, KeyDimmer, "Level…"));
         settle(100);
         {
-            HelpShots::Frame f;
-            f.grab = v;
-            f.callouts << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyColour)), 1)
-                       << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyDimmer)), 2)
-                       << mark(v->findChild<QLabel *>(QStringLiteral("stReuse:%1").arg(KeyDimmer)), 3)
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(stFind<QLabel>(v, QStringLiteral("stRow:%1").arg(KeyColour)), 1)
+                       << mark(stFind<QLabel>(v, QStringLiteral("stRow:%1").arg(KeyDimmer)), 2)
+                       << mark(stFind<QLabel>(v, QStringLiteral("stReuse:%1").arg(KeyDimmer)), 3)
                        << mark(hintOf(v), 4);
             QVERIFY(shoot(f, d, "make-reusable"));
         }
@@ -2053,10 +2082,9 @@ void CourseShow_Test::lessonPictures()
         {
             QListWidget *rows = v->cueLayerList();
             QRect own = rows->visualItemRect(cueRow(v, "TrussW-RGB")) | rows->visualItemRect(cueRow(v, "Lanterns"));
-            HelpShots::Frame f;
-            f.grab = v;
-            f.callouts << mark(v->findChild<QLabel *>("stCueLooks"), 1)
-                       << markRect(rows->viewport(), own, v, 2);
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(stFind<QLabel>(v, "stCueLooks"), 1)
+                       << markRect(rows->viewport(), own, m_app, 2);
             QVERIFY(shoot(f, d, "cue-looks"));
         }
         dc->resetModified();
@@ -2082,10 +2110,9 @@ void CourseShow_Test::lessonPictures()
         {
             QTreeWidgetItem *center = showLibraryRow(v->library(), "Center");
             QVERIFY(center != nullptr);
-            HelpShots::Frame f;
-            f.grab = v;
-            f.callouts << markRect(v->library()->viewport(), v->library()->visualItemRect(center), v, 1)
-                       << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyPosition)), 2);
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << markRect(v->library()->viewport(), v->library()->visualItemRect(center), m_app, 1)
+                       << mark(stFind<QLabel>(v, QStringLiteral("stRow:%1").arg(KeyPosition)), 2);
             QVERIFY(shoot(f, d, "aim-row"));
         }
         QVERIFY(v->selectNode(cueNumbered(dc, "1.0.4")));
@@ -2097,20 +2124,18 @@ void CourseShow_Test::lessonPictures()
                     solo = *it;
             QVERIFY(solo != nullptr);
             QListWidget *rows = v->cueLayerList();
-            HelpShots::Frame f;
-            f.grab = v;
-            f.callouts << mark(v->findChild<QComboBox *>("stCueMode"), 1)
-                       << markRect(rows->viewport(), rows->visualItemRect(cueRow(v, "AT-Spots")), v, 2)
-                       << markRect(v->tree()->viewport(), v->tree()->visualItemRect(solo), v, 3);
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(stFind<QComboBox>(v, "stCueMode"), 1)
+                       << markRect(rows->viewport(), rows->visualItemRect(cueRow(v, "AT-Spots")), m_app, 2)
+                       << markRect(v->tree()->viewport(), v->tree()->visualItemRect(solo), m_app, 3);
             QVERIFY(shoot(f, d, "solo-cue"));
         }
         QVERIFY(clickCueRow(v, "AT-Spots"));
         settle(100);
         {
-            HelpShots::Frame f;
-            f.grab = v;
-            f.callouts << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyDimmer)), 1)
-                       << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyPosition)), 2);
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(stFind<QLabel>(v, QStringLiteral("stRow:%1").arg(KeyDimmer)), 1)
+                       << mark(stFind<QLabel>(v, QStringLiteral("stRow:%1").arg(KeyPosition)), 2);
             QVERIFY(shoot(f, d, "spot-layer"));
         }
         dc->resetModified();
@@ -2125,8 +2150,7 @@ void CourseShow_Test::lessonPictures()
         QVERIFY(v->selectNode(cueNumbered(dc, "1.0.3")));
         settle(200);
         {
-            HelpShots::Frame f;
-            f.grab = v;
+            HelpShots::Frame f = showTreeFrame(m_app, v);
             f.callouts << mark(v->m_cueFadeIn, 1) << mark(v->m_cueFadeOut, 2) << mark(v->m_cueHold, 3);
             QVERIFY(shoot(f, d, "cue-timing"));
         }

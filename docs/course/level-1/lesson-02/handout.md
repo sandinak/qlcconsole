@@ -84,7 +84,7 @@ Switch roles after each part.
    row and **(4)** its **⋯**.
 
 5. On the **Colour** row, click **⋯ → Set to → Lavender**.
-   - *You should see:* the row reads **Lavender**, and the top right
+   - *You should see:* the row reads **Lavender**, and the top bar
      reads **Changed: 1.0.1 Verse, 1.0.2 Chorus**. The chorus changed too,
      because StepTops tracks into it.
 6. On the **Dimmer** row, click **⋯ → Level…**. A small window asks for
@@ -121,7 +121,7 @@ Switch roles after each part.
     - *You should see:* two new rows, **TrussW-RGB** and **Lanterns**,
       with no colour yet.
 11. Drag **Red** (Palettes → Colour) onto the **dashed box** itself, not
-    onto a row. While you drag, the top right reads *"Red → cue look on
+    onto a row. While you drag, the top bar reads *"Red → cue look on
     1.0.3 Scream: reaches 2 of 2 layers"*. Then drag **Full** (Palettes →
     Dimmer) onto the dashed box the same way.
     - *You should see:* **Cue looks: Colour: Red, Dimmer: Full**, both
@@ -158,7 +158,7 @@ Switch roles after each part.
    The row shows its code, like **#6a0dad-ish**, with **Make reusable**.
    Is it better than Lavender? If not, undo it.
 2. **A puzzle.** Click **1.0.0 Pose** and drag **Green** onto its dashed
-   box. The top right reads *"reaches 0 of 1 layers"*. Why didn't the cyc
+   box. The top bar reads *"reaches 0 of 1 layers"*. Why didn't the cyc
    turn green? (Undo afterwards.)
 3. Give the **chorus** a new mood with **⋯ → Set to** on its Steps row.
    What does it say now?

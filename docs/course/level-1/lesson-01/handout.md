@@ -70,10 +70,11 @@ Switch roles after each cue.
 
 ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
-The tab is laid out as **(1)** the buttons that create things, **(2)**
-the **Library** of groups and palettes to drag from, **(3)** the **tree**
-of your show, **(4)** the **page** for whatever you've selected, **(5)**
-the command line (for later), and **(6)** the tabs.
+The tab is laid out as **(1)** the buttons that create things, in the
+bar along the top of the window, **(2)** the **Library** of groups and
+palettes to drag from, **(3)** the **tree** of your show, **(4)** the
+**page** for whatever you've selected, **(5)** the command line (for
+later), and **(6)** the tabs.
 
 ### Make the song
 
@@ -97,8 +98,9 @@ the command line (for later), and **(6)** the tabs.
 
 7. In the Library, open **All → Groups → Trusses** and drag **TrussC-RGB**
    onto the dashed box under **Layers** (3).
-   - While you drag, the top right reads *"a new layer on TrussC-RGB in
-     1.0.0 Pose"*.
+   - While you drag, the note in the top bar, just left of **Stop all**,
+     reads *"a new layer on TrussC-RGB in 1.0.0 Pose"*. It tells you
+     where a drop will land, so read it before you let go.
    - *You should see:* a **TrussC-RGB** row under Layers.
 
 ![Dragging a group onto the cue](../../images/lesson-1-1/drop-group.png)
@@ -113,7 +115,7 @@ the command line (for later), and **(6)** the tabs.
 ![Colour and level on the layer](../../images/lesson-1-1/drop-palettes.png)
 
    **(1)** the palette in the Library, **(2)** the layer it lands on, and
-   **(3)** the note at the top right saying what changed.
+   **(3)** the note in the top bar saying what changed.
 
    **Always give a layer both a colour *and* a level.** These LED
    fixtures show a colour at full on their own, but fixtures with a

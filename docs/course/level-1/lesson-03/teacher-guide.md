@@ -96,7 +96,7 @@ On the projector:
 
 | You see | Likely cause | Say |
 |---|---|---|
-| The aim landed somewhere unexpected | Dropped on the dashed box or another row | "Undo, and drop it on the **AT-W-ALL** row. Read the top right while you drag." |
+| The aim landed somewhere unexpected | Dropped on the dashed box or another row | "Undo, and drop it on the **AT-W-ALL** row. Read the note in the top bar while you drag." |
 | The Solo has all the earlier lights in it | Mode isn't **Block** | "Set **Mode** to **Block** on the Solo's page." |
 | Two pools of light on the floor by the towers | Expected: no position yet | "Where are they pointing? Give them a place to aim at." |
 | Hard to see the spots | Busy stage, or Room is bright | "Set **Room** to **Dim** in the Rig Overview." |

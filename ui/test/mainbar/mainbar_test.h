@@ -51,6 +51,9 @@ private slots:
     /** A narrow window folds the tab's tools into », never the show
      *  controls */
     void aNarrowWindowFoldsTheTabsTools();
+    /** The Show Tree's drop hint stays in sight at a laptop's width: the
+     *  buttons fold into », not the hint (it says where a drag will go) */
+    void theShowTreesHintIsNeverFolded();
     /** Operate hides the Virtual Console's tools, in the top bar as at home */
     void operateModeStillHidesTheConsolesTools();
     /** Pictures for the record (MAINBAR_SHOTS=dir) */

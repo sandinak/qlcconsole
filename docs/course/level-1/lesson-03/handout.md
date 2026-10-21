@@ -73,10 +73,10 @@ Switch roles after each part.
 ![Front light, not aimed](../../images/lesson-1-3/rig-verse-front.png)
 
 5. In the Library, open **All → Targets** and drag **Center** onto the
-   **AT-W-ALL** row. While you drag, the top right reads *"Aim at Center →
+   **AT-W-ALL** row. While you drag, the top bar reads *"Aim at Center →
    layer AT-W-ALL in 1.0.1 Verse"*.
    - *You should see:* the four beams swing in onto the middle of the
-     risers, and the top right reads **Changed: 1.0.1 Verse, 1.0.2
+     risers, and the top bar reads **Changed: 1.0.1 Verse, 1.0.2
      Chorus, 1.0.3 Scream**, because the front light tracks into the
      following cues.
 
@@ -108,7 +108,7 @@ Switch roles after each part.
 ![White at Full, no position](../../images/lesson-1-3/rig-solo-floor.png)
 
 10. From **All → Targets**, drag **Soloist DS** onto the **AT-Spots** row.
-    The top right reads *"Aim at Soloist DS → layer AT-Spots in 1.0.4
+    The top bar reads *"Aim at Soloist DS → layer AT-Spots in 1.0.4
     Solo"*.
     - *You should see:* both spots swing onto the singer standing in front
       of the risers, who is now the brightest thing on stage.

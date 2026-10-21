@@ -21,6 +21,7 @@
 #include <QTabWidget>
 #include <QTabBar>
 #include <QToolBar>
+#include <QLabel>
 #include <QToolButton>
 #include <QMenuBar>
 #include <QStatusBar>
@@ -457,7 +458,12 @@ void MainBar_Test::aNarrowWindowFoldsTheTabsTools()
     m_app->resize(qMax(m_app->minimumSizeHint().width(), 760), was.height());
     QCoreApplication::processEvents();
 
-    QToolBar *tools = qobject_cast<QToolBar *>(m_app->m_mainBar->hostedTools());
+    // The Show Tree's toolbar sits in a header beside its drop hint.
+    QWidget *hosted = m_app->m_mainBar->hostedTools();
+    QVERIFY(hosted != nullptr);
+    QToolBar *tools = qobject_cast<QToolBar *>(hosted);
+    if (tools == nullptr)
+        tools = hosted->findChild<QToolBar *>();
     QVERIFY(tools != nullptr);
     QToolButton *more = tools->findChild<QToolButton *>(QStringLiteral("qt_toolbar_ext_button"));
     QVERIFY(more != nullptr);
@@ -475,6 +481,40 @@ void MainBar_Test::aNarrowWindowFoldsTheTabsTools()
     // The window can still be made narrow: the bar doesn't hold it wide.
     QVERIFY2(m_app->m_toolbar->minimumSizeHint().width() < 700,
              qPrintable(QString::number(m_app->m_toolbar->minimumSizeHint().width())));
+    m_app->resize(was);
+    QCoreApplication::processEvents();
+}
+
+void MainBar_Test::theShowTreesHintIsNeverFolded()
+{
+    showTab(QStringLiteral("Show Tree"));
+    const QSize was = m_app->size();
+    QWidget *tools = m_app->m_mainBar->hostedTools();
+    QVERIFY(tools != nullptr);
+    QLabel *hint = tools->findChild<QLabel *>(QStringLiteral("stDropHint"));
+    QVERIFY(hint != nullptr);
+    // What a drag says, as long as the course quotes them.
+    hint->setText(QStringLiteral("Aim at Soloist DS → layer AT-Spots in 1.0.4 Solo"));
+
+    // A 13" laptop, and a narrower window still: the hint whole, inside the
+    // window; the buttons are what fold.
+    for (int width : { 1280, 1024 })
+    {
+        m_app->resize(qMax(m_app->minimumSizeHint().width(), width), was.height());
+        QCoreApplication::processEvents();
+        QVERIFY2(hint->isVisible(), qPrintable(QString::number(width)));
+        QVERIFY2(hint->width() >= hint->sizeHint().width(),
+                 qPrintable(QString("%1: hint %2 of %3 px").arg(width).arg(hint->width())
+                                .arg(hint->sizeHint().width())));
+        const QRect r(hint->mapTo(m_app, QPoint(0, 0)), hint->size());
+        QVERIFY2(m_app->rect().contains(r), qPrintable(QString::number(width)));
+        QToolButton *more = tools->findChild<QToolButton *>(QStringLiteral("qt_toolbar_ext_button"));
+        QVERIFY(more != nullptr && more->isVisible());
+    }
+    // ...and it doesn't hold the window wide.
+    QVERIFY2(m_app->m_toolbar->minimumSizeHint().width() < 700,
+             qPrintable(QString::number(m_app->m_toolbar->minimumSizeHint().width())));
+    hint->clear();
     m_app->resize(was);
     QCoreApplication::processEvents();
 }
