@@ -31,6 +31,8 @@
 #include <QTcpSocket>
 #include <QSettings>
 #include <QProcess>
+#include <QThread>
+#include <QRegularExpression>
 #include <QtTest>
 
 #include "updatedownloader.h"
@@ -232,11 +234,89 @@ QString markerOf(const QString &app)
     return m.open(QIODevice::ReadOnly) ? QString::fromUtf8(m.readAll()) : QString();
 }
 
+/** Detaches every disk image still attached from a file under @a folder,
+ *  mounted or not. hdiutil names an image by the path it was given
+ *  (/var/folders/...), not always the real one (/private/var/...): either
+ *  matches. */
+void detachImagesUnder(const QString &folder)
+{
+    const QStringList folders({ QDir::cleanPath(folder), QFileInfo(folder).canonicalFilePath() });
+    QByteArray info;
+    run("/usr/bin/hdiutil", { "info" }, &info);
+    // Blocks of "image-path : <file>" then "/dev/diskN ..." lines.
+    bool ours = false;
+    QStringList devices;
+    for (const QByteArray &raw : info.split('\n'))
+    {
+        const QString line = QString::fromUtf8(raw).trimmed();
+        if (line.startsWith(QLatin1String("image-path")))
+        {
+            const QString image = line.section(QLatin1Char(':'), 1).trimmed();
+            ours = false;
+            for (const QString &f : folders)
+                ours = ours || (f.isEmpty() == false && image.startsWith(f + QLatin1Char('/')));
+            continue;
+        }
+        const QString device = line.section(QRegularExpression("\\s"), 0, 0);
+        if (ours && device.contains(QRegularExpression("^/dev/disk\\d+$")))
+        {
+            devices << device;
+            ours = false;       // the whole disk is enough
+        }
+    }
+    for (const QString &device : devices)
+    {
+        qWarning() << "detaching a disk image left attached:" << device;
+        if (run("/usr/bin/hdiutil", { "detach", "-quiet", device }) == false)
+            run("/usr/bin/hdiutil", { "detach", "-quiet", "-force", device });
+    }
+}
+
+/** A disk image of @a srcFolder, as a release's is (UDZO).
+ *
+ *  Not `hdiutil create -srcfolder`: that attaches a scratch image to fill
+ *  it, and with several test programs at it at once (overlapping gates) it
+ *  failed about half the time and could leave the new image attached with
+ *  no file system -- after which every attach of it, the helper's included,
+ *  fails with "Resource temporarily unavailable". makehybrid writes the
+ *  file system straight into the file and convert compresses it; neither
+ *  attaches anything. UDF, because makehybrid's HFS adds Finder info that
+ *  a strict code-signature check refuses. */
 bool makeDmg(const QString &srcFolder, const QString &dmg)
 {
-    return run("/usr/bin/hdiutil", { "create", "-quiet", "-srcfolder", srcFolder,
-                                     "-format", "UDZO", "-volname", "qlcconsole test", dmg });
+    static int made = 0;
+    const QString volume = QStringLiteral("qlcconsole test %1-%2")
+                               .arg(QCoreApplication::applicationPid()).arg(++made);
+    const QString raw = dmg + QStringLiteral(".udf.iso");
+    QByteArray out;
+    for (int attempt = 1; attempt <= 5; ++attempt)
+    {
+        QFile::remove(raw);
+        QFile::remove(dmg);
+        if (run("/usr/bin/hdiutil", { "makehybrid", "-quiet", "-udf", "-udf-volume-name", volume,
+                                      "-o", raw, srcFolder }, &out)
+            && run("/usr/bin/hdiutil", { "convert", "-quiet", raw, "-format", "UDZO", "-o", dmg }, &out))
+        {
+            QFile::remove(raw);
+            return true;
+        }
+        qWarning() << "making" << dmg << "attempt" << attempt << ":" << out.trimmed();
+        detachImagesUnder(QFileInfo(dmg).absolutePath());
+        QThread::sleep(std::chrono::seconds(attempt));
+    }
+    return false;
 }
+
+/** On leaving a test, however it left: detach every disk image still
+ *  attached from under @a folder (a helper killed part way would leave one). */
+class DetachImagesUnder
+{
+public:
+    explicit DetachImagesUnder(const QString &folder) : m_folder(folder) {}
+    ~DetachImagesUnder() { detachImagesUnder(m_folder); }
+private:
+    QString m_folder;
+};
 #endif
 }
 
@@ -895,11 +975,12 @@ void Updates_Test::macHelperPrepare()
     QVERIFY(makeApp(dir.path() + "/src/qlcconsole.app", "com.test.qlcconsole", "2"));
     const QString dmg = dir.path() + "/new.dmg";
     QVERIFY(makeDmg(dir.path() + "/src", dmg));
+    DetachImagesUnder detach(dir.path());
 
     UpdateInstaller inst;
     QSignalSpy spy(&inst, &UpdateInstaller::prepared);
     inst.prepare(dmg, apps + "/qlcconsole.app", true);
-    QVERIFY(spy.wait(120000));
+    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 120000);
     QVERIFY2(spy.first().at(0).toBool(), qPrintable(spy.first().at(1).toString()));
     QCOMPARE(inst.stagedPath(), apps + "/.qlcconsole-update.app");
     QCOMPARE(markerOf(inst.stagedPath()), QString("2"));
@@ -919,9 +1000,14 @@ void Updates_Test::macHelperRefusals()
     const QString staged = apps + "/.qlcconsole-update.app";
     QVERIFY(QDir().mkpath(apps));
     QVERIFY(makeApp(running, "com.test.qlcconsole", "1"));
+    DetachImagesUnder detach(dir.path());
 
+    // Runs the helper on a disk image of its own; false if it never got as
+    // far as answering. *ok and *error are then that case's, never the last.
     auto prepareFrom = [&](const QString &name, const QString &bundleId, bool tamper,
-                           bool allowAdhoc, QString *error) {
+                           bool allowAdhoc, bool *ok, QString *error) {
+        *ok = false;
+        error->clear();
         const QString src = dir.path() + "/" + name;
         QDir().mkpath(src);
         if (bundleId.isEmpty() == false)
@@ -942,31 +1028,48 @@ void Updates_Test::macHelperRefusals()
         }
         const QString dmg = dir.path() + "/" + name + ".dmg";
         if (makeDmg(src, dmg) == false)
+        {
+            *error = QStringLiteral("could not make the disk image %1").arg(dmg);
             return false;
+        }
         UpdateInstaller inst;
         QSignalSpy spy(&inst, &UpdateInstaller::prepared);
         inst.prepare(dmg, running, allowAdhoc);
-        if (spy.isEmpty() && spy.wait(120000) == false)
+        // This installer's one answer, however long a busy diskimagesd takes.
+        QElapsedTimer t;
+        t.start();
+        while (spy.count() == 0 && t.elapsed() < 120000)
+            spy.wait(1000);
+        if (spy.count() != 1)
+        {
+            *error = QStringLiteral("%1 answers from the helper").arg(spy.count());
             return false;
+        }
+        *ok = spy.first().at(0).toBool();
         *error = spy.first().at(1).toString();
-        return spy.first().at(0).toBool();
+        return true;
     };
 
+    bool ok = true;
     QString error;
     // A copy with no Team ID (a dev build) cannot vouch for anything.
-    QVERIFY(prepareFrom("unsigned", "com.test.qlcconsole", false, false, &error) == false);
+    QVERIFY2(prepareFrom("unsigned", "com.test.qlcconsole", false, false, &ok, &error), qPrintable(error));
+    QVERIFY(ok == false);
     QVERIFY2(error.contains("not a signed release"), qPrintable(error));
     QVERIFY(QFileInfo::exists(staged) == false);
 
-    QVERIFY(prepareFrom("otherid", "com.test.somethingelse", false, true, &error) == false);
+    QVERIFY2(prepareFrom("otherid", "com.test.somethingelse", false, true, &ok, &error), qPrintable(error));
+    QVERIFY(ok == false);
     QVERIFY2(error.contains("bundle identifier"), qPrintable(error));
     QVERIFY(QFileInfo::exists(staged) == false);
 
-    QVERIFY(prepareFrom("tampered", "com.test.qlcconsole", true, true, &error) == false);
+    QVERIFY2(prepareFrom("tampered", "com.test.qlcconsole", true, true, &ok, &error), qPrintable(error));
+    QVERIFY(ok == false);
     QVERIFY2(error.contains("signature"), qPrintable(error));
     QVERIFY(QFileInfo::exists(staged) == false);
 
-    QVERIFY(prepareFrom("empty", QString(), false, true, &error) == false);
+    QVERIFY2(prepareFrom("empty", QString(), false, true, &ok, &error), qPrintable(error));
+    QVERIFY(ok == false);
     QVERIFY2(error.contains("no app"), qPrintable(error));
 
     // No write access to the app's folder: no in-place install at all.

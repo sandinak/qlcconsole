@@ -68,13 +68,34 @@ QByteArray msc(int device, int command, const QByteArray &cue)
     return b;
 }
 
-/** A free UDP port on this machine for the test to listen on. */
+/** A free UDP port on this machine for the test to listen on: one nothing
+ *  holds on any address, shared or not (the listener binds Any, sharing). */
 int freePort()
 {
     QUdpSocket probe;
-    probe.bind(QHostAddress(QHostAddress::LocalHost), 0);
+    probe.bind(QHostAddress(QHostAddress::Any), 0, QUdpSocket::DontShareAddress);
     return probe.localPort();
 }
+
+/** Turns OSC on for @a listener on a free port and returns the port. A port
+ *  free a moment ago can be taken before the listener binds it (another
+ *  test program, overlapping gates): then another one is tried. */
+int listenOnAFreePort(ShowControlListener &listener)
+{
+    for (int attempt = 0; attempt < 10; ++attempt)
+    {
+        ShowControlListener::setSettings(true, freePort(), true, 1);
+        listener.apply();
+        if (listener.oscState() == ShowControlListener::OscListening)
+            return ShowControlListener::oscPort();
+        qWarning() << "OSC listener could not bind:" << listener.status();
+    }
+    return -1;
+}
+
+/** However busy the machine (a full gate, several at once), a datagram over
+ *  localhost arrives well within this. */
+const int kDatagramTimeout = 30000;
 }
 
 void ShowControlUi_Test::initTestCase()
@@ -134,19 +155,19 @@ Chaser *ShowControlUi_Test::makeList(int steps)
 void ShowControlUi_Test::oscFromTheNetworkFiresTheCue()
 {
     Chaser *c = makeList(3);
-    const int port = freePort();
+    int port = freePort();
 
     ShowControlListener::setSettings(false, port, true, 1);
     ShowControlListener listener(m_doc);
     QVERIFY(listener.status().contains("off"));
 
-    ShowControlListener::setSettings(true, port, true, 1);
-    listener.apply();
+    port = listenOnAFreePort(listener);
+    QVERIFY2(port > 0, qPrintable(listener.status()));
     QVERIFY2(listener.status().contains(QString::number(port)), qPrintable(listener.status()));
 
     QUdpSocket qlab;
     qlab.writeDatagram(osc("/cue/2/start"), QHostAddress::LocalHost, quint16(port));
-    QTRY_VERIFY(!listener.lastCommand().isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(!listener.lastCommand().isEmpty(), kDatagramTimeout);
     QVERIFY2(listener.lastCommand().contains("GO cue 2"), qPrintable(listener.lastCommand()));
     for (int i = 0; i < 3; ++i)
         m_doc->masterTimer()->timerTick();
@@ -155,7 +176,7 @@ void ShowControlUi_Test::oscFromTheNetworkFiresTheCue()
 
     // One that can't be carried out says so.
     qlab.writeDatagram(osc("/cue/9/start"), QHostAddress::LocalHost, quint16(port));
-    QTRY_VERIFY(listener.lastCommand().contains("cue 9"));
+    QTRY_VERIFY_WITH_TIMEOUT(listener.lastCommand().contains("cue 9"), kDatagramTimeout);
     QVERIFY(listener.lastCommand().contains("not done"));
 
     // Off again: the port is let go.
@@ -308,23 +329,28 @@ void ShowControlUi_Test::aCommandReceivedShowsAsLast()
 {
     Chaser *c = makeList(3);
     m_doc->showControl()->setMainCueList(c->id());
-    const int port = freePort();
-    ShowControlListener::setSettings(true, port, true, 1);
+    ShowControlListener::setSettings(false, freePort(), true, 1);
     ShowControlListener listener(m_doc);
+    const int port = listenOnAFreePort(listener);
+    QVERIFY2(port > 0, qPrintable(listener.status()));
     ShowControlSyncPage page(m_doc);
     page.setListener(&listener);
     QLabel *oscLast = page.findChild<QLabel *>("scOscLast");
     QLabel *mscLast = page.findChild<QLabel *>("scMscLast");
 
+    // Each wait is on what the page shows, for as long as a busy machine
+    // could take to hand a datagram over -- never on a fixed delay.
     QUdpSocket qlab;
     qlab.writeDatagram(osc("/cue/2/start"), QHostAddress::LocalHost, quint16(port));
-    QTRY_VERIFY2(oscLast->text().contains("GO cue 2"), qPrintable(oscLast->text()));
+    QTRY_VERIFY2_WITH_TIMEOUT(oscLast->text().contains("GO cue 2"), qPrintable(oscLast->text()),
+                              kDatagramTimeout);
     QVERIFY(oscLast->text().contains(QRegularExpression("^\\d\\d:\\d\\d:\\d\\d")));
     QCOMPARE(mscLast->text(), QString("Nothing received yet."));
 
     // An address that isn't a cue command says what it was.
     qlab.writeDatagram(osc("/qlab/hello"), QHostAddress::LocalHost, quint16(port));
-    QTRY_VERIFY2(oscLast->text().contains("/qlab/hello"), qPrintable(oscLast->text()));
+    QTRY_VERIFY2_WITH_TIMEOUT(oscLast->text().contains("/qlab/hello"), qPrintable(oscLast->text()),
+                              kDatagramTimeout);
     QVERIFY(oscLast->text().contains("not a cue command"));
 
     // MSC, as it arrives from a patched MIDI input.
