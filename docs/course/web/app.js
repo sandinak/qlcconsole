@@ -55,7 +55,7 @@
     'trussc-rgb': 'The colour (RGB) pixels of the truss boxes that light the cyc.',
     'trussc-w': 'The white pixels of the truss boxes that light the cyc.',
     'usts': 'The 8 upstage beams (two heads each) standing on the top riser. They have a dimmer.',
-    'at-spots': 'The moving spots on the audience towers, for soloists. Dimmer and a shutter that rests closed.',
+    'at-spots': 'The moving spots on the audience towers, for soloists. Dimmer and a shutter that rests closed; it opens by itself when they get a level.',
     'at-w-all': 'The 4 moving washes on the audience towers: front light. They have a dimmer.',
     'lanterns': 'The 6 LED lanterns hanging from the trusses and towers. They have a dimmer.'
   };
@@ -263,12 +263,17 @@
     return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
   }
 
+  // Auto-open shutters, as the app does by default (Settings → Advanced):
+  // a light given a level opens a shutter that rests closed. A Shutter
+  // palette on the layer still sets the shutter itself.
+  var AUTO_OPEN = true;
+
   // Light from one part of a fixture, [r,g,b] in 0..1, or null for dark.
   function partLight(fx, part, a) {
     var cp = palOf(a.colour), lp = palOf(a.level);
     var col = cp ? hexRgb(cp.color) : null;
     var lev = lp ? lp.level : null;
-    if (fx.shutterClosed && !a.shutter) return null;
+    if (fx.shutterClosed && !a.shutter && !AUTO_OPEN) return null;
     var c;
     if (part === 'w') {                        // white pixels: the white in the colour
       if (!col) return null;
@@ -323,7 +328,7 @@
       var c = hexRgb((palOf(vals.colour) || {}).color || '#000000');
       if (Math.min(c[0], c[1], c[2]) < 0.05) notes.push('These are white pixels: a saturated colour like ' + vals.colour + ' leaves them dark. Use the -RGB group for colour.');
     }
-    if (shut && !vals.shutter) notes.push('The AT-Spots’ shutter rests closed: add Open (Palettes → Shutter) to let light out.');
+    if (shut && !vals.shutter && !AUTO_OPEN) notes.push('The AT-Spots’ shutter rests closed: add Open (Palettes → Shutter) to let light out.');
     if (vals.aim && !movers) notes.push('These lights can’t move, so the aim does nothing.');
     return notes;
   }

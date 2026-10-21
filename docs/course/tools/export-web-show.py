@@ -52,8 +52,9 @@ KNOWN_MODELS = {
     'Focus Spot Three Z': dict(colour='wheel', dimmer=True, moves=True),
     'Lantern': dict(colour='rgb', dimmer=True, moves=False),
 }
-# The AT spots' shutter rests closed: "White, Full" lights nothing until the
-# Shutter palette Open (COURSE_PLAN.md section 8, item 7).
+# The AT spots' shutter rests closed. The app (and the page) open it by
+# themselves when the spots get a level -- auto-open, on by default
+# (COURSE_PLAN.md section 8, item 7); a Shutter palette still sets it.
 SHUTTER_CLOSED = {'Focus Spot Three Z'}
 
 # How the page draws each group's lights (one role per light: the first

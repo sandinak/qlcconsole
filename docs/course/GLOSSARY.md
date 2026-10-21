@@ -46,7 +46,7 @@ brackets.
 | **Snap** | A change with no fade (0 seconds), for a hit or a surprise. [1.4] |
 | **Wash** | A soft, wide light that covers an area. [1.1] |
 | **Spot** | A narrow, hard-edged light, often following one person. [1.3] |
-| **Shutter** | A spot's built-in shutter blocks the beam: while it's closed, no light comes out, however high the level. Our AT-Spots need **Open** (Palettes → Shutter). [1.3] |
+| **Shutter** | A spot's built-in shutter blocks the beam: while it's closed, no light comes out, however high the level. Our AT-Spots' shutter opens by itself when they're lit; Shutter palettes still close it or strobe it. [1.3] |
 | **Position / pan / tilt** | Where a moving light points: it pans (turns left and right) and tilts (up and down). [1.3] |
 | **Mover / moving light** | A fixture that can be pointed (panned and tilted) from the console. [1.3] |
 | **Pixel box / pixel bar** | A fixture made of many small LEDs (pixels), each of which can be a different colour. [1.1] |

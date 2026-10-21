@@ -59,6 +59,7 @@
 #include "fixturegroupsource.h"
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
+#include "shutterautoopen.h"
 #include "monitorproperties.h"
 #include "qlcfixturedefcache.h"
 #include "inputoutputmap.h"
@@ -555,6 +556,25 @@ int channelValue(Doc *doc, const QString &fixture, const QString &name)
                 if (fx->channel(c)->name() == name)
                     return uchar(v.at(int(c)));
         }
+    return -1;
+}
+
+/* What @a fixture's channel @a name sends after the universe's own steps
+   (auto-open shutters among them), not what the looks put in. */
+int outputValue(Doc *doc, const QString &fixture, const QString &name)
+{
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == fixture)
+            for (quint32 c = 0; c < fx->channels(); ++c)
+                if (fx->channel(c)->name() == name)
+                {
+                    QList<Universe *> us = doc->inputOutputMap()->claimUniverses();
+                    const QByteArray *post = us.at(int(fx->universe()))->postGMValues();
+                    const int a = int(fx->address() + c);
+                    const int v = a < post->size() ? uchar(post->at(a)) : 0;
+                    doc->inputOutputMap()->releaseUniverses(false);
+                    return v;
+                }
     return -1;
 }
 
@@ -1247,19 +1267,19 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
         LESSON_STEP(said.startsWith(QStringLiteral("%1 → layer AT-Spots in 1.0.4 Solo").arg(pal)), said);
     }
     settle(300);
-    // White at Full, and still dark: the shutter is closed.
+    // White at Full lights the floor: the spots' shutter rests closed, and
+    // auto-open (the show's setting, on by default) opens it for a level.
     LESSON_STEP(waitUntil([doc]() { return channelValue(doc, "SR AT Spot", "Master Dimmer") == 255; }), "spot dimmer");
-    LESSON_STEP(channelValue(doc, "SR AT Spot", "Strobe/Shutter") < 8, "spot shutter already open");
-    shot(QStringLiteral("rig-solo-closed"));
-    {
-        const QString said = dropPaletteOnRow(doc, view, "AT-Spots", "Open");
-        qInfo().noquote() << "[L3] drop Open:" << said;
-        LESSON_STEP(said.startsWith(QStringLiteral("Open → layer AT-Spots in 1.0.4 Solo")), said);
-    }
-    settle(300);
-    qInfo() << "[L3] open AT spot pan/tilt" << panTilt(doc, "SR AT Spot") << panTilt(doc, "SL AT Spot")
-            << "shutter" << channelValue(doc, "SR AT Spot", "Strobe/Shutter");
-    LESSON_STEP(waitUntil([doc]() { return channelValue(doc, "SR AT Spot", "Strobe/Shutter") >= 8; }), "spot shutter still closed");
+    qInfo() << "[L3] AT spot pan/tilt" << panTilt(doc, "SR AT Spot") << panTilt(doc, "SL AT Spot")
+            << "shutter" << outputValue(doc, "SR AT Spot", "Strobe/Shutter");
+    LESSON_STEP(doc->shutterAutoOpen()->isEnabled(), "auto-open is off in the lesson show");
+    LESSON_STEP(waitUntil([doc]() { return outputValue(doc, "SR AT Spot", "Strobe/Shutter") >= 8; }), "spot shutter still closed");
+    // It's auto-open that lights them: off, the shutter stays closed (the
+    // handout's Stuck? row); on again, open.
+    doc->shutterAutoOpen()->setEnabled(false);
+    LESSON_STEP(waitUntil([doc]() { return outputValue(doc, "SR AT Spot", "Strobe/Shutter") < 8; }), "auto-open off, shutter still open");
+    doc->shutterAutoOpen()->setEnabled(true);
+    LESSON_STEP(waitUntil([doc]() { return outputValue(doc, "SR AT Spot", "Strobe/Shutter") >= 8; }), "auto-open on again, shutter closed");
     LESSON_STEP(panTilt(doc, "SR AT Spot") == qMakePair(0, 0), "the spot has a position already");
     shot(QStringLiteral("rig-solo-floor"));
     {
@@ -2043,7 +2063,7 @@ void CourseShow_Test::lessonPictures()
     }
 
     // --- 1.3: done with the mouse, a picture at each "you should see";
-    //     then the aim row, the Solo's page and its shutter.
+    //     then the aim row, the Solo's page and the spots' layer.
     {
         const QString d = root + QStringLiteral("/lesson-1-3");
         QVERIFY(open(kL3Start));
@@ -2090,8 +2110,7 @@ void CourseShow_Test::lessonPictures()
             HelpShots::Frame f;
             f.grab = v;
             f.callouts << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyDimmer)), 1)
-                       << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyPosition)), 2)
-                       << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyShutter)), 3);
+                       << mark(v->findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyPosition)), 2);
             QVERIFY(shoot(f, d, "spot-layer"));
         }
         dc->resetModified();

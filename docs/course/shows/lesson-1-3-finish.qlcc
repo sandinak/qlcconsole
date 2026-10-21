@@ -7576,7 +7576,6 @@
    <Palette ID="0"/>
    <Palette ID="10"/>
    <Palette ID="17"/>
-   <Palette ID="16"/>
   </Function>
   <SpeedMasters>
    <Master Index="0" Name="Main Speed" Mode="Own" BPM="120"/>
@@ -7621,7 +7620,6 @@
       <Layer ID="14" Groups="14">
        <Look Key="Colour" Palettes="0"/>
        <Look Key="Dimmer" Palettes="10"/>
-       <Look Key="Shutter" Palettes="16"/>
        <Look Key="Position" Palettes="17"/>
       </Layer>
      </Cue>

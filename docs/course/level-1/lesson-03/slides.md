@@ -48,15 +48,15 @@ teacher says. It can be turned into a deck as it is.*
 - *Ask:* "When one singer sings alone, where should the audience look?"
 - **Block**: start from a dark stage.
 
-## 8. A spot needs four things
+## 8. A spot needs three things
 
 - Picture: `images/lesson-1-3/spot-layer.png`
-- Colour · level · **shutter open** · position.
-- Pictures: `rig-solo-closed.png`, `rig-solo-floor.png`, `rig-solo.png`.
+- Colour · level · position. The shutter opens by itself.
+- Pictures: `rig-solo-floor.png`, `rig-solo.png`.
 
 ## 9. Your turn
 
-- Handout Part 2, steps 1–13.
+- Handout Part 2, steps 1–12.
 
 ## 10. Exit ticket
 

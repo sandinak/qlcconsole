@@ -18,7 +18,7 @@ Students can:
 2. aim moving lights at a **stage target** (Center, Soloist DS), and
    explain why a moving light needs a **position**;
 3. build a **Block** cue that starts from a dark stage, and light one
-   person with spots (colour, level, **shutter open**, position).
+   person with spots (colour, level, position; the shutter opens by itself).
 
 ## Before class
 
@@ -42,7 +42,7 @@ cue**. Each is in the handout's word table and the
 |---|---|---|
 | 0–10 | **Design idea** (no computers) | A torch on a face: four directions |
 | 10–20 | **Teacher demo** (projector) | Front light on the verse; Aim Center |
-| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–13 |
+| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–12 |
 | 40–45 | **Check / share** | Two groups show their solo |
 | 45–50 | **Exit ticket** | On paper |
 
@@ -84,8 +84,6 @@ On the projector:
    in 1.0.1 Verse"*. The beams swing in onto the risers.
 3. Click the AT-W-ALL row: the **Position** row says **Aim Center**.
 
-The students do the solo themselves: don't spoil the shutter surprise.
-
 ## 3. Hands-on (20 min)
 
 - Groups of 2–3 with **Driver / Navigator / Designer** roles; switch after
@@ -100,7 +98,6 @@ The students do the solo themselves: don't spoil the shutter surprise.
 |---|---|---|
 | The aim landed somewhere unexpected | Dropped on the dashed box or another row | "Undo, and drop it on the **AT-W-ALL** row. Read the top right while you drag." |
 | The Solo has all the earlier lights in it | Mode isn't **Block** | "Set **Mode** to **Block** on the Solo's page." |
-| The spots stay dark after White and Full | Expected: the shutter is closed | "What does a camera need to take a picture? Find **Shutter** in the Palettes." |
 | Two pools of light on the floor by the towers | Expected: no position yet | "Where are they pointing? Give them a place to aim at." |
 | Hard to see the spots | Busy stage, or Room is bright | "Set **Room** to **Dim** in the Rig Overview." |
 
@@ -108,8 +105,6 @@ The students do the solo themselves: don't spoil the shutter surprise.
 
 - "Why did you need to aim the washes?" (*A moving light needs a position,
   or it lights wherever it happens to point.*)
-- "Why was the Solo dark with White at Full?" (*The spots' shutter was
-  closed.*)
 - "What does Block do to the Solo?" (*It starts from nothing: only its own
   layers.*)
 
@@ -136,8 +131,9 @@ a solo on paper.
 
 - **Exit ticket:** 1 — the front: the audience towers (AT-W-ALL, AT-Spots).
   2 — it can point anywhere, so it needs a position (an aim), or it lights
-  whatever it happens to point at. 3 — the shutter was closed; dropping
-  **Open** opened it. 4 — Block: the cue starts from a dark stage, with
+  whatever it happens to point at. 3 — the console opens a closed shutter by
+  itself when the light is given a level (auto-open, on by default); a
+  Shutter palette on the layer would set it instead. 4 — Block: the cue starts from a dark stage, with
   only its own layers, so the eye goes to the soloist.
 - **Extension:** a blue back light makes an outline round the soloist and
   separates her from the dark risers.
@@ -148,5 +144,6 @@ Every step of the handout is run by the course test (`ui/test/courseshow`,
 `lessonsOneTwoToOneFourWithTheMouse`, `lessonThreeExtension`): the drops of
 groups, palettes and targets, the hint text, the Mode box, and what the
 lights send (the washes' and spots' pan and tilt before and after the aim,
-the spots' shutter), offscreen on the real app. The pictures are taken by
+and the spots' shutter: open at White and Full with auto-open on, closed
+with it off), offscreen on the real app. The pictures are taken by
 the same test, at each "you should see".

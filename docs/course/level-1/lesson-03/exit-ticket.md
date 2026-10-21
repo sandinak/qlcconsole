@@ -18,8 +18,8 @@ Name: ______________________
 
    ____________________________________________________________
 
-3. In the Solo, the spots were at White, Full and still dark. Why, and
-   how did you fix it?
+3. Our spots' shutter rests closed. Why did they light at White and Full
+   without a Shutter look?
 
    ____________________________________________________________
 

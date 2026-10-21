@@ -28,7 +28,7 @@ nav_order: 2
 | **Stage target** | A named spot on our stage that lights can aim at: **Center** (the middle of the CS row) and **Soloist DS** (downstage centre, in front of the risers). |
 | **Aim** | Point moving lights at a stage target. |
 | **Spot** | A narrow, hard-edged light for one performer, like our two **AT-Spots**. |
-| **Shutter** | A spot's built-in shutter blocks the beam. While it's closed, no light comes out, however high the level. |
+| **Shutter** | A spot's built-in shutter blocks the beam. While it's closed, no light comes out, however high the level. Ours opens by itself when the spot is given a level. |
 | **Block cue** | A cue that starts from a dark stage, with nothing tracking into it: only what you put in it is on. |
 
 ## Part 1 — Design it (on paper, everyone)
@@ -40,7 +40,7 @@ singer steps down to sing alone.
 | Cue | When | Why (feel) | Lights |
 |---|---|---|---|
 | 1.0.1 Verse *(add)* | First words | | **AT-W-ALL**: Warm White, Full, **aimed at Center** |
-| 1.0.4 Solo *(new)* | After the scream, one singer alone | | Starts dark (**Block**). **AT-Spots**: White, Full, shutter **Open**, **aimed at Soloist DS** |
+| 1.0.4 Solo *(new)* | After the scream, one singer alone | | Starts dark (**Block**). **AT-Spots**: White, Full, **aimed at Soloist DS** |
 
 In the solo, where will the audience look, and why? ______________________
 
@@ -100,20 +100,14 @@ Switch roles after each part.
      beside 1.0.4 in the tree, and the stage goes dark.
 9. From **Groups → AT**, drag **AT-Spots** onto the dashed box, then drag
    **White** and **Full** onto the **AT-Spots** row.
-   - *You should see:* no change at all; the stage stays dark. Before you
-     read on, work out why.
+   - *You should see:* two pools of light on the floor at the foot of
+     the towers. A spot's **shutter** rests closed, and the console opens
+     it when the spot is given a level. The spots have no **position**
+     yet, so they're pointing straight down.
 
-![White at Full, and dark](../../images/lesson-1-3/rig-solo-closed.png)
+![White at Full, no position](../../images/lesson-1-3/rig-solo-floor.png)
 
-10. Spots have a **shutter**, and theirs is closed. In the Library, open
-    **Palettes → Shutter** and drag **Open** onto the **AT-Spots** row.
-    - *You should see:* two pools of light on the floor at the foot of
-      the towers. The spots have no **position** yet, so they're pointing
-      straight down.
-
-![Shutter open, no position](../../images/lesson-1-3/rig-solo-floor.png)
-
-11. From **All → Targets**, drag **Soloist DS** onto the **AT-Spots** row.
+10. From **All → Targets**, drag **Soloist DS** onto the **AT-Spots** row.
     The top right reads *"Aim at Soloist DS → layer AT-Spots in 1.0.4
     Solo"*.
     - *You should see:* both spots swing onto the singer standing in front
@@ -126,17 +120,18 @@ Switch roles after each part.
    **(1)** Mode: Block, **(2)** the spots' layer, and **(3)** ⊘ block in
    the tree.
 
-12. Click the **AT-Spots** row to see everything a spot needs to light
+11. Click the **AT-Spots** row to see everything a spot needs to light
     someone.
 
 ![What a spot needs](../../images/lesson-1-3/spot-layer.png)
 
-   **(1)** a level, **(2)** a position and **(3)** an open shutter (plus a
-   colour).
+   **(1)** a level and **(2)** a position (plus a colour). The shutter
+   opens by itself; a **Shutter** palette on this row would set it
+   instead.
 
 ### Save
 
-13. Save with **File → Save As** → `Lesson1-3-yourname.qlcc` in
+12. Save with **File → Save As** → `Lesson1-3-yourname.qlcc` in
     **Documents → qlcconsole**.
 
 ## Stuck?
@@ -145,7 +140,7 @@ Switch roles after each part.
 |---|---|
 | You can't find the targets | They're in the Library under **All → Targets**, or type `Center` in **Filter the Library**. |
 | The Solo still shows the red scream | Set its **Mode** to **Block**. |
-| The spots are dark | Check that **Open** (Palettes → Shutter) is on the AT-Spots row. |
+| The spots are dark at Full | Check that **Settings → Advanced → Auto-open shutters** is on. |
 | The spots light the floor by the towers | They need a position: drop **Soloist DS** on their row. |
 | The spots are hard to see | In the Rig Overview, set **Room** to **Dim**. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |

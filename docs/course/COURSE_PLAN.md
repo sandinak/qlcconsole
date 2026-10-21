@@ -74,7 +74,7 @@ with GO.*
 |---|---|---|---|
 | **1.1** | **From a song to cues: your first three looks** *(written; song: "Everybody Scream")* | A song has sections; a cue is a moment where the light changes. A look is a group of lights in a colour at a level. | Production → cue list → cue. A group dropped on a cue is a **layer**; a colour and a level dropped on the layer. Three cues: Pose, Verse, Chorus. GO in the Run tab. |
 | 1.2 | **Colour and intensity tell the mood** *(written)* | Warm vs cool; saturated vs pale; bright isn't always better. Contrast between sections. The director's note: the verse is too cosy. | The verse's StepTops in place: ⋯ → **Set to** Lavender, ⋯ → **Level…** 40, **Make reusable**; Undo / Redo. A new cue 1.0.3 *Scream*: TrussW-RGB and Lanterns with **cue looks** Red, Full. Extension: **Colour…**. |
-| 1.3 | **Direction: aim the light** *(written)* | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | AT-W-ALL Warm White, Full in the verse — it lights the front row as it is — then **Aim Center** (Library → Targets). A **Block** cue 1.0.4 *Solo*: AT-Spots White, Full stay dark (the shutter), **Open** (Palettes → Shutter) lights the floor (no position), then **Aim Soloist DS**. |
+| 1.3 | **Direction: aim the light** *(written)* | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | AT-W-ALL Warm White, Full in the verse — it lights the front row as it is — then **Aim Center** (Library → Targets). A **Block** cue 1.0.4 *Solo*: AT-Spots White, Full light the floor (the shutter opens by itself; no position yet), then **Aim Soloist DS**. |
 | 1.4 | **Timing: fades and holds** *(written)* | A snap is a hit; a slow fade is a breath. Cue timing follows the music. | Fade in / Fade out / Hold typed on the cue page: Pose 3 s, Verse 2 s, Chorus a snap, Scream hold 2 s and fade out 3 s (the Solo, fade in 3 s, follows by itself). Played in the Run tab. |
 | 1.5 | **Calling and running the show** *(written)* | Standby / GO. The stage manager calls; the board op runs. | **Operate** (LIVE); Run tab: GO, Back, LOAD a cue (STANDBY), double-click to jump, Stop; Design again. Students call each other's cues. **Level check** (its own page, with the rubric): light a 30-second clip (3–5 cues) and run it. |
 
@@ -330,12 +330,13 @@ worked around in the course and checked by the course test.
 7. **The AT-Spots stay dark at Full: their shutter is closed.** The
    *Focus Spot Three Z*'s Strobe/Shutter channel rests at 0 (*Off*), and a
    Dimmer look doesn't open it, so "AT-Spots White, Full" lights nothing.
-   **Worked around:** the classroom show now has a Shutter palette
-   **Open** (Palettes → Shutter), and Lesson 1.3 teaches it as a step —
-   a real thing about spots. **For the app (Branson's call):** a Dimmer
-   look could open a closed shutter, as many consoles do, or the
-   definition's default could be an *Open* value (8). DanceHysteria has
-   the same spots.
+   **Resolved by auto-open (2026-10-21):** the app now opens a closed
+   shutter when a light is given a level, as many consoles do — on by
+   default, saved per show (Settings → Advanced, *Auto-open shutters when
+   a light is given a level*). A Shutter palette still sets the shutter
+   (closed, strobe or open). Lesson 1.3 no longer has an **Open** step;
+   the classroom show keeps its **Open** palette. DanceHysteria has the
+   same spots and gets the same.
 8. **Make reusable files a picked level in a folder of its own.** After
    **Level… 40** and **Make reusable**, *40%* lands in **Palettes →
    Dimmer → Show Tree**, though the show's other levels are in no folder
@@ -387,8 +388,9 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 2. **The 0.2.0 release's name and files**: the install page says "the
    newest pre-release whose name starts with **Show Tree**" and "0.2.0 or
    later" — check both when it's published.
-3. **The AT-Spots' shutter** (§8, 7): keep teaching **Open**, or change
-   the app or the definition?
+3. ~~**The AT-Spots' shutter**~~ **Answered (2026-10-21):** auto-open
+   shutters in the app, on by default (§8, 7). Lesson 1.3 drops the
+   **Open** step; the practice version opens them the same way.
 4. **Video clips** for Lesson 0.1 and the Level 1 check: pick them.
 
 ---
@@ -423,7 +425,7 @@ drape, proscenium). Run it again whenever the teaching show changes.
 | Lesson | Adds |
 |---|---|
 | 1.2 | ⋯ → **Set to** / **Level…** (any level, not only palettes), **Make reusable** into a palette, **cue looks** (a palette dropped on the cue); a fourth cue. |
-| 1.3 | Already has aim, Targets and the AT-Spots' shutter; add **Block** cues (the Solo is one), and check the beams against the app's pictures. |
+| 1.3 | Already has aim, Targets and the AT-Spots' shutter (auto-open, as the app); add **Block** cues (the Solo is one), and check the beams against the app's pictures. |
 | 1.4 | Fade out and **Hold** (auto-follow), shown in the Run tab's Timing column. |
 | 1.5 | Operate (LIVE) vs Design, **LOAD**/STANDBY and jump, which the runner mostly has; a "call the cues" mode for pairs. |
 | Level 2 | Cue modes (Track / Block / Cue-only), Release and the base cue (2.1); editing a palette everywhere (2.2); child layers and group sets (2.3); a simple pixel effect on the steps and truss boxes (2.4); lines, spread and cross for the movers (2.5); Looks fired from buttons (2.6); sub-cues (2.7). Past 2.4 the stage drawing needs per-pixel heads, which the exporter already counts. |

@@ -7,7 +7,7 @@
 | `lesson-1-1-finish.qlcc` | Lesson 1.1 done: *Spring Show / 01-Everybody Scream*, cues Pose, Verse, Chorus, made current. Lesson 0.2 opens it too. |
 | `lesson-1-2-start.qlcc` | Lesson 1.2's start (the same as 1.1's finish). |
 | `lesson-1-2-finish.qlcc` | 1.2 done: the verse Lavender at 40%, and 1.0.3 *Scream* with cue looks Red, Full. |
-| `lesson-1-3-start.qlcc` · `lesson-1-3-finish.qlcc` | 1.3: AT-W-ALL Warm White, Full, Aim Center in the verse; 1.0.4 *Solo* (Block) with the AT-Spots White, Full, Open, Aim Soloist DS. |
+| `lesson-1-3-start.qlcc` · `lesson-1-3-finish.qlcc` | 1.3: AT-W-ALL Warm White, Full, Aim Center in the verse; 1.0.4 *Solo* (Block) with the AT-Spots White, Full, Aim Soloist DS (their shutter opens by itself). |
 | `lesson-1-4-start.qlcc` · `lesson-1-4-finish.qlcc` | 1.4: fades and a hold (Pose fade in 3 s, Verse 2 s, Scream hold 2 s and fade out 3 s, Solo fade in 3 s). |
 | `lesson-1-5-start.qlcc` | 1.5 runs the show: 1.4's finish. Nothing is built, so there is no finish file. |
 

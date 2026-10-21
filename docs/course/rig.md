@@ -83,7 +83,7 @@ Line**) under Palettes → Position.
 | Colour | White, Warm White, Red, Amber, Yellow, Green, Cyan, Blue, Lavender, Magenta |
 | Dimmer | Full, 75%, Half, 25%, 10%, Out |
 | Position | Aim Soloist DS, Aim Center, Aim Riser Line |
-| Shutter | Open (the AT-Spots' shutter is closed until a look opens it) |
+| Shutter | Open (the AT-Spots' shutter rests closed and opens by itself when they're lit; Shutter palettes still close it or strobe it) |
 
 A level you type that isn't there (`dimmer 30`) makes a new palette named
 the same way: **30%**.
