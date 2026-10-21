@@ -16,8 +16,8 @@ Students can:
 1. name the four **qualities** of light: intensity, colour, direction,
    movement;
 2. name the four **jobs** of light in a show choir number: let the
-   audience **see**, tell them **where to look**, set the **mood**, match
-   the **energy**;
+   audience see (**visibility**), tell them where to look (**focus**),
+   set the **mood**, match the **energy**;
 3. describe a light change they saw, using those words ("the colour went
    from blue to warm, to make it feel friendlier").
 
@@ -118,8 +118,8 @@ concert, a music video, a TV talent show), or sort the pictures on paper.
 
 ## Answer key
 
-- **Exit ticket:** 1 — intensity, colour, direction, movement. 2 — see;
-  where to look; mood; energy (any two). 3 — any change described with a
+- **Exit ticket:** 1 — intensity, colour, direction, movement. 2 — visibility;
+  focus; mood; energy (any two). 3 — any change described with a
   quality and a job, e.g. "it went dim and blue in the verse to make it
   calm". 4 — front light (it lights faces).
 - **Picture sort:** intensity — `intensity-full`, `intensity-low`; colour —

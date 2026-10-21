@@ -42,7 +42,7 @@ Students can:
 
 | Min | Part | What happens |
 |---|---|---|
-| 0–10 | **Design idea** (no computers) | Who calls, who presses; the calling game |
+| 0–10 | **Design idea** (no computers) | Who calls, who presses; the calling drill |
 | 10–20 | **Teacher demo** (projector) | The Run tab; Operate; a called run |
 | 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, then called runs with the song |
 | 40–45 | **Share** | One group runs the song for the class |
@@ -59,7 +59,7 @@ Students can:
    - Op: **"Standing by."** (I'm ready.)
    - SM: **"Lights cue one-oh-two… GO."**
    - Op presses GO on "GO".
-3. **The calling game** (no computers): pairs face each other; one calls,
+3. **The calling drill** (no computers): pairs face each other; one calls,
    one "presses" (claps) on GO. The SM tries to trick them ("Lights
    cue… *wait*…"): the op must only move on the word **GO**.
 
@@ -84,7 +84,7 @@ A cue that goes early or late is as wrong as the wrong colour.
 - Roles: **SM** (calls, with the cue sheet and the song),
   **Board op** (hands on the laptop), **Spotter** (watches the Rig
   Overview: did the right cue happen, on time?). Switch after each run.
-- Students without a laptop: the **design station** — the calling game,
+- Students without a laptop: the **design station** — the calling drill,
   or start the Level 1 check's cue sheet.
 
 ### What to watch for
