@@ -12,6 +12,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   a light. Hazers, smoke machines and fans with no light of their own are
   left out too; a real light with no output set is still listed.
 
+### The Programming tab's outline
+
+- **Every scene and what's in it, in one tree.** The left of the
+  Programming tab is now an outline: folders, scenes, and under each scene
+  its targets and looks. Click a row and the middle edits it — the Look
+  Editor gets the whole height. Drag a row to another scene to move it (⌥
+  copies it), open everything with ⊞, and ⌘Z / ⇧⌘Z undo and redo scene
+  edits with everything else. See
+  [The outline](programming-tab.md#the-outline).
+
 ### Definition updates
 
 - **Old definitions, brought up to date.** **Fixtures → Definition

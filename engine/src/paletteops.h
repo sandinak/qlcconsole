@@ -26,11 +26,13 @@
 #include <QObject>
 #include <QList>
 #include <QHash>
+#include <QSharedPointer>
 
 #include "qlcengine_export.h"
 #include "qlcpalette.h"
 
 class Doc;
+class Scene;
 
 /** @addtogroup engine Engine
  * @{
@@ -178,6 +180,27 @@ public:
     /** Forget the empty folders and the undo steps (a new show). */
     void reset();
 
+    /************************************************************************
+     * Scene steps (PROGRAMMING_REDESIGN.md P1): the Programming tab's scene
+     * edits -- targets and looks added, moved, removed, reordered, renamed,
+     * timing, raw values -- on this same stack, so they undo AND redo with
+     * everything else, from either tab.
+     ************************************************************************/
+public:
+    /** Scene @a sceneId as it is now, detached (owned by nobody but the
+     *  pointer); null if there is no such scene. */
+    QSharedPointer<Scene> sceneSnapshot(quint32 sceneId) const;
+    /** One step for scene edits already made: @a before holds each touched
+     *  scene as it was (sceneSnapshot()), the after side is taken now. A
+     *  scene that didn't change is dropped; nothing changed, no step (false).
+     *  A non-empty @a mergeKey equal to the top step's, within 1.5 s, extends
+     *  that step instead (a fader drag is one step). */
+    bool recordSceneStep(const QString &label, const QList<QSharedPointer<Scene>> &before,
+                         const QString &mergeKey = QString());
+    /** Run @a change over scenes @a sceneIds as one step (recordSceneStep). */
+    bool sceneStep(const QString &label, const QList<quint32> &sceneIds,
+                   const std::function<bool()> &change);
+
 signals:
     /** Palettes, folders or the undo stack changed. */
     void changed();
@@ -208,7 +231,16 @@ private:
          *  (ShowTreeController::outsideUndoState()); empty: untouched. */
         QByteArray treeBefore;
         QByteArray treeAfter;
+        /** A scene step: each touched scene on either side (the snapshot's
+         *  own id is invalid, so the scene's id is kept beside it). */
+        QList<QPair<quint32, QSharedPointer<Scene>>> scenesBefore;
+        QList<QPair<quint32, QSharedPointer<Scene>>> scenesAfter;
+        QString mergeKey;
+        qint64 mergeAt = 0;     //!< when it was last extended (ms since epoch)
     };
+    /** Put the scenes back as @a states hold them. */
+    void applyScenes(const QList<QPair<quint32, QSharedPointer<Scene>>> &states,
+                     const QList<QPair<quint32, QSharedPointer<Scene>>> &other);
     State capture(quint32 id) const;
     void apply(const QList<State> &states, const QStringList &folders);
     /** Run @a change as one undo step named @a label, recording the

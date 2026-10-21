@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QBuffer>
 #include <QColor>
+#include <QDateTime>
 #include <QSet>
 #include <algorithm>
 
@@ -657,6 +658,13 @@ bool PaletteOps::undo()
     if (m_undo.isEmpty())
         return false;
     Step st = m_undo.takeLast();
+    if (!st.scenesBefore.isEmpty())
+    {
+        applyScenes(st.scenesBefore, st.scenesAfter);
+        m_redo << st;
+        emit changed();
+        return true;
+    }
     // The palettes first (back in their scenes and slots), then the tree
     // that names them, baked once.
     apply(st.before, st.foldersBefore);
@@ -673,6 +681,13 @@ bool PaletteOps::redo()
     if (m_redo.isEmpty())
         return false;
     Step st = m_redo.takeLast();
+    if (!st.scenesAfter.isEmpty())
+    {
+        applyScenes(st.scenesAfter, st.scenesBefore);
+        m_undo << st;
+        emit changed();
+        return true;
+    }
     apply(st.after, st.foldersAfter);
     if (!st.treeAfter.isEmpty())
         if (ShowTreeController *tree = m_doc->showTree())
@@ -680,6 +695,156 @@ bool PaletteOps::redo()
     m_undo << st;
     emit changed();
     return true;
+}
+
+/****************************************************************************
+ * Scene steps
+ ****************************************************************************/
+
+/** What a scene saves: its whole state, to tell whether an edit changed it. */
+static QByteArray sceneSignature(const Scene *scene)
+{
+    QByteArray xml;
+    if (scene == nullptr)
+        return xml;
+    QBuffer buf(&xml);
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    scene->saveXML(&w);
+    return xml;
+}
+
+QSharedPointer<Scene> PaletteOps::sceneSnapshot(quint32 sceneId) const
+{
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(sceneId));
+    if (scene == nullptr)
+        return QSharedPointer<Scene>();
+    Scene *snap = new Scene(m_doc);
+    // Owned by the pointer alone: the Doc would delete it a second time.
+    snap->setParent(nullptr);
+    snap->copyFrom(scene);
+    /* copyFrom() takes the id-less snapshot's name and path too; the id is
+       the scene's, so a later step can tell which scene it is. */
+    snap->setID(sceneId);
+    return QSharedPointer<Scene>(snap);
+}
+
+bool PaletteOps::recordSceneStep(const QString &label, const QList<QSharedPointer<Scene>> &before,
+                                 const QString &mergeKey)
+{
+    QList<QPair<quint32, QSharedPointer<Scene>>> was, now;
+    for (const QSharedPointer<Scene> &b : before)
+    {
+        if (b.isNull())
+            continue;
+        const quint32 id = b->id();
+        QSharedPointer<Scene> after = sceneSnapshot(id);
+        if (after.isNull() || sceneSignature(b.data()) == sceneSignature(after.data()))
+            continue;
+        was << qMakePair(id, b);
+        now << qMakePair(id, after);
+    }
+    if (was.isEmpty())
+        return false;
+
+    const qint64 at = QDateTime::currentMSecsSinceEpoch();
+    if (!mergeKey.isEmpty() && !m_undo.isEmpty() && m_undo.last().mergeKey == mergeKey
+        && at - m_undo.last().mergeAt < 1500 && m_redo.isEmpty())
+    {
+        Step &top = m_undo.last();
+        // The same scenes, further on: keep where they started, take where
+        // they are now.
+        for (const QPair<quint32, QSharedPointer<Scene>> &n : now)
+        {
+            bool found = false;
+            for (QPair<quint32, QSharedPointer<Scene>> &a : top.scenesAfter)
+                if (a.first == n.first)
+                {
+                    a.second = n.second;
+                    found = true;
+                }
+            if (!found)
+            {
+                for (const QPair<quint32, QSharedPointer<Scene>> &w : was)
+                    if (w.first == n.first)
+                        top.scenesBefore << w;
+                top.scenesAfter << n;
+            }
+        }
+        top.mergeAt = at;
+        m_doc->setModified();
+        emit changed();
+        return true;
+    }
+
+    Step st;
+    st.label = label;
+    st.scenesBefore = was;
+    st.scenesAfter = now;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.mergeKey = mergeKey;
+    st.mergeAt = at;
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    if (ShowTreeController *tree = m_doc->showTree())
+        tree->clearRedo();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+bool PaletteOps::sceneStep(const QString &label, const QList<quint32> &sceneIds,
+                           const std::function<bool()> &change)
+{
+    QList<QSharedPointer<Scene>> before;
+    for (quint32 id : sceneIds)
+    {
+        bool dup = false;
+        for (const QSharedPointer<Scene> &b : before)
+            dup = dup || b->id() == id;
+        if (dup)
+            continue;
+        QSharedPointer<Scene> s = sceneSnapshot(id);
+        if (!s.isNull())
+            before << s;
+    }
+    if (!change())
+        return false;
+    recordSceneStep(label, before);
+    return true;
+}
+
+void PaletteOps::applyScenes(const QList<QPair<quint32, QSharedPointer<Scene>>> &states,
+                             const QList<QPair<quint32, QSharedPointer<Scene>>> &other)
+{
+    for (const QPair<quint32, QSharedPointer<Scene>> &s : states)
+    {
+        Scene *scene = qobject_cast<Scene *>(m_doc->function(s.first));
+        if (scene == nullptr || s.second.isNull())
+            continue;
+        /* The name and folder are put back only when this step changed them
+           (a rename): a rename made since, outside this history (the
+           Functions tab), stays. */
+        QString otherName = s.second->name(), otherPath = s.second->path(true);
+        for (const QPair<quint32, QSharedPointer<Scene>> &o : other)
+            if (o.first == s.first && !o.second.isNull())
+            {
+                otherName = o.second->name();
+                otherPath = o.second->path(true);
+            }
+        const QString keepName = scene->name(), keepPath = scene->path(true);
+        scene->copyFrom(s.second.data());
+        if (otherName == s.second->name())
+            scene->setName(keepName);
+        if (otherPath == s.second->path(true))
+            scene->setPath(keepPath);
+        if (scene->isRunning())
+            scene->resetRuntime();
+    }
+    m_doc->setModified();
 }
 
 void PaletteOps::clearUndo()

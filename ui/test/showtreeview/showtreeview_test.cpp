@@ -2522,9 +2522,9 @@ void ShowTreeView_Test::generatedFunctionsAreLockedElsewhere()
         ModalCloser closer;
         pm.deleteFunctions({ chaserId });
         QVERIFY(m_doc->function(chaserId) != nullptr);
-        pm.addFunctionsToCollection(collId, { plain->id() });
-        QVERIFY(!qobject_cast<const Collection *>(m_doc->function(collId))->functions().contains(plain->id()));
-        QCOMPARE(closer.seen.count(), 2);
+        // (Adding to a collection was the old function tree's; the outline
+        // holds scenes only, PROGRAMMING_REDESIGN.md P1.)
+        QCOMPARE(closer.seen.count(), 1);
         // A plain function is deleted as ever.
         pm.deleteFunctions({ plain->id() });
     }

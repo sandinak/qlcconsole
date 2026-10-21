@@ -8,6 +8,24 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Programming tab redesign (PROGRAMMING_REDESIGN.md)
+
+- **P1 the outline — built on feat/programming-outline, on trial
+  (2026-10-21), not merged.** Branson to try it in the dev app before it
+  merges (he asked what the outline is for: the line over it now says).
+  Left over / open from P1:
+  - Several look rows of one type selected don't edit together on the page
+    yet (the current row's look shows).
+  - Look Editor *value* edits (a colour, a level) are not on the history
+    yet — only scene edits are (the doc allowed that to wait for P8).
+  - Folder renames undo the scenes' paths; a chaser filed there keeps its
+    new path. Deleting a scene is still not undoable (as before).
+  - Open rows are remembered per show *folder* (Doc knows the folder, not
+    the file).
+  - The scene rows' names (Targets / Looks vs Palettes, open question 1)
+    are untouched; the words are in one place each in programmingoutline.cpp.
+  - Then P2 (the shared Library) → P3 (command bar) → P4 (bench).
+
 ## Small fixes and leftovers
 
 - **Definition updates: leftovers (2026-10-21)** (feat/definition-updates,

@@ -13,6 +13,25 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Programming tab: the outline (redesign P1, on trial).** The function
+  tree and the one-scene-at-a-time Targets/Looks canvas are replaced by one
+  tree of every scene folder → scene → its targets and looks (an effect's
+  own colour/dimmer nested under it), with a line over it saying what it
+  is. Click a row and the page in the middle edits it: a scene its timing,
+  warnings and what fires it; a look the Look Editor at full height; a
+  target its channels. **⊞ / ⊟** (⌘→ / ⌘←) expand or collapse everything,
+  ⌥-click a triangle for a whole subtree, open rows are remembered per show.
+  Rows drag between scenes (move; ⌥ copies — a look keeps its fade, a fixed
+  fixture its raw values, an effect its own colour), within a scene to
+  reorder, palettes/groups/fixtures in from the sources, scenes onto
+  folders; the line says what a drop will do first. Multi-select across
+  scenes, ⌫ removes, F2 renames scenes, folders and palettes. Badges with
+  details on hover: ⚠ n, VC ×n, ▣ raw values, ⇄ transition, ⏱ speed
+  master, ◷ a look's own fade. Chasers and collections filed beside scenes
+  show greyed with **Open in Functions**. Every scene edit — the outline's
+  and the page's (timing, a fader drag as one step, a look's fade, a Bundle
+  stamp, a Snapshot) — is a step on the one history the Show Tree shares,
+  with redo. No file format change.
 - **Definition updates.** Fixtures → **Definition Updates…** lists the
   user folder's fixture definitions that are older than the current version
   of the same Manufacturer/Model (the shipped one, or a newer user copy,

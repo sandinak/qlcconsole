@@ -35,6 +35,7 @@
 #include <QToolButton>
 #include <QIcon>
 #include <algorithm>
+#include <functional>
 
 #include <QDebug>
 #include "mainbar.h"
@@ -89,12 +90,12 @@
 #include "qlcbundle.h"
 #include "monitor/monitor.h"
 #include <QTabWidget>
+#include <QStackedWidget>
+#include "functionmanager.h"
+#include "programmingoutline.h"
+#include "lookstackcheck.h"
+#include "speedmasters.h"
 
-// Nav-tree member rows (functions nested under a collection / chaser / show
-// track): their index in the container, and for shows the track id (on the
-// track row) / ShowFunction id (on the placed function's row).
-#define MEMBER_INDEX_ROLE (Qt::UserRole + 3)
-#define SHOW_ITEM_ROLE    (Qt::UserRole + 4)
 
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     : QWidget(parent)
@@ -108,7 +109,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_operateFunction(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
     , m_clipboardPalette(QLCPalette::invalidId())
-    , m_memberContainer(Function::invalidId())
 {
     QHBoxLayout *root = new QHBoxLayout(this);
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
@@ -120,91 +120,95 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_mainSplit = splitter;
     root->addWidget(splitter);
 
-    // --- Left: function tree (folders) of what you build ---
+    // --- Left: the outline -- every scene folder, scene, target and look ---
     QWidget *navPanel = new QWidget(this);
     QVBoxLayout *navCol = new QVBoxLayout(navPanel);
     navCol->setContentsMargins(0, 0, 0, 0);
-    navCol->addWidget(new QLabel(tr("Scenes / functions"), this));
+    navCol->setSpacing(3);
 
-    m_funcTree = new FunctionsTreeWidget(m_doc, this);
-    m_funcTree->setObjectName("programmingFunctions");
-    m_funcTree->setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
-    m_funcTree->setHeaderHidden(true);
-    m_funcTree->setColumnHidden(1, true);
-    m_funcTree->setSortingEnabled(true);
-    m_funcTree->sortByColumn(0, Qt::AscendingOrder);
-    // Order the top-level type categories by role (Show · Chaser · Collection ·
-    // RGB Matrix · EFX · Scene) rather than A–Z — persisted, toggle in the
-    // right-click menu.
-    {
-        QSettings s;
-        m_funcTree->setTypeOrderByRole(
-            s.value(QStringLiteral("programming/functree/typeOrderByRole"), true).toBool());
-    }
-    m_funcTree->setContextMenuPolicy(Qt::CustomContextMenu);
-    // Shift/Ctrl-click to select several functions at once, then drag, delete or
-    // duplicate them together. mimeData() already streams every selected id.
-    m_funcTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    // Drag is ALWAYS on, with the tree's own payload: press on any row and move
-    // drags it (or the selection it belongs to) — into a folder, onto a
-    // collection row, or out to the open collection/chaser/show/canvas. Before,
-    // the tree had no drag mode at all until a function was opened, so a
-    // press-and-move rubber-band-selected rows instead of dragging them, and
-    // with a collection open a scene couldn't be dropped on a folder.
-    m_funcTree->setExternalDragMode(true);
-    m_funcTree->setAutoExpandDelay(600); // hover a folder to open it mid-drag
-    m_funcTree->updateTree();
+    m_outline = new ProgrammingOutline(m_doc, navPanel);
 
     QHBoxLayout *navToolbar = new QHBoxLayout;
     navToolbar->setContentsMargins(0, 0, 0, 0);
     QLineEdit *funcFilter = new QLineEdit(this);
+    funcFilter->setObjectName(QStringLiteral("outlineFilter"));
     funcFilter->setPlaceholderText(tr("Filter…"));
     funcFilter->setClearButtonEnabled(true);
     navToolbar->addWidget(funcFilter, 1);
 
-    // Tab-local "Add" menu: same New Scene/Chaser/… actions as the tree's
-    // right-click menu, just reachable without a right-click, with icons
-    // matching Function Manager's. Embedded here (not on the app's global
-    // menu bar) so it travels along when this tab is detached into its own
-    // window — see App::slotDetachContext, which gives a detached tab no
-    // menu bar of its own, only whatever the tab widget itself carries.
+    // Expand all / Collapse all (also ⌘→ / ⌘←, and ⌥-click a triangle for
+    // everything under it).
+    QToolButton *expandBtn = new QToolButton(this);
+    expandBtn->setObjectName(QStringLiteral("outlineExpandAll"));
+    expandBtn->setText(QStringLiteral("⊞"));
+    expandBtn->setToolTip(tr("Expand all (⌘→). ⌥-click a triangle to open everything under it."));
+    connect(expandBtn, &QToolButton::clicked, m_outline, &ProgrammingOutline::expandEverything);
+    navToolbar->addWidget(expandBtn);
+    QToolButton *collapseBtn = new QToolButton(this);
+    collapseBtn->setObjectName(QStringLiteral("outlineCollapseAll"));
+    collapseBtn->setText(QStringLiteral("⊟"));
+    collapseBtn->setToolTip(tr("Collapse all (⌘←)"));
+    connect(collapseBtn, &QToolButton::clicked, m_outline, &ProgrammingOutline::collapseEverything);
+    navToolbar->addWidget(collapseBtn);
+
+    // "+ Scene": a scene in the selected row's folder, or in a new folder.
+    // Embedded here (not on the app's menu bar) so it travels along when this
+    // tab is detached into its own window (App::slotDetachContext).
     m_addFuncBtn = new QToolButton(this);
     m_addFuncBtn->setObjectName("programmingAddFunction");
-    m_addFuncBtn->setText(tr("Add"));
+    m_addFuncBtn->setText(tr("Scene"));
     m_addFuncBtn->setIcon(QIcon(":/edit_add.png"));
-    m_addFuncBtn->setPopupMode(QToolButton::InstantPopup);
+    m_addFuncBtn->setToolTip(tr("A new scene, in the folder of the row selected"));
+    m_addFuncBtn->setPopupMode(QToolButton::MenuButtonPopup);
     QMenu *addFuncMenu = new QMenu(m_addFuncBtn);
-    QAction *addSceneAction  = addFuncMenu->addAction(QIcon(":/scene.png"), tr("New Scene"));
-    QAction *addChaserAction = addFuncMenu->addAction(QIcon(":/chaser.png"), tr("New Chaser"));
-    QAction *addCollAction   = addFuncMenu->addAction(QIcon(":/collection.png"), tr("New Collection"));
-    QAction *addEFXAction    = addFuncMenu->addAction(QIcon(":/efx.png"), tr("New EFX"));
-    QAction *addMatrixAction = addFuncMenu->addAction(QIcon(":/rgbmatrix.png"), tr("New RGB Matrix"));
-    QAction *addShowAction   = addFuncMenu->addAction(QIcon(":/show.png"), tr("New Show"));
-    addFuncMenu->addSeparator();
-    QAction *addFolderAction = addFuncMenu->addAction(QIcon(":/folder.png"), tr("New Folder"));
+    QAction *addSceneAction  = addFuncMenu->addAction(QIcon(":/scene.png"), tr("New scene"));
+    QAction *addFolderAction = addFuncMenu->addAction(QIcon(":/folder.png"), tr("New scene in a new folder…"));
+    connect(m_addFuncBtn, &QToolButton::clicked, this, [this]() {
+        addNewFunction(Function::SceneType, m_outline->folderFor(m_outline->currentItem()));
+    });
     connect(addSceneAction, &QAction::triggered, this, [this]() {
-        addNewFunction(Function::SceneType, selectedFuncFolderPath()); });
-    connect(addChaserAction, &QAction::triggered, this, [this]() {
-        addNewFunction(Function::ChaserType, selectedFuncFolderPath()); });
-    connect(addCollAction, &QAction::triggered, this, [this]() {
-        addNewFunction(Function::CollectionType, selectedFuncFolderPath()); });
-    connect(addEFXAction, &QAction::triggered, this, [this]() {
-        addNewFunction(Function::EFXType, selectedFuncFolderPath()); });
-    connect(addMatrixAction, &QAction::triggered, this, [this]() {
-        addNewFunction(Function::RGBMatrixType, selectedFuncFolderPath()); });
-    connect(addShowAction, &QAction::triggered, this, [this]() {
-        addNewFunction(Function::ShowType, selectedFuncFolderPath()); });
-    connect(addFolderAction, &QAction::triggered, m_funcTree, &FunctionsTreeWidget::addFolder);
+        addNewFunction(Function::SceneType, m_outline->folderFor(m_outline->currentItem()));
+    });
+    connect(addFolderAction, &QAction::triggered, this, [this]() {
+        const QString in = m_outline->folderFor(m_outline->currentItem());
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("New folder"),
+            in.isEmpty() ? tr("Folder name:") : tr("Folder name (in %1):").arg(in),
+            QLineEdit::Normal, QString(), &ok).trimmed();
+        if (!ok || name.isEmpty())
+            return;
+        addNewFunction(Function::SceneType, in.isEmpty() ? name : in + QLatin1Char('/') + name);
+    });
     m_addFuncBtn->setMenu(addFuncMenu);
     navToolbar->addWidget(m_addFuncBtn);
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();
 
+    /* What the outline is, in one line, always there: it is new, and a tree
+       of everything doesn't say on its own that you edit by clicking and
+       move by dragging. During a drag the same line says what the drop will
+       do, before you let go. */
+    const QString outlineWhat = tr("Every scene and what's in it. Click a row to edit it; "
+                                   "drag rows between scenes.");
+    m_outlineHint = new QLabel(outlineWhat, navPanel);
+    m_outlineHint->setObjectName(QStringLiteral("outlineHint"));
+    m_outlineHint->setWordWrap(true);
+    m_outlineHint->setStyleSheet(QStringLiteral("QLabel { font-style: italic; }"));
+    m_outlineHint->setToolTip(tr("Folders hold scenes; a scene holds its targets (groups ◆, fixtures) "
+                                 "and its looks (palettes; an effect's own colour and dimmer sit under it). "
+                                 "Drag a row to another scene to move it, hold ⌥ to copy; drag within a "
+                                 "scene to reorder its looks (lower rows win). Drag palettes, groups and "
+                                 "fixtures in from the right. F2 renames, ⌫ removes, ⌘Z undoes."));
+
     navCol->addLayout(navToolbar);
-    navCol->addWidget(m_funcTree, 1);
-    connect(funcFilter, &QLineEdit::textChanged,
-            m_funcTree, &FunctionsTreeWidget::filterByText);
-    navCol->addWidget(new QLabel(tr("Right-click to add a scene/function or folder."), this));
+    navCol->addWidget(m_outlineHint);
+    navCol->addWidget(m_outline, 1);
+    connect(funcFilter, &QLineEdit::textChanged, m_outline, &ProgrammingOutline::setFilterText);
+    connect(m_outline, &ProgrammingOutline::hintChanged, this, [this, outlineWhat](const QString &text) {
+        m_outlineHint->setText(text.isEmpty() ? outlineWhat : text);
+        m_outlineHint->setStyleSheet(text.isEmpty() ? QStringLiteral("QLabel { font-style: italic; }")
+                                                    : QStringLiteral("QLabel { font-weight: bold; }"));
+    });
     splitter->addWidget(navPanel);
 
     // --- Center: the selected scene's canvas ---
@@ -545,61 +549,144 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         connect(m_groupBackButton, &QPushButton::clicked, this, [this]() {
             const quint32 sid = m_groupReturnScene;
             if (m_doc->function(sid) != NULL)
-                loadCanvas(sid);
+                revealScene(sid);
         });
         titleRow->addWidget(m_groupBackButton);
         m_canvasLayout->addLayout(titleRow);
     }
-    /* The empty state says ONE line. The full explanation lives behind the
-       button beside it, and shows itself once on a first run.
-     *
-       It used to be the whole paragraph, permanently, stretched across the
-       canvas -- four lines of text that a user reads once and then looks past
-       forever, in the middle of the panel they actually work in. Instructions
-       that have been read are just furniture. */
-    m_canvasPlaceholder = new QWidget(this);
-    QVBoxLayout *phl = new QVBoxLayout(m_canvasPlaceholder);
-    phl->addStretch();
-    m_canvasHint = new QLabel(tr("Select or create a scene on the left to begin."),
-                              m_canvasPlaceholder);
-    m_canvasHint->setWordWrap(true);
-    m_canvasHint->setAlignment(Qt::AlignCenter);
-    phl->addWidget(m_canvasHint);
-    QPushButton *guideBtn = new QPushButton(tr("How this works"), m_canvasPlaceholder);
-    guideBtn->setFlat(true);
-    guideBtn->setCursor(Qt::PointingHandCursor);
-    connect(guideBtn, &QPushButton::clicked,
-            this, [this]() { showProgrammingGuide(); });
-    QHBoxLayout *bl = new QHBoxLayout;
-    bl->addStretch();
-    bl->addWidget(guideBtn);
-    bl->addStretch();
-    phl->addLayout(bl);
-    phl->addStretch();
-    /* The canvas (targets and looks) over the editor of what's selected
-       (look editor / fixture console), with a handle between them. */
-    m_canvasSplit = new QSplitter(Qt::Vertical, this);
-    m_canvasSplit->setObjectName(QStringLiteral("programmingCanvasSplitter"));
-    m_canvasSplit->setChildrenCollapsible(false);
-    QWidget *canvasTop = new QWidget(m_canvasSplit);
-    m_canvasTopLayout = new QVBoxLayout(canvasTop);
-    m_canvasTopLayout->setContentsMargins(0, 0, 0, 0);
-    // Scrolls when the handle makes it shorter than the editor in it.
-    QScrollArea *editorScroll = new QScrollArea(m_canvasSplit);
-    editorScroll->setWidgetResizable(true);
-    editorScroll->setFrameShape(QFrame::NoFrame);
-    editorScroll->setMinimumHeight(80);
-    QWidget *editorInner = new QWidget(editorScroll);
-    m_editorLayout = new QVBoxLayout(editorInner);
-    m_editorLayout->setContentsMargins(0, 0, 0, 0);
-    editorScroll->setWidget(editorInner);
-    m_editorPane = editorScroll;
-    m_canvasSplit->addWidget(canvasTop);
-    m_canvasSplit->addWidget(m_editorPane);
-    m_canvasSplit->setStretchFactor(0, 1);
-    m_canvasSplit->setStretchFactor(1, 0);
-    m_canvasLayout->addWidget(m_canvasSplit, 1);
-    m_canvasTopLayout->addWidget(m_canvasPlaceholder, 1);
+
+    /* The page: what the selected outline row edits, with the room
+       (PROGRAMMING_REDESIGN.md §2.3). One widget per kind of row. */
+    m_page = new QStackedWidget(this);
+    m_page->setObjectName(QStringLiteral("programmingPage"));
+    m_canvasLayout->addWidget(m_page, 1);
+
+    // Empty: one line plus a way in (the full explanation is behind the
+    // button, and shows itself once on a first run).
+    m_emptyPage = new QWidget(m_page);
+    {
+        QVBoxLayout *phl = new QVBoxLayout(m_emptyPage);
+        phl->addStretch();
+        m_canvasHint = new QLabel(tr("Select a row in the outline: a scene, one of its targets or "
+                                     "one of its looks."), m_emptyPage);
+        m_canvasHint->setWordWrap(true);
+        m_canvasHint->setAlignment(Qt::AlignCenter);
+        phl->addWidget(m_canvasHint);
+        QHBoxLayout *bl = new QHBoxLayout;
+        bl->addStretch();
+        m_openInFunctionsBtn = new QPushButton(tr("Open in Functions"), m_emptyPage);
+        m_openInFunctionsBtn->setObjectName(QStringLiteral("openInFunctions"));
+        m_openInFunctionsBtn->hide();
+        connect(m_openInFunctionsBtn, &QPushButton::clicked, this, [this]() { openInFunctions(m_pageFunction); });
+        bl->addWidget(m_openInFunctionsBtn);
+        QPushButton *guideBtn = new QPushButton(tr("How this works"), m_emptyPage);
+        guideBtn->setFlat(true);
+        guideBtn->setCursor(Qt::PointingHandCursor);
+        connect(guideBtn, &QPushButton::clicked,
+                this, [this]() { showProgrammingGuide(); });
+        bl->addWidget(guideBtn);
+        bl->addStretch();
+        phl->addLayout(bl);
+        phl->addStretch();
+    }
+    m_page->addWidget(m_emptyPage);
+
+    // A scene: what it is, what's wrong with it, what fires it, its timing.
+    m_scenePage = new QWidget(m_page);
+    m_scenePage->setObjectName(QStringLiteral("programmingScenePage"));
+    {
+        QVBoxLayout *sl = new QVBoxLayout(m_scenePage);
+        sl->setContentsMargins(4, 4, 4, 4);
+        m_sceneHeading = new QLabel(m_scenePage);
+        m_sceneHeading->setObjectName(QStringLiteral("sceneHeading"));
+        m_sceneHeading->setStyleSheet(QStringLiteral("QLabel { font-size: 15pt; font-weight: bold; }"));
+        m_sceneHeading->setWordWrap(true);
+        sl->addWidget(m_sceneHeading);
+        m_sceneSummary = new QLabel(m_scenePage);
+        m_sceneSummary->setObjectName(QStringLiteral("sceneSummary"));
+        m_sceneSummary->setWordWrap(true);
+        m_sceneSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        sl->addWidget(m_sceneSummary);
+        m_sceneWarnings = new QLabel(m_scenePage);
+        m_sceneWarnings->setObjectName(QStringLiteral("sceneWarnings"));
+        m_sceneWarnings->setWordWrap(true);
+        m_sceneWarnings->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
+        sl->addWidget(m_sceneWarnings);
+        QHBoxLayout *btns = new QHBoxLayout;
+        QPushButton *dupBtn = new QPushButton(tr("Duplicate"), m_scenePage);
+        dupBtn->setToolTip(tr("A copy, named on from this one"));
+        connect(dupBtn, &QPushButton::clicked, this, [this]() {
+            if (m_currentScene != Function::invalidId())
+                duplicateFunctions({ m_currentScene });
+        });
+        QPushButton *snapBtn = new QPushButton(tr("Snapshot"), m_scenePage);
+        snapBtn->setToolTip(m_snapshotBtn->toolTip());
+        connect(snapBtn, &QPushButton::clicked, this, &ProgrammingManager::slotSnapshotLive);
+        QPushButton *expandScene = new QPushButton(tr("Show its rows"), m_scenePage);
+        expandScene->setToolTip(tr("Open this scene, and its effects, in the outline"));
+        connect(expandScene, &QPushButton::clicked, this, [this]() {
+            m_outline->setSubtreeExpanded(m_outline->sceneItem(m_currentScene), true);
+        });
+        btns->addWidget(dupBtn);
+        btns->addWidget(snapBtn);
+        btns->addWidget(expandScene);
+        btns->addStretch();
+        sl->addLayout(btns);
+        QLabel *timing = new QLabel(tr("Timing"), m_scenePage);
+        timing->setStyleSheet(QStringLiteral("QLabel { font-weight: bold; margin-top: 8px; }"));
+        sl->addWidget(timing);
+        m_sceneCanvasLayout = new QVBoxLayout;
+        m_sceneCanvasLayout->setContentsMargins(0, 0, 0, 0);
+        sl->addLayout(m_sceneCanvasLayout);
+        QLabel *how = new QLabel(tr("Its targets and looks are its rows in the outline: drag palettes, "
+                                    "groups and fixtures onto it from the right, click a look to edit it."),
+                                 m_scenePage);
+        how->setWordWrap(true);
+        how->setStyleSheet(QStringLiteral("QLabel { font-style: italic; margin-top: 8px; }"));
+        sl->addWidget(how);
+        sl->addStretch(1);
+    }
+    m_page->addWidget(m_scenePage);
+
+    /* A look: the Look Editor at full height (it was what was left under the
+       canvas). Scrolls when the window is shorter than it. */
+    m_lookEditor = new LookEditor(m_doc, this);
+    m_lookEditor->setObjectName("lookEditor");
+    {
+        QScrollArea *lookScroll = new QScrollArea(m_page);
+        lookScroll->setObjectName(QStringLiteral("programmingLookPage"));
+        lookScroll->setWidgetResizable(true);
+        lookScroll->setFrameShape(QFrame::NoFrame);
+        lookScroll->setWidget(m_lookEditor);
+        m_lookPage = lookScroll;
+    }
+    m_page->addWidget(m_lookPage);
+
+    // A target: which group or fixtures, and their channels.
+    m_targetPage = new QWidget(m_page);
+    m_targetPage->setObjectName(QStringLiteral("programmingTargetPage"));
+    QVBoxLayout *targetCol = new QVBoxLayout(m_targetPage);
+    targetCol->setContentsMargins(4, 4, 4, 4);
+    {
+        QHBoxLayout *hl = new QHBoxLayout;
+        m_targetHeading = new QLabel(m_targetPage);
+        m_targetHeading->setObjectName(QStringLiteral("targetHeading"));
+        m_targetHeading->setWordWrap(true);
+        hl->addWidget(m_targetHeading, 1);
+        m_targetLayoutBtn = new QPushButton(tr("Edit layout"), m_targetPage);
+        m_targetLayoutBtn->setToolTip(tr("The group's head layout (as in the Fixture Manager)"));
+        connect(m_targetLayoutBtn, &QPushButton::clicked, this, [this]() { loadGroupEditor(m_targetGroup); });
+        hl->addWidget(m_targetLayoutBtn);
+        targetCol->addLayout(hl);
+    }
+    m_page->addWidget(m_targetPage);
+
+    // Something hosted whole: a group's layout editor, or a function opened
+    // from elsewhere (showFunction()).
+    m_functionPage = new QWidget(m_page);
+    m_functionLayout = new QVBoxLayout(m_functionPage);
+    m_functionLayout->setContentsMargins(0, 0, 0, 0);
+    m_page->addWidget(m_functionPage);
 
     /* Once, on a first run -- queued, so it lands after the window is up rather
        than during construction. Never on a headless platform ("offscreen", or
@@ -616,30 +703,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         && takeFirstRunGuideFlag())
         QMetaObject::invokeMethod(this, [this]() { showProgrammingGuide(); },
                                   Qt::QueuedConnection);
-    // Inline look editor pinned to the bottom of the center panel. It is NOT
-    // scrolled: it always renders fully at its preferred height (Fixed
-    // vertical), and the canvas above (stretch) shrinks to make room.
-    m_lookEditor = new LookEditor(m_doc, this);
-    m_lookEditor->setObjectName("lookEditor");
-    // Take the look editor's full preferred height; the canvas above (Expanding)
-    // shrinks first to make room. Maximum (not Fixed) so the window can still be
-    // resized very short if needed (the canvas hits its min first).
-    // In the lower pane of the canvas splitter: its handle sets the height.
-    m_lookEditor->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    m_editorLayout->addWidget(m_lookEditor);
 
-    // Per-fixture DMX channel editor, shown at the bottom when fixed-fixture
-    // targets are selected (instead of the look editor). Height-bounded so a
-    // tall console scrolls inside the panel instead of overrunning it.
+    // Per-fixture DMX channel editor, shown on the target page when target
+    // rows are selected. Scrolls inside the page if the console is taller.
     m_fixtureConsole = new FixtureConsole(this, m_doc);
     m_fixtureScroll = new QScrollArea(this);
     m_fixtureScroll->setWidgetResizable(true);
     m_fixtureScroll->setFrameShape(QFrame::NoFrame);
-    // Minimum so the channel faders always have usable height (they were
-    // getting squished to nothing when the Targets list was tall); scrolls
-    // within the band if the console is taller.
     m_fixtureScroll->setMinimumHeight(200);
-    m_fixtureScroll->setMaximumHeight(400);
     // FixtureConsole lays out one ConsoleChannel per DMX channel in a plain
     // QHBoxLayout with no wrap — a many-channel fixture (e.g. a 20+ channel
     // moving head) makes this scroll area's un-scrolled minimumSizeHint very
@@ -651,8 +722,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureScroll->setSizePolicy(QSizePolicy::Ignored, m_fixtureScroll->sizePolicy().verticalPolicy());
     m_fixtureScroll->setMinimumWidth(150);
     m_fixtureScroll->setWidget(m_fixtureConsole);
-    m_fixtureScroll->hide();
-    m_editorLayout->addWidget(m_fixtureScroll);
+    targetCol->addWidget(m_fixtureScroll, 1);
 
     // Shown instead of the console when several selected fixed fixtures are of
     // different types (editing them by channel index would be meaningless).
@@ -662,12 +732,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureMixedNote->setMinimumHeight(120);
     m_fixtureMixedNote->setStyleSheet("QLabel { color: gray; }");
     m_fixtureMixedNote->hide();
-    m_editorLayout->addWidget(m_fixtureMixedNote);
-
-    // The lower pane only while it has something to show.
-    for (QWidget *w : { (QWidget *)m_lookEditor, (QWidget *)m_fixtureScroll, (QWidget *)m_fixtureMixedNote })
-        w->installEventFilter(this);
-    syncEditorPane();
+    targetCol->addWidget(m_fixtureMixedNote, 1);
+    showPage(EmptyPage);
 
     // Estimated electrical load of the previewed look (Design mode only);
     // the readout is the app status-bar chip, this just drives the timer.
@@ -755,87 +821,95 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
     splitter->addWidget(sourcePanel);
 
-    splitter->setStretchFactor(0, 2); // nav
-    splitter->setStretchFactor(1, 3); // canvas
+    splitter->setStretchFactor(0, 2); // outline
+    splitter->setStretchFactor(1, 4); // page
     splitter->setStretchFactor(2, 2); // sources
 
-    // Where the handles were left, next time.
+    // Where the handles were left, next time. ("outline": the panes were
+    // the function tree and the canvas before; their sizes aren't these.)
     {
         QSettings st;
-        splitter->restoreState(st.value(QStringLiteral("programming/splitter")).toByteArray());
-        m_canvasSplit->restoreState(st.value(QStringLiteral("programming/canvasSplitter")).toByteArray());
+        splitter->restoreState(st.value(QStringLiteral("programming/outlineSplitter")).toByteArray());
     }
     connect(splitter, &QSplitter::splitterMoved, this, [splitter]() {
-        QSettings().setValue(QStringLiteral("programming/splitter"), splitter->saveState());
-    });
-    connect(m_canvasSplit, &QSplitter::splitterMoved, this, [this]() {
-        QSettings().setValue(QStringLiteral("programming/canvasSplitter"), m_canvasSplit->saveState());
+        QSettings().setValue(QStringLiteral("programming/outlineSplitter"), splitter->saveState());
     });
 
-    // Open on DOUBLE-click only; single-click just selects, so a function
-    // can be click-dragged from the tree into a collection/chaser canvas
-    // without the canvas switching out from under the drag.
-    connect(m_funcTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
-            this, SLOT(slotFunctionActivated(QTreeWidgetItem*)));
-    connect(m_funcTree, SIGNAL(customContextMenuRequested(QPoint)),
-            this, SLOT(slotFuncTreeMenu(QPoint)));
-    connect(m_paletteTree, SIGNAL(customContextMenuRequested(QPoint)),
-            this, SLOT(slotPaletteTreeMenu(QPoint)));
-
-    // Drag scenes/functions/palettes/folders onto folders to re-file them. The
-    // trees set the paths and rebuild themselves (deferred, outside the drop);
-    // the nav tree's rebuild drops the nested collection/chaser member rows, so
-    // put those back.
-    connect(m_funcTree, &FunctionsTreeWidget::folderContentsMoved, this, [this]() {
-        const quint32 c = m_memberContainer;
-        m_memberContainer = Function::invalidId();
-        if (c != Function::invalidId())
-            syncMemberNodes(c);
+    // The outline: its selection fills the page; its requests are the tab's.
+    connect(m_outline, &QTreeWidget::itemSelectionChanged,
+            this, &ProgrammingManager::slotOutlineSelectionChanged);
+    connect(m_outline, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *it, int) {
+        const ProgrammingOutline::Row r = ProgrammingOutline::rowOf(it);
+        if (r.kind == ProgrammingOutline::OtherRow)
+            openInFunctions(r.id);
     });
-
-    // Drag scene(s) / other collection(s) onto a collection node in the nav tree
-    // to add them as members. Deferred for the same reason as above (the tree is
-    // rebuilt, invalidating the drag's item pointers).
-    connect(m_funcTree, &FunctionsTreeWidget::functionsDroppedOnCollection,
-            this, [this](quint32 containerId, const QList<quint32> &fids) {
-        QTimer::singleShot(0, this,
-            [this, containerId, fids]() { addFunctionsToCollection(containerId, fids); });
+    connect(m_outline, &ProgrammingOutline::pageRequested, this, [this]() {
+        QWidget *page = m_page->currentWidget();
+        page->setFocus(Qt::OtherFocusReason);
+        if (QWidget *next = page->nextInFocusChain())
+            if (page->isAncestorOf(next))
+                next->setFocus(Qt::TabFocusReason);
     });
+    connect(m_outline, &ProgrammingOutline::scenesEdited, this, [this](const QList<quint32> &ids) {
+        if (!ids.contains(m_currentScene))
+            return;
+        if (m_canvas != NULL)
+            m_canvas->reload();
+        if (m_trialScene != Function::invalidId() || !m_lookEditor->trialNote().isEmpty())
+            updateTrialPalette(m_lookEditor->paletteId());
+        refreshPreview();
+        recomputePower();
+        updateScenePage();
+    });
+    connect(m_outline, &ProgrammingOutline::newSceneRequested, this, [this](const QString &folder) {
+        addNewFunction(Function::SceneType, folder);
+    });
+    connect(m_outline, &ProgrammingOutline::duplicateRequested, this, &ProgrammingManager::duplicateFunctions);
+    connect(m_outline, &ProgrammingOutline::deleteScenesRequested, this, &ProgrammingManager::deleteFunctions);
+    connect(m_outline, &ProgrammingOutline::openInFunctionsRequested, this, &ProgrammingManager::openInFunctions);
+    connect(m_outline, &ProgrammingOutline::editGroupLayoutRequested, this, &ProgrammingManager::loadGroupEditor);
+    connect(m_outline, &ProgrammingOutline::revealPaletteRequested, this, &ProgrammingManager::revealPalette);
 
-    // Keep the trees in sync with the Doc (functor connects so we can call
-    // the trees' non-slot helpers directly).
-    connect(m_doc, &Doc::functionAdded, m_funcTree, &FunctionsTreeWidget::addFunction);
     connect(m_doc, &Doc::functionRemoved, this, [this](quint32 id) {
-        // The canvas (SceneGroupLooks), the look editor and the chaser/
-        // collection editor all hold a raw Function*/Scene*. Doc emits this
-        // BEFORE it deletes the function, so tear them down now — otherwise
-        // the next canvas interaction dereferences freed memory.
+        // The canvas (SceneGroupLooks), the look editor and a hosted editor
+        // all hold a raw Function*/Scene*. Doc emits this BEFORE it deletes
+        // the function, so tear them down now — otherwise the next
+        // interaction dereferences freed memory.
         if (id == m_currentScene || id == m_canvasFunction)
+        {
             loadCanvas(Function::invalidId());
-
-        const quint32 c = m_memberContainer;
-        m_funcTree->updateTree();
-        m_memberContainer = Function::invalidId();
-        if (c != Function::invalidId())
-            syncMemberNodes(c);   // re-nest members (node is fresh after rebuild)
+            showPage(EmptyPage);
+        }
     });
     connect(m_doc, &Doc::functionChanged, this, [this](quint32 id) {
-        m_funcTree->functionNameChanged(id);
-        if (id == m_memberContainer)
-            syncMemberNodes(m_memberContainer); // membership may have changed
-    });
-    connect(m_doc, &Doc::loaded, this, [this]() {
-        m_funcTree->updateTree();
-        m_memberContainer = Function::invalidId();
+        if (id == m_currentScene)
+            QTimer::singleShot(0, this, [this]() { updateScenePage(); });
     });
     connect(m_doc, &Doc::cleared, this, [this]() {
         m_currentScene   = Function::invalidId();
         m_canvasFunction = Function::invalidId();
         m_trialScene     = Function::invalidId();   // ids are reused by the next show
         clearEditors();
-        m_funcTree->updateTree();
-        m_memberContainer = Function::invalidId();
+        m_editBaseline.reset();
+        showPage(EmptyPage);
     });
+    // Any step on the shared history (here, in the Show Tree): the open
+    // scene as it now is becomes the baseline, and shows as it now is.
+    if (PaletteOps *ops = m_doc->paletteOps())
+        connect(ops, &PaletteOps::changed, this, [this]() {
+            recaptureBaseline();
+            // An undo / redo from either tab may have changed the open scene.
+            if (m_refreshQueued)
+                return;
+            m_refreshQueued = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_refreshQueued = false;
+                if (m_canvas != NULL)
+                    m_canvas->reload();
+                refreshPreview();
+                updateScenePage();
+            });
+        });
 
     connect(m_doc, &Doc::paletteAdded, m_paletteTree, &FunctionsTreeWidget::addPalette);
     connect(m_doc, &Doc::paletteRemoved, this, [this](quint32) { m_paletteTree->updateTree(); });
@@ -897,9 +971,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     redoSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(redoSc, &QShortcut::activated, this, &ProgrammingManager::slotRedo);
 
-    // Delete / Backspace (⌫ on a Mac) on either tree: delete what's selected —
-    // asking first, with where it's used.
-    for (FunctionsTreeWidget *tree : { m_funcTree, m_paletteTree })
+    // Delete / Backspace (⌫ on a Mac) on the palette tree: delete what's
+    // selected — asking first, with where it's used. (The outline takes its
+    // own: a row comes out of its scene.)
+    for (FunctionsTreeWidget *tree : { m_paletteTree })
     {
         for (const QKeySequence &key : { QKeySequence(Qt::Key_Delete),
                                          QKeySequence(Qt::Key_Backspace) })
@@ -920,19 +995,203 @@ ProgrammingManager::~ProgrammingManager()
     stopPreview();
 }
 
-void ProgrammingManager::slotFunctionActivated(QTreeWidgetItem *item)
+void ProgrammingManager::slotOutlineSelectionChanged()
 {
-    if (item == NULL)
+    /* The page follows the outline: a scene row edits the scene, a look row
+       its palette (the Look Editor), a target row its channels. With several
+       rows selected, the current one says which page; the others still drag,
+       remove and move with it. */
+    QTreeWidgetItem *cur = m_outline->currentItem();
+    if (cur == nullptr || !cur->isSelected())
+    {
+        const QList<QTreeWidgetItem *> sel = m_outline->selectedItems();
+        cur = sel.isEmpty() ? nullptr : sel.first();
+    }
+    if (cur == nullptr)
         return;
+    const ProgrammingOutline::Row row = ProgrammingOutline::rowOf(cur);
+    m_pageFunction = Function::invalidId();
+    m_openInFunctionsBtn->hide();
 
-    const quint32 fid = m_funcTree->itemFunctionId(item);
-    Function *f = m_doc->function(fid);
-    if (f == NULL)
-        loadCanvas(Function::invalidId()); // folder / category -> placeholder
-    else if (f->type() == Function::SceneType)
-        loadCanvas(fid);
-    else
-        loadFunctionEditor(f);
+    switch (row.kind)
+    {
+    case ProgrammingOutline::SceneRow:
+        loadCanvas(row.id);
+        m_lookEditor->setPalette(QLCPalette::invalidId());
+        m_doc->setFocusedPalette(QLCPalette::invalidId());
+        updateScenePage();
+        showPage(ScenePage);
+        break;
+    case ProgrammingOutline::PaletteRow:
+        loadCanvas(row.scene);
+        m_lookEditor->setPalette(row.id);
+        m_doc->setFocusedPalette(row.id);
+        showPage(LookPage);
+        break;
+    case ProgrammingOutline::GroupRow:
+    case ProgrammingOutline::FixtureRow:
+    {
+        loadCanvas(row.scene);
+        // Every target row selected in this scene: groups by their members.
+        QList<quint32> fixtures;
+        QStringList names;
+        m_targetGroup = row.kind == ProgrammingOutline::GroupRow ? row.id : UINT_MAX;
+        for (const ProgrammingOutline::Row &r : m_outline->selectedRows())
+        {
+            if (r.scene != row.scene)
+                continue;
+            if (r.kind == ProgrammingOutline::GroupRow)
+                if (FixtureGroup *g = m_doc->fixtureGroup(r.id))
+                {
+                    names << g->name();
+                    for (quint32 fid : g->fixtureList())
+                        if (!fixtures.contains(fid))
+                            fixtures << fid;
+                }
+            if (r.kind == ProgrammingOutline::FixtureRow)
+                if (Fixture *f = m_doc->fixture(r.id))
+                {
+                    names << f->name();
+                    if (!fixtures.contains(r.id))
+                        fixtures << r.id;
+                }
+        }
+        m_targetHeading->setText(tr("<b>%1</b> — %n fixture(s) in this scene's targets. "
+                                    "Their channels, as the scene sets them:", "", fixtures.size())
+                                 .arg(names.join(QStringLiteral(", ")).toHtmlEscaped()));
+        m_targetLayoutBtn->setVisible(m_targetGroup != UINT_MAX);
+        m_selectedFixtures.clear();     // a real change of selection
+        slotFixturesSelected(fixtures);
+        showPage(TargetPage);
+        break;
+    }
+    case ProgrammingOutline::OtherRow:
+    {
+        Function *f = m_doc->function(row.id);
+        loadCanvas(Function::invalidId());
+        if (f != nullptr)
+        {
+            m_pageFunction = f->id();
+            m_canvasHint->setText(tr("“%1” is a %2: not a scene, so it isn't edited here.")
+                                      .arg(f->name(), Function::typeToString(f->type()).toLower()));
+            m_openInFunctionsBtn->show();
+        }
+        showPage(EmptyPage);
+        break;
+    }
+    case ProgrammingOutline::FolderRow:
+    {
+        loadCanvas(Function::invalidId());
+        std::function<int(QTreeWidgetItem *)> count = [&count](QTreeWidgetItem *it) {
+            int n = it->data(0, ProgrammingOutline::KindRole).toInt() == ProgrammingOutline::SceneRow ? 1 : 0;
+            if (n == 0)
+                for (int i = 0; i < it->childCount(); ++i)
+                    n += count(it->child(i));
+            return n;
+        };
+        const int scenes = count(cur);
+        m_canvasHint->setText(tr("Folder “%1”: %n scene(s). Open a scene in it to edit it, "
+                                 "or + Scene to add one here.", "", scenes)
+                                  .arg(cur->data(0, ProgrammingOutline::PathRole).toString()));
+        showPage(EmptyPage);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void ProgrammingManager::showPage(Page page)
+{
+    QWidget *w = page == ScenePage ? m_scenePage : page == LookPage ? m_lookPage
+               : page == TargetPage ? m_targetPage : page == FunctionPage ? m_functionPage
+               : m_emptyPage;
+    if (page == EmptyPage && m_pageFunction == Function::invalidId() && m_currentScene == Function::invalidId()
+        && m_outline != nullptr && m_outline->selectedItems().isEmpty())
+        m_canvasHint->setText(tr("Select a row in the outline: a scene, one of its targets or "
+                                 "one of its looks."));
+    m_page->setCurrentWidget(w);
+    // The fixture console's channels are drawn when it shows (a switch from
+    // one fixture to another fires no showEvent).
+    if (page == TargetPage && !m_fixtureScroll->isHidden())
+        m_fixtureConsole->showChannels();
+}
+
+ProgrammingManager::Page ProgrammingManager::currentPage() const
+{
+    QWidget *w = m_page->currentWidget();
+    return w == m_scenePage ? ScenePage : w == m_lookPage ? LookPage
+         : w == m_targetPage ? TargetPage : w == m_functionPage ? FunctionPage : EmptyPage;
+}
+
+void ProgrammingManager::updateScenePage()
+{
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(m_currentScene));
+    if (scene == nullptr || m_sceneHeading == nullptr)
+        return;
+    m_sceneHeading->setText(scene->name());
+
+    QSet<quint32> fixtures;
+    for (quint32 gid : scene->fixtureGroups())
+        if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+            for (quint32 fid : g->fixtureList())
+                fixtures.insert(fid);
+    for (quint32 fid : scene->fixtures())
+        fixtures.insert(fid);
+    QStringList lines;
+    lines << (scene->path(true).isEmpty() ? tr("Not in a folder") : tr("In %1").arg(scene->path(true)));
+    lines << tr("%n target(s)", "", scene->fixtureGroups().size() + scene->fixtures().size())
+             + QStringLiteral(" · ") + tr("%n look(s)", "", scene->palettes().size())
+             + QStringLiteral(" · ") + tr("%n fixture(s)", "", fixtures.size());
+    if (!scene->values().isEmpty())
+        lines << tr("Sets %n raw channel value(s) directly", "", scene->values().size());
+    const QStringList vc = UsedBy::vcLines({ scene->id() });
+    lines << (vc.isEmpty() ? tr("Fired by: nothing on the Virtual Console")
+                           : tr("Fired by: %1").arg(vc.join(QStringLiteral(", "))));
+    const int uses = functionUsageCount(scene->id());
+    if (uses > 0)
+        lines << tr("Used in %n chaser(s) or collection(s)", "", uses);
+    m_sceneSummary->setText(lines.join(QLatin1Char('\n')));
+
+    // The same notes the outline's ⚠ counts, in full.
+    QStringList warn;
+    if (QTreeWidgetItem *it = m_outline->sceneItem(scene->id()))
+        if (it->text(ProgrammingOutline::BadgeCol).contains(QStringLiteral("⚠")))
+            for (const QString &l : it->toolTip(ProgrammingOutline::BadgeCol).split(QLatin1Char('\n')))
+                if (!l.startsWith(tr("Fired by")) && !l.startsWith(tr("Sets ")) && !l.startsWith(tr("Has a transition"))
+                    && !l.startsWith(tr("Its effects keep time")))
+                    warn << QStringLiteral("⚠ ") + l;
+    m_sceneWarnings->setText(warn.join(QLatin1Char('\n')));
+    m_sceneWarnings->setVisible(!warn.isEmpty());
+}
+
+void ProgrammingManager::openInFunctions(quint32 fid)
+{
+    FunctionManager *fm = FunctionManager::instance();
+    if (fm == nullptr || m_doc->function(fid) == nullptr)
+        return;
+    // The tab that holds the Function Manager, wherever the window keeps it.
+    for (QWidget *w = fm->parentWidget(); w != nullptr; w = w->parentWidget())
+        if (QTabWidget *tabs = qobject_cast<QTabWidget *>(w))
+            if (tabs->indexOf(fm) >= 0)
+            {
+                tabs->setCurrentWidget(fm);
+                break;
+            }
+    fm->selectFunction(fid);
+}
+
+void ProgrammingManager::revealScene(quint32 sceneId)
+{
+    ProgrammingOutline::Row r;
+    r.kind = ProgrammingOutline::SceneRow;
+    r.scene = r.id = sceneId;
+    if (!m_outline->selectRow(r))
+    {
+        loadCanvas(sceneId);
+        updateScenePage();
+        showPage(ScenePage);
+    }
 }
 
 void ProgrammingManager::loadCanvas(quint32 sceneId)
@@ -955,11 +1214,6 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_lookEditor->setPalette(QLCPalette::invalidId());
     if (Monitor::instance() != NULL)
         Monitor::instance()->setActiveScene(sceneId);
-    // Keep the collection/chaser context (its nested subtree) when drilling
-    // into one of ITS member scenes, so you can go back and forth; clear it
-    // only when opening an unrelated scene.
-    if (isContainerMember(m_memberContainer, sceneId) == false)
-        syncMemberNodes(Function::invalidId());
     clearEditors();
 
     Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
@@ -968,35 +1222,26 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
         m_doc->setFocusedScene(Function::invalidId());
         if (ProgrammerController *pc = m_doc->programmer())
             pc->seedStageAimFromScene(Function::invalidId());
-        m_canvasHint->setText(tr("Select or create a scene on the left to begin."));
-        m_canvasPlaceholder->show();
+        m_editBaseline.reset();
         updateTitle();
         return;
     }
 
-    m_canvasPlaceholder->hide();
     m_selectedFixtures.clear();
-    m_fixtureScroll->hide(); // default to the look editor at the bottom
+    m_fixtureScroll->hide();
     m_fixtureMixedNote->hide();
-    m_lookEditor->show();
     m_lookEditor->setContextScene(scene);
     m_doc->setFocusedScene(sceneId);
-    resetUndoFor(sceneId);   // start a fresh undo history for this scene
+    recaptureBaseline();     // edits on the page record from here
 
-    m_canvas = new SceneGroupLooks(scene, m_doc, this, /*includeFixtureTargets*/ true);
+    /* The scene's timing row (fades, transitions, speed), on the scene
+       page. Its Targets and Looks lists are the outline's rows now, so
+       they're kept hidden (the drop logic and the tests still reach them). */
+    m_canvas = new SceneGroupLooks(scene, m_doc, m_scenePage, /*includeFixtureTargets*/ true);
+    m_canvas->setListsVisible(false);
+    // Only its edits: what is selected is the outline's to say.
     connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
-    connect(m_canvas, SIGNAL(lookSelected(quint32)),
-            m_lookEditor, SLOT(setPalette(quint32)));
-    connect(m_canvas, SIGNAL(fixturesSelected(QList<quint32>)),
-            this, SLOT(slotFixturesSelected(QList<quint32>)));
-    // Selecting a look switches the bottom back to the look editor and
-    // notifies the programmer controller so APC40 sliders target that palette.
-    connect(m_canvas, &SceneGroupLooks::lookSelected, this, [this](quint32 pid) {
-        m_doc->setFocusedPalette(pid);
-        if (pid != QLCPalette::invalidId()) { m_fixtureScroll->hide(); m_fixtureMixedNote->hide(); m_lookEditor->show(); }
-    });
-    // Insert above the bottom editors.
-    m_canvasTopLayout->addWidget(m_canvas, 1);
+    m_sceneCanvasLayout->addWidget(m_canvas);
 
     stopOperateScene();  // stop the previous scene before starting the new one
     startPreview();
@@ -1043,17 +1288,15 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     m_groupBackButton->hide();
     stopPreview();
     m_currentScene = Function::invalidId();
-    resetUndoFor(Function::invalidId());  // scene undo doesn't apply to func editors
+    m_editBaseline.reset();
     m_canvasFunction = f->id();
     m_lookEditor->setPalette(QLCPalette::invalidId());
     m_lookEditor->setContextScene(NULL);
     if (Monitor::instance() != NULL)
         Monitor::instance()->setActiveScene(Function::invalidId());
     clearEditors();
-    m_canvasPlaceholder->hide();
     m_fixtureScroll->hide(); // non-scene: no per-fixture editor
     m_fixtureMixedNote->hide();
-    m_lookEditor->show();
 
     // Host the stock editor for the function type; collections and chasers
     // accept functions dragged from the left tree (external drag mode).
@@ -1095,26 +1338,25 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
         break;
     }
 
-    // If this function is nested inside the current container's tree (e.g. a
-    // collection under the open chaser), keep that context + subtree — just
-    // show/preview the selected function. Otherwise establish a new context.
-    if (isContainerMember(m_memberContainer, f->id()) == false)
-        syncMemberNodes(dragIn ? f->id() : Function::invalidId());
+    Q_UNUSED(dragIn)
 
     if (ed == NULL)
     {
+        m_pageFunction = f->id();
         m_canvasHint->setText(
             tr("\"%1\" (%2) — open it in the Functions tab to edit.")
             .arg(f->name()).arg(Function::typeToString(f->type())));
-        m_canvasPlaceholder->show();
+        m_openInFunctionsBtn->show();
+        showPage(EmptyPage);
         m_canvasFunction = Function::invalidId(); // nothing previewable shown
         updateTitle();
         return;
     }
 
     m_funcEditor = ed;
-    m_canvasTopLayout->addWidget(m_funcEditor, 1);
+    m_functionLayout->addWidget(m_funcEditor, 1);
     m_funcEditor->show();
+    showPage(FunctionPage);
     // A Show owns its own transport (Play/Stop in the timeline editor) — never
     // auto-play it on open. Other editors preview live so the view reflects them.
     if (f->type() != Function::ShowType)
@@ -1135,26 +1377,24 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
 
     stopPreview();
     m_currentScene = Function::invalidId();
-    resetUndoFor(Function::invalidId());
+    m_editBaseline.reset();
     m_canvasFunction = Function::invalidId(); // nothing previewable
     m_lookEditor->setPalette(QLCPalette::invalidId());
     m_lookEditor->setContextScene(NULL);
     if (Monitor::instance() != NULL)
         Monitor::instance()->setActiveScene(Function::invalidId());
 
-    syncMemberNodes(Function::invalidId());
     clearEditors();
 
-    m_canvasPlaceholder->hide();
     m_fixtureScroll->hide();
     m_fixtureMixedNote->hide();
-    m_lookEditor->hide(); // group layout editor stands alone in the canvas
 
-    // Reuse the func-editor slot as the hosted canvas widget so clearEditors()
+    // Reuse the func-editor slot as the hosted widget so clearEditors()
     // tears it down on the next selection.
     m_funcEditor = new FixtureGroupEditor(grp, m_doc, this);
-    m_canvasTopLayout->addWidget(m_funcEditor, 1);
+    m_functionLayout->addWidget(m_funcEditor, 1);
     m_funcEditor->show();
+    showPage(FunctionPage);
 
     m_canvasTitle->setText(tr("Fixture group: %1   —   %n head(s)", "", grp->headList().count())
                            .arg(grp->name()));
@@ -1187,43 +1427,6 @@ void ProgrammingManager::updateTitle()
         .arg(live ? tr("ON") : tr("OFF — Design mode only")));
 }
 
-bool ProgrammingManager::isContainerMember(quint32 containerId, quint32 fid) const
-{
-    if (containerId == Function::invalidId())
-        return false;
-    QSet<quint32> visited;
-    return containerHas(containerId, fid, visited, 0);
-}
-
-bool ProgrammingManager::containerHas(quint32 containerId, quint32 fid,
-                                      QSet<quint32> &visited, int depth) const
-{
-    if (depth > 8 || visited.contains(containerId))
-        return false;
-    visited.insert(containerId);
-
-    Function *c = m_doc->function(containerId);
-    QList<quint32> members;
-    if (Collection *col = qobject_cast<Collection*>(c))
-        members = col->functions();
-    else if (Chaser *ch = qobject_cast<Chaser*>(c))
-    {
-        foreach (const ChaserStep &s, ch->steps())
-            members << s.fid;
-    }
-    else
-        return false;
-
-    foreach (quint32 mid, members)
-    {
-        if (mid == fid)
-            return true;
-        if (containerHas(mid, fid, visited, depth + 1))
-            return true;
-    }
-    return false;
-}
-
 void ProgrammingManager::slotLookEdited(quint32 paletteId)
 {
     // A look's value changed (including name edits) in the editor:
@@ -1231,9 +1434,15 @@ void ProgrammingManager::slotLookEdited(quint32 paletteId)
     refreshPreview();
     // Update the palette tree so a renamed palette shows its new name.
     m_paletteTree->updateTree();
-    // Update the canvas's looks list (tiles show palette name).
+    // Update the canvas's looks list (tiles show palette name), and the
+    // outline's rows (names, swatches, fade badges).
     if (m_canvas)
         m_canvas->reload();
+    m_outline->scheduleRebuild();
+    // A look's own fade is the scene's: one step on the history.
+    recordSceneEdit(tr("edit a look's fade in %1").arg(m_doc->function(m_currentScene) != nullptr
+                                                        ? m_doc->function(m_currentScene)->name() : QString()),
+                    QStringLiteral("lookfade:%1").arg(paletteId));
 
     /* "Didn't change colour when colour was changed in program from white to
        blue." This refreshed the Programming tab's OWN preview, but nothing
@@ -1250,24 +1459,6 @@ void ProgrammingManager::slotLookEdited(quint32 paletteId)
                              || s->trialPalette() == paletteId))
             m_doc->notifyFunctionChanged(s->id());
     }
-}
-
-bool ProgrammingManager::eventFilter(QObject *watched, QEvent *event)
-{
-    if ((event->type() == QEvent::Show || event->type() == QEvent::Hide)
-        && (watched == m_lookEditor || watched == m_fixtureScroll || watched == m_fixtureMixedNote))
-        QMetaObject::invokeMethod(this, [this]() { syncEditorPane(); }, Qt::QueuedConnection);
-    return QWidget::eventFilter(watched, event);
-}
-
-void ProgrammingManager::syncEditorPane()
-{
-    // The editor pane under the canvas shows while one of its editors does.
-    if (m_editorPane == nullptr)
-        return;
-    const bool any = !m_lookEditor->isHidden() || !m_fixtureScroll->isHidden()
-                     || !m_fixtureMixedNote->isHidden();
-    m_editorPane->setVisible(any);
 }
 
 void ProgrammingManager::updateTrialPalette(quint32 paletteId)
@@ -1374,7 +1565,7 @@ void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
            effect .. I can't get back to the effect"). Go back to the scene
            first, then open the look on it. */
         if (!m_groupBackButton->isHidden() && m_doc->function(m_groupReturnScene) != NULL)
-            loadCanvas(m_groupReturnScene);
+            revealScene(m_groupReturnScene);
         m_lookEditor->setPalette(pid);
         showLookEditorPanel(); // pivot from the DMX console if it's showing
     }
@@ -1382,9 +1573,7 @@ void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
 
 void ProgrammingManager::showLookEditorPanel()
 {
-    m_fixtureScroll->hide();
-    m_fixtureMixedNote->hide();
-    m_lookEditor->show();
+    showPage(LookPage);
 }
 
 void ProgrammingManager::slotFixGroupSourceSelectionChanged()
@@ -1419,7 +1608,7 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
        reloads it): keep the look editor. Swapping in the fixtures' faders
        here threw the user out of the colour picker on every click ("it drops
        out of the color picker"). A real change of selection still swaps. */
-    if (!m_lookEditor->isHidden() && fixtureIds == m_selectedFixtures
+    if (currentPage() == LookPage && fixtureIds == m_selectedFixtures
         && m_currentScene == m_selectedFixturesScene)
         return;
     m_selectedFixtures = fixtureIds;
@@ -1440,7 +1629,8 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
     {
         m_fixtureScroll->hide();
         m_fixtureMixedNote->hide();
-        m_lookEditor->show();
+        if (currentPage() == TargetPage)
+            showPage(s != NULL ? ScenePage : EmptyPage);
         return;
     }
 
@@ -1459,13 +1649,13 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
 
     if (fixtureIds.size() > 1 && mismatched > 0)
     {
-        m_lookEditor->hide();
         m_fixtureScroll->hide();
         m_fixtureMixedNote->setText(
             tr("%n fixed fixture(s) of different types are selected.\n"
                "Select fixtures of the same type to edit their DMX channels together.",
                "", fixtureIds.size()));
         m_fixtureMixedNote->show();
+        showPage(TargetPage);
         return;
     }
 
@@ -1517,9 +1707,9 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
         m_fixtureConsole->setChannelEnabled(ch, false);
     m_fixtureConsole->blockSignals(false);
 
-    m_lookEditor->hide();
     m_fixtureMixedNote->hide();
     m_fixtureScroll->show();
+    showPage(TargetPage);
     // The scroll area may already have been visible (fixture->fixture switch),
     // so no showEvent fires for the rebuilt console — reveal its channels
     // explicitly so single and multi selections render identically.
@@ -1555,6 +1745,8 @@ void ProgrammingManager::slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar 
     }
     m_doc->setModified();
     refreshPreview();
+    // A fader drag is one step.
+    recordSceneEdit(tr("set channels in %1").arg(s->name()), QStringLiteral("channel:%1").arg(ch));
 }
 
 void ProgrammingManager::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
@@ -1573,6 +1765,7 @@ void ProgrammingManager::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
     }
     m_doc->setModified();
     refreshPreview();
+    recordSceneEdit(tr("release a channel in %1").arg(s->name()));
 }
 
 void ProgrammingManager::slotCopy()
@@ -1592,12 +1785,12 @@ void ProgrammingManager::slotCopy()
         }
     }
 
-    const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
-    if (sel.isEmpty())
-        return;
-    const quint32 fid = m_funcTree->itemFunctionId(sel.first());
-    if (fid != Function::invalidId())
-        m_clipboardFunction = fid;
+    for (const ProgrammingOutline::Row &r : m_outline->selectedRows())
+        if (r.kind == ProgrammingOutline::SceneRow)
+        {
+            m_clipboardFunction = r.id;
+            return;
+        }
 }
 
 void ProgrammingManager::slotPaste()
@@ -1615,12 +1808,10 @@ void ProgrammingManager::slotPaste()
     if (copy == NULL)
         return;
     copy->setName(m_doc->nextDuplicateName(src));
-
-    QTreeWidgetItem *it = m_funcTree->functionItem(copy);
-    if (it != NULL)
+    if (copy->type() == Function::SceneType)
     {
-        m_funcTree->setCurrentItem(it);
-        m_funcTree->scrollToItem(it);
+        m_outline->rebuild();
+        revealScene(copy->id());
     }
 }
 
@@ -1768,9 +1959,11 @@ void ProgrammingManager::slotCanvasModified()
     // Dropping the palette being tried on INTO the look ends the trial.
     if (m_trialScene != Function::invalidId() || !m_lookEditor->trialNote().isEmpty())
         updateTrialPalette(m_lookEditor->paletteId());
-    // Record the pre-edit state for Ctrl+Z (the baseline still holds the state
-    // from before this edit; push it and re-capture).
-    pushUndoSnapshot();
+    // One step on the shared history, from the baseline (the scene as of
+    // the last step) to now.
+    recordSceneEdit(tr("edit %1").arg(m_doc->function(m_currentScene) != nullptr
+                                      ? m_doc->function(m_currentScene)->name() : QString()));
+    updateScenePage();
     // Re-apply the scene's targets/looks to the live preview (resetRuntime
     // if running, else start) — no start/stop churn.
     refreshPreview();
@@ -2116,14 +2309,6 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
     // Pick up folder/path changes made in the Functions tab while away,
     // preserving the current scene selection.
     m_paletteTree->updateTree();
-    m_funcTree->updateTree();
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
-    if (scene != NULL)
-    {
-        QTreeWidgetItem *it = m_funcTree->functionItem(scene);
-        if (it != NULL)
-            m_funcTree->setCurrentItem(it);
-    }
     // Connect to 2D monitor fixture selection so clicks there match Targets list.
     if (Monitor *mon = Monitor::instance())
         connect(mon, &Monitor::fixturesSelected,
@@ -2153,207 +2338,6 @@ void ProgrammingManager::hideEvent(QHideEvent *ev)
     QWidget::hideEvent(ev);
 }
 
-QString ProgrammingManager::funcFolderPathFor(QTreeWidgetItem *it) const
-{
-    if (it == NULL)
-        return QString();
-    const QString colPath = it->text(1); // COL_PATH
-    if (colPath.isEmpty() == false)
-        return colPath; // a folder/category row
-    Function *f = m_doc->function(m_funcTree->itemFunctionId(it));
-    return f != NULL ? f->path() : QString();
-}
-
-QString ProgrammingManager::selectedFuncFolderPath() const
-{
-    const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
-    return sel.isEmpty() ? QString() : funcFolderPathFor(sel.first());
-}
-
-void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
-{
-    // Which function(s) is this menu acting on? (Right-click doesn't change the
-    // selection, so resolve the target from the item under the cursor.)
-    QTreeWidgetItem *clickedItem = m_funcTree->itemAt(pos);
-    const QList<quint32> targetIds = funcTreeTargetIds(clickedItem);
-    // A new function is created in the folder the user clicked in, not wherever
-    // the selection happened to be.
-    const QString clickedFolder = funcFolderPathFor(clickedItem);
-
-    QMenu menu(this);
-
-    // A folder row: rename / delete it (its contents are kept, see
-    // deleteTreeFolder) — "New …" below then creates inside it.
-    QAction *aRenameFolder = NULL;
-    QAction *aDeleteFolder = NULL;
-    if (m_funcTree->isUserFolder(clickedItem))
-    {
-        aRenameFolder = menu.addAction(tr("Rename Folder"));
-        aDeleteFolder = menu.addAction(tr("Delete Folder"));
-        menu.addSeparator();
-    }
-
-    // Rows nested under a collection / chaser / show: take them out of it
-    // (membership only — "Delete" below deletes the function itself).
-    const QList<MemberRef> memberRefs = funcTreeMemberTargets(clickedItem);
-    QAction *aRemoveMember = NULL;
-    if (memberRefs.isEmpty() == false)
-    {
-        QSet<quint32> containers;
-        for (const MemberRef &r : memberRefs)
-            containers.insert(r.container);
-        Function *c = m_doc->function(memberRefs.first().container);
-        QString text;
-        if (containers.size() == 1 && c != NULL)
-            text = memberRefs.size() > 1
-                ? tr("Remove %1 from “%2”").arg(memberRefs.size()).arg(c->name())
-                : tr("Remove from “%1”").arg(c->name());
-        else
-            text = tr("Remove %1 from their %2 containers")
-                       .arg(memberRefs.size()).arg(containers.size());
-        aRemoveMember = menu.addAction(text);
-        aRemoveMember->setToolTip(tr("Takes them out of it; the functions themselves stay."));
-        menu.addSeparator();
-    }
-
-    // Duplicate / Delete first, but only when a function is actually targeted —
-    // on empty space or a folder the menu is just the "New …" palette.
-    QAction *aDuplicate = NULL;
-    QAction *aDelete    = NULL;
-    if (!targetIds.isEmpty())
-    {
-        aDuplicate = menu.addAction(targetIds.size() > 1
-                                        ? tr("Duplicate %1 Functions").arg(targetIds.size())
-                                        : tr("Duplicate"));
-        // On nested rows say plainly that this deletes the function itself.
-        if (memberRefs.isEmpty() == false)
-            aDelete = menu.addAction(targetIds.size() > 1
-                                         ? tr("Delete %1 Functions Everywhere…").arg(targetIds.size())
-                                         : tr("Delete Function Everywhere…"));
-        else
-            aDelete = menu.addAction(targetIds.size() > 1
-                                         ? tr("Delete %1 Functions").arg(targetIds.size())
-                                         : tr("Delete"));
-        menu.addSeparator();
-    }
-
-    // Static MIDI trigger (Control Map — Phase 0): bind a controller button/pad
-    // straight to this function, no Virtual Console widget required.
-    QAction *aLearnMidi = NULL;
-    QAction *aClearMidi = NULL;
-    if (targetIds.size() == 1)
-    {
-        ProgrammerController *pc = m_doc->programmer();
-        const quint32 fid = targetIds.first();
-        aLearnMidi = menu.addAction(tr("Learn MIDI Trigger…"));
-        if (pc != NULL && pc->hasFunctionTrigger(fid))
-            aClearMidi = menu.addAction(tr("Clear MIDI Trigger (%1)")
-                                            .arg(pc->functionTriggerLabel(fid)));
-        menu.addSeparator();
-    }
-
-    QAction *aScene  = menu.addAction(QIcon(":/scene.png"), tr("New Scene"));
-    QAction *aChaser = menu.addAction(QIcon(":/chaser.png"), tr("New Chaser"));
-    QAction *aColl   = menu.addAction(QIcon(":/collection.png"), tr("New Collection"));
-    QAction *aEFX    = menu.addAction(QIcon(":/efx.png"), tr("New EFX"));
-    QAction *aMatrix = menu.addAction(QIcon(":/rgbmatrix.png"), tr("New RGB Matrix"));
-    QAction *aShow   = menu.addAction(QIcon(":/show.png"), tr("New Show"));
-    menu.addSeparator();
-    QAction *aFolder = menu.addAction(QIcon(":/folder.png"), tr("New Folder"));
-
-    menu.addSeparator();
-    // Order top-level type categories by role (Show · Chaser · Collection · RGB
-    // Matrix · EFX · Scene) vs. classic A–Z. Persisted.
-    QAction *aTypeOrder = menu.addAction(tr("Group types by role"));
-    aTypeOrder->setCheckable(true);
-    aTypeOrder->setChecked(m_funcTree->typeOrderByRole());
-
-    QAction *chosen = menu.exec(m_funcTree->viewport()->mapToGlobal(pos));
-    if (chosen == NULL)
-        return;
-    if (chosen == aTypeOrder)
-    {
-        const bool en = aTypeOrder->isChecked();
-        m_funcTree->setTypeOrderByRole(en);
-        QSettings().setValue(
-            QStringLiteral("programming/functree/typeOrderByRole"), en);
-        return;
-    }
-    if (chosen == aDuplicate)
-    {
-        duplicateFunctions(targetIds);
-        return;
-    }
-    if (chosen == aDelete)
-    {
-        deleteFunctions(targetIds);
-        return;
-    }
-    if (chosen == aRemoveMember)
-    {
-        removeMembers(memberRefs);
-        return;
-    }
-    if (chosen == aRenameFolder)
-    {
-        m_funcTree->editItem(clickedItem, 0);
-        return;
-    }
-    if (chosen == aDeleteFolder)
-    {
-        deleteTreeFolder(m_funcTree, clickedItem);
-        return;
-    }
-    if (chosen == aFolder)
-    {
-        // Create it where the user right-clicked (addFolder() works from the
-        // selection, which a right-click doesn't move).
-        if (clickedItem != NULL)
-        {
-            m_funcTree->clearSelection();
-            m_funcTree->setCurrentItem(clickedItem);
-            clickedItem->setSelected(true);
-        }
-        m_funcTree->addFolder();
-        return;
-    }
-    if (chosen == aLearnMidi)
-    {
-        ProgrammerController *pc = m_doc->programmer();
-        if (pc != NULL && !targetIds.isEmpty())
-        {
-            const quint32 fid = targetIds.first();
-            pc->learnFunctionTrigger(fid);
-            Function *tf = m_doc->function(fid);
-            QMessageBox::information(this, tr("Learn MIDI Trigger"),
-                tr("Press a button or pad on your MIDI controller now to bind it "
-                   "to \"%1\".\n\nThe control will toggle the function and its LED "
-                   "will follow the run state.")
-                    .arg(tf != NULL ? tf->name() : tr("this function")));
-        }
-        return;
-    }
-    if (chosen == aClearMidi)
-    {
-        if (ProgrammerController *pc = m_doc->programmer())
-            if (!targetIds.isEmpty())
-                pc->clearFunctionTrigger(targetIds.first());
-        return;
-    }
-
-    Function::Type type = Function::Undefined;
-    if (chosen == aScene)       type = Function::SceneType;
-    else if (chosen == aChaser) type = Function::ChaserType;
-    else if (chosen == aColl)   type = Function::CollectionType;
-    else if (chosen == aEFX)    type = Function::EFXType;
-    else if (chosen == aMatrix) type = Function::RGBMatrixType;
-    else if (chosen == aShow)   type = Function::ShowType;
-    else
-        return;
-
-    addNewFunction(type, clickedFolder);
-}
-
 void ProgrammingManager::addNewFunction(Function::Type type, const QString &folder)
 {
     Function *f = NULL;
@@ -2381,41 +2365,14 @@ void ProgrammingManager::addNewFunction(Function::Type type, const QString &fold
     }
     f->setName(QString("%1 %2").arg(base).arg(f->id()));
 
-    QTreeWidgetItem *it = m_funcTree->functionItem(f);
-    if (it != NULL)
-    {
-        m_funcTree->setCurrentItem(it);
-        m_funcTree->scrollToItem(it);
-    }
-    // Selection no longer opens the canvas (double-click does), so open the
-    // freshly created function explicitly.
+    // Selected in the outline, its page open, ready for F2 and drops.
     if (f->type() == Function::SceneType)
-        loadCanvas(f->id());
+    {
+        m_outline->rebuild();
+        revealScene(f->id());
+    }
     else
         loadFunctionEditor(f);
-}
-
-QList<quint32> ProgrammingManager::funcTreeTargetIds(QTreeWidgetItem *clicked) const
-{
-    QList<quint32> ids;
-
-    // If the clicked row is part of a multi-selection, act on the whole
-    // selection; otherwise act on the clicked row alone. Folder rows carry no
-    // function id and are skipped.
-    const QList<QTreeWidgetItem*> selected = m_funcTree->selectedItems();
-    const bool clickedIsSelected = clicked != NULL && selected.contains(clicked);
-
-    const QList<QTreeWidgetItem*> &rows =
-        clickedIsSelected ? selected
-                          : (clicked != NULL ? QList<QTreeWidgetItem*>{clicked}
-                                             : QList<QTreeWidgetItem*>{});
-    for (QTreeWidgetItem *it : rows)
-    {
-        const quint32 fid = m_funcTree->itemFunctionId(it);
-        if (fid != Function::invalidId() && !ids.contains(fid))
-            ids.append(fid);
-    }
-    return ids;
 }
 
 void ProgrammingManager::duplicateFunctions(const QList<quint32> &fids)
@@ -2441,58 +2398,11 @@ void ProgrammingManager::duplicateFunctions(const QList<quint32> &fids)
     if (last == NULL)
         return;
 
-    // The tree rebuilt itself as each copy was added; re-fetch the item.
-    QTreeWidgetItem *it = m_funcTree->functionItem(last);
-    if (it != NULL)
+    if (last->type() == Function::SceneType)
     {
-        m_funcTree->setCurrentItem(it);
-        m_funcTree->scrollToItem(it);
+        m_outline->rebuild();
+        revealScene(last->id());
     }
-}
-
-void ProgrammingManager::addFunctionsToCollection(quint32 containerId,
-                                                  const QList<quint32> &fids)
-{
-    Collection *col = qobject_cast<Collection*>(m_doc->function(containerId));
-    if (col == NULL)
-        return;
-    if (ShowTreeView::refuseGenerated(this, m_doc, { containerId }, tr("Add to collection")))
-        return;
-
-    int added = 0;
-    int skipped = 0;
-    for (quint32 fid : fids)
-    {
-        // Skip the collection itself, anything already in it, and anything that
-        // would form a cycle (a function that already contains this collection).
-        Function *f = m_doc->function(fid);
-        if (f == NULL || fid == containerId || col->functions().contains(fid)
-                || f->contains(containerId))
-        {
-            skipped++;
-            continue;
-        }
-        if (col->addFunction(fid))
-            added++;
-        else
-            skipped++;
-    }
-
-    if (added > 0)
-    {
-        m_doc->setModified();
-
-        // Rebuild the nav tree's nested view if this collection's members are on
-        // screen, and refresh the canvas editor if this collection is open.
-        if (m_memberContainer == containerId)
-            syncMemberNodes(containerId);
-        if (m_canvasFunction == containerId && m_funcEditor != NULL)
-            loadFunctionEditor(col);   // cheapest correct refresh of the member list
-    }
-
-    if (skipped > 0 && added == 0)
-        QMessageBox::information(this, tr("Nothing added"),
-            tr("Those functions are already in the collection (or would create a loop)."));
 }
 
 void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
@@ -2513,7 +2423,7 @@ void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
         return;
 
     // Delete by id, never by tree item: the first deletion emits functionRemoved,
-    // which rebuilds the func tree (and tears down the canvas if it held one of
+    // which rebuilds the outline (and tears down the canvas if it held one of
     // these) — so any QTreeWidgetItem* captured before the loop would dangle.
     for (quint32 fid : fids)
         m_doc->deleteFunction(fid);
@@ -2615,166 +2525,14 @@ void ProgrammingManager::deleteTreeSelection(FunctionsTreeWidget *tree)
         return;
     }
 
-    if (tree == m_paletteTree)
+    QList<quint32> pids;
+    for (QTreeWidgetItem *it : sel)
     {
-        QList<quint32> pids;
-        for (QTreeWidgetItem *it : sel)
-        {
-            const quint32 pid = tree->itemPaletteId(it);
-            if (pid != QLCPalette::invalidId() && !pids.contains(pid))
-                pids << pid;
-        }
-        deletePalettes(pids);
+        const quint32 pid = tree->itemPaletteId(it);
+        if (pid != QLCPalette::invalidId() && !pids.contains(pid))
+            pids << pid;
     }
-    else
-    {
-        deleteFunctions(funcTreeTargetIds(sel.first()));
-    }
-}
-
-QList<ProgrammingManager::MemberRef> ProgrammingManager::funcTreeMemberTargets(QTreeWidgetItem *clicked) const
-{
-    QList<MemberRef> refs;
-    const QList<QTreeWidgetItem*> selected = m_funcTree->selectedItems();
-    const QList<QTreeWidgetItem*> rows =
-        (clicked != NULL && selected.contains(clicked)) ? selected
-            : (clicked != NULL ? QList<QTreeWidgetItem*>{clicked} : QList<QTreeWidgetItem*>{});
-
-    for (QTreeWidgetItem *it : rows)
-    {
-        QTreeWidgetItem *parent = it->parent();
-        if (parent == NULL || it->text(1).isEmpty() == false)
-            continue;
-        const QVariant idx = it->data(0, MEMBER_INDEX_ROLE);
-        if (idx.isValid() == false)
-            continue; // a real row of the tree, not a nested member
-        MemberRef r;
-        r.fid = m_funcTree->itemFunctionId(it);
-        if (r.fid == Function::invalidId())
-            continue;
-
-        const QVariant trackId = parent->data(0, SHOW_ITEM_ROLE);
-        if (trackId.isValid() && parent->parent() != NULL)
-        {
-            // Show → track row → placed function.
-            Show *sh = qobject_cast<Show*>(
-                m_doc->function(m_funcTree->itemFunctionId(parent->parent())));
-            if (sh == NULL)
-                continue;
-            r.container = sh->id();
-            r.trackId = trackId.toUInt();
-            r.showFuncId = it->data(0, SHOW_ITEM_ROLE).toUInt();
-        }
-        else
-        {
-            Function *c = m_doc->function(m_funcTree->itemFunctionId(parent));
-            if (qobject_cast<Collection*>(c) == NULL && qobject_cast<Chaser*>(c) == NULL)
-                continue;
-            r.container = c->id();
-            r.stepIndex = idx.toInt();
-        }
-        refs << r;
-    }
-    return refs;
-}
-
-int ProgrammingManager::removeMembers(const QList<MemberRef> &refs, bool confirm)
-{
-    if (refs.isEmpty())
-        return 0;
-    {
-        // A cue list's steps, a cue's members: the Show Tree's (D13).
-        QList<quint32> containers;
-        for (const MemberRef &r : refs)
-            containers << r.container;
-        if (ShowTreeView::refuseGenerated(this, m_doc, containers, tr("Remove from container")))
-            return 0;
-    }
-
-    // Chaser steps and show items carry their own timing; say it goes with them.
-    bool timed = false;
-    for (const MemberRef &r : refs)
-    {
-        Function *c = m_doc->function(r.container);
-        if (qobject_cast<Chaser*>(c) != NULL || qobject_cast<Show*>(c) != NULL)
-            timed = true;
-    }
-    if (confirm && timed)
-    {
-        const QString msg = tr("Take %n item(s) out of the chaser / show?", "", refs.size())
-                + QString("\n\n")
-                + tr("The functions themselves stay; the step's fade, hold and "
-                     "note (or the show item's timing) go with it.");
-        if (QMessageBox::question(this, tr("Remove from container"), msg,
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-            return 0;
-    }
-
-    // Per container; chaser steps highest index first so the rest keep theirs.
-    QList<MemberRef> sorted = refs;
-    std::sort(sorted.begin(), sorted.end(), [](const MemberRef &a, const MemberRef &b) {
-        return a.container != b.container ? a.container < b.container
-                                          : a.stepIndex > b.stepIndex;
-    });
-
-    int removed = 0;
-    QSet<quint32> changed;
-    QStringList skippedShows;
-    for (const MemberRef &r : sorted)
-    {
-        Function *c = m_doc->function(r.container);
-        if (Collection *col = qobject_cast<Collection*>(c))
-        {
-            if (col->removeFunction(r.fid))
-            {
-                removed++;
-                changed.insert(r.container);
-            }
-        }
-        else if (Chaser *ch = qobject_cast<Chaser*>(c))
-        {
-            if (r.stepIndex >= 0 && r.stepIndex < ch->stepsCount()
-                    && ch->steps().at(r.stepIndex).fid == r.fid
-                    && ch->removeStep(r.stepIndex))
-            {
-                removed++;
-                changed.insert(r.container);
-            }
-        }
-        else if (Show *sh = qobject_cast<Show*>(c))
-        {
-            // A running show's runner holds its items: leave it alone.
-            if (sh->isRunning())
-            {
-                if (skippedShows.contains(sh->name()) == false)
-                    skippedShows << sh->name();
-                continue;
-            }
-            Track *trk = sh->track(r.trackId);
-            ShowFunction *sf = (trk != NULL) ? trk->showFunction(r.showFuncId) : NULL;
-            if (sf != NULL && sf->functionID() == r.fid && trk->removeShowFunction(sf, true))
-            {
-                removed++;
-                changed.insert(r.container);
-                emit sh->changed(sh->id());
-            }
-        }
-    }
-
-    if (removed > 0)
-    {
-        m_doc->setModified();
-        // Re-nest the open container's members, and refresh its editor.
-        if (m_memberContainer != Function::invalidId())
-            syncMemberNodes(m_memberContainer);
-        if (changed.contains(m_canvasFunction) && m_funcEditor != NULL)
-            if (Function *open = m_doc->function(m_canvasFunction))
-                loadFunctionEditor(open);
-    }
-    if (skippedShows.isEmpty() == false && confirm)
-        QMessageBox::information(this, tr("Show is running"),
-            tr("Stop %1 first to take items out of it.").arg(skippedShows.join(", ")));
-    return removed;
+    deletePalettes(pids);
 }
 
 void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
@@ -2990,147 +2748,6 @@ bool ProgrammingManager::deleteTreeFolder(FunctionsTreeWidget *tree, QTreeWidget
     }
     tree->removeFolderKeepContents(item);
     return true;
-}
-
-void ProgrammingManager::syncMemberNodes(quint32 containerId)
-{
-    // CRITICAL: block the tree's signals for the whole rebuild. The nested
-    // member items carry a function id and get prefixed display text ("001.
-    // …"); without this, each setText() fires itemChanged -> the tree's rename
-    // handler bakes that prefixed text into the real function name (and saves
-    // it), which is what produced the runaway "001. 001. 001. …" names.
-    const bool wasBlocked = m_funcTree->blockSignals(true);
-
-    // Remove members previously nested under the old container's node. After
-    // a tree rebuild the node is fresh (no children), so this is a no-op then.
-    if (m_memberContainer != Function::invalidId())
-    {
-        Function *old = m_doc->function(m_memberContainer);
-        if (old != NULL)
-        {
-            QTreeWidgetItem *n = m_funcTree->functionItem(old);
-            if (n != NULL)
-                while (n->childCount() > 0)
-                    delete n->takeChild(0);
-        }
-    }
-
-    m_memberContainer = containerId;
-
-    Function *c = m_doc->function(containerId);
-    QTreeWidgetItem *node = (c != NULL) ? m_funcTree->functionItem(c) : NULL;
-    if (node != NULL)
-    {
-        // Recursively nest members (chaser -> collections -> scenes -> …).
-        QSet<quint32> visited;
-        visited.insert(containerId);
-        addMemberChildren(node, containerId, visited, 0);
-        node->setExpanded(true);
-    }
-
-    m_funcTree->blockSignals(wasBlocked);
-}
-
-QTreeWidgetItem *ProgrammingManager::addMemberLeaf(QTreeWidgetItem *parentNode, quint32 mid,
-                                                   int orderIdx, int width, bool ordered,
-                                                   QSet<quint32> &visited, int depth)
-{
-    Function *mf = m_doc->function(mid);
-    if (mf == NULL)
-        return NULL;
-    // Prefix ordered (chaser step / timeline placement) members with a
-    // zero-padded index so the alphabetical tree keeps their order — BUT only
-    // when the member's own name doesn't already start with a number (users who
-    // encode order in the name, e.g. "00-01.02-…", shouldn't get a redundant
-    // prefix). The prefix is display-only; it is never written back to the name.
-    const QString mname = mf->name();
-    const bool nameIsNumbered = mname.isEmpty() == false && mname.at(0).isDigit();
-    QTreeWidgetItem *ci = new QTreeWidgetItem(parentNode);
-    ci->setText(0, (ordered && !nameIsNumbered)
-                ? QString("%1. %2").arg(orderIdx, width, 10, QChar('0')).arg(mname)
-                : mname);
-    ci->setIcon(0, mf->getIcon());
-    ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
-    // Where in its container (collection member / chaser step), so "Remove
-    // from …" takes out exactly this one (a chaser can hold a function twice).
-    ci->setData(0, MEMBER_INDEX_ROLE, orderIdx - 1);
-    // Read-only nav: selectable + double-click to edit, not draggable.
-    ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-
-    // Recurse into sub-containers (collection inside a chaser, a chaser on a
-    // show track, …), guarding against cycles. Leave collapsed — expand to drill.
-    if (visited.contains(mid) == false)
-    {
-        visited.insert(mid);
-        addMemberChildren(ci, mid, visited, depth + 1);
-    }
-    return ci;
-}
-
-void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
-                                           quint32 containerId,
-                                           QSet<quint32> &visited, int depth)
-{
-    if (depth > 8)
-        return;
-    Function *c = m_doc->function(containerId);
-
-    // Show → tracks → functions: mirror the Show Manager timeline hierarchy —
-    // one folder per track, the placed functions nested underneath in timeline
-    // (start-time) order. A track folder is an inert nav label (no function id).
-    if (Show *sh = qobject_cast<Show*>(c))
-    {
-        foreach (Track *trk, sh->tracks())
-        {
-            if (trk == NULL)
-                continue;
-            QTreeWidgetItem *tn = new QTreeWidgetItem(treeNode);
-            tn->setText(0, trk->name().isEmpty() ? tr("Track") : trk->name());
-            tn->setData(0, Qt::UserRole, Function::invalidId()); // not a function
-            tn->setData(0, SHOW_ITEM_ROLE, trk->id());
-            tn->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-
-            QList<ShowFunction*> sfs = trk->showFunctions();
-            std::sort(sfs.begin(), sfs.end(), [](ShowFunction *a, ShowFunction *b) {
-                return a->startTime() < b->startTime();
-            });
-            const int width = qMax(2, QString::number(sfs.count()).length());
-            int idx = 0;
-            foreach (ShowFunction *sf, sfs)
-            {
-                if (sf == NULL)
-                    continue;
-                idx++;
-                QTreeWidgetItem *leaf =
-                    addMemberLeaf(tn, sf->functionID(), idx, width, true, visited, depth);
-                if (leaf != NULL)
-                    leaf->setData(0, SHOW_ITEM_ROLE, sf->id());
-            }
-            tn->setExpanded(true);
-        }
-        return;
-    }
-
-    QList<quint32> members;
-    bool ordered = false; // chaser steps have a meaningful order; collections don't
-    if (Collection *col = qobject_cast<Collection*>(c))
-        members = col->functions();
-    else if (Chaser *ch = qobject_cast<Chaser*>(c))
-    {
-        ordered = true;
-        foreach (const ChaserStep &s, ch->steps())
-            members << s.fid;
-    }
-    else
-        return; // not a container
-
-    const int width = qMax(2, QString::number(members.count()).length());
-    int idx = 0;
-    foreach (quint32 mid, members)
-    {
-        idx++;
-        addMemberLeaf(treeNode, mid, idx, width, ordered, visited, depth);
-    }
 }
 
 int ProgrammingManager::functionUsageCount(quint32 fid) const
@@ -3556,7 +3173,8 @@ void ProgrammingManager::showGuide(QWidget *parent)
     box.setText(tr(
         "<b>Scenes hold looks. Looks are made of palettes.</b>"
         "<ul>"
-        "<li>Pick or create a <b>scene</b> on the left.</li>"
+        "<li>The <b>outline</b> on the left is every scene and what's in it. "
+        "Click a scene, or <b>+ Scene</b> to make one.</li>"
         "<li>Drag <b>palettes</b> from the right onto it to build the look — "
         "a colour, a dimmer level, a position, an effect.</li>"
         "<li>Drag <b>fixture groups</b> on as targets to follow their "
@@ -3566,16 +3184,16 @@ void ProgrammingManager::showGuide(QWidget *parent)
         "<li>Long list? <b>Search fixtures &amp; groups</b> above it narrows to "
         "what matches.</li>"
         "</ul>"
-        "<p><b>Looks and Targets.</b> Every look in a scene applies to every "
-        "target. Drop <b>palettes</b> into Looks; drop <b>fixture groups</b> "
-        "into Targets to follow their membership as it changes, or individual "
-        "<b>fixtures</b> to pin them.</p>"
+        "<p><b>Looks and Targets.</b> Open a scene in the outline: its rows are "
+        "its targets and its looks. Every look applies to every target. Click a "
+        "row and the page edits it; drag a row to another scene to move it "
+        "(hold ⌥ to copy), or within the scene to reorder its looks.</p>"
         "<p><b>Effects.</b> In an effect look, pick from the <b>browser</b>: "
         "search, or a category tab, each effect running on a strip of lights "
         "beside its name. The <b>WLED</b> tab is WLED's own effects: WLED "
         "fixtures run them themselves; other fixtures run the console's version "
         "where there is one.</p>"
-        "<p><b>Transitions.</b> <i>In</i> and <i>Out</i> at the top of the scene "
+        "<p><b>Transitions.</b> <i>In</i> and <i>Out</i> on the scene's page "
         "set how the whole look arrives and leaves — a wipe across the stage, "
         "from the centre, a dissolve, along each bar — instead of the scene's "
         "fade. <i>Edge</i> is how soft the line is.</p>"
@@ -3654,20 +3272,11 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
     const QLCBundle bundle = m_bundleCache->bundle(bundleName);
     if (!bundle.isValid()) return;
 
-    // Save undo snapshot before replacing (palette list + per-look fades)
-    m_stampUndoSceneId   = scene->id();
-    m_stampUndoStamp     = PaletteOps::nextUndoStamp();
-    m_stampUndoPalettes  = scene->palettes();
-    m_stampUndoFades.clear();
-    for (quint32 pid : m_stampUndoPalettes)
-    {
-        const int in = scene->paletteFadeIn(pid), out = scene->paletteFadeOut(pid);
-        if (in >= 0 || out >= 0)
-            m_stampUndoFades[pid] = qMakePair(in, out);
-    }
-
-    // Replace: remove all existing palettes from this scene before stamping
-    for (quint32 pid : m_stampUndoPalettes)
+    // Replace: remove all existing palettes from this scene before stamping.
+    // (One step on the shared history: slotCanvasModified() records it from
+    // the scene as it was.)
+    const QList<quint32> was = scene->palettes();
+    for (quint32 pid : was)
         scene->removePalette(pid);
 
     for (const BundleEntry &entry : bundle.palettes)
@@ -3770,7 +3379,8 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
     }
     m_paletteTree->updateTree();
     if (m_canvas) m_canvas->reload();  // rebuild look list to show new entries
-    slotCanvasModified();              // restart preview so DMX updates
+    slotCanvasModified();              // one step; restart preview so DMX updates
+    m_outline->scheduleRebuild();
 }
 
 void ProgrammingManager::slotSaveAsBundle()
@@ -3833,87 +3443,28 @@ void ProgrammingManager::saveBundleFromPalettes(const QList<quint32> &paletteIds
     m_bundleBrowser->refresh();
 }
 
-Scene *ProgrammingManager::snapshotScene(Scene *scene)
+void ProgrammingManager::recaptureBaseline()
 {
-    if (scene == NULL)
-        return NULL;
-    Scene *snap = new Scene(m_doc); // detached (not addFunction'd); we own it
-    snap->copyFrom(scene);          // full state: values/fixtures/groups/palettes/fades
-    return snap;
+    m_editBaseline = m_currentScene != Function::invalidId() && m_doc->paletteOps() != nullptr
+                     ? m_doc->paletteOps()->sceneSnapshot(m_currentScene)
+                     : QSharedPointer<Scene>();
 }
 
-void ProgrammingManager::resetUndoFor(quint32 sceneId)
+void ProgrammingManager::recordSceneEdit(const QString &label, const QString &mergeKey)
 {
-    qDeleteAll(m_undoStack);
-    m_undoStack.clear();
-    m_undoStamps.clear();
-    delete m_undoBaseline;
-    m_undoBaseline = NULL;
-    m_undoSceneId = sceneId;
-    if (sceneId != Function::invalidId())
-    {
-        Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
-        m_undoBaseline = snapshotScene(scene);
-    }
-}
-
-void ProgrammingManager::pushUndoSnapshot()
-{
-    // Only track scene-canvas edits, and only for the scene the baseline is for.
-    if (m_currentScene == Function::invalidId() || m_currentScene != m_undoSceneId
-            || m_undoBaseline == NULL)
+    PaletteOps *ops = m_doc->paletteOps();
+    if (ops == nullptr || m_editBaseline.isNull() || m_editBaseline->id() != m_currentScene)
         return;
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
-    if (scene == NULL)
-        return;
-
-    // The baseline is the pre-edit state — push it; the edit is now current, so
-    // re-capture the baseline as the current state for the next edit.
-    m_undoStack.append(m_undoBaseline);
-    m_undoStamps.append(PaletteOps::nextUndoStamp());
-    const int kMaxUndo = 25;
-    while (m_undoStack.size() > kMaxUndo)
-    {
-        delete m_undoStack.takeFirst();
-        m_undoStamps.removeFirst();
-    }
-    m_undoBaseline = snapshotScene(scene);
-}
-
-/* What ⌘Z here takes back: the newest of the canvas edit (this scene's),
-   the bundle stamp and the shared history, by their stamps. */
-namespace
-{
-enum class UndoFrom { Nothing, Canvas, Stamp, Shared };
-}
-
-static quint64 sharedUndoStampOf(Doc *doc)
-{
-    quint64 st = 0;
-    if (doc->showTree() != nullptr && doc->showTree()->canUndoShared())
-        st = qMax(doc->showTree()->undoStamp(),
-                  doc->paletteOps() != nullptr ? doc->paletteOps()->undoStamp() : quint64(0));
-    if (st == 0 && doc->showTree() != nullptr && doc->showTree()->canUndoShared())
-        st = 1;     // a step with no stamp (older): still there to undo
-    return st;
+    // A step (or nothing changed): either way the scene as it is now is the
+    // baseline for the next edit (PaletteOps::changed recaptures it too).
+    if (!ops->recordSceneStep(label, { m_editBaseline }, mergeKey))
+        recaptureBaseline();
 }
 
 QString ProgrammingManager::undoText() const
 {
-    const quint64 canvas = (!m_undoStack.isEmpty() && m_currentScene == m_undoSceneId && !m_undoStamps.isEmpty())
-                           ? m_undoStamps.last() : 0;
-    const quint64 stamp = m_stampUndoSceneId != quint32(-1) ? qMax<quint64>(m_stampUndoStamp, 1) : 0;
-    const quint64 shared = sharedUndoStampOf(m_doc);
-    if (canvas == 0 && stamp == 0 && shared == 0)
-        return QString();
-    if (canvas >= stamp && canvas >= shared)
-    {
-        const Scene *scene = qobject_cast<const Scene *>(m_doc->function(m_currentScene));
-        return tr("edit to %1").arg(scene != nullptr ? scene->name() : tr("the look"));
-    }
-    if (stamp >= shared)
-        return tr("Bundle stamp");
-    return m_doc->showTree()->sharedUndoText();
+    ShowTreeController *st = m_doc->showTree();
+    return st != nullptr && st->canUndoShared() ? st->sharedUndoText() : QString();
 }
 
 QString ProgrammingManager::redoText() const
@@ -3922,85 +3473,31 @@ QString ProgrammingManager::redoText() const
     return st != nullptr && st->canRedoShared() ? st->sharedRedoText() : QString();
 }
 
-void ProgrammingManager::slotRedo()
-{
-    if (ShowTreeController *st = m_doc->showTree())
-        if (st->canRedoShared() && st->redoShared())
-        {
-            m_paletteTree->updateTree();
-            if (m_canvas != NULL)
-                m_canvas->reload();
-        }
-}
-
+/* One history (open 24, P1): the Show Tree's steps, the palette operations
+   and the scene edits made here are on it, so ⌘Z / ⇧⌘Z take back and put
+   back whatever was done last, in either tab. */
 void ProgrammingManager::slotUndo()
 {
-    const quint64 canvas = (!m_undoStack.isEmpty() && m_currentScene == m_undoSceneId && !m_undoStamps.isEmpty())
-                           ? m_undoStamps.last() : 0;
-    const quint64 stamp = m_stampUndoSceneId != quint32(-1) ? qMax<quint64>(m_stampUndoStamp, 1) : 0;
-    const quint64 shared = sharedUndoStampOf(m_doc);
-    if (canvas == 0 && stamp == 0 && shared == 0)
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr || !st->canUndoShared() || !st->undoShared())
         return;
-    if (!(canvas >= stamp && canvas >= shared))
-    {
-        if (stamp >= shared)
-            slotUndoStamp();
-        else if (m_doc->showTree()->undoShared())
-        {
-            m_paletteTree->updateTree();
-            if (m_canvas != NULL)
-                m_canvas->reload();
-        }
-        return;
-    }
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
-    if (scene == NULL)
-    {
-        slotUndoStamp();
-        return;
-    }
-
-    Scene *snap = m_undoStack.takeLast();
-    m_undoStamps.removeLast();
-    const QString keepName = scene->name(); // undo canvas edits, not a tree rename
-    scene->copyFrom(snap);   // restore the pre-edit state
-    scene->setName(keepName);
-    delete snap;
-    // The restored state is the new baseline (don't let the reload re-push it).
-    delete m_undoBaseline;
-    m_undoBaseline = snapshotScene(scene);
-
-    m_doc->setModified();
+    m_paletteTree->updateTree();
     if (m_canvas != NULL)
         m_canvas->reload();
+    m_outline->rebuild();
     refreshPreview();
+    updateScenePage();
 }
 
-void ProgrammingManager::slotUndoStamp()
+void ProgrammingManager::slotRedo()
 {
-    if (m_stampUndoSceneId == quint32(-1)) return;
-
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_stampUndoSceneId));
-    if (!scene) return;
-
-    // Remove the currently stamped palettes
-    for (quint32 pid : scene->palettes())
-        scene->removePalette(pid);
-
-    // Restore the saved palette list + their per-look fade overrides
-    for (quint32 pid : m_stampUndoPalettes)
-        scene->addPalette(pid);
-    for (auto it = m_stampUndoFades.constBegin(); it != m_stampUndoFades.constEnd(); ++it)
-        scene->setPaletteFade(it.key(), it.value().first, it.value().second);
-
-    // Consume the undo entry so a second Ctrl-Z won't repeat
-    m_stampUndoSceneId  = quint32(-1);
-    m_stampUndoStamp    = 0;
-    m_stampUndoPalettes.clear();
-    m_stampUndoFades.clear();
-
-    m_doc->setModified();
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr || !st->canRedoShared() || !st->redoShared())
+        return;
     m_paletteTree->updateTree();
-    if (m_canvas) m_canvas->reload();
-    slotCanvasModified();
+    if (m_canvas != NULL)
+        m_canvas->reload();
+    m_outline->rebuild();
+    refreshPreview();
+    updateScenePage();
 }

@@ -41,6 +41,7 @@
 #include <QDir>
 
 #include "programmingmanager.h"
+#include "programmingoutline.h"
 #include "patchinventorydialog.h"
 #include "functionstreewidget.h"
 #include "scenegrouplooks.h"
@@ -337,52 +338,45 @@ QList<HelpShots::Shot> HelpShots::shots()
             app->m_tab->setCurrentWidget(w);
         settle();
     };
-    // How tall the Programming tab's look editor is, under the canvas.
-    auto editorHeight = [pm](int px) {
-        if (pm == NULL || pm->m_canvasSplit == NULL)
-            return;
-        const QList<int> was = pm->m_canvasSplit->sizes();
-        int total = 0;
-        for (int h : was)
-            total += h;
-        pm->m_canvasSplit->setSizes(QList<int>() << total - px << px);
-        settle();
-    };
-    // Opens a scene in the Programming tab, selected in the tree, and selects
-    // the look whose row contains @a look (none when empty).
+    // The look editor has the page's whole height now: nothing to size.
+    auto editorHeight = [](int) { settle(); };
+    // Opens a scene in the Programming tab, selected in the outline, and
+    // selects the look whose row contains @a look (the scene's own row when
+    // empty).
     auto openScene = [pm, function, showTab](const QString &scene, const QString &look) {
         if (pm == NULL)
             return;
         showTab(pm);
-        // Narrow side panes: the canvas's toolbar wants the width.
+        // Narrow side panes: the page wants the width.
         if (QSplitter *split = qobject_cast<QSplitter *>(named(pm, "programmingSplitter")))
         {
-            const int side = 250;
+            const int side = 360;
             split->setSizes(QList<int>() << side << split->width() - 2 * side << side);
         }
         Function *f = function(scene);
         if (f == NULL)
             return;
-        pm->m_funcTree->clearSelection();
-        if (QTreeWidgetItem *it = pm->m_funcTree->functionItem(f))
-        {
-            pm->m_funcTree->scrollToItem(it);
-            it->setSelected(true);
-        }
+        pm->m_outline->rebuild();
         pm->m_currentScene = Function::invalidId();     // build it afresh
-        pm->loadCanvas(f->id());
+        pm->revealScene(f->id());
         settle();
         if (look.isEmpty())
             return;
-        QTreeWidget *looks = qobject_cast<QTreeWidget *>(named(pm, "sceneLooks"));
-        if (QTreeWidgetItem *it = rowNamed(looks, look))
+        QTreeWidgetItem *sceneRow = pm->m_outline->sceneItem(f->id());
+        sceneRow->setExpanded(true);
+        QTreeWidgetItem *hit = NULL;
+        for (QTreeWidgetItemIterator it(sceneRow); *it != NULL && hit == NULL; ++it)
+            if ((*it)->text(0).contains(look, Qt::CaseInsensitive)
+                && (*it)->data(0, ProgrammingOutline::KindRole).toInt() == ProgrammingOutline::PaletteRow)
+                hit = *it;
+        if (hit != NULL)
         {
-            looks->clearSelection();
-            looks->setCurrentItem(it);
-            it->setSelected(true);
+            ProgrammingOutline::Row r = ProgrammingOutline::rowOf(hit);
+            pm->m_outline->selectRow(r);
         }
         else
             fprintf(stderr, "[HELPSHOT] no look %s\n", qPrintable(look));
+        settle();
     };
 
     QList<Shot> list;
@@ -408,12 +402,11 @@ QList<HelpShots::Shot> HelpShots::shots()
         editorHeight(250);
         Frame f;
         f.grab = app;
-        f.callouts << mark(named(pm, "programmingFunctions"), 1)
-                   << mark(named(pm, "sceneTargets"), 2)
-                   << mark(named(pm, "sceneLooks"), 3)
-                   << mark(named(pm, "lookEditor"), 4)
-                   << mark(named(pm, "programmingSources"), 5)
-                   << mark(named(pm, "programmingFixturesGroups"), 6);
+        f.callouts << mark(named(pm, "programmingOutline"), 1)
+                   << mark(named(pm, "outlineExpandAll"), 2)
+                   << mark(named(pm, "lookEditor"), 3)
+                   << mark(named(pm, "programmingSources"), 4)
+                   << mark(named(pm, "programmingFixturesGroups"), 5);
         return f;
     }, nullptr };
 
@@ -559,16 +552,22 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (!scene->palettes().contains(line->id()))
             scene->addPalette(line->id());
         openScene(scene->name(), QString());
-        editorHeight(120);
-        QWidget *canvas = pm ? pm->m_canvas : NULL;
-        QTreeWidget *looks = qobject_cast<QTreeWidget *>(named(pm, "sceneLooks"));
-        QTreeWidgetItem *covered = rowNamed(looks, QStringLiteral("Circle"));
-        if (looks != NULL && covered != NULL)
-            looks->scrollToItem(covered);
+        QTreeWidget *outline = pm ? pm->m_outline : NULL;
+        if (outline == NULL)
+            return f;
+        pm->m_outline->rebuild();
+        QTreeWidgetItem *sceneRow = pm->m_outline->sceneItem(scene->id());
+        pm->m_outline->setSubtreeExpanded(sceneRow, true);
+        QTreeWidgetItem *covered = NULL;
+        for (QTreeWidgetItemIterator it(sceneRow); *it != NULL && covered == NULL; ++it)
+            if ((*it)->text(0).contains(QStringLiteral("Circle")))
+                covered = *it;
+        if (covered != NULL)
+            outline->scrollToItem(covered);
         settle();
-        f.grab = canvas;
-        f.callouts << markRow(looks, covered, canvas, 1)
-                   << mark(named(pm, "lookStackNotes"), 2);
+        f.grab = outline;
+        f.callouts << markRow(outline, covered, outline, 1)
+                   << markRow(outline, sceneRow, outline, 2);
         return f;
     }, [=]() {
         // Put the show back as it was.

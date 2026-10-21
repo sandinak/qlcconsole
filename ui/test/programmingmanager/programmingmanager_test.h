@@ -104,32 +104,28 @@ private slots:
     void thePowerChipSaysWhatItsFigureIsMadeOf();
 
     /** "I can't seem to drag a scene to a folder in the programming view":
-     *  scenes dropped on a folder move into it (with or without a collection
-     *  open), onto the category/empty space move back out, the show is
-     *  modified and the paths survive save + load; a drop on a collection row
-     *  still adds members, and the payload still carries the function ids the
-     *  collection/chaser/show editors read. */
+     *  in the outline, scenes dropped on a folder row move into it, onto
+     *  empty space back out to the top; the show is modified and the paths
+     *  survive save + load; a scene dropped on a scene is refused (no
+     *  includes here). */
     void scenesDragIntoAFolderAndBackOut();
-    /** A folder dragged onto another folder moves inside it with everything
-     *  in it; never into itself. */
-    void aFolderDragsIntoAnotherFolder();
+    /** A folder renamed in the outline (F2) takes everything filed in it
+     *  and under it along. */
+    void aFolderRenamesWithWhatIsInIt();
     /** Palettes and palette folders drag into folders too, including an
      *  empty folder just made from the menu. */
     void palettesAndTheirFoldersDragIntoFolders();
-    /** "I can't right click on an empty folder to delete it": Delete Folder
-     *  removes an empty folder outright; a folder with things in it hands
-     *  them to its parent folder — nothing is deleted. */
+    /** Delete Folder on the palette tree hands what is in it to the parent
+     *  folder -- nothing is deleted. */
     void deletingAFolderKeepsWhatIsInIt();
     /** "it was drag selecting other things vs dragging to folder": press on
-     *  a row that isn't selected and move -> it's a drag of that row, not a
-     *  rubber-band selection growing over the rows passed. */
+     *  an outline row that isn't selected and move -> it's a drag of that
+     *  row, not a rubber-band selection growing over the rows passed. */
     void pressAndMoveOnARowDragsIt();
-    /** "No ability to remove from side menu": rows shown under a collection /
-     *  chaser / show come out of it (membership only; the functions stay),
-     *  one or several, from one or several containers; a chaser that holds a
-     *  function twice loses only the step picked. "Delete" on such a row says
-     *  it deletes the function everywhere and lists where it is used. */
-    void rowsUnderAContainerComeOutOfIt();
+    /** P1, open question 5: a chaser or collection filed in a scene folder
+     *  shows in the outline, greyed, once, and opens in the Functions tab;
+     *  deleting a scene says it is the function itself and where it's used. */
+    void nonScenesInASceneFolderOpenInFunctions();
     /** "can't remove anything here .. no delete .. AND delete should check
      *  for usage and warn the user with a popup that shows where": deleting a
      *  palette names every scene look and effect-look slot using it, and

@@ -23,86 +23,164 @@ Manager / Scene Editor.
 
 ## Layout
 
-![The Programming tab with a scene open and a look selected](../images/programming-tab-layout.png)
+![The Programming tab: the outline on the left, a look on the page](../images/programming-tab-layout.png)
 
-1. **Scenes / functions** — double-click one to open it.
-2. **Targets** — the fixtures and groups the open scene lights.
-3. **Looks** — what it does to them, top to bottom; select one to edit it.
-4. **The Look Editor**, for the selected look.
-5. **Palettes** and **Bundles** — drag a palette onto Looks.
-6. **Fixtures &amp; groups** — drag them onto Targets.
+1. **The outline** — every scene folder, scene, target and look, in one tree.
+2. **Expand all / Collapse all.**
+3. **The page** — what the selected row edits; here, the Look Editor.
+4. **Palettes** and **Bundles** — drag a palette onto a scene in the outline.
+5. **Fixtures &amp; groups** — drag them onto a scene too.
 
-Three panes:
+Three panes, left to right:
 
-- **Left — Scenes / functions.** A filterable tree of every function
-  (Scene/Chaser/Collection/EFX/RGB Matrix/Show) in folders. Single-click
-  selects; double-click opens it in the canvas. See
-  [Filing into folders](#filing-into-folders).
+- **Left — the outline.** The line over it says what it is: *Every scene
+  and what's in it. Click a row to edit it; drag rows between scenes.*
+  Folders hold scenes; open a scene and its rows are its **targets**
+  (groups, then fixed fixtures) and its **looks** (palettes, in order — an
+  effect's own colour and dimmer sit under it). See
+  [The outline](#the-outline).
+- **Center — the page.** Whatever row is selected, with the room to edit it:
+
+  | Selected | The page |
+  |---|---|
+  | a scene | its name, folder, what it holds, its warnings in full, what on the Virtual Console fires it, **Duplicate**, **Snapshot**, and its **Timing**: fades, [transitions](#transitions), speed master |
+  | a look | the [Look Editor](#the-inline-look-editor), the page's whole height |
+  | a group or fixture | its fixtures' channels, as the scene sets them (several fixtures of one type together); a group has **Edit layout** |
+  | a chaser or collection | what it is, and **Open in Functions** |
+  | a folder | how many scenes it holds |
+
+- **Right — sources.** A **Palettes** tab (filterable, foldered, drag
+  source) and a **Bundles** tab, with a permanent **Fixtures &amp; groups**
+  tree underneath. A **Search fixtures & groups…** box sits over that tree:
+  a row stays when it or anything under it matches, the folders on the way
+  down open, and a matching group keeps all its fixtures. Clear the search
+  and the tree closes back up.
 - **The tab's tools**, in the top bar beside the show controls (or over
-  the canvas, with the show controls in the status bar, or the tab in a
+  the page, with the show controls in the status bar, or the tab in a
   window of its own): **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
   **Move in black** (mark, unmark, auto move-in-black and its lead time),
   **Beat** (internal beat on, BPM, speed masters — the button reads the
   tempo) and **More** (snapshot live output, jog speed) as drop-downs.
   In a narrow window, what doesn't fit is under **»**.
-- **Center — canvas.** Either an empty-state placeholder or the loaded
-  editor. For
-  a Scene, that's the **Targets** panel (left half) and **Looks** panel
-  (right half) shown above. Other function types (Chaser, Collection, EFX,
-  RGB Matrix, Show) open their own stock editors here instead. Below the
-  canvas, the inline **Look Editor** appears whenever a look is selected.
-- **Right — sources.** A **Palettes** tab (filterable, foldered, drag
-  source) and a **Bundles** tab, with a permanent **Fixtures &amp; groups**
-  tree underneath for dragging Targets. A **Search fixtures & groups…** box
-  sits over that tree: a row stays when it or anything under it matches,
-  the folders on the way down open, and a matching group keeps all its
-  fixtures. Clear the search and the tree closes back up.
 
-**Resizing:** drag the handles between the three panes, and the one
-between the canvas and the Look Editor below it. A handle moves its edge
-and stops where a pane reaches its smallest — no pane snaps shut. The
-fades-and-transitions line wraps when the canvas is narrow; the Look Editor
-scrolls when you make it shorter than it is. Where you leave the handles
-is remembered.
+**Resizing:** drag the handles between the three panes. A handle moves its
+edge and stops where a pane reaches its smallest — no pane snaps shut. The
+outline's badge column is a handle of its own (drag the line between the
+columns). Where you leave them is remembered.
 
-Double-clicking a fixture group opens its layout view in the canvas. A
-**← Back to &lt;scene&gt;** button there returns you to the scene you came
-from; if you open an effect while in a group's view, the tab goes back to
-that scene first, with the effect showing.
+**Edit layout** on a group's page (or right-click a group row → **Edit the
+group's layout**) opens its layout view on the page. A **← Back to
+&lt;scene&gt;** button there returns you to the scene you came from.
+
+## The outline
+
+One tree of everything you build here, so a scene doesn't have to be opened
+on its own to see or change what is in it.
+
+**Rows.** Folders → scenes → each scene's targets (◆ a group, a fixture)
+and looks (a colour shows its swatch). A colour or dimmer under an effect is
+that effect's own; one above every effect is the look's own. Chasers,
+collections and the like filed in a scene folder show there **greyed**,
+once, so nothing seems to vanish: double-click one, or its page's **Open in
+Functions**, to edit it in the Functions tab. The scenes the Show Tree made
+for its cues stay hidden, as everywhere.
+
+**Click a row** and the page edits it (see the table above). The scene of
+the row you clicked is the one previewing, and the one a control surface
+addresses.
+
+**Open and close.** **⊞ / ⊟** over the outline (or **⌘→ / ⌘←**) open or
+close every row. **⌥-click a triangle** to open or close that row and
+everything under it (**⌥→ / ⌥←** on the keyboard). What you leave open is
+open again next time, per show.
+
+**Badges**, in the right-hand column; hover for the details:
+
+| Badge | Means |
+|---|---|
+| **⚠ n** | n things to look at: a target with no look for what it can do, heads that can't reach their aim target, unpatched fixtures, or a look the [stack checker](effects.md#how-a-look-stacks) flags. On a group: how many fixtures, marked ⚠ if any of that is about them. |
+| **VC ×n** | n Virtual Console buttons fire the scene. |
+| **▣** | The scene sets raw channel values directly (a fixed fixture row shows how many). |
+| **⇄** | It has a [transition](#transitions). |
+| **⏱** | Its effects keep time with a speed master. |
+| **◷** | A look with a fade of its own. |
+
+**Drag and drop.** The line over the outline says what a drop will do before
+you let go.
+
+| Drag | Onto | Does |
+|---|---|---|
+| a look or target row | another scene (or a row in it) | **moves** it there; hold **⌥** to **copy**. A look keeps its own fade, a fixed fixture its raw values, an effect brings its own colour and dimmer. |
+| a look row | another look in its own scene | reorders: it goes above that one (lower rows win) |
+| a colour or dimmer row | an effect row | makes it that effect's own |
+| a palette (Palettes tab) | a scene, or a row in it | adds it: a base look, or above the look it was dropped on, or the effect's own if dropped on an effect |
+| a group or fixture (right) | a scene | a dynamic or fixed target |
+| a scene | a folder; empty space | files it there; takes it out of its folder |
+| a scene | another scene | nothing — scenes don't include scenes here; build cues in the [Show Tree](show-tree.md) |
+
+**Several at once.** ⇧/⌘-click rows — across scenes too — then drag them,
+or press **⌫** to take them all out of their scenes (the palettes, groups
+and fixtures themselves stay). ⌫ on scene rows asks before deleting the
+scenes, naming where each is used.
+
+**Rename** with **F2** (or a slow second click): a scene, a folder (what is
+filed in it follows) or a palette.
+
+**Right-click** a row for the same actions: remove, move a look up or down,
+show a palette in the Palettes tab, rename, duplicate, delete, a new scene
+in that folder, open or close everything under it.
+
+**+ Scene** (over the outline) makes a scene in the folder of the selected
+row; its menu also makes one in a new folder.
+
+**Undo.** Every edit in the outline and on the page — a row moved, copied,
+added or removed, a rename, a scene filed, its timing, a fixture's channels
+(a fader drag is one step), a look's fade, a Bundle stamp, a Snapshot — is
+one step on the **one history** the Programming tab and the Show Tree share
+(below): **⌘Z** takes it back, **⇧⌘Z** puts it back, in either tab.
 
 ## Filing into folders
 
-Both the scenes/functions tree and the Palettes tab keep things in folders.
+**Scenes** file by dragging their rows in the outline onto a folder row
+(empty space takes them back out to the top); **F2** on a folder row renames
+it, and what is filed in it follows. **+ Scene → New scene in a new
+folder…** makes a folder with a scene in it. Folders are saved with the show
+and show the same in the Functions tab.
 
-- **Drag to file.** Press on a scene (or any function, or a palette) and
-  drag it onto a folder — it moves in. Drop it on another row and it joins
-  that row's folder; drop it on the type's heading (**Scene**, **Chaser**…)
-  or on empty space below the list to take it back out to the top. Select
-  several first (⇧/⌘-click) to move them together. The folder it will land
-  in is outlined while you drag, and hovering over a closed folder opens it.
-- **Folders move too.** Drag a folder onto another folder and it goes inside
-  it with everything in it.
-- A scene stays among scenes, a chaser among chasers: a folder of another
-  type doesn't take it. Dropping a scene **on a Collection's row** adds it
-  to that collection instead of filing it.
-- **Right-click a folder** for **Rename Folder**, **Delete Folder** and the
-  usual **New …** items, which then create inside it. Deleting an empty
-  folder just removes it. Deleting one with things in it asks first, and
-  what was in it moves up a level — nothing is deleted.
+### Taking something out of a collection, chaser or show
 
-Folders are saved with the show and show the same in the Functions tab.
+Chasers, collections and shows are edited in the **Functions** tab: their
+rows in the outline are greyed, and **Open in Functions** takes you there.
+
+### Deleting palettes and functions
+
+A scene: select its row (several, ⇧/⌘-click) and press **⌫**, or right-click
+→ **Delete…**. The question says it deletes the scene itself, everywhere,
+and names each collection, chaser step and show track using it.
+
+A palette: in the Palettes tab, right-click → **Delete**, or select and press **⌫**.
+The question lists every place the palette is used — each scene and which
+look row, each effect look whose slot uses it — and says what happens:
+scenes lose that look (their other looks and values stay), effect looks lose
+that slot's palette and use their look's colours. With a folder selected, ⌫
+deletes the folder: what was in it moves up a level, nothing is deleted.
+
+A palette the Show Tree uses is named by its **cues and looks** ("Cue 1.0.1
+Verse in Full Show — Towers"), not by the scenes the tree made for them, and
+the **VC buttons** that fire those are listed too.
 
 **Palette folders hold any type.** A folder in the Palettes tab can hold
 colours, aims, dimmers and effects together — say a folder per song,
 "01-Everybody Scream", with everything that song uses. Right-click empty
-space → **New folder…** makes one at the top level. The tab shows folders
-first, each palette with its type's icon, and the palettes in no folder
-below them. Tick **Group by type** in the right-click menu to see it the
-other way round: Aim, Color, Dimmer… first, with the same folders under each
-type (it is remembered). In that view a folder is still one folder: renaming
-or deleting it under Color does it for every type, and dropping a palette on
-it files the palette there whatever its type.
+space → **New folder…** makes one at the top level. Drag a palette onto a
+folder to file it; drag a folder into another. The tab shows folders first,
+each palette with its type's icon, and the palettes in no folder below them.
+Tick **Group by type** in the right-click menu to see it the other way
+round: Aim, Color, Dimmer… first, with the same folders under each type (it
+is remembered). In that view a folder is still one folder: renaming or
+deleting it under Color does it for every type, and dropping a palette on it
+files the palette there whatever its type.
 
 Shows saved before this had a folder per type (Color › 01-Song, Aim ›
 01-Song); they open with those merged into one folder per name, and effect
@@ -113,37 +191,13 @@ you made that happens to be named like a type (*Color* holding dimmers) or
 qlcconsole opening such a show shows the same folders at the top level. The
 Show Tree's Library uses the same folders.
 
-### Taking something out of a collection, chaser or show
-
-An open collection, chaser or show lists what is in it underneath its row.
-Right-click one of those rows (or several, ⇧/⌘-click) and pick **Remove from
-“…”**: they come out of it and the functions themselves stay. Taking a step
-out of a chaser, or an item off a show's track, asks first, since its fade,
-hold and timing go with it. **Delete Function Everywhere…** on such a row is
-different: it deletes the function itself, from every collection, chaser and
-show; the question names where it is used.
-
-### Deleting palettes and functions
-
-Right-click → **Delete**, or select and press **⌫** (Delete), in either tree.
-The question lists every place the palette or function is used — each scene
-and which look row, each effect look whose slot uses the palette, each
-collection, chaser step and show track — and says what happens: scenes lose
-that look (their other looks and values stay), effect looks lose that slot's
-palette and use their look's colours, collections/chasers/shows lose it. With
-a folder selected, ⌫ deletes the folder the same way as its menu item.
-
-A palette the Show Tree uses is named by its **cues and looks** ("Cue 1.0.1
-Verse in Full Show — Towers"), not by the scenes the tree made for them, and
-the **VC buttons** that fire those are listed too.
-
 ### Palettes here and in the Show Tree
 
 New, Duplicate, Delete and Move to folder of a palette are the same
 operations as in the Show Tree's Library ([Palettes in the
 Library](show-tree.md#palettes-in-the-library)), and each is one step on the
 **one history** the two tabs share: **⌘Z** here (or the Show Tree's) takes
-back whatever was done last — an edit to the look open on the canvas, a
+back whatever was done last — a scene edit in the outline or on the page, a
 Bundle stamp, a palette made, renamed, filed or deleted in either tab, or a
 Show Tree change — and **⇧⌘Z** puts back what was undone last. Deleting a
 palette here clears it from everything that uses it — scenes, effect slots
@@ -159,46 +213,46 @@ and Bundles stay here.
    pick a type — Color, Dimmer, Pan/Tilt, Aim, Beam, Gobo, Shutter, Strobe,
    or Effect. It opens straight into the Look Editor for you to set its
    value; drag it into a folder afterward to file it.
-3. On the left, pick an existing Scene (double-click) or click **Add** → New
-   Scene.
-4. **Drag a fixture group onto Targets** to add it as a **dynamic** target —
-   its membership is followed live, so adding a fixture to that group later
-   automatically pulls it into every scene using it. **Drag an individual
-   fixture onto Targets** instead for a **fixed** target with static
-   membership.
-5. **Drag a palette from the right onto the Looks list.** Dropped on empty
-   space, it becomes a base look (painted directly onto the targets).
-   Dropped onto an Effect look, a Color/Dimmer palette instead nests
-   *under* it and belongs to that effect only — its colours, its level;
-   the ones above every effect are the look's own and feed every effect
-   that has none of its own. See
-   [How a look stacks](effects.md#how-a-look-stacks).
-6. Click a look to edit it live in the Look Editor at the bottom — see
-   below. Every edit there applies immediately; there's no separate "apply"
-   step.
-7. Reorder looks with the up/down buttons — the list is a stack read top
-   to bottom, and the lower look wins on what two of them set (two Colours
-   are colour 1 and colour 2 instead; see
-   [How a look stacks](effects.md#how-a-look-stacks)). Remove a look or
-   target with its panel's **Remove** button.
-8. Save the workspace normally (⌘S).
+3. In the outline, click a scene, or **+ Scene** to make one (it goes in
+   the folder of the row selected; F2 names it).
+4. **Drag a fixture group onto the scene** to add it as a **dynamic**
+   target — its membership is followed live, so adding a fixture to that
+   group later pulls it into every scene using it. **Drag an individual
+   fixture** instead for a **fixed** target with static membership.
+5. **Drag a palette from the right onto the scene.** Dropped on the scene's
+   row, it becomes a base look (painted directly onto the targets). Dropped
+   onto an Effect's row, a Color/Dimmer palette instead goes *under* it and
+   belongs to that effect only — its colours, its level; the ones above
+   every effect are the look's own and feed every effect that has none of
+   its own. See [How a look stacks](effects.md#how-a-look-stacks).
+6. Click a look's row to edit it in the Look Editor on the page. Every edit
+   there applies immediately; there's no separate "apply" step.
+7. Reorder looks by dragging a look's row onto another in the same scene —
+   the list is a stack read top to bottom, and the lower look wins on what
+   two of them set (two Colours are colour 1 and colour 2 instead; see
+   [How a look stacks](effects.md#how-a-look-stacks)). Right-click → **Move
+   up / Move down** does the same a row at a time. Select rows and press ⌫
+   to take them out of the scene.
+8. Moving on to the next scene that uses the same group or look? Drag the
+   row there (⌥ copies it).
+9. Save the workspace normally (⌘S).
 
-If some of a scene's targets are still in the inventory (not patched), an
-amber warning under Targets says so: they send no DMX, and the look shows in
-the Lighting Studio and the Rig Overview only until you patch them in the Fixture Manager. Unpatched
-target rows are also marked "(unpatched)".
+If some of a scene's targets are still in the inventory (not patched), the
+scene and the group show **⚠**, and the scene's page says so: they send no
+DMX, and the look shows in the Lighting Studio and the Rig Overview only
+until you patch them in the Fixture Manager.
 
 A **Bundle** is a related, separate shortcut: a portable, shareable snapshot
 of an ordered palette stack (no fixture targets attached). "Stamping" one
-from the Bundles tab onto the open scene replaces its whole look stack in one
-action — handy for re-using a "look" across shows without re-dragging every
-palette. One level of undo is kept for a stamp.
+from the Bundles tab onto the selected scene replaces its whole look stack
+in one action — handy for re-using a "look" across shows without re-dragging
+every palette. A stamp is one step on the history (⌘Z).
 
 ## Transitions
 
 A scene can arrive and leave as a **transition** rather than everything
 fading together: a wipe across the stage, from the centre, a dissolve. The
-row sits on the scene's canvas:
+row is under **Timing** on the scene's page:
 
 **In:** [shape] [time]  **Out:** [shape] [time]  **Edge:** [%]
 
@@ -252,8 +306,8 @@ override (leave at "step" to inherit the scene or chaser's own timing). A
 scene [transition](#transitions), when set, takes the place of the scene's
 fade.
 
-If the editor is showing a palette that isn't in the look open on the
-canvas, the look **tries it on**: it plays on top of the look's own
+If the editor is showing a palette that isn't in the scene selected in the
+outline, the scene **tries it on**: it plays on top of the look's own
 palettes so you can see it on the rig, but it's never saved into the look.
 The editor says "Trying it on “&lt;look&gt;” — not saved into it"; drag the
 palette onto the look to keep it. With no look open it says "Not in a look".
@@ -404,8 +458,8 @@ WLED fixture definition if there isn't one.
 
 Red warning text appears if a look's type has no matching channel on any of
 its targets (e.g. a Gobo look applied to fixtures with no gobo wheel), and —
-for Aim looks specifically — the Targets panel flags in red which fixtures
-physically **can't reach** the point they're aimed at (see
+for Aim looks specifically — the outline marks with ⚠ (hover for which)
+the fixtures that physically **can't reach** the point they're aimed at (see
 [Stage Targets](stage-targets.md#reachability)).
 
 ## Design vs. Operate mode
@@ -438,7 +492,9 @@ capturing a look you built live on an external console.
 
 | Term | Meaning |
 |---|---|
-| **Look** | A palette as applied inside a specific scene. |
+| **Look** | A palette as applied inside a specific scene: a look row in the outline. |
+| **Outline** | The tree on the left: every scene folder, scene, target and look. |
+| **Page** | The middle pane: what the selected outline row edits. |
 | **Palette** | A reusable, named preset (Color, Dimmer, Pan/Tilt, Aim, Beam, Gobo, Shutter, Strobe, Effect) that expands per-fixture at run time. Lives in its own tree, independent of any scene. |
 | **Target** | A fixture or group a scene's looks apply to — **dynamic** (a group, membership tracked live) or **fixed** (an individual fixture, static). |
 | **Base look** | A look positioned before any Effect in the list — paints fixtures directly. |

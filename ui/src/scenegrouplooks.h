@@ -17,6 +17,11 @@
 
 #include <QWidget>
 #include <QList>
+#include <QSet>
+#include <QHash>
+#include <QStringList>
+
+#include "qlcpalette.h"
 
 class QListWidget;
 class QListWidgetItem;
@@ -27,6 +32,7 @@ class QComboBox;
 class QLabel;
 class Scene;
 class Doc;
+class Fixture;
 
 /** @addtogroup ui_functions
  * @{
@@ -58,6 +64,42 @@ public:
 
     /** Repopulate the lists from the scene's current targets/looks. */
     void reload();
+
+    /** Show or hide the Targets and Looks lists. The Programming tab's
+     *  outline lists a scene's targets and looks itself, so its scene page
+     *  keeps only the timing row (fades, transitions, speed). */
+    void setListsVisible(bool visible);
+
+    /************************************************************************
+     * What a scene's targets lack, for anything that lists them (this
+     * widget and the Programming tab's outline)
+     ************************************************************************/
+    /** The palette types the scene's looks cover (an effect covers what it
+     *  drives; auto-open shutters cover Shutter). */
+    static QSet<QLCPalette::PaletteType> coveredTypes(Doc *doc, Scene *scene);
+    /** What @a fixture can do that no look covers: "color, pan/tilt"
+     *  (empty: nothing). */
+    static QStringList missingLooks(Fixture *fixture, const QSet<QLCPalette::PaletteType> &covered);
+    /** Heads the scene's Aim looks point at a target they cannot reach:
+     *  fixture id -> the names of those targets. */
+    static QHash<quint32, QStringList> headsThatCannotReach(Doc *doc, Scene *scene);
+
+    /************************************************************************
+     * Scene edits shared with the outline
+     ************************************************************************/
+    /** Add group @a gid as a dynamic target, folding away a fixed target the
+     *  scene's looks then fully cover (its baked values the looks cover go).
+     *  False: already there / no such group. */
+    static bool addGroupTarget(Doc *doc, Scene *scene, quint32 gid);
+    /** Put @a pids (already in the scene, or added here) at @a at in the
+     *  scene's look order; -1: as a base look, before the first effect. */
+    static void placeLooks(Doc *doc, Scene *scene, const QList<quint32> &pids, int at);
+    /** Nest @a pids under effect @a effectPid (right after it); an invalid
+     *  effect makes them base looks. True if the order changed. */
+    static bool nestLooks(Doc *doc, Scene *scene, const QList<quint32> &pids, quint32 effectPid);
+    /** After looks were applied: strip baked values they now control, then
+     *  ask (over @a parent) whether to clear baked channels no look covers. */
+    static void reconcileAfterPaletteApply(Doc *doc, Scene *scene, QWidget *parent);
 
 signals:
     /** Emitted after the scene's targets/looks were changed here. */
@@ -127,9 +169,10 @@ private:
     void reconcileAfterPaletteApply();
 
 private:
-    /** Heads the scene's Aim looks point at a target they cannot reach:
-     *  fixture id -> the names of those targets. */
     QHash<quint32, QStringList> headsThatCannotReach() const;
+    /** The lists' widgets, hidden by setListsVisible(false). */
+    QList<QWidget *> m_listWidgets;
+    bool m_listsVisible = true;
 
     Scene *m_scene;
     Doc *m_doc;

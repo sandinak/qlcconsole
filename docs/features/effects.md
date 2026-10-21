@@ -368,14 +368,15 @@ own uses them. An effect with its own uses its own.
 
 ### The stack checker
 
-![A covered movement effect, marked in the Looks list](../images/effects-stack-checker.png)
+![A covered movement effect, marked in the Programming tab's outline](../images/effects-stack-checker.png)
 
 1. **A marked look** — a warning sign in its row; hover it for why. Here two
    movement effects are on the same heads: the lower wins, so the upper one
    is **Covered**.
-2. **The line under the list** says how many are marked.
+2. **The scene's row** counts what is marked in it (⚠ n); its page lists
+   them in full.
 
-The Looks list checks the stack against these rules as you build it, and
+The Programming tab's outline checks the stack against these rules as you build it, and
 marks a look (a warning sign in its row; the reason in its tooltip) when it
 won't do what it seems to, with a line under the list saying how many:
 

@@ -169,6 +169,7 @@ add_library(${module_name}
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
+    programmingoutline.cpp programmingoutline.h
     showtreeview.cpp showtreeview.h
     cuerunner.cpp cuerunner.h
     updatechecker.cpp updatechecker.h
