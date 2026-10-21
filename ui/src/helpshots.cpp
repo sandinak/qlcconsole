@@ -88,17 +88,6 @@ HelpShots::Callout mark(QWidget *w, int number)
     return c;
 }
 
-/** The row of @a tree whose first column contains @a text. */
-QTreeWidgetItem *rowNamed(QTreeWidget *tree, const QString &text)
-{
-    if (tree == NULL)
-        return NULL;
-    for (QTreeWidgetItemIterator it(tree); *it; ++it)
-        if ((*it)->text(0).contains(text, Qt::CaseInsensitive))
-            return *it;
-    return NULL;
-}
-
 /** @a item's row, in @a frame's grab coordinates. */
 HelpShots::Callout markRow(QTreeWidget *tree, QTreeWidgetItem *item,
                            QWidget *grab, int number)
