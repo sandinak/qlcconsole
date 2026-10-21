@@ -8,6 +8,18 @@
 # Result: ~/qlcconsole.app  and
 #         <repo>/dist/qlcconsole-<release>-<universal|arm64>-<date>-<rev>.dmg
 #
+# ~/qlcconsole.app is replaced as a side effect: `cmake --install` writes the
+# bundle there (variables.cmake, QLC_MACOS_BUNDLE). The one it replaces is
+# kept as ~/qlcconsole.app.prev (one generation; an extension Finder and
+# LaunchServices don't take for an app). Restore with
+#   rm -rf ~/qlcconsole.app && mv ~/qlcconsole.app.prev ~/qlcconsole.app
+# It refuses to run while that app is open.
+#
+# The DMG is made without driving Finder (create-dmg --skip-jenkins): it holds
+# the app and an Applications link, in a plain window. DMG_FINDER=1 restores
+# the laid-out window with the background -- that runs an AppleScript that
+# opens the volume in Finder on the real screen.
+#
 # UNIVERSAL=1 (the default) builds one app for Apple silicon AND Intel Macs:
 # against the official, universal Qt (aqt; QTDIR, default ~/Qt-aqt/6.9.3/macos)
 # and the plugins' libraries built universal by universal-deps.sh
@@ -15,8 +27,9 @@
 # Mac's arch only.
 set -euo pipefail
 
-REPO="/Users/branson/git/qlcconsole"
 SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The checkout this script is in (a worktree builds itself, not the main tree).
+REPO="${REPO:-$(cd "$SCRIPTDIR/../.." && pwd)}"
 USERDATA="$HOME/Library/Application Support/QLC+"
 APP="$HOME/qlcconsole.app"
 UNIVERSAL="${UNIVERSAL:-1}"
@@ -55,16 +68,26 @@ else
   ARCHFLAGS=(-DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake")
 fi
 
+if pgrep -f "^$APP/Contents/MacOS/" >/dev/null; then
+  echo "ERROR: $APP is running -- quit it first (this replaces it)."
+  exit 1
+fi
+
 step "1/7 Configure (Release, $FLAVOUR, separate build dir: $(basename "$BUILD"))"
 cmake -S . -B "$BUILD" "${ARCHFLAGS[@]}" \
   -DCMAKE_BUILD_TYPE=Release \
+  -DQLC_MACOS_BUNDLE="$APP" \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0   # what Qt 6.9 itself needs
 
 step "2/7 Build (parallel)"
 cmake --build "$BUILD" -j"$JOBS"
 
-step "3/7 Install into ~/qlcconsole.app (fresh)"
-rm -rf "$APP"
+step "3/7 Install into ~/qlcconsole.app (fresh; the old one -> qlcconsole.app.prev)"
+if [ -d "$APP" ]; then
+  rm -rf "$APP.prev"
+  mv "$APP" "$APP.prev"
+  echo "  kept the previous app as $APP.prev"
+fi
 cmake --install "$BUILD"
 
 step "4/7 Fold in custom user content (faithful clone)"
@@ -164,7 +187,8 @@ DIST="$REPO/dist"; mkdir -p "$DIST"
 DMG="$DIST/qlcconsole-${RELEASE}-${FLAVOUR}-${BUILD_DATE}-${GIT_REV}.dmg"
 rm -f "$DMG"
 cd "$REPO/platforms/macos/dmg"
-./create-dmg --volname "qlcconsole ${RELEASE}" \
+DMG_STYLE=(--skip-jenkins); [ "${DMG_FINDER:-0}" = 1 ] && DMG_STYLE=()
+./create-dmg "${DMG_STYLE[@]}" --volname "qlcconsole ${RELEASE}" \
   --volicon "$REPO/resources/icons/qlcconsole.icns" \
   --background background.png \
   --window-size 400 300 \

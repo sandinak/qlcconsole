@@ -10,7 +10,8 @@
 #   SIGN_ID, ENT, NOTARY_PROFILE, APP, BUNDLE_ID
 set -euo pipefail
 
-REPO="/Users/branson/git/qlcconsole"
+# The checkout this script is in (VERSION, the DMG's rev and dist/ come from it).
+REPO="${REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 APP="${APP:-$HOME/qlcconsole.app}"
 SIGN_ID="${SIGN_ID:-Developer ID Application: Branson Matheson (B4N7HJ7VZ6)}"
 ENT="${ENT:-$REPO/platforms/macos/qlcconsole.entitlements}"
@@ -73,8 +74,10 @@ BUILD_DATE=$(date -u '+%Y%m%d'); GIT_REV=$(git -C "$REPO" rev-parse --short HEAD
 DIST="$REPO/dist"; mkdir -p "$DIST"
 DMG="$DIST/qlcconsole-${RELEASE}-${FLAVOUR}-${BUILD_DATE}-${GIT_REV}.dmg"
 rm -f "$DMG"
+# --skip-jenkins: no Finder AppleScript on the real screen (package-local.sh).
+DMG_STYLE=(--skip-jenkins); [ "${DMG_FINDER:-0}" = 1 ] && DMG_STYLE=()
 ( cd "$REPO/platforms/macos/dmg"
-  ./create-dmg --volname "qlcconsole ${RELEASE}" \
+  ./create-dmg "${DMG_STYLE[@]}" --volname "qlcconsole ${RELEASE}" \
     --volicon "$REPO/resources/icons/qlcconsole.icns" \
     --background background.png --window-size 400 300 --window-pos 200 100 \
     --icon-size 64 --icon "qlcconsole" 0 150 --app-drop-link 200 150 \

@@ -81,6 +81,14 @@ if(qmlui)
     )
 endif()
 
+# QLC_MACOS_DEV_BUNDLE (`make test`): the app links Homebrew's Qt and
+# libraries in place (their install names are absolute), so nothing is copied
+# but the Qt plugins below, which the app only looks for inside the bundle.
+option(QLC_MACOS_DEV_BUNDLE "macOS: a dev bundle that uses Homebrew's Qt in place" OFF)
+if(QLC_MACOS_DEV_BUNDLE)
+    set(QT_FRAMEWORK_NAMES "")
+endif()
+
 # Loop through each framework and copy it to installation
 foreach(FW_NAME IN LISTS QT_FRAMEWORK_NAMES)
     # install each framework Version file
@@ -133,6 +141,10 @@ if(qmlui)
     install(FILES ${QT_PLUGINS_DIR}/geometryloaders/libdefaultgeometryloader.dylib  DESTINATION ${INSTALLROOT}/${PLUGINDIR}/geometryloaders OPTIONAL)
     install(FILES ${QT_PLUGINS_DIR}/renderers/libopenglrenderer.dylib  DESTINATION ${INSTALLROOT}/${PLUGINDIR}/renderers OPTIONAL)
     install(FILES ${QT_PLUGINS_DIR}/sceneparsers/libassimpsceneimport.dylib  DESTINATION ${INSTALLROOT}/${PLUGINDIR}/sceneparsers OPTIONAL)
+endif()
+
+if(QLC_MACOS_DEV_BUNDLE)
+    return()
 endif()
 
 # install support libraries
