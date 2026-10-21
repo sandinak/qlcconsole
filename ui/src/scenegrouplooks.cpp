@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <functional>
 
+#include "shutterautoopen.h"
 #include "programmingmanager.h"
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
@@ -672,6 +673,11 @@ void SceneGroupLooks::reload()
                 coveredTypes.insert(QLCPalette::PanTilt);
         }
     }
+
+    // Auto-open shutters (the show's setting, Settings -> Advanced) opens a
+    // lit head's shutter by itself: no Shutter look needed for it.
+    if (m_doc->shutterAutoOpen() != NULL && m_doc->shutterAutoOpen()->isEnabled())
+        coveredTypes.insert(QLCPalette::Shutter);
 
     // Groups = dynamic targets (top level).
     QList<FixtureGroup*> groups;

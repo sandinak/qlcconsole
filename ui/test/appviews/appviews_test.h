@@ -61,6 +61,7 @@ private slots:
     /** "set the h,w,d by the configured measurement type": one Settings
      *  entry, kept for the person, read by the fixture editor too. */
     void settingsChoosesTheUnits();
+    void settingsAdvancedHoldsAutoOpen();
     /** The grid follows Settings -> Units: an old show in feet seeds an
      *  unset preference once, a show opens in the person's unit, and is
      *  saved with Units from the preference */

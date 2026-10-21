@@ -7,8 +7,9 @@ its cues GO the lights.
 Everything that controls or clocks the show from outside is set up in one
 place: **Connections → Show control &amp; sync** — OSC in, MIDI Show Control
 in, and MIDI timecode, each with what it last heard. (It used to be a group
-in the Settings dialog; that group now just has an **Open** button that
-takes you there. Your settings carried over unchanged.)
+in the Settings dialog; that group, now on **Settings → Advanced**, just
+has an **Open** button that takes you there. Your settings carried over
+unchanged.)
 
 ## Cues and cue lists
 

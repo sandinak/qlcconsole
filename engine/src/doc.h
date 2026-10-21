@@ -196,6 +196,7 @@ private:
     class ShowTreeController *m_showTree = nullptr;
     class PaletteOps *m_paletteOps = nullptr;
     class PowerLimiter *m_powerLimiter = nullptr;
+    class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
 
@@ -1152,6 +1153,9 @@ public:
     class PaletteOps *paletteOps() const { return m_paletteOps; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
+
+    /** Opens a lit head's shutter when nothing sets it (the show's setting) */
+    class ShutterAutoOpen *shutterAutoOpen() const { return m_shutterAutoOpen; }
 
     /*********************************************************************
      * Network Topology

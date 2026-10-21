@@ -22,6 +22,22 @@ for pixel boxes; backup WLED lanterns; and output held off the rig
 network. Everything in 0.1.0 is in it too.
 
 ### Added
+- **Auto-open shutters** (Settings → Advanced, saved with the show, on by
+  default). Like a console's auto open: a head given a level (its dimmer,
+  or a colour when it has no dimmer) by any look, layer, cue, slider or
+  programmer edit, whose shutter nothing sets, has its shutter opened on
+  output, at the definition's open value (an open default, else the
+  ShutterOpen / "Shutter open" capability; a strobe preset channel at 0;
+  never an iris). An explicit shutter value -- Closed, Strobe, anything --
+  always wins, including one a slider or programmer edit left behind; a
+  head with no level, or a dimmer only resting at its default, is left
+  alone. Each universe applies it after its faders on its own thread, on
+  the post-GM values only, so DMX, the 2D view and the Rig Overview agree
+  and turning it off restores exactly what the show sets. Shows that never
+  turned it off save as before (`<ShutterAutoOpen Enabled="0"/>` only
+  when off). The AT-Spots (Focus Spot Three Z, shutter resting at Off) now
+  light from White, Full alone. The Programming tab stops warning "no look
+  for: shutter" while it is on.
 - **Software update check and install** (GitHub Releases). A background
   check after start-up and at most once a day, plus **Help → Check for
   Updates…**. It sends one unauthenticated GET of the releases list, with
@@ -135,6 +151,10 @@ network. Everything in 0.1.0 is in it too.
   every Pan or Tilt channel Fine (**Can't move**: the head stays at 0).
 
 ### Changed
+- **Settings has General and Advanced tabs.** Advanced holds the show's
+  output behaviour (auto-open shutters) and two settings for experienced
+  users moved off the one page: the effect script editor, and the Show
+  control (QLab) pointer to Connections. Everything else stays on General.
 - **A new production is current when nothing else has GO.** In the Show
   Tree, a production made while no production is current and the main cue
   list isn't some other chaser becomes the current one, so a first
