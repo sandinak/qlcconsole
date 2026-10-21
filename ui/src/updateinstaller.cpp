@@ -41,8 +41,14 @@ UpdateInstaller::~UpdateInstaller()
     if (m_process != nullptr)
     {
         m_process->disconnect(this);
-        m_process->kill();
-        m_process->waitForFinished(2000);
+        // Asked first: the helper then detaches the disk image it may have
+        // mounted (a kill would leave it attached until the next restart).
+        m_process->terminate();
+        if (m_process->waitForFinished(5000) == false)
+        {
+            m_process->kill();
+            m_process->waitForFinished(2000);
+        }
     }
     if (m_helper.isEmpty() == false)
         QFile::remove(m_helper);

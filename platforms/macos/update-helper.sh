@@ -74,32 +74,146 @@ bundle_id_of() {
   /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$1/Contents/Info.plist" 2>/dev/null
 }
 
+# Is something mounted at $1 (a real path: mount(8) prints /private/var/...)?
+mounted_at() {
+  mount | grep -qF " on $1 ("
+}
+
+# Mount the disk image $1 read-only at the folder $2. hdiutil works through
+# diskimagesd, which turns requests away while it is busy with other images
+# ("Resource busy", "Resource temporarily unavailable"): try a few times
+# before giving up. An image that is simply bad fails the same way every
+# time, so those errors end it at once. On failure, prints hdiutil's last
+# message.
+attach_dmg() {
+  local dmg="$1" mnt="$2" out="" try
+  for try in 1 2 3 4 5; do
+    out=$(hdiutil attach -nobrowse -readonly -noautoopen -noverify -mountpoint "$mnt" "$dmg" 2>&1 >/dev/null) \
+      && mounted_at "$mnt" && return 0
+    # Half there (attached, then failed -- possibly with no file system
+    # mounted at all): let it go before the next try.
+    detach_dmg "$mnt"
+    detach_image "$dmg"
+    case "$out" in
+      *"not recognized"*|*"corrupt"*|*"no mountable file systems"*|*"No such file"*|*"Permission denied"*)
+        break ;;
+    esac
+    [ "$try" -lt 5 ] && sleep "$try"
+  done
+  echo "$out" | grep -v '^[[:space:]]*$' | tail -1
+  return 1
+}
+
+# Unmount $1 and wait until it is really gone, forcing it if asking nicely
+# does not do. Returns 1 if it is still mounted after all that.
+detach_dmg() {
+  local mnt="$1" try
+  for try in 1 2 3 4 5 6; do
+    mounted_at "$mnt" || return 0
+    if [ "$try" -le 2 ]; then
+      hdiutil detach -quiet "$mnt" >/dev/null 2>&1
+    else
+      hdiutil detach -quiet -force "$mnt" >/dev/null 2>&1
+    fi
+    mounted_at "$mnt" || return 0
+    sleep 1
+  done
+  ! mounted_at "$mnt"
+}
+
+# The devices attached from the disk image file $1, one per line; with
+# "unmounted" as $2, only those with no file system mounted anywhere.
+devices_of() {
+  local real
+  real=$(cd "$(dirname "$1")" 2>/dev/null && echo "$(pwd -P)/$(basename "$1")")
+  hdiutil info 2>/dev/null | awk -F '\t' -v a="$1" -v b="$real" -v only="${2:-}" '
+    function flush() { if (ours && dev != "" && (only != "unmounted" || !mounted)) print dev }
+    /^image-path/ {
+      flush(); dev = ""; mounted = 0
+      p = $0; sub(/^image-path[ \t]*:[ \t]*/, "", p); ours = (p == a || p == b); next
+    }
+    ours && /^\/dev\/disk[0-9]/ {
+      d = $1; sub(/[ \t]+$/, "", d)
+      if (dev == "") dev = d
+      if (NF >= 3 && $3 ~ /^\//) mounted = 1
+    }
+    END { flush() }'
+}
+
+# Detach the devices this run attached from the disk image file $1, mounted
+# or not: an attach that fails part way can leave one attached with nothing
+# mounted, which no mount point would ever find again. Ones that were there
+# before this run started (PRE_DEVICES) are someone else's and stay.
+# Such a device can refuse to go for a moment while the system is still
+# probing it, so this waits until they are all really gone (or gives up
+# after about ten seconds).
+PRE_DEVICES=""
+detach_image() {
+  local dev devs try
+  for try in 1 2 3 4 5 6 7 8 9 10; do
+    devs=""
+    for dev in $(devices_of "$1" "${2:-}"); do
+      case " $PRE_DEVICES " in *" $dev "*) ;; *) devs="$devs $dev" ;; esac
+    done
+    [ -z "$devs" ] && return 0
+    for dev in $devs; do
+      if [ "$try" -le 2 ]; then
+        hdiutil detach -quiet "$dev" >/dev/null 2>&1
+      else
+        hdiutil detach -quiet -force "$dev" >/dev/null 2>&1
+      fi
+    done
+    sleep 1
+  done
+  return 1
+}
+
 prepare() {
-  local staged="" mnt="" app="" newteam runteam
+  local staged="" mnt="" app="" newteam runteam why
+  release_dmg() {
+    if [ -n "$mnt" ]; then
+      detach_dmg "$mnt"
+      detach_image "$DMG"
+      rmdir "$mnt" 2>/dev/null
+      mnt=""
+    fi
+  }
   fail() {
-    [ -n "$mnt" ] && hdiutil detach -quiet -force "$mnt" >/dev/null 2>&1
-    [ -n "$mnt" ] && rmdir "$mnt" 2>/dev/null
+    release_dmg
     [ -n "$staged" ] && rm -rf "$staged"
     echo "ERROR: $*"
     exit 1
   }
+  # Stopped part way (the app quitting, a test timing out): never leave the
+  # disk image mounted behind.
+  trap 'release_dmg; [ -n "$staged" ] && rm -rf "$staged"; exit 1' HUP INT TERM
   [ -f "$DMG" ] || fail "no disk image at $DMG"
   [ -d "$DEST" ] || fail "no folder $DEST"
   [ -w "$DEST" ] || fail "$DEST is not writable"
   [ -d "$RUNNING" ] || fail "no running app at $RUNNING"
   case "$STAGED_NAME" in */*|"") fail "bad staged name" ;; esac
 
-  mnt=$(mktemp -d "${TMPDIR:-/tmp}/qlcconsole-dmg.XXXXXX") || fail "no temporary folder"
-  hdiutil attach -nobrowse -readonly -noautoopen -noverify -mountpoint "$mnt" "$DMG" >/dev/null 2>&1 \
-    || { rmdir "$mnt"; mnt=""; fail "the disk image would not open"; }
+  # An attach that failed part way -- an earlier try, or something that
+  # opened the download to scan it -- can leave the image attached with
+  # nothing mounted, and then every attach of it fails ("Resource
+  # temporarily unavailable") until it goes. Let those go first; one that is
+  # mounted somewhere is someone's, and stays.
+  detach_image "$DMG" unmounted
+  PRE_DEVICES=$(devices_of "$DMG" | tr '\n' ' ')
+  # A mount point of this run's own: several helpers may be at it at once.
+  mnt=$(mktemp -d "${TMPDIR:-/tmp}/qlcconsole-dmg.$$.XXXXXX") || fail "no temporary folder"
+  mnt=$(cd "$mnt" && pwd -P) || fail "no temporary folder"
+  if ! why=$(attach_dmg "$DMG" "$mnt"); then
+    rmdir "$mnt" 2>/dev/null; mnt=""
+    fail "the disk image would not open${why:+ ($why)}"
+  fi
   app=$(find "$mnt" -maxdepth 1 -name '*.app' -type d | head -1)
   [ -n "$app" ] || fail "the disk image holds no app"
 
   staged="$DEST/$STAGED_NAME"
   rm -rf "$staged"
   ditto "$app" "$staged" || fail "could not copy the app out of the disk image"
-  hdiutil detach -quiet "$mnt" >/dev/null 2>&1 || hdiutil detach -quiet -force "$mnt" >/dev/null 2>&1
-  rmdir "$mnt" 2>/dev/null; mnt=""
+  release_dmg
 
   codesign --verify --deep --strict "$staged" >/dev/null 2>&1 \
     || fail "the new app's code signature is not valid"
