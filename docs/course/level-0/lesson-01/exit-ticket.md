@@ -17,14 +17,14 @@ Name: ______________________
 
    ____________________________________________________________
 
-3. Describe **one** light change from today's video. What changed, and
-   why do you think the designer did it?
+3. Describe **one** lighting change from today's video. What changed, and
+   why do you think the designer chose it?
 
    ____________________________________________________________
 
    ____________________________________________________________
 
-4. A singer's face is in the dark. Which **direction** of light would you
-   add?
+4. A singer's face is in shadow. Light from which **direction** would
+   fix it?
 
    ____________________________________________________________

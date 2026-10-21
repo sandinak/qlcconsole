@@ -78,8 +78,8 @@ Use [slides](slides.md) 4–8 and the pictures from our virtual stage:
 
 Then the four jobs, with an example from the clip for each if you can:
 
-- **See:** the audience can see faces. *Every number needs faces lit.*
-- **Where to look:** the brightest place is where the eye goes (a
+- **Visibility:** the audience can see faces. *Every number needs faces lit.*
+- **Focus:** the brightest place is where the eye goes (a
   soloist).
 - **Mood:** what the song feels like (blue = night, calm; amber =
   warm, friendly; red = danger, energy).

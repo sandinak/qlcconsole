@@ -16,8 +16,8 @@ teacher says. It can be turned into a deck as it is.*
 
 - Title, Level 0 · Lesson 1
 - Picture: `images/lesson-0-1/colour-warm.png`
-- *Say:* "This year you're going to light our show. Today: what light is
-  for."
+- *Say:* "This year you're lighting our show. Today is about what light
+  is for."
 
 ## 2. Imagine it dark
 
@@ -56,7 +56,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 8. The four jobs
 
-- **See** · **Where to look** · **Mood** · **Energy**.
+- **Visibility** · **Focus** · **Mood** · **Energy**.
 - *Say:* "Every light change should do one of these jobs."
 
 ## 9. Watch 2: only the light
