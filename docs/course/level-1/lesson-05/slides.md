@@ -29,7 +29,7 @@ teacher says. It can be turned into a deck as it is.*
   one-oh-two… GO."
 - *Say:* "Only on the word GO."
 
-## 4. The calling game
+## 4. The calling drill
 
 - Pairs: call, clap on GO. Try to catch each other out.
 
