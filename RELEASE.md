@@ -33,6 +33,27 @@ In short: `VERSION` answers "what qlcconsole release is this," `APPVERSION`
 answers "what's actually in the binary and what QLC+ base is it built on."
 A release's notes should mention both.
 
+## make test / make release
+
+From the repo root (`make help` for the details):
+
+- `make test` — builds the checkout (`build-dev/`, Homebrew Qt) and installs
+  `~/Applications/qlcconsole-dev.app`, ad-hoc signed, for running on this Mac.
+  Not a release, not distributable, and it runs no unit tests (`make check`).
+- `make release` — steps 2–3 of `./release.sh` without the tag or the
+  GitHub Release: `package-local.sh` + `sign-notarize.sh` on a committed HEAD,
+  then `dist/SHA256SUMS` and a Gatekeeper check. It **replaces
+  `~/qlcconsole.app`**, keeping the old one as `~/qlcconsole.app.prev`, and
+  leaves `/Applications` alone (open the DMG and drag to update that one).
+  It doesn't run the test gate; `make check` first. The DMG is made without
+  driving Finder (`create-dmg --skip-jenkins`: a plain window, no background
+  layout); `DMG_FINDER=1` brings back the laid-out window, at the cost of an
+  AppleScript opening the volume on the screen.
+- `make publish` — prints what `./release.sh` will do, asks you to type
+  `publish`, then runs it (it rebuilds; it does not reuse `make release`'s DMG).
+
+The scripts build the checkout they're in, so a worktree releases itself.
+
 ## Cutting a release
 
 Prerequisites (one-time, per machine that releases; done on `ender`
