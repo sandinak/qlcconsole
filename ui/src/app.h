@@ -46,6 +46,8 @@ class QTabWidget;
 class QStatusBar;
 class WebAccess;
 class QToolBar;
+class MainBar;
+class ShowControls;
 class QPixmap;
 class QAction;
 class QLabel;
@@ -141,6 +143,25 @@ public:
 private:
     int m_tabLabelMode = TabIconAndText;
     QList<QPair<QString, QIcon>> m_tabOriginals; // stored on first tab add
+
+    /*********************************************************************
+     * Show controls placement (MainBar)
+     *********************************************************************/
+public:
+    /** Where Stop all / Blackout / Blind / Design|Operate sit: in the one
+     *  top bar beside the current tab's own tools (the default), or in the
+     *  status bar, leaving the top to the tab's tools alone. */
+    enum ShowControlsPlacement { ShowControlsInTopBar = 0, ShowControlsInStatusBar = 1 };
+
+    int showControlsPlacement() const { return m_showControlsPlacement; }
+    /** Saved, and applied at once (no restart) */
+    void setShowControlsPlacement(int placement);
+    static QString showControlsPlacementKey();
+
+private:
+    void applyShowControlsPlacement();
+
+    int m_showControlsPlacement = ShowControlsInTopBar;
 
     /*********************************************************************
      * Backstage color theme
@@ -462,7 +483,10 @@ private:
     QMenu* m_fadeAndStopMenu;
 
 private:
-    QToolBar* m_toolbar;
+    /** The one top bar: holds m_mainBar (the tab's tools + show controls) */
+    QWidget* m_toolbar;
+    MainBar* m_mainBar = nullptr;
+    ShowControls* m_showControls = nullptr;
 
     /*********************************************************************
      * Utilities

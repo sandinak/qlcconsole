@@ -54,6 +54,7 @@
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
 #include "studiotemplate.h"
+#include "mainbar.h"
 #include <QLineEdit>
 #include <QListWidget>
 #include <QTreeWidget>
@@ -267,6 +268,19 @@ void Monitor::initView()
 {
     qDebug() << Q_FUNC_INFO;
 
+    /* Both views' toolbars live in one holder, the layout's menu bar, and a
+       view switch only shows one and hides the other. The holder is what
+       the main window's top bar borrows while this is the current tab
+       (MainBar), so it must stay put: setMenuBar() on each switch would
+       pull whichever bar it named back out of the top bar. */
+    m_toolsHolder = new QWidget(this);
+    m_toolsHolder->setObjectName(QStringLiteral("monitorToolbars"));
+    QVBoxLayout *holder = new QVBoxLayout(m_toolsHolder);
+    holder->setContentsMargins(0, 0, 0, 0);
+    holder->setSpacing(0);
+    layout()->setMenuBar(m_toolsHolder);
+    MainBar::registerTabTools(this, m_toolsHolder);
+
     initDMXToolbar();
     initDMXView();
     initGraphicsToolbar();
@@ -347,7 +361,6 @@ void Monitor::showDMXView()
     m_graphicsView->hide();
     m_graphicsToolBar->hide();
 
-    layout()->setMenuBar(m_DMXToolBar);
     m_DMXToolBar->show();
     m_scrollArea->show();
 
@@ -1412,7 +1425,6 @@ void Monitor::showGraphicsView()
     m_DMXToolBar->hide();
     m_scrollArea->hide();
 
-    layout()->setMenuBar(m_graphicsToolBar);
     m_graphicsToolBar->show();
     m_graphicsView->show();
 
@@ -1578,10 +1590,10 @@ void Monitor::initDMXToolbar()
     QActionGroup* group;
     QAction* action;
     m_DMXToolBar = new QToolBar(this);
-
-    /* Menu bar */
-    Q_ASSERT(layout() != NULL);
-    layout()->setMenuBar(m_DMXToolBar);
+    // The app-wide 20x20 toolbar icon (Fixtures, Shows, ...); unset, it
+    // was the platform's 32 and a row half again as tall as the others.
+    m_DMXToolBar->setIconSize(QSize(20, 20));
+    m_toolsHolder->layout()->addWidget(m_DMXToolBar);
 
     action = m_DMXToolBar->addAction(tr("2D View"));
     m_DMXToolBar->addSeparator();
@@ -1714,10 +1726,10 @@ void Monitor::initGraphicsToolbar()
     QAction* action;
 
     m_graphicsToolBar = new QToolBar(this);
-
-    /* Menu bar */
-    Q_ASSERT(layout() != NULL);
-    layout()->setMenuBar(m_graphicsToolBar);
+    // The app-wide 20x20 toolbar icon (Fixtures, Shows, ...); unset, it
+    // was the platform's 32 and a row half again as tall as the others.
+    m_graphicsToolBar->setIconSize(QSize(20, 20));
+    m_toolsHolder->layout()->addWidget(m_graphicsToolBar);
 
     // Unified view selector: the DMX channel grid, or the 2D map from a chosen
     // point of view. Front/Side are read-only elevation views.

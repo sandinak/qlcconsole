@@ -34,6 +34,7 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QToolButton>
+#include <QToolBar>
 #include <QGridLayout>
 #include <QFormLayout>
 #include <QDataStream>
@@ -58,6 +59,7 @@
 #include <QPainter>
 #include <algorithm>
 
+#include "mainbar.h"
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "fixturegroupsource.h"
@@ -774,8 +776,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     QVBoxLayout *main = new QVBoxLayout(this);
     main->setContentsMargins(4, 4, 4, 4);
 
-    // Header
-    QHBoxLayout *bar = new QHBoxLayout();
+    // Header: a toolbar, so the main window's top bar can borrow it while
+    // this is the current tab (MainBar), and a narrow window folds its end
+    // into the toolbar's » menu instead of cutting it off.
+    QToolBar *bar = new QToolBar(this);
+    bar->setObjectName(QStringLiteral("stToolBar"));
+    bar->setMovable(false);
+    bar->setFloatable(false);
     auto button = [this, bar](const QString &text, const QString &tip, const char *name) {
         QToolButton *b = new QToolButton(this);
         b->setText(text);
@@ -812,10 +819,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                      "layers of one cue) into one layer on all their groups"), "stMerge");
     m_delete = button(tr("Delete"), tr("Delete the selected cues and layers, or a cue list or production"),
                       "stDelete");
-    bar->addSpacing(12);
+    bar->addSeparator();
     m_undo = button(tr("Undo"), tr("Undo the last change to the tree (⌘Z)"), "stUndo");
     m_redo = button(tr("Redo"), tr("Redo (⇧⌘Z)"), "stRedo");
-    bar->addSpacing(12);
+    bar->addSeparator();
     m_import = button(tr("Import chaser…"), tr("Import a chaser as a cue list in a new production. "
                                                "The chaser stays as it is."), "stImport");
     m_importMenu = new QMenu(m_import);
@@ -824,7 +831,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_importMenu, &QMenu::aboutToShow, this, &ShowTreeView::slotImportMenuAboutToShow);
     // P5: the current production -- what GO, the footer, VC and show
     // control play.
-    bar->addSpacing(12);
+    bar->addSeparator();
     bar->addWidget(new QLabel(tr("Production:"), this));
     m_production = new QComboBox(this);
     m_production->setObjectName("stProduction");
@@ -845,16 +852,25 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             updateInspector();
         }
     });
-    bar->addStretch(1);
+    {
+        QWidget *stretch = new QWidget(bar);
+        stretch->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        bar->addWidget(stretch);
+    }
     // What the rig shows: the selected cue (Design), or nothing (Live).
     m_previewLabel = new QLabel(this);
     m_previewLabel->setObjectName("stPreview");
     bar->addWidget(m_previewLabel);
-    bar->addSpacing(12);
+    {
+        QWidget *gap = new QWidget(bar);
+        gap->setFixedWidth(12);
+        bar->addWidget(gap);
+    }
     m_hint = new QLabel(this);
     m_hint->setObjectName("stDropHint");
     bar->addWidget(m_hint);
-    main->addLayout(bar);
+    main->addWidget(bar);
+    MainBar::registerTabTools(this, bar);
 
     // The command line (§6C): optional, hidden until asked for.
     m_commander = new ShowTreeCommand(m_doc, m_st);

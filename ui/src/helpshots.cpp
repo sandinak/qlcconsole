@@ -391,18 +391,10 @@ QList<HelpShots::Shot> HelpShots::shots()
     list << Shot{ QStringLiteral("getting-started-main-window"), [=]() {
         window();
         openScene(QStringLiteral("05 Stage Shape"), QString());
-        // The toolbar's buttons, not the bar: on macOS it runs under the menus.
-        QRect buttons;
-        for (QAction *a : { app->m_controlPanicAction, app->m_controlBlackoutAction,
-                            app->m_controlBlindAction, app->m_modeToggleAction })
-            if (QWidget *w = app->m_toolbar->widgetForAction(a))
-                buttons |= QRect(w->mapTo(app, QPoint(0, 0)), w->size());
         Frame f;
         f.grab = app;
-        Callout bar;
-        bar.rect = buttons;
-        bar.number = 1;
-        f.callouts << bar
+        // The top bar: the tab's tools, then the show controls.
+        f.callouts << mark(app->m_toolbar, 1)
                    << mark(app->m_tab->currentWidget(), 2)
                    << mark(app->m_tab->tabBar(), 3)
                    << mark(app->statusBar(), 4);

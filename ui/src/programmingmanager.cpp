@@ -10,6 +10,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
+#include <QToolBar>
 #include <QPushButton>
 #include <QLabel>
 #include <QShowEvent>
@@ -36,6 +37,7 @@
 #include <algorithm>
 
 #include <QDebug>
+#include "mainbar.h"
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
 #include "paletteops.h"
@@ -388,36 +390,33 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         // Highlight, Flash | Park, Move in black ... Beat, Tap | More, Save Positions
         while (toolbar->count() > 0)
             delete toolbar->takeAt(0);                 // the items, not the widgets
-        toolbar->addWidget(m_highlightBtn);
-        toolbar->addWidget(m_flashBtn);
-        toolbar->addWidget(parkMenu);
-        toolbar->addWidget(markMenu);
-        toolbar->addStretch(1);
-        toolbar->addWidget(beatMenu);
-        toolbar->addWidget(m_tapBtn);
-        toolbar->addWidget(moreMenu);
-        toolbar->addWidget(m_saveBtn);
+        delete toolbar;
 
-        // The row above packs ~15 controls (Highlight/Flash/Park/Unpark/Mark/
-        // Unmark/Auto MIB/Snapshot/BPM/Tap/Beat On/Jog/Save) into one
-        // QHBoxLayout with no wrapping, so their summed minimum widths (~1866px)
-        // become this panel's minimum — and since QTabWidget's minimum size is
-        // the max over all pages, that drags the WHOLE app window wider than
-        // most screens and makes it unresizable. Wrap it in a horizontally
-        // scrollable, frameless container so it keeps its natural minimum
-        // width but doesn't force the rest of the layout to match.
-        QWidget *toolbarWidget = new QWidget(this);
-        toolbarWidget->setLayout(toolbar);
+        // A QToolBar, so the main window's top bar can borrow it while this
+        // is the current tab (MainBar). It was a row of ~15 controls whose
+        // summed minimum widths (~1866 px) held the whole window wider than
+        // most screens, kept in check by a horizontal scroll area; a
+        // toolbar folds what doesn't fit into its » menu instead.
+        QToolBar *bar = new QToolBar(this);
+        bar->setObjectName(QStringLiteral("programmingToolBar"));
+        bar->setMovable(false);
+        bar->setFloatable(false);
+        bar->addWidget(m_highlightBtn);
+        bar->addWidget(m_flashBtn);
+        bar->addWidget(parkMenu);
+        bar->addWidget(markMenu);
+        {
+            QWidget *stretch = new QWidget(bar);
+            stretch->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            bar->addWidget(stretch);
+        }
+        bar->addWidget(beatMenu);
+        bar->addWidget(m_tapBtn);
+        bar->addWidget(moreMenu);
+        bar->addWidget(m_saveBtn);
 
-        QScrollArea *toolbarScroll = new QScrollArea(this);
-        toolbarScroll->setWidget(toolbarWidget);
-        toolbarScroll->setWidgetResizable(false);
-        toolbarScroll->setFrameShape(QFrame::NoFrame);
-        toolbarScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        toolbarScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        toolbarScroll->setFixedHeight(toolbarWidget->sizeHint().height() + 4);
-
-        m_canvasLayout->addWidget(toolbarScroll);
+        m_canvasLayout->addWidget(bar);
+        MainBar::registerTabTools(this, bar);
 
         connect(m_highlightBtn, &QPushButton::toggled,
                 this, &ProgrammingManager::slotHighlightToggled);

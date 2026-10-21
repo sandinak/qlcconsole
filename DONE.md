@@ -6,6 +6,37 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-21 — One top bar: the tab's tools + the show controls *(feat/compact-toolbar)*
+
+Mockups A–D (Branson chose A, with B as a setting). `ui/src/mainbar.{h,cpp}`:
+`MainBar` is the row above the tabs (a plain widget in the central widget,
+not a QMainWindow toolbar: a toolbar inside a toolbar paid both margins);
+`ShowControls` is Stop all / Blackout / Blind (the App's own actions, short
+`iconText()`s) plus a separate Design | Operate switch widget.
+
+- **Borrowing, not re-registering.** A tab names its tools once
+  (`MainBar::registerTabTools(page, widget)`); while it is current they are
+  lifted out of its layout (a hidden placeholder keeps their place, or the
+  layout's menu bar is cleared) into the bar, and put back on a tab change,
+  detach, park, Settings → status bar, kiosk and quit. The tab keeps
+  building / enabling / hiding them as before, so no action can be lost;
+  words-under-icons become words-beside while borrowed and go back after.
+  Registered: Fixtures, Lighting Studio (both its toolbars now live in one
+  holder; view switches only hide/show), Programming (its canvas row is a
+  QToolBar now, was a scroll area), Show Tree (its header is a QToolBar
+  now), Shows, Virtual Console (hidden in Operate, still). Connections
+  keeps its toolbar in the universe pane; Simple Desk and Run have none.
+- **Status bar (B):** icons only there (unless Text Only), the DESIGN and
+  BLACKOUT chips hide, and the switch is its own widget so a full footer's
+  squeeze (widest item first) takes the big chips before it.
+- Measured offscreen at 1280×800 on help-demo.qxw, Fixtures tab, from the
+  menu bar to content: 94 px before → 37 px (A) / 36 px (B).
+- Test: `ui/test/mainbar` (12 cases incl. all six themes' contrast,
+  detach, narrow window, Operate, kiosk). Gotcha found on the way: the
+  Virtual Console's contents layout was added with `addItem()`, so it has
+  no parent widget and `replaceWidget()` won't re-adopt a widget into it;
+  MainBar re-parents to the original parent first.
+
 ### 2026-10-16 — Sub-cues P3: show control by sub-cue number *(feat/sub-cues-p3, merged into feat/show-tree 2026-10-21)*
 
 SUBCUES_DESIGN.md §4.1. `ShowControl` reads a cue by number as

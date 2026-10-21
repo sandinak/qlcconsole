@@ -101,6 +101,27 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     tabLayout->addStretch();
     mainLayout->addWidget(tabGroup);
 
+    // --- Show controls: Stop all, Blackout, Blind, Design | Operate ---
+    // One row at the top with the tab's own tools (the default), or in the
+    // status bar, leaving the top to the tab. Applied on OK, no restart.
+    QGroupBox *scGroupBox = new QGroupBox(tr("Show Controls"), this);
+    scGroupBox->setProperty("helpTopic", QStringLiteral("getting-started.md#finding-your-way-around"));
+    QHBoxLayout *showCtlLayout = new QHBoxLayout(scGroupBox);
+    showCtlLayout->addWidget(new QLabel(tr("Stop all, Blackout, Blind and Design | Operate:"), scGroupBox));
+    m_showControlsCombo = new QComboBox(scGroupBox);
+    m_showControlsCombo->setObjectName(QStringLiteral("settingsShowControls"));
+    m_showControlsCombo->addItem(tr("In the top bar, beside the tab's tools"), App::ShowControlsInTopBar);
+    m_showControlsCombo->addItem(tr("In the status bar"), App::ShowControlsInStatusBar);
+    m_showControlsCombo->setCurrentIndex(qMax(0, m_showControlsCombo->findData(m_app->showControlsPlacement())));
+    m_showControlsCombo->setToolTip(tr("The top bar: one row above the tabs, the tab's own tools on the "
+                                       "left and the show controls on the right. The status bar: the "
+                                       "show controls at the right end of the bottom edge, beside "
+                                       "Ready and the other show chips, and the top is the tab's alone. "
+                                       "The shortcuts are the same either way."));
+    showCtlLayout->addWidget(m_showControlsCombo);
+    showCtlLayout->addStretch();
+    mainLayout->addWidget(scGroupBox);
+
     // --- Units ---
     // One choice for the person, whatever show is open: fixture dimensions
     // and weights (here and in the fixture definition editor) and the
@@ -422,6 +443,9 @@ void AppSettings::accept()
     // Apply tab label mode
     const int mode = m_tabLabelModeCombo->currentData().toInt();
     m_app->setTabLabelMode(mode);
+
+    // Where the show controls sit (live)
+    m_app->setShowControlsPlacement(m_showControlsCombo->currentData().toInt());
 
     // Show Tree: what Record records when the choices differ.
     QSettings().setValue(ShowTreeView::recordSettingKey(false), m_recordDesignCombo->currentData().toString());

@@ -135,6 +135,21 @@ network. Everything in 0.1.0 is in it too.
   every Pan or Tilt channel Fine (**Can't move**: the head stays at 0).
 
 ### Changed
+- **One top bar instead of two.** The show controls and the open tab's
+  own tools share one row: the tab's tools on the left, **Stop all**,
+  **Blackout**, **Blind** and a **Design | Operate** switch (the mode you
+  are in lit) on the right, as small icon-and-word buttons. About 57 px
+  more for content on every tab (94 px of bars above it before, 37 px
+  now). Blackout lights red and Blind blue while on, readable in all six
+  themes. A narrow window folds the tab's tools into **»**; the show
+  controls never fold. **Settings → Show Controls** can put them in the
+  status bar instead, at its right end, leaving the top to the tab's own
+  tools; it switches at once, no restart. Same actions and shortcuts
+  either way; a tab in a window of its own keeps its tools at its top;
+  kiosk mode still has neither. The Show Tree header and the Programming
+  tab's row are toolbars now (they fold into » rather than being cut off
+  or scrolled), and the Lighting Studio's toolbar uses the same 20 px
+  icons as the others.
 - **A new production is current when nothing else has GO.** In the Show
   Tree, a production made while no production is current and the main cue
   list isn't some other chaser becomes the current one, so a first

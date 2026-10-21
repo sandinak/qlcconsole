@@ -40,6 +40,7 @@
 #include <QMenu>
 #include <QList>
 
+#include "mainbar.h"
 #include "vcpropertieseditor.h"
 #include "addvcbuttonmatrix.h"
 #include "addvcslidermatrix.h"
@@ -630,6 +631,9 @@ void VirtualConsole::initMenuBar()
     // 26x26 — see fixturemanager.cpp's initToolBar for the full reasoning).
     m_toolbar->setIconSize(QSize(20, 20));
     m_contentsLayout->addWidget(m_toolbar);
+    // On show in the main window's top bar while this is the current tab
+    // (hidden there in Operate, as here).
+    MainBar::registerTabTools(this, m_toolbar);
 
     // "Add" consolidates the New Button/Slider/…/Frame actions that used to
     // be spelled out as fourteen separate toolbar buttons — reuses m_addMenu
