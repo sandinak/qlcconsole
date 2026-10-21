@@ -196,11 +196,13 @@ if [ "${1:-}" = attach ]; then
   gh api "repos/$GH_REPO/releases/$rid" --jq .body > "$WORK/body.md"
   # (bash 3.2: no mapfile; asset names have no spaces)
   line="$(platforms_line $(asset_json "$rid" | awk '{print $2}'))"
-  python3 -I - "$WORK/body.md" "$line" > "$WORK/req.json" <<'PY'
+  # tag_name goes with every PATCH: GitHub turns a draft patched without it
+  # into "untagged-<hash>".
+  python3 -I - "$WORK/body.md" "$line" "$TAG" > "$WORK/req.json" <<'PY'
 import json, re, sys
 body = open(sys.argv[1]).read()
 new = re.sub(r'(?m)^Windows and Linux builds:.*$', lambda m: sys.argv[2], body, count=1)
-print(json.dumps({"body": new}) if new != body else "{}")
+print(json.dumps({"body": new, "tag_name": sys.argv[3]}) if new != body else "{}")
 PY
   if [ "$(cat "$WORK/req.json")" != "{}" ]; then
     gh api -X PATCH "repos/$GH_REPO/releases/$rid" --input "$WORK/req.json" >/dev/null
@@ -399,7 +401,10 @@ if [ "$DRAFT" = 1 ]; then
 fi
 
 step "Publish"
-gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F draft=false >/dev/null
+# tag_name too: a draft PATCHed without it becomes "untagged-<hash>".
+gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -f tag_name="$TAG" -F draft=false >/dev/null
+got="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" --jq '"\(.tag_name) \(.draft) \(.prerelease)"')"
+[ "$got" = "$TAG false $PRERELEASE" ] || die "the release reads back as '$got', not '$TAG false $PRERELEASE'"
 STAGE=""
 URL="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" --jq .html_url)"
 echo
