@@ -24,7 +24,24 @@ Do **one** of these.
    stick or in the class folder), or hand in a screenshot of each cue in
    the Rig Overview.
 
-## B. On paper (no computer, or a Chromebook without Linux)
+## B. In a browser (a Chromebook, or a computer without the app)
+
+Open the [Show Tree practice version](../../web/index.html) in any browser,
+Chromebooks included. It is a practice copy of the Show Tree, not the real
+app, but Lesson 1.1 works the same way in it.
+
+1. Build Pose, Verse and Chorus with the handout's steps (its list beside
+   the stage ticks them off).
+2. Make it **yours**: change at least one colour in each cue to tell a
+   different story.
+3. Play it in its **Run** tab: GO three times.
+4. **Save to file** with your name and hand the file in (or use **Copy as
+   text** and paste it into a document).
+
+Your work stays in that browser on that computer until you save it to a
+file.
+
+## C. On paper (no computer)
 
 1. Choose a song (school-appropriate) and listen closely to its first
    minute.

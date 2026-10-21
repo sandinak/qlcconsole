@@ -20,6 +20,7 @@ virtual copy of a show choir stage.
 | I am… | Go to |
 |---|---|
 | A student | [Install qlcconsole](install.md), then your lesson's **handout** |
+| A student on a Chromebook, or without the app | The [Show Tree practice version](web/index.html) in your browser (Lesson 1.1) |
 | The teacher | [Course plan](COURSE_PLAN.md) · start with [Lesson 0.1](level-0/lesson-01/teacher-guide.md) |
 | Anyone | [Glossary](GLOSSARY.md) · [The teaching show](rig.md) |
 | Helping write the course | [For volunteers](VOLUNTEER.md) — start here |
@@ -42,7 +43,8 @@ virtual copy of a show choir stage.
 | `level-N/` | A level; each lesson has its own folder (`level-1/lesson-01/` …): teacher guide, handout, slides outline, exit ticket, at home |
 | `shows/` | The teaching show and each lesson's start / finish files (see [shows/README.md](shows/README.md)) |
 | `images/` | Lesson pictures, taken from the real app by the course test |
-| `tools/` | How the teaching show is made |
+| `web/` | The Show Tree practice version: a browser page for students who can't run the app (plain HTML/JS, no install) |
+| `tools/` | How the teaching show and the practice version's show data are made |
 | `_config.yml` | The website's settings (GitHub Pages, just-the-docs theme); the site is built by `.github/workflows/pages.yml` from `main` |
 | `LICENSE.md` | The course's licences |
 | `VOLUNTEER.md` | Getting started for volunteers and co-authors |

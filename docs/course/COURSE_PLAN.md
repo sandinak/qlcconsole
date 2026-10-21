@@ -30,7 +30,7 @@ ends with the Show Tree action that makes it happen.
 | **Class period** | **50 minutes** (confirmed). Each lesson fits one period: 10 min design idea, 10 min teacher demo, 20 min hands-on, 10 min check and exit ticket. A 45-minute period drops the extension. |
 | **Pace** | About one lesson a week (confirmed), between rehearsals. Level 0–1 before the fall show's tech week; Level 2 through the winter; Level 3 for the students who will run the spring show. |
 | **Laptops in class** | **Few at first** — one per pair or three. The projector shows the teacher's screen. |
-| **Computers at home** | Mixed: Mac, Windows, and **Chromebooks**. A Chromebook runs qlcconsole only if its Linux environment (Crostini) is turned on **and** it has an Intel/AMD chip — the Linux build is x86_64 only. Many school Chromebooks have Linux turned off by the district, and many are ARM. Those students do the paper version of the homework (each lesson has one). |
+| **Computers at home** | Mixed: Mac, Windows, and **Chromebooks**. A Chromebook runs qlcconsole only if its Linux environment (Crostini) is turned on **and** it has an Intel/AMD chip — the Linux build is x86_64 only. **The school's Chromebooks don't allow Linux** (Branson, 2026-10-21), so they can't run the app. Chromebook students use the browser [practice version](web/index.html) (§10) for hands-on work; each lesson keeps its paper version too. |
 | **The stage** | The **teaching show** (below): a virtual copy of a show choir stage. It is never connected to real lights. The **Rig Overview** is the stage. |
 | **Real lights** | First hands on the real rig in **December or January**, with Branson: Level 3 starts there. Until then, only the virtual stage. |
 
@@ -381,12 +381,58 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 
 **Still open:**
 
-1. **Chromebooks** (6): does the district allow the Linux environment on
-   student Chromebooks, and are they Intel or ARM? Probably not Linux — so
-   every lesson keeps a full paper *At home* version.
+1. ~~**Chromebooks**~~ **Answered (2026-10-21):** the school Chromebooks
+   don't allow Linux. The browser practice version (§10) is the at-home and
+   Chromebook path; every lesson keeps its paper *At home* version.
 2. **The 0.2.0 release's name and files**: the install page says "the
    newest pre-release whose name starts with **Show Tree**" and "0.2.0 or
    later" — check both when it's published.
 3. **The AT-Spots' shutter** (§8, 7): keep teaching **Open**, or change
    the app or the definition?
 4. **Video clips** for Lesson 0.1 and the Level 1 check: pick them.
+
+---
+
+## 10. The browser practice version (Chromebooks and home)
+
+School Chromebooks can't run qlcconsole (no Linux, §9), so the course has a
+**practice version of the Show Tree that runs in a browser**:
+[`web/index.html`](web/index.html). It is plain HTML, CSS and JavaScript
+with no build step and no network use. It runs from the course website, or
+opened as a file, on a Chromebook, a phone or a tablet. It says on every
+screen that it is a practice copy, not the real app.
+
+**What it does now (Lesson 1.1):** the app's layout and words (Library |
+Tree | Page, + Production / + Cue list / + Cue, layers, grey *tracked from*
+rows, *Changed:* in the top right, the Run tab with NEXT, GO, Back, Stop);
+groups, targets and palettes from the teaching show; a layer's colour,
+level, aim and shutter, by drag, by tap-then-tap, from the layer's page or
+typed (`TrussC-RGB colour Blue dimmer Full`); tracking; fade-in times; a
+front-and-above stage drawing (glowing groups, the cyc wash, beams for
+aimed heads); the Lesson 1.1 steps ticked off as they're done. Work is kept
+in the browser and saves to / opens from a small JSON file (not a .qlcc).
+
+**How it's made:** `tools/export-web-show.py` reads
+`shows/ShowChoir-Classroom.qlcc` and writes `web/show.json` and
+`web/show-data.js` (fixtures with position, kind, heads and what they can
+do; groups and folders; targets; palettes; risers, trusses, towers, cyc,
+drape, proscenium). Run it again whenever the teaching show changes.
+
+**How it would grow**, a lesson at a time, each checked against the app:
+
+| Lesson | Adds |
+|---|---|
+| 1.2 | ⋯ → **Set to** / **Level…** (any level, not only palettes), **Make reusable** into a palette, **cue looks** (a palette dropped on the cue); a fourth cue. |
+| 1.3 | Already has aim, Targets and the AT-Spots' shutter; add **Block** cues (the Solo is one), and check the beams against the app's pictures. |
+| 1.4 | Fade out and **Hold** (auto-follow), shown in the Run tab's Timing column. |
+| 1.5 | Operate (LIVE) vs Design, **LOAD**/STANDBY and jump, which the runner mostly has; a "call the cues" mode for pairs. |
+| Level 2 | Cue modes (Track / Block / Cue-only), Release and the base cue (2.1); editing a palette everywhere (2.2); child layers and group sets (2.3); a simple pixel effect on the steps and truss boxes (2.4); lines, spread and cross for the movers (2.5); Looks fired from buttons (2.6); sub-cues (2.7). Past 2.4 the stage drawing needs per-pixel heads, which the exporter already counts. |
+
+Level 3 (patching, DMX, the real rig) stays in the app.
+
+**Limits to say out loud in class:** it can't open or save .qlcc files, send
+DMX, or do anything past Lesson 1.1's tools; its stage is a sketch, not the
+Rig Overview's 3D view, and its beams are only roughly where the app's
+fall. A student moving to the app rebuilds their cues there (the same
+steps).
+
