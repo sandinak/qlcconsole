@@ -13,6 +13,20 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Effect designer** (`ui/src/effectdesigner.{h,cpp}`, WORKFLOW_DESIGN.md
+  W4): a self-contained widget that designs an effect for a target set (a
+  layer's groups and fixtures, or the Try on bench). It puts the effect
+  browser at full height beside the Look Editor's effect settings and the
+  effect's own colour and dimmer. It previews live on those heads through
+  a hidden scene, only in Design mode and only while on screen. It works on
+  a draft (a hidden one-off palette) and reports the result as a
+  one-off, a new palette (`makeReusable`, one undo step), an update to the
+  palette it started from, or a preset. Hosted by `EffectLayerDialog`
+  (**Design effect…** on a Show Tree layer, its right-click menu and the
+  Effect row's ⋯ menu; one undo step, and an effect of another kind
+  replaces the old one) and by `EffectsPage` (**Window ▸ Effects**:
+  effect palettes by folder, EFX and RGB Matrix as classic effects, and
+  + New for each). Covered by `ui/test/effectdesigner`.
 - **Twelve more Matrix effects** (`resources/effectscripts/matrix-*.js`):
   Fire, Starfield, Spiral, Lissajous, Kaleidoscope, Bouncing Balls,
   Fireworks, Scanner, Dissolve, Gradient Sweep, Box VU and Image. Pure

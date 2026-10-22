@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **The effect designer.** Build an effect in detail on the heads it is
+  for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
+  menu of its Effect row) opens the effect browser at full height. Beside
+  it are the effect's settings and its own colour and dimmer, playing live
+  on just that layer's fixtures, in context or Solo. **Keep on this
+  layer** makes a one-off. **Save as palette…** names and files it.
+  **Save as preset…** keeps it as a starting point for other shows.
+  **Window ▸ Effects** lists every effect palette and every EFX and RGB
+  Matrix in the show, with the same designer on a **Try on** bench. See
+  [The effect designer](effects.md#the-effect-designer).
 - **The version on the boot window.** While qlcconsole starts, its window
   shows the release — "qlcconsole 0.2.2" — and below it the build and
   commit, so you can tell which version is starting.

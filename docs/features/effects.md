@@ -15,6 +15,58 @@ works in any colour.
 See [How a look stacks](#how-a-look-stacks) for exactly how a look's
 colours, dimmers, positions and effects combine, and which wins.
 
+## The effect designer
+
+To build an effect in detail, on the heads it is for, use the **effect
+designer**. It has the effect browser down one side at full height, with
+presets, Recent and WLED. Beside it are the effect's settings: its
+parameters, Spread, the speed master and On the beat. Under those is the
+effect's **own** colour and dimmer, which apply inside that effect only.
+Whatever you pick plays at once on the rig, in Design mode, on just those
+heads.
+
+Open it from either of two places:
+
+- **On a Show Tree layer.** Right-click a layer and choose **Design
+  effect…**, or use **Design effect…** in the ⋯ menu of a layer's Effect
+  row. The designer plays on that layer's fixtures. The layer's own colour
+  and dimmer play under the effect, so it looks as it will in the cue.
+  **In context** keeps the rest of the cue playing; **Solo** plays only the
+  effect.
+- **Window ▸ Effects.** Every effect in the show in one window. On the
+  left are the effect palettes in their folders, then the **classic
+  effects**: QLC+ EFX and RGB Matrix functions, each marked as one. On the
+  right is the designer on the **bench**. **Try on ▾** picks the groups
+  the bench plays on, and it remembers them. Selecting an effect palette
+  loads a copy of it onto the bench. Selecting an EFX or RGB Matrix opens
+  it in its own editor. **+ New** makes an effect palette, an EFX (on the
+  Try on groups' heads) or an RGB Matrix (on the first Try on group).
+
+The designer works on a copy, so nothing in the show changes until you
+pick one of these:
+
+- **Keep on this layer** (on a layer): a one-off for that layer, named
+  after the effect and the cue ("Color Chase · 0.0.3 Announcer
+  AT-W-ALL"). It works like a value picked in the tree. Its row offers
+  **Make reusable** later. If the layer already had an effect of another
+  kind, this one replaces it. Designing the layer's own one-off again
+  changes that one-off; it doesn't make a second.
+- **Save as palette…**: names the effect and files it where the show keeps
+  its effect palettes, so you can use it anywhere. On a layer it also goes
+  on the layer.
+- **Update "name"**: shown when the designer started from a named
+  palette. It writes the design into that palette, which changes it
+  everywhere it plays.
+- **Save as preset…**: keeps the effect and its settings as a starting
+  point in the browser, for this show and others. You stay in the
+  designer.
+- **Cancel** (or closing the window) throws the copy away. The show is
+  left as it was, and a show that was saved stays saved.
+
+The preview is a hidden scene on the chosen heads. It plays only in Design
+mode and only while the designer is on screen; in Operate nothing
+previews.
+
 ## Colour
 
 | Effect | What it does |
