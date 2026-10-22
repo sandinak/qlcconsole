@@ -1752,7 +1752,24 @@ void CourseShow_Test::lessonFiveOperate()
 
     run = runTab(m_app);
     press(run, "crStop");
-    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
+    /* Dark within the same kRigWait (it takes ~20-45 ms, also at a load of
+       100). Once, under a gate at a load of ~187, it stayed 00 00 FF; that
+       never came back in 56 runs. If it does, say what still plays: a stop
+       that was lost (1.0.0 or its list still running) or a starved engine
+       (nothing running, the output not yet written). */
+    QElapsedTimer sinceStop;
+    sinceStop.start();
+    while (sinceStop.elapsed() < kRigWait && sends(doc, "SR Truss Cyc 1") != QByteArray("\x00\x00\x00", 3))
+        QTest::qWait(20);
+    QStringList running;
+    for (Function *f : doc->functions())
+        if (f != nullptr && f->isRunning())
+            running << f->name();
+    QVERIFY2(sends(doc, "SR Truss Cyc 1") == QByteArray("\x00\x00\x00", 3),
+             qPrintable(QStringLiteral("cyc %1 %2 ms after Stop; still running: %3")
+                            .arg(QString::fromLatin1(sends(doc, "SR Truss Cyc 1").toHex(' ')))
+                            .arg(sinceStop.elapsed())
+                            .arg(running.isEmpty() ? QStringLiteral("nothing") : running.join(QStringLiteral(", ")))));
     settle(300);
     m_app->m_modeToggleAction->trigger();
     settle(100);
