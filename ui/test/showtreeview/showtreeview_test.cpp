@@ -50,6 +50,7 @@
 #include "universe.h"
 #include "programmingmanager.h"
 #include "workbench.h"
+#include "treecuestack.h"
 #undef protected
 #undef private
 #include "functionliveeditdialog.h"
@@ -5296,9 +5297,10 @@ void ShowTreeView_Test::openAnOpaqueLayer()
     view.hide();
 }
 
-/* Open with no stand-in: the Function Manager's own editor for it (the
-   window it lives in is App's to bring forward). */
-void ShowTreeView_Test::openUsesTheFunctionsWindowsEditor()
+/* Open with no stand-in (board Q32, the Functions window retired): the
+   Workbench -- the one docked in the tree when it is (↩ back to the cue),
+   Build's otherwise; opening one from elsewhere brings the docked one home. */
+void ShowTreeView_Test::openLandsInTheWorkbench()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
     const quint32 full = dimmer(255, "Full");
@@ -5306,18 +5308,52 @@ void ShowTreeView_Test::openUsesTheFunctionsWindowsEditor()
     EFX *efx = nullptr;
     Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
     ShowTreeView view(nullptr, m_doc);
+    view.resize(1100, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     view.importChaser(chaser->id(), false);
 
-    QVERIFY(!view.openFunction(haze->id()));        // no Functions window
+    QVERIFY(!view.openFunction(haze->id()));        // no Build tab
     {
-        FunctionManager fm(nullptr, m_doc);
-        QVERIFY(view.openFunction(haze->id()));
-        SceneEditor *se = fm.findChild<SceneEditor *>();
-        QVERIFY(se != nullptr);
+        ProgrammingManager build(nullptr, m_doc);
+        QPointer<ProgrammingManager> guard(&build);
+        view.setWorkbenchLender(
+            [guard]() -> Workbench * { return guard.isNull() ? nullptr : guard->lendWorkbench(); },
+            [guard](Workbench *wb) { if (!guard.isNull()) guard->returnWorkbench(wb); });
+
+        // Nothing docked: Build's Workbench, with the function's own editor.
         QVERIFY(view.openFunction(efx->id()));
-        QVERIFY(fm.findChild<EFXEditor *>() != nullptr);
+        QCOMPARE(build.workbench()->loadedFunction(), efx->id());
+        QVERIFY(build.workbench()->findChild<EFXEditor *>() != nullptr);
         QVERIFY(!view.openFunction(Function::invalidId()));
+
+        // Docked on a cue: it loads there, ↩ back to the cue.
+        const CueList *list = nullptr;
+        for (const Production &p : m_doc->showTree()->productions())
+            for (const CueList &l : p.lists)
+                list = &l;
+        QVERIFY(list != nullptr);
+        const quint32 cueId = list->cues.first().id;
+        QVERIFY(view.openInWorkbench(cueId));
+        QVERIFY(build.isWorkbenchLent());
+        Workbench *bench = view.dockedWorkbench();
+        QCOMPARE(bench, build.workbench());
+        QVERIFY(view.openFunction(haze->id()));
+        QCOMPARE(bench->loadedFunction(), haze->id());
+        QVERIFY(bench->canGoBack());
+        if (!w0Shot("open-in-docked-workbench.png").isEmpty())
+            QVERIFY(view.grab().save(w0Shot("open-in-docked-workbench.png")));
+        QVERIFY(bench->goBack());
+        QVERIFY(qobject_cast<TreeCueStack *>(bench->stack()) != nullptr);
+
+        // Opened from outside the tree: the Workbench goes home to Build.
+        QVERIFY(ProgrammingManager::openFunction(efx->id()));
+        QVERIFY(!view.isWorkbenchDocked());
+        QVERIFY(!build.isWorkbenchLent());
+        QCOMPARE(build.workbench()->loadedFunction(), efx->id());
+        view.setWorkbenchLender(nullptr, nullptr);
     }
+    view.hide();
 }
 
 /* Import chaser… shows a sheet: plays the same?, what each step became,

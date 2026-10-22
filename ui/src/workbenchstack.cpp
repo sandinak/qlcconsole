@@ -328,7 +328,7 @@ QList<WorkbenchStack::Layer> FunctionStack::layers() const
     QList<Layer> out;
     // A chaser: the layers of the step walked to (W2).
     Function *f = layerSource();
-    if (f == nullptr)
+    if (f == nullptr || f->type() == Function::SequenceType)   // its steps: the overview's editor
         return out;
     const quint32 here = f->id();
 
@@ -614,7 +614,10 @@ static ChaserStep newStep(Chaser *ch, quint32 fid)
 
 Chaser *FunctionStack::chaser() const
 {
-    return qobject_cast<Chaser *>(function());
+    // A sequence is a chaser of one scene's values: no steps to walk or
+    // add (its editor is on the overview).
+    Function *f = function();
+    return f != nullptr && f->type() == Function::ChaserType ? qobject_cast<Chaser *>(f) : nullptr;
 }
 
 int FunctionStack::stepCount() const

@@ -25,6 +25,7 @@
 #include <QSet>
 #include <QSharedPointer>
 #include <QElapsedTimer>
+#include <functional>
 #include "function.h"
 #include "powerdistribution.h"
 
@@ -78,6 +79,40 @@ public:
      *  navigator would (and select it there). Public entry for external
      *  navigation / automated screenshots. */
     void showFunction(quint32 fid);
+
+    /** The Build tab (null: none). The Functions window is retired (board
+     *  Q32): Window → Functions and every "open this function" from outside
+     *  Build land here. */
+    static ProgrammingManager *instance();
+    /** Window → Functions: Scenes ▸ Classic, the list focused. */
+    void showClassic();
+    /** Open function @a fid in Build's Workbench from anywhere: Build
+     *  brought forward (the Workbench taken back from the Show Tree if it
+     *  is docked there), the function selected under Scenes (Classic when
+     *  Folders doesn't list it) and loaded. False: no Build tab or no such
+     *  function. */
+    static bool openFunction(quint32 fid);
+
+    /** The Function Manager's tools, at home in Build ▸ Scenes: New
+     *  function ▸ every type (⌘1…⌘9 as there), Function Wizard…, Startup
+     *  function…; added to @a menu (+ New's, the outline's right-click). A
+     *  new one is filed in the folder of the row current in the outline. */
+    void addFunctionTools(class QMenu *menu);
+    /** Create a new function of @p type in @p folder, name it, select it in
+     *  the navigator and load it: any type the Function Manager made (a
+     *  sequence with its hidden bound scene; Audio / Video ask for files,
+     *  see addMediaFunctions()). */
+    void addNewFunction(Function::Type type, const QString &folder);
+    /** An Audio or Video function for each of @a files, in @a folder; the
+     *  last loaded. The ids made (a file that can't play: skipped, said). */
+    QList<quint32> addMediaFunctions(Function::Type type, const QStringList &files, const QString &folder);
+    /** The Function Wizard (it was the Functions window's). */
+    void runFunctionWizard();
+    /** Pick the function that starts with the show (Operate mode). */
+    void chooseStartupFunction();
+    /** Delete folder @a path's folder: what is filed there moves up to its
+     *  parent (as a palette folder's does); nothing is deleted. */
+    void removeFunctionFolder(const QString &path);
     /** Send to Show Tree… on chaser @a chaserId (the Workbench's header
      *  button, a chaser row's right-click): the Show Tree's Import in
      *  place, its sheet offering to go there. Whether it was sent. */
@@ -241,11 +276,6 @@ private:
 
     /** Select @a sceneId's row in the navigator (and so load it). */
     void revealScene(quint32 sceneId);
-    /** Create a new function of @p type in @p folder, name it, select it in
-     *  the navigator and load it. No-op if @p type isn't one of the
-     *  creatable types (Scene/Chaser/Collection/EFX/RGBMatrix/Show). */
-    void addNewFunction(Function::Type type, const QString &folder);
-
     /** Create a new palette of the given QLCPalette::PaletteType in the
      *  selected palette folder and open it in the look editor. */
     void createPalette(int paletteType);
@@ -300,6 +330,10 @@ private:
     Workbench *m_workbench = nullptr;
     // W3: while the Show Tree has the Workbench
     QWidget *m_workbenchStandIn = nullptr;
+    /** addFunctionTools(): New function ▸ (one per type), wizard, startup. */
+    QList<class QAction *> m_newFunctionActions;
+    class QAction *m_wizardAction = nullptr;
+    class QAction *m_startupAction = nullptr;
     QSharedPointer<class WorkbenchStack> m_lentFrom;     //!< what Build had loaded
     QString m_lentSelection;                            //!< its selected row's key
 

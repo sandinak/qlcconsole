@@ -219,7 +219,7 @@ the tree and the Workbench follows it.
      alone.
    - **Import in place** (ticked): the chaser, and the collections and
      scenes only it plays, are filed under `Imported/<chaser> (originals)`
-     in the Functions window, and a Show timeline that played the chaser
+     in Build ▸ Scenes, and a Show timeline that played the chaser
      plays the list. Nothing is deleted; **Restore original** puts it all
      back ([how](#an-old-show-convert-it)). Untick it to keep both side by
      side.
@@ -308,7 +308,7 @@ two ways (**Convert by**):
 - **Import in place** (the default). The list takes over from the chaser:
   - the list is linked to the chaser it came from;
   - the chaser and the collections and scenes only it plays go to
-    `Imported/<chaser> (originals)` in the Functions window. What the list
+    `Imported/<chaser> (originals)` in Build ▸ Scenes. What the list
     still plays as it is (a raw scene on a ▣ row) and what another
     function plays stay where they are;
   - VC buttons, VC Cue Lists, sliders, speed dials, clocks, audio
@@ -449,9 +449,10 @@ Preshow (⌥: a layer for each group)"*.
   each, in one undo step.
 - **To edit what a ▣ layer plays**, double-click it, or right-click →
   **Open "Haze"…**, or select it and press **Open** on its page. The
-  function opens in its own editor in the Functions window (the scene,
-  EFX, RGB Matrix, collection or chaser editor), and what you change there
-  is what the cue plays. The page lists where else the function plays
+  function opens in its own editor in the Workbench (the scene,
+  EFX, RGB Matrix, collection or chaser editor): the Workbench docked
+  beside the tree when it is open there (**↩** comes back to the cue),
+  Build's otherwise. What you change there is what the cue plays. The page lists where else the function plays
   (**Also in:** other cues, the show's own collections and chasers): those
   change too.
 - **Below the tree's last row**, a drop is a new layer in the selected cue
@@ -1455,7 +1456,7 @@ the rule would change, and reusable uses. A list that tracks already says
 `detach list`) hands a cue list back as an ordinary chaser:
 
 - the list's **chaser** and its cues' **collections** become your own
-  functions, unlocked and shown in the Functions window where they are
+  functions, unlocked and shown in Build ▸ Scenes where they are
   (`Productions/<production>/…`), to edit as any chaser;
 - the **scenes** only this list plays go with them; a scene another list
   still plays is **copied**, and the chaser plays the copy, so it is all
@@ -1646,7 +1647,7 @@ Cue Runner back into a Cue List).
 ## Playing it
 
 - Each cue list plays as a chaser of the same name, at
-  `Productions/<production>` in the Functions window. Its steps carry the
+  `Productions/<production>` in Build ▸ Scenes. Its steps carry the
   cue numbers, fades, holds and notes.
 - Play it from the **Run** tab or a **Cue Runner** widget
   ([The cue runner](#the-cue-runner)), pick the chaser in a Virtual Console
@@ -1659,7 +1660,7 @@ Cue Runner back into a Cue List).
   their place.
 - **They are changed here, and locked everywhere else.** Outside the tab,
   what the tree made says *"Made by the Show Tree — edit it there."*:
-  - **The chaser's editor** (Functions window, Build tab, Shows, a
+  - **The chaser's editor** (Build's Workbench, Shows, a
     Virtual Console widget's live edit) opens with its steps and name
     locked, under a bar that says so and has **Show in Show Tree**. Its
     playback settings stay yours to set and are kept: run order,

@@ -93,8 +93,19 @@
 #include "monitor/monitor.h"
 #include <QTabWidget>
 #include <QStackedWidget>
-#include "functionmanager.h"
 #include "programmingoutline.h"
+#include "functionselection.h"
+#include "functionwizard.h"
+#include "audioplugincache.h"
+#include "sequence.h"
+#include "script.h"
+#include "audio.h"
+#include "video.h"
+#include "app.h"
+#include <QApplication>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QDir>
 #include "workbench.h"
 #include "effectdesigner.h"
 #include "workbenchstack.h"
@@ -180,12 +191,20 @@ protected:
 };
 }
 
+static ProgrammingManager *s_buildTab = nullptr;
+
+ProgrammingManager *ProgrammingManager::instance()
+{
+    return s_buildTab;
+}
+
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     : QWidget(parent)
     , m_doc(doc)
     , m_clipboardFunction(Function::invalidId())
     , m_clipboardPalette(QLCPalette::invalidId())
 {
+    s_buildTab = this;
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(4, 4, 4, 4);
     root->setSpacing(3);
@@ -594,6 +613,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_outline, &ProgrammingOutline::deleteScenesRequested, this, &ProgrammingManager::deleteFunctions);
     connect(m_outline, &ProgrammingOutline::editGroupLayoutRequested, m_workbench, &Workbench::showGroupLayout);
     connect(m_outline, &ProgrammingOutline::revealPaletteRequested, this, &ProgrammingManager::revealPalette);
+    // Its right-click: the Function Manager's tools too.
+    connect(m_outline, &ProgrammingOutline::extendMenu, this, &ProgrammingManager::addFunctionTools);
+    connect(m_outline, &ProgrammingOutline::removeFolderRequested, this, &ProgrammingManager::removeFunctionFolder);
 
     connect(m_doc, &Doc::paletteAdded, m_paletteTree, &FunctionsTreeWidget::addPalette);
     connect(m_doc, &Doc::paletteRemoved, this, [this](quint32) { m_paletteTree->updateTree(); });
@@ -649,6 +671,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
 ProgrammingManager::~ProgrammingManager()
 {
+    if (s_buildTab == this)
+        s_buildTab = nullptr;
 }
 
 /****************************************************************************
@@ -820,6 +844,53 @@ QWidget *ProgrammingManager::buildScenesSection()
             return;
         addNewFunction(Function::SceneType, in.isEmpty() ? name : in + QLatin1Char('/') + name);
     });
+    /* The Functions window's tools live here now (board Q32): a new
+       function of any type, the wizard, the startup function. Its ⌘1…⌘9
+       come with them, on this page. */
+    addFuncMenu->addSeparator();
+    {
+        struct NewType { Function::Type type; const char *icon; QString text; QString tip; };
+        const QList<NewType> types = {
+            { Function::SceneType,      ":/scene.png",      tr("Scene"),       QString() },
+            { Function::ChaserType,     ":/chaser.png",     tr("Chaser"),      QString() },
+            { Function::SequenceType,   ":/sequence.png",   tr("Sequence"),
+              tr("A chaser whose steps are all one scene's channels, each step its own values") },
+            { Function::EFXType,        ":/efx.png",        tr("EFX"),         QString() },
+            { Function::CollectionType, ":/collection.png", tr("Collection"),  QString() },
+            { Function::RGBMatrixType,  ":/rgbmatrix.png",  tr("RGB Matrix"),  QString() },
+            { Function::ScriptType,     ":/script.png",     tr("Script"),      QString() },
+            { Function::AudioType,      ":/audio.png",      tr("Audio…"),      tr("An audio function for each file picked") },
+            { Function::VideoType,      ":/video.png",      tr("Video…"),      tr("A video function for each file picked") },
+            { Function::ShowType,       ":/show.png",       tr("Show"),
+              tr("A timeline of tracks (it opens in the Workbench; Shows has it too)") } };
+        for (int i = 0; i < types.size(); ++i)
+        {
+            const NewType &t = types.at(i);
+            QAction *a = new QAction(QIcon(t.icon), t.text, page);
+            a->setObjectName(QStringLiteral("buildNew%1").arg(Function::typeToString(t.type).remove(QLatin1Char(' '))));
+            a->setData(int(t.type));
+            if (!t.tip.isEmpty())
+                a->setToolTip(t.tip);
+            if (i < 9)      // ⌘1…⌘9, the Functions window's order
+            {
+                a->setShortcut(QKeySequence(Qt::CTRL | Qt::Key(Qt::Key_1 + i)));
+                a->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+                page->addAction(a);
+            }
+            const Function::Type type = t.type;
+            connect(a, &QAction::triggered, this, [this, here, type]() { addNewFunction(type, here()); });
+            m_newFunctionActions << a;
+        }
+        m_wizardAction = new QAction(QIcon(":/wizard.png"), tr("Function Wizard…"), page);
+        m_wizardAction->setObjectName(QStringLiteral("buildFunctionWizard"));
+        m_wizardAction->setToolTip(tr("Make chasers, scenes and effects for the fixtures you pick, in one go"));
+        connect(m_wizardAction, &QAction::triggered, this, &ProgrammingManager::runFunctionWizard);
+        m_startupAction = new QAction(QIcon(":/autostart.png"), tr("Startup function…"), page);
+        m_startupAction->setObjectName(QStringLiteral("buildStartupFunction"));
+        m_startupAction->setToolTip(tr("The function that starts by itself when the show goes to Operate mode"));
+        connect(m_startupAction, &QAction::triggered, this, &ProgrammingManager::chooseStartupFunction);
+    }
+    addFunctionTools(addFuncMenu);
     m_addFuncBtn->setMenu(addFuncMenu);
     navToolbar->addWidget(m_addFuncBtn);
     // Match the main window's icon/text display preference.
@@ -1535,9 +1606,161 @@ void ProgrammingManager::showFunction(quint32 fid)
     ProgrammingOutline::Row r;
     r.kind = qobject_cast<Scene *>(f) != nullptr ? ProgrammingOutline::SceneRow : ProgrammingOutline::FunctionRow;
     r.scene = r.id = fid;
-    m_outline->selectRow(r);
+    // Folders lists scenes, collections and chasers; Classic lists the rest.
+    if (!m_outline->selectRow(r) && m_outline->arrangement() != ProgrammingOutline::Classic)
+    {
+        m_outline->setArrangement(ProgrammingOutline::Classic);
+        m_outline->selectRow(r);
+    }
     if (m_workbench->loadedFunction() != fid)
         m_workbench->load(fid);
+}
+
+void ProgrammingManager::showClassic()
+{
+    setSection(ScenesSection);
+    m_outline->setArrangement(ProgrammingOutline::Classic);
+    if (m_outline->currentItem() == nullptr && m_outline->topLevelItemCount() > 0)
+        m_outline->setCurrentItem(m_outline->topLevelItem(0), 0, QItemSelectionModel::NoUpdate);
+    m_outline->setFocus(Qt::ShortcutFocusReason);
+}
+
+bool ProgrammingManager::openFunction(quint32 fid)
+{
+    ProgrammingManager *pm = instance();
+    if (pm == nullptr || pm->m_doc->function(fid) == nullptr)
+        return false;
+    // Docked in the Show Tree: the Workbench comes home first.
+    if (pm->isWorkbenchLent())
+        if (ShowTreeView *tree = ShowTreeView::instance())
+            tree->closeWorkbench();
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        if (App *app = qobject_cast<App *>(w))
+            app->showContext(App::tr("Build"));
+    pm->showFunction(fid);
+    return true;
+}
+
+void ProgrammingManager::addFunctionTools(QMenu *menu)
+{
+    if (menu == nullptr || m_newFunctionActions.isEmpty())
+        return;
+    QMenu *sub = menu->addMenu(QIcon(":/function.png"), tr("New function"));
+    sub->setObjectName(QStringLiteral("buildNewFunctionMenu"));
+    sub->setToolTipsVisible(true);
+    sub->addActions(m_newFunctionActions);
+    menu->addAction(m_wizardAction);
+    menu->addAction(m_startupAction);
+    const bool design = m_doc->mode() == Doc::Design;
+    for (QAction *a : m_newFunctionActions)
+        a->setEnabled(design);
+    m_wizardAction->setEnabled(design);
+}
+
+QList<quint32> ProgrammingManager::addMediaFunctions(Function::Type type, const QStringList &files,
+                                                     const QString &folder)
+{
+    QList<quint32> made;
+    QStringList refused;
+    for (const QString &fn : files)
+    {
+        Function *f = nullptr;
+        if (type == Function::AudioType)
+        {
+            Audio *audio = new Audio(m_doc);
+            if (audio->setSourceFileName(fn))
+                f = audio;
+            else
+                delete audio;
+        }
+        else if (type == Function::VideoType)
+        {
+            Video *video = new Video(m_doc);
+            if (video->setSourceUrl(fn))
+                f = video;
+            else
+                delete video;
+        }
+        if (f == nullptr)
+        {
+            refused << QFileInfo(fn).fileName();
+            continue;
+        }
+        if (!folder.isEmpty())
+            f->setPath(folder);
+        if (!m_doc->addFunction(f))
+        {
+            delete f;
+            continue;
+        }
+        made << f->id();
+    }
+    if (!refused.isEmpty())
+        QMessageBox::warning(this, type == Function::AudioType ? tr("Unsupported audio file")
+                                                               : tr("Unsupported video file"),
+                             tr("These can't be played with qlcconsole:\n%1").arg(refused.join(QLatin1Char('\n'))));
+    if (!made.isEmpty())
+    {
+        m_outline->rebuild();
+        showFunction(made.last());
+    }
+    return made;
+}
+
+void ProgrammingManager::runFunctionWizard()
+{
+    FunctionWizard fw(this, m_doc);
+    if (fw.exec() == QDialog::Accepted)
+    {
+        m_outline->rebuild();
+        rebuildEffects();
+    }
+}
+
+void ProgrammingManager::chooseStartupFunction()
+{
+    FunctionSelection fs(this, m_doc);
+    fs.setMultiSelection(false);
+    fs.showNone(true);
+    fs.setSelection({ m_doc->startupFunction() });
+    if (fs.exec() == QDialog::Accepted && !fs.selection().isEmpty())
+    {
+        m_doc->setStartupFunction(fs.selection().first());
+        m_doc->setModified();
+    }
+}
+
+void ProgrammingManager::removeFunctionFolder(const QString &path)
+{
+    if (path.isEmpty())
+        return;
+    const int cut = path.lastIndexOf(QLatin1Char('/'));
+    const QString up = cut > 0 ? path.left(cut) : QString();
+    QList<Function *> all;
+    QList<quint32> ids;
+    for (Function *f : m_doc->functions())
+    {
+        const QString p = f->path(true);
+        if (p == path || p.startsWith(path + QLatin1Char('/')))
+        {
+            all << f;
+            ids << f->id();
+        }
+    }
+    if (all.isEmpty())
+        return;
+    m_doc->paletteOps()->functionStep(tr("remove folder %1").arg(path), ids, [&](QList<quint32> &) {
+        for (Function *f : all)
+        {
+            const QString rest = f->path(true).mid(path.length());   // "" or "/sub"
+            QString to = up + rest;
+            if (to.startsWith(QLatin1Char('/')))
+                to = to.mid(1);
+            f->setPath(to);
+        }
+        return true;
+    });
+    m_outline->rebuild();
 }
 
 void ProgrammingManager::createPalette(int paletteType)
@@ -1963,6 +2186,38 @@ void ProgrammingManager::addNewFunction(Function::Type type, const QString &fold
         case Function::EFXType:        f = new EFX(m_doc);        base = tr("New EFX"); break;
         case Function::RGBMatrixType:  f = new RGBMatrix(m_doc);  base = tr("New RGB Matrix"); break;
         case Function::ShowType:       f = new Show(m_doc);       base = tr("New Show"); break;
+        case Function::ScriptType:     f = new Script(m_doc);     base = tr("New Script"); break;
+        case Function::SequenceType:
+        {
+            // A sequence plays one scene's channels: its own, hidden.
+            Scene *bound = new Scene(m_doc);
+            bound->setVisible(false);
+            if (!m_doc->addFunction(bound))
+            {
+                delete bound;
+                return;
+            }
+            Sequence *seq = new Sequence(m_doc);
+            seq->setBoundSceneID(bound->id());
+            f = seq;
+            base = tr("New Sequence");
+            break;
+        }
+        case Function::AudioType:
+        case Function::VideoType:
+        {
+            const bool audio = type == Function::AudioType;
+            const QStringList ext = audio ? m_doc->audioPluginCache()->getSupportedFormats()
+                                          : Video::getVideoCapabilities();
+            const QString filter = (audio ? tr("Audio Files (%1)") : tr("Video Files (%1)")).arg(ext.join(QLatin1Char(' ')))
+                                   + QStringLiteral(";;") + tr("All Files (*)");
+            const QStringList files = QFileDialog::getOpenFileNames(this, audio ? tr("Open Audio File")
+                                                                                : tr("Open Video File"),
+                                                                    QDir::homePath(), filter);
+            if (!files.isEmpty())
+                addMediaFunctions(type, files, folder);
+            return;
+        }
         default: return;
     }
     if (f == NULL)

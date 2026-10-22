@@ -57,11 +57,16 @@ under `~/.claude/.../memory/`.
   - A scene step takes no + Scene / + EFX (a step plays one function);
     "make this step a collection" could come later.
   - Preview plays the step's function alone, not the chaser running
-    through its steps (Play the chaser from VC / the Functions window).
+    through its steps (Play the chaser from VC).
   - Classic folder rename renames that folder for every function type
     filed in it (paths are shared, as in Folders).
-  - Retire the Functions window now Classic covers it (open question 4) —
-    Branson's call.
+  - ~~Retire the Functions window now Classic covers it~~ — done
+    (board Q32, feat/retire-functions-window): Window → Functions opens
+    Build ▸ Scenes ▸ Classic; every function type, the wizard, the
+    startup function and Delete folder are on + Scene ▾ / the outline's
+    right-click; sequences edit in the Workbench; Show Tree Open and Edit
+    Chase… load there. The FunctionManager class stays (not built by
+    App; showtreeview_test still drives it directly).
 - W2 and W3 merged together on feat/w3-showtree-workbench (2026-10-22).
 - Then W4 → W5 → W6 → W7.
 

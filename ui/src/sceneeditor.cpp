@@ -17,6 +17,8 @@
   limitations under the License.
 */
 
+#include <QPointer>
+#include <QTimer>
 #include <QTreeWidgetItem>
 #include <QColorDialog>
 #include <QTreeWidget>
@@ -36,7 +38,7 @@
 #include "genericdmxsource.h"
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
-#include "functionmanager.h"
+#include "workbench.h"
 #include "fixtureconsole.h"
 #include "groupsconsole.h"
 #include "qlcfixturedef.h"
@@ -1023,8 +1025,19 @@ void SceneEditor::slotRecord()
     m_doc->addFunction(clone);
     chaser->addStep(ChaserStep(clone->id()));
 
-    // Switch to the cloned scene
-    FunctionManager::instance()->selectFunction(clone->id());
+    // Switch to the cloned scene, in the Workbench this editor is in (↩
+    // back); elsewhere (Shows), it stays here.
+    for (QWidget *p = parentWidget(); p != NULL; p = p->parentWidget())
+        if (Workbench *bench = qobject_cast<Workbench *>(p))
+        {
+            const quint32 id = clone->id();
+            QPointer<Workbench> guard(bench);
+            QTimer::singleShot(0, bench, [guard, id]() {
+                if (!guard.isNull())
+                    guard->open(id);
+            });
+            break;
+        }
 }
 
 void SceneEditor::slotChaserComboActivated(int index)

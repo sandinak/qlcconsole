@@ -565,7 +565,7 @@ See [WLED effects](build.md#wled-effects).
 
 ## RGB Matrix algorithms
 
-The classic **RGB Matrix** function (Functions window) has its own
+The classic **RGB Matrix** function (Build ▸ Effects) has its own
 algorithms — Fire, Text (with a **Centered** style), Plasma and many
 scripted ones. Where one shares a name with an effect, the browser lists it
 as "&lt;name&gt; (RGB Matrix)".

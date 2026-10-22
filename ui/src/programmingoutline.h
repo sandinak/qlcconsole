@@ -212,6 +212,11 @@ signals:
     void sendToShowTreeRequested(quint32 chaserId);
     /** Folders | Classic changed (the switch above follows). */
     void arrangementChanged(int arrangement);
+    /** Navigator right-click, before it shows: the tab adds its own
+     *  (New function ▸, Function Wizard…, Startup function…). */
+    void extendMenu(class QMenu *menu);
+    /** Delete folder on a folder row: what is filed in @a path moves up. */
+    void removeFolderRequested(const QString &path);
 
 protected:
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override;

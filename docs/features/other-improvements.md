@@ -396,12 +396,15 @@ which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
 as usual.
 
-**Functions has no tab.** It sat beside Build (now **Build**) and was easy to hit by
-mistake, and Build now covers building scenes and looks. The
-classic **Function Manager** — chasers, sequences, EFX, collections, RGB
-matrices, scripts, audio and video — is still there: **Window → Functions**
-(⇧⌘4) opens it in a window of its own, and closing that window puts it away
-again (it does not come back as a tab).
+**Functions is Build ▸ Scenes ▸ Classic.** The Functions window is
+retired: **Window → Functions** (⇧⌘4) brings Build forward with the
+Scenes outline set to **Classic** — every function by type, as the
+Function Manager listed them — and the list focused. Each function opens
+in the Workbench with its own editor (chasers, sequences, EFX, RGB
+matrices, shows, scripts, audio and video). New functions of every type,
+the Function Wizard and the startup function are on **+ Scene ▾** and
+the outline's right-click; see
+[Coming from the Functions window](build.md#coming-from-the-functions-window).
 
 ## Readiness footer
 

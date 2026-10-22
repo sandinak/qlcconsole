@@ -148,11 +148,17 @@ work in its place; pick **Use This Computer's**, **Keep the Show's** or
 
 ## Finding things
 
-**Where did the Functions tab go?** **Window → Functions** (⇧⌘4) — it
-opens in its own window.
+**Where did the Functions tab go?** **Build ▸ Scenes ▸ Classic.**
+**Window → Functions** (⇧⌘4) takes you there: Build, the Scenes section,
+the outline set to **Classic**, which lists every function by type as the
+Function Manager did. Click one to edit it in the Workbench. New
+functions of every type, the Function Wizard and the startup function are
+on **+ Scene ▾** and the outline's right-click
+([Coming from the Functions window](build.md#coming-from-the-functions-window)).
 
 **A shortcut does nothing.** Check [Keyboard and mouse](shortcuts.md):
 some keys only work in one view (the Virtual Console's add-widget keys
-only in its Design mode, the Functions keys only in its window).
+only in its Design mode, ⌘1 … ⌘9 for a new function only in Build ▸
+Scenes).
 
 **Help** — F1 opens the help for whatever you're looking at.

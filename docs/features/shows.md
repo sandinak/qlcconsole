@@ -47,7 +47,7 @@ Right-click a track's header:
 - **Lock an item** — ⌘K, so it can't be dragged by accident; **colour** —
   ⌘L; **copy / paste** — ⌘C / ⌘V (it checks the paste won't overlap or
   land on an incompatible track); **delete** — Delete (from the show only;
-  the Functions window deletes the function itself).
+  Build ▸ Scenes deletes the function itself).
 - **Play / pause** — Space; **stop** — ⌘Space (twice: back to 0).
 - **Undo** — ⌘Z.
 

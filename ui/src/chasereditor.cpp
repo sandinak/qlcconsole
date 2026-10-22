@@ -33,13 +33,16 @@
 #include <QCheckBox>
 #include <QMenu>
 #include <QApplication>
+#include <QPointer>
+#include <QTimer>
 #include <QSettings>
 #include <QDebug>
 #include <QUrl>
 #include <QAction>
 
 #include "functionstreewidget.h"
-#include "functionmanager.h"
+#include "programmingmanager.h"
+#include "workbench.h"
 #include "functionselection.h"
 #include "speeddialwidget.h"
 #include "speedmasterspanel.h"
@@ -1416,13 +1419,21 @@ int ChaserEditor::topLevelIndex(QTreeWidgetItem *item) const
 void ChaserEditor::editSubCueChase(int index)
 {
     Chaser *chase = m_chaser->subCueChase(index);
-    FunctionManager *fm = FunctionManager::instance();
-    if (chase == NULL || fm == NULL)
+    if (chase == NULL)
         return;
-    // Queued: opening it there replaces this editor, which mustn't go
-    // while one of its own slots is still running.
+    // Queued: opening it replaces this editor, which mustn't go while one of
+    // its own slots is still running. In the Workbench this editor is in,
+    // ↩ back here; anywhere else, in Build's.
     const quint32 id = chase->id();
-    QMetaObject::invokeMethod(fm, [fm, id]() { fm->selectFunction(id); }, Qt::QueuedConnection);
+    QPointer<Workbench> bench;
+    for (QWidget *p = parentWidget(); p != NULL && bench.isNull(); p = p->parentWidget())
+        bench = qobject_cast<Workbench *>(p);
+    QTimer::singleShot(0, qApp, [bench, id]() {
+        if (!bench.isNull())
+            bench->open(id);
+        else
+            ProgrammingManager::openFunction(id);
+    });
 }
 
 void ChaserEditor::updateSubCueItems(QTreeWidgetItem *item, const ChaserStep &step)

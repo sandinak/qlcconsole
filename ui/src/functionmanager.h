@@ -40,6 +40,10 @@ class Doc;
  * @{
  */
 
+/** QLC+'s Function Manager. Retired from the UI (board Q32): App no longer
+ *  builds it, and Window → Functions opens Build ▸ Scenes ▸ Classic, where
+ *  everything it did lives. The class stays for tests that drive it and as
+ *  the upstream reference; instance() is null in the app. */
 class FunctionManager final : public QWidget
 {
     Q_OBJECT
@@ -91,12 +95,6 @@ public:
 
     /** Select the function with the given ID */
     void selectFunction(quint32 id);
-
-    /** Open function @a id in its own editor, the Functions window brought
-     *  forward (Window → Functions): the Show Tree's Open on a layer that
-     *  plays a function as it is (W0). False when there is no Functions
-     *  window or no such function. */
-    static bool openFunction(quint32 id);
 
 private:
     /** Init the splitter view */

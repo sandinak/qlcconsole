@@ -56,6 +56,11 @@
 #include <QTabWidget>
 #include "measurementunits.h"
 #include "functionmanager.h"
+#include "programmingmanager.h"
+#include "programmingoutline.h"
+#include "workbench.h"
+#include "efxeditor.h"
+#include "efx.h"
 #define private public
 #define protected public
 #include "virtualconsole.h"
@@ -278,41 +283,72 @@ void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
     m_app->setShiftClickBreaksOut(was);
 }
 
-void AppViews_Test::functionsOpensFromTheWindowMenuNotATab()
+void AppViews_Test::functionsOpensBuildScenesClassic()
 {
     QTabWidget *tabs = m_app->m_tab;
     const QString functions = QString("Functions");
     for (int i = 0; i < tabs->count(); ++i)
         QVERIFY2(tabs->tabBar()->tabData(i).toString() != functions, "Functions should have no tab");
+    QVERIFY2(FunctionManager::instance() == nullptr, "no Function Manager is built");
+    QVERIFY(m_app->m_parkedContexts.isEmpty());
+    ProgrammingManager *build = ProgrammingManager::instance();
+    QVERIFY(build != nullptr);
     const int views = tabs->count();
 
+    // Still in the Window menu, at its old place and shortcut (⇧⌘4).
     QAction *jump = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == functions)
             jump = a;
     QVERIFY2(jump != nullptr, "Functions should be in the Window menu");
-    jump->trigger();
-    DetachedContext *dw = nullptr;
-    foreach (DetachedContext *w, m_app->findChildren<DetachedContext *>())
-        if (w->centralWidget() != nullptr && w->centralWidget() == FunctionManager::instance())
-            dw = w;
-    QVERIFY2(dw != nullptr && dw->isVisible(), "picking it should open its window");
-    QVERIFY(FunctionManager::instance()->isVisible());
-    QVERIFY2(m_app->detachedContexts().isEmpty(), "it has no tab to be put back in");
+    QCOMPARE(jump->objectName(), QString("windowFunctions"));
+    QCOMPARE(jump->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
+    QCOMPARE(m_app->m_windowJumps.indexOf(jump), 3);
+    QCOMPARE(m_app->m_windowJumps.at(4)->data().toString(), QString("Build"));
+    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_5));
 
-    dw->close();
+    // Away from Build, Folders, Palettes: the menu lands on Scenes ▸ Classic.
+    m_app->showContext("Simple Desk");
+    build->setSection(ProgrammingManager::PalettesSection);
+    build->m_outline->setArrangement(ProgrammingOutline::Folders);
+    jump->trigger();
+    QCOMPARE(tabs->tabBar()->tabData(tabs->currentIndex()).toString(), QString("Build"));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->section(), ProgrammingManager::ScenesSection);
+    QCOMPARE(build->m_outline->arrangement(), ProgrammingOutline::Classic);
+    QCOMPARE(m_app->focusWidget(), static_cast<QWidget *>(build->m_outline));
     QCOMPARE(tabs->count(), views);
-    QVERIFY(!FunctionManager::instance()->isVisible());
-    QVERIFY(FunctionManager::instance()->parentWidget() == m_app);
+    QVERIFY(m_app->findChildren<DetachedContext *>().isEmpty() ||
+            m_app->detachedContexts().isEmpty());
+    const QString shots = qEnvironmentVariable("QLC_NOFM_SHOTS");
+    if (!shots.isEmpty())
+    {
+        m_app->resize(1400, 860);
+        QVERIFY(m_app->grab().save(shots + "/window-functions-classic.png"));
+    }
 
-    // And again, after closing.
-    jump->trigger();
-    QVERIFY(FunctionManager::instance()->isVisible());
-    foreach (DetachedContext *w, m_app->findChildren<DetachedContext *>())
-        if (w->centralWidget() == FunctionManager::instance())
-            w->close();
+    // A show saved with the Functions window in front opens there.
+    m_app->showContext("Simple Desk");
+    build->m_outline->setArrangement(ProgrammingOutline::Folders);
+    m_app->setActiveWindow("FunctionManager");
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->m_outline->arrangement(), ProgrammingOutline::Classic);
 
-    // The tabs keep their own labels with one gone from among them.
+    // Opening a function from outside Build: Build's Workbench.
+    Doc *doc = m_app->m_doc;
+    EFX *efx = new EFX(doc);
+    efx->setName("Window Functions EFX");
+    QVERIFY(doc->addFunction(efx));
+    m_app->showContext("Shows");
+    QVERIFY(ProgrammingManager::openFunction(efx->id()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->workbench()->loadedFunction(), efx->id());
+    QVERIFY(build->workbench()->findChild<EFXEditor *>() != nullptr);
+    if (!shots.isEmpty())
+        QVERIFY(m_app->grab().save(shots + "/open-function-in-workbench.png"));
+    doc->deleteFunction(efx->id());
+
+    // The tabs keep their own labels.
     m_app->setTabLabelMode(App::TabTextOnly);
     for (int i = 0; i < tabs->count(); ++i)
         QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
@@ -341,7 +377,6 @@ void AppViews_Test::helpOpensOnWhatIsInFront()
         want.remove(label);
     }
     QVERIFY2(want.isEmpty(), qPrintable("no tab for: " + want.keys().join(", ")));
-    QCOMPARE(m_app->helpTopicFor(FunctionManager::instance()), QString("other-improvements.md#window-menu"));
 
     // Something inside a view that names its own topic wins over the view.
     QWidget *inner = new QWidget(tabs->currentWidget());

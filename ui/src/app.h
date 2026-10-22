@@ -381,6 +381,9 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
+    /** Window → Functions (⇧⌘4): Build ▸ Scenes ▸ Classic, the list focused
+     *  (the Functions window is retired, board Q32). */
+    void showFunctions();
     /** The help topic for @p w ("lighting-studio.md#mounting-a-fixture"):
      *  the nearest "helpTopic" property up its parents, else the tab on
      *  screen's, else Getting Started. */

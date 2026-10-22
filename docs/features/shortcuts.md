@@ -15,7 +15,7 @@
 | ⌘D | Dump the current DMX values into a function |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
-| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
+| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (Build ▸ Scenes ▸ Classic), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
 | ⇧⌘M | Lighting Studio |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
@@ -104,16 +104,18 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | ⌘D | Delete the selected universe (Detailed tab) |
 | ⌘Z | Undo the last patch change (any of the three tabs) |
 
-## Functions window
+## Build ▸ Scenes (what the Functions window had)
 
 | Keys | Does |
 |---|---|
-| ⌘1 … ⌘9 | New scene, chaser, sequence, EFX, collection, RGB matrix, script, audio, video |
-| ⌘L | New folder |
-| ⌘W | Function wizard |
-| ⌘C | Clone |
-| Delete | Delete |
-| ⌥→ / ⌥← | Next / previous fixture tab in the scene editor |
+| ⌘1 … ⌘9 | New scene, chaser, sequence, EFX, collection, RGB matrix, script, audio, video (with the Scenes section focused) |
+| ⌘C then ⌘V | Duplicate (the Functions window's Clone) |
+| ⌫ / Delete | Delete |
+| F2 | Rename |
+| ⌥→ / ⌥← | Next / previous fixture tab in a sequence's scene editor |
+
+The Function Wizard and the startup function are on **+ Scene ▾**; a new
+folder is **+ Scene ▾ → New scene in a new folder…**.
 
 ## Shows (timeline)
 

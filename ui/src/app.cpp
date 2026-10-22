@@ -508,7 +508,6 @@ void App::init()
             { QStringLiteral("Connections"),     QStringLiteral("other-improvements.md#connections--patch") },
             { QStringLiteral("Fixtures"),        QStringLiteral("fixture-manager.md") },
             { QStringLiteral("Lighting Studio"), QStringLiteral("lighting-studio.md") },
-            { QStringLiteral("Functions"),       QStringLiteral("other-improvements.md#window-menu") },
             { QStringLiteral("Build"),           QStringLiteral("build.md") },
             { QStringLiteral("Show Tree"),       QStringLiteral("show-tree.md") },
             { QStringLiteral("Shows"),           QStringLiteral("shows.md") },
@@ -558,8 +557,12 @@ void App::init()
     // alongside another tab or on a second monitor.
     w = new Monitor(m_tab, m_doc);
     addTab(w, QIcon(":/grid.png"), tr("Lighting Studio"));
-    w = new FunctionManager(m_tab, m_doc);
-    addTab(w, QIcon(":/function.png"), tr("Functions"));
+    /* Functions: retired (board Q32). The Function Manager is not built;
+       Window → Functions (⇧⌘4, its old place in the list) opens Build ▸
+       Scenes ▸ Classic, which lists what it listed, and everything it did
+       has a home in Build (build.md, "Coming from the Functions window").
+       Its entry is kept in the list so the shortcuts after it stay put. */
+    m_tabOriginals.append(qMakePair(tr("Functions"), QIcon(":/function.png")));
     QPointer<ProgrammingManager> buildTab;
     {
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
@@ -645,11 +648,6 @@ void App::init()
     w = new CueRunner(m_doc, CueRunner::Full, m_tab);
     w->setObjectName(QStringLiteral("runTab"));
     addTab(w, QIcon(":/chaser.png"), tr("Run"));
-    /* Functions: no tab ("I keep hitting it by mistake instead of
-       Programming"), but there to open from the Window menu, in a window of
-       its own. Closing that window puts it away again. */
-    parkContext(tr("Functions"));
-
     // Load and apply the tab label mode preference.
     {
         QSettings settings;
@@ -738,6 +736,12 @@ void App::setActiveWindow(const QString& name)
 {
     if (name.isEmpty() == true)
         return;
+    // A show saved with the Functions window in front: its home now.
+    if (name == QLatin1String(FunctionManager::staticMetaObject.className()))
+    {
+        showFunctions();
+        return;
+    }
 
     for (int i = 0; i < m_tab->count(); i++)
     {
@@ -1530,7 +1534,6 @@ void App::enableKioskMode()
 
     // No need for these
     m_tab->removeTab(m_tab->indexOf(FixtureManager::instance()));
-    m_tab->removeTab(m_tab->indexOf(FunctionManager::instance()));
     m_tab->removeTab(m_tab->indexOf(ShowManager::instance()));
     m_tab->removeTab(m_tab->indexOf(SimpleDesk::instance()));
     m_tab->removeTab(m_tab->indexOf(InputOutputManager::instance()));
@@ -2456,7 +2459,7 @@ void App::initMenuBar()
         QAction* jump = windowMenu->addAction(m_tabOriginals.at(i).second,
                                               m_tabOriginals.at(i).first);
         // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
-        // the Function Manager's "add function" shortcuts.
+        // Build ▸ Scenes' "new function" shortcuts.
         // The tenth (Run) is ⇧⌘0.
         jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10)));
         /* Resolve by LABEL, not by construction order. Detaching a view calls
@@ -2465,9 +2468,16 @@ void App::initMenuBar()
            for the detached view itself. */
         const QString label = m_tabOriginals.at(i).first;
         jump->setData(label);
-        connect(jump, &QAction::triggered, this, [this, label]() {
-            showContext(label);
-        });
+        if (label == tr("Functions"))
+        {
+            jump->setObjectName(QStringLiteral("windowFunctions"));
+            jump->setToolTip(tr("Every function by type, as the Function Manager listed them: Build ▸ Scenes ▸ Classic"));
+            connect(jump, &QAction::triggered, this, &App::showFunctions);
+        }
+        else
+            connect(jump, &QAction::triggered, this, [this, label]() {
+                showContext(label);
+            });
         m_windowJumps << jump;
     }
     /* The Rig Overview is a window of its own, so it is offered here too, not
@@ -3360,6 +3370,13 @@ void App::slotCaptureUndoStackChanged()
         m_captureUndoAction->setText(tr("Undo Last Store"));
         m_captureUndoAction->setToolTip(tr("Revert the most recent capture commit"));
     }
+}
+
+void App::showFunctions()
+{
+    showContext(tr("Build"));
+    if (ProgrammingManager *pm = ProgrammingManager::instance())
+        pm->showClassic();
 }
 
 void App::showContext(const QString &tabLabel)
