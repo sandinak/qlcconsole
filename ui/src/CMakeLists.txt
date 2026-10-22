@@ -170,6 +170,7 @@ add_library(${module_name}
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
     showtreeview.cpp showtreeview.h
+    importsheet.cpp importsheet.h
     cuerunner.cpp cuerunner.h
     updatechecker.cpp updatechecker.h
     updatedialog.cpp updatedialog.h

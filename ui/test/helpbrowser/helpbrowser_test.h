@@ -34,6 +34,7 @@ private slots:
     void headingsAreSluggedTheWayGitHubDoes();
     void keysAreSpelledForTheComputerYouAreOn();
     void aPictureFitsThePageAndOpensFullSize();
+    void noGuideSendsYouToTheFunctionsTab();
 };
 
 #endif

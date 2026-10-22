@@ -2387,7 +2387,7 @@ void ShowManager::slotShowItemMoved(ShowItem *item, quint32 time, bool moved)
     // NOTE: clicking a timeline item no longer opens a Scene/Chaser editor on
     // the right. Building a full SceneEditor console (every fixture/channel) on
     // each click was slow enough to beachball on larger rigs, and content is
-    // edited in the Programming / Functions tabs anyway — the timeline is for
+    // edited in the Programming tab / Functions window anyway — the timeline is for
     // arranging and timing. We just select the item + activate its track here.
     Sequence *sequence = qobject_cast<Sequence*>(f);
     if (sequence != NULL)

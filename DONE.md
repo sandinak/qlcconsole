@@ -6,6 +6,47 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-22 — Workflow W0: seam fixes, no new layout *(feat/w0-seam-fixes)*
+
+Phase W0 of WORKFLOW_DESIGN.md (design/programming-redesign), approved by
+Branson ("Yes, build it").
+
+- **Open on an opaque layer.** `ShowTreeView::openableFunction()` (a layer
+  row or one carried in), `openFunction()` -> `FunctionManager::openFunction()`
+  (App::showContext("Functions"), select, editFunction). Row menu (first
+  item, `stOpenFunction`), double-click, the layer page's **Open** with an
+  "Also in:" line (`alsoIn()`: other tree cues + the show's own collections
+  and chasers via `Doc::getUsage`, generated ones left out).
+- **Import sheet** (`ui/src/importsheet.{h,cpp}`): the report as a
+  QTextBrowser page + the re-point tick + Undo import / Done. The new
+  same-output check `ShowTreeController::importDifferences()` (static: each
+  step's Collection members played HTP/LTP via CueOutput vs
+  `staticCueOutput`) runs in every import; agrees with the playback dry run
+  on DanceHysteria-0.1 (0/0) and Sample (0/0). `CueOutput` now applies the
+  look-dimmer scaling on dimmerless fixtures, as Scene::write does (it gave
+  255 vs 250 on DH's pixel bars).
+- **Re-point** (`ImportSheet::planRepoint()` / `Repoint::apply()`): VC
+  buttons, VC Cue Lists, VC sliders, main cue list, cue-list number;
+  attached to the import's undo step by the new
+  `ShowTreeController::attachToLastStep()` (Snapshot::outside, run after
+  restore on undo/redo). The generated chaser no longer copies the
+  original's cue-list number.
+- **Sample.qxw's 201 channels: a real difference, fixed.** Not the sampling
+  instant: QLC+ blends Scene→Scene steps (`Scene::setBlendFunctionID`, the
+  new scene fades from the previous scene's values with CrossFade), the
+  list's steps are Collections and never blended. Sample's Group/Par
+  chasers have Duration 0 + scenes' own 1 s fades, so the chaser sat at
+  ~245-250 and the list at ~106-108. Traced tick by tick: identical at
+  durations ≥ the fade (2000/3000 ms: 0 differ), different at 500 ms and
+  0 ms. Fix: `ChaserRunner::blendScene()` treats a *generated* cue
+  Collection holding exactly one non-generated Scene as that Scene for the
+  blend (stock collections unchanged). Now 0 differ at 0/500/2000 ms,
+  converted lists too. Tests: `importedRawScenesBlendAsTheChaserDid`
+  (fails without the fix), `importTheSampleShow` (201 without it).
+- **"Functions tab"** text: the Programming placeholder (one string in
+  programmingmanager.cpp), programming-tab.md, two comments;
+  `helpbrowser_test::noGuideSendsYouToTheFunctionsTab`.
+
 ### 2026-10-21 — Definition updates: user folder and show-embedded *(feat/definition-updates)*
 
 Branson: "for old definitions we should have a way to update them in place

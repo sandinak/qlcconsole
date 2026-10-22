@@ -120,6 +120,12 @@ private slots:
      *  .qlcc, read only) and QLC_SKIPCUE_SHOT (a .png). */
     void pictureOfSkippedCues();
 
+    // W0: seam fixes
+    void openAnOpaqueLayer();
+    void openUsesTheFunctionsWindowsEditor();
+    void theImportSheetReadsAndRepoints();
+    void theImportSheetCanUndoOrLeaveVcAlone();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

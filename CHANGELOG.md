@@ -13,6 +13,26 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Open a function a Show Tree layer plays as it is** (W0 of the workflow
+  design): a ▣ layer (a raw scene, EFX, RGB Matrix, collection or chaser)
+  opens its function in its own editor in the Functions window -- from
+  the row's menu (**Open "Haze"…**, first), a double-click, or **Open** on
+  its page. The page says that the edit changes what the cue plays, and
+  lists where else the function plays (**Also in:** other cues, the
+  show's collections and chasers). `ShowTreeView::openFunction()`,
+  `FunctionManager::openFunction()`.
+- **Import chaser… shows a sheet** instead of a message box with the
+  detail folded away (`ImportSheet`): **Plays the same** (a new
+  same-output check on every import, `ShowTreeController::importDifferences()`,
+  `ImportReport::differChannels` / `differCues`), what each step became
+  (a row per cue: layers, ▣ functions, includes, ≈ mix), what plays as it
+  is and why (once per function, ×n), two scenes on one group, mixes and
+  notes, and **Undo import** / **Done**.
+- **The import offers to fire the new cue list** from what fires the
+  chaser now -- VC buttons, VC Cue Lists, VC sliders, the main cue list and
+  its cue-list number -- ticked, in the import's own undo step
+  (`ShowTreeController::attachToLastStep()`; the full *Import in place* is
+  W5).
 - **Twelve more Matrix effects** (`resources/effectscripts/matrix-*.js`):
   Fire, Starfield, Spiral, Lissajous, Kaleidoscope, Bouncing Balls,
   Fireworks, Scanner, Dissolve, Gradient Sweep, Box VU and Image. Pure
@@ -136,6 +156,20 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **An imported chaser of raw scenes plays as the chaser did.** QLC+
+  blends a scene step from the scene before it; the cue list's steps are
+  Collections, which never blended, so a chase of scenes with their own
+  fades, stepping faster than they fade, ran at half the level in the list
+  (Sample.qxw's *Group* and *Par chasers*: 201 channels differed). A Show
+  Tree cue that plays just one scene as it is now blends as that scene did
+  (`ChaserRunner::blendScene()`); the stock sample imports with 0 channels
+  different, tick for tick.
+- **An imported chaser's cue-list number** is no longer copied onto the new
+  list's chaser (two chasers answered to it); it moves with the re-point.
+- **The look-ahead's static output** (`CueOutput`, move in black) scales a
+  dimmerless fixture's colour by the look's dimmer, as the scene plays it.
+- **No more "Functions tab"**: the Programming tab's placeholder and the
+  Programming guide send you to **Window → Functions**.
 - **Back, then GO, keeps the colours the cues set.** Going Back (or jumping
   to a cue) played the cue's own layers but left everything else as the
   cue played before it had it: a fixture the cue leaves dark, or lights with

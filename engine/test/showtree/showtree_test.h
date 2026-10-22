@@ -84,6 +84,12 @@ private slots:
     void importARealShow();
     void importAnIncludeBrighterThanTheCuesOwnMixes();
     void dryRunUsesTheShowsOwnDefinitions();
+    // W0: the import report's own check; raw scenes blend as in the
+    // chaser; the stock sample; something outside the tree in an undo step
+    void importChecksTheOutput();
+    void importedRawScenesBlendAsTheChaserDid();
+    void importTheSampleShow();
+    void anUndoStepCarriesWhatItChangedOutside();
 
     // P2: tracking in the tab, D22/D23, the Library's list usage, the
     // command line
@@ -188,6 +194,7 @@ private:
         int lists = 0, cues = 0;
         int differ = 0;             //!< channels, imported vs the chaser, all cues
         int convertedDiffer = 0;    //!< channels, converted vs imported
+        int staticDiffer = 0;       //!< channels, the import report's own check (W0)
         int showDefinitions = 0;    //!< fixture definitions used from the show
         QList<Played> played;
         QStringList mixedIncludes;
