@@ -20,6 +20,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   same switch, ticked while it is on: **Control ▸ Auto Move in Black**.
   See [Build](build.md#layout).
 
+- **Group tools in the Show Tree's Library.** Right-click a group (or
+  several) in the Library for **Select all similar**: every group in the
+  same folder made of the same fixtures and heads. **Make set…** is right
+  below, to keep them as a group set. **Move to folder ▸** lists the
+  folders in use, *no folder* and **New Folder…**. See
+  [Group sets](show-tree.md#group-sets) and [The Library](show-tree.md#the-library).
+
 - **Icons that say what a row is.** In Build (the outline and the
   Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
   look is a small pie filled to its level (a 45 % look is 45 % lit); a

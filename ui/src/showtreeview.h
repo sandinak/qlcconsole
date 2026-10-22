@@ -135,6 +135,15 @@ public:
     /** Make set (§1): the groups and fixtures selected in the Library as a
      *  group set named @a name. Invalid: nothing selected. */
     quint32 makeSetFromLibrary(const QString &name);
+    /** Select All Similar: every group in the Library like one selected
+     *  there (FixtureManager::similarGroups: same folder, same fixtures,
+     *  as many heads) -- selected, ready for Make set. Returns how many
+     *  groups are selected. */
+    int selectSimilarLibraryGroups();
+    /** Move to folder: file the groups selected in the Library in group
+     *  folder @a path ("" = none) -- reloaded with them still selected.
+     *  Returns how many moved. */
+    int moveLibraryGroupsToFolder(const QString &path);
     /** MIME type of group sets dragged from the Library (a stream of ids). */
     static const char *setMimeType();
     /** MIME type of stage targets (points, areas, lines) dragged from the
@@ -609,6 +618,11 @@ private slots:
     void reloadLibrary();
 
 private:
+    /** The groups selected in the Library, in order, each once. */
+    QList<quint32> selectedLibraryGroups() const;
+    /** Select (only) the Library's rows of @a groupIds, their folders
+     *  opened, the first scrolled to. Returns how many groups. */
+    int selectLibraryGroups(const QList<quint32> &groupIds);
     void buildTree();
     void updateInspector();
     void updateButtons();

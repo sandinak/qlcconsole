@@ -65,6 +65,7 @@
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "fixturegroupsource.h"
+#include "fixturemanager.h"
 #include "functionstreewidget.h"
 #include "linespreadpreview.h"
 #include "lineplanview.h"
@@ -4489,6 +4490,64 @@ quint32 ShowTreeView::makeSetFromLibrary(const QString &name)
     return id;
 }
 
+QList<quint32> ShowTreeView::selectedLibraryGroups() const
+{
+    QList<quint32> groups;
+    for (QTreeWidgetItem *item : m_library->selectedItems())
+        if (item->data(0, KindRole).toInt() == LibGroup && !groups.contains(item->data(0, IdRole).toUInt()))
+            groups << item->data(0, IdRole).toUInt();
+    return groups;
+}
+
+int ShowTreeView::selectLibraryGroups(const QList<quint32> &groupIds)
+{
+    QTreeWidgetItem *first = nullptr;
+    QSet<quint32> found;
+    m_library->clearSelection();
+    for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        if (row->data(0, KindRole).toInt() != LibGroup || !groupIds.contains(row->data(0, IdRole).toUInt()))
+            continue;
+        row->setSelected(true);
+        found.insert(row->data(0, IdRole).toUInt());
+        for (QTreeWidgetItem *p = row->parent(); p != nullptr; p = p->parent())
+            p->setExpanded(true);
+        if (first == nullptr)
+            first = row;
+    }
+    if (first != nullptr)
+    {
+        m_library->setCurrentItem(first, 0, QItemSelectionModel::NoUpdate);
+        m_library->scrollToItem(first);
+    }
+    return int(found.count());
+}
+
+int ShowTreeView::selectSimilarLibraryGroups()
+{
+    const QList<quint32> like = selectedLibraryGroups();
+    if (like.isEmpty())
+        return 0;
+    const int n = selectLibraryGroups(FixtureManager::similarGroups(m_doc, like));
+    // What to do with them: a group set (Make set), offered next.
+    m_hint->setText(n > 1 ? tr("%1 similar groups selected: right-click → Make set… to keep them as a group set")
+                                .arg(n)
+                          : tr("No other group like it (same folder, same fixtures, as many heads)"));
+    return n;
+}
+
+int ShowTreeView::moveLibraryGroupsToFolder(const QString &path)
+{
+    const QList<quint32> groups = selectedLibraryGroups();
+    const int moved = FixtureManager::moveGroupsToFolder(m_doc, groups, path);
+    // Reloaded now, not on the next turn, so they stay selected where they went.
+    m_libraryTimer->stop();
+    reloadLibrary();
+    selectLibraryGroups(groups);
+    return moved;
+}
+
 const char *ShowTreeView::targetMimeType()
 {
     return "application/x-qlcconsole-showtree-stagetargets";
@@ -7163,6 +7222,18 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         else if (k == LibFixture && !selFixtures.contains(sid))
             selFixtures << sid;
     }
+    if (kind == LibGroup)
+    {
+        // Select All Similar (as in the Fixture Manager and Build): the
+        // groups like these, selected -- for Make set, right below.
+        menu.addSeparator();
+        QAction *similar = menu.addAction(tr("Select all similar"), this, [this]() {
+            selectSimilarLibraryGroups();
+        });
+        similar->setObjectName("stSelectSimilarGroups");
+        similar->setToolTip(tr("Every group in the same folder made of the same fixtures (as many of each "
+                               "kind) and as many heads -- then Make set… for a group set of them"));
+    }
     if (kind == LibGroup || kind == LibFixture || kind == LibSet)
     {
         QAction *make = menu.addAction(tr("Make set…"), this, [this]() {
@@ -7176,6 +7247,24 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         make->setObjectName("stMakeSet");
         make->setToolTip(tr("A named set of the groups selected (⌘-click several), reusable by name "
                             "in any cue"));
+    }
+    if (kind == LibGroup && !selGroups.isEmpty())
+    {
+        // Move to folder (the Fixture Manager's folders): each folder in
+        // use, none, or New Folder… -- the groups stay selected.
+        QMenu *move = menu.addMenu(QIcon(":/folder.png"), selGroups.count() > 1
+                                       ? tr("Move %1 groups to folder").arg(selGroups.count())
+                                       : tr("Move to folder"));
+        move->setObjectName("stMoveGroupsToFolder");
+        FixtureManager::fillMoveToFolderMenu(move, m_doc, selGroups);
+        connect(move, &QMenu::triggered, this, [this, selGroups](QAction *chosen) {
+            if (!FixtureManager::applyMoveToFolder(this, m_doc, selGroups, chosen))
+                return;
+            m_libraryTimer->stop();
+            reloadLibrary();
+            selectLibraryGroups(selGroups);
+        });
+        menu.addSeparator();
     }
     if (kind == LibSet)
     {

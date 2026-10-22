@@ -533,6 +533,10 @@ cue, list or production: *Towers* = *SL* + *SR*.
 - **Make one:** in the Library, select the groups (⌘-click), right-click →
   **Make set…**, and name it. Or type `set "Towers" SL SR`. It shows under
   **All → Group sets**, as *"Towers (SL + SR)"*.
+- **Groups that are alike:** right-click a group → **Select all similar**
+  selects every group in the same folder made of the same fixtures (as
+  many of each kind) and as many heads: all the truss tops, say, but not
+  their RGB-only groups. **Make set…** is right below it on the same menu.
 - **Use it** as a group: drag it onto a cue for one layer on the whole set,
   or type its name (`Towers dimmer 45`). With **⌥**, you get a layer per
   member instead. Onto a layer, it joins it.
@@ -1275,7 +1279,11 @@ again what it opened.
   - **Group sets** ([Group sets](#group-sets)): right-click groups → **Make set…**;
   - **Reusable**: the [reusable layers and cues](#reusable-layers-and-cues),
     each with how many use it (hover: *Used by*);
-  - **Groups**, in the Fixture Manager's folders;
+  - **Groups**, in the Fixture Manager's folders. Right-click one (or
+    several) for **Select all similar**, **Make set…** and **Move to
+    folder ▸**: the folders in use, *no folder*, or **New Folder…** (made
+    inside the one they are in). They stay selected where they land. The
+    Fixture Manager uses the same folders;
   - **Palettes**, by type with your folders under each, or folders first
     ([Palettes in the Library](#palettes-in-the-library));
   - **Functions (played as they are)**: not chasers, and not what the tree
