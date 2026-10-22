@@ -42,7 +42,10 @@ Three panes:
   the canvas, with the show controls in the status bar, or the tab in a
   window of its own): **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
-  **Move in black** (mark, unmark, auto move-in-black and its lead time),
+  **Move in black** (mark, unmark, auto move-in-black and its lead time;
+  the auto switch and lead time are the show's, the same as the Show Tree's
+  **MIB** button and Settings → Show Tree — see
+  [Move in black](show-tree.md#move-in-black)),
   **Beat** (internal beat on, BPM, speed masters — the button reads the
   tempo) and **More** (snapshot live output, jog speed) as drop-downs.
   In a narrow window, what doesn't fit is under **»**.

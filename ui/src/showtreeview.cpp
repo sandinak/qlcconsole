@@ -61,6 +61,7 @@
 #include <algorithm>
 
 #include "mainbar.h"
+#include "moveinblackbutton.h"
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "fixturegroupsource.h"
@@ -892,6 +893,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_previewLabel->setObjectName("stPreview");
     bar->addWidget(m_previewLabel);
     headerRow->addWidget(bar, 1);
+    // Auto move-in-black: the show's one setting (Programming's Move in
+    // black menu and Settings show it too). Beside the bar, not in it, so a
+    // narrow window never folds it into » -- in the top bar it sits by the
+    // show controls, where an operator running cues looks.
+    m_moveInBlack = new MoveInBlackButton(m_doc, header);
+    headerRow->addSpacing(6);
+    headerRow->addWidget(m_moveInBlack);
     headerRow->addSpacing(12);
     m_hint = new DropHintLabel(header);
     m_hint->setObjectName("stDropHint");
