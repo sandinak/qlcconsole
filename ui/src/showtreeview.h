@@ -209,6 +209,12 @@ public:
      *  timelines, show control) fires the list; one undo step. What
      *  happened, a line each. */
     QStringList importInPlace(quint32 chaserId);
+    /** Send to Show Tree… (Build, on a chaser): Import in place of
+     *  @a chaserId through the import sheet (over @a parent), which also
+     *  offers "Done, show it in the Show Tree" -- this tab, the new list
+     *  selected. False: not sent (ShowTreeController::whyNotSend), or the
+     *  import undone. */
+    bool sendToShowTree(quint32 chaserId, QWidget *parent = nullptr);
     /** W5: Restore original for list @a listId: asks, then the list leaves
      *  the tree, the originals go back to their folders and what fires the
      *  list fires the chaser again; one undo step. */
@@ -537,6 +543,8 @@ public slots:
     /** Import a chaser as a cue list (§7): shows the report, a sheet
      *  (W0) that also offers to fire the list from what fires the chaser. */
     void importChaser(quint32 chaserId, bool showReport = true);
+    /** This tab forward (and its window), the tree focused. */
+    void bringForward();
 
 protected:
     void showEvent(QShowEvent *ev) override;

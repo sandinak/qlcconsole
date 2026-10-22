@@ -13,6 +13,24 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Send to Show Tree… in Build.** A loaded chaser's Workbench header and a
+  chaser row's right-click in Build ▸ Scenes (Folders and Classic) run the
+  Show Tree's Import in place for that chaser through the same import
+  sheet, which adds **Done, show it in the Show Tree** (to the new list's
+  tab). Greyed with the reason for a chaser the tree made or one already
+  sent (`ShowTreeController::whyNotSend`).
+- **The import tracks what the steps repeat.** The same function in
+  consecutive steps (a nested `0.0.0-base` collection's members, a shared
+  scene or EFX), or an include of what the cue before already plays, is set
+  in the first cue and tracks through the rest; the last cue where it
+  appears releases it, and after a gap it is set again. Cue by cue, kept
+  only where every cue plays exactly what it did (stage + generated scenes,
+  as Convert checks), else the cue stays Block; the list is Tracking when
+  any cue tracks, the first cue Block. The sheet has a **Set once, then
+  tracking** section and ⤳ / ○ marks. DanceHysteria-0.1 Full Show: 3 of 7
+  cues track, 8 layers no longer repeated; New Chaser 8: 1 tracks, 2
+  releases; Sample.qxw: nothing repeats. 0 channels differ in the DMX dry
+  run on both.
 - **Chasers in the Workbench, and Scenes ▸ Classic (WORKFLOW_DESIGN.md
   W2).** A chaser loads as a step walker (`ChaserWalker`): ◀ prev · step N ·
   next ▶, the step's fade in / hold / fade out / cue no. / note edited in

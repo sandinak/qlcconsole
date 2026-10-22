@@ -187,6 +187,14 @@ Every edit — a step's timing, note or cue number, a step added, moved or
 removed, a layer of its collection, an own copy — is one step on the shared
 history.
 
+**Send to Show Tree…** (in the header of a loaded chaser, or right-click a
+chaser's row in the navigator) makes the chaser a Show Tree cue list in
+place: the import sheet says whether it plays the same, what repeats is
+set once and tracks, and **Done, show it in the Show Tree** goes there.
+The chaser is filed under `Imported/…`; **Restore original** on the list
+puts it back. See
+[Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
+
 ### Two QLC+ habits, kept
 
 - **Set the rig, save a scene, chase the scenes, run.** In Build ▸ Scenes

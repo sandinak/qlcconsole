@@ -205,6 +205,8 @@ signals:
     void revealPaletteRequested(quint32 paletteId);
     /** Chaser from selection: @a functionIds as its steps, in @a folder. */
     void chaserRequested(const QList<quint32> &functionIds, const QString &folder);
+    /** Send to Show Tree… on a chaser row. */
+    void sendToShowTreeRequested(quint32 chaserId);
     /** Folders | Classic changed (the switch above follows). */
     void arrangementChanged(int arrangement);
 

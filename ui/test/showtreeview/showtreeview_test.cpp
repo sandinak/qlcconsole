@@ -37,6 +37,7 @@
 #include <QHeaderView>
 #include <QScrollBar>
 #include <QTextBrowser>
+#include <QTabWidget>
 #include <QListWidget>
 #include <QToolButton>
 #include <QMimeData>
@@ -72,6 +73,7 @@
 #include "vcclock.h"
 #include "showconverter.h"
 #include "importsheet.h"
+#include "programmingoutline.h"
 #include "sceneeditor.h"
 #include "efxeditor.h"
 #include "efx.h"
@@ -3790,7 +3792,14 @@ void ShowTreeView_Test::convertAndDetachFromTheListPage()
     Collection *two = new Collection(m_doc);
     two->setName("0.0.2-Two");
     m_doc->addFunction(two);
-    two->addFunction(one->id());
+    // A copy of A-Full, not A-Full itself: the import tracks only what the
+    // steps share (the same function); Convert reads the values.
+    Scene *sa2 = new Scene(m_doc);
+    sa2->setName("A-Full 2");
+    sa2->addFixtureGroup(a->id());
+    sa2->addPalette(full);
+    m_doc->addFunction(sa2);
+    two->addFunction(sa2->id());
     two->addFunction(sb->id());
     Chaser *chaser = new Chaser(m_doc);
     chaser->setName("Song");
@@ -3817,10 +3826,10 @@ void ShowTreeView_Test::convertAndDetachFromTheListPage()
         return true;
     });
     convert->click();
-    QVERIFY2(details.contains("0.0.2 Two: tracks from 0.0.1 One (its include of 0.0.1 One taken out)"),
-             qPrintable(details));
+    QVERIFY2(details.contains("0.0.2 Two: tracks from 0.0.1 One"), qPrintable(details));
+    QVERIFY2(details.contains("all of it tracks in, layer taken out"), qPrintable(details));
     QCOMPARE(st->cueList(listId)->mode, ListMode::Tracking);
-    QVERIFY(st->cueList(listId)->cues.at(1).includes.isEmpty());
+    QCOMPARE(st->cueList(listId)->cues.at(1).layers.count(), 1);
     QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("tracks now"));
     // Again: nothing more to convert, said.
     convert->click();
@@ -5226,7 +5235,8 @@ void ShowTreeView_Test::openAnOpaqueLayer()
     QCOMPARE(open->text(), QString("Open “Haze”"));
     QLabel *note = view.findChild<QLabel *>("stLayerOpenNote");
     QVERIFY(note != nullptr);
-    QVERIFY2(note->text().contains("Also in: cue 0.0.2 Towers of Full Show"), qPrintable(note->text()));
+    // Set in 0.0.1 only: 0.0.2 tracks it in (the import's tracking reading).
+    QVERIFY2(!note->text().contains("cue 0.0.2 Towers"), qPrintable(note->text()));
     QVERIFY2(note->text().contains("collection “0.0.1-Open”"), qPrintable(note->text()));
     QVERIFY(view.alsoIn(efx->id(), cue.id).contains("collection “0.0.1-Open”"));
     if (!w0Shot("layer-open.png").isEmpty())
@@ -5406,6 +5416,101 @@ void ShowTreeView_Test::theImportSheetCanUndoOrLeaveVcAlone()
         QVERIFY(st->productions().isEmpty());
         QCOMPARE(go->function(), chaser->id());
     }
+}
+
+/* Build's Send to Show Tree… on a chaser: the chaser row's right-click
+   (Undo import here) and the Workbench's header button, which runs the
+   Import in place through the sheet; "Done, show it in the Show Tree"
+   goes to the new list's tab. What repeats from step to step (Haze) is
+   set once and tracks (the sheet says so). */
+void ShowTreeView_Test::sendToShowTreeFromBuild()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
+    ShowTreeController *st = m_doc->showTree();
+
+    QTabWidget tabs;
+    ProgrammingManager *mgr = new ProgrammingManager(&tabs, m_doc);
+    ShowTreeView *view = new ShowTreeView(&tabs, m_doc);
+    tabs.addTab(mgr, "Build");
+    tabs.addTab(view, "Show Tree");
+    tabs.resize(1400, 900);
+    tabs.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabs));
+    QCOMPARE(tabs.currentWidget(), mgr);
+    mgr->setSection(ProgrammingManager::ScenesSection);
+    mgr->showFunction(chaser->id());
+
+    // The chaser row's right-click: Send to Show Tree…, then Undo import.
+    ProgrammingOutline *nav = nullptr;
+    for (ProgrammingOutline *o : mgr->findChildren<ProgrammingOutline *>())
+        if (o->mode() == ProgrammingOutline::Navigator)
+            nav = o;
+    QVERIFY(nav != nullptr);
+    ProgrammingOutline::Row row;
+    row.kind = ProgrammingOutline::FunctionRow;
+    row.id = row.scene = chaser->id();
+    QTreeWidgetItem *item = nav->itemFor(row);
+    QVERIFY(item != nullptr);
+    nav->scrollToItem(item);
+    QStringList actions;
+    bool undone = false;
+    view->setSheetRunner([&](ImportSheet *sheet) {
+        QVERIFY(sheet->findChild<QPushButton *>("stImportGoTo") != nullptr);
+        sheet->findChild<QPushButton *>("stImportUndo")->click();
+        undone = true;
+    });
+    QTimer driver;
+    driver.setInterval(20);
+    connect(&driver, &QTimer::timeout, this, [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+            return;
+        driver.stop();
+        for (QAction *a : menu->actions())
+            actions << a->objectName();
+        QAction *send = menu->findChild<QAction *>("outlineSendToTree");
+        menu->close();
+        if (send != nullptr && send->isEnabled())
+            send->trigger();
+    });
+    driver.start();
+    emit nav->customContextMenuRequested(nav->visualItemRect(item).center());
+    QTRY_VERIFY(undone);
+    QVERIFY2(actions.contains("outlineSendToTree"), qPrintable(actions.join(", ")));
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(tabs.currentWidget(), mgr);
+
+    // The Workbench's header button, "Done, show it in the Show Tree".
+    mgr->showFunction(chaser->id());
+    QToolButton *send = mgr->findChild<QToolButton *>("workbenchSendToTree");
+    QVERIFY(send != nullptr);
+    QVERIFY(send->isVisible());
+    QString text;
+    view->setSheetRunner([&](ImportSheet *sheet) {
+        text = sheet->text();
+        QVERIFY(sheet->fileBox()->isChecked());
+        sheet->findChild<QPushButton *>("stImportGoTo")->click();
+        QVERIFY(sheet->goToAsked());
+    });
+    send->click();
+    for (const QString &want : { QString("Plays the same"), QString("0 channels differ"),
+                                 QString("Set once, then tracking"), QString("tracks in: Haze") })
+        QVERIFY2(text.contains(want), qPrintable(want + " not in:\n" + text));
+    QCOMPARE(st->productions().count(), 1);
+    const CueList *list = &st->productions().first().lists.first();
+    QVERIFY(list->inPlace);
+    QCOMPARE(list->mode, ListMode::Tracking);
+    QVERIFY(list->cues[1].layers.isEmpty() || !list->cues[1].layers.first().target.isOpaque()
+            || list->cues[1].layers.first().target.function != haze->id());
+    QVERIFY(chaser->path(true).startsWith("Imported/"));
+    QCOMPARE(tabs.currentWidget(), view);
+    // Sent: not offered again.
+    QVERIFY(!st->whyNotSend(chaser->id()).isEmpty());
+    QVERIFY(send->isHidden());
 }
 
 /****************************************************************************
@@ -5619,7 +5724,8 @@ void ShowTreeView_Test::captureFromTheOpaqueRow()
     QVERIFY(cap->isEnabled());
     cap->click();
     QVERIFY2(details.contains("Dimmer"), qPrintable(details));
-    QVERIFY(details.contains("Where: Full Show 0.0.1 Open, Full Show 0.0.2 Towers"));
+    QVERIFY2(details.contains("Where: Full Show 0.0.1 Open"), qPrintable(details));
+    QVERIFY(!details.contains("0.0.2 Towers"));     // it tracks in there
     const CueList &list = m_doc->showTree()->productions().first().lists.first();
     for (const Cue &c : list.cues)
         for (const Layer &l : c.layers)

@@ -944,6 +944,16 @@ public:
          *  the Show timelines that played the chaser and play the list now. */
         int filed = 0;
         QStringList timelines;
+        /** The same function (a scene, a nested collection's member, an
+         *  effect) or the cue before's collection in consecutive steps: set
+         *  in the first cue, tracked through the rest, released where it
+         *  stops (trackRepeats). Cues that track, layers and includes no
+         *  longer repeated, releases made; one line per cue that tracks. */
+        int trackingCues = 0;
+        int trackedLayers = 0;
+        int trackedIncludes = 0;
+        int trackReleases = 0;
+        QStringList trackNotes;
     };
 
     /** Import @a chaserId as a cue list in a new production (D12): each
@@ -981,6 +991,16 @@ private:
      *  same-output check not yet run. False: not a chaser. */
     bool buildImport(quint32 chaserId, ShowTree::CueList *list, ImportReport *report,
                      const std::function<quint32()> &nextId) const;
+    /** The import's tracking reading: a layer made from the same function
+     *  (@a origin: layer id -> function) as one the cue before puts on
+     *  stage, or an include of what the cue before already plays, is set
+     *  only where it starts and tracks on; what the cue before plays that
+     *  this cue doesn't is released there. Cue by cue, each kept only
+     *  where every cue still plays exactly what it did (else the cue
+     *  stays Block and repeats it). The list is made Tracking when any
+     *  cue tracks; the first cue stays Block. */
+    void trackRepeats(ShowTree::CueList &list, const QHash<quint32, quint32> &origin, ImportReport &report,
+                      const std::function<quint32()> &nextId) const;
 
     /************************************************************************
      * The bridge (W5): an old show into the tree -- and back
@@ -1006,6 +1026,10 @@ public:
     /** The chasers an old show could convert: its own (not the tree's, not
      *  already imported in place), by name. */
     QList<quint32> convertibleChasers() const;
+    /** Why chaser @a chaserId can't be sent to the Show Tree (Build's Send
+     *  to Show Tree…): not a chaser, the tree's own, or imported in place
+     *  already. Empty: it can. */
+    QString whyNotSend(quint32 chaserId) const;
     /** What Import would make of @a chaserId, without changing anything:
      *  the report with its same-output check (and the list, @a list). */
     ImportReport planImport(quint32 chaserId, ShowTree::CueList *list = nullptr) const;

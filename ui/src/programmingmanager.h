@@ -78,6 +78,10 @@ public:
      *  navigator would (and select it there). Public entry for external
      *  navigation / automated screenshots. */
     void showFunction(quint32 fid);
+    /** Send to Show Tree… on chaser @a chaserId (the Workbench's header
+     *  button, a chaser row's right-click): the Show Tree's Import in
+     *  place, its sheet offering to go there. Whether it was sent. */
+    bool sendToShowTree(quint32 chaserId);
 
     /** The Workbench (W3 docks this same widget in the Show Tree). */
     Workbench *workbench() const { return m_workbench; }

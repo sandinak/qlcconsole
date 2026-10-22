@@ -153,6 +153,8 @@ signals:
     void revealPaletteRequested(quint32 paletteId);
     /** "How this works". */
     void guideRequested();
+    /** Send to Show Tree… on a loaded chaser (its header button). */
+    void sendToShowTreeRequested(quint32 chaserId);
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -318,6 +320,7 @@ private:
 
     QPointer<QWidget> m_stackWidget;
     QToolButton *m_ownCopyBtn = nullptr;
+    QToolButton *m_sendToTreeBtn = nullptr;
 };
 
 /** @} */

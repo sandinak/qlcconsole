@@ -4542,6 +4542,7 @@ bool ShowTreeController::buildImport(quint32 chaserId, CueList *listOut, ImportR
     }
 
     QSet<quint32> usedCueIds;
+    QHash<quint32, quint32> origin;             // layer -> the function it was read from
     for (int i = 0; i < steps.count(); ++i)
     {
         const ChaserStep &step = steps.at(i);
@@ -4589,6 +4590,7 @@ bool ShowTreeController::buildImport(quint32 chaserId, CueList *listOut, ImportR
             Layer l;
             l.id = newId();
             l.target.function = fn->id();
+            origin.insert(l.id, fn->id());
             cue.layers << l;
             report.opaqueLayers++;
             report.opaqueReasons << QStringLiteral("%1: %2").arg(fn->name(), why);
@@ -4603,6 +4605,7 @@ bool ShowTreeController::buildImport(quint32 chaserId, CueList *listOut, ImportR
                 if (sceneToLayer(qobject_cast<const Scene *>(fn), &l, &why))
                 {
                     l.id = newId();
+                    origin.insert(l.id, fn->id());
                     cue.layers << l;
                     report.layers++;
                 }
@@ -4827,6 +4830,9 @@ bool ShowTreeController::buildImport(quint32 chaserId, CueList *listOut, ImportR
     for (const auto &h : htp)
         if (h.first < 0 || !list.cues.at(h.first).mixOverlap)
             report.htpConflicts << h.second;
+
+    // What repeats from step to step is set once and tracks.
+    trackRepeats(list, origin, report, newId);
     return true;
 }
 

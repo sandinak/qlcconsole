@@ -4,6 +4,17 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Send a chaser to the Show Tree from Build.** Load a chaser in the
+  Workbench and click **Send to Show Tree…**, or right-click its row in
+  Build ▸ Scenes. It is the Show Tree's Import in place for that chaser,
+  with the same sheet, and **Done, show it in the Show Tree** takes you to
+  the new list. See
+  [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
+- **An imported chaser tracks what it repeats.** A collection or scene
+  that appears in several steps in a row is set in the first of those cues
+  and tracks through the rest. It is released where it stops and set again
+  where it comes back. Every cue still plays exactly what its step did. See
+  [What repeats is set once and tracks](show-tree.md#what-repeats-is-set-once-and-tracks).
 - **The effect designer.** Build an effect in detail on the heads it is
   for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
   menu of its Effect row) opens the effect browser at full height. Beside

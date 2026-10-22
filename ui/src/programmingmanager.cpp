@@ -532,6 +532,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             this, &ProgrammingManager::currentPaletteIdChanged);
     connect(m_workbench, &Workbench::guideRequested, this, &ProgrammingManager::showProgrammingGuide);
     connect(m_workbench, &Workbench::revealPaletteRequested, this, &ProgrammingManager::revealPalette);
+    connect(m_workbench, &Workbench::sendToShowTreeRequested, this, &ProgrammingManager::sendToShowTree);
     connect(m_workbench, &Workbench::paletteEdited, this, [this](quint32 id) {
         // A name or a value: the lists that show it. An auto-rename re-sorts
         // the tree; the palette is found again after it settles.
@@ -1113,7 +1114,20 @@ QLayout *ProgrammingManager::buildArrangementSwitch(QWidget *page)
     if (m_outline->arrangement() == ProgrammingOutline::Classic)
         idle(ProgrammingOutline::Classic);
     connect(m_outline, &ProgrammingOutline::chaserRequested, this, &ProgrammingManager::makeChaserFrom);
+    connect(m_outline, &ProgrammingOutline::sendToShowTreeRequested, this, &ProgrammingManager::sendToShowTree);
     return hl;
+}
+
+bool ProgrammingManager::sendToShowTree(quint32 chaserId)
+{
+    ShowTreeView *tree = ShowTreeView::instance();
+    if (tree == nullptr)
+        return false;
+    const bool sent = tree->sendToShowTree(chaserId, this);
+    // Filed under Imported/…, and no longer one to send.
+    m_outline->rebuild();
+    m_workbench->refreshAll();
+    return sent;
 }
 
 void ProgrammingManager::makeChaserFrom(const QList<quint32> &functionIds, const QString &folder)

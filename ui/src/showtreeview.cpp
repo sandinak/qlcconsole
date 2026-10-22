@@ -1773,6 +1773,12 @@ bool ShowTreeView::reveal(quint32 functionId)
         return false;
     const bool ok = layerId != invalidId() ? selectNode(layerId, cueId)
                     : cueId != invalidId() ? selectNode(cueId) : selectNode(listId);
+    bringForward();
+    return ok;
+}
+
+void ShowTreeView::bringForward()
+{
     // Forward: its tab, and the window it is in.
     for (QWidget *w = parentWidget(); w != nullptr; w = w->parentWidget())
         if (QTabWidget *tabs = qobject_cast<QTabWidget *>(w))
@@ -1788,7 +1794,6 @@ bool ShowTreeView::reveal(quint32 functionId)
         window()->activateWindow();
     }
     m_tree->setFocus(Qt::OtherFocusReason);
-    return ok;
 }
 
 quint32 ShowTreeView::detachGenerated(Doc *doc, quint32 sceneId)
@@ -5940,6 +5945,46 @@ void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
         repointToList(chaserId, rep.list);
 }
 
+bool ShowTreeView::sendToShowTree(quint32 chaserId, QWidget *parent)
+{
+    // Build's Send to Show Tree…: W5's Import in place, through the same
+    // sheet, which also offers to come here.
+    const QString why = m_st->whyNotSend(chaserId);
+    if (!why.isEmpty())
+    {
+        m_hint->setText(why);
+        return false;
+    }
+    const ShowTreeController::ImportReport rep = m_st->importChaser(chaserId);
+    if (rep.list == invalidId())
+        return false;
+    selectNode(rep.list);
+    ImportSheet sheet(m_doc, rep, chaserId, parent != nullptr ? parent : this);
+    sheet.offerShowTree();
+    if (m_sheetRunner)
+        m_sheetRunner(&sheet);
+    else
+        sheet.exec();
+    if (sheet.undoAsked())
+    {
+        m_st->undo();
+        m_hint->setText(tr("Import undone: the show is as it was"));
+        return false;
+    }
+    if (sheet.fileOriginals())
+        m_st->fileOriginals(rep.list);
+    if (sheet.repoint())
+        repointToList(chaserId, rep.list);
+    const CueList *list = m_st->cueList(rep.list);
+    m_hint->setText(tr("%1 is a Show Tree cue list now").arg(list == nullptr ? QString() : list->name));
+    if (sheet.goToAsked())
+    {
+        selectNode(rep.list);
+        bringForward();
+    }
+    return true;
+}
+
 int ShowTreeView::repointToList(quint32 chaserId, quint32 listId)
 {
     const CueList *list = m_st->cueList(listId);
@@ -6029,6 +6074,9 @@ QStringList ShowTreeView::importInPlace(quint32 chaserId)
                                               : tr("%n channel(s) differ", "", rep.differChannels));
     if (rep.dropped + rep.flattened > 0)
         out << tr("%1: %n nested collection(s) read into the cues.", "", rep.dropped + rep.flattened).arg(name);
+    if (rep.trackingCues > 0)
+        out << tr("%1: %n cue(s) track what the steps repeated (%2 layer(s) set once).", "", rep.trackingCues)
+               .arg(name).arg(rep.trackedLayers + rep.trackedIncludes);
     if (rep.filed > 0)
         out << tr("%1: %n original(s) filed under %2.", "", rep.filed)
                .arg(name, ShowTreeController::originalsFolder(name));

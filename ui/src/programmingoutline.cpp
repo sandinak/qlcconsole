@@ -1992,6 +1992,20 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         menu.addAction(QIcon(QStringLiteral(":/chaser.png")), tr("Chaser from selection"), this,
                        [this, ordered, folder]() { emit chaserRequested(ordered, folder); })
             ->setToolTip(tr("A new chaser with these as its steps, in the order you selected them"));
+        // A chaser: make it a Show Tree cue list in place (W5's Import).
+        const Function *one = scenes.size() == 1 && m_doc != nullptr ? m_doc->function(scenes.first()) : nullptr;
+        if (one != nullptr && one->type() == Function::ChaserType)
+        {
+            const quint32 chaserId = one->id();
+            const QString why = m_doc->showTree()->whyNotSend(chaserId);
+            QAction *send = menu.addAction(tr("Send to Show Tree…"), this,
+                                           [this, chaserId]() { emit sendToShowTreeRequested(chaserId); });
+            send->setObjectName(QStringLiteral("outlineSendToTree"));
+            send->setEnabled(why.isEmpty());
+            send->setToolTip(why.isEmpty() ? tr("Make this chaser a Show Tree cue list in place, checked to play "
+                                                "the same; Restore original puts it back")
+                                           : why);
+        }
         menu.addSeparator();
     }
     if (at.kind == FolderRow)

@@ -91,6 +91,10 @@ public:
     QCheckBox *fileBox() const { return m_file; }
     /** Undo import was pressed. */
     bool undoAsked() const { return m_undo; }
+    /** Send to Show Tree (from Build): a third button, "Done, show it in
+     *  the Show Tree", the default; goToAsked() when it was pressed. */
+    void offerShowTree();
+    bool goToAsked() const { return m_goTo && !m_undo; }
     /** The sheet as text (tests). */
     QString text() const;
 
@@ -107,6 +111,8 @@ private:
     QCheckBox *m_repoint = nullptr;
     QCheckBox *m_file = nullptr;
     bool m_undo = false;
+    bool m_goTo = false;
+    class QDialogButtonBox *m_buttons = nullptr;
 };
 
 /** @} */
