@@ -30,6 +30,7 @@ class QToolButton;
 class QPushButton;
 class QLineEdit;
 class QLabel;
+class NoteEdit;
 
 /** @addtogroup ui_functions
  * @{
@@ -44,7 +45,8 @@ class QLabel;
  *   place (the Chaser editor's columns, its timing modes);
  * - "also in N" when the step's function plays elsewhere too, with *Make
  *   this step's own copy*;
- * - the step table: click a step to walk to it; drag scenes onto it to add
+ * - the step table: click a step to walk to it; double-click its note to
+ *   type in it there; drag scenes onto it to add
  *   steps; + Step, ▲ ▼, Remove.
  *
  * It sits under the Workbench's header; the step's layers are the rows
@@ -72,7 +74,8 @@ protected:
 private:
     void buildTable();
     void commitTime(int which, const QString &text);
-    void commitText(int which, const QString &text);
+    /** Step @a step's (-1: the one walked to) cue number or note. */
+    void commitText(int which, const QString &text, int step = -1);
     void addStepsPicked();
     void scheduleRefresh();
 
@@ -84,7 +87,7 @@ private:
     QLineEdit *m_hold = nullptr;
     QLineEdit *m_fadeOut = nullptr;
     QLineEdit *m_cue = nullptr;
-    QLineEdit *m_note = nullptr;
+    NoteEdit *m_note = nullptr;
     QLabel *m_shared = nullptr;
     QPushButton *m_ownCopy = nullptr;
     QPushButton *m_openStep = nullptr;

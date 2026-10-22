@@ -162,6 +162,7 @@ add_library(${module_name}
     linespreadpreview.cpp linespreadpreview.h
     lineplanview.cpp lineplanview.h
     networktopologydialog.cpp networktopologydialog.h
+    noteedit.cpp noteedit.h
     patchinventorydialog.cpp patchinventorydialog.h
     helpbrowser.cpp helpbrowser.h
     helpshots.cpp helpshots.h

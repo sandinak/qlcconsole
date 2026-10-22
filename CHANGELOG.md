@@ -36,6 +36,16 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   (`ui/src/treecuestack.*`; the engine already has a Simple Desk
   `CueStack`), the dock in `ui/src/showtreeworkbench.cpp`; new
   `showtreeworkbench_test`. No file format change.
+- **Notes open up while they are typed.** A shared `NoteEdit` /
+  `NoteDelegate` (`ui/src/noteedit.*`) for a chaser step's note -- the W2
+  walker's header and step table (double-click the note), the Chaser
+  editor's Notes column -- and the Show Tree cue note: word-wrapping, it
+  grows to fit as you type (up to 6 lines; a cell's editor floats over the
+  rows below, wider than the cell where there is room). Return commits,
+  Shift+Return / ⌥Return inserts a new line (notes keep new lines in the
+  .qxw), Esc reverts. Closed up it is one line, elided (new lines as ⏎),
+  the whole note in the tooltip. Commits go through the same paths as
+  before, so undo is unchanged (one step per commit).
 - **Chasers in the Workbench, and Scenes ▸ Classic (WORKFLOW_DESIGN.md
   W2).** A chaser loads as a step walker (`ChaserWalker`): ◀ prev · step N ·
   next ▶, the step's fade in / hold / fade out / cue no. / note edited in

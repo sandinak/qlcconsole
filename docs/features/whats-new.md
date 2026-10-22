@@ -4,6 +4,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Notes open up while you type.** A chaser step's note -- in the
+  Workbench's step header and step table, the Chaser editor's **Notes**
+  column -- and a Show Tree cue's note now word-wrap and grow as you type,
+  up to six lines, so you can read back what you wrote. **Return** applies
+  it, **Shift+Return** starts a new line, **Esc** puts it back. Closed up,
+  a long note is cut short with *…*; hover it to read all of it. See
+  [Walking a chaser](build.md#walking-a-chaser).
 - **The effect designer.** Build an effect in detail on the heads it is
   for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
   menu of its Effect row) opens the effect browser at full height. Beside

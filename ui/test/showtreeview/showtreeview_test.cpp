@@ -54,6 +54,7 @@
 #include "functionliveeditdialog.h"
 #include "functionmanager.h"
 #include "chasereditor.h"
+#include "noteedit.h"
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPushButton>
@@ -639,6 +640,33 @@ void ShowTreeView_Test::cueFieldsEditTheCue()
     // The collection it plays is renamed with it.
     const Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(c1)->collection));
     QCOMPARE(coll->name(), QString("1-Opener"));
+
+    // The note opens up while typed in: Shift+Return a new line, Return
+    // commits (one undo step), Esc puts it back.
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    NoteEdit *note = view.findChild<NoteEdit *>("stCueNote");
+    QVERIFY(note != nullptr);
+    const int closed = note->height();
+    note->setFocus(Qt::MouseFocusReason);
+    QVERIFY(note->isExpanded());
+    QTest::keyClicks(note, "House to half");
+    QTest::keyClick(note, Qt::Key_Return, Qt::ShiftModifier);
+    QTest::keyClicks(note, "then out");
+    QVERIFY(note->height() > closed);
+    QCOMPARE(st->cue(c1)->note, QString());
+    QTest::keyClick(note, Qt::Key_Return);
+    QCOMPARE(st->cue(c1)->note, QString("House to half\nthen out"));
+    QCOMPARE(note->height(), closed);
+    note->setFocus(Qt::MouseFocusReason);
+    QTest::keyClicks(note, " nope");
+    QTest::keyClick(note, Qt::Key_Escape);
+    QCOMPARE(note->text(), QString("House to half\nthen out"));
+    QCOMPARE(st->cue(c1)->note, QString("House to half\nthen out"));
+    view.slotUndo();
+    QCOMPARE(st->cue(c1)->note, QString());
 }
 
 void ShowTreeView_Test::undoAndRedoFromTheView()

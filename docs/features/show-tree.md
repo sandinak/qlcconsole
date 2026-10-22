@@ -90,7 +90,9 @@ from the Library lands in the tree right beside it.
     fade in / out, hold, its **sub-cues** (and + Sub-cue), cue looks, every
     layer on stage in it, a dashed drop area, and *Next cue receives*. A
     **sub-cue** shows **Advance** (Sub GO, or Auto-follow after a wait) in
-    place of the mode, base, includes and hold.
+    place of the mode, base, includes and hold. The **note** opens up
+    while you type in it: Return applies it, Shift+Return starts a new
+    line, Esc puts it back.
   - **A layer** shows what it contains, then one row per attribute.
   - **A look** shows its name, note, *Fired by* (the VC buttons, **Make VC
     page**, **Move to folder…**), its looks and layers; **Looks** or a
