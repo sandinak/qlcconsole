@@ -278,6 +278,7 @@ ImportSheet::ImportSheet(Doc *doc, const ShowTreeController::ImportReport &repor
     }
 
     QDialogButtonBox *buttons = new QDialogButtonBox(this);
+    m_buttons = buttons;
     QPushButton *undo = buttons->addButton(tr("Undo import"), QDialogButtonBox::DestructiveRole);
     undo->setObjectName(QStringLiteral("stImportUndo"));
     connect(undo, &QPushButton::clicked, this, [this]() {
@@ -289,6 +290,20 @@ ImportSheet::ImportSheet(Doc *doc, const ShowTreeController::ImportReport &repor
     done->setDefault(true);
     connect(done, &QPushButton::clicked, this, &QDialog::accept);
     root->addWidget(buttons);
+}
+
+void ImportSheet::offerShowTree()
+{
+    if (findChild<QPushButton *>(QStringLiteral("stImportGoTo")) != nullptr)
+        return;
+    QPushButton *go = m_buttons->addButton(tr("Done, show it in the Show Tree"), QDialogButtonBox::AcceptRole);
+    go->setObjectName(QStringLiteral("stImportGoTo"));
+    go->setToolTip(tr("Keep the import and go to the new cue list in the Show Tree tab"));
+    go->setDefault(true);
+    connect(go, &QPushButton::clicked, this, [this]() {
+        m_goTo = true;
+        accept();
+    });
 }
 
 bool ImportSheet::fileOriginals() const
@@ -330,15 +345,20 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
         return h;
     }
     const Production *prod = st->production(rep.production);
+    const bool tracks = list->mode == ListMode::Tracking;
+    const QString how = tracks
+            ? tr("Tracking: what repeats from step to step is set in the cue where it starts and tracks on, "
+                 "so each cue plays what its step played.")
+            : tr("Non-tracking, so each cue plays what its step played.");
     if (planned)
         h += QStringLiteral("<p>%1</p>").arg(esc(
-            tr("A new production, %1, with the cue list %2: %n cue(s), Non-tracking, so each cue plays what its "
-               "step played.", "", rep.cues).arg(chaser, list->name)));
+            tr("A new production, %1, with the cue list %2: %n cue(s).", "", rep.cues).arg(chaser, list->name)
+            + QLatin1Char(' ') + how));
     else
         h += QStringLiteral("<p>%1</p>").arg(esc(
-            tr("A new production, %1, with the cue list %2: %n cue(s), Non-tracking, so each cue plays what its "
-               "step played. The chaser itself is unchanged.", "", rep.cues)
-            .arg(prod == nullptr ? chaser : prod->name, list->name)));
+            tr("A new production, %1, with the cue list %2: %n cue(s).", "", rep.cues)
+            .arg(prod == nullptr ? chaser : prod->name, list->name)
+            + QLatin1Char(' ') + how + QLatin1Char(' ') + tr("The chaser itself is unchanged.")));
 
     // Plays the same?
     h += QStringLiteral("<h3>%1</h3>").arg(esc(tr("Plays the same")));
@@ -378,11 +398,14 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
         QStringList layers, opaque;
         for (const Layer &l : c.layers)
         {
+            const QString released = l.release ? QStringLiteral(" ○") : QString();
             if (l.target.isOpaque())
-                opaque << QStringLiteral("▣ ") + st->targetLabel(l.target);
+                opaque << QStringLiteral("▣ ") + st->targetLabel(l.target) + released;
             else
-                layers << (l.name.isEmpty() ? st->targetLabel(l.target) : l.name);
+                layers << (l.name.isEmpty() ? st->targetLabel(l.target) : l.name) + released;
         }
+        if (tracks && i > 0 && c.mode != CueMode::Block)
+            layers.prepend(QStringLiteral("⤳"));
         for (quint32 inc : c.includes)
             opaque << tr("includes %1").arg(st->cueLabel(*list, list->indexOf(inc)));
         QString label = st->cueLabel(*list, i);
@@ -398,6 +421,21 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
         h += QStringLiteral("<p><small>%1</small></p>").arg(esc(
             tr("▣ plays a function as it is: select it in the tree and Open (or double-click it) to edit it in "
                "its own editor. ≈ the cue mixes overlapping layers, as the chaser did.")));
+    if (tracks)
+        h += QStringLiteral("<p><small>%1</small></p>").arg(esc(
+            tr("⤳ the cue tracks: it starts from the cue before and lists only what it sets. ○ the layer is "
+               "released when its cue ends (the next step doesn't play it).")));
+
+    // Set once, then tracking.
+    if (!rep.trackNotes.isEmpty())
+    {
+        h += QStringLiteral("<h3>%1</h3><p>%2</p><ul>").arg(esc(tr("Set once, then tracking")), esc(
+            tr("%n cue(s) track: %1 layer(s) and %2 include(s) the steps repeated are set once, %3 release(s).",
+               "", rep.trackingCues).arg(rep.trackedLayers).arg(rep.trackedIncludes).arg(rep.trackReleases)));
+        for (const QString &s : rep.trackNotes)
+            h += QStringLiteral("<li>%1</li>").arg(esc(s));
+        h += QStringLiteral("</ul>");
+    }
 
     // W5: collections inside a step that are no step themselves.
     if (!rep.flattenNotes.isEmpty())

@@ -1578,16 +1578,28 @@ void ShowTree_Test::importReadsScenesIncludesAndOpaqueFunctions()
 
     const CueList *list = st->cueList(rep.list);
     QVERIFY(list != nullptr);
-    QCOMPARE(list->mode, ListMode::NonTracking);
+    // What repeats from step to step is set once and tracks: 0.0.2's
+    // include of 0.0.1 and Three's TowersA (USTsB released in 0.0.2).
+    QCOMPARE(list->mode, ListMode::Tracking);
+    QCOMPARE(rep.trackingCues, 2);
+    QCOMPARE(rep.trackedIncludes, 1);
+    QCOMPARE(rep.trackedLayers, 1);
+    QCOMPARE(rep.trackReleases, 1);
+    QCOMPARE(list->cues[0].mode, CueMode::Block);
+    QCOMPARE(list->cues[1].mode, CueMode::ListDefault);
+    QCOMPARE(rep.differChannels, 0);
     QCOMPARE(st->production(rep.production)->name, QString("Full Show"));
     QCOMPARE(list->cues[0].number, QString("0.0.1"));
     QCOMPARE(list->cues[0].name, QString("One"));
     QCOMPARE(list->cues[0].note, QString("After setup"));
     QCOMPARE(list->cues[0].fadeIn, 1000u);
     QCOMPARE(list->cues[0].fadeOut, 500u);
-    QCOMPARE(list->cues[1].includes, QList<quint32>({ list->cues[0].id }));
+    QVERIFY(list->cues[1].includes.isEmpty());
+    QCOMPARE(list->cues[1].layers.count(), 1);
+    QVERIFY(list->cues[1].layers.first().release);
     QCOMPARE(list->cues[2].number, QString("7"));
     QCOMPARE(list->cues[2].name, QString("Three"));
+    QCOMPARE(list->cues[2].layers.count(), 1);
     QVERIFY(list->cues[2].layers.first().target.isOpaque());
     QCOMPARE(list->cues[2].layers.first().target.function, raw->id());
 
@@ -1618,6 +1630,84 @@ void ShowTree_Test::importReadsScenesIncludesAndOpaqueFunctions()
     QCOMPARE(c->goQuantize(), Chaser::GoOnBeat);
     QCOMPARE(c->stepsCount(), 3);
     QVERIFY(st->isGenerated(generatedChaser));
+}
+
+/* The import's tracking reading: a nested collection (no step itself) in
+   steps 1, 2 and 4 is set in cue 1 and tracks into 2; it is released in 2
+   (fresh layer, it only tracked in there) since 3 doesn't play it, and set
+   again in 4. A scene in steps 2-4 is set in 2 and tracks on; one only in
+   step 1 is released there. Every cue plays what its step did. */
+void ShowTree_Test::importTracksWhatRepeats()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    FixtureGroup *d = group("D", { m_fixtures[2], m_fixtures[3] });
+    const quint32 dim = dimmer(150, "Half");
+    const quint32 full = dimmer(255, "Full");
+    Scene *sA = groupScene(m_doc, "A-Half", a->id(), { dim });
+    Scene *sB = groupScene(m_doc, "B-Full", b->id(), { full });
+    Scene *sD = groupScene(m_doc, "D-Half", d->id(), { dim });
+    Collection *base = collection(m_doc, "0.0.0-base", { sD->id() });
+    Collection *one = collection(m_doc, "0.0.1-One", { base->id(), sA->id() });
+    Collection *two = collection(m_doc, "0.0.2-Two", { base->id(), sB->id() });
+    Collection *three = collection(m_doc, "0.0.3-Three", { sB->id() });
+    Collection *four = collection(m_doc, "0.0.4-Four", { base->id(), sB->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Show");
+    m_doc->addFunction(chaser);
+    for (Collection *c : { one, two, three, four })
+        chaser->addStep(ChaserStep(c->id(), 0, Function::infiniteSpeed(), 0));
+    const QList<QByteArray> was = playEveryStep(chaser);
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    QCOMPARE(rep.differChannels, 0);
+    QCOMPARE(rep.flattened, 3);
+    QCOMPARE(rep.trackingCues, 3);
+    QCOMPARE(rep.trackedLayers, 3);         // D into 0.0.2, B into 0.0.3 and 0.0.4
+    QCOMPARE(rep.trackReleases, 2);         // A in 0.0.1, D in 0.0.2
+    const CueList *list = st->cueList(rep.list);
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->mode, ListMode::Tracking);
+    const Target tA = groupTarget(a->id()), tB = groupTarget(b->id()), tD = groupTarget(d->id());
+    auto targets = [&](int i) {
+        QList<Target> out;
+        for (const Layer &l : list->cues[i].layers)
+            out << l.target;
+        return out;
+    };
+    // 0.0.1: the base and A, set; A leaves with it.
+    QCOMPARE(list->cues[0].mode, CueMode::Block);
+    QCOMPARE(targets(0), QList<Target>({ tD, tA }));
+    QVERIFY(!list->cues[0].layers[0].release);
+    QVERIFY(list->cues[0].layers[1].release);
+    // 0.0.2: B set; the base tracks in and is released here (0.0.3 has none).
+    QCOMPARE(list->cues[1].mode, CueMode::ListDefault);
+    QCOMPARE(targets(1), QList<Target>({ tB, tD }));
+    QVERIFY(!list->cues[1].layers[0].release);
+    QVERIFY(list->cues[1].layers[1].release);
+    QVERIFY(list->cues[1].layers[1].looks.isEmpty());
+    // 0.0.3: nothing of its own, B tracks in.
+    QCOMPARE(list->cues[2].mode, CueMode::ListDefault);
+    QVERIFY(list->cues[2].layers.isEmpty());
+    // 0.0.4: back after the gap, the base is set again; B still tracks.
+    QCOMPARE(list->cues[3].mode, CueMode::ListDefault);
+    QCOMPARE(targets(3), QList<Target>({ tD }));
+    QVERIFY(!list->cues[3].layers[0].looks.isEmpty());
+
+    QCOMPARE(playEveryStep(qobject_cast<Chaser *>(m_doc->function(list->chaser))), was);
+
+    // A chaser where nothing repeats stays Non-tracking.
+    Collection *x = collection(m_doc, "X", { sA->id() });
+    Collection *y = collection(m_doc, "Y", { sB->id() });
+    Chaser *plain = new Chaser(m_doc);
+    plain->setName("Plain");
+    m_doc->addFunction(plain);
+    plain->addStep(ChaserStep(x->id(), 0, Function::infiniteSpeed(), 0));
+    plain->addStep(ChaserStep(y->id(), 0, Function::infiniteSpeed(), 0));
+    const ShowTreeController::ImportReport rep2 = st->importChaser(plain->id());
+    QCOMPARE(rep2.trackingCues, 0);
+    QCOMPARE(st->cueList(rep2.list)->mode, ListMode::NonTracking);
 }
 
 void ShowTree_Test::importedListPlaysAsTheChaserDid()
@@ -2424,7 +2514,7 @@ void ShowTree_Test::captureARawSceneIntoPalettes()
 
     const ShowTreeController::CapturePlan plan = st->planCapture(raw->id());
     QVERIFY2(plan.ok, qPrintable(plan.why));
-    QCOMPARE(plan.uses.count(), 2);
+    QCOMPARE(plan.uses.count(), 1);         // set in 0.0.1, tracked into 0.0.2
     QCOMPARE(plan.capturedChannels, 3);
     QVERIFY(plan.leftovers.isEmpty());
     QCOMPARE(plan.layers.count(), 2);
@@ -2437,13 +2527,14 @@ void ShowTree_Test::captureARawSceneIntoPalettes()
 
     ShowTreeController::CapturePlan done;
     QVERIFY(st->captureIntoPalettes(raw->id(), &done));
-    QCOMPARE(done.captured, 2);
+    QCOMPARE(done.captured, 1);             // its one use: 0.0.2 tracks it in
     QVERIFY(done.kept.isEmpty());
     QCOMPARE(done.made.count(), 1);
     QCOMPARE(done.rest, invalidId());
     QCOMPARE(int(m_doc->palettes().count()), palettesBefore + 1);
     const CueList *list = st->cueList(rep.list);
-    for (const Cue &c : list->cues)
+    QCOMPARE(list->cues[1].layers.count(), 0);
+    for (const Cue &c : list->cues.mid(0, 1))
     {
         QCOMPARE(c.layers.count(), 2);
         for (const Layer &l : c.layers)
@@ -2916,6 +3007,11 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunLoaded(DryRun run)
             qInfo().noquote() << "  HTP:" << s;
         for (const QString &s : rep.notes)
             qInfo().noquote() << "  note:" << s;
+        qInfo().noquote() << QString("  tracking: %1 cues track, %2 layers and %3 includes not repeated, "
+                                     "%4 releases").arg(rep.trackingCues).arg(rep.trackedLayers)
+                             .arg(rep.trackedIncludes).arg(rep.trackReleases);
+        for (const QString &s : rep.trackNotes)
+            qInfo().noquote() << "  track:" << s;
         qInfo().noquote() << QString("  same-output check: %1 cues, %2 channels differ")
                              .arg(rep.checkedCues).arg(rep.differChannels);
         for (const QString &s : rep.differCues)

@@ -79,6 +79,7 @@ private slots:
 
     // Import (§7)
     void importReadsScenesIncludesAndOpaqueFunctions();
+    void importTracksWhatRepeats();
     void importedListPlaysAsTheChaserDid();
     void importListsHtpConflicts();
     void importARealShow();

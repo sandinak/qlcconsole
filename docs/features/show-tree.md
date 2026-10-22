@@ -165,7 +165,9 @@ the tree and the Workbench follows it.
 ### From a chaser you already have
 
 1. **Import chaser…** → pick the chaser. A new production named after it
-   holds a Non-tracking cue list that plays exactly as the chaser did. The
+   holds a cue list that plays exactly as the chaser did. What repeats
+   from step to step is set once and tracks
+   ([below](#what-repeats-is-set-once-and-tracks)). The
    chaser itself plays as it did; the sheet below offers to file it away
    (**Import in place**). For a whole show at once, use
    [Convert an old show…](#an-old-show-convert-it).
@@ -195,6 +197,11 @@ the tree and the Workbench follows it.
      - A chaser of raw scenes with their own fades (a looping par chase)
        plays the same too: the list fades from one scene to the next as
        the chaser did, even when a step is shorter than the fade.
+   - **Set once, then tracking**: the cues that track and what each no
+     longer repeats, with the releases made
+     ([below](#what-repeats-is-set-once-and-tracks)). In the table, **⤳**
+     marks a cue that tracks and **○** a layer released when its cue
+     ends.
    - **Two scenes on one group**: where two scenes in one cue set the same
      group, the chaser ran both, HTP on intensity and LTP on the rest. The
      cue list keeps the later scene's values, and the check above shows
@@ -224,9 +231,36 @@ the tree and the Workbench follows it.
 3. Click a cue. In Design mode it plays on the rig. Open a layer and change
    it.
 
-**To convert the import to tracking:** select the list → **Convert to
-tracking…** ([how](#convert-to-tracking)). It shows what it will change,
-and every cue then plays exactly as before.
+#### What repeats is set once and tracks
+
+A chaser repeats whatever stays on: the same `0.0.0-base` collection in
+every step, the same scene in three steps running, the step before's
+collection inside the next. The import reads that the way a console
+would:
+
+- it is **set in the first cue** where it appears, and the cues after it
+  **track** it, as long as it appears in each step in a row. Those cues
+  don't repeat it;
+- in the **last cue** where it appears, its layer is ticked **Release**,
+  so it leaves when the next step doesn't play it (a layer that only
+  tracked into that cue gets a Release layer of its own there);
+- after a **gap** (in steps 1 and 2, not 3, back in 4) it is **set
+  again** in the cue where it comes back;
+- an **include** of a step whose layers the cue before already plays is
+  taken out: tracking brings them.
+
+"The same" means the same function (the same scene, EFX or collection
+member), not two that happen to set the same values. The first cue stays
+**Block**. Every cue is checked: one that would then play differently stays
+Block and repeats what it has, as before. Where anything tracks, the list
+is **Tracking**; where nothing repeats, it stays Non-tracking. The sheet's
+**Plays the same** check runs on the result.
+
+**To go further:** select the list → **Convert to tracking…**
+([how](#convert-to-tracking)). It also tracks values that only repeat what
+is on stage (two scenes with the same looks) and makes cues Cue-only where
+that saves repeating. It shows what it will change, and every cue then
+plays exactly as before.
 
 By hand instead (or after it, to go further):
 
@@ -248,6 +282,10 @@ uses chasers: 2 look like cue lists (Full Show, New Chaser 8)…*.
 away for this show. The upgrade is always at **File → Upgrade This
 Show…**, and the converter on its own at **Import chaser… → Convert an
 old show…**.
+**Convert…** opens the converter; **✕** puts the line away for this show.
+The converter is always at **Import chaser… → Convert an old show…**.
+One chaser at a time from Build: **Send to Show Tree…**
+([below](#send-to-show-tree-from-build)).
 
 **The converter** lists every chaser of the show, told apart by how it
 runs:
@@ -277,6 +315,18 @@ two ways (**Convert by**):
     fire the list instead.
 - **Import beside the chaser**: the list is made and both stay, as the
   plain import does.
+
+#### Send to Show Tree, from Build
+
+A chaser you are working on in Build goes over from there: load it in the
+Workbench and click **Send to Show Tree…** in its header, or right-click
+its row in **Build ▸ Scenes** (Folders or Classic) → **Send to Show
+Tree…**. It is **Import in place** for that chaser, with the same sheet
+(**Plays the same**, a row per cue, what tracks). The sheet's **Done, show
+it in the Show Tree** keeps it and goes to the new list in the Show Tree
+tab; **Done** keeps it and stays in Build; **Undo import** takes it back. A
+chaser the tree made, or one sent already, has the item greyed with the
+reason.
 
 The list's page says where it came from. **Restore original…** (on the
 list's page or its right-click menu) undoes Import in place: the list
@@ -1363,8 +1413,10 @@ reusables are reusable *arrangements*.
 
 ## Convert to tracking
 
-An imported list is Non-tracking: every cue repeats what stays on, or
-includes the cue before. **Convert to tracking…** (the list's page,
+An imported list tracks only what its steps repeated
+([what repeats is set once](#what-repeats-is-set-once-and-tracks)); the
+rest of its cues are Block, repeating what stays on or including the cue
+before. **Convert to tracking…** (the list's page,
 right-click the list, or `convert`) makes it a Tracking list that plays
 **exactly** as it did, cue by cue:
 

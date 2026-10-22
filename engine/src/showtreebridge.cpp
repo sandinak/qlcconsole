@@ -166,6 +166,23 @@ QList<quint32> ShowTreeController::convertibleChasers() const
     return out;
 }
 
+QString ShowTreeController::whyNotSend(quint32 chaserId) const
+{
+    const Function *f = m_doc->function(chaserId);
+    if (f == nullptr || f->type() != Function::ChaserType)
+        return tr("Not a chaser.");
+    if (isGenerated(chaserId))
+        return tr("The Show Tree made this chaser: it is a cue list there already.");
+    const quint32 listId = importedInto(chaserId);
+    if (listId != invalidId())
+    {
+        const CueList *list = cueList(listId);
+        return tr("Sent already: it is the cue list %1 in the Show Tree (Restore original there puts it back).")
+               .arg(list == nullptr ? f->name() : list->name);
+    }
+    return QString();
+}
+
 ShowTreeController::ImportReport ShowTreeController::planImport(quint32 chaserId, CueList *listOut) const
 {
     ImportReport report;

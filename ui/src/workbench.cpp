@@ -283,6 +283,20 @@ void Workbench::buildHeader(QWidget *column)
     m_kind->setStyleSheet(QStringLiteral("QLabel { border: 1px solid palette(mid); border-radius: 3px; "
                                          "padding: 0 5px; font-size: 9pt; }"));
     titleRow->addWidget(m_kind);
+    // A chaser: Send to Show Tree… (W5's Import in place, from here).
+    m_sendToTreeBtn = new QToolButton(head);
+    m_sendToTreeBtn->setObjectName(QStringLiteral("workbenchSendToTree"));
+    m_sendToTreeBtn->setText(tr("Send to Show Tree…"));
+    m_sendToTreeBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_sendToTreeBtn->setToolTip(tr("Make this chaser a Show Tree cue list in place, checked to play the same; "
+                                   "the chaser is filed under Imported/… and Restore original puts it back"));
+    m_sendToTreeBtn->hide();
+    connect(m_sendToTreeBtn, &QToolButton::clicked, this, [this]() {
+        const quint32 id = loadedFunction();
+        if (qobject_cast<Chaser *>(m_doc->function(id)) != nullptr)
+            emit sendToShowTreeRequested(id);
+    });
+    titleRow->addWidget(m_sendToTreeBtn);
     m_headerLayout->addLayout(titleRow);
 
     m_info = new QLabel(head);
@@ -748,6 +762,12 @@ void Workbench::updateHeader()
     {
         m_lockedBanner->deleteLater();
         m_lockedBanner = nullptr;
+    }
+    {
+        const quint32 id = m_stack == nullptr ? Function::invalidId() : loadedFunction();
+        const Function *f = m_doc->function(id);
+        m_sendToTreeBtn->setVisible(f != nullptr && f->type() == Function::ChaserType
+                                    && m_doc->showTree()->whyNotSend(id).isEmpty());
     }
     if (m_stack == nullptr)
     {

@@ -125,6 +125,7 @@ private slots:
     void openUsesTheFunctionsWindowsEditor();
     void theImportSheetReadsAndRepoints();
     void theImportSheetCanUndoOrLeaveVcAlone();
+    void sendToShowTreeFromBuild();
     // W5: the bridge
     void anOldShowOpensWithABanner();
     void theConverterImportsCueListsInPlace();
