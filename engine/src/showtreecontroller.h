@@ -314,6 +314,39 @@ public:
      *  list's -- a sub-cue's, else its cue's -- ("" none: the theme's). */
     QString cueColour(quint32 cueId) const;
     QString listColour(quint32 listId) const;
+
+    /** Automatic move-in-black per cue list and per cue (Q38). The show's
+     *  setting (ProgrammerController::isAutoMoveInBlack) is the default; a
+     *  list may say On or Off whatever the show says (CueList::moveInBlack,
+     *  a sub-cue list: its cue's list's), and a cue may say "Don't move in
+     *  black into this cue" (Cue::noMoveInBlack), which wins. Lead time
+     *  stays the show's. Each set is one undo step ("Move in black: On" /
+     *  "Don't move in black into cue"); false when nothing changed (a
+     *  Looks section has neither). */
+    bool setListMoveInBlack(quint32 listId, ShowTree::MoveInBlack mode);
+    ShowTree::MoveInBlack listMoveInBlack(quint32 listId) const;
+    bool setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool no);
+    bool isCueNoMoveInBlack(quint32 cueId) const;
+    /** The show's own setting, read from Doc's programmer (false: none). */
+    bool showMoveInBlack() const;
+    /** Whether heads move in black into cue @a cueId: the cue's flag, else
+     *  its list's setting, else @a showDefault (ShowTree::effectiveMoveInBlack). */
+    bool moveInBlackInto(quint32 cueId, bool showDefault) const;
+    bool moveInBlackInto(quint32 cueId) const { return moveInBlackInto(cueId, showMoveInBlack()); }
+    /** The list's setting as it plays: its own, else @a showDefault. */
+    bool listMovesInBlack(quint32 listId, bool showDefault) const;
+    /** Any list or cue that says other than the show (for the MIB button's
+     *  tooltip); @a lists / @a cues: how many of each. */
+    bool hasMoveInBlackOverrides(int *lists = nullptr, int *cues = nullptr) const;
+    /** Any cue list set to On: the planner has to look ahead even while
+     *  the show's setting is off. */
+    bool anyListMoveInBlackOn() const;
+    /** For the planner (MarkPlanner): whether to move in black into what
+     *  fires next -- step @a step of chaser @a chaserId (a running list),
+     *  else function @a functionId (a Show's next item: a cue's collection
+     *  or a list's chaser). Not a tree cue or list: @a showDefault. */
+    bool moveInBlackForNext(quint32 chaserId, int step, quint32 functionId, bool showDefault) const;
+
     /** Layers of the cue on fixtures in common: the lower wins what both
      *  set (false, the tree's rule), or they mix as a chaser's collection
      *  does (true, how an import keeps them). One undo step. */

@@ -1162,6 +1162,8 @@ is always there and calls the same operations as the mouse.
 | `include 0.0.3` | Includes that cue; again, takes it out |
 | `skip 0.0.3` · `skip 0.0.3 thru 0.0.5` · `skip 0.0.3, 0.0.7` · `skip` | **Skips** those cues (none named: the selected one); [Skipping cues](#skipping-cues) |
 | `unskip 0.0.3` · `unskip 0.0.3 thru 0.0.5` · `unskip` | Puts them back: GO plays them again |
+| `mib on list` · `mib off list` · `mib show list` · `mib` | The list's **Move in black**: on or off whatever the show says, or the show's again; alone, says what it is ([Move in black](#move-in-black)) |
+| `nomib 0.0.3` · `nomib 0.0.3 thru 0.0.5` · `allowmib 0.0.3` | **Don't move in black into** those cues (none named: the selected one); `allowmib` takes it away |
 | `record` | Record as new cue, as the button does (your setting, or it asks) |
 | `record selected` · `record running` · `record lit` | Records what the word says |
 | `US in Steps colour Red` | A **child layer** on US under the cue's Steps layer |
@@ -1767,6 +1769,35 @@ set it, and they always agree:
   lead time, applied on OK. The note under them says it: saved with this
   show, not this computer. Another show keeps its own, and a new show
   starts with it off.
+
+That switch is the show's **default**. A cue list, or a single cue, can
+say otherwise:
+
+- **A cue list: Move in black ▸ Use show's / On / Off.** Right-click the
+  list, or use **Move in black** on its page. *Use show's (On)* (or
+  *(Off)*) follows the switch above; **On** moves lights in black for
+  this list's cues even with the show's switch off; **Off** never does,
+  even with it on. A list whose setting differs from the show's carries
+  a badge beside its mode: **▸ MIB** (on here, off for the show) or
+  **⊘ MIB** (off here, on for the show). Its tooltip says which. A
+  cue's sub-cues follow their cue's list.
+- **A cue: Don't move in black into this cue.** A tick on the cue's page
+  and on its right-click menu (with several cues selected, all of them).
+  No light is moved in black for that cue, whatever its list and the
+  show say. Use it for a cue where the audience should see the heads
+  move, or one that comes too close after the cue before it. A cue that
+  says so, in a list that would move in black, shows **⊘ MIB** in the
+  badge column. A sub-cue also takes its cue's tick.
+- **Typed:** `mib off list`, `mib on list`, `mib show list` (back to the
+  show's), `mib` alone says what the list does; `nomib 0.0.3`,
+  `nomib 0.0.3 thru 0.0.5` (no number: the selected cue), and
+  `allowmib 0.0.3` takes the tick away.
+
+The lead time stays the show's for every list. Each change is one undo
+step, saved with the show. A build from before this keeps the show's
+switch and ignores the rest. The **MIB** button still shows the show's
+switch. When any list or cue says otherwise, its tooltip says how many,
+and *MIB · n* counts the lights a list set **On** is moving.
 
 ## Keys and mouse
 

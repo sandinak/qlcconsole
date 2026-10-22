@@ -24,6 +24,11 @@ public:
     {
         quint32 functionId; //!< the Function (Scene/Collection) that fires next
         int     fireInMs;   //!< ms until it fires; INT_MAX = holds for a manual GO
+        /** What drives it, for per-list/per-cue move-in-black (Q38): the
+         *  running Chaser and the step that fires, else invalid / -1 (a
+         *  Show timeline's item: functionId alone says which cue). */
+        quint32 chaserId = 0xFFFFFFFF;
+        int     step = -1;
     };
 
     /** Upcoming cues within @p horizonMs for whatever is driving the show right
