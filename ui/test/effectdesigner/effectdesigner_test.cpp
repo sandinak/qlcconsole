@@ -24,6 +24,10 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QLabel>
+#include <QPainter>
+#include <QLineEdit>
+#include <QToolButton>
+#include <QTreeWidgetItemIterator>
 #include <QtTest>
 
 #define private public
@@ -32,6 +36,9 @@
 #include "effectdesigner_test.h"
 #include "effectdesigner.h"
 #include "effectspage.h"
+#include "programmingmanager.h"
+#include "workbench.h"
+#include "rgbmatrix.h"
 #include "effectbrowser.h"
 #include "lookeditor.h"
 #include "efxeditor.h"
@@ -548,6 +555,142 @@ void EffectDesigner_Test::theEffectsPageListsEveryEffect()
     page.hide();
 }
 
+static QTreeWidgetItem *effectsRow(QTreeWidget *list, const QString &name)
+{
+    for (QTreeWidgetItemIterator it(list); *it; ++it)
+        if ((*it)->text(0) == name)
+            return *it;
+    return nullptr;
+}
+
+static QAction *menuAction(QMenu *menu, const QString &objectName)
+{
+    for (QAction *a : menu->actions())
+        if (a->objectName() == objectName)
+            return a;
+    return nullptr;
+}
+
+void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *phaser = effectPalette(m_doc, "Phaser", "Dimmer Phaser");
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Circle");
+    m_doc->addFunction(efx);
+
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    pm.setSection(ProgrammingManager::EffectsSection);
+    QTreeWidget *list = pm.findChild<QTreeWidget *>("buildEffects");
+    QVERIFY(list != nullptr);
+    QTRY_VERIFY(effectsRow(list, "Phaser") != nullptr);
+    QVERIFY(effectsRow(list, "Circle") != nullptr);
+
+    // + New, with the classic effects in its menu.
+    QToolButton *newBtn = pm.findChild<QToolButton *>("buildEffectsNew");
+    QVERIFY(newBtn != nullptr && newBtn->isVisible());
+    QVERIFY(newBtn->menu() != nullptr);
+    QStringList newItems;
+    for (QAction *a : newBtn->menu()->actions())
+        if (!a->isSeparator())
+            newItems << a->objectName();
+    QVERIFY2(newItems.contains("buildEffectsNewPalette") && newItems.contains("buildEffectsNewEfx")
+             && newItems.contains("buildEffectsNewMatrix"), qPrintable(newItems.join(',')));
+
+    // + New (the button): a new effect in the designer, in the Workbench's
+    // editor pane, the layers column out of the way.
+    newBtn->click();
+    EffectDesigner *ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
+    QCOMPARE(pm.workbench()->currentPage(), Workbench::EffectPage);
+    QCOMPARE(pm.workbench()->effectPane(), static_cast<QWidget *>(ed));
+    QVERIFY(ed->isVisible());
+    QVERIFY(!pm.workbench()->findChild<QWidget *>("workbenchColumn")->isVisible());
+    QCOMPARE(ed->originalId(), QLCPalette::invalidId());
+    QVERIFY(ed->draftId() != QLCPalette::invalidId());
+    ed->setTryOnGroups({ towers->id() });
+
+    // Designed and saved: listed in Effects, back on the bench.
+    QVERIFY(ed->pickEffect("Color Chase"));
+    const quint32 saved = ed->saveAsPalette("Chase Saved");
+    QVERIFY(m_doc->palette(saved) != nullptr);
+    QTRY_VERIFY(effectsRow(list, "Chase Saved") != nullptr);
+    QTRY_COMPARE(ed->originalId(), saved);
+
+    // Clicking an effect palette designs it there.
+    QTreeWidgetItem *phaserRow = effectsRow(list, "Phaser");
+    QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(phaserRow).center());
+    QCOMPARE(ed->originalId(), phaser->id());
+    QCOMPARE(pm.workbench()->currentPage(), Workbench::EffectPage);
+
+    // The right-click menu on an effect palette.
+    QCoreApplication::processEvents();          // a queued rebuild: rows are new
+    QMenu *menu = pm.effectsContextMenu(effectsRow(list, "Phaser"), &pm);
+    for (const char *name : { "effectsDesign", "effectsDuplicate", "effectsRename", "effectsMove", "effectsDelete",
+                              "effectsNewPalette", "effectsNewEfx", "effectsNewMatrix" })
+        QVERIFY2(menuAction(menu, name) != nullptr, name);
+    QVERIFY(menuAction(menu, "effectsOpen") == nullptr);
+    const int before = m_doc->palettes().count();
+    menuAction(menu, "effectsDuplicate")->trigger();
+    delete menu;
+    QTRY_VERIFY(effectsRow(list, "Phaser (copy)") != nullptr);
+    QVERIFY(m_doc->palettes().count() > before);
+    QCOMPARE(m_doc->palette(ed->originalId())->name(), QString("Phaser (copy)"));
+
+    // F2 / Rename: in place.
+    QCoreApplication::processEvents();
+    effectsRow(list, "Phaser (copy)")->setText(0, "Phaser Two");
+    QCOMPARE(m_doc->palette(ed->originalId())->name(), QString("Phaser Two"));
+
+    // On an EFX: Open in editor loads it, the designer's draft goes.
+    QCoreApplication::processEvents();
+    menu = pm.effectsContextMenu(effectsRow(list, "Circle"), &pm);
+    QVERIFY(menuAction(menu, "effectsOpen") != nullptr);
+    QVERIFY(menuAction(menu, "effectsDesign") == nullptr);
+    menuAction(menu, "effectsOpen")->trigger();
+    delete menu;
+    QCOMPARE(pm.workbench()->loadedFunction(), efx->id());
+    QVERIFY(pm.workbench()->currentPage() != Workbench::EffectPage);
+    QVERIFY(pm.workbench()->findChild<QWidget *>("workbenchColumn")->isVisible());
+    QCOMPARE(ed->draftId(), QLCPalette::invalidId());
+
+    // Empty space: only the New items. New EFX / RGB Matrix land on the
+    // Try on groups and load.
+    menu = pm.effectsContextMenu(nullptr, &pm);
+    QVERIFY(menuAction(menu, "effectsDelete") == nullptr);
+    QVERIFY(menuAction(menu, "effectsNewPalette") != nullptr);
+    delete menu;
+    const quint32 newEfx = pm.newClassicEffect(Function::EFXType);
+    EFX *fresh = qobject_cast<EFX *>(m_doc->function(newEfx));
+    QVERIFY(fresh != nullptr);
+    QCOMPARE(fresh->fixtures().count(), 3);
+    QCOMPARE(pm.workbench()->loadedFunction(), newEfx);
+    QTRY_VERIFY(effectsRow(list, fresh->name()) != nullptr);
+    QCOMPARE(pm.section(), ProgrammingManager::EffectsSection);
+    const quint32 newMatrix = pm.newClassicEffect(Function::RGBMatrixType);
+    RGBMatrix *matrix = qobject_cast<RGBMatrix *>(m_doc->function(newMatrix));
+    QVERIFY(matrix != nullptr);
+    QCOMPARE(matrix->fixtureGroup(), towers->id());
+
+    // Move to folder (a function): its path, shown beside it.
+    QTRY_VERIFY(effectsRow(list, matrix->name()) != nullptr);
+    QCoreApplication::processEvents();
+    pm.findChild<QLineEdit *>("buildEffectsFilter")->setText("Phaser");
+    QVERIFY(effectsRow(list, "Circle")->isHidden());
+    QVERIFY(!effectsRow(list, "Phaser")->isHidden());
+    pm.findChild<QLineEdit *>("buildEffectsFilter")->clear();
+
+    // Another show: nothing left behind.
+    pm.designEffect(phaser->id());
+    QVERIFY(ed->draftId() != QLCPalette::invalidId());
+    m_doc->clearContents();
+    QCOMPARE(ed->draftId(), QLCPalette::invalidId());
+    pm.hide();
+}
+
 static FixtureGroup *groupNamed(Doc *doc, const QString &name)
 {
     for (FixtureGroup *g : doc->fixtureGroups())
@@ -630,6 +773,40 @@ void EffectDesigner_Test::picturesOfARealShow()
     QVERIFY(page.grab().save(QDir(shots).filePath("effects-page-bench.png")));
     page.designer()->cancel();
     page.hide();
+
+    // Build ▸ Effects: the designer in the Workbench, and the right-click menu.
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1600, 940);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    pm.designEffect(QLCPalette::invalidId());
+    if (xl != nullptr)
+        pm.effectDesigner()->setTryOnGroups({ xl->id() });
+    QVERIFY(pm.effectDesigner()->pickEffect(qEnvironmentVariable("QLC_EFFECTDESIGNER_MATRIX", "Matrix Fire")));
+    for (int i = 0; i < 20; ++i)
+        QTest::qWait(50);
+    QVERIFY(pm.grab().save(QDir(shots).filePath("build-effects-designer.png")));
+    {
+        QTreeWidget *list = pm.findChild<QTreeWidget *>("buildEffects");
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(list); *it && row == nullptr; ++it)
+            if ((*it)->flags() & Qt::ItemIsSelectable)
+                row = *it;
+        QMenu *menu = pm.effectsContextMenu(row, &pm);
+        const QRect r = list->visualItemRect(row);
+        menu->popup(list->viewport()->mapToGlobal(r.center()));
+        QTest::qWait(200);
+        // The window and the menu, one picture.
+        QPixmap shot = pm.grab();
+        QPainter paint(&shot);
+        paint.drawPixmap(pm.mapFromGlobal(menu->pos()), menu->grab());
+        paint.end();
+        QVERIFY(shot.save(QDir(shots).filePath("build-effects-menu.png")));
+        menu->hide();
+        delete menu;
+    }
+    pm.effectDesigner()->cancel();
+    pm.hide();
 }
 
 QTEST_MAIN(EffectDesigner_Test)

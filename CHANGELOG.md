@@ -13,6 +13,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Build ▸ Effects makes effects.** A **+ New ▾** button (effect palette
+  in the designer, EFX, RGB Matrix — the classic ones on the Try on groups)
+  and a right-click menu on the list (Design / edit…, Open in editor for
+  EFX / RGB Matrix, Duplicate, Rename / F2, Move to folder…, Delete / ⌫,
+  and New effect / EFX / RGB Matrix on empty space). Clicking an effect
+  palette opens it in the W4 effect designer, hosted at full height in the
+  Workbench's editor pane (`Workbench::showEffectPane()`; the layers column
+  steps aside, and loading anything else puts the designer and its draft
+  away). The folder column no longer squeezes the names.
 - **Chasers in the Workbench, and Scenes ▸ Classic (WORKFLOW_DESIGN.md
   W2).** A chaser loads as a step walker (`ChaserWalker`): ◀ prev · step N ·
   next ▶, the step's fade in / hold / fade out / cue no. / note edited in

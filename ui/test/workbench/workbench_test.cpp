@@ -621,7 +621,7 @@ void Workbench_Test::theNavigatorDrivesTheWorkbench()
     EFX *efx = new EFX(m_doc);
     efx->setName("Ballyhoo");
     m_doc->addFunction(efx);
-    mgr.rebuildEffects();
+    mgr.rebuildEffectsNow();      // rebuildEffects() is queued
     QTreeWidgetItem *fx = nullptr;
     for (QTreeWidgetItemIterator it(mgr.m_effectsList); *it; ++it)
         if ((*it)->text(0) == "Ballyhoo")

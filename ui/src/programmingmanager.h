@@ -82,6 +82,18 @@ public:
     /** The Workbench (W3 docks this same widget in the Show Tree). */
     Workbench *workbench() const { return m_workbench; }
 
+    /** Build ▸ Effects: design effect palette @a paletteId (invalid: a new
+     *  effect) in the effect designer, in the Workbench's editor pane. */
+    void designEffect(quint32 paletteId);
+    /** + New ▸ EFX / RGB Matrix: a new one on the designer's Try on groups,
+     *  listed, selected and loaded. Returns its id (invalid: refused). */
+    quint32 newClassicEffect(Function::Type type);
+    /** The designer the Effects section hosts (null until first used). */
+    class EffectDesigner *effectDesigner() const { return m_effectDesigner; }
+    /** The Effects list's context menu for row @a clicked (null: empty
+     *  space), parented to @a parent -- public for tests and pictures. */
+    class QMenu *effectsContextMenu(QTreeWidgetItem *clicked, QWidget *parent);
+
     /** The navigator's sections. */
     enum Section { PalettesSection = 0, EffectsSection, ScenesSection };
     void setSection(Section section);
@@ -199,8 +211,18 @@ private:
     QWidget *buildScenesSection();
     QWidget *buildPalettesSection();
     QWidget *buildEffectsSection();
-    /** The Effects section's list: effect palettes and classic effects. */
+    /** The Effects section's list: effect palettes and classic effects
+     *  (queued: a draft or a preview scene added mid-click must not pull
+     *  the rows away). */
     void rebuildEffects();
+    void rebuildEffectsNow();
+    /** Select the Effects row of palette (@a palette) or function @a id. */
+    void selectEffectRow(bool palette, quint32 id);
+    /** The effect palettes / classic effects a menu on @a clicked acts on:
+     *  the selection if the clicked row is in it, else the clicked row. */
+    void effectTargets(QTreeWidgetItem *clicked, QList<quint32> &palettes, QList<quint32> &functions) const;
+    /** The designer, made (and wired) the first time. */
+    class EffectDesigner *ensureEffectDesigner();
 
     /** Enable/label the Park button (Park vs Unpark) from selection + park state. */
     void updateParkButtonLabel();
@@ -275,6 +297,9 @@ private:
     class QSplitter *m_mainSplit = nullptr;
     class QSplitter *m_navSplit = nullptr;
     QTreeWidget *m_effectsList = nullptr;
+    class EffectDesigner *m_effectDesigner = nullptr;
+    bool m_effectsRebuildQueued = false;
+    bool m_effectsRebuilding = false;
     bool m_navigating = false;    //!< the navigator follows a load: don't load again
 
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate

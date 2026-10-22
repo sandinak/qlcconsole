@@ -123,6 +123,12 @@ public:
     void editPalette(quint32 paletteId);
     /** A fixture group's head layout in the editor pane (← back returns). */
     void showGroupLayout(quint32 groupId);
+    /** Host @a pane in the editor pane at full height, the layers column
+     *  out of the way (Build ▸ Effects' effect designer): what is loaded is
+     *  unloaded first. The pane stays the caller's to delete; loading
+     *  anything else takes it off (effectPaneClosed()). */
+    void showEffectPane(QWidget *pane);
+    QWidget *effectPane() const { return m_effectPane; }
     /** Fixtures picked elsewhere (the 2D view, the sources): their channels. */
     void selectFixtures(const QList<quint32> &fixtureIds);
 
@@ -138,7 +144,7 @@ public:
     /** Apply an edit to the live preview without a stop/start. */
     void refreshPreview();
 
-    enum Page { EmptyPage, OverviewPage, ScenePage, LookPage, TargetPage, FunctionPage };
+    enum Page { EmptyPage, OverviewPage, ScenePage, LookPage, TargetPage, FunctionPage, EffectPage };
     Page currentPage() const;
 
 signals:
@@ -153,6 +159,8 @@ signals:
     void revealPaletteRequested(quint32 paletteId);
     /** "How this works". */
     void guideRequested();
+    /** The effect pane went off (something else is shown). */
+    void effectPaneClosed();
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -318,6 +326,10 @@ private:
 
     QPointer<QWidget> m_stackWidget;
     QToolButton *m_ownCopyBtn = nullptr;
+
+    /** showEffectPane()'s page and what it hosts. */
+    QWidget *m_effectPage = nullptr;
+    QPointer<QWidget> m_effectPane;
 };
 
 /** @} */

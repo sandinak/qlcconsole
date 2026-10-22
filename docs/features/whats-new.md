@@ -4,6 +4,12 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Make effects in Build.** Build ▸ Effects has a **+ New ▾** button
+  (an effect palette, an EFX or an RGB Matrix) and a right-click menu
+  (Design / edit…, Open in editor, Duplicate, Rename, Move to folder…,
+  Delete, and New on empty space). Clicking an effect palette opens it in
+  the effect designer, full height in the Workbench. See
+  [Making effects](build.md#making-effects).
 - **The effect designer.** Build an effect in detail on the heads it is
   for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
   menu of its Effect row) opens the effect browser at full height. Beside

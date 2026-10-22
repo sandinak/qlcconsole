@@ -973,10 +973,17 @@ void Workbench::showPage(Page page)
 {
     QWidget *w = page == ScenePage ? m_scenePage : page == LookPage ? m_lookPage
                : page == TargetPage ? m_targetPage : page == FunctionPage ? m_functionPage
+               : page == EffectPage && m_effectPage != nullptr ? m_effectPage
                : page == OverviewPage && m_stack != nullptr ? m_overviewPage : m_emptyPage;
     if (w == m_overviewPage)
         updateOverview();
+    const bool leavingEffect = m_effectPage != nullptr && m_page->currentWidget() == m_effectPage
+                               && w != m_effectPage;
     m_page->setCurrentWidget(w);
+    // The effect pane has the width; the layers come back with anything else.
+    m_split->widget(0)->setVisible(w != m_effectPage);
+    if (leavingEffect)
+        emit effectPaneClosed();
     // The console's channels are drawn when it shows (a switch from one
     // fixture to another fires no showEvent).
     if (page == TargetPage && !m_fixtureScroll->isHidden())
@@ -988,7 +995,8 @@ Workbench::Page Workbench::currentPage() const
     QWidget *w = m_page->currentWidget();
     return w == m_scenePage ? ScenePage : w == m_lookPage ? LookPage
          : w == m_targetPage ? TargetPage : w == m_functionPage ? FunctionPage
-         : w == m_overviewPage ? OverviewPage : EmptyPage;
+         : w == m_overviewPage ? OverviewPage
+         : w != nullptr && w == m_effectPage ? EffectPage : EmptyPage;
 }
 
 void Workbench::updateOverview()
@@ -1345,6 +1353,35 @@ void Workbench::showGroupLayout(quint32 groupId)
     }
     else
         m_groupBackButton->hide();
+}
+
+void Workbench::showEffectPane(QWidget *pane)
+{
+    if (pane == nullptr)
+        return;
+    // Nothing loaded behind it: its preview is the only one playing.
+    if (currentPage() != EffectPage)
+        clear();
+    if (m_effectPage == nullptr)
+    {
+        m_effectPage = new QWidget(m_page);
+        m_effectPage->setObjectName(QStringLiteral("workbenchEffectPage"));
+        QVBoxLayout *l = new QVBoxLayout(m_effectPage);
+        l->setContentsMargins(0, 0, 0, 0);
+        m_page->addWidget(m_effectPage);
+    }
+    if (m_effectPane != pane)
+    {
+        if (m_effectPane != nullptr)
+        {
+            m_effectPane->hide();
+            m_effectPage->layout()->removeWidget(m_effectPane);
+        }
+        m_effectPane = pane;
+        m_effectPage->layout()->addWidget(pane);
+    }
+    pane->show();
+    showPage(EffectPage);
 }
 
 void Workbench::editPalette(quint32 paletteId)

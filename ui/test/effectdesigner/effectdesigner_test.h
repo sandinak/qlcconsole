@@ -64,6 +64,11 @@ private slots:
     /** Window ▸ Effects: effect palettes in folders, classic effects marked,
      *  one-offs left out; + New EFX on the Try on groups opens its editor. */
     void theEffectsPageListsEveryEffect();
+    /** "in build how does one generate new effects? I don't see an add or
+     *  right click when effects are subselected .. only palettes": Build ▸
+     *  Effects has + New and a right-click menu, and designs an effect
+     *  palette in the Workbench. */
+    void buildEffectsMakesAndDesignsEffects();
 
     /** QLC_EFFECTDESIGNER_SHOW=<a COPY of a show> QLC_EFFECTDESIGNER_SHOTS=<dir>:
      *  pictures of the designer on a real layer and on the bench. */

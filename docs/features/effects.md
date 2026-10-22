@@ -25,7 +25,7 @@ effect's **own** colour and dimmer, which apply inside that effect only.
 Whatever you pick plays at once on the rig, in Design mode, on just those
 heads.
 
-Open it from either of two places:
+Open it from any of three places:
 
 - **On a Show Tree layer.** Right-click a layer and choose **Design
   effect…**, or use **Design effect…** in the ⋯ menu of a layer's Effect
@@ -33,6 +33,10 @@ Open it from either of two places:
   and dimmer play under the effect, so it looks as it will in the cue.
   **In context** keeps the rest of the cue playing; **Solo** plays only the
   effect.
+- **Build ▸ Effects.** **+ New**, or click an effect palette: the
+  designer opens in the Workbench's editor pane, on the **bench**
+  described next. Right-click an effect for Duplicate, Rename, Move to
+  folder… and Delete. See [Making effects](build.md#making-effects).
 - **Window ▸ Effects.** Every effect in the show in one window. On the
   left are the effect palettes in their folders, then the **classic
   effects**: QLC+ EFX and RGB Matrix functions, each marked as one. On the
