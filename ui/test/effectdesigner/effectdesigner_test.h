@@ -70,6 +70,21 @@ private slots:
      *  palette in the Workbench. */
     void buildEffectsMakesAndDesignsEffects();
 
+    /** Make a layer (board Q37), into a Show Tree cue: a saved, unchanged
+     *  palette plays by name; a changed design is a one-off copy (the bench
+     *  keeps its own). One tree undo step each; undo and redo restore. */
+    void makeALayerIntoACue();
+    /** Into a plain Build scene: the Try on groups and the effect added,
+     *  one undo step; a one-off survives a bake while undo can put it back. */
+    void makeALayerIntoAScene();
+    /** Into a new scene: made with the groups and the effect, one step. */
+    void makeALayerIntoANewScene();
+    /** From Build: the bench opened over a loaded scene goes back into it
+     *  (the button), the scene loaded with its new look selected; the
+     *  Show Tree's selected cue is in the menu, and its new layer is
+     *  selected in the tree. */
+    void makeALayerFromTheWorkbench();
+
     /** QLC_EFFECTDESIGNER_SHOW=<a COPY of a show> QLC_EFFECTDESIGNER_SHOTS=<dir>:
      *  pictures of the designer on a real layer and on the bench. */
     void picturesOfARealShow();

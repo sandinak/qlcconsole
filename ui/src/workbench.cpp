@@ -47,6 +47,7 @@
 #include "fixtureconsole.h"
 #include "functionparent.h"
 #include "showtreeview.h"
+#include "treecuestack.h"
 #include "chasereditor.h"
 #include "sceneeditor.h"
 #include "sequence.h"
@@ -2151,9 +2152,31 @@ bool Workbench::designEffect(const EffectRequest &request)
     }
     if (!s_effectPane)
         return false;
+    // Where it was opened from (Make a layer goes there first): what is
+    // loaded, or the bench's own when it shows already.
+    EffectRequest req = request;
+    if (req.fromCue == 0xFFFFFFFF && req.fromScene == 0xFFFFFFFF)
+    {
+        if (m_benchPane && effectPane() != nullptr)
+        {
+            req.fromCue = m_benchFromCue;
+            req.fromScene = m_benchFromScene;
+        }
+        else if (TreeCueStack *cs = qobject_cast<TreeCueStack *>(m_stack))
+        {
+            req.fromCue = cs->cueId();
+        }
+        else if (qobject_cast<Scene *>(m_doc->function(loadedFunction())) != nullptr
+                 && (m_doc->showTree() == nullptr || !m_doc->showTree()->isGenerated(loadedFunction())))
+        {
+            req.fromScene = loadedFunction();
+        }
+    }
     // The bench: nothing loaded behind it, so its preview is the only one playing.
     clear();
-    QWidget *w = s_effectPane(this, request, m_functionPage);
+    m_benchFromCue = req.fromCue;
+    m_benchFromScene = req.fromScene;
+    QWidget *w = s_effectPane(this, req, m_functionPage);
     if (w == nullptr)
         return false;
     const QLCPalette *p = m_doc->palette(request.palette);

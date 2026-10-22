@@ -456,6 +456,10 @@ public:
        menu handler is not survivable. */
     Q_INVOKABLE void updateTargets();
 
+    /** Delete every target item and aim line, without rebuilding: for when
+     *  the StageTargets they point at are about to be deleted. */
+    void dropTargetItems();
+
     /** Reposition existing TargetItems in place from their StageTarget data
      *  (no recreate) — used when the joystick moves an aim target live so the
      *  marker tracks without the churn of updateTargets(). */

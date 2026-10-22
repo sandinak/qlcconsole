@@ -21775,3 +21775,41 @@ void Monitor_Test::aColourRingIsFoundAndDrawn()
 
     spot->setFixtureDefinition(nullptr, nullptr);           // plain is on the stack
 }
+
+void Monitor_Test::clearingTheShowDropsTargetItemsFirst()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *target = props->addStageTarget();
+    target->setName("Mark");
+    target->setPosition(QVector3D(3.0f, 4.0f, 0.0f));
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTargets();
+        QCOMPARE(view.m_targetItems.size(), 1);
+
+        /* What the Workbench does while the Doc clears: something the clear
+           emits re-seeds the follow-spot pin, which repositions the items.
+           By then reset() has deleted the targets -- so the items must be
+           gone already, or this reads freed memory. */
+        int itemsWhenFunctionsGo = -1;
+        connect(doc, &Doc::functionRemoved, &view, [&](quint32) {
+            itemsWhenFunctionsGo = view.m_targetItems.size();
+            view.repositionTargetItems();
+        });
+        Scene *scene = new Scene(doc);
+        QVERIFY(doc->addFunction(scene));
+
+        doc->clearContents();
+        QVERIFY(props->stageTargets().isEmpty());
+        QVERIFY(view.m_targetItems.isEmpty());
+        QVERIFY(view.m_aimLines.isEmpty());
+        QCOMPARE(itemsWhenFunctionsGo, 0);
+    }
+
+    delete doc;
+}

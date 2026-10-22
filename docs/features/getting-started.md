@@ -88,8 +88,39 @@ The tabs follow the order a show is built in:
 | **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
 | **Virtual Console** | The operator's surface | stock QLC+ |
 | **Simple Desk** | Raw channel faders | stock QLC+ |
+| **Run** | The operator's full-screen cue runner | [Show Tree](show-tree.md#the-cue-runner) |
 
-**Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘9). Double-click
+Which of these you see depends on the view (below).
+
+### Views
+
+**View → Workspace** picks which tabs the main window shows:
+
+- **qlcconsole** — Connections, Fixtures, Lighting Studio, Build, Show
+  Tree, Shows, Virtual Console and Run. Functions has no tab: **Window →
+  Functions** opens **Build ▸ Scenes ▸ Classic**.
+- **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
+  Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
+  Connections tab).
+- **Everything** — every tab.
+
+A view only shows and hides tabs. The show itself doesn't change, and
+nothing on a hidden tab stops working. The view is saved with the show: it
+marks the show changed, but it isn't an undo step. QLC+ ignores it when it
+opens the file. A show saved without a view opens in **Classic QLC+** if
+it is an old QLC+ show with no Show Tree, and in **qlcconsole** otherwise.
+A new show, and the first launch, start in **qlcconsole**. **Settings**
+shows the open show's view and can change it.
+
+Choosing a tab the view hides (from **Window** or a link such as *Open in
+Build*) switches to **Everything**. A line above the tabs says so and has
+a button to go back. A tab broken out into its own window stays there
+when the view changes. If the new view hides that tab, closing its window
+puts it away instead of back on the tab bar. After **File → Upgrade This
+Show…** gives a Classic QLC+ show a Show Tree, a line above the tabs
+offers the **qlcconsole** view, once.
+
+**Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘0). Shift-click
 a tab to break it out into its own window; Window brings it back.
 **Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
 scripts, audio, video) is in Build now: **Window → Functions** (⇧⌘4)

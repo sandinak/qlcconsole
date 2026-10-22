@@ -73,6 +73,7 @@ private:
 
     // Tab label mode
     QComboBox *m_tabLabelModeCombo;
+    QComboBox *m_workspaceViewCombo = nullptr;   ///< the show's view (View ▸ Workspace)
     // Show controls: top bar or status bar (App::ShowControlsPlacement)
     QComboBox *m_showControlsCombo;
     QComboBox *m_scriptEditorCombo;

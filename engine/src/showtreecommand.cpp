@@ -59,7 +59,7 @@ QString ShowTreeCommand::grammar()
               "Towers aim DS-Edge spread 0 group pairs cross mirror · cue look spread +5 · "
               "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · "
               "name \"Hero\" · T1-CW … (a fixture) · function Haze · include 0.0.3 · skip 0.0.3 [thru 0.0.5] · unskip · "
-              "textcolour red [list | 0.0.3] · "
+              "mib on|off|show list · nomib 0.0.3 · allowmib · textcolour red [list | 0.0.3] · "
               "record [selected|running|lit] · list \"name\" · dup · reusable · use BackStage · unlink · "
               "detach [list] · convert [apply] · undo — Tab completes every word "
               "(again: the next), ↑ recalls");
@@ -212,6 +212,19 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
         add("unskip", "tracking", "unskip [<cue> [thru <cue>]] [, <cue>…]",
             "Puts skipped cues back (the selected one when none is named): GO plays them again.",
             { "unskip", "unskip 0.0.3", "unskip 0.0.3 thru 0.0.5" }, { "skip" });
+        add("mib", "tracking", "mib on|off|show [list]",
+            "Move in black for the selected cue list: on or off whatever the show's setting (the MIB "
+            "button) says, or show to follow it again. The lead time stays the show's. mib alone says "
+            "what it is.",
+            { "mib", "mib off list", "mib on list", "mib show list" }, { "nomib", "allowmib" });
+        add("nomib", "tracking", "nomib [<cue> [thru <cue>]] [, <cue>…]",
+            "Don't move in black into these cues (the selected one when none is named): no head is "
+            "pre-positioned for them, whatever the list and the show say -- for a cue whose heads must "
+            "be seen moving, or that follows too closely. allowmib takes it away.",
+            { "nomib", "nomib 0.0.3", "nomib 0.0.3 thru 0.0.5" }, { "allowmib", "mib" });
+        add("allowmib", "tracking", "allowmib [<cue> [thru <cue>]] [, <cue>…]",
+            "Takes \"Don't move in black into this cue\" away again: the cue follows its list and the show.",
+            { "allowmib", "allowmib 0.0.3" }, { "nomib", "mib" });
         add("textcolour", "build", "textcolour <colour>|#rrggbb|none [list | <cue> [thru <cue>] [, <cue>…]]",
             "The colour a cue's text is shown in -- the tree, the Run tab, the VC Cue Runner and Cue List -- "
             "for the cues named (the selected one when none is), or with list for the whole cue list (a "
@@ -1702,6 +1715,58 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                           .arg(cues.count() == 1 ? QStringLiteral("1 cue") : tr("%1 cues").arg(cues.count()));
         res.keepSelection = true;
     }
+    else if (w0 == QLatin1String("nomib") || w0 == QLatin1String("allowmib"))
+    {
+        // nomib [<cue> [thru <cue>]] [, <cue>…] (Q38): don't move in black
+        // into the cues named, else the selected one. One undo step.
+        r.word();
+        const bool no = w0 == QLatin1String("nomib");
+        const QString rest = r.src.mid(r.i);
+        r.i = int(r.src.length());
+        QList<quint32> cues;
+        error = cueRange(w0, rest, list, ctx, &cues);
+        const QString n = cues.count() == 1 ? tr("1 cue") : tr("%1 cues").arg(cues.count());
+        if (error.isEmpty() && !m_st->setCuesNoMoveInBlack(cues, no))
+            res.message = no ? tr("already no move in black") : tr("already moves in black as its list does");
+        else if (error.isEmpty())
+            res.message = no ? tr("%1: no move in black into it").arg(n)
+                             : tr("%1: moves in black as its list does").arg(n);
+        res.keepSelection = true;
+    }
+    else if (w0 == QLatin1String("mib"))
+    {
+        // mib on|off|show [list] (Q38): the list's move in black. From a
+        // sub-cue: its main list. One undo step.
+        r.word();
+        const QString what = r.word().toLower();
+        const QString tail = r.word().toLower();
+        const CueList *target = list->isSubCues() ? m_st->listOfCue(list->subOf) : list;
+        auto said = [this](const CueList *l) {
+            const MoveInBlack m = m_st->listMoveInBlack(l->id);
+            const bool show = m_st->showMoveInBlack();
+            return m == MoveInBlack::On ? tr("%1: move in black On (the show's is %2)")
+                                          .arg(l->name, show ? tr("on") : tr("off"))
+                 : m == MoveInBlack::Off ? tr("%1: move in black Off (the show's is %2)")
+                                           .arg(l->name, show ? tr("on") : tr("off"))
+                 : tr("%1: move in black as the show's (%2)").arg(l->name, show ? tr("on") : tr("off"));
+        };
+        if (target == nullptr || target->looks)
+            error = tr("A Looks section has no move in black.");
+        else if (what.isEmpty())
+            res.message = said(target);
+        else if ((what != QLatin1String("on") && what != QLatin1String("off") && what != QLatin1String("show")
+                  && what != QLatin1String("default"))
+                 || (!tail.isEmpty() && tail != QLatin1String("list")) || !r.atEnd())
+            error = tr("mib on|off|show [list]");
+        else
+        {
+            const MoveInBlack m = what == QLatin1String("on") ? MoveInBlack::On
+                                : what == QLatin1String("off") ? MoveInBlack::Off : MoveInBlack::Show;
+            m_st->setListMoveInBlack(target->id, m);
+            res.message = said(target);
+        }
+        res.keepSelection = true;
+    }
     else if (w0 == QLatin1String("cue"))
     {
         r.word();
@@ -2132,7 +2197,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         if (ts.isEmpty())
         {
             const QString near = nearestWord(r.peek());
-            error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, skip, "
+            error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, skip, mib, "
                        "function, record, list, set, name, copy, paste, dup, reusable, use, unlink, detach, "
                        "convert, undo — type help.")
                     .arg(r.peek(), near.isEmpty() ? QString() : tr(" Did you mean “%1”? (help %1)").arg(near));
@@ -2940,7 +3005,22 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
             out->prepend(QStringLiteral("thru"));
         return true;
     }
-    if (w0 == QLatin1String("skip") || w0 == QLatin1String("unskip"))
+    if (w0 == QLatin1String("mib"))
+    {
+        // on / off / show, then list.
+        r.word();
+        if (r.atEnd())
+        {
+            *out << QStringLiteral("on") << QStringLiteral("off") << QStringLiteral("show");
+            return true;
+        }
+        r.word();
+        if (r.atEnd())
+            *out << QStringLiteral("list");
+        return true;
+    }
+    if (w0 == QLatin1String("skip") || w0 == QLatin1String("unskip")
+        || w0 == QLatin1String("nomib") || w0 == QLatin1String("allowmib"))
     {
         // Cue numbers; after one, thru (or another).
         r.word();

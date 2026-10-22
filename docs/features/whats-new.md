@@ -15,6 +15,32 @@ The latest changes, newest first. Each links to the guide with the detail.
   with rules carry an amber badge. See
   [Output rules](fixture-manager.md#output-rules).
 
+- **Three views.** **View → Workspace** picks the tabs: **qlcconsole**
+  (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
+  Virtual Console, Run), **Classic QLC+** (the QLC+ tabs, in QLC+'s order
+  and names) or **Everything**. The view is saved with the show. An old
+  QLC+ show opens in Classic QLC+, everything else (and a new show) in
+  qlcconsole. Choosing a hidden tab shows Everything, with a way back.
+  After **Upgrade This Show…**, a Classic show is offered the qlcconsole
+  view. See [Views](getting-started.md#views).
+
+- **Make a layer from the effects bench.** In the effect designer on the
+  bench (Build ▸ Effects, Window ▸ Effects), **Make a layer** turns the
+  Try on groups and the effect into a new layer. It goes back into the
+  cue or scene you came from, or into the Show Tree's selected cue,
+  another scene, or a new one. A saved, unchanged palette plays by name;
+  otherwise the layer gets a one-off. It is one undo step, and the new
+  layer is selected afterwards. See [Make a layer](effects.md#make-a-layer).
+
+- **Move in black per cue list and per cue.** The **MIB** switch is now
+  the show's default. A cue list can say **On** or **Off** whatever the
+  show says (right-click → **Move in black ▸**, its page, or
+  `mib off list`). A single cue can say **Don't move in black into this
+  cue** (its page, right-click, or `nomib 0.0.3`). The tree badges a list
+  or cue that differs from the show (**⊘ MIB** / **▸ MIB**), and the MIB
+  button's tooltip counts them. The lead time stays the show's. See
+  [Move in black](show-tree.md#move-in-black).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;

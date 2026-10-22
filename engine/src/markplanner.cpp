@@ -19,6 +19,7 @@
 #include "markeffect.h"
 #include "cueoutput.h"
 #include "cuelookahead.h"
+#include "showtreecontroller.h"
 
 MarkPlanner::MarkPlanner(Doc *doc, MarkEffect *mark, QObject *parent)
     : QObject(parent)
@@ -117,12 +118,28 @@ void MarkPlanner::evaluate()
         emit plannedChanged(int(m_planned.size()));
 }
 
+bool MarkPlanner::wantsMoveInBlack(const CueLookahead::UpcomingCue &cue) const
+{
+    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    if (st == nullptr)
+        return m_enabled;
+    return st->moveInBlackForNext(cue.chaserId, cue.step, cue.functionId, m_enabled);
+}
+
 void MarkPlanner::evaluatePlan()
 {
     updateDangleDetection();
 
-    if (!m_enabled || m_doc == nullptr || m_mark == nullptr)
+    if (m_doc == nullptr || m_mark == nullptr)
         return;
+    // Off for the show and no cue list says On: nothing to plan (cheap, as
+    // before Q38).
+    ShowTreeController *st = m_doc->showTree();
+    if (!m_enabled && (st == nullptr || !st->anyListMoveInBlackOn()))
+    {
+        clearPlanned();
+        return;
+    }
 
     // A mark auto-releases on reveal; prune those from our owned set first.
     const QList<quint32> stillMarked = m_mark->markedFixtures();
@@ -136,6 +153,13 @@ void MarkPlanner::evaluatePlan()
         return;
     }
     const CueLookahead::UpcomingCue cue = cues.first();
+    // Not into this cue (its list is Off, the cue says don't, or the show
+    // is off and the list doesn't say On): release what we pre-set.
+    if (!wantsMoveInBlack(cue))
+    {
+        clearPlanned();
+        return;
+    }
     // Too soon to move in black? Leave existing pre-sets be, add nothing new.
     if (cue.fireInMs < m_darkGapMs)
         return;

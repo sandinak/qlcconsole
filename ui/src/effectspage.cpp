@@ -128,6 +128,11 @@ EffectsPage::EffectsPage(Doc *doc, QWidget *parent)
         m_selectAfterRebuild = pid;
         scheduleRebuild();
     });
+    // Make a layer: shown where it went (the Show Tree, Build).
+    connect(m_designer, &EffectDesigner::layerMade, this,
+            [this](quint32 cueId, quint32 layerId, quint32 sceneId, quint32 paletteId) {
+        EffectDesigner::revealLayer(m_doc, nullptr, cueId, layerId, sceneId, paletteId);
+    });
 
     if (doc != nullptr)
     {

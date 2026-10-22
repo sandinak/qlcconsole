@@ -50,6 +50,7 @@
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
+#include "programmercontroller.h"
 
 using namespace ShowTree;
 
@@ -337,7 +338,9 @@ static void normalizeLooks(QList<Production> &ps)
                 c.mode = CueMode::ListDefault;
                 c.includes.clear();
                 c.skip = false;                 // a look is fired, not GOne through
+                c.noMoveInBlack = false;        // ... nor looked ahead to
             }
+            l.moveInBlack = MoveInBlack::Show;
         }
 }
 
@@ -921,6 +924,160 @@ QString ShowTreeController::listColour(quint32 listId) const
 {
     const CueList *l = cueList(listId);
     return l == nullptr ? QString() : l->colour;
+}
+
+/* Q38: move in black per list and per cue */
+
+bool ShowTreeController::setListMoveInBlack(quint32 listId, MoveInBlack mode)
+{
+    const QString label = mode == MoveInBlack::On ? tr("Move in black: On")
+                        : mode == MoveInBlack::Off ? tr("Move in black: Off")
+                        : tr("Move in black: the show's");
+    return edit(label, [&](QList<Production> &ps) {
+        CueList *l = listIn(ps, listId);
+        if (l != nullptr && l->isSubCues())
+        {
+            CueList *owner = nullptr;           // a sub-cue list: its cue's list
+            l = cueIn(ps, l->subOf, &owner) != nullptr ? owner : nullptr;
+        }
+        if (l == nullptr || l->looks || l->isSubCues() || l->moveInBlack == mode)
+            return false;
+        l->moveInBlack = mode;
+        return true;
+    });
+}
+
+MoveInBlack ShowTreeController::listMoveInBlack(quint32 listId) const
+{
+    const CueList *l = cueList(listId);
+    if (l != nullptr && l->isSubCues())
+        l = listOfCue(l->subOf);
+    return l == nullptr ? MoveInBlack::Show : l->moveInBlack;
+}
+
+bool ShowTreeController::setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool no)
+{
+    const QString label = no ? (cueIds.count() == 1 ? tr("Don't move in black into cue")
+                                                    : tr("Don't move in black into %1 cues").arg(cueIds.count()))
+                             : (cueIds.count() == 1 ? tr("Move in black into cue")
+                                                    : tr("Move in black into %1 cues").arg(cueIds.count()));
+    return edit(label, [&](QList<Production> &ps) {
+        bool changed = false;
+        for (quint32 cueId : cueIds)
+        {
+            CueList *l = nullptr;
+            Cue *c = cueIn(ps, cueId, &l);
+            if (c == nullptr || l->looks || c->noMoveInBlack == no)
+                continue;
+            c->noMoveInBlack = no;
+            changed = true;
+        }
+        return changed;
+    });
+}
+
+bool ShowTreeController::isCueNoMoveInBlack(quint32 cueId) const
+{
+    const Cue *c = cue(cueId);
+    return c != nullptr && c->noMoveInBlack;
+}
+
+bool ShowTreeController::showMoveInBlack() const
+{
+    return m_doc != nullptr && m_doc->programmer() != nullptr && m_doc->programmer()->isAutoMoveInBlack();
+}
+
+bool ShowTreeController::moveInBlackInto(quint32 cueId, bool showDefault) const
+{
+    const Cue *c = cue(cueId);
+    const CueList *l = listOfCue(cueId);
+    if (c == nullptr || l == nullptr || l->looks)
+        return showDefault;
+    // A sub-cue: its own flag, its cue's, and its cue's list's setting.
+    bool off = c->noMoveInBlack;
+    if (l->isSubCues())
+    {
+        if (const Cue *parent = cue(l->subOf))
+            off = off || parent->noMoveInBlack;
+        l = listOfCue(l->subOf);
+        if (l == nullptr)
+            return !off && showDefault;
+    }
+    return effectiveMoveInBlack(showDefault, l->moveInBlack, off);
+}
+
+bool ShowTreeController::listMovesInBlack(quint32 listId, bool showDefault) const
+{
+    return effectiveMoveInBlack(showDefault, listMoveInBlack(listId), false);
+}
+
+bool ShowTreeController::hasMoveInBlackOverrides(int *lists, int *cues) const
+{
+    int nl = 0, nc = 0;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+        {
+            if (l.looks)
+                continue;
+            if (!l.isSubCues() && l.moveInBlack != MoveInBlack::Show)
+                nl++;
+            for (const Cue &c : l.cues)
+                if (c.noMoveInBlack)
+                    nc++;
+        }
+    if (lists != nullptr)
+        *lists = nl;
+    if (cues != nullptr)
+        *cues = nc;
+    return nl + nc > 0;
+}
+
+bool ShowTreeController::anyListMoveInBlackOn() const
+{
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            if (!l.looks && !l.isSubCues() && l.moveInBlack == MoveInBlack::On)
+                return true;
+    return false;
+}
+
+bool ShowTreeController::moveInBlackForNext(quint32 chaserId, int step, quint32 functionId,
+                                            bool showDefault) const
+{
+    // A running list (or a cue's sub-cues): the cue its next step plays.
+    if (chaserId != invalidId())
+        for (const Production &p : m_productions)
+            for (const CueList &l : p.lists)
+            {
+                if (l.looks || l.chaser != chaserId)
+                    continue;
+                quint32 cueId = invalidId();
+                if (!l.isSubCues())
+                    cueId = step >= 0 ? cueOfStep(l.id, step) : invalidId();
+                else if (step >= 0 && step < l.cues.count())
+                    cueId = l.cues.at(step).id;
+                return cueId != invalidId() ? moveInBlackInto(cueId, showDefault)
+                                            : listMovesInBlack(l.id, showDefault);
+            }
+    if (functionId == invalidId())
+        return showDefault;
+    // A Show's next item: a cue's collection, or a whole list's chaser.
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+        {
+            if (l.looks)
+                continue;
+            if (!l.isSubCues() && l.chaser == functionId)
+            {
+                // The list starts at its first cue.
+                return l.cues.isEmpty() ? listMovesInBlack(l.id, showDefault)
+                                        : moveInBlackInto(l.cues.first().id, showDefault);
+            }
+            for (const Cue &c : l.cues)
+                if (c.collection == functionId)
+                    return moveInBlackInto(c.id, showDefault);
+        }
+    return showDefault;
 }
 
 bool ShowTreeController::setCueMixOverlap(quint32 cueId, bool mix)
@@ -4334,6 +4491,11 @@ void ShowTreeController::dropUnusedInlinePalettes()
         for (const Layer &layer : r.layers)
             addLooks(layer.looks);
     }
+
+    // A scene step in Build's history can put one back in its scene
+    // (Make a layer's one-off, undone): it stays while that step does.
+    if (const PaletteOps *ops = m_doc->paletteOps())
+        used.unite(ops->palettesInHistory());
 
     QList<quint32> ids = m_inlinePalettes.values();
     std::sort(ids.begin(), ids.end());

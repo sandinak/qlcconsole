@@ -183,6 +183,17 @@ QString Target::signature() const
     return sig;
 }
 
+bool effectiveMoveInBlack(bool showDefault, MoveInBlack list, bool cueOff)
+{
+    if (cueOff)
+        return false;
+    if (list == MoveInBlack::On)
+        return true;
+    if (list == MoveInBlack::Off)
+        return false;
+    return showDefault;
+}
+
 QString cueModeToString(CueMode mode)
 {
     switch (mode)
@@ -1325,6 +1336,10 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
         doc->writeAttribute(QStringLiteral("Name"), list.name);
         if (!list.colour.isEmpty())
             doc->writeAttribute(QStringLiteral("Colour"), list.colour);
+        // Q38: only when it isn't the show's (an older build ignores it).
+        if (!list.looks && !list.isSubCues() && list.moveInBlack != MoveInBlack::Show)
+            doc->writeAttribute(QStringLiteral("MoveInBlack"), list.moveInBlack == MoveInBlack::On
+                                                               ? QStringLiteral("On") : QStringLiteral("Off"));
         writeId(doc, QStringLiteral("Cue"), list.subOf);
         if (list.isSubCues())
         {
@@ -1384,6 +1399,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Skip"), QStringLiteral("1"));
             if (!cue.colour.isEmpty())
                 doc->writeAttribute(QStringLiteral("Colour"), cue.colour);
+            if (cue.noMoveInBlack && !list.looks)
+                doc->writeAttribute(QStringLiteral("NoMoveInBlack"), QStringLiteral("1"));
             if (list.isSubCues() && cue.follow)
             {
                 doc->writeAttribute(QStringLiteral("Follow"), QStringLiteral("Auto"));
@@ -1514,6 +1531,10 @@ bool loadXML(QXmlStreamReader &root, Production &production)
         list.chaser = readId(a, QStringLiteral("Chaser"));
         if (!looks && !subs)
         {
+            const QString mib = a.value(QStringLiteral("MoveInBlack")).toString();
+            list.moveInBlack = mib.compare(QLatin1String("On"), Qt::CaseInsensitive) == 0 ? MoveInBlack::On
+                             : mib.compare(QLatin1String("Off"), Qt::CaseInsensitive) == 0 ? MoveInBlack::Off
+                             : MoveInBlack::Show;
             list.source = readId(a, QStringLiteral("Source"));
             list.inPlace = a.value(QStringLiteral("InPlace")).toString() == QLatin1String("1");
         }
@@ -1573,6 +1594,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.collection = readId(a, QStringLiteral("Collection"));
             cue.skip = !looks && a.value(QStringLiteral("Skip")).toString() == QLatin1String("1");
             cue.colour = readColour(a);
+            cue.noMoveInBlack = !looks && a.value(QStringLiteral("NoMoveInBlack")).toString() == QLatin1String("1");
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();

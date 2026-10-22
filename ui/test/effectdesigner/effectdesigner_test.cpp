@@ -39,6 +39,8 @@
 #include "effectspage.h"
 #include "programmingmanager.h"
 #include "workbench.h"
+#include "programmingoutline.h"
+#include "paletteops.h"
 #include "rgbmatrix.h"
 #include "effectbrowser.h"
 #include "lookeditor.h"
@@ -704,6 +706,317 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     pm.hide();
 }
 
+/****************************************************************************
+ * Make a layer
+ ****************************************************************************/
+
+static const Look *effectLook(const Layer *layer)
+{
+    if (layer == nullptr)
+        return nullptr;
+    for (const Look &l : layer->looks)
+        if (isEffectKey(l.key))
+            return &l;
+    return nullptr;
+}
+
+void EffectDesigner_Test::makeALayerIntoACue()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    FixtureGroup *truss = group("Truss", 3, 3);
+    QLCPalette *phaser = effectPalette(m_doc, "Phaser", "Dimmer Phaser");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "Verse");
+    st->clearUndo();
+
+    EffectDesigner ed(m_doc);
+    ed.setTryOnGroups({ towers->id(), truss->id() });
+    QToolButton *btn = ed.findChild<QToolButton *>("edMakeLayer");
+    QVERIFY(btn != nullptr);
+    QVERIFY(!btn->isHidden());                  // the bench has it
+    ed.setEffect(QLCPalette::invalidId());
+    QVERIFY(!btn->isEnabled());                 // nothing picked yet
+    QVERIFY(!ed.whyNoLayer().isEmpty());
+    QCOMPARE(ed.makeLayerInCue(c1), invalidId());
+
+    // A saved palette, as it is: the layer plays it by name.
+    ed.setEffect(phaser->id());
+    QVERIFY(btn->isEnabled());
+    QCOMPARE(ed.savedPaletteForLayer(), phaser->id());
+    const int palettes = m_doc->palettes().count();
+    QSignalSpy made(&ed, &EffectDesigner::layerMade);
+    const quint32 l1 = ed.makeLayerInCue(c1);
+    QVERIFY(l1 != invalidId());
+    QCOMPARE(made.count(), 1);
+    QCOMPARE(made.first().at(0).toUInt(), c1);
+    QCOMPARE(made.first().at(1).toUInt(), l1);
+    QCOMPARE(made.first().at(3).toUInt(), phaser->id());
+    const Layer *layer = st->cue(c1)->layer(l1);
+    QVERIFY(layer != nullptr);
+    QCOMPARE(layer->target.groups, QList<quint32>({ towers->id(), truss->id() }));
+    QVERIFY(effectLook(layer) != nullptr);
+    QCOMPARE(effectLook(layer)->palettes, QList<quint32>({ phaser->id() }));
+    QCOMPARE(m_doc->palettes().count(), palettes);      // nothing new
+    QVERIFY(layerScene(m_doc, c1)->palettes().contains(phaser->id()));
+    // The bench goes on, as it was.
+    QVERIFY(ed.draft() != nullptr);
+    QCOMPARE(ed.originalId(), phaser->id());
+
+    // One step: undo takes the layer and its look, redo brings them back.
+    QVERIFY(st->undoText().contains("Make a layer"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layer(l1), nullptr);
+    QVERIFY(!st->canUndo());
+    QVERIFY(st->redo());
+    QVERIFY(effectLook(st->cue(c1)->layer(l1)) != nullptr);
+    QCOMPARE(effectLook(st->cue(c1)->layer(l1))->palettes, QList<quint32>({ phaser->id() }));
+
+    // Changed on the bench: a one-off copy, named for the cue; the bench
+    // keeps designing its own draft.
+    ed.draft()->setEffectParamValue("speed", 9);
+    QVERIFY(ed.isModified());
+    QCOMPARE(ed.savedPaletteForLayer(), QLCPalette::invalidId());
+    const quint32 l2 = ed.makeLayerInCue(c1);
+    QVERIFY(l2 != invalidId() && l2 != l1);
+    const Look *look = effectLook(st->cue(c1)->layer(l2));
+    QVERIFY(look != nullptr);
+    const quint32 oneOff = look->palettes.value(0);
+    QVERIFY(oneOff != phaser->id() && oneOff != ed.draftId());
+    QVERIFY(st->isInlinePalette(oneOff));
+    QVERIFY2(m_doc->palette(oneOff)->name().startsWith("Dimmer Phaser · 1 Verse"),
+             qPrintable(m_doc->palette(oneOff)->name()));
+    QCOMPARE(m_doc->palette(oneOff)->effectParamValues().value("speed"), 9.0);
+    QVERIFY(m_doc->palette(ed.draftId()) != nullptr);
+    QCOMPARE(phaser->effectParamValues().value("speed", 0.0), 0.0);     // the palette untouched
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layer(l2), nullptr);
+    QVERIFY(st->redo());
+    look = effectLook(st->cue(c1)->layer(l2));
+    QVERIFY(look != nullptr);
+    QCOMPARE(look->palettes, QList<quint32>({ oneOff }));
+    QVERIFY(m_doc->palette(oneOff) != nullptr);
+    QCOMPARE(m_doc->palette(oneOff)->effectParamValues().value("speed"), 9.0);
+
+    // Where you came from: the button goes there, the menu says so first.
+    ed.setCameFrom(c1, Function::invalidId());
+    QCOMPARE(btn->popupMode(), QToolButton::MenuButtonPopup);
+    QVERIFY2(btn->text().contains("1 Verse"), qPrintable(btn->text()));
+    QMenu *menu = ed.makeLayerMenu();
+    QAction *from = menu->findChild<QAction *>("edLayerCameFrom");
+    QVERIFY(from != nullptr && from->isEnabled());
+    QVERIFY(menu->findChild<QAction *>("edLayerPickScene") != nullptr);
+    QVERIFY(menu->findChild<QAction *>("edLayerNewScene") != nullptr);
+    QAction *treeCue = menu->findChild<QAction *>("edLayerTreeCue");
+    QVERIFY(treeCue != nullptr && !treeCue->isEnabled());   // no Show Tree here
+    const int layers = st->cue(c1)->layers.count();
+    btn->click();
+    QCOMPARE(st->cue(c1)->layers.count(), layers + 1);
+
+    // A layer's designer has none (it is the layer).
+    Target t;
+    t.groups << towers->id();
+    EffectLayerDialog dlg(m_doc, c1, l1, t);
+    QVERIFY(dlg.designer()->findChild<QToolButton *>("edMakeLayer")->isHidden());
+}
+
+void EffectDesigner_Test::makeALayerIntoAScene()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Verse wash");
+    m_doc->addFunction(scene);
+    PaletteOps *ops = m_doc->paletteOps();
+    ShowTreeController *st = m_doc->showTree();
+
+    EffectDesigner ed(m_doc);
+    ed.setTryOnGroups({ towers->id() });
+    ed.setEffect(QLCPalette::invalidId());
+    QVERIFY(ed.pickEffect("Dimmer Phaser"));
+    QCOMPARE(ed.savedPaletteForLayer(), QLCPalette::invalidId());   // never saved
+
+    QSignalSpy made(&ed, &EffectDesigner::layerMade);
+    QVERIFY(ed.makeLayerInScene(scene->id()));
+    QCOMPARE(made.count(), 1);
+    QCOMPARE(made.first().at(2).toUInt(), scene->id());
+    const quint32 oneOff = made.first().at(3).toUInt();
+    QVERIFY(st->isInlinePalette(oneOff));
+    QVERIFY(oneOff != ed.draftId());
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ towers->id() }));
+    QCOMPARE(scene->palettes(), QList<quint32>({ oneOff }));
+    QVERIFY2(m_doc->palette(oneOff)->name().endsWith("· Verse wash"), qPrintable(m_doc->palette(oneOff)->name()));
+    QVERIFY(ops->undoText().contains("make a layer"));
+
+    // Undo: the scene as it was; redo: back.
+    QVERIFY(ops->undo());
+    QVERIFY(scene->fixtureGroups().isEmpty());
+    QVERIFY(scene->palettes().isEmpty());
+    QVERIFY(ops->redo());
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ towers->id() }));
+    QCOMPARE(scene->palettes(), QList<quint32>({ oneOff }));
+    QCOMPARE(m_doc->palette(oneOff)->type(), QLCPalette::Effect);
+
+    // The scene keeps it across a bake (an edit in the tree)...
+    st->addProduction("Another");
+    QVERIFY(m_doc->palette(oneOff) != nullptr);
+    // ...and so does a step that took it out, while undo can put it back.
+    QVERIFY(ops->sceneStep("remove look", { scene->id() }, [&]() {
+        scene->removePalette(oneOff);
+        return true;
+    }));
+    st->addProduction("Third");
+    QVERIFY(m_doc->palette(oneOff) != nullptr);
+    QVERIFY(ops->undo());
+    QCOMPARE(scene->palettes(), QList<quint32>({ oneOff }));
+
+    // Again into the same scene: the groups it has aren't doubled.
+    QVERIFY(ed.makeLayerInScene(scene->id()));
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ towers->id() }));
+    QCOMPARE(scene->palettes().count(), 2);
+
+    // Not into the tree's own scenes, nor the preview's.
+    QVERIFY(!ed.makeLayerInScene(ed.previewSceneId()));
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+    st->setLayerLook(c1, st->addLayer(c1, t), st->lookForPalette(full->id()));
+    const Scene *generated = layerScene(m_doc, c1);
+    QVERIFY(generated != nullptr);
+    QVERIFY(!ed.makeLayerInScene(generated->id()));
+}
+
+void EffectDesigner_Test::makeALayerIntoANewScene()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *phaser = effectPalette(m_doc, "Phaser", "Dimmer Phaser");
+    PaletteOps *ops = m_doc->paletteOps();
+
+    EffectDesigner ed(m_doc);
+    ed.setTryOnGroups({ towers->id() });
+    ed.setEffect(phaser->id());
+    const int functions = m_doc->functions().count();
+    const quint32 sid = ed.makeLayerInNewScene("Phaser on Towers");
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(sid));
+    QVERIFY(scene != nullptr);
+    QVERIFY(scene->isVisible());
+    QCOMPARE(scene->name(), QString("Phaser on Towers"));
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ towers->id() }));
+    QCOMPARE(scene->palettes(), QList<quint32>({ phaser->id() }));
+    QCOMPARE(m_doc->functions().count(), functions + 1);
+
+    QVERIFY(ops->undo());
+    QCOMPARE(m_doc->function(sid), nullptr);
+    QVERIFY(ops->redo());
+    scene = qobject_cast<Scene *>(m_doc->function(sid));
+    QVERIFY(scene != nullptr);
+    QCOMPARE(scene->name(), QString("Phaser on Towers"));
+    QCOMPARE(scene->palettes(), QList<quint32>({ phaser->id() }));
+
+    // No Try on groups: nothing to make it on.
+    ed.setTryOnGroups({});
+    QVERIFY(!ed.whyNoLayer().isEmpty());
+    QCOMPARE(ed.makeLayerInNewScene("Nothing"), Function::invalidId());
+}
+
+void EffectDesigner_Test::makeALayerFromTheWorkbench()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *phaser = effectPalette(m_doc, "Phaser", "Dimmer Phaser");
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Verse wash");
+    m_doc->addFunction(scene);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "Chorus");
+
+    EffectDesigner::plugIntoWorkbench();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1000, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(c1));
+
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+
+    // The scene loaded, then an effect designed: the bench remembers it.
+    pm.showFunction(scene->id());
+    QCOMPARE(pm.workbench()->loadedFunction(), scene->id());
+    QVERIFY(pm.designEffect(phaser->id()));
+    QPointer<EffectDesigner> ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
+    QCOMPARE(ed->cameFromScene(), scene->id());
+    ed->setTryOnGroups({ towers->id() });
+    QToolButton *btn = ed->findChild<QToolButton *>("edMakeLayer");
+    QVERIFY(btn->isVisible() && btn->isEnabled());
+    QVERIFY2(btn->text().contains("Verse wash"), qPrintable(btn->text()));
+
+    // Another effect on the same bench: still where it came from.
+    QVERIFY(pm.designEffect(QLCPalette::invalidId()));
+    ed = pm.effectDesigner();
+    QCOMPARE(ed->cameFromScene(), scene->id());
+    QVERIFY(pm.designEffect(phaser->id()));
+    ed = pm.effectDesigner();
+    ed->setTryOnGroups({ towers->id() });
+
+    // The Show Tree's selected cue is offered too.
+    QMenu *menu = ed->makeLayerMenu();
+    QAction *treeCue = menu->findChild<QAction *>("edLayerTreeCue");
+    QVERIFY(treeCue != nullptr && treeCue->isEnabled());
+    QVERIFY2(treeCue->text().contains("1 Chorus"), qPrintable(treeCue->text()));
+    treeCue->trigger();
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    const quint32 l1 = st->cue(c1)->layers.first().id;
+    // ...and its new layer is selected there.
+    QTRY_COMPARE(view.currentId(), l1);
+    QCOMPARE(view.currentCueId(), c1);
+
+    // The button: into the scene it came from, loaded with the look selected.
+    ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
+    btn = ed->findChild<QToolButton *>("edMakeLayer");
+    btn->click();
+    QCOMPARE(scene->palettes(), QList<quint32>({ phaser->id() }));
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ towers->id() }));
+    QTRY_COMPARE(pm.workbench()->loadedFunction(), scene->id());
+    QTRY_VERIFY(ed.isNull());                       // the bench made way for it
+    const ProgrammingOutline::Row row = ProgrammingOutline::rowOf(pm.workbench()->rows()->currentItem());
+    QCOMPARE(row.kind, int(ProgrammingOutline::PaletteRow));
+    QCOMPARE(row.id, phaser->id());
+    QCOMPARE(pm.workbench()->currentPaletteId(), phaser->id());
+
+    // Undo (Build's history) takes it out again.
+    QVERIFY(m_doc->paletteOps()->undo());
+    QVERIFY(scene->palettes().isEmpty());
+
+    const QString shots = qEnvironmentVariable("QLC_EFFECTDESIGNER_SHOTS");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        QVERIFY(pm.designEffect(phaser->id()));
+        pm.effectDesigner()->setTryOnGroups({ towers->id() });
+        QMenu *m = pm.effectDesigner()->makeLayerMenu();
+        QToolButton *b = pm.effectDesigner()->findChild<QToolButton *>("edMakeLayer");
+        m->popup(b->mapToGlobal(QPoint(0, b->height())));
+        QTest::qWait(300);
+        QPixmap shot = pm.grab();
+        QPainter paint(&shot);
+        paint.drawPixmap(pm.mapFromGlobal(m->pos()), m->grab());
+        paint.end();
+        QVERIFY(shot.save(QDir(shots).filePath("make-a-layer.png")));
+        m->hide();
+    }
+    pm.hide();
+    view.hide();
+}
+
 static FixtureGroup *groupNamed(Doc *doc, const QString &name)
 {
     for (FixtureGroup *g : doc->fixtureGroups())
@@ -819,7 +1132,45 @@ void EffectDesigner_Test::picturesOfARealShow()
         menu->hide();
         delete menu;
     }
-    pm.effectDesigner()->cancel();
+
+    // Make a layer, on the real show: its menu, then into a cue and into a
+    // new scene, each taken back by its undo.
+    {
+        EffectDesigner *ed = pm.effectDesigner();
+        QToolButton *b = ed->findChild<QToolButton *>("edMakeLayer");
+        QVERIFY(b != nullptr && b->isVisible());
+        QMenu *m = ed->makeLayerMenu();
+        m->popup(b->mapToGlobal(QPoint(0, b->height())));
+        QTest::qWait(200);
+        QPixmap shot = pm.grab();
+        QPainter paint(&shot);
+        paint.drawPixmap(pm.mapFromGlobal(m->pos()), m->grab());
+        paint.end();
+        QVERIFY(shot.save(QDir(shots).filePath("build-make-a-layer.png")));
+        m->hide();
+
+        quint32 firstCue = invalidId();
+        for (const Production &p : st->productions())
+            for (const CueList &l : p.lists)
+                if (firstCue == invalidId() && !l.cues.isEmpty())
+                    firstCue = l.cues.first().id;
+        if (firstCue != invalidId())
+        {
+            const int layers = st->cue(firstCue)->layers.count();
+            const quint32 lid = ed->makeLayerInCue(firstCue);
+            QVERIFY(lid != invalidId());
+            QCOMPARE(st->cue(firstCue)->layers.count(), layers + 1);
+            QVERIFY(st->undo());
+            QCOMPARE(st->cue(firstCue)->layers.count(), layers);
+        }
+        const quint32 sid = ed->makeLayerInNewScene("Make a layer (test)");
+        QVERIFY(qobject_cast<Scene *>(m_doc->function(sid)) != nullptr);
+        QVERIFY(m_doc->paletteOps()->undo());
+        QCOMPARE(m_doc->function(sid), nullptr);
+    }
+    QTest::qWait(50);
+    if (pm.effectDesigner() != nullptr)
+        pm.effectDesigner()->cancel();
     pm.hide();
 }
 

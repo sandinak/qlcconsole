@@ -67,6 +67,12 @@
 #undef protected
 #undef private
 #include "helpbrowser.h"
+#include "simpledesk.h"
+#include "showmanager.h"
+#include "inputoutputmanager.h"
+#include "fixturemanager.h"
+#include "showconverter.h"
+#include <QToolButton>
 #include "inputoutputmap.h"
 #include "networkroute.h"
 #include "outputpatch.h"
@@ -167,7 +173,8 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QVERIFY(windowMenu != nullptr);
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
-    QCOMPARE(m_app->m_windowJumps.size(), views + 1);    // and Functions, which has no tab
+    // And Functions and Simple Desk, which have no tab in the qlcconsole view.
+    QCOMPARE(m_app->m_windowJumps.size(), views + 2);
     // The Rig Overview is a window too: offered here as well as under View.
     QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
     QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
@@ -354,7 +361,7 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
     QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_5));
 
     // Away from Build, Folders, Palettes: the menu lands on Scenes ▸ Classic.
-    m_app->showContext("Simple Desk");
+    m_app->showContext("Virtual Console");
     build->setSection(ProgrammingManager::PalettesSection);
     build->m_outline->setArrangement(ProgrammingOutline::Folders);
     jump->trigger();
@@ -374,7 +381,7 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
     }
 
     // A show saved with the Functions window in front opens there.
-    m_app->showContext("Simple Desk");
+    m_app->showContext("Virtual Console");
     build->m_outline->setArrangement(ProgrammingOutline::Folders);
     m_app->setActiveWindow("FunctionManager");
     QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
@@ -402,7 +409,7 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
     const int at = tabs->indexOf(FunctionManager::instance());
     QCOMPARE(at, 3);
     QCOMPARE(tabs->tabBar()->tabData(at).toString(), functions);
-    m_app->showContext("Simple Desk");
+    m_app->showContext("Virtual Console");
     jump->trigger();
     QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(FunctionManager::instance()));
     m_app->setTabLabelMode(App::TabTextOnly);
@@ -420,7 +427,7 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
     m_app->setFunctionsWindowShown(false);
     QCOMPARE(tabs->count(), views);
     QCOMPARE(tabs->indexOf(FunctionManager::instance()), -1);
-    m_app->showContext("Simple Desk");
+    m_app->showContext("Virtual Console");
     jump->trigger();
     QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
     QCOMPARE(build->m_outline->arrangement(), ProgrammingOutline::Classic);
@@ -1153,6 +1160,384 @@ void AppViews_Test::textColoursReadInEveryTheme()
     m_app->setTheme(was);
     m_app->hide();
     QVERIFY(st->removeProduction(prod));
+}
+
+/* The labels on the tab bar, in order (identities, not the text shown). */
+static QStringList tabLabels(QTabWidget *tabs)
+{
+    QStringList out;
+    for (int i = 0; i < tabs->count(); ++i)
+        out << tabs->tabBar()->tabData(i).toString();
+    return out;
+}
+
+static void viewShot(App *app, const QString &name)
+{
+    const QString dir = qEnvironmentVariable("APPVIEWS_SHOTS");
+    if (dir.isEmpty())
+        return;
+    app->resize(1400, 860);
+    QCoreApplication::processEvents();
+    QVERIFY(app->grab().save(dir + "/" + name));
+}
+
+void AppViews_Test::eachWorkspaceViewShowsItsTabs()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);     // a new show
+    const QStringList classic = { "Fixtures", "Functions", "Shows", "Virtual Console",
+                                  "Simple Desk", "Connections" };
+    const QStringList console = { "Connections", "Fixtures", "Lighting Studio", "Build",
+                                  "Show Tree", "Shows", "Virtual Console", "Run" };
+    const QStringList everything = { "Connections", "Fixtures", "Lighting Studio", "Functions",
+                                     "Build", "Show Tree", "Shows", "Virtual Console",
+                                     "Simple Desk", "Run" };
+    QCOMPARE(tabLabels(tabs), console);
+
+    QMenu *menu = m_app->menuBar()->findChild<QMenu *>("viewWorkspaceMenu");
+    QVERIFY(menu != nullptr);
+    QAction *toClassic = m_app->menuBar()->findChild<QAction *>("viewWorkspaceClassic");
+    QAction *toConsole = m_app->menuBar()->findChild<QAction *>("viewWorkspaceConsole");
+    QAction *toAll = m_app->menuBar()->findChild<QAction *>("viewWorkspaceEverything");
+    QVERIFY(toClassic && toConsole && toAll);
+    QCOMPARE(toClassic->text(), QString("Classic QLC+"));
+    QCOMPARE(toConsole->text(), QString("qlcconsole"));
+    QCOMPARE(toAll->text(), QString("Everything"));
+    QVERIFY(toConsole->isChecked() && !toClassic->isChecked() && !toAll->isChecked());
+    viewShot(m_app, "view-qlcconsole.png");
+
+    const QList<QWidget *> widgets = { FunctionManager::instance(), ProgrammingManager::instance(),
+                                       ShowTreeView::instance(), SimpleDesk::instance(),
+                                       Monitor::instance() };
+    for (QWidget *w : widgets)
+        QVERIFY(w != nullptr);
+
+    // Classic QLC+: stock order, and Connections reads as QLC+ calls it.
+    toClassic->trigger();
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+    QVERIFY(toClassic->isChecked() && !toConsole->isChecked());
+    QCOMPARE(tabLabels(tabs), classic);
+    QVERIFY(m_app->functionsWindowShown());
+    const int io = tabs->indexOf(InputOutputManager::instance());
+    QCOMPARE(io, 5);
+    QCOMPARE(tabs->tabText(io), QString("Inputs/Outputs"));
+    m_app->updateWindowMenu();
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == "Connections")
+            QCOMPARE(a->text(), QString("Inputs/Outputs"));
+    tabs->setCurrentIndex(io);
+    QVERIFY2(m_app->windowTitle().endsWith(" - Inputs/Outputs"), qPrintable(m_app->windowTitle()));
+    // Hidden, alive: the same widgets, off the bar.
+    QCOMPARE(tabs->indexOf(ProgrammingManager::instance()), -1);
+    QVERIFY(ProgrammingManager::instance() == widgets.at(1));
+    QVERIFY(ShowTreeView::instance() == widgets.at(2));
+    QVERIFY(!ShowTreeView::instance()->isVisible());
+    // Text-only and icon-only modes keep the QLC+ name.
+    m_app->setTabLabelMode(App::TabTextOnly);
+    QCOMPARE(tabs->tabText(io), QString("Inputs/Outputs"));
+    m_app->setTabLabelMode(App::TabIconAndText);
+    tabs->setCurrentIndex(0);
+    viewShot(m_app, "view-classic.png");
+
+    // The Settings dialog shows (and sets) the show's view.
+    {
+        AppSettings dlg(m_app, m_app);
+        QComboBox *combo = dlg.findChild<QComboBox *>("settingsWorkspaceView");
+        QVERIFY(combo != nullptr);
+        QCOMPARE(combo->currentText(), QString("Classic QLC+"));
+        combo->setCurrentIndex(combo->findData(int(App::EverythingView)));
+        dlg.accept();
+    }
+    QCOMPARE(m_app->workspaceView(), App::EverythingView);
+    QVERIFY(toAll->isChecked());
+    QCOMPARE(tabLabels(tabs), everything);
+    QCOMPARE(tabs->tabText(tabs->indexOf(InputOutputManager::instance())), QString("Connections"));
+    viewShot(m_app, "view-everything.png");
+
+    toConsole->trigger();
+    QCOMPARE(tabLabels(tabs), console);
+    QVERIFY(!m_app->functionsWindowShown());
+    {
+        AppSettings dlg(m_app, m_app);
+        QComboBox *combo = dlg.findChild<QComboBox *>("settingsWorkspaceView");
+        QCOMPARE(combo->currentText(), QString("qlcconsole"));
+    }
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::aJumpToAHiddenTabShowsEverything()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+    QAction *desk = nullptr;
+    QAction *functions = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+    {
+        if (a->data().toString() == "Simple Desk")
+            desk = a;
+        if (a->data().toString() == "Functions")
+            functions = a;
+    }
+    QVERIFY(desk && functions);
+
+    // Window → Functions in qlcconsole: Build ▸ Scenes ▸ Classic, view kept.
+    functions->trigger();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(ProgrammingManager::instance()));
+
+    // Window → Simple Desk: not in qlcconsole, so Everything, with a note.
+    m_app->resize(1400, 860);
+    m_app->show();
+    desk->trigger();
+    QCOMPARE(m_app->workspaceView(), App::EverythingView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(SimpleDesk::instance()));
+    QVERIFY(m_app->m_viewNotice->isVisible());
+    QVERIFY2(m_app->m_viewNoticeText->text().contains("Simple Desk isn't in the qlcconsole view"),
+             qPrintable(m_app->m_viewNoticeText->text()));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Back to qlcconsole"));
+    viewShot(m_app, "view-hidden-jump-note.png");
+    m_app->m_viewNoticeButton->click();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+    QCOMPARE(tabs->indexOf(SimpleDesk::instance()), -1);
+
+    // The same from Classic: Window → Build shows Everything.
+    m_app->setWorkspaceView(App::ClassicView);
+    m_app->showContext("Build");
+    QCOMPARE(m_app->workspaceView(), App::EverythingView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(ProgrammingManager::instance()));
+    // × puts the note away; the view stays.
+    m_app->m_viewNotice->findChild<QToolButton *>("viewNoticeClose")->click();
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+    QCOMPARE(m_app->workspaceView(), App::EverythingView);
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->hide();
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    auto windowOf = [this](QWidget *w) -> DetachedContext * {
+        foreach (DetachedContext *dw, m_app->findChildren<DetachedContext *>())
+            if (dw->centralWidget() == w)
+                return dw;
+        return nullptr;
+    };
+
+    // Shows (in both views) and Build (qlcconsole only) out in windows.
+    QWidget *shows = ShowManager::instance();
+    QWidget *build = ProgrammingManager::instance();
+    m_app->slotDetachContext(tabs->indexOf(shows));
+    m_app->slotDetachContext(tabs->indexOf(build));
+    DetachedContext *showsWin = windowOf(shows);
+    DetachedContext *buildWin = windowOf(build);
+    QVERIFY(showsWin && buildWin);
+
+    m_app->setWorkspaceView(App::ClassicView);
+    QCOMPARE(windowOf(shows), showsWin);              // still in their windows
+    QCOMPARE(windowOf(build), buildWin);
+    QVERIFY(buildWin->isVisible() && build->isVisible());
+    QCOMPARE(tabs->indexOf(shows), -1);
+    QCOMPARE(tabLabels(tabs), QStringList({ "Fixtures", "Functions", "Virtual Console",
+                                            "Simple Desk", "Connections" }));
+    // Build has no tab in Classic: put back from the menu it isn't offered...
+    QCOMPARE(m_app->detachedContexts(), QStringList({ "Shows" }));
+    // ...and closing its window puts it away, not on the bar.
+    buildWin->close();
+    QCOMPARE(tabs->indexOf(build), -1);
+    QVERIFY(!build->isVisible());
+    // Shows goes back to its place in Classic's order.
+    showsWin->close();
+    QCOMPARE(tabs->indexOf(shows), 2);
+
+    // Out again, and back to qlcconsole: Build is a tab again, Shows stays out.
+    m_app->slotDetachContext(tabs->indexOf(shows));
+    showsWin = windowOf(shows);
+    m_app->setWorkspaceView(App::ConsoleView);
+    QCOMPARE(windowOf(shows), showsWin);
+    QCOMPARE(tabs->indexOf(build), 3);
+    showsWin->close();
+    QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Lighting Studio", "Build",
+                                            "Show Tree", "Shows", "Virtual Console", "Run" }));
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::theViewIsSavedWithTheShow()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("views.qxw");
+    Doc *doc = m_app->doc();
+    m_app->clearDocument();
+    QVERIFY(!doc->isModified());
+
+    // Switching marks the show modified (it is saved with it)...
+    m_app->setWorkspaceView(App::ClassicView);
+    QVERIFY(doc->isModified());
+    // ...but setting the view it already has does not.
+    doc->resetModified();
+    m_app->setWorkspaceView(App::ClassicView);
+    QVERIFY(!doc->isModified());
+    // Not an undo step: the Show Tree's undo history doesn't move.
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+
+    // An attribute on <Workspace>, nothing else new: QLC+ reads past it.
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QXmlStreamReader xml(&f);
+        QVERIFY(xml.readNextStartElement());
+        QCOMPARE(xml.name().toString(), QString("Workspace"));
+        QCOMPARE(xml.attributes().value("View").toString(), QString("classic"));
+        while (xml.readNextStartElement())
+        {
+            QVERIFY2(xml.name() != QLatin1String("View"), "the view should be an attribute");
+            xml.skipCurrentElement();
+        }
+        QVERIFY(!xml.hasError());
+    }
+
+    for (App::WorkspaceView v : { App::ClassicView, App::EverythingView, App::ConsoleView })
+    {
+        m_app->setWorkspaceView(v);
+        QCOMPARE(m_app->saveXML(path), QFile::NoError);
+        m_app->clearDocument();
+        QCOMPARE(m_app->workspaceView(), App::ConsoleView);    // a new show
+        QCOMPARE(m_app->loadXML(path), QFile::NoError);
+        QCOMPARE(m_app->workspaceView(), v);
+        QVERIFY(!doc->isModified());
+    }
+
+    /* An older or newer build: a view it doesn't know is no view at all
+       (the default), and the show loads. */
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QByteArray xml = f.readAll();
+        f.close();
+        QVERIFY(xml.contains("View=\"qlcconsole\""));
+        xml.replace("View=\"qlcconsole\"", "View=\"tomorrow\"");
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(xml);
+        f.close();
+        m_app->clearDocument();
+        QCOMPARE(m_app->loadXML(path), QFile::NoError);
+        QCOMPARE(m_app->workspaceView(), App::ConsoleView);     // saved by qlcconsole
+    }
+    m_app->clearDocument();
+}
+
+/* A workspace as QLC+ 4.14 writes one: no view, its own creator. */
+static void writeStockShow(const QString &path, const QString &creator, bool tree)
+{
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QByteArray xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<!DOCTYPE Workspace>\n"
+        "<Workspace xmlns=\"http://www.qlcplus.org/Workspace\" CurrentWindow=\"FixtureManager\">\n"
+        " <Creator>\n"
+        "  <Name>" + creator.toUtf8() + "</Name>\n"
+        "  <Version>4.14.2</Version>\n"
+        "  <Author>someone</Author>\n"
+        " </Creator>\n"
+        " <Engine>\n"
+        "  <InputOutputMap>\n"
+        "   <Universe Name=\"Universe 1\" ID=\"0\"/>\n"
+        "  </InputOutputMap>\n";
+    if (tree)
+        xml += "  <ShowTree NextId=\"3\"><Production ID=\"1\" Name=\"Act One\"/></ShowTree>\n";
+    xml += " </Engine>\n"
+           "</Workspace>\n";
+    f.write(xml);
+}
+
+void AppViews_Test::aShowWithoutAViewOpensInItsDefault()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath("stock.qxw");
+
+    // An old QLC+ show: Classic QLC+.
+    writeStockShow(path, "Q Light Controller Plus", false);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+    QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(FixtureManager::instance()));
+    QVERIFY(!m_app->doc()->isModified());
+
+    // One with a Show Tree: qlcconsole.
+    writeStockShow(path, "Q Light Controller Plus", true);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(!m_app->doc()->showTree()->productions().isEmpty());
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+
+    // Saved by qlcconsole before views: qlcconsole.
+    writeStockShow(path, "qlcconsole", false);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+
+    // A new show (and first launch, initTestCase's): qlcconsole.
+    writeStockShow(path, "Q Light Controller Plus", false);
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+    QVERIFY(m_app->slotFileNew());
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+}
+
+void AppViews_Test::upgradingAClassicShowOffersTheConsoleView()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath("old.qxw");
+    writeStockShow(path, "Q Light Controller Plus", false);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+    m_app->resize(1400, 860);
+    m_app->show();
+
+    QAction *upgrade = m_app->findChild<QAction *>("fileUpgradeShow");
+    QVERIFY(upgrade != nullptr);
+    ShowTreeView *view = ShowTreeView::instance();
+    ShowTreeController *st = m_app->doc()->showTree();
+
+    // Upgrading nothing: no offer.
+    int opened = 0;
+    view->setConverterRunner([&](ShowConverter *) { ++opened; });
+    upgrade->trigger();
+    QCOMPARE(opened, 1);
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+
+    // Upgraded (the show has a Show Tree now): one quiet line, one button.
+    view->setConverterRunner([&](ShowConverter *) { ++opened; st->addProduction("Upgraded"); });
+    upgrade->trigger();
+    QCOMPARE(opened, 2);
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);   // offered, not done
+    QVERIFY(m_app->m_viewNotice->isVisible());
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Switch to the qlcconsole view"));
+    viewShot(m_app, "view-upgrade-offer.png");
+    // Once: dismissed, another upgrade doesn't ask again.
+    m_app->hideViewNotice();
+    upgrade->trigger();
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+    QVERIFY(!m_app->offerConsoleViewAfterUpgrade());
+
+    // Taken, from a fresh load of the same show: the qlcconsole view.
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    st->addProduction("Upgraded");
+    QVERIFY(m_app->offerConsoleViewAfterUpgrade());
+    m_app->m_viewNoticeButton->click();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QVERIFY(m_app->doc()->isModified());
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+    view->setConverterRunner(nullptr);
+    m_app->hide();
+    m_app->clearDocument();
 }
 
 void AppViews_Test::quittingWithTheShowTreeShowing()

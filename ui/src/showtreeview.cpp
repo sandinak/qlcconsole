@@ -54,6 +54,7 @@
 #include <QLabel>
 #include <QTimer>
 #include <QtMath>
+#include <QActionGroup>
 #include <QMenu>
 #include <QCursor>
 #include <QDrag>
@@ -62,6 +63,7 @@
 
 #include "mainbar.h"
 #include "moveinblackbutton.h"
+#include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "fixturegroupsource.h"
@@ -1186,6 +1188,17 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             m_listColour->setMenu(m);
         }
         f->addRow(tr("Text colour"), m_listColour);
+        // Q38: the list's own move in black, else the show's.
+        m_listMib = new QComboBox(m_listPage);
+        m_listMib->setObjectName("stListMib");
+        m_listMib->addItem(QString(), int(MoveInBlack::Show));
+        m_listMib->addItem(tr("On"), int(MoveInBlack::On));
+        m_listMib->addItem(tr("Off"), int(MoveInBlack::Off));
+        m_listMib->setToolTip(tr("Automatic move in black for this list's cues: the show's setting (the MIB "
+                                 "button), or On / Off for this list whatever the show says. A cue can still "
+                                 "say \"Don't move in black into this cue\". The lead time is the show's."));
+        f->addRow(tr("Move in black"), m_listMib);
+        connect(m_listMib, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotListMibChanged);
         m_listInfo = new QLabel(m_listPage);
         m_listInfo->setWordWrap(true);
         f->addRow(m_listInfo);
@@ -1379,6 +1392,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                  "does the same."));
         f->addRow(QString(), m_cueSkip);
         connect(m_cueSkip, &QCheckBox::toggled, this, &ShowTreeView::slotCueSkipToggled);
+        m_cueNoMib = new QCheckBox(tr("Don't move in black into this cue"), inner);
+        m_cueNoMib->setObjectName("stCueNoMib");
+        m_cueNoMib->setToolTip(tr("No head is pre-positioned in black for this cue, whatever its list and the "
+                                  "show say -- for a cue whose heads must be seen moving, or that follows too "
+                                  "closely to move them unseen. Right-click a cue, or nomib 0.0.3, does the "
+                                  "same."));
+        f->addRow(QString(), m_cueNoMib);
+        connect(m_cueNoMib, &QCheckBox::toggled, this, &ShowTreeView::slotCueNoMibToggled);
         {
             // Includes (D8): this cue plays their output under its own,
             // in order -- the later wins.
@@ -1794,6 +1815,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     }
 
     connect(m_st, &ShowTreeController::changed, this, &ShowTreeView::slotTreeChanged);
+    // Q38: the badges and "Use show's (On)" follow the show's move in black.
+    if (ProgrammerController *pc = m_doc->programmer())
+        connect(pc, &ProgrammerController::autoMoveInBlackChanged, this, [this]() {
+            buildTree();
+            updateInspector();
+        });
     connect(m_st, &ShowTreeController::previewChanged, this, &ShowTreeView::slotPreviewChanged);
     // The Library follows the show's groups and palettes -- once per burst
     // (a show loading adds them one by one).
@@ -2228,6 +2255,18 @@ void ShowTreeView::buildTree()
                 li->setToolTip(1, currentProd ? tr("GO plays this list (the current production's main list)")
                                               : tr("GO plays this list when the production is current"));
             }
+            // Q38: a list whose move in black isn't the show's.
+            if (!list.looks && list.moveInBlack != MoveInBlack::Show
+                && m_st->listMovesInBlack(list.id, m_st->showMoveInBlack()) != m_st->showMoveInBlack())
+            {
+                const bool on = list.moveInBlack == MoveInBlack::On;
+                li->setText(1, li->text(1) + (on ? tr("  ▸ MIB") : tr("  ⊘ MIB")));
+                const QString tip = on ? tr("Move in black On for this list, although the show's is off: dark "
+                                            "heads are pre-positioned for its next cue.")
+                                       : tr("Move in black Off for this list, although the show's is on: no head "
+                                            "is pre-positioned for its cues.");
+                li->setToolTip(1, QStringList({ li->toolTip(1), tip }).join(QStringLiteral("\n\n")).trimmed());
+            }
             const QList<ResolvedCue> resolved = m_st->resolved(list);
 
             // A Looks section: its folders (nested, first) and the VC
@@ -2309,6 +2348,20 @@ void ShowTreeView::buildTree()
                                          "layer wins). Convert to tracking keeps a cue mixing only where the "
                                          "rule would change what it plays; untick Overlapping layers mix on "
                                          "the cue page to put it on the rule anyway."));
+                }
+                // Q38: a cue that says no move in black where its list
+                // would (a list's own setting is badged on the list).
+                if (!list.looks && cue.noMoveInBlack)
+                {
+                    const quint32 owner = list.isSubCues() && m_st->listOfCue(list.subOf) != nullptr
+                                          ? m_st->listOfCue(list.subOf)->id : list.id;
+                    if (m_st->listMovesInBlack(owner, m_st->showMoveInBlack()))
+                    {
+                        badges << tr("⊘ MIB");
+                        badgeTip = QStringList({ badgeTip, tr("Don't move in black into this cue: no head is "
+                                                              "pre-positioned for it, although its list and the "
+                                                              "show would.") }).join(QStringLiteral("\n\n")).trimmed();
+                    }
                 }
                 // Tracking at a glance (Branson, 2026-10-21): how many
                 // layers it sets (●), releases (○) and how many track in
@@ -2885,6 +2938,9 @@ void ShowTreeView::updateInspector()
             m_listTitle->setText(list->name);
             m_listForm->setRowVisible(m_listColour, true);
             showColourButton(m_listColour, list->colour, QString());
+            m_listForm->setRowVisible(m_listMib, true);
+            m_listMib->setItemText(0, showMibLabel());
+            m_listMib->setCurrentIndex(qMax(0, m_listMib->findData(int(list->moveInBlack))));
             m_listMode->setCurrentIndex(list->mode == ListMode::Tracking ? 1 : 0);
             m_listBase->clear();
             m_listBase->addItem(tr("None: released layers go dark"), invalidId());
@@ -3034,7 +3090,8 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueBase), m_cueIncludes->parentWidget(),
                             static_cast<QWidget *>(m_cueFadeIn), static_cast<QWidget *>(m_cueFadeOut),
                             static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext),
-                            static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip) })
+                            static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip),
+                            static_cast<QWidget *>(m_cueNoMib) })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
         // A sub-cue (P6): its advance, not a mode, base, includes or hold
@@ -3102,6 +3159,10 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     {
         QSignalBlocker block(m_cueSkip);
         m_cueSkip->setChecked(cue.skip);
+    }
+    {
+        QSignalBlocker block(m_cueNoMib);
+        m_cueNoMib->setChecked(cue.noMoveInBlack);
     }
     m_cueReuse->setText(reuseLine(cue.id, invalidId()));
 
@@ -4356,6 +4417,43 @@ void ShowTreeView::slotCueSkipToggled(bool on)
     if (m_inspectorUpdating || m_pageCue == invalidId())
         return;
     setCuesSkipped({ m_pageCue }, on);
+}
+
+void ShowTreeView::slotCueNoMibToggled(bool on)
+{
+    if (m_inspectorUpdating || m_pageCue == invalidId())
+        return;
+    m_st->setCuesNoMoveInBlack({ m_pageCue }, on);
+}
+
+void ShowTreeView::slotListMibChanged(int index)
+{
+    if (m_inspectorUpdating || currentKind() != ListNode || index < 0)
+        return;
+    m_st->setListMoveInBlack(currentId(), MoveInBlack(m_listMib->itemData(index).toInt()));
+}
+
+QString ShowTreeView::showMibLabel() const
+{
+    return m_st->showMoveInBlack() ? tr("Use show's (On)") : tr("Use show's (Off)");
+}
+
+void ShowTreeView::listMibMenu(QMenu *menu, quint32 listId)
+{
+    const MoveInBlack now = m_st->listMoveInBlack(listId);
+    const QList<QPair<MoveInBlack, QString>> items = {
+        { MoveInBlack::Show, showMibLabel() }, { MoveInBlack::On, tr("On") }, { MoveInBlack::Off, tr("Off") } };
+    QActionGroup *group = new QActionGroup(menu);
+    for (const auto &it : items)
+    {
+        const MoveInBlack m = it.first;
+        QAction *a = menu->addAction(it.second, this, [this, listId, m]() { m_st->setListMoveInBlack(listId, m); });
+        a->setCheckable(true);
+        a->setChecked(now == m);
+        a->setActionGroup(group);
+        a->setObjectName(m == MoveInBlack::On ? "stListMibOn" : m == MoveInBlack::Off ? "stListMibOff"
+                                                                                    : "stListMibShow");
+    }
 }
 
 QList<quint32> ShowTreeView::selectedCues() const
@@ -5870,6 +5968,19 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     sk->setToolTip(skipped ? tr("GO plays it again")
                                            : tr("GO, auto-follow and Back pass over it; a jump still plays it"));
                 }
+                // Q38: Don't move in black into this cue (the selected cues).
+                {
+                    QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
+                    if (!cues.contains(cueId))
+                        cues = { cueId };
+                    const bool no = list->cue(cueId)->noMoveInBlack;
+                    const QString what = cues.count() == 1 ? QString() : tr(" (%1 cues)").arg(cues.count());
+                    QAction *nm = menu.addAction(tr("Don't move in black into this cue") + what, this,
+                                                 [this, cues, no]() { m_st->setCuesNoMoveInBlack(cues, !no); });
+                    nm->setObjectName("stCueNoMib");
+                    nm->setCheckable(true);
+                    nm->setChecked(no);
+                }
                 menu.addSeparator();
                 menu.addAction(tr("Record as new cue"), this, [this, cueId]() {
                     recordFrom(cueId);
@@ -6110,6 +6221,9 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             QMenu *colour = menu.addMenu(tr("Colour"));
             colour->setObjectName("stColourMenu");
             colourMenu(colour, {}, id);
+            QMenu *mib = menu.addMenu(tr("Move in black"));
+            mib->setObjectName("stListMibMenu");
+            listMibMenu(mib, id);
             menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
                 ->setObjectName("stDetachList");
             if (m_st->canRestoreOriginal(id))
@@ -8274,6 +8388,7 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
     for (QWidget *w : { static_cast<QWidget *>(m_listMode), static_cast<QWidget *>(m_listBase) })
         m_listForm->setRowVisible(w, false);
     m_listForm->setRowVisible(m_listColour, false);
+    m_listForm->setRowVisible(m_listMib, false);
     m_listConvert->hide();
     m_listDetach->hide();
     m_listVcPage->show();

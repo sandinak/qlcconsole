@@ -90,6 +90,8 @@
 #include "programmercontroller.h"
 #include "qxwimporter.h"
 #include "importselectiondialog.h"
+#include "eosimportwizard.h"
+#include "eosimporter.h"
 #include "lastlookeffect.h"
 
 #include "qlcfixturedefcache.h"
@@ -162,6 +164,7 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_SHOW_FOOTER_GM    QStringLiteral("workspace/showFooterGM")
 #define SETTINGS_SHOW_FOOTER_SPEED QStringLiteral("workspace/showFooterSpeedMasters")
 #define KXMLQLCWorkspaceWindow QStringLiteral("CurrentWindow")
+#define KXMLQLCWorkspaceView QStringLiteral("View")
 
 #define MAX_RECENT_FILES    10
 #define DEFAULT_AUTOSAVE_INTERVAL 5  // 5 minutes
@@ -415,6 +418,37 @@ void App::init()
     m_tab = new QTabWidget(central);
     m_tab->setObjectName("MainTabs");
     m_tab->setTabPosition(QTabWidget::South);
+    /* A quiet line above the tabs about the view (showViewNotice()). */
+    {
+        QFrame *notice = new QFrame(central);
+        notice->setObjectName(QStringLiteral("viewNotice"));
+        notice->setFrameShape(QFrame::StyledPanel);
+        QHBoxLayout *row = new QHBoxLayout(notice);
+        row->setContentsMargins(8, 2, 4, 2);
+        m_viewNoticeText = new QLabel(notice);
+        m_viewNoticeText->setObjectName(QStringLiteral("viewNoticeText"));
+        m_viewNoticeText->setWordWrap(true);
+        row->addWidget(m_viewNoticeText, 1);
+        m_viewNoticeButton = new QPushButton(notice);
+        m_viewNoticeButton->setObjectName(QStringLiteral("viewNoticeButton"));
+        row->addWidget(m_viewNoticeButton);
+        QToolButton *close = new QToolButton(notice);
+        close->setObjectName(QStringLiteral("viewNoticeClose"));
+        close->setText(QStringLiteral("×"));
+        close->setAutoRaise(true);
+        close->setToolTip(tr("Dismiss"));
+        row->addWidget(close);
+        connect(m_viewNoticeButton, &QPushButton::clicked, this, [this]() {
+            std::function<void()> act = m_viewNoticeAction;
+            hideViewNotice();
+            if (act)
+                act();
+        });
+        connect(close, &QToolButton::clicked, this, &App::hideViewNotice);
+        notice->hide();
+        m_viewNotice = notice;
+        centralLayout->addWidget(notice);
+    }
     centralLayout->addWidget(m_tab, 1);
     setCentralWidget(central);
 
@@ -648,10 +682,10 @@ void App::init()
     w = new CueRunner(m_doc, CueRunner::Full, m_tab);
     w->setObjectName(QStringLiteral("runTab"));
     addTab(w, QIcon(":/chaser.png"), tr("Run"));
-    /* Functions: hidden (board Q32) -- no tab, and Window → Functions opens
-       Build ▸ Scenes ▸ Classic, where everything it did lives. The view
-       modes (a Classic QLC+ view) show it again through the same switch. */
-    setFunctionsWindowShown(false);
+    /* The view (View ▸ Workspace): qlcconsole until a show says otherwise.
+       Functions has no tab in it (board Q32): Window → Functions opens
+       Build ▸ Scenes ▸ Classic, where everything it did lives. */
+    setWorkspaceView(ConsoleView, false);
     // Load and apply the tab label mode preference.
     {
         QSettings settings;
@@ -946,6 +980,11 @@ void App::clearDocument()
     SimpleDesk::instance()->clearContents();
     m_doc->inputOutputMap()->resetUniverses();
     setFileName(QString());
+    // A new show: the qlcconsole view (a loaded one sets its own, loadXML()).
+    m_loadedCreator.clear();
+    m_upgradeOfferMade = false;
+    hideViewNotice();
+    setWorkspaceView(ConsoleView, false);
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
@@ -1495,7 +1534,7 @@ void App::updateWindowTitle()
     // how many tabs before it have been detached.
     const int tabIdx = m_tab != NULL ? m_tab->currentIndex() : -1;
     if (tabIdx >= 0)
-        caption += QString(" - ") + m_tab->tabBar()->tabData(tabIdx).toString();
+        caption += QString(" - ") + tabDisplayLabel(m_tab->tabBar()->tabData(tabIdx).toString());
 
     setWindowTitle(caption);
 }
@@ -2164,6 +2203,9 @@ void App::initMenuBar()
                 return;
             switchToTabContaining(view);
             view->openUpgrade();
+            // A Classic QLC+ show now with a Show Tree: offer the view
+            // that shows it (once).
+            offerConsoleViewAfterUpgrade();
         });
         fileMenu->addAction(upgrade);
     }
@@ -2297,6 +2339,38 @@ void App::initMenuBar()
 
     /* ---- View: tools + jump to a workspace tab ---- */
     QMenu* viewMenu = mb->addMenu(tr("&View"));
+    /* View ▸ Workspace (board Q35/Q36): which tabs show -- Classic QLC+,
+       qlcconsole or Everything. Saved with the show; only the tabs change. */
+    {
+        QMenu *workspace = viewMenu->addMenu(tr("Workspace"));
+        workspace->setObjectName(QStringLiteral("viewWorkspaceMenu"));
+        QActionGroup *group = new QActionGroup(workspace);
+        group->setExclusive(true);
+        const struct { WorkspaceView view; const char *name; const char *tip; } views[] = {
+            { ClassicView, "viewWorkspaceClassic",
+              QT_TR_NOOP("The QLC+ tabs, in QLC+'s order: Fixtures, Functions, Shows, "
+                         "Virtual Console, Simple Desk, Inputs/Outputs") },
+            { ConsoleView, "viewWorkspaceConsole",
+              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows, "
+                         "Virtual Console and Run; Functions lives in Build ▸ Scenes ▸ Classic") },
+            { EverythingView, "viewWorkspaceEverything",
+              QT_TR_NOOP("Every tab") } };
+        for (const auto &v : views)
+        {
+            QAction *a = workspace->addAction(workspaceViewName(v.view));
+            a->setObjectName(QString::fromLatin1(v.name));
+            a->setToolTip(tr(v.tip));
+            a->setStatusTip(tr(v.tip));
+            a->setCheckable(true);
+            a->setData(int(v.view));
+            group->addAction(a);
+            const WorkspaceView view = v.view;
+            connect(a, &QAction::triggered, this, [this, view]() { setWorkspaceView(view); });
+            m_workspaceViewActions << a;
+        }
+        updateWorkspaceViewActions();
+        viewMenu->addSeparator();
+    }
     // m_controlMonitorAction (Ctrl+Shift+M) is deliberately NOT added to this
     // menu — Lighting Studio is a regular tab now, so it already gets a jump
     // entry from the loop below like every other tab; adding this too would
@@ -2926,6 +3000,7 @@ void App::slotFileImport()
     QStringList filters;
     filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
     filters << tr("QLC+ Workspaces (*%1)").arg(KExtWorkspace);
+    filters << tr("ETC Eos shows, USITT ASCII export (*.asc *.ASC)");
 #if defined(WIN32) || defined(Q_OS_WIN)
     filters << tr("All Files (*.*)");
 #else
@@ -2938,6 +3013,12 @@ void App::slotFileImport()
     QString fn = dialog.selectedFiles().first();
     if (fn.isEmpty() == true)
         return;
+
+    if (fn.endsWith(QLatin1String(".asc"), Qt::CaseInsensitive))
+    {
+        importEosShow(fn);
+        return;
+    }
 
     QString err;
     Doc *scratchDoc = loadScratchDoc(fn, err);
@@ -2957,15 +3038,21 @@ void App::slotFileImport()
     QList<quint32> fixtures = picker.selectedFixtures();
     QList<quint32> groups = picker.selectedFixtureGroups();
     QList<quint32> functions = picker.selectedFunctions();
-    if (fixtures.isEmpty() && groups.isEmpty() && functions.isEmpty())
+    QList<quint32> palettes = picker.selectedPalettes();
+    if (fixtures.isEmpty() && groups.isEmpty() && functions.isEmpty() && palettes.isEmpty())
     {
         delete scratchDoc;
         return;
     }
 
-    QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, fixtures, groups, functions);
+    QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, fixtures, groups, functions, palettes);
     delete scratchDoc;
+    showImportSummary(result);
+}
 
+void App::showImportSummary(const QxwImportResult &result, const QStringList &before,
+                            const QStringList &after)
+{
     if (FixtureManager::instance() != NULL)
         FixtureManager::instance()->updateView();
     if (InputOutputManager::instance() != NULL)
@@ -2995,8 +3082,74 @@ void App::slotFileImport()
         summary += tr("\n%1 fixture(s) were moved to a free DMX address.").arg(result.fixturesRelocated);
     if (result.warnings.isEmpty() == false)
         summary += tr("\n\n%1 item(s) skipped:\n").arg(result.warnings.size()) + result.warnings.join("\n");
+    if (!after.isEmpty())
+        summary += QStringLiteral("\n\n") + after.join(QStringLiteral("\n"));
 
-    QMessageBox::information(this, tr("Import complete"), summary);
+    if (before.isEmpty())
+    {
+        QMessageBox::information(this, tr("Import complete"), summary);
+        return;
+    }
+    // An Eos import's report runs long: what was read, then what landed.
+    QMessageBox box(QMessageBox::Information, tr("Import complete"), summary, QMessageBox::Ok, this);
+    box.setDetailedText(before.join(QStringLiteral("\n")));
+    box.exec();
+}
+
+void App::importEosShow(const QString &asciiPath)
+{
+    EosImportWizard wizard(this, m_doc, asciiPath);
+    if (wizard.exec() != QDialog::Accepted)
+        return;
+
+    EosImportResult eos;
+    QApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
+    Doc *scratchDoc = EosImporter::load(wizard.bundle(), eos, wizard.mapper());
+    QApplication::restoreOverrideCursor();
+    if (scratchDoc == NULL)
+    {
+        QMessageBox::warning(this, tr("Import"), eos.warnings.join("\n"));
+        return;
+    }
+
+    ImportSelectionDialog picker(this, scratchDoc);
+    picker.setWindowTitle(tr("Import from the Eos show"));
+    picker.selectAll();
+    if (picker.exec() != QDialog::Accepted)
+    {
+        delete scratchDoc;
+        return;
+    }
+
+    QApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
+    QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, picker.selectedFixtures(),
+                                                 picker.selectedFixtureGroups(), picker.selectedFunctions(),
+                                                 picker.selectedPalettes());
+    delete scratchDoc;
+
+    QStringList treeLines;
+    if (wizard.toShowTree())
+    {
+        QList<quint32> chasers;
+        for (quint32 id : eos.chasers)
+            if (result.functionMap.contains(id))
+                chasers << result.functionMap.value(id);
+        EosImporter::toShowTree(m_doc, chasers, &treeLines);
+    }
+    QApplication::restoreOverrideCursor();
+
+    QStringList read;
+    read << tr("Read from %1: %2 channel(s) (%3 patched as a generic dimmer, %4 staged without an address), "
+               "%5 group(s), %6 palette(s), %7 cue(s) in %8 list(s), %9 preset(s), %10 sub(s).")
+            .arg(QFileInfo(wizard.bundle().asciiPath).fileName())
+            .arg(eos.fixturesParsed).arg(eos.fixturesUnmapped).arg(eos.fixturesUnpatched)
+            .arg(eos.fixtureGroupsParsed).arg(eos.palettesParsed).arg(eos.cuesParsed)
+            .arg(eos.cueListsParsed).arg(eos.presetsParsed).arg(eos.submastersParsed);
+    read << eos.warnings;
+    if (!eos.warnings.isEmpty())
+        treeLines.prepend(tr("%n note(s) on what the Eos file holds and what didn't come across: Show Details.",
+                             "", int(eos.warnings.count())));
+    showImportSummary(result, read, treeLines);
 }
 
 QFile::FileError App::slotFileSave()
@@ -3470,37 +3623,274 @@ void App::showFunctions()
 void App::setFunctionsWindowShown(bool shown)
 {
     m_functionsWindowShown = shown;
-    FunctionManager *fm = FunctionManager::instance();
-    if (fm == NULL || m_tab == NULL)
-        return;
-    const QString label = tr("Functions");
-    if (!shown)
+    applyWorkspaceTabs();
+}
+
+/*****************************************************************************
+ * Workspace views (View ▸ Workspace)
+ *****************************************************************************/
+
+QStringList App::workspaceViewTabs(WorkspaceView view)
+{
+    switch (view)
     {
-        if (m_tab->indexOf(fm) >= 0)
-            parkContext(label);                 // off the tab bar
-        else if (!m_parkedContexts.contains(fm))
-        {
-            // In a window of its own: closing it puts it away, not back.
-            fm->setProperty("parked", true);
-            m_parkedContexts << fm;
-        }
-        updateWindowTitle();
-        return;
+    case ClassicView:
+        // Stock QLC+ 4.x, in its order (Connections reads "Inputs/Outputs").
+        return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
+                 tr("Simple Desk"), tr("Connections") };
+    case ConsoleView:
+        // Functions folds into Build ▸ Scenes ▸ Classic (board Q32).
+        return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Build"),
+                 tr("Show Tree"), tr("Shows"), tr("Virtual Console"), tr("Run") };
+    case EverythingView:
+    default:
+        return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Functions"),
+                 tr("Build"), tr("Show Tree"), tr("Shows"), tr("Virtual Console"),
+                 tr("Simple Desk"), tr("Run") };
     }
-    if (!m_parkedContexts.contains(fm))
-        return;                                 // a tab already
-    m_parkedContexts.removeAll(fm);
-    fm->setProperty("parked", false);
-    // Open in a window of its own: closing it puts it back as a tab.
+}
+
+QString App::workspaceViewKey(WorkspaceView view)
+{
+    switch (view)
+    {
+    case ClassicView:    return QStringLiteral("classic");
+    case EverythingView: return QStringLiteral("everything");
+    case ConsoleView:
+    default:             return QStringLiteral("qlcconsole");
+    }
+}
+
+App::WorkspaceView App::workspaceViewFromKey(const QString &key, bool *ok)
+{
+    const QString k = key.trimmed().toLower();
+    if (ok != nullptr)
+        *ok = true;
+    if (k == QLatin1String("classic"))
+        return ClassicView;
+    if (k == QLatin1String("everything"))
+        return EverythingView;
+    if (k == QLatin1String("qlcconsole"))
+        return ConsoleView;
+    if (ok != nullptr)
+        *ok = false;
+    return ConsoleView;
+}
+
+QString App::workspaceViewName(WorkspaceView view)
+{
+    switch (view)
+    {
+    case ClassicView:    return tr("Classic QLC+");
+    case EverythingView: return tr("Everything");
+    case ConsoleView:
+    default:             return tr("qlcconsole");
+    }
+}
+
+App::WorkspaceView App::defaultViewForLoadedShow() const
+{
+    /* A show with a Show Tree was made here: qlcconsole. One without, saved
+       by QLC+ (or anything but qlcconsole): it opens the way QLC+ showed it. */
+    const ShowTreeController *tree = m_doc != NULL ? m_doc->showTree() : nullptr;
+    if (tree != nullptr && !tree->productions().isEmpty())
+        return ConsoleView;
+    if (m_loadedCreator == QLatin1String(APPNAME))
+        return ConsoleView;
+    return ClassicView;
+}
+
+QString App::tabDisplayLabel(const QString &label) const
+{
+    if (m_workspaceView == ClassicView && label == tr("Connections"))
+        return tr("Inputs/Outputs");
+    return label;
+}
+
+QStringList App::effectiveViewTabs() const
+{
+    QStringList order = workspaceViewTabs(m_workspaceView);
+    const QString functions = tr("Functions");
+    if (m_functionsWindowShown && !order.contains(functions))
+    {
+        // At its place among everything (after Lighting Studio).
+        const QStringList all = workspaceViewTabs(EverythingView);
+        const int at = all.indexOf(functions);
+        int i = 0;
+        while (i < order.size() && all.indexOf(order.at(i)) < at)
+            ++i;
+        order.insert(i, functions);
+    }
+    else if (!m_functionsWindowShown)
+        order.removeAll(functions);
+    return order;
+}
+
+bool App::tabInView(const QString &label) const
+{
+    return effectiveViewTabs().contains(label);
+}
+
+int App::tabInsertIndex(const QString &label) const
+{
+    if (m_tab == NULL)
+        return 0;
+    const QStringList order = effectiveViewTabs();
+    const int pos = order.indexOf(label);
+    if (pos < 0)
+        return m_tab->count();
+    int idx = 0;
+    for (int t = 0; t < m_tab->count(); ++t)
+    {
+        const int o = order.indexOf(m_tab->tabBar()->tabData(t).toString());
+        if (o >= 0 && o < pos)
+            ++idx;
+    }
+    return idx;
+}
+
+QWidget *App::contextWidget(const QString &label) const
+{
+    if (m_tab != NULL)
+        for (int t = 0; t < m_tab->count(); ++t)
+            if (m_tab->tabBar()->tabData(t).toString() == label)
+                return m_tab->widget(t);
     foreach (DetachedContext *dw, findChildren<DetachedContext *>())
-        if (dw->centralWidget() == fm)
-            return;
-    const int idx = qBound(0, fm->property("tabIndex").toInt(), m_tab->count());
-    fm->setParent(m_tab);
-    m_tab->insertTab(idx, fm, fm->property("tabIcon").value<QIcon>(), label);
-    m_tab->tabBar()->setTabData(idx, label);
+        if (dw->centralWidget() != NULL && dw->centralWidget()->property("tabLabel").toString() == label)
+            return dw->centralWidget();
+    foreach (QWidget *w, m_parkedContexts)
+        if (w != NULL && w->property("tabLabel").toString() == label)
+            return w;
+    return nullptr;
+}
+
+void App::setWorkspaceView(WorkspaceView view, bool markModified)
+{
+    const bool changed = view != m_workspaceView;
+    m_workspaceView = view;
+    m_functionsWindowShown = workspaceViewTabs(view).contains(tr("Functions"));
+    applyWorkspaceTabs();
+    if (changed)
+        hideViewNotice();
+    // Saved with the show, but not an edit of it: no undo step.
+    if (changed && markModified && m_doc != NULL)
+        m_doc->setModified();
+}
+
+void App::applyWorkspaceTabs()
+{
+    if (m_tab == NULL)
+        return;
+    QWidget *front = m_tab->currentWidget();
+    const QStringList order = effectiveViewTabs();
+    const QList<DetachedContext *> windows = findChildren<DetachedContext *>();
+    auto inWindow = [&windows](QWidget *w) {
+        foreach (DetachedContext *dw, windows)
+            if (dw->centralWidget() == w)
+                return true;
+        return false;
+    };
+
+    /* Every tab off the bar (the widgets live on), then the view's back on in
+       its order. Signals held so the bar doesn't hand its tools round for
+       each step. */
+    const bool blocked = m_tab->blockSignals(true);
+    QHash<QString, QWidget *> docked;
+    while (m_tab->count() > 0)
+    {
+        const QString label = m_tab->tabBar()->tabData(0).toString();
+        QWidget *w = m_tab->widget(0);
+        w->setProperty("tabLabel", label);
+        m_tab->removeTab(0);
+        docked.insert(label, w);
+    }
+
+    QHash<QString, QWidget *> widgets;
+    for (int k = 0; k < m_tabOriginals.size(); ++k)
+    {
+        const QString label = m_tabOriginals.at(k).first;
+        QWidget *w = docked.value(label, nullptr);
+        if (w == nullptr)
+            w = contextWidget(label);
+        if (w == nullptr)
+            continue;
+        widgets.insert(label, w);
+        w->setProperty("tabLabel", label);
+        w->setProperty("tabIcon", QVariant::fromValue(m_tabOriginals.at(k).second));
+        const bool want = order.contains(label);
+        w->setProperty("parked", !want);
+        if (want)
+            m_parkedContexts.removeAll(w);
+        else if (!m_parkedContexts.contains(w))
+            m_parkedContexts << w;
+        // In a window of its own: it stays there (parked: closing it puts
+        // it away rather than back on a bar that doesn't show it).
+        if (!want && !inWindow(w))
+        {
+            w->setParent(this);
+            w->hide();
+        }
+    }
+
+    foreach (const QString &label, order)
+    {
+        // Docked, or put away until now: on the bar. In a window: stays.
+        QWidget *w = widgets.value(label, nullptr);
+        if (w == nullptr || inWindow(w))
+            continue;
+        w->setParent(m_tab);
+        const int idx = m_tab->addTab(w, w->property("tabIcon").value<QIcon>(), label);
+        m_tab->tabBar()->setTabData(idx, label);
+        w->setProperty("tabIndex", idx);
+    }
+
+    if (front != NULL && m_tab->indexOf(front) >= 0)
+        m_tab->setCurrentWidget(front);
+    m_tab->blockSignals(blocked);
     applyTabLabelMode();
-    updateWindowTitle();
+    updateWorkspaceViewActions();
+    slotTabChanged(m_tab->currentIndex());
+}
+
+void App::updateWorkspaceViewActions()
+{
+    foreach (QAction *a, m_workspaceViewActions)
+        a->setChecked(a->data().toInt() == int(m_workspaceView));
+}
+
+void App::showViewNotice(const QString &text, const QString &buttonText,
+                         const std::function<void()> &action)
+{
+    if (m_viewNotice == nullptr)
+        return;
+    m_viewNoticeText->setText(text);
+    m_viewNoticeAction = action;
+    m_viewNoticeButton->setText(buttonText);
+    m_viewNoticeButton->setVisible(!buttonText.isEmpty() && action != nullptr);
+    m_viewNotice->show();
+}
+
+void App::hideViewNotice()
+{
+    if (m_viewNotice == nullptr)
+        return;
+    m_viewNotice->hide();
+    m_viewNoticeAction = nullptr;
+}
+
+bool App::offerConsoleViewAfterUpgrade()
+{
+    if (m_upgradeOfferMade || m_workspaceView != ClassicView)
+        return false;
+    const ShowTreeController *tree = m_doc != NULL ? m_doc->showTree() : nullptr;
+    if (tree == nullptr || tree->productions().isEmpty())
+        return false;              // nothing upgraded: nothing new to show
+    m_upgradeOfferMade = true;
+    showViewNotice(tr("This show now has a Show Tree. The qlcconsole view shows it, with Build "
+                      "and Run, beside the QLC+ tabs you know."),
+                   tr("Switch to the qlcconsole view"),
+                   [this]() { setWorkspaceView(ConsoleView); });
+    return true;
 }
 
 void App::showContext(const QString &tabLabel)
@@ -3536,6 +3926,24 @@ void App::showContext(const QString &tabLabel)
         dw->raise();
         dw->activateWindow();
         return;
+    }
+
+    /* Not in this view (View ▸ Workspace): show everything, and say so --
+       the show is the same, only the tabs on show change. */
+    if (!tabInView(tabLabel) && contextWidget(tabLabel) != nullptr
+        && workspaceViewTabs(EverythingView).contains(tabLabel))
+    {
+        const WorkspaceView was = m_workspaceView;
+        setWorkspaceView(EverythingView);
+        if (tabInView(tabLabel))
+        {
+            showViewNotice(tr("%1 isn't in the %2 view: showing Everything (View ▸ Workspace).")
+                               .arg(tabLabel, workspaceViewName(was)),
+                           tr("Back to %1").arg(workspaceViewName(was)),
+                           [this, was]() { setWorkspaceView(was); });
+            showContext(tabLabel);
+            return;
+        }
     }
 
     /* Put away (parkContext()): open it in a window of its own. */
@@ -3583,7 +3991,8 @@ void App::updateWindowMenu()
     foreach (QAction *jump, m_windowJumps)
     {
         const QString label = jump->data().toString();
-        jump->setText(away.contains(label) ? tr("%1 — in its own window").arg(label) : label);
+        const QString shown = tabDisplayLabel(label);
+        jump->setText(away.contains(label) ? tr("%1 — in its own window").arg(shown) : shown);
     }
     if (m_windowDockMenu != NULL)
     {
@@ -3703,6 +4112,8 @@ void App::slotReattachContext()
         return;
     }
 
+    // Its place in the view now (the view may have changed meanwhile).
+    tabIndex = tabInsertIndex(tabLabel);
     qDebug() << "Reattaching context" << tabIndex << tabLabel << context;
 
     context->setParent(m_tab);
@@ -3711,6 +4122,7 @@ void App::slotReattachContext()
     // restore it so a later re-detach (or the window title) can still find
     // the real label under Icons-Only tab-label mode.
     m_tab->tabBar()->setTabData(tabIndex, tabLabel);
+    applyTabLabelMode();
     updateWindowTitle();
 }
 
@@ -4148,6 +4560,10 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     }
 
     QString activeWindowName = doc.attributes().value(KXMLQLCWorkspaceWindow).toString();
+    // The view it was saved in (absent: an older show; see below).
+    const QString viewKey = doc.attributes().value(KXMLQLCWorkspaceView).toString();
+    m_loadedCreator.clear();
+    m_upgradeOfferMade = false;
 
     while (doc.readNextStartElement())
     {
@@ -4175,8 +4591,15 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
         }
         else if (doc.name() == KXMLQLCCreator)
         {
-            /* Ignore creator information */
-            doc.skipCurrentElement();
+            /* Only who saved it: a show without a view opens in Classic QLC+
+               when QLC+ saved it (defaultViewForLoadedShow()). */
+            while (doc.readNextStartElement())
+            {
+                if (doc.name() == KXMLQLCCreatorName)
+                    m_loadedCreator = doc.readElementText().trimmed();
+                else
+                    doc.skipCurrentElement();
+            }
         }
         else if (doc.name() == KXMLShowEmbedded)
         {
@@ -4202,21 +4625,30 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
                     int tabIdx  = doc.attributes().value("tabIndex").toInt();
                     QByteArray geo = QByteArray::fromBase64(
                         doc.attributes().value("geometry").toLatin1());
-                    // Find the tab widget that matches the class name and detach it
+                    // Find the view that matches the class name and detach
+                    // it: a tab, or one the current view has put away (the
+                    // show's own view is applied after this, below).
+                    QList<QWidget *> candidates;
                     for (int t = 0; t < m_tab->count(); ++t)
+                        candidates << m_tab->widget(t);
+                    candidates << m_parkedContexts;
+                    for (QWidget *w : candidates)
                     {
-                        QWidget *w = m_tab->widget(t);
                         if (w && QString(w->metaObject()->className()) == cls)
                         {
+                            const int t = m_tab->indexOf(w);
                             w->setProperty("tabIndex", tabIdx);
-                            w->setProperty("tabIcon",  QVariant::fromValue(m_tab->tabIcon(t)));
-                            w->setProperty("tabLabel", m_tab->tabText(t));
-                            // Without this, the tab strip is left with a
-                            // dangling entry for a page that no longer lives
-                            // there once setCentralWidget() below reparents
-                            // it out (same fix as the interactive double-
-                            // click detach path in slotDetachContext()).
-                            m_tab->removeTab(t);
+                            if (t >= 0)
+                            {
+                                w->setProperty("tabIcon",  QVariant::fromValue(m_tab->tabIcon(t)));
+                                w->setProperty("tabLabel", m_tab->tabBar()->tabData(t).toString());
+                                // Without this, the tab strip is left with a
+                                // dangling entry for a page that no longer
+                                // lives there once setCentralWidget() below
+                                // reparents it out (same fix as the
+                                // interactive detach in slotDetachContext()).
+                                m_tab->removeTab(t);
+                            }
                             DetachedContext *dw = new DetachedContext(this);
                             dw->setCentralWidget(w);
                             if (!geo.isEmpty())
@@ -4245,6 +4677,17 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
             qWarning() << Q_FUNC_INFO << "Unknown Workspace tag:" << doc.name();
             doc.skipCurrentElement();
         }
+    }
+
+    /* The show's view (View ▸ Workspace), before the tab it was saved on is
+       brought forward. Not saved with one: an old QLC+ show opens in
+       Classic QLC+, anything else in qlcconsole. */
+    {
+        bool known = false;
+        WorkspaceView view = workspaceViewFromKey(viewKey, &known);
+        if (!known)
+            view = defaultViewForLoadedShow();
+        setWorkspaceView(view, false);
     }
 
     if (goToConsole == true)
@@ -4292,6 +4735,9 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     QWidget* widget = m_tab->currentWidget();
     if (widget != NULL)
         doc.writeAttribute(KXMLQLCWorkspaceWindow, QString(widget->metaObject()->className()));
+    /* The view it is shown in (View ▸ Workspace). An attribute, which QLC+
+       and older qlcconsole builds read past. */
+    doc.writeAttribute(KXMLQLCWorkspaceView, workspaceViewKey(m_workspaceView));
 
     doc.writeStartElement(KXMLQLCCreator);
     doc.writeTextElement(KXMLQLCCreatorName, APPNAME);
@@ -4538,7 +4984,7 @@ void App::applyTabLabelMode()
                 o = k;
         if (o < 0)
             continue;
-        const QString &origText = m_tabOriginals.at(o).first;
+        const QString origText = tabDisplayLabel(m_tabOriginals.at(o).first);
         const QIcon   &origIcon = m_tabOriginals.at(o).second;
         switch (m_tabLabelMode)
         {

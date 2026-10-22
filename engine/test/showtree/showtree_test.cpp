@@ -7662,6 +7662,218 @@ void ShowTree_Test::aSkippedCueStillPlaysWhenJumpedToAndIncluded()
     QVERIFY(canInclude(list, 1, 2));
 }
 
+/* Q38: effective = the cue says no ? no : the list's if set, else the show's. */
+void ShowTree_Test::moveInBlackDecisionMatrix()
+{
+    for (bool show : { false, true })
+        for (bool cueOff : { false, true })
+        {
+            QCOMPARE(effectiveMoveInBlack(show, MoveInBlack::Show, cueOff), !cueOff && show);
+            QCOMPARE(effectiveMoveInBlack(show, MoveInBlack::On, cueOff), !cueOff);
+            QCOMPARE(effectiveMoveInBlack(show, MoveInBlack::Off, cueOff), false);
+        }
+}
+
+/* The controller: one undo step per change, nothing for no change, Looks
+   left alone; the planner's lookup by a running list's step or by a Show
+   item's function; a sub-cue follows its cue and its cue's list. */
+void ShowTree_Test::moveInBlackPerListAndCue()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(!st->hasMoveInBlackOverrides());
+    QVERIFY(!st->showMoveInBlack());
+    QVERIFY(!st->moveInBlackInto(c2));
+    QVERIFY(st->moveInBlackInto(c2, true));
+
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::On));
+    QCOMPARE(st->undoText(), QString("Move in black: On"));
+    QVERIFY(!st->setListMoveInBlack(listId, MoveInBlack::On));     // no change, no step
+    QCOMPARE(st->listMoveInBlack(listId), MoveInBlack::On);
+    QVERIFY(st->anyListMoveInBlackOn());
+    QVERIFY(st->moveInBlackInto(c2, false));                        // On whatever the show says
+    QVERIFY(st->setCuesNoMoveInBlack({ c2 }, true));
+    QCOMPARE(st->undoText(), QString("Don't move in black into cue"));
+    QVERIFY(!st->setCuesNoMoveInBlack({ c2 }, true));
+    QVERIFY(st->isCueNoMoveInBlack(c2));
+    QVERIFY(!st->moveInBlackInto(c2, true));                        // the cue wins
+    QVERIFY(st->moveInBlackInto(c1, false));
+    int lists = 0, cues = 0;
+    QVERIFY(st->hasMoveInBlackOverrides(&lists, &cues));
+    QCOMPARE(lists, 1);
+    QCOMPARE(cues, 1);
+
+    // The planner's lookup: a running list's next step, a Show's next item.
+    const CueList *l = st->cueList(listId);
+    QVERIFY(st->moveInBlackForNext(l->chaser, 0, invalidId(), false));            // step 0: One
+    QVERIFY(!st->moveInBlackForNext(l->chaser, 1, invalidId(), true));            // step 1: Two, flagged
+    QVERIFY(st->moveInBlackForNext(invalidId(), -1, l->cues.at(0).collection, false));
+    QVERIFY(!st->moveInBlackForNext(invalidId(), -1, l->cues.at(1).collection, true));
+    QVERIFY(st->moveInBlackForNext(invalidId(), -1, l->chaser, false));           // starts at One
+    QVERIFY(!st->moveInBlackForNext(invalidId(), -1, 12345, false));               // not the tree's:
+    QVERIFY(st->moveInBlackForNext(invalidId(), -1, 12345, true));                 // the show's
+
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::Off));
+    QVERIFY(!st->moveInBlackInto(c1, true));
+    QVERIFY(!st->anyListMoveInBlackOn());
+
+    // A sub-cue: its cue's flag and its cue's list.
+    const quint32 sub = st->addSubCue(c1, "Sub");
+    QVERIFY(sub != invalidId());
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::Show));
+    QVERIFY(st->moveInBlackInto(sub, true));
+    QVERIFY(st->setCuesNoMoveInBlack({ c1 }, true));
+    QVERIFY(!st->moveInBlackInto(sub, true));
+    QVERIFY(st->setCuesNoMoveInBlack({ c1 }, false));
+    QCOMPARE(st->undoText(), QString("Move in black into cue"));
+    QVERIFY(st->setListMoveInBlack(st->subCueList(c1), MoveInBlack::Off));     // = its cue's list
+    QCOMPARE(st->listMoveInBlack(listId), MoveInBlack::Off);
+    QVERIFY(!st->moveInBlackInto(sub, true));
+
+    // A Looks section has neither.
+    const quint32 look = st->addLook(prod, "Hit");
+    if (look != invalidId())
+    {
+        QVERIFY(!st->setCuesNoMoveInBlack({ look }, true));
+        QVERIFY(!st->setListMoveInBlack(st->listOfCue(look)->id, MoveInBlack::On));
+    }
+}
+
+/* Saved as optional attributes (nothing when they're the show's), undone and
+   redone as one step each; a reader that doesn't know them -- an older build,
+   or a show from before -- reads the same tree, minus them. */
+void ShowTree_Test::moveInBlackSaveLoadUndo()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(!engineXml(m_doc).contains("MoveInBlack=\""));        // the show's own <MoveInBlack> only
+
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::Off));
+    QVERIFY(st->setCuesNoMoveInBlack({ c2 }, true));
+    QVERIFY(st->undo());
+    QVERIFY(!st->isCueNoMoveInBlack(c2));
+    QCOMPARE(st->listMoveInBlack(listId), MoveInBlack::Off);        // one step each
+    QVERIFY(st->undo());
+    QCOMPARE(st->listMoveInBlack(listId), MoveInBlack::Show);
+    QVERIFY(st->redo());
+    QVERIFY(st->redo());
+    QCOMPARE(st->listMoveInBlack(listId), MoveInBlack::Off);
+    QVERIFY(st->isCueNoMoveInBlack(c2));
+
+    const QByteArray xml = engineXml(m_doc);
+    QVERIFY(xml.contains("MoveInBlack=\"Off\""));
+    QVERIFY(xml.contains("NoMoveInBlack=\"1\""));
+    Doc *other = new Doc(this);
+    {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+    }
+    QCOMPARE(other->showTree()->listMoveInBlack(listId), MoveInBlack::Off);
+    QVERIFY(other->showTree()->isCueNoMoveInBlack(c2));
+    QVERIFY(!other->showTree()->isCueNoMoveInBlack(c1));
+    QCOMPARE(productionXml(other->showTree()->productions().first()), productionXml(st->productions().first()));
+    delete other;
+
+    // On also round-trips.
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::On));
+    QVERIFY(engineXml(m_doc).contains("MoveInBlack=\"On\""));
+
+    // Without the attributes (what an older reader sees of them: nothing):
+    // the same tree, the show's setting everywhere.
+    QByteArray old = xml;
+    old.replace(" MoveInBlack=\"Off\"", "");
+    old.replace(" NoMoveInBlack=\"1\"", "");
+    QVERIFY(!old.contains("MoveInBlack=\""));
+    Doc *older = new Doc(this);
+    {
+        QXmlStreamReader r(old);
+        r.readNextStartElement();
+        QVERIFY(older->loadXML(r, false));
+    }
+    Production expect = st->productions().first();
+    for (CueList &el : expect.lists)
+    {
+        el.moveInBlack = MoveInBlack::Show;
+        for (Cue &ec : el.cues)
+            ec.noMoveInBlack = false;
+    }
+    QCOMPARE(older->showTree()->listMoveInBlack(listId), MoveInBlack::Show);
+    QCOMPARE(productionXml(older->showTree()->productions().first()), productionXml(expect));
+    delete older;
+}
+
+/* mib on|off|show [list], nomib / allowmib <cues>: one undo step each;
+   Tab offers on/off/show, then list; cue numbers after nomib. */
+void ShowTree_Test::moveInBlackTyped()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ShowTreeCommand::Result r = cmd.run("list \"Show\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    QList<quint32> c;
+    for (int i = 1; i <= 4; ++i)
+        c << st->addCueNumbered(ctx.list, QString("0.0.%1").arg(i), QString("C%1").arg(i));
+    ctx.cue = c[0];
+
+    r = cmd.run("mib off list", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->listMoveInBlack(ctx.list), MoveInBlack::Off);
+    QCOMPARE(st->undoText(), QString("mib off list"));
+    r = cmd.run("mib on", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->listMoveInBlack(ctx.list), MoveInBlack::On);
+    r = cmd.run("mib", ctx);                                // says what it is
+    QVERIFY2(r.ok && r.message.contains("On"), qPrintable(r.message));
+    r = cmd.run("mib show list", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->listMoveInBlack(ctx.list), MoveInBlack::Show);
+
+    r = cmd.run("nomib", ctx);                              // the selected cue
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(st->isCueNoMoveInBlack(c[0]));
+    r = cmd.run("nomib 0.0.2 thru 0.0.4", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    for (int i = 1; i < 4; ++i)
+        QVERIFY(st->isCueNoMoveInBlack(c[i]));
+    QVERIFY(st->undo());                                    // one step for the range
+    QVERIFY(!st->isCueNoMoveInBlack(c[2]));
+    QVERIFY(st->redo());
+    r = cmd.run("allowmib 0.0.3, 0.0.1", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(!st->isCueNoMoveInBlack(c[0]) && !st->isCueNoMoveInBlack(c[2]));
+    QVERIFY(st->isCueNoMoveInBlack(c[1]));
+
+    // Wrong: nothing changes.
+    const QString before = st->undoText();
+    QVERIFY(!cmd.run("mib sideways", ctx).ok);
+    QVERIFY(!cmd.run("mib on cue", ctx).ok);
+    QVERIFY(!cmd.run("nomib 9.9.9", ctx).ok);
+    QCOMPARE(st->undoText(), before);
+
+    QStringList options;
+    QVERIFY(cmd.candidates("mib ", ctx, &options));
+    QCOMPARE(options, QStringList({ "on", "off", "show" }));
+    QVERIFY(cmd.candidates("mib off ", ctx, &options));
+    QCOMPARE(options, QStringList({ "list" }));
+    QVERIFY(cmd.candidates("nomib ", ctx, &options));
+    QVERIFY(options.contains("0.0.3"));
+    QVERIFY(cmd.candidates("nomib 0.0.3 ", ctx, &options));
+    QVERIFY(options.contains("thru"));
+    QVERIFY(cmd.candidates("", ctx, &options));
+    QVERIFY(options.contains("mib") && options.contains("nomib") && options.contains("allowmib"));
+    QVERIFY(ShowTreeCommand::helpText("nomib").contains("Don't move in black"));
+    QVERIFY(ShowTreeCommand::grammar().contains("nomib"));
+}
+
 /* Baked: the cue's chaser step is skipped, so GO, Back and auto-follow pass
    over it (the runner) and a jump plays it; GO from stopped with the first
    skipped starts at the second; every cue skipped, GO does nothing. */

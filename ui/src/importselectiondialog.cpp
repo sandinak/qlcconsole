@@ -29,6 +29,7 @@
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "function.h"
+#include "qlcpalette.h"
 
 #define KColumnName 0
 #define KColumnID   1
@@ -69,6 +70,9 @@ ImportSelectionDialog::ImportSelectionDialog(QWidget *parent, Doc *sourceDoc)
 
     m_functionTree = makeTree();
     tabs->addTab(m_functionTree, tr("Functions"));
+
+    m_paletteTree = makeTree();
+    tabs->addTab(m_paletteTree, tr("Palettes"));
 
     QDialogButtonBox *buttons = new QDialogButtonBox(
                 QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -111,6 +115,14 @@ void ImportSelectionDialog::populate()
         item->setText(KColumnID, QString::number(f->id()));
         item->setData(KColumnID, Qt::UserRole, f->id());
     }
+
+    foreach (QLCPalette *p, m_sourceDoc->palettes())
+    {
+        QTreeWidgetItem *item = new QTreeWidgetItem(m_paletteTree);
+        item->setText(KColumnName, QString("%1 (%2)").arg(p->name(), QLCPalette::typeToString(p->type())));
+        item->setText(KColumnID, QString::number(p->id()));
+        item->setData(KColumnID, Qt::UserRole, p->id());
+    }
 }
 
 QList<quint32> ImportSelectionDialog::selectedFixtures() const
@@ -135,4 +147,20 @@ QList<quint32> ImportSelectionDialog::selectedFunctions() const
     foreach (QTreeWidgetItem *item, m_functionTree->selectedItems())
         ids << item->data(KColumnID, Qt::UserRole).toUInt();
     return ids;
+}
+
+QList<quint32> ImportSelectionDialog::selectedPalettes() const
+{
+    QList<quint32> ids;
+    foreach (QTreeWidgetItem *item, m_paletteTree->selectedItems())
+        ids << item->data(KColumnID, Qt::UserRole).toUInt();
+    return ids;
+}
+
+void ImportSelectionDialog::selectAll()
+{
+    m_fixtureTree->selectAll();
+    m_groupTree->selectAll();
+    m_functionTree->selectAll();
+    m_paletteTree->selectAll();
 }

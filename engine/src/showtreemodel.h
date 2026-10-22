@@ -145,6 +145,16 @@ namespace ShowTree
     enum class CueMode { ListDefault, Track, Block, CueOnly };
     enum class ListMode { Tracking, NonTracking };
 
+    /** A cue list's automatic move-in-black (Q38): the show's setting
+     *  (ProgrammerController::isAutoMoveInBlack), or always on / off for
+     *  this list. */
+    enum class MoveInBlack { Show, On, Off };
+
+    /** Whether the planner moves dark heads in black into a cue: never when
+     *  the cue says "Don't move in black into this cue" (@a cueOff), else
+     *  the list's setting when it has one, else the show's. */
+    QLC_ENGINE_EXPORT bool effectiveMoveInBlack(bool showDefault, MoveInBlack list, bool cueOff);
+
     QLC_ENGINE_EXPORT QString cueModeToString(CueMode mode);
     QLC_ENGINE_EXPORT CueMode stringToCueMode(const QString &str);
 
@@ -245,6 +255,12 @@ namespace ShowTree
          *  use's, like its number. Saved as Colour=, which an older build
          *  ignores. */
         QString colour;
+        /** "Don't move in black into this cue" (Q38): the move-in-black
+         *  planner never pre-positions heads for it, whatever the list and
+         *  the show say (a cue whose heads must be seen moving, or that
+         *  follows too closely). This use's, like its number. Saved as
+         *  NoMoveInBlack="1", which an older build ignores. */
+        bool noMoveInBlack = false;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);
@@ -274,6 +290,11 @@ namespace ShowTree
         /** The text colour of its cues that have none of their own
          *  (Cue::colour; empty: the theme's). */
         QString colour;
+        /** Automatic move-in-black for its cues (Q38): the show's setting,
+         *  or On / Off for this list whatever the show says. A sub-cue list
+         *  follows its cue's list; a Looks section has none. Saved as
+         *  MoveInBlack="On|Off", which an older build ignores. */
+        MoveInBlack moveInBlack = MoveInBlack::Show;
         /** A cue's sub-cues (P6, §3C, D9, D25): the sub-cues of cue @a subOf
          *  (in another list of the same production) as a list of their own,
          *  as a Looks section is -- so every cue operation works on a

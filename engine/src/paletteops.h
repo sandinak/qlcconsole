@@ -26,6 +26,7 @@
 #include <QObject>
 #include <QList>
 #include <QHash>
+#include <QSet>
 #include <QSharedPointer>
 
 #include "qlcengine_export.h"
@@ -180,6 +181,10 @@ public:
 
     /** Forget the empty folders and the undo steps (a new show). */
     void reset();
+    /** The palettes the scenes and functions held by this history's steps
+     *  play (either side, undo and redo): a Show Tree one-off a scene step
+     *  took out of a scene stays while an undo or redo can put it back. */
+    QSet<quint32> palettesInHistory() const;
 
     /************************************************************************
      * Scene steps (PROGRAMMING_REDESIGN.md P1): the Programming tab's scene

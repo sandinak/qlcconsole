@@ -8,6 +8,26 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Eos import (EOS_IMPORT_DESIGN.md)
+
+- **Phases 1–4 + magic-sheet placement built on feat/eos-import-design
+  (2026-10-22), not merged.** File ▸ Import takes an Eos USITT ASCII
+  export (.asc): the wizard (files, fixture types), the usual picker and
+  merge, the cue lists into the Show Tree as tracking lists (one undo
+  step). Tried on Branson's Element 2 show (01-30-23 .asc + Magic Sheet
+  1, outside the repo: `QLC_EOS_SAMPLE_DIR` runs it in eosimporter_test).
+  Left:
+  - The magic-sheet calibration dialog (two reference channels → real
+    coordinates); today a sheet lands as an uncalibrated layer.
+  - BP values, effects, curves, subs' fader/bump behaviour, cue delays and
+    links, per-part timing, multi-part fixtures' extra parts: reported,
+    not carried.
+  - Library gaps seen in his show: ColorSource Spot / Spot Jr / Cyc in
+    their 3-channel RGB modes (the wizard suggests ColorSource PAR RGB,
+    same DMX layout).
+  - Augment3d (.esf3d `working.a3d`): his file's is the empty default
+    scene; nothing to read until a show has a model.
+
 ## Build + Workbench (WORKFLOW_DESIGN.md, phases W0–W7)
 
 - **W1 Build tab + Workbench — built on feat/w1-build-workbench
@@ -68,6 +88,11 @@ under `~/.claude/.../memory/`.
     Chase… load there. The Functions window is hidden, not deleted:
     App::setFunctionsWindowShown(bool) is the one switch, for the coming
     view modes (Classic QLC+ shows it).
+  - ~~View modes~~ — done (board Q35/Q36, feat/view-modes): View ▸
+    Workspace ▸ Classic QLC+ / qlcconsole / Everything, saved per show
+    (`View=` on `<Workspace>`); old QLC+ shows open in Classic, the rest
+    and new shows in qlcconsole; a hidden tab's jump shows Everything
+    with a note; Upgrade This Show… offers qlcconsole once.
 - W2 and W3 merged together on feat/w3-showtree-workbench (2026-10-22).
 - Then W4 → W5 → W6 → W7.
 
@@ -1246,8 +1271,12 @@ rig edits, bulk repatching, cross-show consistency checks.
     signal, forwarded `ProgrammerController` → App footer chip. DONE (unit-tested,
     engine/test/markplanner). Runs regardless of Auto-MIB being on (manual marks
     dangle too). *Needs rig eyeball to confirm the chip reads right live.*
+  - **Q38 — per list / per cue** — show default + cue list Use show's / On /
+    Off + per-cue "Don't move in black into this cue" (`mib`, `nomib`,
+    `allowmib`; badges; MIB tooltip). DONE (feat/mib-overrides). Lead time
+    stays show-wide.
   Still open: **verify CueLookahead timing on a rig** (the dark-gap depends on it);
-  **force-live / force-mark** per-cue overrides + dark-move fade. Also: mark "to a
+  **force-mark** per-cue override + dark-move fade. Also: mark "to a
   chosen look"; a monitor context-menu Mark action. *(from the cue-policy discussion)*
 
 ## Backlog — not started

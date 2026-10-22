@@ -166,6 +166,11 @@ public:
         QString targetSignature;        //!< ShowTree::Target::signature()
         QString key;                    //!< "Effect.Color"; empty: the layer's
         quint32 palette = 0xFFFFFFFF;   //!< the effect it has (invalid: none)
+        /** The bench: the cue or scene it was opened from, Make a layer's
+         *  first choice. Both invalid: what the Workbench had loaded (a
+         *  cue, a plain scene) -- or the bench showing already, its own. */
+        quint32 fromCue = 0xFFFFFFFF;
+        quint32 fromScene = 0xFFFFFFFF;
     };
     /** The effect designer's widget for @a request, made for the editor
      *  pane (the Workbench owns it and deletes it when the row changes);
@@ -391,6 +396,9 @@ private:
     /** designEffect()'s designer, and whether it is the bench's. */
     QPointer<QWidget> m_effectPane;
     bool m_benchPane = false;
+    /** The bench's EffectRequest::fromCue / fromScene, kept while it shows. */
+    quint32 m_benchFromCue = 0xFFFFFFFF;
+    quint32 m_benchFromScene = 0xFFFFFFFF;
     /** Host the factory's @a pane under @a heading. */
     void hostEffectPane(QWidget *pane, const QString &heading, bool bench);
     QToolButton *m_sendToTreeBtn = nullptr;
