@@ -265,6 +265,14 @@ Report rendered post-import by the same dialog that renders `QxwImportResult`.
   almost always want a chaser, revisit — but then we have to decide what a
   chaser-ful of cues does differently from Eos's cue list semantics
   (follows, links, loops), which is non-trivial.
+
+  **Update 2026-10-22:** settled by the Show Tree. Each Eos cue list comes
+  in as a Show Tree production with one cue list, through the tree's own
+  import path: the scratch Doc carries a chaser per cue list (one scene per
+  cue, its full tracked state; cue number, up/down time, follow/hang), and
+  after the merge it goes through Import in place, Capture into palettes
+  and Convert to tracking -- one undo step. Eos tracks and the tree tracks,
+  so the list ends up tracking; links and delays are reported, not carried.
 - **How to represent sub-levels.** A sub in Eos drives channel levels; a
   QLC Scene is the obvious analogue, but a sub also has a handle/bump
   behavior. Scene is fine for the "what levels"; VC fader binding to run it
