@@ -23,6 +23,7 @@
 #include <QHash>
 
 #include <QTreeWidget>
+#include <QPersistentModelIndex>
 
 #include "grouphead.h"
 
@@ -177,6 +178,10 @@ private:
     void keyPressEvent(QKeyEvent* event) override;
 
 protected slots:
+    /** Disarm a row Return/F2 made editable once its editor closes, however
+     *  it closed (Esc included), and restore its normal label. */
+    void closeEditor(QWidget *editor, QAbstractItemDelegate::EndEditHint hint) override;
+
     void slotItemExpanded();
     void slotItemChanged(QTreeWidgetItem* item, int column);
 
@@ -189,6 +194,9 @@ private:
     Doc *m_doc;
 
     QHash<QString, QTreeWidgetItem*> m_groupFolders; //!< group folder nodes
+
+    /** The row Return/F2 armed for an in-place rename (see closeEditor()). */
+    QPersistentModelIndex m_armedIndex;
 
     // counters
     int m_universesCount;

@@ -98,6 +98,13 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
+- **Rename a group in place in the Fixtures tree (2026-10-22,
+  feat/group-rename-enter): done.** Return/F2 on a group row edits its
+  name in the tree, Esc cancels; empty/unchanged names are ignored, as in
+  the group editor. Esc now also disarms a fixture/universe row (it used
+  to stay editable). Leftover: like every group edit, not on the ⌘Z
+  history.
+
 - **⇧⌘N New here (2026-10-22, feat/new-next-thing): leftovers.** Built in
   the Show Tree, Build (+ Workbench) and Fixtures, Edit ▸ New … names it.
   Open: making a group in Fixtures isn't an undo step (New Group… never

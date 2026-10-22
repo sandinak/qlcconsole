@@ -38,6 +38,12 @@ The latest changes, newest first. Each links to the guide with the detail.
   dimmers. A show with the old ColorSource Spot inside it is offered the
   new one; see [Definition updates](definition-updates.md).
 
+- **Rename a group in the Fixtures tree.** Select a fixture group and
+  press **Return** (or **F2**) to type a new name right in the tree;
+  Return keeps it, **Esc** cancels. Fixtures, folders and universes
+  already renamed this way. Double-click still opens the group's grid
+  editor. See [Fixture Manager](fixture-manager.md#layout).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;

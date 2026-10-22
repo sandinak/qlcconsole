@@ -107,6 +107,13 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | ⌘D | Delete the selected universe (Detailed tab) |
 | ⌘Z | Undo the last patch change (any of the three tabs) |
 
+## Fixtures
+
+| Keys | Does |
+|---|---|
+| **Return** / **F2** | Rename the selected fixture, group, group folder or universe in place; Esc cancels ([Layout](fixture-manager.md#layout)) |
+| Double-click | A group opens its grid editor, a fixture its properties, a folder renames |
+
 ## Build ▸ Scenes (what the Functions window had)
 
 | Keys | Does |

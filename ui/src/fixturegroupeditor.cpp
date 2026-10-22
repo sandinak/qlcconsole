@@ -146,6 +146,12 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
 
     connect(m_nameEdit, SIGNAL(textEdited(const QString&)),
             this, SLOT(slotNameEdited(const QString&)));
+    // Renamed elsewhere (in place in the Fixtures tree, Layers): follow it.
+    // Typing here sets the same name, so this leaves the field alone then.
+    connect(m_grp, &FixtureGroup::nameChanged, this, [this]() {
+        if (m_nameEdit->text() != m_grp->name())
+            m_nameEdit->setText(m_grp->name());
+    });
     connect(m_xSpin, SIGNAL(valueChanged(int)),
             this, SLOT(slotXSpinValueChanged(int)));
     connect(m_ySpin, SIGNAL(valueChanged(int)),
