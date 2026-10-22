@@ -38,6 +38,7 @@ class ChaserStep;
 class Function;
 class Universe;
 class Chaser;
+class Scene;
 class Doc;
 
 /** @addtogroup engine_functions Functions
@@ -320,6 +321,13 @@ private:
     /** Whether @a from and @a to are Collections with a member in common
      *  (at any depth), or one holds the other. */
     static bool sharesMembers(const Function *from, const Function *to);
+public:
+    /** The scene step function @a f plays, for the blend between scenes:
+     *  a Scene; a Show Tree cue Collection of one scene played as it is (an
+     *  imported chaser's raw scene step, W0). Else null. */
+    static Scene *blendScene(const Doc *doc, Function *f);
+private:
+    quint32 blendSceneId(Function *f) const;
 
     /**
      * Start a Chaser step Function with the given $index, at the given

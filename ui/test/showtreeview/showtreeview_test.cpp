@@ -66,6 +66,11 @@
 #include "paletteops.h"
 #include "virtualconsole.h"
 #include "vcbutton.h"
+#include "vccuelist.h"
+#include "importsheet.h"
+#include "sceneeditor.h"
+#include "efxeditor.h"
+#include "efx.h"
 #include "vcframe.h"
 #include "inputoutputmap.h"
 #include "chaseraction.h"
@@ -5075,6 +5080,328 @@ void ShowTreeView_Test::pictureOfSkippedCues()
     tip.write("\n");
     tip.write(view.nextCueText(three).toUtf8());
     view.hide();
+}
+
+/****************************************************************************
+ * W0: seam fixes
+ ****************************************************************************/
+
+namespace
+{
+/* An old show's shape: a raw scene in two steps, an EFX beside it in one,
+   a scene of groups and palettes in the other. */
+Chaser *oldShow(Doc *doc, quint32 towers, quint32 full, Scene **hazeOut, EFX **efxOut)
+{
+    Scene *haze = new Scene(doc);
+    haze->setName("Haze");
+    haze->setValue(0, 0, 90);
+    doc->addFunction(haze);
+    EFX *efx = new EFX(doc);
+    efx->setName("SC Circle 1");
+    doc->addFunction(efx);
+    Scene *tw = new Scene(doc);
+    tw->setName("Towers-Full");
+    tw->addFixtureGroup(towers);
+    tw->addPalette(full);
+    doc->addFunction(tw);
+    Collection *one = new Collection(doc);
+    one->setName("0.0.1-Open");
+    doc->addFunction(one);
+    one->addFunction(haze->id());
+    one->addFunction(efx->id());
+    Collection *two = new Collection(doc);
+    two->setName("0.0.2-Towers");
+    doc->addFunction(two);
+    two->addFunction(haze->id());
+    two->addFunction(tw->id());
+    Chaser *chaser = new Chaser(doc);
+    chaser->setName("Full Show");
+    chaser->setDurationMode(Chaser::PerStep);
+    doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(two->id(), 0, Function::infiniteSpeed(), 0));
+    *hazeOut = haze;
+    *efxOut = efx;
+    return chaser;
+}
+
+QTreeWidgetItem *layerRow(QTreeWidget *tree, const QString &text)
+{
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode
+            && (*it)->text(0).contains(text))
+            return *it;
+    return nullptr;
+}
+
+QString w0Shot(const QString &name)
+{
+    const QString dir = qEnvironmentVariable("QLC_W0_SHOTS");
+    return dir.isEmpty() ? QString() : dir + QLatin1Char('/') + name;
+}
+}
+
+/* An opaque layer (a raw scene, an EFX, ...) opens its function in its own
+   editor: from the row's menu, a double-click, and its page. A layer of
+   groups and palettes doesn't (it is edited on the page). */
+void ShowTreeView_Test::openAnOpaqueLayer()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
+
+    ShowTreeView view(nullptr, m_doc);
+    QList<quint32> opened;
+    view.setFunctionOpener([&opened](quint32 fid) {
+        opened << fid;
+        return true;
+    });
+    view.resize(1100, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.importChaser(chaser->id(), false);
+    view.tree()->expandAll();
+
+    QTreeWidgetItem *hazeRow = layerRow(view.tree(), "Haze");
+    QTreeWidgetItem *efxRow = layerRow(view.tree(), "SC Circle 1");
+    QTreeWidgetItem *towersRow = layerRow(view.tree(), "Towers");
+    QVERIFY(hazeRow != nullptr && efxRow != nullptr && towersRow != nullptr);
+    QCOMPARE(view.openableFunction(hazeRow), haze->id());
+    QCOMPARE(view.openableFunction(efxRow), efx->id());
+    QCOMPARE(view.openableFunction(towersRow), Function::invalidId());
+    QCOMPARE(view.openableFunction(nullptr), Function::invalidId());
+
+    // Double-click.
+    emit view.tree()->itemDoubleClicked(efxRow, 0);
+    QCOMPARE(opened, QList<quint32>({ efx->id() }));
+    emit view.tree()->itemDoubleClicked(towersRow, 0);
+    QCOMPARE(opened.count(), 1);
+
+    // The row's menu: Open first.
+    {
+        QStringList actions;
+        ModalCloser closer([&actions](QWidget *w) {
+            QMenu *menu = qobject_cast<QMenu *>(w);
+            if (menu == nullptr)
+                return false;
+            for (QAction *a : menu->actions())
+                actions << a->objectName() + QLatin1Char('|') + a->text();
+            for (QAction *a : menu->actions())
+                if (a->objectName() == "stOpenFunction")
+                {
+                    menu->close();
+                    a->trigger();
+                    return true;
+                }
+            return false;
+        });
+        view.tree()->scrollToItem(hazeRow);
+        const QPoint pos = view.tree()->visualItemRect(hazeRow).center();
+        QVERIFY(QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos)));
+        QVERIFY2(!actions.isEmpty() && actions.first() == QString("stOpenFunction|Open “Haze”…"),
+                 qPrintable(actions.join(", ")));
+        QCOMPARE(opened, QList<quint32>({ efx->id(), haze->id() }));
+    }
+
+    // The layer's page: Open, and where else it plays.
+    const CueList *list = nullptr;
+    for (const Production &p : m_doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            list = &l;
+    QVERIFY(list != nullptr);
+    const Cue &cue = list->cues.first();
+    quint32 hazeLayer = invalidId();
+    for (const Layer &l : cue.layers)
+        if (l.target.function == haze->id())
+            hazeLayer = l.id;
+    QVERIFY(view.selectNode(hazeLayer, cue.id));
+    QPushButton *open = view.findChild<QPushButton *>("stLayerOpen");
+    QVERIFY(open != nullptr && open->isVisible());
+    QCOMPARE(open->text(), QString("Open “Haze”"));
+    QLabel *note = view.findChild<QLabel *>("stLayerOpenNote");
+    QVERIFY(note != nullptr);
+    QVERIFY2(note->text().contains("Also in: cue 0.0.2 Towers of Full Show"), qPrintable(note->text()));
+    QVERIFY2(note->text().contains("collection “0.0.1-Open”"), qPrintable(note->text()));
+    QVERIFY(view.alsoIn(efx->id(), cue.id).contains("collection “0.0.1-Open”"));
+    if (!w0Shot("layer-open.png").isEmpty())
+        QVERIFY(view.grab().save(w0Shot("layer-open.png")));
+    open->click();
+    QCOMPARE(opened.last(), haze->id());
+
+    // A layer of groups and palettes: no Open on its page.
+    const Cue &two = list->cues.at(1);
+    for (const Layer &l : two.layers)
+        if (!l.target.isOpaque())
+            QVERIFY(view.selectNode(l.id, two.id));
+    QTest::qWait(10);
+    QPushButton *gone = view.findChild<QPushButton *>("stLayerOpen");
+    QVERIFY(gone == nullptr || !gone->isVisible());
+    view.hide();
+}
+
+/* Open with no stand-in: the Function Manager's own editor for it (the
+   window it lives in is App's to bring forward). */
+void ShowTreeView_Test::openUsesTheFunctionsWindowsEditor()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
+    ShowTreeView view(nullptr, m_doc);
+    view.importChaser(chaser->id(), false);
+
+    QVERIFY(!view.openFunction(haze->id()));        // no Functions window
+    {
+        FunctionManager fm(nullptr, m_doc);
+        QVERIFY(view.openFunction(haze->id()));
+        SceneEditor *se = fm.findChild<SceneEditor *>();
+        QVERIFY(se != nullptr);
+        QVERIFY(view.openFunction(efx->id()));
+        QVERIFY(fm.findChild<EFXEditor *>() != nullptr);
+        QVERIFY(!view.openFunction(Function::invalidId()));
+    }
+}
+
+/* Import chaser… shows a sheet: plays the same?, what each step became,
+   what plays as it is and why -- and offers (ticked) to fire the list from
+   what fires the chaser now: VC buttons, a VC Cue List, the main cue list
+   and its cue-list number. One undo step with the import. */
+void ShowTreeView_Test::theImportSheetReadsAndRepoints()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
+    chaser->setCueListNumber("3");
+    m_doc->showControl()->setMainCueList(chaser->id());
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCButton *go = new VCButton(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(go, contents);
+    go->setCaption("Show");
+    go->setFunction(chaser->id());
+    VCButton *other = new VCButton(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(other, contents);
+    other->setCaption("Haze");
+    other->setFunction(haze->id());
+    VCCueList *cues = new VCCueList(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(cues, contents);
+    cues->setCaption("Cues");
+    cues->setChaser(chaser->id());
+
+    ShowTreeView view(nullptr, m_doc);
+    QString text;
+    bool ticked = false;
+    view.setSheetRunner([&](ImportSheet *sheet) {
+        text = sheet->text();
+        ticked = sheet->repointBox()->isChecked() && !sheet->repointBox()->isHidden();
+        sheet->resize(680, 640);
+        sheet->show();
+        QVERIFY(QTest::qWaitForWindowExposed(sheet));
+        if (!w0Shot("import-sheet.png").isEmpty())
+            QVERIFY(sheet->grab().save(w0Shot("import-sheet.png")));
+        sheet->findChild<QPushButton *>("stImportDone")->click();
+    });
+    view.importChaser(chaser->id());
+    QVERIFY(ticked);
+    for (const QString &want : { QString("Imported “Full Show”"), QString("Plays the same"),
+                                 QString("0 channels differ"), QString("What each step became"),
+                                 QString("Played as they are, and why"), QString("Haze: has channel values of its own (×2)"),
+                                 QString("SC Circle 1"), QString("4 place(s)") })
+        QVERIFY2(text.contains(want), qPrintable(want + " not in:\n" + text));
+
+    ShowTreeController *st = m_doc->showTree();
+    const CueList *list = nullptr;
+    for (const Production &p : st->productions())
+        for (const CueList &l : p.lists)
+            list = &l;
+    QVERIFY(list != nullptr);
+    const quint32 listChaser = list->chaser;
+    Chaser *generated = qobject_cast<Chaser *>(m_doc->function(listChaser));
+    QVERIFY(generated != nullptr);
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(other->function(), haze->id());          // not the chaser's: left alone
+    QCOMPARE(cues->chaserID(), listChaser);
+    QCOMPARE(m_doc->showControl()->mainCueList(), listChaser);
+    QCOMPARE(generated->cueListNumber(), QString("3"));
+    QCOMPARE(chaser->cueListNumber(), QString());
+
+    // One undo step: all of it back on the chaser...
+    QVERIFY(st->undo());
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(cues->chaserID(), chaser->id());
+    QCOMPARE(m_doc->showControl()->mainCueList(), chaser->id());
+    QCOMPARE(chaser->cueListNumber(), QString("3"));
+    // ...and redone, on the list again.
+    QVERIFY(st->redo());
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(cues->chaserID(), listChaser);
+    QCOMPARE(m_doc->showControl()->mainCueList(), listChaser);
+    QCOMPARE(qobject_cast<Chaser *>(m_doc->function(listChaser))->cueListNumber(), QString("3"));
+    QCOMPARE(chaser->cueListNumber(), QString());
+}
+
+/* Unticked, the VC stays on the chaser; Undo import takes the import back;
+   nothing firing the chaser: no offer. */
+void ShowTreeView_Test::theImportSheetCanUndoOrLeaveVcAlone()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
+    ShowTreeController *st = m_doc->showTree();
+
+    // Nothing fires it: no offer.
+    {
+        ShowTreeView view(nullptr, m_doc);
+        bool offered = true;
+        view.setSheetRunner([&offered](ImportSheet *sheet) {
+            offered = !sheet->repointBox()->isHidden();
+            QVERIFY(sheet->findChild<QLabel *>("stImportRepointNone") != nullptr);
+            QVERIFY(!sheet->repoint());
+            sheet->accept();
+        });
+        view.importChaser(chaser->id());
+        QVERIFY(!offered);
+        QCOMPARE(st->productions().count(), 1);
+        QVERIFY(st->undo());
+    }
+
+    ScopedVc vc(m_doc);
+    VCButton *go = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    VirtualConsole::instance()->placeWidget(go, VirtualConsole::instance()->contents());
+    go->setFunction(chaser->id());
+
+    // Unticked.
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.setSheetRunner([](ImportSheet *sheet) {
+            sheet->repointBox()->setChecked(false);
+            sheet->accept();
+        });
+        view.importChaser(chaser->id());
+        QCOMPARE(st->productions().count(), 1);
+        QCOMPARE(go->function(), chaser->id());
+        QVERIFY(st->undo());
+    }
+    // Undo import.
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.setSheetRunner([](ImportSheet *sheet) {
+            sheet->findChild<QPushButton *>("stImportUndo")->click();
+            QVERIFY(sheet->undoAsked());
+            QVERIFY(!sheet->repoint());
+        });
+        view.importChaser(chaser->id());
+        QVERIFY(st->productions().isEmpty());
+        QCOMPARE(go->function(), chaser->id());
+    }
 }
 
 QTEST_MAIN(ShowTreeView_Test)

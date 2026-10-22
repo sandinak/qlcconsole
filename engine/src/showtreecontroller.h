@@ -688,6 +688,11 @@ public:
     bool undo();
     bool redo();
     void clearUndo();
+    /** Something outside the tree that the last undo step also changed --
+     *  the VC buttons an import re-pointed (W0): @a apply(true) once the
+     *  step is undone, @a apply(false) once it is redone, so it stays one
+     *  step. False when there is no step to attach it to. */
+    bool attachToLastStep(const std::function<void(bool undone)> &apply);
     void clearRedo() { m_redo.clear(); }
     /** When the top undo / redo step was taken (0: none), comparable with
      *  the palette stack's (PaletteOps::nextUndoStamp()). */
@@ -728,6 +733,8 @@ private:
         QString label;
         QByteArray xml;
         quint64 stamp = 0;
+        /** What the step changed outside the tree (attachToLastStep). */
+        std::function<void(bool undone)> outside;
     };
     QByteArray snapshotXml() const;
     void restoreSnapshot(const QByteArray &xml);
@@ -913,6 +920,12 @@ public:
          *  not in @a htpConflicts (they play as the chaser did). */
         QStringList mixedIncludes;
         QStringList notes;
+        /** The same-output check (W0), as Convert's: what each cue would
+         *  put out statically against the chaser's step. Cues checked,
+         *  channels that differ in all, and one line per cue that does. */
+        int checkedCues = 0;
+        int differChannels = 0;
+        QStringList differCues;
     };
 
     /** Import @a chaserId as a cue list in a new production (D12): each
@@ -930,6 +943,16 @@ public:
      *  order, the same other static looks, the same effects in the same
      *  order each with the same own looks. */
     bool playsTheSame(const QList<quint32> &a, const QList<quint32> &b) const;
+
+    /** The import's same-output check (W0): each cue of @a listId against
+     *  step i of @a chaserId, statically -- every channel the step's scenes
+     *  set (a Collection's members as it runs them: HTP on intensity, else
+     *  the later one), against staticCueOutput(). Effects (EFX, RGB Matrix,
+     *  effect palettes) are left out on both sides; fade times too. The
+     *  number of channels that differ; @a lines gets a line per cue that
+     *  differs, @a checked the cues compared. */
+    int importDifferences(quint32 chaserId, quint32 listId, QStringList *lines = nullptr,
+                          int *checked = nullptr) const;
 
     /************************************************************************
      * Load & save

@@ -111,24 +111,46 @@ The dividers between them can be dragged; their places are kept.
 1. **Import chaser…** → pick the chaser. A new production named after it
    holds a Non-tracking cue list that plays exactly as the chaser did. The
    chaser itself is not touched.
-2. A report says what was made:
-   - Each step became a cue. Its number comes from the step's cue number,
-     else from a name like `0.0.4-SHOUT`, else its position. Fades, hold and
-     note are kept.
-   - A scene of groups and palettes became a layer.
-   - A step's collection used inside another step became an **include**.
-   - Anything else plays as it is, with the reason. That covers raw channel
-     values, EFX, RGB Matrix, a scene with its own fades, and so on.
-   - Where two scenes in one cue set the same group, the chaser ran both:
-     HTP on intensity, LTP on the rest. The report lists these cues, and the
-     cue list keeps the later scene's values.
-   - Where a cue includes another at full and sets the same fixtures lower
-     itself (0.0.5 includes 0.0.4's StepTops at full and has its own at
-     45%), the chaser showed the brighter level. Where the tree's rule
-     would change that, the cue **mixes** (see [Who wins](#who-wins)):
-     the include plays beside its own scene, so it looks as it did. The
-     report names each such cue and how many channels the rule would
-     change. Cues where the rule plays the same are left alone.
+2. A sheet says what was made:
+   - **Plays the same**: each cue's channels checked against its step's.
+     *0 channels differ* means every cue puts out what its step did;
+     otherwise it names each cue that differs and by how many channels.
+     It compares the cues as they stand, not mid-fade; effects (EFX, RGB
+     Matrix, effect palettes) play as they are on both sides.
+   - **What each step became**, a row per cue:
+     - Each step became a cue. Its number comes from the step's cue
+       number, else from a name like `0.0.4-SHOUT`, else its position.
+       Fades, hold and note are kept.
+     - A scene of groups and palettes became a layer.
+     - A step's collection used inside another step became an
+       **include**.
+     - Anything else plays as it is (▣). That covers raw channel values,
+       EFX, RGB Matrix, a scene with its own fades, and so on.
+       **Played as they are, and why** gives the reason once per
+       function, with how many times it occurs. To edit one, open it from
+       the tree ([how](#adding-layers)).
+     - A chaser of raw scenes with their own fades (a looping par chase)
+       plays the same too: the list fades from one scene to the next as
+       the chaser did, even when a step is shorter than the fade.
+   - **Two scenes on one group**: where two scenes in one cue set the same
+     group, the chaser ran both, HTP on intensity and LTP on the rest. The
+     cue list keeps the later scene's values, and the check above shows
+     whether that changes anything.
+   - **Mixes and notes**: where a cue includes another at full and sets
+     the same fixtures lower itself (0.0.5 includes 0.0.4's StepTops at
+     full and has its own at 45%), the chaser showed the brighter level.
+     Where the tree's rule would change that, the cue **mixes** (see
+     [Who wins](#who-wins)): the include plays beside its own scene, so it
+     looks as it did. The sheet names each such cue and how many channels
+     the rule would change. Cues where the rule plays the same are left
+     alone.
+   - **Fire the cue list from what fires the chaser now** (ticked): VC
+     buttons, VC Cue Lists and sliders that played the chaser, the main
+     cue list and its cue-list number move to the new list. It is part of
+     the import's undo step: **Undo** puts them back on the chaser. Untick
+     it to leave them on the chaser. It isn't offered when nothing fires
+     the chaser.
+   - **Undo import** takes the whole import back; **Done** keeps it.
 3. Click a cue. In Design mode it plays on the rig. Open a layer and change
    it.
 
@@ -211,6 +233,13 @@ Preshow (⌥: a layer for each group)"*.
   a cue plays as it is, as a layer of its own (▣). The tree doesn't set
   its looks, and it has no Release. Several dropped together make a layer
   each, in one undo step.
+- **To edit what a ▣ layer plays**, double-click it, or right-click →
+  **Open "Haze"…**, or select it and press **Open** on its page. The
+  function opens in its own editor in the Functions window (the scene,
+  EFX, RGB Matrix, collection or chaser editor), and what you change there
+  is what the cue plays. The page lists where else the function plays
+  (**Also in:** other cues, the show's own collections and chasers): those
+  change too.
 - **Below the tree's last row**, a drop is a new layer in the selected cue
   (or the selected layer's cue): *"New layer in 1.0.3 Out: Towers"*.
 - After a drop on the cue page, the cue stays selected, so you can keep
