@@ -6831,6 +6831,23 @@ QColor StructureStudioView::pixelColor(Fixture *fx, const QByteArray &values,
     return shadeLive(hc, hd, unlit, visibility);
 }
 
+QRectF StructureStudioView::parBodyRect(const FixtureVisualTraits &traits, const QPointF &c) const
+{
+    /* Its real declared footprint when there is one, a sane default
+       otherwise (most bundled defs still leave Width/Height at 0) -- in a
+       stage look's proportions when it has one: a followspot long, a staff
+       thin and tall. */
+    double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
+    double hPx = (traits.physH > 0.0f) ? qMax(8.0, double(traits.physH) * m_scale) : wPx * 0.85;
+    if (traits.look != Fixture::AutoLook && traits.physW <= 0.0f && traits.physH <= 0.0f)
+    {
+        const QSizeF look = stageLookDefaultSize(traits.look, 10.0);
+        wPx = look.width();
+        hPx = look.height();
+    }
+    return QRectF(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);
+}
+
 void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                                         bool nameEveryone) const
 {
@@ -7533,7 +7550,11 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const double off = (u - (units - 1) * 0.5) * spacing;
                 const QPointF hc = c + unit * off;
                 const double half = baseR;
-                const QPainterPath body = moverPlanPath(QRectF(hc.x() - half, hc.y() - half, half * 2, half * 2));
+                const QRectF unitRect(hc.x() - half, hc.y() - half, half * 2, half * 2);
+                // A moving-head stage look: its own base seen from above.
+                const QPainterPath body = traits.look != Fixture::AutoLook
+                                          ? stageLookBodyPath(traits.look, unitRect)
+                                          : moverPlanPath(unitRect);
                 if (hi)
                 {
                     QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
@@ -7658,18 +7679,51 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         // A can/wash unit: filled rounded rect sized from its real
         // declared physical footprint when there is one, a sane default
         // otherwise (most bundled defs still leave Width/Height at 0).
-        const double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
-        const double hPx = (traits.physH > 0.0f) ? qMax(8.0, double(traits.physH) * m_scale) : wPx * 0.85;
-        const QRectF r(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);
-        if (hi)
+        const QRectF r = parBodyRect(traits, c);
+        if (traits.look != Fixture::AutoLook)
         {
-            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
-            p.setPen(halo); p.setBrush(Qt::NoBrush);
-            p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), 3, 3);
+            /* The LD's stage look: a followspot's barrel, a staff's rod...
+               the same shape as on the plot, in its colour. */
+            const QPainterPath body = stageLookBodyPath(traits.look, r, m_plane != Top);
+            if (hi)
+            {
+                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+                p.setPen(halo); p.setBrush(Qt::NoBrush);
+                p.drawRect(r.adjusted(-3, -3, 3, 3));
+            }
+            p.setPen(QPen(col.darker(150), 1.4));
+            p.setBrush(col);
+            p.drawPath(body);
+            const QRectF lens = stageLookLensRect(traits.look, r, m_plane != Top);
+            if (lens.isValid())
+            {
+                p.setPen(QPen(col.darker(200), 1.0));
+                p.setBrush(col.lighter(130));
+                if (stageLookSquareLens(traits.look))
+                    p.drawRect(lens);
+                else
+                    p.drawEllipse(lens);
+                const QPainterPath hint = stageLookLensHint(traits.look, lens);
+                if (!hint.isEmpty())
+                {
+                    p.setPen(QPen(QColor(0, 0, 0, 150), 0));
+                    p.setBrush(QColor(0, 0, 0, 90));
+                    p.drawPath(hint);
+                }
+            }
         }
-        p.setPen(QPen(col.darker(150), 1.4));
-        p.setBrush(col);
-        p.drawRoundedRect(r, 2, 2);
+        else
+        {
+            if (hi)
+            {
+                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+                p.setPen(halo); p.setBrush(Qt::NoBrush);
+                p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), 3, 3);
+            }
+            p.setPen(QPen(col.darker(150), 1.4));
+            p.setBrush(col);
+            p.drawRoundedRect(r, 2, 2);
+        }
     }
     else if (traits.kind == FixtureSilhouette::Bar)
     {
@@ -9792,9 +9846,7 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
             else if (traits.kind == FixtureSilhouette::Par)
             {
                 const QPointF c = w2s(fixtureCentre(fid));
-                const double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
-                const double hPx = (traits.physH > 0.0f) ? qMax(8.0, double(traits.physH) * m_scale) : wPx * 0.85;
-                QRectF r(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);
+                QRectF r = parBodyRect(traits, c);      // as drawFixtures() drew it
                 r.adjust(-3, -3, 3, 3);
                 if (r.contains(px))
                 {

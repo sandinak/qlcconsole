@@ -1298,9 +1298,15 @@ QByteArray Monitor::rigSnapshot() const
         else if (fx->fixtureMode() != nullptr)
             modes.insert(fx->id(), fx->fixtureMode()->name());
     }
+    // And each one's stage look (Fixture Properties sets it).
+    QHash<quint32, int> looks;
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx->stageLook() != Fixture::AutoLook)
+            looks.insert(fx->id(), int(fx->stageLook()));
     QByteArray out;
     QDataStream ds(&out, QIODevice::WriteOnly);
-    ds << m_props->snapshot(m_doc) << names << power << network << patch << modes << dimmerChannels;
+    ds << m_props->snapshot(m_doc) << names << power << network << patch << modes << dimmerChannels
+       << looks;
     return out;
 }
 
@@ -1323,8 +1329,17 @@ void Monitor::restoreRig(const QByteArray &snap)
     QHash<quint32, quint32> dimmerChannels;
     if (!ds.atEnd())
         ds >> modes >> dimmerChannels;
+    QHash<quint32, int> looks;
+    const bool hasLooks = !ds.atEnd();
+    if (hasLooks)
+        ds >> looks;
     if (props.isEmpty())
         return;
+    if (hasLooks)
+    {
+        foreach (Fixture *fx, m_doc->fixtures())
+            fx->setStageLook(Fixture::StageLook(looks.value(fx->id(), int(Fixture::AutoLook))));
+    }
     /* The patch: unpatch what wasn't, then put the rest back where it was --
        as one step, so fixtures can swap or shift onto each other's channels.
        Modes first: they decide the footprints being put back. */

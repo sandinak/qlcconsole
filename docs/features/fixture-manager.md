@@ -549,7 +549,7 @@ selected, and only offers what applies:
 1. **The fixture itself** — Fixture Properties…, Definition & Mode…,
    Edit Fixture Definition… and [LED Layout…](#led-layout) (one fixture),
    Change Definition… (fixtures of one definition, when another is a
-   drop-in for it).
+   drop-in for it), and **Stage Look ▸** (below).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….
@@ -569,6 +569,17 @@ inventory — and Expand All / Collapse All last.
 
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.
+
+### Stage Look
+
+**Stage Look ▸** sets what the fixtures selected -- and every fixture of a
+group selected -- look like: **Auto** (named for what their type is closest
+to, as *Auto (Moving head spot)*), then the looks under **Moving**, **Fixed
+conventional** and **Fixed LED**, with icons. The one they all share is
+ticked. A fixture with a look shows its icon in this list and the other
+fixture lists, and its shape on the plot and in the studio; see
+[Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
+same choice as its **Stage look** row.
 
 ### Patching a universe's output
 

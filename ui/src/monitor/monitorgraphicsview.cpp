@@ -3499,6 +3499,7 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     if (fxi == NULL || m_fixtures.contains(id) == false)
         return;
     m_fixtures.value(id)->refreshName();
+    m_fixtures.value(id)->refreshStageLook();
 
     const QLCFixtureMode *mode = fxi->fixtureMode();
     double width = 0;
@@ -3510,6 +3511,8 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         height = mode->physical().height();
     }
 
+    if (fxi->stageLook() != Fixture::AutoLook && stageLookIgnoresPhysical(fxi))
+        width = height = 0;     // made up: the look's proportions, below
     if (width <= 0 || height <= 0)
     {
         // No physical layout declared: most multi-head fixtures like this are
@@ -3519,6 +3522,14 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         const int n = qMax(1, fxi->heads());
         width = 300.0;
         height = (n > 1) ? 300.0 / n : 300.0;
+        /* A stage look knows its proportions better: a followspot long, a
+           staff thin (one with several heads keeps the strip above). */
+        if (fxi->stageLook() != Fixture::AutoLook && n == 1)
+        {
+            const QSizeF look = stageLookDefaultSize(fxi->stageLook(), 300.0);
+            width = look.width();
+            height = look.height();
+        }
     }
 
     MonitorFixtureItem *item = m_fixtures.value(id, NULL);
@@ -3564,8 +3575,8 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         pw *= s;
         ph *= s;
     }
+    item->setElevationView(isElevation());   // first: a look's lens depends on it
     item->setSize(QSize(qMax(1, qRound(pw)), qMax(1, qRound(ph))));
-    item->setElevationView(isElevation());
 
     // Riser-mounted fixtures derive their position from the platform in EVERY
     // view (top too — they sit on the riser's edge/face). Free/truss fixtures

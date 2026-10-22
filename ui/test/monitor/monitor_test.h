@@ -726,6 +726,23 @@ private slots:
     void everyColourModelTheEngineDefinesIsRead();
     void pixelBarDrawsEachPixelInItsOwnColour();
 
+    /* Stage looks (Fixture::StageLook): the LD's word for what it looks like. */
+    /** A look decides the silhouette; Auto keeps the definition's. */
+    void aStageLookDecidesTheSilhouette();
+    /** Every look has a body and a lens inside its rect, in its proportions. */
+    void everyStageLookHasItsShape();
+    /** The plot redraws a fixture whose look changed: shape, square or round
+     *  heads in its lens, the lens hint. */
+    void thePlotRedrawsAFixtureWhenItsLookChanges();
+    /** Fixture Properties' Stage look row sets it on every fixture shown,
+     *  reads "mixed" where they differ, and is one undo with the rig. */
+    void fixturePropertiesSetsTheStageLook();
+    /** The Fixture Manager's Stage Look menu: Auto named for its type, every
+     *  look, the shared one checked, a choice set on all of them. */
+    void theStageLookMenuSetsEveryFixtureSelected();
+    /** The studio's flat views draw a look in its proportions. */
+    void theStudioDrawsAStageLook();
+
 private:
     Doc* m_doc;
 };

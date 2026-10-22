@@ -820,6 +820,14 @@ QLCFixtureHead Fixture::head(int index) const
 
 QString Fixture::iconResource(bool svg) const
 {
+    const QString look = stageLookIconResource(stageLook(), svg);
+    if (!look.isEmpty())
+        return look;
+    return typeIconResource(svg);
+}
+
+QString Fixture::typeIconResource(bool svg) const
+{
     QString prefix = svg ? "qrc" : "";
     QString ext = svg ? "svg" : "png";
 
@@ -842,6 +850,169 @@ QString Fixture::iconResource(bool svg) const
     }
 
     return QString("%1:/other.%2").arg(prefix).arg(ext);
+}
+
+/*****************************************************************************
+ * Stage look
+ *****************************************************************************/
+
+void Fixture::setStageLook(StageLook look)
+{
+    if (int(look) < int(AutoLook) || int(look) > int(StrobeLook))
+        look = AutoLook;
+    if (m_stageLook.exchange(int(look), std::memory_order_relaxed) == int(look))
+        return;
+    emit changed(m_id);
+}
+
+QList<Fixture::StageLook> Fixture::stageLooks()
+{
+    return { AutoLook,
+             // Moving
+             MovingSpotLook, MovingRoundWashLook, MovingSquareWashLook,
+             // Fixed conventional
+             LanternLook, ParCanLook, EllipsoidalLook, FresnelLook, FollowspotLook,
+             // Fixed LED
+             LedParLook, SquareWashLook, BarWashLook, UplightWashLook, CycStripLook,
+             StrobeLook, StaffLook };
+}
+
+int Fixture::stageLookSection(StageLook look)
+{
+    switch (look)
+    {
+        case MovingSpotLook: case MovingRoundWashLook: case MovingSquareWashLook:
+            return MovingSection;
+        case LanternLook: case ParCanLook: case EllipsoidalLook: case FresnelLook:
+        case FollowspotLook:
+            return ConventionalSection;
+        case LedParLook: case SquareWashLook: case BarWashLook: case UplightWashLook:
+        case CycStripLook: case StrobeLook: case StaffLook:
+            return LedSection;
+        case AutoLook:
+        default:
+            return -1;
+    }
+}
+
+QString Fixture::stageLookSectionName(StageLookSection section)
+{
+    switch (section)
+    {
+        case MovingSection:       return tr("Moving");
+        case ConventionalSection: return tr("Fixed conventional");
+        case LedSection:
+        default:                  return tr("Fixed LED");
+    }
+}
+
+Fixture::StageLook Fixture::autoStageLook() const
+{
+    if (m_fixtureDef == NULL)
+        return LanternLook;                     // a generic dimmer: a conventional
+    switch (m_fixtureDef->type())
+    {
+        case QLCFixtureDef::ColorChanger: return LedParLook;
+        case QLCFixtureDef::LEDBarBeams:
+        case QLCFixtureDef::LEDBarPixels: return BarWashLook;
+        case QLCFixtureDef::Strobe:       return StrobeLook;
+        case QLCFixtureDef::Dimmer:       return LanternLook;
+        case QLCFixtureDef::Scanner:      return MovingSpotLook;
+        case QLCFixtureDef::MovingHead:   break;
+        default:                          return AutoLook;
+    }
+
+    /* A moving head: its channels first (a gobo or an iris is a spot; a zoom
+       with neither is a wash), then what the definition calls itself. */
+    bool gobo = false, zoom = false;
+    for (quint32 i = 0; m_fixtureMode != NULL && i < channels(); ++i)
+    {
+        const QLCChannel *ch = channel(i);
+        if (ch == NULL)
+            continue;
+        if (ch->group() == QLCChannel::Gobo || ch->group() == QLCChannel::Prism
+            || ch->preset() == QLCChannel::ShutterIrisMinToMax
+            || ch->preset() == QLCChannel::ShutterIrisMaxToMin)
+            gobo = true;
+        if (ch->preset() == QLCChannel::BeamZoomSmallBig || ch->preset() == QLCChannel::BeamZoomBigSmall
+            || ch->preset() == QLCChannel::BeamZoomFine)
+            zoom = true;
+    }
+    const QString name = (m_fixtureDef->model() + QLatin1Char(' ')
+                          + (m_fixtureMode != NULL ? m_fixtureMode->name() : QString())).toLower();
+    if (gobo)
+        return MovingSpotLook;
+    if (name.contains(QLatin1String("square")) || name.contains(QLatin1String("matrix"))
+        || name.contains(QLatin1String("panel")))
+        return MovingSquareWashLook;
+    if (zoom || name.contains(QLatin1String("wash")))
+        return MovingRoundWashLook;
+    return MovingSpotLook;
+}
+
+QString Fixture::stageLookToString(StageLook look)
+{
+    switch (look)
+    {
+        case FollowspotLook:       return QStringLiteral("Followspot");
+        case MovingSpotLook:       return QStringLiteral("MovingSpot");
+        case MovingRoundWashLook:  return QStringLiteral("MovingRoundWash");
+        case MovingSquareWashLook: return QStringLiteral("MovingSquareWash");
+        case LanternLook:          return QStringLiteral("Lantern");
+        case StaffLook:            return QStringLiteral("Staff");
+        case SquareWashLook:       return QStringLiteral("SquareWash");
+        case BarWashLook:          return QStringLiteral("BarWash");
+        case UplightWashLook:      return QStringLiteral("UplightWash");
+        case ParCanLook:           return QStringLiteral("ParCan");
+        case EllipsoidalLook:      return QStringLiteral("Ellipsoidal");
+        case FresnelLook:          return QStringLiteral("Fresnel");
+        case LedParLook:           return QStringLiteral("LedPar");
+        case CycStripLook:         return QStringLiteral("CycStrip");
+        case StrobeLook:           return QStringLiteral("Strobe");
+        case AutoLook:
+        default:                   return QStringLiteral("Auto");
+    }
+}
+
+Fixture::StageLook Fixture::stringToStageLook(const QString &key)
+{
+    foreach (StageLook look, stageLooks())
+        if (key.compare(stageLookToString(look), Qt::CaseInsensitive) == 0)
+            return look;
+    return AutoLook;
+}
+
+QString Fixture::stageLookName(StageLook look)
+{
+    switch (look)
+    {
+        case FollowspotLook:       return tr("Followspot");
+        case MovingSpotLook:       return tr("Moving head spot");
+        case MovingRoundWashLook:  return tr("Moving head round wash");
+        case MovingSquareWashLook: return tr("Moving head square wash");
+        case LanternLook:          return tr("Lantern");
+        case StaffLook:            return tr("Staff");
+        case SquareWashLook:       return tr("Square wash");
+        case BarWashLook:          return tr("Bar wash");
+        case UplightWashLook:      return tr("Uplight wash");
+        case ParCanLook:           return tr("PAR can");
+        case EllipsoidalLook:      return tr("Ellipsoidal / profile spot");
+        case FresnelLook:          return tr("Fresnel");
+        case LedParLook:           return tr("LED PAR / round multi-LED wash");
+        case CycStripLook:         return tr("Cyc / strip light");
+        case StrobeLook:           return tr("Strobe / blinder");
+        case AutoLook:
+        default:                   return tr("Auto");
+    }
+}
+
+QString Fixture::stageLookIconResource(StageLook look, bool svg)
+{
+    if (look == AutoLook)
+        return QString();
+    return QStringLiteral("%1:/look_%2.%3").arg(svg ? QStringLiteral("qrc") : QString())
+                                          .arg(stageLookToString(look).toLower())
+                                          .arg(svg ? QStringLiteral("svg") : QStringLiteral("png"));
 }
 
 QString Fixture::groupingManufacturer() const
@@ -1236,6 +1407,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     Connection connection = Dmx;
     QString ipAddress;
     Transport transport = ArtNetTransport;
+    StageLook stageLook = AutoLook;
     quint32 channels = 0;
     quint32 width = 0, height = 0;
     QList<int> excludeList;
@@ -1305,6 +1477,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         else if (xmlDoc.name() == KXMLFixtureTransport)
         {
             transport = xmlDoc.readElementText() == QLatin1String("WLED") ? WledTransport : ArtNetTransport;
+        }
+        else if (xmlDoc.name() == KXMLFixtureStageLook)
+        {
+            stageLook = stringToStageLook(xmlDoc.readElementText());
         }
         else if (xmlDoc.name() == KXMLFixtureCrossUniverse)
         {
@@ -1478,6 +1654,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setConnection(connection);
     setIPAddress(ipAddress);
     setTransport(transport);
+    m_stageLook.store(int(stageLook), std::memory_order_relaxed);
     setName(name);
     setExcludeFadeChannels(excludeList);
     setForcedHTPChannels(forcedHTP);
@@ -1555,6 +1732,10 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         doc->writeTextElement(KXMLFixtureIPAddress, m_ipAddress);
     if (m_transport == WledTransport)
         doc->writeTextElement(KXMLFixtureTransport, QStringLiteral("WLED"));
+    /* Upstream QLC+ skips a tag it does not know, so a show with looks set
+       still opens there; Auto writes nothing, so a show without is unchanged. */
+    if (stageLook() != AutoLook)
+        doc->writeTextElement(KXMLFixtureStageLook, stageLookToString(stageLook()));
     /* Channel count */
     doc->writeTextElement(KXMLFixtureChannels, QString::number(channels()));
 

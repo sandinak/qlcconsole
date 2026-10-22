@@ -1171,4 +1171,234 @@ void Fixture_Test::theShowCacheKeepsDefinitionsOnThisComputer()
 #endif
 }
 
+/*****************************************************************************
+ * Stage look
+ *****************************************************************************/
+
+void Fixture_Test::stageLookDefaultAndSet()
+{
+    Fixture fxi(this);
+    fxi.setID(7);
+    QCOMPARE(fxi.stageLook(), Fixture::AutoLook);
+
+    QSignalSpy spy(&fxi, SIGNAL(changed(quint32)));
+    fxi.setStageLook(Fixture::StaffLook);
+    QCOMPARE(fxi.stageLook(), Fixture::StaffLook);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toUInt(), quint32(7));
+
+    // The same again says nothing.
+    fxi.setStageLook(Fixture::StaffLook);
+    QCOMPARE(spy.count(), 1);
+
+    // Out of range is Auto, not a garbage look.
+    fxi.setStageLook(Fixture::StageLook(999));
+    QCOMPARE(fxi.stageLook(), Fixture::AutoLook);
+    QCOMPARE(spy.count(), 2);
+}
+
+void Fixture_Test::stageLookKeys()
+{
+    const QList<Fixture::StageLook> looks = Fixture::stageLooks();
+    // Every value of the enum, once, Auto first.
+    QCOMPARE(looks.first(), Fixture::AutoLook);
+    QCOMPARE(looks.size(), int(Fixture::StrobeLook) + 1);
+    QSet<int> seen;
+    QSet<QString> keys;
+    int section = -1;
+    foreach (Fixture::StageLook look, looks)
+    {
+        QVERIFY(!seen.contains(int(look)));
+        seen.insert(int(look));
+        const QString key = Fixture::stageLookToString(look);
+        QVERIFY(!keys.contains(key));
+        keys.insert(key);
+        // Round trip, any case.
+        QCOMPARE(Fixture::stringToStageLook(key), look);
+        QCOMPARE(Fixture::stringToStageLook(key.toUpper()), look);
+        QVERIFY(!Fixture::stageLookName(look).isEmpty());
+        // Listed section by section, never going back.
+        const int sec = Fixture::stageLookSection(look);
+        if (look == Fixture::AutoLook)
+        {
+            QCOMPARE(sec, -1);
+            continue;
+        }
+        QVERIFY(sec >= section);
+        section = sec;
+    }
+    // The keys a saved show holds: these must never change.
+    QCOMPARE(Fixture::stageLookToString(Fixture::FollowspotLook), QString("Followspot"));
+    QCOMPARE(Fixture::stageLookToString(Fixture::MovingSquareWashLook), QString("MovingSquareWash"));
+    QCOMPARE(Fixture::stageLookToString(Fixture::LedParLook), QString("LedPar"));
+    QCOMPARE(Fixture::stageLookToString(Fixture::CycStripLook), QString("CycStrip"));
+    QCOMPARE(Fixture::stageLookSection(Fixture::MovingSpotLook), int(Fixture::MovingSection));
+    QCOMPARE(Fixture::stageLookSection(Fixture::FresnelLook), int(Fixture::ConventionalSection));
+    QCOMPARE(Fixture::stageLookSection(Fixture::StaffLook), int(Fixture::LedSection));
+}
+
+static QByteArray stageLookSaved(Fixture &fxi)
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.writeStartElement("TestRoot");
+    fxi.saveXML(&xmlWriter);
+    xmlWriter.writeEndElement();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    return buffer.data();
+}
+
+void Fixture_Test::stageLookSaveLoad()
+{
+    Fixture fxi(this);
+    fxi.setID(5);
+    fxi.setName("Spot 1");
+    fxi.setAddress(10);
+    fxi.setChannels(4);
+    QLCFixtureDef *def = fxi.genericDimmerDef(4);
+    fxi.setFixtureDefinition(def, fxi.genericDimmerMode(def, 4));
+
+    // Auto writes nothing: a show without looks saves as it always has.
+    QVERIFY(!stageLookSaved(fxi).contains("StageLook"));
+
+    foreach (Fixture::StageLook look, Fixture::stageLooks())
+    {
+        if (look == Fixture::AutoLook)
+            continue;
+        fxi.setStageLook(look);
+        const QByteArray xml = stageLookSaved(fxi);
+        QVERIFY(xml.contains(QString("<StageLook>%1</StageLook>")
+                                 .arg(Fixture::stageLookToString(look)).toUtf8()));
+
+        QXmlStreamReader xmlReader(xml);
+        xmlReader.readNextStartElement();       // TestRoot
+        xmlReader.readNextStartElement();       // Fixture
+        Fixture loaded(this);
+        QVERIFY(loaded.loadXML(xmlReader, m_doc, m_doc->fixtureDefCache()) == true);
+        QCOMPARE(loaded.stageLook(), look);
+        QCOMPARE(loaded.name(), QString("Spot 1"));
+        QCOMPARE(loaded.address(), quint32(10));
+        QCOMPARE(loaded.channels(), quint32(4));
+        // And saved again, byte for byte.
+        QCOMPARE(stageLookSaved(loaded), xml);
+    }
+}
+
+void Fixture_Test::stageLookUnknownKey()
+{
+    /* A look a newer qlcconsole knows and this one does not: the fixture
+       still loads, every other field intact, drawn as Auto. (Upstream QLC+
+       skips the whole unknown StageLook tag the same way.) */
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.writeStartElement("Fixture");
+    xmlWriter.writeTextElement("Manufacturer", "Generic");
+    xmlWriter.writeTextElement("Model", "Generic");
+    xmlWriter.writeTextElement("Mode", "Generic");
+    xmlWriter.writeTextElement("ID", "9");
+    xmlWriter.writeTextElement("Name", "Future");
+    xmlWriter.writeTextElement("StageLook", "Hologram");
+    xmlWriter.writeTextElement("Universe", "1");
+    xmlWriter.writeTextElement("Address", "100");
+    xmlWriter.writeTextElement("Channels", "2");
+    xmlWriter.writeEndElement();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    Fixture fxi(this);
+    QVERIFY(fxi.loadXML(xmlReader, m_doc, m_doc->fixtureDefCache()) == true);
+    QCOMPARE(fxi.stageLook(), Fixture::AutoLook);
+    QCOMPARE(fxi.name(), QString("Future"));
+    QCOMPARE(fxi.universe(), quint32(1));
+    QCOMPARE(fxi.address(), quint32(100));
+    QCOMPARE(fxi.channels(), quint32(2));
+}
+
+void Fixture_Test::stageLookAuto()
+{
+    // A generic dimmer: a conventional.
+    Fixture dimmer(this);
+    QLCFixtureDef *ddef = dimmer.genericDimmerDef(1);
+    dimmer.setFixtureDefinition(ddef, dimmer.genericDimmerMode(ddef, 1));
+    QCOMPARE(dimmer.autoStageLook(), Fixture::LanternLook);
+
+    // A moving head with a gobo wheel: a spot.
+    QLCFixtureDef *mac = m_doc->fixtureDefCache()->fixtureDef("Martin", "MAC250+");
+    QVERIFY(mac != NULL);
+    Fixture mover(this);
+    mover.setFixtureDefinition(mac, mac->modes().at(0));
+    QCOMPARE(mover.autoStageLook(), Fixture::MovingSpotLook);
+
+    // By type: a colour changer is an LED PAR, a bar a bar wash, a strobe a strobe.
+    foreach (QLCFixtureDef *def, m_doc->fixtureDefCache()->definitions())
+    {
+        if (def->modes().isEmpty())
+            continue;
+        Fixture fx(this);
+        fx.setFixtureDefinition(def, def->modes().first());
+        switch (def->type())
+        {
+            case QLCFixtureDef::ColorChanger:
+                QCOMPARE(fx.autoStageLook(), Fixture::LedParLook);
+                break;
+            case QLCFixtureDef::LEDBarBeams:
+            case QLCFixtureDef::LEDBarPixels:
+                QCOMPARE(fx.autoStageLook(), Fixture::BarWashLook);
+                break;
+            case QLCFixtureDef::Strobe:
+                QCOMPARE(fx.autoStageLook(), Fixture::StrobeLook);
+                break;
+            case QLCFixtureDef::MovingHead:
+                QCOMPARE(Fixture::stageLookSection(fx.autoStageLook()), int(Fixture::MovingSection));
+                break;
+            case QLCFixtureDef::Hazer:
+            case QLCFixtureDef::Smoke:
+            case QLCFixtureDef::Fan:
+                QCOMPARE(fx.autoStageLook(), Fixture::AutoLook);
+                break;
+            default:
+                break;
+        }
+        fx.setFixtureDefinition(NULL, NULL);
+    }
+    // Auto is still Auto: it names a look, it does not set one.
+    QCOMPARE(mover.stageLook(), Fixture::AutoLook);
+}
+
+void Fixture_Test::stageLookIcon()
+{
+    QLCFixtureDef *mac = m_doc->fixtureDefCache()->fixtureDef("Martin", "MAC250+");
+    QVERIFY(mac != NULL);
+    Fixture fxi(this);
+    fxi.setFixtureDefinition(mac, mac->modes().at(0));
+    QCOMPARE(fxi.iconResource(), QString(":/movinghead.png"));
+    QCOMPARE(fxi.iconResource(true), QString("qrc:/movinghead.svg"));
+
+    fxi.setStageLook(Fixture::FollowspotLook);
+    QCOMPARE(fxi.iconResource(), QString(":/look_followspot.png"));
+    QCOMPARE(fxi.iconResource(true), QString("qrc:/look_followspot.svg"));
+    // Its type's icon is still there, for "Auto (...)".
+    QCOMPARE(fxi.typeIconResource(), QString(":/movinghead.png"));
+    QVERIFY(Fixture::stageLookIconResource(Fixture::AutoLook).isEmpty());
+
+    // Every look's icon is a file the resources ship.
+    const QString icons = QString(INTERNAL_FIXTUREDIR) + QStringLiteral("../icons/");
+    foreach (Fixture::StageLook look, Fixture::stageLooks())
+    {
+        if (look == Fixture::AutoLook)
+            continue;
+        const QString base = Fixture::stageLookIconResource(look).mid(2);   // drop ":/"
+        QVERIFY2(QFile::exists(icons + QStringLiteral("png/") + base), qPrintable(base));
+        QVERIFY2(QFile::exists(icons + QStringLiteral("svg/")
+                                   + Fixture::stageLookIconResource(look, true).mid(5)),
+                 qPrintable(base));
+    }
+}
+
 QTEST_APPLESS_MAIN(Fixture_Test)

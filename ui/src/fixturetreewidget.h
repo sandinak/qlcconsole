@@ -42,6 +42,7 @@ class Doc;
 #define PROP_INVENTORY_NAME Qt::UserRole + 9 //!< an Inventory folder's bare name, before its "(N)" count
 #define PROP_CLASHES  Qt::UserRole + 10 //!< marks the "Address clashes" root
 #define PROP_DUPLICATES Qt::UserRole + 11 //!< marks the "Duplicate names" root and its rows
+#define PROP_LOOK     Qt::UserRole + 12 //!< a fixture row's stage look when its icon was set (int)
 
 class FixtureTreeWidget final : public QTreeWidget
 {

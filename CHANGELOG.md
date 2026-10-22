@@ -13,6 +13,20 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Per-fixture stage look.** `Fixture::StageLook` (Auto + 15 looks in
+  three picker sections: Moving, Fixed conventional, Fixed LED), saved as
+  `<StageLook>key</StageLook>` in the fixture XML only when not Auto (stable
+  string keys; an unknown key loads as Auto; upstream QLC+ skips the tag).
+  `Fixture::autoStageLook()` names the closest look for a definition (Color
+  Changer → LED PAR, LED bar → bar wash, Strobe → strobe, moving head by
+  gobo/zoom/name). `Fixture::iconResource()` returns the look's icon
+  (`resources/icons/svg/look_*.svg`, rendered to `png/look_*.png` + `@2x`).
+  Set in Fixture Properties (`FixtureFields`, multi-edit "mixed") and the
+  Fixture Manager's **Stage Look ▸** menu; in the rig undo snapshot. The 2D
+  plot (`MonitorFixtureItem`) and the studio's Top/Front/Side views draw the
+  look (`stageLookBodyPath()` / `stageLookLensRect()` /
+  `stageLookLensHint()` in `fixturevisualtraits`); Auto draws as before,
+  and Angled is unchanged.
 - **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
   tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
   yellow hard hat with an amber edge, crisp at any size and pixel ratio,

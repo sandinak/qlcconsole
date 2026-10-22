@@ -59,6 +59,12 @@ private slots:
     void loadWrongID();
     void loader();
     void save();
+    void stageLookDefaultAndSet();
+    void stageLookKeys();
+    void stageLookSaveLoad();
+    void stageLookUnknownKey();
+    void stageLookAuto();
+    void stageLookIcon();
     //void status();
 
 private:

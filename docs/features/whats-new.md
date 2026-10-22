@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Stage looks: say what a fixture looks like.** Fixture Properties has
+  a **Stage look** row, and the Fixture Manager a right-click **Stage
+  Look ▸** for fixtures and groups: Auto (its type), or a moving head
+  spot, round or square wash; a lantern, PAR can, ellipsoidal, Fresnel or
+  followspot; an LED PAR, square, bar, uplight or cyc wash, a strobe or a
+  staff. The fixture gets that look's icon in the fixture lists and its
+  shape on the plot and in the studio's flat views -- a followspot a long
+  barrel, a staff a thin rod -- still in its live colour. See
+  [Stage looks](lighting-studio.md#stage-looks).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;

@@ -76,6 +76,9 @@
 #include "monitorruler.h"
 #include "hangeritem.h"
 #include "patchinventorydialog.h"
+#include "fixturemanager.h"
+#include "itemicons.h"
+#include <QActionGroup>
 #include <QTableWidget>
 #include <QHeaderView>
 #include "hanger.h"
@@ -21775,3 +21778,264 @@ void Monitor_Test::aColourRingIsFoundAndDrawn()
 
     spot->setFixtureDefinition(nullptr, nullptr);           // plain is on the stack
 }
+
+/*****************************************************************************
+ * Stage looks
+ *****************************************************************************/
+
+void Monitor_Test::aStageLookDecidesTheSilhouette()
+{
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Look probe");
+    fxi->setChannels(1);
+    QVERIFY(m_doc->addFixture(fxi));
+    auto cleanup = qScopeGuard([this, fxi]() { m_doc->deleteFixture(fxi->id()); });
+
+    const FixtureSilhouette autoKind = classifyFixture(fxi).kind;
+    QCOMPARE(int(classifyFixture(fxi).look), int(Fixture::AutoLook));
+
+    fxi->setStageLook(Fixture::FollowspotLook);
+    QCOMPARE(int(classifyFixture(fxi).look), int(Fixture::FollowspotLook));
+    QCOMPARE(int(classifyFixture(fxi).kind), int(FixtureSilhouette::Par));
+
+    fxi->setStageLook(Fixture::MovingSpotLook);
+    QCOMPARE(int(classifyFixture(fxi).kind), int(FixtureSilhouette::Mover));
+
+    // A staff that is not a bar is one body of its own shape...
+    fxi->setStageLook(Fixture::StaffLook);
+    QCOMPARE(int(classifyFixture(fxi).kind), int(FixtureSilhouette::Par));
+    // ...one that is keeps its pixels.
+    QCOMPARE(int(stageLookSilhouette(Fixture::StaffLook, FixtureSilhouette::Bar)),
+             int(FixtureSilhouette::Bar));
+    // The theatre lantern is not the LED lantern that lights all round.
+    QCOMPARE(int(stageLookSilhouette(Fixture::LanternLook, FixtureSilhouette::Lantern)),
+             int(FixtureSilhouette::Par));
+
+    fxi->setStageLook(Fixture::AutoLook);
+    QCOMPARE(int(classifyFixture(fxi).kind), int(autoKind));
+}
+
+void Monitor_Test::everyStageLookHasItsShape()
+{
+    const QRectF square(0, 0, 40, 40);
+    const QRectF wide(0, 0, 80, 20);
+    foreach (Fixture::StageLook look, Fixture::stageLooks())
+    {
+        const QString what = Fixture::stageLookToString(look);
+        for (bool elevation : { false, true })
+        {
+            for (const QRectF &r : { square, wide })
+            {
+                const QPainterPath body = stageLookBodyPath(look, r, elevation);
+                const QRectF lens = stageLookLensRect(look, r, elevation);
+                if (look == Fixture::AutoLook)
+                {
+                    QVERIFY(body.isEmpty());
+                    QVERIFY(lens.isNull());
+                    continue;
+                }
+                QVERIFY2(!body.isEmpty(), qPrintable(what));
+                QVERIFY2(r.adjusted(-0.5, -0.5, 0.5, 0.5).contains(body.boundingRect()), qPrintable(what));
+                if (!lens.isNull())
+                    QVERIFY2(r.adjusted(-0.5, -0.5, 0.5, 0.5).contains(lens), qPrintable(what));
+            }
+        }
+    }
+    // In a square cell each keeps its proportions.
+    QRectF b = stageLookBodyPath(Fixture::FollowspotLook, square).boundingRect();
+    QVERIFY(b.width() > b.height());
+    b = stageLookBodyPath(Fixture::StaffLook, square).boundingRect();
+    QVERIFY(b.height() > b.width() * 3);
+    b = stageLookBodyPath(Fixture::BarWashLook, square).boundingRect();
+    QVERIFY(b.width() > b.height() * 2);
+    // A followspot's light is at its front, not its middle.
+    QVERIFY(stageLookLensRect(Fixture::FollowspotLook, wide).left() > wide.center().x());
+    // And the lens says what the look is.
+    for (Fixture::StageLook look : { Fixture::MovingSpotLook, Fixture::LedParLook,
+                                     Fixture::FresnelLook, Fixture::CycStripLook,
+                                     Fixture::StrobeLook })
+        QVERIFY2(!stageLookLensHint(look, QRectF(0, 0, 30, 30)).isEmpty(),
+                 qPrintable(Fixture::stageLookToString(look)));
+    QVERIFY(stageLookLensHint(Fixture::AutoLook, QRectF(0, 0, 30, 30)).isEmpty());
+    QVERIFY(stageLookLensHint(Fixture::MovingSpotLook, QRectF(0, 0, 3, 3)).isEmpty());
+    QVERIFY(stageLookSquareLens(Fixture::SquareWashLook));
+    QVERIFY(!stageLookSquareLens(Fixture::LedParLook));
+    // Sizes for a definition that declares none.
+    QVERIFY(stageLookDefaultSize(Fixture::StaffLook, 10).height()
+            > stageLookDefaultSize(Fixture::StaffLook, 10).width() * 3);
+    QCOMPARE(stageLookDefaultSize(Fixture::AutoLook, 10), QSizeF(10, 10));
+}
+
+void Monitor_Test::thePlotRedrawsAFixtureWhenItsLookChanges()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(3000, 3000, 0)));
+    MonitorFixtureItem *item = rig.item;
+    QCOMPARE(int(item->stageLook()), int(Fixture::AutoLook));
+    QVERIFY(item->lensHintPath().isEmpty());
+
+    auto firstHead = [item]() { return item->m_heads.first()->m_item; };
+    QVERIFY(qgraphicsitem_cast<QGraphicsEllipseItem *>(firstHead()) != nullptr);
+
+    // Set on the fixture -- Doc's fixtureChanged reaches the plot by itself.
+    rig.fxi->setStageLook(Fixture::SquareWashLook);
+    item = rig.gv->m_fixtures.value(rig.fxi->id());
+    QCOMPARE(int(item->stageLook()), int(Fixture::SquareWashLook));
+    QGraphicsRectItem *sq = qgraphicsitem_cast<QGraphicsRectItem *>(firstHead());
+    QVERIFY2(sq != nullptr, "a square wash's head should be square");
+    const QRectF lens = stageLookLensRect(Fixture::SquareWashLook,
+                                          QRectF(0, 0, item->m_width, item->m_height));
+    QVERIFY(lens.adjusted(-0.5, -0.5, 0.5, 0.5).contains(sq->rect()));
+
+    // A followspot: the default footprint goes long, its lens at the front.
+    rig.fxi->setStageLook(Fixture::FollowspotLook);
+    QVERIFY(qgraphicsitem_cast<QGraphicsEllipseItem *>(firstHead()) != nullptr);
+    QVERIFY(item->m_width > item->m_height);
+    QVERIFY(qgraphicsitem_cast<QGraphicsEllipseItem *>(firstHead())->rect().center().x()
+            > item->m_width / 2.0);
+
+    rig.fxi->setStageLook(Fixture::MovingSpotLook);
+    QVERIFY(!item->lensHintPath().isEmpty());
+
+    // Drawn, every look, without anything to complain about.
+    QImage img(400, 300, QImage::Format_ARGB32_Premultiplied);
+    foreach (Fixture::StageLook look, Fixture::stageLooks())
+    {
+        rig.fxi->setStageLook(look);
+        img.fill(Qt::black);
+        QPainter p(&img);
+        rig.gv->scene()->render(&p);
+    }
+
+    rig.fxi->setStageLook(Fixture::AutoLook);
+    QCOMPARE(int(item->stageLook()), int(Fixture::AutoLook));
+    QVERIFY(qgraphicsitem_cast<QGraphicsEllipseItem *>(firstHead()) != nullptr);
+    QVERIFY(item->lensHintPath().isEmpty());
+}
+
+void Monitor_Test::fixturePropertiesSetsTheStageLook()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(3000, 3000, 0)));
+    Fixture *other = new Fixture(m_doc);
+    other->setName("Look two");
+    other->setChannels(1);
+    other->setAddress(40);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([this, other]() { m_doc->deleteFixture(other->id()); });
+    const QList<quint32> both { rig.fxi->id(), other->id() };
+
+    QWidget host;
+    QFormLayout *form = new QFormLayout(&host);
+    FixtureFields fields(rig.mon, form, &host);
+    fields.setFixtures(both, rig.fxi->id());
+    QComboBox *look = fields.m_look;
+    QVERIFY(!look->isHidden());
+    QVERIFY(look->itemText(look->currentIndex()).startsWith("Auto"));
+    // Its type's look named: a generic dimmer is a conventional.
+    QCOMPARE(look->itemText(0), QString("Auto (%1)").arg(Fixture::stageLookName(Fixture::LanternLook)));
+    // Sections are headings, not choices.
+    int headings = 0;
+    for (int i = 0; i < look->count(); ++i)
+        if (!look->itemData(i, Qt::UserRole).isValid() && !look->itemText(i).isEmpty())
+            ++headings;
+    QCOMPARE(headings, 3);
+
+    const QByteArray before = rig.mon->rigSnapshot();
+    look->setCurrentIndex(look->findData(int(Fixture::SquareWashLook), Qt::UserRole));
+    QCOMPARE(int(rig.fxi->stageLook()), int(Fixture::SquareWashLook));
+    QCOMPARE(int(other->stageLook()), int(Fixture::SquareWashLook));
+
+    // The rig's undo puts it back.
+    rig.mon->restoreRig(before);
+    QCOMPARE(int(rig.fxi->stageLook()), int(Fixture::AutoLook));
+    QCOMPARE(int(other->stageLook()), int(Fixture::AutoLook));
+
+    // Different: "mixed", and nothing changes until one is chosen.
+    other->setStageLook(Fixture::StaffLook);
+    fields.reload();
+    QVERIFY(look->currentText().contains("mixed"));
+    QCOMPARE(int(rig.fxi->stageLook()), int(Fixture::AutoLook));
+    QCOMPARE(int(other->stageLook()), int(Fixture::StaffLook));
+}
+
+void Monitor_Test::theStageLookMenuSetsEveryFixtureSelected()
+{
+    Fixture *a = new Fixture(m_doc);
+    a->setName("Menu A"); a->setChannels(1); a->setAddress(100);
+    QVERIFY(m_doc->addFixture(a));
+    Fixture *b = new Fixture(m_doc);
+    b->setName("Menu B"); b->setChannels(1); b->setAddress(110);
+    QVERIFY(m_doc->addFixture(b));
+    auto cleanup = qScopeGuard([this, a, b]() {
+        m_doc->deleteFixture(a->id());
+        m_doc->deleteFixture(b->id());
+    });
+    b->setStageLook(Fixture::StaffLook);
+
+    QMenu menu;
+    FixtureManager::fillStageLookMenu(&menu, m_doc, { a->id(), b->id() });
+    QList<QAction *> looks;
+    foreach (QAction *act, menu.actions())
+        if (act->isCheckable())
+            looks << act;
+    QCOMPARE(looks.size(), Fixture::stageLooks().size());
+    QVERIFY(looks.first()->text().startsWith("Auto"));
+    // They differ: nothing checked.
+    foreach (QAction *act, looks)
+        QVERIFY(!act->isChecked());
+
+    QAction *bar = menu.findChild<QAction *>("stageLook_BarWash");
+    QVERIFY(bar != nullptr);
+    bar->trigger();
+    QCOMPARE(int(a->stageLook()), int(Fixture::BarWashLook));
+    QCOMPARE(int(b->stageLook()), int(Fixture::BarWashLook));
+    QVERIFY(!ItemIcons::fixtureIcon(a).isNull());
+
+    QMenu again;
+    FixtureManager::fillStageLookMenu(&again, m_doc, { a->id(), b->id() });
+    QAction *checked = again.findChild<QAction *>("stageLook_BarWash");
+    QVERIFY(checked != nullptr && checked->isChecked());
+
+    QCOMPARE(FixtureManager::setStageLook(m_doc, { a->id(), b->id() }, int(Fixture::BarWashLook)), 0);
+    QCOMPARE(FixtureManager::setStageLook(m_doc, { a->id(), b->id() }, int(Fixture::AutoLook)), 2);
+}
+
+void Monitor_Test::theStudioDrawsAStageLook()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.view->setPlane(StructureStudioView::Front);
+    const QPointF c(100, 100);
+
+    FixtureVisualTraits traits = classifyFixture(rig.fxi);
+    QCOMPARE(int(traits.kind), int(FixtureSilhouette::Par));
+    // Auto: as before, its definition's footprint.
+    QCOMPARE(rig.view->parBodyRect(traits, c).center(), c);
+
+    rig.fxi->setStageLook(Fixture::FollowspotLook);
+    traits = classifyFixture(rig.fxi);
+    QRectF r = rig.view->parBodyRect(traits, c);
+    QVERIFY(r.width() > r.height() * 2);
+    QCOMPARE(r.center(), c);
+
+    rig.fxi->setStageLook(Fixture::StaffLook);
+    r = rig.view->parBodyRect(classifyFixture(rig.fxi), c);
+    QVERIFY(r.height() > r.width() * 3);
+
+    // Every look drawn in every flat plane.
+    for (StructureStudioView::Plane plane : { StructureStudioView::Top, StructureStudioView::Front,
+                                              StructureStudioView::Side })
+    {
+        rig.view->setPlane(plane);
+        foreach (Fixture::StageLook look, Fixture::stageLooks())
+        {
+            rig.fxi->setStageLook(look);
+            rig.view->reload();
+            QImage img = rig.view->grab().toImage();
+            QVERIFY(!img.isNull());
+        }
+    }
+    rig.fxi->setStageLook(Fixture::AutoLook);
+}
+
