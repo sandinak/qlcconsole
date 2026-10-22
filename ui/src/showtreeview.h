@@ -351,6 +351,10 @@ public:
      *  colours (ShowTree::textColours()), Custom… and None, for cues
      *  @a cueIds or -- @a listId valid -- the cue list. Each one undo step. */
     void colourMenu(QMenu *menu, const QList<quint32> &cueIds, quint32 listId = 0xFFFFFFFF);
+    /** Move in black ▸ Use show's (On) / On / Off for list @a listId (Q38). */
+    void listMibMenu(QMenu *menu, quint32 listId);
+    /** "Use show's (On)": the show's setting as it is now. */
+    QString showMibLabel() const;
     /** @a hex ("" none) as the tree shows text on its background. */
     QColor treeTextColour(const QString &hex) const;
     /** Delete the cues and own layers selected in the tree (two or more)
@@ -641,6 +645,8 @@ private slots:
     void slotCueBaseToggled(bool on);
     void slotCueMixToggled(bool on);
     void slotCueSkipToggled(bool on);
+    void slotCueNoMibToggled(bool on);
+    void slotListMibChanged(int index);
     void slotLayerReleaseToggled(bool on);
     void slotCommandEntered();
     void slotFilterChanged(const QString &text);
@@ -768,6 +774,9 @@ private:
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
     QCheckBox *m_cueSkip = nullptr;
+    /** Q38: "Don't move in black into this cue"; the list's Move in black. */
+    QCheckBox *m_cueNoMib = nullptr;
+    QComboBox *m_listMib = nullptr;
     /** The pages' Text colour buttons (Colour ▸ menus). */
     QToolButton *m_cueColour = nullptr;
     QToolButton *m_listColour = nullptr;

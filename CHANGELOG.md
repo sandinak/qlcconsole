@@ -13,6 +13,56 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Workspace views.** **View ▸ Workspace ▸ Classic QLC+ / qlcconsole /
+  Everything** (`App::setWorkspaceView()`, `workspaceViewTabs()`): Classic
+  shows Fixtures, Functions, Shows, Virtual Console, Simple Desk and
+  Connections (read "Inputs/Outputs") in stock QLC+ order; qlcconsole shows
+  Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows, Virtual
+  Console and Run (Functions → Build ▸ Scenes ▸ Classic, as before);
+  Everything shows all ten. Hidden tabs keep their widgets (put away, not
+  deleted); a broken-out window stays out across a switch, and closing one
+  whose tab is hidden puts it away. Saved per show as an optional
+  `View="classic|qlcconsole|everything"` attribute on `<Workspace>`, which
+  QLC+ and older builds ignore; a switch marks the show modified but is no
+  undo step. No attribute: Classic for a show with no Show Tree not saved
+  by qlcconsole (`defaultViewForLoadedShow()`), else qlcconsole; a new show
+  is qlcconsole. A Window-menu jump (or `showContext()`) to a hidden tab
+  switches to Everything and says so in a quiet line above the tabs, with
+  a *Back to …* button (`showViewNotice()`). Settings ▸ General ▸ Tab Bar
+  shows and sets the show's view. After File ▸ Upgrade This Show… gives a
+  Classic show a Show Tree, the same line offers the qlcconsole view once
+  (`offerConsoleViewAfterUpgrade()`). `setFunctionsWindowShown()` remains
+  the Functions switch; the view sets it.
+- **Make a layer, from the effect designer's bench** (board Q37). The
+  bench (Build ▸ Effects, Window ▸ Effects) has **Make a layer**: the Try
+  on groups and the effect as a new layer. It goes into the cue or scene
+  the bench was opened from (`Workbench::EffectRequest::fromCue` /
+  `fromScene`, filled from what was loaded and kept while the bench
+  shows), the Show Tree's selected cue, a picked scene, or a new scene.
+  A cue gets `addLayer` + `setLayerLook` in one tree batch; a scene gets
+  a `PaletteOps::sceneStep`; a new scene a `functionStep`. A saved,
+  unchanged palette plays by name, else a one-off copy of the draft (as
+  Keep on this layer makes). `EffectDesigner::layerMade` /
+  `revealLayer()` select the new layer in the Show Tree or Workbench.
+  `ShowTreeController::dropUnusedInlinePalettes` now keeps one-offs a
+  scene in Build's undo history still plays
+  (`PaletteOps::palettesInHistory()`).
+- **Move in black per cue list and per cue (Q38).** `CueList::moveInBlack`
+  (`ShowTree::MoveInBlack` Show / On / Off, saved as `MoveInBlack="On|Off"`
+  on `<CueList>`) and `Cue::noMoveInBlack` (`NoMoveInBlack="1"` on `<Cue>`),
+  both optional attributes an older build ignores. `MarkPlanner` asks
+  `ShowTreeController::moveInBlackForNext()` for the next cue
+  (`CueLookahead::UpcomingCue` now carries the running chaser and step):
+  the cue's flag wins, else the list's setting, else the show's switch
+  (`ShowTree::effectiveMoveInBlack`). It now also looks ahead with the
+  show's switch off when some list is On, and releases its pre-sets when
+  the next cue says no. Lead time stays show-wide. UI: the list page's
+  **Move in black** combo and right-click **Move in black ▸**; the cue
+  page's and right-click **Don't move in black into this cue**; ⊘ MIB /
+  ▸ MIB badges; the MIB button's tooltip counts overrides and *MIB · n*
+  shows a list's pre-sets with the show's switch off. Command line:
+  `mib on|off|show [list]`, `nomib` / `allowmib <cues>`, with help and
+  Tab completion. One undo step per change.
 - **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
   tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
   yellow hard hat with an amber edge, crisp at any size and pixel ratio,

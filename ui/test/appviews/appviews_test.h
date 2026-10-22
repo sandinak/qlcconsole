@@ -91,6 +91,27 @@ private slots:
     void rigNetworkFooterSaysWhyOutputIsHeld();
     void rigNetworkSettingsRoundTrip();
 
+    /** Board Q35/Q36: View ▸ Workspace -- Classic QLC+, qlcconsole,
+     *  Everything -- each its own tabs in its own order; hidden tabs live
+     *  on; the Settings dialog shows the show's view. */
+    void eachWorkspaceViewShowsItsTabs();
+    /** A Window-menu jump to a tab the view hides shows Everything, with a
+     *  note and a way back; Window → Functions in qlcconsole is Build. */
+    void aJumpToAHiddenTabShowsEverything();
+    /** A view in a window of its own stays there through view switches,
+     *  and goes back to its place (or is put away) when closed. */
+    void aBrokenOutViewSurvivesAViewSwitch();
+    /** The view is saved with the show, as an attribute older readers skip;
+     *  switching marks the show modified but is no undo step. */
+    void theViewIsSavedWithTheShow();
+    /** No view saved: an old QLC+ show opens in Classic QLC+, a show with a
+     *  Show Tree (or saved by qlcconsole) in qlcconsole; a new show in
+     *  qlcconsole. */
+    void aShowWithoutAViewOpensInItsDefault();
+    /** File ▸ Upgrade This Show… on a Classic show: offered (once) the
+     *  qlcconsole view, as a quiet line with a button. */
+    void upgradingAClassicShowOffersTheConsoleView();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */

@@ -1,0 +1,27 @@
+otbpa-eos-3.3.6.asc is a USITT ASCII export from ETC Eos 3.3.6 ($$Title
+OTBPA DRESS TUES), copied unchanged from the lacylights-go project:
+https://github.com/bbernstein/lacylights-go/blob/73f2fede3d6c1c0f23ea1b9b2b0f6aa642289977/internal/services/import_eos/testdata/golden_otbpa.asc
+It is used by engine/test/eosasciiparser and engine/test/eosimporter.
+Its licence follows.
+
+MIT License
+
+Copyright (c) 2024 Bernard Bernstein
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

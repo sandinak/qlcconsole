@@ -54,9 +54,11 @@
 
 /* The tabs that have tools of their own for the top bar. Connections keeps
    its in the universe list's pane (they act on the universe picked there);
-   Simple Desk and Run have none. */
+   Simple Desk and Run have none. Functions is a tab in the Everything view
+   the test runs in. */
 static const QStringList kTabsWithTools = {
-    QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio"), QStringLiteral("Build"),
+    QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio"), QStringLiteral("Functions"),
+    QStringLiteral("Build"),
     QStringLiteral("Show Tree"), QStringLiteral("Shows"), QStringLiteral("Virtual Console") };
 
 /* What a tab's tools hold: every action and every widget, by pointer. */
@@ -120,6 +122,8 @@ void MainBar_Test::initTestCase()
     const QString show = m_dir.filePath(QStringLiteral("demo.qxw"));
     QVERIFY(QFile::copy(QStringLiteral(MAINBAR_DEMO_SHOW), show));
     m_app->loadXML(show);
+    // Every tab on the bar (View ▸ Workspace ▸ Everything): Simple Desk too.
+    m_app->setWorkspaceView(App::EverythingView, false);
     m_app->resize(1280, 800);
     m_app->show();
     QCoreApplication::processEvents();

@@ -127,6 +127,16 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(m_scene, &QGraphicsScene::selectionChanged,
             this, &MonitorGraphicsView::extendSelectionToGroups);
 
+    /* A new or opened show deletes the stage targets (MonitorProperties::
+       reset()) before the view is rebuilt, and a TargetItem only borrows its
+       StageTarget. The Doc is still emitting while it clears -- unloading the
+       bench re-seeds the follow-spot pin, which repositions the target items
+       -- so drop them now, while their targets still exist, not on the
+       updateView() that follows. Reading a freed target's position locked a
+       freed mutex and hung (courseshow_test, Release). */
+    if (m_doc != NULL)
+        connect(m_doc, &Doc::clearing, this, &MonitorGraphicsView::dropTargetItems);
+
     // dragging on the empty canvas rubber-band selects fixtures.
     // This works both when locked and unlocked.
     setDragMode(QGraphicsView::RubberBandDrag);
@@ -5418,7 +5428,7 @@ void MonitorGraphicsView::repositionTargetItems()
     updateAimLines();   // keep aim lines tracking the moved target
 }
 
-void MonitorGraphicsView::updateTargets()
+void MonitorGraphicsView::dropTargetItems()
 {
     QScopedValueRollback<bool> rb(m_itemsRebuilding); m_itemsRebuilding = true;
     foreach (TargetItem *ti, m_targetItems)
@@ -5428,13 +5438,19 @@ void MonitorGraphicsView::updateTargets()
     }
     m_targetItems.clear();
 
-    // Aim lines are tied to target selection; rebuild them too.
+    // Aim lines are tied to target selection; they go with the targets.
     foreach (QGraphicsLineItem *li, m_aimLines)
     {
         m_scene->removeItem(li);
         delete li;
     }
     m_aimLines.clear();
+}
+
+void MonitorGraphicsView::updateTargets()
+{
+    QScopedValueRollback<bool> rb(m_itemsRebuilding); m_itemsRebuilding = true;
+    dropTargetItems();
 
     MonitorProperties *props = m_doc->monitorProperties();
     if (props == nullptr || m_cellPixels == 0)

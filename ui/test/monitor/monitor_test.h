@@ -725,6 +725,10 @@ private slots:
     void aLampWithNoColourEmitsNothingNotBlack();
     void everyColourModelTheEngineDefinesIsRead();
     void pixelBarDrawsEachPixelInItsOwnColour();
+    /** A new or opened show deletes the stage targets while the Doc is still
+     *  emitting; the view's target items go first, so nothing reads a freed
+     *  target (it hung courseshow_test in Release). */
+    void clearingTheShowDropsTargetItemsFirst();
 
 private:
     Doc* m_doc;

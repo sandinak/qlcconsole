@@ -40,6 +40,10 @@ private slots:
     void theShowsMoveInBlackSavesLoadsAndResets();
     /** The "pre-positioning N heads" count follows the planner's pre-sets. */
     void thePresetCountFollowsThePlanner();
+    /** Q38: a Show Tree list set On pre-positions with the show's setting
+     *  off; a list set Off, or a cue flagged "Don't move in black into this
+     *  cue", never does (and releases what was pre-set). */
+    void perListAndPerCueMoveInBlack();
 
 private:
     Doc *m_doc = nullptr;

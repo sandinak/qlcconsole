@@ -394,10 +394,13 @@ tab, or its own window when it has been broken out (right-click a tab →
 Window**),
 which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
-as usual.
+as usual. A view that the current workspace view hides (**View →
+Workspace**) switches to **Everything** when you choose it; see
+[Views](getting-started.md#views).
 
-**Functions is Build ▸ Scenes ▸ Classic.** The Functions window is
-hidden: **Window → Functions** (⇧⌘4) brings Build forward with the
+**Functions is Build ▸ Scenes ▸ Classic.** In the qlcconsole view the
+Functions window is hidden (the Classic QLC+ and Everything views show
+it): **Window → Functions** (⇧⌘4) brings Build forward with the
 Scenes outline set to **Classic** — every function by type, as the
 Function Manager listed them — and the list focused. Each function opens
 in the Workbench with its own editor (chasers, sequences, EFX, RGB

@@ -11,6 +11,11 @@
   The planner only ever touches marks it created itself (m_planned), so manual
   Mark/Unmark coexists untouched.
 
+  Per list and per cue (Q38): isEnabled() is the show's default; the Show
+  Tree decides for the next cue (ShowTreeController::moveInBlackForNext) --
+  a list set On pre-positions with the show's setting off, a list set Off
+  or a cue flagged "Don't move in black into this cue" never does.
+
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
@@ -22,6 +27,8 @@
 #include <QTimer>
 #include <QSet>
 #include <QString>
+
+#include "cuelookahead.h"
 
 class Doc;
 class MarkEffect;
@@ -35,8 +42,8 @@ class QLC_ENGINE_EXPORT MarkPlanner : public QObject
 public:
     MarkPlanner(Doc *doc, MarkEffect *mark, QObject *parent = nullptr);
 
-    /** Turn automatic move-in-black on/off (starts/stops the look-ahead timer;
-     *  clears the planner's own marks when turned off). */
+    /** The show's automatic move-in-black on/off (clears the planner's own
+     *  marks when turned off; a cue list set On still pre-positions). */
     void setEnabled(bool enable);
     bool isEnabled() const { return m_enabled; }
 
@@ -73,6 +80,9 @@ private slots:
 
 private:
     void evaluatePlan();
+    /** Whether to move in black into @a cue: the Show Tree's per list /
+     *  per cue setting, else the show's (isEnabled()). */
+    bool wantsMoveInBlack(const CueLookahead::UpcomingCue &cue) const;
 
 private:
     /** Live pre-Grand-Master value at a fixture's absolute channel (0 if off-range). */

@@ -33,6 +33,8 @@
 #include "markplanner.h"
 #include "functionparent.h"
 #include "programmercontroller.h"
+#include "showtreecontroller.h"
+#include "showtreemodel.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
@@ -283,6 +285,72 @@ void MarkPlanner_Test::thePresetCountFollowsThePlanner()
     QCOMPARE(pc->moveInBlackPresetCount(), 0);
     QCOMPARE(spy.count(), 2);
     QCOMPARE(spy.last().at(0).toInt(), 0);
+}
+
+void MarkPlanner_Test::perListAndPerCueMoveInBlack()
+{
+    using namespace ShowTree;
+    // A tree list: cue One (nothing), cue Two plays a scene lighting A.
+    Scene *next = new Scene(m_doc);
+    next->setName("Next");
+    next->setValue(m_fixtureA, 1, 200);     // Dimmer
+    next->setValue(m_fixtureA, 0, 128);     // Pan
+    m_doc->addFunction(next);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 one = st->addCue(listId, -1, "One");
+    const quint32 two = st->addCue(listId, 0, "Two");
+    Target fn;
+    fn.function = next->id();
+    QVERIFY(st->addLayer(two, fn) != invalidId());
+    Q_UNUSED(one);
+
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    MasterTimer timer(m_doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 0);
+
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    auto plan = [&]() { QMetaObject::invokeMethod(&planner, "evaluate"); };
+
+    // The show's off, the list follows it: nothing.
+    plan();
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+
+    // The list On: pre-positioned although the show's is off.
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::On));
+    QVERIFY(chaser->isRunning());
+    plan();
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 1);
+
+    // Two says don't: released, and nothing more.
+    QVERIFY(st->setCuesNoMoveInBlack({ two }, true));
+    plan();
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 0);
+    QVERIFY(st->setCuesNoMoveInBlack({ two }, false));
+
+    // The show's on, the list Off: nothing.
+    planner.setEnabled(true);
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::Off));
+    plan();
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+
+    // ... and back to the show's: pre-positioned.
+    QVERIFY(st->setListMoveInBlack(listId, MoveInBlack::Show));
+    plan();
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+
+    // The show's off again, the list follows: released.
+    planner.setEnabled(false);
+    plan();
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+    chaser->stop(FunctionParent::master());
 }
 
 QTEST_GUILESS_MAIN(MarkPlanner_Test)

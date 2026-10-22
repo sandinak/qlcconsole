@@ -32,6 +32,7 @@
 #include <QIcon>
 #include <QPair>
 #include <QPalette>
+#include <functional>
 
 #include "dmxdumpfactoryproperties.h"
 #include "qlcfixturedefcache.h"
@@ -143,6 +144,69 @@ public:
 private:
     int m_tabLabelMode = TabIconAndText;
     QList<QPair<QString, QIcon>> m_tabOriginals; // stored on first tab add
+
+    /*********************************************************************
+     * Workspace views (View ▸ Workspace; board Q35/Q36)
+     *********************************************************************/
+public:
+    /** Which tabs the main window shows. Classic QLC+: the stock QLC+ tabs,
+     *  in stock order and names; qlcconsole: the qlcconsole workflow
+     *  (Functions folded into Build); Everything: every tab. Saved with the
+     *  show ("View" on <Workspace>, which older readers ignore). Switching
+     *  only shows and hides tabs -- never the show itself. */
+    enum WorkspaceView { ClassicView = 0, ConsoleView = 1, EverythingView = 2 };
+
+    WorkspaceView workspaceView() const { return m_workspaceView; }
+    /** Show @p view's tabs. @p markModified: the show is modified (the view
+     *  is saved with it; it is not an undo step). Hidden tabs keep their
+     *  widgets; a view in a window of its own stays in it. */
+    void setWorkspaceView(WorkspaceView view, bool markModified = true);
+    /** The tab labels @p view shows, in its order. */
+    static QStringList workspaceViewTabs(WorkspaceView view);
+    /** "classic", "qlcconsole", "everything": as saved. */
+    static QString workspaceViewKey(WorkspaceView view);
+    static WorkspaceView workspaceViewFromKey(const QString &key, bool *ok = nullptr);
+    /** What the View menu calls @p view. */
+    static QString workspaceViewName(WorkspaceView view);
+    /** A show saved without a view: Classic for an old QLC+ show (no Show
+     *  Tree, not saved by qlcconsole), else qlcconsole. */
+    WorkspaceView defaultViewForLoadedShow() const;
+    /** What tab @p label reads as in the current view ("Inputs/Outputs" for
+     *  Connections in Classic QLC+); its identity stays @p label. */
+    QString tabDisplayLabel(const QString &label) const;
+    /** A quiet line above the tabs: @p text, with a button @p buttonText
+     *  running @p action when given; × puts it away. */
+    void showViewNotice(const QString &text, const QString &buttonText = QString(),
+                        const std::function<void()> &action = nullptr);
+    void hideViewNotice();
+    /** After Upgrade This Show… on a Classic show that now has a Show Tree:
+     *  offer (once per show) the qlcconsole view. True: offered. */
+    bool offerConsoleViewAfterUpgrade();
+
+private:
+    /** The current view's tabs, in order, with Functions in or out by
+     *  setFunctionsWindowShown(). */
+    QStringList effectiveViewTabs() const;
+    /** Put the tab bar in step with the view: its tabs in its order, the
+     *  rest put away (or left in their own windows). */
+    void applyWorkspaceTabs();
+    /** Whether @p label is a tab of the current view. */
+    bool tabInView(const QString &label) const;
+    /** Where @p label goes in the tab bar now: after the docked tabs that
+     *  come before it in the current view. */
+    int tabInsertIndex(const QString &label) const;
+    /** The widget for tab @p label, wherever it is (tab, window, put away). */
+    QWidget *contextWidget(const QString &label) const;
+    void updateWorkspaceViewActions();
+
+    WorkspaceView m_workspaceView = ConsoleView;
+    QString m_loadedCreator;                   ///< <Creator><Name> of the show loaded
+    bool m_upgradeOfferMade = false;           ///< offerConsoleViewAfterUpgrade(), per show
+    QList<QAction *> m_workspaceViewActions;   ///< View ▸ Workspace
+    QWidget *m_viewNotice = nullptr;
+    class QLabel *m_viewNoticeText = nullptr;
+    class QPushButton *m_viewNoticeButton = nullptr;
+    std::function<void()> m_viewNoticeAction;
 
     /*********************************************************************
      * Show controls placement (MainBar)
@@ -324,6 +388,15 @@ private:
      *  failure; caller owns the returned Doc on success. */
     Doc *loadScratchDoc(const QString &fileName, QString &error);
 
+    /** File > Import of an ETC Eos show (@p asciiPath, its USITT ASCII
+     *  export): the EosImportWizard, the usual picker and merge, then the
+     *  cue lists into the Show Tree (EOS_IMPORT_DESIGN.md). */
+    void importEosShow(const QString &asciiPath);
+    /** File > Import's report: the merge, with @p before as its details
+     *  (what an Eos file held) and @p after appended (the Show Tree). */
+    void showImportSummary(const class QxwImportResult &result, const QStringList &before = QStringList(),
+                           const QStringList &after = QStringList());
+
 public slots:
     bool slotFileNew();
     QFile::FileError slotFileOpen();
@@ -387,8 +460,9 @@ public slots:
     void showFunctions();
     /** THE switch for the Functions window (Function Manager), board Q32:
      *  shown, it is a tab of its own again and Window → Functions brings it
-     *  forward (a Classic QLC+ view); hidden -- the default -- it has no tab
-     *  and Window → Functions opens Build ▸ Scenes ▸ Classic. Opening a
+     *  forward; hidden -- the qlcconsole view -- it has no tab and Window →
+     *  Functions opens Build ▸ Scenes ▸ Classic. setWorkspaceView() sets it
+     *  for the view (shown in Classic QLC+ and Everything). Opening a
      *  function from elsewhere (Show Tree Open, Edit Chase…) loads it in the
      *  Workbench either way. */
     void setFunctionsWindowShown(bool shown);

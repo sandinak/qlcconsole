@@ -60,6 +60,9 @@ class Doc;
  *   include 0.0.3                include a cue (again: take it out)
  *   skip 0.0.3 [thru 0.0.5] [, 0.0.7]   skip cues (none named: the selected
  *                                one): GO passes over; unskip puts back
+ *   mib on|off|show [list]       the list's move in black (show: the show's)
+ *   nomib 0.0.3 [thru 0.0.5]     don't move in black into those cues (none
+ *                                named: the selected one); allowmib undoes
  *   record [selected|running|lit]   Record as new cue: the setting says
  *                                which when the choices differ (or asks)
  *   list "01-Opener"             select that cue list, or make it

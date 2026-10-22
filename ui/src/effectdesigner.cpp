@@ -30,6 +30,11 @@
 
 #include "effectdesigner.h"
 #include "workbench.h"
+#include "showtreeview.h"
+#include "programmingmanager.h"
+#include "functionselection.h"
+#include "paletteops.h"
+#include "programmingoutline.h"
 #include "effectbrowser.h"
 #include "lookeditor.h"
 #include "showtreecontroller.h"
@@ -110,6 +115,8 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     , m_sceneId(Function::invalidId())
     , m_ownColour(QLCPalette::invalidId())
     , m_ownDimmer(QLCPalette::invalidId())
+    , m_fromCue(ShowTree::invalidId())
+    , m_fromScene(Function::invalidId())
 {
     setObjectName(QStringLiteral("effectDesigner"));
     QVBoxLayout *v = new QVBoxLayout(this);
@@ -264,6 +271,26 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_keepBtn->setDefault(true);
     m_keepBtn->hide();
     btns->addWidget(m_keepBtn);
+    // The bench: what you tried it on, with it, as a layer of a cue or a
+    // scene -- where you came from, else picked.
+    m_makeLayerBtn = new QToolButton(this);
+    m_makeLayerBtn->setObjectName(QStringLiteral("edMakeLayer"));
+    m_makeLayerBtn->setText(tr("Make a layer ▾"));
+    m_makeLayerBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_makeLayerBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *layerMenu = new QMenu(m_makeLayerBtn);
+    layerMenu->setObjectName(QStringLiteral("edMakeLayerMenu"));
+    layerMenu->setToolTipsVisible(true);
+    m_makeLayerBtn->setMenu(layerMenu);
+    connect(layerMenu, &QMenu::aboutToShow, this, &EffectDesigner::fillMakeLayerMenu);
+    connect(m_makeLayerBtn, &QToolButton::clicked, this, [this]() {
+        // Its own part (where you came from): straight there.
+        if (m_doc != nullptr && m_doc->showTree()->cue(m_fromCue) != nullptr)
+            makeLayerInCue(m_fromCue);
+        else if (m_doc != nullptr && qobject_cast<Scene *>(m_doc->function(m_fromScene)) != nullptr)
+            makeLayerInScene(m_fromScene);
+    });
+    btns->addWidget(m_makeLayerBtn);
     v->addLayout(btns);
 
     m_hint = new QLabel(this);
@@ -321,6 +348,8 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
             m_base.clear();
             m_cleanAtStart = false;
             m_ownColour = m_ownDimmer = QLCPalette::invalidId();
+            m_fromCue = ShowTree::invalidId();
+            m_fromScene = Function::invalidId();
             m_look->setContextScene(nullptr);
             m_look->setPalette(QLCPalette::invalidId());
             updateHeader();
@@ -378,7 +407,14 @@ void EffectDesigner::plugIntoWorkbench()
         ed->setObjectName(QStringLiteral("workbenchEffectDesigner"));
         ed->setCancelVisible(false);
         ed->setTargets(QList<quint32>(), QList<quint32>());
+        ed->setCameFrom(req.fromCue, req.fromScene);
         ed->setEffect(req.palette);
+        QPointer<Workbench> bench = wb;
+        connect(ed, &EffectDesigner::layerMade, wb,
+                [bench](quint32 cueId, quint32 layerId, quint32 sceneId, quint32 paletteId) {
+            if (!bench.isNull())
+                revealLayer(bench->doc(), bench, cueId, layerId, sceneId, paletteId);
+        });
         return ed;
     });
 }
@@ -406,6 +442,7 @@ void EffectDesigner::setTargets(const QList<quint32> &groups, const QList<quint3
     rebuildScene();
     refreshPreview(false);
     updateHeader();
+    updateMakeLayerButton();
 }
 
 void EffectDesigner::setTryOnGroups(const QList<quint32> &groups)
@@ -423,6 +460,7 @@ void EffectDesigner::setTryOnGroups(const QList<quint32> &groups)
         refreshPreview(false);
     }
     updateHeader();
+    updateMakeLayerButton();
 }
 
 void EffectDesigner::setBaseLooks(const QList<quint32> &paletteIds)
@@ -919,6 +957,371 @@ void EffectDesigner::release(bool keepDraft)
 }
 
 /****************************************************************************
+ * Make a layer
+ ****************************************************************************/
+
+void EffectDesigner::setCameFrom(quint32 cueId, quint32 sceneId)
+{
+    m_fromCue = cueId;
+    m_fromScene = sceneId;
+    updateMakeLayerButton();
+}
+
+QString EffectDesigner::tryOnNames() const
+{
+    QStringList names;
+    if (m_doc != nullptr)
+        for (quint32 gid : m_tryOn)
+            if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                names << g->name();
+    return names.join(QStringLiteral(", "));
+}
+
+QString EffectDesigner::whyNoLayer() const
+{
+    if (m_doc == nullptr || !isBench())
+        return tr("Only on the bench");
+    if (draft() == nullptr || effectName().isEmpty())
+        return tr("Pick an effect first");
+    if (tryOnNames().isEmpty())
+        return tr("Pick groups to Try on first: they are the layer's");
+    return QString();
+}
+
+quint32 EffectDesigner::savedPaletteForLayer() const
+{
+    const QLCPalette *o = m_doc == nullptr ? nullptr : m_doc->palette(m_originalId);
+    if (o == nullptr || m_doc->showTree()->isInlinePalette(o->id()) || isModified())
+        return QLCPalette::invalidId();
+    return o->id();
+}
+
+quint32 EffectDesigner::paletteForLayer(const QString &where, bool *made)
+{
+    *made = false;
+    if (!whyNoLayer().isEmpty())
+        return QLCPalette::invalidId();
+    const quint32 saved = savedPaletteForLayer();
+    if (saved != QLCPalette::invalidId())
+        return saved;
+    // A one-off, as Keep on this layer makes: a copy of the design, so the
+    // bench goes on with its own.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pid = st->createInlinePalette(QLCPalette::Effect, QVariantList(),
+                                                QStringLiteral("%1 · %2").arg(effectName(), where));
+    QLCPalette *p = m_doc->palette(pid);
+    if (p == nullptr)
+        return QLCPalette::invalidId();
+    copyEffect(draft(), p);
+    *made = true;
+    return pid;
+}
+
+void EffectDesigner::dropOneOff(quint32 paletteId)
+{
+    if (m_doc != nullptr && m_doc->palette(paletteId) != nullptr && m_doc->showTree()->isInlinePalette(paletteId))
+        m_doc->deletePalette(paletteId);
+}
+
+quint32 EffectDesigner::makeLayerInCue(quint32 cueId)
+{
+    if (m_doc == nullptr || !whyNoLayer().isEmpty())
+        return ShowTree::invalidId();
+    ShowTreeController *st = m_doc->showTree();
+    const CueList *list = st->listOfCue(cueId);
+    if (list == nullptr || st->cue(cueId) == nullptr)
+        return ShowTree::invalidId();
+    const QString cueText = st->cueLabel(*list, list->indexOf(cueId));
+    Target target;
+    for (quint32 gid : m_tryOn)
+        if (m_doc->fixtureGroup(gid) != nullptr)
+            target.groups << gid;
+
+    bool made = false;
+    const quint32 pid = paletteForLayer(QStringLiteral("%1 %2").arg(cueText, st->targetLabel(target)).trimmed(), &made);
+    const QLCPalette *p = m_doc->palette(pid);
+    if (p == nullptr)
+        return ShowTree::invalidId();
+    Look look;
+    look.key = effectKey(st->effectKind(p));
+    look.palettes << pid;
+    look.own = ownLooks();
+
+    // One step: the layer and its effect.
+    st->beginBatch(tr("Make a layer: %1 on %2").arg(effectName(), st->targetLabel(target)));
+    const quint32 layerId = st->addLayer(cueId, target);
+    const bool ok = layerId != ShowTree::invalidId() && st->setLayerLook(cueId, layerId, look);
+    st->endBatch(ok);
+    if (!ok)
+    {
+        if (made)
+            dropOneOff(pid);
+        return ShowTree::invalidId();
+    }
+    emit layerMade(cueId, layerId, Function::invalidId(), pid);
+    return layerId;
+}
+
+bool EffectDesigner::makeLayerInScene(quint32 sceneId)
+{
+    if (m_doc == nullptr || !whyNoLayer().isEmpty() || m_doc->paletteOps() == nullptr)
+        return false;
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(sceneId));
+    // The tree's own scenes are its to change (D13).
+    if (scene == nullptr || sceneId == m_sceneId || m_doc->showTree()->isGenerated(sceneId))
+        return false;
+    bool made = false;
+    const quint32 pid = paletteForLayer(scene->name(), &made);
+    if (m_doc->palette(pid) == nullptr)
+        return false;
+    const QList<quint32> own = ownLooks();
+    const bool ok = m_doc->paletteOps()->sceneStep(tr("make a layer: %1 on %2").arg(effectName(), tryOnNames()),
+                                                   { sceneId }, [&]() {
+        for (quint32 gid : m_tryOn)
+            if (m_doc->fixtureGroup(gid) != nullptr && !scene->fixtureGroups().contains(gid))
+                scene->addFixtureGroup(gid);
+        // The look stack: the effect, then its own looks.
+        if (!scene->palettes().contains(pid))
+            scene->addPalette(pid);
+        for (quint32 o : own)
+            if (!scene->palettes().contains(o))
+                scene->addPalette(o);
+        return true;
+    });
+    if (!ok)
+    {
+        if (made)
+            dropOneOff(pid);
+        return false;
+    }
+    m_doc->notifyFunctionChanged(sceneId);
+    emit layerMade(ShowTree::invalidId(), ShowTree::invalidId(), sceneId, pid);
+    return true;
+}
+
+quint32 EffectDesigner::makeLayerInNewScene(const QString &name)
+{
+    if (m_doc == nullptr || !whyNoLayer().isEmpty() || m_doc->paletteOps() == nullptr)
+        return Function::invalidId();
+    QString n = name.trimmed();
+    if (n.isEmpty())
+    {
+        bool ok = false;
+        n = QInputDialog::getText(this, tr("Make a layer"), tr("New scene name:"), QLineEdit::Normal,
+                                  QStringLiteral("%1 · %2").arg(effectName(), tryOnNames()), &ok).trimmed();
+        if (!ok || n.isEmpty())
+            return Function::invalidId();
+    }
+    bool made = false;
+    const quint32 pid = paletteForLayer(n, &made);
+    if (m_doc->palette(pid) == nullptr)
+        return Function::invalidId();
+    const QList<quint32> own = ownLooks();
+    quint32 sceneId = Function::invalidId();
+    const bool ok = m_doc->paletteOps()->functionStep(tr("new scene %1").arg(n), {}, [&](QList<quint32> &news) {
+        Scene *s = new Scene(m_doc);
+        s->setName(n);
+        for (quint32 gid : m_tryOn)
+            if (m_doc->fixtureGroup(gid) != nullptr)
+                s->addFixtureGroup(gid);
+        s->addPalette(pid);
+        for (quint32 o : own)
+            s->addPalette(o);
+        if (!m_doc->addFunction(s))
+        {
+            delete s;
+            return false;
+        }
+        sceneId = s->id();
+        news << sceneId;
+        return true;
+    });
+    if (!ok)
+    {
+        if (made)
+            dropOneOff(pid);
+        return Function::invalidId();
+    }
+    emit layerMade(ShowTree::invalidId(), ShowTree::invalidId(), sceneId, pid);
+    return sceneId;
+}
+
+QMenu *EffectDesigner::makeLayerMenu()
+{
+    fillMakeLayerMenu();
+    return m_makeLayerBtn->menu();
+}
+
+void EffectDesigner::fillMakeLayerMenu()
+{
+    QMenu *menu = m_makeLayerBtn->menu();
+    menu->clear();
+    if (m_doc == nullptr)
+        return;
+    ShowTreeController *st = m_doc->showTree();
+    const QString why = whyNoLayer();
+    const quint32 saved = savedPaletteForLayer();
+    const QString plays = saved != QLCPalette::invalidId()
+                              ? tr("It plays “%1”, the palette.").arg(m_doc->palette(saved)->name())
+                              : tr("It plays a one-off of this design (Save as palette first to use it "
+                                   "by name).");
+    auto cueText = [st](quint32 cueId) {
+        const CueList *list = st->listOfCue(cueId);
+        return list == nullptr ? QString() : st->cueLabel(*list, list->indexOf(cueId));
+    };
+    auto add = [&](const QString &text, const char *name, const QString &tip, const std::function<void()> &f) {
+        QAction *a = menu->addAction(text, this, f);
+        a->setObjectName(QLatin1String(name));
+        a->setToolTip(why.isEmpty() ? tip + QLatin1Char(' ') + plays : why);
+        a->setEnabled(why.isEmpty());
+        return a;
+    };
+
+    // Where you came from first.
+    const QString on = tryOnNames().isEmpty() ? tr("the Try on groups") : tryOnNames();
+    if (st->cue(m_fromCue) != nullptr)
+    {
+        const quint32 cueId = m_fromCue;
+        add(tr("Into cue %1 (where you came from)").arg(cueText(cueId)), "edLayerCameFrom",
+            tr("A new layer of that cue on %1, with this effect.").arg(on),
+            [this, cueId]() { makeLayerInCue(cueId); });
+        menu->addSeparator();
+    }
+    else if (const Function *f = m_doc->function(m_fromScene))
+    {
+        const quint32 sceneId = m_fromScene;
+        add(tr("Into scene “%1” (where you came from)").arg(f->name()), "edLayerCameFrom",
+            tr("%1 and this effect added to that scene.").arg(on),
+            [this, sceneId]() { makeLayerInScene(sceneId); });
+        menu->addSeparator();
+    }
+
+    const ShowTreeView *tree = ShowTreeView::instance();
+    const quint32 treeCue = tree == nullptr ? ShowTree::invalidId() : tree->currentCueId();
+    if (st->cue(treeCue) != nullptr)
+    {
+        add(tr("Into the Show Tree's cue %1").arg(cueText(treeCue)), "edLayerTreeCue",
+            tr("A new layer of the cue selected in the Show Tree, on %1, with this effect.").arg(on),
+            [this, treeCue]() { makeLayerInCue(treeCue); });
+    }
+    else
+    {
+        QAction *a = menu->addAction(tr("Into the Show Tree's cue (none selected)"));
+        a->setObjectName(QStringLiteral("edLayerTreeCue"));
+        a->setEnabled(false);
+        a->setToolTip(tr("Select a cue in the Show Tree to make the layer there"));
+    }
+    add(tr("Into a scene in Build…"), "edLayerPickScene",
+        tr("Pick a scene: %1 and this effect are added to it.").arg(on), [this]() {
+        FunctionSelection fs(this, m_doc);
+        fs.setMultiSelection(false);
+        fs.setFilter(Function::SceneType, true);
+        QList<quint32> locked;
+        for (Function *f : m_doc->functions())
+            if (f->id() == m_sceneId || m_doc->showTree()->isGenerated(f->id()))
+                locked << f->id();
+        fs.setDisabledFunctions(locked);
+        if (fs.exec() != QDialog::Accepted || fs.selection().isEmpty())
+            return;
+        makeLayerInScene(fs.selection().first());
+    });
+    add(tr("Into a new scene…"), "edLayerNewScene",
+        tr("A new scene on %1 with this effect.").arg(on), [this]() { makeLayerInNewScene(); });
+}
+
+void EffectDesigner::updateMakeLayerButton()
+{
+    if (m_makeLayerBtn == nullptr)
+        return;
+    m_makeLayerBtn->setVisible(isBench());
+    const QString why = m_doc == nullptr ? QString() : whyNoLayer();
+    m_makeLayerBtn->setEnabled(why.isEmpty());
+    // Where you came from: the button goes there; its arrow, elsewhere.
+    QString from;
+    if (m_doc != nullptr)
+    {
+        ShowTreeController *st = m_doc->showTree();
+        if (const CueList *list = st->cue(m_fromCue) != nullptr ? st->listOfCue(m_fromCue) : nullptr)
+            from = tr("cue %1").arg(st->cueLabel(*list, list->indexOf(m_fromCue)));
+        else if (const Function *f = qobject_cast<Scene *>(m_doc->function(m_fromScene)))
+            from = tr("“%1”").arg(f->name());
+    }
+    if (from.isEmpty())
+    {
+        m_makeLayerBtn->setPopupMode(QToolButton::InstantPopup);
+        m_makeLayerBtn->setText(tr("Make a layer ▾"));
+        m_makeLayerBtn->setToolTip(why.isEmpty()
+                                       ? tr("The Try on groups and this effect as a new layer: in a Show Tree "
+                                            "cue, a scene in Build, or a new scene")
+                                       : why);
+    }
+    else
+    {
+        m_makeLayerBtn->setPopupMode(QToolButton::MenuButtonPopup);
+        m_makeLayerBtn->setText(tr("Make a layer in %1").arg(from));
+        m_makeLayerBtn->setToolTip(why.isEmpty()
+                                       ? tr("The Try on groups and this effect as a new layer in %1, where you "
+                                            "came from (the arrow: somewhere else)").arg(from)
+                                       : why);
+    }
+}
+
+void EffectDesigner::revealLayer(Doc *doc, Workbench *workbench, quint32 cueId, quint32 layerId,
+                                 quint32 sceneId, quint32 paletteId)
+{
+    QPointer<Doc> d = doc;
+    QPointer<Workbench> wb = workbench;
+    // Later: showing it may replace the designer that made it.
+    QTimer::singleShot(0, [d, wb, cueId, layerId, sceneId, paletteId]() {
+        if (d.isNull())
+            return;
+        if (d->showTree()->cue(cueId) != nullptr)
+        {
+            ShowTreeView *tree = ShowTreeView::instance();
+            if (tree == nullptr)
+                return;
+            if (!wb.isNull() && tree->dockedWorkbench() == wb)
+            {
+                tree->openInWorkbench(cueId, layerId);
+                return;
+            }
+            tree->selectNode(layerId, cueId);
+            tree->bringForward();
+            return;
+        }
+        if (qobject_cast<Scene *>(d->function(sceneId)) == nullptr)
+            return;
+        Workbench *bench = wb.data();
+        ProgrammingManager *pm = ProgrammingManager::instance();
+        if (pm != nullptr && (bench == nullptr || bench == pm->workbench()))
+        {
+            if (bench == nullptr)
+                ProgrammingManager::openFunction(sceneId);
+            else
+                pm->showFunction(sceneId);
+            bench = pm->workbench();
+        }
+        else if (bench != nullptr && bench->loadedFunction() != sceneId)
+        {
+            bench->load(sceneId);
+        }
+        if (bench == nullptr)
+            return;
+        // The effect's look row, so it is what you see.
+        ProgrammingOutline::Row row;
+        row.kind = ProgrammingOutline::PaletteRow;
+        row.scene = sceneId;
+        row.id = paletteId;
+        if (!bench->selectRow(row))
+        {
+            row.kind = ProgrammingOutline::SceneRow;
+            row.id = sceneId;
+            bench->selectRow(row);
+        }
+    });
+}
+
+/****************************************************************************
  * Preview
  ****************************************************************************/
 
@@ -1050,6 +1453,7 @@ void EffectDesigner::updateButtons()
     m_presetBtn->setEnabled(draft() != nullptr && !draft()->scriptPath().isEmpty());
     m_updateBtn->setVisible(named);
     m_updateBtn->setEnabled(named && isModified());
+    updateMakeLayerButton();
     if (named)
     {
         m_updateBtn->setText(tr("Update “%1”").arg(o->name()));
@@ -1063,6 +1467,7 @@ void EffectDesigner::updateButtons()
                            "Save as palette makes a new one beside it.").arg(o->name()));
     else
         m_hint->setText(tr("Pick an effect and shape it on the bench. Save as palette keeps it for the show; "
+                           "Make a layer puts it on the Try on groups in a cue or a scene; "
                            "Save as preset keeps it as a starting point for other shows."));
 }
 
