@@ -41,6 +41,7 @@
 #include "mainbar.h"
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "workbenchstack.h"
 #include "paletteops.h"
 #include "usedby.h"
 #include "helpbrowser.h"
@@ -765,7 +766,18 @@ QWidget *ProgrammingManager::buildScenesSection()
     addChaserAction->setToolTip(tr("Steps that play one after another (its steps are edited in its step table)"));
     addFuncMenu->addSeparator();
     QAction *addFolderAction = addFuncMenu->addAction(QIcon(":/folder.png"), tr("New scene in a new folder…"));
+    // W2: habit 1, "chase the scenes" -- the scenes selected, in the order picked.
+    QAction *chaseAction = addFuncMenu->addAction(QIcon(":/chaser.png"), tr("Chaser from selection"));
+    chaseAction->setObjectName(QStringLiteral("chaserFromSelection"));
+    chaseAction->setToolTip(tr("A new chaser with the scenes selected on the left as its steps, in the order "
+                               "you selected them"));
+    connect(addFuncMenu, &QMenu::aboutToShow, this, [this, chaseAction]() {
+        chaseAction->setEnabled(!m_outline->selectedFunctionsInOrder().isEmpty());
+    });
     auto here = [this]() { return m_outline->folderFor(m_outline->currentItem()); };
+    connect(chaseAction, &QAction::triggered, this, [this, here]() {
+        makeChaserFrom(m_outline->selectedFunctionsInOrder(), here());
+    });
     connect(m_addFuncBtn, &QToolButton::clicked, this, [this, here]() {
         addNewFunction(Function::SceneType, here());
     });
@@ -798,6 +810,7 @@ QWidget *ProgrammingManager::buildScenesSection()
     const QString outlineWhat = tr("Your scene folders. Click a scene, collection or chaser to load it "
                                    "in the Workbench; drag rows between scenes.");
     m_outlineHint = new QLabel(outlineWhat, page);
+    m_outlineHint->setProperty("idleText", outlineWhat);
     m_outlineHint->setObjectName(QStringLiteral("outlineHint"));
     m_outlineHint->setWordWrap(true);
     m_outlineHint->setStyleSheet(QStringLiteral("QLabel { font-style: italic; }"));
@@ -807,11 +820,13 @@ QWidget *ProgrammingManager::buildScenesSection()
                                  "copy; drag a scene onto the Workbench to make it a layer of the collection "
                                  "there. F2 renames, ⌫ removes, ⌘Z undoes."));
     navCol->addLayout(navToolbar);
+    navCol->addLayout(buildArrangementSwitch(page));
     navCol->addWidget(m_outlineHint);
     navCol->addWidget(m_outline, 1);
     connect(funcFilter, &QLineEdit::textChanged, m_outline, &ProgrammingOutline::setFilterText);
-    connect(m_outline, &ProgrammingOutline::hintChanged, this, [this, outlineWhat](const QString &text) {
-        m_outlineHint->setText(text.isEmpty() ? outlineWhat : text);
+    // The idle line says what the outline is (Folders | Classic, W2).
+    connect(m_outline, &ProgrammingOutline::hintChanged, this, [this](const QString &text) {
+        m_outlineHint->setText(text.isEmpty() ? m_outlineHint->property("idleText").toString() : text);
         m_outlineHint->setStyleSheet(text.isEmpty() ? QStringLiteral("QLabel { font-style: italic; }")
                                                     : QStringLiteral("QLabel { font-weight: bold; }"));
     });
@@ -1045,6 +1060,69 @@ void ProgrammingManager::revealScene(quint32 sceneId)
     r.scene = r.id = sceneId;
     if (!m_outline->selectRow(r))
         m_workbench->load(sceneId);
+}
+
+/****************************************************************************
+ * W2: Scenes ▸ Folders | Classic, Chaser from selection
+ ****************************************************************************/
+
+QLayout *ProgrammingManager::buildArrangementSwitch(QWidget *page)
+{
+    QHBoxLayout *hl = new QHBoxLayout;
+    hl->setContentsMargins(0, 0, 0, 0);
+    hl->setSpacing(0);
+    QButtonGroup *group = new QButtonGroup(page);
+    group->setExclusive(true);
+    auto button = [page, hl, group](const QString &text, const QString &name, const QString &tip, int id) {
+        QToolButton *b = new QToolButton(page);
+        b->setObjectName(name);
+        b->setText(text);
+        b->setToolTip(tip);
+        b->setCheckable(true);
+        b->setAutoRaise(false);
+        hl->addWidget(b);
+        group->addButton(b, id);
+        return b;
+    };
+    button(tr("Folders"), QStringLiteral("arrangeFolders"),
+           tr("Your scene folders: scenes, collections and chasers where you filed them"),
+           ProgrammingOutline::Folders);
+    button(tr("Classic"), QStringLiteral("arrangeClassic"),
+           tr("By type, as QLC+'s Function Manager lists them: every scene, chaser, collection, EFX, "
+              "RGB Matrix, show, script… with its folders"),
+           ProgrammingOutline::Classic);
+    hl->addStretch(1);
+    group->button(m_outline->arrangement())->setChecked(true);
+    connect(group, &QButtonGroup::idClicked, this, [this](int id) {
+        m_outline->setArrangement(ProgrammingOutline::Arrangement(id));
+    });
+    auto idle = [this](int id) {
+        const QString text = id == ProgrammingOutline::Classic
+            ? tr("Every function by type, as QLC+'s Function Manager lists them. Click one to load it "
+                 "in the Workbench; select scenes and right-click for a chaser of them.")
+            : tr("Your scene folders. Click a scene, collection or chaser to load it "
+                 "in the Workbench; drag rows between scenes.");
+        m_outlineHint->setProperty("idleText", text);
+        m_outlineHint->setText(text);
+    };
+    connect(m_outline, &ProgrammingOutline::arrangementChanged, this, [group, idle](int id) {
+        if (QAbstractButton *b = group->button(id))
+            b->setChecked(true);
+        idle(id);
+    });
+    if (m_outline->arrangement() == ProgrammingOutline::Classic)
+        idle(ProgrammingOutline::Classic);
+    connect(m_outline, &ProgrammingOutline::chaserRequested, this, &ProgrammingManager::makeChaserFrom);
+    return hl;
+}
+
+void ProgrammingManager::makeChaserFrom(const QList<quint32> &functionIds, const QString &folder)
+{
+    const quint32 made = FunctionStack::makeChaser(m_doc, functionIds, folder);
+    if (made == Function::invalidId())
+        return;
+    m_outline->rebuild();
+    showFunction(made);
 }
 
 void ProgrammingManager::showFunction(quint32 fid)

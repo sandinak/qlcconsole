@@ -68,6 +68,26 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **One Undo.** Adding, removing and reordering layers, a new EFX or RGB
   Matrix, filing and renaming — each is one ⌘Z, in Build or the Show Tree.
 
+### Chasers in the Workbench, and Classic
+
+- **Walk a chaser.** Click a chaser and the Workbench walks it step by
+  step: **◀ ▶**, *Step 3 of 7*, and the step's fade in, hold, fade out, cue
+  number and note to edit in place. The step table (the Chaser editor's
+  columns) sits over the step's layers: click a step to go to it. A
+  collection step opens up into its layers — add an EFX, take a scene out,
+  reorder — and the chaser plays it that way. See
+  [Walking a chaser](build.md#walking-a-chaser).
+- **Chaser from selection.** Select scenes in Build ▸ Scenes in the order
+  you want them, then **Chaser from selection** (+ Scene's menu, or
+  right-click). Drag scenes onto a chaser's row, or onto its step table, to
+  add steps.
+- **Make own copy.** A scene shared with other collections — or a step
+  whose collection plays elsewhere too — says **also in …**; **Own copy**
+  splits it off so your edit changes only this one. One ⌘Z puts it back.
+- **Scenes ▸ Classic.** The navigator can list the show by function type,
+  as QLC+'s Function Manager does. An old QLC+ show opens that way; your
+  choice is remembered per show.
+
 ### More Matrix effects, and staggered boxes
 
 - **Twelve more Matrix effects** for pixel boxes, in the effect browser's

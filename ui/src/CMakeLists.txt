@@ -37,6 +37,7 @@ add_library(${module_name}
     channelmodifiergraphicsview.cpp channelmodifiergraphicsview.h
     channelsselection.cpp channelsselection.h channelsselection.ui
     chasereditor.cpp chasereditor.h chasereditor.ui
+    chaserwalker.cpp chaserwalker.h
     colourswatchbutton.cpp colourswatchbutton.h
     wledconfigcheck.cpp wledconfigcheck.h
     wleddevicesdialog.cpp wleddevicesdialog.h

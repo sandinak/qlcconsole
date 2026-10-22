@@ -34,6 +34,7 @@
 
 #include "workbench.h"
 #include "workbenchstack.h"
+#include "chaserwalker.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "effectscriptrunner.h"
@@ -364,6 +365,10 @@ void Workbench::buildAddBar(QWidget *column)
     m_removeBtn = tool(tr("Remove"), QStringLiteral("workbenchRemove"),
                        tr("Take the layer out (⌫); the function itself stays in the show"));
     connect(m_removeBtn, &QToolButton::clicked, this, &Workbench::removeSelectedLayers);
+    m_ownCopyBtn = tool(tr("Own copy"), QStringLiteral("workbenchOwnCopy"),
+                        tr("The layer is shared (also in…): split it off as a copy of its own here, so "
+                           "an edit changes only this one"));
+    connect(m_ownCopyBtn, &QToolButton::clicked, this, &Workbench::makeOwnCopySelected);
     m_openBtn = tool(tr("▣ Open"), QStringLiteral("workbenchOpen"),
                      tr("Load the selected layer in the Workbench on its own (double-click); ↩ comes back"));
     connect(m_openBtn, &QToolButton::clicked, this, &Workbench::openSelected);
@@ -606,6 +611,7 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
             updateHeader();
             updateAddBar();
         });
+        connect(m_stack, &WorkbenchStack::layersReplaced, this, &Workbench::stackLayersReplaced);
     }
     {
         QSignalBlocker block(m_rows);
@@ -613,6 +619,7 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
     }
     if (old != nullptr)
         old->deleteLater();
+    installStackWidget();
     m_previewHeld = false;
     updateHeader();
 
@@ -823,6 +830,7 @@ void Workbench::updateAddBar()
     if (layer >= 0 && layer < layers.size())
         openable = layers.at(layer).functionId != loadedFunction();
     m_openBtn->setEnabled(openable);
+    m_ownCopyBtn->setEnabled(m_stack != nullptr && m_stack->canMakeOwnCopy(layer));
 }
 
 /****************************************************************************
@@ -1007,8 +1015,9 @@ void Workbench::updateOverview()
     else if (Chaser *ch = qobject_cast<Chaser *>(root))
     {
         lines << QString()
-              << tr("Its steps are on the left: ▣ Open one to work on it, ↩ to come back. "
-                    "The step table, as the Chaser editor has it:");
+              << tr("Walk its steps on the left (◀ ▶, or click one in the step table): each step's "
+                    "layers come up under it, to work on as in a collection. Its run order, speeds "
+                    "and timing modes, as the Chaser editor has them:");
         // The chaser's own step table; a cue list's is the Show Tree's (D13).
         ChaserEditor *ed = new ChaserEditor(m_overviewPage, ch, m_doc);
         ShowTreeController *st = m_doc->showTree();
@@ -1812,4 +1821,66 @@ void Workbench::recordSceneEdit(const QString &label, const QString &mergeKey)
     // baseline for the next edit (PaletteOps::changed recaptures it too).
     if (!ops->recordSceneStep(label, { m_editBaseline }, mergeKey))
         recaptureBaseline();
+}
+
+/****************************************************************************
+ * W2: the back end's header widget, steps walked, shared layers split off
+ ****************************************************************************/
+
+void Workbench::installStackWidget()
+{
+    if (m_stackWidget != nullptr)
+        m_stackWidget->deleteLater();
+    m_stackWidget = nullptr;
+    QWidget *column = m_rowsHint->parentWidget();
+    QVBoxLayout *col = qobject_cast<QVBoxLayout *>(column->layout());
+    QWidget *w = m_stack != nullptr ? m_stack->createHeaderWidget(column) : nullptr;
+    if (w == nullptr || col == nullptr)
+        return;
+    // Under the header, over the layers.
+    col->insertWidget(col->indexOf(m_rowsHint), w);
+    m_stackWidget = w;
+    if (ChaserWalker *walker = qobject_cast<ChaserWalker *>(w))
+        connect(walker, &ChaserWalker::openRequested, this, &Workbench::open);
+}
+
+void Workbench::stackLayersReplaced()
+{
+    // Another set of layers (a chaser's next step): nothing of the last
+    // one stays in the editor pane.
+    m_restartTimer->stop();
+    m_editorFunction = Function::invalidId();
+    loadCanvas(Function::invalidId());
+    clearEditors();
+    m_lookEditor->setPalette(QLCPalette::invalidId());
+    m_rows->rebuild();
+    m_rows->clearSelection();
+    slotRowsSelectionChanged();
+    updateHeader();
+    updateAddBar();
+    // What previews now (the step walked to) plays instead.
+    if (m_stack != nullptr && m_stack->previewFunction() != m_previewFunction)
+    {
+        stopPreview();
+        startPreview();
+    }
+    if (m_stack != nullptr && m_operateFunction != Function::invalidId()
+        && m_stack->previewFunction() != m_operateFunction)
+    {
+        stopOperate();
+        startOperate();
+    }
+    updateOnRig();
+}
+
+void Workbench::makeOwnCopySelected()
+{
+    const int layer = selectedLayer();
+    if (m_stack == nullptr || !m_stack->canMakeOwnCopy(layer))
+        return;
+    if (m_stack->makeOwnCopy(layer) == Function::invalidId())
+        return;
+    m_rows->rebuild();
+    selectLayer(layer);
+    layersChanged();
 }
