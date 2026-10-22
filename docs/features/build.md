@@ -59,7 +59,12 @@ Two panes, left to right:
   Under every section, **Groups &amp; fixtures**, with a **Search fixtures &
   groups…** box: a row stays when it or anything under it matches, the
   folders on the way down open, and a matching group keeps all its
-  fixtures. The section you pick is the one the tab opens on next time.
+  fixtures. Right-click a row for **Select all similar** (the
+  [Fixture Manager's rule](fixture-manager.md#fixture-group-folders)),
+  **Create fixture group from selection…** (filed in the folder it was
+  made in) and, on groups, **Move to folder ▸** (a folder in use, or
+  **New Folder…**). The section you pick is the one the tab opens on next
+  time.
 - **Right — [the Workbench](#the-workbench)**: what is loaded, its layers,
   and the editor pane for the selected row. It is the same in every
   section: switching to Palettes to drag a colour onto a layer leaves the
@@ -165,13 +170,21 @@ editor lists it, one step at a time, each step opened up. Under the header:
   sets for every step (*Common*) or leaves to the function (*Default*) is
   shown greyed: change that in the Chaser editor on the right. A step's
   duration stays its fade in + hold, as the Chaser editor keeps it.
+- **A note opens up while you type in it.** Click into **Note** and it
+  word-wraps and grows to fit what you type, up to six lines; **Return**
+  applies it, **Shift+Return** (or **⌥ Return**) starts a new line, **Esc**
+  puts back what was there. Closed up it shows one line, cut short with
+  *…*; hover it for the whole note. The same goes for the step table's
+  **Notes** column (double-click a note to type there: it opens over the
+  rows below), the Chaser editor's **Notes** column and a Show Tree cue's
+  **Note**. In a one-line list a new line shows as ⏎.
 - **also in …** when the step's function plays somewhere else too (another
   chaser, another step of this one), with **Make this step's own copy**.
   **▣ Open** loads the step's function on its own; **↩** comes back to the
   same step.
 - **The step table** — the Chaser editor's columns (#, Function, Fade In,
   Hold, Fade Out, Duration, Notes, Cue). Click a step to walk to it;
-  double-click to open it. **+ Step…** adds functions from the show after
+  double-click to open it (double-click its **note** to edit the note). **+ Step…** adds functions from the show after
   the step you're on; **drag scenes** from the navigator onto the table to
   insert them before the row you drop on (at the end on empty space). ▲ ▼
   move the step, **Remove step** takes it out (its function stays).
@@ -186,6 +199,14 @@ instead.
 Every edit — a step's timing, note or cue number, a step added, moved or
 removed, a layer of its collection, an own copy — is one step on the shared
 history.
+
+**Send to Show Tree…** (in the header of a loaded chaser, or right-click a
+chaser's row in the navigator) makes the chaser a Show Tree cue list in
+place: the import sheet says whether it plays the same, what repeats is
+set once and tracks, and **Done, show it in the Show Tree** goes there.
+The chaser is filed under `Imported/…`; **Restore original** on the list
+puts it back. See
+[Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
 
 ### Two QLC+ habits, kept
 
@@ -212,6 +233,16 @@ EFX or RGB Matrix (Undo takes the new function away too; Redo brings it
 back with its id), and every edit in the outline and the editor pane — is
 one step on the **one history** Build and the Show Tree share: **⌘Z** takes
 it back, **⇧⌘Z** puts it back, in either tab.
+
+### On a Show Tree cue
+
+The Show Tree opens a cue, a look or a layer in this same Workbench, in
+place of its page (double-click, **✎ Workbench**, or `wb`): the cue's own
+layers, each opening into one row per attribute, and — grey, read-only —
+what tracks in, with where it comes from. Every edit there is a step of the
+tree's. While it is there, Build shows a note in its place; **↩ Show Tree**
+hands it back, loaded as it was. See [Working on a cue in the
+Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
 
 ## The outline
 
@@ -471,6 +502,36 @@ Every type except Effect also shows a per-look **Fade in / Fade out**
 override (leave at "step" to inherit the scene or chaser's own timing). A
 scene [transition](#transitions), when set, takes the place of the scene's
 fade.
+
+### The name follows the value
+
+When a look's name says its value, changing the value changes the name to
+match. Pick a darker red on a look called "Red" and it becomes "Dark Red";
+the **Name** field updates as you drag. Only the part of the name that says
+the value changes. Anything you or the show's convention put around it
+stays, and the look stays in its folder:
+
+| Before | Value changed to | After |
+|---|---|---|
+| Red | a dark red | Dark Red |
+| Act2 Red | a dark red | Act2 Dark Red |
+| 02-01 Red Wash | a dark red | 02-01 Dark Red Wash |
+| Intensity 45% | 60% | Intensity 60% |
+| Verse Intensity 45% | full | Verse Full |
+| Strobe 40% | 70% | Strobe 70% |
+| Act2 Open (shutter) | Closed | Act2 Closed |
+| Crimson Tide | anything | Crimson Tide (yours: never changed) |
+
+Colour names come from a table of colours with light and dark variants,
+such as Red, Dark Red, Light Red, Amber, Warm White and UV. A colour word
+the old value was close to also counts, so a "Blue" named by an older
+version follows too. A look still called **New Color** (or **New Dimmer**)
+is named after its value. If at least two other looks of that type in the
+same folder share a naming pattern ("Act2 Red", "Act2 Blue"), the new one
+follows it ("Act2 Amber").
+
+The value change and the rename are **one Undo step**, and a drag counts as
+one step. Undo puts back both the value and the name.
 
 If the editor is showing a palette that isn't in the scene selected in the
 outline, the scene **tries it on**: it plays on top of the look's own

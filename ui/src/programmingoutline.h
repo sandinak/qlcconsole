@@ -25,7 +25,8 @@
 #include <QList>
 #include <QSet>
 
-class WorkbenchStack;
+#include "workbenchstack.h"
+
 class QMimeData;
 class QTimer;
 class Scene;
@@ -68,7 +69,9 @@ public:
         GroupRow,       //!< a dynamic target
         FixtureRow,     //!< a fixed target
         PaletteRow,     //!< a look
-        HintRow         //!< the empty state
+        HintRow,        //!< the empty state
+        CueLayerRow,    //!< W3 Stack: a Show Tree cue's layer (id: its place)
+        AttributeRow    //!< W3 Stack: one of its attributes (scene: the layer, id: its place)
     };
     enum Role
     {
@@ -205,6 +208,8 @@ signals:
     void revealPaletteRequested(quint32 paletteId);
     /** Chaser from selection: @a functionIds as its steps, in @a folder. */
     void chaserRequested(const QList<quint32> &functionIds, const QString &folder);
+    /** Send to Show Tree… on a chaser row. */
+    void sendToShowTreeRequested(quint32 chaserId);
     /** Folders | Classic changed (the switch above follows). */
     void arrangementChanged(int arrangement);
 
@@ -229,6 +234,8 @@ private:
     void addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene);
     void rebuildNavigator(QList<Scene *> &scenes);
     void rebuildStack();
+    /** W3: a CueLayer of the stack and its attribute rows. */
+    void addCueLayerRows(const WorkbenchStack::Layer &layer, int index);
     /** What dropping outline rows of scenes / functions does in Stack mode
      *  (layers added or reordered); @a layerAt: before that layer (-1 end). */
     QString stackDropPlan(const QMimeData *mime, const QPoint &pos, bool internal, int *layerAt) const;

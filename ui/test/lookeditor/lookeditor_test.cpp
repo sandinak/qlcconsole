@@ -34,6 +34,8 @@
 #include <QDoubleSpinBox>
 #include <QTemporaryDir>
 #include <QImage>
+#include <QColorDialog>
+#include <QSignalSpy>
 
 #define private public
 #include "lookeditor.h"
@@ -64,6 +66,7 @@
 #include "lookeditor_test.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfile.h"
+#include "paletteops.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
 {
@@ -1175,6 +1178,103 @@ void LookEditor_Test::aLineLooksGroupingIsSetOnTheAimPage()
     QCOMPARE(ed.m_lineCrossCombo->currentData().toInt(), int(LineSpread::Mirror));
     QVERIFY(ed.m_lineShareCheck->isChecked());
     QCOMPARE(ed.m_lineOrderCombo->currentData().toInt(), int(LineSpread::LookOrder));
+}
+
+void LookEditor_Test::aLooksNameFollowsItsColour()
+{
+    Doc doc(this);
+    PaletteOps *ops = doc.paletteOps();
+    const quint32 id = ops->create(QLCPalette::Color, PaletteOps::pathForFolder("Act 2"), "02-01 Red Wash",
+                                   { QLCPalette::colorToString(QColor(255, 0, 0), QColor()) });
+    QLCPalette *p = doc.palette(id);
+    QVERIFY(p != nullptr);
+    ops->clearUndo();
+    const QString path = p->path();
+
+    LookEditor ed(&doc);
+    QSignalSpy renamed(&ed, &LookEditor::paletteRenamed);
+    ed.setPalette(id);
+    QCOMPARE(ed.m_nameEdit->text(), QString("02-01 Red Wash"));
+
+    // Red to dark red, on the R slider: only the colour part changes, live.
+    ed.m_redSlider->setValue(139);
+    QCOMPARE(p->name(), QString("02-01 Dark Red Wash"));
+    QCOMPARE(ed.m_nameEdit->text(), QString("02-01 Dark Red Wash"));
+    QCOMPARE(p->path(), path);                              // the folder stays
+    QCOMPARE(renamed.count(), 1);
+    // The same drag goes on: still one step.
+    ed.m_redSlider->setValue(120);
+    QCOMPARE(p->name(), QString("02-01 Dark Red Wash"));
+    QVERIFY(ops->canUndo());
+
+    // One Undo: the colour and the name together, and the editor shows it.
+    QVERIFY(ops->undo());
+    QCOMPARE(p->rgbValue(), QColor(255, 0, 0));
+    QCOMPARE(p->name(), QString("02-01 Red Wash"));
+    QVERIFY(!ops->canUndo());
+    QCOMPARE(ed.m_nameEdit->text(), QString("02-01 Red Wash"));
+    QCOMPARE(ed.m_redSlider->value(), 255);
+
+    QVERIFY(ops->redo());
+    QCOMPARE(p->name(), QString("02-01 Dark Red Wash"));
+    QCOMPARE(ed.m_nameEdit->text(), QString("02-01 Dark Red Wash"));
+
+    // Blue from the picker: the colour part again.
+    ed.m_colorDialog->setCurrentColor(QColor(0, 0, 255));
+    QCOMPARE(p->name(), QString("02-01 Blue Wash"));
+}
+
+void LookEditor_Test::aCustomNameStays()
+{
+    Doc doc(this);
+    const quint32 id = doc.paletteOps()->create(QLCPalette::Color, QString(), "Crimson Tide",
+                                                { QLCPalette::colorToString(QColor(255, 0, 0), QColor()) });
+    LookEditor ed(&doc);
+    ed.setPalette(id);
+    ed.m_redSlider->setValue(139);
+    QCOMPARE(doc.palette(id)->name(), QString("Crimson Tide"));
+    ed.m_blueSlider->setValue(255);
+    QCOMPARE(doc.palette(id)->name(), QString("Crimson Tide"));
+    QCOMPARE(ed.m_nameEdit->text(), QString("Crimson Tide"));
+}
+
+void LookEditor_Test::aLevelInTheNameFollowsTheLevel()
+{
+    Doc doc(this);
+    PaletteOps *ops = doc.paletteOps();
+    const quint32 dim = ops->create(QLCPalette::Dimmer, QString(), "Verse Intensity 45%", { 115 });
+    LookEditor ed(&doc);
+    ed.setPalette(dim);
+    ed.slotDimmerChanged(153);
+    QCOMPARE(doc.palette(dim)->name(), QString("Verse Intensity 60%"));
+    QCOMPARE(ed.m_nameEdit->text(), QString("Verse Intensity 60%"));
+    ed.slotDimmerChanged(255);
+    QCOMPARE(doc.palette(dim)->name(), QString("Verse Full"));
+
+    const quint32 strobe = ops->create(QLCPalette::Strobe, QString(), "Strobe 40%", { 0.4 });
+    ed.setPalette(strobe);
+    ed.m_strobeSlider->setValue(70);
+    QCOMPARE(doc.palette(strobe)->name(), QString("Strobe 70%"));
+}
+
+void LookEditor_Test::aNewColourIsNamedLikeItsSiblings()
+{
+    Doc doc(this);
+    PaletteOps *ops = doc.paletteOps();
+    const QString act2 = PaletteOps::pathForFolder("Act2");
+    ops->create(QLCPalette::Color, act2, "Act2 Red", { QLCPalette::colorToString(Qt::red, QColor()) });
+    ops->create(QLCPalette::Color, act2, "Act2 Blue", { QLCPalette::colorToString(Qt::blue, QColor()) });
+    const quint32 id = ops->create(QLCPalette::Color, act2, QString());
+    QVERIFY(doc.palette(id)->name().startsWith("New Color"));
+
+    LookEditor ed(&doc);
+    ed.setPalette(id);
+    ed.m_colorDialog->setCurrentColor(QColor(255, 176, 0));
+    QCOMPARE(doc.palette(id)->name(), QString("Act2 Amber"));
+    // Then it follows like any other.
+    ed.m_colorDialog->setCurrentColor(QColor(0, 255, 0));
+    QCOMPARE(doc.palette(id)->name(), QString("Act2 Green"));
+    QCOMPARE(PaletteOps::folderOf(doc.palette(id)), QString("Act2"));
 }
 
 QTEST_MAIN(LookEditor_Test)

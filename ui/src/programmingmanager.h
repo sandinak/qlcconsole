@@ -78,9 +78,19 @@ public:
      *  navigator would (and select it there). Public entry for external
      *  navigation / automated screenshots. */
     void showFunction(quint32 fid);
+    /** Send to Show Tree… on chaser @a chaserId (the Workbench's header
+     *  button, a chaser row's right-click): the Show Tree's Import in
+     *  place, its sheet offering to go there. Whether it was sent. */
+    bool sendToShowTree(quint32 chaserId);
 
     /** The Workbench (W3 docks this same widget in the Show Tree). */
     Workbench *workbench() const { return m_workbench; }
+    /** W3: lend the Workbench to the Show Tree (it docks it there); a note
+     *  stands in its place. Null: lent already. */
+    Workbench *lendWorkbench();
+    /** ...and have it back, loaded as it was before it was lent. */
+    void returnWorkbench(Workbench *workbench);
+    bool isWorkbenchLent() const { return m_workbenchStandIn != nullptr; }
 
     /** The navigator's sections. */
     enum Section { PalettesSection = 0, EffectsSection, ScenesSection };
@@ -265,6 +275,10 @@ private:
     Doc *m_doc;
 
     Workbench *m_workbench = nullptr;
+    // W3: while the Show Tree has the Workbench
+    QWidget *m_workbenchStandIn = nullptr;
+    QSharedPointer<class WorkbenchStack> m_lentFrom;     //!< what Build had loaded
+    QString m_lentSelection;                            //!< its selected row's key
 
     // The navigator
     QButtonGroup *m_sections = nullptr;

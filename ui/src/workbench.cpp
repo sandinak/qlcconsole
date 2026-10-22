@@ -238,6 +238,8 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
 
 Workbench::~Workbench()
 {
+    // A page the back end lent goes back before it would go with us.
+    releaseLentPane();
     stopPreview();
     stopOperate();
     // The rows hold the stack: let go of it before it goes.
@@ -281,6 +283,20 @@ void Workbench::buildHeader(QWidget *column)
     m_kind->setStyleSheet(QStringLiteral("QLabel { border: 1px solid palette(mid); border-radius: 3px; "
                                          "padding: 0 5px; font-size: 9pt; }"));
     titleRow->addWidget(m_kind);
+    // A chaser: Send to Show Tree… (W5's Import in place, from here).
+    m_sendToTreeBtn = new QToolButton(head);
+    m_sendToTreeBtn->setObjectName(QStringLiteral("workbenchSendToTree"));
+    m_sendToTreeBtn->setText(tr("Send to Show Tree…"));
+    m_sendToTreeBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_sendToTreeBtn->setToolTip(tr("Make this chaser a Show Tree cue list in place, checked to play the same; "
+                                   "the chaser is filed under Imported/… and Restore original puts it back"));
+    m_sendToTreeBtn->hide();
+    connect(m_sendToTreeBtn, &QToolButton::clicked, this, [this]() {
+        const quint32 id = loadedFunction();
+        if (qobject_cast<Chaser *>(m_doc->function(id)) != nullptr)
+            emit sendToShowTreeRequested(id);
+    });
+    titleRow->addWidget(m_sendToTreeBtn);
     m_headerLayout->addLayout(titleRow);
 
     m_info = new QLabel(head);
@@ -298,7 +314,7 @@ void Workbench::buildHeader(QWidget *column)
     m_playBtn->setObjectName(QStringLiteral("workbenchPlay"));
     m_playBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
     connect(m_playBtn, &QToolButton::clicked, this, [this]() {
-        if (m_previewFunction != Function::invalidId())
+        if (m_previewFunction != Function::invalidId() || m_ownPreview)
         {
             m_previewHeld = true;
             stopPreview();
@@ -311,6 +327,16 @@ void Workbench::buildHeader(QWidget *column)
         updateOnRig();
     });
     rigRow->addWidget(m_playBtn);
+    // W3: a cue plays in context (what tracks in too) or Solo.
+    m_soloBtn = new QToolButton(head);
+    m_soloBtn->setObjectName(QStringLiteral("workbenchSolo"));
+    m_soloBtn->setText(tr("Solo"));
+    m_soloBtn->setCheckable(true);
+    m_soloBtn->setToolTip(tr("Solo: only the selected layer plays. Off: the whole cue plays, in context "
+                             "(what tracks in too), the selected layer highlighted"));
+    m_soloBtn->hide();
+    connect(m_soloBtn, &QToolButton::toggled, this, [this](bool on) { setSolo(on); });
+    rigRow->addWidget(m_soloBtn);
     m_headerLayout->addLayout(rigRow);
 
     col->addWidget(head);
@@ -610,6 +636,13 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
         connect(m_stack, &WorkbenchStack::changed, this, [this]() {
             updateHeader();
             updateAddBar();
+            // W3: a cue edited in the tree (its steps don't go through
+            // PaletteOps): the rows as they now are, the Solo layer replayed.
+            if (m_stack != nullptr && m_stack->takesDrops())
+            {
+                m_rows->scheduleRebuild();
+                syncStackPreview();
+            }
         });
         connect(m_stack, &WorkbenchStack::layersReplaced, this, &Workbench::stackLayersReplaced);
     }
@@ -730,6 +763,12 @@ void Workbench::updateHeader()
         m_lockedBanner->deleteLater();
         m_lockedBanner = nullptr;
     }
+    {
+        const quint32 id = m_stack == nullptr ? Function::invalidId() : loadedFunction();
+        const Function *f = m_doc->function(id);
+        m_sendToTreeBtn->setVisible(f != nullptr && f->type() == Function::ChaserType
+                                    && m_doc->showTree()->whyNotSend(id).isEmpty());
+    }
     if (m_stack == nullptr)
     {
         m_crumb->setText(tr("Workbench"));
@@ -759,6 +798,23 @@ void Workbench::updateOnRig()
     Function *playing = m_doc->function(m_previewFunction);
     Function *live = m_doc->function(m_operateFunction);
     const bool canPlay = m_stack != nullptr && m_stack->previewFunction() != Function::invalidId();
+    if (m_soloBtn != nullptr)
+    {
+        m_soloBtn->setVisible(m_stack != nullptr && m_stack->canSolo());
+        QSignalBlocker block(m_soloBtn);
+        m_soloBtn->setChecked(m_stack != nullptr && m_stack->solo());
+    }
+    if (m_ownPreview && m_stack != nullptr)
+    {
+        // W3: the back end says what plays (the Show Tree's words).
+        const QString text = m_stack->ownPreviewText();
+        m_onRig->setText(text.isEmpty() ? tr("▶ On the rig: %1").arg(m_stack->title()) : text);
+        m_onRig->setStyleSheet(QStringLiteral("QLabel { color: #6cc08f; }"));
+        m_playBtn->setText(tr("Stop"));
+        m_playBtn->setToolTip(tr("Stop the preview (it plays again when you Play or load something)"));
+        m_playBtn->setVisible(true);
+        return;
+    }
     if (playing != nullptr)
     {
         m_onRig->setText(tr("▶ On the rig: %1").arg(playing->name()));
@@ -822,13 +878,16 @@ void Workbench::updateAddBar()
                                : hasGroups ? tr("A new RGB Matrix on the selected layer's first group, added after it")
                                            : tr("A new RGB Matrix, added as a layer (select a layer with a "
                                                 "group to make it on that group)"));
-    const bool reorder = m_stack != nullptr && m_stack->canReorderLayers() && layer >= 0;
+    // W3: a layer carried into a cue isn't the cue's to move or take out.
+    const bool tracked = layer >= 0 && layer < layers.size() && layers.at(layer).tracked;
+    const bool reorder = m_stack != nullptr && m_stack->canReorderLayers() && layer >= 0 && !tracked;
     m_upBtn->setEnabled(reorder && layer > 0);
     m_downBtn->setEnabled(reorder && layer + 1 < layers.size());
-    m_removeBtn->setEnabled(m_stack != nullptr && m_stack->canRemoveLayers() && layer >= 0);
+    m_removeBtn->setEnabled(m_stack != nullptr && m_stack->canRemoveLayers() && layer >= 0 && !tracked);
     bool openable = false;
     if (layer >= 0 && layer < layers.size())
-        openable = layers.at(layer).functionId != loadedFunction();
+        openable = layers.at(layer).functionId != loadedFunction()
+                   && layers.at(layer).kind != WorkbenchStack::Layer::CueLayer;
     m_openBtn->setEnabled(openable);
     m_ownCopyBtn->setEnabled(m_stack != nullptr && m_stack->canMakeOwnCopy(layer));
 }
@@ -1103,6 +1162,12 @@ void Workbench::slotRowsSelectionChanged()
     case ProgrammingOutline::FunctionRow:
         loadCanvas(Function::invalidId());
         loadFunctionEditor(row.id);
+        if (m_stack != nullptr)
+            m_stack->setFocusLayer(m_rows->layerOf(cur));
+        break;
+    case ProgrammingOutline::CueLayerRow:
+    case ProgrammingOutline::AttributeRow:
+        showStackRow(row);
         break;
     default:
     {
@@ -1119,7 +1184,14 @@ void Workbench::slotRowsSelectionChanged()
         {
             loadCanvas(Function::invalidId());
             clearEditors();
-            showPage(m_stack != nullptr ? OverviewPage : EmptyPage);
+            // W3: a cue's own page (number, mode, fades, includes...).
+            if (m_stack != nullptr)
+                m_stack->setFocusLayer(-1);
+            QWidget *pane = m_stack != nullptr ? m_stack->lendPane(-1, -1) : nullptr;
+            if (pane != nullptr)
+                hostLentPane(pane);
+            else
+                showPage(m_stack != nullptr ? OverviewPage : EmptyPage);
         }
         break;
     }
@@ -1197,6 +1269,7 @@ void Workbench::loadCanvas(quint32 sceneId)
 
 void Workbench::clearEditors()
 {
+    releaseLentPane();
     if (m_canvas != nullptr)
     {
         m_canvas->deleteLater();
@@ -1406,6 +1479,17 @@ void Workbench::updateTrialPalette(quint32 paletteId)
     m_trialScene = Function::invalidId();
 
     QLCPalette *p = m_doc->palette(paletteId);
+    // W3: a cue's value is in the cue already (nothing to try it on): say
+    // whether it is shared, as the tree's Look Editor does.
+    if (m_stack != nullptr && m_stack->takesDrops())
+    {
+        ShowTreeController *st = m_doc->showTree();
+        m_lookEditor->setTrialNote(p == nullptr ? QString()
+                                   : st != nullptr && st->isInlinePalette(paletteId)
+                                     ? tr("A one-off value of this cue")
+                                     : tr("A shared palette: changing it changes every cue and scene that uses it"));
+        return;
+    }
     Scene *scene = qobject_cast<Scene *>(m_doc->function(m_currentScene));
     QString note;
     if (p != nullptr && p->type() != QLCPalette::Effect)
@@ -1657,6 +1741,14 @@ void Workbench::startPreview()
         updateOnRig();
         return;
     }
+    if (m_stack->playsItself())
+    {
+        // W3: the Show Tree's preview (the cue in context, or Solo).
+        m_stack->startOwnPreview();
+        m_ownPreview = true;
+        updateOnRig();
+        return;
+    }
     const quint32 fid = m_stack->previewFunction();
     if (fid == m_previewFunction)
         return;
@@ -1677,6 +1769,13 @@ void Workbench::startPreview()
 
 void Workbench::stopPreview()
 {
+    if (m_ownPreview)
+    {
+        m_ownPreview = false;
+        if (m_stack != nullptr)
+            m_stack->stopOwnPreview();
+        updateOnRig();
+    }
     if (m_previewFunction == Function::invalidId())
         return;
     Function *f = m_doc->function(m_previewFunction);
@@ -1700,7 +1799,8 @@ void Workbench::refreshPreview()
 {
     // An edit, applied WITHOUT a stop/start (rapid start/stop on the timer
     // thread races): reset the scene's runtime so the next write re-reads it.
-    if (m_doc->mode() != Doc::Design || !isVisible() || m_previewHeld || m_stack == nullptr)
+    if (m_doc->mode() != Doc::Design || !isVisible() || m_previewHeld || m_stack == nullptr
+        || m_ownPreview)
         return;
     Function *root = m_doc->function(m_stack->previewFunction());
     if (root == nullptr)
@@ -1740,6 +1840,9 @@ void Workbench::startOperate()
        No isRunning() guard: a stop lands on the next tick. */
     if (m_doc->mode() != Doc::Operate || !isVisible() || m_stack == nullptr)
         return;
+    // A cue edited in Live is blind (the tree's rule): nothing started here.
+    if (m_stack->playsItself())
+        return;
     const quint32 fid = m_stack->previewFunction();
     if (m_operateFunction == fid)
         return;
@@ -1774,8 +1877,11 @@ void Workbench::slotModeChanged()
     }
     else
     {
-        // Design -> Operate: the same run carries on as the live one.
-        if (m_previewFunction != Function::invalidId())
+        // Design -> Operate: the same run carries on as the live one (a
+        // cue's own preview stops: Live is blind in the tree).
+        if (m_ownPreview)
+            stopPreview();
+        else if (m_previewFunction != Function::invalidId())
         {
             m_operateFunction = m_previewFunction;
             m_previewFunction = Function::invalidId();
@@ -1821,6 +1927,159 @@ void Workbench::recordSceneEdit(const QString &label, const QString &mergeKey)
     // baseline for the next edit (PaletteOps::changed recaptures it too).
     if (!ops->recordSceneStep(label, { m_editBaseline }, mergeKey))
         recaptureBaseline();
+}
+
+/****************************************************************************
+ * W3: a Show Tree cue loaded (TreeCueStack); W4's plug in the editor pane
+ ****************************************************************************/
+
+Workbench::EffectPaneFactory Workbench::s_effectPane;
+
+void Workbench::setEffectPaneFactory(const EffectPaneFactory &factory)
+{
+    s_effectPane = factory;
+}
+
+void Workbench::hostLentPane(QWidget *pane)
+{
+    if (pane == nullptr)
+        return;
+    if (m_lentPane != pane)
+    {
+        releaseLentPane();
+        m_lentPane = pane;
+        m_functionLayout->addWidget(pane, 1);
+    }
+    m_functionHeading->clear();
+    m_functionHeading->hide();
+    pane->show();
+    showPage(FunctionPage);
+}
+
+void Workbench::releaseLentPane()
+{
+    if (m_lentPane.isNull())
+        return;
+    QWidget *pane = m_lentPane;
+    m_lentPane.clear();
+    m_functionLayout->removeWidget(pane);
+    m_functionHeading->show();
+    if (m_stack != nullptr)
+        m_stack->returnPane(pane);
+    else
+        pane->hide();
+}
+
+void Workbench::showStackRow(const ProgrammingOutline::Row &row)
+{
+    if (m_stack == nullptr)
+        return;
+    const int layer = row.kind == ProgrammingOutline::CueLayerRow ? int(row.id) : int(row.scene);
+    const int attr = row.kind == ProgrammingOutline::AttributeRow ? int(row.id) : -1;
+    const QList<WorkbenchStack::Layer> layers = m_stack->layers();
+    if (layer < 0 || layer >= layers.size())
+        return;
+    m_editorFunction = Function::invalidId();
+    loadCanvas(Function::invalidId());
+    clearEditors();
+    m_stack->setFocusLayer(layer);
+
+    // The selected layer, highlighted on the 2D view; Flash / Park follow.
+    const QList<quint32> fixtures = m_stack->layerFixtures(layer);
+    m_selectedFixtures = fixtures;
+    m_selectedFixturesScene = UINT_MAX;
+    if (ProgrammerController *pc = m_doc->programmer())
+        pc->setProgrammerSelection(fixtures);
+    if (Monitor::instance() != nullptr)
+        Monitor::instance()->highlightFixtures(fixtures);
+    emit fixturesSelected(fixtures);
+
+    const WorkbenchStack::Layer &l = layers.at(layer);
+    if (attr >= 0 && attr < l.attributes.size())
+    {
+        const WorkbenchStack::Layer::Attribute &a = l.attributes.at(attr);
+        // An effect: W4's designer, when it is plugged in.
+        if (a.key.startsWith(QLatin1String("Effect.")) && s_effectPane && designEffect())
+            return;
+        // A value with a palette: the Look Editor, at full height, tried on
+        // the layer's own fixtures. Changing it changes every use (the
+        // Look Editor says so for a shared one).
+        if (m_doc->palette(a.palette) != nullptr)
+        {
+            Scene *ctx = qobject_cast<Scene *>(m_doc->function(m_stack->layerScene(layer)));
+            m_lookEditor->setContextScene(ctx);
+            m_lookEditor->setPalette(a.palette);
+            m_doc->setFocusedPalette(a.palette);
+            showPage(LookPage);
+            return;
+        }
+    }
+    // The layer (or a value without a palette): the back end's page for it
+    // -- the Show Tree's layer page, every attribute with its ⋯.
+    if (QWidget *pane = m_stack->lendPane(layer, attr))
+        hostLentPane(pane);
+    else
+        showPage(OverviewPage);
+}
+
+bool Workbench::designEffect()
+{
+    if (!s_effectPane || m_stack == nullptr || !m_stack->takesDrops())
+        return false;
+    QTreeWidgetItem *cur = m_rows->currentItem();
+    const ProgrammingOutline::Row row = ProgrammingOutline::rowOf(cur);
+    if (row.kind != ProgrammingOutline::CueLayerRow && row.kind != ProgrammingOutline::AttributeRow)
+        return false;
+    const int layer = m_rows->layerOf(cur);
+    const QList<WorkbenchStack::Layer> layers = m_stack->layers();
+    if (layer < 0 || layer >= layers.size())
+        return false;
+    EffectRequest req;
+    req.cueId = layers.at(layer).cueId;
+    req.layerId = layers.at(layer).layerId;
+    req.targetSignature = layers.at(layer).targetSignature;
+    if (row.kind == ProgrammingOutline::AttributeRow && int(row.id) < layers.at(layer).attributes.size())
+    {
+        req.key = layers.at(layer).attributes.at(int(row.id)).key;
+        req.palette = layers.at(layer).attributes.at(int(row.id)).palette;
+    }
+    QWidget *w = s_effectPane(this, req, m_functionPage);
+    if (w == nullptr)
+        return false;
+    clearEditors();
+    m_funcEditor = w;
+    m_functionHeading->setText(tr("<b>Design effect</b> — %1").arg(layers.at(layer).label.toHtmlEscaped()));
+    m_functionLayout->addWidget(w, 1);
+    w->show();
+    showPage(FunctionPage);
+    return true;
+}
+
+void Workbench::setSolo(bool solo)
+{
+    if (m_stack == nullptr || !m_stack->canSolo() || m_stack->solo() == solo)
+        return;
+    m_stack->setSolo(solo);
+    syncStackPreview();
+    updateOnRig();
+}
+
+bool Workbench::isSolo() const
+{
+    return m_stack != nullptr && m_stack->solo();
+}
+
+void Workbench::syncStackPreview()
+{
+    // The back end decides what plays (the cue, or its Solo layer); asked
+    // again after anything that may change it.
+    if (m_stack == nullptr || !m_stack->playsItself() || m_previewHeld)
+        return;
+    if (m_ownPreview)
+        m_stack->startOwnPreview();
+    else
+        startPreview();
+    updateOnRig();
 }
 
 /****************************************************************************

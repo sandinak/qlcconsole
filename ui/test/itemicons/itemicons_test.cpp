@@ -315,6 +315,9 @@ void ItemIcons_Test::aGroupOfOneKindShowsIt()
     QCOMPARE(groupIcon(m_doc, g).name(), QString("kind:%1:1").arg(int(MovingSpot)));
     QCOMPARE(targetsIcon(m_doc, { g->id() }, {}).name(), groupIcon(m_doc, g).name());
     QCOMPARE(targetsIcon(m_doc, {}, { par->id() }).name(), fixtureIcon(par).name());
+    // A Workbench cue-layer row, by its target's signature.
+    QCOMPARE(signatureIcon(m_doc, QString("g:%1|f:").arg(g->id())).name(), groupIcon(m_doc, g).name());
+    QCOMPARE(signatureIcon(m_doc, QString("g:|f:%1").arg(par->id())).name(), fixtureIcon(par).name());
 
     QVERIFY(g->assignFixture(par->id()));
     QCOMPARE(groupKind(m_doc, g), OtherKind);

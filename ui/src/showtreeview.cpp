@@ -61,6 +61,7 @@
 #include <algorithm>
 
 #include "mainbar.h"
+#include "moveinblackbutton.h"
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "fixturegroupsource.h"
@@ -73,6 +74,8 @@
 #include "effectdesigner.h"
 #include "showtreeview.h"
 #include "itemicons.h"
+#include "workbench.h"
+#include "noteedit.h"
 #include "importsheet.h"
 #include "showconverter.h"
 #include "functionmanager.h"
@@ -848,6 +851,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                              "through them while GO goes on to the next cue. It starts from what "
                                              "is on stage before it; its changes are cue-only."), "stNewSubCue");
     connect(m_newSubCue, &QToolButton::clicked, this, [this]() { newSubCue(); });
+    // W3: the selected cue / look / layer in the Workbench, docked here.
+    {
+        QToolButton *wb = button(tr("✎ Workbench"), tr("Open the selected cue, look or layer in the Workbench, "
+                                                      "here in place of the page (double-click, or wb): its "
+                                                      "layers and what tracks in, each value's editor at full "
+                                                      "height. ↩ Show Tree comes back."), "stOpenWorkbench");
+        connect(wb, &QToolButton::clicked, this, [this]() { openSelectionInWorkbench(); });
+    }
     m_merge = button(tr("Merge"), tr("Merge the layers selected in the tree (⌘- or ⇧-click two or more "
                                      "layers of one cue) into one layer on all their groups"), "stMerge");
     m_delete = button(tr("Delete"), tr("Delete the selected cues and layers, or a cue list or production"),
@@ -895,6 +906,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_previewLabel->setObjectName("stPreview");
     bar->addWidget(m_previewLabel);
     headerRow->addWidget(bar, 1);
+    // Auto move-in-black: the show's one setting (Programming's Move in
+    // black menu and Settings show it too). Beside the bar, not in it, so a
+    // narrow window never folds it into » -- in the top bar it sits by the
+    // show controls, where an operator running cues looks.
+    m_moveInBlack = new MoveInBlackButton(m_doc, header);
+    headerRow->addSpacing(6);
+    headerRow->addWidget(m_moveInBlack);
     headerRow->addSpacing(12);
     m_hint = new DropHintLabel(header);
     m_hint->setObjectName("stDropHint");
@@ -914,17 +932,17 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_bridgeText->setObjectName(QStringLiteral("stBridgeText"));
         m_bridgeText->setWordWrap(true);
         h->addWidget(m_bridgeText, 1);
-        QPushButton *convert = new QPushButton(tr("Convert…"), m_bridgeBanner);
-        convert->setObjectName(QStringLiteral("stBridgeConvert"));
-        convert->setToolTip(tr("The show converter: each chaser with its plan, checked; nothing changes until you "
-                               "press Convert"));
-        connect(convert, &QPushButton::clicked, this, [this]() { openConverter(); });
+        QPushButton *convert = new QPushButton(tr("Upgrade this show…"), m_bridgeBanner);
+        convert->setObjectName(QStringLiteral("stBridgeUpgrade"));
+        convert->setToolTip(tr("Each chaser and collection with its plan, checked, and raw scenes into palettes; "
+                               "nothing changes until you press Upgrade, and it is one undo step"));
+        connect(convert, &QPushButton::clicked, this, [this]() { openUpgrade(); });
         h->addWidget(convert);
         QToolButton *dismiss = new QToolButton(m_bridgeBanner);
         dismiss->setObjectName(QStringLiteral("stBridgeDismiss"));
         dismiss->setText(QStringLiteral("✕"));
         dismiss->setAutoRaise(true);
-        dismiss->setToolTip(tr("Not now: Import chaser… ▸ Convert an old show… is always there"));
+        dismiss->setToolTip(tr("Not now: File ▸ Upgrade this show… is always there"));
         connect(dismiss, &QToolButton::clicked, this, [this]() {
             m_bridgeDismissed = true;
             updateBridgeBanner();
@@ -1103,11 +1121,20 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowTreeView::slotTreeSelectionChanged);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
-    // W0: double-click a layer that plays a function as it is: open it.
+    // W3: double-click a cue, a look or a layer: it opens in the Workbench,
+    // docked here (a layer that plays a function as it is, W0's Open, too:
+    // its editor is the Workbench's, and ▣ Open loads it there).
+    m_tree->setExpandsOnDoubleClick(false);
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
-        const quint32 fid = openableFunction(item);
-        if (fid != Function::invalidId())
-            openFunction(fid);
+        const int kind = item != nullptr ? item->data(0, KindRole).toInt() : NoNode;
+        if (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode)
+        {
+            m_tree->setCurrentItem(item, 0, kSelectOnly);
+            openSelectionInWorkbench();
+            return;
+        }
+        if (item != nullptr && item->childCount() > 0)
+            item->setExpanded(!item->isExpanded());
     });
     split->addWidget(m_tree);
 
@@ -1256,7 +1283,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueNumber->setObjectName("stCueNumber");
         m_cueName = new QLineEdit(inner);
         m_cueName->setObjectName("stCueName");
-        m_cueNote = new QLineEdit(inner);
+        m_cueNote = new NoteEdit(inner);
+        m_cueNote->setObjectName("stCueNote");
+        m_cueNote->setHelpTip(tr("It opens up while you type: Return applies it, Shift+Return "
+                                 "starts a new line, Esc puts it back."));
         m_cueMode = new QComboBox(inner);
         m_cueMode->setObjectName("stCueMode");
         for (CueMode m : { CueMode::ListDefault, CueMode::Track, CueMode::Block, CueMode::CueOnly })
@@ -1487,8 +1517,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueNext = new QLabel(inner);
         m_cueNext->setWordWrap(true);
         f->addRow(tr("Next cue receives"), m_cueNext);
-        for (QLineEdit *e : { m_cueNumber, m_cueName, m_cueNote })
+        for (QLineEdit *e : { m_cueNumber, m_cueName })
             connect(e, &QLineEdit::editingFinished, this, &ShowTreeView::slotCueEdited);
+        connect(m_cueNote, &NoteEdit::editingFinished, this, &ShowTreeView::slotCueEdited);
         // Text fields don't swallow a group dragged over them: the page takes it.
         for (QWidget *w : inner->findChildren<QWidget *>())
             if (w != m_cueLayers && w->acceptDrops() && w->parentWidget() != m_cueLayers)
@@ -1753,6 +1784,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
 ShowTreeView::~ShowTreeView()
 {
+    // A docked Workbench goes back to Build (or with the tree's own).
+    destroyWorkbenchDock();
     if (s_instance == this)
         s_instance = nullptr;
     delete m_commander;
@@ -1774,6 +1807,12 @@ bool ShowTreeView::reveal(quint32 functionId)
         return false;
     const bool ok = layerId != invalidId() ? selectNode(layerId, cueId)
                     : cueId != invalidId() ? selectNode(cueId) : selectNode(listId);
+    bringForward();
+    return ok;
+}
+
+void ShowTreeView::bringForward()
+{
     // Forward: its tab, and the window it is in.
     for (QWidget *w = parentWidget(); w != nullptr; w = w->parentWidget())
         if (QTabWidget *tabs = qobject_cast<QTabWidget *>(w))
@@ -1789,7 +1828,6 @@ bool ShowTreeView::reveal(quint32 functionId)
         window()->activateWindow();
     }
     m_tree->setFocus(Qt::OtherFocusReason);
-    return ok;
 }
 
 quint32 ShowTreeView::detachGenerated(Doc *doc, quint32 sceneId)
@@ -2533,6 +2571,7 @@ void ShowTreeView::slotTreeSelectionChanged()
     syncPreview();
     if (currentListId() != m_libraryList)
         m_libraryTimer->start();
+    workbenchFollowTree();
 }
 
 quint32 ShowTreeView::currentListId() const
@@ -2552,6 +2591,12 @@ void ShowTreeView::showEvent(QShowEvent *ev)
 {
     QWidget::showEvent(ev);
     syncPreview();
+    // W3: docked when the tab was left: docked again.
+    if (m_wb != nullptr)
+        QTimer::singleShot(0, this, [this]() {
+            if (isVisible())
+                resumeWorkbench();
+        });
 }
 
 void ShowTreeView::hideEvent(QHideEvent *ev)
@@ -2560,6 +2605,8 @@ void ShowTreeView::hideEvent(QHideEvent *ev)
     // and the preview with it, is already gone).
     if (!m_st.isNull())
         m_st->stopPreview();
+    // W3: Build gets its Workbench back while the tab is away.
+    suspendWorkbench();
     QWidget::hideEvent(ev);
 }
 
@@ -2606,6 +2653,12 @@ void ShowTreeView::syncPreview()
 {
     // A cue, or a layer in one, plays that cue; the controller decides
     // whether it may (Design mode, its list not running for real).
+    // W3: docked, the Workbench plays the cue (in context, or Solo).
+    if (isWorkbenchDocked())
+    {
+        slotPreviewChanged();
+        return;
+    }
     const quint32 cueId = currentCueId();
     if (!isVisible() || cueId == invalidId())
         m_st->stopPreview();
@@ -3460,7 +3513,13 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             open->setObjectName(QStringLiteral("stLayerOpen"));
             open->setToolTip(tr("Open it in its own editor (Window → Functions). Double-clicking the layer does "
                                 "the same."));
-            connect(open, &QPushButton::clicked, this, [this, fid]() { openFunction(fid); });
+            connect(open, &QPushButton::clicked, this, [this, fid]() {
+                // W3: docked, it loads in the Workbench (↩ comes back).
+                if (Workbench *bench = dockedWorkbench())
+                    bench->open(fid);
+                else
+                    openFunction(fid);
+            });
             const Scene *raw = qobject_cast<const Scene *>(f);
             if (raw != nullptr && !raw->values().isEmpty())
             {
@@ -5116,6 +5175,13 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
 
 void ShowTreeView::editPalette(quint32 paletteId)
 {
+    // W3: docked, the Workbench's Look Editor (the page's own is away).
+    if (Workbench *bench = dockedWorkbench())
+        if (m_doc->palette(paletteId) != nullptr)
+        {
+            bench->editPalette(paletteId);
+            return;
+        }
     if (m_doc->palette(paletteId) == nullptr)
     {
         m_lookEditor->setPalette(QLCPalette::invalidId());
@@ -5492,6 +5558,9 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
         if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
             menu.addAction(tr("+ Sub-cue"), this, [this]() { newSubCue(); })->setObjectName("stNewSubCueMenu");
+        if (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode)
+            menu.addAction(tr("Open in Workbench"), this, [this]() { openSelectionInWorkbench(); })
+                ->setObjectName("stOpenWorkbenchMenu");
         if (inLooks && kind != CueNode && kind != LayerNode)
         {
             const quint32 listId = currentListId();
@@ -5955,6 +6024,46 @@ void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
         repointToList(chaserId, rep.list);
 }
 
+bool ShowTreeView::sendToShowTree(quint32 chaserId, QWidget *parent)
+{
+    // Build's Send to Show Tree…: W5's Import in place, through the same
+    // sheet, which also offers to come here.
+    const QString why = m_st->whyNotSend(chaserId);
+    if (!why.isEmpty())
+    {
+        m_hint->setText(why);
+        return false;
+    }
+    const ShowTreeController::ImportReport rep = m_st->importChaser(chaserId);
+    if (rep.list == invalidId())
+        return false;
+    selectNode(rep.list);
+    ImportSheet sheet(m_doc, rep, chaserId, parent != nullptr ? parent : this);
+    sheet.offerShowTree();
+    if (m_sheetRunner)
+        m_sheetRunner(&sheet);
+    else
+        sheet.exec();
+    if (sheet.undoAsked())
+    {
+        m_st->undo();
+        m_hint->setText(tr("Import undone: the show is as it was"));
+        return false;
+    }
+    if (sheet.fileOriginals())
+        m_st->fileOriginals(rep.list);
+    if (sheet.repoint())
+        repointToList(chaserId, rep.list);
+    const CueList *list = m_st->cueList(rep.list);
+    m_hint->setText(tr("%1 is a Show Tree cue list now").arg(list == nullptr ? QString() : list->name));
+    if (sheet.goToAsked())
+    {
+        selectNode(rep.list);
+        bringForward();
+    }
+    return true;
+}
+
 int ShowTreeView::repointToList(quint32 chaserId, quint32 listId)
 {
     const CueList *list = m_st->cueList(listId);
@@ -5999,7 +6108,7 @@ void ShowTreeView::updateBridgeBanner()
     if (lists.count() > 3)
         shown << tr("…");
     m_bridgeText->setText(tr("This show uses chasers: %n look(s) like cue lists (%1). They play as they are; "
-                             "Convert… makes them Show Tree cue lists, checked, when you want.", "",
+                             "Upgrade this show… makes them Show Tree cue lists, checked, when you want.", "",
                              int(lists.count())).arg(shown.join(QStringLiteral(", "))));
     m_bridgeBanner->show();
 }
@@ -6008,21 +6117,68 @@ void ShowTreeView::openConverter()
 {
     ShowConverter dialog(m_doc, this);
     dialog.setConverter([this](quint32 chaserId, bool inPlace) {
-        if (inPlace)
-            return importInPlace(chaserId);
-        const Function *f = m_doc->function(chaserId);
-        const QString name = f == nullptr ? QString() : f->name();
-        const ShowTreeController::ImportReport rep = m_st->importChaser(chaserId);
-        if (rep.list == invalidId())
-            return QStringList(tr("%1: not imported (%2)").arg(name, rep.notes.join(QStringLiteral("; "))));
-        return QStringList(tr("%1: a cue list of %n cue(s) beside the chaser; %2.", "", rep.cues)
-                           .arg(name, rep.differChannels == 0 ? tr("plays the same (0 channels differ)")
-                                                              : tr("%n channel(s) differ", "", rep.differChannels)));
+        return inPlace ? importInPlace(chaserId) : importBeside(chaserId);
     });
     if (m_converterRunner)
         m_converterRunner(&dialog);
     else
         dialog.exec();
+}
+
+QStringList ShowTreeView::importBeside(quint32 chaserId)
+{
+    const Function *f = m_doc->function(chaserId);
+    const QString name = f == nullptr ? QString() : f->name();
+    const ShowTreeController::ImportReport rep = m_st->importChaser(chaserId);
+    if (rep.list == invalidId())
+        return QStringList(tr("%1: not imported (%2)").arg(name, rep.notes.join(QStringLiteral("; "))));
+    selectNode(rep.list);
+    return QStringList(tr("%1: a cue list of %n cue(s) beside the chaser; %2.", "", rep.cues)
+                       .arg(name, rep.differChannels == 0 ? tr("plays the same (0 channels differ)")
+                                                          : tr("%n channel(s) differ", "", rep.differChannels)));
+}
+
+void ShowTreeView::openUpgrade()
+{
+    ShowConverter dialog(m_doc, this, ShowConverter::Upgrade);
+    dialog.setUpgrader([this](const QList<quint32> &chasers, bool inPlace, const QList<quint32> &scenes) {
+        return upgradeShow(chasers, inPlace, scenes);
+    });
+    dialog.setRestorer([this](quint32 listId) { return restoreOriginal(listId); });
+    if (m_converterRunner)
+        m_converterRunner(&dialog);
+    else
+        dialog.exec();
+}
+
+QStringList ShowTreeView::upgradeShow(const QList<quint32> &chasers, bool inPlace, const QList<quint32> &scenes)
+{
+    QStringList out;
+    const quint64 since = m_st->undoStamp();
+    for (quint32 id : chasers)
+        out << (inPlace ? importInPlace(id) : importBeside(id));
+    int captured = 0;
+    for (quint32 id : scenes)
+    {
+        const Function *f = m_doc->function(id);
+        const QString name = f == nullptr ? QString() : f->name();
+        ShowTreeController::CapturePlan done;
+        if (!m_st->captureIntoPalettes(id, &done))
+        {
+            out << tr("%1: not captured (%2)").arg(name, done.why);
+            continue;
+        }
+        ++captured;
+        out << tr("%1: captured into palettes in %n cue(s), 0 channels differ.", "", done.captured).arg(name);
+        for (const QString &k : done.kept)
+            out << QStringLiteral("%1: %2").arg(name, k);
+    }
+    // All of it one undo step.
+    if (m_st->groupStepsSince(since, tr("Upgrade this show")))
+        m_hint->setText(tr("Show upgraded: %n chaser(s) converted, %1 scene(s) captured. Undo takes it all back.",
+                           "", int(chasers.count())).arg(captured));
+    updateBridgeBanner();
+    return out;
 }
 
 QStringList ShowTreeView::importInPlace(quint32 chaserId)
@@ -6044,6 +6200,9 @@ QStringList ShowTreeView::importInPlace(quint32 chaserId)
                                               : tr("%n channel(s) differ", "", rep.differChannels));
     if (rep.dropped + rep.flattened > 0)
         out << tr("%1: %n nested collection(s) read into the cues.", "", rep.dropped + rep.flattened).arg(name);
+    if (rep.trackingCues > 0)
+        out << tr("%1: %n cue(s) track what the steps repeated (%2 layer(s) set once).", "", rep.trackingCues)
+               .arg(name).arg(rep.trackedLayers + rep.trackedIncludes);
     if (rep.filed > 0)
         out << tr("%1: %n original(s) filed under %2.", "", rep.filed)
                .arg(name, ShowTreeController::originalsFolder(name));
@@ -6104,20 +6263,7 @@ bool ShowTreeView::captureIntoPalettes(quint32 sceneId)
         m_hint->setText(tr("Can't capture “%1”: %2").arg(name, plan.why));
         return false;
     }
-    QStringList details;
-    for (const ShowTreeController::CaptureLayer &cl : plan.layers)
-    {
-        QStringList looks;
-        for (auto it = cl.looks.constBegin(); it != cl.looks.constEnd(); ++it)
-        {
-            const ShowTreeController::CapturePalette &cp = plan.palettes.at(it.value());
-            looks << QStringLiteral("%1 %2%3").arg(keyLabel(it.key()), cp.name,
-                                                   cp.reuse == QLCPalette::invalidId() ? tr(" (new)") : QString());
-        }
-        details << tr("Layer on %1: %2").arg(m_st->targetLabel(cl.target), looks.join(QStringLiteral(", ")));
-    }
-    if (!plan.leftoverLines.isEmpty())
-        details << tr("Stays raw, in “%1 (rest)” beside it: %2").arg(name, plan.leftoverLines.join(QStringLiteral("; ")));
+    QStringList details = ShowConverter::captureLines(m_doc, plan);
     QStringList cues;
     for (const auto &u : plan.uses)
         if (const CueList *l = m_st->cueList(u.first))
@@ -8114,6 +8260,9 @@ bool ShowTreeView::runCommand(const QString &line)
     if (m_commandHistory.isEmpty() || m_commandHistory.last() != line)
         m_commandHistory << line;
     m_historyAt = -1;
+    // W3: `wb`: the cue (and its layer) in the Workbench, docked here.
+    if (r.openWorkbench)
+        return openInWorkbench(r.context.cue, r.layer);
     // Where the command leaves the selection: its layer, cue or list (or,
     // acting on the layers selected, as it was).
     if (r.keepSelection)

@@ -92,6 +92,9 @@ namespace ItemIcons
     /** The icon for fixtures/groups together (a Show Tree layer). */
     QIcon targetsIcon(Doc *doc, const QList<quint32> &groups,
                       const QList<quint32> &fixtures);
+    /** The same for a Show Tree target by its signature ("g:1,2|f:3|s:4",
+     *  "x:7" a function played as it is): a Workbench cue-layer row. */
+    QIcon signatureIcon(Doc *doc, const QString &signature);
 }
 
 #endif

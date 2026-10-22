@@ -203,6 +203,20 @@ public:
                    const std::function<bool()> &change);
 
     /************************************************************************
+     * Value steps: the Look Editor's edits to a palette's value -- and the
+     * name that follows it (PaletteNaming) -- as one step.
+     ************************************************************************/
+public:
+    /** Run @a change over palette @a paletteId's value (and name) as one
+     *  step. Undo puts back the value, wheel slot, gobo name and values and
+     *  the name it had. A non-empty @a mergeKey equal to the top step's,
+     *  within 1.5 s, extends that step (a picker drag is one step). A
+     *  palette the tree owns (isManaged() false) is changed with no step.
+     *  Nothing changed: no step (false). */
+    bool valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
+                   const QString &mergeKey = QString());
+
+    /************************************************************************
      * Function steps (WORKFLOW_DESIGN.md W1): the Workbench's edits to a
      * collection's members -- added, removed, reordered, a new EFX or RGB
      * Matrix made on a layer -- on this same stack.
@@ -232,6 +246,13 @@ private:
          *  scene's looks; palette -> slots binding it. */
         QList<QPair<quint32, int>> scenes;
         QList<QPair<quint32, QString>> bindings;
+        /** A value step: apply() puts these back too (other steps leave the
+         *  value as it is, edited since or not). */
+        bool value = false;
+        QVariantList values;
+        QString colourMacro;
+        QString goboName;
+        QMap<QString, int> goboValues;
     };
     struct Step
     {

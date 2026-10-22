@@ -280,6 +280,12 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             "Adopt as look: a scene (say a Programming one) becomes a look of the selected production -- its "
             "groups and palettes a layer, or else the scene played as it is. The scene stays.",
             { "adopt Haze" }, { "look" });
+        // W3: the Workbench
+        add("wb", "navigate", "wb [<cue number>]",
+            "Opens the selected cue (or its layer, or a busking look) in the Workbench, docked in place of the "
+            "page: its layers and what tracks in, each value's editor at full height. With a number, that cue "
+            "of the list. ↩ Show Tree comes back. Double-click and ✎ Workbench do the same.",
+            { "wb", "wb 1.0.1" }, { "cue" }, { "workbench" });
         // undo
         add("undo", "undo", "undo | redo", "Undoes (redoes) the last change: to the tree, or to a palette "
             "(made, renamed, filed, deleted) -- whichever came last.",
@@ -880,6 +886,40 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         return res;
     }
 
+    if (w0 == QLatin1String("wb") || w0 == QLatin1String("workbench"))
+    {
+        // W3: the view docks the Workbench; here only which cue.
+        r.word();
+        const QString number = r.word();
+        if (!r.atEnd())
+        {
+            res.message = tr("wb [<cue number>]");
+            return res;
+        }
+        if (!number.isEmpty())
+        {
+            const CueList *l = m_st->cueList(context.list);
+            const int idx = l == nullptr ? -1 : indexOfNumber(*l, number);
+            if (idx < 0)
+            {
+                res.message = tr("No cue %1 in this list.").arg(number);
+                return res;
+            }
+            res.context.cue = l->cues.at(idx).id;
+            res.context.layer = invalidId();
+        }
+        if (m_st->cue(res.context.cue) == nullptr)
+        {
+            res.message = tr("Select a cue first (or: wb 1.0.1).");
+            return res;
+        }
+        res.ok = true;
+        res.openWorkbench = true;
+        res.keepSelection = true;
+        res.layer = res.context.layer;
+        res.message = tr("In the Workbench: ↩ Show Tree comes back");
+        return res;
+    }
     if (w0 == QLatin1String("palette") || w0 == QLatin1String("pal"))
         return runPalette(r.src, context);
     if (w0 == QLatin1String("look") || w0 == QLatin1String("vcpage") || w0 == QLatin1String("adopt"))
@@ -2848,6 +2888,17 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
     {
         r.word();
         return names(targets, false);
+    }
+    if (w0 == QLatin1String("wb") || w0 == QLatin1String("workbench"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = cueNumbers(context);
+            return true;
+        }
+        r.word();
+        return r.atEnd();
     }
     if (w0 == QLatin1String("cue"))
     {

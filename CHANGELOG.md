@@ -13,6 +13,74 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Show Tree ↔ Workbench (WORKFLOW_DESIGN.md W3).** A cue, a look or a
+  layer opens in the Workbench, docked in the Show Tree in place of the
+  page — double-click it, **✎ Workbench** in the header, **Open in
+  Workbench** on its menu, or the `wb [<cue>]` command. Build's own
+  Workbench is lent (a note stands in for it in Build) and handed back,
+  loaded as it was, by **↩ Show Tree** or by leaving the tab (coming back
+  opens the cue again). The rows are what is on stage in the cue: its own
+  layers, each opening into one row per attribute, and — grey, read-only,
+  with where they come from — the layers and values carried in; a ▣ layer
+  opens in the Workbench itself (↩ back to the cue). The editor pane hosts
+  the tree's own cue and layer pages (every ⋯, Release, Make reusable) and
+  the Look Editor for a value. Drops from the Library, the value menus, ⌫
+  (clear), + Scene / + EFX / + RGB Matrix, remove and reorder all go through
+  the tree's controller: one tree step each, then a bake (a new EFX goes
+  and comes back with its step). Design mode plays the cue in context (the
+  tree's preview) or **Solo** (only the selected layer); the layer's
+  fixtures are highlighted and a click on the 2D view selects the layer
+  that lights it. The tree beside it follows and is followed. W4's effect
+  designer plugs into the editor pane through
+  `Workbench::setEffectPaneFactory()`. New `TreeCueStack` back end
+  (`ui/src/treecuestack.*`; the engine already has a Simple Desk
+  `CueStack`), the dock in `ui/src/showtreeworkbench.cpp`; new
+  `showtreeworkbench_test`. No file format change.
+- **Notes open up while they are typed.** A shared `NoteEdit` /
+  `NoteDelegate` (`ui/src/noteedit.*`) for a chaser step's note -- the W2
+  walker's header and step table (double-click the note), the Chaser
+  editor's Notes column -- and the Show Tree cue note: word-wrapping, it
+  grows to fit as you type (up to 6 lines; a cell's editor floats over the
+  rows below, wider than the cell where there is room). Return commits,
+  Shift+Return / ⌥Return inserts a new line (notes keep new lines in the
+  .qxw), Esc reverts. Closed up it is one line, elided (new lines as ⏎),
+  the whole note in the tooltip. Commits go through the same paths as
+  before, so undo is unchanged (one step per commit).
+- **Palette names follow their value.** In the Look Editor, a colour
+  look's name that says its colour is rewritten when the colour changes
+  (nearest named colour, CIE Lab, light and dark variants: Red → Dark Red).
+  Only that part is rewritten: "Act2 Red" → "Act2 Dark Red", "02-01 Red
+  Wash" → "02-01 Dark Red Wash". The folder is never touched, and a custom
+  name with no colour word stays. The same applies to intensity ("Intensity
+  45%" → "Intensity 60%"), strobe rate and shutter/gobo state names. A
+  factory-named look takes its folder siblings' shared naming pattern. The
+  Look Editor's value edits are now palette undo steps
+  (`PaletteOps::valueStep`): the value and the rename undo together, and a
+  drag is one step. The naming lives in `engine/src/palettenaming.*`.
+- **Fixture-group tools.** *Select All Similar* on fixtures (same
+  definition + mode; inside a group, that group's) and groups (same folder,
+  same fixture make-up and head count); *Move to Folder ▸* lists the folders in use and
+  *New Folder…* (made inside the groups' folder), replacing the type-a-path
+  prompt; *Create Group(s) from Selection…* defaults to the selection's
+  folder. In the Fixture Manager and Build's Groups & fixtures.
+- **Send to Show Tree… in Build.** A loaded chaser's Workbench header and a
+  chaser row's right-click in Build ▸ Scenes (Folders and Classic) run the
+  Show Tree's Import in place for that chaser through the same import
+  sheet, which adds **Done, show it in the Show Tree** (to the new list's
+  tab). Greyed with the reason for a chaser the tree made or one already
+  sent (`ShowTreeController::whyNotSend`).
+- **The import tracks what the steps repeat.** The same function in
+  consecutive steps (a nested `0.0.0-base` collection's members, a shared
+  scene or EFX), or an include of what the cue before already plays, is set
+  in the first cue and tracks through the rest; the last cue where it
+  appears releases it, and after a gap it is set again. Cue by cue, kept
+  only where every cue plays exactly what it did (stage + generated scenes,
+  as Convert checks), else the cue stays Block; the list is Tracking when
+  any cue tracks, the first cue Block. The sheet has a **Set once, then
+  tracking** section and ⤳ / ○ marks. DanceHysteria-0.1 Full Show: 3 of 7
+  cues track, 8 layers no longer repeated; New Chaser 8: 1 tracks, 2
+  releases; Sample.qxw: nothing repeats. 0 channels differ in the DMX dry
+  run on both.
 - **Chasers in the Workbench, and Scenes ▸ Classic (WORKFLOW_DESIGN.md
   W2).** A chaser loads as a step walker (`ChaserWalker`): ◀ prev · step N ·
   next ▶, the step's fade in / hold / fade out / cue no. / note edited in
@@ -81,6 +149,17 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   replaces the old one) and by `EffectsPage` (**Window ▸ Effects**:
   effect palettes by folder, EFX and RGB Matrix as classic effects, and
   + New for each). Covered by `ui/test/effectdesigner`.
+- **Upgrade this show…** (File menu, and the Show Tree's old-show line;
+  WORKFLOW_DESIGN.md §3.7): the show converter in an Upgrade mode
+  (`ShowConverter::Upgrade`). Page 1 lists every chaser (cue list, ticked,
+  with its same-output check / effect kept as a function / left alone)
+  and every collection (read into the ticked lists' cues, or left alone),
+  plus chasers already imported in place, with **Restore original…**.
+  Page 2 offers Capture into palettes for the raw scenes the tree plays
+  or a ticked list would; none is ticked for you. **Upgrade**
+  (`ShowTreeView::upgradeShow()`) converts, then captures, and groups the
+  steps into one (`ShowTreeController::groupStepsSince()`: undo takes the
+  parts back last first, each with its outside changes; redo in order).
 - **The bridge from an old show** (W5 of the workflow design):
   - **Show converter** (Show Tree → Import chaser… → Convert an old
     show…, and a dismissable line at the top of the tab for a show with
@@ -111,6 +190,16 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
     (`attachToLastStep(…, beforeTree)`), several per step.
   - Older builds ignore the new XML (`Source`, `InPlace`, `Original`):
     the list still loads and plays.
+- **Move in black in the Show Tree and Settings** (board Q31): the show's
+  auto move-in-black and its lead time, until now only under Programming →
+  Move in black, are also the Show Tree header's **MIB** button (lead time
+  in its menu; *MIB · n* while n heads are being pre-positioned) and rows in
+  **Settings → Show Tree**, noted as saved with the show. One setting,
+  three views, kept in step by `ProgrammerController::autoMoveInBlackChanged`
+  (now also emitted for a lead-time change). New
+  `MoveInBlackButton`, `ProgrammerController::moveInBlackPresetCount()` /
+  `moveInBlackPresetsChanged`, `MarkPlanner::plannedChanged`.
+
 - **Open a function a Show Tree layer plays as it is** (W0 of the workflow
   design): a ▣ layer (a raw scene, EFX, RGB Matrix, collection or chaser)
   opens its function in its own editor in the Functions window -- from
@@ -239,7 +328,7 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   value falls in); Strobe looks a flash with their rate (they had no icon);
   Aim looks and stage targets a yellow bullseye (point) or a line with end
   handles (line); fixtures a fixed wash, moving spot, moving wash or moving
-  head, read from the definition; a group of one kind that kind, stacked.
+  head, read from the definition; a group of one kind that kind, badged.
   Drawn in code (`ui/src/itemicons.{h,cpp}`), crisp at any size, outlines
   in the theme's text colour. Used in Build's outline/Workbench, the
   Palettes list, the Show Tree's layers and Library, the Groups source and
@@ -264,6 +353,12 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Move in black no longer carries over to the next show**: a new show,
+  or one saved without it, starts with auto move-in-black off and the
+  default 0.8 s lead time (`Doc::clearContents` →
+  `ProgrammerController::resetMoveInBlack`). Turning it on or off now marks
+  the show modified, as the lead time did.
+
 - **An imported chaser of raw scenes plays as the chaser did.** QLC+
   blends a scene step from the scene before it; the cue list's steps are
   Collections, which never blended, so a chase of scenes with their own

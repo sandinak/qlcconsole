@@ -117,6 +117,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
             this, &ProgrammerController::autoMoveInBlackChanged);
     connect(m_markPlanner, &MarkPlanner::dangleFixturesChanged,
             this, &ProgrammerController::dangleFixturesChanged);
+    connect(m_markPlanner, &MarkPlanner::plannedChanged,
+            this, &ProgrammerController::moveInBlackPresetsChanged);
 
     connect(this, &ProgrammerController::programmerSelectionChanged,
             this, &ProgrammerController::slotSyncEffectFixtures);
@@ -1477,8 +1479,10 @@ bool ProgrammerController::loadMarkXML(QXmlStreamReader &root)
 
 void ProgrammerController::setAutoMoveInBlack(bool enable)
 {
-    if (m_markPlanner != nullptr)
-        m_markPlanner->setEnabled(enable);
+    if (m_markPlanner == nullptr || m_markPlanner->isEnabled() == enable)
+        return;
+    m_markPlanner->setEnabled(enable);      // emits autoMoveInBlackChanged
+    m_doc->setModified();                   // saved with the show
 }
 
 bool ProgrammerController::isAutoMoveInBlack() const
@@ -1488,11 +1492,26 @@ bool ProgrammerController::isAutoMoveInBlack() const
 
 void ProgrammerController::setMoveInBlackDarkGapMs(int ms)
 {
-    if (m_markPlanner != nullptr)
-    {
-        m_markPlanner->setDarkGapMs(ms);
-        m_doc->setModified();
-    }
+    if (m_markPlanner == nullptr || m_markPlanner->darkGapMs() == ms)
+        return;
+    m_markPlanner->setDarkGapMs(ms);
+    m_doc->setModified();
+    // Every view shows the lead time beside the switch: tell them all.
+    emit autoMoveInBlackChanged(m_markPlanner->isEnabled());
+}
+
+void ProgrammerController::resetMoveInBlack()
+{
+    if (m_markPlanner == nullptr)
+        return;
+    m_markPlanner->setDarkGapMs(MarkPlanner::defaultDarkGapMs());
+    m_markPlanner->setEnabled(false);
+    emit autoMoveInBlackChanged(false);
+}
+
+int ProgrammerController::moveInBlackPresetCount() const
+{
+    return m_markPlanner != nullptr ? m_markPlanner->plannedCount() : 0;
 }
 
 int ProgrammerController::moveInBlackDarkGapMs() const

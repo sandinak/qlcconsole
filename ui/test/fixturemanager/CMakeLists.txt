@@ -6,6 +6,11 @@ add_executable(${module_name} WIN32 MACOSX_BUNDLE
     ${module_name}.cpp ${module_name}.h
 )
 
+# A real show with 50 groups, read from a copy (never the original); the
+# test skips when it is not there (FM_DH_SHOW in the environment overrides).
+target_compile_definitions(${module_name} PRIVATE
+    FM_DH_SHOW="${CMAKE_SOURCE_DIR}/test-workspaces/DanceHysteria-0.6.qlcc")
+
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src
     ../../src

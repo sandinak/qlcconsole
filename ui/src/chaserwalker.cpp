@@ -33,6 +33,7 @@
 #include <QTimer>
 
 #include "chaserwalker.h"
+#include "noteedit.h"
 #include "workbenchstack.h"
 #include "programmingoutline.h"
 #include "functionselection.h"
@@ -84,15 +85,21 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     // The step's header: fade in · hold · fade out · cue · note.
     QHBoxLayout *fields = new QHBoxLayout;
     fields->setSpacing(4);
-    auto field = [this, fields](const QString &label, const QString &name, int width) {
-        QLabel *l = new QLabel(label, this);
-        fields->addWidget(l);
+    // Top-aligned: the note grows downwards while it is typed in.
+    auto label = [this, fields](const QString &text) {
+        QLabel *l = new QLabel(text, this);
+        l->setMinimumHeight(QLineEdit().sizeHint().height());
+        fields->addWidget(l, 0, Qt::AlignTop);
+        return l;
+    };
+    auto field = [this, fields, label](const QString &text, const QString &name, int width) {
+        QLabel *l = label(text);
         QLineEdit *e = new QLineEdit(this);
         e->setObjectName(name);
-        if (width > 0)
-            e->setMaximumWidth(width);
+        e->setMaximumWidth(width);
+        e->setMinimumWidth(width);
         l->setBuddy(e);
-        fields->addWidget(e, width > 0 ? 0 : 1);
+        fields->addWidget(e, 0, Qt::AlignTop);
         return e;
     };
     const int timeWidth = fontMetrics().horizontalAdvance(QStringLiteral("00m00s.00")) + 12;
@@ -100,17 +107,22 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     m_hold = field(tr("Hold"), QStringLiteral("walkerHold"), timeWidth);
     m_fadeOut = field(tr("Fade out"), QStringLiteral("walkerFadeOut"), timeWidth);
     m_cue = field(tr("Cue"), QStringLiteral("walkerCue"), fontMetrics().horizontalAdvance(QStringLiteral("000.00")) + 12);
-    m_note = field(tr("Note"), QStringLiteral("walkerNote"), 0);
+    QLabel *noteLabel = label(tr("Note"));
+    m_note = new NoteEdit(this);
+    m_note->setObjectName(QStringLiteral("walkerNote"));
+    noteLabel->setBuddy(m_note);
+    fields->addWidget(m_note, 1);
     const QString timeTip = tr("As the Chaser editor writes it: 1s.50, 2m, ∞ (hold until GO). Return applies it.");
     for (QLineEdit *e : { m_fadeIn, m_hold, m_fadeOut })
         e->setToolTip(timeTip);
     m_cue->setToolTip(tr("The step's cue number for show control (empty: its place)"));
-    m_note->setToolTip(tr("The step's note, as in the Chaser editor and a VC Cue List"));
+    m_note->setHelpTip(tr("The step's note, as in the Chaser editor and a VC Cue List. It opens up while "
+                          "you type: Return applies it, Shift+Return starts a new line, Esc puts it back."));
     connect(m_fadeIn, &QLineEdit::editingFinished, this, [this]() { commitTime(FadeInField, m_fadeIn->text()); });
     connect(m_hold, &QLineEdit::editingFinished, this, [this]() { commitTime(HoldField, m_hold->text()); });
     connect(m_fadeOut, &QLineEdit::editingFinished, this, [this]() { commitTime(FadeOutField, m_fadeOut->text()); });
     connect(m_cue, &QLineEdit::editingFinished, this, [this]() { commitText(CueField, m_cue->text()); });
-    connect(m_note, &QLineEdit::editingFinished, this, [this]() { commitText(NoteField, m_note->text()); });
+    connect(m_note, &NoteEdit::editingFinished, this, [this]() { commitText(NoteField, m_note->text()); });
     col->addLayout(fields);
 
     // The step's function, shared: say so, and split it off.
@@ -199,6 +211,9 @@ void ChaserWalker::buildTable()
     m_table->setRootIsDecorated(false);
     m_table->setAllColumnsShowFocus(true);
     m_table->setUniformRowHeights(true);
+    // Only the note is typed in here (double-click it); the rest is the header's.
+    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_table->setItemDelegateForColumn(ColNotes, new NoteDelegate(m_table));
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setHeaderLabels({ tr("#"), tr("Function"), tr("Fade In"), tr("Hold"), tr("Fade Out"),
                                tr("Duration"), tr("Notes"), tr("Cue") });
@@ -215,13 +230,22 @@ void ChaserWalker::buildTable()
             return;
         m_stack->setStep(m_table->indexOfTopLevelItem(it));
     });
-    connect(m_table, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *it) {
+    connect(m_table, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *it, int column) {
         if (m_stack == nullptr || it == nullptr)
             return;
         const int i = m_table->indexOfTopLevelItem(it);
         Chaser *ch = m_stack->chaser();
-        if (ch != nullptr && i >= 0 && i < ch->stepsCount())
+        if (ch == nullptr || i < 0 || i >= ch->stepsCount())
+            return;
+        if (column == ColNotes && (it->flags() & Qt::ItemIsEditable))
+            m_table->editItem(it, ColNotes);
+        else
             emit openRequested(ch->steps().at(i).fid);
+    });
+    connect(m_table, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem *it, int column) {
+        if (m_refreshing || m_stack == nullptr || it == nullptr || column != ColNotes)
+            return;
+        commitText(NoteField, it->text(ColNotes), m_table->indexOfTopLevelItem(it));
     });
 }
 
@@ -276,6 +300,7 @@ void ChaserWalker::refresh()
         it->setText(ColHold, Function::speedToString(hold));
         it->setText(ColDuration, Function::speedToString(duration));
         it->setText(ColNotes, st.note);
+        it->setFlags(readOnly ? it->flags() & ~Qt::ItemIsEditable : it->flags() | Qt::ItemIsEditable);
         const bool own = !st.cueNumber.trimmed().isEmpty();
         it->setText(ColCue, own ? st.cueNumber.trimmed() : QString::number(i + 1));
         it->setForeground(ColCue, own ? m_table->palette().brush(QPalette::Text) : grey);
@@ -333,7 +358,9 @@ void ChaserWalker::refresh()
                                                                                         : st.fadeOut),
              ch->fadeOutMode() == Chaser::PerStep, modeWhy(ch->fadeOutMode()));
     setField(m_cue, st.cueNumber, true, QString());
-    setField(m_note, st.note, true, QString());
+    if (!m_note->hasFocus())
+        m_note->setText(st.note);
+    m_note->setEnabled(n > 0 && !readOnly);
 
     // Shared: where else it plays.
     QStringList also;
@@ -397,12 +424,14 @@ void ChaserWalker::commitTime(int which, const QString &text)
     refresh();
 }
 
-void ChaserWalker::commitText(int which, const QString &text)
+void ChaserWalker::commitText(int which, const QString &text, int step)
 {
     Chaser *ch = m_stack != nullptr ? m_stack->chaser() : nullptr;
     if (ch == nullptr || m_refreshing || ch->stepsCount() == 0)
         return;
-    const int index = m_stack->step();
+    const int index = step >= 0 ? step : m_stack->step();
+    if (index >= ch->stepsCount())
+        return;
     const ChaserStep was = ch->steps().at(index);
     const QString value = which == CueField ? text.trimmed() : text;
     if ((which == CueField ? was.cueNumber : was.note) == value)

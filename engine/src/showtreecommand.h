@@ -80,6 +80,8 @@ class Doc;
  *   look "Hit 1" [in "Hits"]     select that busking look, or make it (R3)
  *   vcpage                       Make VC page: a button per look
  *   adopt "Old Scene"            Adopt as look: a scene becomes a look
+ *   wb [<cue number>]           the selected cue (or layer), or that cue, in the
+ *                                Workbench, docked in the tab (W3)
  *   dup · undo · redo
  *
  * Names are the Library's (groups, fixtures, palettes, functions), matched
@@ -124,6 +126,9 @@ public:
         /** A palette to open in the Look Editor (`palette … edit`, a new
          *  palette); invalid: none. */
         quint32 editPalette = 0xFFFFFFFF;
+        /** `wb`: open the cue in context (and the layer, if one) in the
+         *  Workbench (W3) -- the view's to do. */
+        bool openWorkbench = false;
     };
 
     Result run(const QString &line, const Context &context);

@@ -29,7 +29,10 @@
 #include <QSet>
 #include <functional>
 
+#include "showtreecontroller.h"
 #include "monitorproperties.h"
+#include "showtreemodel.h"
+#include "function.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlccapability.h"
@@ -576,6 +579,34 @@ QIcon targetsIcon(Doc *doc, const QList<quint32> &groups, const QList<quint32> &
         first = false;
     }
     return kindIcon(kind, true);
+}
+
+QIcon signatureIcon(Doc *doc, const QString &signature)
+{
+    if (doc == nullptr)
+        return QIcon(QStringLiteral(":/group.png"));
+    QList<quint32> groups, fixtures;
+    for (const QString &part : signature.split(QLatin1Char('|')))
+    {
+        const QString ids = part.mid(2);
+        if (part.startsWith(QLatin1String("x:")))
+        {
+            const Function *f = doc->function(ids.toUInt());
+            return f != nullptr ? f->getIcon() : QIcon();
+        }
+        if (part.startsWith(QLatin1String("g:")))
+            groups += ShowTree::stringToIds(ids);
+        else if (part.startsWith(QLatin1String("f:")))
+            fixtures += ShowTree::stringToIds(ids);
+        else if (part.startsWith(QLatin1String("s:")) && doc->showTree() != nullptr)
+            for (quint32 id : ShowTree::stringToIds(ids))
+                if (const ShowTree::GroupSet *gs = doc->showTree()->groupSet(id))
+                {
+                    groups += gs->groups;
+                    fixtures += gs->fixtures;
+                }
+    }
+    return targetsIcon(doc, groups, fixtures);
 }
 
 } // namespace ItemIcons
