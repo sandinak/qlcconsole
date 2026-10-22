@@ -48,6 +48,7 @@
 #include "mastertimer.h"
 #include "universe.h"
 #include "programmingmanager.h"
+#include "workbench.h"
 #undef protected
 #undef private
 #include "functionliveeditdialog.h"
@@ -5173,11 +5174,23 @@ void ShowTreeView_Test::openAnOpaqueLayer()
     QCOMPARE(view.openableFunction(towersRow), Function::invalidId());
     QCOMPARE(view.openableFunction(nullptr), Function::invalidId());
 
-    // Double-click.
+    // Double-click (W3): the layer in the Workbench, docked here -- the
+    // EFX's own editor in its pane, ▣ Open loads it there.
     emit view.tree()->itemDoubleClicked(efxRow, 0);
-    QCOMPARE(opened, QList<quint32>({ efx->id() }));
+    QVERIFY(view.isWorkbenchDocked());
+    QCOMPARE(view.dockedWorkbench()->currentPage(), Workbench::FunctionPage);
+    QVERIFY(opened.isEmpty());
+    QVERIFY(view.closeWorkbench());
+    efxRow = layerRow(view.tree(), "SC Circle 1");
+    towersRow = layerRow(view.tree(), "Towers");
     emit view.tree()->itemDoubleClicked(towersRow, 0);
-    QCOMPARE(opened.count(), 1);
+    QVERIFY(view.isWorkbenchDocked());
+    QVERIFY(opened.isEmpty());
+    QVERIFY(view.closeWorkbench());
+    view.tree()->expandAll();
+    hazeRow = layerRow(view.tree(), "Haze");
+    efxRow = layerRow(view.tree(), "SC Circle 1");
+    towersRow = layerRow(view.tree(), "Towers");
 
     // The row's menu: Open first.
     {
@@ -5202,7 +5215,7 @@ void ShowTreeView_Test::openAnOpaqueLayer()
         QVERIFY(QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos)));
         QVERIFY2(!actions.isEmpty() && actions.first() == QString("stOpenFunction|Open “Haze”…"),
                  qPrintable(actions.join(", ")));
-        QCOMPARE(opened, QList<quint32>({ efx->id(), haze->id() }));
+        QCOMPARE(opened, QList<quint32>({ haze->id() }));
     }
 
     // The layer's page: Open, and where else it plays.

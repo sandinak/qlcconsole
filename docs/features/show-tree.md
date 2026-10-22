@@ -104,6 +104,60 @@ from the Library lands in the tree right beside it.
 
 The dividers between them can be dragged; their places are kept.
 
+## Working on a cue in the Workbench
+
+To work on a cue's layers in detail, open it in the **Workbench** — the
+same editor Build has ([The Workbench](build.md#the-workbench)), here in
+place of the page. **Double-click** a cue, a look or a layer, press
+**✎ Workbench** in the header, choose **Open in Workbench** from its
+right-click menu, or type **`wb`** (`wb 0.0.3` for another cue of the
+list). The Library and the tree stay where they are: click another cue in
+the tree and the Workbench follows it.
+
+![A cue in the Workbench: its own layers, and Washes tracking in grey](../images/show-tree-workbench.png)
+
+- **The header** names the cue, its list and production, its mode, fades
+  and hold, how many layers are its own and how many are carried in, its
+  includes, its note — and what is on the rig.
+- **The rows** are what is on stage in the cue, in order. Each of its own
+  layers opens up into one row per attribute (*Colour Blue*, *Dimmer
+  Intensity 45%*…). A layer carried in — tracked, included, back to the
+  base — is **grey**, with where it comes from (*⤳ tracked from 0.0.1
+  Setup*); so is a value inherited from an earlier cue or a cue look. A
+  layer that plays a function as it is (**▣**: a raw scene, an EFX, a
+  collection) opens in the Workbench itself with **▣ Open** or a
+  double-click; **↩** comes back to the cue.
+- **The editor pane**, beside the rows, edits what is selected:
+  - nothing: the cue's own page (number, name, mode, fades, includes…);
+  - a layer: its page as the tree has it — every attribute with **✎** and
+    **⋯**, Release, Make reusable, a line aim's strip;
+  - a value: its palette in the **Look Editor**, at full height. It says
+    whether the palette is shared (changing it changes every cue that uses
+    it) or a one-off of this cue.
+- **Changing things.** Drop palettes, groups and fixtures from the Library
+  onto a layer row (below the rows: onto the cue), exactly as onto the tree.
+  Right-click a value for the tree's menu (set, clear, off, Level…);
+  **⌫** on a value clears it, so it inherits again. Right-click a layer for
+  Solo, Release, Remove. **+ Scene** plays scenes (or any function) from
+  the show as layers; **+ EFX** / **+ RGB Matrix** make a new one on the
+  selected layer's fixtures. **▲ ▼** and **Remove** work on the cue's own
+  layers.
+- **Carried-in rows are read-only.** They aren't removed, moved or
+  cleared here: they belong to the cue they come from. Setting a value on
+  one (a drop, or a value's menu) makes it this cue's own, as in the tree.
+- **On the rig.** In Design mode the cue plays **in context** — what tracks
+  in too — and every edit shows at once; the selected layer's fixtures are
+  highlighted on the 2D view, and clicking a fixture there selects the
+  layer that lights it. **Solo** plays only the selected layer. **Stop**
+  holds the preview, **Play** brings it back. In Operate nothing previews,
+  as everywhere in the tree.
+- **Undo.** Every edit is one step of the tree's, on the one history:
+  **⌘Z** in the Show Tree takes it back.
+- **↩ Show Tree** puts the page back, with the cue — and the layer the
+  Workbench had selected — selected in the tree. The Workbench goes back to
+  Build, loaded as it was there. Leaving the tab does the same; coming back
+  opens the cue again.
+
 ## Quick start
 
 ### From a chaser you already have
@@ -933,6 +987,7 @@ is always there and calls the same operations as the mouse.
 | `look "Hit 1"` · `look "Hit 1" in "Hits"` | Selects that **look** of the production, or makes it (and the Looks section); `in` files it. Then set its layers as on a cue |
 | `vcpage` | **Make VC page** for the selected look's folder (else every look) |
 | `adopt "Old Busk"` | **Adopt as look**: a scene becomes a look |
+| `wb` · `wb 0.0.3` | The selected cue (or layer), or that cue, in the **Workbench** ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)) |
 | `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo (one history with the palettes, [Undo](#undo)) |
 | `help` · `help spread` · `?` | The language, with examples (see below) |
 
@@ -1474,6 +1529,7 @@ Cue Runner back into a Cue List).
 | Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it |
 | **⌥** held as you drop groups | A layer for each group (a set: each member) |
 | **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
+| Double-click a cue, look or layer · **✎ Workbench** · `wb` | Open it in the Workbench, in place of the page ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)); **↩ Show Tree** comes back |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |

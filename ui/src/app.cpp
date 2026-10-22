@@ -44,6 +44,7 @@
 #include "showtreecontroller.h"
 #include "cuerunner.h"
 #include "showtreeview.h"
+#include "workbench.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
 #include "virtualconsole.h"
@@ -557,8 +558,10 @@ void App::init()
     addTab(w, QIcon(":/grid.png"), tr("Lighting Studio"));
     w = new FunctionManager(m_tab, m_doc);
     addTab(w, QIcon(":/function.png"), tr("Functions"));
+    QPointer<ProgrammingManager> buildTab;
     {
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
+        buildTab = pm;
         connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
         connect(pm, &ProgrammingManager::powerEstimateChanged, this,
                 [this](double amps, double kw, bool overload, const QString &detail) {
@@ -615,7 +618,17 @@ void App::init()
     addTab(w, QIcon(":/scene.png"), tr("Build"));
     // The Show Tree beside Build (SHOW_TREE_DESIGN.md D2): writing a show as
     // one tree of cue lists, cues and layers -- what Build made, in order.
-    w = new ShowTreeView(m_tab, m_doc);
+    {
+        ShowTreeView *tree = new ShowTreeView(m_tab, m_doc);
+        // W3: a cue opens in Build's Workbench, docked in the tree.
+        tree->setWorkbenchLender(
+            [buildTab]() -> Workbench * { return buildTab.isNull() ? nullptr : buildTab->lendWorkbench(); },
+            [buildTab](Workbench *wb) {
+                if (!buildTab.isNull())
+                    buildTab->returnWorkbench(wb);
+            });
+        w = tree;
+    }
     addTab(w, QIcon(":/chaser.png"), tr("Show Tree"));
     w = new ShowManager(m_tab, m_doc);
     addTab(w, QIcon(":/show.png"), tr("Shows"));

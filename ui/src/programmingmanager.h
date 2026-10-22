@@ -81,6 +81,12 @@ public:
 
     /** The Workbench (W3 docks this same widget in the Show Tree). */
     Workbench *workbench() const { return m_workbench; }
+    /** W3: lend the Workbench to the Show Tree (it docks it there); a note
+     *  stands in its place. Null: lent already. */
+    Workbench *lendWorkbench();
+    /** ...and have it back, loaded as it was before it was lent. */
+    void returnWorkbench(Workbench *workbench);
+    bool isWorkbenchLent() const { return m_workbenchStandIn != nullptr; }
 
     /** The navigator's sections. */
     enum Section { PalettesSection = 0, EffectsSection, ScenesSection };
@@ -260,6 +266,10 @@ private:
     Doc *m_doc;
 
     Workbench *m_workbench = nullptr;
+    // W3: while the Show Tree has the Workbench
+    QWidget *m_workbenchStandIn = nullptr;
+    QSharedPointer<class WorkbenchStack> m_lentFrom;     //!< what Build had loaded
+    QString m_lentSelection;                            //!< its selected row's key
 
     // The navigator
     QButtonGroup *m_sections = nullptr;

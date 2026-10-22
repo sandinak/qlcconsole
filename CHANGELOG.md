@@ -13,6 +13,29 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Show Tree ↔ Workbench (WORKFLOW_DESIGN.md W3).** A cue, a look or a
+  layer opens in the Workbench, docked in the Show Tree in place of the
+  page — double-click it, **✎ Workbench** in the header, **Open in
+  Workbench** on its menu, or the `wb [<cue>]` command. Build's own
+  Workbench is lent (a note stands in for it in Build) and handed back,
+  loaded as it was, by **↩ Show Tree** or by leaving the tab (coming back
+  opens the cue again). The rows are what is on stage in the cue: its own
+  layers, each opening into one row per attribute, and — grey, read-only,
+  with where they come from — the layers and values carried in; a ▣ layer
+  opens in the Workbench itself (↩ back to the cue). The editor pane hosts
+  the tree's own cue and layer pages (every ⋯, Release, Make reusable) and
+  the Look Editor for a value. Drops from the Library, the value menus, ⌫
+  (clear), + Scene / + EFX / + RGB Matrix, remove and reorder all go through
+  the tree's controller: one tree step each, then a bake (a new EFX goes
+  and comes back with its step). Design mode plays the cue in context (the
+  tree's preview) or **Solo** (only the selected layer); the layer's
+  fixtures are highlighted and a click on the 2D view selects the layer
+  that lights it. The tree beside it follows and is followed. W4's effect
+  designer plugs into the editor pane through
+  `Workbench::setEffectPaneFactory()`. New `TreeCueStack` back end
+  (`ui/src/treecuestack.*`; the engine already has a Simple Desk
+  `CueStack`), the dock in `ui/src/showtreeworkbench.cpp`; new
+  `showtreeworkbench_test`. No file format change.
 - **Build tab and the Workbench (WORKFLOW_DESIGN.md W1).** The Programming
   tab is **Build**: a section switch (**Palettes | Effects | Scenes**) picks
   what the navigator on the left lists, with Groups & fixtures under every

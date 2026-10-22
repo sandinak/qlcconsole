@@ -174,6 +174,7 @@ add_library(${module_name}
     workbench.cpp workbench.h
     workbenchstack.cpp workbenchstack.h
     showtreeview.cpp showtreeview.h
+    showtreeworkbench.cpp treecuestack.cpp treecuestack.h
     importsheet.cpp importsheet.h
     cuerunner.cpp cuerunner.h
     updatechecker.cpp updatechecker.h

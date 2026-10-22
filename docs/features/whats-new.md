@@ -67,6 +67,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   collections load in the Workbench as layers.
 - **One Undo.** Adding, removing and reordering layers, a new EFX or RGB
   Matrix, filing and renaming — each is one ⌘Z, in Build or the Show Tree.
+- **A cue in the Workbench.** In the Show Tree, double-click a cue (or a
+  layer, or a look), press **✎ Workbench** or type `wb`: the cue opens in
+  the Workbench, right there in place of the page. Its own layers open up
+  into a row per attribute; what tracks in is grey, with where it comes
+  from, and isn't changed here. Click a value for its palette in the Look
+  Editor at full height, a layer for its page with every ⋯; drop palettes
+  and groups from the Library onto a layer. The cue plays in context as you
+  work, or **Solo** just the selected layer. **↩ Show Tree** goes back with
+  the same layer selected. See [Working on a cue in the
+  Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
 
 ### More Matrix effects, and staggered boxes
 

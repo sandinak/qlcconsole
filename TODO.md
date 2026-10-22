@@ -28,9 +28,25 @@ under `~/.claude/.../memory/`.
   - Several look rows of one type selected don't edit together yet.
   - The Workbench's expansion is remembered per show folder and loaded
     function id.
-  - W3 docks this same Workbench in the Show Tree with a `CueStack`
-    (see the W1 report / workbench.h): `setStack()`, `setReturnTo()`.
-- Then W3 (Show Tree ↔ Workbench) → W2 → W4 → W5 → W6 → W7.
+- **W3 Show Tree ↔ Workbench — built on feat/w3-showtree-workbench
+  (2026-10-22, from W1), not merged.** `TreeCueStack` (the engine's
+  Simple Desk owns the name `CueStack`), docked in place of the tree's
+  page; the tree's cue / layer pages lent to the editor pane. Left over:
+  - Rows of a cue don't drag (reorder with ▲ ▼; layers between cues: in
+    the tree). A layer row's own menu is short (Solo, Release, Remove,
+    Show in the tree); the tree's full layer menu (split, make reusable,
+    detach…) stays in the tree.
+  - + Scene / + EFX put the new layer last (the tree's order), not after
+    the selected one.
+  - Cue looks (D6) show in the header count, not as rows of their own;
+    edit them on the cue's page in the pane.
+  - W4: `Workbench::setEffectPaneFactory()` is the plug for the effect
+    designer on an Effect row / Design effect (EffectLayerDialog's
+    designer can be hosted there); until then an effect row opens its
+    palette in the Look Editor.
+  - The dock is one per tree; a detached Show Tree window docks the
+    Workbench there too (untested on a second monitor).
+- Then W2 → W4 → W5 → W6 → W7.
 
 ## Small fixes and leftovers
 

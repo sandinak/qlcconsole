@@ -71,6 +71,7 @@
 #include "stagetarget.h"
 #include "linespread.h"
 #include "showtreeview.h"
+#include "workbench.h"
 #include "importsheet.h"
 #include "functionmanager.h"
 #include "inputoutputmap.h"
@@ -845,6 +846,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                              "through them while GO goes on to the next cue. It starts from what "
                                              "is on stage before it; its changes are cue-only."), "stNewSubCue");
     connect(m_newSubCue, &QToolButton::clicked, this, [this]() { newSubCue(); });
+    // W3: the selected cue / look / layer in the Workbench, docked here.
+    {
+        QToolButton *wb = button(tr("✎ Workbench"), tr("Open the selected cue, look or layer in the Workbench, "
+                                                      "here in place of the page (double-click, or wb): its "
+                                                      "layers and what tracks in, each value's editor at full "
+                                                      "height. ↩ Show Tree comes back."), "stOpenWorkbench");
+        connect(wb, &QToolButton::clicked, this, [this]() { openSelectionInWorkbench(); });
+    }
     m_merge = button(tr("Merge"), tr("Merge the layers selected in the tree (⌘- or ⇧-click two or more "
                                      "layers of one cue) into one layer on all their groups"), "stMerge");
     m_delete = button(tr("Delete"), tr("Delete the selected cues and layers, or a cue list or production"),
@@ -1068,11 +1077,20 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowTreeView::slotTreeSelectionChanged);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
-    // W0: double-click a layer that plays a function as it is: open it.
+    // W3: double-click a cue, a look or a layer: it opens in the Workbench,
+    // docked here (a layer that plays a function as it is, W0's Open, too:
+    // its editor is the Workbench's, and ▣ Open loads it there).
+    m_tree->setExpandsOnDoubleClick(false);
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
-        const quint32 fid = openableFunction(item);
-        if (fid != Function::invalidId())
-            openFunction(fid);
+        const int kind = item != nullptr ? item->data(0, KindRole).toInt() : NoNode;
+        if (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode)
+        {
+            m_tree->setCurrentItem(item, 0, kSelectOnly);
+            openSelectionInWorkbench();
+            return;
+        }
+        if (item != nullptr && item->childCount() > 0)
+            item->setExpanded(!item->isExpanded());
     });
     split->addWidget(m_tree);
 
@@ -1702,6 +1720,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
 ShowTreeView::~ShowTreeView()
 {
+    // A docked Workbench goes back to Build (or with the tree's own).
+    destroyWorkbenchDock();
     if (s_instance == this)
         s_instance = nullptr;
     delete m_commander;
@@ -2466,6 +2486,7 @@ void ShowTreeView::slotTreeSelectionChanged()
     syncPreview();
     if (currentListId() != m_libraryList)
         m_libraryTimer->start();
+    workbenchFollowTree();
 }
 
 quint32 ShowTreeView::currentListId() const
@@ -2485,6 +2506,12 @@ void ShowTreeView::showEvent(QShowEvent *ev)
 {
     QWidget::showEvent(ev);
     syncPreview();
+    // W3: docked when the tab was left: docked again.
+    if (m_wb != nullptr)
+        QTimer::singleShot(0, this, [this]() {
+            if (isVisible())
+                resumeWorkbench();
+        });
 }
 
 void ShowTreeView::hideEvent(QHideEvent *ev)
@@ -2493,6 +2520,8 @@ void ShowTreeView::hideEvent(QHideEvent *ev)
     // and the preview with it, is already gone).
     if (!m_st.isNull())
         m_st->stopPreview();
+    // W3: Build gets its Workbench back while the tab is away.
+    suspendWorkbench();
     QWidget::hideEvent(ev);
 }
 
@@ -2539,6 +2568,12 @@ void ShowTreeView::syncPreview()
 {
     // A cue, or a layer in one, plays that cue; the controller decides
     // whether it may (Design mode, its list not running for real).
+    // W3: docked, the Workbench plays the cue (in context, or Solo).
+    if (isWorkbenchDocked())
+    {
+        slotPreviewChanged();
+        return;
+    }
     const quint32 cueId = currentCueId();
     if (!isVisible() || cueId == invalidId())
         m_st->stopPreview();
@@ -3382,7 +3417,13 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             open->setObjectName(QStringLiteral("stLayerOpen"));
             open->setToolTip(tr("Open it in its own editor (Window → Functions). Double-clicking the layer does "
                                 "the same."));
-            connect(open, &QPushButton::clicked, this, [this, fid]() { openFunction(fid); });
+            connect(open, &QPushButton::clicked, this, [this, fid]() {
+                // W3: docked, it loads in the Workbench (↩ comes back).
+                if (Workbench *bench = dockedWorkbench())
+                    bench->open(fid);
+                else
+                    openFunction(fid);
+            });
             v->addWidget(open, 0, Qt::AlignLeft);
             const QStringList also = alsoIn(fid, cue.id);
             QString what = tr("Edited there, it changes what this cue plays.");
@@ -5007,6 +5048,13 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
 
 void ShowTreeView::editPalette(quint32 paletteId)
 {
+    // W3: docked, the Workbench's Look Editor (the page's own is away).
+    if (Workbench *bench = dockedWorkbench())
+        if (m_doc->palette(paletteId) != nullptr)
+        {
+            bench->editPalette(paletteId);
+            return;
+        }
     if (m_doc->palette(paletteId) == nullptr)
     {
         m_lookEditor->setPalette(QLCPalette::invalidId());
@@ -5383,6 +5431,9 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
         if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
             menu.addAction(tr("+ Sub-cue"), this, [this]() { newSubCue(); })->setObjectName("stNewSubCueMenu");
+        if (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode)
+            menu.addAction(tr("Open in Workbench"), this, [this]() { openSelectionInWorkbench(); })
+                ->setObjectName("stOpenWorkbenchMenu");
         if (inLooks && kind != CueNode && kind != LayerNode)
         {
             const quint32 listId = currentListId();
@@ -7807,6 +7858,9 @@ bool ShowTreeView::runCommand(const QString &line)
     if (m_commandHistory.isEmpty() || m_commandHistory.last() != line)
         m_commandHistory << line;
     m_historyAt = -1;
+    // W3: `wb`: the cue (and its layer) in the Workbench, docked here.
+    if (r.openWorkbench)
+        return openInWorkbench(r.context.cue, r.layer);
     // Where the command leaves the selection: its layer, cue or list (or,
     // acting on the layers selected, as it was).
     if (r.keepSelection)

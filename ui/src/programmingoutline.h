@@ -25,7 +25,8 @@
 #include <QList>
 #include <QSet>
 
-class WorkbenchStack;
+#include "workbenchstack.h"
+
 class QMimeData;
 class QTimer;
 class Scene;
@@ -68,7 +69,9 @@ public:
         GroupRow,       //!< a dynamic target
         FixtureRow,     //!< a fixed target
         PaletteRow,     //!< a look
-        HintRow         //!< the empty state
+        HintRow,        //!< the empty state
+        CueLayerRow,    //!< W3 Stack: a Show Tree cue's layer (id: its place)
+        AttributeRow    //!< W3 Stack: one of its attributes (scene: the layer, id: its place)
     };
     enum Role
     {
@@ -208,6 +211,8 @@ private:
     void addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene);
     void rebuildNavigator(QList<Scene *> &scenes);
     void rebuildStack();
+    /** W3: a CueLayer of the stack and its attribute rows. */
+    void addCueLayerRows(const WorkbenchStack::Layer &layer, int index);
     /** What dropping outline rows of scenes / functions does in Stack mode
      *  (layers added or reordered); @a layerAt: before that layer (-1 end). */
     QString stackDropPlan(const QMimeData *mime, const QPoint &pos, bool internal, int *layerAt) const;
