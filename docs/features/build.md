@@ -59,7 +59,12 @@ Two panes, left to right:
   Under every section, **Groups &amp; fixtures**, with a **Search fixtures &
   groups…** box: a row stays when it or anything under it matches, the
   folders on the way down open, and a matching group keeps all its
-  fixtures. The section you pick is the one the tab opens on next time.
+  fixtures. Right-click a row for **Select all similar** (the
+  [Fixture Manager's rule](fixture-manager.md#fixture-group-folders)),
+  **Create fixture group from selection…** (filed in the folder it was
+  made in) and, on groups, **Move to folder ▸** (a folder in use, or
+  **New Folder…**). The section you pick is the one the tab opens on next
+  time.
 - **Right — [the Workbench](#the-workbench)**: what is loaded, its layers,
   and the editor pane for the selected row. It is the same in every
   section: switching to Palettes to drag a colour onto a layer leaves the

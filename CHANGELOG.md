@@ -13,6 +13,12 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Fixture-group tools.** *Select All Similar* on fixtures (same
+  definition + mode; inside a group, that group's) and groups (same folder,
+  same fixture make-up and head count); *Move to Folder ▸* lists the folders in use and
+  *New Folder…* (made inside the groups' folder), replacing the type-a-path
+  prompt; *Create Group(s) from Selection…* defaults to the selection's
+  folder. In the Fixture Manager and Build's Groups & fixtures.
 - **Chasers in the Workbench, and Scenes ▸ Classic (WORKFLOW_DESIGN.md
   W2).** A chaser loads as a step walker (`ChaserWalker`): ◀ prev · step N ·
   next ▶, the step's fade in / hold / fade out / cue no. / note edited in
