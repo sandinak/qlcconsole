@@ -63,6 +63,18 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   shows a list's pre-sets with the show's switch off. Command line:
   `mib on|off|show [list]`, `nomib` / `allowmib <cues>`, with help and
   Tab completion. One undo step per change.
+- **ETC ColorSource Spot jr and ColorSource CYC definitions; ColorSource
+  Spot gets all its modes.** `resources/fixtures/ETC/ETC-ColorSource-Spot-jr.qxf`
+  and `ETC-ColorSource-CYC.qxf` (+ FixturesMap) with ETC's four DMX modes
+  each -- *5-Channel* (IRGBS), *Direct* (IRGB/Indigo-L-S on the Spot jr,
+  IRGB-Indigo-Lime-S on the CYC), *1-Channel* (preset 1 intensity) and
+  *RGB* -- from ETC's installation guides and datasheets. The ColorSource
+  Spot (5-Channel only until now) gains Direct, 1-Channel and RGB, a
+  strobe channel that reads ETC's table (0/255 no strobe, 1-254 1-33 per
+  second) and ETC's typical power; mode *5-Channel* keeps its name, so
+  patched shows are untouched and an embedded older copy is offered as an
+  update. An Eos import's `ColorSource_SPOT_RGB` / `ColorSource_SPOT_Jr_RGB`
+  / `ColorSource_Cyc_RGB` now resolve Exact, to the *RGB* modes.
 - **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
   tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
   yellow hard hat with an amber edge, crisp at any size and pixel ratio,

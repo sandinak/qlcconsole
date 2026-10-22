@@ -30,6 +30,14 @@ The latest changes, newest first. Each links to the guide with the detail.
   button's tooltip counts them. The lead time stays the show's. See
   [Move in black](show-tree.md#move-in-black).
 
+- **More ETC ColorSource fixtures.** The library now has the
+  **ColorSource Spot jr** and the **ColorSource CYC**, and the
+  **ColorSource Spot** has all its modes: 5-Channel, Direct, 1-Channel and
+  RGB, laid out as ETC documents them. A show from an Eos console that
+  patched them in RGB mode comes across as these fixtures, not as generic
+  dimmers. A show with the old ColorSource Spot inside it is offered the
+  new one; see [Definition updates](definition-updates.md).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;
