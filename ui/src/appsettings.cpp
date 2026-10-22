@@ -159,6 +159,18 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     m_tabLabelModeCombo->addItem(tr("Text only"),      App::TabTextOnly);
     m_tabLabelModeCombo->setCurrentIndex(m_tabLabelModeCombo->findData(m_app->tabLabelMode()));
     tabLayout->addWidget(m_tabLabelModeCombo);
+    // Which tabs show (View ▸ Workspace): the show's, saved with it.
+    tabLayout->addSpacing(12);
+    tabLayout->addWidget(new QLabel(tr("View (this show):"), tabGroup));
+    m_workspaceViewCombo = new QComboBox(tabGroup);
+    m_workspaceViewCombo->setObjectName(QStringLiteral("settingsWorkspaceView"));
+    for (App::WorkspaceView v : { App::ClassicView, App::ConsoleView, App::EverythingView })
+        m_workspaceViewCombo->addItem(App::workspaceViewName(v), int(v));
+    m_workspaceViewCombo->setCurrentIndex(m_workspaceViewCombo->findData(int(m_app->workspaceView())));
+    m_workspaceViewCombo->setToolTip(tr("Which tabs this show opens with (View ▸ Workspace): "
+                                        "Classic QLC+, qlcconsole or Everything. Saved with the show; "
+                                        "only the tabs change."));
+    tabLayout->addWidget(m_workspaceViewCombo);
     tabLayout->addStretch();
     mainLayout->addWidget(tabGroup);
 
@@ -550,6 +562,9 @@ void AppSettings::accept()
     // Apply tab label mode
     const int mode = m_tabLabelModeCombo->currentData().toInt();
     m_app->setTabLabelMode(mode);
+
+    // The show's view (marks the show modified only when it changes)
+    m_app->setWorkspaceView(App::WorkspaceView(m_workspaceViewCombo->currentData().toInt()));
 
     // Where the show controls sit (live)
     m_app->setShowControlsPlacement(m_showControlsCombo->currentData().toInt());

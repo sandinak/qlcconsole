@@ -13,6 +13,26 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Workspace views.** **View ▸ Workspace ▸ Classic QLC+ / qlcconsole /
+  Everything** (`App::setWorkspaceView()`, `workspaceViewTabs()`): Classic
+  shows Fixtures, Functions, Shows, Virtual Console, Simple Desk and
+  Connections (read "Inputs/Outputs") in stock QLC+ order; qlcconsole shows
+  Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows, Virtual
+  Console and Run (Functions → Build ▸ Scenes ▸ Classic, as before);
+  Everything shows all ten. Hidden tabs keep their widgets (put away, not
+  deleted); a broken-out window stays out across a switch, and closing one
+  whose tab is hidden puts it away. Saved per show as an optional
+  `View="classic|qlcconsole|everything"` attribute on `<Workspace>`, which
+  QLC+ and older builds ignore; a switch marks the show modified but is no
+  undo step. No attribute: Classic for a show with no Show Tree not saved
+  by qlcconsole (`defaultViewForLoadedShow()`), else qlcconsole; a new show
+  is qlcconsole. A Window-menu jump (or `showContext()`) to a hidden tab
+  switches to Everything and says so in a quiet line above the tabs, with
+  a *Back to …* button (`showViewNotice()`). Settings ▸ General ▸ Tab Bar
+  shows and sets the show's view. After File ▸ Upgrade This Show… gives a
+  Classic show a Show Tree, the same line offers the qlcconsole view once
+  (`offerConsoleViewAfterUpgrade()`). `setFunctionsWindowShown()` remains
+  the Functions switch; the view sets it.
 - **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
   tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
   yellow hard hat with an amber edge, crisp at any size and pixel ratio,

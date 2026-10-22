@@ -4,6 +4,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Three views.** **View → Workspace** picks the tabs: **qlcconsole**
+  (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
+  Virtual Console, Run), **Classic QLC+** (the QLC+ tabs, in QLC+'s order
+  and names) or **Everything**. The view is saved with the show. An old
+  QLC+ show opens in Classic QLC+, everything else (and a new show) in
+  qlcconsole. Choosing a hidden tab shows Everything, with a way back.
+  After **Upgrade This Show…**, a Classic show is offered the qlcconsole
+  view. See [Views](getting-started.md#views).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;

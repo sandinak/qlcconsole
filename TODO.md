@@ -68,6 +68,11 @@ under `~/.claude/.../memory/`.
     Chase… load there. The Functions window is hidden, not deleted:
     App::setFunctionsWindowShown(bool) is the one switch, for the coming
     view modes (Classic QLC+ shows it).
+  - ~~View modes~~ — done (board Q35/Q36, feat/view-modes): View ▸
+    Workspace ▸ Classic QLC+ / qlcconsole / Everything, saved per show
+    (`View=` on `<Workspace>`); old QLC+ shows open in Classic, the rest
+    and new shows in qlcconsole; a hidden tab's jump shows Everything
+    with a note; Upgrade This Show… offers qlcconsole once.
 - W2 and W3 merged together on feat/w3-showtree-workbench (2026-10-22).
 - Then W4 → W5 → W6 → W7.
 
