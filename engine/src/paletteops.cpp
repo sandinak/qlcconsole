@@ -1055,6 +1055,27 @@ void PaletteOps::applyFunctions(const QList<QPair<quint32, QSharedPointer<Functi
     m_doc->setModified();
 }
 
+QSet<quint32> PaletteOps::palettesInHistory() const
+{
+    QSet<quint32> out;
+    auto addScene = [&out](const Function *f) {
+        if (const Scene *s = qobject_cast<const Scene *>(f))
+            for (quint32 pid : s->palettes())
+                out.insert(pid);
+    };
+    for (const QList<Step> *stack : { &m_undo, &m_redo })
+        for (const Step &st : *stack)
+        {
+            for (const auto *side : { &st.scenesBefore, &st.scenesAfter })
+                for (const QPair<quint32, QSharedPointer<Scene>> &s : *side)
+                    addScene(s.second.data());
+            for (const auto *side : { &st.functionsBefore, &st.functionsAfter })
+                for (const QPair<quint32, QSharedPointer<Function>> &f : *side)
+                    addScene(f.second.data());
+        }
+    return out;
+}
+
 void PaletteOps::clearUndo()
 {
     m_undo.clear();

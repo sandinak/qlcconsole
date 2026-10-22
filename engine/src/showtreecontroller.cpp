@@ -4335,6 +4335,11 @@ void ShowTreeController::dropUnusedInlinePalettes()
             addLooks(layer.looks);
     }
 
+    // A scene step in Build's history can put one back in its scene
+    // (Make a layer's one-off, undone): it stays while that step does.
+    if (const PaletteOps *ops = m_doc->paletteOps())
+        used.unite(ops->palettesInHistory());
+
     QList<quint32> ids = m_inlinePalettes.values();
     std::sort(ids.begin(), ids.end());
     for (quint32 id : ids)

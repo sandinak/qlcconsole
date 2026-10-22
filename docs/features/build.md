@@ -257,6 +257,12 @@ the tab.
 - **Click an effect palette** to open it in the designer. The designer
   works on a copy: **Update “name”** writes it back, **Save as
   palette…** keeps it as a new one.
+- **Make a layer** puts the Try on groups and the effect into
+  programming. If a scene was loaded in the Workbench when you opened the
+  bench, the button puts them back into that scene. Its menu offers the
+  Show Tree's selected cue, another scene, or a new one. Each is one undo
+  step, and the new layer is selected afterwards. See
+  [Make a layer](effects.md#make-a-layer).
 - **Right-click** an effect: **Design / edit…** (an effect palette) or
   **Open in editor** (an EFX or RGB Matrix), **Duplicate**, **Rename**
   (or F2), **Move to folder…** and **Delete** (⌫ too; it asks first, and

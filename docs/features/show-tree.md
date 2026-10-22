@@ -818,6 +818,12 @@ that kind of effect itself, or sets it to **None**, is left out. The rows
 say *"one effect with Towers + USTs"*. It carries on as one into the cues
 it tracks into, until a later cue changes some of those layers.
 
+**From the effects bench.** An effect tried on groups in Build ▸ Effects
+(or Window ▸ Effects) can come here as a new layer: select the cue, then
+**Make a layer ▸ Into the Show Tree's cue** in the designer. The new layer
+is on the Try on groups, plays the effect, and is selected in the tree.
+It is one undo step. See [Make a layer](effects.md#make-a-layer).
+
 ## Line aims
 
 A **line target** (drawn in the Lighting Studio, see

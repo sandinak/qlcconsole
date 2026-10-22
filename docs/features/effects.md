@@ -67,6 +67,38 @@ pick one of these:
 - **Cancel** (or closing the window) throws the copy away. The show is
   left as it was, and a show that was saved stays saved.
 
+### Make a layer
+
+On the bench, **Make a layer** turns what you tried the effect on into
+programming: a new layer on the **Try on** groups, playing the effect.
+
+- If you opened the bench with a cue or a scene loaded in the Workbench,
+  the button says where: **Make a layer in cue 1 Chorus** or **Make a layer
+  in “Verse wash”**. Click it to put the layer there.
+- The arrow (or the whole button, when you came from nowhere in
+  particular) opens the menu: **Into the Show Tree's cue…** (the cue
+  selected in the Show Tree), **Into a scene in Build…** (pick one) or
+  **Into a new scene…** (name it; the effect and the groups are offered).
+
+In a Show Tree cue it is a new layer on those groups, with the effect as
+its Effect look. In a scene, the groups it doesn't have yet are added as
+targets and the effect as a look. A new scene gets both. Either way it is
+one undo step: one in the Show Tree's history for a cue, one in Build's
+for a scene.
+
+The layer plays the **palette** when the bench has a saved effect palette
+on it, unchanged: **Save as palette…** first, or start from one in the
+list. Otherwise it plays a **one-off** copy of the design, made the same way
+**Keep on this layer** makes one ("Matrix Fire · 1 Chorus Towers"). The
+bench keeps your design either way, so you can make another layer from
+it.
+
+Afterwards the new layer is selected where it went: in the Show Tree, or
+with the scene loaded in the Workbench and the effect's look selected.
+Make a layer needs a picked effect and at least one Try on group.
+
+![Make a layer: back into the scene the bench came from, or another cue or scene](../images/make-a-layer.png)
+
 The preview is a hidden scene on the chosen heads. It plays only in Design
 mode and only while the designer is on screen; in Operate nothing
 previews.
