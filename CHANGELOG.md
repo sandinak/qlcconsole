@@ -368,6 +368,22 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **A Closed shutter look closes.** A Shutter palette resolved to the
+  fixture's Open capability whenever it had one (and to 0, open, on a
+  strobe-preset channel), whatever the look's value -- so *Closed* (and
+  *Strobe*) sent Open on the AT-Spots, and auto-open had nothing to defer
+  to. `QLCPalette::shutterIntent()` now reads the look's value on the
+  first target whose shutter has a tagged (then a named) Open, Closed or
+  Strobe capability there, and `shutterValueFor()` sends each fixture the
+  value as set where it means the same, else its own closed / open / a
+  strobe at the same rate. No value or 0 (every look made before, the
+  course shows' "Open" among them) is still Open; a strobe-preset channel
+  never decides it and has no closed, so it stays open. The Shutter icon
+  uses the same code, so a Closed look shows closed; the Look Editor shows
+  an open look as the type's Open, keeps a Closed picked at 0 as 1, and no
+  longer offers a strobe-only channel's single "Strobe" as a Shutter
+  source.
+
 - **Move in black no longer carries over to the next show**: a new show,
   or one saved without it, starts with auto move-in-black off and the
   default 0.8 s lead time (`Doc::clearContents` →

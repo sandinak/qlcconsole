@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **A Closed shutter look closes.** A Shutter look set to *Closed* used
+  to open the shutter on any spot with an Open capability (the AT-Spots
+  among them). It now closes it, *Strobe* strobes and *Open* opens;
+  auto-open still opens a shutter only when no look sets it. The Look
+  Editor shows a new Shutter look as the type's *Open*, and its icon
+  shows closed for a Closed look. See
+  [Auto-open shutters](other-improvements.md#auto-open-shutters).
+
 - **Icons that say what a row is.** In Build (the outline and the
   Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
   look is a small pie filled to its level (a 45 % look is 45 % lit); a

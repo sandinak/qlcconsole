@@ -41,6 +41,7 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "scenevalue.h"
+#include "shutterautoopen.h"
 #include "scene.h"
 #include "doc.h"
 
@@ -511,6 +512,12 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             }
         });
 
+    // A Shutter look: what it means, read once for all of them.
+    ShutterIntent shIntent = ShutterIntentOpen;
+    const QLCChannel *shReference = nullptr;
+    if (m_type == Shutter)
+        shIntent = shutterIntent(doc, fixtures, &shReference);
+
     // Aim at a line target: each head's point, worked out on first use.
     bool lineReady = false;
     QHash<quint32, QVector3D> linePts;
@@ -876,45 +883,14 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             break;
             case Shutter:
             {
-                // channelNumber(Shutter, MSB) via the head map never resolves Shutter
-                // because heads store shutter in m_shutterChannels, not m_channelsMap.
-                // Query the mode directly instead.
-                quint32 shCh = (fixture->fixtureMode() != nullptr)
-                    ? fixture->fixtureMode()->channelNumber(QLCChannel::Shutter, QLCChannel::MSB)
-                    : QLCChannel::invalid();
-                if (shCh != QLCChannel::invalid())
-                {
-                    const QLCChannel *ch = fixture->channel(shCh);
-                    uchar dmxVal = 0;
-                    if (ch != nullptr &&
-                        (ch->preset() == QLCChannel::ShutterStrobeSlowFast ||
-                         ch->preset() == QLCChannel::ShutterStrobeFastSlow))
-                    {
-                        // Preset strobe channel: DMX 0 = beam open, 1-255 = strobe.
-                        dmxVal = 0;
-                    }
-                    else
-                    {
-                        // Capability-defined channel: search for ShutterOpen first
-                        // (fixture-aware), then fall back to stored value / 255.
-                        if (ch != nullptr)
-                        {
-                            for (const QLCCapability *cap : ch->capabilities())
-                            {
-                                if (cap->preset() == QLCCapability::ShutterOpen)
-                                {
-                                    dmxVal = uchar((int(cap->min()) + int(cap->max())) / 2);
-                                    break;
-                                }
-                            }
-                        }
-                        if (dmxVal == 0 && !m_values.isEmpty())
-                            dmxVal = uchar(value().toUInt());
-                        if (dmxVal == 0)
-                            dmxVal = 255; // last resort
-                    }
-                    list << SceneValue(id, shCh, dmxVal);
-                }
+                // An explicit Closed (or Strobe) is sent as such; only a look
+                // that says Open -- or nothing -- opens (shutterIntent()).
+                const quint32 shCh = shutterChannel(fixture);
+                const QLCChannel *ch = shCh == QLCChannel::invalid() ? nullptr
+                                                                     : fixture->channel(shCh);
+                if (ch != nullptr)
+                    list << SceneValue(id, shCh,
+                                       uchar(shutterValueFor(ch, shIntent, shReference)));
             }
             break;
             case Strobe:
@@ -1195,6 +1171,205 @@ bool QLCPalette::isEffectScoped(Doc *doc, const QList<quint32> &orderedPalettes,
             return true;                    // under an effect
     }
     return false;
+}
+
+/*********************************************************************
+ * Shutter looks
+ *********************************************************************/
+
+static bool isStrobePresetChannel(const QLCChannel *ch)
+{
+    return ch != nullptr && (ch->preset() == QLCChannel::ShutterStrobeSlowFast
+                             || ch->preset() == QLCChannel::ShutterStrobeFastSlow);
+}
+
+QLCPalette::ShutterIntent QLCPalette::capabilityShutterIntent(const QLCCapability *cap)
+{
+    if (cap == nullptr)
+        return ShutterIntentOther;
+    switch (cap->preset())
+    {
+        case QLCCapability::ShutterOpen: return ShutterIntentOpen;
+        case QLCCapability::ShutterClose: return ShutterIntentClosed;
+        case QLCCapability::StrobeSlowToFast:
+        case QLCCapability::StrobeFastToSlow:
+        case QLCCapability::StrobeRandom:
+        case QLCCapability::StrobeRandomSlowToFast:
+        case QLCCapability::StrobeRandomFastToSlow:
+        case QLCCapability::StrobeFrequency:
+        case QLCCapability::StrobeFreqRange:
+        case QLCCapability::PulseSlowToFast:
+        case QLCCapability::PulseFastToSlow:
+        case QLCCapability::PulseFrequency:
+        case QLCCapability::PulseFreqRange:
+            return ShutterIntentStrobe;
+        default:
+            break;
+    }
+    if (ShutterAutoOpen::isOpenName(cap))
+        return ShutterIntentOpen;
+
+    QString n = cap->name().toLower().simplified();
+    n.remove(QLatin1Char('(')).remove(QLatin1Char(')'));
+    static const QStringList closedNames = {
+        QStringLiteral("closed"), QStringLiteral("close"), QStringLiteral("shutter closed"),
+        QStringLiteral("shutter close"), QStringLiteral("closed shutter"),
+        QStringLiteral("beam closed"), QStringLiteral("blackout"), QStringLiteral("black out"),
+        QStringLiteral("shutter blackout") };
+    if (closedNames.contains(n))
+        return ShutterIntentClosed;
+    // "Strobe off" / "No strobe" is the strobe not running: not a strobe.
+    if ((n.contains(QLatin1String("strobe")) || n.contains(QLatin1String("pulse")))
+        && !n.contains(QLatin1String("off")) && !n.contains(QLatin1String("no ")))
+        return ShutterIntentStrobe;
+    return ShutterIntentOther;
+}
+
+QLCPalette::ShutterIntent QLCPalette::channelShutterIntent(const QLCChannel *ch, int value)
+{
+    if (ch == nullptr)
+        return ShutterIntentOther;
+    if (isStrobePresetChannel(ch))
+        return value <= 0 ? ShutterIntentOpen : ShutterIntentStrobe;
+    return capabilityShutterIntent(ch->searchCapability(uchar(qBound(0, value, 255))));
+}
+
+quint32 QLCPalette::shutterChannel(const Fixture *fixture)
+{
+    // channelNumber(Shutter, MSB) via the head map never resolves Shutter
+    // because heads store shutter in m_shutterChannels, not m_channelsMap.
+    // Query the mode directly instead.
+    if (fixture == nullptr || fixture->fixtureMode() == nullptr)
+        return QLCChannel::invalid();
+    return fixture->fixtureMode()->channelNumber(QLCChannel::Shutter, QLCChannel::MSB);
+}
+
+QLCPalette::ShutterIntent QLCPalette::shutterIntent(Doc *doc, const QList<quint32> &fixtures,
+                                                    const QLCChannel **reference) const
+{
+    if (reference != nullptr)
+        *reference = nullptr;
+    if (m_type != Shutter || m_values.isEmpty() || intValue1() <= 0 || doc == nullptr)
+        return ShutterIntentOpen;
+
+    const int v = intValue1();
+    bool anyCapabilities = false;
+    // A definition that tags its capabilities says what they do; one that
+    // only names them is read second, so a mixed group does not depend on
+    // which type comes first.
+    for (int pass = 0; pass < 2; pass++)
+    {
+        for (quint32 fid : fixtures)
+        {
+            const Fixture *f = doc->fixture(fid);
+            const quint32 shCh = shutterChannel(f);
+            const QLCChannel *ch = shCh == QLCChannel::invalid() ? nullptr : f->channel(shCh);
+            if (ch == nullptr || isStrobePresetChannel(ch))
+                continue;
+            anyCapabilities = true;
+            const QLCCapability *cap = ch->searchCapability(uchar(qBound(0, v, 255)));
+            if (cap == nullptr || (pass == 0 && cap->preset() == QLCCapability::Custom))
+                continue;
+            const ShutterIntent in = capabilityShutterIntent(cap);
+            if (in != ShutterIntentOther)
+            {
+                if (reference != nullptr)
+                    *reference = ch;
+                return in;
+            }
+        }
+    }
+    // Only effects or "No function" there: the value as is, where it can be.
+    return anyCapabilities ? ShutterIntentOther : ShutterIntentOpen;
+}
+
+int QLCPalette::shutterOpenValue(const QLCChannel *ch, int fallback)
+{
+    const int open = ShutterAutoOpen::openValue(ch);
+    if (open >= 0)
+        return open;
+    if (ch == nullptr)
+        return 255;
+    const ShutterIntent at = channelShutterIntent(ch, fallback);
+    if (fallback > 0 && at != ShutterIntentClosed && at != ShutterIntentStrobe)
+        return fallback;
+    for (const QLCCapability *cap : ch->capabilities())
+        if (capabilityShutterIntent(cap) == ShutterIntentOther)
+            return cap->middle();
+    return 255;
+}
+
+/* Where @p v sits in @p cap's range, as a strobe rate from 0 (slowest) to
+   1 (fastest). */
+static qreal strobeRate(const QLCCapability *cap, int v)
+{
+    if (cap == nullptr || cap->max() <= cap->min())
+        return 0.5;
+    qreal r = qreal(v - cap->min()) / qreal(cap->max() - cap->min());
+    r = qBound(0.0, r, 1.0);
+    if (cap->preset() == QLCCapability::StrobeFastToSlow
+        || cap->preset() == QLCCapability::PulseFastToSlow
+        || cap->preset() == QLCCapability::StrobeRandomFastToSlow)
+        r = 1.0 - r;
+    return r;
+}
+
+int QLCPalette::shutterValueFor(const QLCChannel *ch, ShutterIntent intent,
+                                const QLCChannel *reference) const
+{
+    if (ch == nullptr)
+        return 0;
+    const int v = m_values.isEmpty() ? 0 : qBound(0, intValue1(), 255);
+
+    /* Read the same way here: its own value, as set. Not on a strobe-only
+       channel, which never reads the look's value: a strobe there is at
+       the rate the value has where it was read. */
+    if (v > 0 && intent != ShutterIntentOther && isStrobePresetChannel(ch) == false
+        && channelShutterIntent(ch, v) == intent)
+        return v;
+
+    switch (intent)
+    {
+        case ShutterIntentClosed:
+            if (isStrobePresetChannel(ch) == false)
+                for (const QLCCapability *cap : ch->capabilities())
+                    if (capabilityShutterIntent(cap) == ShutterIntentClosed)
+                        return cap->middle();
+            // It cannot close: open, as a shutter that is not there.
+            return shutterOpenValue(ch, 0);
+
+        case ShutterIntentStrobe:
+        {
+            const QLCCapability *refCap = reference != nullptr
+                ? reference->searchCapability(uchar(v)) : nullptr;
+            const qreal rate = strobeRate(refCap, v);
+            if (ch->preset() == QLCChannel::ShutterStrobeSlowFast)
+                return 1 + qRound(rate * 254);
+            if (ch->preset() == QLCChannel::ShutterStrobeFastSlow)
+                return 1 + qRound((1.0 - rate) * 254);
+            for (const QLCCapability *cap : ch->capabilities())
+            {
+                if (capabilityShutterIntent(cap) != ShutterIntentStrobe)
+                    continue;
+                const bool down = cap->preset() == QLCCapability::StrobeFastToSlow
+                               || cap->preset() == QLCCapability::PulseFastToSlow
+                               || cap->preset() == QLCCapability::StrobeRandomFastToSlow;
+                const qreal r = down ? 1.0 - rate : rate;
+                return cap->min() + qRound(r * (cap->max() - cap->min()));
+            }
+            return shutterOpenValue(ch, 0);
+        }
+
+        case ShutterIntentOther:
+            // An effect or a plain value: as set, where it means anything.
+            if (isStrobePresetChannel(ch) == false && v > 0)
+                return v;
+            return shutterOpenValue(ch, 0);
+
+        case ShutterIntentOpen:
+        default:
+            return shutterOpenValue(ch, v);
+    }
 }
 
 QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> groups,

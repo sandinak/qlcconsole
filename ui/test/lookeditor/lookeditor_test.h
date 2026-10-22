@@ -45,6 +45,10 @@ private slots:
      *  from the palette list has no look yet; the picker falls back to the
      *  workspace's fixtures, with a chooser when several wheels differ. */
     void aNewGoboOffersTheWorkspacesWheels();
+    /** A new Shutter look shows the type's Open (what it sends); picking
+     *  Closed stores a value that closes, a Closed at 0 too; a strobe-only
+     *  shutter is not offered (its one "Strobe" is a Strobe look's). */
+    void aShutterLookOffersClosed();
     /** A slot a unit has fitted with other glass (Gobo Wheels…) is listed
      *  as that glass, by name, with its picture. */
     void aSwappedSlotShowsItsOwnGlass();

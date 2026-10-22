@@ -82,7 +82,7 @@ static bool isIris(const QLCChannel *ch)
 /* A capability that means "the beam is open", by name, for definitions that
    never tagged their capabilities: "Open", "Shutter open", "Open (shutter)".
    Not "Slow open - fast close" or "Pulse open": those are effects. */
-static bool namedOpen(const QLCCapability *cap)
+bool ShutterAutoOpen::isOpenName(const QLCCapability *cap)
 {
     QString n = cap->name().toLower().simplified();
     n.remove(QLatin1Char('(')).remove(QLatin1Char(')'));
@@ -104,14 +104,14 @@ int ShutterAutoOpen::openValue(const QLCChannel *ch)
 
     const QLCCapability *atDefault = ch->searchCapability(ch->defaultValue());
     if (atDefault != nullptr && (atDefault->preset() == QLCCapability::ShutterOpen
-                                 || namedOpen(atDefault)))
+                                 || isOpenName(atDefault)))
         return ch->defaultValue();
 
     foreach (const QLCCapability *cap, ch->capabilities())
         if (cap->preset() == QLCCapability::ShutterOpen)
             return cap->middle();
     foreach (const QLCCapability *cap, ch->capabilities())
-        if (namedOpen(cap))
+        if (isOpenName(cap))
             return cap->middle();
     return -1;
 }

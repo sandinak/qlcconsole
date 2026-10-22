@@ -657,6 +657,16 @@ With **Auto-open shutters** on, qlcconsole works like a lighting console's
 - **An explicit shutter value always wins.** A look, slider or programmer
   edit that sets the shutter to Closed, Strobe or anything else keeps it
   there.
+- **A Shutter look sends what it says.** *Closed* closes the shutter,
+  *Strobe* strobes it, *Open* opens it -- also on a spot whose shutter has
+  an Open capability, which a Closed look used to open anyway. A Shutter
+  look with no value (or 0, as every look made before Closed could be
+  picked) is an *Open* look. On a mixed group the look's value is read on
+  the fixture type it was picked from (a type that tags its capabilities
+  comes first); every other type gets its own Open, Closed or a strobe at
+  the same rate. A fixture whose shutter cannot close -- a plain strobe
+  channel, 0 open and the rest strobe -- stays open under a Closed look:
+  take its level down instead. Its strobe is a **Strobe** look's job.
 - **A light with no level is left alone**, so nothing lights by itself. A
   dimmer that only rests at full because of its definition's default does
   not count as a level.

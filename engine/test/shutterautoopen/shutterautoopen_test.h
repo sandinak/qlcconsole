@@ -46,9 +46,16 @@ private slots:
     void aSceneWithOnlyALevelLights();
     void itIsSavedWithTheShow();
 
+    void aShutterLookMeansWhatItSays();
+    void aShutterLookOnAMixedRig();
+    void aShutterLookOnTheWire_data();
+    void aShutterLookOnTheWire();
+
 private:
     /** One processFaders() frame; the shutter's output value */
     int frame();
+    /** The LED Movinghead+Circle (a strobe-only shutter) at @p address */
+    Fixture *addMover(int address);
 
     Doc *m_doc = nullptr;
     Fixture *m_spot = nullptr;

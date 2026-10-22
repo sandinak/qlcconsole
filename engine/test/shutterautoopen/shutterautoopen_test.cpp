@@ -38,6 +38,8 @@
 #include "inputoutputmap.h"
 #include "genericfader.h"
 #include "fadechannel.h"
+#include "qlcpalette.h"
+#include "scenevalue.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "qlcfile.h"
@@ -56,6 +58,13 @@ void ShutterAutoOpen_Test::initTestCase()
     dir.setFilter(QDir::Files);
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
     QVERIFY(m_doc->fixtureDefCache()->loadMap(dir));
+
+    /* A copy of DanceHysteria's LED Movinghead+Circle: its shutter is a
+       strobe-preset channel -- 0 open, 1-255 strobe, nothing that closes. */
+    QLCFixtureDef *mover = new QLCFixtureDef();
+    QCOMPARE(mover->loadXML(QString(SHUTTER_TEST_DIR) + "Branson-LED-Movinghead-Circle.qxf"),
+             QFile::NoError);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(mover));
 }
 
 void ShutterAutoOpen_Test::cleanupTestCase()
@@ -101,6 +110,24 @@ int ShutterAutoOpen_Test::frame()
 {
     m_uni->processFaders();
     return uchar(m_uni->postGMValues()->at(m_shutter));
+}
+
+Fixture *ShutterAutoOpen_Test::addMover(int address)
+{
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle");
+    if (def == nullptr || def->mode("10 Channel") == nullptr)
+        return nullptr;
+    Fixture *f = new Fixture(m_doc);
+    f->setName("T1-S1");
+    f->setFixtureDefinition(def, def->mode("10 Channel"));
+    f->setAddress(quint32(address));
+    f->setUniverse(0);
+    if (m_doc->addFixture(f) == false)
+    {
+        delete f;
+        return nullptr;
+    }
+    return f;
 }
 
 static void put(Doc *doc, QSharedPointer<GenericFader> fader, Universe *u, int address, uchar v,
@@ -317,6 +344,208 @@ void ShutterAutoOpen_Test::itIsSavedWithTheShow()
     QVERIFY(m_doc->loadXML(r2, false));
     QVERIFY(ao->isEnabled() == false);
     ao->setEnabled(true);
+}
+
+/* The value a Shutter look puts on @p fx's shutter channel (-1: none). */
+static int shutterOut(Doc *doc, QLCPalette *look, const QList<quint32> &fixtures, const Fixture *fx)
+{
+    const quint32 ch = QLCPalette::shutterChannel(fx);
+    for (const SceneValue &sv : look->valuesFromFixtures(doc, fixtures))
+        if (sv.fxi == fx->id() && sv.channel == ch)
+            return sv.value;
+    return -1;
+}
+
+void ShutterAutoOpen_Test::aShutterLookMeansWhatItSays()
+{
+    // The AT-Spot: Off 0-7 (closed), Open 8-15, Strobing slow - fast 16-131,
+    // and Open again at 248-255.
+    const QList<quint32> spot = { m_spot->id() };
+    const int open = ShutterAutoOpen::openValue(m_spot->channel(QLCPalette::shutterChannel(m_spot)));
+    QLCPalette *look = new QLCPalette(QLCPalette::Shutter);
+    QVERIFY(m_doc->addPalette(look));
+
+    // No value, or 0 -- every Shutter look made before Closed could be
+    // picked, the course shows' "Open" among them -- opens.
+    QCOMPARE(look->shutterIntent(m_doc, spot), QLCPalette::ShutterIntentOpen);
+    QCOMPARE(shutterOut(m_doc, look, spot, m_spot), open);
+    look->setValue(0);
+    QCOMPARE(shutterOut(m_doc, look, spot, m_spot), open);
+
+    // Closed is closed. Before, any fixture with an Open capability was
+    // sent that, whatever the look said.
+    look->setValue(3);
+    QCOMPARE(look->shutterIntent(m_doc, spot), QLCPalette::ShutterIntentClosed);
+    QCOMPARE(shutterOut(m_doc, look, spot, m_spot), 3);
+
+    // Open and Strobe: as set.
+    look->setValue(11);
+    QCOMPARE(look->shutterIntent(m_doc, spot), QLCPalette::ShutterIntentOpen);
+    QCOMPARE(shutterOut(m_doc, look, spot, m_spot), 11);
+    look->setValue(255);            // DanceHysteria's "Open"
+    QCOMPARE(look->shutterIntent(m_doc, spot), QLCPalette::ShutterIntentOpen);
+    QCOMPARE(shutterOut(m_doc, look, spot, m_spot), 255);
+    look->setValue(70);
+    QCOMPARE(look->shutterIntent(m_doc, spot), QLCPalette::ShutterIntentStrobe);
+    QCOMPARE(shutterOut(m_doc, look, spot, m_spot), 70);
+    // An effect of its own: as set too.
+    look->setValue(150);            // Slow open - fast close
+    QCOMPARE(look->shutterIntent(m_doc, spot), QLCPalette::ShutterIntentOther);
+    QCOMPARE(shutterOut(m_doc, look, spot, m_spot), 150);
+
+    // A strobe-only shutter alone never reads the value: it has no closed,
+    // and a 255 there is as likely a legacy "Open" as a strobe.
+    Fixture *mover = addMover(100);
+    QVERIFY(mover != nullptr);
+    const QList<quint32> movers = { mover->id() };
+    for (int v : { 0, 3, 11, 70, 255 })
+    {
+        look->setValue(v);
+        QCOMPARE(look->shutterIntent(m_doc, movers), QLCPalette::ShutterIntentOpen);
+        QCOMPARE(shutterOut(m_doc, look, movers, mover), 0);
+    }
+
+    // Names, for definitions that never tagged their capabilities.
+    QLCCapability closed(0, 9, "Blackout"), shut(0, 9, "Shutter closed"), on(10, 19, "Open"),
+                  strobe(20, 255, "Strobe slow to fast"), off(0, 9, "Strobe off"),
+                  effect(0, 9, "Slow open - fast close"), none(0, 9, "No function");
+    QCOMPARE(QLCPalette::capabilityShutterIntent(&closed), QLCPalette::ShutterIntentClosed);
+    QCOMPARE(QLCPalette::capabilityShutterIntent(&shut), QLCPalette::ShutterIntentClosed);
+    QCOMPARE(QLCPalette::capabilityShutterIntent(&on), QLCPalette::ShutterIntentOpen);
+    QCOMPARE(QLCPalette::capabilityShutterIntent(&strobe), QLCPalette::ShutterIntentStrobe);
+    QCOMPARE(QLCPalette::capabilityShutterIntent(&off), QLCPalette::ShutterIntentOther);
+    QCOMPARE(QLCPalette::capabilityShutterIntent(&effect), QLCPalette::ShutterIntentOther);
+    QCOMPARE(QLCPalette::capabilityShutterIntent(&none), QLCPalette::ShutterIntentOther);
+}
+
+void ShutterAutoOpen_Test::aShutterLookOnAMixedRig()
+{
+    /* A spot, a strobe-only mover, and a bar whose shutter only names its
+       capabilities -- "No function" 0-9, "Strobe (slow to fast)" 10-255,
+       like DanceHysteria's 60W bars -- in one group. */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Named bar");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setPreset(QLCChannel::IntensityMasterDimmer);
+    QLCChannel *sh = new QLCChannel();
+    sh->setName("Strobe");
+    sh->setGroup(QLCChannel::Shutter);
+    QVERIFY(sh->addCapability(new QLCCapability(0, 9, "No function")));
+    QVERIFY(sh->addCapability(new QLCCapability(10, 255, "Strobe (slow to fast)")));
+    def->addChannel(dim);
+    def->addChannel(sh);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    mode->insertChannel(dim, 0);
+    mode->insertChannel(sh, 1);
+    def->addMode(mode);
+    Fixture *bar = new Fixture(m_doc);
+    bar->setFixtureDefinition(def, mode);
+    bar->setAddress(200);
+    QVERIFY(m_doc->addFixture(bar));
+    Fixture *mover = addMover(100);
+    QVERIFY(mover != nullptr);
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Shutter);
+    QVERIFY(m_doc->addPalette(look));
+    const QList<quint32> orders[] = { { bar->id(), mover->id(), m_spot->id() },
+                                      { m_spot->id(), mover->id(), bar->id() } };
+    for (const QList<quint32> &rig : orders)
+    {
+        // "Open" at 255: the spot's tagged Open decides it, whichever
+        // comes first; the bar is not strobed at full, the mover opens.
+        look->setValue(255);
+        QCOMPARE(look->shutterIntent(m_doc, rig), QLCPalette::ShutterIntentOpen);
+        QCOMPARE(shutterOut(m_doc, look, rig, m_spot), 255);
+        QCOMPARE(shutterOut(m_doc, look, rig, bar), 4);         // No function
+        QCOMPARE(shutterOut(m_doc, look, rig, mover), 0);
+
+        // Closed: the spot closes; the others have no closed and stay open.
+        look->setValue(3);
+        QCOMPARE(look->shutterIntent(m_doc, rig), QLCPalette::ShutterIntentClosed);
+        QCOMPARE(shutterOut(m_doc, look, rig, m_spot), 3);
+        QCOMPARE(shutterOut(m_doc, look, rig, bar), 4);
+        QCOMPARE(shutterOut(m_doc, look, rig, mover), 0);
+
+        // Strobe halfway up the spot's range: each strobes, at that rate.
+        look->setValue(16 + (131 - 16) / 2);
+        QCOMPARE(look->shutterIntent(m_doc, rig), QLCPalette::ShutterIntentStrobe);
+        QCOMPARE(shutterOut(m_doc, look, rig, m_spot), 73);
+        QCOMPARE(shutterOut(m_doc, look, rig, bar), 73);        // a strobe there too
+        const int m = shutterOut(m_doc, look, rig, mover);
+        QVERIFY2(m > 110 && m < 145, qPrintable(QString::number(m)));
+    }
+}
+
+void ShutterAutoOpen_Test::aShutterLookOnTheWire_data()
+{
+    QTest::addColumn<int>("look");          // -2: no Shutter look; -1: one with no value
+    QTest::addColumn<bool>("autoOpen");
+    QTest::addColumn<int>("spot");          // -1: the spot's open value
+    QTest::addColumn<int>("mover");
+
+    QTest::newRow("Closed, auto-open on")   << 3   << true  << 3   << 0;
+    QTest::newRow("Closed, auto-open off")  << 3   << false << 3   << 0;
+    QTest::newRow("Open, auto-open on")     << 11  << true  << 11  << 0;
+    QTest::newRow("Open, auto-open off")    << 11  << false << 11  << 0;
+    QTest::newRow("Strobe, auto-open on")   << 70  << true  << 70  << 120;
+    QTest::newRow("Strobe, auto-open off")  << 70  << false << 70  << 120;
+    QTest::newRow("Open look, no value")    << -1  << false << -1  << 0;
+    QTest::newRow("No look, auto-open on")  << -2  << true  << -1  << 0;
+    QTest::newRow("No look, auto-open off") << -2  << false << 0   << 0;
+}
+
+/* What goes out of the universe -- DMX and the preview alike -- for a look
+   at full on the spot and a mover, with a Shutter look or none. */
+void ShutterAutoOpen_Test::aShutterLookOnTheWire()
+{
+    QFETCH(int, look);
+    QFETCH(bool, autoOpen);
+    QFETCH(int, spot);
+    QFETCH(int, mover);
+
+    const int open = ShutterAutoOpen::openValue(m_spot->channel(quint32(m_shutter - 20)));
+    if (spot < 0)
+        spot = open;
+    Fixture *mv = addMover(100);
+    QVERIFY(mv != nullptr);
+    const int mvShutter = 100 + int(QLCPalette::shutterChannel(mv));
+    const quint32 mvDimmer = mv->fixtureMode()->channelNumber(QLCChannel::Intensity, QLCChannel::MSB);
+    QVERIFY(mvDimmer != QLCChannel::invalid());
+    m_doc->shutterAutoOpen()->setEnabled(autoOpen);
+
+    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+    MasterTimerStub timer(m_doc, ua);
+    Scene *scene = new Scene(m_doc);
+    scene->setName("01-01.00-Spots Full");
+    scene->setValue(m_spot->id(), quint32(m_dimmer - 20), 255);
+    scene->setValue(mv->id(), mvDimmer, 255);
+    scene->addFixture(m_spot->id());
+    scene->addFixture(mv->id());
+    if (look > -2)
+    {
+        QLCPalette *p = new QLCPalette(QLCPalette::Shutter);
+        if (look >= 0)
+            p->setValue(look);
+        QVERIFY(m_doc->addPalette(p));
+        scene->addPalette(p->id());
+    }
+    QVERIFY(m_doc->addFunction(scene));
+
+    scene->preRun(&timer);
+    for (int i = 0; i < 3; i++)
+    {
+        scene->write(&timer, ua);
+        QCOMPARE(frame(), spot);
+        // A strobe: at the spot's rate, (70 - 16) / (131 - 16) of the way up.
+        QCOMPARE(int(uchar(m_uni->postGMValues()->at(mvShutter))), mover);
+    }
+    scene->postRun(&timer, ua);
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    m_doc->shutterAutoOpen()->setEnabled(true);
 }
 
 QTEST_MAIN(ShutterAutoOpen_Test)

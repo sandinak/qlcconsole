@@ -27,6 +27,7 @@
 class QXmlStreamReader;
 class QXmlStreamWriter;
 class QLCChannel;
+class QLCCapability;
 class Fixture;
 class Doc;
 
@@ -72,6 +73,10 @@ public:
      *  preset, then by a plain "Open" / "Shutter open" name). A strobe
      *  preset channel opens at 0. Iris channels have none. */
     static int openValue(const QLCChannel *ch);
+
+    /** True when @p cap is named as the beam open ("Open", "Shutter open",
+     *  "Open (shutter)") -- not an effect that merely says "open". */
+    static bool isOpenName(const QLCCapability *cap);
 
     /** The rules for one fixture (its universe-relative addresses). */
     static QVector<Universe::AutoOpenRule> rulesFor(const Fixture *fx);
