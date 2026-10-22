@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Move in black from the Show Tree and Settings.** The show's auto
+  move-in-black is now a **MIB** button in the Show Tree's header, beside
+  the show controls, with the lead time under its arrow, and in
+  **Settings → Show Tree**, as well as in Programming → Move in black. All
+  three are the same one setting, saved with the show. While it is moving
+  lights in black, the button says how many (*MIB · 3*). A new show now
+  starts with it off instead of keeping the last show's. See
+  [Move in black](show-tree.md#move-in-black).
 - **Open what an old show's layer plays.** In the Show Tree, a layer that
   plays a function as it is (▣ — a raw scene, an EFX, an RGB Matrix)
   now opens it: double-click it, right-click → **Open**, or **Open** on

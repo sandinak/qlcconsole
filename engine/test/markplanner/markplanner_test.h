@@ -34,6 +34,12 @@ private slots:
     /** dangleFixturesChanged() fires on change, not on every tick. */
     void signalFiresOnlyOnChange();
     void aDarkFixtureIsPresetButAStagedOneIsNot();
+    /** Through the show's ProgrammerController: one switch + lead time,
+     *  every change signalled (the lead time too, so every view follows),
+     *  saved and loaded with the show, and a new show starts it off. */
+    void theShowsMoveInBlackSavesLoadsAndResets();
+    /** The "pre-positioning N heads" count follows the planner's pre-sets. */
+    void thePresetCountFollowsThePlanner();
 
 private:
     Doc *m_doc = nullptr;

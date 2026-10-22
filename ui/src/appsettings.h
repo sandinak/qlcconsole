@@ -79,6 +79,9 @@ private:
     // Show Tree: Record as new cue, when the choices differ
     QComboBox *m_recordDesignCombo;
     QComboBox *m_recordPerformCombo;
+    // Auto move-in-black: the show's (ProgrammerController), saved with it
+    QCheckBox *m_mibCheck = nullptr;
+    class QDoubleSpinBox *m_mibLeadSpin = nullptr;
     // Measurement units (MeasurementUnits::preferredLength)
     QComboBox *m_unitsCombo;
 

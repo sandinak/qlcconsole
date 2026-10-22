@@ -148,6 +148,7 @@ add_library(${module_name}
     fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h
     mainbar.cpp mainbar.h
+    moveinblackbutton.cpp moveinblackbutton.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     networkreportdialog.cpp networkreportdialog.h

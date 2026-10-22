@@ -45,6 +45,9 @@ is changed only in the tree: elsewhere it is locked. See
 - **Header.** It has + Production, + Cue list, + Cue (**+ Look** in a
   Looks section), + Layer, Record, **+ Sub-cue**, Merge, Delete, Undo, Redo,
   Import chaser… and the **Production** switcher (the current production).
+  At its right end, by the show controls, is **MIB**, the show's auto
+  move-in-black (see [Move in black](#move-in-black)); a narrow window
+  folds the buttons into **»**, never MIB.
   On the right are two pieces of status:
   - what the rig shows, such as *"▶ On the rig: 1.0.1 Verse"* (see
     [Seeing it on the rig](#seeing-it-on-the-rig));
@@ -1459,6 +1462,31 @@ Cue Runner back into a Cue List).
 - A show saved with a Show Tree still opens and plays in a build without
   one. The chaser and its cues are ordinary functions there; only the tree
   is lost if you save it there.
+
+### Move in black
+
+**Auto move-in-black** looks ahead to the next cue while the show runs. Any
+mover that cue will light, and that is dark now, is sent ahead of time to
+where it will be revealed: pan and tilt, colour, gobo, beam. Its level is
+left alone, so nobody sees it move. Each light is let go as its cue lights
+it. A next cue closer than the **lead time** (0.8 s for a new show) is too
+soon to move in black, so nothing new is sent for it.
+
+It is one setting of the show, saved with it. There are three places to
+set it, and they always agree:
+
+- **The Show Tree's header: MIB**, at its right end, just left of Stop
+  all, Blackout and Blind. Click
+  it to turn it on (it lights up) or off. Its arrow holds the same switch
+  and the **Lead time**. While it is moving lights, it says how many:
+  *MIB · 3*.
+- **Programming → Move in black ▾**: **Auto move-in-black** and **Lead
+  time**, with marking lights by hand (see
+  [The Programming tab](programming-tab.md)).
+- **Settings** (⌘,) → **Show Tree** → **Move in black**: the switch and the
+  lead time, applied on OK. The note under them says it: saved with this
+  show, not this computer. Another show keeps its own, and a new show
+  starts with it off.
 
 ## Keys and mouse
 

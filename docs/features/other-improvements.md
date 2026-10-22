@@ -622,8 +622,9 @@ estimates use the readings (and the cap) wherever a fixture has them.
 ## Advanced settings
 
 **Settings** has two tabs. **General** holds what everyone sets: autosave,
-the tab bar, units, the Show Tree's Record choices, the rig network and
-software updates. **Advanced** holds settings for experienced users and
+the tab bar, units, the Show Tree's Record choices and the show's
+[move in black](show-tree.md#move-in-black) (saved with the show), the rig
+network and software updates. **Advanced** holds settings for experienced users and
 the show's output behaviour:
 
 - **Output (saved with this show)**: **Auto-open shutters when a light is
