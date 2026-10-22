@@ -806,8 +806,10 @@
     <F n="Equinox-Ultra-Scan-LED" m="Ultra Scan LED"/>
   </M>
   <M n="ETC">
+    <F n="ETC-ColorSource-CYC" m="ColorSource CYC"/>
     <F n="ETC-ColorSource-Fresnel-V" m="ColorSource Fresnel V"/>
     <F n="ETC-ColorSource-PAR" m="ColorSource PAR"/>
+    <F n="ETC-ColorSource-Spot-jr" m="ColorSource Spot jr"/>
     <F n="ETC-ColorSource-Spot" m="ColorSource Spot"/>
     <F n="ETC-Desire-D22-Lustr+" m="Desire D22 Lustr+"/>
     <F n="ETC-Desire-D40-Vivid" m="Desire D40 Vivid"/>
