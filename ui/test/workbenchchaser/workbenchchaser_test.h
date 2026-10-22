@@ -72,6 +72,18 @@ private slots:
     /** Sample.qxw (a copy): every stock chaser walks; Classic matches the
      *  Function Manager. */
     void sampleShowsChasers();
+    /** The Functions window is retired (board Q32): everything it did is in
+     *  Build ▸ Scenes -- New function ▸ every type (⌘1…⌘9), Function
+     *  Wizard…, Startup function…, Delete folder; each new one filed in the
+     *  current row's folder and loaded in the Workbench. */
+    void functionsWindowToolsLiveInBuild();
+    /** A sequence, root or step, edits in the Workbench: its steps over its
+     *  bound scene's channels, wired as the Functions window wired them. */
+    void aSequenceEditsInTheWorkbench();
+    /** ProgrammingManager::openFunction(): from anywhere, Build's Workbench
+     *  (Classic when Folders doesn't list it); Edit Chase… on a step loads
+     *  the chase in the Workbench the editor is in, ↩ back. */
+    void openingAFunctionLandsInTheWorkbench();
 
 private:
     Scene *scene(const QString &name, const QString &path = QString());

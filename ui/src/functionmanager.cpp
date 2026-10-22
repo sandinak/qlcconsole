@@ -1031,20 +1031,6 @@ void FunctionManager::selectFunction(quint32 id)
         m_tree->setCurrentItem(item);
 }
 
-bool FunctionManager::openFunction(quint32 id)
-{
-    FunctionManager *fm = instance();
-    if (fm == NULL || fm->m_doc->function(id) == NULL)
-        return false;
-    // Forward first: the Functions window (or its tab), wherever it lives.
-    foreach (QWidget *w, QApplication::topLevelWidgets())
-        if (App *app = qobject_cast<App *>(w))
-            app->showContext(App::tr("Functions"));
-    fm->selectFunction(id);
-    fm->editFunction(fm->m_doc->function(id));
-    return true;
-}
-
 void FunctionManager::deleteSelectedFunctions()
 {
     // Doc::deletePalette() emits paletteRemoved, which rebuilds the whole tree

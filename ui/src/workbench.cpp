@@ -48,6 +48,8 @@
 #include "functionparent.h"
 #include "showtreeview.h"
 #include "chasereditor.h"
+#include "sceneeditor.h"
+#include "sequence.h"
 #include "scripteditor.h"
 #include "audioeditor.h"
 #include "videoeditor.h"
@@ -71,6 +73,29 @@
 #include "show.h"
 #include "efx.h"
 #include "doc.h"
+
+/* A sequence's editor, as the Functions window had it: its steps (the
+   chaser editor) over its bound scene's channels (the scene editor); a click
+   on a step puts that step's values on the scene, a fader moved writes into
+   the step selected. Null: its bound scene is gone. */
+static QWidget *sequenceEditor(QWidget *parent, Sequence *sequence, Doc *doc)
+{
+    Scene *bound = qobject_cast<Scene *>(doc->function(sequence->boundSceneID()));
+    if (bound == nullptr)
+        return nullptr;
+    QSplitter *split = new QSplitter(Qt::Vertical, parent);
+    split->setObjectName(QStringLiteral("workbenchSequenceEditor"));
+    split->setChildrenCollapsible(false);
+    ChaserEditor *steps = new ChaserEditor(split, sequence, doc);
+    SceneEditor *channels = new SceneEditor(split, bound, doc, false);
+    split->addWidget(steps);
+    split->addWidget(channels);
+    QObject::connect(steps, SIGNAL(applyValues(QList<SceneValue>&)),
+                     channels, SLOT(slotSetSceneValues(QList<SceneValue>&)));
+    QObject::connect(channels, SIGNAL(fixtureValueChanged(SceneValue,bool)),
+                     steps, SLOT(slotUpdateCurrentStep(SceneValue,bool)));
+    return split;
+}
 
 #define SETTINGS_SPLITTER QStringLiteral("programming/workbenchSplitter")
 
@@ -660,7 +685,7 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
     // collection or chaser as a whole.
     Function *root = m_doc->function(loadedFunction());
     if (root != nullptr && root->type() != Function::CollectionType && root->type() != Function::ChaserType
-        && m_rows->topLevelItemCount() > 0)
+        && root->type() != Function::SequenceType && m_rows->topLevelItemCount() > 0)
         selectLayer(0);
     else
     {
@@ -1127,6 +1152,17 @@ void Workbench::updateOverview()
                     "new one on the selected layer's groups. Drag scenes here from the left, palettes, "
                     "groups and fixtures onto a layer.");
     }
+    else if (Sequence *seq = qobject_cast<Sequence *>(root))
+    {
+        lines << QString()
+              << tr("A sequence: every step is its scene's channels at their own values. Click a step "
+                    "to see its values below; move a fader to change the step selected.");
+        if (QWidget *ed = sequenceEditor(m_overviewPage, seq, m_doc))
+        {
+            m_overviewEditor = ed;
+            m_overviewLayout->insertWidget(m_overviewLayout->count() - 1, ed, 10);
+        }
+    }
     else if (Chaser *ch = qobject_cast<Chaser *>(root))
     {
         lines << QString()
@@ -1385,8 +1421,8 @@ void Workbench::loadFunctionEditor(quint32 fid)
                 ce->setLocked(ShowTreeView::lockedBanner(ce, m_doc, fid));
             ed = ce;
         }
-        else
-            note = tr("A sequence: edit it in the Functions window.");
+        else if ((ed = sequenceEditor(m_functionPage, qobject_cast<Sequence *>(f), m_doc)) == nullptr)
+            note = tr("A sequence whose scene is gone: it has nothing to play.");
         break;
     case Function::CollectionType:
         if (generated)

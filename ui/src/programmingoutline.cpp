@@ -1600,7 +1600,8 @@ QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, b
         if (!scenes.isEmpty())
         {
             // On a chaser: its steps (W2).
-            if (at.kind == FunctionRow && qobject_cast<Chaser *>(m_doc->function(at.id)) != nullptr)
+            if (at.kind == FunctionRow && m_doc->function(at.id) != nullptr
+                && m_doc->function(at.id)->type() == Function::ChaserType)
                 return chaserDropPlan(scenes, at.id);
             if (at.kind == FolderRow && it->data(NameCol, PathRole).toString().isEmpty())
             {
@@ -1824,7 +1825,8 @@ void ProgrammingOutline::dropEvent(QDropEvent *event)
         else if (!scenes.isEmpty())
         {
             const Row at = rowOf(itemAt(qlcEventPos(event)));
-            if (at.kind == FunctionRow && qobject_cast<Chaser *>(m_doc->function(at.id)) != nullptr)
+            if (at.kind == FunctionRow && m_doc->function(at.id) != nullptr
+                && m_doc->function(at.id)->type() == Function::ChaserType)
             {
                 // Appended as steps, in the order dragged (W2).
                 if (FunctionStack::addSteps(m_doc, at.id, scenes))
@@ -2103,13 +2105,20 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         }
         menu.addSeparator();
     }
-    if (at.kind == FolderRow)
+    if (at.kind == FolderRow && !clicked->data(NameCol, PathRole).toString().isEmpty())
+    {
+        // (Classic's type rows are no folder of anyone's.)
+        const QString path = clicked->data(NameCol, PathRole).toString();
         menu.addAction(tr("Rename folder"), this, [this, clicked]() { editItem(clicked, NameCol); });
+        menu.addAction(tr("Delete folder"), this, [this, path]() { emit removeFolderRequested(path); })
+            ->setToolTip(tr("What is filed in it moves up a level; nothing is deleted"));
+    }
     if (m_mode == Navigator)
     {
         menu.addAction(QIcon(QStringLiteral(":/scene.png")),
                        folder.isEmpty() ? tr("New scene") : tr("New scene in %1").arg(folder),
                        this, [this, folder]() { emit newSceneRequested(folder); });
+        emit extendMenu(&menu);
         menu.addSeparator();
     }
     if (clicked != nullptr && clicked->childCount() > 0)

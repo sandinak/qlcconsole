@@ -190,11 +190,13 @@ public:
      *  scene, EFX, RGB Matrix, Collection or chaser) -- a layer of a cue,
      *  or one carried into it. Function::invalidId() for anything else. */
     quint32 openableFunction(QTreeWidgetItem *item) const;
-    /** W0: open function @a functionId in its own editor (Window →
-     *  Functions): Open on an opaque layer, its double-click and its page.
-     *  What is changed there is what the cue plays. */
+    /** W0: open function @a functionId in its own editor, in the
+     *  Workbench: the one docked here (↩ comes back), else Build's (the
+     *  Functions window is hidden). Open on an opaque layer, its
+     *  double-click and its page. What is changed there is what the cue
+     *  plays. */
     bool openFunction(quint32 functionId);
-    /** In place of opening the Functions window (tests). */
+    /** In place of opening it in Build when nothing is docked (tests). */
     typedef std::function<bool(quint32 functionId)> FunctionOpener;
     void setFunctionOpener(const FunctionOpener &opener) { m_functionOpener = opener; }
     /** Where else @a functionId plays, besides cue @a cueId: "cue 0.0.3

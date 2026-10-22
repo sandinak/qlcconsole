@@ -176,7 +176,8 @@ private:
     void updateSubCueItems(QTreeWidgetItem *item, const ChaserStep &step);
     /** Its sub-cue rows' numbers: their own, or (grey) "<parent>.<n>". */
     void updateSubCueNumbers(QTreeWidgetItem *item);
-    /** Edit Chase…: open step @a index's chase in the Function Manager. */
+    /** Edit Chase…: open step @a index's chase in the Workbench this editor
+     *  is in (↩ back), else in Build's. */
     void editSubCueChase(int index);
 
     /************************************************************************

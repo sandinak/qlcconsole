@@ -381,13 +381,25 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
+    /** Window → Functions (⇧⌘4): the Functions tab when it is shown
+     *  (setFunctionsWindowShown()); otherwise Build ▸ Scenes ▸ Classic, the
+     *  list focused. */
+    void showFunctions();
+    /** THE switch for the Functions window (Function Manager), board Q32:
+     *  shown, it is a tab of its own again and Window → Functions brings it
+     *  forward (a Classic QLC+ view); hidden -- the default -- it has no tab
+     *  and Window → Functions opens Build ▸ Scenes ▸ Classic. Opening a
+     *  function from elsewhere (Show Tree Open, Edit Chase…) loads it in the
+     *  Workbench either way. */
+    void setFunctionsWindowShown(bool shown);
+    bool functionsWindowShown() const { return m_functionsWindowShown; }
     /** The help topic for @p w ("lighting-studio.md#mounting-a-fixture"):
      *  the nearest "helpTopic" property up its parents, else the tab on
      *  screen's, else Getting Started. */
     QString helpTopicFor(QWidget *w) const;
     /** Take a view off the tab bar, there to open from the Window menu in a
      *  window of its own (showContext()); closing that window puts it away
-     *  again. Functions lives this way. */
+     *  again. Functions lives this way while hidden. */
     void parkContext(const QString &tabLabel);
 
     /** The views broken out into their own windows, by tab label. */
@@ -412,6 +424,7 @@ private:
     /** Show @p context in a window of its own, titled for @p tabLabel. */
     void openContextWindow(QWidget *context, const QString &tabLabel);
     QList<QWidget *> m_parkedContexts;      ///< views with no tab (parkContext())
+    bool m_functionsWindowShown = false;    ///< setFunctionsWindowShown()
 public slots:
     void slotReattachContext();
 

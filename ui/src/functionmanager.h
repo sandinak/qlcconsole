@@ -40,6 +40,10 @@ class Doc;
  * @{
  */
 
+/** QLC+'s Function Manager: the Functions window. Hidden by default (board
+ *  Q32) -- App::setFunctionsWindowShown() is the one switch -- with Window →
+ *  Functions opening Build ▸ Scenes ▸ Classic instead, where everything it
+ *  does also lives. A Classic QLC+ view mode shows it again. */
 class FunctionManager final : public QWidget
 {
     Q_OBJECT
@@ -91,12 +95,6 @@ public:
 
     /** Select the function with the given ID */
     void selectFunction(quint32 id);
-
-    /** Open function @a id in its own editor, the Functions window brought
-     *  forward (Window → Functions): the Show Tree's Open on a layer that
-     *  plays a function as it is (W0). False when there is no Functions
-     *  window or no such function. */
-    static bool openFunction(quint32 id);
 
 private:
     /** Init the splitter view */

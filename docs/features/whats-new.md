@@ -46,6 +46,15 @@ The latest changes, newest first. Each links to the guide with the detail.
   name is open to type, and ⌘Z takes it away in one step. See
   [New here](show-tree.md#new-here).
 
+- **The Functions window is now Build ▸ Scenes ▸ Classic.**
+  **Window → Functions** (⇧⌘4) opens Build with the Scenes outline set to
+  Classic, every function by type, and each one edits in the Workbench.
+  A new function of any type (⌘1 … ⌘9), the Function Wizard and the
+  startup function are on **+ Scene ▾** and the outline's right-click; a
+  sequence edits there now too. Show Tree **Open** and a step's **Edit
+  Chase…** load in the Workbench, with **↩** back. See
+  [Coming from the Functions window](build.md#coming-from-the-functions-window).
+
 - **Icons that say what a row is.** In Build (the outline and the
   Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
   look is a small pie filled to its level (a 45 % look is 45 % lit); a
@@ -147,7 +156,7 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Open what an old show's layer plays.** In the Show Tree, a layer that
   plays a function as it is (▣ — a raw scene, an EFX, an RGB Matrix)
   now opens it: double-click it, right-click → **Open**, or **Open** on
-  its page. It opens in its own editor in the Functions window, and what
+  its page. It opens in its own editor (now in the Workbench), and what
   you change there is what the cue plays. The page also says where else
   it plays. See [Adding layers](show-tree.md#adding-layers).
 - **The import tells you what it did, and takes over the buttons.**
@@ -1011,8 +1020,8 @@ The latest changes, newest first. Each links to the guide with the detail.
   no longer does it by accident. **Window → Move … to Its Own Window** does
   the same for the view in front, and the Window menu can turn the
   Shift-click off. ([Window menu](other-improvements.md#window-menu))
-- **Functions has no tab** — **Window → Functions** (⇧⌘4) opens it in its
-  own window. ([Window menu](other-improvements.md#window-menu))
+- **Functions has no tab** — **Window → Functions** (⇧⌘4) opens it
+  (now Build ▸ Scenes ▸ Classic). ([Window menu](other-improvements.md#window-menu))
 - The **Window** menu lists every view, wherever it is, and puts
   broken-out ones back.
 - **Connections**' Devices header is one row; the list gets the height.

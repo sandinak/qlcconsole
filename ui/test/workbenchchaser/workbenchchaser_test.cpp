@@ -43,6 +43,9 @@
 #include "workbench.h"
 #include "workbenchstack.h"
 #include "mastertimer.h"
+#include "sceneeditor.h"
+#include "functionselection.h"
+#include "functionwizard.h"
 #undef private
 #undef protected
 
@@ -60,7 +63,11 @@
 #include "chaser.h"
 #include "scene.h"
 #include "efx.h"
+#include "sequence.h"
+#include "video.h"
 #include "doc.h"
+#include <QApplication>
+#include <QMenu>
 
 #include "workbenchchaser_test.h"
 
@@ -965,3 +972,254 @@ void WorkbenchChaser_Test::sampleShowsChasers()
 }
 
 QTEST_MAIN(WorkbenchChaser_Test)
+
+/****************************************************************************
+ * The Functions window, retired (board Q32)
+ ****************************************************************************/
+
+/* Whatever modal dialog or popup comes up next: its class and the texts of
+   its actions, then it is closed (accepted after @a onDialog, if given). */
+static void whenItOpens(QStringList *seen, const std::function<void(QWidget *)> &onDialog = nullptr)
+{
+    QTimer::singleShot(0, qApp, [seen, onDialog]() {
+        QWidget *w = QApplication::activePopupWidget();
+        if (w == nullptr)
+            w = QApplication::activeModalWidget();
+        if (w == nullptr)
+            return;
+        seen->append(QString::fromLatin1(w->metaObject()->className()));
+        if (QMenu *m = qobject_cast<QMenu *>(w))
+        {
+            for (QAction *a : m->actions())
+                seen->append(a->text());
+            m->close();
+            return;
+        }
+        if (onDialog)
+            onDialog(w);
+        else if (QDialog *d = qobject_cast<QDialog *>(w))
+            d->reject();
+    });
+}
+
+void WorkbenchChaser_Test::functionsWindowToolsLiveInBuild()
+{
+    Scene *a = scene("Walk-in", "Act 1");
+    ProgrammingManager mgr(nullptr, m_doc);
+    QCOMPARE(ProgrammingManager::instance(), &mgr);
+    ProgrammingOutline *nav = mgr.m_outline;
+    mgr.showClassic();
+    QCOMPARE(mgr.section(), ProgrammingManager::ScenesSection);
+    QCOMPARE(nav->arrangement(), ProgrammingOutline::Classic);
+
+    // + Scene ▾: New function ▸ every type, the wizard, the startup function.
+    QMenu *plus = mgr.m_addFuncBtn->menu();
+    QVERIFY(plus != nullptr);
+    QMenu *sub = plus->findChild<QMenu *>("buildNewFunctionMenu");
+    QVERIFY(sub != nullptr);
+    QStringList kinds;
+    for (QAction *act : sub->actions())
+        kinds << act->text();
+    QCOMPARE(kinds, QStringList({ "Scene", "Chaser", "Sequence", "EFX", "Collection", "RGB Matrix",
+                                  "Script", "Audio…", "Video…", "Show" }));
+    QVERIFY(plus->actions().contains(mgr.m_wizardAction));
+    QVERIFY(plus->actions().contains(mgr.m_startupAction));
+    const QString shots = qEnvironmentVariable("QLC_NOFM_SHOTS");
+    if (!shots.isEmpty())
+    {
+        plus->popup(QPoint(0, 0));
+        sub->popup(QPoint(plus->sizeHint().width(), 0));
+        QVERIFY(plus->grab().save(shots + "/build-new-menu.png"));
+        QVERIFY(sub->grab().save(shots + "/build-new-function-submenu.png"));
+        sub->close();
+        plus->close();
+    }
+    // ⌘1…⌘9 as the Functions window had them, live on the Scenes page.
+    QWidget *page = mgr.findChild<QWidget *>("buildScenes");
+    QVERIFY(page != nullptr);
+    for (int i = 0; i < 9; ++i)
+    {
+        QAction *act = sub->actions().at(i);
+        QCOMPARE(act->shortcut(), QKeySequence(Qt::CTRL | Qt::Key(Qt::Key_1 + i)));
+        QCOMPARE(act->shortcutContext(), Qt::WidgetWithChildrenShortcut);
+        QVERIFY(page->actions().contains(act));
+    }
+
+    // Each type: made in the current row's folder, selected, loaded.
+    const QList<Function::Type> types = { Function::SceneType, Function::ChaserType, Function::SequenceType,
+                                          Function::EFXType, Function::CollectionType, Function::RGBMatrixType,
+                                          Function::ScriptType, Function::ShowType };
+    for (Function::Type t : types)
+    {
+        nav->rebuild();
+        QTreeWidgetItem *row = nav->itemFor({ ProgrammingOutline::SceneRow, a->id(), a->id() });
+        QVERIFY(row != nullptr);
+        nav->setCurrentItem(row, 0, QItemSelectionModel::NoUpdate);
+        const QList<Function *> had = m_doc->functionsByType(t);
+        QAction *act = nullptr;
+        for (QAction *x : sub->actions())
+            if (x->data().toInt() == int(t))
+                act = x;
+        QVERIFY(act != nullptr);
+        act->trigger();
+        QCOMPARE(m_doc->functionsByType(t).size(), had.size() + 1);
+        Function *made = nullptr;
+        for (Function *f : m_doc->functionsByType(t))
+            if (!had.contains(f))
+                made = f;
+        QVERIFY(made != nullptr);
+        QCOMPARE(made->path(true), QString("Act 1"));
+        QCOMPARE(mgr.m_workbench->loadedFunction(), made->id());
+        QList<ProgrammingOutline::Row> sel = nav->selectedRows();
+        QVERIFY2(!sel.isEmpty() && sel.first().id == made->id(),
+                 qPrintable(Function::typeToString(t) + " not selected in the outline"));
+        if (Sequence *seq = qobject_cast<Sequence *>(made))
+        {
+            Function *bound = m_doc->function(seq->boundSceneID());
+            QVERIFY(bound != nullptr && bound->type() == Function::SceneType && !bound->isVisible());
+        }
+    }
+    // Audio / Video: a function per file (the picker is the menu's).
+    const QList<quint32> videos = mgr.addMediaFunctions(Function::VideoType,
+                                                        { "/nonexistent/clip.mp4", "/nonexistent/still.png" },
+                                                        "Media");
+    QCOMPARE(videos.size(), 2);
+    QCOMPARE(m_doc->function(videos.first())->type(), Function::VideoType);
+    QCOMPARE(m_doc->function(videos.first())->path(true), QString("Media"));
+    QCOMPARE(mgr.m_workbench->loadedFunction(), videos.last());
+
+    // The outline's right-click has them too.
+    {
+        QMenu m;
+        emit nav->extendMenu(&m);
+        QStringList texts;
+        for (QAction *act : m.actions())
+            texts << act->text();
+        QVERIFY(texts.contains("New function"));
+        QVERIFY(texts.contains(mgr.m_wizardAction->text()));
+        QVERIFY(texts.contains(mgr.m_startupAction->text()));
+    }
+
+    // Function Wizard… opens the wizard.
+    QStringList seen;
+    whenItOpens(&seen);
+    mgr.m_wizardAction->trigger();
+    QCOMPARE(seen.value(0), QString("FunctionWizard"));
+
+    // Startup function… picks it.
+    seen.clear();
+    QSignalSpy modified(m_doc, &Doc::modified);
+    whenItOpens(&seen, [a](QWidget *w) {
+        FunctionSelection *fs = qobject_cast<FunctionSelection *>(w);
+        if (fs == nullptr)
+            return;
+        fs->setSelection({ a->id() });
+        fs->accept();
+    });
+    mgr.m_startupAction->trigger();
+    QCOMPARE(seen.value(0), QString("FunctionSelection"));
+    QCOMPARE(m_doc->startupFunction(), a->id());
+
+    // A folder row: Rename folder, Delete folder (what is in it moves up).
+    Collection *c = collection("Opener", { a->id() });
+    c->setPath("Act 1/Opening");
+    nav->rebuild();
+    QTreeWidgetItem *folder = nullptr;
+    for (QTreeWidgetItemIterator it(nav); *it; ++it)
+        if ((*it)->data(0, ProgrammingOutline::PathRole).toString() == "Act 1")
+            folder = *it;
+    QVERIFY(folder != nullptr);
+    nav->scrollToItem(folder);
+    seen.clear();
+    whenItOpens(&seen);
+    nav->slotContextMenu(nav->visualItemRect(folder).center());
+    QVERIFY2(seen.contains("Rename folder") && seen.contains("Delete folder"), qPrintable(seen.join(" | ")));
+    QVERIFY(seen.contains("New function"));
+    QVERIFY(seen.contains("Function Wizard…"));
+    mgr.removeFunctionFolder("Act 1");
+    QCOMPARE(a->path(true), QString());
+    QCOMPARE(c->path(true), QString("Opening"));
+    QVERIFY(m_doc->paletteOps()->canUndo());
+    m_doc->paletteOps()->undo();
+    QCOMPARE(a->path(true), QString("Act 1"));
+    QCOMPARE(c->path(true), QString("Act 1/Opening"));
+}
+
+void WorkbenchChaser_Test::aSequenceEditsInTheWorkbench()
+{
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.addNewFunction(Function::SequenceType, QString());
+    QCOMPARE(m_doc->functionsByType(Function::SequenceType).size(), 1);
+    Sequence *seq = qobject_cast<Sequence *>(m_doc->functionsByType(Function::SequenceType).first());
+    QVERIFY(seq != nullptr);
+    Workbench *wb = mgr.m_workbench;
+    QCOMPARE(wb->loadedFunction(), seq->id());
+    // No chaser walker: its steps are one scene's values, not scenes to add.
+    QVERIFY(walkerOf(*wb) == nullptr);
+    QVERIFY(wb->stack()->layers().isEmpty());
+
+    // Root: its editor on the overview, steps over channels.
+    QSplitter *ed = wb->findChild<QSplitter *>("workbenchSequenceEditor");
+    QVERIFY(ed != nullptr);
+    QVERIFY(ed->findChild<ChaserEditor *>() != nullptr);
+    SceneEditor *se = ed->findChild<SceneEditor *>();
+    QVERIFY(se != nullptr);
+    QCOMPARE(se->m_scene->id(), seq->boundSceneID());
+    const QString shots = qEnvironmentVariable("QLC_NOFM_SHOTS");
+    if (!shots.isEmpty())
+    {
+        mgr.resize(1400, 860);
+        QVERIFY(mgr.grab().save(shots + "/sequence-in-workbench.png"));
+    }
+    QVERIFY(!wb->m_overviewText->text().contains("Functions window"));
+
+    // A step of a collection: the same editor in the editor pane.
+    Collection *c = collection("Holder", { seq->id() });
+    wb->load(c->id());
+    QTreeWidgetItem *layer = wb->rows()->layerItem(0);
+    QVERIFY(layer != nullptr);
+    select(wb->rows(), layer);
+    QCOMPARE(wb->m_editorFunction, seq->id());
+    QVERIFY(wb->m_funcEditor != nullptr);
+    QCOMPARE(wb->m_funcEditor->objectName(), QString("workbenchSequenceEditor"));
+    QVERIFY(!wb->m_functionHeading->text().contains("Functions window"));
+}
+
+void WorkbenchChaser_Test::openingAFunctionLandsInTheWorkbench()
+{
+    Scene *a = scene("A");
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Ballyhoo");
+    m_doc->addFunction(efx);
+    Chaser *inner = new Chaser(m_doc);
+    inner->setName("Inner chase");
+    m_doc->addFunction(inner);
+    inner->addStep(ChaserStep(a->id()));
+    Chaser *outer = new Chaser(m_doc);
+    outer->setName("Outer");
+    m_doc->addFunction(outer);
+    outer->addStep(ChaserStep(inner->id()));
+
+    QVERIFY(!ProgrammingManager::openFunction(efx->id()));   // no Build tab
+    ProgrammingManager mgr(nullptr, m_doc);
+    ProgrammingOutline *nav = mgr.m_outline;
+    nav->setArrangement(ProgrammingOutline::Folders);
+    mgr.setSection(ProgrammingManager::PalettesSection);
+    QVERIFY(!ProgrammingManager::openFunction(Function::invalidId()));
+    QVERIFY(ProgrammingManager::openFunction(efx->id()));
+    QCOMPARE(mgr.section(), ProgrammingManager::ScenesSection);
+    QCOMPARE(mgr.m_workbench->loadedFunction(), efx->id());
+    QCOMPARE(nav->arrangement(), ProgrammingOutline::Classic);   // Folders doesn't list a loose EFX
+    QVERIFY(nav->itemFor({ ProgrammingOutline::FunctionRow, efx->id(), efx->id() })->isSelected());
+
+    // Edit Chase… on a step: in this Workbench, ↩ back to the chaser.
+    QVERIFY(ProgrammingManager::openFunction(outer->id()));
+    QCOMPARE(mgr.m_workbench->loadedFunction(), outer->id());
+    ChaserEditor *ce = qobject_cast<ChaserEditor *>(mgr.m_workbench->m_overviewEditor);
+    QVERIFY(ce != nullptr);
+    ce->editSubCueChase(0);
+    QTRY_COMPARE(mgr.m_workbench->loadedFunction(), inner->id());
+    QVERIFY(mgr.m_workbench->canGoBack());
+    QVERIFY(mgr.m_workbench->goBack());
+    QCOMPARE(mgr.m_workbench->loadedFunction(), outer->id());
+}

@@ -132,7 +132,7 @@ private slots:
 
     // W0: seam fixes
     void openAnOpaqueLayer();
-    void openUsesTheFunctionsWindowsEditor();
+    void openLandsInTheWorkbench();
     void theImportSheetReadsAndRepoints();
     void theImportSheetCanUndoOrLeaveVcAlone();
     void sendToShowTreeFromBuild();

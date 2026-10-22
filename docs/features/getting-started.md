@@ -92,8 +92,9 @@ The tabs follow the order a show is built in:
 **Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘9). Double-click
 a tab to break it out into its own window; Window brings it back.
 **Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
-scripts, audio, video) has no tab: **Window → Functions** (⇧⌘4) opens it
-in a window of its own. **View → Rig Overview** (⇧⌘R) opens the whole rig
+scripts, audio, video) is in Build now: **Window → Functions** (⇧⌘4)
+opens **Build ▸ Scenes ▸ Classic**, every function by type, each one
+edited in the Workbench. **View → Rig Overview** (⇧⌘R) opens the whole rig
 in 3D.
 
 **Design and Operate.** In **Design** mode (the default) you build: the

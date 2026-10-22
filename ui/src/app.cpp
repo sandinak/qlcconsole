@@ -560,6 +560,7 @@ void App::init()
     // alongside another tab or on a second monitor.
     w = new Monitor(m_tab, m_doc);
     addTab(w, QIcon(":/grid.png"), tr("Lighting Studio"));
+    // Functions: shown or hidden by setFunctionsWindowShown() (below).
     w = new FunctionManager(m_tab, m_doc);
     addTab(w, QIcon(":/function.png"), tr("Functions"));
     QPointer<ProgrammingManager> buildTab;
@@ -647,11 +648,10 @@ void App::init()
     w = new CueRunner(m_doc, CueRunner::Full, m_tab);
     w->setObjectName(QStringLiteral("runTab"));
     addTab(w, QIcon(":/chaser.png"), tr("Run"));
-    /* Functions: no tab ("I keep hitting it by mistake instead of
-       Programming"), but there to open from the Window menu, in a window of
-       its own. Closing that window puts it away again. */
-    parkContext(tr("Functions"));
-
+    /* Functions: hidden (board Q32) -- no tab, and Window → Functions opens
+       Build ▸ Scenes ▸ Classic, where everything it did lives. The view
+       modes (a Classic QLC+ view) show it again through the same switch. */
+    setFunctionsWindowShown(false);
     // Load and apply the tab label mode preference.
     {
         QSettings settings;
@@ -740,6 +740,12 @@ void App::setActiveWindow(const QString& name)
 {
     if (name.isEmpty() == true)
         return;
+    // A show saved with the Functions window in front: its home now.
+    if (name == QLatin1String(FunctionManager::staticMetaObject.className()))
+    {
+        showFunctions();
+        return;
+    }
 
     for (int i = 0; i < m_tab->count(); i++)
     {
@@ -2533,7 +2539,7 @@ void App::initMenuBar()
         QAction* jump = windowMenu->addAction(m_tabOriginals.at(i).second,
                                               m_tabOriginals.at(i).first);
         // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
-        // the Function Manager's "add function" shortcuts.
+        // Build ▸ Scenes' "new function" shortcuts.
         // The tenth (Run) is ⇧⌘0.
         jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10)));
         /* Resolve by LABEL, not by construction order. Detaching a view calls
@@ -2542,9 +2548,16 @@ void App::initMenuBar()
            for the detached view itself. */
         const QString label = m_tabOriginals.at(i).first;
         jump->setData(label);
-        connect(jump, &QAction::triggered, this, [this, label]() {
-            showContext(label);
-        });
+        if (label == tr("Functions"))
+        {
+            jump->setObjectName(QStringLiteral("windowFunctions"));
+            jump->setToolTip(tr("Every function by type, as the Function Manager listed them: Build ▸ Scenes ▸ Classic"));
+            connect(jump, &QAction::triggered, this, &App::showFunctions);
+        }
+        else
+            connect(jump, &QAction::triggered, this, [this, label]() {
+                showContext(label);
+            });
         m_windowJumps << jump;
     }
     /* The Rig Overview is a window of its own, so it is offered here too, not
@@ -3437,6 +3450,54 @@ void App::slotCaptureUndoStackChanged()
         m_captureUndoAction->setText(tr("Undo Last Store"));
         m_captureUndoAction->setToolTip(tr("Revert the most recent capture commit"));
     }
+}
+
+void App::showFunctions()
+{
+    if (m_functionsWindowShown)
+    {
+        showContext(tr("Functions"));
+        return;
+    }
+    showContext(tr("Build"));
+    if (ProgrammingManager *pm = ProgrammingManager::instance())
+        pm->showClassic();
+}
+
+void App::setFunctionsWindowShown(bool shown)
+{
+    m_functionsWindowShown = shown;
+    FunctionManager *fm = FunctionManager::instance();
+    if (fm == NULL || m_tab == NULL)
+        return;
+    const QString label = tr("Functions");
+    if (!shown)
+    {
+        if (m_tab->indexOf(fm) >= 0)
+            parkContext(label);                 // off the tab bar
+        else if (!m_parkedContexts.contains(fm))
+        {
+            // In a window of its own: closing it puts it away, not back.
+            fm->setProperty("parked", true);
+            m_parkedContexts << fm;
+        }
+        updateWindowTitle();
+        return;
+    }
+    if (!m_parkedContexts.contains(fm))
+        return;                                 // a tab already
+    m_parkedContexts.removeAll(fm);
+    fm->setProperty("parked", false);
+    // Open in a window of its own: closing it puts it back as a tab.
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() == fm)
+            return;
+    const int idx = qBound(0, fm->property("tabIndex").toInt(), m_tab->count());
+    fm->setParent(m_tab);
+    m_tab->insertTab(idx, fm, fm->property("tabIcon").value<QIcon>(), label);
+    m_tab->tabBar()->setTabData(idx, label);
+    applyTabLabelMode();
+    updateWindowTitle();
 }
 
 void App::showContext(const QString &tabLabel)

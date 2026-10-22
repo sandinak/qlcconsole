@@ -79,7 +79,7 @@
 #include "noteedit.h"
 #include "importsheet.h"
 #include "showconverter.h"
-#include "functionmanager.h"
+#include "programmingmanager.h"
 #include "inputoutputmap.h"
 #include "paletteops.h"
 #include "usedby.h"
@@ -1201,7 +1201,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listDetach = new QPushButton(tr("Detach to plain chaser…"), row);
         m_listDetach->setObjectName("stListDetach");
         m_listDetach->setToolTip(tr("The list's chaser and its cues' collections become ordinary functions you "
-                                    "edit in the Functions window; the list leaves the Show Tree. One undo step."));
+                                    "edit in Build (Scenes ▸ Classic); the list leaves the Show Tree. One undo step."));
         h->addWidget(m_listConvert);
         h->addWidget(m_listDetach);
         // W5: an import in place, undone.
@@ -3567,15 +3567,9 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         {
             QPushButton *open = new QPushButton(tr("Open “%1”").arg(f->name()), box);
             open->setObjectName(QStringLiteral("stLayerOpen"));
-            open->setToolTip(tr("Open it in its own editor (Window → Functions). Double-clicking the layer does "
+            open->setToolTip(tr("Open it in the Workbench, in its own editor (↩ comes back). Double-clicking the layer does "
                                 "the same."));
-            connect(open, &QPushButton::clicked, this, [this, fid]() {
-                // W3: docked, it loads in the Workbench (↩ comes back).
-                if (Workbench *bench = dockedWorkbench())
-                    bench->open(fid);
-                else
-                    openFunction(fid);
-            });
+            connect(open, &QPushButton::clicked, this, [this, fid]() { openFunction(fid); });
             const Scene *raw = qobject_cast<const Scene *>(f);
             if (raw != nullptr && !raw->values().isEmpty())
             {
@@ -6180,7 +6174,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         {
             QAction *open = new QAction(tr("Open “%1”…").arg(f->name()), &menu);
             open->setObjectName(QStringLiteral("stOpenFunction"));
-            open->setToolTip(tr("In its own editor (Window → Functions)"));
+            open->setToolTip(tr("In the Workbench, in its own editor (↩ comes back)"));
             connect(open, &QAction::triggered, this, [this, fid]() { openFunction(fid); });
             QAction *first = menu.actions().value(0);
             menu.insertAction(first, open);
@@ -6549,9 +6543,17 @@ bool ShowTreeView::openFunction(quint32 functionId)
     const Function *f = m_doc->function(functionId);
     if (f == nullptr)
         return false;
-    const bool ok = m_functionOpener ? m_functionOpener(functionId) : FunctionManager::openFunction(functionId);
-    m_hint->setText(ok ? tr("“%1” is open in the Functions window").arg(f->name())
-                       : tr("Couldn't open “%1”: no Functions window").arg(f->name()));
+    // W3: the Workbench docked here: it loads there (↩ comes back).
+    if (Workbench *bench = dockedWorkbench())
+    {
+        bench->open(functionId);
+        m_hint->setText(tr("“%1” is open in the Workbench: ↩ comes back").arg(f->name()));
+        return bench->loadedFunction() == functionId;
+    }
+    // Otherwise Build's Workbench (the Functions window is hidden).
+    const bool ok = m_functionOpener ? m_functionOpener(functionId) : ProgrammingManager::openFunction(functionId);
+    m_hint->setText(ok ? tr("“%1” is open in Build's Workbench").arg(f->name())
+                       : tr("Couldn't open “%1”: no Build tab").arg(f->name()));
     return ok;
 }
 
@@ -6778,14 +6780,14 @@ bool ShowTreeView::detachListToChaser(quint32 listId)
         return false;
     const QString name = list->name;
     if (!confirm(tr("Detach to plain chaser"),
-                 tr("Detach %1? Its chaser and its cues' collections become ordinary functions you edit in the "
-                    "Functions window (Productions folder), and the list leaves the Show Tree. VC widgets and "
+                 tr("Detach %1? Its chaser and its cues' collections become ordinary functions you edit in "
+                    "Build (Scenes, Productions folder), and the list leaves the Show Tree. VC widgets and "
                     "show control that play the chaser keep playing it. One undo step.").arg(name)))
         return false;
     const quint32 chaser = m_st->detachList(listId);
     if (chaser == Function::invalidId())
         return false;
-    m_hint->setText(tr("%1 is a plain chaser now (Functions → Productions)").arg(name));
+    m_hint->setText(tr("%1 is a plain chaser now (Build ▸ Scenes ▸ Productions)").arg(name));
     return true;
 }
 
