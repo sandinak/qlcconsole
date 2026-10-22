@@ -139,10 +139,9 @@ EffectsPage::EffectsPage(Doc *doc, QWidget *parent)
                 closeEditor();
             scheduleRebuild();
         });
-        connect(doc, &Doc::cleared, this, [this]() {
-            closeEditor();
-            scheduleRebuild();
-        });
+        // Before the Doc deletes the function the editor edits.
+        connect(doc, &Doc::clearing, this, &EffectsPage::closeEditor);
+        connect(doc, &Doc::cleared, this, &EffectsPage::scheduleRebuild);
         connect(doc, &Doc::loaded, this, [this]() {
             scheduleRebuild();
             newEffect();

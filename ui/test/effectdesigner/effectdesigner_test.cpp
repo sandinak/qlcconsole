@@ -534,6 +534,17 @@ void EffectDesigner_Test::theEffectsPageListsEveryEffect()
     const QStringList filtered = page.navigatorText();
     QVERIFY(filtered.contains("    ✦ Phaser"));
     QVERIFY(!filtered.contains("  ✦ Loose"));
+
+    // Another show (File ▸ New): the editor and the draft go first, the Doc
+    // deletes what they used.
+    page.newEffect();
+    QVERIFY(page.designer()->draftId() != QLCPalette::invalidId());
+    QVERIFY(page.selectFunction(made));
+    m_doc->clearContents();
+    QCOMPARE(page.editedFunction(), Function::invalidId());
+    QCOMPARE(page.findChild<EFXEditor *>(), nullptr);
+    QCOMPARE(page.designer()->draftId(), QLCPalette::invalidId());
+    QCOMPARE(page.designer()->previewSceneId(), Function::invalidId());
     page.hide();
 }
 

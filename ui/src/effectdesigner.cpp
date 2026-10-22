@@ -307,8 +307,9 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
                 stopPreview();
             updateHeader();
         });
-        // Another show: what we had is gone with the old one.
-        connect(doc, &Doc::cleared, this, [this]() {
+        // Another show (or the Doc going): what we had goes with the old
+        // one -- the Doc deletes it, not us (its timer may be gone).
+        connect(doc, &Doc::clearing, this, [this]() {
             m_draftId = QLCPalette::invalidId();
             m_sceneId = Function::invalidId();
             m_previewStarted = false;
@@ -317,26 +318,23 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
             m_fixtures.clear();
             m_tryOn.clear();
             m_base.clear();
+            m_cleanAtStart = false;
             m_ownColour = m_ownDimmer = QLCPalette::invalidId();
             m_look->setContextScene(nullptr);
             m_look->setPalette(QLCPalette::invalidId());
             updateHeader();
             updateButtons();
         });
+        connect(doc, &Doc::loaded, this, [this]() {
+            if (m_tryOn.isEmpty())
+                loadTryOn();
+            updateHeader();
+        });
         connect(doc, &Doc::paletteAdded, this, &EffectDesigner::fillOwnCombos);
         connect(doc, &Doc::paletteRemoved, this, &EffectDesigner::fillOwnCombos);
     }
 
-    // The bench's groups, as last time (by name: ids are per show).
-    if (doc != nullptr)
-    {
-        const QStringList names = QSettings().value(SETTINGS_TRYON).toStringList();
-        for (FixtureGroup *g : doc->fixtureGroups())
-            if (names.contains(g->name()))
-                m_tryOn << g->id();
-        if (m_tryOn.isEmpty() && !doc->fixtureGroups().isEmpty())
-            m_tryOn << doc->fixtureGroups().first()->id();
-    }
+    loadTryOn();
     fillOwnCombos();
     updateHeader();
     updateButtons();
@@ -347,6 +345,20 @@ EffectDesigner::~EffectDesigner()
     // Leaving without an answer leaves nothing behind.
     if (m_doc != nullptr)
         release(false);
+}
+
+void EffectDesigner::loadTryOn()
+{
+    // The bench's groups, as last time (by name: ids are per show).
+    m_tryOn.clear();
+    if (m_doc == nullptr)
+        return;
+    const QStringList names = QSettings().value(SETTINGS_TRYON).toStringList();
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+        if (names.contains(g->name()))
+            m_tryOn << g->id();
+    if (m_tryOn.isEmpty() && !m_doc->fixtureGroups().isEmpty())
+        m_tryOn << m_doc->fixtureGroups().first()->id();
 }
 
 template <typename F> void EffectDesigner::quietly(F f)

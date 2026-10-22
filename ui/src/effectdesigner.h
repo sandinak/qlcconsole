@@ -192,6 +192,7 @@ private:
     void updateButtons();
     void fillOwnCombos();
     void fillTryOnMenu();
+    void loadTryOn();
     void scheduleBrowserReload();
     /** The fixtures the preview plays on. */
     QList<quint32> previewFixtures() const;
