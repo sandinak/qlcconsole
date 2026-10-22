@@ -182,7 +182,7 @@ public:
     quint32 openableFunction(QTreeWidgetItem *item) const;
     /** W0: open function @a functionId in its own editor, in the
      *  Workbench: the one docked here (↩ comes back), else Build's (the
-     *  Functions window is retired). Open on an opaque layer, its
+     *  Functions window is hidden). Open on an opaque layer, its
      *  double-click and its page. What is changed there is what the cue
      *  plays. */
     bool openFunction(quint32 functionId);

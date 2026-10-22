@@ -6318,7 +6318,7 @@ bool ShowTreeView::openFunction(quint32 functionId)
         m_hint->setText(tr("“%1” is open in the Workbench: ↩ comes back").arg(f->name()));
         return bench->loadedFunction() == functionId;
     }
-    // Otherwise Build's Workbench (the Functions window is retired).
+    // Otherwise Build's Workbench (the Functions window is hidden).
     const bool ok = m_functionOpener ? m_functionOpener(functionId) : ProgrammingManager::openFunction(functionId);
     m_hint->setText(ok ? tr("“%1” is open in Build's Workbench").arg(f->name())
                        : tr("Couldn't open “%1”: no Build tab").arg(f->name()));

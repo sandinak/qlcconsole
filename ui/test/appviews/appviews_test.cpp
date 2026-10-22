@@ -289,8 +289,11 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
     const QString functions = QString("Functions");
     for (int i = 0; i < tabs->count(); ++i)
         QVERIFY2(tabs->tabBar()->tabData(i).toString() != functions, "Functions should have no tab");
-    QVERIFY2(FunctionManager::instance() == nullptr, "no Function Manager is built");
-    QVERIFY(m_app->m_parkedContexts.isEmpty());
+    // Hidden, not gone: the one switch (setFunctionsWindowShown) shows it.
+    QVERIFY(FunctionManager::instance() != nullptr);
+    QVERIFY(!m_app->functionsWindowShown());
+    QVERIFY(m_app->m_parkedContexts.contains(FunctionManager::instance()));
+    QVERIFY(!FunctionManager::instance()->isVisible());
     ProgrammingManager *build = ProgrammingManager::instance();
     QVERIFY(build != nullptr);
     const int views = tabs->count();
@@ -348,7 +351,36 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
         QVERIFY(m_app->grab().save(shots + "/open-function-in-workbench.png"));
     doc->deleteFunction(efx->id());
 
-    // The tabs keep their own labels.
+    // The switch: shown (a Classic QLC+ view), Functions is a tab again,
+    // at its old place, and Window → Functions brings it forward...
+    m_app->setFunctionsWindowShown(true);
+    QVERIFY(m_app->functionsWindowShown());
+    QCOMPARE(tabs->count(), views + 1);
+    const int at = tabs->indexOf(FunctionManager::instance());
+    QCOMPARE(at, 3);
+    QCOMPARE(tabs->tabBar()->tabData(at).toString(), functions);
+    m_app->showContext("Simple Desk");
+    jump->trigger();
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(FunctionManager::instance()));
+    m_app->setTabLabelMode(App::TabTextOnly);
+    for (int i = 0; i < tabs->count(); ++i)
+        QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
+    m_app->setTabLabelMode(App::TabIconAndText);
+    // ...opening a function from elsewhere still loads it in the Workbench.
+    EFX *again = new EFX(doc);
+    QVERIFY(doc->addFunction(again));
+    QVERIFY(ProgrammingManager::openFunction(again->id()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->workbench()->loadedFunction(), again->id());
+    doc->deleteFunction(again->id());
+    // Hidden again: no tab, and the menu lands on Build ▸ Scenes ▸ Classic.
+    m_app->setFunctionsWindowShown(false);
+    QCOMPARE(tabs->count(), views);
+    QCOMPARE(tabs->indexOf(FunctionManager::instance()), -1);
+    m_app->showContext("Simple Desk");
+    jump->trigger();
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->m_outline->arrangement(), ProgrammingOutline::Classic);
     m_app->setTabLabelMode(App::TabTextOnly);
     for (int i = 0; i < tabs->count(); ++i)
         QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
@@ -377,6 +409,7 @@ void AppViews_Test::helpOpensOnWhatIsInFront()
         want.remove(label);
     }
     QVERIFY2(want.isEmpty(), qPrintable("no tab for: " + want.keys().join(", ")));
+    QCOMPARE(m_app->helpTopicFor(FunctionManager::instance()), QString("other-improvements.md#window-menu"));
 
     // Something inside a view that names its own topic wins over the view.
     QWidget *inner = new QWidget(tabs->currentWidget());

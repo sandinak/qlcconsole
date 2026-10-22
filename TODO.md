@@ -65,8 +65,9 @@ under `~/.claude/.../memory/`.
     Build ▸ Scenes ▸ Classic; every function type, the wizard, the
     startup function and Delete folder are on + Scene ▾ / the outline's
     right-click; sequences edit in the Workbench; Show Tree Open and Edit
-    Chase… load there. The FunctionManager class stays (not built by
-    App; showtreeview_test still drives it directly).
+    Chase… load there. The Functions window is hidden, not deleted:
+    App::setFunctionsWindowShown(bool) is the one switch, for the coming
+    view modes (Classic QLC+ shows it).
 - W2 and W3 merged together on feat/w3-showtree-workbench (2026-10-22).
 - Then W4 → W5 → W6 → W7.
 

@@ -80,7 +80,7 @@ public:
      *  navigation / automated screenshots. */
     void showFunction(quint32 fid);
 
-    /** The Build tab (null: none). The Functions window is retired (board
+    /** The Build tab (null: none). The Functions window is hidden (board
      *  Q32): Window → Functions and every "open this function" from outside
      *  Build land here. */
     static ProgrammingManager *instance();

@@ -300,7 +300,7 @@ everywhere.
 
 ### Coming from the Functions window
 
-The Functions window is retired. **Window → Functions** (⇧⌘4) opens
+The Functions window is hidden. **Window → Functions** (⇧⌘4) opens
 **Build ▸ Scenes ▸ Classic** with the list focused, and everything the
 Function Manager did is here:
 

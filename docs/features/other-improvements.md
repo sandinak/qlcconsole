@@ -397,7 +397,7 @@ returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
 as usual.
 
 **Functions is Build ▸ Scenes ▸ Classic.** The Functions window is
-retired: **Window → Functions** (⇧⌘4) brings Build forward with the
+hidden: **Window → Functions** (⇧⌘4) brings Build forward with the
 Scenes outline set to **Classic** — every function by type, as the
 Function Manager listed them — and the list focused. Each function opens
 in the Workbench with its own editor (chasers, sequences, EFX, RGB

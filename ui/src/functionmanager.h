@@ -40,10 +40,10 @@ class Doc;
  * @{
  */
 
-/** QLC+'s Function Manager. Retired from the UI (board Q32): App no longer
- *  builds it, and Window → Functions opens Build ▸ Scenes ▸ Classic, where
- *  everything it did lives. The class stays for tests that drive it and as
- *  the upstream reference; instance() is null in the app. */
+/** QLC+'s Function Manager: the Functions window. Hidden by default (board
+ *  Q32) -- App::setFunctionsWindowShown() is the one switch -- with Window →
+ *  Functions opening Build ▸ Scenes ▸ Classic instead, where everything it
+ *  does also lives. A Classic QLC+ view mode shows it again. */
 class FunctionManager final : public QWidget
 {
     Q_OBJECT
