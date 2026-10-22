@@ -33,6 +33,10 @@
 #include <functional>
 #include <QTextBrowser>
 #include <QAction>
+#include <QTemporaryDir>
+#include <QXmlStreamReader>
+#include "qlcfixturedefcache.h"
+#include "showembedding.h"
 
 #define KColumnName 0
 
@@ -47,6 +51,8 @@
 #include "createfixturegroup.h"
 #include "patchinventorydialog.h"
 #include "addfixture.h"
+#include "creategroupsdialog.h"
+#include "fixturegroupsource.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -1169,6 +1175,375 @@ void FixtureManager_Test::deletingInventoryFixturesUpdatesTheFolderCounts()
     QVERIFY(m_doc->deleteFixture(wide->id()));
     QCOMPARE(inv()->childCount(), 0);
     QCOMPARE(inv()->text(KColumnName), QString("Inventory"));
+}
+
+namespace
+{
+/* @p count dimmers of @p channels channels, patched one after another. */
+QList<quint32> addDimmers(Doc *doc, int count, int channels, const QString &name)
+{
+    static quint32 nextAddress = 0;
+    QList<quint32> ids;
+    for (int i = 0; i < count; i++)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("%1 %2").arg(name).arg(i + 1));
+        f->setChannels(quint32(channels));
+        f->setAddress(nextAddress % 400);
+        nextAddress += quint32(channels);
+        if (!doc->addFixture(f))
+            return QList<quint32>();
+        ids << f->id();
+    }
+    return ids;
+}
+
+FixtureGroup *addGroup(Doc *doc, const QString &name, const QString &path,
+                       const QList<quint32> &fids)
+{
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName(name);
+    g->setPath(path);
+    g->setSize(QSize(qMax(1, int(fids.size())), 1));
+    doc->addFixtureGroup(g);
+    foreach (quint32 fid, fids)
+        g->assignFixture(fid);
+    return g;
+}
+
+QTreeWidgetItem *groupRow(FixtureManager &mgr, quint32 gid)
+{
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it != nullptr; ++it)
+        if ((*it)->data(KColumnName, PROP_GROUP).isValid()
+            && (*it)->data(KColumnName, PROP_GROUP).toUInt() == gid)
+            return *it;
+    return nullptr;
+}
+
+QSet<quint32> selectedGroups(FixtureManager &mgr)
+{
+    QSet<quint32> out;
+    foreach (QTreeWidgetItem *it, mgr.m_fixtures_tree->selectedItems())
+        if (it->data(KColumnName, PROP_GROUP).isValid())
+            out.insert(it->data(KColumnName, PROP_GROUP).toUInt());
+    return out;
+}
+
+QList<quint32> selectedFixtureRows(FixtureManager &mgr, QList<QTreeWidgetItem *> *rows = nullptr)
+{
+    QList<quint32> out;
+    foreach (QTreeWidgetItem *it, mgr.m_fixtures_tree->selectedItems())
+        if (it->data(KColumnName, PROP_ID).isValid() && !it->data(KColumnName, PROP_HEAD).isValid())
+        {
+            out << it->data(KColumnName, PROP_ID).toString().toUInt();
+            if (rows)
+                *rows << it;
+        }
+    return out;
+}
+
+/* The texts of the right-click menu, submenus as "Sub ▸ Item". */
+QStringList menuTree(QMenu *m, const QString &prefix = QString())
+{
+    QStringList out;
+    foreach (QAction *a, m->actions())
+    {
+        if (a->isSeparator())
+            continue;
+        out << prefix + a->text();
+        if (a->menu() != nullptr)
+            out << menuTree(a->menu(), prefix + a->text() + QStringLiteral(" ▸ "));
+    }
+    return out;
+}
+
+QStringList contextMenuTree(FixtureManager &mgr)
+{
+    QStringList texts;
+    auto poll = std::make_shared<std::function<void()>>();
+    *poll = [&texts, poll]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == nullptr)
+        {
+            QTimer::singleShot(10, *poll);
+            return;
+        }
+        texts = menuTree(m);
+        m->close();
+    };
+    QTimer::singleShot(0, *poll);
+    QTreeWidgetItem *cur = mgr.m_fixtures_tree->selectedItems().value(0);
+    mgr.slotContextMenuRequested(cur ? mgr.m_fixtures_tree->visualItemRect(cur).center() : QPoint());
+    return texts;
+}
+
+void selectOnly(QTreeWidget *tree, const QList<QTreeWidgetItem *> &rows)
+{
+    const bool was = tree->blockSignals(true);
+    tree->clearSelection();
+    foreach (QTreeWidgetItem *r, rows)
+        r->setSelected(true);
+    if (!rows.isEmpty())
+        tree->setCurrentItem(rows.first(), 0, QItemSelectionModel::NoUpdate);
+    tree->blockSignals(was);
+}
+} // namespace
+
+void FixtureManager_Test::similarFixturesAndGroupsFollowTheirRules()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> four = addDimmers(m_doc, 6, 4, "Four");
+    const QList<quint32> six = addDimmers(m_doc, 3, 6, "Six");
+    QCOMPARE(four.size(), 6);
+
+    QList<quint32> pool = four + six;
+    QCOMPARE(FixtureManager::similarFixtures(m_doc, { four.first() }, pool), four);
+    QCOMPARE(FixtureManager::similarFixtures(m_doc, { six.last() }, pool), six);
+    QCOMPARE(FixtureManager::similarFixtures(m_doc, { six.first() }, four), QList<quint32>());
+
+    // Same make-up, same folder: alike. Another folder, or another make-up: not.
+    FixtureGroup *a = addGroup(m_doc, "A", "Truss", { four[0], four[1] });
+    FixtureGroup *b = addGroup(m_doc, "B", "Truss", { four[2], four[3] });
+    FixtureGroup *c = addGroup(m_doc, "C", "Floor", { four[4], four[5] });
+    FixtureGroup *d = addGroup(m_doc, "D", "Truss", { six[0], six[1] });
+    FixtureGroup *e = addGroup(m_doc, "E", "Truss", { four[0], four[1], four[2] });
+    QCOMPARE(FixtureManager::similarGroups(m_doc, { a->id() }), QList<quint32>({ a->id(), b->id() }));
+    QCOMPARE(FixtureManager::similarGroups(m_doc, { c->id() }), QList<quint32>({ c->id() }));
+    QCOMPARE(FixtureManager::similarGroups(m_doc, { d->id() }), QList<quint32>({ d->id() }));
+    QCOMPARE(FixtureManager::similarGroups(m_doc, { e->id() }), QList<quint32>({ e->id() }));
+
+    // Folders, parents included; the common one.
+    c->setPath("Floor/Left");
+    QCOMPARE(FixtureManager::groupFolders(m_doc), QStringList({ "Floor", "Floor/Left", "Truss" }));
+    QCOMPARE(FixtureManager::commonGroupFolder(m_doc, { a->id(), b->id() }), QString("Truss"));
+    QCOMPARE(FixtureManager::commonGroupFolder(m_doc, { a->id(), c->id() }), QString());
+    QCOMPARE(FixtureManager::cleanFolderPath(" Movers / Front /"), QString("Movers/Front"));
+}
+
+void FixtureManager_Test::selectAllSimilarSelectsTheRowsAlike()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> four = addDimmers(m_doc, 6, 4, "Four");
+    const QList<quint32> six = addDimmers(m_doc, 2, 6, "Six");
+    QVERIFY(four.size() == 6 && six.size() == 2);
+    FixtureGroup *a = addGroup(m_doc, "A", "Truss", { four[0], four[1], six[0] });
+    FixtureGroup *b = addGroup(m_doc, "B", "Truss", { four[2], four[3], six[1] });
+    FixtureGroup *c = addGroup(m_doc, "C", "", { four[4], four[5] });
+    Q_UNUSED(c)
+
+    FixtureManager mgr(nullptr, m_doc);
+
+    // Groups.
+    QTreeWidgetItem *ra = groupRow(mgr, a->id());
+    QVERIFY(ra != nullptr);
+    selectOnly(mgr.m_fixtures_tree, { ra });
+    const QStringList texts = contextMenuTree(mgr);
+    QVERIFY2(texts.contains("Select All Similar"), qPrintable(texts.join(" | ")));
+    QCOMPARE(mgr.selectAllSimilar(), 2);
+    QCOMPARE(selectedGroups(mgr), QSet<quint32>({ a->id(), b->id() }));
+
+    // A fixture in the rig: every one of its kind, once each, under its universe.
+    QTreeWidgetItem *rigRow = nullptr;
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it != nullptr; ++it)
+        if ((*it)->data(KColumnName, PROP_ID).toString().toUInt() == four[0]
+            && (*it)->data(KColumnName, PROP_ID).isValid()
+            && (*it)->parent() != nullptr && (*it)->parent()->data(KColumnName, PROP_UNIVERSE).isValid())
+            rigRow = *it;
+    QVERIFY(rigRow != nullptr);
+    selectOnly(mgr.m_fixtures_tree, { rigRow });
+    QCOMPARE(mgr.selectAllSimilar(), 6);
+    QList<quint32> got = selectedFixtureRows(mgr);
+    std::sort(got.begin(), got.end());
+    QCOMPARE(got, four);
+
+    // A fixture inside group A: A's own of its kind.
+    QTreeWidgetItem *inA = nullptr;
+    ra = groupRow(mgr, a->id());
+    for (int i = 0; ra != nullptr && i < ra->childCount(); i++)
+        if (ra->child(i)->data(KColumnName, PROP_ID).toString().toUInt() == four[1])
+            inA = ra->child(i);
+    QVERIFY(inA != nullptr);
+    selectOnly(mgr.m_fixtures_tree, { inA });
+    QCOMPARE(mgr.selectAllSimilar(), 2);
+    QList<QTreeWidgetItem *> rows;
+    got = selectedFixtureRows(mgr, &rows);
+    std::sort(got.begin(), got.end());
+    QCOMPARE(got, QList<quint32>({ four[0], four[1] }));
+    foreach (QTreeWidgetItem *r, rows)
+        QCOMPARE(r->parent()->data(KColumnName, PROP_GROUP).toUInt(), a->id());
+}
+
+void FixtureManager_Test::moveToFolderMenuFilesGroups()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> four = addDimmers(m_doc, 4, 4, "Four");
+    QCOMPARE(four.size(), 4);
+    FixtureGroup *a = addGroup(m_doc, "A", "Truss", { four[0] });
+    FixtureGroup *b = addGroup(m_doc, "B", "Truss", { four[1] });
+    FixtureGroup *c = addGroup(m_doc, "C", "Floor", { four[2] });
+
+    {
+        FixtureManager mgr(nullptr, m_doc);
+        selectOnly(mgr.m_fixtures_tree, { groupRow(mgr, a->id()), groupRow(mgr, b->id()) });
+        const QStringList texts = contextMenuTree(mgr);
+        QVERIFY2(texts.contains("Group ▸ Move 2 Groups to Folder ▸ Fixture Groups (no folder)"),
+                 qPrintable(texts.join(" | ")));
+        QVERIFY2(texts.contains("Group ▸ Move 2 Groups to Folder ▸ Floor"), qPrintable(texts.join(" | ")));
+        QVERIFY2(texts.contains("Group ▸ Move 2 Groups to Folder ▸ New Folder…"),
+                 qPrintable(texts.join(" | ")));
+        QVERIFY2(texts.contains("Group ▸ Create Group(s) from Selection…"), qPrintable(texts.join(" | ")));
+    }
+
+    QMenu sub;
+    FixtureManager::fillMoveToFolderMenu(&sub, m_doc, { a->id(), b->id() });
+    QAction *truss = nullptr, *floor = nullptr, *root = nullptr, *newFolder = nullptr;
+    foreach (QAction *act, sub.actions())
+    {
+        if (act->data().toString() == "Truss") truss = act;
+        if (act->data().toString() == "Floor") floor = act;
+        if (act->data().typeId() == QMetaType::QString && act->data().toString().isEmpty()) root = act;
+        if (act->objectName() == "newGroupFolder") newFolder = act;
+    }
+    QVERIFY(truss && floor && root && newFolder);
+    QVERIFY2(!truss->isEnabled(), "where they all are already is offered");
+
+    QVERIFY(FixtureManager::applyMoveToFolder(nullptr, m_doc, { a->id(), b->id() }, floor));
+    QCOMPARE(a->path(), QString("Floor"));
+    QCOMPARE(b->path(), QString("Floor"));
+    QCOMPARE(c->path(), QString("Floor"));
+
+    // A new folder goes inside the one they are in.
+    driveDialog([](QWidget *w) {
+        QLineEdit *le = w->findChild<QLineEdit *>();
+        if (le == nullptr)
+            return false;
+        le->setText(" Front ");
+        return true;
+    });
+    QVERIFY(FixtureManager::applyMoveToFolder(nullptr, m_doc, { a->id(), b->id() }, newFolder));
+    QCOMPARE(a->path(), QString("Floor/Front"));
+    QCOMPARE(b->path(), QString("Floor/Front"));
+
+    QVERIFY(FixtureManager::applyMoveToFolder(nullptr, m_doc, { a->id() }, root));
+    QCOMPARE(a->path(), QString());
+    QVERIFY(m_doc->isModified());
+}
+
+void FixtureManager_Test::createGroupFromSelectionStartsInTheCurrentFolder()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> four = addDimmers(m_doc, 4, 4, "Four");
+    QCOMPARE(four.size(), 4);
+    FixtureGroup *a = addGroup(m_doc, "A", "Truss/Top", { four[0], four[1] });
+    FixtureGroup *b = addGroup(m_doc, "B", "Truss/Top", { four[2], four[3] });
+    const int before = m_doc->fixtureGroups().size();
+
+    FixtureManager mgr(nullptr, m_doc);
+    QString seen;
+    whenModal<CreateGroupsDialog>([&seen](CreateGroupsDialog *dlg) {
+        seen = dlg->m_folderEdit->text();
+        dlg->accept();
+    });
+    const QList<FixtureGroup *> made = mgr.createGroupsFromSelection({}, { a->id(), b->id() }, "Truss/Top");
+    QCOMPARE(seen, QString("Truss/Top"));
+    QCOMPARE(m_doc->fixtureGroups().size(), before + 1);
+    QCOMPARE(made.size(), 1);
+    QCOMPARE(made.first()->path(), QString("Truss/Top"));
+}
+
+void FixtureManager_Test::groupToolsOnARealShow()
+{
+    QString show = qEnvironmentVariable("FM_DH_SHOW");
+    if (show.isEmpty())
+        show = QString::fromUtf8(FM_DH_SHOW);
+    if (!QFileInfo::exists(show))
+        QSKIP("DanceHysteria-0.6 is not here (set FM_DH_SHOW)");
+
+    // Read a copy: the show itself is never touched.
+    QTemporaryDir dir;
+    const QString copy = dir.filePath(QStringLiteral("show.qlcc"));
+    QVERIFY(QFile::copy(show, copy));
+    m_doc->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures"));
+    m_doc->setWorkspacePath(dir.path());
+    if (m_doc->showEmbedding()->readWorkspace(copy))
+        m_doc->showEmbedding()->apply(dir.path());
+    QFile file(copy);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlStreamReader r(&file);
+    bool loaded = false;
+    while (!r.atEnd() && !loaded)
+        if (r.readNextStartElement() && r.name() == QLatin1String("Engine"))
+            loaded = m_doc->loadXML(r, false);
+    QVERIFY(loaded);
+    QVERIFY2(m_doc->fixtureGroups().size() >= 40, "not the show with the groups");
+
+    auto byName = [this](const QString &n) -> FixtureGroup * {
+        foreach (FixtureGroup *g, m_doc->fixtureGroups())
+            if (g->name() == n)
+                return g;
+        return nullptr;
+    };
+    FixtureGroup *ds1t = byName("DS1t");
+    FixtureGroup *ds1f = byName("DS1f");
+    QVERIFY(ds1t && ds1f);
+
+    // The truss tops alike: all of them, none of the faces.
+    const QList<quint32> tops = FixtureManager::similarGroups(m_doc, { ds1t->id() });
+    QStringList topNames;
+    foreach (quint32 gid, tops)
+        topNames << m_doc->fixtureGroup(gid)->name();
+    QVERIFY2(tops.size() >= 4, qPrintable(topNames.join(", ")));
+    QVERIFY2(!topNames.contains("DS1f") && !topNames.contains("DS1t RGB"), qPrintable(topNames.join(", ")));
+
+    {
+        FixtureManager mgr(nullptr, m_doc);
+        selectOnly(mgr.m_fixtures_tree, { groupRow(mgr, ds1t->id()) });
+        QCOMPARE(mgr.selectAllSimilar(), tops.size());
+        QCOMPARE(selectedGroups(mgr), QSet<quint32>(tops.begin(), tops.end()));
+
+        // ...into a new folder, through the menu's own handler.
+        QMenu sub;
+        FixtureManager::fillMoveToFolderMenu(&sub, m_doc, tops);
+        QAction *nf = sub.findChild<QAction *>("newGroupFolder");
+        QVERIFY(nf != nullptr);
+        driveDialog([](QWidget *w) {
+            QLineEdit *le = w->findChild<QLineEdit *>();
+            if (le == nullptr)
+                return false;
+            le->setText("Truss tops");
+            return true;
+        });
+        QVERIFY(FixtureManager::applyMoveToFolder(&mgr, m_doc, tops, nf));
+        mgr.updateView();
+        foreach (quint32 gid, tops)
+            QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Truss tops"));
+        QVERIFY(groupRow(mgr, ds1t->id())->parent()->data(KColumnName, PROP_FOLDER).toString()
+                == QString("Truss tops"));
+        // Alike still: they moved together.
+        QCOMPARE(FixtureManager::similarGroups(m_doc, { ds1t->id() }).size(), tops.size());
+    }
+
+    // Build's Groups & fixtures: the same rule.
+    FixtureGroupSource src(m_doc);
+    src.reload();
+    QTreeWidgetItem *srcRow = src.groupItemById(ds1t->id());
+    QVERIFY(srcRow != nullptr);
+    src.clearSelection();
+    QCOMPARE(src.selectAllSimilar(srcRow), tops.size());
+    QSet<quint32> srcSel;
+    foreach (QTreeWidgetItem *it, src.selectedItems())
+        if (it->data(0, FixtureGroupSource::KindRole).toInt() == FixtureGroupSource::GroupNode)
+            srcSel.insert(it->data(0, FixtureGroupSource::IdRole).toUInt());
+    QCOMPARE(srcSel, QSet<quint32>(tops.begin(), tops.end()));
+
+    // A fixture leaf inside a group: that group's of its kind.
+    QTreeWidgetItem *leaf = srcRow->child(0);
+    QVERIFY(leaf != nullptr);
+    src.clearSelection();
+    const int n = src.selectAllSimilar(leaf);
+    QVERIFY(n >= 1);
+    foreach (QTreeWidgetItem *it, src.selectedItems())
+        QCOMPARE(it->parent(), srcRow);
 }
 
 QTEST_MAIN(FixtureManager_Test)

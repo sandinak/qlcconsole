@@ -20,6 +20,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   your own is left alone. The change and the rename are one Undo step.
   See [The name follows the value](build.md#the-name-follows-the-value).
 
+
+- **Group tools: select all similar, move to folder.** Right-click a
+  fixture or a group in the Fixtures tab (or in Build's Groups &
+  fixtures) for **Select All Similar** — fixtures of the same definition
+  and mode, or groups in the same folder made of the same fixtures and
+  heads. Then
+  **Move to Folder ▸** lists the folders in use plus **New Folder…**, and
+  **Create Group(s) from Selection…** starts in the folder the selection
+  was made in. See
+  [Fixture-group folders](fixture-manager.md#fixture-group-folders).
 - **The effect designer.** Build an effect in detail on the heads it is
   for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
   menu of its Effect row) opens the effect browser at full height. Beside

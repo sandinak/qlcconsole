@@ -88,6 +88,22 @@ private slots:
      *  canMoveHeads() guard while skipping QDrag::exec() itself. */
     void draggingASubGroupBlockMovesItThroughTheRealDropPath();
 
+    /** Group tools: similar fixtures are the same definition and mode;
+     *  similar groups share a folder and a make-up. */
+    void similarFixturesAndGroupsFollowTheirRules();
+    /** Select All Similar is offered on a selection and selects, in the tree,
+     *  the groups alike and the fixtures alike (inside a group: its own). */
+    void selectAllSimilarSelectsTheRowsAlike();
+    /** Move to Folder lists the folders in use and New Folder…, and files the
+     *  groups there -- a new folder inside the one they are in. */
+    void moveToFolderMenuFilesGroups();
+    /** Create Group(s) from Selection files the groups in the folder the
+     *  selection was made in. */
+    void createGroupFromSelectionStartsInTheCurrentFolder();
+    /** The same tools on DanceHysteria-0.6's 50 groups, in the Fixture
+     *  Manager and Build's Groups & fixtures list. */
+    void groupToolsOnARealShow();
+
 private:
     Doc* m_doc;
 };

@@ -74,6 +74,54 @@ public:
      *  menu bar rather than a right-click context menu or the toolbar. */
     void populateFixturesMenu(QMenu *menu);
 
+    /*********************************************************************
+     * Group tools -- shared with Build's Groups & fixtures list
+     *********************************************************************/
+public:
+    /** What makes two fixtures "similar": the same definition (maker and
+     *  model), mode and channel count. */
+    static QString fixtureKind(const Fixture *fxi);
+
+    /** Of @p pool, every fixture of the same kind (fixtureKind()) as one of
+     *  @p like -- in @p pool's order. */
+    static QList<quint32> similarFixtures(Doc *doc, const QList<quint32> &like,
+                                          const QList<quint32> &pool);
+
+    /** Every group similar to one of @p like: in the same folder, made of
+     *  the same fixtures -- as many of each kind -- and as many heads (a
+     *  truss's "DS1t", "DS2t"... tops alike; "DS1t RGB", the same fixtures'
+     *  RGB heads only, not). The grid shape is not compared. */
+    static QList<quint32> similarGroups(Doc *doc, const QList<quint32> &like);
+
+    /** Every group folder in use, parents included, sorted. */
+    static QStringList groupFolders(Doc *doc);
+
+    /** The folder all of @p groupIds are in; empty when none or they differ. */
+    static QString commonGroupFolder(Doc *doc, const QList<quint32> &groupIds);
+
+    /** "Movers / Front /" typed loosely as a clean "Movers/Front". */
+    static QString cleanFolderPath(const QString &path);
+
+    /** File @p groupIds in folder @p path ("" = no folder). Returns how many
+     *  moved; sets the Doc modified when any did. */
+    static int moveGroupsToFolder(Doc *doc, const QList<quint32> &groupIds,
+                                  const QString &path);
+
+    /** Fill @p sub with Move to Folder's choices for @p groupIds: no folder,
+     *  each folder in use (the one they are all in already disabled), and
+     *  New Folder… (objectName "newGroupFolder"). */
+    static void fillMoveToFolderMenu(QMenu *sub, Doc *doc, const QList<quint32> &groupIds);
+
+    /** Carry out @p chosen if it is one of fillMoveToFolderMenu()'s actions
+     *  (New Folder… asks for the name). True when it was. */
+    static bool applyMoveToFolder(QWidget *parent, Doc *doc, const QList<quint32> &groupIds,
+                                  QAction *chosen);
+
+    /** Select every row similar to what is selected: fixtures of the same
+     *  kind (inside a group, that group's; elsewhere, the rig's) and groups
+     *  similar by similarGroups(). Returns how many rows are selected. */
+    int selectAllSimilar();
+
 private:
     /** The singleton FixtureManager instance */
     static FixtureManager* s_instance;
@@ -186,7 +234,8 @@ private:
      *  type, or a group per head type for each fixture, through
      *  CreateGroupsDialog. Returns the groups made (none when cancelled). */
     QList<FixtureGroup *> createGroupsFromSelection(const QList<quint32>& fixtureIds,
-                                                    const QList<quint32>& groupIds);
+                                                    const QList<quint32>& groupIds,
+                                                    const QString& folder = QString());
 
     /** Create the text browser for displaying information */
     void createInfo();
