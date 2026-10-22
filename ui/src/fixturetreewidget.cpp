@@ -739,10 +739,18 @@ void FixtureTreeWidget::refreshFixtureName(quint32 id)
     {
         QTreeWidgetItem *item = *it;
         const QVariant var = item->data(KColumnName, PROP_ID);
-        if (var.isValid() && var.toUInt() == id
-            && item->data(KColumnName, PROP_HEAD).isValid() == false
-            && item->text(KColumnName) != fxi->name())
+        if (!var.isValid() || var.toUInt() != id
+            || item->data(KColumnName, PROP_HEAD).isValid())
+            continue;
+        if (item->text(KColumnName) != fxi->name())
             item->setText(KColumnName, fxi->name());
+        // Its stage look changed (Fixture Properties, Stage look ▸): its icon.
+        if (item->data(KColumnName, PROP_LOOK).isValid()
+            && item->data(KColumnName, PROP_LOOK).toInt() != int(fxi->stageLook()))
+        {
+            item->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
+            item->setData(KColumnName, PROP_LOOK, int(fxi->stageLook()));
+        }
     }
     blockSignals(was);
 }
@@ -803,6 +811,7 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
 
     item->setText(KColumnName, fixture->name());
     item->setIcon(KColumnName, ItemIcons::fixtureIcon(fixture));
+    item->setData(KColumnName, PROP_LOOK, int(fixture->stageLook()));
     item->setData(KColumnName, PROP_ID, QString::number(fixture->id()));
     if (m_channelSelection)
     {

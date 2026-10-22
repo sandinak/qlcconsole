@@ -40,7 +40,28 @@
 #include <QVector3D>
 #include "qlcphysical.h"
 
+static FixtureVisualTraits classifyByDefinition(Fixture *fx);
+
 FixtureVisualTraits classifyFixture(Fixture *fx)
+{
+    FixtureVisualTraits t = classifyByDefinition(fx);
+    if (fx != nullptr)
+    {
+        /* The LD's own word for what it looks like, over the type's. One
+           relaxed atomic read: this runs per fixture per frame, on the
+           studio's worker threads too. */
+        t.look = fx->stageLook();
+        t.kind = stageLookSilhouette(t.look, t.kind);
+        /* A generic dimmer's 300 mm a channel is made up: with a look, the
+           look's own proportions say more (a followspot on a dimmer channel
+           is long, not a 300 mm cube). */
+        if (t.look != Fixture::AutoLook && stageLookIgnoresPhysical(fx))
+            t.physW = t.physH = t.physD = 0.0f;
+    }
+    return t;
+}
+
+static FixtureVisualTraits classifyByDefinition(Fixture *fx)
 {
     FixtureVisualTraits t;
     if (fx == nullptr)
@@ -294,6 +315,402 @@ QPainterPath moverPlanPath(const QRectF &r, int headCount)
         addMoverPlanUnit(path, QRectF(r.left() + slotW * i, r.top(), slotW, r.height()));
 
     return path;
+}
+
+/*****************************************************************************
+ * Stage looks
+ *****************************************************************************/
+
+FixtureSilhouette stageLookSilhouette(Fixture::StageLook look, FixtureSilhouette autoKind)
+{
+    switch (look)
+    {
+        case Fixture::MovingSpotLook:
+        case Fixture::MovingRoundWashLook:
+        case Fixture::MovingSquareWashLook:
+            return FixtureSilhouette::Mover;
+        case Fixture::StaffLook:
+        case Fixture::BarWashLook:
+        case Fixture::CycStripLook:
+            // Already a bar: keep its real footprint and its pixels.
+            return autoKind == FixtureSilhouette::Bar ? FixtureSilhouette::Bar
+                                                      : FixtureSilhouette::Par;
+        case Fixture::FollowspotLook:
+        case Fixture::LanternLook:
+        case Fixture::SquareWashLook:
+        case Fixture::UplightWashLook:
+        case Fixture::ParCanLook:
+        case Fixture::EllipsoidalLook:
+        case Fixture::FresnelLook:
+        case Fixture::LedParLook:
+        case Fixture::StrobeLook:
+            return FixtureSilhouette::Par;
+        case Fixture::AutoLook:
+        default:
+            return autoKind;
+    }
+}
+
+bool stageLookIgnoresPhysical(const Fixture *fx)
+{
+    const QLCFixtureDef *def = fx != nullptr ? fx->fixtureDef() : nullptr;
+    return def != nullptr && def->manufacturer() == KXMLFixtureGeneric
+           && def->model() == KXMLFixtureGeneric;
+}
+
+bool stageLookSquareLens(Fixture::StageLook look)
+{
+    return look == Fixture::MovingSquareWashLook || look == Fixture::SquareWashLook
+           || look == Fixture::StaffLook || look == Fixture::BarWashLook
+           || look == Fixture::CycStripLook || look == Fixture::StrobeLook;
+}
+
+namespace
+{
+/* A shape that runs along a rect's long axis, described in "along/across"
+   terms and mapped back: @p along0..@p along1 (fractions of the length)
+   by @p thick (fraction of the thickness, centred). */
+struct AxisFrame
+{
+    QRectF r;
+    bool across;        ///< long axis is horizontal
+    qreal len() const   { return across ? r.width() : r.height(); }
+    qreal thick() const { return across ? r.height() : r.width(); }
+    QRectF band(qreal a0, qreal a1, qreal t) const
+    {
+        const qreal L = len(), T = thick();
+        if (across)
+            return QRectF(r.left() + a0 * L, r.center().y() - t * T / 2.0, (a1 - a0) * L, t * T);
+        return QRectF(r.center().x() - t * T / 2.0, r.top() + a0 * L, t * T, (a1 - a0) * L);
+    }
+    /* A band of ABSOLUTE thickness @p px (clamped to the rect). */
+    QRectF bandPx(qreal a0, qreal a1, qreal px) const
+    {
+        const qreal T = thick();
+        return band(a0, a1, T > 0.0 ? qMin(1.0, px / T) : 1.0);
+    }
+};
+
+/* A followspot's barrel, a staff and a bar run along the LONG axis; a square
+   rect goes across for a barrel or a bar and upright for a staff. */
+AxisFrame axisFrame(const QRectF &r, bool uprightWhenSquare)
+{
+    AxisFrame f;
+    f.r = r;
+    const qreal w = r.width(), h = r.height();
+    if (qAbs(w - h) <= 0.15 * qMax(w, h))
+        f.across = !uprightWhenSquare;
+    else
+        f.across = w > h;
+    return f;
+}
+
+QRectF centredSquare(const QRectF &r, qreal frac)
+{
+    const qreal s = qMin(r.width(), r.height()) * frac;
+    return QRectF(r.center().x() - s / 2.0, r.center().y() - s / 2.0, s, s);
+}
+
+void addMoverLookUnit(QPainterPath &path, const QRectF &slot, Fixture::StageLook look)
+{
+    const QRectF sq = centredSquare(slot, 1.0);
+    const qreal s = sq.width();
+    switch (look)
+    {
+        case Fixture::MovingSpotLook:
+        {
+            // A chamfered base: reads apart from both washes at a glance.
+            const qreal c = s * 0.24;
+            QPolygonF oct;
+            oct << QPointF(sq.left() + c, sq.top()) << QPointF(sq.right() - c, sq.top())
+                << QPointF(sq.right(), sq.top() + c) << QPointF(sq.right(), sq.bottom() - c)
+                << QPointF(sq.right() - c, sq.bottom()) << QPointF(sq.left() + c, sq.bottom())
+                << QPointF(sq.left(), sq.bottom() - c) << QPointF(sq.left(), sq.top() + c);
+            path.addPolygon(oct);
+            path.closeSubpath();
+            break;
+        }
+        case Fixture::MovingRoundWashLook:
+            path.addEllipse(sq);
+            break;
+        case Fixture::MovingSquareWashLook:
+        default:
+            path.addRoundedRect(sq, s * 0.08, s * 0.08);
+            break;
+    }
+}
+} // namespace
+
+QPainterPath stageLookBodyPath(Fixture::StageLook look, const QRectF &r, bool elevation,
+                               int units, bool hung)
+{
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
+    if (r.isEmpty())
+        return path;
+    const qreal s = qMin(r.width(), r.height());
+
+    switch (look)
+    {
+        case Fixture::MovingSpotLook:
+        case Fixture::MovingRoundWashLook:
+        case Fixture::MovingSquareWashLook:
+        {
+            if (elevation)
+                return moverElevationPath(r, hung, units);
+            const int n = qMax(1, units);
+            const qreal slotW = r.width() / n;
+            for (int i = 0; i < n; ++i)
+                addMoverLookUnit(path, QRectF(r.left() + slotW * i, r.top(), slotW, r.height()), look);
+            return path;
+        }
+        case Fixture::FollowspotLook:
+        {
+            // A tail cap, the long barrel, and a wider hood at the front.
+            const AxisFrame f = axisFrame(r, false);
+            path.addRect(f.band(0.0, 0.08, 0.7));
+            path.addRect(f.band(0.06, 0.8, 0.55));
+            path.addRoundedRect(f.band(0.78, 1.0, 0.95), s * 0.06, s * 0.06);
+            return path;
+        }
+        case Fixture::LanternLook:
+        {
+            // A can, with its yoke's two ears on either side.
+            const QRectF can = r.adjusted(r.width() * 0.14, r.height() * 0.06,
+                                          -r.width() * 0.14, -r.height() * 0.06);
+            path.addRoundedRect(can, s * 0.22, s * 0.22);
+            const qreal earH = r.height() * 0.36, earW = r.width() * 0.16;
+            path.addRect(QRectF(r.left(), r.center().y() - earH / 2.0, earW, earH));
+            path.addRect(QRectF(r.right() - earW, r.center().y() - earH / 2.0, earW, earH));
+            return path;
+        }
+        case Fixture::StaffLook:
+        {
+            // A thin rod, standing on a small foot where it is seen standing.
+            const AxisFrame f = axisFrame(r, true);
+            const qreal T = qMax(2.0, qMin(f.thick(), f.len() * 0.22));
+            const QRectF rod = f.bandPx(0.0, elevation ? 0.92 : 1.0, T);
+            path.addRoundedRect(rod, T * 0.4, T * 0.4);
+            if (elevation)
+                path.addRect(f.bandPx(0.9, 1.0, qMin(f.thick(), T * 2.6)));
+            return path;
+        }
+        case Fixture::BarWashLook:
+        {
+            const AxisFrame f = axisFrame(r, false);
+            const qreal T = qMax(2.0, qMin(f.thick(), f.len() * 0.3));
+            path.addRoundedRect(f.bandPx(0.0, 1.0, T), T * 0.15, T * 0.15);
+            return path;
+        }
+        case Fixture::SquareWashLook:
+        {
+            const QRectF sq = centredSquare(r, 0.94);
+            path.addRoundedRect(sq, s * 0.06, s * 0.06);
+            return path;
+        }
+        case Fixture::UplightWashLook:
+        {
+            if (elevation)
+            {
+                // A squat box on the deck, wider at its foot.
+                const qreal top = r.top() + r.height() * 0.35;
+                QPolygonF box;
+                box << QPointF(r.left(), r.bottom()) << QPointF(r.right(), r.bottom())
+                    << QPointF(r.right() - r.width() * 0.12, top)
+                    << QPointF(r.left() + r.width() * 0.12, top);
+                path.addPolygon(box);
+                path.closeSubpath();
+                return path;
+            }
+            const QRectF box = r.adjusted(r.width() * 0.04, r.height() * 0.12,
+                                          -r.width() * 0.04, -r.height() * 0.12);
+            path.addRoundedRect(box, s * 0.18, s * 0.18);
+            return path;
+        }
+        case Fixture::ParCanLook:
+        {
+            // A plot's PAR: the can, a rim round its lens.
+            const AxisFrame f = axisFrame(r, false);
+            path.addRoundedRect(f.band(0.0, 0.84, 0.78), s * 0.12, s * 0.12);
+            path.addRect(f.band(0.8, 1.0, 0.96));
+            return path;
+        }
+        case Fixture::EllipsoidalLook:
+        {
+            // Lamp housing, shutters across it, the lens barrel, its hood.
+            const AxisFrame f = axisFrame(r, false);
+            path.addRoundedRect(f.band(0.0, 0.42, 0.76), s * 0.14, s * 0.14);
+            path.addRect(f.band(0.4, 0.5, 1.0));
+            path.addRect(f.band(0.48, 0.86, 0.5));
+            path.addRect(f.band(0.84, 1.0, 0.62));
+            return path;
+        }
+        case Fixture::FresnelLook:
+        {
+            // A short box, its lens stepped down toward the front.
+            const AxisFrame f = axisFrame(r, false);
+            path.addRoundedRect(f.band(0.0, 0.74, 0.92), s * 0.1, s * 0.1);
+            path.addRect(f.band(0.72, 0.88, 0.76));
+            path.addRect(f.band(0.86, 1.0, 0.56));
+            return path;
+        }
+        case Fixture::LedParLook:
+            // A round face, seen from the front.
+            path.addEllipse(centredSquare(r, 0.96));
+            return path;
+        case Fixture::CycStripLook:
+        {
+            // A wide flood: a strip deeper than a bar's.
+            const AxisFrame f = axisFrame(r, false);
+            const qreal T = qMax(3.0, qMin(f.thick(), f.len() * 0.45));
+            path.addRoundedRect(f.bandPx(0.0, 1.0, T), T * 0.1, T * 0.1);
+            return path;
+        }
+        case Fixture::StrobeLook:
+        {
+            const QRectF face(r.left() + r.width() * 0.03, r.center().y() - r.height() * 0.4,
+                              r.width() * 0.94, r.height() * 0.8);
+            path.addRoundedRect(face, s * 0.06, s * 0.06);
+            return path;
+        }
+        case Fixture::AutoLook:
+        default:
+            return path;
+    }
+}
+
+QRectF stageLookLensRect(Fixture::StageLook look, const QRectF &r, bool elevation)
+{
+    if (r.isEmpty())
+        return QRectF();
+    const qreal s = qMin(r.width(), r.height());
+    switch (look)
+    {
+        case Fixture::FollowspotLook:
+            return axisFrame(r, false).band(0.84, 0.98, 0.8);
+        case Fixture::LanternLook:
+            return centredSquare(r, 0.6);
+        case Fixture::StaffLook:
+        {
+            const AxisFrame f = axisFrame(r, true);
+            const qreal T = qMax(2.0, qMin(f.thick(), f.len() * 0.22));
+            return f.bandPx(0.03, elevation ? 0.89 : 0.97, qMax(1.0, T - 2.0));
+        }
+        case Fixture::BarWashLook:
+        {
+            const AxisFrame f = axisFrame(r, false);
+            const qreal T = qMax(2.0, qMin(f.thick(), f.len() * 0.3));
+            return f.bandPx(0.02, 0.98, qMax(1.0, T - 2.0));
+        }
+        case Fixture::SquareWashLook:
+            return centredSquare(r, 0.72);
+        case Fixture::UplightWashLook:
+            if (elevation)
+                return QRectF(r.center().x() - r.width() * 0.36, r.top() + r.height() * 0.27,
+                              r.width() * 0.72, r.height() * 0.16);
+            return QRectF(r.center().x() - s * 0.3, r.center().y() - s * 0.3, s * 0.6, s * 0.6);
+        case Fixture::ParCanLook:
+            return axisFrame(r, false).band(0.84, 0.98, 0.82);
+        case Fixture::EllipsoidalLook:
+            return axisFrame(r, false).band(0.88, 0.98, 0.5);
+        case Fixture::FresnelLook:
+            return axisFrame(r, false).band(0.76, 0.98, 0.5);
+        case Fixture::LedParLook:
+            return centredSquare(r, 0.8);
+        case Fixture::CycStripLook:
+        {
+            const AxisFrame f = axisFrame(r, false);
+            const qreal T = qMax(3.0, qMin(f.thick(), f.len() * 0.45));
+            return f.bandPx(0.02, 0.98, qMax(1.0, T - 2.0));
+        }
+        case Fixture::StrobeLook:
+            return QRectF(r.left() + r.width() * 0.08, r.center().y() - r.height() * 0.32,
+                          r.width() * 0.84, r.height() * 0.64);
+        case Fixture::MovingSpotLook:
+        case Fixture::MovingRoundWashLook:
+        case Fixture::MovingSquareWashLook:
+        case Fixture::AutoLook:
+        default:
+            return QRectF();
+    }
+}
+
+QPainterPath stageLookLensHint(Fixture::StageLook look, const QRectF &lens)
+{
+    QPainterPath hint;
+    if (lens.width() < 6.0 || lens.height() < 6.0)
+        return hint;                            // too small to say anything
+    const QPointF c = lens.center();
+    const qreal s = qMin(lens.width(), lens.height());
+    switch (look)
+    {
+        case Fixture::MovingSpotLook:
+        {
+            // A gobo: four holes round a centre one.
+            const qreal d = s * 0.2, rr = s * 0.08;
+            for (const QPointF &o : { QPointF(0, -d), QPointF(d, 0), QPointF(0, d),
+                                      QPointF(-d, 0), QPointF(0, 0) })
+                hint.addEllipse(c + o, rr, rr);
+            break;
+        }
+        case Fixture::LedParLook:
+        {
+            // Its LEDs: a ring of dots round a centre one.
+            const qreal rr = s * 0.06, ring = s * 0.3;
+            hint.addEllipse(c, rr, rr);
+            for (int i = 0; i < 8; ++i)
+            {
+                const qreal a = i * M_PI / 4.0;
+                hint.addEllipse(c + QPointF(qCos(a), qSin(a)) * ring, rr, rr);
+            }
+            break;
+        }
+        case Fixture::FresnelLook:
+            hint.addEllipse(lens.adjusted(s * 0.18, s * 0.18, -s * 0.18, -s * 0.18));
+            hint.addEllipse(lens.adjusted(s * 0.34, s * 0.34, -s * 0.34, -s * 0.34));
+            break;
+        case Fixture::CycStripLook:
+        case Fixture::StrobeLook:
+        {
+            // Its cells: two for a strobe, along the length for a cyc.
+            const bool across = lens.width() >= lens.height();
+            const qreal L = across ? lens.width() : lens.height();
+            const int cells = look == Fixture::StrobeLook ? 2
+                              : qBound(2, int(L / qMax(4.0, s * 1.2)), 8);
+            for (int i = 1; i < cells; ++i)
+            {
+                const qreal t = L * i / cells;
+                if (across)
+                    hint.addRect(QRectF(lens.left() + t - 0.5, lens.top(), 1.0, lens.height()));
+                else
+                    hint.addRect(QRectF(lens.left(), lens.top() + t - 0.5, lens.width(), 1.0));
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    return hint;
+}
+
+QSizeF stageLookDefaultSize(Fixture::StageLook look, double base)
+{
+    switch (look)
+    {
+        case Fixture::FollowspotLook:  return QSizeF(base * 2.6, base * 1.0);
+        case Fixture::LanternLook:     return QSizeF(base * 1.2, base * 1.0);
+        case Fixture::StaffLook:       return QSizeF(base * 0.45, base * 2.4);
+        case Fixture::BarWashLook:     return QSizeF(base * 2.8, base * 0.7);
+        case Fixture::SquareWashLook:  return QSizeF(base * 1.2, base * 1.2);
+        case Fixture::UplightWashLook: return QSizeF(base * 1.4, base * 0.9);
+        case Fixture::ParCanLook:      return QSizeF(base * 1.5, base * 1.0);
+        case Fixture::EllipsoidalLook: return QSizeF(base * 2.2, base * 0.9);
+        case Fixture::FresnelLook:     return QSizeF(base * 1.4, base * 1.0);
+        case Fixture::LedParLook:      return QSizeF(base * 1.1, base * 1.1);
+        case Fixture::CycStripLook:    return QSizeF(base * 2.4, base * 1.1);
+        case Fixture::StrobeLook:      return QSizeF(base * 1.6, base * 1.0);
+        default:                       return QSizeF(base, base);
+    }
 }
 
 /* The shared core: reduce ONE set of channels to a colour and a level.

@@ -23,7 +23,8 @@
 #include <QPainterPath>
 #include <QRectF>
 
-class Fixture;
+#include "fixture.h"
+
 class Doc;
 class QVector3D;
 
@@ -85,9 +86,66 @@ struct FixtureVisualTraits
      *  it is left out of headCount. */
     int   ringChannel = -1;
     int   ringHead = -1;              ///< its head, -1 when it has none of its own
+    /** The look the LD gave it (Fixture::stageLook()); AutoLook draws by
+     *  kind as the definition suggests. Not AutoLook: kind already follows
+     *  it (stageLookSilhouette()), and the 2D shapes come from
+     *  stageLookBodyPath(). */
+    Fixture::StageLook look = Fixture::AutoLook;
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
+
+// ---------------------------------------------------------------------------
+// Stage looks (Fixture::StageLook): the LD's word for what a fixture looks
+// like, over what its definition's type suggests. Pure geometry, shared by
+// the 2D Monitor (MonitorFixtureItem) and the studio's flat views
+// (StructureStudioView), so a followspot is the same barrel in both.
+// ---------------------------------------------------------------------------
+
+/** The silhouette a fixture with @p look draws as; @p autoKind (what the
+ *  definition says) for AutoLook. The moving-head looks are Movers; every
+ *  other look is a Par -- one body, its own shape -- except a staff or a bar
+ *  wash that is already a Bar, which keeps its real footprint and heads.
+ *  NB: the Lantern look (a theatre lantern) is NOT FixtureSilhouette::Lantern,
+ *  which is a decorative lantern of LEDs giving light all round. */
+FixtureSilhouette stageLookSilhouette(Fixture::StageLook look, FixtureSilhouette autoKind);
+
+/** True when @p fx's declared size is made up (a generic dimmer's 300 mm a
+ *  channel), so a stage look's own proportions are used instead. */
+bool stageLookIgnoresPhysical(const Fixture *fx);
+
+/** True when @p look's lens is square (a square wash, a staff, a bar): its
+ *  heads are drawn as squares, not circles. */
+bool stageLookSquareLens(Fixture::StageLook look);
+
+/** The body of a fixture with @p look, inside @p r: a long barrel for a
+ *  followspot (along r's long axis), a thin rod for a staff, a wide strip
+ *  for a bar wash, a square for a square wash, a can for a lantern, a squat
+ *  box for an uplight; a mover's base seen from above (an octagon for a
+ *  spot, a circle for a round wash, a square for a square wash), or with
+ *  @p elevation the yoke silhouette (moverElevationPath(), @p hung, one unit
+ *  per head of @p units). Empty for AutoLook: draw by kind. */
+QPainterPath stageLookBodyPath(Fixture::StageLook look, const QRectF &r, bool elevation = false,
+                               int units = 1, bool hung = false);
+
+/** Where the light comes out of a fixture with @p look in @p r -- the lens
+ *  its heads are drawn in (the barrel's front, the whole length of a staff
+ *  or a bar). A null rect for AutoLook and the movers: lay heads out as
+ *  before. */
+QRectF stageLookLensRect(Fixture::StageLook look, const QRectF &r, bool elevation = false);
+
+/** What is drawn OVER a fixture's lit lens so its look still reads when the
+ *  lens is all one colour: a moving spot's gobo, an LED PAR's grid of LEDs,
+ *  a Fresnel's rings, a cyc's or a strobe's cells. Thin, translucent dark
+ *  strokes and dots, so the head's own colour and level show through. An
+ *  empty path when its look has none. @p lens is the head's rect. */
+QPainterPath stageLookLensHint(Fixture::StageLook look, const QRectF &lens);
+
+/** A sensible on-screen size, in px, for a fixture with @p look whose
+ *  definition declares no dimensions, from @p base (the size an ordinary
+ *  Par of that view gets): long for a followspot or a bar wash, thin and
+ *  tall for a staff. @p base unchanged for AutoLook and the movers. */
+QSizeF stageLookDefaultSize(Fixture::StageLook look, double base);
 
 /** A mover's colour ring: a ring of LEDs round the lens, driven by one
  *  colour-macro channel of named colours and chases ("LED Movinghead+Circle":

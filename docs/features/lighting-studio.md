@@ -352,6 +352,8 @@ Click a fixture in that list (or in the preview) to see its own mount panel:
 
 ![A mounted fixture's rig properties: mount, colour, orientation, face, placement, angle, tilt](../images/lighting-studio-fixture-mount-properties.png)
 
+- **Stage look** — what it looks like: its icon and its shape on the plot
+  and in the studio ([Stage looks](#stage-looks)).
 - **Mounted on** — which structure and where along/on it.
 - **Orientation** — which way up the body is: **Upright** (base down),
   **Hung** (base on top) or **Sideways** — worded for what it is on (on top /
@@ -466,6 +468,48 @@ somewhere else.
 > that default is corrected automatically the next time the workspace
 > loads; a Face you've chosen deliberately in this panel (Front or Back
 > included) is remembered and left alone.
+
+## Stage looks
+
+A definition's type says too little about what a fixture looks like: a
+*Color Changer* can be a PAR, a staff or a cyc. **Stage look** says it. Set
+it in Fixture Properties (one fixture, or several at once -- a row they
+differ on reads "mixed"), or right-click fixtures or groups in the Fixture
+Manager → **Stage Look ▸**.
+
+**Auto**, the default, draws the fixture as its definition's type always
+has; the picker names the look that type is closest to, as *Auto (LED PAR /
+round multi-LED wash)*. The other looks, in three sections:
+
+- **Moving** — Moving head spot, Moving head round wash, Moving head square
+  wash.
+- **Fixed conventional** — Lantern, PAR can, Ellipsoidal / profile spot,
+  Fresnel, Followspot.
+- **Fixed LED** — LED PAR / round multi-LED wash, Square wash, Bar wash,
+  Uplight wash, Cyc / strip light, Strobe / blinder, Staff.
+
+On the plot each look has its own outline -- a followspot is a long barrel
+with its lens at the front, a staff a thin rod, a bar wash a wide strip, a
+square wash a square with a square lens, a round wash a round base, a spot
+a chamfered one -- and its heads sit where its light comes out, square or
+round to match. Marks over the lens say the rest: a spot's gobo, an LED
+PAR's ring of LEDs, a Fresnel's rings, a strobe's two cells. The lens still
+shows the fixture's live colour and level. A definition with no dimensions
+gets the look's proportions (a followspot long, a staff tall).
+
+Top, Front and Side draw the same shapes in the studio. The Angled view
+still draws every fixture by its type.
+
+A look changes only the picture: how the fixture is driven, its beam and
+its pool are its definition's. A moving-head look draws its yoke and aims
+by pan and tilt as a moving head does; the fixed looks do not -- give a
+moving head that is used as a followspot *Moving head spot*, not
+*Followspot*, to keep its aim on the plot. Setting a look is one Ctrl+Z on
+the plot.
+
+The look is saved in the show only when it is not Auto, so a show without
+looks saves exactly as before, and QLC+ opens a show with looks (it skips
+them).
 
 ## Locks
 

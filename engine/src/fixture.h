@@ -22,6 +22,7 @@
 #define FIXTURE_H
 
 #include <QObject>
+#include <atomic>
 #include <QMutex>
 #include <QList>
 #include <QIcon>
@@ -62,6 +63,7 @@ class Doc;
 #define KXMLFixtureExcludeFade      QStringLiteral("ExcludeFade")
 #define KXMLFixtureForcedHTP        QStringLiteral("ForcedHTP")
 #define KXMLFixtureForcedLTP        QStringLiteral("ForcedLTP")
+#define KXMLFixtureStageLook        QStringLiteral("StageLook")
 
 #define KXMLFixtureChannelModifier  QStringLiteral("Modifier")
 #define KXMLFixtureChannelIndex     QStringLiteral("Channel")
@@ -505,6 +507,7 @@ public:
      */
     QLCFixtureHead head(int index) const;
 
+    /** Its icon: its stage look's when one is set, else its type's. */
     Q_INVOKABLE QString iconResource(bool svg = false) const;
 
     QIcon getIconFromType() const;
@@ -516,6 +519,77 @@ public:
     QString groupingManufacturer() const;
     QString groupingModel() const;
 
+    /*********************************************************************
+     * Stage look
+     *********************************************************************/
+public:
+    /** What the fixture looks like on stage: its icon in the fixture lists
+     *  and how the rig view (the 2D Monitor) and the studio's flat views
+     *  draw it. AutoLook, the default, follows the definition's type as
+     *  before; the others are the LD's word for it, for a definition whose
+     *  type says too little ("Color Changer" covers a PAR, a staff and a
+     *  bar). It changes nothing about how the fixture is driven. */
+    enum StageLook
+    {
+        AutoLook = 0,
+        FollowspotLook,
+        MovingSpotLook,
+        MovingRoundWashLook,
+        MovingSquareWashLook,
+        LanternLook,            ///< a conventional: ellipsoidal, profile, PAR can
+        StaffLook,              ///< a tall LED staff / pole / stick
+        SquareWashLook,
+        BarWashLook,            ///< a linear LED bar or batten
+        UplightWashLook,
+        ParCanLook,             ///< a conventional PAR: a round can
+        EllipsoidalLook,        ///< a fixed profile spot: barrel, lens, shutters
+        FresnelLook,            ///< a short round body, a stepped lens
+        LedParLook,             ///< a round multi-LED wash
+        CycStripLook,           ///< a cyc / strip light: a wide flood of cells
+        StrobeLook              ///< a strobe or blinder
+        /* New looks go at the END: the int is runtime only (the file holds
+           stageLookToString()'s key), but tests and pickers walk the enum. */
+    };
+    /** The picker's sections. */
+    enum StageLookSection { MovingSection, ConventionalSection, LedSection };
+    Q_ENUM(StageLook)
+
+    /** Read without a lock: the rig views classify fixtures on worker
+     *  threads while the GUI thread may be changing it. */
+    StageLook stageLook() const { return StageLook(m_stageLook.load(std::memory_order_relaxed)); }
+    /** Set the look; emits changed() when it differs. */
+    void setStageLook(StageLook look);
+
+    /** Every look, Auto first, then section by section (Moving, Fixed
+     *  conventional, Fixed LED) in the order a picker lists them. */
+    static QList<StageLook> stageLooks();
+    /** The picker section @p look is listed under (Auto: none, -1). */
+    static int stageLookSection(StageLook look);
+    /** A section's name for people ("Fixed LED"), translated. */
+    static QString stageLookSectionName(StageLookSection section);
+    /** The look closest to what the definition says this is: a Color
+     *  Changer is an LED PAR, an LED bar a bar wash, a Strobe a strobe, a
+     *  moving head a spot or a wash by its gobo / zoom channels or its name,
+     *  a dimmer a lantern. AutoLook when nothing is close (a hazer, a fan).
+     *  What "Auto (...)" names in a picker; Auto itself still draws as the
+     *  definition's type always has. */
+    StageLook autoStageLook() const;
+    /** The XML / stable key of @p look ("Auto", "Followspot", ...). */
+    static QString stageLookToString(StageLook look);
+    /** The look for @p key; AutoLook for anything unknown (a newer file). */
+    static StageLook stringToStageLook(const QString &key);
+    /** Its name for people ("Moving head spot"), translated. */
+    static QString stageLookName(StageLook look);
+    /** Its icon resource (":/look_staff.png", or with @p svg
+     *  "qrc:/look_staff.svg"); empty for AutoLook. */
+    static QString stageLookIconResource(StageLook look, bool svg = false);
+    /** The type-derived icon, ignoring any stage look. */
+    QString typeIconResource(bool svg = false) const;
+
+protected:
+    std::atomic<int> m_stageLook { AutoLook };
+
+public:
     QRectF degreesRange(int head) const;
 
     /** Its definition could not be found when the show loaded -- in cloud

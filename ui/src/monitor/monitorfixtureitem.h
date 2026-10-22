@@ -120,6 +120,16 @@ public:
     /** Re-read the fixture's name (label and tooltip) after a rename. */
     void refreshName();
 
+    /** Re-read the fixture's stage look (Fixture::stageLook()) after it
+     *  changed: its shape, its heads' shape (round or square lens) and their
+     *  layout. Nothing happens when it did not change -- cheap enough to call
+     *  on every fixture change. */
+    void refreshStageLook();
+    /** The look it is drawn with now (tests). */
+    Fixture::StageLook stageLook() const { return m_traits.look; }
+    /** The lens hint drawn over its first head now (tests); empty: none. */
+    QPainterPath lensHintPath() const;
+
     /** Set the position of this fixture using the monitor measure units */
     void setRealPosition(QPointF pos) { m_realPos = pos; }
 
@@ -375,6 +385,12 @@ private:
      *  colourRingLive(). Null for a fixture without one. A chase keeps a
      *  timer stepping it. */
     class ColourRingGraphic *m_ringItem = nullptr;
+    /** Over the first head, the look's lens hint (stageLookLensHint()):
+     *  a gobo, LEDs, rings, cells. Null when the look has none. */
+    class LensHintGraphic *m_hintItem = nullptr;
+    void updateLensHint();
+    /** Dense (pixel tape) heads: tiled squares whatever the look. */
+    bool m_denseHeads = false;
     QTimer *m_ringTimer = nullptr;
     QElapsedTimer m_ringClock;
 public:

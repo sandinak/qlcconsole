@@ -69,6 +69,13 @@ public:
     static void spinMixed(QDoubleSpinBox *sp, bool mixed, double lowest);
     static bool spinIsMixed(const QDoubleSpinBox *sp);
 
+    /** Fill @p cb with the stage looks, in sections (Moving, Fixed
+     *  conventional, Fixed LED) under "Auto (<what its type is>)" for
+     *  @p fx (nullptr: plain "Auto"). Each item's UserRole data is its
+     *  Fixture::StageLook; the section headings are disabled. Shared with
+     *  the Fixture Manager's Stage look menu's wording. */
+    static void fillStageLookCombo(QComboBox *cb, const class Fixture *fx);
+
 signals:
     /** A field is about to change the fixtures: @p field names it, so a run of
      *  steps on one spin box can be one undo. */
@@ -90,6 +97,7 @@ private:
     quint32 m_shown;
     bool m_loading = false;
 
+    QComboBox *m_look;          ///< its stage look (Fixture::StageLook)
     QLabel *m_mountOn;
     QComboBox *m_towerPos;
     ColourSwatchButton *m_colour;
