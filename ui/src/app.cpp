@@ -40,11 +40,13 @@
 #include "inputoutputmanager.h"
 #include "functionselection.h"
 #include "effectspage.h"
+#include "effectdesigner.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "showtreecontroller.h"
 #include "cuerunner.h"
 #include "showtreeview.h"
+#include "workbench.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
 #include "virtualconsole.h"
@@ -558,8 +560,10 @@ void App::init()
     addTab(w, QIcon(":/grid.png"), tr("Lighting Studio"));
     w = new FunctionManager(m_tab, m_doc);
     addTab(w, QIcon(":/function.png"), tr("Functions"));
+    QPointer<ProgrammingManager> buildTab;
     {
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
+        buildTab = pm;
         connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
         connect(pm, &ProgrammingManager::powerEstimateChanged, this,
                 [this](double amps, double kw, bool overload, const QString &detail) {
@@ -616,7 +620,17 @@ void App::init()
     addTab(w, QIcon(":/scene.png"), tr("Build"));
     // The Show Tree beside Build (SHOW_TREE_DESIGN.md D2): writing a show as
     // one tree of cue lists, cues and layers -- what Build made, in order.
-    w = new ShowTreeView(m_tab, m_doc);
+    {
+        ShowTreeView *tree = new ShowTreeView(m_tab, m_doc);
+        // W3: a cue opens in Build's Workbench, docked in the tree.
+        tree->setWorkbenchLender(
+            [buildTab]() -> Workbench * { return buildTab.isNull() ? nullptr : buildTab->lendWorkbench(); },
+            [buildTab](Workbench *wb) {
+                if (!buildTab.isNull())
+                    buildTab->returnWorkbench(wb);
+            });
+        w = tree;
+    }
     addTab(w, QIcon(":/chaser.png"), tr("Show Tree"));
     w = new ShowManager(m_tab, m_doc);
     addTab(w, QIcon(":/show.png"), tr("Shows"));
@@ -2101,6 +2115,22 @@ void App::initMenuBar()
             dlg.exec();
         });
         fileMenu->addAction(showDefs);
+
+        // Upgrade this show (WORKFLOW_DESIGN.md §3.7): the W5 converter
+        // over every chaser and collection, Capture into palettes, one undo
+        // step. Only ever opened from here or the Show Tree's banner.
+        QAction *upgrade = new QAction(tr("&Upgrade This Show…"), this);
+        upgrade->setObjectName(QStringLiteral("fileUpgradeShow"));
+        upgrade->setToolTip(tr("Make the show's cue-list chasers Show Tree cue lists, checked channel "
+                               "for channel, and raw scenes palettes: every part optional, one undo step"));
+        connect(upgrade, &QAction::triggered, this, [this]() {
+            ShowTreeView *view = ShowTreeView::instance();
+            if (view == nullptr)
+                return;
+            switchToTabContaining(view);
+            view->openUpgrade();
+        });
+        fileMenu->addAction(upgrade);
     }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
@@ -2449,6 +2479,8 @@ void App::initMenuBar()
     QAction *effectsAct = windowMenu->addAction(tr("Effects…"));
     effectsAct->setObjectName(QStringLiteral("windowEffects"));
     connect(effectsAct, &QAction::triggered, this, [this]() { EffectsPage::open(m_doc, this); });
+    // ...and in the Workbench's editor pane (Build ▸ Effects).
+    EffectDesigner::plugIntoWorkbench();
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
     m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));

@@ -200,6 +200,15 @@ private:
     template <typename F> void quietly(F f);
 
 public:
+    /** The bench's Try on groups as last picked (by name), in @a doc. */
+    static QList<quint32> savedTryOnGroups(Doc *doc);
+    /** Plug the designer into the Workbench's editor pane
+     *  (Workbench::setEffectPaneFactory): the bench's requests -- Build ▸
+     *  Effects -- get a designer on the Try on groups. A cue layer's are
+     *  declined for now (the Show Tree's Design effect… dialog does those),
+     *  so the Workbench shows what it did before. */
+    static void plugIntoWorkbench();
+
     /** Copy everything an Effect palette runs from @a from to @a to (not its
      *  name or folder). */
     static void copyEffect(const QLCPalette *from, QLCPalette *to);

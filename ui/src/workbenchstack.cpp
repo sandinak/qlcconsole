@@ -76,6 +76,50 @@ quint32 WorkbenchStack::addNew(Function::Type, int, const QList<GroupHead> &, qu
     return Function::invalidId();
 }
 
+QString WorkbenchStack::dropPlanOn(int, const QMimeData *, bool) const
+{
+    return QString();
+}
+
+bool WorkbenchStack::dropOn(int, const QMimeData *, bool)
+{
+    return false;
+}
+
+bool WorkbenchStack::showMenu(int, int, const QPoint &)
+{
+    return false;
+}
+
+bool WorkbenchStack::clearAttribute(int, int)
+{
+    return false;
+}
+
+QWidget *WorkbenchStack::lendPane(int, int)
+{
+    return nullptr;
+}
+
+void WorkbenchStack::returnPane(QWidget *)
+{
+}
+
+QList<quint32> WorkbenchStack::layerFixtures(int) const
+{
+    return QList<quint32>();
+}
+
+int WorkbenchStack::layerOfFixture(quint32) const
+{
+    return -1;
+}
+
+quint32 WorkbenchStack::layerScene(int) const
+{
+    return Function::invalidId();
+}
+
 QWidget *WorkbenchStack::createHeaderWidget(QWidget *)
 {
     return nullptr;

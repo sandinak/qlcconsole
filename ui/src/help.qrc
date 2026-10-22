@@ -35,6 +35,7 @@
     <file alias="images/programming-tab-effect-browser.png">../../docs/images/programming-tab-effect-browser.png</file>
     <file alias="images/build-tab-layout.png">../../docs/images/build-tab-layout.png</file>
     <file alias="images/build-effects-menu.png">../../docs/images/build-effects-menu.png</file>
+    <file alias="images/show-tree-workbench.png">../../docs/images/show-tree-workbench.png</file>
     <file alias="images/programming-tab-look-editor-color.png">../../docs/images/programming-tab-look-editor-color.png</file>
     <file alias="images/programming-tab-look-editor-effect.png">../../docs/images/programming-tab-look-editor-effect.png</file>
 </qresource>

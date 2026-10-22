@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QLabel>
+#include <QPointer>
 #include <QPainter>
 #include <QLineEdit>
 #include <QToolButton>
@@ -579,6 +580,7 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     efx->setName("Circle");
     m_doc->addFunction(efx);
 
+    EffectDesigner::plugIntoWorkbench();            // as the app does
     ProgrammingManager pm(nullptr, m_doc);
     pm.resize(1500, 900);
     pm.show();
@@ -603,10 +605,13 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     // + New (the button): a new effect in the designer, in the Workbench's
     // editor pane, the layers column out of the way.
     newBtn->click();
-    EffectDesigner *ed = pm.effectDesigner();
+    // The same path a docked Show Tree cue's Effect row takes: the
+    // Workbench's effect pane factory, on the bench.
+    QPointer<EffectDesigner> ed = pm.effectDesigner();
     QVERIFY(ed != nullptr);
-    QCOMPARE(pm.workbench()->currentPage(), Workbench::EffectPage);
-    QCOMPARE(pm.workbench()->effectPane(), static_cast<QWidget *>(ed));
+    QCOMPARE(pm.workbench()->currentPage(), Workbench::FunctionPage);
+    QCOMPARE(pm.workbench()->effectPane(), static_cast<QWidget *>(ed.data()));
+    QCOMPARE(pm.workbench()->loadedFunction(), Function::invalidId());
     QVERIFY(ed->isVisible());
     QVERIFY(!pm.workbench()->findChild<QWidget *>("workbenchColumn")->isVisible());
     QCOMPARE(ed->originalId(), QLCPalette::invalidId());
@@ -618,13 +623,15 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     const quint32 saved = ed->saveAsPalette("Chase Saved");
     QVERIFY(m_doc->palette(saved) != nullptr);
     QTRY_VERIFY(effectsRow(list, "Chase Saved") != nullptr);
-    QTRY_COMPARE(ed->originalId(), saved);
+    QTRY_VERIFY(pm.effectDesigner() != nullptr && pm.effectDesigner()->originalId() == saved);
+    QTRY_VERIFY(ed.isNull());                       // a fresh designer on it
 
     // Clicking an effect palette designs it there.
     QTreeWidgetItem *phaserRow = effectsRow(list, "Phaser");
     QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(phaserRow).center());
+    ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
     QCOMPARE(ed->originalId(), phaser->id());
-    QCOMPARE(pm.workbench()->currentPage(), Workbench::EffectPage);
 
     // The right-click menu on an effect palette.
     QCoreApplication::processEvents();          // a queued rebuild: rows are new
@@ -638,6 +645,8 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     delete menu;
     QTRY_VERIFY(effectsRow(list, "Phaser (copy)") != nullptr);
     QVERIFY(m_doc->palettes().count() > before);
+    ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
     QCOMPARE(m_doc->palette(ed->originalId())->name(), QString("Phaser (copy)"));
 
     // F2 / Rename: in place.
@@ -653,9 +662,12 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     menuAction(menu, "effectsOpen")->trigger();
     delete menu;
     QCOMPARE(pm.workbench()->loadedFunction(), efx->id());
-    QVERIFY(pm.workbench()->currentPage() != Workbench::EffectPage);
+    QVERIFY(pm.workbench()->effectPane() == nullptr);
+    QVERIFY(pm.effectDesigner() == nullptr);
     QVERIFY(pm.workbench()->findChild<QWidget *>("workbenchColumn")->isVisible());
-    QCOMPARE(ed->draftId(), QLCPalette::invalidId());
+    QTRY_VERIFY(ed.isNull());                       // and its draft with it
+    for (QLCPalette *p : m_doc->palettes())
+        QVERIFY2(p->name() != "Phaser Two" || !m_doc->showTree()->isInlinePalette(p->id()), "a draft left");
 
     // Empty space: only the New items. New EFX / RGB Matrix land on the
     // Try on groups and load.
@@ -684,10 +696,11 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     pm.findChild<QLineEdit *>("buildEffectsFilter")->clear();
 
     // Another show: nothing left behind.
-    pm.designEffect(phaser->id());
-    QVERIFY(ed->draftId() != QLCPalette::invalidId());
+    QVERIFY(pm.designEffect(phaser->id()));
+    ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr && ed->draftId() != QLCPalette::invalidId());
     m_doc->clearContents();
-    QCOMPARE(ed->draftId(), QLCPalette::invalidId());
+    QVERIFY(ed.isNull() || ed->draftId() == QLCPalette::invalidId());
     pm.hide();
 }
 
@@ -775,6 +788,7 @@ void EffectDesigner_Test::picturesOfARealShow()
     page.hide();
 
     // Build ▸ Effects: the designer in the Workbench, and the right-click menu.
+    EffectDesigner::plugIntoWorkbench();
     ProgrammingManager pm(nullptr, m_doc);
     pm.resize(1600, 940);
     pm.show();

@@ -310,10 +310,30 @@ Three ways to file a group into one:
 1. **Right-click a folder (or the root) → "New Group..."** — the new group
    is filed there immediately; typing a never-before-seen path creates the
    folder.
-2. **"Move to folder…"** on one or more selected groups — type an arbitrary
-   path, applied to all of them at once.
+2. **Group ▸ Move to Folder ▸** on one or more selected groups — pick
+   **Fixture Groups (no folder)** or any folder in use, or **New Folder…**
+   to name a new one; it is made inside the folder the groups are in (a
+   `/` in the name nests it further).
 3. **Drag and drop** a group onto a folder, onto another group (joins its
    folder), or onto empty space / the root (un-files it).
+
+**Select All Similar** (right-click a fixture or a group) picks out the rest
+of its kind, ready to group or file in one go:
+
+- **A fixture**: every fixture of the same definition and mode. Picked
+  inside a group, it stays in that group; picked under a universe or the
+  Inventory, it takes in the whole rig.
+- **A group**: every group in the same folder made of the same fixtures —
+  as many of each kind — with as many heads. A truss's DS1t, DS2t, CS1t…
+  tops are alike; its faces (DS1f…) and a "DS1t RGB" split (the same
+  fixtures, only their RGB heads) are not. The grid shape is not
+  compared.
+
+Then **Group ▸ Move N Groups to Folder ▸ New Folder…** files them together,
+or **Group ▸ Create Group(s) from Selection…** makes one group of them, each
+as a block. Groups made from a selection start in the folder it was made in.
+None of these are on the Undo (⌘Z) history, which covers the rig and the
+patch; moving them back is the same menu.
 
 Rename a folder the same way as any tree row: select it, press Return/F2, or
 double-click, and type the new name. Every group in that folder — and every

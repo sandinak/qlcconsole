@@ -26,8 +26,24 @@ under `~/.claude/.../memory/`.
   - Several look rows of one type selected don't edit together yet.
   - The Workbench's expansion is remembered per show folder and loaded
     function id.
-  - W3 docks this same Workbench in the Show Tree with a `CueStack`
-    (see the W1 report / workbench.h): `setStack()`, `setReturnTo()`.
+- **W3 Show Tree ↔ Workbench — built on feat/w3-showtree-workbench
+  (2026-10-22, from W1), not merged.** `TreeCueStack` (the engine's
+  Simple Desk owns the name `CueStack`), docked in place of the tree's
+  page; the tree's cue / layer pages lent to the editor pane. Left over:
+  - Rows of a cue don't drag (reorder with ▲ ▼; layers between cues: in
+    the tree). A layer row's own menu is short (Solo, Release, Remove,
+    Show in the tree); the tree's full layer menu (split, make reusable,
+    detach…) stays in the tree.
+  - + Scene / + EFX put the new layer last (the tree's order), not after
+    the selected one.
+  - Cue looks (D6) show in the header count, not as rows of their own;
+    edit them on the cue's page in the pane.
+  - W4: `Workbench::setEffectPaneFactory()` is the plug for the effect
+    designer on an Effect row / Design effect (EffectLayerDialog's
+    designer can be hosted there); until then an effect row opens its
+    palette in the Look Editor.
+  - The dock is one per tree; a detached Show Tree window docks the
+    Workbench there too (untested on a second monitor).
 - **W2 Chasers in the Workbench + Classic — built on feat/w2-chasers-classic
   (2026-10-22, cut from W1), not merged.** Step walker (`ChaserWalker`,
   `FunctionStack` chaser step), step header + step table, Chaser from
@@ -46,7 +62,8 @@ under `~/.claude/.../memory/`.
     filed in it (paths are shared, as in Folders).
   - Retire the Functions window now Classic covers it (open question 4) —
     Branson's call.
-- Then W3 (Show Tree ↔ Workbench) → W4 → W5 → W6 → W7.
+- W2 and W3 merged together on feat/w3-showtree-workbench (2026-10-22).
+- Then W4 → W5 → W6 → W7.
 
 ## Small fixes and leftovers
 
@@ -69,11 +86,14 @@ under `~/.claude/.../memory/`.
     AT-W-ALL and on the XL-450 boxes was checked offscreen only.
 - **Workflow W5 leftovers (2026-10-22)** (feat/w5-bridge; design:
   WORKFLOW_DESIGN.md §3.5):
-  - **Upgrade this show… wizard** (§3.7) not built: the converter covers
-    the chasers; the wizard would add collections → busk looks and a
-    "raw scenes" section offering Capture into palettes in one pass.
-  - The open banner is in the Show Tree tab (Build is W1's); its ✕ lasts
-    until the next show is opened, not saved per show.
+  - **Upgrade this show…** built (feat/upgrade-show-menu): File menu +
+    banner, chasers and collections with plans, Capture page, one undo
+    step, Restore original. Not in it: a collection → **busk look** (§3.7
+    lists it; there is no collection-to-look conversion yet), and a
+    stand-alone chaser of collections becoming a cue list is what the
+    cue-list row already does. The banner's ✕ still lasts only until the
+    next show is opened.
+  - The open banner is in the Show Tree tab (Build is W1's).
   - Capture into palettes reads Dimmer, Colour (RGB/W/A/UV, CMY, a wheel
     slot), Position (whole degrees) and an unnamed Gobo value. Shutter,
     zoom, prism and effect-mode channels stay in the "(rest)" scene. A

@@ -125,11 +125,13 @@ private slots:
     void openUsesTheFunctionsWindowsEditor();
     void theImportSheetReadsAndRepoints();
     void theImportSheetCanUndoOrLeaveVcAlone();
+    void sendToShowTreeFromBuild();
     // W5: the bridge
     void anOldShowOpensWithABanner();
     void theConverterImportsCueListsInPlace();
     void restoreOriginalPointsVcBack();
     void captureFromTheOpaqueRow();
+    void upgradeThisShow();
 
 private:
     quint32 dimmer(int level, const QString &name);

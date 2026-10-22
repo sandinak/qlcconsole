@@ -45,6 +45,7 @@ add_library(${module_name} SHARED
     networkreport.cpp networkreport.h
     patchlabels.cpp patchlabels.h
     paletteops.cpp paletteops.h
+    palettenaming.cpp palettenaming.h
     patchlist.cpp patchlist.h
     speedmasters.cpp speedmasters.h
     showcontrol.cpp showcontrol.h

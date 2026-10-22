@@ -79,6 +79,7 @@ private slots:
 
     // Import (§7)
     void importReadsScenesIncludesAndOpaqueFunctions();
+    void importTracksWhatRepeats();
     void importedListPlaysAsTheChaserDid();
     void importListsHtpConflicts();
     void importARealShow();
@@ -102,6 +103,8 @@ private slots:
     void bridgeDanceHysteria();
     void bridgeTheSampleShow();
     void saveABridgedShow();
+    void upgradeAShowIsOneUndoStep();
+    void upgradeTheSampleShowIsOneUndoStep();
 
     // P2: tracking in the tab, D22/D23, the Library's list usage, the
     // command line
@@ -224,6 +227,11 @@ private:
         QByteArray home, profile;
     };
     QList<QByteArray> playEveryStep(Chaser *c);
+    /** Upgrade this show (§3.7) on a copy of @a path: every cue-list chaser
+     *  (all chasers, @a cueListsOnly false) imported in place and its raw
+     *  scenes captured, grouped into one undo step, then undone, redone and
+     *  undone again; problems listed (empty: XML-equal each way). */
+    QStringList upgradeAsOneStep(const QString &path, bool cueListsOnly, int *steps);
     /** W5 on a real show: what bridgeDanceHysteria / bridgeTheSampleShow found. */
     struct Bridge
     {

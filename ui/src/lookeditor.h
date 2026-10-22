@@ -19,6 +19,8 @@
 #define LOOKEDITOR_H
 
 #include <QWidget>
+#include <QColor>
+#include <functional>
 
 class QStackedWidget;
 class QColorDialog;
@@ -385,8 +387,35 @@ private:
     void populateEffectPicker(QLCPalette *p);
 
     /** Auto-set palette name from its value when it still has the factory
-     *  default name ("New Color", "New Dimmer", "New Effect"). */
+     *  default name ("New Color", "New Dimmer", "New Effect"), in the
+     *  convention its siblings in the folder share ("Act2 Red"...). */
     void maybeAutoName(QLCPalette *p);
+
+public:
+    /** What a palette's value said before an edit, for followName(). */
+    struct ValueBefore
+    {
+        QString name;
+        QColor rgb, wauv;
+        QString macro;
+        int value = 0;          //!< intValue1(): dimmer, gobo, shutter
+        int strobe = 0;         //!< strobe rate, percent
+        QString capability;     //!< gobo / shutter: the slot's name
+    };
+private:
+    ValueBefore valueBefore(const QLCPalette *p) const;
+    /** The name follows the value (PaletteNaming): only the part that said
+     *  the old value is rewritten; a name of the user's own stays. */
+    void followName(QLCPalette *p, const ValueBefore &before);
+    /** Change the shown palette's value with @a change as one undo step on
+     *  the palette stack, the name following it in the same step (a drag
+     *  is one step). Nested: the outer call keeps the step. */
+    void editValue(const std::function<void(QLCPalette *)> &change);
+    bool m_inValueEdit = false;
+    /** The palette's value and name as this editor last showed or set
+     *  them: anything else changing them (Undo) redisplays it. */
+    QString m_shownSignature;
+    static QString valueSignature(const QLCPalette *p);
 
 };
 

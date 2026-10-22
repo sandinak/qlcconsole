@@ -10,6 +10,45 @@ The latest changes, newest first. Each links to the guide with the detail.
   Delete, and New on empty space). Clicking an effect palette opens it in
   the effect designer, full height in the Workbench. See
   [Making effects](build.md#making-effects).
+
+- **Notes open up while you type.** A chaser step's note -- in the
+  Workbench's step header and step table, the Chaser editor's **Notes**
+  column -- and a Show Tree cue's note now word-wrap and grow as you type,
+  up to six lines, so you can read back what you wrote. **Return** applies
+  it, **Shift+Return** starts a new line, **Esc** puts it back. Closed up,
+  a long note is cut short with *…*; hover it to read all of it. See
+  [Walking a chaser](build.md#walking-a-chaser).
+
+- **A look's name follows its colour.** Change a colour look from red
+  to a darker red and "Red" becomes "Dark Red" as you drag. Only the
+  colour part changes ("Act2 Red" becomes "Act2 Dark Red"), and the look
+  stays in its folder. Intensity ("Intensity 45%" to "Intensity 60%"),
+  strobe and shutter names follow their values the same way. A name of
+  your own is left alone. The change and the rename are one Undo step.
+  See [The name follows the value](build.md#the-name-follows-the-value).
+
+
+- **Group tools: select all similar, move to folder.** Right-click a
+  fixture or a group in the Fixtures tab (or in Build's Groups &
+  fixtures) for **Select All Similar** — fixtures of the same definition
+  and mode, or groups in the same folder made of the same fixtures and
+  heads. Then
+  **Move to Folder ▸** lists the folders in use plus **New Folder…**, and
+  **Create Group(s) from Selection…** starts in the folder the selection
+  was made in. See
+  [Fixture-group folders](fixture-manager.md#fixture-group-folders).
+
+- **Send a chaser to the Show Tree from Build.** Load a chaser in the
+  Workbench and click **Send to Show Tree…**, or right-click its row in
+  Build ▸ Scenes. It is the Show Tree's Import in place for that chaser,
+  with the same sheet, and **Done, show it in the Show Tree** takes you to
+  the new list. See
+  [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
+- **An imported chaser tracks what it repeats.** A collection or scene
+  that appears in several steps in a row is set in the first of those cues
+  and tracks through the rest. It is released where it stops and set again
+  where it comes back. Every cue still plays exactly what its step did. See
+  [What repeats is set once and tracks](show-tree.md#what-repeats-is-set-once-and-tracks).
 - **The effect designer.** Build an effect in detail on the heads it is
   for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
   menu of its Effect row) opens the effect browser at full height. Beside
@@ -21,6 +60,15 @@ The latest changes, newest first. Each links to the guide with the detail.
   Matrix in the show, with the same designer on a **Try on** bench. See
   [The effect designer](effects.md#the-effect-designer).
 
+
+- **Upgrade this show, in one place.** **File → Upgrade This Show…**
+  lists every chaser and collection with what would become of it: a cue
+  list (checked to play the same), an effect kept as a function, or left
+  alone. A second page offers to capture the raw scenes into palettes.
+  **Upgrade** does the ticked parts as one undo step, and **Restore
+  original…** puts a chaser back. Nothing happens on its own, and the
+  old way keeps working. See
+  [Upgrade this show](show-tree.md#upgrade-this-show).
 - **Bring an old show over, and back.** A show of chasers opens as it
   always did, with one line at the top of the Show Tree tab offering to
   convert it. **Convert an old show…** tells the chasers used as cue
@@ -33,6 +81,15 @@ The latest changes, newest first. Each links to the guide with the detail.
   longer show up as ▣ rows, and a raw scene's ▣ row can **Capture into
   palettes…**. See
   [An old show: convert it](show-tree.md#an-old-show-convert-it).
+
+- **Move in black from the Show Tree and Settings.** The show's auto
+  move-in-black is now a **MIB** button in the Show Tree's header, beside
+  the show controls, with the lead time under its arrow, and in
+  **Settings → Show Tree**, as well as in Programming → Move in black. All
+  three are the same one setting, saved with the show. While it is moving
+  lights in black, the button says how many (*MIB · 3*). A new show now
+  starts with it off instead of keeping the last show's. See
+  [Move in black](show-tree.md#move-in-black).
 - **Open what an old show's layer plays.** In the Show Tree, a layer that
   plays a function as it is (▣ — a raw scene, an EFX, an RGB Matrix)
   now opens it: double-click it, right-click → **Open**, or **Open** on
@@ -96,6 +153,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   collections load in the Workbench as layers.
 - **One Undo.** Adding, removing and reordering layers, a new EFX or RGB
   Matrix, filing and renaming — each is one ⌘Z, in Build or the Show Tree.
+- **A cue in the Workbench.** In the Show Tree, double-click a cue (or a
+  layer, or a look), press **✎ Workbench** or type `wb`: the cue opens in
+  the Workbench, right there in place of the page. Its own layers open up
+  into a row per attribute; what tracks in is grey, with where it comes
+  from, and isn't changed here. Click a value for its palette in the Look
+  Editor at full height, a layer for its page with every ⋯; drop palettes
+  and groups from the Library onto a layer. The cue plays in context as you
+  work, or **Solo** just the selected layer. **↩ Show Tree** goes back with
+  the same layer selected. See [Working on a cue in the
+  Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
 
 ### Chasers in the Workbench, and Classic
 

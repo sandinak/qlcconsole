@@ -78,18 +78,31 @@ public:
      *  navigator would (and select it there). Public entry for external
      *  navigation / automated screenshots. */
     void showFunction(quint32 fid);
+    /** Send to Show Tree… on chaser @a chaserId (the Workbench's header
+     *  button, a chaser row's right-click): the Show Tree's Import in
+     *  place, its sheet offering to go there. Whether it was sent. */
+    bool sendToShowTree(quint32 chaserId);
 
     /** The Workbench (W3 docks this same widget in the Show Tree). */
     Workbench *workbench() const { return m_workbench; }
+    /** W3: lend the Workbench to the Show Tree (it docks it there); a note
+     *  stands in its place. Null: lent already. */
+    Workbench *lendWorkbench();
+    /** ...and have it back, loaded as it was before it was lent. */
+    void returnWorkbench(Workbench *workbench);
+    bool isWorkbenchLent() const { return m_workbenchStandIn != nullptr; }
 
     /** Build ▸ Effects: design effect palette @a paletteId (invalid: a new
-     *  effect) in the effect designer, in the Workbench's editor pane. */
-    void designEffect(quint32 paletteId);
+     *  effect) in the effect designer, in the Workbench's editor pane --
+     *  Workbench::designEffect() on the bench, the path a docked Show Tree
+     *  cue's Effect row takes. False: no designer plugged in. */
+    bool designEffect(quint32 paletteId);
     /** + New ▸ EFX / RGB Matrix: a new one on the designer's Try on groups,
      *  listed, selected and loaded. Returns its id (invalid: refused). */
     quint32 newClassicEffect(Function::Type type);
-    /** The designer the Effects section hosts (null until first used). */
-    class EffectDesigner *effectDesigner() const { return m_effectDesigner; }
+    /** The designer the Workbench shows for the Effects section (null: none
+     *  showing). */
+    class EffectDesigner *effectDesigner() const;
     /** The Effects list's context menu for row @a clicked (null: empty
      *  space), parented to @a parent -- public for tests and pictures. */
     class QMenu *effectsContextMenu(QTreeWidgetItem *clicked, QWidget *parent);
@@ -221,8 +234,6 @@ private:
     /** The effect palettes / classic effects a menu on @a clicked acts on:
      *  the selection if the clicked row is in it, else the clicked row. */
     void effectTargets(QTreeWidgetItem *clicked, QList<quint32> &palettes, QList<quint32> &functions) const;
-    /** The designer, made (and wired) the first time. */
-    class EffectDesigner *ensureEffectDesigner();
 
     /** Enable/label the Park button (Park vs Unpark) from selection + park state. */
     void updateParkButtonLabel();
@@ -287,6 +298,10 @@ private:
     Doc *m_doc;
 
     Workbench *m_workbench = nullptr;
+    // W3: while the Show Tree has the Workbench
+    QWidget *m_workbenchStandIn = nullptr;
+    QSharedPointer<class WorkbenchStack> m_lentFrom;     //!< what Build had loaded
+    QString m_lentSelection;                            //!< its selected row's key
 
     // The navigator
     QButtonGroup *m_sections = nullptr;
@@ -297,7 +312,6 @@ private:
     class QSplitter *m_mainSplit = nullptr;
     class QSplitter *m_navSplit = nullptr;
     QTreeWidget *m_effectsList = nullptr;
-    class EffectDesigner *m_effectDesigner = nullptr;
     bool m_effectsRebuildQueued = false;
     bool m_effectsRebuilding = false;
     bool m_navigating = false;    //!< the navigator follows a load: don't load again

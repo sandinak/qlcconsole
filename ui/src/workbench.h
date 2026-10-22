@@ -63,7 +63,7 @@ class Doc;
  *
  * Every edit is one step on the shared history (PaletteOps), so Undo in
  * either tab takes it back. It is self-contained: the Build tab hosts it,
- * and W3 docks the same widget in the Show Tree with a CueStack loaded
+ * and W3 docks the same widget in the Show Tree with a TreeCueStack loaded
  * (setStack(), setReturnTo()).
  */
 class Workbench final : public QWidget
@@ -123,12 +123,6 @@ public:
     void editPalette(quint32 paletteId);
     /** A fixture group's head layout in the editor pane (← back returns). */
     void showGroupLayout(quint32 groupId);
-    /** Host @a pane in the editor pane at full height, the layers column
-     *  out of the way (Build ▸ Effects' effect designer): what is loaded is
-     *  unloaded first. The pane stays the caller's to delete; loading
-     *  anything else takes it off (effectPaneClosed()). */
-    void showEffectPane(QWidget *pane);
-    QWidget *effectPane() const { return m_effectPane; }
     /** Fixtures picked elsewhere (the 2D view, the sources): their channels. */
     void selectFixtures(const QList<quint32> &fixtureIds);
 
@@ -144,8 +138,52 @@ public:
     /** Apply an edit to the live preview without a stop/start. */
     void refreshPreview();
 
-    enum Page { EmptyPage, OverviewPage, ScenePage, LookPage, TargetPage, FunctionPage, EffectPage };
+    enum Page { EmptyPage, OverviewPage, ScenePage, LookPage, TargetPage, FunctionPage };
     Page currentPage() const;
+
+    /************************************************************************
+     * W3: a Show Tree cue loaded (TreeCueStack), and W4's plug
+     ************************************************************************/
+public:
+    /** What W4's effect designer is asked to design: an Effect row of a
+     *  cue's layer (or the layer itself, @a key empty). */
+    struct EffectRequest
+    {
+        /** Invalid: no cue -- the bench (Build ▸ Effects): design effect
+         *  palette @a palette (invalid: a new effect) on the Try on groups. */
+        quint32 cueId = 0xFFFFFFFF;
+        quint32 layerId = 0xFFFFFFFF;   //!< invalid: a layer carried in
+        QString targetSignature;        //!< ShowTree::Target::signature()
+        QString key;                    //!< "Effect.Color"; empty: the layer's
+        quint32 palette = 0xFFFFFFFF;   //!< the effect it has (invalid: none)
+    };
+    /** The effect designer's widget for @a request, made for the editor
+     *  pane (the Workbench owns it and deletes it when the row changes);
+     *  null: not designed here (the Look Editor shows the effect palette,
+     *  or the layer's page). W4 sets it; until then nothing is set. */
+    typedef std::function<QWidget *(Workbench *workbench, const EffectRequest &request,
+                                    QWidget *parent)> EffectPaneFactory;
+    static void setEffectPaneFactory(const EffectPaneFactory &factory);
+    /** Ask for the effect designer on the selected cue layer (its Effect
+     *  row, or the layer). False: no designer plugged in, or no cue layer. */
+    bool designEffect();
+    /** Ask for the effect designer for @a request: a cue layer's, or the
+     *  bench's (cueId invalid; Build ▸ Effects) -- what is loaded is
+     *  unloaded first and the layers column steps aside while it shows.
+     *  False: no designer plugged in, or it declined. */
+    bool designEffect(const EffectRequest &request);
+    /** The designer the factory made, while the editor pane shows it
+     *  (null: none). The Workbench deletes it when the row changes. */
+    QWidget *effectPane() const
+    { return m_funcEditor != nullptr && m_funcEditor == m_effectPane ? m_effectPane.data() : nullptr; }
+    /** The show this Workbench edits (for a factory). */
+    Doc *doc() const { return m_doc; }
+    /** The page the back end lent the editor pane (the Show Tree's cue or
+     *  layer page; null: none). */
+    QWidget *lentPane() const { return m_lentPane; }
+    /** Solo: only the selected layer plays (a cue loaded); else in context. */
+    void setSolo(bool solo);
+    bool isSolo() const;
 
 signals:
     /** What is loaded changed (its function; invalid: none or not one). */
@@ -159,8 +197,8 @@ signals:
     void revealPaletteRequested(quint32 paletteId);
     /** "How this works". */
     void guideRequested();
-    /** The effect pane went off (something else is shown). */
-    void effectPaneClosed();
+    /** Send to Show Tree… on a loaded chaser (its header button). */
+    void sendToShowTreeRequested(quint32 chaserId);
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -311,6 +349,19 @@ private:
     bool m_refreshQueued = false;
     class QTimer *m_restartTimer = nullptr;
     int m_restartTries = 0;
+    // W3
+    /** A cue's layer or attribute row selected: its editor. */
+    void showStackRow(const ProgrammingOutline::Row &row);
+    /** Host @a pane, lent by the back end, on the function page. */
+    void hostLentPane(QWidget *pane);
+    void releaseLentPane();
+    /** The back end's own preview, or a Solo layer that changed. */
+    void syncStackPreview();
+    QPointer<QWidget> m_lentPane;
+    QToolButton *m_soloBtn = nullptr;
+    bool m_ownPreview = false;          //!< the back end plays it (playsItself())
+    static EffectPaneFactory s_effectPane;
+
     /** setStack()'s way with ↩: start over, push what was loaded, or pop. */
     enum History { Fresh, Push, Pop };
     void setStackImpl(WorkbenchStack *stack, History history);
@@ -327,9 +378,12 @@ private:
     QPointer<QWidget> m_stackWidget;
     QToolButton *m_ownCopyBtn = nullptr;
 
-    /** showEffectPane()'s page and what it hosts. */
-    QWidget *m_effectPage = nullptr;
+    /** designEffect()'s designer, and whether it is the bench's. */
     QPointer<QWidget> m_effectPane;
+    bool m_benchPane = false;
+    /** Host the factory's @a pane under @a heading. */
+    void hostEffectPane(QWidget *pane, const QString &heading, bool bench);
+    QToolButton *m_sendToTreeBtn = nullptr;
 };
 
 /** @} */

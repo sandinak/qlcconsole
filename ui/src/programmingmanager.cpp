@@ -97,6 +97,7 @@
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "effectdesigner.h"
+#include "workbenchstack.h"
 #include "splitterhandles.h"
 #include <QButtonGroup>
 #include <QHeaderView>
@@ -550,6 +551,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             this, &ProgrammingManager::currentPaletteIdChanged);
     connect(m_workbench, &Workbench::guideRequested, this, &ProgrammingManager::showProgrammingGuide);
     connect(m_workbench, &Workbench::revealPaletteRequested, this, &ProgrammingManager::revealPalette);
+    connect(m_workbench, &Workbench::sendToShowTreeRequested, this, &ProgrammingManager::sendToShowTree);
     connect(m_workbench, &Workbench::paletteEdited, this, [this](quint32 id) {
         // A name or a value: the lists that show it. An auto-rename re-sorts
         // the tree; the palette is found again after it settles.
@@ -647,14 +649,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
 ProgrammingManager::~ProgrammingManager()
 {
-    // The designer's draft and preview go with it, telling the Doc: before
-    // the Workbench hosting it goes, half gone by then.
-    if (m_effectDesigner != nullptr)
-    {
-        disconnect(m_effectDesigner, nullptr, this, nullptr);
-        delete m_effectDesigner;
-        m_effectDesigner = nullptr;
-    }
 }
 
 /****************************************************************************
@@ -974,8 +968,8 @@ QWidget *ProgrammingManager::buildEffectsSection()
         const int kind = it->data(0, EffectsList::KindRole).toInt();
         if (kind == EffectsList::PaletteItem)
         {
-            if (m_effectDesigner == nullptr || m_workbench->effectPane() != m_effectDesigner
-                || m_workbench->currentPage() != Workbench::EffectPage || m_effectDesigner->originalId() != id)
+            EffectDesigner *ed = effectDesigner();
+            if (ed == nullptr || ed->originalId() != id)
                 designEffect(id);
         }
         else if (kind == EffectsList::FunctionItem && m_workbench->loadedFunction() != id)
@@ -1172,17 +1166,28 @@ void ProgrammingManager::effectTargets(QTreeWidgetItem *clicked, QList<quint32> 
     }
 }
 
-EffectDesigner *ProgrammingManager::ensureEffectDesigner()
+EffectDesigner *ProgrammingManager::effectDesigner() const
 {
-    if (m_effectDesigner != nullptr)
-        return m_effectDesigner;
-    m_effectDesigner = new EffectDesigner(m_doc, this);
-    m_effectDesigner->setObjectName(QStringLiteral("buildEffectDesigner"));
-    m_effectDesigner->setCancelVisible(false);
-    m_effectDesigner->hide();
+    return qobject_cast<EffectDesigner *>(m_workbench->effectPane());
+}
+
+bool ProgrammingManager::designEffect(quint32 paletteId)
+{
+    const QLCPalette *p = m_doc->palette(paletteId);
+    if (p != nullptr && p->type() != QLCPalette::Effect)
+        return false;
+    Workbench::EffectRequest req;
+    req.palette = p != nullptr ? paletteId : QLCPalette::invalidId();
+    if (m_sections->checkedId() != EffectsSection)
+        setSection(EffectsSection);
+    if (!m_workbench->designEffect(req))
+        return false;
+    EffectDesigner *ed = effectDesigner();
+    if (ed == nullptr)
+        return true;
     // Saved as a palette, or the palette updated: listed, selected, and on
     // the bench again (a fresh copy of it), as Window ▸ Effects does.
-    connect(m_effectDesigner, &EffectDesigner::effectChosen, this,
+    connect(ed, &EffectDesigner::effectChosen, this,
             [this](quint32 pid, const QList<quint32> &, EffectDesigner::Outcome) {
         m_paletteTree->updateTree();
         rebuildEffects();
@@ -1190,33 +1195,15 @@ EffectDesigner *ProgrammingManager::ensureEffectDesigner()
             if (m_doc->palette(pid) == nullptr)
                 return;
             selectEffectRow(true, pid);
-            if (m_workbench->currentPage() == Workbench::EffectPage)
+            if (effectDesigner() != nullptr)
                 designEffect(pid);
         });
     });
-    // Something else loaded in the Workbench: what was on the bench goes.
-    connect(m_workbench, &Workbench::effectPaneClosed, this, [this]() {
-        if (m_effectDesigner != nullptr && m_effectDesigner->draftId() != QLCPalette::invalidId())
-            m_effectDesigner->cancel();
-    });
-    return m_effectDesigner;
-}
-
-void ProgrammingManager::designEffect(quint32 paletteId)
-{
-    const QLCPalette *p = m_doc->palette(paletteId);
-    if (p != nullptr && p->type() != QLCPalette::Effect)
-        return;
-    EffectDesigner *ed = ensureEffectDesigner();
-    if (m_sections->checkedId() != EffectsSection)
-        setSection(EffectsSection);
-    m_workbench->showEffectPane(ed);
-    ed->setTargets(QList<quint32>(), QList<quint32>());
-    ed->setEffect(p != nullptr ? paletteId : QLCPalette::invalidId());
     if (p != nullptr)
         selectEffectRow(true, paletteId);
     else
         m_effectsList->clearSelection();
+    return true;
 }
 
 quint32 ProgrammingManager::newClassicEffect(Function::Type type)
@@ -1235,7 +1222,7 @@ quint32 ProgrammingManager::newClassicEffect(Function::Type type)
     }
     f->setName(type == Function::EFXType ? tr("New EFX %1").arg(f->id()) : tr("New RGB Matrix %1").arg(f->id()));
     // Its heads: the Try on groups', as the designer's bench plays.
-    const QList<quint32> tryOn = ensureEffectDesigner()->tryOnGroups();
+    const QList<quint32> tryOn = EffectDesigner::savedTryOnGroups(m_doc);
     if (EFX *efx = qobject_cast<EFX *>(f))
     {
         for (quint32 gid : tryOn)
@@ -1514,7 +1501,20 @@ QLayout *ProgrammingManager::buildArrangementSwitch(QWidget *page)
     if (m_outline->arrangement() == ProgrammingOutline::Classic)
         idle(ProgrammingOutline::Classic);
     connect(m_outline, &ProgrammingOutline::chaserRequested, this, &ProgrammingManager::makeChaserFrom);
+    connect(m_outline, &ProgrammingOutline::sendToShowTreeRequested, this, &ProgrammingManager::sendToShowTree);
     return hl;
+}
+
+bool ProgrammingManager::sendToShowTree(quint32 chaserId)
+{
+    ShowTreeView *tree = ShowTreeView::instance();
+    if (tree == nullptr)
+        return false;
+    const bool sent = tree->sendToShowTree(chaserId, this);
+    // Filed under Imported/…, and no longer one to send.
+    m_outline->rebuild();
+    m_workbench->refreshAll();
+    return sent;
 }
 
 void ProgrammingManager::makeChaserFrom(const QList<quint32> &functionIds, const QString &folder)
@@ -3062,4 +3062,64 @@ void ProgrammingManager::slotRedo()
     m_paletteTree->updateTree();
     m_outline->rebuild();
     m_workbench->refreshAll();
+}
+
+/*****************************************************************************
+ * W3: the Workbench lent to the Show Tree
+ *****************************************************************************/
+
+Workbench *ProgrammingManager::lendWorkbench()
+{
+    if (m_workbench == nullptr || m_workbenchStandIn != nullptr || m_mainSplit == nullptr)
+        return nullptr;
+    const int index = m_mainSplit->indexOf(m_workbench);
+    if (index < 0)
+        return nullptr;
+    // What Build had loaded comes back with it.
+    m_lentFrom.reset(m_workbench->stack() != nullptr ? m_workbench->stack()->reopen(nullptr) : nullptr);
+    QTreeWidgetItem *cur = m_workbench->rows()->currentItem();
+    m_lentSelection = cur != nullptr && cur->isSelected()
+                      ? cur->data(0, ProgrammingOutline::KeyRole).toString() : QString();
+
+    QLabel *note = new QLabel(tr("The Workbench is in the Show Tree, open on a cue.\n"
+                                 "↩ Show Tree there brings it back here."));
+    note->setObjectName(QStringLiteral("workbenchLentNote"));
+    note->setAlignment(Qt::AlignCenter);
+    note->setWordWrap(true);
+    note->setEnabled(false);
+    m_workbenchStandIn = note;
+    m_mainSplit->replaceWidget(index, note);     // the Workbench's parent: none, for now
+    return m_workbench;
+}
+
+void ProgrammingManager::returnWorkbench(Workbench *workbench)
+{
+    if (workbench == nullptr || workbench != m_workbench || m_workbenchStandIn == nullptr)
+        return;
+    const int index = m_mainSplit->indexOf(m_workbenchStandIn);
+    QWidget *standIn = m_workbenchStandIn;
+    m_workbenchStandIn = nullptr;
+    if (index >= 0)
+        m_mainSplit->replaceWidget(index, m_workbench);
+    else
+        m_mainSplit->addWidget(m_workbench);
+    standIn->deleteLater();
+    m_workbench->setReturnTo(QString(), nullptr);
+    // Loaded as it was (if it is still there).
+    WorkbenchStack *back = m_lentFrom.isNull() ? nullptr : m_lentFrom->reopen(m_workbench);
+    m_lentFrom.reset();
+    if (back != nullptr)
+    {
+        m_workbench->setStack(back);
+        if (!m_lentSelection.isEmpty())
+            for (QTreeWidgetItemIterator it(m_workbench->rows()); *it; ++it)
+                if ((*it)->data(0, ProgrammingOutline::KeyRole).toString() == m_lentSelection)
+                {
+                    m_workbench->rows()->setCurrentItem(*it);
+                    break;
+                }
+    }
+    else
+        m_workbench->clear();
+    m_workbench->show();
 }

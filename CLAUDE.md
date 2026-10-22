@@ -108,8 +108,11 @@ QLC+ splits into an **engine** (no UI) and a Qt widgets **ui** layer.
   Stack mode, + Scene / + EFX / + RGB Matrix, editor pane with the Look
   Editor / channel console / stock editors, live preview, ↩) over a
   `WorkbenchStack` back end (`FunctionStack`: scenes, collections, chasers;
-  W3 adds a Show Tree `CueStack`). Collection edits are
-  `PaletteOps::functionStep` steps on the shared history.
+  `TreeCueStack` in `ui/src/treecuestack.*`: a Show Tree cue, every edit a
+  tree step -- not `CueStack`, which is the engine's Simple Desk class).
+  Collection edits are `PaletteOps::functionStep` steps on the shared
+  history. The Show Tree docks Build's Workbench in place of its page
+  (`ui/src/showtreeworkbench.cpp`, `ProgrammingManager::lendWorkbench()`).
 - **`ui/src/fixturemanager.{h,cpp}`** — Fixture Manager: fixture-group folders,
   empty-group creation, the head-layout grid editor (drag fixtures onto cells,
   add a group as a block, move a sub-group as a unit).

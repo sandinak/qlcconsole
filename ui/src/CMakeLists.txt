@@ -151,6 +151,7 @@ add_library(${module_name}
     fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h
     mainbar.cpp mainbar.h
+    moveinblackbutton.cpp moveinblackbutton.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     networkreportdialog.cpp networkreportdialog.h
@@ -162,6 +163,7 @@ add_library(${module_name}
     linespreadpreview.cpp linespreadpreview.h
     lineplanview.cpp lineplanview.h
     networktopologydialog.cpp networktopologydialog.h
+    noteedit.cpp noteedit.h
     patchinventorydialog.cpp patchinventorydialog.h
     helpbrowser.cpp helpbrowser.h
     helpshots.cpp helpshots.h
@@ -177,6 +179,7 @@ add_library(${module_name}
     workbench.cpp workbench.h
     workbenchstack.cpp workbenchstack.h
     showtreeview.cpp showtreeview.h
+    showtreeworkbench.cpp treecuestack.cpp treecuestack.h
     importsheet.cpp importsheet.h
     showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h

@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <memory>
 #include <algorithm>
 #include <functional>
 
@@ -163,6 +164,23 @@ QList<quint32> ShowTreeController::convertibleChasers() const
     for (const Function *f : fs)
         out << f->id();
     return out;
+}
+
+QString ShowTreeController::whyNotSend(quint32 chaserId) const
+{
+    const Function *f = m_doc->function(chaserId);
+    if (f == nullptr || f->type() != Function::ChaserType)
+        return tr("Not a chaser.");
+    if (isGenerated(chaserId))
+        return tr("The Show Tree made this chaser: it is a cue list there already.");
+    const quint32 listId = importedInto(chaserId);
+    if (listId != invalidId())
+    {
+        const CueList *list = cueList(listId);
+        return tr("Sent already: it is the cue list %1 in the Show Tree (Restore original there puts it back).")
+               .arg(list == nullptr ? f->name() : list->name);
+    }
+    return QString();
 }
 
 ShowTreeController::ImportReport ShowTreeController::planImport(quint32 chaserId, CueList *listOut) const
@@ -1018,7 +1036,11 @@ bool ShowTreeController::captureIntoPalettes(quint32 sceneId, CapturePlan *planO
     // Outside the tree, with this step: the rest scene (made again on redo,
     // with its id) and the palettes made (redo's snapshot brings those
     // back; undo takes them away unless something of the show's uses them).
-    const quint32 restId = rest == nullptr ? invalidId() : rest->id();
+    // Where the rest scene is now: made again on redo under its own id, or
+    // -- when a bake has given that id to another function meanwhile (a
+    // redo of several steps) -- under a new one the tree is pointed at.
+    const std::shared_ptr<quint32> restId =
+        std::make_shared<quint32>(rest == nullptr ? invalidId() : rest->id());
     const QString restName = rest == nullptr ? QString() : rest->name();
     const QString restPath = rest == nullptr ? QString() : rest->path(true);
     const QList<SceneValue> vals = plan.leftovers;
@@ -1029,8 +1051,8 @@ bool ShowTreeController::captureIntoPalettes(quint32 sceneId, CapturePlan *planO
     attachToLastStep([this, doc, restId, restName, restPath, vals, madePalettes](bool undone) {
         if (undone)
         {
-            if (restId != invalidId())
-                doc->deleteFunction(restId);
+            if (*restId != invalidId())
+                doc->deleteFunction(*restId);
             for (quint32 pid : madePalettes)
             {
                 bool used = false;
@@ -1043,15 +1065,26 @@ bool ShowTreeController::captureIntoPalettes(quint32 sceneId, CapturePlan *planO
             }
             return;
         }
-        if (restId == invalidId() || doc->function(restId) != nullptr)
+        if (*restId == invalidId())
             return;
         Scene *s = new Scene(doc);
         s->setName(restName);
         s->setPath(restPath);
         for (const SceneValue &sv : vals)
             s->setValue(sv.fxi, sv.channel, sv.value);
-        if (!doc->addFunction(s, restId))
+        // The step's tree snapshot plays it where it was when the step was
+        // undone; when a bake has taken that id since, under a new one.
+        const quint32 was = *restId;
+        if (doc->function(was) == nullptr ? doc->addFunction(s, was) : doc->addFunction(s))
+        {
+            *restId = s->id();
+            if (s->id() != was)
+                remapSnapshotFunction(was, s->id());
+        }
+        else
+        {
             delete s;
+        }
     }, true);
     return done(true);
 }
