@@ -4,6 +4,18 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Bring an old show over, and back.** A show of chasers opens as it
+  always did, with one line at the top of the Show Tree tab offering to
+  convert it. **Convert an old show…** tells the chasers used as cue
+  lists (they wait for GO, carry notes or cue numbers) from the ones used
+  as effects (strobes and chases, which stay functions), and shows each
+  list's plan, checked channel by channel before anything changes.
+  **Import in place** files the originals under `Imported/…` and moves
+  the VC, timelines and show control over to the list; **Restore
+  original** undoes it. Collections that every cue holds (a "base") no
+  longer show up as ▣ rows, and a raw scene's ▣ row can **Capture into
+  palettes…**. See
+  [An old show: convert it](show-tree.md#an-old-show-convert-it).
 - **Open what an old show's layer plays.** In the Show Tree, a layer that
   plays a function as it is (▣ — a raw scene, an EFX, an RGB Matrix)
   now opens it: double-click it, right-click → **Open**, or **Open** on

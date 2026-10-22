@@ -30,6 +30,11 @@
 #include "vccuelist.h"
 #include "vcbutton.h"
 #include "vcslider.h"
+#include "vcspeeddial.h"
+#include "vcspeeddialfunction.h"
+#include "vcclock.h"
+#include "vcaudiotriggers.h"
+#include "audiobar.h"
 #include "vcframe.h"
 #include "chaser.h"
 #include "doc.h"
@@ -42,7 +47,8 @@ using namespace ShowTree;
 
 int ImportSheet::Repoint::count() const
 {
-    return int(buttons.count() + cueLists.count() + sliders.count()) + (mainCueList ? 1 : 0)
+    return int(buttons.count() + cueLists.count() + sliders.count() + speedDials.count() + clocks.count()
+               + audioTriggers.count()) + (mainCueList ? 1 : 0)
            + (cueListNumber.isEmpty() ? 0 : 1);
 }
 
@@ -58,6 +64,15 @@ QStringList ImportSheet::Repoint::lines() const
     for (const QPointer<VCSlider> &s : sliders)
         if (s)
             out << tr("VC slider “%1”").arg(s->caption());
+    for (const QPointer<VCSpeedDial> &d : speedDials)
+        if (d)
+            out << tr("VC speed dial “%1”").arg(d->caption());
+    for (const QPointer<VCClock> &c : clocks)
+        if (c)
+            out << tr("VC clock “%1” (its schedule)").arg(c->caption());
+    for (const QPointer<VCAudioTriggers> &a : audioTriggers)
+        if (a)
+            out << tr("VC audio triggers “%1”").arg(a->caption());
     if (mainCueList)
         out << tr("the main cue list (GO with no list, OSC and MSC)");
     if (!cueListNumber.isEmpty())
@@ -77,6 +92,42 @@ void ImportSheet::Repoint::apply(Doc *doc, bool forward) const
     for (const QPointer<VCSlider> &s : sliders)
         if (s)
             s->setPlaybackFunction(now);
+    // These hold the chaser among other functions: only its entries move.
+    const quint32 was = forward ? from : to;
+    for (const QPointer<VCSpeedDial> &d : speedDials)
+    {
+        if (!d)
+            continue;
+        QList<VCSpeedDialFunction> fs = d->functions();
+        for (VCSpeedDialFunction &f : fs)
+            if (f.functionId == was)
+                f.functionId = now;
+        d->setFunctions(fs);
+    }
+    for (const QPointer<VCClock> &c : clocks)
+    {
+        if (!c)
+            continue;
+        const QList<VCClockSchedule> schedules = c->schedules();
+        for (int i = int(schedules.count()) - 1; i >= 0; --i)
+            c->removeSchedule(i);
+        for (VCClockSchedule sch : schedules)
+        {
+            if (sch.function() == was)
+                sch.setFunction(now);
+            c->addSchedule(sch);
+        }
+    }
+    for (const QPointer<VCAudioTriggers> &a : audioTriggers)
+    {
+        if (!a)
+            continue;
+        Function *f = doc->function(now);
+        for (AudioBar *bar : a->getAudioBars())
+            if (bar != nullptr && bar->m_type == AudioBar::FunctionBar && bar->m_function != nullptr
+                && bar->m_function->id() == was && f != nullptr)
+                bar->attachFunction(f);
+    }
     if (mainCueList && doc->showControl() != nullptr)
         doc->showControl()->setMainCueList(now);
     if (!cueListNumber.isEmpty())
@@ -111,6 +162,28 @@ ImportSheet::Repoint ImportSheet::planRepoint(Doc *doc, quint32 from, quint32 to
         for (VCSlider *s : vc->contents()->findChildren<VCSlider *>())
             if (s->playbackFunction() == from)
                 r.sliders << s;
+        for (VCSpeedDial *d : vc->contents()->findChildren<VCSpeedDial *>())
+            for (const VCSpeedDialFunction &f : d->functions())
+                if (f.functionId == from)
+                {
+                    r.speedDials << d;
+                    break;
+                }
+        for (VCClock *c : vc->contents()->findChildren<VCClock *>())
+            for (const VCClockSchedule &sch : c->schedules())
+                if (sch.function() == from)
+                {
+                    r.clocks << c;
+                    break;
+                }
+        for (VCAudioTriggers *a : vc->contents()->findChildren<VCAudioTriggers *>())
+            for (AudioBar *bar : a->getAudioBars())
+                if (bar != nullptr && bar->m_type == AudioBar::FunctionBar && bar->m_function != nullptr
+                    && bar->m_function->id() == from)
+                {
+                    r.audioTriggers << a;
+                    break;
+                }
     }
     if (doc->showControl() != nullptr && doc->showControl()->mainCueList() == from)
         r.mainCueList = true;

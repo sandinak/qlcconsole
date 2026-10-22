@@ -1167,6 +1167,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             if (currentKind() == ListNode)
                 restoreOriginal(currentId());
         });
+        m_listRestore->hide();
         h->addWidget(m_listRestore);
         // R3: a Looks section or folder -- a VC page of buttons for it.
         m_listVcPage = new QPushButton(tr("Make VC page"), row);
@@ -5935,6 +5936,178 @@ int ShowTreeView::repointToList(quint32 chaserId, quint32 listId)
     m_st->attachToLastStep([doc, r](bool undone) { r.apply(doc, !undone); });
     m_hint->setText(tr("%1 now fire(s) the cue list %2").arg(r.lines().join(QStringLiteral(", ")), list->name));
     return r.count();
+}
+
+/****************************************************************************
+ * W5: the bridge -- the show converter, Import in place, Restore original,
+ * Capture into palettes, the open banner
+ ****************************************************************************/
+
+QWidget *ShowTreeView::bridgeBanner() const
+{
+    return m_bridgeBanner;
+}
+
+void ShowTreeView::updateBridgeBanner()
+{
+    if (m_bridgeBanner == nullptr)
+        return;
+    // Only a show with no tree yet, and only until dismissed: it never
+    // nags a show that already has one, and never converts on its own.
+    QStringList lists;
+    if (!m_bridgeDismissed && m_st->productions().isEmpty())
+        lists = ShowConverter::cueListChasers(m_doc);
+    if (lists.isEmpty())
+    {
+        m_bridgeBanner->hide();
+        return;
+    }
+    QStringList shown = lists.mid(0, 3);
+    if (lists.count() > 3)
+        shown << tr("…");
+    m_bridgeText->setText(tr("This show uses chasers: %n look(s) like cue lists (%1). They play as they are; "
+                             "Convert… makes them Show Tree cue lists, checked, when you want.", "",
+                             int(lists.count())).arg(shown.join(QStringLiteral(", "))));
+    m_bridgeBanner->show();
+}
+
+void ShowTreeView::openConverter()
+{
+    ShowConverter dialog(m_doc, this);
+    dialog.setConverter([this](quint32 chaserId, bool inPlace) {
+        if (inPlace)
+            return importInPlace(chaserId);
+        const Function *f = m_doc->function(chaserId);
+        const QString name = f == nullptr ? QString() : f->name();
+        const ShowTreeController::ImportReport rep = m_st->importChaser(chaserId);
+        if (rep.list == invalidId())
+            return QStringList(tr("%1: not imported (%2)").arg(name, rep.notes.join(QStringLiteral("; "))));
+        return QStringList(tr("%1: a cue list of %n cue(s) beside the chaser; %2.", "", rep.cues)
+                           .arg(name, rep.differChannels == 0 ? tr("plays the same (0 channels differ)")
+                                                              : tr("%n channel(s) differ", "", rep.differChannels)));
+    });
+    if (m_converterRunner)
+        m_converterRunner(&dialog);
+    else
+        dialog.exec();
+}
+
+QStringList ShowTreeView::importInPlace(quint32 chaserId)
+{
+    QStringList out;
+    const Function *f = m_doc->function(chaserId);
+    const QString name = f == nullptr ? QString() : f->name();
+    const ShowTreeController::ImportReport rep = m_st->importInPlace(chaserId);
+    if (rep.list == invalidId())
+    {
+        out << tr("%1: not imported (%2)").arg(name, rep.notes.join(QStringLiteral("; ")));
+        return out;
+    }
+    const CueList *list = m_st->cueList(rep.list);
+    const ImportSheet::Repoint r = ImportSheet::planRepoint(m_doc, chaserId, list->chaser);
+    repointToList(chaserId, rep.list);
+    out << tr("%1: a cue list of %n cue(s); %2.", "", rep.cues)
+           .arg(name, rep.differChannels == 0 ? tr("plays the same (0 channels differ)")
+                                              : tr("%n channel(s) differ", "", rep.differChannels));
+    if (rep.dropped + rep.flattened > 0)
+        out << tr("%1: %n nested collection(s) read into the cues.", "", rep.dropped + rep.flattened).arg(name);
+    if (rep.filed > 0)
+        out << tr("%1: %n original(s) filed under %2.", "", rep.filed)
+               .arg(name, ShowTreeController::originalsFolder(name));
+    for (const QString &t : rep.timelines)
+        out << tr("%1: the Show timeline “%2” plays the list now.").arg(name, t);
+    if (r.count() > 0)
+        out << tr("%1: %2 fire the list now.").arg(name, r.lines().join(QStringLiteral(", ")));
+    selectNode(rep.list);
+    m_hint->setText(tr("%1 imported in place").arg(name));
+    return out;
+}
+
+bool ShowTreeView::restoreOriginal(quint32 listId)
+{
+    QString why;
+    if (!m_st->canRestoreOriginal(listId, &why))
+    {
+        m_hint->setText(why);
+        return false;
+    }
+    const CueList *list = m_st->cueList(listId);
+    const quint32 source = list->source, listChaser = list->chaser;
+    const QString name = m_doc->function(source)->name();
+    const ImportSheet::Repoint back = ImportSheet::planRepoint(m_doc, listChaser, source);
+    QString text = tr("Restore “%1”? The cue list %2 leaves the Show Tree -- with any change made to it since the "
+                      "import -- and “%1” and its originals go back to their folders.")
+                   .arg(name, list->name);
+    if (back.count() > 0)
+        text += QStringLiteral(" ") + tr("%1 fire the chaser again.").arg(back.lines().join(QStringLiteral(", ")));
+    text += QStringLiteral(" ") + tr("One undo step.");
+    if (!confirm(tr("Restore original"), text))
+        return false;
+    // What fires the list fires the chaser first: the list's chaser goes
+    // with the list.
+    back.apply(m_doc, true);
+    if (!m_st->restoreOriginal(listId, &why))
+    {
+        back.apply(m_doc, false);
+        m_hint->setText(why);
+        return false;
+    }
+    Doc *doc = m_doc;
+    if (back.count() > 0)
+        m_st->attachToLastStep([doc, back](bool undone) { back.apply(doc, !undone); }, true);
+    m_hint->setText(tr("“%1” is back as it was").arg(name));
+    return true;
+}
+
+bool ShowTreeView::captureIntoPalettes(quint32 sceneId)
+{
+    const Function *f = m_doc->function(sceneId);
+    if (f == nullptr)
+        return false;
+    const QString name = f->name();
+    const ShowTreeController::CapturePlan plan = m_st->planCapture(sceneId);
+    if (!plan.ok)
+    {
+        m_hint->setText(tr("Can't capture “%1”: %2").arg(name, plan.why));
+        return false;
+    }
+    QStringList details;
+    for (const ShowTreeController::CaptureLayer &cl : plan.layers)
+    {
+        QStringList looks;
+        for (auto it = cl.looks.constBegin(); it != cl.looks.constEnd(); ++it)
+        {
+            const ShowTreeController::CapturePalette &cp = plan.palettes.at(it.value());
+            looks << QStringLiteral("%1 %2%3").arg(keyLabel(it.key()), cp.name,
+                                                   cp.reuse == QLCPalette::invalidId() ? tr(" (new)") : QString());
+        }
+        details << tr("Layer on %1: %2").arg(m_st->targetLabel(cl.target), looks.join(QStringLiteral(", ")));
+    }
+    if (!plan.leftoverLines.isEmpty())
+        details << tr("Stays raw, in “%1 (rest)” beside it: %2").arg(name, plan.leftoverLines.join(QStringLiteral("; ")));
+    QStringList cues;
+    for (const auto &u : plan.uses)
+        if (const CueList *l = m_st->cueList(u.first))
+            cues << QStringLiteral("%1 %2").arg(l->name, m_st->cueLabel(*l, l->indexOf(u.second)));
+    details << tr("Where: %1").arg(cues.join(QStringLiteral(", ")));
+    const QString text = tr("Capture “%1” into palettes? %2 of its %3 channel values become %n layer(s) of palettes "
+                            "in %4 cue(s), checked channel for channel: a cue that would change keeps the scene as "
+                            "it is. The scene itself is kept. One undo step.", "", int(plan.layers.count()))
+                         .arg(name).arg(plan.capturedChannels)
+                         .arg(plan.capturedChannels + int(plan.leftovers.count())).arg(plan.uses.count());
+    if (!confirm(tr("Capture into palettes"), text, details.join(QStringLiteral("\n"))))
+        return false;
+    ShowTreeController::CapturePlan done;
+    if (!m_st->captureIntoPalettes(sceneId, &done))
+    {
+        m_hint->setText(tr("“%1” not captured: %2").arg(name, done.why));
+        return false;
+    }
+    QString hint = tr("“%1” captured into palettes in %n cue(s): 0 channels differ", "", done.captured).arg(name);
+    if (!done.kept.isEmpty())
+        hint += QStringLiteral(" · ") + done.kept.join(QStringLiteral(" · "));
+    m_hint->setText(hint);
+    return true;
 }
 
 quint32 ShowTreeView::openableFunction(QTreeWidgetItem *item) const

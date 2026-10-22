@@ -30,6 +30,9 @@ class QTextBrowser;
 class VCCueList;
 class VCButton;
 class VCSlider;
+class VCSpeedDial;
+class VCClock;
+class VCAudioTriggers;
 class QCheckBox;
 class Doc;
 
@@ -63,6 +66,11 @@ public:
         QList<QPointer<VCButton>> buttons;
         QList<QPointer<VCCueList>> cueLists;
         QList<QPointer<VCSlider>> sliders;
+        /** W5: the other VC widgets that hold a chaser -- a speed dial's
+         *  functions, a clock's schedule, an audio trigger's bars. */
+        QList<QPointer<VCSpeedDial>> speedDials;
+        QList<QPointer<VCClock>> clocks;
+        QList<QPointer<VCAudioTriggers>> audioTriggers;
         bool mainCueList = false;
         QString cueListNumber;              //!< the chaser's, moved with it
         int count() const;

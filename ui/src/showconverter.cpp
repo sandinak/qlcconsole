@@ -74,7 +74,7 @@ ShowConverter::ShowConverter(Doc *doc, QWidget *parent)
     QVBoxLayout *root = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("Each chaser, by how it runs. One that waits for GO (notes, cue numbers, a VC Cue "
                                   "List, show control) is a cue list: tick it to make it a Show Tree cue list. One "
-                                  "that loops on its own -- a strobe, a chase, a sweep -- is an effect and stays a "
+                                  "that loops on its own — a strobe, a chase, a sweep — is an effect and stays a "
                                   "function: it plays as a ▣ layer wherever you drop it. Nothing changes until you "
                                   "press Convert, and each chaser is one undo step."), this);
     intro->setWordWrap(true);
@@ -86,7 +86,7 @@ ShowConverter::ShowConverter(Doc *doc, QWidget *parent)
     m_table->setHeaderLabels({ tr("Chaser"), tr("Used as"), tr("Plan"), tr("Plays the same") });
     m_table->header()->setStretchLastSection(false);
     m_table->header()->setSectionResizeMode(1, QHeaderView::Stretch);
-    root->addWidget(m_table, 2);
+    root->addWidget(m_table, 1);
 
     m_details = new QTextBrowser(this);
     m_details->setObjectName(QStringLiteral("stConverterDetails"));

@@ -13,6 +13,36 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **The bridge from an old show** (W5 of the workflow design):
+  - **Show converter** (Show Tree → Import chaser… → Convert an old
+    show…, and a dismissable line at the top of the tab for a show with
+    chasers and no tree; nothing converts on load). Each chaser is
+    classified (`ShowTreeController::classifyChaser()`): a cue list
+    (waits for GO, notes, cue numbers, cue-list number, main cue list, a
+    VC Cue List) is offered and ticked with its plan and same-output check
+    (`planImport()`, made without changing the show); an effect chaser
+    (loops on its own) stays a function and isn't offered.
+  - **Import in place** (`importInPlace()`, `fileOriginals()`): the list
+    is linked to its chaser (`Source=` on the cue list); the chaser and
+    what only it plays are filed under `Imported/<chaser> (originals)`
+    (recorded as `Original` entries with their old folders); Show
+    timelines that played it play the list; VC buttons, Cue Lists,
+    sliders, speed dials, clocks, audio triggers, the main cue list and
+    the cue-list number fire the list. One undo step. The import sheet
+    offers it (ticked); **Restore original** (`restoreOriginal()`) undoes
+    it as one undo step.
+  - **Nested collections that are no step** are read into the cue
+    (`ImportReport::flattened` / `dropped`): DanceHysteria-0.1's Full Show
+    goes from 15 ▣ rows to 8, all real raw scenes.
+  - **Capture into palettes** for a raw scene on a ▣ row
+    (`planCapture()`, `captureIntoPalettes()`): Dimmer, Colour, Position
+    and Gobo looks that put out exactly its values, palettes reused by
+    value, leftovers in a "(rest)" scene, kept only where every cue plays
+    the same. The scene is kept. One undo step.
+  - Undo steps carry outside changes before and after the tree's
+    (`attachToLastStep(…, beforeTree)`), several per step.
+  - Older builds ignore the new XML (`Source`, `InPlace`, `Original`):
+    the list still loads and plays.
 - **Open a function a Show Tree layer plays as it is** (W0 of the workflow
   design): a ▣ layer (a raw scene, EFX, RGB Matrix, collection or chaser)
   opens its function in its own editor in the Functions window -- from

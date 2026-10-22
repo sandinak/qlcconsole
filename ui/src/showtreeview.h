@@ -219,7 +219,7 @@ public:
     /** W5: the banner an old show opens with ("This show uses chasers…
      *  Convert…"): shown while the show has chasers that look like cue
      *  lists and no Show Tree, until dismissed (for this show). */
-    QWidget *bridgeBanner() const { return m_bridgeBanner; }
+    QWidget *bridgeBanner() const;
     void updateBridgeBanner();
 
     /** Functions dropped on a cue: opaque function layers. */
