@@ -79,6 +79,7 @@ add_library(${module_name}
     connectionstree.cpp connectionstree.h
     universepatcher.cpp universepatcher.h
     powerprofiledialog.cpp powerprofiledialog.h
+    outputrulesdialog.cpp outputrulesdialog.h
     universeoutputview.cpp universeoutputview.h
     deviceprofile.cpp deviceprofile.h
     universepatchgrid.cpp universepatchgrid.h

@@ -30,6 +30,8 @@
 #include "inputoutputmap.h"
 #include "universe.h"
 #include "fixturegroup.h"
+#include "outputrulekeeper.h"
+#include "outputrulesdialog.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -259,6 +261,8 @@ void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
     QTreeWidgetItem *fi = new QTreeWidgetItem(parent);
     fi->setText(0, f->name());
     fi->setIcon(0, ItemIcons::fixtureIcon(f));
+    if (f->outputRules() != Fixture::OutputRules())
+        fi->setToolTip(0, tr("Output rules: %1").arg(OutputRuleKeeper::describe(f->outputRules())));
     fi->setData(0, IdRole, f->id());
     fi->setData(0, KindRole, FixtureNode);
     fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
@@ -324,6 +328,10 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
             : tr("Create fixture group from fixture…"))
         : tr("Create fixture group from selection…"));
 
+    // Relays, house and work lights (all of a group's members).
+    QAction *rules = menu.addAction(OutputRulesDialog::actionText());
+    rules->setObjectName(QStringLiteral("outputRulesAction"));
+
     QAction *rename = NULL;
     QMenu *move = NULL;
     QAction *del = NULL;
@@ -375,6 +383,12 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
             if (dlg.heads() > 0 && dlg.exec() == QDialog::Accepted)
                 m_doc->setModified();
         }
+        return;
+    }
+    if (chosen == rules)
+    {
+        if (OutputRulesDialog::edit(this, m_doc, groupIds, fixtureIds))
+            reload();   // the badges
         return;
     }
     if (chosen == rename)

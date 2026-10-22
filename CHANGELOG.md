@@ -13,6 +13,28 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Output rules** (`Fixture::OutputRules`: `ExemptBlackout`,
+  `ExemptGrandMaster`, `Switch`, `OnAtOpen`; saved as an optional
+  `OutputRules` child of the fixture, "Blackout,GrandMaster,Switch,OnAtOpen",
+  skipped by older readers). `OutputRuleKeeper` (engine, owned by `Doc`)
+  keeps rule bits (`Universe::GMExempt`, `BlackoutExempt`, `SwitchOutput`,
+  `OnAtOpenOutput`) in each universe's channel mask in step with the
+  fixtures, clearing them when a fixture moves, unpatches or goes;
+  `setChannelCapability()` preserves them. `updatePostGMValue()` skips the
+  GM for exempt and Switch channels and snaps Switch channels to 0/255 last;
+  `dumpOutput()` overlays Blackout-exempt channels' live values on the
+  Blackout frame, and under Blind sends that frame when the universe has
+  any (`kDefaultBlindHoldsExempt`, board Q44); power limits leave Switch
+  channels alone; a Switch fixture's channels never fade. OnAtOpen is a
+  floor after the faders (full when nothing set the channel this frame),
+  armed per the show setting *When you switch to Operate* (default, board
+  Q45) / *When the show opens*, saved as `OutputRuleSettings OnAtOpen=`
+  only when not the default; Settings ▸ Output. UI: `OutputRulesDialog`
+  (tri-state for mixed selections, one rig undo step — the rig snapshot
+  now carries rules) from the Fixture Manager, Build's Groups & fixtures
+  and the Show Tree Library; an amber badge on fixture icons
+  (`ItemIcons::fixtureIcon`) with a tooltip; Blackout/Blind tooltips say
+  exempt fixtures stay on.
 - **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
   tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
   yellow hard hat with an amber edge, crisp at any size and pixel ratio,

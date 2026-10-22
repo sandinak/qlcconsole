@@ -4,6 +4,17 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Output rules for relays, house and work lights.** Right-click
+  fixtures or a group → **Output Rules…** (Fixture Manager, Build, the
+  Show Tree's Library): **Ignore Blackout** (it also holds through
+  Blind), **Ignore the Grand Master**, **Switch (relay)** — on at 50%,
+  off below, never faded, and the Grand Master cannot switch it off — and
+  **On when not in use**: full whenever nothing in the show sets it. When
+  those come on is the show's setting in Settings ▸ Output: *When you
+  switch to Operate* (the default) or *When the show opens*. Fixtures
+  with rules carry an amber badge. See
+  [Output rules](fixture-manager.md#output-rules).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;

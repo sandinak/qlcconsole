@@ -6174,6 +6174,8 @@ void ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove()
     QVERIFY2(similarAt >= 0, qPrintable(names.join(", ")));
     QCOMPARE(names.value(similarAt + 1), QString("stMakeSet"));
     QCOMPARE(names.value(similarAt + 2), QString("stMoveGroupsToFolder"));
+    // Output Rules… for the groups' members (relays, house lights).
+    QVERIFY2(names.contains("stOutputRules"), qPrintable(names.join(", ")));
     QTRY_COMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
     QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("Make set"));
     QVERIFY(!selectedGroups().contains(mid->id()) && !selectedGroups().contains(other->id()));

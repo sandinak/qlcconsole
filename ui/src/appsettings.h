@@ -65,6 +65,7 @@ private:
     QTabWidget *m_tabs = nullptr;
     // Advanced: the show's auto-open shutters (ShutterAutoOpen)
     QCheckBox *m_autoOpenCheck = nullptr;
+    class QComboBox *m_onAtOpenCombo = nullptr;
 
     // Autosave widgets
     QCheckBox *m_autosaveEnabledCheck;

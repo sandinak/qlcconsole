@@ -70,6 +70,7 @@
 #include "linespreadpreview.h"
 #include "lineplanview.h"
 #include "monitorproperties.h"
+#include "outputrulesdialog.h"
 #include "stagetarget.h"
 #include "linespread.h"
 #include "effectdesigner.h"
@@ -7440,6 +7441,14 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
             selectLibraryGroups(selGroups);
         });
         menu.addSeparator();
+    }
+    if ((kind == LibGroup || kind == LibFixture) && (!selGroups.isEmpty() || !selFixtures.isEmpty()))
+    {
+        // Relays, house and work lights: for the fixtures or groups' members.
+        menu.addAction(OutputRulesDialog::actionText(), this, [this, selGroups, selFixtures]() {
+            if (OutputRulesDialog::edit(this, m_doc, selGroups, selFixtures))
+                reloadLibrary();    // the badges
+        })->setObjectName("stOutputRules");
     }
     if (kind == LibSet)
     {

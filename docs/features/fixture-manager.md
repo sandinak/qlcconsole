@@ -541,6 +541,48 @@ mover's colour ring made a head of its own, say. The item only shows when
 there is such a definition. Undo it the same way (the old definition is a
 drop-in for the new one).
 
+## Output rules
+
+Some of a rig's "dimmers" are not lights in the show: the power relays
+that feed the movers, the house, work and hall lights, backstage blues.
+An Eos show patches them as plain dimmers; here they must not go out with
+Blackout or the Grand Master, and a relay must switch, not fade.
+
+Select fixtures (or a group — every member) and right-click →
+**Output Rules…**. The same item is on a group or fixture in Build's
+*Groups & fixtures* and in the Show Tree's Library. Four rules, any
+together:
+
+| Rule | What it does |
+|------|--------------|
+| **Ignore Blackout** | Blackout leaves it as it is: it keeps whatever the show gives it, live. It also holds through **Blind**. |
+| **Ignore the Grand Master** | The Grand Master does not dim it. |
+| **Switch (relay)** | On at 50% and over, off below — never in between, never faded (a fade-in switches at once). The Grand Master cannot switch it off, and the power limiter never scales it. |
+| **On when not in use** | At full whenever nothing in the show sets it. Anything that sets it — a cue, a slider, even to zero — wins; when that lets go, it is back at full. |
+
+When **On when not in use** fixtures come on is the show's setting, in
+**Settings ▸ Advanced ▸ Output (saved with this show)**: **When you switch
+to Operate** (a new show's, the safer choice: nothing switches on while you
+patch) or **When the show opens**. With *When you switch to Operate* they
+stay on if you go back to Design; opening another show waits for its own
+Operate. The Grand Master does dim an *On when not in use* light unless it
+also ignores the Grand Master.
+
+With several fixtures whose rules differ, a rule some have and some not
+shows partly ticked and is left as each has it — click it to set it for
+all. **⌘Z** undoes the change (one rig undo step).
+
+A fixture with rules has a small amber lightning badge on its icon in the
+Fixture Manager, Build and the Library; hover it for the rules in words.
+
+Which channels: *Ignore Blackout* and *Ignore the Grand Master* cover all
+of the fixture's channels (Blackout already keeps the non-intensity ones;
+this keeps the intensity ones too). *Switch* and *On when not in use*
+cover its intensity channels — all of them if it has none.
+
+The rules are saved with the fixture, only when it has any, so a show
+without them is unchanged; QLC+ and older qlcconsole builds skip them.
+
 ## Context menu
 
 Right-click is laid out by what it is about, in the same order whatever is
@@ -549,7 +591,7 @@ selected, and only offers what applies:
 1. **The fixture itself** — Fixture Properties…, Definition & Mode…,
    Edit Fixture Definition… and [LED Layout…](#led-layout) (one fixture),
    Change Definition… (fixtures of one definition, when another is a
-   drop-in for it).
+   drop-in for it), and [Output Rules…](#output-rules).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….

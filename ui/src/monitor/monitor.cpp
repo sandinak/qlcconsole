@@ -1298,9 +1298,14 @@ QByteArray Monitor::rigSnapshot() const
         else if (fx->fixtureMode() != nullptr)
             modes.insert(fx->id(), fx->fixtureMode()->name());
     }
+    // And each fixture's output rules (Output Rules…).
+    QHash<quint32, int> rules;
+    foreach (Fixture *fx, m_doc->fixtures())
+        rules.insert(fx->id(), int(fx->outputRules()));
     QByteArray out;
     QDataStream ds(&out, QIODevice::WriteOnly);
-    ds << m_props->snapshot(m_doc) << names << power << network << patch << modes << dimmerChannels;
+    ds << m_props->snapshot(m_doc) << names << power << network << patch << modes << dimmerChannels
+       << rules;
     return out;
 }
 
@@ -1323,6 +1328,10 @@ void Monitor::restoreRig(const QByteArray &snap)
     QHash<quint32, quint32> dimmerChannels;
     if (!ds.atEnd())
         ds >> modes >> dimmerChannels;
+    QHash<quint32, int> rules;
+    const bool haveRules = !ds.atEnd();
+    if (haveRules)
+        ds >> rules;
     if (props.isEmpty())
         return;
     /* The patch: unpatch what wasn't, then put the rest back where it was --
@@ -1387,6 +1396,11 @@ void Monitor::restoreRig(const QByteArray &snap)
         if (r.readNextStartElement())
             pp.loadXML(r);
         fx->setPowerProfile(pp);
+    }
+    if (haveRules)
+    {
+        foreach (Fixture *fx, m_doc->fixtures())
+            fx->setOutputRules(Fixture::OutputRules(rules.value(fx->id(), 0)));
     }
 
     m_props->restoreSnapshot(props, m_doc);
