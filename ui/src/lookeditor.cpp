@@ -265,6 +265,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QHBoxLayout *nameRow = new QHBoxLayout();
     nameRow->setContentsMargins(0, 0, 0, 0);
     QLabel *nameLbl = new QLabel(tr("Name:"), this);
+    nameLbl->setObjectName("lookNameLabel");
     nameLbl->setMinimumWidth(44);
     nameRow->addWidget(nameLbl);
     m_nameEdit = new QLineEdit(this);
@@ -277,6 +278,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     // Info line: "used by N scene(s)" — updated when a palette is selected
     m_title = new QLabel(tr("Look editor"), this);
+    m_title->setObjectName("lookTitle");
     m_title->setStyleSheet("color: palette(mid); font-size: small;");
     root->addWidget(m_title);
 
@@ -764,6 +766,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QLabel *effectLabel = new QLabel(tr("Effect:"), effectPage);
     efScriptRow->addWidget(effectLabel);
     m_effectScriptCombo = new QComboBox(effectPage);
+    m_effectScriptCombo->setObjectName(QStringLiteral("effectScriptCombo"));   // EffectDesigner mirrors it
     m_effectScriptCombo->setToolTip(tr("Pick an Effect (or a raw Generator) for this look"));
     /* Cap the popup and force it to scroll. Several styles (macOS among them)
        otherwise draw every item at once, and with categories, generators and
@@ -962,6 +965,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(m_exportEffectButton, &QPushButton::clicked, this, &LookEditor::slotExportEffect);
 
     m_saveAsEffectButton = new QPushButton(tr("Save as Effect…"), effectPage);
+    m_saveAsEffectButton->setObjectName(QStringLiteral("effectSaveAs"));
     m_saveAsEffectButton->setToolTip(
         tr("Save this Generator + its current settings as a named Effect you can reuse"));
     // On a row of its own: the column beside the list is narrow.

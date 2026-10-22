@@ -70,6 +70,7 @@
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "linespread.h"
+#include "effectdesigner.h"
 #include "showtreeview.h"
 #include "importsheet.h"
 #include "functionmanager.h"
@@ -3795,6 +3796,14 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
         upd->setEnabled(true);
     }
 
+    if (isEffectKey(key) && !rowTarget.isEmpty())
+    {
+        // In detail, on just this layer's heads (W4).
+        menu.addAction(tr("Design effect…"), this, [this, cueId, layerId, rowTarget, key]() {
+            EffectLayerDialog::design(m_doc, this, cueId, layerId, rowTarget, key);
+        })->setObjectName("stDesignEffect");
+        menu.addSeparator();
+    }
     if (key == KeyDimmer)
     {
         menu.addAction(tr("Level…"), this, [this, cueId, layerId, target]() {
@@ -5572,6 +5581,15 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 if (ok)
                     m_st->renameNode(layerId, n.trimmed());
             });
+            if (const Cue *dc = m_st->cue(cueId))
+                if (const Layer *dl = dc->layer(layerId))
+                    if (!dl->target.isOpaque())
+                    {
+                        const Target dt = dl->target;
+                        menu.addAction(tr("Design effect…"), this, [this, cueId, layerId, dt]() {
+                            EffectLayerDialog::design(m_doc, this, cueId, layerId, dt);
+                        })->setObjectName("stDesignEffectLayer");
+                    }
             menu.addAction(tr("Detach to plain scene"), this, [this, cueId, layerId]() {
                 m_st->detachLayer(cueId, layerId);
             });

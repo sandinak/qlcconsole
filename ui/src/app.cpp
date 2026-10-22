@@ -39,6 +39,7 @@
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
 #include "functionselection.h"
+#include "effectspage.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "showtreecontroller.h"
@@ -2443,6 +2444,11 @@ void App::initMenuBar()
        only under View: the Window menu is where people go looking for one
        ("there's no option in Windows"). The same action, so one shortcut. */
     windowMenu->addAction(m_rigOverviewAction);
+    /* The effect designer on the Try on bench, with every effect palette
+       and EFX / RGB Matrix of the show (W4; Build ▸ Effects in time). */
+    QAction *effectsAct = windowMenu->addAction(tr("Effects…"));
+    effectsAct->setObjectName(QStringLiteral("windowEffects"));
+    connect(effectsAct, &QAction::triggered, this, [this]() { EffectsPage::open(m_doc, this); });
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
     m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));

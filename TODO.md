@@ -34,6 +34,23 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
+- **W4 effect designer: follow-ons (2026-10-22)** (feat/w4-effect-designer,
+  WORKFLOW_DESIGN.md §3.3/§3.4):
+  - Host it in the Workbench's editor pane (W1/W3) and in Build ▸ Effects
+    once the Build tab exists. The widget is `EffectDesigner`: hosts call
+    `setTargets()`, `setEffect()`, `setOneOffAllowed()` and
+    `setContextChoice()`, and listen to `effectChosen()`. Then retire
+    Window ▸ Effects or keep it as a shortcut.
+  - In context, the layer's old effect keeps playing under the draft. On
+    intensity, highest-takes-precedence (HTP) can let it show through;
+    Solo shows the draft alone. Muting just that layer's scene while
+    designing would need a preview hook in `ShowTreeController`.
+  - `pickEffect()` (a command, a test) doesn't add to the browser's
+    Recent tab or switch to the effect's tab.
+  - The bench's Try on is a menu, not a drop target; the design has groups
+    dropped on it.
+  - Not yet seen on the real rig (ender / show VLAN): the preview on
+    AT-W-ALL and on the XL-450 boxes was checked offscreen only.
 - **Workflow W0 leftovers (2026-10-22)** (feat/w0-seam-fixes, DONE.md;
   design: WORKFLOW_DESIGN.md on design/programming-redesign):
   - The blend between scene steps (`ChaserRunner::blendScene()`) covers a
