@@ -490,6 +490,36 @@ override (leave at "step" to inherit the scene or chaser's own timing). A
 scene [transition](#transitions), when set, takes the place of the scene's
 fade.
 
+### The name follows the value
+
+When a look's name says its value, changing the value changes the name to
+match. Pick a darker red on a look called "Red" and it becomes "Dark Red";
+the **Name** field updates as you drag. Only the part of the name that says
+the value changes. Anything you or the show's convention put around it
+stays, and the look stays in its folder:
+
+| Before | Value changed to | After |
+|---|---|---|
+| Red | a dark red | Dark Red |
+| Act2 Red | a dark red | Act2 Dark Red |
+| 02-01 Red Wash | a dark red | 02-01 Dark Red Wash |
+| Intensity 45% | 60% | Intensity 60% |
+| Verse Intensity 45% | full | Verse Full |
+| Strobe 40% | 70% | Strobe 70% |
+| Act2 Open (shutter) | Closed | Act2 Closed |
+| Crimson Tide | anything | Crimson Tide (yours: never changed) |
+
+Colour names come from a table of colours with light and dark variants,
+such as Red, Dark Red, Light Red, Amber, Warm White and UV. A colour word
+the old value was close to also counts, so a "Blue" named by an older
+version follows too. A look still called **New Color** (or **New Dimmer**)
+is named after its value. If at least two other looks of that type in the
+same folder share a naming pattern ("Act2 Red", "Act2 Blue"), the new one
+follows it ("Act2 Amber").
+
+The value change and the rename are **one Undo step**, and a drag counts as
+one step. Undo puts back both the value and the name.
+
 If the editor is showing a palette that isn't in the scene selected in the
 outline, the scene **tries it on**: it plays on top of the look's own
 palettes so you can see it on the rig, but it's never saved into the look.

@@ -46,6 +46,17 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   .qxw), Esc reverts. Closed up it is one line, elided (new lines as ⏎),
   the whole note in the tooltip. Commits go through the same paths as
   before, so undo is unchanged (one step per commit).
+- **Palette names follow their value.** In the Look Editor, a colour
+  look's name that says its colour is rewritten when the colour changes
+  (nearest named colour, CIE Lab, light and dark variants: Red → Dark Red).
+  Only that part is rewritten: "Act2 Red" → "Act2 Dark Red", "02-01 Red
+  Wash" → "02-01 Dark Red Wash". The folder is never touched, and a custom
+  name with no colour word stays. The same applies to intensity ("Intensity
+  45%" → "Intensity 60%"), strobe rate and shutter/gobo state names. A
+  factory-named look takes its folder siblings' shared naming pattern. The
+  Look Editor's value edits are now palette undo steps
+  (`PaletteOps::valueStep`): the value and the rename undo together, and a
+  drag is one step. The naming lives in `engine/src/palettenaming.*`.
 - **Chasers in the Workbench, and Scenes ▸ Classic (WORKFLOW_DESIGN.md
   W2).** A chaser loads as a step walker (`ChaserWalker`): ◀ prev · step N ·
   next ▶, the step's fade in / hold / fade out / cue no. / note edited in
