@@ -36,6 +36,25 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   (`ui/src/treecuestack.*`; the engine already has a Simple Desk
   `CueStack`), the dock in `ui/src/showtreeworkbench.cpp`; new
   `showtreeworkbench_test`. No file format change.
+- **Chasers in the Workbench, and Scenes ▸ Classic (WORKFLOW_DESIGN.md
+  W2).** A chaser loads as a step walker (`ChaserWalker`): ◀ prev · step N ·
+  next ▶, the step's fade in / hold / fade out / cue no. / note edited in
+  place (honouring the chaser's Common / Per step / Default modes), the step
+  table with the Chaser editor's columns (click to walk, double-click to
+  open, + Step…, ▲ ▼, Remove step, scenes dropped on it inserted as steps),
+  and the selected step's function opened up as layers under it — a
+  collection step edited exactly as a loaded collection (+ Scene / + EFX /
+  + RGB Matrix / remove / reorder), so the chaser plays the change. The
+  step being worked on previews; ▣ Open and ↩ keep the step. **Chaser from
+  selection** (+ Scene's menu, the navigator's right-click) makes a chaser
+  of the selected scenes in the order they were picked; scenes dropped on a
+  chaser row are appended as steps. **Make own copy** splits a shared layer
+  (Own copy, right-click) or a shared step (*Make this step's own copy*) off
+  as a duplicate in place. **Scenes ▸ Folders | Classic**: Classic lists
+  every function by type as the Function Manager does (Show Tree ones
+  greyed); a saved show without a Show Tree opens on Classic, the switch is
+  remembered per show. All edits are steps on the shared history
+  (`PaletteOps::functionStep`). No file format change.
 - **Build tab and the Workbench (WORKFLOW_DESIGN.md W1).** The Programming
   tab is **Build**: a section switch (**Palettes | Effects | Scenes**) picks
   what the navigator on the left lists, with Groups & fixtures under every

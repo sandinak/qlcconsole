@@ -23,6 +23,7 @@
 #include <QStringList>
 #include <QObject>
 #include <QList>
+#include <functional>
 
 #include "grouphead.h"
 #include "function.h"
@@ -172,9 +173,25 @@ public:
     /** The layer selected now (Solo plays it; -1: none). */
     virtual void setFocusLayer(int layer) { Q_UNUSED(layer) }
 
+    /************************************************************************
+     * W2: chasers, shared members
+     ************************************************************************/
+public:
+    /** A widget of the back end's own under the header (a chaser's step
+     *  walker), owned by @a parent; null: none. */
+    virtual QWidget *createHeaderWidget(QWidget *parent);
+    /** Layer @a index is shared (it is used elsewhere too): split it off as
+     *  a copy of its own, in its place. One step. The copy's id, or invalid. */
+    virtual quint32 makeOwnCopy(int index);
+    /** Whether layer @a index can be split off (makeOwnCopy()). */
+    virtual bool canMakeOwnCopy(int index) const;
+
 signals:
     /** Something the header or the rows show changed. */
     void changed();
+    /** The layers are another set now (a chaser walked to another step):
+     *  show them afresh, play what now previews. */
+    void layersReplaced();
 
 protected:
     Doc *m_doc;
@@ -183,8 +200,9 @@ protected:
 /**
  * The FunctionStack back end: a scene (one layer), a collection (one layer
  * per member: a scene opens up, anything else plays as it is), a chaser
- * (one row per step; its steps are edited in its stock editor until W2),
- * or any other function (one row, its stock editor).
+ * (walked one step at a time, W2: the step's function opened up as layers,
+ * a collection step's members editable as a collection's are), or any
+ * other function (one row, its stock editor).
  */
 class FunctionStack final : public WorkbenchStack
 {
@@ -224,10 +242,60 @@ public:
      *  adding @a fid to @a container would loop). */
     static bool contains(Doc *doc, quint32 container, quint32 fid);
 
+    /************************************************************************
+     * W2: a chaser, walked step by step
+     ************************************************************************/
+public:
+    QWidget *createHeaderWidget(QWidget *parent) override;
+    quint32 makeOwnCopy(int index) override;
+    bool canMakeOwnCopy(int index) const override;
+
+    /** The chaser loaded (null: something else is). */
+    class Chaser *chaser() const;
+    /** The step walked to (0 for anything but a chaser). */
+    int step() const { return m_step; }
+    int stepCount() const;
+    /** Walk to step @a index (clamped): its layers come up. False: no
+     *  chaser, or already there. */
+    bool setStep(int index);
+    /** The function of the step walked to (invalid: none). */
+    quint32 stepFunction() const;
+
+    /** Change chaser step @a index with @a edit, one step on the history
+     *  named @a label. */
+    bool editStep(int index, const QString &label, const std::function<void(class ChaserStep &)> &edit);
+    /** Insert @a functionIds as steps of the chaser loaded before step
+     *  @a at (-1: the end). One step. */
+    bool insertSteps(const QList<quint32> &functionIds, int at);
+    bool removeStep(int index);
+    bool moveStep(int from, int to);
+    /** The step walked to plays a shared function: split it off (Make
+     *  this step's own copy). One step. The copy's id, or invalid. */
+    quint32 makeStepOwnCopy();
+
+    /** What adding @a functionIds as steps of chaser @a chaserId would do,
+     *  or "!why not". */
+    static QString stepsPlan(Doc *doc, quint32 chaserId, const QList<quint32> &functionIds);
+    /** Add @a functionIds as steps of chaser @a chaserId before step @a at
+     *  (-1: the end), timed as the Chaser editor adds them. One step. */
+    static bool addSteps(Doc *doc, quint32 chaserId, const QList<quint32> &functionIds, int at = -1);
+    /** Chaser from selection: a new chaser with @a functionIds as its steps,
+     *  in that order, filed in @a folder. One step. Its id, or invalid. */
+    static quint32 makeChaser(Doc *doc, const QList<quint32> &functionIds, const QString &folder);
+    /** Split member @a index of collection @a containerId (or step @a index
+     *  of a chaser) off as a copy of its own, in its place. One step. */
+    static quint32 makeOwnCopy(Doc *doc, quint32 containerId, int index);
+
 private:
     bool isCollection() const;
+    /** What the edits go to: the collection loaded, or the collection a
+     *  chaser's step plays (null: none). */
+    class Collection *editCollection() const;
+    /** What the layers are of: the function loaded, or a chaser step's. */
+    Function *layerSource() const;
 
     quint32 m_fid;
+    int m_step = 0;
 };
 
 /** @} */

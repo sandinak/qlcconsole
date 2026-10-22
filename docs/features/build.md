@@ -91,7 +91,7 @@ selected row, and a live preview.
 |---|---|---|
 | a **scene** | one layer, opened up into its targets and looks | the scene's page (its layer is selected) |
 | a **collection** | one layer per member, in order: a scene opens up into its targets and looks; anything else — a raw-value scene shows its fixtures and **▣**, an EFX, an RGB Matrix, a chaser, a nested collection — is a **▣** row that plays as it is | what it holds, where it's used, what fires it |
-| a **chaser** | one row per step ("2 · 0.0.3-Announcer"), each opened with ▣ Open | its step table, as the Chaser editor has it |
+| a **chaser** | the layers of the step you are on, as if it were loaded on its own: a collection step's members, a scene step opened up, anything else a ▣ row — with the [step walker](#walking-a-chaser) over them | its run order, speeds and timing modes (the Chaser editor) |
 | an **EFX, RGB Matrix, show, script…** | one row | its stock editor |
 
 **The header** says where it is (its folder), its name and kind, what it
@@ -108,7 +108,7 @@ with **Show in Show Tree**; it is changed there, not here.
 | a look | the [Look Editor](#the-inline-look-editor) |
 | a group or fixture | its fixtures' channels, as the scene sets them (several fixtures of one type together); a group has **Edit layout** |
 | an EFX or RGB Matrix layer | its stock editor (EFX editor, RGB Matrix editor) |
-| a chaser layer | its step table |
+| a chaser layer (in a collection) | its own Chaser editor; **▣ Open** it to walk it |
 | a nested collection | **▣ Open** it |
 
 The scene of the row you clicked is the one a control surface addresses.
@@ -147,7 +147,59 @@ layers — move, or copy with **⌥**.
 
 **Shared members.** A scene in more than one collection or chaser step
 carries a badge, **also in 2**; hover for where (*0.0.4-SHOUT, Full Show
-(step 3)*). An edit here changes it everywhere it is used.
+(step 3)*). An edit here changes it everywhere it is used. To change it here
+only, select it and press **Own copy** (or right-click → **Make own copy**):
+the layer becomes a copy of its own (named as a duplicate is, filed beside
+the original) in the same place, and the other collections keep the
+original. It is one step: ⌘Z puts the shared one back and the copy goes.
+
+### Walking a chaser
+
+Load a chaser (*Full Show*) and the Workbench walks it the way the Chaser
+editor lists it, one step at a time, each step opened up. Under the header:
+
+- **◀ · Step 3 of 7 · 0.0.3-Announcer · ▶** — the step before and after.
+- **The step's header**: **Fade in**, **Hold**, **Fade out**, **Cue** and
+  **Note**, edited in place (Return applies; times as the Chaser editor
+  writes them — `1s.50`, `2m`, `∞` to hold until GO). A time the chaser
+  sets for every step (*Common*) or leaves to the function (*Default*) is
+  shown greyed: change that in the Chaser editor on the right. A step's
+  duration stays its fade in + hold, as the Chaser editor keeps it.
+- **also in …** when the step's function plays somewhere else too (another
+  chaser, another step of this one), with **Make this step's own copy**.
+  **▣ Open** loads the step's function on its own; **↩** comes back to the
+  same step.
+- **The step table** — the Chaser editor's columns (#, Function, Fade In,
+  Hold, Fade Out, Duration, Notes, Cue). Click a step to walk to it;
+  double-click to open it. **+ Step…** adds functions from the show after
+  the step you're on; **drag scenes** from the navigator onto the table to
+  insert them before the row you drop on (at the end on empty space). ▲ ▼
+  move the step, **Remove step** takes it out (its function stays).
+
+Under the walker are **the step's layers**. A collection step works exactly
+like a collection loaded on its own: + Scene, + EFX, + RGB Matrix, ⌫, ▲ ▼,
+drag scenes in, a scene layer opened up into its looks. What you change is
+the collection itself, so the chaser plays it at that step. The step you
+are on plays on the rig (Design mode); walk to another and that plays
+instead.
+
+Every edit — a step's timing, note or cue number, a step added, moved or
+removed, a layer of its collection, an own copy — is one step on the shared
+history.
+
+### Two QLC+ habits, kept
+
+- **Set the rig, save a scene, chase the scenes, run.** In Build ▸ Scenes
+  select scenes in the order you want them (⌘-click), then **+ Scene ▾ →
+  Chaser from selection** or right-click → **Chaser from selection**: a new
+  chaser with those scenes as its steps, in that order, filed in the last
+  one's folder and
+  loaded to walk. Or drag scenes onto a chaser's row in the navigator to
+  append them as steps.
+- **Scenes into collections with EFX and RGB Matrix, run.** Load a
+  collection (or walk to a chaser step that plays one) and add layers with
+  + Scene / + EFX / + RGB Matrix. The chaser of collections plays as QLC+
+  plays it; nothing is converted.
 
 **Live preview.** In Design mode what is loaded plays — a collection with
 all its layers — and what you edit plays as you edit it. A layer added or
@@ -185,6 +237,20 @@ EFX, RGB Matrix or show filed in one of these folders shows there too. The
 scenes and collections the Show Tree made for its cues stay hidden, as
 everywhere.
 
+**Folders | Classic.** The two buttons over the outline arrange it:
+
+- **Folders** — your scene folders, as above.
+- **Classic** — by function type, as QLC+'s Function Manager lists them:
+  Scene, Chaser, Collection, EFX, RGB Matrix, Show, Script… (each with its
+  count), the folders of each type under it. Every function the Function
+  Manager lists is here, those the Show Tree made too (greyed, changed in
+  the Show Tree). Scenes still open up into their targets and looks, and a
+  click loads any row in the Workbench.
+
+A show you open that has no Show Tree (an old QLC+ show) opens on
+**Classic**; one with a Show Tree, and a new show, on **Folders**. The
+switch you make is remembered for that show.
+
 **Click a row** and the Workbench loads it: a scene, collection or chaser
 on its own; a look or target in a scene, its scene with that row selected
 (or, when the collection loaded holds that scene, that row in it). A folder
@@ -220,6 +286,7 @@ layers) says what a drop will do before you let go.
 | a group or fixture | a scene | a dynamic or fixed target |
 | a scene, collection or chaser | a folder; empty space | files it there; takes it out of its folder |
 | a scene, collection or chaser | the Workbench's layers | adds it to the collection loaded, as a layer |
+| scenes (or any function) | a chaser's row | appends them as its steps, in the order dragged |
 | a scene | another scene in the outline | nothing — scenes don't include scenes; drop it on the Workbench to make it a layer of a collection |
 
 **Several at once.** ⇧/⌘-click rows — across scenes too — then drag them,
@@ -251,8 +318,8 @@ and renaming are steps on the history.
 
 A collection's members are its layers in the [Workbench](#the-workbench):
 select one and press **⌫** (or **Remove**). The function stays in the
-show. A chaser's steps are edited in its step table (the editor pane when a
-chaser is loaded); a show's tracks in **Shows**. The Functions window (Window
+show. A chaser's steps come out with **Remove step** under its
+[step table](#walking-a-chaser); a show's tracks in **Shows**. The Functions window (Window
 menu) still has the stock editors.
 
 ### Deleting palettes and functions

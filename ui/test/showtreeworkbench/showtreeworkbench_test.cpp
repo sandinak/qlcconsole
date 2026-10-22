@@ -53,6 +53,7 @@
 #include "qlcpalette.h"
 #include "universe.h"
 #include "fixture.h"
+#include "chaserstep.h"
 #include "chaser.h"
 #include "scene.h"
 #include "efx.h"
@@ -523,6 +524,7 @@ void ShowTreeWorkbench_Test::buildAfterHandBack()
     QVERIFY(pm->m_mainSplit->indexOf(bench) < 0);
     QVERIFY(pm->findChild<QLabel *>("workbenchLentNote") != nullptr);
     QVERIFY(qobject_cast<TreeCueStack *>(bench->stack()) != nullptr);
+    QVERIFY(bench->m_stackWidget == nullptr);       // W2's walker: chasers only
 
     // Leaving the tab hands it back; coming back docks it again, the same
     // cue and layer.
@@ -556,6 +558,16 @@ void ShowTreeWorkbench_Test::buildAfterHandBack()
     QCOMPARE(bench->loadedFunction(), mine->id());
     QCOMPARE(bench->currentSceneId(), mine->id());
     QVERIFY(bench->isVisible());
+    // W2's chaser walker, after the hand-back.
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Walk");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(mine->id()));
+    chaser->addStep(ChaserStep(other->id()));
+    pm->showFunction(chaser->id());
+    QCOMPARE(bench->loadedFunction(), chaser->id());
+    QVERIFY(bench->m_stackWidget != nullptr);
+    QCOMPARE(QString(bench->m_stackWidget->metaObject()->className()), QString("ChaserWalker"));
 
     // The tree going first (the app closing) gives it back too.
     tabs->setCurrentWidget(view);

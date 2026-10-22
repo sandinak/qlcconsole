@@ -60,6 +60,7 @@
 #define SETTINGS_EXPANDED QStringLiteral("programming/outline/expanded")
 #define SETTINGS_STACK_EXPANDED QStringLiteral("programming/workbench/expanded")
 #define SETTINGS_STACK_BADGE_COLUMN QStringLiteral("programming/workbench/badgeColumn")
+#define SETTINGS_ARRANGEMENT QStringLiteral("programming/outline/arrangement")
 
 static const quint32 kInvalid = 0xFFFFFFFF;
 
@@ -148,14 +149,22 @@ ProgrammingOutline::ProgrammingOutline(Doc *doc, QWidget *parent)
                           &Doc::fixtureRemoved, &Doc::paletteAdded, &Doc::paletteRemoved })
             connect(m_doc, sig, this, [this](quint32) { scheduleRebuild(); });
         connect(m_doc, &Doc::loaded, this, [this]() {
+            // Folders | Classic, as this show was left (W2).
+            if (m_mode == Navigator && savedArrangement() != m_arrangement)
+            {
+                m_arrangement = savedArrangement();
+                emit arrangementChanged(m_arrangement);
+            }
             m_expanded = QSettings().value(settingsKey()).toMap();
             scheduleRebuild();
         });
         connect(m_doc, &Doc::cleared, this, [this]() { scheduleRebuild(); });
         if (m_doc->paletteOps() != nullptr)
             connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() { scheduleRebuild(); });
+        m_arrangement = savedArrangement();
         m_expanded = QSettings().value(settingsKey()).toMap();
     }
+    connect(this, &QTreeWidget::itemSelectionChanged, this, &ProgrammingOutline::trackSelectionOrder);
 }
 
 ProgrammingOutline::~ProgrammingOutline()
@@ -179,8 +188,9 @@ QString ProgrammingOutline::settingsKey() const
         return SETTINGS_STACK_EXPANDED + QLatin1Char('/') + show + QLatin1Char('/')
                + (m_stack != nullptr ? m_stack->key() : QStringLiteral("-"));
     /* Per show: by where it is kept (Doc knows the folder; one show per
-       folder is the usual case). */
-    return SETTINGS_EXPANDED + QLatin1Char('/') + show;
+       folder is the usual case). Classic opens its own rows. */
+    return SETTINGS_EXPANDED + QLatin1Char('/') + show
+           + (m_arrangement == Classic ? QStringLiteral("/classic") : QString());
 }
 
 void ProgrammingOutline::saveExpansion()
@@ -679,6 +689,11 @@ void ProgrammingOutline::rebuild()
 
 void ProgrammingOutline::rebuildNavigator(QList<Scene *> &scenes)
 {
+    if (m_arrangement == Classic)
+    {
+        rebuildClassic(scenes);
+        return;
+    }
     QCollator coll;
     coll.setNumericMode(true);
     coll.setCaseSensitivity(Qt::CaseInsensitive);
@@ -763,8 +778,10 @@ void ProgrammingOutline::rebuildNavigator(QList<Scene *> &scenes)
         it->setData(NameCol, KindRole, FunctionRow);
         it->setData(NameCol, IdRole, f->id());
         it->setData(NameCol, KeyRole, rowKey(FunctionRow, f->id(), f->id()));
+        // A chaser takes scenes dropped on it as steps (W2).
         it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled
-                     | Qt::ItemIsEditable);
+                     | Qt::ItemIsEditable
+                     | (f->type() == Function::ChaserType ? Qt::ItemIsDropEnabled : Qt::NoItemFlags));
         QString badge = Function::typeToString(f->type()).toLower();
         if (Collection *c = qobject_cast<Collection *>(f))
             badge = tr("collection · %1").arg(c->functions().size());
@@ -1595,6 +1612,17 @@ QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, b
             return stackDropPlan(mime, pos, false, nullptr);
         if (!scenes.isEmpty())
         {
+            // On a chaser: its steps (W2).
+            if (at.kind == FunctionRow && qobject_cast<Chaser *>(m_doc->function(at.id)) != nullptr)
+                return chaserDropPlan(scenes, at.id);
+            if (at.kind == FolderRow && it->data(NameCol, PathRole).toString().isEmpty())
+            {
+                // Classic's type rows: the top of every type.
+                if (folder != nullptr)
+                    *folder = QString();
+                return allScenes ? tr("Take %n scene(s) out of their folder", "", scenes.size())
+                                 : tr("Take %n function(s) out of their folder", "", scenes.size());
+            }
             if (at.kind == FolderRow)
             {
                 if (folder != nullptr)
@@ -1807,7 +1835,17 @@ void ProgrammingOutline::dropEvent(QDropEvent *event)
             }
         }
         else if (!scenes.isEmpty())
-            fileScenes(scenes, folder);
+        {
+            const Row at = rowOf(itemAt(qlcEventPos(event)));
+            if (at.kind == FunctionRow && qobject_cast<Chaser *>(m_doc->function(at.id)) != nullptr)
+            {
+                // Appended as steps, in the order dragged (W2).
+                if (FunctionStack::addSteps(m_doc, at.id, scenes))
+                    finishEdit({}, { rowKey(FunctionRow, at.id, at.id) });
+            }
+            else
+                fileScenes(scenes, folder);
+        }
         else
             moveRows(rows, toScene, atPalette, copy);
     }
@@ -1986,6 +2024,22 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
                 layers << layerOf(it);
         menu.addAction(tr("Open"), this, [this, at]() { emit openRequested(at.id); })
             ->setToolTip(tr("Load it in the Workbench on its own (↩ comes back here)"));
+        if (!readOnly && layers.size() == 1 && m_stack->canMakeOwnCopy(layer))
+            menu.addAction(tr("Make own copy"), this, [this, layer]() {
+                if (m_stack->makeOwnCopy(layer) != kInvalid)
+                {
+                    QTimer::singleShot(0, this, [this, layer]() {
+                        rebuild();
+                        if (QTreeWidgetItem *it = layerItem(layer))
+                        {
+                            clearSelection();
+                            setCurrentItem(it);
+                            it->setSelected(true);
+                        }
+                    });
+                    emit layersEdited();
+                }
+            })->setToolTip(tr("It is shared: split it off as a copy of its own here, so an edit changes only this one"));
         if (!readOnly && m_stack->canRemoveLayers())
             menu.addAction(layers.size() > 1 ? tr("Remove %n layer(s)", "", layers.size()) : tr("Remove the layer"),
                            this, [this, layers]() { removeLayers(layers); })
@@ -2042,6 +2096,10 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
                        this, [this, scenes]() { emit duplicateRequested(scenes); });
         menu.addAction(scenes.size() == 1 ? tr("Delete…") : tr("Delete %n…", "", scenes.size()),
                        this, [this, scenes]() { emit deleteScenesRequested(scenes); });
+        const QList<quint32> ordered = selectedFunctionsInOrder();
+        menu.addAction(QIcon(QStringLiteral(":/chaser.png")), tr("Chaser from selection"), this,
+                       [this, ordered, folder]() { emit chaserRequested(ordered, folder); })
+            ->setToolTip(tr("A new chaser with these as its steps, in the order you selected them"));
         menu.addSeparator();
     }
     if (at.kind == FolderRow)
@@ -2061,4 +2119,233 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
     menu.addAction(tr("Expand all"), this, &ProgrammingOutline::expandEverything);
     menu.addAction(tr("Collapse all"), this, &ProgrammingOutline::collapseEverything);
     menu.exec(viewport()->mapToGlobal(pos));
+}
+
+/****************************************************************************
+ * W2: Classic, the selection's order, drops on a chaser
+ ****************************************************************************/
+
+ProgrammingOutline::Arrangement ProgrammingOutline::savedArrangement() const
+{
+    if (m_doc == nullptr)
+        return Folders;
+    // A new show (not saved yet) has nothing old to list: your folders.
+    const QString where = m_doc->workspacePath();
+    if (where.isEmpty())
+        return Folders;
+    const QString show = QString::number(qHash(where));
+    const QVariant saved = QSettings().value(SETTINGS_ARRANGEMENT + QLatin1Char('/') + show);
+    if (saved.isValid())
+        return saved.toInt() == Classic ? Classic : Folders;
+    // A show built the old way opens as QLC+ listed it (§3.5).
+    bool tree = false;
+    if (ShowTreeController *st = m_doc->showTree())
+        for (const ShowTree::Production &p : st->productions())
+            tree = tree || !p.lists.isEmpty();
+    return tree ? Folders : Classic;
+}
+
+void ProgrammingOutline::setArrangement(Arrangement arrangement)
+{
+    // Remembered per show (a show not saved yet: for this session only).
+    if (m_doc != nullptr && !m_doc->workspacePath().isEmpty())
+        QSettings().setValue(SETTINGS_ARRANGEMENT + QLatin1Char('/') + QString::number(qHash(m_doc->workspacePath())),
+                             int(arrangement));
+    if (arrangement == m_arrangement)
+        return;
+    m_arrangement = arrangement;
+    m_expanded = QSettings().value(settingsKey()).toMap();
+    rebuild();
+    // What was selected stays selected, wherever it now is.
+    if (QTreeWidgetItem *cur = currentItem())
+        scrollToItem(cur);
+    emit arrangementChanged(arrangement);
+}
+
+void ProgrammingOutline::rebuildClassic(QList<Scene *> &scenes)
+{
+    /* By type, as the Function Manager lists them: every function the show
+       has, its folders under its type (WORKFLOW_DESIGN.md §3.3). A function
+       the Show Tree made is listed as the Function Manager lists it: locked. */
+    QCollator coll;
+    coll.setNumericMode(true);
+    coll.setCaseSensitivity(Qt::CaseInsensitive);
+    static const Function::Type order[] = {
+        Function::SceneType, Function::ChaserType, Function::SequenceType, Function::CollectionType,
+        Function::EFXType, Function::RGBMatrixType, Function::ShowType, Function::ScriptType,
+        Function::AudioType, Function::VideoType };
+    auto rank = [](int type) {
+        for (int i = 0; i < int(sizeof(order) / sizeof(order[0])); ++i)
+            if (order[i] == type)
+                return i;
+        return 100 + type;
+    };
+    QMap<int, QList<Function *>> byType;
+    ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    if (m_doc != nullptr)
+        for (Function *f : m_doc->functions())
+            if (f != nullptr && f->isVisible())
+                byType[rank(f->type())] << f;
+
+    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
+    for (auto t = byType.begin(); t != byType.end(); ++t)
+    {
+        QList<Function *> list = t.value();
+        std::sort(list.begin(), list.end(), [&coll](Function *a, Function *b) {
+            return coll.compare(a->name(), b->name()) < 0;
+        });
+        const QString typeName = Function::typeToString(list.first()->type());
+        QTreeWidgetItem *cat = new QTreeWidgetItem(this);
+        cat->setText(NameCol, typeName);
+        cat->setIcon(NameCol, list.first()->getIcon());
+        cat->setText(BadgeCol, QString::number(list.size()));
+        cat->setForeground(BadgeCol, grey);
+        cat->setData(NameCol, KindRole, FolderRow);
+        cat->setData(NameCol, PathRole, QString());
+        cat->setData(NameCol, KeyRole, QStringLiteral("c:") + typeName);
+        cat->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+        QFont bold = font();
+        bold.setBold(true);
+        cat->setFont(NameCol, bold);
+
+        // Its folders, A-Z, then what is in each.
+        QHash<QString, QTreeWidgetItem *> folders;
+        std::function<QTreeWidgetItem *(const QString &)> folderOf = [&](const QString &path) -> QTreeWidgetItem * {
+            if (path.isEmpty())
+                return cat;
+            if (QTreeWidgetItem *have = folders.value(path))
+                return have;
+            const int cut = path.lastIndexOf(QLatin1Char('/'));
+            QTreeWidgetItem *parent = folderOf(cut > 0 ? path.left(cut) : QString());
+            QTreeWidgetItem *it = new QTreeWidgetItem(parent);
+            it->setText(NameCol, cut > 0 ? path.mid(cut + 1) : path);
+            it->setIcon(NameCol, QIcon(QStringLiteral(":/folder.png")));
+            it->setData(NameCol, KindRole, FolderRow);
+            it->setData(NameCol, PathRole, path);
+            it->setData(NameCol, KeyRole, QStringLiteral("c:%1/%2").arg(typeName, path));
+            it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled | Qt::ItemIsEditable);
+            folders.insert(path, it);
+            return it;
+        };
+        QStringList paths;
+        for (Function *f : list)
+            if (!f->path(true).isEmpty() && !paths.contains(f->path(true)))
+                paths << f->path(true);
+        std::sort(paths.begin(), paths.end(), [&coll](const QString &a, const QString &b) {
+            return coll.compare(a, b) < 0;
+        });
+        for (const QString &p : paths)
+            folderOf(p);
+
+        for (Function *f : list)
+        {
+            const bool generated = st != nullptr && st->isGenerated(f->id());
+            QTreeWidgetItem *it = new QTreeWidgetItem(folderOf(f->path(true)));
+            it->setText(NameCol, f->name());
+            it->setData(NameCol, IdRole, f->id());
+            const Qt::ItemFlags own = generated ? Qt::NoItemFlags
+                                                : Qt::ItemIsDragEnabled | Qt::ItemIsEditable;
+            if (Scene *s = qobject_cast<Scene *>(f))
+            {
+                scenes << s;
+                it->setIcon(NameCol, QIcon(QStringLiteral(":/scene.png")));
+                it->setData(NameCol, KindRole, SceneRow);
+                it->setData(NameCol, KeyRole, rowKey(SceneRow, s->id(), s->id()));
+                it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | own
+                             | (generated ? Qt::NoItemFlags : Qt::ItemIsDropEnabled));
+                decorateScene(it, s);
+                addSceneRows(it, s);
+            }
+            else
+            {
+                it->setIcon(NameCol, f->getIcon());
+                it->setData(NameCol, KindRole, FunctionRow);
+                it->setData(NameCol, KeyRole, rowKey(FunctionRow, f->id(), f->id()));
+                // A chaser takes scenes dropped on it as steps.
+                it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | own
+                             | (f->type() == Function::ChaserType && !generated ? Qt::ItemIsDropEnabled
+                                                                                : Qt::NoItemFlags));
+                QString badge;
+                if (Collection *c = qobject_cast<Collection *>(f))
+                    badge = tr("%n layer(s)", "", int(c->functions().size()));
+                else if (Chaser *ch = qobject_cast<Chaser *>(f))
+                    badge = tr("%n step(s)", "", ch->stepsCount());
+                const QStringList vc = UsedBy::vcLines({ f->id() });
+                if (!vc.isEmpty())
+                    badge += (badge.isEmpty() ? QString() : QStringLiteral("  ")) + tr("VC ×%1").arg(vc.size());
+                it->setText(BadgeCol, badge);
+                it->setForeground(BadgeCol, grey);
+                QString tip = tr("A %1: click to load it in the Workbench.")
+                                  .arg(Function::typeToString(f->type()).toLower());
+                if (!vc.isEmpty())
+                    tip += QLatin1Char('\n') + tr("Fired by: %1").arg(vc.join(QStringLiteral(", ")));
+                it->setToolTip(NameCol, tip);
+                it->setToolTip(BadgeCol, tip);
+            }
+            if (generated)
+            {
+                it->setForeground(NameCol, grey);
+                const QString why = tr("%1 It is %2.").arg(ShowTreeController::lockedText(),
+                                                           st->describeGenerated(f->id()));
+                it->setToolTip(NameCol, why);
+            }
+        }
+    }
+    if (topLevelItemCount() == 0)
+    {
+        QTreeWidgetItem *it = new QTreeWidgetItem(this);
+        it->setText(NameCol, tr("No functions yet: + New above to start a scene."));
+        it->setData(NameCol, KindRole, HintRow);
+        it->setData(NameCol, KeyRole, rowKey(HintRow, kInvalid, kInvalid));
+        it->setFlags(Qt::ItemIsEnabled);
+        it->setForeground(NameCol, grey);
+    }
+}
+
+void ProgrammingOutline::trackSelectionOrder()
+{
+    if (m_building)
+        return;
+    QStringList now;
+    for (QTreeWidgetItemIterator it(this, QTreeWidgetItemIterator::Selected); *it; ++it)
+        now << key(*it);
+    // Gone from the selection: dropped; new to it: last, in the tree's order.
+    QStringList kept;
+    for (const QString &k : m_selectionOrder)
+        if (now.contains(k))
+            kept << k;
+    for (const QString &k : now)
+        if (!kept.contains(k))
+            kept << k;
+    m_selectionOrder = kept;
+}
+
+QList<quint32> ProgrammingOutline::selectedFunctionsInOrder() const
+{
+    QHash<QString, quint32> selected;
+    QStringList treeOrder;
+    for (QTreeWidgetItemIterator it(const_cast<ProgrammingOutline *>(this), QTreeWidgetItemIterator::Selected);
+         *it; ++it)
+    {
+        const Row r = rowOf(*it);
+        if (r.kind == SceneRow || r.kind == FunctionRow)
+        {
+            selected.insert(key(*it), r.id);
+            treeOrder << key(*it);
+        }
+    }
+    QList<quint32> out;
+    for (const QString &k : m_selectionOrder)
+        if (selected.contains(k) && !out.contains(selected.value(k)))
+            out << selected.value(k);
+    // Selected without a click we saw (a rebuild kept it): in the tree's order.
+    for (const QString &k : treeOrder)
+        if (!out.contains(selected.value(k)))
+            out << selected.value(k);
+    return out;
+}
+
+QString ProgrammingOutline::chaserDropPlan(const QList<quint32> &functionIds, quint32 chaserId) const
+{
+    return FunctionStack::stepsPlan(m_doc, chaserId, functionIds);
 }

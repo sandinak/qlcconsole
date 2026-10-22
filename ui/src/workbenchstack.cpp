@@ -21,6 +21,7 @@
 #include <functional>
 
 #include "workbenchstack.h"
+#include "chaserwalker.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "fixturegroup.h"
@@ -119,6 +120,21 @@ quint32 WorkbenchStack::layerScene(int) const
     return Function::invalidId();
 }
 
+QWidget *WorkbenchStack::createHeaderWidget(QWidget *)
+{
+    return nullptr;
+}
+
+quint32 WorkbenchStack::makeOwnCopy(int)
+{
+    return Function::invalidId();
+}
+
+bool WorkbenchStack::canMakeOwnCopy(int) const
+{
+    return false;
+}
+
 /****************************************************************************
  * FunctionStack
  ****************************************************************************/
@@ -146,7 +162,12 @@ QString FunctionStack::key() const
 
 WorkbenchStack *FunctionStack::reopen(QObject *parent) const
 {
-    return function() != nullptr ? new FunctionStack(m_doc, m_fid, parent) : nullptr;
+    if (function() == nullptr)
+        return nullptr;
+    FunctionStack *s = new FunctionStack(m_doc, m_fid, parent);
+    // ↩ to a chaser: the step it was on.
+    s->m_step = qBound(0, m_step, qMax(0, stepCount() - 1));
+    return s;
 }
 
 QString FunctionStack::title() const
@@ -204,7 +225,17 @@ QStringList FunctionStack::infoLines() const
     else if (Collection *c = qobject_cast<Collection *>(f))
         lines << tr("%n layer(s), played together", "", int(c->functions().size()));
     else if (Chaser *ch = qobject_cast<Chaser *>(f))
+    {
         lines << tr("%n step(s), one after another", "", ch->stepsCount());
+        if (Function *sf = m_doc->function(stepFunction()))
+        {
+            QString l = tr("Step %1: %2 (%3)").arg(m_step + 1).arg(sf->name(),
+                                                                Function::typeToString(sf->type()).toLower());
+            if (Collection *c = qobject_cast<Collection *>(sf))
+                l += QStringLiteral(" · ") + tr("%n layer(s)", "", int(c->functions().size()));
+            lines << l;
+        }
+    }
 
     const QString in = usedInText(m_doc, m_fid, Function::invalidId());
     lines << (in.isEmpty() ? tr("Used in: nothing else") : tr("Used in: %1").arg(in));
@@ -220,13 +251,17 @@ quint32 FunctionStack::previewFunction() const
     // A Show owns its transport (Play / Stop in its timeline): never auto-played.
     if (f == nullptr || f->type() == Function::ShowType)
         return Function::invalidId();
+    // A chaser walked: the step being worked on plays, on its own.
+    if (f->type() == Function::ChaserType)
+        return stepFunction();
     return m_fid;
 }
 
 QString FunctionStack::readOnlyReason() const
 {
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
-    if (st != nullptr && st->isGenerated(m_fid))
+    if (st != nullptr && (st->isGenerated(m_fid)
+                          || (chaser() != nullptr && st->isGenerated(stepFunction()))))
         return tr("Made by the Show Tree: change it there.");
     return QString();
 }
@@ -291,11 +326,13 @@ bool FunctionStack::contains(Doc *doc, quint32 container, quint32 fid)
 QList<WorkbenchStack::Layer> FunctionStack::layers() const
 {
     QList<Layer> out;
-    Function *f = function();
+    // A chaser: the layers of the step walked to (W2).
+    Function *f = layerSource();
     if (f == nullptr)
         return out;
+    const quint32 here = f->id();
 
-    auto layerOf = [this](quint32 fid, const QString &prefix) {
+    auto layerOf = [this, here](quint32 fid, const QString &prefix) {
         Layer l;
         l.functionId = fid;
         Function *m = m_doc->function(fid);
@@ -310,7 +347,7 @@ QList<WorkbenchStack::Layer> FunctionStack::layers() const
         }
         // A member shared with other collections or chasers: an edit changes
         // every one of them (open question 7).
-        const QStringList also = alsoIn(m_doc, fid, m_fid);
+        const QStringList also = alsoIn(m_doc, fid, here);
         if (!also.isEmpty())
         {
             badge << tr("also in %1").arg(also.size());
@@ -342,14 +379,20 @@ QList<WorkbenchStack::Layer> FunctionStack::layers() const
     }
     else
     {
-        Layer l = layerOf(m_fid, QString());
+        Layer l = layerOf(here, QString());
+        if (l.kind == Layer::FunctionLayer && here != m_fid)
+        {
+            // A chaser step that plays as it is: a ▣ row that opens.
+            out << l;
+            return out;
+        }
         if (l.kind == Layer::FunctionLayer)
         {
             // The function itself: its badge is what it is, not "Open".
             l.badge = Function::typeToString(f->type());
             l.tip = tr("Its stock editor is on the right.");
         }
-        else
+        else if (here == m_fid)
         {
             l.badge.clear();
             l.tip.clear();
@@ -361,7 +404,7 @@ QList<WorkbenchStack::Layer> FunctionStack::layers() const
 
 bool FunctionStack::canAddLayers() const
 {
-    return isCollection() && readOnlyReason().isEmpty();
+    return editCollection() != nullptr && readOnlyReason().isEmpty();
 }
 
 bool FunctionStack::canRemoveLayers() const
@@ -376,7 +419,10 @@ bool FunctionStack::canReorderLayers() const
 
 QString FunctionStack::addPlan(const QList<quint32> &functionIds) const
 {
-    Collection *c = qobject_cast<Collection *>(function());
+    Collection *c = editCollection();
+    if (c == nullptr && chaser() != nullptr)
+        return QStringLiteral("!") + tr("Step %1 plays one function, not a collection: drop it on the step "
+                                        "table to add steps.").arg(m_step + 1);
     if (c == nullptr)
         return QStringLiteral("!") + tr("A scene is one layer: load a collection to add layers to it.");
     if (!readOnlyReason().isEmpty())
@@ -387,7 +433,7 @@ QString FunctionStack::addPlan(const QList<quint32> &functionIds) const
         Function *f = m_doc->function(fid);
         if (f == nullptr)
             continue;
-        if (fid == m_fid || contains(m_doc, fid, m_fid))
+        if (fid == c->id() || contains(m_doc, fid, c->id()))
             return QStringLiteral("!") + tr("“%1” holds “%2”: it can't go in it.").arg(f->name(), c->name());
         if (c->functions().contains(fid))
             continue;
@@ -401,7 +447,7 @@ QString FunctionStack::addPlan(const QList<quint32> &functionIds) const
 
 bool FunctionStack::addLayers(const QList<quint32> &functionIds, int at)
 {
-    Collection *c = qobject_cast<Collection *>(function());
+    Collection *c = editCollection();
     if (c == nullptr || addPlan(functionIds).startsWith(QLatin1Char('!')))
         return false;
     QStringList names;
@@ -411,7 +457,7 @@ bool FunctionStack::addLayers(const QList<quint32> &functionIds, int at)
                 names << f->name();
     const QString label = names.size() == 1 ? tr("add %1 to %2").arg(names.first(), c->name())
                                             : tr("add %n layer(s) to %1", "", int(names.size())).arg(c->name());
-    const bool ok = m_doc->paletteOps()->functionStep(label, { m_fid }, [&](QList<quint32> &) {
+    const bool ok = m_doc->paletteOps()->functionStep(label, { c->id() }, [&](QList<quint32> &) {
         bool changed = false;
         int pos = at < 0 || at > c->functions().size() ? -1 : at;
         for (quint32 fid : functionIds)
@@ -434,7 +480,7 @@ bool FunctionStack::addLayers(const QList<quint32> &functionIds, int at)
 
 bool FunctionStack::removeLayers(const QList<int> &indexes)
 {
-    Collection *c = qobject_cast<Collection *>(function());
+    Collection *c = editCollection();
     if (c == nullptr || !canRemoveLayers())
         return false;
     const QList<quint32> members = c->functions();
@@ -448,7 +494,7 @@ bool FunctionStack::removeLayers(const QList<int> &indexes)
     const QString label = going.size() == 1 && first != nullptr
                           ? tr("remove %1 from %2").arg(first->name(), c->name())
                           : tr("remove %n layer(s) from %1", "", int(going.size())).arg(c->name());
-    const bool ok = m_doc->paletteOps()->functionStep(label, { m_fid }, [&](QList<quint32> &) {
+    const bool ok = m_doc->paletteOps()->functionStep(label, { c->id() }, [&](QList<quint32> &) {
         bool changed = false;
         for (quint32 fid : going)
             changed = c->removeFunction(fid) || changed;
@@ -461,7 +507,7 @@ bool FunctionStack::removeLayers(const QList<int> &indexes)
 
 bool FunctionStack::moveLayer(int from, int to)
 {
-    Collection *c = qobject_cast<Collection *>(function());
+    Collection *c = editCollection();
     if (c == nullptr || !canReorderLayers())
         return false;
     const QList<quint32> members = c->functions();
@@ -471,7 +517,7 @@ bool FunctionStack::moveLayer(int from, int to)
     if (to == from)
         return false;
     const quint32 fid = members.at(from);
-    const bool ok = m_doc->paletteOps()->functionStep(tr("reorder layers in %1").arg(c->name()), { m_fid },
+    const bool ok = m_doc->paletteOps()->functionStep(tr("reorder layers in %1").arg(c->name()), { c->id() },
                                                      [&](QList<quint32> &) {
         c->removeFunction(fid);
         return c->addFunction(fid, to);
@@ -484,7 +530,7 @@ bool FunctionStack::moveLayer(int from, int to)
 quint32 FunctionStack::addNew(Function::Type type, int after, const QList<GroupHead> &heads,
                               quint32 group)
 {
-    Collection *c = qobject_cast<Collection *>(function());
+    Collection *c = editCollection();
     if (c == nullptr || !canAddLayers())
         return Function::invalidId();
     QString base, what;
@@ -497,7 +543,7 @@ quint32 FunctionStack::addNew(Function::Type type, int after, const QList<GroupH
         return Function::invalidId();
     }
     quint32 made = Function::invalidId();
-    const bool ok = m_doc->paletteOps()->functionStep(tr("add a new %1 to %2").arg(what, c->name()), { m_fid },
+    const bool ok = m_doc->paletteOps()->functionStep(tr("add a new %1 to %2").arg(what, c->name()), { c->id() },
                                                      [&](QList<quint32> &news) {
         Function *f = nullptr;
         if (type == Function::SceneType)
@@ -541,5 +587,307 @@ quint32 FunctionStack::addNew(Function::Type type, int after, const QList<GroupH
     if (!ok)
         return Function::invalidId();
     emit changed();
+    return made;
+}
+
+/****************************************************************************
+ * FunctionStack, W2: a chaser walked step by step; shared members split off
+ ****************************************************************************/
+
+/* A new step of @a ch, timed as the Chaser editor times one it adds: the
+   chaser's own times where they are common to every step, nothing where each
+   step has its own. */
+static ChaserStep newStep(Chaser *ch, quint32 fid)
+{
+    ChaserStep step(fid);
+    if (ch->fadeInMode() == Chaser::Common)
+        step.fadeIn = ch->fadeInSpeed();
+    if (ch->fadeOutMode() == Chaser::Common)
+        step.fadeOut = ch->fadeOutSpeed();
+    if (ch->durationMode() == Chaser::Common)
+    {
+        step.duration = ch->duration();
+        step.hold = Function::speedSubtract(step.duration, step.fadeIn);
+    }
+    return step;
+}
+
+Chaser *FunctionStack::chaser() const
+{
+    return qobject_cast<Chaser *>(function());
+}
+
+int FunctionStack::stepCount() const
+{
+    Chaser *ch = chaser();
+    return ch != nullptr ? ch->stepsCount() : 0;
+}
+
+quint32 FunctionStack::stepFunction() const
+{
+    Chaser *ch = chaser();
+    if (ch == nullptr)
+        return Function::invalidId();
+    const QList<ChaserStep> steps = ch->steps();
+    if (steps.isEmpty())
+        return Function::invalidId();
+    return steps.at(qBound(0, m_step, int(steps.size()) - 1)).fid;
+}
+
+bool FunctionStack::setStep(int index)
+{
+    if (chaser() == nullptr)
+        return false;
+    index = qBound(0, index, qMax(0, stepCount() - 1));
+    if (index == m_step)
+        return false;
+    m_step = index;
+    emit layersReplaced();
+    emit changed();
+    return true;
+}
+
+Function *FunctionStack::layerSource() const
+{
+    Function *f = function();
+    if (qobject_cast<Chaser *>(f) != nullptr)
+        return m_doc->function(stepFunction());
+    return f;
+}
+
+Collection *FunctionStack::editCollection() const
+{
+    return qobject_cast<Collection *>(layerSource());
+}
+
+QWidget *FunctionStack::createHeaderWidget(QWidget *parent)
+{
+    if (chaser() == nullptr)
+        return nullptr;
+    return new ChaserWalker(this, parent);
+}
+
+bool FunctionStack::editStep(int index, const QString &label, const std::function<void(ChaserStep &)> &edit)
+{
+    Chaser *ch = chaser();
+    if (ch == nullptr || !readOnlyReason().isEmpty() || index < 0 || index >= ch->stepsCount())
+        return false;
+    const bool ok = m_doc->paletteOps()->functionStep(label, { m_fid }, [&](QList<quint32> &) {
+        ChaserStep st = ch->steps().at(index);
+        edit(st);
+        return ch->replaceStep(st, index);
+    });
+    if (ok)
+        emit changed();
+    return ok;
+}
+
+QString FunctionStack::stepsPlan(Doc *doc, quint32 chaserId, const QList<quint32> &functionIds)
+{
+    Chaser *ch = qobject_cast<Chaser *>(doc != nullptr ? doc->function(chaserId) : nullptr);
+    if (ch == nullptr)
+        return QStringLiteral("!") + tr("Not a chaser.");
+    ShowTreeController *st = doc->showTree();
+    if (st != nullptr && st->isGenerated(chaserId))
+        return QStringLiteral("!") + tr("Made by the Show Tree: change it there.");
+    QStringList names;
+    for (quint32 fid : functionIds)
+    {
+        Function *f = doc->function(fid);
+        if (f == nullptr)
+            continue;
+        if (fid == chaserId || contains(doc, fid, chaserId))
+            return QStringLiteral("!") + tr("“%1” holds “%2”: it can't be a step of it.").arg(f->name(), ch->name());
+        names << f->name();
+    }
+    if (names.isEmpty())
+        return QStringLiteral("!") + tr("Nothing to add.");
+    return names.size() == 1 ? tr("Add “%1” to “%2” as a step").arg(names.first(), ch->name())
+                             : tr("Add %n step(s) to “%1”", "", int(names.size())).arg(ch->name());
+}
+
+bool FunctionStack::addSteps(Doc *doc, quint32 chaserId, const QList<quint32> &functionIds, int at)
+{
+    if (stepsPlan(doc, chaserId, functionIds).startsWith(QLatin1Char('!')) || doc->paletteOps() == nullptr)
+        return false;
+    Chaser *ch = qobject_cast<Chaser *>(doc->function(chaserId));
+    QStringList names;
+    for (quint32 fid : functionIds)
+        if (Function *f = doc->function(fid))
+            names << f->name();
+    const QString label = names.size() == 1 ? tr("add %1 to %2 as a step").arg(names.first(), ch->name())
+                                            : tr("add %n step(s) to %1", "", int(names.size())).arg(ch->name());
+    return doc->paletteOps()->functionStep(label, { chaserId }, [&](QList<quint32> &) {
+        bool changed = false;
+        int pos = at < 0 || at > ch->stepsCount() ? -1 : at;
+        for (quint32 fid : functionIds)
+        {
+            if (doc->function(fid) == nullptr)
+                continue;
+            if (ch->addStep(newStep(ch, fid), pos))
+            {
+                changed = true;
+                if (pos >= 0)
+                    ++pos;
+            }
+        }
+        return changed;
+    });
+}
+
+bool FunctionStack::insertSteps(const QList<quint32> &functionIds, int at)
+{
+    const bool ok = addSteps(m_doc, m_fid, functionIds, at);
+    if (ok)
+        emit changed();
+    return ok;
+}
+
+bool FunctionStack::removeStep(int index)
+{
+    Chaser *ch = chaser();
+    if (ch == nullptr || !readOnlyReason().isEmpty() || index < 0 || index >= ch->stepsCount())
+        return false;
+    Function *f = m_doc->function(ch->steps().at(index).fid);
+    const bool ok = m_doc->paletteOps()->functionStep(
+        tr("remove step %1 (%2) from %3").arg(index + 1).arg(f != nullptr ? f->name() : QString(), ch->name()),
+        { m_fid }, [&](QList<quint32> &) { return ch->removeStep(index); });
+    if (!ok)
+        return false;
+    const int was = m_step;
+    m_step = qBound(0, m_step, qMax(0, ch->stepsCount() - 1));
+    if (index <= was)
+        emit layersReplaced();
+    emit changed();
+    return true;
+}
+
+bool FunctionStack::moveStep(int from, int to)
+{
+    Chaser *ch = chaser();
+    if (ch == nullptr || !readOnlyReason().isEmpty())
+        return false;
+    to = qBound(0, to, ch->stepsCount() - 1);
+    if (from < 0 || from >= ch->stepsCount() || from == to)
+        return false;
+    const bool ok = m_doc->paletteOps()->functionStep(tr("reorder steps in %1").arg(ch->name()), { m_fid },
+                                                     [&](QList<quint32> &) { return ch->moveStep(from, to); });
+    if (!ok)
+        return false;
+    // The step walked to goes with it.
+    if (m_step == from)
+        m_step = to;
+    else if (from < m_step && to >= m_step)
+        --m_step;
+    else if (from > m_step && to <= m_step)
+        ++m_step;
+    emit changed();
+    return true;
+}
+
+quint32 FunctionStack::makeChaser(Doc *doc, const QList<quint32> &functionIds, const QString &folder)
+{
+    if (doc == nullptr || doc->paletteOps() == nullptr)
+        return Function::invalidId();
+    QList<quint32> ids;
+    for (quint32 fid : functionIds)
+        if (doc->function(fid) != nullptr)
+            ids << fid;
+    if (ids.isEmpty())
+        return Function::invalidId();
+    quint32 made = Function::invalidId();
+    doc->paletteOps()->functionStep(tr("chaser from %n function(s)", "", int(ids.size())), {},
+                                    [&](QList<quint32> &news) {
+        Chaser *ch = new Chaser(doc);
+        if (!doc->addFunction(ch))
+        {
+            delete ch;
+            return false;
+        }
+        // As the Function Manager names a new one.
+        ch->setName(QStringLiteral("%1 %2").arg(tr("New Chaser")).arg(ch->id()));
+        ch->setPath(folder);
+        for (quint32 fid : ids)
+        {
+            ch->addStep(newStep(ch, fid));
+        }
+        news << ch->id();
+        made = ch->id();
+        return true;
+    });
+    return made;
+}
+
+quint32 FunctionStack::makeOwnCopy(Doc *doc, quint32 containerId, int index)
+{
+    if (doc == nullptr || doc->paletteOps() == nullptr)
+        return Function::invalidId();
+    Function *container = doc->function(containerId);
+    Collection *c = qobject_cast<Collection *>(container);
+    Chaser *ch = qobject_cast<Chaser *>(container);
+    quint32 fid = Function::invalidId();
+    if (c != nullptr && index >= 0 && index < c->functions().size())
+        fid = c->functions().at(index);
+    else if (ch != nullptr && index >= 0 && index < ch->stepsCount())
+        fid = ch->steps().at(index).fid;
+    Function *src = doc->function(fid);
+    ShowTreeController *st = doc->showTree();
+    if (src == nullptr || (st != nullptr && st->isGenerated(containerId)))
+        return Function::invalidId();
+
+    quint32 made = Function::invalidId();
+    doc->paletteOps()->functionStep(tr("make %1's own copy of %2").arg(container->name(), src->name()),
+                                    { containerId }, [&](QList<quint32> &news) {
+        Function *copy = src->createCopy(doc, true);
+        if (copy == nullptr)
+            return false;
+        copy->setName(doc->nextDuplicateName(src));
+        news << copy->id();
+        made = copy->id();
+        if (c != nullptr)
+        {
+            // In its place: out, and the copy in at the same index.
+            c->removeFunction(fid);
+            return c->addFunction(copy->id(), index >= c->functions().size() ? -1 : index);
+        }
+        ChaserStep step = ch->steps().at(index);
+        step.fid = copy->id();
+        return ch->replaceStep(step, index);
+    });
+    return made;
+}
+
+bool FunctionStack::canMakeOwnCopy(int index) const
+{
+    if (!readOnlyReason().isEmpty())
+        return false;
+    const QList<Layer> ls = layers();
+    if (index < 0 || index >= ls.size() || editCollection() == nullptr)
+        return false;
+    return !alsoIn(m_doc, ls.at(index).functionId, editCollection()->id()).isEmpty();
+}
+
+quint32 FunctionStack::makeOwnCopy(int index)
+{
+    if (!canMakeOwnCopy(index))
+        return Function::invalidId();
+    const quint32 made = makeOwnCopy(m_doc, editCollection()->id(), index);
+    if (made != Function::invalidId())
+        emit changed();
+    return made;
+}
+
+quint32 FunctionStack::makeStepOwnCopy()
+{
+    if (chaser() == nullptr || !readOnlyReason().isEmpty())
+        return Function::invalidId();
+    if (alsoIn(m_doc, stepFunction(), Function::invalidId()).size() < 2)
+        return Function::invalidId();     // only this step uses it
+    const quint32 made = makeOwnCopy(m_doc, m_fid, m_step);
+    if (made != Function::invalidId())
+    {
+        emit layersReplaced();
+        emit changed();
+    }
     return made;
 }

@@ -350,6 +350,18 @@ private:
     /** setStack()'s way with ↩: start over, push what was loaded, or pop. */
     enum History { Fresh, Push, Pop };
     void setStackImpl(WorkbenchStack *stack, History history);
+
+    /************************************************************************
+     * W2: a back end's own header widget (a chaser's step walker), the
+     * layers replaced (a step walked to), a shared layer split off
+     ************************************************************************/
+private:
+    void installStackWidget();
+    void stackLayersReplaced();
+    void makeOwnCopySelected();
+
+    QPointer<QWidget> m_stackWidget;
+    QToolButton *m_ownCopyBtn = nullptr;
 };
 
 /** @} */

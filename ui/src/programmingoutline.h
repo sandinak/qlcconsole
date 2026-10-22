@@ -172,6 +172,23 @@ public:
     /** The badge column's width (dragged, remembered). */
     int badgeWidth() const { return m_badgeWidth; }
 
+    /************************************************************************
+     * W2: Build ▸ Scenes ▸ Folders | Classic; Chaser from selection
+     ************************************************************************/
+public:
+    /** Navigator: your folders, or by function type as the Function
+     *  Manager lists them (WORKFLOW_DESIGN.md §3.3). */
+    enum Arrangement { Folders, Classic };
+    Arrangement arrangement() const { return m_arrangement; }
+    /** Switch, rebuild, and remember it for this show. */
+    void setArrangement(Arrangement arrangement);
+    /** What a show opens on: as last left for it, else Classic for a show
+     *  without a Show Tree, Folders for one with. */
+    Arrangement savedArrangement() const;
+    /** The scenes and functions selected, in the order they were picked
+     *  (Chaser from selection: order = selection). */
+    QList<quint32> selectedFunctionsInOrder() const;
+
 signals:
     /** Return on a row: go to its page. */
     void pageRequested();
@@ -189,6 +206,10 @@ signals:
     void layersEdited();
     void editGroupLayoutRequested(quint32 groupId);
     void revealPaletteRequested(quint32 paletteId);
+    /** Chaser from selection: @a functionIds as its steps, in @a folder. */
+    void chaserRequested(const QList<quint32> &functionIds, const QString &folder);
+    /** Folders | Classic changed (the switch above follows). */
+    void arrangementChanged(int arrangement);
 
 protected:
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override;
@@ -241,6 +262,14 @@ private:
     QVariantMap m_expanded;      //!< row key -> open, as last left
     int m_badgeWidth = 0;
     bool m_fittingColumns = false;
+
+    // W2
+    void rebuildClassic(QList<Scene *> &scenes);
+    void trackSelectionOrder();
+    /** Scenes / functions dropped on a chaser row: its steps (W2). */
+    QString chaserDropPlan(const QList<quint32> &functionIds, quint32 chaserId) const;
+    Arrangement m_arrangement = Folders;
+    QStringList m_selectionOrder;    //!< keys of selected rows, as picked
 };
 
 /** @} */
