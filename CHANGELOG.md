@@ -13,6 +13,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
+  tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
+  yellow hard hat with an amber edge, crisp at any size and pixel ratio,
+  the same in every theme). Build's **Move in black ▾** drop-down follows
+  `ProgrammerController::autoMoveInBlackChanged` /
+  `moveInBlackPresetsChanged`: lit in the theme's highlight with
+  "Move in black · Auto", or "MIB · n" while heads pre-position, like the
+  Show Tree's MIB button. New **Control ▸ Auto Move in Black** menu item
+  (checkable, ticked while on), the same show setting.
 - **Build ▸ Effects makes effects.** A **+ New ▾** button (effect palette
   in the designer, EFX, RGB Matrix — the classic ones on the Try on groups)
   and a right-click menu on the list (Design / edit…, Open in editor for

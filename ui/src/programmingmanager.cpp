@@ -6,6 +6,7 @@
 */
 
 #include <QGuiApplication>
+#include <QStyle>
 #include <QWidgetAction>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -342,6 +343,43 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         markMenu->menu()->addSeparator();
         mirror(markMenu->menu(), m_autoMibBtn, tr("Auto move-in-black"));
         fieldAction(markMenu->menu(), tr("Lead time"), m_mibGapSpin);
+        /* The drop-down says when Auto is on ("when we set move in black to
+           auto .. should change the item in the menubar to indicate same"):
+           lit as the Show Tree's MIB button is, "Move in black · Auto", and
+           "MIB · n" while it pre-positions n heads. */
+        markMenu->setStyleSheet(QStringLiteral(
+            "QToolButton#markMenu[mibAuto=\"true\"] { background: palette(highlight);"
+            "  color: palette(highlighted-text); border-radius: 4px;"
+            "  padding: 2px 14px 2px 5px; }"));   // room for the arrow
+        auto markText = [markMenu, this]() {
+            ProgrammerController *pc = m_doc->programmer();
+            const bool on = pc != nullptr && pc->isAutoMoveInBlack();
+            const int presets = pc != nullptr ? pc->moveInBlackPresetCount() : 0;
+            // MIDDLE DOT, as the Show Tree's button.
+            markMenu->setText(!on ? tr("Move in black")
+                              : presets > 0 ? tr("MIB \302\267 %1").arg(presets)
+                                            : tr("Move in black \302\267 Auto"));
+            markMenu->setToolTip(!on ? tr("Mark, unmark and auto move-in-black (off)")
+                                 : presets > 0
+                                     ? tr("Auto move-in-black is on: pre-positioning %n head(s) "
+                                          "in black for the next cue.", "", presets)
+                                     : tr("Auto move-in-black is on: nothing to pre-position "
+                                          "right now."));
+            if (markMenu->property("mibAuto").toBool() != on)
+            {
+                markMenu->setProperty("mibAuto", on);
+                markMenu->style()->unpolish(markMenu);
+                markMenu->style()->polish(markMenu);
+            }
+        };
+        if (ProgrammerController *pc = m_doc->programmer())
+        {
+            connect(pc, &ProgrammerController::autoMoveInBlackChanged, markMenu,
+                    [markText](bool) { markText(); });
+            connect(pc, &ProgrammerController::moveInBlackPresetsChanged, markMenu,
+                    [markText](int) { markText(); });
+        }
+        markText();
 
         QToolButton *beatMenu = dropDown(tr("Beat"), QStringLiteral("beatMenu"));
         mirror(beatMenu->menu(), m_bpmBtn, tr("Internal beat on"));

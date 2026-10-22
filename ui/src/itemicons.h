@@ -77,6 +77,8 @@ namespace ItemIcons
     QIcon shutterIcon(ShutterState state, int ratePercent = -1);
     QIcon pointTargetIcon();
     QIcon lineTargetIcon();
+    /** A hard hat: the Build tab (and wherever Build is named). */
+    QIcon buildIcon();
     QIcon swatchIcon(const QColor &color);
     QIcon kindIcon(FixtureKind kind, bool group = false);
 
