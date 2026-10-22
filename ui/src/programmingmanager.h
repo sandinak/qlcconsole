@@ -228,6 +228,11 @@ private:
     QList<quint32> paletteTreeTargetIds(QTreeWidgetItem *clicked) const;
     /** Open the Bundle editor pre-filled with @p paletteIds and save the result. */
     void saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene = nullptr);
+    /** W2: the Folders | Classic switch over the Scenes navigator. */
+    class QLayout *buildArrangementSwitch(QWidget *page);
+    /** Chaser from selection: a new chaser of @a functionIds, loaded. */
+    void makeChaserFrom(const QList<quint32> &functionIds, const QString &folder);
+
     /** Duplicate each function (smart-incremented name), select the last copy. */
     void duplicateFunctions(const QList<quint32> &fids);
 

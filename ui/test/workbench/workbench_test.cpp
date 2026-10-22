@@ -513,11 +513,11 @@ void Workbench_Test::sharedMembersSayWhereElse()
     selectItem(rows, shared);
     QVERIFY(wb.m_sceneSummary->text().contains("Used in: 0.0.3-Announcer"));
 
-    // A chaser's steps: one row each, opened, not opened up (W2 walks them).
+    // A chaser is walked a step at a time (W2): step 1's scene, opened up.
     wb.load(ch->id());
     QCOMPARE(rows->topLevelItemCount(), 1);
-    QCOMPARE(kindOf(rows->layerItem(0)), int(ProgrammingOutline::FunctionRow));
-    QVERIFY(rows->layerItem(0)->text(0).startsWith("1 · BackStage"));
+    QCOMPARE(kindOf(rows->layerItem(0)), int(ProgrammingOutline::SceneRow));
+    QVERIFY(rows->layerItem(0)->text(0).startsWith("BackStage"));
     QVERIFY(!wb.m_addSceneBtn->isEnabled());
     QCOMPARE(wb.currentPage(), Workbench::OverviewPage);
     QVERIFY(wb.m_overviewEditor != nullptr);        // its step table

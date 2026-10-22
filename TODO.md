@@ -16,9 +16,7 @@ under `~/.claude/.../memory/`.
   Build ▸ Scenes. Left over / open from W1:
   - A lone scene takes no + Scene / + EFX / + RGB Matrix (a scene is one
     layer); "make a collection of this scene and…" could come later.
-  - A chaser loads as one row per step with its step table in the editor
-    pane; walking the steps (◀ ▶, the step header) is W2, with
-    *Make own copy* for a shared member and Scenes ▸ Classic.
+  - (Chasers: done in W2, below.)
   - Palettes and Effects sections are today's lists behind the switch; the
     shared Library (P2/W6), the bench (W4) and the effect designer on a
     layer (W4) are to come. No command bar yet (W6).
@@ -30,7 +28,25 @@ under `~/.claude/.../memory/`.
     function id.
   - W3 docks this same Workbench in the Show Tree with a `CueStack`
     (see the W1 report / workbench.h): `setStack()`, `setReturnTo()`.
-- Then W3 (Show Tree ↔ Workbench) → W2 → W4 → W5 → W6 → W7.
+- **W2 Chasers in the Workbench + Classic — built on feat/w2-chasers-classic
+  (2026-10-22, cut from W1), not merged.** Step walker (`ChaserWalker`,
+  `FunctionStack` chaser step), step header + step table, Chaser from
+  selection, drops on a chaser, Make own copy (layer / step), Scenes ▸
+  Folders | Classic. Left over / open from W2:
+  - The chaser's own settings (run order, direction, speed modes) are still
+    edited in the stock Chaser editor in the editor pane, and its edits are
+    not on the shared history (as in W1).
+  - No ⌥↑ / ⌥↓ shortcut for ◀ ▶ yet (a window-wide one would clash with
+    the Show Tree); the step table takes ↑ ↓ when it has focus.
+  - A scene step takes no + Scene / + EFX (a step plays one function);
+    "make this step a collection" could come later.
+  - Preview plays the step's function alone, not the chaser running
+    through its steps (Play the chaser from VC / the Functions window).
+  - Classic folder rename renames that folder for every function type
+    filed in it (paths are shared, as in Folders).
+  - Retire the Functions window now Classic covers it (open question 4) —
+    Branson's call.
+- Then W3 (Show Tree ↔ Workbench) → W4 → W5 → W6 → W7.
 
 ## Small fixes and leftovers
 
