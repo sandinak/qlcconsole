@@ -90,6 +90,8 @@
 #include "programmercontroller.h"
 #include "qxwimporter.h"
 #include "importselectiondialog.h"
+#include "eosimportwizard.h"
+#include "eosimporter.h"
 #include "lastlookeffect.h"
 
 #include "qlcfixturedefcache.h"
@@ -2995,6 +2997,7 @@ void App::slotFileImport()
     QStringList filters;
     filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
     filters << tr("QLC+ Workspaces (*%1)").arg(KExtWorkspace);
+    filters << tr("ETC Eos shows, USITT ASCII export (*.asc *.ASC)");
 #if defined(WIN32) || defined(Q_OS_WIN)
     filters << tr("All Files (*.*)");
 #else
@@ -3007,6 +3010,12 @@ void App::slotFileImport()
     QString fn = dialog.selectedFiles().first();
     if (fn.isEmpty() == true)
         return;
+
+    if (fn.endsWith(QLatin1String(".asc"), Qt::CaseInsensitive))
+    {
+        importEosShow(fn);
+        return;
+    }
 
     QString err;
     Doc *scratchDoc = loadScratchDoc(fn, err);
@@ -3026,15 +3035,21 @@ void App::slotFileImport()
     QList<quint32> fixtures = picker.selectedFixtures();
     QList<quint32> groups = picker.selectedFixtureGroups();
     QList<quint32> functions = picker.selectedFunctions();
-    if (fixtures.isEmpty() && groups.isEmpty() && functions.isEmpty())
+    QList<quint32> palettes = picker.selectedPalettes();
+    if (fixtures.isEmpty() && groups.isEmpty() && functions.isEmpty() && palettes.isEmpty())
     {
         delete scratchDoc;
         return;
     }
 
-    QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, fixtures, groups, functions);
+    QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, fixtures, groups, functions, palettes);
     delete scratchDoc;
+    showImportSummary(result);
+}
 
+void App::showImportSummary(const QxwImportResult &result, const QStringList &before,
+                            const QStringList &after)
+{
     if (FixtureManager::instance() != NULL)
         FixtureManager::instance()->updateView();
     if (InputOutputManager::instance() != NULL)
@@ -3064,8 +3079,74 @@ void App::slotFileImport()
         summary += tr("\n%1 fixture(s) were moved to a free DMX address.").arg(result.fixturesRelocated);
     if (result.warnings.isEmpty() == false)
         summary += tr("\n\n%1 item(s) skipped:\n").arg(result.warnings.size()) + result.warnings.join("\n");
+    if (!after.isEmpty())
+        summary += QStringLiteral("\n\n") + after.join(QStringLiteral("\n"));
 
-    QMessageBox::information(this, tr("Import complete"), summary);
+    if (before.isEmpty())
+    {
+        QMessageBox::information(this, tr("Import complete"), summary);
+        return;
+    }
+    // An Eos import's report runs long: what was read, then what landed.
+    QMessageBox box(QMessageBox::Information, tr("Import complete"), summary, QMessageBox::Ok, this);
+    box.setDetailedText(before.join(QStringLiteral("\n")));
+    box.exec();
+}
+
+void App::importEosShow(const QString &asciiPath)
+{
+    EosImportWizard wizard(this, m_doc, asciiPath);
+    if (wizard.exec() != QDialog::Accepted)
+        return;
+
+    EosImportResult eos;
+    QApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
+    Doc *scratchDoc = EosImporter::load(wizard.bundle(), eos, wizard.mapper());
+    QApplication::restoreOverrideCursor();
+    if (scratchDoc == NULL)
+    {
+        QMessageBox::warning(this, tr("Import"), eos.warnings.join("\n"));
+        return;
+    }
+
+    ImportSelectionDialog picker(this, scratchDoc);
+    picker.setWindowTitle(tr("Import from the Eos show"));
+    picker.selectAll();
+    if (picker.exec() != QDialog::Accepted)
+    {
+        delete scratchDoc;
+        return;
+    }
+
+    QApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
+    QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, picker.selectedFixtures(),
+                                                 picker.selectedFixtureGroups(), picker.selectedFunctions(),
+                                                 picker.selectedPalettes());
+    delete scratchDoc;
+
+    QStringList treeLines;
+    if (wizard.toShowTree())
+    {
+        QList<quint32> chasers;
+        for (quint32 id : eos.chasers)
+            if (result.functionMap.contains(id))
+                chasers << result.functionMap.value(id);
+        EosImporter::toShowTree(m_doc, chasers, &treeLines);
+    }
+    QApplication::restoreOverrideCursor();
+
+    QStringList read;
+    read << tr("Read from %1: %2 channel(s) (%3 patched as a generic dimmer, %4 staged without an address), "
+               "%5 group(s), %6 palette(s), %7 cue(s) in %8 list(s), %9 preset(s), %10 sub(s).")
+            .arg(QFileInfo(wizard.bundle().asciiPath).fileName())
+            .arg(eos.fixturesParsed).arg(eos.fixturesUnmapped).arg(eos.fixturesUnpatched)
+            .arg(eos.fixtureGroupsParsed).arg(eos.palettesParsed).arg(eos.cuesParsed)
+            .arg(eos.cueListsParsed).arg(eos.presetsParsed).arg(eos.submastersParsed);
+    read << eos.warnings;
+    if (!eos.warnings.isEmpty())
+        treeLines.prepend(tr("%n note(s) on what the Eos file holds and what didn't come across: Show Details.",
+                             "", int(eos.warnings.count())));
+    showImportSummary(result, read, treeLines);
 }
 
 QFile::FileError App::slotFileSave()

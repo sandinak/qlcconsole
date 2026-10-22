@@ -22,6 +22,7 @@
 
 #include <QList>
 #include <QStringList>
+#include <QHash>
 
 class Doc;
 
@@ -44,6 +45,9 @@ public:
     int layersCreated = 0;          //!< 2D-map layers created in the target
     int mapGroupsCreated = 0;       //!< 2D-map groups created in the target
     int idsRemapped = 0;         //!< fixture/function/group IDs that collided
+    /** Each imported function's id in the source -> its id in the target
+     *  (Eos import hands the cue lists' chasers to the Show Tree). */
+    QHash<quint32, quint32> functionMap;
     QStringList warnings;        //!< items skipped because they couldn't be placed
 };
 
@@ -91,11 +95,14 @@ public:
      * @param functionIds Root function selection (from sourceDoc) -- each
      *        one's full dependency closure (member functions + fixtures they
      *        touch) is pulled in automatically.
+     * @param paletteIds Palettes to bring even when no imported scene uses
+     *        them (an Eos show's IP / CP / FP palettes).
      */
     static QxwImportResult import(Doc *sourceDoc, Doc *targetDoc,
                                    const QList<quint32> &fixtureIds,
                                    const QList<quint32> &fixtureGroupIds,
-                                   const QList<quint32> &functionIds);
+                                   const QList<quint32> &functionIds,
+                                   const QList<quint32> &paletteIds = QList<quint32>());
 };
 
 /** @} */

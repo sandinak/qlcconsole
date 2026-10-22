@@ -283,7 +283,8 @@ static quint32 mapGroup(MonitorProperties *src, MonitorProperties *dst,
 QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
                                      const QList<quint32> &fixtureIds,
                                      const QList<quint32> &fixtureGroupIds,
-                                     const QList<quint32> &functionIds)
+                                     const QList<quint32> &functionIds,
+                                     const QList<quint32> &paletteIds)
 {
     QxwImportResult result;
     if (sourceDoc == NULL || targetDoc == NULL)
@@ -321,6 +322,8 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
     // A Scene applies palettes by ID, so an imported Scene needs them too or it
     // lands referring to palettes that don't exist in the target.
     QSet<quint32> allPalettes;
+    foreach (quint32 pid, paletteIds)
+        allPalettes.insert(pid);
     foreach (quint32 fid, allFunctions)
     {
         Scene *sc = qobject_cast<Scene *>(sourceDoc->function(fid));
@@ -623,6 +626,7 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         if (collides == true)
             result.idsRemapped++;
         functionMap.insert(oldId, copy->id());
+        result.functionMap.insert(oldId, copy->id());
         result.functionsImported++;
     }
 

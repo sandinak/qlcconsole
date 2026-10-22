@@ -388,6 +388,15 @@ private:
      *  failure; caller owns the returned Doc on success. */
     Doc *loadScratchDoc(const QString &fileName, QString &error);
 
+    /** File > Import of an ETC Eos show (@p asciiPath, its USITT ASCII
+     *  export): the EosImportWizard, the usual picker and merge, then the
+     *  cue lists into the Show Tree (EOS_IMPORT_DESIGN.md). */
+    void importEosShow(const QString &asciiPath);
+    /** File > Import's report: the merge, with @p before as its details
+     *  (what an Eos file held) and @p after appended (the Show Tree). */
+    void showImportSummary(const class QxwImportResult &result, const QStringList &before = QStringList(),
+                           const QStringList &after = QStringList());
+
 public slots:
     bool slotFileNew();
     QFile::FileError slotFileOpen();

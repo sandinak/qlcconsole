@@ -74,6 +74,7 @@ add_library(${module_name}
     grandmasterslider.cpp grandmasterslider.h
     groupsconsole.cpp groupsconsole.h
     importselectiondialog.cpp importselectiondialog.h
+    eosimportwizard.cpp eosimportwizard.h
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
     inputoutputmanager.cpp inputoutputmanager.h
     connectionstree.cpp connectionstree.h
