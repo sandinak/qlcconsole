@@ -235,6 +235,77 @@ static QStringList itemsOf(const QComboBox *c)
     return out;
 }
 
+/* A shutter like the AT-Spots': Closed 0-7, Open 8-15, strobe 16-255 --
+   or, with @p strobeOnly, a plain strobe channel (0 open, the rest strobe). */
+static QLCFixtureDef *shutterDef(const QString &model, bool strobeOnly)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(model);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Shutter");
+    if (strobeOnly)
+    {
+        ch->setPreset(QLCChannel::ShutterStrobeSlowFast);
+    }
+    else
+    {
+        ch->setGroup(QLCChannel::Shutter);
+        QLCCapability *closed = new QLCCapability(0, 7, "Closed");
+        closed->setPreset(QLCCapability::ShutterClose);
+        QLCCapability *open = new QLCCapability(8, 15, "Open");
+        open->setPreset(QLCCapability::ShutterOpen);
+        QLCCapability *strobe = new QLCCapability(16, 255, "Strobe slow - fast");
+        strobe->setPreset(QLCCapability::StrobeSlowToFast);
+        ch->addCapability(closed);
+        ch->addCapability(open);
+        ch->addCapability(strobe);
+    }
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    return def;
+}
+
+void LookEditor_Test::aShutterLookOffersClosed()
+{
+    QLCFixtureDef *spot = shutterDef("Spot", false);
+    QLCFixtureDef *mover = shutterDef("Mover", true);
+    {
+        Doc doc(this);
+        QVERIFY(addOf(doc, mover) != nullptr);
+        QVERIFY(addOf(doc, mover) != nullptr);
+        Fixture *s = addOf(doc, spot);
+        QVERIFY(s != nullptr);
+        QLCPalette *sh = new QLCPalette(QLCPalette::Shutter, &doc);
+        QVERIFY(doc.addPalette(sh));
+
+        // The strobe-only movers are not a source, though more numerous.
+        LookEditor ed(&doc);
+        ed.setPalette(sh->id());
+        QVERIFY(ed.m_singleSourceCombo->isHidden());
+        QCOMPARE(itemsOf(ed.m_singleCombo), QStringList({ "Closed", "Open", "Strobe slow - fast" }));
+        // A new look opens, and says so -- not "Closed", what sits at 0.
+        QCOMPARE(ed.m_singleCombo->currentText(), QString("Open"));
+        QCOMPARE(sh->shutterIntent(&doc, { s->id() }), QLCPalette::ShutterIntentOpen);
+
+        // Closed is stored as a value that closes, and is sent as such.
+        ed.slotSingleCapabilityPicked(0);
+        QCOMPARE(sh->intValue1(), 3);
+        QCOMPARE(sh->shutterIntent(&doc, { s->id() }), QLCPalette::ShutterIntentClosed);
+        QCOMPARE(sh->valuesFromFixtures(&doc, { s->id() }).first().value, uchar(3));
+
+        // Dragged to 0, still Closed: 0 is an open look's.
+        ed.m_singleSlider->setValue(0);
+        QCOMPARE(sh->intValue1(), 1);
+        QCOMPARE(sh->shutterIntent(&doc, { s->id() }), QLCPalette::ShutterIntentClosed);
+    }
+    delete spot;
+    delete mover;
+}
+
 void LookEditor_Test::aNewGoboOffersTheWorkspacesWheels()
 {
     QLCFixtureDef *spot = wheelDef("Spot", { "Open", "Star", "Ring" });

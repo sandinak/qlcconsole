@@ -200,14 +200,23 @@ void ItemIcons_Test::aShutterLookShowsItsState()
     sh->setValue(0);                                      // the engine's 255
     QCOMPARE(shutterState(m_doc, sh), ShutterStrobe);
 
-    // One with an Open capability: the engine opens it, whatever the value.
+    /* One with an Open capability. The engine used to send that whatever
+       the look said, so a Closed look showed open (and was); a Closed look
+       now closes it and shows closed (QLCPalette::shutterIntent()). */
     QVERIFY(m_doc->deleteFixture(noOpen->id()));
     makeFixture(QLCFixtureDef::ColorChanger, QStringLiteral("Par"),
                 { { QLCChannel::Intensity, QLCChannel::IntensityRed },
                   { QLCChannel::Shutter, -1 } });
     sh->setValue(5);
+    QCOMPARE(shutterState(m_doc, sh), ShutterClosed);
+    QCOMPARE(paletteIcon(m_doc, sh).name(), shutterIcon(ShutterClosed).name());
+    sh->setValue(15);
     QCOMPARE(shutterState(m_doc, sh), ShutterOpen);
     QCOMPARE(paletteIcon(m_doc, sh).name(), shutterIcon(ShutterOpen).name());
+    sh->setValue(100);
+    QCOMPARE(shutterState(m_doc, sh), ShutterStrobe);
+    sh->setValue(0);                                      // a look made before Closed: open
+    QCOMPARE(shutterState(m_doc, sh), ShutterOpen);
 
     QVERIFY(shutterIcon(ShutterOpen).name() != shutterIcon(ShutterClosed).name());
     // Open shows light through the gate; closed shows none.

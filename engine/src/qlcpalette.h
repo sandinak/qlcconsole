@@ -225,6 +225,58 @@ public:
     static bool effectUsesLookColours(const QLCPalette *effect);
     static bool isEffectScoped(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId);
 
+    /*********************************************************************
+     * Shutter looks
+     *********************************************************************/
+    /** What a shutter value does to the beam. */
+    enum ShutterIntent
+    {
+        ShutterIntentOpen,
+        ShutterIntentClosed,
+        ShutterIntentStrobe,
+        /** Anything else: an effect ("Slow open - fast close"), "No
+         *  function", a value no capability covers */
+        ShutterIntentOther
+    };
+
+    /** What @p cap does: by its preset, else by a plain name ("Open",
+     *  "Closed", "Blackout", "Strobe slow - fast"). */
+    static ShutterIntent capabilityShutterIntent(const QLCCapability *cap);
+
+    /** What @p value does on @p ch: a strobe-preset channel is open at 0
+     *  and strobes above it; any other is read by its capability there. */
+    static ShutterIntent channelShutterIntent(const QLCChannel *ch, int value);
+
+    /** The shutter channel a Shutter look writes on @p fixture, or
+     *  QLCChannel::invalid(). */
+    static quint32 shutterChannel(const Fixture *fixture);
+
+    /** What this Shutter look means, for @p fixtures: a look with no value
+     *  (or 0, which every Shutter look made before Closed could be picked
+     *  used for "open") opens; otherwise its value is read on the first of
+     *  @p fixtures whose shutter has an Open, Closed or Strobe capability
+     *  there -- the type it was picked from, for a look on one type. A
+     *  strobe-preset channel (0 open, the rest strobe) never decides it: on
+     *  its own it cannot tell a legacy "Open" at 255 from a strobe, so with
+     *  nothing else to read it on the look stays open. @p reference, when
+     *  given, gets the channel that decided it (nullptr when none did). */
+    ShutterIntent shutterIntent(Doc *doc, const QList<quint32> &fixtures,
+                                const QLCChannel **reference = nullptr) const;
+
+    /** The DMX value this Shutter look puts on @p ch, a fixture's shutter
+     *  channel, for @p intent (shutterIntent(), decided on @p reference):
+     *  its own value where @p ch reads it the same way; else the value that
+     *  does that on @p ch (its open, its closed, a strobe at the same
+     *  rate). A shutter that cannot close, or cannot strobe, is sent open. */
+    int shutterValueFor(const QLCChannel *ch, ShutterIntent intent,
+                        const QLCChannel *reference) const;
+
+    /** The value that opens @p ch (ShutterAutoOpen::openValue()). A channel
+     *  with no Open capability gets @p fallback unless that closes or
+     *  strobes it, else the middle of a capability that does neither ("No
+     *  function"), else 255 (as before there was a Closed). */
+    static int shutterOpenValue(const QLCChannel *ch, int fallback);
+
 protected:
     /** This method returns a normalized factor between 0.0 and 1.0
      *  which will then be multiplied by a value to obtain the final

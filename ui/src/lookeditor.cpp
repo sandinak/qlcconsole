@@ -1421,6 +1421,10 @@ void LookEditor::setPalette(quint32 paletteId)
         int shown = p->intValue1();
         if (p->isGoboByName() && goboValueForSource(p) >= 0)
             shown = goboValueForSource(p);
+        // A Shutter look with no value (or 0) opens: show the browsed
+        // type's Open, not whatever sits at 0 there (often "Closed").
+        if (p->type() == QLCPalette::Shutter && p->intValue1() <= 0 && m_singleChannel != NULL)
+            shown = QLCPalette::shutterOpenValue(m_singleChannel, 0);
         if (shown != p->intValue1())
         {
             m_singleSlider->setValue(shown);
@@ -2159,7 +2163,18 @@ void LookEditor::slotSingleValueChanged(int v)
     if (m_doc->palette(m_paletteId) == NULL)
         return;
     editValue([&](QLCPalette *p) {
-        p->setValue(v);
+        int stored = v;
+        /* 0 in a Shutter look means "open" (what every one made before
+           Closed could be picked holds): a Closed at 0 is kept as 1, the
+           same capability, so the look closes. */
+        if (p->type() == QLCPalette::Shutter && v == 0 && m_singleChannel != NULL)
+        {
+            const QLCCapability *cap = m_singleChannel->searchCapability(0);
+            if (cap != NULL && cap->max() >= 1
+                && QLCPalette::capabilityShutterIntent(cap) != QLCPalette::ShutterIntentOpen)
+                stored = 1;
+        }
+        p->setValue(stored);
         if (p->type() == QLCPalette::Gobo)
         {
             // The slot is picked for the type being browsed; the look is named
@@ -2339,6 +2354,14 @@ void LookEditor::slotSingleSourcePicked(int index)
         m_singleSlider->setValue(goboValueForSource(p));
         m_loading = was;
     }
+    // An open Shutter look (no value): this type's own Open.
+    if (p != NULL && p->type() == QLCPalette::Shutter && p->intValue1() <= 0 && m_singleChannel != NULL)
+    {
+        const bool was = m_loading;
+        m_loading = true;
+        m_singleSlider->setValue(QLCPalette::shutterOpenValue(m_singleChannel, 0));
+        m_loading = was;
+    }
     fillSingleCapabilities(m_singleSlider->value());
     updateSinglePreview(m_singleSlider->value());
 }
@@ -2415,6 +2438,13 @@ QList<LookEditor::ChannelSource> LookEditor::singleChannelSources(int group) con
                 : f->fixtureMode()->channelNumber(QLCChannel::Group(group), QLCChannel::MSB);
             const QLCChannel *ch = (chn == QLCChannel::invalid()) ? NULL : f->channel(chn);
             if (ch == NULL)
+                continue;
+            /* A strobe-only shutter (0 open, the rest strobe) has no Open or
+               Closed to pick, and a Shutter look's value is not read on it
+               (QLCPalette::shutterIntent()): its strobe is a Strobe look's. */
+            if (group == QLCChannel::Shutter
+                && (ch->preset() == QLCChannel::ShutterStrobeSlowFast
+                    || ch->preset() == QLCChannel::ShutterStrobeFastSlow))
                 continue;
             QString key, label;
             if (f->fixtureDef() != NULL)

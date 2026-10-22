@@ -16,3 +16,7 @@ target_link_libraries(shutterautoopen_test PRIVATE
     Qt6::Test
     qlcplusengine
 )
+
+target_compile_definitions(shutterautoopen_test PRIVATE
+    SHUTTER_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/"
+)
