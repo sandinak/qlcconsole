@@ -411,14 +411,14 @@ void EosImporter_Test::specialCircuits()
     for (FixtureGroup *g : m_doc->fixtureGroups())
         groups.insert(g->name(), g);
     QCOMPARE(groups.count(), 3);
-    QCOMPARE(groups.value("Relays")->path(), QString("Eos"));
-    QCOMPARE(groups.value("Relays")->fixtureList(), QList<quint32>() << 1);
+    QCOMPARE(groups.value("Power relays")->path(), QString("Eos"));
+    QCOMPARE(groups.value("Power relays")->fixtureList(), QList<quint32>() << 1);
     QCOMPARE(groups.value("House & Work")->fixtureList(), QList<quint32>() << 2 << 3 << 6);
     QCOMPARE(groups.value("Backstage")->fixtureList(), QList<quint32>() << 4);
 
     const QString w = r.warnings.join("\n");
     QVERIFY2(w.contains("Special circuits: Relay (power) × 1, House × 1, Work × 2, Backstage / hall × 1, "
-                        "GM exempt ($$Options X) × 1 (groups Eos/Relays, Eos/House & Work, Eos/Backstage)"),
+                        "GM exempt ($$Options X) × 1 (groups Eos/Power relays, Eos/House & Work, Eos/Backstage)"),
              qPrintable(w));
     QVERIFY2(w.contains("Patch $$Options not carried: P (flip pan) on 1 channel(s), T (flip tilt) on 1 channel(s)."),
              qPrintable(w));
@@ -426,12 +426,13 @@ void EosImporter_Test::specialCircuits()
     // turns true and the fixtures carry the rules: check them here then.
     QCOMPARE(EosImporter::applyCircuitRoles(m_doc, r.circuits), r.outputRulesApplied);
 
-    // A show with an Eos group named "Relays" of its own keeps it; ours steps aside.
+    // The show's own Eos "Relays" group doesn't clash; one named "Power
+    // relays" does, and ours steps aside.
     {
         Doc *doc = new Doc(this);
         EosShowData d2;
         QVERIFY(p.parseText("Ident 3:0\n$Patch 1 0 1 0 1\n Text Relay FOH\n$Patch 2 0 2 0 1\n Text FOH\n"
-                            "$Group 7\n Text Relays\n $$ChanList 2\n", d2));
+                            "$Group 7\n Text Relays\n $$ChanList 2\n$Group 8\n Text Power Relays\n $$ChanList 1\n", d2));
         EosImportResult r2;
         EosFixtureMapper m2(doc->fixtureDefCache());
         QVERIFY(EosImporter::build(d2, doc, m2, r2));
@@ -439,7 +440,7 @@ void EosImporter_Test::specialCircuits()
         for (FixtureGroup *g : doc->fixtureGroups())
             names << g->name();
         names.sort();
-        QCOMPARE(names, QStringList() << "Relays" << "Relays (special circuits)");
+        QCOMPARE(names, QStringList() << "Power Relays" << "Power relays (special circuits)" << "Relays");
         delete doc;
     }
 

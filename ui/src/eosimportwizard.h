@@ -57,7 +57,7 @@ class Doc;
  *      Work, Backstage / hall, Normal -- read from its Eos label
  *      (EosCircuit::classify), changed per channel or for a selection.
  *      The roles set the fixtures' output rules and make the groups
- *      Eos/Relays, Eos/House & Work, Eos/Backstage.
+ *      Eos/Power relays, Eos/House & Work, Eos/Backstage.
  *
  * Then the caller builds the scratch Doc (load()), hands it to the usual
  * ImportSelectionDialog / QxwImporter merge, and the cue lists to the Show

@@ -21,9 +21,9 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   only on a one-channel dimmer, "House Left/Right/Center" is a place).
   Roles can be changed per row or for a selection. `$$Options` in patch
   records is now read: X (GM exempt) marks the channel; other letters are
-  reported. The roles make groups Eos/Relays, Eos/House & Work and
-  Eos/Backstage ("… (special circuits)" if the show already has an Eos
-  group of that name), and map to fixture output rules in one place
+  reported. The roles make groups Eos/Power relays, Eos/House & Work
+  and Eos/Backstage ("… (special circuits)" if the show already has an
+  Eos group of that name), and map to fixture output rules in one place
   (`EosImporter::applyCircuitRoles()`). Relay → switch + exempt from
   blackout and GM + on at open; house/work/backstage → exempt from
   blackout and GM. These are applied once `feat/output-rules` lands (a

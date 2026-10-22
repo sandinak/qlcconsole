@@ -284,7 +284,7 @@ void EosImportWizard_Test::showFromSampleDir()
         qInfo().noquote() << asc << QString("faders %1:").arg(faders) << lines.join(" ");
         QStringList roleGroups;
         for (FixtureGroup *g : target->fixtureGroups())
-            if (g->name().startsWith("Relays") || g->name() == "House & Work" || g->name() == "Backstage")
+            if (g->name().startsWith("Power relays") || g->name() == "House & Work" || g->name() == "Backstage")
                 roleGroups << QString("%1/%2 (%3)").arg(g->path(), g->name()).arg(g->fixtureList().count());
         qInfo().noquote() << asc << "role groups:" << roleGroups.join(", ");
         delete VirtualConsole::instance();

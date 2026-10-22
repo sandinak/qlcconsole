@@ -520,7 +520,7 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
 
         struct RoleGroup { QString name; QList<EosCircuit::Role> roles; };
         const QList<RoleGroup> roleGroups = {
-            { QObject::tr("Relays"), { EosCircuit::Relay } },
+            { QObject::tr("Power relays"), { EosCircuit::Relay } },
             { QObject::tr("House & Work"), { EosCircuit::House, EosCircuit::Work } },
             { QObject::tr("Backstage"), { EosCircuit::Backstage } },
         };
@@ -534,7 +534,7 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
             if (chans.isEmpty())
                 continue;
             // The show may have a group of that name already (an Eos
-            // "Relays" group of its own): ours steps aside.
+            // "Power relays" group of its own): ours steps aside.
             QString name = rg.name;
             for (const EosGroup &g : data.groups)
                 if (g.label.compare(name, Qt::CaseInsensitive) == 0)

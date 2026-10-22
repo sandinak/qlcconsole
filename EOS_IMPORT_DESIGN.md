@@ -289,7 +289,7 @@ Report rendered post-import by the same dialog that renders `QxwImportResult`.
   channel from its label (`EosCircuit::classify`, most specific word wins:
   House > Work > Hall/Blue/Backstage > Relay) and reads `$$Options` X (GM
   exempt). The user's edits travel in `EosImportBundle::circuitRoles`. The
-  roles make the groups Eos/Relays, Eos/House & Work and Eos/Backstage ("…
+  roles make the groups Eos/Power relays, Eos/House & Work and Eos/Backstage ("…
   (special circuits)" when the show has an Eos group of that name), and
   map to fixture output rules in `EosImporter::applyCircuitRoles()`.
   Until `feat/output-rules` merges, that function runs on a marked shim.

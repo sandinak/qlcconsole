@@ -265,7 +265,7 @@ a tracking cue list in the Show Tree. House and relay moves stay in the
 cues, so the cue that brings the house up still does. Relays become
 switches that come on at open. House, work and backstage circuits ignore
 blackout and the Grand Master. Each kind gets a group under **Eos**
-(**Relays**, **House &amp; Work**, **Backstage**). Each **sub** becomes a
+(**Power relays**, **House &amp; Work**, **Backstage**). Each **sub** becomes a
 Playback fader on its scene, labelled *Sub N label*, in a new Virtual
 Console frame **Eos subs**, using the sub's up and down times. Bump
 buttons, LTP and exclusive subs, effects and links aren't carried; the

@@ -9,8 +9,9 @@ The latest changes, newest first. Each links to the guide with the detail.
   backstage / hall circuits by their labels, and you can change any of
   them. Relays come in as switches that are on at open; house, work and
   backstage circuits ignore blackout and the Grand Master. Each kind gets
-  an **Eos** group. Each Eos sub becomes a Playback fader in a new
-  Virtual Console frame, **Eos subs**. See
+  an **Eos** group (**Power relays**, **House &amp; Work**,
+  **Backstage**). Each Eos sub becomes a Playback fader in a new Virtual
+  Console frame, **Eos subs**. See
   [Importing an Eos show](getting-started.md#importing-an-eos-show).
 
 - **Three views.** **View → Workspace** picks the tabs: **qlcconsole**
