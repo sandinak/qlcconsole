@@ -26,6 +26,7 @@ private slots:
     void cueParts();
     void palettesAndPresets();
     void subs();
+    void patchOptionsAndSubModes();
     void unknownRecordsSkipped();
     void notAscii();
     void realExport();

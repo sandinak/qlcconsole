@@ -3133,6 +3133,15 @@ void App::importEosShow(const QString &asciiPath)
                 chasers << result.functionMap.value(id);
         EosImporter::toShowTree(m_doc, chasers, &treeLines);
     }
+    // Subs: a Playback fader each on the Virtual Console.
+    QList<EosImportedSub> subs;
+    for (EosImportedSub s : eos.subs)
+        if (result.functionMap.contains(s.function))
+        {
+            s.function = result.functionMap.value(s.function);
+            subs << s;
+        }
+    EosImportWizard::addSubFaders(m_doc, subs, &treeLines);
     QApplication::restoreOverrideCursor();
 
     QStringList read;

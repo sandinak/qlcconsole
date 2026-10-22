@@ -34,6 +34,7 @@ class QLineEdit;
 class QCheckBox;
 class QComboBox;
 class QLabel;
+class VCFrame;
 class Doc;
 
 /** @addtogroup ui UI
@@ -52,6 +53,11 @@ class Doc;
  *      matches to confirm, or a generic dimmer of the same size; "Other…"
  *      picks any definition with a mode of that size). The choices can be
  *      remembered in the per-user map file, so a re-import doesn't ask.
+ *   3. Special circuits: each channel's role -- Relay (power), House,
+ *      Work, Backstage / hall, Normal -- read from its Eos label
+ *      (EosCircuit::classify), changed per channel or for a selection.
+ *      The roles set the fixtures' output rules and make the groups
+ *      Eos/Relays, Eos/House & Work, Eos/Backstage.
  *
  * Then the caller builds the scratch Doc (load()), hands it to the usual
  * ImportSelectionDialog / QxwImporter merge, and the cue lists to the Show
@@ -90,6 +96,19 @@ public:
     /** Apply the rows to the mapper, and save them when remembered. */
     void applyChoices();
 
+    /** Page 3: a channel's role (EosCircuit::Role). */
+    int circuitRole(int channel) const { return m_roles.value(channel, 0); }
+    /** Set @a channels to @a role (what "Set selected" does). */
+    void setCircuitRoles(const QList<int> &channels, int role);
+    /** Page 3's channels, in table order (shown or not). */
+    QList<int> circuitChannels() const { return m_circuitChannels; }
+
+    /** After the merge: each sub as a Playback fader on its scene, in a new
+     *  VC frame "Eos subs", in a row below what the console holds. @a subs
+     *  holds the subs with their scene ids in @a doc (the live show). The
+     *  frame (null: no console, or no subs). */
+    static VCFrame *addSubFaders(Doc *doc, const QList<EosImportedSub> &subs, QStringList *lines = nullptr);
+
 protected:
     void accept() override;
     bool validateCurrentPage() override;
@@ -97,7 +116,10 @@ protected:
 private:
     QWizardPage *createFilesPage();
     QWizardPage *createTypesPage();
+    QWizardPage *createCircuitsPage();
     void fillTypes();
+    void fillCircuits();
+    void showCircuitRows();
     void fillRow(int row, const EosPersonality &p, const EosFixtureChoice &select);
     void pickOther(int row);
 
@@ -117,6 +139,13 @@ private:
     QCheckBox *m_showTree = nullptr;
     QStringList m_rowKeys;
     QList<QList<EosFixtureChoice>> m_rowChoices;    //!< per row, the combo's entries
+
+    QTableWidget *m_circuits = nullptr;
+    QCheckBox *m_allChannels = nullptr;
+    QComboBox *m_setRole = nullptr;
+    QLabel *m_circuitSummary = nullptr;
+    QHash<int, int> m_roles;                        //!< channel -> EosCircuit::Role
+    QList<int> m_circuitChannels;                   //!< the table's rows
 };
 
 /** @} */

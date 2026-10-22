@@ -34,6 +34,9 @@
 #include <QLabel>
 
 #include "eosimportwizard.h"
+#include "virtualconsole.h"
+#include "vcslider.h"
+#include "vcframe.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -43,6 +46,12 @@
 #define KColChannels  1
 #define KColUse       2
 #define KColStatus    3
+
+#define KColCircuitChannel  0
+#define KColCircuitLabel    1
+#define KColCircuitType     2
+#define KColCircuitRole     3
+#define KColCircuitNote     4
 
 namespace
 {
@@ -173,6 +182,7 @@ EosImportWizard::EosImportWizard(QWidget *parent, Doc *doc, const QString &ascii
 
     addPage(createFilesPage());
     addPage(createTypesPage());
+    addPage(createCircuitsPage());
     m_asciiEdit->setText(asciiPath);
 }
 
@@ -284,6 +294,198 @@ QWizardPage *EosImportWizard::createTypesPage()
     return page;
 }
 
+QWizardPage *EosImportWizard::createCircuitsPage()
+{
+    QWizardPage *page = new QWizardPage(this);
+    page->setTitle(tr("Special circuits"));
+    page->setSubTitle(tr("Channels that aren't stage lights: relays (power), house, work and backstage / hall "
+                         "lights, read from their Eos labels. Relays become switches that come on at open; "
+                         "house, work and backstage circuits ignore blackout and the Grand Master. Their cue "
+                         "moves stay in the cues."));
+    QVBoxLayout *lay = new QVBoxLayout(page);
+    m_circuitSummary = new QLabel(page);
+    m_circuitSummary->setWordWrap(true);
+    lay->addWidget(m_circuitSummary);
+
+    m_circuits = new QTableWidget(0, 5, page);
+    m_circuits->setHorizontalHeaderLabels(QStringList() << tr("Channel") << tr("Eos label") << tr("Eos type")
+                                                        << tr("Role") << tr(""));
+    m_circuits->horizontalHeader()->setSectionResizeMode(KColCircuitChannel, QHeaderView::ResizeToContents);
+    m_circuits->horizontalHeader()->setSectionResizeMode(KColCircuitLabel, QHeaderView::Stretch);
+    m_circuits->horizontalHeader()->setSectionResizeMode(KColCircuitType, QHeaderView::ResizeToContents);
+    m_circuits->horizontalHeader()->setSectionResizeMode(KColCircuitRole, QHeaderView::ResizeToContents);
+    m_circuits->horizontalHeader()->setSectionResizeMode(KColCircuitNote, QHeaderView::ResizeToContents);
+    m_circuits->verticalHeader()->setVisible(false);
+    m_circuits->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_circuits->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_circuits->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    lay->addWidget(m_circuits, 1);
+
+    QHBoxLayout *row = new QHBoxLayout();
+    m_allChannels = new QCheckBox(tr("Show every channel"), page);
+    row->addWidget(m_allChannels);
+    row->addStretch(1);
+    row->addWidget(new QLabel(tr("Set the selected channels to"), page));
+    m_setRole = new QComboBox(page);
+    for (int r = EosCircuit::Normal; r <= EosCircuit::Backstage; ++r)
+        m_setRole->addItem(EosCircuit::roleName(EosCircuit::Role(r)), r);
+    row->addWidget(m_setRole);
+    QPushButton *apply = new QPushButton(tr("Set"), page);
+    row->addWidget(apply);
+    lay->addLayout(row);
+
+    connect(m_allChannels, &QCheckBox::toggled, this, [this]() { showCircuitRows(); });
+    connect(apply, &QPushButton::clicked, this, [this]() {
+        QList<int> chans;
+        for (const QModelIndex &i : m_circuits->selectionModel()->selectedRows())
+            chans << m_circuitChannels.value(i.row());
+        setCircuitRoles(chans, m_setRole->currentData().toInt());
+    });
+    return page;
+}
+
+void EosImportWizard::fillCircuits()
+{
+    m_roles.clear();
+    m_circuitChannels.clear();
+    m_circuits->setRowCount(0);
+    const QMap<int, EosCircuit> found = EosImporter::circuits(m_data);
+
+    QMap<int, const EosPatch *> chans;
+    for (const EosPatch &p : m_data.patch)
+        if (p.part <= 1 && !chans.contains(p.channel))
+            chans.insert(p.channel, &p);
+    for (auto it = chans.constBegin(); it != chans.constEnd(); ++it)
+    {
+        const EosPatch &p = *it.value();
+        const EosCircuit c = found.value(p.channel);
+        m_roles.insert(p.channel, int(c.role));
+        const int row = m_circuits->rowCount();
+        m_circuits->insertRow(row);
+        m_circuitChannels << p.channel;
+        QTableWidgetItem *ch = new QTableWidgetItem(QString::number(p.channel));
+        ch->setData(Qt::UserRole, p.channel);
+        m_circuits->setItem(row, KColCircuitChannel, ch);
+        m_circuits->setItem(row, KColCircuitLabel, new QTableWidgetItem(p.label));
+        const auto pers = m_data.personalities.constFind(p.personality);
+        m_circuits->setItem(row, KColCircuitType,
+                            new QTableWidgetItem(pers == m_data.personalities.constEnd()
+                                                 ? (p.personalityName.isEmpty() ? tr("Dimmer") : p.personalityName)
+                                                 : pers.value().model));
+        QTableWidgetItem *note = new QTableWidgetItem(c.gmExempt ? tr("GM exempt") : QString());
+        if (c.gmExempt)
+            note->setToolTip(tr("$$Options X in the Eos patch: the channel ignores the Grand Master."));
+        m_circuits->setItem(row, KColCircuitNote, note);
+
+        QComboBox *combo = new QComboBox(m_circuits);
+        for (int r = EosCircuit::Normal; r <= EosCircuit::Backstage; ++r)
+            combo->addItem(EosCircuit::roleName(EosCircuit::Role(r)), r);
+        combo->setCurrentIndex(int(c.role));
+        m_circuits->setCellWidget(row, KColCircuitRole, combo);
+        const int channel = p.channel;
+        connect(combo, QOverload<int>::of(&QComboBox::activated), this, [this, combo, channel]() {
+            setCircuitRoles(QList<int>() << channel, combo->currentData().toInt());
+        });
+    }
+    showCircuitRows();
+}
+
+void EosImportWizard::showCircuitRows()
+{
+    int special = 0;
+    QStringList counts;
+    QHash<int, int> byRole;
+    for (int row = 0; row < m_circuitChannels.count(); ++row)
+    {
+        const int ch = m_circuitChannels.at(row);
+        const int role = m_roles.value(ch);
+        const bool gm = !m_circuits->item(row, KColCircuitNote)->text().isEmpty();
+        const bool shown = m_allChannels->isChecked() || role != EosCircuit::Normal || gm
+                           || m_circuits->item(row, KColCircuitChannel)->data(Qt::UserRole + 1).toBool();
+        m_circuits->setRowHidden(row, !shown);
+        if (role != EosCircuit::Normal)
+        {
+            ++special;
+            byRole[role]++;
+        }
+    }
+    for (int r = EosCircuit::Relay; r <= EosCircuit::Backstage; ++r)
+        if (byRole.value(r) > 0)
+            counts << QStringLiteral("%1 × %2").arg(EosCircuit::roleName(EosCircuit::Role(r))).arg(byRole.value(r));
+    m_circuitSummary->setText(special == 0
+                              ? tr("No channel's label reads as a relay, house, work or backstage circuit. Tick "
+                                   "Show every channel to mark one.")
+                              : tr("%n special circuit(s): %1.", "", special).arg(counts.join(QStringLiteral(", "))));
+}
+
+void EosImportWizard::setCircuitRoles(const QList<int> &channels, int role)
+{
+    role = qBound(int(EosCircuit::Normal), role, int(EosCircuit::Backstage));
+    for (int ch : channels)
+    {
+        const int row = int(m_circuitChannels.indexOf(ch));
+        if (row < 0)
+            continue;
+        m_roles.insert(ch, role);
+        if (QComboBox *combo = qobject_cast<QComboBox *>(m_circuits->cellWidget(row, KColCircuitRole)))
+            combo->setCurrentIndex(role);
+        // Touched: stays in view when set back to Normal.
+        m_circuits->item(row, KColCircuitChannel)->setData(Qt::UserRole + 1, true);
+    }
+    showCircuitRows();
+}
+
+VCFrame *EosImportWizard::addSubFaders(Doc *doc, const QList<EosImportedSub> &subs, QStringList *lines)
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    if (vc == nullptr || vc->contents() == nullptr || doc == nullptr)
+        return nullptr;
+    QList<EosImportedSub> playable;
+    for (const EosImportedSub &s : subs)
+        if (doc->function(s.function) != nullptr)
+            playable << s;
+    if (playable.isEmpty())
+        return nullptr;
+
+    // Below what the console already holds, at its left (as the Show
+    // Tree's Make VC page does).
+    VCFrame *contents = vc->contents();
+    int y = 10;
+    for (QObject *o : contents->children())
+        if (VCWidget *w = qobject_cast<VCWidget *>(o))
+            y = qMax(y, w->geometry().bottom() + 10);
+
+    const QSize size = VCSlider::defaultSize;
+    const int gap = 6, header = 36;
+    VCFrame *frame = new VCFrame(contents, doc, true);
+    vc->placeWidget(frame, contents);
+    frame->setCaption(tr("Eos subs"));
+    frame->setHeaderVisible(true);
+    frame->move(QPoint(10, y));
+    frame->resize(QSize(5 + int(playable.count()) * (size.width() + gap) + 5, header + size.height() + gap + 4));
+
+    QStringList captions;
+    for (int i = 0; i < playable.count(); ++i)
+    {
+        const EosImportedSub &s = playable.at(i);
+        VCSlider *slider = new VCSlider(frame, doc);
+        vc->placeWidget(slider, frame);
+        slider->setSliderMode(VCSlider::Playback);
+        slider->setPlaybackFunction(s.function);
+        slider->setCaption(s.caption);
+        slider->move(QPoint(5 + i * (size.width() + gap), header));
+        slider->resize(size);
+        slider->show();
+        captions << s.caption;
+    }
+    frame->show();
+    doc->setModified();
+    if (lines != nullptr)
+        *lines << tr("Virtual Console: frame “%1” with %n sub fader(s): %2", "", int(playable.count()))
+                  .arg(frame->caption(), captions.join(QStringLiteral(", ")));
+    return frame;
+}
+
 bool EosImportWizard::readAscii(QString *error)
 {
     const QString path = m_asciiEdit->text().trimmed();
@@ -313,6 +515,7 @@ bool EosImportWizard::readAscii(QString *error)
     m_data = data;
     m_readPath = path;
     fillTypes();
+    fillCircuits();
     return true;
 }
 
@@ -492,6 +695,7 @@ EosImportBundle EosImportWizard::bundle() const
         b.magicSheetPaths << m_sheetList->item(i)->text();
     b.augment3dEsfPath = m_esfEdit->text().trimmed();
     b.fixtureMapPath = EosFixtureMapper::defaultMapPath();
+    b.circuitRoles = m_roles;
     return b;
 }
 

@@ -13,6 +13,25 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Eos import: special circuits and subs.** A **Special circuits** page
+  in the Eos import wizard (after Fixture types) gives each channel a role
+  read from its Eos label (`EosCircuit::classify()`): Relay (power),
+  House, Work, Backstage / hall or Normal. The most specific word wins
+  (House > Work > Hall / Blue / Backstage / Stair / Exit > Relay; "Blue"
+  only on a one-channel dimmer, "House Left/Right/Center" is a place).
+  Roles can be changed per row or for a selection. `$$Options` in patch
+  records is now read: X (GM exempt) marks the channel; other letters are
+  reported. The roles make groups Eos/Relays, Eos/House & Work and
+  Eos/Backstage ("… (special circuits)" if the show already has an Eos
+  group of that name), and map to fixture output rules in one place
+  (`EosImporter::applyCircuitRoles()`). Relay → switch + exempt from
+  blackout and GM + on at open; house/work/backstage → exempt from
+  blackout and GM. These are applied once `feat/output-rules` lands (a
+  marked shim until then). House and relay moves stay in the cues. Each
+  Eos sub becomes a VC Slider in Playback mode on its scene, "Sub N
+  label", in a row in a new frame **Eos subs**. Sub up/down times are the
+  scene's fades; `$$LTP` / `$$Exclusive` / inhibitive / effect subs are
+  reported, and bump buttons aren't carried.
 - **Workspace views.** **View ▸ Workspace ▸ Classic QLC+ / qlcconsole /
   Everything** (`App::setWorkspaceView()`, `workspaceViewTabs()`): Classic
   shows Fixtures, Functions, Shows, Virtual Console, Simple Desk and

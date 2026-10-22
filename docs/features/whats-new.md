@@ -4,6 +4,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Eos import: special circuits and subs.** Importing an Eos show now
+  has a **Special circuits** page. It sorts relay, house, work and
+  backstage / hall circuits by their labels, and you can change any of
+  them. Relays come in as switches that are on at open; house, work and
+  backstage circuits ignore blackout and the Grand Master. Each kind gets
+  an **Eos** group. Each Eos sub becomes a Playback fader in a new
+  Virtual Console frame, **Eos subs**. See
+  [Importing an Eos show](getting-started.md#importing-an-eos-show).
+
 - **Three views.** **View → Workspace** picks the tabs: **qlcconsole**
   (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
   Virtual Console, Run), **Classic QLC+** (the QLC+ tabs, in QLC+'s order

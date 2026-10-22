@@ -241,6 +241,36 @@ hired rig with a patch sheet):
    ([A fixture's maximum draw](other-improvements.md#a-fixtures-maximum-draw))
 6. Save under a new name for the venue.
 
+### Importing an Eos show
+
+If the venue's rig lives on an ETC Eos-family desk (Element, Ion, Gio),
+bring its show across instead of rebuilding it. On the Eos: **File ▸
+Export ▸ USITT ASCII**. Here: **File ▸ Import** and pick the `.asc`. The
+wizard goes through three pages:
+
+1. **The show's files.** The `.asc`, plus any magic sheet XML exports
+   (their channels land on the 2D map, a layer per sheet).
+2. **Fixture types.** Each Eos personality and the fixture definition to
+   patch it as. Your choices can be remembered for the next import.
+3. **Special circuits.** Channels that aren't stage lights, read from
+   their Eos labels: **Relay (power)**, **House**, **Work**, **Backstage /
+   hall** (hall lights, backstage blues, stairs, exits) or **Normal**. The
+   most specific word wins, so *Relay Linear House Lights* is a house
+   circuit on a relay panel. Fix any row from its menu, or select several
+   and **Set** them together. A channel with the Eos patch option *GM
+   exempt* (`$$Options X`) is marked too.
+
+What comes in: the patch, groups, palettes, presets, and each cue list as
+a tracking cue list in the Show Tree. House and relay moves stay in the
+cues, so the cue that brings the house up still does. Relays become
+switches that come on at open. House, work and backstage circuits ignore
+blackout and the Grand Master. Each kind gets a group under **Eos**
+(**Relays**, **House &amp; Work**, **Backstage**). Each **sub** becomes a
+Playback fader on its scene, labelled *Sub N label*, in a new Virtual
+Console frame **Eos subs**, using the sub's up and down times. Bump
+buttons, LTP and exclusive subs, effects and links aren't carried; the
+import report lists everything that didn't come across.
+
 ## Workflow 4 — a row of like structures
 
 Steps, towers and booms usually come in sets that should all be the same:

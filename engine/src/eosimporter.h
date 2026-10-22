@@ -24,6 +24,7 @@
 #include <QStringList>
 #include <QList>
 #include <QHash>
+#include <QMap>
 
 class Doc;
 class EosShowData;
@@ -33,6 +34,47 @@ class EosMagicSheet;
 /** @addtogroup engine Engine
  * @{
  */
+
+/** What an Eos channel feeds beyond a stage light: a relay (a power
+ *  switch), the house lights, work lights, backstage / hall blues. Read
+ *  from the channel's label (EosCircuit::classify), editable in the
+ *  wizard's Special circuits page; the import gives each its output rules
+ *  (EosImporter::applyCircuitRoles) and a group. */
+class EosCircuit
+{
+public:
+    enum Role
+    {
+        Normal = 0,
+        Relay,          //!< a relay panel circuit: on or off
+        House,          //!< house lights (aisle lights too)
+        Work,           //!< work lights
+        Backstage       //!< backstage / hall / blue running lights, stairs, exits
+    };
+
+    Role role = Normal;
+    bool gmExempt = false;          //!< $$Options X
+
+    /** The role a channel labelled @a label plays, by its most specific
+     *  word: House > Work > Hall / Blue / Backstage > Relay ("Relay Linear
+     *  House Lights" is a house circuit on a relay panel). "Blue" counts
+     *  only on a @a singleChannel dimmer -- a "Blue" LED wash is just
+     *  coloured. */
+    static Role classify(const QString &label, bool singleChannel = true);
+    static QString roleName(Role role);
+    /** The output rules a @a role gets, in words ("switch, exempt from
+     *  blackout and Grand Master, on at open"). */
+    static QString rulesText(Role role, bool gmExempt);
+};
+
+/** One Eos sub, as the scratch Doc holds it: the scene the VC fader
+ *  plays. */
+class EosImportedSub
+{
+public:
+    quint32 function = 0;           //!< the sub's Scene (scratch id)
+    QString caption;                //!< "Sub 40 Pod SR"
+};
 
 /** Outcome of an EosImporter::build() / load() call, for the UI to summarize.
  *  Separate from QxwImportResult: this one covers the *parse* step
@@ -53,6 +95,14 @@ public:
     int channelObjectsPlaced = 0;    //!< TARGETTYPE=20 placements into layers
     int fixturesUnmapped = 0;        //!< Eos channels patched as a generic dimmer
     QList<quint32> chasers;          //!< the cue lists' chasers, in list order (scratch ids)
+    QList<EosImportedSub> subs;      //!< the subs, in file order: a VC fader each
+    /** Channel -> its special role, for channels that have one (or are
+     *  GM exempt). */
+    QMap<int, EosCircuit> circuits;
+    /** False while this build has no fixture output rules: the roles are
+     *  read and grouped, not applied. */
+    bool outputRulesApplied = false;
+    int circuitCount(EosCircuit::Role role) const;
     QStringList warnings;            //!< per-record skipped/flattened notes
 };
 
@@ -65,6 +115,9 @@ public:
     QStringList magicSheetPaths;      //!< Zero-or-more magic sheet XMLs: channels onto the 2D map.
     QString augment3dEsfPath;         //!< Optional .esf3d for Augment3D. v2.
     QString fixtureMapPath;           //!< ~/.qlcconsole/eos-fixture-map.json
+    /** Channel -> EosCircuit::Role, the wizard's Special circuits page. A
+     *  channel not in it is classified from its label. */
+    QHash<int, int> circuitRoles;
 };
 
 /**
@@ -111,7 +164,22 @@ public:
     /** Populate @a doc (empty, its definition cache loaded) from parsed
      *  @a data. @a showName names the cue lists' productions. */
     static bool build(const EosShowData &data, Doc *doc, const EosFixtureMapper &mapper,
-                      EosImportResult &result, const QString &showName = QString());
+                      EosImportResult &result, const QString &showName = QString(),
+                      const QHash<int, int> &circuitRoles = QHash<int, int>());
+
+    /** Each channel's special role: @a overrides (channel -> Role) where
+     *  given, else EosCircuit::classify() of its label; GM exempt from
+     *  $$Options X. Only channels with a role or GM exempt are listed. */
+    static QMap<int, EosCircuit> circuits(const EosShowData &data,
+                                          const QHash<int, int> &overrides = QHash<int, int>());
+
+    /** Give the fixtures of @a doc (ids = Eos channel numbers, as build()
+     *  makes them) the output rules of their @a circuits: Relay -> switch,
+     *  exempt from blackout and Grand Master, on at open; House / Work /
+     *  Backstage -> exempt from blackout and Grand Master; $$Options X ->
+     *  exempt from Grand Master. False when this build has no fixture
+     *  output rules yet (feat/output-rules). */
+    static bool applyCircuitRoles(Doc *doc, const QMap<int, EosCircuit> &circuits);
 
     /** After the merge: bring the imported cue lists' @a chasers (ids in
      *  @a doc, the live show) into the Show Tree -- Import in place, each

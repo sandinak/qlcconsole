@@ -608,6 +608,8 @@ bool EosAsciiParser::parseText(const QString &text, EosShowData &data)
         {
             if (kw == QLatin1String("$$pers"))
                 patch->personalityName = rest;
+            else if (kw == QLatin1String("$$options"))
+                patch->options += rest.simplified().remove(QLatin1Char(' '));
             continue;
         }
         if (ctx == Ctx::Group && group != nullptr)
@@ -715,6 +717,15 @@ bool EosAsciiParser::parseText(const QString &text, EosShowData &data)
                 readLevels(tok, 1, sub->levels, tok.at(0).toInt(), false);
             else if (kw == QLatin1String("$$chanmove") || kw == QLatin1String("chan"))
                 readLevels(tok, 0, sub->levels, -1, true);
+            else if (kw == QLatin1String("$$ltp") || kw == QLatin1String("$$exclusive")
+                     || kw == QLatin1String("$$inhibsubm") || kw == QLatin1String("$$effectsub")
+                     || kw == QLatin1String("$$independent") || kw == QLatin1String("$$intensitymaster"))
+            {
+                // A flag record; a trailing 0 / Off turns it off.
+                const QString v = tok.value(0).toLower();
+                if (v != QLatin1String("0") && v != QLatin1String("off") && !sub->options.contains(keyword.mid(2)))
+                    sub->options << keyword.mid(2);
+            }
             continue;
         }
     }
