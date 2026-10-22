@@ -285,8 +285,6 @@ uses chasers: 2 look like cue lists (Full Show, New Chaser 8)…*.
 away for this show. The upgrade is always at **File → Upgrade This
 Show…**, and the converter on its own at **Import chaser… → Convert an
 old show…**.
-**Convert…** opens the converter; **✕** puts the line away for this show.
-The converter is always at **Import chaser… → Convert an old show…**.
 One chaser at a time from Build: **Send to Show Tree…**
 ([below](#send-to-show-tree-from-build)).
 
