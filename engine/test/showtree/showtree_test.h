@@ -90,6 +90,18 @@ private slots:
     void importedRawScenesBlendAsTheChaserDid();
     void importTheSampleShow();
     void anUndoStepCarriesWhatItChangedOutside();
+    // W5: the bridge -- classify, plan, flatten, Import in place, Restore
+    // original, Capture into palettes, on made-up shows and the two real ones
+    void bridgeTellsCueListsFromEffects();
+    void bridgeFlattensCollectionsThatAreNoStep();
+    void bridgePlansWithoutChangingTheShow();
+    void importInPlaceFilesTheOriginals();
+    void restoreOriginalPutsTheShowBack();
+    void theBridgeLinkSavesAndAnOlderReaderSkipsIt();
+    void captureARawSceneIntoPalettes();
+    void bridgeDanceHysteria();
+    void bridgeTheSampleShow();
+    void saveABridgedShow();
 
     // P2: tracking in the tab, D22/D23, the Library's list usage, the
     // command line
@@ -201,6 +213,26 @@ private:
         QStringList problems;
     };
     DryRun dryRunImport(const QString &path);
+    /** The show at @a path loaded as App opens it (keep a HomeAway alive). */
+    bool loadShowFile(const QString &path, DryRun &run);
+    DryRun dryRunLoaded(DryRun run);
+    /** HOME pointed at @a path while it lives: the user folder out of the way. */
+    struct HomeAway
+    {
+        explicit HomeAway(const QString &path);
+        ~HomeAway();
+        QByteArray home, profile;
+    };
+    QList<QByteArray> playEveryStep(Chaser *c);
+    /** W5 on a real show: what bridgeDanceHysteria / bridgeTheSampleShow found. */
+    struct Bridge
+    {
+        int lists = 0, cues = 0, opaqueBefore = 0, opaqueAfter = 0, filed = 0;
+        int differImported = 0, differCaptured = 0, captured = 0, scenesCaptured = 0;
+        bool restoredEqual = false;
+        QStringList problems;
+    };
+    Bridge bridgeAShow(const QString &path, bool cueListsOnly);
 
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

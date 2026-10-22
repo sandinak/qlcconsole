@@ -72,6 +72,7 @@
 #include "linespread.h"
 #include "showtreeview.h"
 #include "importsheet.h"
+#include "showconverter.h"
 #include "functionmanager.h"
 #include "inputoutputmap.h"
 #include "paletteops.h"
@@ -899,6 +900,38 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     main->addWidget(header);
     MainBar::registerTabTools(this, header);
 
+    // W5: an old show (chasers, no tree) says so once, never converting on
+    // its own: Convert… opens the show converter; ✕ for this show.
+    m_bridgeBanner = new QFrame(this);
+    m_bridgeBanner->setObjectName(QStringLiteral("stBridgeBanner"));
+    m_bridgeBanner->setFrameShape(QFrame::StyledPanel);
+    {
+        QHBoxLayout *h = new QHBoxLayout(m_bridgeBanner);
+        h->setContentsMargins(8, 4, 4, 4);
+        m_bridgeText = new QLabel(m_bridgeBanner);
+        m_bridgeText->setObjectName(QStringLiteral("stBridgeText"));
+        m_bridgeText->setWordWrap(true);
+        h->addWidget(m_bridgeText, 1);
+        QPushButton *convert = new QPushButton(tr("Convert…"), m_bridgeBanner);
+        convert->setObjectName(QStringLiteral("stBridgeConvert"));
+        convert->setToolTip(tr("The show converter: each chaser with its plan, checked; nothing changes until you "
+                               "press Convert"));
+        connect(convert, &QPushButton::clicked, this, [this]() { openConverter(); });
+        h->addWidget(convert);
+        QToolButton *dismiss = new QToolButton(m_bridgeBanner);
+        dismiss->setObjectName(QStringLiteral("stBridgeDismiss"));
+        dismiss->setText(QStringLiteral("✕"));
+        dismiss->setAutoRaise(true);
+        dismiss->setToolTip(tr("Not now: Import chaser… ▸ Convert an old show… is always there"));
+        connect(dismiss, &QToolButton::clicked, this, [this]() {
+            m_bridgeDismissed = true;
+            updateBridgeBanner();
+        });
+        h->addWidget(dismiss);
+    }
+    m_bridgeBanner->hide();
+    main->addWidget(m_bridgeBanner);
+
     // The command line (§6C): optional, hidden until asked for.
     m_commander = new ShowTreeCommand(m_doc, m_st);
     m_commander->setRecordChooser([this](quint32 cueId, const QList<RecordSource> &choices, RecordSource *chosen) {
@@ -1124,6 +1157,17 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                     "edit in the Functions window; the list leaves the Show Tree. One undo step."));
         h->addWidget(m_listConvert);
         h->addWidget(m_listDetach);
+        // W5: an import in place, undone.
+        m_listRestore = new QPushButton(tr("Restore original…"), row);
+        m_listRestore->setObjectName("stListRestore");
+        m_listRestore->setToolTip(tr("Undo Import in place: the list leaves the Show Tree, the chaser and its "
+                                     "originals go back to their folders, and what fires the list fires the "
+                                     "chaser again. One undo step."));
+        connect(m_listRestore, &QPushButton::clicked, this, [this]() {
+            if (currentKind() == ListNode)
+                restoreOriginal(currentId());
+        });
+        h->addWidget(m_listRestore);
         // R3: a Looks section or folder -- a VC page of buttons for it.
         m_listVcPage = new QPushButton(tr("Make VC page"), row);
         m_listVcPage->setObjectName("stMakeVcPage");
@@ -1685,6 +1729,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                          &Doc::paletteAdded, &Doc::paletteRemoved })
         connect(m_doc, signal, m_libraryTimer, QOverload<>::of(&QTimer::start));
     connect(m_doc, &Doc::loaded, this, &ShowTreeView::reload);
+    connect(m_doc, &Doc::loaded, this, [this]() {
+        m_bridgeDismissed = false;
+        updateBridgeBanner();
+    });
     // Palettes made, renamed, filed, deleted (here, typed or in the
     // Programming tab) and the shared undo: the Library and the buttons.
     connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() {
@@ -1938,6 +1986,7 @@ void ShowTreeView::slotTreeChanged()
     updateInspector();
     updateButtons();
     updateProductionSwitcher();
+    updateBridgeBanner();
     // "In this cue list" counts what the list uses.
     m_libraryTimer->start();
     if (editedPalette() != QLCPalette::invalidId())
@@ -1963,6 +2012,7 @@ void ShowTreeView::reload()
     reloadLibrary();
     updateInspector();
     updateButtons();
+    updateBridgeBanner();
 }
 
 void ShowTreeView::saveExpanded()
@@ -2728,6 +2778,17 @@ void ShowTreeView::updateInspector()
                                         "a chaser does. Make it Tracking to carry values on.")));
             m_listConvert->setEnabled(mayConvert(list));
             m_listDetach->setEnabled(true);
+            // W5: where it came from.
+            m_listRestore->setVisible(list->inPlace);
+            if (const Function *src = m_doc->function(list->source))
+            {
+                QString from = list->inPlace
+                        ? tr("Imported in place from the chaser “%1”: it and what only it played are filed under "
+                             "%2 (editing them there doesn't change the list). Restore original puts them back.")
+                          .arg(src->name(), ShowTreeController::originalsFolder(src->name()))
+                        : tr("Imported from the chaser “%1”, which is still where it was.").arg(src->name());
+                m_listInfo->setText(m_listInfo->text() + QStringLiteral("\n\n") + from);
+            }
             m_pages->setCurrentWidget(m_listPage);
             m_inspectorUpdating = false;
             return;
@@ -3383,7 +3444,30 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             open->setToolTip(tr("Open it in its own editor (Window → Functions). Double-clicking the layer does "
                                 "the same."));
             connect(open, &QPushButton::clicked, this, [this, fid]() { openFunction(fid); });
-            v->addWidget(open, 0, Qt::AlignLeft);
+            const Scene *raw = qobject_cast<const Scene *>(f);
+            if (raw != nullptr && !raw->values().isEmpty())
+            {
+                // W5: a raw scene, as layers of palettes on request.
+                QHBoxLayout *buttons = new QHBoxLayout();
+                buttons->setContentsMargins(0, 0, 0, 0);
+                buttons->addWidget(open);
+                const ShowTreeController::CapturePlan plan = m_st->planCapture(fid);
+                QPushButton *cap = new QPushButton(tr("Capture into palettes…"), box);
+                cap->setObjectName(QStringLiteral("stLayerCapture"));
+                cap->setEnabled(plan.ok);
+                cap->setToolTip(plan.ok ? tr("Its values become layers of groups / fixtures and palettes "
+                                             "(reused where the show has them), checked channel for channel in "
+                                             "every cue it plays in. The scene is kept. One undo step.")
+                                        : plan.why);
+                connect(cap, &QPushButton::clicked, this, [this, fid]() { captureIntoPalettes(fid); });
+                buttons->addWidget(cap);
+                buttons->addStretch(1);
+                v->addLayout(buttons);
+            }
+            else
+            {
+                v->addWidget(open, 0, Qt::AlignLeft);
+            }
             const QStringList also = alsoIn(fid, cue.id);
             QString what = tr("Edited there, it changes what this cue plays.");
             if (!also.isEmpty())
@@ -5698,6 +5782,9 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             conv->setEnabled(mayConvert(m_st->cueList(id)));
             menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
                 ->setObjectName("stDetachList");
+            if (m_st->canRestoreOriginal(id))
+                menu.addAction(tr("Restore original…"), this, [this, id]() { restoreOriginal(id); })
+                    ->setObjectName("stRestoreOriginal");
         }
         if (kind == ProductionNode)
         {
@@ -5762,6 +5849,20 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             connect(open, &QAction::triggered, this, [this, fid]() { openFunction(fid); });
             QAction *first = menu.actions().value(0);
             menu.insertAction(first, open);
+            // W5: a raw scene can become palettes.
+            const Scene *raw = qobject_cast<const Scene *>(f);
+            if (raw != nullptr && !raw->values().isEmpty())
+            {
+                const ShowTreeController::CapturePlan plan = m_st->planCapture(fid);
+                QAction *cap = new QAction(tr("Capture into palettes…"), &menu);
+                cap->setObjectName(QStringLiteral("stCaptureLayer"));
+                cap->setEnabled(plan.ok);
+                cap->setToolTip(plan.ok ? tr("Its values as layers of palettes, checked channel for channel; the "
+                                             "scene is kept")
+                                        : plan.why);
+                connect(cap, &QAction::triggered, this, [this, fid]() { captureIntoPalettes(fid); });
+                menu.insertAction(first, cap);
+            }
             menu.insertSeparator(first);
         }
     }
@@ -5771,6 +5872,10 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
 void ShowTreeView::slotImportMenuAboutToShow()
 {
     m_importMenu->clear();
+    // W5: the whole show, chaser by chaser, checked first.
+    m_importMenu->addAction(tr("Convert an old show…"), this, [this]() { openConverter(); })
+        ->setObjectName(QStringLiteral("stOpenConverter"));
+    m_importMenu->addSeparator();
     QList<Function *> chasers;
     for (Function *f : m_doc->functions())
         if (f->type() == Function::ChaserType && f->isVisible() && !m_st->isGenerated(f->id()))
@@ -5809,6 +5914,9 @@ void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
         m_hint->setText(tr("Import undone: the show is as it was"));
         return;
     }
+    // W5: Import in place -- the originals filed, with the import's step.
+    if (sheet.fileOriginals())
+        m_st->fileOriginals(rep.list);
     if (sheet.repoint())
         repointToList(chaserId, rep.list);
 }

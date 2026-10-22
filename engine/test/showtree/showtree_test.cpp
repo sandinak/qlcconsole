@@ -2066,6 +2066,607 @@ void ShowTree_Test::anUndoStepCarriesWhatItChangedOutside()
     QCOMPARE(calls, QStringList({ "undo", "redo", "undo" }));
 }
 
+/****************************************************************************
+ * W5: the bridge
+ ****************************************************************************/
+
+/* A chaser that waits for GO, numbers its cues, carries notes or is what
+   show control plays is a cue list; one that only loops on its own timing
+   is an effect, and stays a function. */
+void ShowTree_Test::bridgeTellsCueListsFromEffects()
+{
+    ShowTreeController *st = m_doc->showTree();
+    Scene *a = new Scene(m_doc);
+    a->setValue(m_fixtures[0], 0, 255);
+    m_doc->addFunction(a);
+    Scene *b = new Scene(m_doc);
+    b->setValue(m_fixtures[1], 0, 255);
+    m_doc->addFunction(b);
+
+    Chaser *strobe = new Chaser(m_doc);
+    strobe->setName("Strobe");
+    strobe->setRunOrder(Function::Loop);
+    strobe->setDurationMode(Chaser::Common);
+    strobe->setDuration(100);
+    m_doc->addFunction(strobe);
+    strobe->addStep(ChaserStep(a->id()));
+    strobe->addStep(ChaserStep(b->id()));
+    ShowTreeController::ChaserClass c = st->classifyChaser(strobe->id());
+    QCOMPARE(c.kind, ShowTreeController::ChaserKind::Effect);
+    QVERIFY2(c.why.join("; ").contains("loops"), qPrintable(c.why.join("; ")));
+    QVERIFY(c.why.join("; ").contains("raw scenes"));
+    // ...unless something plays it as a list.
+    QCOMPARE(st->classifyChaser(strobe->id(), true).kind, ShowTreeController::ChaserKind::CueList);
+    m_doc->showControl()->setMainCueList(strobe->id());
+    QCOMPARE(st->classifyChaser(strobe->id()).kind, ShowTreeController::ChaserKind::CueList);
+    m_doc->showControl()->setMainCueList(Function::invalidId());
+
+    Chaser *show = new Chaser(m_doc);
+    show->setName("Show");
+    show->setRunOrder(Function::Loop);        // DanceHysteria's Full Show loops too
+    show->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(show);
+    show->addStep(ChaserStep(a->id(), 0, Function::infiniteSpeed(), 0));
+    show->addStep(ChaserStep(b->id(), 0, 2000, 0));
+    c = st->classifyChaser(show->id());
+    QCOMPARE(c.kind, ShowTreeController::ChaserKind::CueList);
+    QVERIFY2(c.why.join("; ").contains("waits for GO on 1 of 2"), qPrintable(c.why.join("; ")));
+
+    Chaser *noted = new Chaser(m_doc);
+    noted->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(noted);
+    ChaserStep s(a->id(), 0, 5000, 0);
+    s.note = "Wait for the band";
+    noted->addStep(s);
+    QCOMPARE(st->classifyChaser(noted->id()).kind, ShowTreeController::ChaserKind::CueList);
+
+    // The converter lists the show's own chasers, not the tree's.
+    const ShowTreeController::ImportReport rep = st->importChaser(show->id());
+    const quint32 generated = st->cueList(rep.list)->chaser;
+    QVERIFY(!st->convertibleChasers().contains(generated));
+    QVERIFY(st->convertibleChasers().contains(show->id()));
+}
+
+/* A collection inside a step that is no step itself played its members as
+   the step's own: they become the cue's layers (or ▣ rows for raw scenes);
+   one that plays nothing is left out. The cue plays the same. */
+void ShowTree_Test::bridgeFlattensCollectionsThatAreNoStep()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *usts = group("USTs", { m_fixtures[2] });
+    Scene *sA = groupScene(m_doc, "TowersFull", towers->id(), { dimmer(255, "Full") });
+    Scene *sB = groupScene(m_doc, "USTsHalf", usts->id(), { dimmer(127, "Half") });
+    Scene *raw = new Scene(m_doc);
+    raw->setName("Haze");
+    raw->setValue(m_fixtures[5], 0, 90);
+    m_doc->addFunction(raw);
+    Collection *empty = collection(m_doc, "0.0.0-base", {});
+    Collection *inner = collection(m_doc, "Wash", { sB->id(), raw->id() });
+    Collection *one = collection(m_doc, "0.0.1-One", { empty->id(), sA->id() });
+    Collection *two = collection(m_doc, "0.0.2-Two", { empty->id(), inner->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Show");
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(two->id(), 0, Function::infiniteSpeed(), 0));
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    QCOMPARE(rep.dropped, 2);           // 0.0.0-base in both cues
+    QCOMPARE(rep.flattened, 1);         // Wash
+    QCOMPARE(rep.layers, 2);            // TowersFull, USTsHalf
+    QCOMPARE(rep.opaqueLayers, 1);      // Haze, a raw scene, as itself
+    QCOMPARE(rep.differChannels, 0);
+    QVERIFY(rep.flattenNotes.join("\n").contains("0.0.0-base plays nothing"));
+    const CueList *list = st->cueList(rep.list);
+    QCOMPARE(list->cues[1].layers.count(), 2);
+    QCOMPARE(list->cues[1].layers[0].target, groupTarget(usts->id()));
+    QCOMPARE(list->cues[1].layers[1].target.function, raw->id());
+    QCOMPARE(list->source, chaser->id());
+
+    // Played, it is what the chaser played.
+    const QList<QByteArray> was = playEveryStep(chaser);
+    const QList<QByteArray> now = playEveryStep(qobject_cast<Chaser *>(m_doc->function(list->chaser)));
+    QCOMPARE(now, was);
+}
+
+/* The converter's plan is the import, made without touching the show. */
+void ShowTree_Test::bridgePlansWithoutChangingTheShow()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    Scene *sA = groupScene(m_doc, "TowersFull", towers->id(), { dimmer(255, "Full") });
+    Collection *empty = collection(m_doc, "base", {});
+    Collection *one = collection(m_doc, "0.0.1-One", { empty->id(), sA->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+
+    ShowTreeController *st = m_doc->showTree();
+    const QByteArray before = engineXml(m_doc);
+    CueList planned;
+    const ShowTreeController::ImportReport plan = st->planImport(chaser->id(), &planned);
+    QCOMPARE(engineXml(m_doc), before);
+    QVERIFY(!st->canUndo());
+    QCOMPARE(plan.cues, 1);
+    QCOMPARE(plan.layers, 1);
+    QCOMPARE(plan.dropped, 1);
+    QCOMPARE(plan.checkedCues, 1);
+    QCOMPARE(plan.differChannels, 0);
+    QCOMPARE(planned.cues.count(), 1);
+
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    QCOMPARE(rep.layers, plan.layers);
+    QCOMPARE(rep.opaqueLayers, plan.opaqueLayers);
+    QCOMPARE(rep.differChannels, plan.differChannels);
+}
+
+/* Import in place files the chaser and what only it plays under
+   Imported/<chaser> (originals), one undo step with the import; what the
+   list plays as it is, and what something else plays, stays put. */
+void ShowTree_Test::importInPlaceFilesTheOriginals()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    Scene *sA = groupScene(m_doc, "TowersFull", towers->id(), { dimmer(255, "Full") });
+    sA->setPath("Spots");
+    Scene *raw = new Scene(m_doc);
+    raw->setName("Haze");
+    raw->setPath("Washes");
+    raw->setValue(m_fixtures[5], 0, 90);
+    m_doc->addFunction(raw);
+    Scene *shared = groupScene(m_doc, "Shared", towers->id(), { dimmer(100, "Low") });
+    Collection *one = collection(m_doc, "0.0.1-One", { sA->id(), raw->id() });
+    one->setPath("Show");
+    Collection *two = collection(m_doc, "0.0.2-Two", { shared->id() });
+    Collection *elsewhere = collection(m_doc, "Busk", { shared->id() });
+    Q_UNUSED(elsewhere)
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(two->id(), 0, Function::infiniteSpeed(), 0));
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importInPlace(chaser->id());
+    QCOMPARE(rep.differChannels, 0);
+    const QString folder = "Imported/Full Show (originals)";
+    QCOMPARE(ShowTreeController::originalsFolder("Full Show"), folder);
+    QCOMPARE(chaser->path(true), folder);
+    QCOMPARE(one->path(true), folder);
+    QCOMPARE(two->path(true), folder);
+    QCOMPARE(sA->path(true), folder);           // read into a layer: the list doesn't play it
+    QCOMPARE(raw->path(true), QString("Washes")); // played as it is: editing it changes the list
+    QCOMPARE(shared->path(true), QString());    // Busk plays it too
+    QCOMPARE(rep.filed, 4);
+    const CueList *list = st->cueList(rep.list);
+    QVERIFY(list->inPlace);
+    QCOMPARE(list->source, chaser->id());
+    QCOMPARE(list->originals.count(), 4);
+    QCOMPARE(st->importedInto(chaser->id()), rep.list);
+    QCOMPARE(st->importedInto(raw->id()), invalidId());
+    QVERIFY(!st->convertibleChasers().contains(chaser->id()));
+
+    // One undo step with the import.
+    QCOMPARE(st->undoText(), QString("Import Full Show"));
+    QVERIFY(st->undo());
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(chaser->path(true), QString());
+    QCOMPARE(one->path(true), QString("Show"));
+    QCOMPARE(sA->path(true), QString("Spots"));
+    QVERIFY(st->redo());
+    QCOMPARE(chaser->path(true), folder);
+    QCOMPARE(sA->path(true), folder);
+    QVERIFY(st->cueList(rep.list)->inPlace);
+    QVERIFY(!st->canRedo());
+
+    // Restore original: the list goes, the originals go back.
+    QString why;
+    QVERIFY2(st->canRestoreOriginal(rep.list, &why), qPrintable(why));
+    QVERIFY(st->restoreOriginal(rep.list));
+    QVERIFY(st->cueList(rep.list) == nullptr);
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(chaser->path(true), QString());
+    QCOMPARE(one->path(true), QString("Show"));
+    QCOMPARE(sA->path(true), QString("Spots"));
+    QCOMPARE(st->undoText(), QString("Restore original Full Show"));
+    QVERIFY(st->undo());
+    QCOMPARE(chaser->path(true), folder);
+    QVERIFY(st->cueList(rep.list) != nullptr);
+    QVERIFY(st->redo());
+    QCOMPARE(chaser->path(true), QString());
+
+    // Not for a list made in the tree, or imported beside its chaser.
+    const ShowTreeController::ImportReport beside = st->importChaser(chaser->id());
+    QCOMPARE(st->cueList(beside.list)->source, chaser->id());
+    QVERIFY(!st->canRestoreOriginal(beside.list, &why));
+    QVERIFY(why.contains("beside"));
+}
+
+/** The first line two XML texts differ at, as a person reads it (empty: none). */
+static QString firstDifference(const QByteArray &a, const QByteArray &b)
+{
+    const QList<QByteArray> x = a.split('\n'), y = b.split('\n');
+    for (int i = 0; i < qMax(x.count(), y.count()); ++i)
+        if (x.value(i) != y.value(i))
+            return QString("line %1: %2 | %3").arg(i + 1).arg(QString::fromUtf8(x.value(i)).trimmed(),
+                                                         QString::fromUtf8(y.value(i)).trimmed());
+    return QString();
+}
+
+/* Restore original after Import in place on DanceHysteria: the show is as
+   it was -- every function and palette, XML for XML. */
+void ShowTree_Test::restoreOriginalPutsTheShowBack()
+{
+    QTemporaryDir home;
+    HomeAway away(home.path());
+    DryRun run;
+    QVERIFY2(loadShowFile(QStringLiteral(DH_SHOW), run), qPrintable(run.problems.join(" | ")));
+    ShowTreeController *st = m_doc->showTree();
+    auto withoutTree = [](QByteArray xml) {
+        const int a = xml.indexOf("<ShowTree");
+        if (a >= 0)
+        {
+            int b = xml.indexOf("</ShowTree>", a);
+            b = b < 0 ? xml.indexOf("/>", a) + 2 : b + 11;
+            xml.remove(a, b - a);
+        }
+        return xml;
+    };
+    const QByteArray before = withoutTree(engineXml(m_doc));
+    quint32 full = Function::invalidId();
+    for (Function *f : m_doc->functions())
+        if (f->name() == "Full Show")
+            full = f->id();
+    QVERIFY(full != Function::invalidId());
+    const ShowTreeController::ImportReport rep = st->importInPlace(full);
+    QVERIFY(rep.filed > 0);
+    QVERIFY(withoutTree(engineXml(m_doc)) != before);
+    QVERIFY(st->restoreOriginal(rep.list));
+    QString diff = firstDifference(before, withoutTree(engineXml(m_doc)));
+    QVERIFY2(diff.isEmpty(), qPrintable(diff));
+    // Restore undone, then the import: still the same.
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    diff = firstDifference(before, withoutTree(engineXml(m_doc)));
+    QVERIFY2(diff.isEmpty(), qPrintable(diff));
+}
+
+/* The link and the filing save with the show; an older build, which reads
+   neither, still loads the list and plays it, and keeps the originals
+   where they were filed. */
+void ShowTree_Test::theBridgeLinkSavesAndAnOlderReaderSkipsIt()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    Scene *sA = groupScene(m_doc, "TowersFull", towers->id(), { dimmer(255, "Full") });
+    Collection *one = collection(m_doc, "0.0.1-One", { sA->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importInPlace(chaser->id());
+    const QByteArray xml = engineXml(m_doc);
+    QVERIFY(xml.contains(QString("Source=\"%1\"").arg(chaser->id()).toUtf8()));
+    QVERIFY(xml.contains("InPlace=\"1\""));
+    QVERIFY(xml.contains("<Original ID="));
+
+    {
+        Doc *other = new Doc(this);
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+        const CueList *l = other->showTree()->cueList(rep.list);
+        QVERIFY(l != nullptr);
+        QCOMPARE(l->source, chaser->id());
+        QVERIFY(l->inPlace);
+        QCOMPARE(l->originals.count(), st->cueList(rep.list)->originals.count());
+        QCOMPARE(other->showTree()->importedInto(chaser->id()), rep.list);
+        QVERIFY(other->showTree()->canRestoreOriginal(rep.list));
+        delete other;
+    }
+    {
+        // What an older build reads: no Source / InPlace / <Original>.
+        QByteArray old = xml;
+        old.replace(QString(" Source=\"%1\"").arg(chaser->id()).toUtf8(), "");
+        old.replace(" InPlace=\"1\"", "");
+        int at;
+        while ((at = old.indexOf("<Original ")) >= 0)
+            old.remove(at, old.indexOf("/>", at) + 2 - at);
+        QVERIFY(!old.contains("Original"));
+        Doc *other = new Doc(this);
+        QXmlStreamReader r(old);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+        const CueList *l = other->showTree()->cueList(rep.list);
+        QVERIFY(l != nullptr);
+        QCOMPARE(l->source, invalidId());
+        QVERIFY(!l->inPlace);
+        QCOMPARE(other->function(chaser->id())->path(true), QString("Imported/Full Show (originals)"));
+        QCOMPARE(qobject_cast<Chaser *>(other->function(l->chaser))->stepsCount(), 1);
+        delete other;
+    }
+}
+
+/* Capture into palettes: a raw scene read as layers of palettes, the same
+   value one palette, checked channel for channel in every cue; the scene
+   itself is kept. One undo step. */
+void ShowTree_Test::captureARawSceneIntoPalettes()
+{
+    FixtureGroup *pair = group("Pair", { m_fixtures[0], m_fixtures[1] });
+    const quint32 full = dimmer(200, "Bright");
+    Scene *raw = new Scene(m_doc);
+    raw->setName("Wash");
+    raw->setValue(m_fixtures[0], 0, 200);
+    raw->setValue(m_fixtures[1], 0, 200);
+    raw->setValue(m_fixtures[2], 0, 100);
+    m_doc->addFunction(raw);
+    Collection *one = collection(m_doc, "0.0.1-One", { raw->id() });
+    Collection *two = collection(m_doc, "0.0.2-Two", { raw->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(two->id(), 0, Function::infiniteSpeed(), 0));
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    QCOMPARE(rep.opaqueLayers, 2);
+    const QList<QByteArray> was = playEveryStep(chaser);
+    const QByteArray sceneXml = [&]() {
+        QByteArray x;
+        QBuffer b(&x);
+        b.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&b);
+        raw->saveXML(&w);
+        return x;
+    }();
+    const int palettesBefore = int(m_doc->palettes().count());
+
+    const ShowTreeController::CapturePlan plan = st->planCapture(raw->id());
+    QVERIFY2(plan.ok, qPrintable(plan.why));
+    QCOMPARE(plan.uses.count(), 2);
+    QCOMPARE(plan.capturedChannels, 3);
+    QVERIFY(plan.leftovers.isEmpty());
+    QCOMPARE(plan.layers.count(), 2);
+    QCOMPARE(plan.layers[0].target, groupTarget(pair->id()));   // exactly the group's fixtures
+    QCOMPARE(plan.layers[1].target.fixtures, QList<quint32>({ m_fixtures[2] }));
+    QCOMPARE(plan.palettes.count(), 2);
+    QCOMPARE(plan.palettes[0].reuse, full);                       // 200: the show's own "Bright"
+    QCOMPARE(plan.palettes[1].reuse, QLCPalette::invalidId());    // 100: made
+    QCOMPARE(int(m_doc->palettes().count()), palettesBefore);    // a plan changes nothing
+
+    ShowTreeController::CapturePlan done;
+    QVERIFY(st->captureIntoPalettes(raw->id(), &done));
+    QCOMPARE(done.captured, 2);
+    QVERIFY(done.kept.isEmpty());
+    QCOMPARE(done.made.count(), 1);
+    QCOMPARE(done.rest, invalidId());
+    QCOMPARE(int(m_doc->palettes().count()), palettesBefore + 1);
+    const CueList *list = st->cueList(rep.list);
+    for (const Cue &c : list->cues)
+    {
+        QCOMPARE(c.layers.count(), 2);
+        for (const Layer &l : c.layers)
+            QVERIFY(!l.target.isOpaque());
+    }
+    QVERIFY(!st->isInlinePalette(done.made.first()));
+    QCOMPARE(playEveryStep(qobject_cast<Chaser *>(m_doc->function(list->chaser))), was);
+    // The scene itself is kept as it was.
+    QByteArray x;
+    QBuffer b(&x);
+    b.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&b);
+    raw->saveXML(&w);
+    QCOMPARE(x, sceneXml);
+
+    QVERIFY(st->undo());
+    QCOMPARE(int(m_doc->palettes().count()), palettesBefore);
+    QVERIFY(st->cueList(rep.list)->cues[0].layers[0].target.isOpaque());
+    QVERIFY(st->redo());
+    QVERIFY(!st->cueList(rep.list)->cues[0].layers[0].target.isOpaque());
+    QCOMPARE(int(m_doc->palettes().count()), palettesBefore + 1);
+
+    // Not a raw scene, or not in the tree: nothing to capture.
+    QVERIFY(!st->planCapture(chaser->id()).ok);
+    Scene *loose = new Scene(m_doc);
+    loose->setValue(m_fixtures[3], 0, 10);
+    m_doc->addFunction(loose);
+    QVERIFY(!st->planCapture(loose->id()).ok);
+}
+
+/* W5 end to end on a real show: every chaser the converter would offer
+   imported in place, played against the chaser; every raw scene the lists
+   play as they are captured into palettes, played again; then Restore
+   original on each, and the show is XML for XML what it was. */
+ShowTree_Test::Bridge ShowTree_Test::bridgeAShow(const QString &path, bool cueListsOnly)
+{
+    Bridge out;
+    QTemporaryDir home;
+    HomeAway away(home.path());
+    DryRun run;
+    if (!loadShowFile(path, run))
+    {
+        out.problems << run.problems;
+        out.problems << QString("can't load %1").arg(path);
+        return out;
+    }
+    ShowTreeController *st = m_doc->showTree();
+    auto withoutTree = [](QByteArray xml) {
+        const int a = xml.indexOf("<ShowTree");
+        if (a >= 0)
+        {
+            int b = xml.indexOf("</ShowTree>", a);
+            b = b < 0 ? xml.indexOf("/>", a) + 2 : b + 11;
+            xml.remove(a, b - a);
+        }
+        return xml;
+    };
+    const QByteArray before = withoutTree(engineXml(m_doc));
+    auto differ = [](const QList<QByteArray> &a, const QList<QByteArray> &b) {
+        int n = 0;
+        for (int i = 0; i < qMax(a.count(), b.count()); ++i)
+        {
+            const QByteArray x = a.value(i), y = b.value(i);
+            for (int k = 0; k < qMax(x.size(), y.size()); ++k)
+                if (k >= x.size() || k >= y.size() || x.at(k) != y.at(k))
+                    ++n;
+        }
+        return n;
+    };
+
+    for (quint32 id : st->convertibleChasers())
+    {
+        const ShowTreeController::ChaserClass cls = st->classifyChaser(id);
+        if (cueListsOnly && cls.kind != ShowTreeController::ChaserKind::CueList)
+            continue;
+        Chaser *original = qobject_cast<Chaser *>(m_doc->function(id));
+        const QString name = original->name();
+        const ShowTreeController::ImportReport rep = st->importInPlace(id);
+        const CueList *list = st->cueList(rep.list);
+        if (list == nullptr)
+        {
+            out.problems << name + ": not imported";
+            continue;
+        }
+        ++out.lists;
+        out.cues += rep.cues;
+        out.opaqueBefore += rep.opaqueLayers + rep.dropped;
+        out.opaqueAfter += rep.opaqueLayers;
+        out.filed += rep.filed;
+        const QList<QByteArray> a = playEveryStep(original);
+        const QList<QByteArray> b = playEveryStep(qobject_cast<Chaser *>(m_doc->function(list->chaser)));
+        const int d = differ(a, b);
+        out.differImported += d;
+        qInfo().noquote() << QString("BRIDGE \"%1\" (%2): %3 cues, %4 layers, %5 opaque (+%6 dropped, %7 "
+                                     "flattened), %8 filed, check %9, played %10 channels differ")
+                             .arg(name, cls.kind == ShowTreeController::ChaserKind::CueList ? "cue list" : "effect")
+                             .arg(rep.cues).arg(rep.layers).arg(rep.opaqueLayers).arg(rep.dropped)
+                             .arg(rep.flattened).arg(rep.filed).arg(rep.differChannels).arg(d);
+
+        // Every raw scene the list plays as it is, captured.
+        QList<quint32> raws;
+        for (const Cue &c : list->cues)
+            for (const Layer &l : c.layers)
+                if (l.target.isOpaque() && !raws.contains(l.target.function))
+                    raws << l.target.function;
+        for (quint32 fid : raws)
+        {
+            ShowTreeController::CapturePlan plan;
+            const bool ok = st->captureIntoPalettes(fid, &plan);
+            const QString fname = m_doc->function(fid) ? m_doc->function(fid)->name() : QString::number(fid);
+            qInfo().noquote() << QString("  capture \"%1\": %2 -- %3 layer(s), %4 channel(s) in palettes, %5 kept "
+                                         "raw, %6 use(s) captured, %7 kept")
+                                 .arg(fname, ok ? "captured" : "not captured: " + plan.why)
+                                 .arg(plan.layers.count()).arg(plan.capturedChannels).arg(plan.leftovers.count())
+                                 .arg(plan.captured).arg(plan.kept.count());
+            for (const QString &k : plan.kept)
+                qInfo().noquote() << "    kept:" << k;
+            for (const QString &k : plan.leftoverLines)
+                qInfo().noquote() << "    raw:" << k;
+            if (ok)
+            {
+                ++out.scenesCaptured;
+                out.captured += plan.captured;
+            }
+        }
+        list = st->cueList(rep.list);
+        const QList<QByteArray> c = playEveryStep(qobject_cast<Chaser *>(m_doc->function(list->chaser)));
+        const int dc = differ(a, c);
+        out.differCaptured += dc;
+        qInfo().noquote() << QString("  after capture: played %1 channels differ").arg(dc);
+
+        // Back: the captures undone, then Restore original -- the show as it
+        // was before this chaser's import (each chaser from the original).
+        while (st->canUndo() && st->undoText().startsWith("Capture"))
+            st->undo();
+        QString why;
+        if (!st->restoreOriginal(rep.list, &why))
+            out.problems << name + ": restore: " + why;
+        const QString d2 = firstDifference(before, withoutTree(engineXml(m_doc)));
+        if (!d2.isEmpty())
+            out.problems << name + ": restored differs at " + d2;
+    }
+
+    out.restoredEqual = withoutTree(engineXml(m_doc)) == before;
+    return out;
+}
+
+void ShowTree_Test::bridgeDanceHysteria()
+{
+    const Bridge b = bridgeAShow(QStringLiteral(DH_SHOW), true);
+    QVERIFY2(b.problems.isEmpty(), qPrintable(b.problems.join(" | ")));
+    qInfo().noquote() << QString("DANCEHYSTERIA: %1 lists, %2 cues, opaque %3 -> %4, %5 filed, %6 raw scenes "
+                                 "captured in %7 cues; differ imported %8, captured %9; restored equal %10")
+                         .arg(b.lists).arg(b.cues).arg(b.opaqueBefore).arg(b.opaqueAfter).arg(b.filed)
+                         .arg(b.scenesCaptured).arg(b.captured).arg(b.differImported).arg(b.differCaptured)
+                         .arg(b.restoredEqual);
+    QCOMPARE(b.lists, 2);               // Full Show, New Chaser 8
+    QCOMPARE(b.differImported, 0);
+    QCOMPARE(b.differCaptured, 0);
+    QVERIFY(b.scenesCaptured > 0);
+    QVERIFY(b.restoredEqual);
+}
+
+/* QLC_BRIDGE_SAVE=<file>: DanceHysteria with Full Show imported in place
+   and its raw scenes captured, saved there -- for an older build to open
+   (its importARealShow, QLC_SHOWTREE_IMPORT=<file>). Skipped without it. */
+void ShowTree_Test::saveABridgedShow()
+{
+    const QString path = qEnvironmentVariable("QLC_BRIDGE_SAVE");
+    if (path.isEmpty())
+        QSKIP("set QLC_BRIDGE_SAVE to a file to save DanceHysteria imported in place");
+    QTemporaryDir home;
+    HomeAway away(home.path());
+    DryRun run;
+    QVERIFY(loadShowFile(QStringLiteral(DH_SHOW), run));
+    ShowTreeController *st = m_doc->showTree();
+    quint32 full = Function::invalidId();
+    for (Function *f : m_doc->functions())
+        if (f->name() == "Full Show")
+            full = f->id();
+    const ShowTreeController::ImportReport rep = st->importInPlace(full);
+    QList<quint32> raws;
+    for (const Cue &c : st->cueList(rep.list)->cues)
+        for (const Layer &l : c.layers)
+            if (l.target.isOpaque() && !raws.contains(l.target.function))
+                raws << l.target.function;
+    for (quint32 fid : raws)
+        QVERIFY(st->captureIntoPalettes(fid));
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(engineXml(m_doc));
+    f.close();
+    qInfo().noquote() << "saved" << path;
+}
+
+void ShowTree_Test::bridgeTheSampleShow()
+{
+    // No cue lists: the converter offers none of its 13 looping chasers.
+    {
+        QTemporaryDir home;
+        HomeAway away(home.path());
+        DryRun run;
+        QVERIFY(loadShowFile(QStringLiteral(SAMPLE_SHOW), run));
+        int effects = 0;
+        for (quint32 id : m_doc->showTree()->convertibleChasers())
+            if (m_doc->showTree()->classifyChaser(id).kind == ShowTreeController::ChaserKind::Effect)
+                ++effects;
+        QCOMPARE(effects, 13);
+    }
+    // The mechanism on all of them anyway (Import chaser… still takes any).
+    const Bridge b = bridgeAShow(QStringLiteral(SAMPLE_SHOW), false);
+    QVERIFY2(b.problems.isEmpty(), qPrintable(b.problems.join(" | ")));
+    qInfo().noquote() << QString("SAMPLE: %1 lists, %2 cues, opaque %3 -> %4, %5 filed, %6 raw scenes "
+                                 "captured in %7 cues; differ imported %8, captured %9; restored equal %10")
+                         .arg(b.lists).arg(b.cues).arg(b.opaqueBefore).arg(b.opaqueAfter).arg(b.filed)
+                         .arg(b.scenesCaptured).arg(b.captured).arg(b.differImported).arg(b.differCaptured)
+                         .arg(b.restoredEqual);
+    QCOMPARE(b.lists, 13);
+    QCOMPARE(b.differImported, 0);
+    QCOMPARE(b.differCaptured, 0);
+    QVERIFY(b.restoredEqual);
+}
+
 /* A dry run on a real show: QLC_SHOWTREE_IMPORT=<a COPY of a .qxw/.qlcc>.
    The show is opened as App opens it (its embedded definitions first, the
    user folder kept out); every chaser in it is imported (in memory only --
@@ -2098,22 +2699,30 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
 {
     DryRun run;
     QTemporaryDir home;
-    const QByteArray realHome = qgetenv("HOME"), realProfile = qgetenv("USERPROFILE");
-    qputenv("HOME", home.path().toUtf8());
-    qputenv("USERPROFILE", home.path().toUtf8());
-    struct Restore
-    {
-        QByteArray h, p;
-        ~Restore()
-        {
-            qputenv("HOME", h);
-            if (p.isEmpty())
-                qunsetenv("USERPROFILE");
-            else
-                qputenv("USERPROFILE", p);
-        }
-    } restore { realHome, realProfile };
+    HomeAway away(home.path());
+    if (!loadShowFile(path, run))
+        return run;
+    return dryRunLoaded(run);
+}
 
+ShowTree_Test::HomeAway::HomeAway(const QString &path)
+    : home(qgetenv("HOME")), profile(qgetenv("USERPROFILE"))
+{
+    qputenv("HOME", path.toUtf8());
+    qputenv("USERPROFILE", path.toUtf8());
+}
+
+ShowTree_Test::HomeAway::~HomeAway()
+{
+    qputenv("HOME", home);
+    if (profile.isEmpty())
+        qunsetenv("USERPROFILE");
+    else
+        qputenv("USERPROFILE", profile);
+}
+
+bool ShowTree_Test::loadShowFile(const QString &path, DryRun &run)
+{
     stopAll();
     m_doc->clearContents();
     m_fixtures.clear();
@@ -2130,7 +2739,7 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
     if (!file.open(QIODevice::ReadOnly))
     {
         run.problems << QString("can't read %1").arg(path);
-        return run;
+        return false;
     }
     QXmlStreamReader r(&file);
     while (!r.atEnd() && !run.loaded)
@@ -2139,9 +2748,11 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
             run.loaded = m_doc->loadXML(r, false);
     }
     file.close();
-    if (!run.loaded)
-        return run;
+    return run.loaded;
+}
 
+ShowTree_Test::DryRun ShowTree_Test::dryRunLoaded(DryRun run)
+{
     QList<quint32> chasers;
     for (Function *f : m_doc->functions())
         if (f->type() == Function::ChaserType)
@@ -2199,46 +2810,7 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
         // channel defaults (a mover's Pan 128) and modifiers put back, as
         // patching does -- clearing alone would leave the first run with
         // the defaults and the next without.
-        auto idle = [this]() {
-            m_doc->inputOutputMap()->resetUniverses();
-            for (Fixture *fx : m_doc->fixtures())
-                m_doc->updateFixtureChannelCapabilities(fx->id(), fx->forcedHTPChannels(),
-                                                        fx->forcedLTPChannels());
-        };
-        auto playAll = [this, idle](Chaser *c) {
-            idle();
-            QList<QByteArray> states;
-            for (int i = 0; i < c->stepsCount(); ++i)
-            {
-                ChaserAction a;
-                a.m_action = ChaserSetStepIndex;
-                a.m_stepIndex = i;
-                a.m_masterIntensity = 1.0;
-                a.m_stepIntensity = 1.0;
-                a.m_fadeMode = Chaser::FromFunction;
-                c->setAction(a);
-                if (!c->isRunning())
-                    c->start(m_doc->masterTimer(), FunctionParent::master());
-                QByteArray all;
-                for (int t = 0; t < 250; ++t)
-                {
-                    m_doc->masterTimer()->timerTick();
-                    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
-                    for (Universe *u : ua)
-                        u->processFaders();
-                    m_doc->inputOutputMap()->releaseUniverses(false);
-                }
-                QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
-                for (Universe *u : ua)
-                    all += u->preGMValues();
-                m_doc->inputOutputMap()->releaseUniverses(false);
-                states << all;
-            }
-            stopAll();
-            tick(100);
-            idle();
-            return states;
-        };
+        auto playAll = [this](Chaser *c) { return playEveryStep(c); };
         Chaser *original = qobject_cast<Chaser *>(m_doc->function(id));
         Chaser *imported = qobject_cast<Chaser *>(m_doc->function(list->chaser));
         if (original == nullptr || imported == nullptr)
@@ -2324,6 +2896,52 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
         run.convertedDiffer += total;
     }
     return run;
+}
+
+
+/* Every step of @a c played from the idle rig, each to rest: every universe's
+   channels, step by step (static looks only: effects run on the effect
+   runner's own timer). */
+QList<QByteArray> ShowTree_Test::playEveryStep(Chaser *c)
+{
+    auto idle = [this]() {
+        m_doc->inputOutputMap()->resetUniverses();
+        for (Fixture *fx : m_doc->fixtures())
+            m_doc->updateFixtureChannelCapabilities(fx->id(), fx->forcedHTPChannels(),
+                                                    fx->forcedLTPChannels());
+    };
+    idle();
+    QList<QByteArray> states;
+    for (int i = 0; i < c->stepsCount(); ++i)
+    {
+        ChaserAction a;
+        a.m_action = ChaserSetStepIndex;
+        a.m_stepIndex = i;
+        a.m_masterIntensity = 1.0;
+        a.m_stepIntensity = 1.0;
+        a.m_fadeMode = Chaser::FromFunction;
+        c->setAction(a);
+        if (!c->isRunning())
+            c->start(m_doc->masterTimer(), FunctionParent::master());
+        QByteArray all;
+        for (int t = 0; t < 250; ++t)
+        {
+            m_doc->masterTimer()->timerTick();
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            for (Universe *u : ua)
+                u->processFaders();
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (Universe *u : ua)
+            all += u->preGMValues();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        states << all;
+    }
+    stopAll();
+    tick(100);
+    idle();
+    return states;
 }
 
 /****************************************************************************

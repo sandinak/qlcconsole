@@ -50,6 +50,7 @@ add_library(${module_name} SHARED
     showcontrol.cpp showcontrol.h
     showtreecommand.cpp showtreecommand.h
     showtreecontroller.cpp showtreecontroller.h
+    showtreebridge.cpp
     showtreeconvert.cpp
     showtreelooks.cpp
     showtreeproductions.cpp

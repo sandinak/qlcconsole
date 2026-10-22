@@ -171,6 +171,7 @@ add_library(${module_name}
     programmingmanager.cpp programmingmanager.h
     showtreeview.cpp showtreeview.h
     importsheet.cpp importsheet.h
+    showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h
     updatechecker.cpp updatechecker.h
     updatedialog.cpp updatedialog.h
