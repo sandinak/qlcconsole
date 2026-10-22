@@ -13,6 +13,21 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Build ▸ Effects makes effects.** A **+ New ▾** button (effect palette
+  in the designer, EFX, RGB Matrix — the classic ones on the Try on groups)
+  and a right-click menu on the list (Design / edit…, Open in editor for
+  EFX / RGB Matrix, Duplicate, Rename / F2, Move to folder…, Delete / ⌫,
+  and New effect / EFX / RGB Matrix on empty space). Clicking an effect
+  palette opens it in the W4 effect designer, at full height in the
+  Workbench's editor pane through W3's `Workbench::setEffectPaneFactory()`
+  — the same path a docked Show Tree cue's Effect row takes. A bench
+  request (`EffectRequest` with no cue, `Workbench::designEffect(request)`)
+  unloads what is loaded and the layers column steps aside; loading
+  anything else deletes the designer and its draft.
+  `EffectDesigner::plugIntoWorkbench()` (installed by the app) serves bench
+  requests; a cue layer's are still declined, so the Show Tree keeps its
+  current behaviour there. The folder column no longer squeezes the names.
+
 - **Show Tree ↔ Workbench (WORKFLOW_DESIGN.md W3).** A cue, a look or a
   layer opens in the Workbench, docked in the Show Tree in place of the
   page — double-click it, **✎ Workbench** in the header, **Open in

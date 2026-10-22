@@ -50,9 +50,10 @@ Two panes, left to right:
   - **Palettes**: the palette list (filterable, foldered; right-click to add
     one, double-click to edit one) and a **Bundles** tab.
   - **Effects**: the effect palettes, and the classic effects — every EFX and
-    RGB Matrix in the show. Double-click an effect palette to edit it; click
-    an EFX or RGB Matrix to load it in the Workbench; drag either onto a
-    layer or a collection.
+    RGB Matrix in the show. Click an effect palette to open it in the
+    effect designer; click an EFX or RGB Matrix to load it in the
+    Workbench; drag either onto a layer or a collection. **+ New ▾** and
+    right-click make new ones ([Making effects](#making-effects)).
   - **Scenes**: [the outline](#the-outline) of your scene folders. Click a
     scene, a collection or a chaser and it loads in the Workbench.
 
@@ -233,6 +234,35 @@ EFX or RGB Matrix (Undo takes the new function away too; Redo brings it
 back with its id), and every edit in the outline and the editor pane — is
 one step on the **one history** Build and the Show Tree share: **⌘Z** takes
 it back, **⇧⌘Z** puts it back, in either tab.
+
+### Making effects
+
+Build ▸ Effects is where effects are made and changed, without leaving
+the tab.
+
+- **+ New** makes an effect palette: the
+  [effect designer](effects.md#the-effect-designer) opens in the
+  Workbench's editor pane, at full height, with the layers column put
+  away to give it the width. It plays on the **Try on ▾** groups. Pick an
+  effect, shape it, then **Save as palette…**; the new palette appears in
+  the list, and is back on the bench to keep working on.
+- **+ New ▾** (the arrow) also makes a classic **EFX** (on the Try on
+  groups' heads) or **RGB Matrix** (on the first Try on group). It loads
+  in the Workbench with its own editor.
+- **Click an effect palette** to open it in the designer. The designer
+  works on a copy: **Update “name”** writes it back, **Save as
+  palette…** keeps it as a new one.
+- **Right-click** an effect: **Design / edit…** (an effect palette) or
+  **Open in editor** (an EFX or RGB Matrix), **Duplicate**, **Rename**
+  (or F2), **Move to folder…** and **Delete** (⌫ too; it asks first, and
+  says where the effect is used). Right-click empty space, or any row,
+  for **New effect…**, **New EFX** and **New RGB Matrix**.
+
+Loading anything else in the Workbench puts the designer away, and an
+unsaved design with it. Window ▸ Effects is the same designer in a
+window of its own.
+
+![Build ▸ Effects: the right-click menu, and the effect designer in the Workbench](../images/build-effects-menu.png)
 
 ### On a Show Tree cue
 

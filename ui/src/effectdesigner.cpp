@@ -29,6 +29,7 @@
 #include <algorithm>
 
 #include "effectdesigner.h"
+#include "workbench.h"
 #include "effectbrowser.h"
 #include "lookeditor.h"
 #include "showtreecontroller.h"
@@ -350,15 +351,36 @@ EffectDesigner::~EffectDesigner()
 void EffectDesigner::loadTryOn()
 {
     // The bench's groups, as last time (by name: ids are per show).
-    m_tryOn.clear();
-    if (m_doc == nullptr)
-        return;
+    m_tryOn = savedTryOnGroups(m_doc);
+}
+
+QList<quint32> EffectDesigner::savedTryOnGroups(Doc *doc)
+{
+    QList<quint32> out;
+    if (doc == nullptr)
+        return out;
     const QStringList names = QSettings().value(SETTINGS_TRYON).toStringList();
-    for (FixtureGroup *g : m_doc->fixtureGroups())
+    for (FixtureGroup *g : doc->fixtureGroups())
         if (names.contains(g->name()))
-            m_tryOn << g->id();
-    if (m_tryOn.isEmpty() && !m_doc->fixtureGroups().isEmpty())
-        m_tryOn << m_doc->fixtureGroups().first()->id();
+            out << g->id();
+    if (out.isEmpty() && !doc->fixtureGroups().isEmpty())
+        out << doc->fixtureGroups().first()->id();
+    return out;
+}
+
+void EffectDesigner::plugIntoWorkbench()
+{
+    Workbench::setEffectPaneFactory([](Workbench *wb, const Workbench::EffectRequest &req, QWidget *parent)
+                                        -> QWidget * {
+        if (wb == nullptr || wb->doc() == nullptr || req.cueId != 0xFFFFFFFF)
+            return nullptr;
+        EffectDesigner *ed = new EffectDesigner(wb->doc(), parent);
+        ed->setObjectName(QStringLiteral("workbenchEffectDesigner"));
+        ed->setCancelVisible(false);
+        ed->setTargets(QList<quint32>(), QList<quint32>());
+        ed->setEffect(req.palette);
+        return ed;
+    });
 }
 
 template <typename F> void EffectDesigner::quietly(F f)

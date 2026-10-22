@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QShowEvent>
 #include <QHideEvent>
+#include <QResizeEvent>
 #include <QTreeWidgetItem>
 #include <QShortcut>
 #include <QScrollArea>
@@ -95,6 +96,7 @@
 #include "functionmanager.h"
 #include "programmingoutline.h"
 #include "workbench.h"
+#include "effectdesigner.h"
 #include "workbenchstack.h"
 #include "splitterhandles.h"
 #include <QButtonGroup>
@@ -129,10 +131,26 @@ public:
         setUniformRowHeights(true);
         header()->setStretchLastSection(false);
         header()->setSectionResizeMode(0, QHeaderView::Stretch);
-        header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        header()->setSectionResizeMode(1, QHeaderView::Interactive);
+    }
+
+    /** The folder / kind column: as wide as it needs, but never more than a
+     *  third of the list -- the names come first. */
+    void fitColumns()
+    {
+        resizeColumnToContents(1);
+        const int cap = qMax(60, viewport()->width() / 3);
+        if (columnWidth(1) > cap)
+            setColumnWidth(1, cap);
     }
 
 protected:
+    void resizeEvent(QResizeEvent *e) override
+    {
+        QTreeWidget::resizeEvent(e);
+        fitColumns();
+    }
+
     QStringList mimeTypes() const override
     {
         return { QString::fromLatin1(FunctionsTreeWidget::paletteDragMimeType()),
@@ -885,16 +903,55 @@ QWidget *ProgrammingManager::buildPalettesSection()
 QWidget *ProgrammingManager::buildEffectsSection()
 {
     QWidget *page = new QWidget(this);
+    page->setObjectName(QStringLiteral("buildEffectsPage"));
     QVBoxLayout *col = new QVBoxLayout(page);
     col->setContentsMargins(2, 2, 2, 2);
+    QHBoxLayout *top = new QHBoxLayout;
+    top->setContentsMargins(0, 0, 0, 0);
     QLineEdit *filter = new QLineEdit(page);
+    filter->setObjectName(QStringLiteral("buildEffectsFilter"));
     filter->setPlaceholderText(tr("Filter…"));
     filter->setClearButtonEnabled(true);
-    col->addWidget(filter);
+    top->addWidget(filter, 1);
+
+    /* + New: an effect palette in the designer (the button); the menu has
+       the classic effects too, as the Scenes section's + New has. */
+    QToolButton *newBtn = new QToolButton(page);
+    newBtn->setObjectName(QStringLiteral("buildEffectsNew"));
+    newBtn->setText(tr("New"));
+    newBtn->setIcon(QIcon(":/edit_add.png"));
+    newBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    newBtn->setToolTip(tr("A new effect palette, designed in the Workbench (the menu: a classic EFX or "
+                          "RGB Matrix)"));
+    newBtn->setPopupMode(QToolButton::MenuButtonPopup);
+    QMenu *newMenu = new QMenu(newBtn);
+    newMenu->setToolTipsVisible(true);
+    QAction *a = newMenu->addAction(QIcon(":/script.png"), tr("Effect palette…"), this,
+                                    [this]() { designEffect(QLCPalette::invalidId()); });
+    a->setObjectName(QStringLiteral("buildEffectsNewPalette"));
+    a->setToolTip(tr("A script effect, designed in the Workbench on the Try on groups: plays in scenes, "
+                     "looks and the Show Tree"));
+    newMenu->addSection(tr("Classic effects (QLC+ functions)"));
+    a = newMenu->addAction(QIcon(":/efx.png"), tr("EFX"), this,
+                           [this]() { newClassicEffect(Function::EFXType); });
+    a->setObjectName(QStringLiteral("buildEffectsNewEfx"));
+    a->setToolTip(tr("A QLC+ EFX function on the Try on groups' heads, loaded in the Workbench"));
+    a = newMenu->addAction(QIcon(":/rgbmatrix.png"), tr("RGB Matrix"), this,
+                           [this]() { newClassicEffect(Function::RGBMatrixType); });
+    a->setObjectName(QStringLiteral("buildEffectsNewMatrix"));
+    a->setToolTip(tr("A QLC+ RGB Matrix function on the first Try on group, loaded in the Workbench"));
+    newBtn->setMenu(newMenu);
+    connect(newBtn, &QToolButton::clicked, this, [this]() { designEffect(QLCPalette::invalidId()); });
+    top->addWidget(newBtn);
+    col->addLayout(top);
+
     m_effectsList = new EffectsList(page);
+    m_effectsList->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_effectsList->setEditTriggers(QAbstractItemView::EditKeyPressed);
     col->addWidget(m_effectsList, 1);
-    QLabel *how = new QLabel(tr("Drag an effect palette onto a layer; double-click to edit it. Click an EFX or "
-                                "RGB Matrix to load it, or drag it onto a collection as a layer."), page);
+    QLabel *how = new QLabel(tr("Click an effect palette to design it in the Workbench; drag it onto a layer. "
+                                "Click an EFX or RGB Matrix to load it, or drag it onto a collection. "
+                                "Right-click for more."), page);
     how->setWordWrap(true);
     col->addWidget(how);
     connect(filter, &QLineEdit::textChanged, this, [this](const QString &text) {
@@ -902,21 +959,103 @@ QWidget *ProgrammingManager::buildEffectsSection()
             if ((*it)->childCount() == 0)
                 (*it)->setHidden(!text.isEmpty() && !(*it)->text(0).contains(text, Qt::CaseInsensitive));
     });
-    connect(m_effectsList, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *it, int) {
-        if (it->data(0, EffectsList::KindRole).toInt() == EffectsList::FunctionItem)
-            showFunction(it->data(0, EffectsList::IdRole).toUInt());
+    // A click (or Return) opens it: an effect palette in the designer, a
+    // classic effect in the Workbench with its own editor.
+    auto activate = [this](QTreeWidgetItem *it) {
+        if (it == nullptr || m_effectsRebuilding)
+            return;
+        const quint32 id = it->data(0, EffectsList::IdRole).toUInt();
+        const int kind = it->data(0, EffectsList::KindRole).toInt();
+        if (kind == EffectsList::PaletteItem)
+        {
+            EffectDesigner *ed = effectDesigner();
+            if (ed == nullptr || ed->originalId() != id)
+                designEffect(id);
+        }
+        else if (kind == EffectsList::FunctionItem && m_workbench->loadedFunction() != id)
+            m_workbench->load(id);
+    };
+    connect(m_effectsList, &QTreeWidget::itemClicked, this, [activate](QTreeWidgetItem *it, int) { activate(it); });
+    connect(m_effectsList, &QTreeWidget::itemActivated, this, [activate](QTreeWidgetItem *it, int) { activate(it); });
+    connect(m_effectsList, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QMenu *menu = effectsContextMenu(m_effectsList->itemAt(pos), this);
+        menu->exec(m_effectsList->viewport()->mapToGlobal(pos));
+        delete menu;
     });
-    connect(m_effectsList, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *it, int) {
+    // F2 renames in place.
+    connect(m_effectsList, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem *it, int column) {
+        if (m_effectsRebuilding || column != 0)
+            return;
+        const quint32 id = it->data(0, EffectsList::IdRole).toUInt();
+        const QString name = it->text(0).trimmed();
         if (it->data(0, EffectsList::KindRole).toInt() == EffectsList::PaletteItem)
-            m_workbench->editPalette(it->data(0, EffectsList::IdRole).toUInt());
+        {
+            const QLCPalette *p = m_doc->palette(id);
+            if (p != nullptr && !name.isEmpty() && name != p->name() && m_doc->paletteOps()->rename(id, name))
+            {
+                m_paletteTree->updateTree();
+                m_workbench->refreshAll();
+            }
+        }
+        else if (it->data(0, EffectsList::KindRole).toInt() == EffectsList::FunctionItem)
+        {
+            Function *f = m_doc->function(id);
+            if (f != nullptr && !name.isEmpty() && name != f->name())
+            {
+                m_doc->paletteOps()->functionStep(tr("rename %1 to %2").arg(f->name(), name), { id },
+                                                  [&](QList<quint32> &) {
+                    f->setName(name);
+                    return true;
+                });
+                m_outline->scheduleRebuild();
+                m_workbench->refreshAll();
+            }
+        }
+        rebuildEffects();
     });
+    // Delete / Backspace: what is selected, asking first (as the palette list).
+    for (const QKeySequence &key : { QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace) })
+    {
+        QShortcut *sc = new QShortcut(key, m_effectsList);
+        sc->setContext(Qt::WidgetShortcut);
+        connect(sc, &QShortcut::activated, this, [this]() {
+            QList<quint32> pals, fns;
+            effectTargets(m_effectsList->currentItem(), pals, fns);
+            if (!pals.isEmpty())
+                deletePalettes(pals);
+            if (!fns.isEmpty())
+                deleteFunctions(fns);
+        });
+    }
     return page;
 }
 
 void ProgrammingManager::rebuildEffects()
 {
+    if (m_effectsList == nullptr || m_effectsRebuildQueued)
+        return;
+    m_effectsRebuildQueued = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_effectsRebuildQueued = false;
+        rebuildEffectsNow();
+    });
+}
+
+void ProgrammingManager::rebuildEffectsNow()
+{
     if (m_effectsList == nullptr)
         return;
+    // Back where it was: the current row and the selection, by what they are.
+    QTreeWidgetItem *cur = m_effectsList->currentItem();
+    const QPair<int, quint32> curKey = cur == nullptr ? qMakePair(0, 0u)
+        : qMakePair(cur->data(0, EffectsList::KindRole).toInt(), cur->data(0, EffectsList::IdRole).toUInt());
+    QSet<QPair<int, quint32>> selected;
+    for (QTreeWidgetItem *it : m_effectsList->selectedItems())
+        selected.insert(qMakePair(it->data(0, EffectsList::KindRole).toInt(),
+                                  it->data(0, EffectsList::IdRole).toUInt()));
+    m_effectsRebuilding = true;
+    QSignalBlocker block(m_effectsList);
+
     QCollator coll;
     coll.setNumericMode(true);
     coll.setCaseSensitivity(Qt::CaseInsensitive);
@@ -937,14 +1076,16 @@ void ProgrammingManager::rebuildEffects()
     std::sort(effects.begin(), effects.end(), [&coll](QLCPalette *a, QLCPalette *b) {
         return coll.compare(a->name(), b->name()) < 0;
     });
+    const Qt::ItemFlags leaf = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsEditable;
     for (QLCPalette *p : effects)
     {
         QTreeWidgetItem *it = new QTreeWidgetItem(pals, { p->name(), PaletteOps::folderOf(p) });
         it->setIcon(0, QIcon(p->iconResource()));
         it->setData(0, EffectsList::KindRole, EffectsList::PaletteItem);
         it->setData(0, EffectsList::IdRole, p->id());
-        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
-        it->setToolTip(0, tr("Effect palette “%1”: drag it onto a layer, double-click to edit it.").arg(p->name()));
+        it->setFlags(leaf);
+        it->setToolTip(0, tr("Effect palette “%1”: click to design it in the Workbench, drag it onto a layer.")
+                              .arg(p->name()));
     }
     QList<Function *> fns;
     ShowTreeController *st = m_doc->showTree();
@@ -957,19 +1098,264 @@ void ProgrammingManager::rebuildEffects()
     });
     for (Function *f : fns)
     {
-        QTreeWidgetItem *it = new QTreeWidgetItem(classic, { f->name(), Function::typeToString(f->type()) });
+        const QString folder = f->path(true);
+        QTreeWidgetItem *it = new QTreeWidgetItem(classic, { f->name(), folder.isEmpty()
+            ? Function::typeToString(f->type()) : Function::typeToString(f->type()) + QStringLiteral(" · ") + folder });
         it->setIcon(0, f->getIcon());
         it->setData(0, EffectsList::KindRole, EffectsList::FunctionItem);
         it->setData(0, EffectsList::IdRole, f->id());
-        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+        it->setFlags(leaf);
         it->setToolTip(0, tr("A classic %1: click to load it in the Workbench, drag it onto a collection.")
                               .arg(Function::typeToString(f->type())));
     }
     if (effects.isEmpty())
-        new QTreeWidgetItem(pals, { tr("None yet: + New Effect in the Palettes list") });
+        new QTreeWidgetItem(pals, { tr("None yet: + New ▸ Effect palette") });
     if (fns.isEmpty())
-        new QTreeWidgetItem(classic, { tr("None yet: + EFX / + RGB Matrix in a collection") });
+        new QTreeWidgetItem(classic, { tr("None yet: + New ▸ EFX / RGB Matrix") });
     m_effectsList->expandAll();
+    static_cast<EffectsList *>(m_effectsList)->fitColumns();
+
+    for (QTreeWidgetItemIterator it(m_effectsList); *it; ++it)
+    {
+        const QPair<int, quint32> key((*it)->data(0, EffectsList::KindRole).toInt(),
+                                      (*it)->data(0, EffectsList::IdRole).toUInt());
+        if (key.first == 0)
+            continue;
+        if (key == curKey)
+            m_effectsList->setCurrentItem(*it, 0, QItemSelectionModel::NoUpdate);
+        if (selected.contains(key))
+            (*it)->setSelected(true);
+    }
+    m_effectsRebuilding = false;
+}
+
+void ProgrammingManager::selectEffectRow(bool palette, quint32 id)
+{
+    if (m_effectsRebuildQueued)
+        rebuildEffectsNow();      // the row may be new
+    const int kind = palette ? EffectsList::PaletteItem : EffectsList::FunctionItem;
+    for (QTreeWidgetItemIterator it(m_effectsList); *it; ++it)
+        if ((*it)->data(0, EffectsList::KindRole).toInt() == kind
+            && (*it)->data(0, EffectsList::IdRole).toUInt() == id)
+        {
+            QSignalBlocker block(m_effectsList);
+            m_effectsList->clearSelection();
+            m_effectsList->setCurrentItem(*it);
+            (*it)->setSelected(true);
+            m_effectsList->scrollToItem(*it);
+            return;
+        }
+}
+
+void ProgrammingManager::effectTargets(QTreeWidgetItem *clicked, QList<quint32> &palettes,
+                                       QList<quint32> &functions) const
+{
+    palettes.clear();
+    functions.clear();
+    if (clicked == nullptr || clicked->data(0, EffectsList::KindRole).toInt() == 0)
+        return;
+    const QList<QTreeWidgetItem *> rows = clicked->isSelected() ? m_effectsList->selectedItems()
+                                                                : QList<QTreeWidgetItem *>({ clicked });
+    for (QTreeWidgetItem *it : rows)
+    {
+        const quint32 id = it->data(0, EffectsList::IdRole).toUInt();
+        if (it->data(0, EffectsList::KindRole).toInt() == EffectsList::PaletteItem)
+            palettes << id;
+        else if (it->data(0, EffectsList::KindRole).toInt() == EffectsList::FunctionItem)
+            functions << id;
+    }
+}
+
+EffectDesigner *ProgrammingManager::effectDesigner() const
+{
+    return qobject_cast<EffectDesigner *>(m_workbench->effectPane());
+}
+
+bool ProgrammingManager::designEffect(quint32 paletteId)
+{
+    const QLCPalette *p = m_doc->palette(paletteId);
+    if (p != nullptr && p->type() != QLCPalette::Effect)
+        return false;
+    Workbench::EffectRequest req;
+    req.palette = p != nullptr ? paletteId : QLCPalette::invalidId();
+    if (m_sections->checkedId() != EffectsSection)
+        setSection(EffectsSection);
+    if (!m_workbench->designEffect(req))
+        return false;
+    EffectDesigner *ed = effectDesigner();
+    if (ed == nullptr)
+        return true;
+    // Saved as a palette, or the palette updated: listed, selected, and on
+    // the bench again (a fresh copy of it), as Window ▸ Effects does.
+    connect(ed, &EffectDesigner::effectChosen, this,
+            [this](quint32 pid, const QList<quint32> &, EffectDesigner::Outcome) {
+        m_paletteTree->updateTree();
+        rebuildEffects();
+        QTimer::singleShot(0, this, [this, pid]() {
+            if (m_doc->palette(pid) == nullptr)
+                return;
+            selectEffectRow(true, pid);
+            if (effectDesigner() != nullptr)
+                designEffect(pid);
+        });
+    });
+    if (p != nullptr)
+        selectEffectRow(true, paletteId);
+    else
+        m_effectsList->clearSelection();
+    return true;
+}
+
+quint32 ProgrammingManager::newClassicEffect(Function::Type type)
+{
+    Function *f = nullptr;
+    if (type == Function::EFXType)
+        f = new EFX(m_doc);
+    else if (type == Function::RGBMatrixType)
+        f = new RGBMatrix(m_doc);
+    else
+        return Function::invalidId();
+    if (!m_doc->addFunction(f))
+    {
+        delete f;
+        return Function::invalidId();
+    }
+    f->setName(type == Function::EFXType ? tr("New EFX %1").arg(f->id()) : tr("New RGB Matrix %1").arg(f->id()));
+    // Its heads: the Try on groups', as the designer's bench plays.
+    const QList<quint32> tryOn = EffectDesigner::savedTryOnGroups(m_doc);
+    if (EFX *efx = qobject_cast<EFX *>(f))
+    {
+        for (quint32 gid : tryOn)
+            if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                for (const GroupHead &head : g->headList())
+                    efx->addFixture(head.fxi, head.head);
+    }
+    else if (RGBMatrix *m = qobject_cast<RGBMatrix *>(f))
+    {
+        if (!tryOn.isEmpty())
+            m->setFixtureGroup(tryOn.first());
+    }
+    if (m_sections->checkedId() != EffectsSection)
+        setSection(EffectsSection);
+    m_outline->scheduleRebuild();
+    selectEffectRow(false, f->id());
+    m_workbench->load(f->id());
+    return f->id();
+}
+
+QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget *parent)
+{
+    QMenu *menu = new QMenu(parent);
+    menu->setObjectName(QStringLiteral("buildEffectsMenu"));
+    menu->setToolTipsVisible(true);
+    QList<quint32> pals, fns;
+    effectTargets(clicked, pals, fns);
+    const int kind = clicked == nullptr ? 0 : clicked->data(0, EffectsList::KindRole).toInt();
+    const quint32 id = clicked == nullptr ? 0 : clicked->data(0, EffectsList::IdRole).toUInt();
+    const QPersistentModelIndex index = clicked == nullptr ? QPersistentModelIndex()
+                                                           : QPersistentModelIndex(m_effectsList->indexFromItem(clicked));
+
+    // On a row: what it is first.
+    if (kind == EffectsList::PaletteItem)
+    {
+        QAction *a = menu->addAction(tr("Design / edit…"), this, [this, id]() { designEffect(id); });
+        a->setObjectName(QStringLiteral("effectsDesign"));
+        a->setToolTip(tr("In the effect designer, in the Workbench: a copy on the bench until you update "
+                         "the palette or save a new one"));
+        menu->setDefaultAction(a);
+    }
+    else if (kind == EffectsList::FunctionItem)
+    {
+        QAction *a = menu->addAction(tr("Open in editor"), this, [this, id]() {
+            selectEffectRow(false, id);
+            m_workbench->load(id);
+        });
+        a->setObjectName(QStringLiteral("effectsOpen"));
+        a->setToolTip(tr("Load it in the Workbench, with its own (QLC+) editor"));
+        menu->setDefaultAction(a);
+    }
+    if (kind != 0)
+    {
+        QAction *a = menu->addAction(tr("Duplicate"), this, [this, kind, id]() {
+            if (kind == EffectsList::PaletteItem)
+            {
+                const quint32 copy = m_doc->paletteOps()->duplicate(id);
+                if (m_doc->palette(copy) == nullptr)
+                    return;
+                m_paletteTree->updateTree();
+                designEffect(copy);
+            }
+            else
+            {
+                Function *src = m_doc->function(id);
+                Function *copy = src == nullptr ? nullptr : src->createCopy(m_doc);
+                if (copy == nullptr)
+                    return;
+                copy->setName(m_doc->nextDuplicateName(src));
+                m_outline->scheduleRebuild();
+                selectEffectRow(false, copy->id());
+                m_workbench->load(copy->id());
+            }
+        });
+        a->setObjectName(QStringLiteral("effectsDuplicate"));
+        a = menu->addAction(tr("Rename"), this, [this, index]() {
+            if (index.isValid())
+                m_effectsList->editItem(m_effectsList->itemFromIndex(index), 0);
+        });
+        a->setObjectName(QStringLiteral("effectsRename"));
+        a->setShortcut(QKeySequence(Qt::Key_F2));
+        a = menu->addAction(tr("Move to folder…"), this, [this, pals, fns]() {
+            QString current;
+            if (!pals.isEmpty())
+                current = PaletteOps::folderOf(m_doc->palette(pals.first()));
+            else if (Function *f = m_doc->function(fns.first()))
+                current = f->path(true);
+            bool ok = false;
+            const QString folder = QInputDialog::getText(this, tr("Move to folder"),
+                tr("Folder (e.g. \"01-Song\"; empty for none):"), QLineEdit::Normal, current, &ok).trimmed();
+            if (!ok)
+                return;
+            if (!pals.isEmpty())
+            {
+                m_doc->paletteOps()->move(pals, folder);
+                m_paletteTree->updateTree();
+            }
+            if (!fns.isEmpty())
+            {
+                m_doc->paletteOps()->functionStep(tr("move to folder %1").arg(folder), fns, [&](QList<quint32> &) {
+                    for (quint32 fid : fns)
+                        if (Function *f = m_doc->function(fid))
+                            f->setPath(folder);
+                    return true;
+                });
+                m_outline->scheduleRebuild();
+            }
+            rebuildEffects();
+        });
+        a->setObjectName(QStringLiteral("effectsMove"));
+        menu->addSeparator();
+        const int n = pals.size() + fns.size();
+        a = menu->addAction(n > 1 ? tr("Delete %1 effects").arg(n) : tr("Delete"), this, [this, pals, fns]() {
+            if (!pals.isEmpty())
+                deletePalettes(pals);
+            if (!fns.isEmpty())
+                deleteFunctions(fns);
+        });
+        a->setObjectName(QStringLiteral("effectsDelete"));
+        menu->addSeparator();
+    }
+
+    // Everywhere (empty space too): a new one.
+    QAction *a = menu->addAction(QIcon(":/script.png"), tr("New effect…"), this,
+                                 [this]() { designEffect(QLCPalette::invalidId()); });
+    a->setObjectName(QStringLiteral("effectsNewPalette"));
+    a->setToolTip(tr("A new effect palette, designed in the Workbench on the Try on groups"));
+    a = menu->addAction(QIcon(":/efx.png"), tr("New EFX"), this, [this]() { newClassicEffect(Function::EFXType); });
+    a->setObjectName(QStringLiteral("effectsNewEfx"));
+    a = menu->addAction(QIcon(":/rgbmatrix.png"), tr("New RGB Matrix"), this,
+                        [this]() { newClassicEffect(Function::RGBMatrixType); });
+    a->setObjectName(QStringLiteral("effectsNewMatrix"));
+    return menu;
 }
 
 void ProgrammingManager::setSection(Section section)

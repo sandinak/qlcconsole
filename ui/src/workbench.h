@@ -149,6 +149,8 @@ public:
      *  cue's layer (or the layer itself, @a key empty). */
     struct EffectRequest
     {
+        /** Invalid: no cue -- the bench (Build ▸ Effects): design effect
+         *  palette @a palette (invalid: a new effect) on the Try on groups. */
         quint32 cueId = 0xFFFFFFFF;
         quint32 layerId = 0xFFFFFFFF;   //!< invalid: a layer carried in
         QString targetSignature;        //!< ShowTree::Target::signature()
@@ -165,6 +167,17 @@ public:
     /** Ask for the effect designer on the selected cue layer (its Effect
      *  row, or the layer). False: no designer plugged in, or no cue layer. */
     bool designEffect();
+    /** Ask for the effect designer for @a request: a cue layer's, or the
+     *  bench's (cueId invalid; Build ▸ Effects) -- what is loaded is
+     *  unloaded first and the layers column steps aside while it shows.
+     *  False: no designer plugged in, or it declined. */
+    bool designEffect(const EffectRequest &request);
+    /** The designer the factory made, while the editor pane shows it
+     *  (null: none). The Workbench deletes it when the row changes. */
+    QWidget *effectPane() const
+    { return m_funcEditor != nullptr && m_funcEditor == m_effectPane ? m_effectPane.data() : nullptr; }
+    /** The show this Workbench edits (for a factory). */
+    Doc *doc() const { return m_doc; }
     /** The page the back end lent the editor pane (the Show Tree's cue or
      *  layer page; null: none). */
     QWidget *lentPane() const { return m_lentPane; }
@@ -364,6 +377,12 @@ private:
 
     QPointer<QWidget> m_stackWidget;
     QToolButton *m_ownCopyBtn = nullptr;
+
+    /** designEffect()'s designer, and whether it is the bench's. */
+    QPointer<QWidget> m_effectPane;
+    bool m_benchPane = false;
+    /** Host the factory's @a pane under @a heading. */
+    void hostEffectPane(QWidget *pane, const QString &heading, bool bench);
     QToolButton *m_sendToTreeBtn = nullptr;
 };
 

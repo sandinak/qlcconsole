@@ -16,6 +16,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   with a small group badge; a mixed group keeps the group icon. See
   [Stage targets](stage-targets.md).
 
+- **Make effects in Build.** Build ▸ Effects has a **+ New ▾** button
+  (an effect palette, an EFX or an RGB Matrix) and a right-click menu
+  (Design / edit…, Open in editor, Duplicate, Rename, Move to folder…,
+  Delete, and New on empty space). Clicking an effect palette opens it in
+  the effect designer, full height in the Workbench. See
+  [Making effects](build.md#making-effects).
+
 - **Notes open up while you type.** A chaser step's note -- in the
   Workbench's step header and step table, the Chaser editor's **Notes**
   column -- and a Show Tree cue's note now word-wrap and grow as you type,

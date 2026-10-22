@@ -1036,6 +1036,9 @@ void Workbench::showPage(Page page)
     if (w == m_overviewPage)
         updateOverview();
     m_page->setCurrentWidget(w);
+    // The bench's designer has the width; the layers come back with anything else.
+    m_split->widget(0)->setVisible(!(w == m_functionPage && m_benchPane && !m_effectPane.isNull()
+                                     && m_funcEditor == m_effectPane));
     // The console's channels are drawn when it shows (a switch from one
     // fixture to another fires no showEvent).
     if (page == TargetPage && !m_fixtureScroll->isHidden())
@@ -2046,13 +2049,40 @@ bool Workbench::designEffect()
     QWidget *w = s_effectPane(this, req, m_functionPage);
     if (w == nullptr)
         return false;
-    clearEditors();
-    m_funcEditor = w;
-    m_functionHeading->setText(tr("<b>Design effect</b> — %1").arg(layers.at(layer).label.toHtmlEscaped()));
-    m_functionLayout->addWidget(w, 1);
-    w->show();
-    showPage(FunctionPage);
+    hostEffectPane(w, tr("<b>Design effect</b> — %1").arg(layers.at(layer).label.toHtmlEscaped()), false);
     return true;
+}
+
+bool Workbench::designEffect(const EffectRequest &request)
+{
+    if (request.cueId != 0xFFFFFFFF)
+    {
+        // A cue layer's: the one above, on the layer selected.
+        return designEffect();
+    }
+    if (!s_effectPane)
+        return false;
+    // The bench: nothing loaded behind it, so its preview is the only one playing.
+    clear();
+    QWidget *w = s_effectPane(this, request, m_functionPage);
+    if (w == nullptr)
+        return false;
+    const QLCPalette *p = m_doc->palette(request.palette);
+    hostEffectPane(w, p != nullptr ? tr("<b>Design effect</b> — %1, on the bench").arg(p->name().toHtmlEscaped())
+                                   : tr("<b>Design effect</b> — a new effect, on the bench"), true);
+    return true;
+}
+
+void Workbench::hostEffectPane(QWidget *pane, const QString &heading, bool bench)
+{
+    clearEditors();
+    m_funcEditor = pane;
+    m_effectPane = pane;
+    m_benchPane = bench;
+    m_functionHeading->setText(heading);
+    m_functionLayout->addWidget(pane, 1);
+    pane->show();
+    showPage(FunctionPage);
 }
 
 void Workbench::setSolo(bool solo)

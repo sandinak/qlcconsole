@@ -40,6 +40,7 @@
 #include "inputoutputmanager.h"
 #include "functionselection.h"
 #include "effectspage.h"
+#include "effectdesigner.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "showtreecontroller.h"
@@ -2478,6 +2479,8 @@ void App::initMenuBar()
     QAction *effectsAct = windowMenu->addAction(tr("Effects…"));
     effectsAct->setObjectName(QStringLiteral("windowEffects"));
     connect(effectsAct, &QAction::triggered, this, [this]() { EffectsPage::open(m_doc, this); });
+    // ...and in the Workbench's editor pane (Build ▸ Effects).
+    EffectDesigner::plugIntoWorkbench();
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
     m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));
