@@ -5862,7 +5862,9 @@ void ShowTreeView_Test::upgradeThisShow()
         QVERIFY2(untickedText.contains(want), qPrintable(want + " not in:\n" + untickedText));
     const QString all = results.join("\n");
     QVERIFY2(all.contains("Full Show: a cue list of 2 cue(s); plays the same (0 channels differ)."), qPrintable(all));
-    QVERIFY2(all.contains("Haze: captured into palettes in 2 cue(s), 0 channels differ."), qPrintable(all));
+    // Haze is set in 0.0.1 and tracks into 0.0.2 (the import's tracking
+    // reading): captured where it is set, the capture tracks in with it.
+    QVERIFY2(all.contains("Haze: captured into palettes in 1 cue(s), 0 channels differ."), qPrintable(all));
     QVERIFY2(afterText.contains("Full Show | Converted — the cue list Full Show, in place"), qPrintable(afterText));
     QVERIFY2(afterText.contains("takes the whole upgrade back as one step"), qPrintable(afterText));
 
