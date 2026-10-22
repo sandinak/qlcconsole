@@ -122,10 +122,11 @@ private slots:
      *  an outline row that isn't selected and move -> it's a drag of that
      *  row, not a rubber-band selection growing over the rows passed. */
     void pressAndMoveOnARowDragsIt();
-    /** P1, open question 5: a chaser or collection filed in a scene folder
-     *  shows in the outline, greyed, once, and opens in the Functions tab;
-     *  deleting a scene says it is the function itself and where it's used. */
-    void nonScenesInASceneFolderOpenInFunctions();
+    /** W1 (reverses P-D12): collections and chasers are full rows in
+     *  Build ▸ Scenes, making their own folders; a click loads one in the
+     *  Workbench; deleting a scene says it is the function itself and where
+     *  it's used. */
+    void collectionsAndChasersAreFullRows();
     /** "can't remove anything here .. no delete .. AND delete should check
      *  for usage and warn the user with a popup that shows where": deleting a
      *  palette names every scene look and effect-look slot using it, and

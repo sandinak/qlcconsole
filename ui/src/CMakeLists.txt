@@ -170,6 +170,9 @@ add_library(${module_name}
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
     programmingoutline.cpp programmingoutline.h
+    splitterhandles.cpp splitterhandles.h
+    workbench.cpp workbench.h
+    workbenchstack.cpp workbenchstack.h
     showtreeview.cpp showtreeview.h
     cuerunner.cpp cuerunner.h
     updatechecker.cpp updatechecker.h

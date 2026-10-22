@@ -36,6 +36,7 @@
 #include <algorithm>
 
 #include "programmingoutline.h"
+#include "workbenchstack.h"
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
@@ -50,11 +51,15 @@
 #include "qlcpalette.h"
 #include "scenevalue.h"
 #include "fixture.h"
+#include "collection.h"
+#include "chaser.h"
 #include "scene.h"
 #include "doc.h"
 
 #define SETTINGS_BADGE_COLUMN QStringLiteral("programming/outline/badgeColumn")
 #define SETTINGS_EXPANDED QStringLiteral("programming/outline/expanded")
+#define SETTINGS_STACK_EXPANDED QStringLiteral("programming/workbench/expanded")
+#define SETTINGS_STACK_BADGE_COLUMN QStringLiteral("programming/workbench/badgeColumn")
 
 static const quint32 kInvalid = 0xFFFFFFFF;
 
@@ -94,7 +99,7 @@ ProgrammingOutline::ProgrammingOutline(Doc *doc, QWidget *parent)
         if (m_fittingColumns)
             return;
         m_badgeWidth = qMax(24, section == 0 ? viewport()->width() - size : size);
-        QSettings().setValue(SETTINGS_BADGE_COLUMN, m_badgeWidth);
+        QSettings().setValue(m_mode == Stack ? SETTINGS_STACK_BADGE_COLUMN : SETTINGS_BADGE_COLUMN, m_badgeWidth);
         fitColumns();
     });
 
@@ -110,6 +115,14 @@ ProgrammingOutline::ProgrammingOutline(Doc *doc, QWidget *parent)
     });
 
     connect(this, &QTreeWidget::customContextMenuRequested, this, &ProgrammingOutline::slotContextMenu);
+    // Stack mode: a layer that plays as it is opens on a double-click.
+    connect(this, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *it, int) {
+        if (m_mode != Stack || it == nullptr || it->parent() != nullptr)
+            return;
+        const Row r = rowOf(it);
+        if (r.kind == FunctionRow)
+            emit openRequested(r.id);
+    });
     connect(this, &QTreeWidget::itemChanged, this, &ProgrammingOutline::slotItemChanged);
     connect(this, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *it) {
         if (!m_building && m_filter.isEmpty())
@@ -160,11 +173,14 @@ const char *ProgrammingOutline::rowMimeType()
 
 QString ProgrammingOutline::settingsKey() const
 {
+    const QString where = m_doc != nullptr ? m_doc->workspacePath() : QString();
+    const QString show = QString::number(qHash(where.isEmpty() ? QStringLiteral("(new)") : where));
+    if (m_mode == Stack)
+        return SETTINGS_STACK_EXPANDED + QLatin1Char('/') + show + QLatin1Char('/')
+               + (m_stack != nullptr ? m_stack->key() : QStringLiteral("-"));
     /* Per show: by where it is kept (Doc knows the folder; one show per
        folder is the usual case). */
-    const QString where = m_doc != nullptr ? m_doc->workspacePath() : QString();
-    return SETTINGS_EXPANDED + QLatin1Char('/')
-           + QString::number(qHash(where.isEmpty() ? QStringLiteral("(new)") : where));
+    return SETTINGS_EXPANDED + QLatin1Char('/') + show;
 }
 
 void ProgrammingOutline::saveExpansion()
@@ -184,7 +200,7 @@ ProgrammingOutline::Row ProgrammingOutline::rowOf(const QTreeWidgetItem *item)
         return r;
     r.kind = item->data(NameCol, KindRole).toInt();
     r.id = item->data(NameCol, IdRole).toUInt();
-    r.scene = r.kind == SceneRow ? r.id : item->data(NameCol, SceneRole).toUInt();
+    r.scene = r.kind == SceneRow || r.kind == FunctionRow ? r.id : item->data(NameCol, SceneRole).toUInt();
     return r;
 }
 
@@ -194,7 +210,7 @@ static QString rowKey(int kind, quint32 scene, quint32 id, const QString &path =
     {
     case ProgrammingOutline::FolderRow:  return QStringLiteral("f:") + path;
     case ProgrammingOutline::SceneRow:   return QStringLiteral("s:%1").arg(id);
-    case ProgrammingOutline::OtherRow:   return QStringLiteral("o:%1").arg(id);
+    case ProgrammingOutline::FunctionRow: return QStringLiteral("o:%1").arg(id);
     case ProgrammingOutline::GroupRow:   return QStringLiteral("g:%1:%2").arg(scene).arg(id);
     case ProgrammingOutline::FixtureRow: return QStringLiteral("x:%1:%2").arg(scene).arg(id);
     case ProgrammingOutline::PaletteRow: return QStringLiteral("p:%1:%2").arg(scene).arg(id);
@@ -222,8 +238,11 @@ QTreeWidgetItem *ProgrammingOutline::sceneItem(quint32 sceneId) const
 bool ProgrammingOutline::defaultExpanded(const QTreeWidgetItem *item) const
 {
     // Folders open, scenes closed (open what you work on), an effect shows
-    // its own colour and dimmer.
+    // its own colour and dimmer. On the Workbench a layer is open: it is
+    // what you loaded it for.
     const int kind = item->data(NameCol, KindRole).toInt();
+    if (m_mode == Stack && kind == SceneRow)
+        return true;
     return kind == FolderRow || kind == PaletteRow;
 }
 
@@ -352,8 +371,11 @@ void ProgrammingOutline::decorateScene(QTreeWidgetItem *item, Scene *scene)
     else
         item->setForeground(BadgeCol, palette().color(QPalette::Disabled, QPalette::Text));
 
-    item->setToolTip(NameCol, tr("Scene “%1”: %n fixture(s). Click to edit its timing; "
-                                 "open it to see its targets and looks.", "", all.size())
+    item->setToolTip(NameCol, (m_mode == Stack
+                                   ? tr("Scene “%1”: %n fixture(s). Click to edit its timing; "
+                                        "its targets and looks are the rows under it.", "", all.size())
+                                   : tr("Scene “%1”: %n fixture(s). Click to load it in the Workbench; "
+                                        "open it here to see its targets and looks.", "", all.size()))
                      .arg(scene->name())
                      + (tips.isEmpty() ? QString() : QStringLiteral("\n\n") + tips.join(QLatin1Char('\n'))));
 }
@@ -538,6 +560,53 @@ void ProgrammingOutline::addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene)
     }
 }
 
+void ProgrammingOutline::setStack(WorkbenchStack *stack)
+{
+    if (m_mode == Stack && m_stack == stack)
+        return;
+    if (m_mode == Navigator)
+    {
+        // The Workbench's rows: one per layer, and a layer moves as one.
+        setObjectName(QStringLiteral("workbenchRows"));
+        setHeaderLabels({ tr("Layers"), QString() });
+        // Its badges say more ("also in 2  Collection ▣"): a column of its own.
+        m_badgeWidth = QSettings().value(SETTINGS_STACK_BADGE_COLUMN,
+                                         fontMetrics().horizontalAdvance(QStringLiteral("also in 99  Collection ▣  ⚠ 9"))
+                                             + 12).toInt();
+    }
+    m_mode = Stack;
+    m_stack = stack;
+    m_expanded = QSettings().value(settingsKey()).toMap();
+    if (m_stack != nullptr)
+        connect(m_stack, &QObject::destroyed, this, [this, stack]() {
+            if (m_stack == stack)
+                m_stack = nullptr;
+        });
+    rebuild();
+}
+
+int ProgrammingOutline::layerOf(const QTreeWidgetItem *item) const
+{
+    if (m_mode != Stack || item == nullptr)
+        return -1;
+    while (item->parent() != nullptr)
+        item = item->parent();
+    const QVariant v = item->data(NameCol, LayerRole);
+    return v.isValid() ? v.toInt() : -1;
+}
+
+QTreeWidgetItem *ProgrammingOutline::layerItem(int index) const
+{
+    for (int i = 0; i < topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *it = topLevelItem(i);
+        const QVariant v = it->data(NameCol, LayerRole);
+        if (v.isValid() && v.toInt() == index)
+            return it;
+    }
+    return nullptr;
+}
+
 void ProgrammingOutline::rebuild()
 {
     m_rebuildTimer->stop();
@@ -557,100 +626,11 @@ void ProgrammingOutline::rebuild()
     QSignalBlocker blockSel(selectionModel());
     clear();
 
-    QCollator coll;
-    coll.setNumericMode(true);
-    coll.setCaseSensitivity(Qt::CaseInsensitive);
-
     QList<Scene *> scenes;
-    QList<Function *> others;
-    QSet<QString> sceneFolders;
-    if (m_doc != nullptr)
-    {
-        ShowTreeController *st = m_doc->showTree();
-        for (Function *f : m_doc->functions())
-        {
-            if (f == nullptr || !f->isVisible() || (st != nullptr && st->isGenerated(f->id())))
-                continue;
-            if (Scene *s = qobject_cast<Scene *>(f))
-            {
-                scenes << s;
-                QString p = s->path(true);
-                while (!p.isEmpty())
-                {
-                    sceneFolders.insert(p);
-                    const int cut = p.lastIndexOf(QLatin1Char('/'));
-                    p = cut > 0 ? p.left(cut) : QString();
-                }
-            }
-            else
-                others << f;
-        }
-    }
-
-    // Folders first (A-Z, numbers as numbers), then the scenes in each.
-    QStringList folderList = sceneFolders.values();
-    std::sort(folderList.begin(), folderList.end(), [&coll](const QString &a, const QString &b) {
-        return coll.compare(a, b) < 0;
-    });
-    QHash<QString, QTreeWidgetItem *> folders;
-    for (const QString &p : folderList)
-        folderItem(p, folders);
-
-    std::sort(scenes.begin(), scenes.end(), [&coll](Scene *a, Scene *b) {
-        return coll.compare(a->name(), b->name()) < 0;
-    });
-    for (Scene *s : scenes)
-    {
-        QTreeWidgetItem *parent = folders.value(s->path(true));
-        QTreeWidgetItem *it = parent != nullptr ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(this);
-        it->setText(NameCol, s->name());
-        it->setIcon(NameCol, QIcon(QStringLiteral(":/scene.png")));
-        it->setData(NameCol, KindRole, SceneRow);
-        it->setData(NameCol, IdRole, s->id());
-        it->setData(NameCol, KeyRole, rowKey(SceneRow, s->id(), s->id()));
-        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled
-                     | Qt::ItemIsDropEnabled | Qt::ItemIsEditable);
-        decorateScene(it, s);
-        addSceneRows(it, s);
-    }
-
-    /* Chasers, collections and the rest filed beside scenes: shown once,
-       greyed, so nothing seems to vanish; they open in Functions. */
-    std::sort(others.begin(), others.end(), [&coll](Function *a, Function *b) {
-        return coll.compare(a->name(), b->name()) < 0;
-    });
-    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
-    for (Function *f : others)
-    {
-        QTreeWidgetItem *parent = folders.value(f->path(true));
-        if (parent == nullptr)
-            continue;
-        QTreeWidgetItem *it = new QTreeWidgetItem(parent);
-        it->setText(NameCol, f->name());
-        it->setIcon(NameCol, f->getIcon());
-        it->setForeground(NameCol, grey);
-        it->setText(BadgeCol, tr("Functions ↗"));
-        it->setForeground(BadgeCol, grey);
-        it->setData(NameCol, KindRole, OtherRow);
-        it->setData(NameCol, IdRole, f->id());
-        it->setData(NameCol, KeyRole, rowKey(OtherRow, f->id(), f->id()));
-        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-        const QString tip = tr("A %1: not a scene, so it isn't edited here. "
-                               "Double-click or right-click to open it in the Functions tab.")
-                                .arg(Function::typeToString(f->type()).toLower());
-        it->setToolTip(NameCol, tip);
-        it->setToolTip(BadgeCol, tip);
-    }
-
-    if (scenes.isEmpty())
-    {
-        QTreeWidgetItem *it = new QTreeWidgetItem(this);
-        it->setText(NameCol, tr("No scenes yet: + Scene above to start one, then drag groups and palettes onto it."));
-        it->setData(NameCol, KindRole, HintRow);
-        it->setData(NameCol, KeyRole, rowKey(HintRow, kInvalid, kInvalid));
-        it->setFlags(Qt::ItemIsEnabled);
-        it->setForeground(NameCol, grey);
-    }
+    if (m_mode == Stack)
+        rebuildStack();
+    else
+        rebuildNavigator(scenes);
 
     // As it was left: open rows, selection, scroll.
     for (QTreeWidgetItemIterator it(this); *it; ++it)
@@ -684,6 +664,196 @@ void ProgrammingOutline::rebuild()
     applyFilter();
     m_building = false;
     fitColumns();
+}
+
+void ProgrammingOutline::rebuildNavigator(QList<Scene *> &scenes)
+{
+    QCollator coll;
+    coll.setNumericMode(true);
+    coll.setCaseSensitivity(Qt::CaseInsensitive);
+
+    /* Scenes, collections and chasers are the Scenes section's own: each
+       makes its folder. Anything else (an EFX, a show...) filed in one of
+       those folders shows there too, so nothing seems to vanish. */
+    QList<Function *> others;
+    QSet<QString> folderSet;
+    auto addFolders = [&folderSet](QString p) {
+        while (!p.isEmpty())
+        {
+            folderSet.insert(p);
+            const int cut = p.lastIndexOf(QLatin1Char('/'));
+            p = cut > 0 ? p.left(cut) : QString();
+        }
+    };
+    if (m_doc != nullptr)
+    {
+        ShowTreeController *st = m_doc->showTree();
+        for (Function *f : m_doc->functions())
+        {
+            if (f == nullptr || !f->isVisible() || (st != nullptr && st->isGenerated(f->id())))
+                continue;
+            if (Scene *s = qobject_cast<Scene *>(f))
+            {
+                scenes << s;
+                addFolders(s->path(true));
+            }
+            else
+            {
+                others << f;
+                if (f->type() == Function::CollectionType || f->type() == Function::ChaserType)
+                    addFolders(f->path(true));
+            }
+        }
+    }
+
+    // Folders first (A-Z, numbers as numbers), then what is in each.
+    QStringList folderList = folderSet.values();
+    std::sort(folderList.begin(), folderList.end(), [&coll](const QString &a, const QString &b) {
+        return coll.compare(a, b) < 0;
+    });
+    QHash<QString, QTreeWidgetItem *> folders;
+    for (const QString &p : folderList)
+        folderItem(p, folders);
+
+    std::sort(scenes.begin(), scenes.end(), [&coll](Scene *a, Scene *b) {
+        return coll.compare(a->name(), b->name()) < 0;
+    });
+    for (Scene *s : scenes)
+    {
+        QTreeWidgetItem *parent = folders.value(s->path(true));
+        QTreeWidgetItem *it = parent != nullptr ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(this);
+        it->setText(NameCol, s->name());
+        it->setIcon(NameCol, QIcon(QStringLiteral(":/scene.png")));
+        it->setData(NameCol, KindRole, SceneRow);
+        it->setData(NameCol, IdRole, s->id());
+        it->setData(NameCol, KeyRole, rowKey(SceneRow, s->id(), s->id()));
+        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled
+                     | Qt::ItemIsDropEnabled | Qt::ItemIsEditable);
+        decorateScene(it, s);
+        addSceneRows(it, s);
+    }
+
+    /* Collections and chasers -- and the rest filed beside them -- are full
+       rows: click one and the Workbench loads it (WORKFLOW_DESIGN.md §3.3,
+       reversing P-D12). */
+    std::sort(others.begin(), others.end(), [&coll](Function *a, Function *b) {
+        return coll.compare(a->name(), b->name()) < 0;
+    });
+    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
+    for (Function *f : others)
+    {
+        const bool own = f->type() == Function::CollectionType || f->type() == Function::ChaserType;
+        QTreeWidgetItem *parent = folders.value(f->path(true));
+        if (parent == nullptr && !own)
+            continue;
+        QTreeWidgetItem *it = parent != nullptr ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(this);
+        it->setText(NameCol, f->name());
+        it->setIcon(NameCol, f->getIcon());
+        it->setData(NameCol, KindRole, FunctionRow);
+        it->setData(NameCol, IdRole, f->id());
+        it->setData(NameCol, KeyRole, rowKey(FunctionRow, f->id(), f->id()));
+        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled
+                     | Qt::ItemIsEditable);
+        QString badge = Function::typeToString(f->type()).toLower();
+        if (Collection *c = qobject_cast<Collection *>(f))
+            badge = tr("collection · %1").arg(c->functions().size());
+        else if (Chaser *ch = qobject_cast<Chaser *>(f))
+            badge = tr("chaser · %1").arg(ch->stepsCount());
+        const QStringList vc = UsedBy::vcLines({ f->id() });
+        if (!vc.isEmpty())
+            badge += QStringLiteral("  ") + tr("VC ×%1").arg(vc.size());
+        it->setText(BadgeCol, badge);
+        it->setForeground(BadgeCol, grey);
+        QString tip = tr("A %1: click to load it in the Workbench.")
+                          .arg(Function::typeToString(f->type()).toLower());
+        if (!vc.isEmpty())
+            tip += QLatin1Char('\n') + tr("Fired by: %1").arg(vc.join(QStringLiteral(", ")));
+        it->setToolTip(NameCol, tip);
+        it->setToolTip(BadgeCol, tip);
+    }
+
+    if (scenes.isEmpty() && topLevelItemCount() == 0)
+    {
+        QTreeWidgetItem *it = new QTreeWidgetItem(this);
+        it->setText(NameCol, tr("No scenes yet: + New above to start one, then drag groups and palettes onto it."));
+        it->setData(NameCol, KindRole, HintRow);
+        it->setData(NameCol, KeyRole, rowKey(HintRow, kInvalid, kInvalid));
+        it->setFlags(Qt::ItemIsEnabled);
+        it->setForeground(NameCol, grey);
+    }
+}
+
+void ProgrammingOutline::rebuildStack()
+{
+    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
+    auto hint = [this, grey](const QString &text) {
+        QTreeWidgetItem *it = new QTreeWidgetItem(this);
+        it->setText(NameCol, text);
+        it->setData(NameCol, KindRole, HintRow);
+        it->setData(NameCol, KeyRole, rowKey(HintRow, kInvalid, kInvalid));
+        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsDropEnabled);
+        it->setForeground(NameCol, grey);
+        it->setToolTip(NameCol, text);
+    };
+    if (m_stack == nullptr)
+    {
+        hint(tr("Nothing loaded: click a scene, collection or chaser on the left."));
+        return;
+    }
+    const bool readOnly = !m_stack->readOnlyReason().isEmpty();
+    const QList<WorkbenchStack::Layer> layers = m_stack->layers();
+    int index = 0;
+    for (const WorkbenchStack::Layer &l : layers)
+    {
+        Function *f = m_doc->function(l.functionId);
+        Scene *s = l.kind == WorkbenchStack::Layer::SceneLayer ? qobject_cast<Scene *>(f) : nullptr;
+        QTreeWidgetItem *it = new QTreeWidgetItem(this);
+        it->setText(NameCol, !l.label.isEmpty() ? l.label : f != nullptr ? f->name() : QString());
+        it->setData(NameCol, IdRole, l.functionId);
+        it->setData(NameCol, LayerRole, index);
+        const Qt::ItemFlags edit = readOnly ? Qt::NoItemFlags
+                                            : Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
+        if (s != nullptr)
+        {
+            it->setIcon(NameCol, QIcon(QStringLiteral(":/scene.png")));
+            it->setData(NameCol, KindRole, SceneRow);
+            it->setData(NameCol, KeyRole, rowKey(SceneRow, s->id(), s->id()));
+            it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | edit
+                         | (readOnly ? Qt::NoItemFlags : Qt::ItemIsEditable));
+            decorateScene(it, s);
+            addSceneRows(it, s);
+            if (readOnly)
+                for (QTreeWidgetItemIterator c(it); *c; ++c)
+                    (*c)->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        }
+        else
+        {
+            if (f != nullptr)
+                it->setIcon(NameCol, f->getIcon());
+            it->setData(NameCol, KindRole, FunctionRow);
+            // A chaser may play one function in two steps: the place tells them apart.
+            it->setData(NameCol, KeyRole, QStringLiteral("o:%1:%2").arg(l.functionId).arg(index));
+            it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | edit);
+            it->setForeground(BadgeCol, grey);
+        }
+        if (!l.badge.isEmpty())
+        {
+            const QString had = it->text(BadgeCol);
+            it->setText(BadgeCol, had.isEmpty() ? l.badge : l.badge + QStringLiteral("  ") + had);
+        }
+        if (!l.tip.isEmpty())
+        {
+            const QString had = it->toolTip(BadgeCol);
+            it->setToolTip(BadgeCol, had.isEmpty() ? l.tip : l.tip + QLatin1Char('\n') + had);
+            it->setToolTip(NameCol, it->toolTip(NameCol).isEmpty() ? l.tip
+                                    : it->toolTip(NameCol) + QStringLiteral("\n\n") + l.tip);
+        }
+        ++index;
+    }
+    if (layers.isEmpty())
+        hint(m_stack->canAddLayers()
+                 ? tr("No layers yet: + Scene, + EFX or + RGB Matrix below, or drag scenes here.")
+                 : tr("Nothing in it."));
 }
 
 void ProgrammingOutline::scheduleRebuild()
@@ -834,7 +1004,7 @@ QString ProgrammingOutline::folderFor(const QTreeWidgetItem *item) const
         const int kind = it->data(NameCol, KindRole).toInt();
         if (kind == FolderRow)
             return it->data(NameCol, PathRole).toString();
-        if (kind == SceneRow)
+        if (kind == SceneRow || kind == FunctionRow)
             if (Function *f = m_doc->function(it->data(NameCol, IdRole).toUInt()))
                 return f->path(true);
     }
@@ -1165,9 +1335,15 @@ bool ProgrammingOutline::fileScenes(const QList<quint32> &sceneIds, const QStrin
                 moving << sid;
     if (moving.isEmpty())
         return false;
-    const QString label = folder.isEmpty() ? tr("unfile %n scene(s)", "", moving.size())
-                                           : tr("file %n scene(s) in %1", "", moving.size()).arg(folder);
-    const bool ok = m_doc->paletteOps()->sceneStep(label, moving, [&]() {
+    bool allScenes = true;
+    for (quint32 sid : moving)
+        allScenes = allScenes && qobject_cast<Scene *>(m_doc->function(sid)) != nullptr;
+    const QString label = allScenes
+        ? (folder.isEmpty() ? tr("unfile %n scene(s)", "", moving.size())
+                            : tr("file %n scene(s) in %1", "", moving.size()).arg(folder))
+        : (folder.isEmpty() ? tr("unfile %n function(s)", "", moving.size())
+                            : tr("file %n function(s) in %1", "", moving.size()).arg(folder));
+    const bool ok = m_doc->paletteOps()->functionStep(label, moving, [&](QList<quint32> &) {
         for (quint32 sid : moving)
             if (Function *f = m_doc->function(sid))
                 f->setPath(folder);
@@ -1177,7 +1353,8 @@ bool ProgrammingOutline::fileScenes(const QList<quint32> &sceneIds, const QStrin
     {
         QStringList keys;
         for (quint32 sid : moving)
-            keys << rowKey(SceneRow, sid, sid);
+            keys << (qobject_cast<Scene *>(m_doc->function(sid)) != nullptr ? rowKey(SceneRow, sid, sid)
+                                                                           : rowKey(FunctionRow, sid, sid));
         finishEdit(moving, keys);
     }
     return ok;
@@ -1189,7 +1366,8 @@ bool ProgrammingOutline::renameScene(quint32 sceneId, const QString &name)
     const QString n = name.trimmed();
     if (f == nullptr || n.isEmpty() || n == f->name())
         return false;
-    const bool ok = m_doc->paletteOps()->sceneStep(tr("rename %1 to %2").arg(f->name(), n), { sceneId }, [&]() {
+    const bool ok = m_doc->paletteOps()->functionStep(tr("rename %1 to %2").arg(f->name(), n), { sceneId },
+                                                     [&](QList<quint32> &) {
         f->setName(n);
         return true;
     });
@@ -1219,14 +1397,28 @@ bool ProgrammingOutline::renameFolder(const QString &path, const QString &name)
                 scenes << f->id();
         }
     }
-    // The scenes' paths are on the history; a chaser filed there follows.
-    m_doc->paletteOps()->sceneStep(tr("rename folder %1 to %2").arg(path, n), scenes, [&]() {
+    // Everything filed there follows, on the history.
+    QList<quint32> ids;
+    for (Function *f : all)
+        ids << f->id();
+    m_doc->paletteOps()->functionStep(tr("rename folder %1 to %2").arg(path, n), ids, [&](QList<quint32> &) {
         for (Function *f : all)
             f->setPath(to + f->path(true).mid(path.length()));
         return true;
     });
     m_expanded.insert(rowKey(FolderRow, kInvalid, kInvalid, to), true);
     finishEdit(scenes, { rowKey(FolderRow, kInvalid, kInvalid, to) });
+    return true;
+}
+
+bool ProgrammingOutline::removeLayers(const QList<int> &indexes)
+{
+    if (m_mode != Stack || m_stack == nullptr || indexes.isEmpty() || !m_stack->canRemoveLayers())
+        return false;
+    if (!m_stack->removeLayers(indexes))
+        return false;
+    QTimer::singleShot(0, this, [this]() { rebuild(); emit itemSelectionChanged(); });
+    emit layersEdited();
     return true;
 }
 
@@ -1250,7 +1442,8 @@ QMimeData *ProgrammingOutline::mimeData(const QList<QTreeWidgetItem *> &items) c
     for (QTreeWidgetItem *it : items)
     {
         const Row r = rowOf(it);
-        if (r.kind == SceneRow || r.kind == GroupRow || r.kind == FixtureRow || r.kind == PaletteRow)
+        if (r.kind == SceneRow || r.kind == FunctionRow || r.kind == GroupRow || r.kind == FixtureRow
+            || r.kind == PaletteRow)
         {
             out << qint32(r.kind) << r.scene << r.id;
             ++n;
@@ -1295,6 +1488,8 @@ QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, b
         *atPalette = kInvalid;
     if (mime == nullptr)
         return QString();
+    if (m_mode == Stack && m_stack != nullptr && !m_stack->readOnlyReason().isEmpty())
+        return QStringLiteral("!") + m_stack->readOnlyReason();
     QTreeWidgetItem *it = itemAt(pos);
     const Row at = rowOf(it);
     Scene *dst = (at.kind == SceneRow || at.kind == GroupRow || at.kind == FixtureRow || at.kind == PaletteRow)
@@ -1306,30 +1501,38 @@ QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, b
     {
         const QList<Row> rows = decodeRows(mime);
         QList<quint32> scenes;
-        bool anyLook = false, anyTarget = false;
+        bool anyLook = false, anyTarget = false, allScenes = true;
         for (const Row &r : rows)
         {
-            if (r.kind == SceneRow)
+            if (r.kind == SceneRow || r.kind == FunctionRow)
+            {
                 scenes << r.id;
+                allScenes = allScenes && r.kind == SceneRow;
+            }
             anyLook = anyLook || r.kind == PaletteRow;
             anyTarget = anyTarget || r.kind == GroupRow || r.kind == FixtureRow;
         }
+        if (!scenes.isEmpty() && m_mode == Stack)
+            return stackDropPlan(mime, pos, false, nullptr);
         if (!scenes.isEmpty())
         {
             if (at.kind == FolderRow)
             {
                 if (folder != nullptr)
                     *folder = it->data(NameCol, PathRole).toString();
-                return tr("File %n scene(s) in “%1”", "", scenes.size()).arg(it->data(NameCol, PathRole).toString());
+                return allScenes
+                    ? tr("File %n scene(s) in “%1”", "", scenes.size()).arg(it->data(NameCol, PathRole).toString())
+                    : tr("File %n function(s) in “%1”", "", scenes.size()).arg(it->data(NameCol, PathRole).toString());
             }
             if (it == nullptr)
             {
                 if (folder != nullptr)
                     *folder = QString();
-                return tr("Take %n scene(s) out of their folder", "", scenes.size());
+                return allScenes ? tr("Take %n scene(s) out of their folder", "", scenes.size())
+                                 : tr("Take %n function(s) out of their folder", "", scenes.size());
             }
-            return QStringLiteral("!") + tr("A scene doesn't go in a scene here (no includes): "
-                                            "drop it on a folder, or build cues in the Show Tree.");
+            return QStringLiteral("!") + tr("A scene doesn't go in a scene: drop it on a folder, "
+                                            "or on the Workbench to make it a layer of a collection.");
         }
         if (dst == nullptr)
             return QStringLiteral("!") + tr("Drop on a scene, or on a row in one.");
@@ -1380,6 +1583,44 @@ QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, b
     return QString();
 }
 
+QString ProgrammingOutline::stackDropPlan(const QMimeData *mime, const QPoint &pos, bool,
+                                          int *layerAt) const
+{
+    if (layerAt != nullptr)
+        *layerAt = -1;
+    if (m_stack == nullptr)
+        return QStringLiteral("!") + tr("Nothing is loaded: click a collection on the left first.");
+    QList<quint32> ids;
+    for (const Row &r : decodeRows(mime))
+        if ((r.kind == SceneRow || r.kind == FunctionRow) && !ids.contains(r.id))
+            ids << r.id;
+    const int at = layerOf(itemAt(pos));
+    if (layerAt != nullptr)
+        *layerAt = at;
+    QTreeWidgetItem *atItem = layerItem(at);
+    const QString atName = atItem != nullptr ? atItem->text(NameCol) : QString();
+
+    // Layers already here: a reorder.
+    QList<quint32> layerIds;
+    for (const WorkbenchStack::Layer &l : m_stack->layers())
+        layerIds << l.functionId;
+    bool allHere = true;
+    for (quint32 id : ids)
+        allHere = allHere && layerIds.contains(id);
+    if (allHere)
+    {
+        if (!m_stack->canReorderLayers())
+            return QStringLiteral("!") + tr("Its layers aren't reordered here.");
+        if (ids.size() == 1 && at >= 0 && layerIds.indexOf(ids.first()) == at)
+            return QStringLiteral("!") + tr("Already there.");
+        return at >= 0 ? tr("Move it above “%1”").arg(atName) : tr("Move it to the bottom (it plays last)");
+    }
+    const QString plan = m_stack->addPlan(ids);
+    if (plan.startsWith(QLatin1Char('!')) || at < 0)
+        return plan;
+    return tr("%1, above “%2”").arg(plan, atName);
+}
+
 void ProgrammingOutline::dragEnterEvent(QDragEnterEvent *event)
 {
     if (event->mimeData()->hasFormat(rowMimeType()) || fromSources(event->mimeData()))
@@ -1428,9 +1669,52 @@ void ProgrammingOutline::dropEvent(QDropEvent *event)
         const QList<Row> rows = decodeRows(mime);
         QList<quint32> scenes;
         for (const Row &r : rows)
-            if (r.kind == SceneRow)
+            if ((r.kind == SceneRow || r.kind == FunctionRow) && !scenes.contains(r.id))
                 scenes << r.id;
-        if (!scenes.isEmpty())
+        if (!scenes.isEmpty() && m_mode == Stack && m_stack != nullptr)
+        {
+            int at = -1;
+            stackDropPlan(mime, qlcEventPos(event), false, &at);
+            QList<quint32> layerIds;
+            for (const WorkbenchStack::Layer &l : m_stack->layers())
+                layerIds << l.functionId;
+            bool allHere = true;
+            for (quint32 id : scenes)
+                allHere = allHere && layerIds.contains(id);
+            bool changed = false;
+            QStringList keys;
+            if (allHere)
+            {
+                // In their order, each above the drop row (or at the bottom).
+                for (quint32 id : scenes)
+                {
+                    QList<quint32> now;
+                    for (const WorkbenchStack::Layer &l : m_stack->layers())
+                        now << l.functionId;
+                    const int from = now.indexOf(id);
+                    int to = at < 0 ? int(now.size()) - 1 : at;
+                    if (at >= 0 && from < at)
+                        --to;
+                    changed = m_stack->moveLayer(from, to) || changed;
+                    if (at >= 0 && from > at)
+                        ++at;
+                }
+            }
+            else
+                changed = m_stack->addLayers(scenes, at);
+            if (changed)
+            {
+                for (quint32 id : scenes)
+                    keys << (qobject_cast<Scene *>(m_doc->function(id)) != nullptr ? rowKey(SceneRow, id, id)
+                                                                                  : QString());
+                keys.removeAll(QString());
+                if (!keys.isEmpty())
+                    selectKeys(keys);
+                QTimer::singleShot(0, this, [this]() { rebuild(); emit itemSelectionChanged(); });
+                emit layersEdited();
+            }
+        }
+        else if (!scenes.isEmpty())
             fileScenes(scenes, folder);
         else
             moveRows(rows, toScene, atPalette, copy);
@@ -1472,9 +1756,18 @@ void ProgrammingOutline::keyPressEvent(QKeyEvent *event)
         QList<quint32> scenes;
         QList<Row> parts;
         for (const Row &r : rows)
-            (r.kind == SceneRow ? (void)(scenes << r.id) : (void)(parts << r));
+            (r.kind == SceneRow || r.kind == FunctionRow ? (void)(scenes << r.id) : (void)(parts << r));
         if (!parts.isEmpty())
             removeRows(parts);
+        else if (m_mode == Stack)
+        {
+            // A layer comes out of what is loaded; the function stays.
+            QList<int> layers;
+            for (QTreeWidgetItem *it : selectedItems())
+                if (it->parent() == nullptr && layerOf(it) >= 0)
+                    layers << layerOf(it);
+            removeLayers(layers);
+        }
         else if (!scenes.isEmpty())
             emit deleteScenesRequested(scenes);
         return;
@@ -1527,7 +1820,7 @@ void ProgrammingOutline::slotItemChanged(QTreeWidgetItem *item, int column)
         return;
     const Row r = rowOf(item);
     const QString text = item->text(NameCol);
-    if (r.kind == SceneRow)
+    if (r.kind == SceneRow || r.kind == FunctionRow)
     {
         if (!renameScene(r.id, text))
             scheduleRebuild();
@@ -1564,7 +1857,7 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
     QList<Row> parts;
     for (const Row &r : rows)
     {
-        if (r.kind == SceneRow)
+        if (r.kind == SceneRow || r.kind == FunctionRow)
             scenes << r.id;
         else if (r.kind == GroupRow || r.kind == FixtureRow || r.kind == PaletteRow)
             parts << r;
@@ -1573,9 +1866,51 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
     QMenu menu(this);
     menu.setToolTipsVisible(true);
     const QString folder = folderFor(clicked);
+    const bool readOnly = m_mode == Stack && (m_stack == nullptr || !m_stack->readOnlyReason().isEmpty());
 
-    if (at.kind == OtherRow)
-        menu.addAction(tr("Open in Functions"), this, [this, at]() { emit openInFunctionsRequested(at.id); });
+    if (m_mode == Stack && clicked != nullptr && clicked->parent() == nullptr && layerOf(clicked) >= 0)
+    {
+        // A layer: open it, take it out, move it.
+        const int layer = layerOf(clicked);
+        QList<int> layers;
+        for (QTreeWidgetItem *it : selectedItems())
+            if (it->parent() == nullptr && layerOf(it) >= 0)
+                layers << layerOf(it);
+        menu.addAction(tr("Open"), this, [this, at]() { emit openRequested(at.id); })
+            ->setToolTip(tr("Load it in the Workbench on its own (↩ comes back here)"));
+        if (!readOnly && m_stack->canRemoveLayers())
+            menu.addAction(layers.size() > 1 ? tr("Remove %n layer(s)", "", layers.size()) : tr("Remove the layer"),
+                           this, [this, layers]() { removeLayers(layers); })
+                ->setToolTip(tr("Take it out of what is loaded; the function itself stays"));
+        if (!readOnly && m_stack->canReorderLayers() && layers.size() == 1)
+        {
+            menu.addAction(tr("Move layer up"), this, [this, layer]() {
+                if (m_stack->moveLayer(layer, layer - 1))
+                {
+                    selectKeys({ key(layerItem(layer)) });
+                    QTimer::singleShot(0, this, [this]() { rebuild(); emit itemSelectionChanged(); });
+                    emit layersEdited();
+                }
+            });
+            menu.addAction(tr("Move layer down"), this, [this, layer]() {
+                if (m_stack->moveLayer(layer, layer + 1))
+                {
+                    selectKeys({ key(layerItem(layer)) });
+                    QTimer::singleShot(0, this, [this]() { rebuild(); emit itemSelectionChanged(); });
+                    emit layersEdited();
+                }
+            });
+        }
+        menu.addSeparator();
+        if (at.kind == SceneRow && !readOnly)
+            menu.addAction(tr("Rename"), this, [this, clicked]() { editItem(clicked, NameCol); });
+        menu.addAction(tr("Open all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, true); });
+        menu.addAction(tr("Close all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, false); });
+        menu.exec(viewport()->mapToGlobal(pos));
+        return;
+    }
+    if (readOnly)
+        parts.clear();
     if (!parts.isEmpty())
     {
         menu.addAction(parts.size() == 1 ? tr("Remove from the scene") : tr("Remove %n from their scenes", "", parts.size()),
@@ -1591,22 +1926,25 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
             menu.addAction(tr("Edit the group's layout"), this, [this, at]() { emit editGroupLayoutRequested(at.id); });
         menu.addSeparator();
     }
-    if (!scenes.isEmpty())
+    if (!scenes.isEmpty() && m_mode == Navigator)
     {
         if (scenes.size() == 1)
             menu.addAction(tr("Rename"), this, [this, clicked]() { editItem(clicked, NameCol); });
-        menu.addAction(scenes.size() == 1 ? tr("Duplicate") : tr("Duplicate %n scenes", "", scenes.size()),
+        menu.addAction(scenes.size() == 1 ? tr("Duplicate") : tr("Duplicate %n", "", scenes.size()),
                        this, [this, scenes]() { emit duplicateRequested(scenes); });
-        menu.addAction(scenes.size() == 1 ? tr("Delete…") : tr("Delete %n scenes…", "", scenes.size()),
+        menu.addAction(scenes.size() == 1 ? tr("Delete…") : tr("Delete %n…", "", scenes.size()),
                        this, [this, scenes]() { emit deleteScenesRequested(scenes); });
         menu.addSeparator();
     }
     if (at.kind == FolderRow)
         menu.addAction(tr("Rename folder"), this, [this, clicked]() { editItem(clicked, NameCol); });
-    menu.addAction(QIcon(QStringLiteral(":/scene.png")),
-                   folder.isEmpty() ? tr("New scene") : tr("New scene in %1").arg(folder),
-                   this, [this, folder]() { emit newSceneRequested(folder); });
-    menu.addSeparator();
+    if (m_mode == Navigator)
+    {
+        menu.addAction(QIcon(QStringLiteral(":/scene.png")),
+                       folder.isEmpty() ? tr("New scene") : tr("New scene in %1").arg(folder),
+                       this, [this, folder]() { emit newSceneRequested(folder); });
+        menu.addSeparator();
+    }
     if (clicked != nullptr && clicked->childCount() > 0)
     {
         menu.addAction(tr("Open all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, true); });

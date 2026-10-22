@@ -506,7 +506,7 @@ void App::init()
             { QStringLiteral("Fixtures"),        QStringLiteral("fixture-manager.md") },
             { QStringLiteral("Lighting Studio"), QStringLiteral("lighting-studio.md") },
             { QStringLiteral("Functions"),       QStringLiteral("other-improvements.md#window-menu") },
-            { QStringLiteral("Programming"),     QStringLiteral("programming-tab.md") },
+            { QStringLiteral("Build"),           QStringLiteral("build.md") },
             { QStringLiteral("Show Tree"),       QStringLiteral("show-tree.md") },
             { QStringLiteral("Shows"),           QStringLiteral("shows.md") },
             { QStringLiteral("Virtual Console"), QStringLiteral("getting-started.md#running-the-show") },
@@ -610,9 +610,11 @@ void App::init()
             m_statusDangleLabel->show();
         });
     }
-    addTab(w, QIcon(":/scene.png"), tr("Programming"));
-    // The Show Tree beside Programming (SHOW_TREE_DESIGN.md D2): writing a
-    // show as one tree of cue lists, cues and layers.
+    // Build (WORKFLOW_DESIGN.md §3.1; it was "Programming"): makes the
+    // show's palettes, effects, scenes and collections.
+    addTab(w, QIcon(":/scene.png"), tr("Build"));
+    // The Show Tree beside Build (SHOW_TREE_DESIGN.md D2): writing a show as
+    // one tree of cue lists, cues and layers -- what Build made, in order.
     w = new ShowTreeView(m_tab, m_doc);
     addTab(w, QIcon(":/chaser.png"), tr("Show Tree"));
     w = new ShowManager(m_tab, m_doc);

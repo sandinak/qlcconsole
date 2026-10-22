@@ -25,6 +25,7 @@
 #include <QList>
 #include <QSet>
 
+class WorkbenchStack;
 class QMimeData;
 class QTimer;
 class Scene;
@@ -35,16 +36,22 @@ class Doc;
  */
 
 /**
- * The Programming tab's outline (PROGRAMMING_REDESIGN.md P1): every scene
- * folder -> its scenes -> each scene's targets (groups, fixed fixtures) and
- * looks (palettes, an effect's own colour/dimmer nested under it), in one
- * tree, so scenes no longer open one at a time.
+ * The outline (PROGRAMMING_REDESIGN.md P1), in two modes:
  *
- * Click a row and the tab's page edits it. Rows drag between scenes (move;
- * with Option held, copy) and within one (reorder the looks); palettes,
- * groups and fixtures drag in from the sources; scenes drag into folders.
- * Every edit made here is one step on the shared undo history
- * (PaletteOps::sceneStep()), so it undoes and redoes from either tab.
+ * - **Navigator** (Build ▸ Scenes ▸ Folders, WORKFLOW_DESIGN.md §3.3): every
+ *   scene folder -> its scenes, collections and chasers, each scene opening
+ *   up into its targets (groups, fixed fixtures) and looks (palettes, an
+ *   effect's own colour/dimmer nested under it). Click a row and the
+ *   Workbench loads it.
+ * - **Stack** (the Workbench's rows, §3.4): one row per layer of what the
+ *   Workbench has loaded (a WorkbenchStack): a scene opens up as above,
+ *   anything else is a ▣ row that opens.
+ *
+ * Rows drag between scenes (move; with Option held, copy) and within one
+ * (reorder the looks); palettes, groups and fixtures drag in from the
+ * sources; scenes and functions drag into folders, and onto the Workbench
+ * as layers. Every edit made here is one step on the shared undo history
+ * (PaletteOps), so it undoes and redoes from either tab.
  *
  * A view of what the show already holds: no file format of its own.
  */
@@ -57,7 +64,7 @@ public:
     {
         FolderRow = 1,
         SceneRow,
-        OtherRow,       //!< a chaser / collection / ... in a scene folder (greyed)
+        FunctionRow,    //!< a collection / chaser / EFX ...: a full row, loads in the Workbench
         GroupRow,       //!< a dynamic target
         FixtureRow,     //!< a fixed target
         PaletteRow,     //!< a look
@@ -69,8 +76,10 @@ public:
         IdRole,         //!< function / group / fixture / palette id
         SceneRole,      //!< the scene a target or look row belongs to
         KeyRole,        //!< stable key, for expansion and selection
-        PathRole        //!< a folder row's path
+        PathRole,       //!< a folder row's path
+        LayerRole       //!< Stack: a top row's place among the layers
     };
+    enum Mode { Navigator, Stack };
     enum Column { NameCol = 0, BadgeCol = 1 };
 
     /** A row as the edits take it. */
@@ -85,6 +94,16 @@ public:
 
     ProgrammingOutline(Doc *doc, QWidget *parent = nullptr);
     ~ProgrammingOutline();
+
+    /** Stack mode: show @a stack's layers (null: nothing loaded). The
+     *  outline doesn't own it. */
+    void setStack(WorkbenchStack *stack);
+    WorkbenchStack *stack() const { return m_stack; }
+    Mode mode() const { return m_mode; }
+    /** Stack mode: the layer @a item is or is in (-1: none). */
+    int layerOf(const QTreeWidgetItem *item) const;
+    /** Stack mode: the top row of layer @a index. */
+    QTreeWidgetItem *layerItem(int index) const;
 
     /** The drag payload of outline rows. */
     static const char *rowMimeType();
@@ -129,9 +148,14 @@ public:
     bool removeRows(const QList<Row> &rows);
     /** Move look @a row one place up (-1) or down (+1) in its scene. */
     bool shiftLook(const Row &row, int delta);
-    /** File scenes @a sceneIds in @a folder. */
+    /** File functions @a sceneIds (scenes, collections, chasers...) in
+     *  @a folder. */
     bool fileScenes(const QList<quint32> &sceneIds, const QString &folder);
+    /** Rename function @a sceneId (a scene or any other). */
     bool renameScene(quint32 sceneId, const QString &name);
+    /** Stack mode: take layers @a indexes out of what is loaded (the
+     *  functions stay). */
+    bool removeLayers(const QList<int> &indexes);
     /** Rename folder @a path's last part to @a name: every function filed in
      *  it or under it follows. */
     bool renameFolder(const QString &path, const QString &name);
@@ -155,7 +179,11 @@ signals:
     void newSceneRequested(const QString &folder);
     void duplicateRequested(const QList<quint32> &sceneIds);
     void deleteScenesRequested(const QList<quint32> &sceneIds);
-    void openInFunctionsRequested(quint32 functionId);
+    /** Stack mode: double-click, ⌥Return or Open on a layer: load it in
+     *  the Workbench (↩ comes back). */
+    void openRequested(quint32 functionId);
+    /** Stack mode: the layers changed (added, removed, reordered). */
+    void layersEdited();
     void editGroupLayoutRequested(quint32 groupId);
     void revealPaletteRequested(quint32 paletteId);
 
@@ -178,6 +206,11 @@ private slots:
 private:
     QString key(const QTreeWidgetItem *item) const;
     void addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene);
+    void rebuildNavigator(QList<Scene *> &scenes);
+    void rebuildStack();
+    /** What dropping outline rows of scenes / functions does in Stack mode
+     *  (layers added or reordered); @a layerAt: before that layer (-1 end). */
+    QString stackDropPlan(const QMimeData *mime, const QPoint &pos, bool internal, int *layerAt) const;
     void decorateScene(QTreeWidgetItem *item, Scene *scene);
     QTreeWidgetItem *folderItem(const QString &path, QHash<QString, QTreeWidgetItem *> &folders);
     bool defaultExpanded(const QTreeWidgetItem *item) const;
@@ -194,6 +227,8 @@ private:
     void finishEdit(const QList<quint32> &sceneIds, const QStringList &keys = QStringList());
 
     Doc *m_doc;
+    Mode m_mode = Navigator;
+    WorkbenchStack *m_stack = nullptr;
     QTimer *m_rebuildTimer;
     bool m_building = false;
     bool m_dirty = true;

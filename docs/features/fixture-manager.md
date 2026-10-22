@@ -15,7 +15,7 @@ richer **head-layout grid editor** with drag-and-drop placement, multi-cell
 block moves, and reusable sub-group blocks.
 
 These groups aren't just filing cabinets — they're the same spatial data
-structure the Programming tab's drag-and-drop **Targets** and the XY-pad /
+structure the Build tab's drag-and-drop **Targets** and the XY-pad /
 EFX functions consume.
 
 ## Layout
@@ -65,7 +65,7 @@ it real addresses, guided by which node actually serves that part of the rig.
 An unpatched fixture is a full member of the show — it can be placed on the
 plot, mounted, grouped and used in looks, and the Lighting Studio shows what it
 would do — it just sends no DMX until it's patched. The footer's "Not
-ready" list counts unpatched fixtures, and a Programming-tab look warns when
+ready" list counts unpatched fixtures, and a Build-tab look warns when
 any of its targets are unpatched.
 
 ### Adding to the inventory
@@ -748,7 +748,7 @@ comes first, then this computer's, then the show's folder.)
 
 | Term | Meaning |
 |---|---|
-| **Fixture group** | A named, sized grid of fixture **heads** — used for XY-pad/EFX effects and as a drag-drop target in the Programming tab. Distinct from a *Channel Group* (a Simple Desk DMX-channel grouping). |
+| **Fixture group** | A named, sized grid of fixture **heads** — used for XY-pad/EFX effects and as a drag-drop target in the Build tab. Distinct from a *Channel Group* (a Simple Desk DMX-channel grouping). |
 | **Path / folder** | A group's `/`-separated organizational string; the folder UI is entirely derived from it. |
 | **Sub-group** | A per-head tag recording which group a pasted block of heads came from — lets it be color-coded, moved as a unit, and rebuilt from its live sources later. |
 | **Add group as block** | Pasting one group's whole layout into another, preserving relative positions. |

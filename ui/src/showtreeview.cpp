@@ -1572,7 +1572,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_newPalette->setObjectName("stNewPalette");
         m_newPalette->setText(tr("+ Palette"));
         m_newPalette->setToolTip(tr("A new palette, by type, in the folder selected in the Library; it opens in "
-                                    "the Look Editor. Effect design, .qxfx and Bundles are in Programming."));
+                                    "the Look Editor. Effect design, .qxfx and Bundles are in Build."));
         m_newPalette->setPopupMode(QToolButton::InstantPopup);
         {
             QMenu *m = new QMenu(m_newPalette);
@@ -6720,7 +6720,7 @@ void ShowTreeView::buildLibraryPalettes(QTreeWidgetItem *all,
     root->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
     root->setToolTip(0, tr("+ Palette (or right-click) makes one; F2 renames; drag onto a folder to file it "
                            "(folders hold any type); ⌫ deletes, saying where it is used. Effect design, .qxfx "
-                           "and Bundles are in Programming."));
+                           "and Bundles are in Build."));
 
     QList<QLCPalette *> pl;
     for (QLCPalette *p : m_doc->palettes())

@@ -56,13 +56,13 @@ not opened — and saving then can write an empty workspace over it.
 ![The main window: the top bar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
 
 1. **The top bar** — one row. On the left, the open tab's own tools (here
-   Programming's Highlight, Flash, Park…); in a narrow window, what
+   Build's Highlight, Flash, Park…); in a narrow window, what
    doesn't fit is under **»**. On the right, the show controls:
    **Stop all** (the panic button; hold it for **Fade and stop**),
    **Blackout**, **Blind**, and the **Design | Operate** switch, the mode
    you are in lit. **Blackout** lights red and **Blind** blue while they
    are on.
-2. **The open tab** — here Programming, with a scene open.
+2. **The open tab** — here Build, with a scene open.
 3. **The tabs**, along the bottom.
 4. **The footer** — is the show ready to run, how busy the output is, Design
    or Operate (below).
@@ -83,7 +83,7 @@ The tabs follow the order a show is built in:
 | **Connections** | How the console is wired: protocols, interfaces, the universes they carry, what each universe is sending | [Connections & patch](other-improvements.md#connections--patch) |
 | **Fixtures** | The fixtures in the show, the inventory, groups and their head layouts, patching | [Fixture Manager](fixture-manager.md) |
 | **Lighting Studio** | The physical rig: structures, where every fixture hangs, the network, the 3D Rig Overview | [Lighting Studio](lighting-studio.md) |
-| **Programming** | Scenes built from looks, looks built from palettes and effects | [Programming Tab](programming-tab.md) |
+| **Build** | Scenes built from looks, looks built from palettes and effects | [Build Tab](build.md) |
 | **Show Tree** | A show as one tree: cue lists, cues and the layers in them; the scenes and chaser are made for you | [Show Tree](show-tree.md) |
 | **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
 | **Virtual Console** | The operator's surface | stock QLC+ |
@@ -163,9 +163,10 @@ needs an address until the end.
 9. **Mark the places that matter** — marks, a drum kit, a performer — as
    **Stage Targets**, so moving heads aim at them.
    ([Stage Targets](stage-targets.md))
-10. **Build looks.** Programming tab: make palettes (colour, dimmer, aim,
-    effects…), drag groups onto a scene's Targets and palettes onto its
-    Looks. ([Programming Tab](programming-tab.md))
+10. **Build looks.** Build tab: make palettes (colour, dimmer, aim,
+    effects…), load a scene in the Workbench and drag groups and palettes
+    onto it; gather scenes, EFX and RGB Matrices into a collection.
+    ([Build Tab](build.md))
 11. **Check the footer** says **Ready**, then run it from Virtual Console,
     Simple Desk or Shows.
 
@@ -202,7 +203,7 @@ hired rig with a patch sheet):
    - For LED-strip steps, a look with the **Step Test Pattern** effect
      shows each strip's number, each step's name and a spinner that stops
      if output freezes.
-     ([Step Test Pattern](programming-tab.md#step-test-pattern))
+     ([Step Test Pattern](build.md#step-test-pattern))
 5. **Power.** Fixtures that draw more than a circuit allows can be held to a
    maximum — measure them once and copy the profile to the same fixtures.
    ([A fixture's maximum draw](other-improvements.md#a-fixtures-maximum-draw))
@@ -234,7 +235,7 @@ Steps, towers and booms usually come in sets that should all be the same:
   can GO a chase's cues by number. See
   [Show control (QLab)](show-control.md).
 - The Virtual Console, Simple Desk and Shows timeline work as in stock
-  QLC+; the **Programming** tab's tools have Highlight / Flash / Park, and
+  QLC+; the **Build** tab's tools have Highlight / Flash / Park, and
   the show controls Blind, for working on a running show.
 
 ### GO on the beat

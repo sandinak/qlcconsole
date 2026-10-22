@@ -41,6 +41,8 @@
 #include "fadetimespin.h"
 #include "programmingmanager.h"
 #include "programmingoutline.h"
+#include "workbench.h"
+#include "workbenchstack.h"
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
@@ -199,7 +201,7 @@ static SceneGroupLooks *openCanvas(ProgrammingManager &mgr, quint32 sceneId)
     QCoreApplication::processEvents();
     QCoreApplication::processEvents();
 
-    mgr.loadCanvas(sceneId);
+    mgr.m_workbench->load(sceneId);
     QCoreApplication::processEvents();
     QCoreApplication::processEvents();
     // m_canvas is created fresh INSIDE loadCanvas(), after the splitter
@@ -207,16 +209,16 @@ static SceneGroupLooks *openCanvas(ProgrammingManager &mgr, quint32 sceneId)
     // ancestor, and the same activation gap applies to it individually: the
     // LayoutRequest its insertion posts never gets delivered for a hidden
     // widget under offscreen QTest. Force it directly on the canvas itself.
-    if (mgr.m_canvas != nullptr)
+    if (mgr.m_workbench->m_canvas != nullptr)
     {
         // The Targets and Looks lists are the outline's rows in the tab; the
         // drop logic tested through them is the classic Scene Editor's too.
-        mgr.m_canvas->setListsVisible(true);
-        mgr.m_canvas->resize(900, 700);
-        mgr.m_canvas->layout()->activate();
+        mgr.m_workbench->m_canvas->setListsVisible(true);
+        mgr.m_workbench->m_canvas->resize(900, 700);
+        mgr.m_workbench->m_canvas->layout()->activate();
         QCoreApplication::processEvents();
     }
-    return mgr.m_canvas;
+    return mgr.m_workbench->m_canvas;
 }
 
 /* Deliver a synthetic drop straight to SceneGroupLooks::dropEvent() -- the
@@ -341,14 +343,14 @@ void ProgrammingManager_Test::fromAGroupsViewTheSceneAndItsEffectComeBack()
     scene->addPalette(chase->id());
 
     ProgrammingManager mgr(nullptr, m_doc);
-    mgr.loadCanvas(scene->id());
-    QVERIFY(mgr.m_canvas != nullptr);
+    mgr.m_workbench->load(scene->id());
+    QVERIFY(mgr.m_workbench->m_canvas != nullptr);
 
     // The group's layout view: and a way back.
-    mgr.loadGroupEditor(grp->id());
-    QVERIFY(mgr.m_canvas == nullptr);
-    QVERIFY(!mgr.m_groupBackButton->isHidden());
-    QVERIFY(mgr.m_groupBackButton->text().contains("01-01.01-Opening"));
+    mgr.m_workbench->showGroupLayout(grp->id());
+    QVERIFY(mgr.m_workbench->m_canvas == nullptr);
+    QVERIFY(!mgr.m_workbench->m_groupBackButton->isHidden());
+    QVERIFY(mgr.m_workbench->m_groupBackButton->text().contains("01-01.01-Opening"));
 
     // An effect opened from there: back on its scene, the effect showing.
     mgr.m_paletteTree->updateTree();
@@ -358,17 +360,17 @@ void ProgrammingManager_Test::fromAGroupsViewTheSceneAndItsEffectComeBack()
             row = *it;
     QVERIFY(row != nullptr);
     mgr.slotPaletteDoubleClicked(row);
-    QCOMPARE(mgr.m_currentScene, scene->id());
-    QVERIFY(mgr.m_canvas != nullptr);
-    QVERIFY(mgr.m_groupBackButton->isHidden());
-    QVERIFY(!mgr.m_lookEditor->isHidden());
-    QCOMPARE(mgr.m_lookEditor->paletteId(), chase->id());
+    QCOMPARE(mgr.m_workbench->m_currentScene, scene->id());
+    QVERIFY(mgr.m_workbench->m_canvas != nullptr);
+    QVERIFY(mgr.m_workbench->m_groupBackButton->isHidden());
+    QVERIFY(!mgr.m_workbench->m_lookEditor->isHidden());
+    QCOMPARE(mgr.m_workbench->m_lookEditor->paletteId(), chase->id());
 
     // And the button itself.
-    mgr.loadGroupEditor(grp->id());
-    mgr.m_groupBackButton->click();
-    QCOMPARE(mgr.m_currentScene, scene->id());
-    QVERIFY(mgr.m_canvas != nullptr);
+    mgr.m_workbench->showGroupLayout(grp->id());
+    mgr.m_workbench->m_groupBackButton->click();
+    QCOMPARE(mgr.m_workbench->m_currentScene, scene->id());
+    QVERIFY(mgr.m_workbench->m_canvas != nullptr);
 }
 
 void ProgrammingManager_Test::aScenesTransitionsAreSetOnItsCanvas()
@@ -377,12 +379,12 @@ void ProgrammingManager_Test::aScenesTransitionsAreSetOnItsCanvas()
     scene->setName("01-01.01-Opening");
     QVERIFY(m_doc->addFunction(scene));
     ProgrammingManager mgr(nullptr, m_doc);
-    mgr.loadCanvas(scene->id());
-    QVERIFY(mgr.m_canvas != nullptr);
-    QComboBox *in = mgr.m_canvas->findChild<QComboBox *>("transitionInShape");
-    QComboBox *out = mgr.m_canvas->findChild<QComboBox *>("transitionOutShape");
-    QDoubleSpinBox *inTime = mgr.m_canvas->findChild<QDoubleSpinBox *>("transitionInTime");
-    QSpinBox *edge = mgr.m_canvas->findChild<QSpinBox *>("transitionEdge");
+    mgr.m_workbench->load(scene->id());
+    QVERIFY(mgr.m_workbench->m_canvas != nullptr);
+    QComboBox *in = mgr.m_workbench->m_canvas->findChild<QComboBox *>("transitionInShape");
+    QComboBox *out = mgr.m_workbench->m_canvas->findChild<QComboBox *>("transitionOutShape");
+    QDoubleSpinBox *inTime = mgr.m_workbench->m_canvas->findChild<QDoubleSpinBox *>("transitionInTime");
+    QSpinBox *edge = mgr.m_workbench->m_canvas->findChild<QSpinBox *>("transitionEdge");
     QVERIFY(in && out && inTime && edge);
     QCOMPARE(in->currentIndex(), int(SceneTransition::None));     // the scene's fade, as always
     QVERIFY(!inTime->isEnabled());
@@ -398,9 +400,9 @@ void ProgrammingManager_Test::aScenesTransitionsAreSetOnItsCanvas()
     QVERIFY(inTime->isEnabled());
 
     // Shown again when the scene is opened again.
-    mgr.loadCanvas(Function::invalidId());
-    mgr.loadCanvas(scene->id());
-    in = mgr.m_canvas->findChild<QComboBox *>("transitionInShape");
+    mgr.m_workbench->load(Function::invalidId());
+    mgr.m_workbench->load(scene->id());
+    in = mgr.m_workbench->m_canvas->findChild<QComboBox *>("transitionInShape");
     QCOMPARE(in->currentIndex(), int(SceneTransition::WipeToStageLeft));
 }
 
@@ -527,10 +529,10 @@ void ProgrammingManager_Test::aScenesTimingIsAllOnItsCanvas()
     scene->setName("01-01.02-Verse");
     QVERIFY(m_doc->addFunction(scene));
     ProgrammingManager mgr(nullptr, m_doc);
-    mgr.loadCanvas(scene->id());
-    FadeTimeSpin *fadeIn = mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn");
-    FadeTimeSpin *fadeOut = mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeOut");
-    QComboBox *transIn = mgr.m_canvas->findChild<QComboBox *>("transitionInShape");
+    mgr.m_workbench->load(scene->id());
+    FadeTimeSpin *fadeIn = mgr.m_workbench->m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn");
+    FadeTimeSpin *fadeOut = mgr.m_workbench->m_canvas->findChild<FadeTimeSpin *>("sceneFadeOut");
+    QComboBox *transIn = mgr.m_workbench->m_canvas->findChild<QComboBox *>("transitionInShape");
     QVERIFY(fadeIn && fadeOut && transIn);
 
     // The scene's own fade, set here.
@@ -548,9 +550,9 @@ void ProgrammingManager_Test::aScenesTimingIsAllOnItsCanvas()
     QVERIFY(fadeIn->isEnabled());
 
     // Shown as it is when the scene opens again.
-    mgr.loadCanvas(Function::invalidId());
-    mgr.loadCanvas(scene->id());
-    QCOMPARE(mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn")->ms(), 2500);
+    mgr.m_workbench->load(Function::invalidId());
+    mgr.m_workbench->load(scene->id());
+    QCOMPARE(mgr.m_workbench->m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn")->ms(), 2500);
 }
 
 void ProgrammingManager_Test::theCanvasAndTheLookEditorAgreeOnFades()
@@ -578,8 +580,8 @@ void ProgrammingManager_Test::theCanvasAndTheLookEditorAgreeOnFades()
     QVERIFY(!LookFades::hasFadeIn(m_doc, scene, feeds->id()) && !LookFades::hasFadeOut(m_doc, scene, feeds->id()));
 
     ProgrammingManager mgr(nullptr, m_doc);
-    mgr.loadCanvas(scene->id());
-    LookEditor *ed = mgr.m_lookEditor;
+    mgr.m_workbench->load(scene->id());
+    LookEditor *ed = mgr.m_workbench->m_lookEditor;
 
     // A base look: both fades, defaulting to the scene's.
     ed->setPalette(dim->id());
@@ -630,9 +632,9 @@ void ProgrammingManager_Test::editingALookColourNotifiesItsScene()
     QVERIFY(m_doc->addFunction(scene));
 
     ProgrammingManager mgr(nullptr, m_doc);
-    QVERIFY(mgr.m_lookEditor != nullptr);
-    mgr.m_lookEditor->setPalette(col->id());
-    QCOMPARE(mgr.m_lookEditor->paletteId(), col->id());
+    QVERIFY(mgr.m_workbench->m_lookEditor != nullptr);
+    mgr.m_workbench->m_lookEditor->setPalette(col->id());
+    QCOMPARE(mgr.m_workbench->m_lookEditor->paletteId(), col->id());
 
     QSignalSpy spy(m_doc, &Doc::functionChanged);
 
@@ -640,7 +642,7 @@ void ProgrammingManager_Test::editingALookColourNotifiesItsScene()
     // not a manually-injected Doc::functionChanged like a shallower test
     // would use, which proves nothing about whether the real UI action
     // actually reaches the scene.
-    mgr.m_lookEditor->slotColorChanged(QColor(0, 0, 255));
+    mgr.m_workbench->m_lookEditor->slotColorChanged(QColor(0, 0, 255));
 
     QVERIFY2(spy.count() > 0,
              "Doc::functionChanged never fired -- editing the look's colour "
@@ -982,26 +984,26 @@ void ProgrammingManager_Test::aNewPanTiltIsTriedOnTheLookSoTheRigFollows()
     {
         ProgrammingManager mgr(nullptr, m_doc);
         QVERIFY(openCanvas(mgr, look->id()) != nullptr);
-        QVERIFY(mgr.m_lookEditor->trialNote().isEmpty());
+        QVERIFY(mgr.m_workbench->m_lookEditor->trialNote().isEmpty());
 
         // "New Pan/Tilt" from the palette list: it opens in the editor,
         // and the look on the canvas tries it on.
         const int before = m_doc->palettes().size();
         mgr.createPalette(QLCPalette::PanTilt);
         QCOMPARE(m_doc->palettes().size(), before + 1);
-        const quint32 pid = mgr.m_lookEditor->paletteId();
+        const quint32 pid = mgr.m_workbench->m_lookEditor->paletteId();
         QLCPalette *fresh = m_doc->palette(pid);
         QVERIFY(fresh != nullptr && fresh->type() == QLCPalette::PanTilt);
         QCOMPARE(look->trialPalette(), pid);
         QVERIFY(!look->palettes().contains(pid));
         // Its new "Palettes/PanTilt" folder didn't rename the look (id 0).
         QCOMPARE(look->name(), QString("Spots"));
-        QVERIFY2(mgr.m_lookEditor->trialNote().contains("Spots"),
-                 qPrintable(mgr.m_lookEditor->trialNote()));
+        QVERIFY2(mgr.m_workbench->m_lookEditor->trialNote().contains("Spots"),
+                 qPrintable(mgr.m_workbench->m_lookEditor->trialNote()));
 
         // Moving the pad moves the rig: the look is re-resolved with the trial.
         QSignalSpy changed(m_doc, &Doc::functionChanged);
-        mgr.m_lookEditor->slotPanTiltChanged(QPointF(200.0, 100.0));
+        mgr.m_workbench->m_lookEditor->slotPanTiltChanged(QPointF(200.0, 100.0));
         QVERIFY(changed.count() > 0);
         QCOMPARE(changed.last().at(0).toUInt(), look->id());
         rig.rebuildAimTargets();
@@ -1012,26 +1014,26 @@ void ProgrammingManager_Test::aNewPanTiltIsTriedOnTheLookSoTheRigFollows()
 
         // Dropped INTO the look for real: no longer a trial, no note.
         look->addPalette(pid);
-        mgr.slotCanvasModified();
+        mgr.m_workbench->slotCanvasModified();
         QCOMPARE(look->trialPalette(), QLCPalette::invalidId());
-        QVERIFY(mgr.m_lookEditor->trialNote().isEmpty());
+        QVERIFY(mgr.m_workbench->m_lookEditor->trialNote().isEmpty());
         look->removePalette(pid);
 
         // Editing one of the look's own palettes tries nothing on.
-        mgr.m_lookEditor->setPalette(base->id());
+        mgr.m_workbench->m_lookEditor->setPalette(base->id());
         QCOMPARE(look->trialPalette(), QLCPalette::invalidId());
-        QVERIFY(mgr.m_lookEditor->trialNote().isEmpty());
+        QVERIFY(mgr.m_workbench->m_lookEditor->trialNote().isEmpty());
 
         // Back to the loose one, then away from the look: the trial ends.
-        mgr.m_lookEditor->setPalette(pid);
+        mgr.m_workbench->m_lookEditor->setPalette(pid);
         QCOMPARE(look->trialPalette(), pid);
-        mgr.loadCanvas(Function::invalidId());
+        mgr.m_workbench->clear();
         QCOMPARE(look->trialPalette(), QLCPalette::invalidId());
 
         // No look on the canvas: nothing to try it on, and the editor says so.
-        mgr.m_lookEditor->setPalette(pid);
-        QVERIFY2(mgr.m_lookEditor->trialNote().contains("Not in a look"),
-                 qPrintable(mgr.m_lookEditor->trialNote()));
+        mgr.m_workbench->m_lookEditor->setPalette(pid);
+        QVERIFY2(mgr.m_workbench->m_lookEditor->trialNote().contains("Not in a look"),
+                 qPrintable(mgr.m_workbench->m_lookEditor->trialNote()));
     }
     rig.rebuildAimTargets();
     QCOMPARE(rigPan(), basePan);                    // nothing was saved into it
@@ -1127,13 +1129,13 @@ void ProgrammingManager_Test::theColourPickerStaysOpenWhileItsLookIsEdited()
 
     // Select the group target in the outline: the fixtures' faders.
     QVERIFY(o->selectRow(row(ProgrammingOutline::GroupRow, grp->id())));
-    QCOMPARE(mgr.m_selectedFixtures, fids);
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::TargetPage);
+    QCOMPARE(mgr.m_workbench->m_selectedFixtures, fids);
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::TargetPage);
 
     // Then the look: its editor, on the page.
     QVERIFY(o->selectRow(row(ProgrammingOutline::PaletteRow, col->id())));
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::LookPage);
-    QCOMPARE(mgr.m_lookEditor->paletteId(), col->id());
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::LookPage);
+    QCOMPARE(mgr.m_workbench->m_lookEditor->paletteId(), col->id());
     QCOMPARE(mgr.currentPaletteId(), col->id());
     QCOMPARE(mgr.currentSceneId(), scene->id());
 
@@ -1141,19 +1143,19 @@ void ProgrammingManager_Test::theColourPickerStaysOpenWhileItsLookIsEdited()
     // outline. The picker stays.
     for (int b = 150; b <= 250; b += 50)
     {
-        mgr.m_lookEditor->slotColorChanged(QColor(0, 0, b));
+        mgr.m_workbench->m_lookEditor->slotColorChanged(QColor(0, 0, b));
         o->rebuild();
         QCoreApplication::processEvents();
-        QVERIFY2(mgr.currentPage() == ProgrammingManager::LookPage,
+        QVERIFY2(mgr.m_workbench->currentPage() == Workbench::LookPage,
                  qPrintable(QString("dropped out at blue %1").arg(b)));
-        QCOMPARE(mgr.m_lookEditor->paletteId(), col->id());
+        QCOMPARE(mgr.m_workbench->m_lookEditor->paletteId(), col->id());
     }
     QCOMPARE(col->rgbValue().blue(), 250);
 
     // A real change of selection still swaps to the faders.
     QVERIFY(o->selectRow(row(ProgrammingOutline::FixtureRow, solo->id())));
-    QCOMPARE(mgr.m_selectedFixtures, QList<quint32>({ solo->id() }));
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::TargetPage);
+    QCOMPARE(mgr.m_workbench->m_selectedFixtures, QList<quint32>({ solo->id() }));
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::TargetPage);
 }
 
 /* "push blue up from all the USt bars .. I don't see anything on the rig
@@ -1289,18 +1291,18 @@ void ProgrammingManager_Test::editingARunningEffectChangesItsOutput()
     mgr.resize(1400, 900);
     mgr.show();
     m_doc->masterTimer()->start();
-    mgr.loadCanvas(scene->id());
+    mgr.m_workbench->load(scene->id());
     EffectScriptRunner *runner = m_doc->effectScriptRunner();
     QTRY_VERIFY2(runner->instanceForPalette(wave->id()) != nullptr, "the look's effect never started");
     EffectInstance *inst = runner->instanceForPalette(wave->id());
 
-    mgr.m_lookEditor->setContextScene(scene);
-    mgr.m_lookEditor->setPalette(wave->id());
+    mgr.m_workbench->m_lookEditor->setContextScene(scene);
+    mgr.m_workbench->m_lookEditor->setPalette(wave->id());
     QApplication::processEvents();
 
     // A setting: the running effect takes it.
     QSlider *rate = nullptr;
-    foreach (QSlider *s, mgr.m_lookEditor->m_effectDynWidget->findChildren<QSlider *>())
+    foreach (QSlider *s, mgr.m_workbench->m_lookEditor->m_effectDynWidget->findChildren<QSlider *>())
         if (s->property("paramName").toString() == QLatin1String("rate"))
             rate = s;
     QVERIFY(rate != nullptr);
@@ -1319,7 +1321,7 @@ void ProgrammingManager_Test::editingARunningEffectChangesItsOutput()
     rate->setValue(qRound(rate->maximum() * 0.05));     // slow enough to see a shape
     QTRY_VERIFY(!inst->dmxWrites().isEmpty());
     QTRY_COMPARE(levels().size(), 1);                    // all together
-    QDoubleSpinBox *amount = mgr.m_lookEditor->m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount");
+    QDoubleSpinBox *amount = mgr.m_workbench->m_lookEditor->m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount");
     QVERIFY(amount != nullptr);
     amount->setValue(1.0);
     QTRY_VERIFY2(levels().size() >= 3, "the spread never reached the running effect");
@@ -1354,30 +1356,36 @@ void ProgrammingManager_Test::theHandlesMoveEdgesAndNeverHideAPanel()
         QApplication::processEvents();
     };
 
+    // Navigator | Workbench, and inside the Workbench its layers | the
+    // editor pane: drag each handle all the way each way -- every panel
+    // stays, at its minimum at worst.
     QSplitter *main = mgr.findChild<QSplitter *>("programmingSplitter");
     QVERIFY(main != nullptr);
     QVERIFY(!main->childrenCollapsible());
-    // Drag the left handle all the way right, then the right one all the way
-    // left: every panel stays, at its minimum at worst.
-    drag(main, 1, QPoint(3000, 0));
-    for (int w : main->sizes())
-        QVERIFY2(w > 0, "a panel was snapped shut");
-    drag(main, 2, QPoint(-3000, 0));
-    for (int w : main->sizes())
-        QVERIFY2(w > 0, "a panel was snapped shut");
+    QCOMPARE(main->count(), 2);
+    QSplitter *bench = mgr.findChild<QSplitter *>("workbenchSplitter");
+    QVERIFY(bench != nullptr);
+    QVERIFY(!bench->childrenCollapsible());
+    for (QSplitter *sp : { main, bench })
+        for (int dx : { 3000, -3000 })
+        {
+            drag(sp, 1, QPoint(dx, 0));
+            for (int w : sp->sizes())
+                QVERIFY2(w > 0, "a panel was snapped shut");
+        }
     QVERIFY(main->widget(1)->isVisible() && main->widget(1)->width() > 100);
 
-    // The page holds the look editor at its full height (P1): no handle
-    // under a canvas to fight with any more.
-    QVERIFY(main->widget(1)->isAncestorOf(mgr.m_lookEditor));
+    // The editor pane holds the look editor at its full height (P1): no
+    // handle under a canvas to fight with any more.
+    QVERIFY(bench->widget(1)->isAncestorOf(mgr.m_workbench->m_lookEditor));
     QVERIFY(mgr.findChild<QSplitter *>("programmingCanvasSplitter") == nullptr);
     // The outline's badge column is its own handle, kept as the pane moves.
     QVERIFY(main->widget(0)->isAncestorOf(mgr.m_outline));
     // In characters of its own font (Linux's draws everything wider).
-    const double canvasChars = double(main->widget(1)->minimumSizeHint().width())
-                               / main->widget(1)->fontMetrics().averageCharWidth();
+    const double canvasChars = double(bench->widget(1)->minimumSizeHint().width())
+                               / bench->widget(1)->fontMetrics().averageCharWidth();
     QVERIFY2(canvasChars < 75, qPrintable(QString("%1 px, %2 characters")
-                                              .arg(main->widget(1)->minimumSizeHint().width())
+                                              .arg(bench->widget(1)->minimumSizeHint().width())
                                               .arg(canvasChars)));
     mgr.resize(1000, 800);
     QApplication::processEvents();
@@ -1456,8 +1464,8 @@ void ProgrammingManager_Test::unpatchedTargetsAreFlaggedInTheProgrammingView()
 
     ProgrammingManager mgr(nullptr, m_doc);
     // The scene editor's lists say it (the classic Scene Editor shows them).
-    mgr.loadCanvas(scene->id());
-    SceneGroupLooks *canvas = mgr.m_canvas;
+    mgr.m_workbench->load(scene->id());
+    SceneGroupLooks *canvas = mgr.m_workbench->m_canvas;
     QVERIFY(canvas != nullptr);
     canvas->setListsVisible(true);
     QVERIFY(!canvas->m_unpatchedNote->isHidden());
@@ -1479,7 +1487,7 @@ void ProgrammingManager_Test::unpatchedTargetsAreFlaggedInTheProgrammingView()
     g.id = grp->id();
     QVERIFY(o->itemFor(g)->toolTip(ProgrammingOutline::BadgeCol).contains("send no DMX"));
     QVERIFY(o->selectRow(o->rowOf(sceneRow)));
-    QVERIFY(mgr.m_sceneWarnings->text().contains("send no DMX"));
+    QVERIFY(mgr.m_workbench->m_sceneWarnings->text().contains("send no DMX"));
 
     // Patched: the warning goes.
     QVERIFY(m_doc->patchFixtures({ { staged->id(), 0, 10 } }));
@@ -1508,8 +1516,8 @@ void ProgrammingManager_Test::anEffectIsALookForWhatItDrives()
     QVERIFY(m_doc->addFunction(scene));
 
     ProgrammingManager mgr(nullptr, m_doc);
-    mgr.loadCanvas(scene->id());
-    SceneGroupLooks *canvas = mgr.m_canvas;
+    mgr.m_workbench->load(scene->id());
+    SceneGroupLooks *canvas = mgr.m_workbench->m_canvas;
     QVERIFY(canvas != nullptr);
     auto groupRow = [canvas]() {
         return canvas->m_targetList->topLevelItemCount() > 0
@@ -1981,7 +1989,7 @@ void ProgrammingManager_Test::scenesDragIntoAFolderAndBackOut()
     o->rebuild();
     mime = o->mimeData({ o->sceneItem(b) });
     const QString plan = o->dropPlan(mime, o->visualItemRect(o->sceneItem(c)).center(), false);
-    QVERIFY(plan.startsWith("!") && plan.contains("Show Tree"));
+    QVERIFY(plan.startsWith("!") && plan.contains("Workbench"));
     QVERIFY(!outlineDrop(o, mime, o->sceneItem(c)));
     QCOMPARE(m_doc->function(b)->path(true), QString());
 }
@@ -2153,7 +2161,7 @@ void ProgrammingManager_Test::pressAndMoveOnARowDragsIt()
     QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, to);
 }
 
-void ProgrammingManager_Test::nonScenesInASceneFolderOpenInFunctions()
+void ProgrammingManager_Test::collectionsAndChasersAreFullRows()
 {
     Scene *walk = new Scene(m_doc);
     walk->setName("0.0.3-Walk");
@@ -2174,22 +2182,24 @@ void ProgrammingManager_Test::nonScenesInASceneFolderOpenInFunctions()
     ProgrammingOutline *o = mgr.m_outline;
     o->rebuild();
     ProgrammingOutline::Row r;
-    r.kind = ProgrammingOutline::OtherRow;
+    r.kind = ProgrammingOutline::FunctionRow;
     r.id = r.scene = coll->id();
     QTreeWidgetItem *row = o->itemFor(r);
     QVERIFY(row != nullptr);
-    QVERIFY(!(row->flags() & Qt::ItemIsDragEnabled));
-    QVERIFY(row->toolTip(0).contains("Functions"));
+    QVERIFY(row->flags() & Qt::ItemIsDragEnabled);
+    QVERIFY(row->toolTip(0).contains("Workbench"));
+    // A chaser makes its own folder (W1: full rows, not only beside scenes).
     r.id = r.scene = chaser->id();
-    QVERIFY(o->itemFor(r) == nullptr);
-    QVERIFY(folderRow(o, "Elsewhere") == nullptr);
+    QVERIFY(o->itemFor(r) != nullptr);
+    QVERIFY(folderRow(o, "Elsewhere") != nullptr);
 
-    // Clicked: the page says what it is and offers the Functions tab.
+    // Clicked: it loads in the Workbench, its members its layers.
     r.id = r.scene = coll->id();
     QVERIFY(o->selectRow(r));
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::EmptyPage);
-    QVERIFY(!mgr.m_openInFunctionsBtn->isHidden());
-    QVERIFY(mgr.m_canvasHint->text().contains("0.0.4-SHOUT"));
+    QCOMPARE(mgr.m_workbench->loadedFunction(), coll->id());
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::OverviewPage);
+    QVERIFY(mgr.m_workbench->m_title->text().contains("0.0.4-SHOUT"));
+    QVERIFY(mgr.m_workbench->rows()->sceneItem(walk->id()) != nullptr);
     QCOMPARE(mgr.currentSceneId(), Function::invalidId());
 
     // "Delete" on a scene says it's the function itself, and where it's used.
@@ -2248,6 +2258,7 @@ void ProgrammingManager_Test::deletingAPaletteSaysWhereItIsUsed()
 
     // Delete/Backspace on the palette tree: an empty folder goes at once.
     mgr.resize(1200, 800);
+    mgr.setSection(ProgrammingManager::PalettesSection);
     mgr.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mgr));
     FunctionsTreeWidget *tree = mgr.m_paletteTree;

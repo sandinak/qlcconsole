@@ -21,15 +21,35 @@ The latest changes, newest first. Each links to the guide with the detail.
   a light. Hazers, smoke machines and fans with no light of their own are
   left out too; a real light with no output set is still listed.
 
-### The Programming tab's outline
+### Build, and the Workbench
 
-- **Every scene and what's in it, in one tree.** The left of the
-  Programming tab is now an outline: folders, scenes, and under each scene
-  its targets and looks. Click a row and the middle edits it — the Look
-  Editor gets the whole height. Drag a row to another scene to move it (⌥
-  copies it), open everything with ⊞, and ⌘Z / ⇧⌘Z undo and redo scene
-  edits with everything else. See
-  [The outline](programming-tab.md#the-outline).
+- **The Programming tab is Build.** Over its left side, **Palettes |
+  Effects | Scenes** picks what is listed; groups and fixtures are under
+  every one of them. On the right, the **Workbench** shows whatever you
+  load. See [Build Tab](build.md).
+- **A collection as layers.** Click a collection in Build ▸ Scenes and each
+  member is a layer: a scene opens up into its groups and looks, an EFX or
+  an RGB Matrix plays as it is (▣). **+ Scene**, **+ EFX** and **+ RGB
+  Matrix** add one — a new EFX or matrix is made on the selected layer's
+  groups and opens beside it in its own editor. ▲ ▼ reorder, ⌫ takes a
+  layer out (the scene stays in the show), drag scenes in from the left.
+  What is loaded plays on the rig as you work (Design mode). See
+  [The Workbench](build.md#the-workbench).
+- **Open, and come back.** **▣ Open** (or a double-click) loads a nested
+  collection, a chaser's step or a scene on its own; **↩** in the header
+  returns, with the same row selected.
+- **Shared members say so.** A scene used in other collections or chaser
+  steps shows **also in 2** — hover for where. An edit changes it
+  everywhere.
+- **Every scene and what's in it, in one tree.** Build ▸ Scenes is the
+  outline: folders, scenes, collections and chasers, each scene opening
+  into its targets and looks. Drag a row to another scene to move it (⌥
+  copies it), open everything with ⊞. See [The outline](build.md#the-outline).
+- **Old QLC+ shows stay as they are.** A show made the old way opens, plays
+  and saves as QLC+ made it; nothing is converted and nothing asks. Its
+  collections load in the Workbench as layers.
+- **One Undo.** Adding, removing and reordering layers, a new EFX or RGB
+  Matrix, filing and renaming — each is one ⌘Z, in Build or the Show Tree.
 
 ### More Matrix effects, and staggered boxes
 
@@ -378,7 +398,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   aims and effects together; the Palettes tab shows folders first, or
   **Group by type** (right-click) for type first with the same folders under
   each. Older shows' per-type folders merge on open. See
-  [Filing into folders](programming-tab.md#filing-into-folders).
+  [Filing into folders](build.md#filing-into-folders).
 
 ### Outputs
 
@@ -408,16 +428,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   onto the type's heading or empty space moves back out; pressing on a row
   and moving now always drags it, where before it could rubber-band select
   instead. Right-click a folder to rename or delete it — deleting keeps what
-  was in it. See [Filing into folders](programming-tab.md#filing-into-folders).
+  was in it. See [Filing into folders](build.md#filing-into-folders).
 - **Take things out of a collection, chaser or show from the side tree.**
   Right-click rows listed under one → **Remove from “…”** (the functions
   stay). Delete on those rows now reads **Delete Function Everywhere…** and
   says where else the function is used. See
-  [Taking something out](programming-tab.md#taking-something-out-of-a-collection-chaser-or-show).
+  [Taking something out](build.md#taking-something-out-of-a-collection-chaser-or-show).
 - **Deleting says where it's used.** Deleting a palette or a function in the
   Programming tab (menu or ⌫) lists every scene look, effect-look slot,
   collection, chaser step and show track using it before you confirm. See
-  [Deleting palettes and functions](programming-tab.md#deleting-palettes-and-functions).
+  [Deleting palettes and functions](build.md#deleting-palettes-and-functions).
 - **A look keeps its Speed and Spread when you try another effect.**
   Clicking or double-clicking another effect's tile in the look editor put
   the look back on *As the look* with no spread; now both stay. See
@@ -552,8 +572,8 @@ The latest changes, newest first. Each links to the guide with the detail.
   [Effects](effects.md) and [Troubleshooting](troubleshooting.md).
 - **Pictures with numbered marks** on the parts each guide talks about:
   the main window and the footer ([Getting started](getting-started.md#finding-your-way-around)),
-  the [Programming tab](programming-tab.md#layout), the effect look editor
-  and the [effect browser](programming-tab.md#the-effect-browser), the
+  the [Build tab](build.md#layout), the effect look editor
+  and the [effect browser](build.md#the-effect-browser), the
   [stack checker](effects.md#the-stack-checker),
   [Connections by universe](other-improvements.md#connections--patch) and the
   [Patch dialog](fixture-manager.md#patching-the-patch-dialog).
@@ -677,7 +697,7 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Effect previews show what the effect does.** A position effect draws
   the shape its heads trace, with the heads along it, instead of a strip
   of lights; gobo, iris and zoom effects show a row of beams; amber and UV
-  pulses light in their own colours. ([The effect browser](programming-tab.md#the-effect-browser))
+  pulses light in their own colours. ([The effect browser](build.md#the-effect-browser))
 - **WLED effects only where they can run.** A WLED effect that only runs on
   a WLED device is offered only when the look's targets include one;
   without, the WLED tab lists the ones that run on any fixture.
@@ -688,7 +708,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   its settings have the look editor's full width; **Change effect…** opens
   the browser, where every pick (and every arrow-key step) plays at once,
   and **Cancel** or Esc puts back the effect you had.
-  ([The effect browser](programming-tab.md#the-effect-browser))
+  ([The effect browser](build.md#the-effect-browser))
 
 ### Playback
 
@@ -709,7 +729,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   px at its narrowest, so a handle squeezed the panes beside it instead).
   A new handle sits **between the looks and the Look Editor**, which
   scrolls when made short. Positions are remembered.
-  ([Layout](programming-tab.md#layout))
+  ([Layout](build.md#layout))
 
 ### Effects
 
@@ -777,10 +797,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   ([On the beat](effects.md#on-the-beat))
 - **Text** — words on a pixel grid, scrolling or still in the middle, in
   the look's colours; settings that are words get a text box.
-  ([Text](programming-tab.md#text))
+  ([Text](build.md#text))
 - **Step Test Pattern** — a diagnostic card for LED-strip steps: strips
   counted, steps numbered and named, a spinner that stops if output
-  freezes. ([Step Test Pattern](programming-tab.md#step-test-pattern))
+  freezes. ([Step Test Pattern](build.md#step-test-pattern))
 - The RGB Matrix **Text** algorithm has a **Centered** style.
 - **Much faster on big pixel rigs**: 96 strips × 64 pixels ticks in about
   8.5 ms (was 68), leaving the screen free to keep up.

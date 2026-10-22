@@ -1,6 +1,6 @@
 # Show Tree
 
-The Show Tree tab (beside Programming, **⇧⌘6**) is where you write a show
+The Show Tree tab (beside Build, **⇧⌘6**) is where you write a show
 as cues. Everything is in one tree:
 
 **Production → Cue list → Cue → Layer**
@@ -24,8 +24,9 @@ as cues. Everything is in one tree:
   tab and the **Cue Runner** VC widget play it all
   ([The cue runner](#the-cue-runner)).
 
-**The Programming tab works alongside it.** It is the palette and effect
-workshop: effect design, `.qxfx` files, Bundles and raw-value scenes. The
+**The Build tab works alongside it.** It makes what the tree schedules:
+palettes, effect design, `.qxfx` files, Bundles, scenes and collections,
+in its Workbench. The
 everyday palette work — new, rename, folders, delete — is also in the
 Library here ([Palettes in the Library](#palettes-in-the-library)). Both
 tabs use the same palettes, groups and Look Editor, and the same palette
@@ -370,8 +371,8 @@ Each row shows its value, where it comes from, and four controls:
   that attribute (or, for a gobo by name, that gobo). The rest ignore the
   look; hover to see which ones.
 - **✎** opens the value's palette in the **Look Editor** at the bottom of the
-  tab (the Programming tab's, see
-  [The inline Look Editor](programming-tab.md#the-inline-look-editor)). A
+  tab (the Build tab's, see
+  [The inline Look Editor](build.md#the-inline-look-editor)). A
   named palette is shared, and the editor says so: changing it changes every
   cue and scene that uses it.
 - **⋯** opens a menu:
@@ -625,7 +626,7 @@ works on the command line as its groups do (`Truss wash dimmer 45`), and
 Tab completes it; with a layer selected, the command line says what it
 holds.
 
-- **In place, as in the Programming tab:** select the row in the tree and
+- **In place, as in the Build tab:** select the row in the tree and
   press **Return** (or **F2**). Type, then **Return** to keep it or **Esc**
   to leave it as it was. An empty name goes back to the groups' name.
 - It works the same on a cue (its name; its number stays), a cue list and
@@ -995,18 +996,18 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
   chaser and collections (locked again); Redo hands them over again.
 - **Palettes are on the same history.** A palette made, renamed,
   duplicated, filed or deleted — in the Library, typed, or in the
-  Programming tab's palette list — is a step too, and Undo takes back
+  Build tab's palette list — is a step too, and Undo takes back
   whichever came last: a tree change or a palette change. Undoing a
   palette's delete brings it back with its id, and every cue, layer, look,
   reusable, scene and effect slot the delete cleared has it back in its
   place — one step, the show exactly as it was.
 - **What undo doesn't cover:**
   - a palette's values changed in the Look Editor (a colour dragged, a
-    level moved): those are the palette's, as in the Programming tab;
+    level moved): those are the palette's, as in the Build tab;
   - a palette a command made (`dimmer 30` with none at 30%): undo takes the
     value off the cue, and the palette stays, as an ordinary palette;
   - a VC page made by **Make VC page** (delete the frame on the console).
-- **The Programming tab is on the same history.** ⌘Z / ⇧⌘Z there take
+- **The Build tab is on the same history.** ⌘Z / ⇧⌘Z there take
   back whatever was done last: an edit to the look open on its canvas, a
   Bundle stamp, or a step of this one history (a tree change or a palette
   operation, from either tab). The **Edit** menu's Undo / Redo name the
@@ -1041,7 +1042,7 @@ Layer**.
 
 ### Palettes in the Library
 
-The everyday palette work happens here, without going to Programming. Every
+The everyday palette work happens here, without going to Build. Every
 operation is one undo step on the tab's [Undo](#undo).
 
 - **+ Palette** (beside the filter, or right-click a palette folder →
@@ -1071,14 +1072,14 @@ operation is one undo step on the tab's [Undo](#undo).
   ticked (the default), Colour, Dimmer… each with your folders under it;
   unticked, your folders first with every type inside, and the palettes in
   no folder below. It is remembered.
-- **One folder model** with the Programming tab's palette list: the same
+- **One folder model** with the Build tab's palette list: the same
   folders, the same palettes in them, whichever tab files them.
 - **Older shows** kept a folder per type (*Color › 01-Song*, *Dimmer ›
   01-Song*). Opening one makes those one folder, *01-Song*. Only what is
   really that old layout changes: a folder you made that happens to be
   called like a type (*Color* holding levels) or *Colour* stays as it is.
   Saved, every path says it is the new kind, and is never changed again.
-- **Still in Programming:** designing effects (the browser, presets, WLED),
+- **Still in Build:** designing effects (the browser, presets, WLED),
   `.qxfx` import and export, Bundles, and capturing.
 
 ## Editing the tree
@@ -1412,7 +1413,7 @@ Cue Runner back into a Cue List).
   their place.
 - **They are changed here, and locked everywhere else.** Outside the tab,
   what the tree made says *"Made by the Show Tree — edit it there."*:
-  - **The chaser's editor** (Functions window, Programming tab, Shows, a
+  - **The chaser's editor** (Functions window, Build tab, Shows, a
     Virtual Console widget's live edit) opens with its steps and name
     locked, under a bar that says so and has **Show in Show Tree**. Its
     playback settings stay yours to set and are kept: run order,

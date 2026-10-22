@@ -8,23 +8,29 @@ under `~/.claude/.../memory/`.
 
 ---
 
-## Programming tab redesign (PROGRAMMING_REDESIGN.md)
+## Build + Workbench (WORKFLOW_DESIGN.md, phases W0–W7)
 
-- **P1 the outline — built on feat/programming-outline, on trial
-  (2026-10-21), not merged.** Branson to try it in the dev app before it
-  merges (he asked what the outline is for: the line over it now says).
-  Left over / open from P1:
-  - Several look rows of one type selected don't edit together on the page
-    yet (the current row's look shows).
+- **W1 Build tab + Workbench — built on feat/w1-build-workbench
+  (2026-10-22), not merged.** Branson to try it in the dev app first. It
+  carries the P1 outline (feat/programming-outline, never merged) as
+  Build ▸ Scenes. Left over / open from W1:
+  - A lone scene takes no + Scene / + EFX / + RGB Matrix (a scene is one
+    layer); "make a collection of this scene and…" could come later.
+  - A chaser loads as one row per step with its step table in the editor
+    pane; walking the steps (◀ ▶, the step header) is W2, with
+    *Make own copy* for a shared member and Scenes ▸ Classic.
+  - Palettes and Effects sections are today's lists behind the switch; the
+    shared Library (P2/W6), the bench (W4) and the effect designer on a
+    layer (W4) are to come. No command bar yet (W6).
   - Look Editor *value* edits (a colour, a level) are not on the history
-    yet — only scene edits are (the doc allowed that to wait for P8).
-  - Folder renames undo the scenes' paths; a chaser filed there keeps its
-    new path. Deleting a scene is still not undoable (as before).
-  - Open rows are remembered per show *folder* (Doc knows the folder, not
-    the file).
-  - The scene rows' names (Targets / Looks vs Palettes, open question 1)
-    are untouched; the words are in one place each in programmingoutline.cpp.
-  - Then P2 (the shared Library) → P3 (command bar) → P4 (bench).
+    yet — only scene and collection edits are. Deleting a function is still
+    not undoable.
+  - Several look rows of one type selected don't edit together yet.
+  - The Workbench's expansion is remembered per show folder and loaded
+    function id.
+  - W3 docks this same Workbench in the Show Tree with a `CueStack`
+    (see the W1 report / workbench.h): `setStack()`, `setReturnTo()`.
+- Then W3 (Show Tree ↔ Workbench) → W2 → W4 → W5 → W6 → W7.
 
 ## Small fixes and leftovers
 

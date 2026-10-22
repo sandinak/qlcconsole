@@ -3,7 +3,7 @@
 A **Show** plays lights against time, the way an audio or video editor
 lays clips on tracks: a song's cues at the moment they happen, run from
 the top, from where you left off, or locked to the band's timecode. Open
-it from the **Shows** tab; the Programming tab can show the same timeline
+it from the **Shows** tab; the Build tab can show the same timeline
 for the scene you're building.
 
 ## The words

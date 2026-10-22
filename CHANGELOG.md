@@ -13,25 +13,41 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
-- **Programming tab: the outline (redesign P1, on trial).** The function
-  tree and the one-scene-at-a-time Targets/Looks canvas are replaced by one
-  tree of every scene folder → scene → its targets and looks (an effect's
-  own colour/dimmer nested under it), with a line over it saying what it
-  is. Click a row and the page in the middle edits it: a scene its timing,
-  warnings and what fires it; a look the Look Editor at full height; a
-  target its channels. **⊞ / ⊟** (⌘→ / ⌘←) expand or collapse everything,
-  ⌥-click a triangle for a whole subtree, open rows are remembered per show.
-  Rows drag between scenes (move; ⌥ copies — a look keeps its fade, a fixed
-  fixture its raw values, an effect its own colour), within a scene to
-  reorder, palettes/groups/fixtures in from the sources, scenes onto
-  folders; the line says what a drop will do first. Multi-select across
-  scenes, ⌫ removes, F2 renames scenes, folders and palettes. Badges with
-  details on hover: ⚠ n, VC ×n, ▣ raw values, ⇄ transition, ⏱ speed
-  master, ◷ a look's own fade. Chasers and collections filed beside scenes
-  show greyed with **Open in Functions**. Every scene edit — the outline's
-  and the page's (timing, a fader drag as one step, a look's fade, a Bundle
-  stamp, a Snapshot) — is a step on the one history the Show Tree shares,
-  with redo. No file format change.
+- **Build tab and the Workbench (WORKFLOW_DESIGN.md W1).** The Programming
+  tab is **Build**: a section switch (**Palettes | Effects | Scenes**) picks
+  what the navigator on the left lists, with Groups & fixtures under every
+  section; the right is the **Workbench**, the same in every section. It
+  loads a scene, a collection, a chaser or any other function and shows it
+  as layers: a scene opens up into its targets and looks, anything else (a
+  raw-value scene, an EFX, an RGB Matrix, a chaser, a nested collection) is
+  a ▣ row. A header says where it is, its kind, where it's used, what fires
+  it and what is on the rig (Stop / Play). On a collection: **+ Scene**
+  (from the show, or a new empty one), **+ EFX** / **+ RGB Matrix** (new,
+  made on the selected layer's groups and opened in the editor pane),
+  remove (⌫, the function stays), ▲ ▼, drag scenes in from the navigator
+  and layers within. **▣ Open** loads a layer on its own; **↩** comes back
+  with the row selected. The editor pane hosts the Look Editor, the channel
+  console, the scene's timing and the stock EFX / RGB Matrix / Chaser /
+  Show / Script / Audio / Video editors. A member used elsewhere carries
+  **also in N** (where, on hover). Live preview of what is loaded in Design
+  mode; a collection that gains or loses a layer is replayed. Every edit is
+  one step on the history the Show Tree shares — a new EFX's Undo takes the
+  function away too, Redo brings it back with its id
+  (`PaletteOps::functionStep`). Build ▸ Scenes is the outline (from the
+  P1 trial): folders → scenes, collections and chasers (full rows now, no
+  longer greyed with "Open in Functions"; collections and chasers make
+  their own folders), each scene opening into its targets and looks; ⊞ / ⊟,
+  ⌥-click a subtree, badges with details on hover (⚠ n, VC ×n, ▣, ⇄, ⏱, ◷),
+  drag rows between scenes (⌥ copies), file scenes, collections and chasers
+  into folders (on the history), F2 renames, + Scene's menu makes a
+  collection or a chaser. Build ▸ Effects lists the effect palettes and the
+  classic EFX and RGB Matrix functions. The Workbench is a widget of its
+  own with pluggable back ends (`WorkbenchStack`: `FunctionStack` now, a
+  Show Tree `CueStack` in W3) so the Show Tree can host it too. Old QLC+
+  shows open as they are: nothing converted, nothing asked. The palette
+  list's right-click menu is back (the outline trial had lost it).
+  `programming-tab.md` is `build.md` in the help (old links open it). No
+  file format change.
 - **Twelve more Matrix effects** (`resources/effectscripts/matrix-*.js`):
   Fire, Starfield, Spiral, Lissajous, Kaleidoscope, Bouncing Balls,
   Fireworks, Scanner, Dissolve, Gradient Sweep, Box VU and Image. Pure

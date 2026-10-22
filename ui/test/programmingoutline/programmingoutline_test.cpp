@@ -35,6 +35,8 @@
 #define private public
 #include "programmingmanager.h"
 #include "programmingoutline.h"
+#include "workbench.h"
+#include "workbenchstack.h"
 #include "scenegrouplooks.h"
 #include "fixtureconsole.h"
 #include "lookeditor.h"
@@ -197,7 +199,7 @@ void ProgrammingOutline_Test::everySceneAndWhatIsInItIsARow()
     o->rebuild();
 
     // The line over the outline says what it is.
-    QVERIFY(mgr.m_outlineHint->text().contains("Every scene and what's in it"));
+    QVERIFY(mgr.m_outlineHint->text().contains("Your scene folders"));
     QVERIFY(mgr.m_outlineHint->text().contains("drag rows between scenes"));
 
     // Show -> Base, 0-Preshow; the loose scene at the top.
@@ -225,11 +227,13 @@ void ProgrammingOutline_Test::everySceneAndWhatIsInItIsARow()
     QVERIFY(waveRow->child(0)->toolTip(0).contains("effect above"));
     QCOMPARE(ProgrammingOutline::rowOf(waveRow->child(0)).scene, base->id());
 
-    // The collection filed beside it: once, greyed, not draggable.
-    QTreeWidgetItem *other = o->itemFor(row(ProgrammingOutline::OtherRow, coll->id(), coll->id()));
+    // The collection filed beside it: a full row (W1), dragged onto the
+    // Workbench as a layer, loaded there on a click.
+    QTreeWidgetItem *other = o->itemFor(row(ProgrammingOutline::FunctionRow, coll->id(), coll->id()));
     QVERIFY(other != nullptr && other->parent() == show->child(1));
-    QVERIFY(!(other->flags() & Qt::ItemIsDragEnabled));
-    QVERIFY(other->text(1).contains("Functions"));
+    QVERIFY(other->flags() & Qt::ItemIsDragEnabled);
+    QVERIFY(other->text(1).contains("collection"));
+    QVERIFY(other->toolTip(0).contains("Workbench"));
 
     // Folders open, scenes closed, by default.
     QVERIFY(show->isExpanded());
@@ -293,58 +297,61 @@ void ProgrammingOutline_Test::aClickedRowFillsThePage()
     ProgrammingManager mgr(nullptr, m_doc);
     ProgrammingOutline *o = mgr.m_outline;
     o->rebuild();
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::EmptyPage);
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::EmptyPage);
     QCOMPARE(mgr.currentSceneId(), Function::invalidId());
 
     // A scene: its page, with its timing (the canvas's row, lists hidden).
     QVERIFY(o->selectRow(row(ProgrammingOutline::SceneRow, s->id(), s->id())));
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::ScenePage);
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::ScenePage);
     QCOMPARE(mgr.currentSceneId(), s->id());
     QCOMPARE(mgr.currentPaletteId(), QLCPalette::invalidId());
-    QCOMPARE(mgr.m_sceneHeading->text(), QString("Base"));
-    QVERIFY(mgr.m_sceneSummary->text().contains("In Show"));
-    QVERIFY(mgr.m_sceneSummary->text().contains("Fired by"));
-    QVERIFY(mgr.m_canvas != nullptr && mgr.m_scenePage->isAncestorOf(mgr.m_canvas));
-    QVERIFY(mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn") != nullptr);
-    QVERIFY(mgr.m_canvas->m_lookList->isHidden() && mgr.m_canvas->m_targetList->isHidden());
+    QCOMPARE(mgr.m_workbench->m_sceneHeading->text(), QString("Base"));
+    QVERIFY(mgr.m_workbench->m_sceneSummary->text().contains("In Show"));
+    QVERIFY(mgr.m_workbench->m_sceneSummary->text().contains("Fired by"));
+    QVERIFY(mgr.m_workbench->m_canvas != nullptr && mgr.m_workbench->m_scenePage->isAncestorOf(mgr.m_workbench->m_canvas));
+    QVERIFY(mgr.m_workbench->m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn") != nullptr);
+    QVERIFY(mgr.m_workbench->m_canvas->m_lookList->isHidden() && mgr.m_workbench->m_canvas->m_targetList->isHidden());
+
+    // The Workbench has it: its one layer, opened up.
+    QCOMPARE(mgr.m_workbench->loadedFunction(), s->id());
+    QVERIFY(mgr.m_workbench->rows()->sceneItem(s->id()) != nullptr);
 
     // A look: the Look Editor fills the page; the scene is the context.
     QVERIFY(o->selectRow(row(ProgrammingOutline::PaletteRow, s->id(), blue->id())));
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::LookPage);
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::LookPage);
     QCOMPARE(mgr.currentPaletteId(), blue->id());
     QCOMPARE(mgr.currentSceneId(), s->id());
 
     // A group: its members' channels.
     QVERIFY(o->selectRow(row(ProgrammingOutline::GroupRow, s->id(), steps->id())));
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::TargetPage);
-    QCOMPARE(mgr.m_selectedFixtures, steps->fixtureList());
-    QVERIFY(mgr.m_targetHeading->text().contains("Steps"));
-    QVERIFY(!mgr.m_targetLayoutBtn->isHidden());
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::TargetPage);
+    QCOMPARE(mgr.m_workbench->m_selectedFixtures, steps->fixtureList());
+    QVERIFY(mgr.m_workbench->m_targetHeading->text().contains("Steps"));
+    QVERIFY(!mgr.m_workbench->m_targetLayoutBtn->isHidden());
     // A fixed fixture: no layout button.
     QVERIFY(o->selectRow(row(ProgrammingOutline::FixtureRow, s->id(), solo->id())));
-    QCOMPARE(mgr.m_selectedFixtures, QList<quint32>({ solo->id() }));
-    QVERIFY(mgr.m_targetLayoutBtn->isHidden());
+    QCOMPARE(mgr.m_workbench->m_selectedFixtures, QList<quint32>({ solo->id() }));
+    QVERIFY(mgr.m_workbench->m_targetLayoutBtn->isHidden());
 
     // Another scene's row: that scene.
     QVERIFY(o->selectRow(row(ProgrammingOutline::SceneRow, other->id(), other->id())));
     QCOMPARE(mgr.currentSceneId(), other->id());
 
-    // A folder: no scene.
+    // A folder: the Workbench keeps what it has.
     for (QTreeWidgetItemIterator it(o); *it; ++it)
         if ((*it)->text(0) == "Show")
         {
             o->setCurrentItem(*it);
             break;
         }
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::EmptyPage);
-    QCOMPARE(mgr.currentSceneId(), Function::invalidId());
-    QVERIFY(mgr.m_canvasHint->text().contains("2 scene"));
+    QCOMPARE(mgr.currentSceneId(), other->id());
 
-    // A scene removed while open: the page lets go of it.
+    // A scene removed while loaded: the Workbench lets go of it.
     QVERIFY(o->selectRow(row(ProgrammingOutline::SceneRow, other->id(), other->id())));
     m_doc->deleteFunction(other->id());
     QCOMPARE(mgr.currentSceneId(), Function::invalidId());
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::EmptyPage);
+    QCOMPARE(mgr.m_workbench->loadedFunction(), Function::invalidId());
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::EmptyPage);
 }
 
 void ProgrammingOutline_Test::rowsMoveBetweenScenesAndOptionCopies()
@@ -536,7 +543,7 @@ void ProgrammingOutline_Test::editsAreStepsOnTheSharedHistory()
 
     // The page's timing: one step (a rename made in Functions meanwhile stays).
     QVERIFY(o->selectRow(row(ProgrammingOutline::SceneRow, a->id(), a->id())));
-    FadeTimeSpin *fadeIn = mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn");
+    FadeTimeSpin *fadeIn = mgr.m_workbench->m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn");
     QVERIFY(fadeIn != nullptr);
     fadeIn->setMs(2500);
     emit fadeIn->msChanged(2500);
@@ -551,10 +558,10 @@ void ProgrammingOutline_Test::editsAreStepsOnTheSharedHistory()
 
     // A fader drag on a fixed target: many ticks, one step.
     QVERIFY(o->selectRow(row(ProgrammingOutline::FixtureRow, a->id(), solo->id())));
-    QCOMPARE(mgr.currentPage(), ProgrammingManager::TargetPage);
+    QCOMPARE(mgr.m_workbench->currentPage(), Workbench::TargetPage);
     const quint64 before = ops->undoStamp();
     for (int v = 10; v <= 100; v += 10)
-        mgr.slotFixtureValueChanged(solo->id(), 0, uchar(v));
+        mgr.m_workbench->slotFixtureValueChanged(solo->id(), 0, uchar(v));
     QCOMPARE(a->value(solo->id(), 0), uchar(100));
     QVERIFY(ops->undoStamp() > before);
     mgr.slotUndo();

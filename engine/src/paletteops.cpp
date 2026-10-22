@@ -658,6 +658,13 @@ bool PaletteOps::undo()
     if (m_undo.isEmpty())
         return false;
     Step st = m_undo.takeLast();
+    if (st.functions)
+    {
+        applyFunctions(st.functionsBefore);
+        m_redo << st;
+        emit changed();
+        return true;
+    }
     if (!st.scenesBefore.isEmpty())
     {
         applyScenes(st.scenesBefore, st.scenesAfter);
@@ -681,6 +688,13 @@ bool PaletteOps::redo()
     if (m_redo.isEmpty())
         return false;
     Step st = m_redo.takeLast();
+    if (st.functions)
+    {
+        applyFunctions(st.functionsAfter);
+        m_undo << st;
+        emit changed();
+        return true;
+    }
     if (!st.scenesAfter.isEmpty())
     {
         applyScenes(st.scenesAfter, st.scenesBefore);
@@ -844,6 +858,127 @@ void PaletteOps::applyScenes(const QList<QPair<quint32, QSharedPointer<Scene>>> 
         if (scene->isRunning())
             scene->resetRuntime();
     }
+    m_doc->setModified();
+}
+
+/****************************************************************************
+ * Function steps
+ ****************************************************************************/
+
+/** What a function saves: its whole state, to tell whether an edit changed it. */
+static QByteArray functionSignature(const Function *f)
+{
+    QByteArray xml;
+    if (f == nullptr)
+        return xml;
+    QBuffer buf(&xml);
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    f->saveXML(&w);
+    return xml;
+}
+
+QSharedPointer<Function> PaletteOps::functionSnapshot(quint32 id) const
+{
+    Function *f = m_doc->function(id);
+    if (f == nullptr)
+        return QSharedPointer<Function>();
+    Function *snap = f->createCopy(m_doc, false);
+    if (snap == nullptr)
+        return QSharedPointer<Function>();
+    // Owned by the pointer alone: the Doc would delete it a second time.
+    snap->setParent(nullptr);
+    snap->setID(id);
+    /* Deaf to the show: a collection drops a member the Doc removes, and a
+       snapshot that did would forget it -- an Undo deleting a new EFX would
+       take it out of the Redo side too. */
+    QObject::disconnect(m_doc, nullptr, snap, nullptr);
+    return QSharedPointer<Function>(snap);
+}
+
+bool PaletteOps::functionStep(const QString &label, const QList<quint32> &functionIds,
+                              const std::function<bool(QList<quint32> &made)> &change)
+{
+    QList<quint32> ids;
+    for (quint32 id : functionIds)
+        if (!ids.contains(id))
+            ids << id;
+    QList<QPair<quint32, QSharedPointer<Function>>> was;
+    for (quint32 id : ids)
+        was << qMakePair(id, functionSnapshot(id));
+    QList<quint32> made;
+    if (!change(made))
+        return false;
+    for (quint32 id : made)
+        if (!ids.contains(id))
+        {
+            ids << id;
+            was << qMakePair(id, QSharedPointer<Function>());
+        }
+
+    Step st;
+    st.label = label;
+    st.functions = true;
+    bool any = false;
+    for (const QPair<quint32, QSharedPointer<Function>> &w : was)
+    {
+        QSharedPointer<Function> now = functionSnapshot(w.first);
+        if (w.second.isNull() && now.isNull())
+            continue;
+        if (!w.second.isNull() && !now.isNull()
+            && functionSignature(w.second.data()) == functionSignature(now.data()))
+            continue;
+        any = true;
+        st.functionsBefore << w;
+        st.functionsAfter << qMakePair(w.first, now);
+    }
+    if (!any)
+        return false;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    if (ShowTreeController *tree = m_doc->showTree())
+        tree->clearRedo();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+void PaletteOps::applyFunctions(const QList<QPair<quint32, QSharedPointer<Function>>> &states)
+{
+    // Made first (what the others name exists), then changed, then deleted
+    // (nothing names them any more).
+    for (const QPair<quint32, QSharedPointer<Function>> &s : states)
+    {
+        if (s.second.isNull() || m_doc->function(s.first) != nullptr)
+            continue;
+        Function *f = s.second->createCopy(m_doc, false);
+        if (f == nullptr)
+            continue;
+        if (!m_doc->addFunction(f, s.first))
+            delete f;
+        else
+            f->setName(s.second->name());       // the copy's own, not a "copy of"
+    }
+    for (const QPair<quint32, QSharedPointer<Function>> &s : states)
+    {
+        Function *f = m_doc->function(s.first);
+        if (s.second.isNull() || f == nullptr)
+            continue;
+        if (functionSignature(f) == functionSignature(s.second.data()))
+            continue;
+        f->copyFrom(s.second.data());
+        if (Scene *scene = qobject_cast<Scene *>(f))
+            if (scene->isRunning())
+                scene->resetRuntime();
+        m_doc->notifyFunctionChanged(f->id());
+    }
+    for (const QPair<quint32, QSharedPointer<Function>> &s : states)
+        if (s.second.isNull() && m_doc->function(s.first) != nullptr)
+            m_doc->deleteFunction(s.first);
     m_doc->setModified();
 }
 

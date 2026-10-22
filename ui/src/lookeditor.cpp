@@ -257,7 +257,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     , m_paletteId(QLCPalette::invalidId())
     , m_loading(false)
 {
-    setProperty("helpTopic", QStringLiteral("programming-tab.md#the-inline-look-editor"));
+    setProperty("helpTopic", QStringLiteral("build.md#the-inline-look-editor"));
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
 

@@ -48,7 +48,7 @@
    its in the universe list's pane (they act on the universe picked there);
    Simple Desk and Run have none. */
 static const QStringList kTabsWithTools = {
-    QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio"), QStringLiteral("Programming"),
+    QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio"), QStringLiteral("Build"),
     QStringLiteral("Show Tree"), QStringLiteral("Shows"), QStringLiteral("Virtual Console") };
 
 /* What a tab's tools hold: every action and every widget, by pointer. */
@@ -573,8 +573,8 @@ void MainBar_Test::screenshots()
     m_app->setShowControlsPlacement(App::ShowControlsInTopBar);
     showTab(QStringLiteral("Fixtures"));
     m_app->grab().save(dir + "/after-A-fixtures.png");
-    showTab(QStringLiteral("Programming"));
-    m_app->grab().save(dir + "/after-A-programming.png");
+    showTab(QStringLiteral("Build"));
+    m_app->grab().save(dir + "/after-A-build.png");
     showTab(QStringLiteral("Show Tree"));
     m_app->grab().save(dir + "/after-A-showtree.png");
     m_app->doc()->inputOutputMap()->setBlackout(true);
@@ -590,8 +590,8 @@ void MainBar_Test::screenshots()
     m_app->doc()->inputOutputMap()->setOutputInhibited(true);
     QCoreApplication::processEvents();
     m_app->grab().save(dir + "/after-B-fixtures-blackout-blind.png");
-    showTab(QStringLiteral("Programming"));
-    m_app->grab().save(dir + "/after-B-programming-blackout-blind.png");
+    showTab(QStringLiteral("Build"));
+    m_app->grab().save(dir + "/after-B-build-blackout-blind.png");
     m_app->doc()->inputOutputMap()->setBlackout(false);
     m_app->doc()->inputOutputMap()->setOutputInhibited(false);
     m_app->resize(760, 800);

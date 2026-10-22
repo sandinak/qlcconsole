@@ -33,6 +33,7 @@
 
 class Doc;
 class Scene;
+class Function;
 
 /** @addtogroup engine Engine
  * @{
@@ -201,6 +202,19 @@ public:
     bool sceneStep(const QString &label, const QList<quint32> &sceneIds,
                    const std::function<bool()> &change);
 
+    /************************************************************************
+     * Function steps (WORKFLOW_DESIGN.md W1): the Workbench's edits to a
+     * collection's members -- added, removed, reordered, a new EFX or RGB
+     * Matrix made on a layer -- on this same stack.
+     ************************************************************************/
+public:
+    /** Run @a change over functions @a functionIds (any type) as one step.
+     *  Each is kept whole on either side; a function @a change makes is
+     *  appended to @a made, so Undo deletes it and Redo brings it back with
+     *  its id. Nothing changed: no step (false). */
+    bool functionStep(const QString &label, const QList<quint32> &functionIds,
+                      const std::function<bool(QList<quint32> &made)> &change);
+
 signals:
     /** Palettes, folders or the undo stack changed. */
     void changed();
@@ -237,7 +251,17 @@ private:
         QList<QPair<quint32, QSharedPointer<Scene>>> scenesAfter;
         QString mergeKey;
         qint64 mergeAt = 0;     //!< when it was last extended (ms since epoch)
+        /** A function step: each touched function on either side (a null
+         *  snapshot: it didn't exist). */
+        bool functions = false;
+        QList<QPair<quint32, QSharedPointer<Function>>> functionsBefore;
+        QList<QPair<quint32, QSharedPointer<Function>>> functionsAfter;
     };
+    /** Function @a id as it is now, detached; null if there is none. */
+    QSharedPointer<Function> functionSnapshot(quint32 id) const;
+    /** Put the functions back as @a states hold them: made, changed back,
+     *  deleted. */
+    void applyFunctions(const QList<QPair<quint32, QSharedPointer<Function>>> &states);
     /** Put the scenes back as @a states hold them. */
     void applyScenes(const QList<QPair<quint32, QSharedPointer<Scene>>> &states,
                      const QList<QPair<quint32, QSharedPointer<Scene>>> &other);

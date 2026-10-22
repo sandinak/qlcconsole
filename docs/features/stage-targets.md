@@ -44,9 +44,9 @@ view or the standalone Monitor window):
    target if it moves later.
 
 To actually point fixtures there: in either the general Palette editor or
-the Programming tab's [Look Editor](programming-tab.md#the-inline-look-editor),
+the Build tab's [Look Editor](build.md#the-inline-look-editor),
 pick the target from the Aim palette's target combo, then drag that palette
-onto a scene as a look — see [Programming Tab](programming-tab.md). Every
+onto a scene as a look — see [Build Tab](build.md). Every
 aimable fixture the scene reaches (directly or through a group) points at
 the target when the look resolves.
 
@@ -96,7 +96,7 @@ target, or an older qlcconsole build sees — is the line's **centre**.
 ### Spread
 
 An Aim look on a line has a **Spread** slider in the
-[Look Editor](programming-tab.md#the-inline-look-editor), from **-5** to
+[Look Editor](build.md#the-inline-look-editor), from **-5** to
 **+5**, under the target picker:
 
 - **+5** — evenly end to end (the default).
@@ -175,7 +175,7 @@ question — see [Line of sight](#line-of-sight).
 
 ## Reachability
 
-An Aim look's Targets panel in the Programming tab flags, in red, exactly
+An Aim look's Targets panel in the Build tab flags, in red, exactly
 which fixtures can't reach their assigned target — worse than the ordinary
 amber "nothing covers this channel" warning, because the fixture isn't
 idle, it's stuck at its limit pointing somewhere else.
