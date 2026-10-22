@@ -309,7 +309,12 @@ void Doc::clearContents()
     // Drop any parked fixtures so a quarantine doesn't bleed into the next
     // workspace (loadXML re-populates from <Park> if present).
     if (m_programmer != NULL)
+    {
         m_programmer->unparkAllFixtures();
+        // Move in black is the show's: a show without <MoveInBlack> starts
+        // from a new show's, not the last one's.
+        m_programmer->resetMoveInBlack();
+    }
 
     destroyAudioCapture();
 

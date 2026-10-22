@@ -190,6 +190,16 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
     (`attachToLastStep(…, beforeTree)`), several per step.
   - Older builds ignore the new XML (`Source`, `InPlace`, `Original`):
     the list still loads and plays.
+- **Move in black in the Show Tree and Settings** (board Q31): the show's
+  auto move-in-black and its lead time, until now only under Programming →
+  Move in black, are also the Show Tree header's **MIB** button (lead time
+  in its menu; *MIB · n* while n heads are being pre-positioned) and rows in
+  **Settings → Show Tree**, noted as saved with the show. One setting,
+  three views, kept in step by `ProgrammerController::autoMoveInBlackChanged`
+  (now also emitted for a lead-time change). New
+  `MoveInBlackButton`, `ProgrammerController::moveInBlackPresetCount()` /
+  `moveInBlackPresetsChanged`, `MarkPlanner::plannedChanged`.
+
 - **Open a function a Show Tree layer plays as it is** (W0 of the workflow
   design): a ▣ layer (a raw scene, EFX, RGB Matrix, collection or chaser)
   opens its function in its own editor in the Functions window -- from
@@ -333,6 +343,12 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Move in black no longer carries over to the next show**: a new show,
+  or one saved without it, starts with auto move-in-black off and the
+  default 0.8 s lead time (`Doc::clearContents` →
+  `ProgrammerController::resetMoveInBlack`). Turning it on or off now marks
+  the show modified, as the lead time did.
+
 - **An imported chaser of raw scenes plays as the chaser did.** QLC+
   blends a scene step from the scene before it; the cue list's steps are
   Collections, which never blended, so a chase of scenes with their own

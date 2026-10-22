@@ -44,6 +44,12 @@ public:
      *  below this there's no time to move in black, so it's skipped. */
     void setDarkGapMs(int ms) { m_darkGapMs = ms; }
     int  darkGapMs() const { return m_darkGapMs; }
+    /** The lead time a new show starts with. */
+    static int defaultDarkGapMs() { return 800; }
+
+    /** How many fixtures the planner is pre-positioning right now (its own
+     *  marks, not manual ones). */
+    int plannedCount() const { return m_planned.size(); }
 
     /** Fixtures that are currently Marked (positioned-but-dark, manual or
      *  auto) but do NOT appear, lit, in any upcoming cue within the
@@ -57,10 +63,16 @@ signals:
      *  empty again). Checked every tick regardless of isEnabled(), since
      *  manual marks can dangle even with auto move-in-black off. */
     void dangleFixturesChanged(const QList<quint32> &fixtureIds);
+    /** The planner's own pre-sets changed: @p count fixtures are being moved
+     *  in black now (0: none). For an "it's working" indicator. */
+    void plannedChanged(int count);
 
 private slots:
     /** Re-evaluate the plan against the current/next cue. */
     void evaluate();
+
+private:
+    void evaluatePlan();
 
 private:
     /** Live pre-Grand-Master value at a fixture's absolute channel (0 if off-range). */
@@ -74,7 +86,7 @@ private:
     MarkEffect *m_mark;
     QTimer      m_timer;
     bool        m_enabled = false;
-    int         m_darkGapMs = 800;      //!< default lead time; tune on a rig
+    int         m_darkGapMs = defaultDarkGapMs();   //!< lead time; tune on a rig
     QSet<quint32> m_planned;            //!< fixtures WE marked (vs manual marks)
     QList<quint32> m_lastDangling;      //!< last emitted dangleFixturesChanged() value
 

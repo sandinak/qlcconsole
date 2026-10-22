@@ -43,7 +43,10 @@ void MarkPlanner::setEnabled(bool enable)
     }
     else
     {
+        const bool had = !m_planned.isEmpty();
         clearPlanned();      // release our pre-sets; manual marks stay
+        if (had)
+            emit plannedChanged(0);
     }
     emit enabledChanged(enable);
 }
@@ -107,6 +110,14 @@ void MarkPlanner::updateDangleDetection()
 }
 
 void MarkPlanner::evaluate()
+{
+    const QSet<quint32> before = m_planned;
+    evaluatePlan();
+    if (m_planned != before)
+        emit plannedChanged(int(m_planned.size()));
+}
+
+void MarkPlanner::evaluatePlan()
 {
     updateDangleDetection();
 

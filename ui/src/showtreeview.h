@@ -702,12 +702,15 @@ private:
     QComboBox *m_prodTimecode = nullptr;
     QLabel *m_prodInfo = nullptr;
     QComboBox *m_production = nullptr;
+    class MoveInBlackButton *m_moveInBlack = nullptr;
     void showProductionPage(quint32 productionId);
     void updateProductionSwitcher();
     /** The timecode choices: (label, universe) -- the show's, any, each universe. */
     QList<QPair<QString, qint32>> timecodeChoices() const;
 public:
     QComboBox *productionSwitcher() const { return m_production; }
+    /** Auto move-in-black (MIB) in the bar */
+    class MoveInBlackButton *moveInBlackButton() const { return m_moveInBlack; }
 private:
     QLabel *m_listTitle;
     QComboBox *m_listMode;
