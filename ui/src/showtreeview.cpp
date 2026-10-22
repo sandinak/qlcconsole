@@ -72,6 +72,7 @@
 #include "linespread.h"
 #include "effectdesigner.h"
 #include "showtreeview.h"
+#include "noteedit.h"
 #include "importsheet.h"
 #include "showconverter.h"
 #include "functionmanager.h"
@@ -1255,7 +1256,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueNumber->setObjectName("stCueNumber");
         m_cueName = new QLineEdit(inner);
         m_cueName->setObjectName("stCueName");
-        m_cueNote = new QLineEdit(inner);
+        m_cueNote = new NoteEdit(inner);
+        m_cueNote->setObjectName("stCueNote");
+        m_cueNote->setHelpTip(tr("It opens up while you type: Return applies it, Shift+Return "
+                                 "starts a new line, Esc puts it back."));
         m_cueMode = new QComboBox(inner);
         m_cueMode->setObjectName("stCueMode");
         for (CueMode m : { CueMode::ListDefault, CueMode::Track, CueMode::Block, CueMode::CueOnly })
@@ -1486,8 +1490,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueNext = new QLabel(inner);
         m_cueNext->setWordWrap(true);
         f->addRow(tr("Next cue receives"), m_cueNext);
-        for (QLineEdit *e : { m_cueNumber, m_cueName, m_cueNote })
+        for (QLineEdit *e : { m_cueNumber, m_cueName })
             connect(e, &QLineEdit::editingFinished, this, &ShowTreeView::slotCueEdited);
+        connect(m_cueNote, &NoteEdit::editingFinished, this, &ShowTreeView::slotCueEdited);
         // Text fields don't swallow a group dragged over them: the page takes it.
         for (QWidget *w : inner->findChildren<QWidget *>())
             if (w != m_cueLayers && w->acceptDrops() && w->parentWidget() != m_cueLayers)

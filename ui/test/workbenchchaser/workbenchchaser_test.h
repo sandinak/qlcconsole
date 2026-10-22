@@ -48,6 +48,12 @@ private slots:
      *  step, one step each on the shared history, as the Chaser editor's
      *  timing modes allow. Steps added, moved, removed: the same. */
     void theStepHeaderEditsTheStep();
+    /** A step's note opens up while it is typed in -- the walker's header,
+     *  its step table, the Chaser editor's Notes column: it grows to fit,
+     *  Return commits (one step on the history), Shift+Return starts a new
+     *  line, Esc puts it back; closed up it is elided, all of it in the
+     *  tooltip. */
+    void theNoteOpensUpWhileTyped();
     /** A layer added to a collection inside a chaser step changes what the
      *  chaser itself puts out; Undo takes it back, Redo again. */
     void editingAStepsCollectionChangesTheChasersOutput();

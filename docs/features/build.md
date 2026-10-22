@@ -165,13 +165,21 @@ editor lists it, one step at a time, each step opened up. Under the header:
   sets for every step (*Common*) or leaves to the function (*Default*) is
   shown greyed: change that in the Chaser editor on the right. A step's
   duration stays its fade in + hold, as the Chaser editor keeps it.
+- **A note opens up while you type in it.** Click into **Note** and it
+  word-wraps and grows to fit what you type, up to six lines; **Return**
+  applies it, **Shift+Return** (or **⌥ Return**) starts a new line, **Esc**
+  puts back what was there. Closed up it shows one line, cut short with
+  *…*; hover it for the whole note. The same goes for the step table's
+  **Notes** column (double-click a note to type there: it opens over the
+  rows below), the Chaser editor's **Notes** column and a Show Tree cue's
+  **Note**. In a one-line list a new line shows as ⏎.
 - **also in …** when the step's function plays somewhere else too (another
   chaser, another step of this one), with **Make this step's own copy**.
   **▣ Open** loads the step's function on its own; **↩** comes back to the
   same step.
 - **The step table** — the Chaser editor's columns (#, Function, Fade In,
   Hold, Fade Out, Duration, Notes, Cue). Click a step to walk to it;
-  double-click to open it. **+ Step…** adds functions from the show after
+  double-click to open it (double-click its **note** to edit the note). **+ Step…** adds functions from the show after
   the step you're on; **drag scenes** from the navigator onto the table to
   insert them before the row you drop on (at the end on empty space). ▲ ▼
   move the step, **Remove step** takes it out (its function stays).

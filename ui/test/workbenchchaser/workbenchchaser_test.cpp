@@ -26,6 +26,7 @@
 #include <QDataStream>
 #include <QDropEvent>
 #include <QLineEdit>
+#include <QVBoxLayout>
 #include <QMimeData>
 #include <QSplitter>
 #include <QAction>
@@ -38,6 +39,7 @@
 #include "programmingoutline.h"
 #include "functionstreewidget.h"
 #include "chaserwalker.h"
+#include "chasereditor.h"
 #include "workbench.h"
 #include "workbenchstack.h"
 #include "mastertimer.h"
@@ -46,6 +48,7 @@
 
 #include "qlcfixturedefcache.h"
 #include "showembedding.h"
+#include "noteedit.h"
 #include "functionparent.h"
 #include "inputoutputmap.h"
 #include "fixturegroup.h"
@@ -352,6 +355,164 @@ void WorkbenchChaser_Test::theStepHeaderEditsTheStep()
     walker->refresh();
     QVERIFY(!walker->m_fadeIn->isEnabled());
     QVERIFY(walker->m_fadeIn->toolTip().contains("same for every step"));
+}
+
+static void typeInto(QWidget *w, const QString &text)
+{
+    for (const QChar &c : text)
+        QTest::keyClick(w, c.toLatin1());
+}
+
+/* The note cell's editor open in @a window (not one closed and going). */
+static NoteEdit *cellEditor(QWidget *window)
+{
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    for (NoteEdit *e : window->findChildren<NoteEdit *>("noteCellEditor"))
+        if (e->isVisible())
+            return e;
+    return nullptr;
+}
+
+void WorkbenchChaser_Test::theNoteOpensUpWhileTyped()
+{
+    Scene *a = scene("A");
+    Scene *b = scene("B");
+    Chaser *ch = new Chaser(m_doc);
+    ch->setName("Full Show");
+    m_doc->addFunction(ch);
+    ch->addStep(ChaserStep(a->id()));
+    ch->addStep(ChaserStep(b->id()));
+    PaletteOps *ops = m_doc->paletteOps();
+
+    QWidget win;
+    QVBoxLayout *lay = new QVBoxLayout(&win);
+    Workbench *wb = new Workbench(m_doc, &win);
+    lay->addWidget(wb);
+    win.resize(900, 700);
+    win.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&win));
+    win.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&win));
+    wb->load(ch->id());
+    ChaserWalker *walker = walkerOf(*wb);
+    NoteEdit *note = walker->m_note;
+    QVERIFY(note->isEnabled());
+
+    // Closed up: one line. Typed in: it grows, a line at a time, to six.
+    const int closed = note->height();
+    QVERIFY(!note->isExpanded());
+    note->setFocus(Qt::MouseFocusReason);
+    QVERIFY(note->isExpanded());
+    const QString longNote = QString("Wait for the band to finish the bridge then go. ").repeated(4).trimmed();
+    typeInto(note, longNote);
+    QCoreApplication::processEvents();
+    QVERIFY2(note->height() > closed * 2, qPrintable(QString("%1 vs %2").arg(note->height()).arg(closed)));
+    QVERIFY(note->height() <= closed * 7);
+    QCOMPARE(ch->steps().at(0).note, QString());        // not yet: Return applies it
+
+    // Shift+Return: a new line, not a commit. Return: one step on the history.
+    QTest::keyClick(note, Qt::Key_Return, Qt::ShiftModifier);
+    typeInto(note, "Spot on");
+    QCOMPARE(ch->steps().at(0).note, QString());
+    QTest::keyClick(note, Qt::Key_Return);
+    const QString typed = longNote + "\nSpot on";
+    QCOMPARE(ch->steps().at(0).note, typed);
+    QVERIFY(ops->undoText().contains("note"));
+    QVERIFY(!note->hasFocus());
+    QVERIFY(!note->isExpanded());
+    QCOMPARE(note->height(), closed);
+    QVERIFY(note->toolTip().contains("Spot on"));
+    QCOMPARE(walker->stepTable()->topLevelItem(0)->text(6), typed);
+
+    // Esc puts it back, and nothing is committed.
+    note->setFocus(Qt::MouseFocusReason);
+    typeInto(note, " later");
+    QTest::keyClick(note, Qt::Key_Escape);
+    QCOMPARE(note->text(), typed);
+    QCOMPARE(ch->steps().at(0).note, typed);
+    QVERIFY(ops->undoText().contains("note"));
+    QVERIFY(!note->isExpanded());
+
+    // Undo / redo as before: one step.
+    QVERIFY(ops->undo());
+    QCOMPARE(ch->steps().at(0).note, QString());
+    QCoreApplication::processEvents();
+    QCOMPARE(note->text(), QString());
+    QVERIFY(ops->redo());
+    QCOMPARE(ch->steps().at(0).note, typed);
+    QCoreApplication::processEvents();
+
+    // The step table: double-click the note of step 2 to type there.
+    QTreeWidget *table = walker->stepTable();
+    QTreeWidgetItem *row2 = table->topLevelItem(1);
+    emit table->itemDoubleClicked(row2, 6);
+    QCoreApplication::processEvents();
+    NoteEdit *cell = cellEditor(&win);
+    QVERIFY(cell != nullptr);
+    cell->setFocus(Qt::MouseFocusReason);
+    const int cellClosed = table->visualItemRect(row2).height();
+    QVERIFY(cell->width() >= table->columnWidth(6));
+    typeInto(cell, longNote);
+    QCoreApplication::processEvents();
+    QVERIFY(cell->height() > cellClosed * 2);
+    const QString shots = qEnvironmentVariable("QLC_NOTE_SHOTS");
+    if (!shots.isEmpty())
+        QVERIFY(win.grab().save(shots + "/chaser-note-expanded.png"));
+    QTest::keyClick(cell, Qt::Key_Return);
+    QCoreApplication::processEvents();
+    QCOMPARE(ch->steps().at(1).note, longNote);
+    QCOMPARE(m_doc->paletteOps()->undoText().contains("step 2"), true);
+    QVERIFY(ops->undo());
+    QCOMPARE(ch->steps().at(1).note, QString());
+    QCoreApplication::processEvents();
+
+    // Esc in a cell: nothing changes.
+    row2 = table->topLevelItem(1);
+    emit table->itemDoubleClicked(row2, 6);
+    QCoreApplication::processEvents();
+    cell = cellEditor(&win);
+    QVERIFY(cell != nullptr);
+    cell->setFocus(Qt::MouseFocusReason);
+    typeInto(cell, "nope");
+    QTest::keyClick(cell, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    QCOMPARE(ch->steps().at(1).note, QString());
+    QCOMPARE(row2->text(6), QString());
+
+    // Closed up, a cell shows the note on one line, new lines as ⏎.
+    QCOMPARE(NoteEdit::flattened("a\nb"), QString("a ⏎ b"));
+    QVERIFY(NoteEdit::tipFor(typed).contains("Spot on"));
+
+    // The Chaser editor's Notes column: the same editor.
+    ChaserEditor ed(nullptr, ch, m_doc);
+    ed.resize(900, 400);
+    ed.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&ed));
+    ed.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&ed));
+    QTreeWidget *tree = ed.findChild<QTreeWidget *>("m_tree");
+    QVERIFY(tree != nullptr);
+    QVERIFY(qobject_cast<NoteDelegate *>(tree->itemDelegateForColumn(6)) != nullptr);
+    tree->editItem(tree->topLevelItem(1), 6);
+    QCoreApplication::processEvents();
+    cell = cellEditor(&ed);
+    QVERIFY(cell != nullptr);
+    cell->setFocus(Qt::MouseFocusReason);
+    typeInto(cell, "Haze up");
+    QTest::keyClick(cell, Qt::Key_Return, Qt::AltModifier);
+    typeInto(cell, "Strobe");
+    QTest::keyClick(cell, Qt::Key_Return);
+    QCoreApplication::processEvents();
+    QCOMPARE(ch->steps().at(1).note, QString("Haze up\nStrobe"));
+    tree->editItem(tree->topLevelItem(1), 6);
+    QCoreApplication::processEvents();
+    cell = cellEditor(&ed);
+    QVERIFY(cell != nullptr);
+    cell->setFocus(Qt::MouseFocusReason);
+    typeInto(cell, " more");
+    QTest::keyClick(cell, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    QCOMPARE(ch->steps().at(1).note, QString("Haze up\nStrobe"));
 }
 
 void WorkbenchChaser_Test::editingAStepsCollectionChangesTheChasersOutput()

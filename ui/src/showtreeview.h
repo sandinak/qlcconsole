@@ -41,6 +41,7 @@ class QTreeWidget;
 class QPushButton;
 class QToolButton;
 class QGridLayout;
+class NoteEdit;
 class QComboBox;
 class QLineEdit;
 class QMimeData;
@@ -670,7 +671,7 @@ private:
     QWidget *m_cuePage;
     QLineEdit *m_cueNumber;
     QLineEdit *m_cueName;
-    QLineEdit *m_cueNote;
+    NoteEdit *m_cueNote;
     QComboBox *m_cueMode;
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
