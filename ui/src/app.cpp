@@ -2938,7 +2938,7 @@ void App::importEosShow(const QString &asciiPath)
         return;
 
     EosImportResult eos;
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
     Doc *scratchDoc = EosImporter::load(wizard.bundle(), eos, wizard.mapper());
     QApplication::restoreOverrideCursor();
     if (scratchDoc == NULL)
@@ -2956,7 +2956,7 @@ void App::importEosShow(const QString &asciiPath)
         return;
     }
 
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
     QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, picker.selectedFixtures(),
                                                  picker.selectedFixtureGroups(), picker.selectedFunctions(),
                                                  picker.selectedPalettes());
