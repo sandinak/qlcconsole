@@ -36,6 +36,7 @@
 #include "universe.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "showtreecontroller.h"
 #include "scene.h"
 #include "doc.h"
 
@@ -268,7 +269,7 @@ void ChaserRunner::setAction(ChaserAction &action)
                 if (action.m_stepIndex == step->m_index)
                 {
                     qDebug() << "[ChaserRunner] Stopping step idx:" << action.m_stepIndex << "(running:" << m_runnerSteps.count() << ")";
-                    m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
+                    m_lastFunctionID = blendSceneId(step->m_function);
                     stopStepFunction(step);
                     m_runnerSteps.removeOne(step);
                     delete step;
@@ -545,16 +546,44 @@ void ChaserRunner::clearRunningList(bool handOver)
             step->m_function->setOverrideFadeOutSpeed(stepFadeOut(step->m_index));
             if (handOver && (step->m_function->type() == Function::CollectionType || step->m_subCues))
             {
-                m_lastFunctionID = Function::invalidId();
+                m_lastFunctionID = step->m_subCues ? Function::invalidId() : blendSceneId(step->m_function);
                 m_leavingSteps.append(step);
                 continue;
             }
             stopStepFunction(step, m_chaser->type() == Function::SequenceType);
-            m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
+            m_lastFunctionID = blendSceneId(step->m_function);
         }
         delete step;
     }
     m_runnerSteps.clear();
+}
+
+/* The scene a step plays, for the blend from step to step (a scene fades
+   from the one before it, Scene::setBlendFunctionID): a Scene step's own;
+   and a Show Tree cue that plays just one scene as it is -- an imported
+   chaser's raw scene (W0), whose cue Collection holds only that scene --
+   the same, so the list blends as the chaser it came from did. None for
+   anything else: QLC+ never blends a Collection, an EFX, ..., and the
+   tree's own layer scenes play by its rules. */
+Scene *ChaserRunner::blendScene(const Doc *doc, Function *f)
+{
+    if (f == NULL)
+        return NULL;
+    if (f->type() == Function::SceneType)
+        return qobject_cast<Scene *>(f);
+    if (f->type() != Function::CollectionType || doc == NULL || doc->showTree() == NULL
+        || !doc->showTree()->isGenerated(f->id()))
+        return NULL;
+    const QList<quint32> members = qobject_cast<Collection *>(f)->functions();
+    if (members.count() != 1 || doc->showTree()->isGenerated(members.first()))
+        return NULL;
+    return qobject_cast<Scene *>(doc->function(members.first()));
+}
+
+quint32 ChaserRunner::blendSceneId(Function *f) const
+{
+    const Scene *scene = blendScene(m_doc, f);
+    return scene == NULL ? Function::invalidId() : scene->id();
 }
 
 /* What a step plays its cue with, for the hand-over: a Collection itself;
@@ -971,26 +1000,21 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
     newStep->m_index = index;
     newStep->m_subCues = false;
 
-    // check if blending between Scenes is needed
-    if (m_lastFunctionID != Function::invalidId() &&
-        func->type() == Function::SceneType)
-    {
-        Scene *scene = qobject_cast<Scene *>(func);
-        scene->setBlendFunctionID(m_lastFunctionID);
-    }
+    // check if blending between Scenes is needed (a Show Tree cue playing
+    // one scene as it is blends as that scene did: blendScene())
+    Scene *funcScene = blendScene(m_doc, func);
+    if (m_lastFunctionID != Function::invalidId() && funcScene != NULL)
+        funcScene->setBlendFunctionID(m_lastFunctionID);
 
     // this happens only during crossfades
     if (m_runnerSteps.count())
     {
         ChaserRunnerStep *lastStep = m_runnerSteps.last();
-        if (lastStep->m_function &&
-            lastStep->m_function->type() == Function::SceneType &&
-            func->type() == Function::SceneType)
+        Scene *lastScene = blendScene(m_doc, lastStep->m_function);
+        if (lastScene != NULL && funcScene != NULL)
         {
-            Scene *lastScene = qobject_cast<Scene *>(lastStep->m_function);
             lastScene->setBlendFunctionID(Function::invalidId());
-            Scene *scene = qobject_cast<Scene *>(func);
-            scene->setBlendFunctionID(lastStep->m_function->id());
+            funcScene->setBlendFunctionID(lastScene->id());
         }
     }
 
@@ -1393,7 +1417,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
             if (step->m_duration != 0)
                 prevStepRoundElapsed = step->m_elapsed % step->m_duration;
 
-            m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
+            m_lastFunctionID = blendSceneId(step->m_function);
             m_runnerSteps.removeOne(step);
             if (step->m_function->type() == Function::CollectionType || step->m_subCues)
             {

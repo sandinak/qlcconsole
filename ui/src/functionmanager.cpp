@@ -38,8 +38,10 @@
 #include <QList>
 #include <QIcon>
 #include <QTimer>
+#include <QApplication>
 
 #include "mainbar.h"
+#include "app.h"
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
@@ -1027,6 +1029,20 @@ void FunctionManager::selectFunction(quint32 id)
     QTreeWidgetItem* item = m_tree->functionItem(function);
     if (item != NULL)
         m_tree->setCurrentItem(item);
+}
+
+bool FunctionManager::openFunction(quint32 id)
+{
+    FunctionManager *fm = instance();
+    if (fm == NULL || fm->m_doc->function(id) == NULL)
+        return false;
+    // Forward first: the Functions window (or its tab), wherever it lives.
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        if (App *app = qobject_cast<App *>(w))
+            app->showContext(App::tr("Functions"));
+    fm->selectFunction(id);
+    fm->editFunction(fm->m_doc->function(id));
+    return true;
 }
 
 void FunctionManager::deleteSelectedFunctions()

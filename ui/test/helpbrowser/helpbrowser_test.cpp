@@ -235,4 +235,19 @@ void HelpBrowser_Test::aPictureFitsThePageAndOpensFullSize()
     QVERIFY(shown->isVisible());
 }
 
+/* Functions is a window now (Window → Functions), not a tab: no guide
+   sends anyone to "the Functions tab" -- bar the one question that asks
+   where it went. */
+void HelpBrowser_Test::noGuideSendsYouToTheFunctionsTab()
+{
+    const QRegularExpression stale(QStringLiteral("Functions\\**\\s+tab"), QRegularExpression::CaseInsensitiveOption);
+    for (const auto &t : HelpBrowser::topics())
+    {
+        QString text = guideText(t.first);
+        text.remove(QStringLiteral("Where did the Functions tab go?"));
+        const QRegularExpressionMatch m = stale.match(text);
+        QVERIFY2(!m.hasMatch(), qPrintable(QString("%1 still says \"%2\"").arg(t.first, m.captured(0))));
+    }
+}
+
 QTEST_MAIN(HelpBrowser_Test)

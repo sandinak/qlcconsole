@@ -46,6 +46,7 @@ static void computeInto(Doc *doc, quint32 functionId,
         const QList<quint32> groups   = sc->fixtureGroups();
         const QList<quint32> fixtures = sc->fixtures();
         const QList<quint32> ordered  = sc->palettes();
+        QHash<quint32, QHash<quint32, uchar>> pals;
         for (quint32 pid : ordered)
         {
             QLCPalette *p = doc->palette(pid);
@@ -58,10 +59,19 @@ static void computeInto(Doc *doc, quint32 functionId,
             const QList<quint32> left = sc->excludedFixtures(pid);
             for (const SceneValue &sv : p->valuesFromFixtureGroups(doc, groups, sc, cOff))
                 if (!left.contains(sv.fxi))
-                    out[sv.fxi][sv.channel] = sv.value;
+                    pals[sv.fxi][sv.channel] = sv.value;
             for (const SceneValue &sv : p->valuesFromFixtures(doc, fixtures, sc, cOff))
                 if (!left.contains(sv.fxi))
-                    out[sv.fxi][sv.channel] = sv.value;
+                    pals[sv.fxi][sv.channel] = sv.value;
+        }
+        // A fixture with no dimmer channel shows the look's Dimmer as its
+        // colour scaled, as Scene::write lays it out.
+        const int lookDim = QLCPalette::lookDimmerValue(doc, ordered);
+        for (auto fx = pals.constBegin(); fx != pals.constEnd(); ++fx)
+        {
+            Fixture *fxi = doc->fixture(fx.key());
+            for (auto c = fx.value().constBegin(); c != fx.value().constEnd(); ++c)
+                out[fx.key()][c.key()] = QLCPalette::dimScaleWithoutDimmer(fxi, c.key(), c.value(), lookDim);
         }
     }
     else if (f->type() == Function::CollectionType)

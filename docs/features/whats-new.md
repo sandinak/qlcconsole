@@ -4,6 +4,23 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Open what an old show's layer plays.** In the Show Tree, a layer that
+  plays a function as it is (▣ — a raw scene, an EFX, an RGB Matrix)
+  now opens it: double-click it, right-click → **Open**, or **Open** on
+  its page. It opens in its own editor in the Functions window, and what
+  you change there is what the cue plays. The page also says where else
+  it plays. See [Adding layers](show-tree.md#adding-layers).
+- **The import tells you what it did, and takes over the buttons.**
+  **Import chaser…** now shows a sheet: whether the cue list plays the
+  same as the chaser (checked channel by channel), a row per cue, and
+  what plays as it is and why. It offers to move the VC buttons, VC Cue
+  Lists and show control that fire the chaser over to the new list —
+  ticked, and undone with the import. See
+  [From a chaser you already have](show-tree.md#from-a-chaser-you-already-have).
+- **The stock sample imports the same.** A looping chase of scenes with
+  their own fades (the sample show's par chasers) now plays in the cue
+  list exactly as in the chaser, where it used to run at about half the
+  level.
 - **The version on the boot window.** While qlcconsole starts, its window
   shows the release — "qlcconsole 0.2.2" — and below it the build and
   commit, so you can tell which version is starting.

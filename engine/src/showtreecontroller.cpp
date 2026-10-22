@@ -3487,8 +3487,10 @@ bool ShowTreeController::undo()
     if (m_undo.isEmpty())
         return false;
     const Snapshot s = m_undo.takeLast();
-    m_redo.append(Snapshot { s.label, snapshotXml(), s.stamp });
+    m_redo.append(Snapshot { s.label, snapshotXml(), s.stamp, s.outside });
     restoreSnapshot(s.xml);
+    if (s.outside)
+        s.outside(true);
     return true;
 }
 
@@ -3497,8 +3499,10 @@ bool ShowTreeController::redo()
     if (m_redo.isEmpty())
         return false;
     const Snapshot s = m_redo.takeLast();
-    m_undo.append(Snapshot { s.label, snapshotXml(), s.stamp });
+    m_undo.append(Snapshot { s.label, snapshotXml(), s.stamp, s.outside });
     restoreSnapshot(s.xml);
+    if (s.outside)
+        s.outside(false);
     return true;
 }
 
@@ -3554,6 +3558,14 @@ QString ShowTreeController::sharedRedoText() const
     if (ops != nullptr && paletteFirst(redoStamp(), ops->redoStamp(), false))
         return ops->redoText();
     return redoText();
+}
+
+bool ShowTreeController::attachToLastStep(const std::function<void(bool)> &apply)
+{
+    if (m_undo.isEmpty())
+        return false;
+    m_undo.last().outside = apply;
+    return true;
 }
 
 void ShowTreeController::clearUndo()
@@ -4768,6 +4780,9 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
     }
     while (generated->stepsCount() > 0)
         generated->removeStep(generated->stepsCount() - 1);
+    // One chaser answers to a cue-list number: it stays with the original
+    // until what fires that is moved to the list (the import's re-point).
+    generated->setCueListNumber(QString());
     m_generatedChasers.insert(generated->id());
     list.chaser = generated->id();
     prod.lists << list;
@@ -4789,6 +4804,8 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
                         scenes.insert(m);
     report.generatedScenes = int(scenes.count());
     Q_UNUSED(scenesBefore)
+    // Plays the same? Statically, cue by cue against the chaser's steps.
+    report.differChannels = importDifferences(chaserId, list.id, &report.differCues, &report.checkedCues);
     return report;
 }
 
