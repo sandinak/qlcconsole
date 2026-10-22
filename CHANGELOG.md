@@ -13,6 +13,17 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Stage looks: Practicals.** A new `Fixture::PracticalSection`
+  ("Practicals") holds Lantern and Staff. `LanternLook` is a practical (a
+  hurricane / porch lantern): `stageLookSilhouette()` maps it to
+  `FixtureSilhouette::Lantern` and `classifyFixture()` marks it omni, so
+  the studio reuses the LED lantern's glow, Angled body and omni light; its
+  flat-view body is hook, cap, glass and base, and the 2D plot paints a
+  radial glow from its head's live colour. `StaffLook` is a pole wound with
+  LED strip: Front/Side draw the pole with a helix of diagonal turns
+  (`stageLookLensHint()`, `stageLookLensHintAlpha()`), Top a small dot
+  (`stageLookDefaultSize()` takes the view). New icons for both. A
+  dimmer's `autoStageLook()` is now `EllipsoidalLook`. XML keys unchanged.
 - **Workspace views.** **View ▸ Workspace ▸ Classic QLC+ / qlcconsole /
   Everything** (`App::setWorkspaceView()`, `workspaceViewTabs()`): Classic
   shows Fixtures, Functions, Shows, Virtual Console, Simple Desk and

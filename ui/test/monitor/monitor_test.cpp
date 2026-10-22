@@ -21845,9 +21845,14 @@ void Monitor_Test::aStageLookDecidesTheSilhouette()
     // ...one that is keeps its pixels.
     QCOMPARE(int(stageLookSilhouette(Fixture::StaffLook, FixtureSilhouette::Bar)),
              int(FixtureSilhouette::Bar));
-    // The theatre lantern is not the LED lantern that lights all round.
-    QCOMPARE(int(stageLookSilhouette(Fixture::LanternLook, FixtureSilhouette::Lantern)),
-             int(FixtureSilhouette::Par));
+    // A lantern is a practical: it glows all round, like the LED lanterns.
+    QCOMPARE(int(stageLookSilhouette(Fixture::LanternLook, FixtureSilhouette::Par)),
+             int(FixtureSilhouette::Lantern));
+    fxi->setStageLook(Fixture::LanternLook);
+    QCOMPARE(int(classifyFixture(fxi).kind), int(FixtureSilhouette::Lantern));
+    QVERIFY(classifyFixture(fxi).omni);
+    fxi->setStageLook(Fixture::StaffLook);
+    QVERIFY(!classifyFixture(fxi).omni);
 
     fxi->setStageLook(Fixture::AutoLook);
     QCOMPARE(int(classifyFixture(fxi).kind), int(autoKind));
@@ -21882,7 +21887,9 @@ void Monitor_Test::everyStageLookHasItsShape()
     // In a square cell each keeps its proportions.
     QRectF b = stageLookBodyPath(Fixture::FollowspotLook, square).boundingRect();
     QVERIFY(b.width() > b.height());
-    b = stageLookBodyPath(Fixture::StaffLook, square).boundingRect();
+    b = stageLookBodyPath(Fixture::StaffLook, square, true).boundingRect();   // standing
+    QVERIFY(b.height() > b.width());
+    b = stageLookLensRect(Fixture::StaffLook, square, true);                  // its pole
     QVERIFY(b.height() > b.width() * 3);
     b = stageLookBodyPath(Fixture::BarWashLook, square).boundingRect();
     QVERIFY(b.width() > b.height() * 2);
@@ -21971,13 +21978,13 @@ void Monitor_Test::fixturePropertiesSetsTheStageLook()
     QVERIFY(!look->isHidden());
     QVERIFY(look->itemText(look->currentIndex()).startsWith("Auto"));
     // Its type's look named: a generic dimmer is a conventional.
-    QCOMPARE(look->itemText(0), QString("Auto (%1)").arg(Fixture::stageLookName(Fixture::LanternLook)));
+    QCOMPARE(look->itemText(0), QString("Auto (%1)").arg(Fixture::stageLookName(Fixture::EllipsoidalLook)));
     // Sections are headings, not choices.
     int headings = 0;
     for (int i = 0; i < look->count(); ++i)
         if (!look->itemData(i, Qt::UserRole).isValid() && !look->itemText(i).isEmpty())
             ++headings;
-    QCOMPARE(headings, 3);
+    QCOMPARE(headings, 4);          // Moving, Fixed conventional, Fixed LED, Practicals
 
     const QByteArray before = rig.mon->rigSnapshot();
     look->setCurrentIndex(look->findData(int(Fixture::SquareWashLook), Qt::UserRole));
@@ -22074,6 +22081,108 @@ void Monitor_Test::theStudioDrawsAStageLook()
             QVERIFY(!img.isNull());
         }
     }
+    rig.fxi->setStageLook(Fixture::AutoLook);
+}
+
+void Monitor_Test::aLanternIsAPracticalThatGlowsAllRound()
+{
+    // Seen from the side: hook, cap, glass, base -- the glass in its middle.
+    const QRectF r(0, 0, 40, 70);
+    const QPainterPath side = stageLookBodyPath(Fixture::LanternLook, r, true);
+    const QRectF glass = stageLookLensRect(Fixture::LanternLook, r, true);
+    QVERIFY(side.contains(QPointF(20, 2)));                 // its hook
+    QVERIFY(side.contains(QPointF(20, 66)));                // its base
+    QVERIFY(!side.contains(QPointF(1, 2)));                 // the cap narrows
+    QVERIFY(side.contains(glass.center()));
+    QVERIFY(glass.top() > r.top() + r.height() * 0.2);
+    QVERIFY(glass.bottom() < r.bottom() - r.height() * 0.15);
+    // From above, its base; the glass in the middle of it.
+    const QRectF top = stageLookLensRect(Fixture::LanternLook, QRectF(0, 0, 40, 40), false);
+    QCOMPARE(top.center(), QPointF(20, 20));
+    // Sizes: tall from the side, round from above.
+    QVERIFY(stageLookDefaultSize(Fixture::LanternLook, 10, true).height()
+            > stageLookDefaultSize(Fixture::LanternLook, 10, true).width());
+    QCOMPARE(stageLookDefaultSize(Fixture::LanternLook, 10, false).width(),
+             stageLookDefaultSize(Fixture::LanternLook, 10, false).height());
+
+    // On the plot: round heads in its glass, and a glow that follows them.
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(3000, 3000, 0)));
+    rig.fxi->setStageLook(Fixture::LanternLook);
+    MonitorFixtureItem *item = rig.item;
+    QCOMPARE(int(item->m_traits.kind), int(FixtureSilhouette::Lantern));
+    QVERIFY(qgraphicsitem_cast<QGraphicsEllipseItem *>(item->m_heads.first()->m_item) != nullptr);
+    item->slotUpdateValues();
+    QCOMPARE(item->m_lanternGlow, item->m_heads.first()->m_item->brush().color());
+    item->m_lanternGlow = QColor(255, 180, 60, 220);        // lit
+    QImage img(400, 300, QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::black);
+    {
+        QPainter p(&img);
+        rig.gv->scene()->render(&p);
+    }
+    rig.fxi->setStageLook(Fixture::AutoLook);
+
+    // In the studio, from the side and from above, lit through its glass.
+    StudioRig studio;
+    QVERIFY(studio.build(m_doc));
+    studio.fxi->setStageLook(Fixture::LanternLook);
+    for (StructureStudioView::Plane plane : { StructureStudioView::Top, StructureStudioView::Front,
+                                              StructureStudioView::Side, StructureStudioView::Angled })
+    {
+        studio.view->setPlane(plane);
+        studio.view->reload();
+        QVERIFY(!studio.view->grab().toImage().isNull());
+    }
+    studio.fxi->setStageLook(Fixture::AutoLook);
+}
+
+void Monitor_Test::aStaffIsAPoleWoundWithLedStrip()
+{
+    // From the side: a pole, its strip in diagonal turns from top to bottom.
+    const QRectF r(0, 0, 12, 120);
+    const QRectF lens = stageLookLensRect(Fixture::StaffLook, r, true);
+    QVERIFY(lens.height() > lens.width() * 4);
+    const QPainterPath turns = stageLookLensHint(Fixture::StaffLook, lens);
+    QVERIFY(!turns.isEmpty());
+    QVERIFY(lens.adjusted(-0.5, -0.5, 0.5, 0.5).contains(turns.boundingRect()));
+    // Lit and dark along its length: the strip is a helix, not the whole pole.
+    int dark = 0, lit = 0;
+    for (qreal y = lens.top() + 1; y < lens.bottom() - 1; y += 1.0)
+        (turns.contains(QPointF(lens.center().x(), y)) ? dark : lit)++;
+    QVERIFY(dark > 10);
+    QVERIFY(lit > 10);
+    // ...and diagonal: one side of a turn is lit where the other is dark.
+    bool diagonal = false;
+    for (qreal y = lens.top() + 2; y < lens.bottom() - 2 && !diagonal; y += 1.0)
+        diagonal = turns.contains(QPointF(lens.left() + 1, y))
+                   != turns.contains(QPointF(lens.right() - 1, y));
+    QVERIFY(diagonal);
+    QVERIFY(stageLookLensHintAlpha(Fixture::StaffLook) > stageLookLensHintAlpha(Fixture::MovingSpotLook));
+
+    // From above: a small round dot, no turns.
+    const QRectF sq(0, 0, 40, 40);
+    const QRectF dot = stageLookBodyPath(Fixture::StaffLook, sq, false).boundingRect();
+    QVERIFY(qAbs(dot.width() - dot.height()) < 0.5);
+    QVERIFY(dot.width() < sq.width() * 0.7);
+    QCOMPARE(dot.center(), sq.center());
+    const QRectF topLens = stageLookLensRect(Fixture::StaffLook, sq, false);
+    QVERIFY(stageLookLensHint(Fixture::StaffLook, topLens).isEmpty());
+    QCOMPARE(stageLookDefaultSize(Fixture::StaffLook, 10, false).width(),
+             stageLookDefaultSize(Fixture::StaffLook, 10, false).height());
+
+    // On the plot, in each view.
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(3000, 3000, 0)));
+    rig.fxi->setStageLook(Fixture::StaffLook);
+    MonitorFixtureItem *item = rig.item;
+    QCOMPARE(item->m_width, item->m_height);               // from above: a dot
+    QVERIFY(item->lensHintPath().isEmpty());
+    rig.gv->setViewPOV(MonitorGraphicsView::PovFront);
+    item = rig.gv->m_fixtures.value(rig.fxi->id());
+    QVERIFY(item->m_height > item->m_width * 3);           // from the front: a pole
+    QVERIFY(!item->lensHintPath().isEmpty());              // wound with its strip
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
     rig.fxi->setStageLook(Fixture::AutoLook);
 }
 

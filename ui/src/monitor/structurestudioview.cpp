@@ -6841,7 +6841,7 @@ QRectF StructureStudioView::parBodyRect(const FixtureVisualTraits &traits, const
     double hPx = (traits.physH > 0.0f) ? qMax(8.0, double(traits.physH) * m_scale) : wPx * 0.85;
     if (traits.look != Fixture::AutoLook && traits.physW <= 0.0f && traits.physH <= 0.0f)
     {
-        const QSizeF look = stageLookDefaultSize(traits.look, 10.0);
+        const QSizeF look = stageLookDefaultSize(traits.look, 10.0, m_plane != Top);
         wPx = look.width();
         hPx = look.height();
     }
@@ -7595,9 +7595,24 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     else if (traits.kind == FixtureSilhouette::Lantern)
     {
         // A lantern: its cage as a rounded outline, the lit core inside.
+        const bool practical = traits.look == Fixture::LanternLook;
         const double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
-        const double hPx = (traits.physH > 0.0f) ? qMax(10.0, double(traits.physH) * m_scale) : wPx * 1.5;
+        const double hPx = (traits.physH > 0.0f) ? qMax(10.0, double(traits.physH) * m_scale)
+                         : (practical && m_plane == Top) ? wPx : wPx * 1.5;
         const QRectF r(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);
+        /* The Lantern stage look, a hurricane or porch lantern: r is its
+           glass; its hook, cap and base (from above, its base) go round it,
+           and the glass glows in it as any lantern's does. */
+        if (practical)
+        {
+            const bool side = m_plane != Top;
+            const QRectF lensIn = stageLookLensRect(Fixture::LanternLook, QRectF(0, 0, 1, 1), side);
+            const double ow = wPx / lensIn.width(), oh = hPx / lensIn.height();
+            const QRectF outer(r.left() - lensIn.left() * ow, r.top() - lensIn.top() * oh, ow, oh);
+            p.setPen(QPen(QColor(40, 40, 44), 1.0));
+            p.setBrush(QColor(72, 72, 78));
+            p.drawPath(stageLookBodyPath(Fixture::LanternLook, outer, side));
+        }
         if (hi)
         {
             QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
@@ -7707,7 +7722,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 if (!hint.isEmpty())
                 {
                     p.setPen(QPen(QColor(0, 0, 0, 150), 0));
-                    p.setBrush(QColor(0, 0, 0, 90));
+                    p.setBrush(QColor(0, 0, 0, stageLookLensHintAlpha(traits.look)));
                     p.drawPath(hint);
                 }
             }

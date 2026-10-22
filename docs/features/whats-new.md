@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Lanterns and staffs are practicals.** In the stage-look picker they
+  have their own **Practicals** section. A **Lantern** is now a hurricane
+  or porch lantern -- hook, cap, glass and base -- that glows all round
+  instead of throwing a beam, and lights what is near it in the studio. A
+  **Staff** is a pole wound with LED strip: diagonal turns of light down it
+  from the front or side, a small dot from above. Both have new icons. A
+  dimmer channel's *Auto* is now *Ellipsoidal / profile spot*. Shows that
+  already use these looks keep them. See
+  [Stage looks](lighting-studio.md#stage-looks).
+
 - **Three views.** **View → Workspace** picks the tabs: **qlcconsole**
   (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
   Virtual Console, Run), **Classic QLC+** (the QLC+ tabs, in QLC+'s order

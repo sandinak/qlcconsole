@@ -746,6 +746,12 @@ private slots:
     void theStageLookMenuSetsEveryFixtureSelected();
     /** The studio's flat views draw a look in its proportions. */
     void theStudioDrawsAStageLook();
+    /** A lantern is a practical (hurricane / porch lantern): hook, cap,
+     *  glass and base, glowing all round. */
+    void aLanternIsAPracticalThatGlowsAllRound();
+    /** A staff is a pole wound with LED strip: a helix from the side, a
+     *  dot from above. */
+    void aStaffIsAPoleWoundWithLedStrip();
 
 private:
     Doc* m_doc;

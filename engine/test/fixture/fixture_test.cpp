@@ -1234,7 +1234,14 @@ void Fixture_Test::stageLookKeys()
     QCOMPARE(Fixture::stageLookToString(Fixture::CycStripLook), QString("CycStrip"));
     QCOMPARE(Fixture::stageLookSection(Fixture::MovingSpotLook), int(Fixture::MovingSection));
     QCOMPARE(Fixture::stageLookSection(Fixture::FresnelLook), int(Fixture::ConventionalSection));
-    QCOMPARE(Fixture::stageLookSection(Fixture::StaffLook), int(Fixture::LedSection));
+    // Practicals: lights that are part of the set.
+    QCOMPARE(Fixture::stageLookSection(Fixture::LanternLook), int(Fixture::PracticalSection));
+    QCOMPARE(Fixture::stageLookSection(Fixture::StaffLook), int(Fixture::PracticalSection));
+    QCOMPARE(Fixture::stageLookSection(Fixture::StrobeLook), int(Fixture::LedSection));
+    QCOMPARE(looks.last(), Fixture::StaffLook);
+    // The key a saved show holds did not change with what a lantern is.
+    QCOMPARE(Fixture::stageLookToString(Fixture::LanternLook), QString("Lantern"));
+    QCOMPARE(Fixture::stageLookSectionName(Fixture::PracticalSection), QString("Practicals"));
 }
 
 static QByteArray stageLookSaved(Fixture &fxi)
@@ -1322,11 +1329,12 @@ void Fixture_Test::stageLookUnknownKey()
 
 void Fixture_Test::stageLookAuto()
 {
-    // A generic dimmer: a conventional.
+    // A generic dimmer: a conventional -- an ellipsoidal, not a lantern
+    // (a lantern is a practical).
     Fixture dimmer(this);
     QLCFixtureDef *ddef = dimmer.genericDimmerDef(1);
     dimmer.setFixtureDefinition(ddef, dimmer.genericDimmerMode(ddef, 1));
-    QCOMPARE(dimmer.autoStageLook(), Fixture::LanternLook);
+    QCOMPARE(dimmer.autoStageLook(), Fixture::EllipsoidalLook);
 
     // A moving head with a gobo wheel: a spot.
     QLCFixtureDef *mac = m_doc->fixtureDefCache()->fixtureDef("Martin", "MAC250+");
@@ -1353,6 +1361,9 @@ void Fixture_Test::stageLookAuto()
                 break;
             case QLCFixtureDef::Strobe:
                 QCOMPARE(fx.autoStageLook(), Fixture::StrobeLook);
+                break;
+            case QLCFixtureDef::Dimmer:
+                QCOMPARE(fx.autoStageLook(), Fixture::EllipsoidalLook);
                 break;
             case QLCFixtureDef::MovingHead:
                 QCOMPARE(Fixture::stageLookSection(fx.autoStageLook()), int(Fixture::MovingSection));

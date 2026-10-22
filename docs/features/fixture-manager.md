@@ -583,7 +583,8 @@ patched ones is Design mode's — the same rule everywhere.
 **Stage Look ▸** sets what the fixtures selected -- and every fixture of a
 group selected -- look like: **Auto** (named for what their type is closest
 to, as *Auto (Moving head spot)*), then the looks under **Moving**, **Fixed
-conventional** and **Fixed LED**, with icons. The one they all share is
+conventional**, **Fixed LED** and **Practicals** (Lantern, Staff), with
+icons. The one they all share is
 ticked. A fixture with a look shows its icon in this list and the other
 fixture lists, and its shape on the plot and in the studio; see
 [Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the

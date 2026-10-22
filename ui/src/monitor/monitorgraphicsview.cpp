@@ -3536,7 +3536,7 @@ void MonitorGraphicsView::updateFixture(quint32 id)
            staff thin (one with several heads keeps the strip above). */
         if (fxi->stageLook() != Fixture::AutoLook && n == 1)
         {
-            const QSizeF look = stageLookDefaultSize(fxi->stageLook(), 300.0);
+            const QSizeF look = stageLookDefaultSize(fxi->stageLook(), 300.0, isElevation());
             width = look.width();
             height = look.height();
         }
