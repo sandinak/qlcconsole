@@ -72,6 +72,8 @@
 #include "linespread.h"
 #include "effectdesigner.h"
 #include "showtreeview.h"
+#include "importsheet.h"
+#include "functionmanager.h"
 #include "inputoutputmap.h"
 #include "paletteops.h"
 #include "usedby.h"
@@ -1067,6 +1069,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowTreeView::slotTreeSelectionChanged);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
+    // W0: double-click a layer that plays a function as it is: open it.
+    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
+        const quint32 fid = openableFunction(item);
+        if (fid != Function::invalidId())
+            openFunction(fid);
+    });
     split->addWidget(m_tree);
 
     // Right: the inspector (the page), the Look Editor under it
@@ -3359,11 +3367,35 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
 
     if (rl->target.isOpaque())
     {
-        QLabel *l = new QLabel(tr("Plays the function \"%1\" as it is.").arg(m_st->targetLabel(rl->target)),
-                               m_rowsHost);
+        // One block at the top: what it plays, and (W0) Open, which edits
+        // it in its own editor -- what changes there is what plays.
+        QWidget *box = new QWidget(m_rowsHost);
+        QVBoxLayout *v = new QVBoxLayout(box);
+        v->setContentsMargins(0, 0, 0, 0);
+        QLabel *l = new QLabel(tr("Plays the function \"%1\" as it is.").arg(m_st->targetLabel(rl->target)), box);
         l->setWordWrap(true);
-        m_rows->addWidget(l, 0, 0, 1, 5);
+        v->addWidget(l);
         m_rowText << l->text();
+        const quint32 fid = rl->target.function;
+        if (const Function *f = m_doc->function(fid))
+        {
+            QPushButton *open = new QPushButton(tr("Open “%1”").arg(f->name()), box);
+            open->setObjectName(QStringLiteral("stLayerOpen"));
+            open->setToolTip(tr("Open it in its own editor (Window → Functions). Double-clicking the layer does "
+                                "the same."));
+            connect(open, &QPushButton::clicked, this, [this, fid]() { openFunction(fid); });
+            v->addWidget(open, 0, Qt::AlignLeft);
+            const QStringList also = alsoIn(fid, cue.id);
+            QString what = tr("Edited there, it changes what this cue plays.");
+            if (!also.isEmpty())
+                what += QStringLiteral(" ") + tr("Also in: %1 — they change too.").arg(also.join(QStringLiteral(", ")));
+            QLabel *note = new QLabel(what, box);
+            note->setObjectName(QStringLiteral("stLayerOpenNote"));
+            note->setWordWrap(true);
+            v->addWidget(note);
+            m_rowText << note->text();
+        }
+        m_rows->addWidget(box, 0, 0, 1, 5, Qt::AlignTop);
         m_pages->setCurrentWidget(m_layerPage);
         return;
     }
@@ -5737,6 +5769,20 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("Delete"), this, &ShowTreeView::slotDelete);
         }
     }
+    // W0: a layer that plays a function as it is opens it, first.
+    {
+        const quint32 fid = openableFunction(item);
+        if (const Function *f = m_doc->function(fid))
+        {
+            QAction *open = new QAction(tr("Open “%1”…").arg(f->name()), &menu);
+            open->setObjectName(QStringLiteral("stOpenFunction"));
+            open->setToolTip(tr("In its own editor (Window → Functions)"));
+            connect(open, &QAction::triggered, this, [this, fid]() { openFunction(fid); });
+            QAction *first = menu.actions().value(0);
+            menu.insertAction(first, open);
+            menu.insertSeparator(first);
+        }
+    }
     menu.exec(m_tree->viewport()->mapToGlobal(pos));
 }
 
@@ -5766,19 +5812,105 @@ void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
         selectNode(rep.list);
     if (!showReport)
         return;
-    QString text = tr("%1 cues, %2 layers, %3 played as they are, %4 includes; %5 scenes generated.")
-                   .arg(rep.cues).arg(rep.layers).arg(rep.opaqueLayers).arg(rep.includes).arg(rep.generatedScenes);
-    QStringList details;
-    for (const QString &s : rep.htpConflicts)
-        details << s;
-    if (!rep.opaqueReasons.isEmpty())
-        details << tr("Played as they are:") << rep.opaqueReasons;
-    details << rep.notes;
-    QMessageBox box(QMessageBox::Information, tr("Import chaser"), text, QMessageBox::Ok, this);
-    box.setInformativeText(tr("The list is non-tracking, so it plays as the chaser did. The chaser is unchanged."));
-    if (!details.isEmpty())
-        box.setDetailedText(details.join(QStringLiteral("\n")));
-    box.exec();
+    // The report as a sheet to read (W0), with the offer to fire the list
+    // from what fires the chaser.
+    ImportSheet sheet(m_doc, rep, chaserId, this);
+    if (m_sheetRunner)
+        m_sheetRunner(&sheet);
+    else
+        sheet.exec();
+    if (rep.list == invalidId())
+        return;
+    if (sheet.undoAsked())
+    {
+        m_st->undo();
+        m_hint->setText(tr("Import undone: the show is as it was"));
+        return;
+    }
+    if (sheet.repoint())
+        repointToList(chaserId, rep.list);
+}
+
+int ShowTreeView::repointToList(quint32 chaserId, quint32 listId)
+{
+    const CueList *list = m_st->cueList(listId);
+    if (list == nullptr)
+        return 0;
+    const ImportSheet::Repoint r = ImportSheet::planRepoint(m_doc, chaserId, list->chaser);
+    if (r.count() == 0)
+        return 0;
+    r.apply(m_doc, true);
+    // Part of the import's step: Undo puts them back on the chaser.
+    Doc *doc = m_doc;
+    m_st->attachToLastStep([doc, r](bool undone) { r.apply(doc, !undone); });
+    m_hint->setText(tr("%1 now fire(s) the cue list %2").arg(r.lines().join(QStringLiteral(", ")), list->name));
+    return r.count();
+}
+
+quint32 ShowTreeView::openableFunction(QTreeWidgetItem *item) const
+{
+    if (item == nullptr)
+        return Function::invalidId();
+    const int kind = item->data(0, KindRole).toInt();
+    const quint32 cueId = item->data(0, CueRole).toUInt();
+    Target t;
+    if (kind == LayerNode)
+    {
+        const Cue *c = m_st->cue(cueId);
+        const Layer *l = c == nullptr ? nullptr : c->layer(item->data(0, IdRole).toUInt());
+        if (l != nullptr)
+            t = l->target;
+    }
+    else if (kind == TrackedLayerNode)
+    {
+        t = carriedTarget(cueId, item->data(0, TargetRole).toString());
+    }
+    if (!t.isOpaque() || m_doc->function(t.function) == nullptr)
+        return Function::invalidId();
+    return t.function;
+}
+
+bool ShowTreeView::openFunction(quint32 functionId)
+{
+    const Function *f = m_doc->function(functionId);
+    if (f == nullptr)
+        return false;
+    const bool ok = m_functionOpener ? m_functionOpener(functionId) : FunctionManager::openFunction(functionId);
+    m_hint->setText(ok ? tr("“%1” is open in the Functions window").arg(f->name())
+                       : tr("Couldn't open “%1”: no Functions window").arg(f->name()));
+    return ok;
+}
+
+QStringList ShowTreeView::alsoIn(quint32 functionId, quint32 cueId) const
+{
+    QStringList out;
+    for (const Production &p : m_st->productions())
+        for (const CueList &l : p.lists)
+            for (int i = 0; i < l.cues.count(); ++i)
+            {
+                const Cue &c = l.cues.at(i);
+                if (c.id == cueId)
+                    continue;
+                for (const Layer &layer : c.layers)
+                    if (layer.target.function == functionId)
+                    {
+                        out << (l.looks ? tr("look %1").arg(m_st->cueLabel(l, i))
+                                        : tr("cue %1 of %2").arg(m_st->cueLabel(l, i), l.name));
+                        break;
+                    }
+            }
+    // The show's own functions that play it (not the tree's).
+    const QList<quint32> usage = m_doc->getUsage(functionId);
+    for (int i = 0; i + 1 < usage.count(); i += 2)
+    {
+        const Function *f = m_doc->function(usage.at(i));
+        if (f == nullptr || m_st->isGenerated(f->id()))
+            continue;
+        const QString line = tr("%1 “%2”").arg(Function::typeToString(f->type()).toLower(), f->name());
+        if (!out.contains(line))
+            out << line;
+    }
+    return out;
 }
 
 

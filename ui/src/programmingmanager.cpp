@@ -1104,7 +1104,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     if (ed == NULL)
     {
         m_canvasHint->setText(
-            tr("\"%1\" (%2) — open it in the Functions tab to edit.")
+            tr("\"%1\" (%2) — open it from Window → Functions to edit.")
             .arg(f->name()).arg(Function::typeToString(f->type())));
         m_canvasPlaceholder->show();
         m_canvasFunction = Function::invalidId(); // nothing previewable shown

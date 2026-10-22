@@ -91,7 +91,8 @@ Both the scenes/functions tree and the Palettes tab keep things in folders.
   folder just removes it. Deleting one with things in it asks first, and
   what was in it moves up a level — nothing is deleted.
 
-Folders are saved with the show and show the same in the Functions tab.
+Folders are saved with the show and show the same in the Functions window
+(**Window → Functions**).
 
 **Palette folders hold any type.** A folder in the Palettes tab can hold
 colours, aims, dimmers and effects together — say a folder per song,

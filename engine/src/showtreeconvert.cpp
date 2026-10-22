@@ -18,11 +18,14 @@
 */
 
 #include <algorithm>
+#include <functional>
 
 #include "showtreecontroller.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
 #include "cueoutput.h"
+#include "collection.h"
+#include "chaser.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -156,6 +159,88 @@ QHash<quint64, uchar> ShowTreeController::staticCueOutput(const CueList &list, c
     if (effects != nullptr)
         effects->sort();
     return out;
+}
+
+int ShowTreeController::importDifferences(quint32 chaserId, quint32 listId, QStringList *lines,
+                                          int *checked) const
+{
+    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(chaserId));
+    const CueList *list = cueList(listId);
+    if (checked != nullptr)
+        *checked = 0;
+    if (chaser == nullptr || list == nullptr)
+        return 0;
+
+    auto isHtp = [this](quint64 key) {
+        Fixture *fx = m_doc->fixture(quint32(key >> 32));
+        const int ch = int(key & 0xFFFFFFFF);
+        if (fx == nullptr)
+            return false;
+        if (fx->forcedHTPChannels().contains(ch))
+            return true;
+        if (fx->forcedLTPChannels().contains(ch))
+            return false;
+        const QLCChannel *c = fx->channel(quint32(ch));
+        return c != nullptr && c->group() == QLCChannel::Intensity;
+    };
+    // The step as the chaser runs it: a Collection starts its members in
+    // order, each writing as it would alone -- HTP on intensity, else the
+    // one started later.
+    std::function<void(quint32, QHash<quint64, uchar> &, int)> play;
+    play = [&](quint32 fid, QHash<quint64, uchar> &out, int depth) {
+        const Function *f = m_doc->function(fid);
+        if (f == nullptr || depth > 8)
+            return;
+        if (const Collection *coll = qobject_cast<const Collection *>(f))
+        {
+            for (quint32 m : coll->functions())
+                play(m, out, depth + 1);
+            return;
+        }
+        const QHash<quint32, QHash<quint32, uchar>> o = CueOutput::compute(m_doc, fid);
+        for (auto fx = o.constBegin(); fx != o.constEnd(); ++fx)
+            for (auto c = fx.value().constBegin(); c != fx.value().constEnd(); ++c)
+            {
+                const quint64 key = (quint64(fx.key()) << 32) | c.key();
+                if (out.contains(key) && isHtp(key))
+                    out[key] = qMax(out.value(key), c.value());
+                else
+                    out[key] = c.value();
+            }
+    };
+
+    const QList<ChaserStep> steps = chaser->steps();
+    const QList<ResolvedCue> resolved = resolve(*list, lineAimTest());
+    int total = 0;
+    for (int i = 0; i < list->cues.count() && i < steps.count(); ++i)
+    {
+        QHash<quint64, uchar> was;
+        play(steps.at(i).fid, was, 0);
+        const QHash<quint64, uchar> now = staticCueOutput(*list, resolved, i);
+        // A channel only one side sets is 0 on the other (the idle rig).
+        QSet<quint64> keys;
+        for (auto it = was.constBegin(); it != was.constEnd(); ++it)
+            keys.insert(it.key());
+        for (auto it = now.constBegin(); it != now.constEnd(); ++it)
+            keys.insert(it.key());
+        int n = 0;
+        QSet<quint32> fixtures;
+        for (quint64 k : keys)
+            if (was.value(k) != now.value(k))
+            {
+                ++n;
+                fixtures.insert(quint32(k >> 32));
+            }
+        if (checked != nullptr)
+            ++*checked;
+        if (n == 0)
+            continue;
+        total += n;
+        if (lines != nullptr)
+            *lines << tr("Cue %1: %n channel(s)", "", n).arg(cueLabel(*list, i))
+                      + tr(" on %n fixture(s) differ from the chaser's step.", "", int(fixtures.count()));
+    }
+    return total;
 }
 
 ShowTreeController::ConvertPlan ShowTreeController::planConvertToTracking(quint32 listId) const

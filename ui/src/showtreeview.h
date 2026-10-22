@@ -173,6 +173,30 @@ public:
     /** The reuse line on the cue / layer page, as text (tests). */
     QString reuseLineText() const;
 
+    /** W0: the function a layer row plays as it is (an opaque layer: a raw
+     *  scene, EFX, RGB Matrix, Collection or chaser) -- a layer of a cue,
+     *  or one carried into it. Function::invalidId() for anything else. */
+    quint32 openableFunction(QTreeWidgetItem *item) const;
+    /** W0: open function @a functionId in its own editor (Window →
+     *  Functions): Open on an opaque layer, its double-click and its page.
+     *  What is changed there is what the cue plays. */
+    bool openFunction(quint32 functionId);
+    /** In place of opening the Functions window (tests). */
+    typedef std::function<bool(quint32 functionId)> FunctionOpener;
+    void setFunctionOpener(const FunctionOpener &opener) { m_functionOpener = opener; }
+    /** Where else @a functionId plays, besides cue @a cueId: "cue 0.0.3
+     *  Announcer", "collection 0.0.4-SHOUT" (W0, the "also in" line). */
+    QStringList alsoIn(quint32 functionId, quint32 cueId) const;
+    /** In place of exec() for the import sheet (tests): look at it, tick or
+     *  untick, press a button. */
+    typedef std::function<void(class ImportSheet *sheet)> SheetRunner;
+    void setSheetRunner(const SheetRunner &runner) { m_sheetRunner = runner; }
+    /** W0: what fires chaser @a chaserId now (VC buttons, VC Cue Lists and
+     *  sliders, the main cue list, its cue-list number) fires list
+     *  @a listId's chaser instead, in the last undo step (the import's).
+     *  How many were moved. */
+    int repointToList(quint32 chaserId, quint32 listId);
+
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
     /** Palettes dropped on a layer (or, with no layer, on the cue's looks;
@@ -485,7 +509,8 @@ public slots:
     void slotMergeSelected();
     void slotUndo();
     void slotRedo();
-    /** Import a chaser as a cue list (§7): shows the report. */
+    /** Import a chaser as a cue list (§7): shows the report, a sheet
+     *  (W0) that also offers to fire the list from what fires the chaser. */
     void importChaser(quint32 chaserId, bool showReport = true);
 
 protected:
@@ -688,6 +713,8 @@ private:
     QStringList m_commandHistory;
     RecordAsker m_recordAsker;
     Confirm m_confirm;
+    FunctionOpener m_functionOpener;
+    SheetRunner m_sheetRunner;
     bool confirm(const QString &title, const QString &text, const QString &details = QString());
     /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
     QString reuseLine(quint32 cueId, quint32 layerId) const;

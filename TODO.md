@@ -27,6 +27,21 @@ under `~/.claude/.../memory/`.
     dropped on it.
   - Not yet seen on the real rig (ender / show VLAN): the preview on
     AT-W-ALL and on the XL-450 boxes was checked offscreen only.
+- **Workflow W0 leftovers (2026-10-22)** (feat/w0-seam-fixes, DONE.md;
+  design: WORKFLOW_DESIGN.md on design/programming-redesign):
+  - The blend between scene steps (`ChaserRunner::blendScene()`) covers a
+    cue that plays one scene **as it is**. A scene step read into a layer
+    (groups + palettes) bakes to a tree scene, which doesn't blend: a
+    chaser of such scenes stepping faster than their own fades would still
+    differ mid-fade. None of the real shows does this; the dry run would
+    show it.
+  - The import re-point moves VC buttons, VC Cue Lists, VC sliders
+    (playback), the main cue list and the cue-list number. Not covered:
+    speed dials / XY pads / anything else holding the chaser's id, input
+    profiles' MSC/OSC by name. W5's Import in place should reuse
+    `ImportSheet::planRepoint()` and extend it.
+  - The sheet's check is static (as the cues stand); fades and effects
+    aren't compared. The dry run (`importARealShow`) still plays both.
 
 - **Definition updates: leftovers (2026-10-21)** (feat/definition-updates,
   DONE.md):

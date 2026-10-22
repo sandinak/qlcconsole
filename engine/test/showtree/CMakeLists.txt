@@ -16,4 +16,5 @@ target_link_libraries(showtree_test PRIVATE
 
 target_compile_definitions(showtree_test PRIVATE
     TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../common/fixtures/"
+    SAMPLE_SHOW="${CMAKE_CURRENT_SOURCE_DIR}/../../../resources/samples/Sample.qxw"
 )

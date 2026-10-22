@@ -44,6 +44,7 @@
 #include "scenevalue.h"
 #include "collection.h"
 #include "chaserstep.h"
+#include "chaserrunner.h"
 #include "resource_paths.h"
 #include "qlcfile.h"
 #include "fixture.h"
@@ -1660,6 +1661,10 @@ void ShowTree_Test::importedListPlaysAsTheChaserDid()
     QCOMPARE(int(original[2][4]), 255);         // Steps-Full beats Steps-Dim (HTP)
 
     const ShowTreeController::ImportReport rep = m_doc->showTree()->importChaser(chaser->id());
+    // The report's own check (W0) says what playing it shows below.
+    QCOMPARE(rep.checkedCues, 5);
+    QCOMPARE(rep.differChannels, 0);
+    QVERIFY(rep.differCues.isEmpty());
     Chaser *imported = qobject_cast<Chaser *>(m_doc->function(m_doc->showTree()->cueList(rep.list)->chaser));
     QVERIFY(imported != nullptr);
     QCOMPARE(imported->stepsCount(), 5);
@@ -1913,6 +1918,154 @@ void ShowTree_Test::dryRunUsesTheShowsOwnDefinitions()
     QCOMPARE(run.mixedIncludes.count(), 1);
 }
 
+/* W0: the import report checks what it made. Two of a cue's own scenes on
+   one group, the brighter first: the chaser ran both (HTP, the brighter
+   showed), the list keeps the later one's value -- and the check says so,
+   for that cue and that channel, which playing the list then shows. */
+void ShowTree_Test::importChecksTheOutput()
+{
+    FixtureGroup *a = group("StepTops", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[1] });
+    const quint32 dim = dimmer(60, "Dim");
+    const quint32 bright = dimmer(250, "Bright");
+    Scene *sBright = groupScene(m_doc, "StepTops-Bright", a->id(), { bright });
+    Scene *sDim = groupScene(m_doc, "StepTops-Dim", a->id(), { dim });
+    Scene *ust = groupScene(m_doc, "USTs-Dim", b->id(), { dim });
+    Collection *one = collection(m_doc, "0.0.1-One", { ust->id() });
+    Collection *two = collection(m_doc, "0.0.2-Two", { sBright->id(), sDim->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(two->id(), 0, Function::infiniteSpeed(), 0));
+
+    go(chaser);
+    settle(10);
+    go(chaser);
+    QCOMPARE(int(settle(10).value(0)), 250);   // HTP: the brighter
+    stopAll();
+
+    const ShowTreeController::ImportReport rep = m_doc->showTree()->importChaser(chaser->id());
+    QCOMPARE(rep.htpConflicts.count(), 1);
+    QCOMPARE(rep.checkedCues, 2);
+    QCOMPARE(rep.differChannels, 1);
+    QCOMPARE(rep.differCues.count(), 1);
+    QVERIFY2(rep.differCues.first().startsWith("Cue 0.0.2 Two: 1 channel"), qPrintable(rep.differCues.first()));
+    // Asked again, the same answer.
+    QStringList lines;
+    int checked = 0;
+    QCOMPARE(m_doc->showTree()->importDifferences(chaser->id(), rep.list, &lines, &checked), 1);
+    QCOMPARE(checked, 2);
+    QCOMPARE(lines, rep.differCues);
+
+    // And it is true: the list plays the later scene's value.
+    Chaser *imported = qobject_cast<Chaser *>(m_doc->function(m_doc->showTree()->cueList(rep.list)->chaser));
+    QVERIFY(imported != nullptr);
+    go(imported);
+    settle(10);
+    go(imported);
+    QCOMPARE(int(settle(10).value(0)), 60);
+}
+
+/* W0, Sample.qxw's "201 channels": a looping chaser of raw scenes, each
+   with its own 1 s fade, fade mode Default, steps shorter than the fade.
+   QLC+ blends a scene from the one before (Scene::setBlendFunctionID); the
+   list's steps are Collections, which never blended, so the list ran at
+   half the level. A cue Collection of one scene played as it is now blends
+   as the scene did: tick for tick the same. */
+void ShowTree_Test::importedRawScenesBlendAsTheChaserDid()
+{
+    auto raw = [this](const QString &name, int a, int b) {
+        Scene *s = new Scene(m_doc);
+        s->setName(name);
+        s->setFadeInSpeed(1000);
+        s->setFadeOutSpeed(1000);
+        s->setValue(m_fixtures[0], 0, uchar(a));
+        s->setValue(m_fixtures[1], 0, uchar(b));
+        m_doc->addFunction(s);
+        return s;
+    };
+    Scene *one = raw("par 1", 255, 0);
+    Scene *two = raw("par 2", 0, 255);
+    Scene *three = raw("par 3", 255, 255);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Par chaser");
+    chaser->setRunOrder(Function::Loop);
+    chaser->setDurationMode(Chaser::Common);
+    chaser->setFadeInMode(Chaser::Default);
+    chaser->setFadeOutMode(Chaser::Default);
+    m_doc->addFunction(chaser);
+    for (Scene *s : { one, two, three })
+        chaser->addStep(ChaserStep(s->id()));
+
+    auto trace = [this](Chaser *c) {
+        m_doc->inputOutputMap()->resetUniverses();
+        c->start(m_doc->masterTimer(), FunctionParent::master());
+        QStringList out;
+        for (int t = 0; t < 150; ++t)
+        {
+            const QHash<quint32, uchar> now = settle(1);
+            out << QString("%1/%2").arg(now.value(0)).arg(now.value(1));
+        }
+        stopAll();
+        tick(100);
+        return out;
+    };
+    for (uint duration : { 0u, 300u, 2000u })
+    {
+        chaser->setDuration(duration);
+        const QStringList original = trace(chaser);
+        const ShowTreeController::ImportReport rep = m_doc->showTree()->importChaser(chaser->id());
+        QCOMPARE(rep.opaqueLayers, 3);
+        Chaser *imported = qobject_cast<Chaser *>(m_doc->function(m_doc->showTree()->cueList(rep.list)->chaser));
+        QVERIFY(imported != nullptr);
+        QCOMPARE(imported->duration(), duration);
+        const QStringList list = trace(imported);
+        for (int t = 0; t < original.count(); ++t)
+            QVERIFY2(list.at(t) == original.at(t),
+                     qPrintable(QString("duration %1, tick %2: the list %3, the chaser %4")
+                                .arg(duration).arg(t).arg(list.at(t), original.at(t))));
+        QVERIFY(m_doc->showTree()->undo());
+    }
+    // A Collection of its own (not the tree's) still never blends, as in QLC+.
+    Collection *mine = collection(m_doc, "mine", { one->id() });
+    QVERIFY(ChaserRunner::blendScene(m_doc, mine) == nullptr);
+    QCOMPARE(ChaserRunner::blendScene(m_doc, one), one);
+}
+
+/* W0: the stock sample (QLC+ 4.0.2, 13 looping chasers of raw scenes, 5
+   EFX) imports and plays the same, by the dry run and by the report's own
+   check. */
+void ShowTree_Test::importTheSampleShow()
+{
+    const DryRun run = dryRunImport(QStringLiteral(SAMPLE_SHOW));
+    QVERIFY2(run.loaded, qPrintable(run.problems.join(" | ")));
+    QVERIFY2(run.problems.isEmpty(), qPrintable(run.problems.join(" | ")));
+    QCOMPARE(run.lists, 13);
+    QCOMPARE(run.cues, 47);
+    QCOMPARE(run.differ, 0);
+    QCOMPARE(run.staticDiffer, 0);
+    QCOMPARE(run.convertedDiffer, 0);
+}
+
+/* W0: an undo step can carry what it changed outside the tree (the VC
+   buttons an import re-pointed): undone, then redone, with the step. */
+void ShowTree_Test::anUndoStepCarriesWhatItChangedOutside()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(!st->attachToLastStep([](bool) {}));
+    QVERIFY(st->addProduction("Show") != invalidId());
+    QStringList calls;
+    QVERIFY(st->attachToLastStep([&calls](bool undone) { calls << (undone ? "undo" : "redo"); }));
+    QVERIFY(st->undo());
+    QCOMPARE(calls, QStringList({ "undo" }));
+    QVERIFY(st->redo());
+    QCOMPARE(calls, QStringList({ "undo", "redo" }));
+    QVERIFY(st->undo());
+    QCOMPARE(calls, QStringList({ "undo", "redo", "undo" }));
+}
+
 /* A dry run on a real show: QLC_SHOWTREE_IMPORT=<a COPY of a .qxw/.qlcc>.
    The show is opened as App opens it (its embedded definitions first, the
    user folder kept out); every chaser in it is imported (in memory only --
@@ -1932,6 +2085,7 @@ void ShowTree_Test::importARealShow()
                          .arg(run.cues).arg(run.lists).arg(run.differ).arg(run.convertedDiffer)
                          .arg(run.showDefinitions);
     QCOMPARE(run.differ, 0);
+    QCOMPARE(run.staticDiffer, 0);
     QCOMPARE(run.convertedDiffer, 0);
 }
 
@@ -1992,6 +2146,7 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
     for (Function *f : m_doc->functions())
         if (f->type() == Function::ChaserType)
             chasers << f->id();
+
     std::sort(chasers.begin(), chasers.end());
     for (quint32 id : chasers)
     {
@@ -2009,6 +2164,11 @@ ShowTree_Test::DryRun ShowTree_Test::dryRunImport(const QString &path)
             qInfo().noquote() << "  HTP:" << s;
         for (const QString &s : rep.notes)
             qInfo().noquote() << "  note:" << s;
+        qInfo().noquote() << QString("  same-output check: %1 cues, %2 channels differ")
+                             .arg(rep.checkedCues).arg(rep.differChannels);
+        for (const QString &s : rep.differCues)
+            qInfo().noquote() << "  differs:" << s;
+        run.staticDiffer += rep.differChannels;
         const CueList *list = m_doc->showTree()->cueList(rep.list);
         if (list == nullptr)
             continue;

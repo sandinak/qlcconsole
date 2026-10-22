@@ -157,7 +157,7 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
     QShortcut *del = new QShortcut(QKeySequence::Delete, this);
     connect(del, SIGNAL(activated()), this, SLOT(slotDeleteSelected()));
 
-    // The Show can be deleted (Functions tab) or the workspace cleared while this
+    // The Show can be deleted (Functions window) or the workspace cleared while this
     // editor is still alive (it's torn down via deleteLater, which defers past the
     // synchronous delete). Drop our pointer so the destructor never touches a
     // freed Show. functionRemoved is emitted BEFORE the delete, so m_show is still
