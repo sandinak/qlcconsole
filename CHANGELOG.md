@@ -47,6 +47,22 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   `ShowTreeController::dropUnusedInlinePalettes` now keeps one-offs a
   scene in Build's undo history still plays
   (`PaletteOps::palettesInHistory()`).
+- **Move in black per cue list and per cue (Q38).** `CueList::moveInBlack`
+  (`ShowTree::MoveInBlack` Show / On / Off, saved as `MoveInBlack="On|Off"`
+  on `<CueList>`) and `Cue::noMoveInBlack` (`NoMoveInBlack="1"` on `<Cue>`),
+  both optional attributes an older build ignores. `MarkPlanner` asks
+  `ShowTreeController::moveInBlackForNext()` for the next cue
+  (`CueLookahead::UpcomingCue` now carries the running chaser and step):
+  the cue's flag wins, else the list's setting, else the show's switch
+  (`ShowTree::effectiveMoveInBlack`). It now also looks ahead with the
+  show's switch off when some list is On, and releases its pre-sets when
+  the next cue says no. Lead time stays show-wide. UI: the list page's
+  **Move in black** combo and right-click **Move in black ▸**; the cue
+  page's and right-click **Don't move in black into this cue**; ⊘ MIB /
+  ▸ MIB badges; the MIB button's tooltip counts overrides and *MIB · n*
+  shows a list's pre-sets with the show's switch off. Command line:
+  `mib on|off|show [list]`, `nomib` / `allowmib <cues>`, with help and
+  Tab completion. One undo step per change.
 - **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
   tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
   yellow hard hat with an amber edge, crisp at any size and pixel ratio,

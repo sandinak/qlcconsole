@@ -1251,8 +1251,12 @@ rig edits, bulk repatching, cross-show consistency checks.
     signal, forwarded `ProgrammerController` → App footer chip. DONE (unit-tested,
     engine/test/markplanner). Runs regardless of Auto-MIB being on (manual marks
     dangle too). *Needs rig eyeball to confirm the chip reads right live.*
+  - **Q38 — per list / per cue** — show default + cue list Use show's / On /
+    Off + per-cue "Don't move in black into this cue" (`mib`, `nomib`,
+    `allowmib`; badges; MIB tooltip). DONE (feat/mib-overrides). Lead time
+    stays show-wide.
   Still open: **verify CueLookahead timing on a rig** (the dark-gap depends on it);
-  **force-live / force-mark** per-cue overrides + dark-move fade. Also: mark "to a
+  **force-mark** per-cue override + dark-move fade. Also: mark "to a
   chosen look"; a monitor context-menu Mark action. *(from the cue-policy discussion)*
 
 ## Backlog — not started

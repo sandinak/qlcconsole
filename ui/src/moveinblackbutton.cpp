@@ -25,6 +25,7 @@
 
 #include "moveinblackbutton.h"
 #include "programmercontroller.h"
+#include "showtreecontroller.h"
 #include "doc.h"
 
 MoveInBlackButton::MoveInBlackButton(Doc *doc, QWidget *parent)
@@ -89,6 +90,9 @@ MoveInBlackButton::MoveInBlackButton(Doc *doc, QWidget *parent)
         connect(pc, &ProgrammerController::autoMoveInBlackChanged, this, &MoveInBlackButton::sync);
         connect(pc, &ProgrammerController::moveInBlackPresetsChanged, this, &MoveInBlackButton::sync);
     }
+    // Q38: the tooltip says when cue lists or cues say otherwise.
+    if (m_doc != nullptr && m_doc->showTree() != nullptr)
+        connect(m_doc->showTree(), &ShowTreeController::changed, this, &MoveInBlackButton::sync);
     sync();
 }
 
@@ -110,7 +114,8 @@ void MoveInBlackButton::sync()
         m_leadSpin->setValue(lead);
     }
     // MIDDLE DOT: the count of heads being moved in black right now.
-    setText(on && presets > 0 ? tr("MIB \302\267 %1").arg(presets) : tr("MIB"));
+    // (A cue list set On pre-positions with the show's setting off, too.)
+    setText(presets > 0 ? tr("MIB \302\267 %1").arg(presets) : tr("MIB"));
     QString tip = tr("Auto move-in-black: while the show runs, look ahead to the next cue and "
                      "pre-position any dark mover it will reveal, if the next cue is at least "
                      "the lead time away (now %1 s). The arrow sets the lead time. Saved with "
@@ -121,6 +126,21 @@ void MoveInBlackButton::sync()
             ? tr("Pre-positioning %n head(s) in black for the next cue.", "", presets)
             : tr("On: nothing to pre-position right now."));
     else
-        tip += QLatin1Char('\n') + tr("Off.");
+        tip += QLatin1Char('\n') + (presets > 0
+            ? tr("Off for the show; a cue list set On is pre-positioning %n head(s).", "", presets)
+            : tr("Off."));
+    int lists = 0, cues = 0;
+    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    if (st != nullptr && st->hasMoveInBlackOverrides(&lists, &cues))
+    {
+        QStringList what;
+        if (lists > 0)
+            what << (lists == 1 ? tr("1 cue list set On or Off") : tr("%1 cue lists set On or Off").arg(lists));
+        if (cues > 0)
+            what << (cues == 1 ? tr("1 cue marked \"Don't move in black\"")
+                               : tr("%1 cues marked \"Don't move in black\"").arg(cues));
+        tip += QLatin1Char('\n') + tr("This is the show's default; overridden by %1 (marked in the tree).")
+                                    .arg(what.join(tr(" and ")));
+    }
     setToolTip(tip);
 }

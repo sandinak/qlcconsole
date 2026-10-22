@@ -21,6 +21,15 @@ The latest changes, newest first. Each links to the guide with the detail.
   otherwise the layer gets a one-off. It is one undo step, and the new
   layer is selected afterwards. See [Make a layer](effects.md#make-a-layer).
 
+- **Move in black per cue list and per cue.** The **MIB** switch is now
+  the show's default. A cue list can say **On** or **Off** whatever the
+  show says (right-click → **Move in black ▸**, its page, or
+  `mib off list`). A single cue can say **Don't move in black into this
+  cue** (its page, right-click, or `nomib 0.0.3`). The tree badges a list
+  or cue that differs from the show (**⊘ MIB** / **▸ MIB**), and the MIB
+  button's tooltip counts them. The lead time stays the show's. See
+  [Move in black](show-tree.md#move-in-black).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;

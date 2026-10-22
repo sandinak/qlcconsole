@@ -34,6 +34,7 @@
 #include <QShortcut>
 #include <QLabel>
 #include <QCheckBox>
+#include <QToolButton>
 #include <QSplitter>
 #include <QHeaderView>
 #include <QScrollBar>
@@ -96,6 +97,8 @@
 #include "qlcchannel.h"
 #include "qlcfixturemode.h"
 #include "showtreeview.h"
+#include "moveinblackbutton.h"
+#include "programmercontroller.h"
 #include "linespreadpreview.h"
 #include "lineplanview.h"
 #include "monitorproperties.h"
@@ -6295,6 +6298,144 @@ void ShowTreeView_Test::libraryGroupToolsOnARealShow()
     for (quint32 gid : tops)
         QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Truss tops"));
     QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));   // alike still
+}
+
+void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    ProgrammerController *pc = m_doc->programmer();
+    QVERIFY(pc != nullptr);
+    pc->setAutoMoveInBlack(true);
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 3; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->setLayerLook(c[0], st->addLayer(c[0], groupTarget(towers->id())), st->lookForPalette(half));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    auto listRow = [tree, list]() -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ListNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == list)
+                return *it;
+        return nullptr;
+    };
+    auto trigger = [](QMenu *menu, const QString &name) {
+        for (QAction *a : menu->actions())
+            if (a->objectName() == name)
+            {
+                a->trigger();
+                return true;
+            }
+        return false;
+    };
+    QVERIFY(!listRow()->text(1).contains("MIB"));
+    QVERIFY(!cueRow(tree, c[1])->text(1).contains("MIB"));
+
+    // The list's page: Move in black, "Use show's (On)".
+    tree->setCurrentItem(listRow());
+    QComboBox *listMib = view.findChild<QComboBox *>("stListMib");
+    QVERIFY(listMib != nullptr && listMib->isVisibleTo(&view));
+    QCOMPARE(listMib->currentText(), QString("Use show's (On)"));
+    listMib->setCurrentIndex(2);
+    QMetaObject::invokeMethod(listMib, "activated", Q_ARG(int, 2));
+    QCOMPARE(st->listMoveInBlack(list), MoveInBlack::Off);
+    QCOMPARE(st->undoText(), QString("Move in black: Off"));
+    tree->expandAll();
+    QVERIFY2(listRow()->text(1).contains("⊘ MIB"), qPrintable(listRow()->text(1)));
+    QVERIFY(listRow()->toolTip(1).contains("Move in black Off for this list"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->listMoveInBlack(list), MoveInBlack::Show);
+
+    // Right-click ▸ Move in black ▸ On, with the show's off: badged.
+    pc->setAutoMoveInBlack(false);
+    {
+        QMenu menu;
+        view.listMibMenu(&menu, list);
+        QCOMPARE(menu.actions().first()->text(), QString("Use show's (Off)"));
+        QVERIFY(menu.actions().first()->isChecked());
+        QVERIFY(trigger(&menu, "stListMibOn"));
+    }
+    QCOMPARE(st->listMoveInBlack(list), MoveInBlack::On);
+    tree->expandAll();
+    QVERIFY2(listRow()->text(1).contains("▸ MIB"), qPrintable(listRow()->text(1)));
+    // The show's turned on: the list says what the show says -- no badge.
+    pc->setAutoMoveInBlack(true);
+    tree->expandAll();
+    QVERIFY(!listRow()->text(1).contains("MIB"));
+
+    // The cue page's "Don't move in black into this cue": badged on the row.
+    QVERIFY(view.selectNode(c[1]));
+    QCheckBox *noMib = view.findChild<QCheckBox *>("stCueNoMib");
+    QVERIFY(noMib != nullptr && noMib->isVisibleTo(&view));
+    QVERIFY(!noMib->isChecked());
+    noMib->setChecked(true);
+    QVERIFY(st->isCueNoMoveInBlack(c[1]));
+    QCOMPARE(st->undoText(), QString("Don't move in black into cue"));
+    tree->expandAll();
+    QVERIFY2(cueRow(tree, c[1])->text(1).contains("⊘ MIB"), qPrintable(cueRow(tree, c[1])->text(1)));
+    QVERIFY(cueRow(tree, c[1])->toolTip(1).contains("Don't move in black into this cue"));
+    QVERIFY(!cueRow(tree, c[0])->text(1).contains("MIB"));
+    QVERIFY(view.selectNode(c[1]));
+    QVERIFY(view.findChild<QCheckBox *>("stCueNoMib")->isChecked());
+
+    // The MIB button: still the show's, its tooltip names the overrides.
+    MoveInBlackButton *mib = view.moveInBlackButton();
+    QVERIFY(mib != nullptr);
+    QVERIFY(mib->isChecked());
+    QVERIFY2(mib->toolTip().contains("overridden by 1 cue list set On or Off and 1 cue marked"),
+             qPrintable(mib->toolTip()));
+    QVERIFY(st->undo());
+    QVERIFY(!st->isCueNoMoveInBlack(c[1]));
+
+    // Right-click a cue: the checkbox action, both ways.
+    for (const bool was : { false, true })
+    {
+        bool seen = false, checked = false;
+        ModalCloser closer([&](QWidget *w) {
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                for (QAction *act : m->actions())
+                    if (act->objectName() == QLatin1String("stCueNoMib"))
+                    {
+                        seen = true;
+                        checked = act->isChecked();
+                        m->close();
+                        act->trigger();
+                        return true;
+                    }
+            return false;
+        });
+        QVERIFY(view.selectNode(c[2]));
+        QTreeWidgetItem *r = cueRow(tree, c[2]);
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, tree->visualItemRect(r).center()));
+        QVERIFY(seen);
+        QCOMPARE(checked, was);
+        QCOMPARE(st->isCueNoMoveInBlack(c[2]), !was);
+    }
+
+    // The command line: mib off list, mib show list, nomib / allowmib.
+    QVERIFY(view.selectNode(c[0]));
+    QVERIFY(view.runCommand("mib off list"));
+    QCOMPARE(st->listMoveInBlack(list), MoveInBlack::Off);
+    QVERIFY2(view.commandMessage().contains("move in black Off"), qPrintable(view.commandMessage()));
+    QVERIFY(view.runCommand("mib show list"));
+    QCOMPARE(st->listMoveInBlack(list), MoveInBlack::Show);
+    QVERIFY(view.runCommand("nomib 1 thru 2"));
+    QVERIFY(st->isCueNoMoveInBlack(c[0]) && st->isCueNoMoveInBlack(c[1]));
+    QCOMPARE(st->undoText(), QString("nomib 1 thru 2"));
+    QVERIFY(view.runCommand("allowmib 1, 2"));
+    QVERIFY(!st->isCueNoMoveInBlack(c[0]) && !st->isCueNoMoveInBlack(c[1]));
+    QVERIFY(!view.runCommand("mib sideways"));
+
+    pc->setAutoMoveInBlack(false);
 }
 
 /* Branson: "for cuelist, and cues can we save a color for the text in the

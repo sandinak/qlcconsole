@@ -50,7 +50,7 @@ static QList<CueLookahead::UpcomingCue> chaserUpcoming(Chaser *chaser, int horiz
     }
 
     if (fireInMs <= horizonMs || fireInMs == INT_MAX)
-        out.append({ ns->fid, fireInMs });
+        out.append({ ns->fid, fireInMs, chaser->id(), next });
     return out;
 }
 
