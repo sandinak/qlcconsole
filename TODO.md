@@ -51,6 +51,23 @@ under `~/.claude/.../memory/`.
     dropped on it.
   - Not yet seen on the real rig (ender / show VLAN): the preview on
     AT-W-ALL and on the XL-450 boxes was checked offscreen only.
+- **Workflow W5 leftovers (2026-10-22)** (feat/w5-bridge; design:
+  WORKFLOW_DESIGN.md §3.5):
+  - **Upgrade this show… wizard** (§3.7) not built: the converter covers
+    the chasers; the wizard would add collections → busk looks and a
+    "raw scenes" section offering Capture into palettes in one pass.
+  - The open banner is in the Show Tree tab (Build is W1's); its ✕ lasts
+    until the next show is opened, not saved per show.
+  - Capture into palettes reads Dimmer, Colour (RGB/W/A/UV, CMY, a wheel
+    slot), Position (whole degrees) and an unnamed Gobo value. Shutter,
+    zoom, prism and effect-mode channels stay in the "(rest)" scene. A
+    scene with its own fades isn't offered (most of Sample.qxw's).
+  - The originals' "Imported into Show Tree" mark is the list's record
+    (`Original` entries) and the folder name, not an attribute on each
+    function; the Functions window shows no banner on them yet.
+  - Restore original re-points everything firing the list back to the
+    chaser, including widgets pointed at the list after the import.
+
 - **Workflow W0 leftovers (2026-10-22)** (feat/w0-seam-fixes, DONE.md;
   design: WORKFLOW_DESIGN.md on design/programming-redesign):
   - The blend between scene steps (`ChaserRunner::blendScene()`) covers a
@@ -60,10 +77,10 @@ under `~/.claude/.../memory/`.
     differ mid-fade. None of the real shows does this; the dry run would
     show it.
   - The import re-point moves VC buttons, VC Cue Lists, VC sliders
-    (playback), the main cue list and the cue-list number. Not covered:
-    speed dials / XY pads / anything else holding the chaser's id, input
-    profiles' MSC/OSC by name. W5's Import in place should reuse
-    `ImportSheet::planRepoint()` and extend it.
+    (playback), speed dials, clocks, audio triggers, Show timelines, the
+    main cue list and the cue-list number (W5). XY pads and matrices
+    can't hold a chaser. Not covered: input profiles' MSC/OSC by name,
+    Scripts that start the chaser by id.
   - The sheet's check is static (as the cues stand); fades and effects
     aren't compared. The dry run (`importARealShow`) still plays both.
 

@@ -49,6 +49,7 @@ class QCheckBox;
 class QFormLayout;
 class QTextBrowser;
 class QLabel;
+class QFrame;
 class QMenu;
 class Doc;
 
@@ -196,6 +197,30 @@ public:
      *  @a listId's chaser instead, in the last undo step (the import's).
      *  How many were moved. */
     int repointToList(quint32 chaserId, quint32 listId);
+
+    /** W5: the show converter (Import chaser… ▸ Convert an old show…, and
+     *  the open banner's Convert…). */
+    void openConverter();
+    /** In place of exec() for the converter (tests). */
+    typedef std::function<void(class ShowConverter *converter)> ConverterRunner;
+    void setConverterRunner(const ConverterRunner &runner) { m_converterRunner = runner; }
+    /** W5: Import in place -- the list takes over from chaser @a chaserId:
+     *  the originals filed under Imported/…, what fires the chaser (VC,
+     *  timelines, show control) fires the list; one undo step. What
+     *  happened, a line each. */
+    QStringList importInPlace(quint32 chaserId);
+    /** W5: Restore original for list @a listId: asks, then the list leaves
+     *  the tree, the originals go back to their folders and what fires the
+     *  list fires the chaser again; one undo step. */
+    bool restoreOriginal(quint32 listId);
+    /** W5: Capture into palettes for raw scene @a sceneId (a ▣ row): shows
+     *  the plan, asks; one undo step. */
+    bool captureIntoPalettes(quint32 sceneId);
+    /** W5: the banner an old show opens with ("This show uses chasers…
+     *  Convert…"): shown while the show has chasers that look like cue
+     *  lists and no Show Tree, until dismissed (for this show). */
+    QWidget *bridgeBanner() const;
+    void updateBridgeBanner();
 
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
@@ -715,6 +740,11 @@ private:
     Confirm m_confirm;
     FunctionOpener m_functionOpener;
     SheetRunner m_sheetRunner;
+    ConverterRunner m_converterRunner;
+    QFrame *m_bridgeBanner = nullptr;
+    QLabel *m_bridgeText = nullptr;
+    bool m_bridgeDismissed = false;
+    QPushButton *m_listRestore = nullptr;
     bool confirm(const QString &title, const QString &text, const QString &details = QString());
     /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
     QString reuseLine(quint32 cueId, quint32 layerId) const;

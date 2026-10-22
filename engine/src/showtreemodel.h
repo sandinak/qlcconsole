@@ -277,6 +277,22 @@ namespace ShowTree
         quint32 subOf = 0xFFFFFFFF;
         bool isSubCues() const { return subOf != 0xFFFFFFFF; }
 
+        /** The chaser this list was imported from (W5, `Source=`): the link
+         *  back that Restore original follows. Invalid: made in the tree. */
+        quint32 source = 0xFFFFFFFF;
+        /** Imported in place (W5): the list took over from its chaser, which
+         *  -- with the collections and scenes only it used -- was filed under
+         *  Imported/… (@a originals: each one's id and the folder it was in,
+         *  for Restore original). Saved as <Original> children, which an
+         *  older build skips. */
+        bool inPlace = false;
+        struct Original
+        {
+            quint32 function = 0xFFFFFFFF;
+            QString path;               //!< its folder before it was filed
+        };
+        QList<Original> originals;
+
         int indexOf(quint32 cueId) const;
         Cue *cue(quint32 id);
         const Cue *cue(quint32 id) const;

@@ -24,12 +24,14 @@
 #include <QStringList>
 #include <QObject>
 #include <QHash>
+#include <QMap>
 #include <QSet>
 
 #include "qlcengine_export.h"
 #include "functionparent.h"
 #include "showtreemodel.h"
 #include "qlcpalette.h"
+#include "scenevalue.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -691,8 +693,12 @@ public:
     /** Something outside the tree that the last undo step also changed --
      *  the VC buttons an import re-pointed (W0): @a apply(true) once the
      *  step is undone, @a apply(false) once it is redone, so it stays one
-     *  step. False when there is no step to attach it to. */
-    bool attachToLastStep(const std::function<void(bool undone)> &apply);
+     *  step. Several attach in order (undone last first). @a beforeTree:
+     *  it was changed before the step's tree change (Restore original
+     *  points VC back at the chaser before the list's goes), so undo runs
+     *  it after the tree is back, redo before. False when there is no step
+     *  to attach it to. */
+    bool attachToLastStep(const std::function<void(bool undone)> &apply, bool beforeTree = false);
     void clearRedo() { m_redo.clear(); }
     /** When the top undo / redo step was taken (0: none), comparable with
      *  the palette stack's (PaletteOps::nextUndoStamp()). */
@@ -733,8 +739,10 @@ private:
         QString label;
         QByteArray xml;
         quint64 stamp = 0;
-        /** What the step changed outside the tree (attachToLastStep). */
+        /** What the step changed outside the tree (attachToLastStep):
+         *  after its tree change, and before it. */
         std::function<void(bool undone)> outside;
+        std::function<void(bool undone)> outsideBefore;
     };
     QByteArray snapshotXml() const;
     void restoreSnapshot(const QByteArray &xml);
@@ -926,6 +934,16 @@ public:
         int checkedCues = 0;
         int differChannels = 0;
         QStringList differCues;
+        /** W5: collections inside a step that are no step themselves, read
+         *  into the cue's layers (@a flattened) or left out because they
+         *  play nothing (@a dropped); one line each in @a flattenNotes. */
+        int flattened = 0;
+        int dropped = 0;
+        QStringList flattenNotes;
+        /** W5, Import in place: the originals filed under Imported/…, and
+         *  the Show timelines that played the chaser and play the list now. */
+        int filed = 0;
+        QStringList timelines;
     };
 
     /** Import @a chaserId as a cue list in a new production (D12): each
@@ -953,6 +971,126 @@ public:
      *  differs, @a checked the cues compared. */
     int importDifferences(quint32 chaserId, quint32 listId, QStringList *lines = nullptr,
                           int *checked = nullptr) const;
+    /** The same for a list that isn't in the tree (yet): a planned import. */
+    int importDifferences(quint32 chaserId, const ShowTree::CueList &list, QStringList *lines = nullptr,
+                          int *checked = nullptr) const;
+
+private:
+    /** What importChaser() makes of @a chaserId, without changing anything:
+     *  the list (its node ids from @a nextId) and the report, the
+     *  same-output check not yet run. False: not a chaser. */
+    bool buildImport(quint32 chaserId, ShowTree::CueList *list, ImportReport *report,
+                     const std::function<quint32()> &nextId) const;
+
+    /************************************************************************
+     * The bridge (W5): an old show into the tree -- and back
+     ************************************************************************/
+public:
+    /** What a chaser is used as (WORKFLOW_DESIGN.md §3.2, §3.5). */
+    enum class ChaserKind
+    {
+        CueList,    //!< manual: waits for GO, notes, cue numbers, show control, a VC Cue List
+        Effect      //!< loops on its own: strobes, chases, sweeps -- stays a function
+    };
+    struct ChaserClass
+    {
+        ChaserKind kind = ChaserKind::Effect;
+        QStringList why;            //!< "waits for GO on 7 of 7 steps", "loops every 0.5 s"
+    };
+    /** Tell a cue-list chaser from an effect chaser, by how it runs: any
+     *  step waiting for GO, a note or cue number, a cue-list number, the
+     *  show's main cue list or a VC Cue List playing it (@a vcCueList: the
+     *  UI knows) make a cue list; a chaser that only loops on its own,
+     *  timed, is an effect. */
+    ChaserClass classifyChaser(quint32 chaserId, bool vcCueList = false) const;
+    /** The chasers an old show could convert: its own (not the tree's, not
+     *  already imported in place), by name. */
+    QList<quint32> convertibleChasers() const;
+    /** What Import would make of @a chaserId, without changing anything:
+     *  the report with its same-output check (and the list, @a list). */
+    ImportReport planImport(quint32 chaserId, ShowTree::CueList *list = nullptr) const;
+
+    /** Import in place (W5): importChaser(), then fileOriginals() in the
+     *  same undo step. What fires the chaser is the UI's to move
+     *  (ImportSheet::planRepoint), attached to that step too. */
+    ImportReport importInPlace(quint32 chaserId);
+    /** File what list @a listId was imported from: its source chaser, and
+     *  the collections and scenes only it uses that the list doesn't play
+     *  as they are, under "Imported/<chaser> (originals)" -- each one's
+     *  folder kept in the list (Restore original puts them back), the list
+     *  marked in place. A Show timeline that played the chaser plays the
+     *  list from now on. Part of the last undo step (call it right after
+     *  the import). The number filed (0: nothing, or not an import). */
+    int fileOriginals(quint32 listId);
+    /** What fileOriginals() would file, without changing anything; the
+     *  Show timelines it would point at the list in @a timelines. */
+    QList<quint32> originalsOf(quint32 listId, QList<quint32> *timelines = nullptr) const;
+    /** The timelines the last fileOriginals() pointed at the list. */
+    QList<quint32> lastTimelines() const { return m_lastTimelines; }
+    /** "Imported/Full Show (originals)" */
+    static QString originalsFolder(const QString &chaserName);
+    /** The in-place list that filed @a functionId (invalid: none). */
+    quint32 importedInto(quint32 functionId) const;
+    /** Whether Restore original can run on @a listId (@a why: not). */
+    bool canRestoreOriginal(quint32 listId, QString *why = nullptr) const;
+    /** Restore original: the list (its production too, when it has no
+     *  other list) leaves the tree and the originals go back to their
+     *  folders. Edits made to the list since go with it. One undo step;
+     *  what fires the list is the UI's to move back (attachToLastStep). */
+    bool restoreOriginal(quint32 listId, QString *why = nullptr);
+
+    /** Capture into palettes (W5): a scene of raw channel values read as
+     *  layers of groups / fixtures + palettes, checked channel for
+     *  channel. The scene itself is never changed. */
+    struct CapturePalette
+    {
+        QLCPalette::PaletteType type = QLCPalette::Undefined;
+        QVariantList values;
+        quint32 reuse = 0xFFFFFFFF;     //!< a named palette that plays it already
+        QString name;                   //!< the reused one's, or the new one's
+    };
+    struct CaptureLayer
+    {
+        ShowTree::Target target;
+        QMap<QString, int> looks;       //!< key -> index in CapturePlan::palettes
+    };
+    struct CapturePlan
+    {
+        bool ok = false;
+        QString why;                    //!< not ok: why not
+        quint32 scene = 0xFFFFFFFF;
+        QList<CapturePalette> palettes;
+        QList<CaptureLayer> layers;
+        int capturedChannels = 0;
+        /** What no palette plays exactly: kept raw, in a scene of their own
+         *  ("Wash-Red (rest)") played beside the new layers. */
+        QList<SceneValue> leftovers;
+        QStringList leftoverLines;      //!< "LM70 #1: Effects 255"
+        /** Where the tree plays the scene as it is: (list, cue). */
+        QList<QPair<quint32, quint32>> uses;
+        // After captureIntoPalettes():
+        int captured = 0;               //!< uses now playing the layers
+        QStringList kept;               //!< uses left raw, and why
+        int differChannels = 0;         //!< in the cues captured: 0 by construction
+        QList<quint32> made;            //!< new palettes
+        quint32 rest = 0xFFFFFFFF;      //!< the leftovers' scene
+    };
+    /** Plan Capture into palettes for raw scene @a sceneId: per fixture,
+     *  the Dimmer, Colour, Position and Gobo looks that put out exactly its
+     *  values (an intensity channel a look sets to 0 that the scene leaves
+     *  alone adds nothing); palettes reused by value, else named as the
+     *  show names its own; fixtures with the same looks one layer (a group
+     *  when one has exactly them). Nothing is changed. */
+    CapturePlan planCapture(quint32 sceneId) const;
+    /** Apply it where the tree plays the scene as it is: each such layer
+     *  becomes the plan's layers (+ the rest as a raw scene), kept only
+     *  where every cue of its list then puts out what it did (else that
+     *  use stays raw, said in @a plan->kept). One undo step. False:
+     *  nothing captured. */
+    bool captureIntoPalettes(quint32 sceneId, CapturePlan *plan = nullptr);
+
+private:
+    QList<quint32> m_lastTimelines;
 
     /************************************************************************
      * Load & save

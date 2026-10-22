@@ -164,11 +164,24 @@ QHash<quint64, uchar> ShowTreeController::staticCueOutput(const CueList &list, c
 int ShowTreeController::importDifferences(quint32 chaserId, quint32 listId, QStringList *lines,
                                           int *checked) const
 {
-    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(chaserId));
     const CueList *list = cueList(listId);
+    if (list == nullptr)
+    {
+        if (checked != nullptr)
+            *checked = 0;
+        return 0;
+    }
+    return importDifferences(chaserId, *list, lines, checked);
+}
+
+int ShowTreeController::importDifferences(quint32 chaserId, const CueList &theList, QStringList *lines,
+                                          int *checked) const
+{
+    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(chaserId));
+    const CueList *list = &theList;
     if (checked != nullptr)
         *checked = 0;
-    if (chaser == nullptr || list == nullptr)
+    if (chaser == nullptr)
         return 0;
 
     auto isHtp = [this](quint64 key) {

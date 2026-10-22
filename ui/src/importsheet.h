@@ -30,6 +30,9 @@ class QTextBrowser;
 class VCCueList;
 class VCButton;
 class VCSlider;
+class VCSpeedDial;
+class VCClock;
+class VCAudioTriggers;
 class QCheckBox;
 class Doc;
 
@@ -43,7 +46,9 @@ class Doc;
  * (cues, layers, includes, mixes), what plays as it is and why, and an
  * offer to fire the new list from whatever fires the chaser now (VC
  * buttons, VC Cue Lists and sliders, the main cue list and its cue-list
- * number) -- ticked, and part of the import's undo step.
+ * number) -- ticked, and part of the import's undo step. W5: Import in
+ * place -- the chaser and what only it plays filed under Imported/… (a
+ * second tick, also ticked), and what each step's nested collections became.
  */
 class ImportSheet final : public QDialog
 {
@@ -61,6 +66,11 @@ public:
         QList<QPointer<VCButton>> buttons;
         QList<QPointer<VCCueList>> cueLists;
         QList<QPointer<VCSlider>> sliders;
+        /** W5: the other VC widgets that hold a chaser -- a speed dial's
+         *  functions, a clock's schedule, an audio trigger's bars. */
+        QList<QPointer<VCSpeedDial>> speedDials;
+        QList<QPointer<VCClock>> clocks;
+        QList<QPointer<VCAudioTriggers>> audioTriggers;
         bool mainCueList = false;
         QString cueListNumber;              //!< the chaser's, moved with it
         int count() const;
@@ -75,16 +85,27 @@ public:
     /** The tick: fire the list from what fires the chaser. */
     bool repoint() const;
     QCheckBox *repointBox() const { return m_repoint; }
+    /** W5, Import in place: file the originals under Imported/… (ticked;
+     *  hidden when there is nothing to file). */
+    bool fileOriginals() const;
+    QCheckBox *fileBox() const { return m_file; }
     /** Undo import was pressed. */
     bool undoAsked() const { return m_undo; }
     /** The sheet as text (tests). */
     QString text() const;
 
 private:
-    QString html(Doc *doc, const ShowTreeController::ImportReport &report, const QString &chaser) const;
+public:
+    /** The report as the sheet reads it: @a list the list it made (or, for
+     *  the show converter's plan, the list it would make); @a planned: not
+     *  made yet. */
+    static QString html(Doc *doc, const ShowTreeController::ImportReport &report, const ShowTree::CueList *list,
+                        const QString &chaser, bool planned = false);
 
+private:
     QTextBrowser *m_body = nullptr;
     QCheckBox *m_repoint = nullptr;
+    QCheckBox *m_file = nullptr;
     bool m_undo = false;
 };
 

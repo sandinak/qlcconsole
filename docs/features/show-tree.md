@@ -110,7 +110,9 @@ The dividers between them can be dragged; their places are kept.
 
 1. **Import chaser…** → pick the chaser. A new production named after it
    holds a Non-tracking cue list that plays exactly as the chaser did. The
-   chaser itself is not touched.
+   chaser itself plays as it did; the sheet below offers to file it away
+   (**Import in place**). For a whole show at once, use
+   [Convert an old show…](#an-old-show-convert-it).
 2. A sheet says what was made:
    - **Plays the same**: each cue's channels checked against its step's.
      *0 channels differ* means every cue puts out what its step did;
@@ -124,6 +126,11 @@ The dividers between them can be dragged; their places are kept.
      - A scene of groups and palettes became a layer.
      - A step's collection used inside another step became an
        **include**.
+     - A collection inside a step that is **no step itself** (a
+       `0.0.0-base` every step holds) is read into the cue: its scenes
+       become the cue's layers, as the step's own do. One that plays
+       nothing is left out. **Collections read into the cues** lists
+       them.
      - Anything else plays as it is (▣). That covers raw channel values,
        EFX, RGB Matrix, a scene with its own fades, and so on.
        **Played as they are, and why** gives the reason once per
@@ -144,9 +151,16 @@ The dividers between them can be dragged; their places are kept.
      looks as it did. The sheet names each such cue and how many channels
      the rule would change. Cues where the rule plays the same are left
      alone.
+   - **Import in place** (ticked): the chaser, and the collections and
+     scenes only it plays, are filed under `Imported/<chaser> (originals)`
+     in the Functions window, and a Show timeline that played the chaser
+     plays the list. Nothing is deleted; **Restore original** puts it all
+     back ([how](#an-old-show-convert-it)). Untick it to keep both side by
+     side.
    - **Fire the cue list from what fires the chaser now** (ticked): VC
-     buttons, VC Cue Lists and sliders that played the chaser, the main
-     cue list and its cue-list number move to the new list. It is part of
+     buttons, VC Cue Lists, sliders, speed dials, clocks and audio
+     triggers that played the chaser, the main cue list and its cue-list
+     number move to the new list. It is part of
      the import's undo step: **Undo** puts them back on the chaser. Untick
      it to leave them on the chaser. It isn't offered when nothing fires
      the chaser.
@@ -167,6 +181,65 @@ By hand instead (or after it, to go further):
 5. Remove includes of the cue before (the cue page, **Includes**, **−**).
 
 *Next cue receives* on each cue page shows what carries on as you go.
+
+### An old show: convert it
+
+A show made the QLC+ way (scenes, collections, chasers, no Show Tree)
+opens as it is: nothing is converted on load, and it plays and saves as
+before. The Show Tree tab says so once, in a line at the top: *This show
+uses chasers: 2 look like cue lists (Full Show, New Chaser 8)…*.
+**Convert…** opens the converter; **✕** puts the line away for this show.
+The converter is always at **Import chaser… → Convert an old show…**.
+
+**The converter** lists every chaser of the show, told apart by how it
+runs:
+
+- **Cue list**: it waits for GO on some step, has notes or cue numbers,
+  answers to a cue-list number, is the show's main cue list or plays in
+  a VC Cue List. It is ticked, with its plan below: the cues, layers, ▣
+  rows, includes and nested collections it would make, and **Plays the
+  same**: the import's channel-by-channel check, run without changing
+  anything.
+- **Effect**: it only loops on its own timing (a strobe, a par chase, a
+  pan sweep). It is not offered: it stays a function, and plays as a ▣
+  layer wherever you drop it on a cue. **Import chaser…** still takes it
+  if you want it as a list anyway.
+
+**Convert** imports each ticked chaser, each its own undo step, in one of
+two ways (**Convert by**):
+
+- **Import in place** (the default). The list takes over from the chaser:
+  - the list is linked to the chaser it came from;
+  - the chaser and the collections and scenes only it plays go to
+    `Imported/<chaser> (originals)` in the Functions window. What the list
+    still plays as it is (a raw scene on a ▣ row) and what another
+    function plays stay where they are;
+  - VC buttons, VC Cue Lists, sliders, speed dials, clocks, audio
+    triggers, Show timelines, the main cue list and the cue-list number
+    fire the list instead.
+- **Import beside the chaser**: the list is made and both stay, as the
+  plain import does.
+
+The list's page says where it came from. **Restore original…** (on the
+list's page or its right-click menu) undoes Import in place: the list
+leaves the tree, with any change made to it since; the chaser and its
+originals go back to their folders; and what fires the list fires the
+chaser again. It asks first and is one undo step.
+
+**Raw scenes into palettes.** A ▣ row that plays a scene of raw channel
+values has **Capture into palettes…** (on its page and its right-click
+menu). It reads the scene fixture by fixture into Dimmer, Colour,
+Position and Gobo looks that put out exactly its values, reusing the
+show's palettes where one plays the same value and naming new ones as the
+show names its own. Fixtures with the same looks become one layer (on a
+group when one holds exactly them). What no look plays exactly (an
+effect-mode channel, say) stays raw in a scene of its own, *Wash-Red
+(rest)*, beside the new layers. It asks with the plan, then changes every
+cue that plays the scene as it is, but only where every cue of the list
+then puts out exactly what it did; a cue that would change keeps the
+scene. The scene itself is kept. One undo step. A scene with its own
+fade times, a transition, a blend mode or a speed master isn't offered:
+a layer would play it differently.
 
 ### Three cues with the mouse
 
