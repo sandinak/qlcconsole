@@ -2,7 +2,7 @@
 
 Guidance for working in this repo. This is a **fork of QLC+ 4.14.2** (Q Light
 Controller Plus) — the Qt5 **widgets** desktop UI, not the QML UI. The fork adds
-a *programmer-mode* workflow and a dedicated **Programming** tab for building
+a *programmer-mode* workflow and a dedicated **Build** tab (was Programming) for building
 scenes/"looks".
 
 ## Branching
@@ -87,7 +87,7 @@ QLC+ splits into an **engine** (no UI) and a Qt widgets **ui** layer.
 
 - `engine/src/` — Doc, Fixture, FixtureGroup, Scene, Chaser, Collection, EFX,
   function model + DMX. Pure logic; serializes to/from `.qxw` XML.
-- `ui/src/` — Qt widgets: Fixture Manager, Function Manager, the Programming
+- `ui/src/` — Qt widgets: Fixture Manager, Function Manager, the Build
   tab, consoles, editors.
 - `main/`, `launcher/`, `fixtureeditor/`, `plugins/`, `webaccess/` — entry
   points and peripheral apps; rarely touched for this work.
@@ -98,11 +98,21 @@ QLC+ splits into an **engine** (no UI) and a Qt widgets **ui** layer.
   (palettes, group scenes, Save workflow). `Doc` has *thin forwarders* only;
   put new programmer/palette/group logic HERE, not in Doc (memory:
   programmer-controller).
-- **`ui/src/programmingmanager.{h,cpp}`** — the Programming top-level tab:
-  searchable/foldered palette + function source trees → a SceneGroupLooks
-  canvas. Drag palettes→looks, groups→dynamic targets, fixtures→fixed targets;
-  inline look editor (color / dimmer gradient / XY pan-tilt / gobo-shutter);
-  live DMX/2D preview (Design mode).
+- **`ui/src/programmingmanager.{h,cpp}`** — the **Build** top-level tab (it
+  was "Programming"; the class kept its name): the navigator by section
+  (Palettes | Effects | Scenes, groups & fixtures under each) and the
+  toolbar. Build ▸ Scenes is `ui/src/programmingoutline.{h,cpp}` in
+  Navigator mode (WORKFLOW_DESIGN.md §3.3).
+- **`ui/src/workbench.{h,cpp}`, `ui/src/workbenchstack.{h,cpp}`** — the
+  Workbench: a self-contained widget (header, layer rows = the outline in
+  Stack mode, + Scene / + EFX / + RGB Matrix, editor pane with the Look
+  Editor / channel console / stock editors, live preview, ↩) over a
+  `WorkbenchStack` back end (`FunctionStack`: scenes, collections, chasers;
+  `TreeCueStack` in `ui/src/treecuestack.*`: a Show Tree cue, every edit a
+  tree step -- not `CueStack`, which is the engine's Simple Desk class).
+  Collection edits are `PaletteOps::functionStep` steps on the shared
+  history. The Show Tree docks Build's Workbench in place of its page
+  (`ui/src/showtreeworkbench.cpp`, `ProgrammingManager::lendWorkbench()`).
 - **`ui/src/fixturemanager.{h,cpp}`** — Fixture Manager: fixture-group folders,
   empty-group creation, the head-layout grid editor (drag fixtures onto cells,
   add a group as a block, move a sub-group as a unit).

@@ -62,6 +62,17 @@ private slots:
     void theEffectPickerIsAWindowOfItsOwn();
     void wledOnlyEffectsNeedAWledTarget();
     void theBrowsersListsAreAToZ();
+    /** "if we go from Red to Dark Red .. we should auto update the title ..
+     *  only update the color part .. the folder should stay consistent."
+     *  The name field follows live; the value and the name are one Undo. */
+    void aLooksNameFollowsItsColour();
+    /** A name of the user's own is never rewritten. */
+    void aCustomNameStays();
+    /** "Intensity 45%" -> "Intensity 60%"; "Strobe 40%" -> "Strobe 70%". */
+    void aLevelInTheNameFollowsTheLevel();
+    /** A new colour in a folder whose colours share a naming is named
+     *  their way ("Act2 Red", "Act2 Blue" -> "Act2 Amber"). */
+    void aNewColourIsNamedLikeItsSiblings();
 };
 
 #endif

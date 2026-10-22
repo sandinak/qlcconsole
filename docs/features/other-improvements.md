@@ -333,7 +333,7 @@ exactly what it would change on the device and writes it there only when you
 agree, then reads it back.
 
 Effects that the WLED device runs itself are picked in the look editor —
-see [WLED effects](programming-tab.md#wled-effects).
+see [WLED effects](build.md#wled-effects).
 
 #### Backup lanterns
 
@@ -387,7 +387,7 @@ try it on your own devices before relying on it for a show.
 ## Window menu
 
 Every view is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
-Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Programming, ⇧⌘6 Show
+Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Build, ⇧⌘6 Show
 Tree, ⇧⌘7 Shows, ⇧⌘8 Virtual Console, ⇧⌘9 Simple Desk): choosing one brings it forward — its
 tab, or its own window when it has been broken out (right-click a tab →
 **Open in Its Own Window**, Shift-click it, or **Move … to Its Own
@@ -396,8 +396,8 @@ which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
 as usual.
 
-**Functions has no tab.** It sat beside Programming and was easy to hit by
-mistake, and Programming now covers building scenes and looks. The
+**Functions has no tab.** It sat beside Build (now **Build**) and was easy to hit by
+mistake, and Build now covers building scenes and looks. The
 classic **Function Manager** — chasers, sequences, EFX, collections, RGB
 matrices, scripts, audio and video — is still there: **Window → Functions**
 (⇧⌘4) opens it in a window of its own, and closing that window puts it away
@@ -550,7 +550,7 @@ view's beam/footprint overlays):
 
 A classroom-safety and rigging-focus trio: Blind from the show controls
 (top bar, or status bar) and the Control menu, the rest from the
-Programming tab's tools:
+Build tab's tools:
 
 - **Blind** mutes physical DMX output while the 2D preview keeps updating —
   build and check a look with the room dark. Design-mode only; force-cleared
@@ -622,8 +622,9 @@ estimates use the readings (and the cap) wherever a fixture has them.
 ## Advanced settings
 
 **Settings** has two tabs. **General** holds what everyone sets: autosave,
-the tab bar, units, the Show Tree's Record choices, the rig network and
-software updates. **Advanced** holds settings for experienced users and
+the tab bar, units, the Show Tree's Record choices and the show's
+[move in black](show-tree.md#move-in-black) (saved with the show), the rig
+network and software updates. **Advanced** holds settings for experienced users and
 the show's output behaviour:
 
 - **Output (saved with this show)**: **Auto-open shutters when a light is
@@ -668,12 +669,12 @@ It is **on** for new shows and for shows saved before it existed. It is
 **saved with the show**, not with this computer, because it changes what
 the rig does: a show programmed with it on looks the same on any computer.
 Turn it off when a show wants every shutter to be programmed by hand, as
-in QLC+. While it is on, the Programming tab no longer warns "no look for:
+in QLC+. While it is on, the Build tab no longer warns "no look for:
 shutter".
 
 ## Show timeline &amp; MTC follow
 
-The Show Manager tab and the Programming tab's embedded timeline editor
+The Show Manager tab and the Build tab's embedded timeline editor
 share: per-track intensity submasters, solo / solo-safe / hold-last /
 priority flags, MIDI Timecode follow (auto-detect or a manual source
 override) with freeze-on-stop and locate/seek, a draggable show-length end

@@ -236,12 +236,20 @@ public:
     bool loadMarkXML(QXmlStreamReader &root);
 
     /** Automatic move-in-black: peek the next cue and pre-position dark movers
-     *  that it will reveal. Persisted with the workspace. */
+     *  that it will reveal. ONE setting of the show, saved with it; the
+     *  Programming tab, the Show Tree and Settings are all views of it and
+     *  follow autoMoveInBlackChanged(). */
     void setAutoMoveInBlack(bool enable);
     bool isAutoMoveInBlack() const;
-    /** Minimum lead time (ms) before the next cue to still pre-set (dark-gap). */
+    /** Minimum lead time (ms) before the next cue to still pre-set (dark-gap).
+     *  A change emits autoMoveInBlackChanged() too, so every view follows. */
     void setMoveInBlackDarkGapMs(int ms);
     int  moveInBlackDarkGapMs() const;
+    /** Back to a new show's: off, the default lead time (Doc::clearContents,
+     *  so a show without <MoveInBlack> doesn't inherit the last one's). */
+    void resetMoveInBlack();
+    /** Fixtures auto move-in-black is pre-positioning right now. */
+    int moveInBlackPresetCount() const;
 
     bool saveMoveInBlackXML(QXmlStreamWriter *doc) const;
     bool loadMoveInBlackXML(QXmlStreamReader &root);
@@ -250,8 +258,12 @@ signals:
     /** Emitted when the mark set changes (add/remove/auto-release) so the 2D
      *  monitor can refresh its ghost outlines. */
     void markChanged();
-    /** Auto move-in-black toggled (so the toolbar button tracks it). */
+    /** Auto move-in-black toggled, or its lead time changed (so every view
+     *  of the setting tracks it). */
     void autoMoveInBlackChanged(bool enable);
+    /** Auto move-in-black's own pre-sets changed: @p count fixtures are
+     *  being pre-positioned in black now. */
+    void moveInBlackPresetsChanged(int count);
     /** Marked (positioned-but-dark) fixtures that no upcoming cue is about to
      *  light -- a pre-set nothing is going to reveal. Forwarded verbatim from
      *  MarkPlanner so the UI doesn't need to reach into it directly. Checked

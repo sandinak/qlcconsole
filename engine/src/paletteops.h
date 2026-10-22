@@ -26,11 +26,14 @@
 #include <QObject>
 #include <QList>
 #include <QHash>
+#include <QSharedPointer>
 
 #include "qlcengine_export.h"
 #include "qlcpalette.h"
 
 class Doc;
+class Scene;
+class Function;
 
 /** @addtogroup engine Engine
  * @{
@@ -178,6 +181,54 @@ public:
     /** Forget the empty folders and the undo steps (a new show). */
     void reset();
 
+    /************************************************************************
+     * Scene steps (PROGRAMMING_REDESIGN.md P1): the Programming tab's scene
+     * edits -- targets and looks added, moved, removed, reordered, renamed,
+     * timing, raw values -- on this same stack, so they undo AND redo with
+     * everything else, from either tab.
+     ************************************************************************/
+public:
+    /** Scene @a sceneId as it is now, detached (owned by nobody but the
+     *  pointer); null if there is no such scene. */
+    QSharedPointer<Scene> sceneSnapshot(quint32 sceneId) const;
+    /** One step for scene edits already made: @a before holds each touched
+     *  scene as it was (sceneSnapshot()), the after side is taken now. A
+     *  scene that didn't change is dropped; nothing changed, no step (false).
+     *  A non-empty @a mergeKey equal to the top step's, within 1.5 s, extends
+     *  that step instead (a fader drag is one step). */
+    bool recordSceneStep(const QString &label, const QList<QSharedPointer<Scene>> &before,
+                         const QString &mergeKey = QString());
+    /** Run @a change over scenes @a sceneIds as one step (recordSceneStep). */
+    bool sceneStep(const QString &label, const QList<quint32> &sceneIds,
+                   const std::function<bool()> &change);
+
+    /************************************************************************
+     * Value steps: the Look Editor's edits to a palette's value -- and the
+     * name that follows it (PaletteNaming) -- as one step.
+     ************************************************************************/
+public:
+    /** Run @a change over palette @a paletteId's value (and name) as one
+     *  step. Undo puts back the value, wheel slot, gobo name and values and
+     *  the name it had. A non-empty @a mergeKey equal to the top step's,
+     *  within 1.5 s, extends that step (a picker drag is one step). A
+     *  palette the tree owns (isManaged() false) is changed with no step.
+     *  Nothing changed: no step (false). */
+    bool valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
+                   const QString &mergeKey = QString());
+
+    /************************************************************************
+     * Function steps (WORKFLOW_DESIGN.md W1): the Workbench's edits to a
+     * collection's members -- added, removed, reordered, a new EFX or RGB
+     * Matrix made on a layer -- on this same stack.
+     ************************************************************************/
+public:
+    /** Run @a change over functions @a functionIds (any type) as one step.
+     *  Each is kept whole on either side; a function @a change makes is
+     *  appended to @a made, so Undo deletes it and Redo brings it back with
+     *  its id. Nothing changed: no step (false). */
+    bool functionStep(const QString &label, const QList<quint32> &functionIds,
+                      const std::function<bool(QList<quint32> &made)> &change);
+
 signals:
     /** Palettes, folders or the undo stack changed. */
     void changed();
@@ -195,6 +246,13 @@ private:
          *  scene's looks; palette -> slots binding it. */
         QList<QPair<quint32, int>> scenes;
         QList<QPair<quint32, QString>> bindings;
+        /** A value step: apply() puts these back too (other steps leave the
+         *  value as it is, edited since or not). */
+        bool value = false;
+        QVariantList values;
+        QString colourMacro;
+        QString goboName;
+        QMap<QString, int> goboValues;
     };
     struct Step
     {
@@ -208,7 +266,26 @@ private:
          *  (ShowTreeController::outsideUndoState()); empty: untouched. */
         QByteArray treeBefore;
         QByteArray treeAfter;
+        /** A scene step: each touched scene on either side (the snapshot's
+         *  own id is invalid, so the scene's id is kept beside it). */
+        QList<QPair<quint32, QSharedPointer<Scene>>> scenesBefore;
+        QList<QPair<quint32, QSharedPointer<Scene>>> scenesAfter;
+        QString mergeKey;
+        qint64 mergeAt = 0;     //!< when it was last extended (ms since epoch)
+        /** A function step: each touched function on either side (a null
+         *  snapshot: it didn't exist). */
+        bool functions = false;
+        QList<QPair<quint32, QSharedPointer<Function>>> functionsBefore;
+        QList<QPair<quint32, QSharedPointer<Function>>> functionsAfter;
     };
+    /** Function @a id as it is now, detached; null if there is none. */
+    QSharedPointer<Function> functionSnapshot(quint32 id) const;
+    /** Put the functions back as @a states hold them: made, changed back,
+     *  deleted. */
+    void applyFunctions(const QList<QPair<quint32, QSharedPointer<Function>>> &states);
+    /** Put the scenes back as @a states hold them. */
+    void applyScenes(const QList<QPair<quint32, QSharedPointer<Scene>>> &states,
+                     const QList<QPair<quint32, QSharedPointer<Scene>>> &other);
     State capture(quint32 id) const;
     void apply(const QList<State> &states, const QStringList &folders);
     /** Run @a change as one undo step named @a label, recording the

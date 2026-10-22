@@ -29,6 +29,7 @@ add_library(${module_name}
     appsettings.cpp appsettings.h
     controllertestdialog.cpp controllertestdialog.h
     apputil.cpp apputil.h
+    itemicons.cpp itemicons.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui
     audiobar.cpp audiobar.h
     audioeditor.cpp audioeditor.h audioeditor.ui
@@ -37,6 +38,7 @@ add_library(${module_name}
     channelmodifiergraphicsview.cpp channelmodifiergraphicsview.h
     channelsselection.cpp channelsselection.h channelsselection.ui
     chasereditor.cpp chasereditor.h chasereditor.ui
+    chaserwalker.cpp chaserwalker.h
     colourswatchbutton.cpp colourswatchbutton.h
     wledconfigcheck.cpp wledconfigcheck.h
     wleddevicesdialog.cpp wleddevicesdialog.h
@@ -145,9 +147,12 @@ add_library(${module_name}
     bundleeditor.cpp bundleeditor.h
     bundlebrowser.cpp bundlebrowser.h
     effectbrowser.cpp effectbrowser.h
+    effectdesigner.cpp effectdesigner.h
+    effectspage.cpp effectspage.h
     fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h
     mainbar.cpp mainbar.h
+    moveinblackbutton.cpp moveinblackbutton.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     networkreportdialog.cpp networkreportdialog.h
@@ -159,6 +164,7 @@ add_library(${module_name}
     linespreadpreview.cpp linespreadpreview.h
     lineplanview.cpp lineplanview.h
     networktopologydialog.cpp networktopologydialog.h
+    noteedit.cpp noteedit.h
     patchinventorydialog.cpp patchinventorydialog.h
     helpbrowser.cpp helpbrowser.h
     helpshots.cpp helpshots.h
@@ -169,8 +175,14 @@ add_library(${module_name}
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
+    programmingoutline.cpp programmingoutline.h
+    splitterhandles.cpp splitterhandles.h
+    workbench.cpp workbench.h
+    workbenchstack.cpp workbenchstack.h
     showtreeview.cpp showtreeview.h
+    showtreeworkbench.cpp treecuestack.cpp treecuestack.h
     importsheet.cpp importsheet.h
+    showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h
     updatechecker.cpp updatechecker.h
     updatedialog.cpp updatedialog.h

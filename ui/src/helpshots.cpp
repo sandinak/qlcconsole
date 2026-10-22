@@ -41,6 +41,8 @@
 #include <QDir>
 
 #include "programmingmanager.h"
+#include "programmingoutline.h"
+#include "workbench.h"
 #include "patchinventorydialog.h"
 #include "functionstreewidget.h"
 #include "scenegrouplooks.h"
@@ -85,17 +87,6 @@ HelpShots::Callout mark(QWidget *w, int number)
     c.widget = w;
     c.number = number;
     return c;
-}
-
-/** The row of @a tree whose first column contains @a text. */
-QTreeWidgetItem *rowNamed(QTreeWidget *tree, const QString &text)
-{
-    if (tree == NULL)
-        return NULL;
-    for (QTreeWidgetItemIterator it(tree); *it; ++it)
-        if ((*it)->text(0).contains(text, Qt::CaseInsensitive))
-            return *it;
-    return NULL;
 }
 
 /** @a item's row, in @a frame's grab coordinates. */
@@ -337,52 +328,43 @@ QList<HelpShots::Shot> HelpShots::shots()
             app->m_tab->setCurrentWidget(w);
         settle();
     };
-    // How tall the Programming tab's look editor is, under the canvas.
-    auto editorHeight = [pm](int px) {
-        if (pm == NULL || pm->m_canvasSplit == NULL)
-            return;
-        const QList<int> was = pm->m_canvasSplit->sizes();
-        int total = 0;
-        for (int h : was)
-            total += h;
-        pm->m_canvasSplit->setSizes(QList<int>() << total - px << px);
-        settle();
-    };
-    // Opens a scene in the Programming tab, selected in the tree, and selects
-    // the look whose row contains @a look (none when empty).
+    // The look editor has the page's whole height now: nothing to size.
+    auto editorHeight = [](int) { settle(); };
+    // Loads a scene in the Build tab's Workbench (Scenes section, selected
+    // in the navigator), and selects the look whose row contains @a look
+    // (the scene's own row when empty).
     auto openScene = [pm, function, showTab](const QString &scene, const QString &look) {
         if (pm == NULL)
             return;
         showTab(pm);
-        // Narrow side panes: the canvas's toolbar wants the width.
+        pm->setSection(ProgrammingManager::ScenesSection);
+        // A narrow navigator: the Workbench wants the width.
         if (QSplitter *split = qobject_cast<QSplitter *>(named(pm, "programmingSplitter")))
-        {
-            const int side = 250;
-            split->setSizes(QList<int>() << side << split->width() - 2 * side << side);
-        }
+            split->setSizes(QList<int>() << 330 << split->width() - 330);
         Function *f = function(scene);
         if (f == NULL)
             return;
-        pm->m_funcTree->clearSelection();
-        if (QTreeWidgetItem *it = pm->m_funcTree->functionItem(f))
-        {
-            pm->m_funcTree->scrollToItem(it);
-            it->setSelected(true);
-        }
-        pm->m_currentScene = Function::invalidId();     // build it afresh
-        pm->loadCanvas(f->id());
+        pm->m_outline->rebuild();
+        pm->m_workbench->clear();       // build it afresh
+        pm->showFunction(f->id());
         settle();
         if (look.isEmpty())
             return;
-        QTreeWidget *looks = qobject_cast<QTreeWidget *>(named(pm, "sceneLooks"));
-        if (QTreeWidgetItem *it = rowNamed(looks, look))
-        {
-            looks->clearSelection();
-            looks->setCurrentItem(it);
-            it->setSelected(true);
-        }
+        ProgrammingOutline *rows = pm->m_workbench->rows();
+        QTreeWidgetItem *sceneRow = rows->sceneItem(f->id());
+        if (sceneRow == NULL)
+            return;
+        sceneRow->setExpanded(true);
+        QTreeWidgetItem *hit = NULL;
+        for (QTreeWidgetItemIterator it(sceneRow); *it != NULL && hit == NULL; ++it)
+            if ((*it)->text(0).contains(look, Qt::CaseInsensitive)
+                && (*it)->data(0, ProgrammingOutline::KindRole).toInt() == ProgrammingOutline::PaletteRow)
+                hit = *it;
+        if (hit != NULL)
+            rows->selectRow(ProgrammingOutline::rowOf(hit));
         else
             fprintf(stderr, "[HELPSHOT] no look %s\n", qPrintable(look));
+        settle();
     };
 
     QList<Shot> list;
@@ -401,19 +383,20 @@ QList<HelpShots::Shot> HelpShots::shots()
         return f;
     }, nullptr };
 
-    // Programming: the three panes and the look editor under the canvas.
-    list << Shot{ QStringLiteral("programming-tab-layout"), [=]() {
+    // Build: the section switch, the navigator, the Workbench and its editor pane.
+    list << Shot{ QStringLiteral("build-tab-layout"), [=]() {
         window();
         openScene(QStringLiteral("05 Stage Shape"), QStringLiteral("White"));
         editorHeight(250);
         Frame f;
         f.grab = app;
-        f.callouts << mark(named(pm, "programmingFunctions"), 1)
-                   << mark(named(pm, "sceneTargets"), 2)
-                   << mark(named(pm, "sceneLooks"), 3)
-                   << mark(named(pm, "lookEditor"), 4)
-                   << mark(named(pm, "programmingSources"), 5)
-                   << mark(named(pm, "programmingFixturesGroups"), 6);
+        f.callouts << mark(named(pm, "buildSection2"), 1)
+                   << mark(named(pm, "programmingOutline"), 2)
+                   << mark(named(pm, "workbenchHeader"), 3)
+                   << mark(named(pm, "workbenchRows"), 4)
+                   << mark(named(pm, "workbenchAddBar"), 5)
+                   << mark(named(pm, "lookEditor"), 6)
+                   << mark(named(pm, "programmingFixturesGroups"), 7);
         return f;
     }, nullptr };
 
@@ -447,7 +430,7 @@ QList<HelpShots::Shot> HelpShots::shots()
     list << Shot{ QStringLiteral("programming-tab-effect-browser"), [=]() {
         window();
         openScene(QStringLiteral("05 Stage Shape"), QStringLiteral("Line"));
-        LookEditor *le = pm ? pm->m_lookEditor : NULL;
+        LookEditor *le = pm ? pm->m_workbench->lookEditor() : NULL;
         Frame f;
         if (le == NULL)
             return f;
@@ -469,8 +452,8 @@ QList<HelpShots::Shot> HelpShots::shots()
                    << mark(named(dlg, "effectPickerDone"), 5);
         return f;
     }, [=]() {
-        if (pm != NULL && pm->m_lookEditor != NULL)
-            pm->m_lookEditor->closeEffectPicker(false);
+        if (pm != NULL && pm->m_workbench->lookEditor() != NULL)
+            pm->m_workbench->lookEditor()->closeEffectPicker(false);
     } };
 
     // The footer, on its own.
@@ -559,16 +542,22 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (!scene->palettes().contains(line->id()))
             scene->addPalette(line->id());
         openScene(scene->name(), QString());
-        editorHeight(120);
-        QWidget *canvas = pm ? pm->m_canvas : NULL;
-        QTreeWidget *looks = qobject_cast<QTreeWidget *>(named(pm, "sceneLooks"));
-        QTreeWidgetItem *covered = rowNamed(looks, QStringLiteral("Circle"));
-        if (looks != NULL && covered != NULL)
-            looks->scrollToItem(covered);
+        ProgrammingOutline *outline = pm ? pm->m_workbench->rows() : NULL;
+        if (outline == NULL)
+            return f;
+        outline->rebuild();
+        QTreeWidgetItem *sceneRow = outline->sceneItem(scene->id());
+        outline->setSubtreeExpanded(sceneRow, true);
+        QTreeWidgetItem *covered = NULL;
+        for (QTreeWidgetItemIterator it(sceneRow); *it != NULL && covered == NULL; ++it)
+            if ((*it)->text(0).contains(QStringLiteral("Circle")))
+                covered = *it;
+        if (covered != NULL)
+            outline->scrollToItem(covered);
         settle();
-        f.grab = canvas;
-        f.callouts << markRow(looks, covered, canvas, 1)
-                   << mark(named(pm, "lookStackNotes"), 2);
+        f.grab = outline;
+        f.callouts << markRow(outline, covered, outline, 1)
+                   << markRow(outline, sceneRow, outline, 2);
         return f;
     }, [=]() {
         // Put the show back as it was.

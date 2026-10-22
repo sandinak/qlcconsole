@@ -3487,10 +3487,7 @@ bool ShowTreeController::undo()
     if (m_undo.isEmpty())
         return false;
     const Snapshot s = m_undo.takeLast();
-    m_redo.append(Snapshot { s.label, snapshotXml(), s.stamp, s.outside });
-    restoreSnapshot(s.xml);
-    if (s.outside)
-        s.outside(true);
+    m_redo.append(undoStep(s));
     return true;
 }
 
@@ -3499,10 +3496,78 @@ bool ShowTreeController::redo()
     if (m_redo.isEmpty())
         return false;
     const Snapshot s = m_redo.takeLast();
-    m_undo.append(Snapshot { s.label, snapshotXml(), s.stamp, s.outside });
-    restoreSnapshot(s.xml);
+    m_undo.append(redoStep(s));
+    return true;
+}
+
+ShowTreeController::Snapshot ShowTreeController::undoStep(const Snapshot &s)
+{
+    Snapshot back { s.label, QByteArray(), s.stamp, s.outside, s.outsideBefore, {} };
+    if (s.parts.empty())
+        back.xml = snapshotXml();
+    // Undone in the reverse order of doing: what the step changed outside
+    // after its tree change first (so the bake sees the show as it was: a
+    // timeline no longer playing a list's chaser lets the bake delete it),
+    // what it changed before its tree change last (a VC widget can point
+    // at the chaser again once the tree has made it again).
+    if (s.outside)
+        s.outside(true);
+    if (s.parts.empty())
+    {
+        restoreSnapshot(s.xml);
+    }
+    else
+    {
+        // A group: its parts last first, each as its own step would be.
+        back.parts.resize(s.parts.size());
+        for (size_t i = s.parts.size(); i-- > 0;)
+            back.parts[i] = undoStep(s.parts[i]);
+    }
+    if (s.outsideBefore)
+        s.outsideBefore(true);
+    return back;
+}
+
+ShowTreeController::Snapshot ShowTreeController::redoStep(const Snapshot &s)
+{
+    Snapshot back { s.label, QByteArray(), s.stamp, s.outside, s.outsideBefore, {} };
+    if (s.parts.empty())
+        back.xml = snapshotXml();
+    if (s.outsideBefore)
+        s.outsideBefore(false);
+    if (s.parts.empty())
+    {
+        restoreSnapshot(s.xml);
+    }
+    else
+    {
+        back.parts.resize(s.parts.size());
+        for (size_t i = 0; i < s.parts.size(); ++i)
+            back.parts[i] = redoStep(s.parts[i]);
+    }
     if (s.outside)
         s.outside(false);
+    return back;
+}
+
+bool ShowTreeController::groupStepsSince(quint64 stamp, const QString &label)
+{
+    int n = 0;
+    while (n < m_undo.count() && m_undo.at(m_undo.count() - 1 - n).stamp > stamp)
+        ++n;
+    if (n == 0)
+        return false;
+    if (n == 1)
+    {
+        m_undo.last().label = label;
+        return true;
+    }
+    Snapshot group { label, QByteArray(), m_undo.last().stamp, {}, {}, {} };
+    group.parts.reserve(size_t(n));
+    for (int i = m_undo.count() - n; i < m_undo.count(); ++i)
+        group.parts.push_back(m_undo.at(i));
+    m_undo.erase(m_undo.end() - n, m_undo.end());
+    m_undo.append(group);
     return true;
 }
 
@@ -3560,11 +3625,29 @@ QString ShowTreeController::sharedRedoText() const
     return redoText();
 }
 
-bool ShowTreeController::attachToLastStep(const std::function<void(bool)> &apply)
+bool ShowTreeController::attachToLastStep(const std::function<void(bool)> &apply, bool beforeTree)
 {
     if (m_undo.isEmpty())
         return false;
-    m_undo.last().outside = apply;
+    // Several things outside on one step (an import's filing, then its VC
+    // re-point): undone last first, redone in the order they were done.
+    std::function<void(bool)> &slot = beforeTree ? m_undo.last().outsideBefore : m_undo.last().outside;
+    const std::function<void(bool)> before = slot;
+    if (!before)
+        slot = apply;
+    else
+        slot = [before, apply](bool undone) {
+            if (undone)
+            {
+                apply(true);
+                before(true);
+            }
+            else
+            {
+                before(false);
+                apply(false);
+            }
+        };
     return true;
 }
 
@@ -3572,6 +3655,7 @@ void ShowTreeController::clearUndo()
 {
     m_undo.clear();
     m_redo.clear();
+    m_snapshotRemap.clear();
 }
 
 /** The functions the tree's opaque layers play. */
@@ -3718,6 +3802,14 @@ QByteArray ShowTreeController::snapshotXml() const
     return xml;
 }
 
+void ShowTreeController::remapSnapshotFunction(quint32 from, quint32 to)
+{
+    for (auto it = m_snapshotRemap.begin(); it != m_snapshotRemap.end(); ++it)
+        if (it.value() == from)
+            it.value() = to;
+    m_snapshotRemap.insert(from, to);
+}
+
 void ShowTreeController::restoreSnapshot(const QByteArray &xml)
 {
     QXmlStreamReader r(xml);
@@ -3726,6 +3818,16 @@ void ShowTreeController::restoreSnapshot(const QByteArray &xml)
     m_snapshotDetached.clear();
     if (r.name() == KXMLQLCShowTree)
         loadState(r, true);
+    if (!m_snapshotRemap.isEmpty())
+        for (Production &p : m_productions)
+            for (CueList &l : p.lists)
+                for (Cue &c : l.cues)
+                    for (Layer &layer : c.layers)
+                    {
+                        const quint32 fid = layer.target.function;
+                        if (m_snapshotRemap.contains(fid) && (m_doc->function(fid) == nullptr || isGenerated(fid)))
+                            layer.target.function = m_snapshotRemap.value(fid);
+                    }
     applyDetachedLists();
     bake();
     // A scene Detach made after this snapshot (the detach is undone) goes,
@@ -4488,25 +4590,24 @@ bool ShowTreeController::sceneToLayer(const Scene *scene, Layer *layer, QString 
     return true;
 }
 
-ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaserId)
+bool ShowTreeController::buildImport(quint32 chaserId, CueList *listOut, ImportReport *reportOut,
+                                     const std::function<quint32()> &newId) const
 {
-    ImportReport report;
+    ImportReport &report = *reportOut;
     const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(chaserId));
     if (chaser == nullptr || chaser->type() != Function::ChaserType)
     {
         report.notes << tr("Not a chaser.");
-        return report;
+        return false;
     }
 
     const QList<ChaserStep> steps = chaser->steps();
     QHash<quint32, quint32> cueOfFunction;      // a step's function -> its cue
-    Production prod;
-    prod.id = newId();
-    prod.name = chaser->name();
-    CueList list;
+    CueList &list = *listOut;
     list.id = newId();
     list.name = chaser->name();
     list.mode = ListMode::NonTracking;
+    list.source = chaserId;
 
     for (int i = 0; i < steps.count(); ++i)
     {
@@ -4516,6 +4617,7 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
     }
 
     QSet<quint32> usedCueIds;
+    QHash<quint32, quint32> origin;             // layer -> the function it was read from
     for (int i = 0; i < steps.count(); ++i)
     {
         const ChaserStep &step = steps.at(i);
@@ -4556,15 +4658,19 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
         if (step.subCues != ChaserStep::Auto)
             report.notes << tr("%1: sub-cues (Sub GO) are not carried over yet.").arg(fname);
 
+        auto cueTitle = [&cue]() {
+            return cue.number.isEmpty() ? cue.name : QStringLiteral("%1 %2").arg(cue.number, cue.name);
+        };
         auto addOpaque = [&](const Function *fn, const QString &why) {
             Layer l;
             l.id = newId();
             l.target.function = fn->id();
+            origin.insert(l.id, fn->id());
             cue.layers << l;
             report.opaqueLayers++;
             report.opaqueReasons << QStringLiteral("%1: %2").arg(fn->name(), why);
         };
-        auto addFunction = [&](const Function *fn) {
+        std::function<void(const Function *, int)> addFunction = [&](const Function *fn, int depth) {
             if (fn == nullptr)
                 return;
             if (fn->type() == Function::SceneType)
@@ -4574,6 +4680,7 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
                 if (sceneToLayer(qobject_cast<const Scene *>(fn), &l, &why))
                 {
                     l.id = newId();
+                    origin.insert(l.id, fn->id());
                     cue.layers << l;
                     report.layers++;
                 }
@@ -4586,8 +4693,38 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
             if (fn->type() == Function::CollectionType && cueOfFunction.contains(fn->id())
                 && fn->id() != step.fid)
             {
-                cue.includes << cueOfFunction.value(fn->id());
-                report.includes++;
+                if (!cue.includes.contains(cueOfFunction.value(fn->id())))
+                {
+                    cue.includes << cueOfFunction.value(fn->id());
+                    report.includes++;
+                }
+                return;
+            }
+            // W5: a collection inside the step that is no step itself (DH's
+            // "0.0.0-base") played its members together with the step's
+            // own, as one: they are read into the cue as the step's own are.
+            // One that plays nothing is left out. Not one with a blend mode
+            // or a speed master of its own: that plays as it is.
+            if (fn->type() == Function::CollectionType && fn->id() != step.fid && depth < 8
+                && fn->blendMode() == Universe::NormalBlend && fn->speedMaster() == SpeedMasters::Inherit)
+            {
+                const Collection *inner = qobject_cast<const Collection *>(fn);
+                const QList<quint32> members = inner->functions();
+                bool plays = false;
+                for (quint32 m : members)
+                    plays |= m_doc->function(m) != nullptr;
+                if (!plays)
+                {
+                    report.dropped++;
+                    report.flattenNotes << tr("Cue %1: %2 plays nothing, so it is left out.")
+                                           .arg(cueTitle(), fn->name());
+                    return;
+                }
+                report.flattened++;
+                report.flattenNotes << tr("Cue %1: %2 is read into the cue's layers (it is no step of its own).")
+                                       .arg(cueTitle(), fn->name());
+                for (quint32 m : members)
+                    addFunction(m_doc->function(m), depth + 1);
                 return;
             }
             addOpaque(fn, tr("played as it is (%1)").arg(Function::typeToString(fn->type())));
@@ -4601,11 +4738,11 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
         {
             const Collection *coll = qobject_cast<const Collection *>(f);
             for (quint32 member : coll->functions())
-                addFunction(m_doc->function(member));
+                addFunction(m_doc->function(member), 1);
         }
         else
         {
-            addFunction(f);
+            addFunction(f, 1);
         }
         list.cues << cue;
     }
@@ -4768,6 +4905,22 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
     for (const auto &h : htp)
         if (h.first < 0 || !list.cues.at(h.first).mixOverlap)
             report.htpConflicts << h.second;
+
+    // What repeats from step to step is set once and tracks.
+    trackRepeats(list, origin, report, newId);
+    return true;
+}
+
+ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaserId)
+{
+    ImportReport report;
+    CueList list;
+    if (!buildImport(chaserId, &list, &report, [this]() { return newId(); }))
+        return report;
+    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(chaserId));
+    Production prod;
+    prod.id = newId();
+    prod.name = chaser->name();
 
     // The generated chaser starts as a copy, so it plays the way the
     // original does: run order, speed modes, tempo, GO on the beat.
@@ -5206,6 +5359,7 @@ void ShowTreeController::reset()
     m_generatedLabels.clear();
     m_undo.clear();
     m_redo.clear();
+    m_snapshotRemap.clear();
     m_nextId = 1;
     m_current = invalidId();
     applyProductionTimecode();

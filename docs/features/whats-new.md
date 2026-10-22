@@ -4,6 +4,104 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Icons that say what a row is.** In Build (the outline and the
+  Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
+  look is a small pie filled to its level (a 45 % look is 45 % lit); a
+  Shutter look shows the gate open, closed or strobing, and a Strobe look
+  a flash with its rate around the ring. An Aim look and a stage target
+  show a yellow bullseye for a point, a line with square ends for a line.
+  Fixtures show what their definition makes them: a fixed wash, a moving
+  spot (gobo, prism or iris), a moving wash (zoom or colour mixing, no
+  gobo) or a plain moving head. A group of one kind wears that kind
+  with a small group badge; a mixed group keeps the group icon. See
+  [Stage targets](stage-targets.md).
+
+- **Make effects in Build.** Build ▸ Effects has a **+ New ▾** button
+  (an effect palette, an EFX or an RGB Matrix) and a right-click menu
+  (Design / edit…, Open in editor, Duplicate, Rename, Move to folder…,
+  Delete, and New on empty space). Clicking an effect palette opens it in
+  the effect designer, full height in the Workbench. See
+  [Making effects](build.md#making-effects).
+
+- **Notes open up while you type.** A chaser step's note -- in the
+  Workbench's step header and step table, the Chaser editor's **Notes**
+  column -- and a Show Tree cue's note now word-wrap and grow as you type,
+  up to six lines, so you can read back what you wrote. **Return** applies
+  it, **Shift+Return** starts a new line, **Esc** puts it back. Closed up,
+  a long note is cut short with *…*; hover it to read all of it. See
+  [Walking a chaser](build.md#walking-a-chaser).
+
+- **A look's name follows its colour.** Change a colour look from red
+  to a darker red and "Red" becomes "Dark Red" as you drag. Only the
+  colour part changes ("Act2 Red" becomes "Act2 Dark Red"), and the look
+  stays in its folder. Intensity ("Intensity 45%" to "Intensity 60%"),
+  strobe and shutter names follow their values the same way. A name of
+  your own is left alone. The change and the rename are one Undo step.
+  See [The name follows the value](build.md#the-name-follows-the-value).
+
+
+- **Group tools: select all similar, move to folder.** Right-click a
+  fixture or a group in the Fixtures tab (or in Build's Groups &
+  fixtures) for **Select All Similar** — fixtures of the same definition
+  and mode, or groups in the same folder made of the same fixtures and
+  heads. Then
+  **Move to Folder ▸** lists the folders in use plus **New Folder…**, and
+  **Create Group(s) from Selection…** starts in the folder the selection
+  was made in. See
+  [Fixture-group folders](fixture-manager.md#fixture-group-folders).
+
+- **Send a chaser to the Show Tree from Build.** Load a chaser in the
+  Workbench and click **Send to Show Tree…**, or right-click its row in
+  Build ▸ Scenes. It is the Show Tree's Import in place for that chaser,
+  with the same sheet, and **Done, show it in the Show Tree** takes you to
+  the new list. See
+  [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
+- **An imported chaser tracks what it repeats.** A collection or scene
+  that appears in several steps in a row is set in the first of those cues
+  and tracks through the rest. It is released where it stops and set again
+  where it comes back. Every cue still plays exactly what its step did. See
+  [What repeats is set once and tracks](show-tree.md#what-repeats-is-set-once-and-tracks).
+- **The effect designer.** Build an effect in detail on the heads it is
+  for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
+  menu of its Effect row) opens the effect browser at full height. Beside
+  it are the effect's settings and its own colour and dimmer, playing live
+  on just that layer's fixtures, in context or Solo. **Keep on this
+  layer** makes a one-off. **Save as palette…** names and files it.
+  **Save as preset…** keeps it as a starting point for other shows.
+  **Window ▸ Effects** lists every effect palette and every EFX and RGB
+  Matrix in the show, with the same designer on a **Try on** bench. See
+  [The effect designer](effects.md#the-effect-designer).
+
+
+- **Upgrade this show, in one place.** **File → Upgrade This Show…**
+  lists every chaser and collection with what would become of it: a cue
+  list (checked to play the same), an effect kept as a function, or left
+  alone. A second page offers to capture the raw scenes into palettes.
+  **Upgrade** does the ticked parts as one undo step, and **Restore
+  original…** puts a chaser back. Nothing happens on its own, and the
+  old way keeps working. See
+  [Upgrade this show](show-tree.md#upgrade-this-show).
+- **Bring an old show over, and back.** A show of chasers opens as it
+  always did, with one line at the top of the Show Tree tab offering to
+  convert it. **Convert an old show…** tells the chasers used as cue
+  lists (they wait for GO, carry notes or cue numbers) from the ones used
+  as effects (strobes and chases, which stay functions), and shows each
+  list's plan, checked channel by channel before anything changes.
+  **Import in place** files the originals under `Imported/…` and moves
+  the VC, timelines and show control over to the list; **Restore
+  original** undoes it. Collections that every cue holds (a "base") no
+  longer show up as ▣ rows, and a raw scene's ▣ row can **Capture into
+  palettes…**. See
+  [An old show: convert it](show-tree.md#an-old-show-convert-it).
+
+- **Move in black from the Show Tree and Settings.** The show's auto
+  move-in-black is now a **MIB** button in the Show Tree's header, beside
+  the show controls, with the lead time under its arrow, and in
+  **Settings → Show Tree**, as well as in Programming → Move in black. All
+  three are the same one setting, saved with the show. While it is moving
+  lights in black, the button says how many (*MIB · 3*). A new show now
+  starts with it off instead of keeping the last show's. See
+  [Move in black](show-tree.md#move-in-black).
 - **Open what an old show's layer plays.** In the Show Tree, a layer that
   plays a function as it is (▣ — a raw scene, an EFX, an RGB Matrix)
   now opens it: double-click it, right-click → **Open**, or **Open** on
@@ -37,6 +135,66 @@ The latest changes, newest first. Each links to the guide with the detail.
   lists it under "fixture types declare no light output": a curtain is not
   a light. Hazers, smoke machines and fans with no light of their own are
   left out too; a real light with no output set is still listed.
+
+### Build, and the Workbench
+
+- **The Programming tab is Build.** Over its left side, **Palettes |
+  Effects | Scenes** picks what is listed; groups and fixtures are under
+  every one of them. On the right, the **Workbench** shows whatever you
+  load. See [Build Tab](build.md).
+- **A collection as layers.** Click a collection in Build ▸ Scenes and each
+  member is a layer: a scene opens up into its groups and looks, an EFX or
+  an RGB Matrix plays as it is (▣). **+ Scene**, **+ EFX** and **+ RGB
+  Matrix** add one — a new EFX or matrix is made on the selected layer's
+  groups and opens beside it in its own editor. ▲ ▼ reorder, ⌫ takes a
+  layer out (the scene stays in the show), drag scenes in from the left.
+  What is loaded plays on the rig as you work (Design mode). See
+  [The Workbench](build.md#the-workbench).
+- **Open, and come back.** **▣ Open** (or a double-click) loads a nested
+  collection, a chaser's step or a scene on its own; **↩** in the header
+  returns, with the same row selected.
+- **Shared members say so.** A scene used in other collections or chaser
+  steps shows **also in 2** — hover for where. An edit changes it
+  everywhere.
+- **Every scene and what's in it, in one tree.** Build ▸ Scenes is the
+  outline: folders, scenes, collections and chasers, each scene opening
+  into its targets and looks. Drag a row to another scene to move it (⌥
+  copies it), open everything with ⊞. See [The outline](build.md#the-outline).
+- **Old QLC+ shows stay as they are.** A show made the old way opens, plays
+  and saves as QLC+ made it; nothing is converted and nothing asks. Its
+  collections load in the Workbench as layers.
+- **One Undo.** Adding, removing and reordering layers, a new EFX or RGB
+  Matrix, filing and renaming — each is one ⌘Z, in Build or the Show Tree.
+- **A cue in the Workbench.** In the Show Tree, double-click a cue (or a
+  layer, or a look), press **✎ Workbench** or type `wb`: the cue opens in
+  the Workbench, right there in place of the page. Its own layers open up
+  into a row per attribute; what tracks in is grey, with where it comes
+  from, and isn't changed here. Click a value for its palette in the Look
+  Editor at full height, a layer for its page with every ⋯; drop palettes
+  and groups from the Library onto a layer. The cue plays in context as you
+  work, or **Solo** just the selected layer. **↩ Show Tree** goes back with
+  the same layer selected. See [Working on a cue in the
+  Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
+
+### Chasers in the Workbench, and Classic
+
+- **Walk a chaser.** Click a chaser and the Workbench walks it step by
+  step: **◀ ▶**, *Step 3 of 7*, and the step's fade in, hold, fade out, cue
+  number and note to edit in place. The step table (the Chaser editor's
+  columns) sits over the step's layers: click a step to go to it. A
+  collection step opens up into its layers — add an EFX, take a scene out,
+  reorder — and the chaser plays it that way. See
+  [Walking a chaser](build.md#walking-a-chaser).
+- **Chaser from selection.** Select scenes in Build ▸ Scenes in the order
+  you want them, then **Chaser from selection** (+ Scene's menu, or
+  right-click). Drag scenes onto a chaser's row, or onto its step table, to
+  add steps.
+- **Make own copy.** A scene shared with other collections — or a step
+  whose collection plays elsewhere too — says **also in …**; **Own copy**
+  splits it off so your edit changes only this one. One ⌘Z puts it back.
+- **Scenes ▸ Classic.** The navigator can list the show by function type,
+  as QLC+'s Function Manager does. An old QLC+ show opens that way; your
+  choice is remembered per show.
 
 ### More Matrix effects, and staggered boxes
 
@@ -385,7 +543,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   aims and effects together; the Palettes tab shows folders first, or
   **Group by type** (right-click) for type first with the same folders under
   each. Older shows' per-type folders merge on open. See
-  [Filing into folders](programming-tab.md#filing-into-folders).
+  [Filing into folders](build.md#filing-into-folders).
 
 ### Outputs
 
@@ -415,16 +573,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   onto the type's heading or empty space moves back out; pressing on a row
   and moving now always drags it, where before it could rubber-band select
   instead. Right-click a folder to rename or delete it — deleting keeps what
-  was in it. See [Filing into folders](programming-tab.md#filing-into-folders).
+  was in it. See [Filing into folders](build.md#filing-into-folders).
 - **Take things out of a collection, chaser or show from the side tree.**
   Right-click rows listed under one → **Remove from “…”** (the functions
   stay). Delete on those rows now reads **Delete Function Everywhere…** and
   says where else the function is used. See
-  [Taking something out](programming-tab.md#taking-something-out-of-a-collection-chaser-or-show).
+  [Taking something out](build.md#taking-something-out-of-a-collection-chaser-or-show).
 - **Deleting says where it's used.** Deleting a palette or a function in the
   Programming tab (menu or ⌫) lists every scene look, effect-look slot,
   collection, chaser step and show track using it before you confirm. See
-  [Deleting palettes and functions](programming-tab.md#deleting-palettes-and-functions).
+  [Deleting palettes and functions](build.md#deleting-palettes-and-functions).
 - **A look keeps its Speed and Spread when you try another effect.**
   Clicking or double-clicking another effect's tile in the look editor put
   the look back on *As the look* with no spread; now both stay. See
@@ -559,8 +717,8 @@ The latest changes, newest first. Each links to the guide with the detail.
   [Effects](effects.md) and [Troubleshooting](troubleshooting.md).
 - **Pictures with numbered marks** on the parts each guide talks about:
   the main window and the footer ([Getting started](getting-started.md#finding-your-way-around)),
-  the [Programming tab](programming-tab.md#layout), the effect look editor
-  and the [effect browser](programming-tab.md#the-effect-browser), the
+  the [Build tab](build.md#layout), the effect look editor
+  and the [effect browser](build.md#the-effect-browser), the
   [stack checker](effects.md#the-stack-checker),
   [Connections by universe](other-improvements.md#connections--patch) and the
   [Patch dialog](fixture-manager.md#patching-the-patch-dialog).
@@ -684,7 +842,7 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Effect previews show what the effect does.** A position effect draws
   the shape its heads trace, with the heads along it, instead of a strip
   of lights; gobo, iris and zoom effects show a row of beams; amber and UV
-  pulses light in their own colours. ([The effect browser](programming-tab.md#the-effect-browser))
+  pulses light in their own colours. ([The effect browser](build.md#the-effect-browser))
 - **WLED effects only where they can run.** A WLED effect that only runs on
   a WLED device is offered only when the look's targets include one;
   without, the WLED tab lists the ones that run on any fixture.
@@ -695,7 +853,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   its settings have the look editor's full width; **Change effect…** opens
   the browser, where every pick (and every arrow-key step) plays at once,
   and **Cancel** or Esc puts back the effect you had.
-  ([The effect browser](programming-tab.md#the-effect-browser))
+  ([The effect browser](build.md#the-effect-browser))
 
 ### Playback
 
@@ -716,7 +874,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   px at its narrowest, so a handle squeezed the panes beside it instead).
   A new handle sits **between the looks and the Look Editor**, which
   scrolls when made short. Positions are remembered.
-  ([Layout](programming-tab.md#layout))
+  ([Layout](build.md#layout))
 
 ### Effects
 
@@ -784,10 +942,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   ([On the beat](effects.md#on-the-beat))
 - **Text** — words on a pixel grid, scrolling or still in the middle, in
   the look's colours; settings that are words get a text box.
-  ([Text](programming-tab.md#text))
+  ([Text](build.md#text))
 - **Step Test Pattern** — a diagnostic card for LED-strip steps: strips
   counted, steps numbered and named, a spinner that stops if output
-  freezes. ([Step Test Pattern](programming-tab.md#step-test-pattern))
+  freezes. ([Step Test Pattern](build.md#step-test-pattern))
 - The RGB Matrix **Text** algorithm has a **Centered** style.
 - **Much faster on big pixel rigs**: 96 strips × 64 pixels ticks in about
   8.5 ms (was 68), leaving the screen free to keep up.

@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QBuffer>
 #include <QColor>
+#include <QDateTime>
 #include <QSet>
 #include <algorithm>
 
@@ -542,6 +543,10 @@ PaletteOps::State PaletteOps::capture(quint32 id) const
     s.exists = true;
     s.name = p->name();
     s.path = p->path();
+    s.values = p->values();
+    s.colourMacro = p->colourMacro();
+    s.goboName = p->goboName();
+    s.goboValues = p->goboValues();
     QBuffer buffer(&s.xml);
     buffer.open(QIODevice::WriteOnly);
     QXmlStreamWriter w(&buffer);
@@ -609,6 +614,18 @@ void PaletteOps::apply(const QList<State> &states, const QStringList &folders)
             have->setName(s.name);
         if (have->path() != s.path)
             have->setPath(s.path);
+        if (s.value)
+        {
+            have->setValues(s.values);
+            have->setColourMacro(s.colourMacro);
+            have->setGoboName(s.goboName);
+            have->setGoboValues(s.goboValues);
+            // Scenes read a palette as they run: the ones playing it, again.
+            for (Function *f : m_doc->functions())
+                if (Scene *sc = qobject_cast<Scene *>(f))
+                    if (sc->isRunning() && sc->palettes().contains(s.id))
+                        sc->requestPaletteRefresh();
+        }
     }
     m_emptyFolders = folders;
     m_doc->setModified();
@@ -657,6 +674,20 @@ bool PaletteOps::undo()
     if (m_undo.isEmpty())
         return false;
     Step st = m_undo.takeLast();
+    if (st.functions)
+    {
+        applyFunctions(st.functionsBefore);
+        m_redo << st;
+        emit changed();
+        return true;
+    }
+    if (!st.scenesBefore.isEmpty())
+    {
+        applyScenes(st.scenesBefore, st.scenesAfter);
+        m_redo << st;
+        emit changed();
+        return true;
+    }
     // The palettes first (back in their scenes and slots), then the tree
     // that names them, baked once.
     apply(st.before, st.foldersBefore);
@@ -673,6 +704,20 @@ bool PaletteOps::redo()
     if (m_redo.isEmpty())
         return false;
     Step st = m_redo.takeLast();
+    if (st.functions)
+    {
+        applyFunctions(st.functionsAfter);
+        m_undo << st;
+        emit changed();
+        return true;
+    }
+    if (!st.scenesAfter.isEmpty())
+    {
+        applyScenes(st.scenesAfter, st.scenesBefore);
+        m_undo << st;
+        emit changed();
+        return true;
+    }
     apply(st.after, st.foldersAfter);
     if (!st.treeAfter.isEmpty())
         if (ShowTreeController *tree = m_doc->showTree())
@@ -680,6 +725,334 @@ bool PaletteOps::redo()
     m_undo << st;
     emit changed();
     return true;
+}
+
+/****************************************************************************
+ * Value steps
+ ****************************************************************************/
+
+bool PaletteOps::valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
+                           const QString &mergeKey)
+{
+    if (m_doc->palette(paletteId) == nullptr)
+        return false;
+    if (!isManaged(paletteId))
+    {
+        change();
+        return false;
+    }
+    State before = capture(paletteId);
+    before.value = true;
+    change();
+    State after = capture(paletteId);
+    after.value = true;
+    if (!after.exists || (after.values == before.values && after.name == before.name
+                          && after.colourMacro == before.colourMacro && after.goboName == before.goboName
+                          && after.goboValues == before.goboValues))
+        return false;
+
+    const qint64 at = QDateTime::currentMSecsSinceEpoch();
+    if (!mergeKey.isEmpty() && !m_undo.isEmpty() && m_undo.last().mergeKey == mergeKey
+        && at - m_undo.last().mergeAt < 1500 && m_redo.isEmpty()
+        && m_undo.last().after.size() == 1 && m_undo.last().after.first().id == paletteId)
+    {
+        // The same palette, further on: keep where it started.
+        Step &top = m_undo.last();
+        top.after[0] = after;
+        top.mergeAt = at;
+        m_doc->setModified();
+        emit changed();
+        return true;
+    }
+
+    Step st;
+    st.label = label;
+    st.before << before;
+    st.after << after;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.mergeKey = mergeKey;
+    st.mergeAt = at;
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    if (ShowTreeController *tree = m_doc->showTree())
+        tree->clearRedo();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+/****************************************************************************
+ * Scene steps
+ ****************************************************************************/
+
+/** What a scene saves: its whole state, to tell whether an edit changed it. */
+static QByteArray sceneSignature(const Scene *scene)
+{
+    QByteArray xml;
+    if (scene == nullptr)
+        return xml;
+    QBuffer buf(&xml);
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    scene->saveXML(&w);
+    return xml;
+}
+
+QSharedPointer<Scene> PaletteOps::sceneSnapshot(quint32 sceneId) const
+{
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(sceneId));
+    if (scene == nullptr)
+        return QSharedPointer<Scene>();
+    Scene *snap = new Scene(m_doc);
+    // Owned by the pointer alone: the Doc would delete it a second time.
+    snap->setParent(nullptr);
+    snap->copyFrom(scene);
+    /* copyFrom() takes the id-less snapshot's name and path too; the id is
+       the scene's, so a later step can tell which scene it is. */
+    snap->setID(sceneId);
+    return QSharedPointer<Scene>(snap);
+}
+
+bool PaletteOps::recordSceneStep(const QString &label, const QList<QSharedPointer<Scene>> &before,
+                                 const QString &mergeKey)
+{
+    QList<QPair<quint32, QSharedPointer<Scene>>> was, now;
+    for (const QSharedPointer<Scene> &b : before)
+    {
+        if (b.isNull())
+            continue;
+        const quint32 id = b->id();
+        QSharedPointer<Scene> after = sceneSnapshot(id);
+        if (after.isNull() || sceneSignature(b.data()) == sceneSignature(after.data()))
+            continue;
+        was << qMakePair(id, b);
+        now << qMakePair(id, after);
+    }
+    if (was.isEmpty())
+        return false;
+
+    const qint64 at = QDateTime::currentMSecsSinceEpoch();
+    if (!mergeKey.isEmpty() && !m_undo.isEmpty() && m_undo.last().mergeKey == mergeKey
+        && at - m_undo.last().mergeAt < 1500 && m_redo.isEmpty())
+    {
+        Step &top = m_undo.last();
+        // The same scenes, further on: keep where they started, take where
+        // they are now.
+        for (const QPair<quint32, QSharedPointer<Scene>> &n : now)
+        {
+            bool found = false;
+            for (QPair<quint32, QSharedPointer<Scene>> &a : top.scenesAfter)
+                if (a.first == n.first)
+                {
+                    a.second = n.second;
+                    found = true;
+                }
+            if (!found)
+            {
+                for (const QPair<quint32, QSharedPointer<Scene>> &w : was)
+                    if (w.first == n.first)
+                        top.scenesBefore << w;
+                top.scenesAfter << n;
+            }
+        }
+        top.mergeAt = at;
+        m_doc->setModified();
+        emit changed();
+        return true;
+    }
+
+    Step st;
+    st.label = label;
+    st.scenesBefore = was;
+    st.scenesAfter = now;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.mergeKey = mergeKey;
+    st.mergeAt = at;
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    if (ShowTreeController *tree = m_doc->showTree())
+        tree->clearRedo();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+bool PaletteOps::sceneStep(const QString &label, const QList<quint32> &sceneIds,
+                           const std::function<bool()> &change)
+{
+    QList<QSharedPointer<Scene>> before;
+    for (quint32 id : sceneIds)
+    {
+        bool dup = false;
+        for (const QSharedPointer<Scene> &b : before)
+            dup = dup || b->id() == id;
+        if (dup)
+            continue;
+        QSharedPointer<Scene> s = sceneSnapshot(id);
+        if (!s.isNull())
+            before << s;
+    }
+    if (!change())
+        return false;
+    recordSceneStep(label, before);
+    return true;
+}
+
+void PaletteOps::applyScenes(const QList<QPair<quint32, QSharedPointer<Scene>>> &states,
+                             const QList<QPair<quint32, QSharedPointer<Scene>>> &other)
+{
+    for (const QPair<quint32, QSharedPointer<Scene>> &s : states)
+    {
+        Scene *scene = qobject_cast<Scene *>(m_doc->function(s.first));
+        if (scene == nullptr || s.second.isNull())
+            continue;
+        /* The name and folder are put back only when this step changed them
+           (a rename): a rename made since, outside this history (the
+           Functions tab), stays. */
+        QString otherName = s.second->name(), otherPath = s.second->path(true);
+        for (const QPair<quint32, QSharedPointer<Scene>> &o : other)
+            if (o.first == s.first && !o.second.isNull())
+            {
+                otherName = o.second->name();
+                otherPath = o.second->path(true);
+            }
+        const QString keepName = scene->name(), keepPath = scene->path(true);
+        scene->copyFrom(s.second.data());
+        if (otherName == s.second->name())
+            scene->setName(keepName);
+        if (otherPath == s.second->path(true))
+            scene->setPath(keepPath);
+        if (scene->isRunning())
+            scene->resetRuntime();
+    }
+    m_doc->setModified();
+}
+
+/****************************************************************************
+ * Function steps
+ ****************************************************************************/
+
+/** What a function saves: its whole state, to tell whether an edit changed it. */
+static QByteArray functionSignature(const Function *f)
+{
+    QByteArray xml;
+    if (f == nullptr)
+        return xml;
+    QBuffer buf(&xml);
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    f->saveXML(&w);
+    return xml;
+}
+
+QSharedPointer<Function> PaletteOps::functionSnapshot(quint32 id) const
+{
+    Function *f = m_doc->function(id);
+    if (f == nullptr)
+        return QSharedPointer<Function>();
+    Function *snap = f->createCopy(m_doc, false);
+    if (snap == nullptr)
+        return QSharedPointer<Function>();
+    // Owned by the pointer alone: the Doc would delete it a second time.
+    snap->setParent(nullptr);
+    snap->setID(id);
+    /* Deaf to the show: a collection drops a member the Doc removes, and a
+       snapshot that did would forget it -- an Undo deleting a new EFX would
+       take it out of the Redo side too. */
+    QObject::disconnect(m_doc, nullptr, snap, nullptr);
+    return QSharedPointer<Function>(snap);
+}
+
+bool PaletteOps::functionStep(const QString &label, const QList<quint32> &functionIds,
+                              const std::function<bool(QList<quint32> &made)> &change)
+{
+    QList<quint32> ids;
+    for (quint32 id : functionIds)
+        if (!ids.contains(id))
+            ids << id;
+    QList<QPair<quint32, QSharedPointer<Function>>> was;
+    for (quint32 id : ids)
+        was << qMakePair(id, functionSnapshot(id));
+    QList<quint32> made;
+    if (!change(made))
+        return false;
+    for (quint32 id : made)
+        if (!ids.contains(id))
+        {
+            ids << id;
+            was << qMakePair(id, QSharedPointer<Function>());
+        }
+
+    Step st;
+    st.label = label;
+    st.functions = true;
+    bool any = false;
+    for (const QPair<quint32, QSharedPointer<Function>> &w : was)
+    {
+        QSharedPointer<Function> now = functionSnapshot(w.first);
+        if (w.second.isNull() && now.isNull())
+            continue;
+        if (!w.second.isNull() && !now.isNull()
+            && functionSignature(w.second.data()) == functionSignature(now.data()))
+            continue;
+        any = true;
+        st.functionsBefore << w;
+        st.functionsAfter << qMakePair(w.first, now);
+    }
+    if (!any)
+        return false;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    if (ShowTreeController *tree = m_doc->showTree())
+        tree->clearRedo();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+void PaletteOps::applyFunctions(const QList<QPair<quint32, QSharedPointer<Function>>> &states)
+{
+    // Made first (what the others name exists), then changed, then deleted
+    // (nothing names them any more).
+    for (const QPair<quint32, QSharedPointer<Function>> &s : states)
+    {
+        if (s.second.isNull() || m_doc->function(s.first) != nullptr)
+            continue;
+        Function *f = s.second->createCopy(m_doc, false);
+        if (f == nullptr)
+            continue;
+        if (!m_doc->addFunction(f, s.first))
+            delete f;
+        else
+            f->setName(s.second->name());       // the copy's own, not a "copy of"
+    }
+    for (const QPair<quint32, QSharedPointer<Function>> &s : states)
+    {
+        Function *f = m_doc->function(s.first);
+        if (s.second.isNull() || f == nullptr)
+            continue;
+        if (functionSignature(f) == functionSignature(s.second.data()))
+            continue;
+        f->copyFrom(s.second.data());
+        if (Scene *scene = qobject_cast<Scene *>(f))
+            if (scene->isRunning())
+                scene->resetRuntime();
+        m_doc->notifyFunctionChanged(f->id());
+    }
+    for (const QPair<quint32, QSharedPointer<Function>> &s : states)
+        if (s.second.isNull() && m_doc->function(s.first) != nullptr)
+            m_doc->deleteFunction(s.first);
+    m_doc->setModified();
 }
 
 void PaletteOps::clearUndo()

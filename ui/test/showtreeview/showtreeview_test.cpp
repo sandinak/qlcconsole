@@ -37,6 +37,7 @@
 #include <QHeaderView>
 #include <QScrollBar>
 #include <QTextBrowser>
+#include <QTabWidget>
 #include <QListWidget>
 #include <QToolButton>
 #include <QMimeData>
@@ -48,11 +49,13 @@
 #include "mastertimer.h"
 #include "universe.h"
 #include "programmingmanager.h"
+#include "workbench.h"
 #undef protected
 #undef private
 #include "functionliveeditdialog.h"
 #include "functionmanager.h"
 #include "chasereditor.h"
+#include "noteedit.h"
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPushButton>
@@ -67,7 +70,12 @@
 #include "virtualconsole.h"
 #include "vcbutton.h"
 #include "vccuelist.h"
+#include "vcspeeddial.h"
+#include "vcspeeddialfunction.h"
+#include "vcclock.h"
+#include "showconverter.h"
 #include "importsheet.h"
+#include "programmingoutline.h"
 #include "sceneeditor.h"
 #include "efxeditor.h"
 #include "efx.h"
@@ -634,6 +642,33 @@ void ShowTreeView_Test::cueFieldsEditTheCue()
     // The collection it plays is renamed with it.
     const Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(c1)->collection));
     QCOMPARE(coll->name(), QString("1-Opener"));
+
+    // The note opens up while typed in: Shift+Return a new line, Return
+    // commits (one undo step), Esc puts it back.
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    NoteEdit *note = view.findChild<NoteEdit *>("stCueNote");
+    QVERIFY(note != nullptr);
+    const int closed = note->height();
+    note->setFocus(Qt::MouseFocusReason);
+    QVERIFY(note->isExpanded());
+    QTest::keyClicks(note, "House to half");
+    QTest::keyClick(note, Qt::Key_Return, Qt::ShiftModifier);
+    QTest::keyClicks(note, "then out");
+    QVERIFY(note->height() > closed);
+    QCOMPARE(st->cue(c1)->note, QString());
+    QTest::keyClick(note, Qt::Key_Return);
+    QCOMPARE(st->cue(c1)->note, QString("House to half\nthen out"));
+    QCOMPARE(note->height(), closed);
+    note->setFocus(Qt::MouseFocusReason);
+    QTest::keyClicks(note, " nope");
+    QTest::keyClick(note, Qt::Key_Escape);
+    QCOMPARE(note->text(), QString("House to half\nthen out"));
+    QCOMPARE(st->cue(c1)->note, QString("House to half\nthen out"));
+    view.slotUndo();
+    QCOMPARE(st->cue(c1)->note, QString());
 }
 
 void ShowTreeView_Test::undoAndRedoFromTheView()
@@ -2527,9 +2562,9 @@ void ShowTreeView_Test::generatedFunctionsAreLockedElsewhere()
         ModalCloser closer;
         pm.deleteFunctions({ chaserId });
         QVERIFY(m_doc->function(chaserId) != nullptr);
-        pm.addFunctionsToCollection(collId, { plain->id() });
-        QVERIFY(!qobject_cast<const Collection *>(m_doc->function(collId))->functions().contains(plain->id()));
-        QCOMPARE(closer.seen.count(), 2);
+        // (Adding to a collection was the old function tree's; the outline
+        // holds scenes only, PROGRAMMING_REDESIGN.md P1.)
+        QCOMPARE(closer.seen.count(), 1);
         // A plain function is deleted as ever.
         pm.deleteFunctions({ plain->id() });
     }
@@ -3786,7 +3821,14 @@ void ShowTreeView_Test::convertAndDetachFromTheListPage()
     Collection *two = new Collection(m_doc);
     two->setName("0.0.2-Two");
     m_doc->addFunction(two);
-    two->addFunction(one->id());
+    // A copy of A-Full, not A-Full itself: the import tracks only what the
+    // steps share (the same function); Convert reads the values.
+    Scene *sa2 = new Scene(m_doc);
+    sa2->setName("A-Full 2");
+    sa2->addFixtureGroup(a->id());
+    sa2->addPalette(full);
+    m_doc->addFunction(sa2);
+    two->addFunction(sa2->id());
     two->addFunction(sb->id());
     Chaser *chaser = new Chaser(m_doc);
     chaser->setName("Song");
@@ -3813,10 +3855,10 @@ void ShowTreeView_Test::convertAndDetachFromTheListPage()
         return true;
     });
     convert->click();
-    QVERIFY2(details.contains("0.0.2 Two: tracks from 0.0.1 One (its include of 0.0.1 One taken out)"),
-             qPrintable(details));
+    QVERIFY2(details.contains("0.0.2 Two: tracks from 0.0.1 One"), qPrintable(details));
+    QVERIFY2(details.contains("all of it tracks in, layer taken out"), qPrintable(details));
     QCOMPARE(st->cueList(listId)->mode, ListMode::Tracking);
-    QVERIFY(st->cueList(listId)->cues.at(1).includes.isEmpty());
+    QCOMPARE(st->cueList(listId)->cues.at(1).layers.count(), 1);
     QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("tracks now"));
     // Again: nothing more to convert, said.
     convert->click();
@@ -5173,11 +5215,23 @@ void ShowTreeView_Test::openAnOpaqueLayer()
     QCOMPARE(view.openableFunction(towersRow), Function::invalidId());
     QCOMPARE(view.openableFunction(nullptr), Function::invalidId());
 
-    // Double-click.
+    // Double-click (W3): the layer in the Workbench, docked here -- the
+    // EFX's own editor in its pane, ▣ Open loads it there.
     emit view.tree()->itemDoubleClicked(efxRow, 0);
-    QCOMPARE(opened, QList<quint32>({ efx->id() }));
+    QVERIFY(view.isWorkbenchDocked());
+    QCOMPARE(view.dockedWorkbench()->currentPage(), Workbench::FunctionPage);
+    QVERIFY(opened.isEmpty());
+    QVERIFY(view.closeWorkbench());
+    efxRow = layerRow(view.tree(), "SC Circle 1");
+    towersRow = layerRow(view.tree(), "Towers");
     emit view.tree()->itemDoubleClicked(towersRow, 0);
-    QCOMPARE(opened.count(), 1);
+    QVERIFY(view.isWorkbenchDocked());
+    QVERIFY(opened.isEmpty());
+    QVERIFY(view.closeWorkbench());
+    view.tree()->expandAll();
+    hazeRow = layerRow(view.tree(), "Haze");
+    efxRow = layerRow(view.tree(), "SC Circle 1");
+    towersRow = layerRow(view.tree(), "Towers");
 
     // The row's menu: Open first.
     {
@@ -5202,7 +5256,7 @@ void ShowTreeView_Test::openAnOpaqueLayer()
         QVERIFY(QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos)));
         QVERIFY2(!actions.isEmpty() && actions.first() == QString("stOpenFunction|Open “Haze”…"),
                  qPrintable(actions.join(", ")));
-        QCOMPARE(opened, QList<quint32>({ efx->id(), haze->id() }));
+        QCOMPARE(opened, QList<quint32>({ haze->id() }));
     }
 
     // The layer's page: Open, and where else it plays.
@@ -5222,7 +5276,8 @@ void ShowTreeView_Test::openAnOpaqueLayer()
     QCOMPARE(open->text(), QString("Open “Haze”"));
     QLabel *note = view.findChild<QLabel *>("stLayerOpenNote");
     QVERIFY(note != nullptr);
-    QVERIFY2(note->text().contains("Also in: cue 0.0.2 Towers of Full Show"), qPrintable(note->text()));
+    // Set in 0.0.1 only: 0.0.2 tracks it in (the import's tracking reading).
+    QVERIFY2(!note->text().contains("cue 0.0.2 Towers"), qPrintable(note->text()));
     QVERIFY2(note->text().contains("collection “0.0.1-Open”"), qPrintable(note->text()));
     QVERIFY(view.alsoIn(efx->id(), cue.id).contains("collection “0.0.1-Open”"));
     if (!w0Shot("layer-open.png").isEmpty())
@@ -5402,6 +5457,456 @@ void ShowTreeView_Test::theImportSheetCanUndoOrLeaveVcAlone()
         QVERIFY(st->productions().isEmpty());
         QCOMPARE(go->function(), chaser->id());
     }
+}
+
+/* Build's Send to Show Tree… on a chaser: the chaser row's right-click
+   (Undo import here) and the Workbench's header button, which runs the
+   Import in place through the sheet; "Done, show it in the Show Tree"
+   goes to the new list's tab. What repeats from step to step (Haze) is
+   set once and tracks (the sheet says so). */
+void ShowTreeView_Test::sendToShowTreeFromBuild()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
+    ShowTreeController *st = m_doc->showTree();
+
+    QTabWidget tabs;
+    ProgrammingManager *mgr = new ProgrammingManager(&tabs, m_doc);
+    ShowTreeView *view = new ShowTreeView(&tabs, m_doc);
+    tabs.addTab(mgr, "Build");
+    tabs.addTab(view, "Show Tree");
+    tabs.resize(1400, 900);
+    tabs.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabs));
+    QCOMPARE(tabs.currentWidget(), mgr);
+    mgr->setSection(ProgrammingManager::ScenesSection);
+    mgr->showFunction(chaser->id());
+
+    // The chaser row's right-click: Send to Show Tree…, then Undo import.
+    ProgrammingOutline *nav = nullptr;
+    for (ProgrammingOutline *o : mgr->findChildren<ProgrammingOutline *>())
+        if (o->mode() == ProgrammingOutline::Navigator)
+            nav = o;
+    QVERIFY(nav != nullptr);
+    ProgrammingOutline::Row row;
+    row.kind = ProgrammingOutline::FunctionRow;
+    row.id = row.scene = chaser->id();
+    QTreeWidgetItem *item = nav->itemFor(row);
+    QVERIFY(item != nullptr);
+    nav->scrollToItem(item);
+    QStringList actions;
+    bool undone = false;
+    view->setSheetRunner([&](ImportSheet *sheet) {
+        QVERIFY(sheet->findChild<QPushButton *>("stImportGoTo") != nullptr);
+        sheet->findChild<QPushButton *>("stImportUndo")->click();
+        undone = true;
+    });
+    QTimer driver;
+    driver.setInterval(20);
+    connect(&driver, &QTimer::timeout, this, [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+            return;
+        driver.stop();
+        for (QAction *a : menu->actions())
+            actions << a->objectName();
+        QAction *send = menu->findChild<QAction *>("outlineSendToTree");
+        menu->close();
+        if (send != nullptr && send->isEnabled())
+            send->trigger();
+    });
+    driver.start();
+    emit nav->customContextMenuRequested(nav->visualItemRect(item).center());
+    QTRY_VERIFY(undone);
+    QVERIFY2(actions.contains("outlineSendToTree"), qPrintable(actions.join(", ")));
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(tabs.currentWidget(), mgr);
+
+    // The Workbench's header button, "Done, show it in the Show Tree".
+    mgr->showFunction(chaser->id());
+    QToolButton *send = mgr->findChild<QToolButton *>("workbenchSendToTree");
+    QVERIFY(send != nullptr);
+    QVERIFY(send->isVisible());
+    QString text;
+    view->setSheetRunner([&](ImportSheet *sheet) {
+        text = sheet->text();
+        QVERIFY(sheet->fileBox()->isChecked());
+        sheet->findChild<QPushButton *>("stImportGoTo")->click();
+        QVERIFY(sheet->goToAsked());
+    });
+    send->click();
+    for (const QString &want : { QString("Plays the same"), QString("0 channels differ"),
+                                 QString("Set once, then tracking"), QString("tracks in: Haze") })
+        QVERIFY2(text.contains(want), qPrintable(want + " not in:\n" + text));
+    QCOMPARE(st->productions().count(), 1);
+    const CueList *list = &st->productions().first().lists.first();
+    QVERIFY(list->inPlace);
+    QCOMPARE(list->mode, ListMode::Tracking);
+    QVERIFY(list->cues[1].layers.isEmpty() || !list->cues[1].layers.first().target.isOpaque()
+            || list->cues[1].layers.first().target.function != haze->id());
+    QVERIFY(chaser->path(true).startsWith("Imported/"));
+    QCOMPARE(tabs.currentWidget(), view);
+    // Sent: not offered again.
+    QVERIFY(!st->whyNotSend(chaser->id()).isEmpty());
+    QVERIFY(send->isHidden());
+}
+
+/****************************************************************************
+ * W5: the bridge
+ ****************************************************************************/
+
+namespace
+{
+/** A looping strobe of raw scenes: an effect chaser. */
+Chaser *strobe(Doc *doc)
+{
+    Scene *on = new Scene(doc);
+    on->setName("Strobe on");
+    on->setValue(3, 0, 255);
+    doc->addFunction(on);
+    Scene *off = new Scene(doc);
+    off->setName("Strobe off");
+    off->setValue(3, 0, 0);
+    doc->addFunction(off);
+    Chaser *c = new Chaser(doc);
+    c->setName("Strobe");
+    c->setRunOrder(Function::Loop);
+    c->setDurationMode(Chaser::Common);
+    c->setDuration(100);
+    doc->addFunction(c);
+    c->addStep(ChaserStep(on->id()));
+    c->addStep(ChaserStep(off->id()));
+    return c;
+}
+}
+
+/* An old show (chasers, no tree) says so once, at the top of the tab; it
+   never converts on its own, ✕ puts it away, and a tree hides it. */
+void ShowTreeView_Test::anOldShowOpensWithABanner()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    strobe(m_doc);
+    ShowTreeView view(nullptr, m_doc);
+    view.updateBridgeBanner();
+    QVERIFY(!view.bridgeBanner()->isHidden());
+    const QString text = view.bridgeBanner()->findChild<QLabel *>("stBridgeText")->text();
+    QVERIFY2(text.contains("1 look(s) like cue lists (Full Show)"), qPrintable(text));
+    QVERIFY(!text.contains("Strobe"));
+    QVERIFY(m_doc->showTree()->productions().isEmpty());     // nothing converted
+
+    view.bridgeBanner()->findChild<QToolButton *>("stBridgeDismiss")->click();
+    QVERIFY(view.bridgeBanner()->isHidden());
+    emit m_doc->loaded();                                     // another show: asks again
+    QVERIFY(!view.bridgeBanner()->isHidden());
+    m_doc->showTree()->importChaser(chaser->id());            // a tree: never
+    QVERIFY(view.bridgeBanner()->isHidden());
+}
+
+/* The converter: the cue list ticked with its plan and check, the effect
+   chaser not offered; Convert imports in place -- originals filed, VC
+   (buttons, Cue Lists, speed dials, clocks) and show control on the list
+   -- one undo step a chaser. */
+void ShowTreeView_Test::theConverterImportsCueListsInPlace()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    Chaser *fx = strobe(m_doc);
+    m_doc->showControl()->setMainCueList(chaser->id());
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCButton *go = new VCButton(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(go, contents);
+    go->setFunction(chaser->id());
+    VCButton *flash = new VCButton(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(flash, contents);
+    flash->setFunction(fx->id());
+    VCSpeedDial *dial = new VCSpeedDial(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(dial, contents);
+    dial->setCaption("Tempo");
+    dial->setFunctions({ VCSpeedDialFunction(chaser->id()), VCSpeedDialFunction(fx->id()) });
+    VCClock *clock = new VCClock(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(clock, contents);
+    clock->setCaption("Doors");
+    VCClockSchedule sch;
+    sch.setFunction(chaser->id());
+    sch.setTime(QDateTime(QDate(2026, 1, 1), QTime(19, 30)));
+    clock->addSchedule(sch);
+
+    ShowTreeView view(nullptr, m_doc);
+    QString text;
+    QStringList results;
+    view.setConverterRunner([&](ShowConverter *c) {
+        text = c->text();
+        QCOMPARE(c->chosen(), QList<quint32>({ chaser->id() }));
+        QVERIFY(c->inPlace());
+        c->resize(900, 700);
+        c->show();
+        QVERIFY(QTest::qWaitForWindowExposed(c));
+        if (!w0Shot("show-converter.png").isEmpty())
+            QVERIFY(c->grab().save(w0Shot("show-converter.png")));
+        results = c->convert();
+        QVERIFY(c->chosen().isEmpty());          // Full Show is converted: no longer offered
+    });
+    view.openConverter();
+    for (const QString &want : { QString("[x] Full Show | Cue list — waits for GO on 2 of 2"),
+                                 QString("✓ 0 channels differ"), QString("Strobe | Effect — loops"),
+                                 QString("stays a function"), QString("What each step became") })
+        QVERIFY2(text.contains(want), qPrintable(want + " not in:\n" + text));
+    QVERIFY2(results.join("\n").contains("original(s) filed under Imported/Full Show (originals)"),
+             qPrintable(results.join("\n")));
+
+    ShowTreeController *st = m_doc->showTree();
+    QCOMPARE(st->productions().count(), 1);
+    const CueList *list = &st->productions().first().lists.first();
+    const quint32 listChaser = list->chaser;
+    QVERIFY(list->inPlace);
+    QCOMPARE(list->source, chaser->id());
+    QCOMPARE(chaser->path(true), QString("Imported/Full Show (originals)"));
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(flash->function(), fx->id());
+    QCOMPARE(dial->functions().at(0).functionId, listChaser);
+    QCOMPARE(dial->functions().at(1).functionId, fx->id());
+    QCOMPARE(clock->schedules().first().function(), listChaser);
+    QCOMPARE(m_doc->showControl()->mainCueList(), listChaser);
+
+    // One undo step: all of it back.
+    QVERIFY(st->undo());
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(chaser->path(true), QString());
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(dial->functions().at(0).functionId, chaser->id());
+    QCOMPARE(clock->schedules().first().function(), chaser->id());
+    QCOMPARE(m_doc->showControl()->mainCueList(), chaser->id());
+    QVERIFY(st->redo());
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(dial->functions().at(0).functionId, listChaser);
+}
+
+/* Restore original: asks, then the list goes, the originals come back and
+   what fired the list fires the chaser -- one undo step, both ways. */
+void ShowTreeView_Test::restoreOriginalPointsVcBack()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCButton *go = new VCButton(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(go, contents);
+    go->setFunction(chaser->id());
+    VCCueList *cues = new VCCueList(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(cues, contents);
+    cues->setChaser(chaser->id());
+
+    ShowTreeView view(nullptr, m_doc);
+    QStringList asked;
+    view.setConfirm([&asked](const QString &title, const QString &text, const QString &) {
+        asked << title + ": " + text;
+        return true;
+    });
+    view.importInPlace(chaser->id());
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->productions().first().lists.first().id;
+    const quint32 listChaser = st->cueList(listId)->chaser;
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(cues->chaserID(), listChaser);
+
+    QVERIFY(view.restoreOriginal(listId));
+    QVERIFY2(asked.join("\n").contains("Restore original: Restore “Full Show”?"), qPrintable(asked.join("\n")));
+    QVERIFY(st->productions().isEmpty());
+    QVERIFY(m_doc->function(listChaser) == nullptr);
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(cues->chaserID(), chaser->id());
+    QCOMPARE(chaser->path(true), QString());
+
+    QVERIFY(st->undo());                    // back in place
+    QVERIFY(st->cueList(listId) != nullptr);
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(cues->chaserID(), listChaser);
+    QCOMPARE(chaser->path(true), QString("Imported/Full Show (originals)"));
+    QVERIFY(st->redo());                    // restored again
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(cues->chaserID(), chaser->id());
+}
+
+/* A ▣ raw scene's row: Capture into palettes… on its page and its menu;
+   the plan asked, then the layers in every cue that plays it. */
+void ShowTreeView_Test::captureFromTheOpaqueRow()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1100, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QString details;
+    view.setConfirm([&details](const QString &, const QString &, const QString &d) {
+        details = d;
+        return true;
+    });
+    view.importChaser(chaser->id(), false);
+    view.tree()->expandAll();
+    QTreeWidgetItem *hazeRow = layerRow(view.tree(), "Haze");
+    QVERIFY(hazeRow != nullptr);
+    view.tree()->setCurrentItem(hazeRow);
+    QPushButton *cap = view.findChild<QPushButton *>("stLayerCapture");
+    QVERIFY(cap != nullptr);
+    QVERIFY(cap->isEnabled());
+    cap->click();
+    QVERIFY2(details.contains("Dimmer"), qPrintable(details));
+    QVERIFY2(details.contains("Where: Full Show 0.0.1 Open"), qPrintable(details));
+    QVERIFY(!details.contains("0.0.2 Towers"));     // it tracks in there
+    const CueList &list = m_doc->showTree()->productions().first().lists.first();
+    for (const Cue &c : list.cues)
+        for (const Layer &l : c.layers)
+            QVERIFY(l.target.function != haze->id());
+    QVERIFY(m_doc->function(haze->id()) != nullptr);          // kept
+    QVERIFY(m_doc->showTree()->undo());
+    view.tree()->expandAll();
+    QVERIFY(layerRow(view.tree(), "Haze") != nullptr);
+}
+
+/* Upgrade this show (§3.7, the File menu and the banner): every chaser and
+   collection with its plan, raw scenes offered for Capture into palettes
+   once their list is ticked; Upgrade is one undo step; Restore original
+   from the same dialog. */
+void ShowTreeView_Test::upgradeThisShow()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    Chaser *fx = strobe(m_doc);
+    Collection *loose = new Collection(m_doc);
+    loose->setName("Busk Haze");
+    m_doc->addFunction(loose);
+    loose->addFunction(haze->id());
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCButton *go = new VCButton(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(go, contents);
+    go->setFunction(chaser->id());
+    ShowTreeController *st = m_doc->showTree();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.setConfirm([](const QString &, const QString &, const QString &) { return true; });
+    view.updateBridgeBanner();
+    QPushButton *bannerButton = view.bridgeBanner()->findChild<QPushButton *>("stBridgeUpgrade");
+    QVERIFY(bannerButton != nullptr);
+    QCOMPARE(bannerButton->text(), QString("Upgrade this show…"));
+
+    QString planText, untickedText, afterText;
+    QStringList results;
+    quint32 listId = ShowTree::invalidId();
+    int opened = 0;
+    view.setConverterRunner([&](ShowConverter *c) {
+        ++opened;
+        QCOMPARE(c->mode(), ShowConverter::Upgrade);
+        QCOMPARE(c->windowTitle(), QString("Upgrade this show"));
+        QCOMPARE(c->chosen(), QList<quint32>({ chaser->id() }));
+        QVERIFY(c->chosenScenes().isEmpty());        // capture is never ticked for you
+        QVERIFY(st->productions().isEmpty());        // nothing changed by opening it
+        // Haze is offered: Full Show's list would play it raw.
+        bool hazeOffered = false;
+        for (const ShowConverter::CaptureRow &r : c->captureRows())
+            if (r.scene == haze->id())
+                hazeOffered = !r.plan.layers.isEmpty() && r.chasers.contains(chaser->id()) && !r.inTree;
+        QVERIFY(hazeOffered);
+        c->setChosen(chaser->id(), false);
+        untickedText = c->text();
+        c->setChosen(chaser->id(), true);
+        c->setCaptureChosen(haze->id(), true);
+        QCOMPARE(c->chosenScenes(), QList<quint32>({ haze->id() }));
+        planText = c->text();
+        c->resize(1000, 720);
+        c->show();
+        QVERIFY(QTest::qWaitForWindowExposed(c));
+        if (!w0Shot("upgrade-show.png").isEmpty())
+        {
+            QVERIFY(c->grab().save(w0Shot("upgrade-show.png")));
+            c->pages()->setCurrentIndex(1);
+            QVERIFY(c->grab().save(w0Shot("upgrade-capture.png")));
+            c->pages()->setCurrentIndex(0);
+        }
+        results = c->convert();
+        afterText = c->text();
+        QVERIFY(c->chosen().isEmpty());
+        QCOMPARE(c->convertedLists().count(), 1);
+        listId = c->convertedLists().first();
+        if (!w0Shot("upgrade-done.png").isEmpty())
+            QVERIFY(c->grab().save(w0Shot("upgrade-done.png")));
+    });
+    bannerButton->click();
+    QCOMPARE(opened, 1);
+
+    for (const QString &want : { QString("[x] Full Show | Cue list — waits for GO on 2 of 2"),
+                                 QString("cue list: 2 cue(s)"), QString("✓ 0 channels differ"),
+                                 QString("Strobe | Effect — loops"), QString("kept as a function"),
+                                 QString("0.0.1-Open | Collection — 2 function(s) | read into the cues of Full Show"),
+                                 QString("Busk Haze | Collection — 1 function(s) | leave alone: plays as it is"),
+                                 QString("[x] Haze | Full Show (once converted)") })
+        QVERIFY2(planText.contains(want), qPrintable(want + " not in:\n" + planText));
+    for (const QString &want : { QString("[ ] Full Show"), QString("leave alone: plays as it is"),
+                                 QString("( ) Haze") })
+        QVERIFY2(untickedText.contains(want), qPrintable(want + " not in:\n" + untickedText));
+    const QString all = results.join("\n");
+    QVERIFY2(all.contains("Full Show: a cue list of 2 cue(s); plays the same (0 channels differ)."), qPrintable(all));
+    // Haze is set in 0.0.1 and tracks into 0.0.2 (the import's tracking
+    // reading): captured where it is set, the capture tracks in with it.
+    QVERIFY2(all.contains("Haze: captured into palettes in 1 cue(s), 0 channels differ."), qPrintable(all));
+    QVERIFY2(afterText.contains("Full Show | Converted — the cue list Full Show, in place"), qPrintable(afterText));
+    QVERIFY2(afterText.contains("takes the whole upgrade back as one step"), qPrintable(afterText));
+
+    const CueList *list = st->cueList(listId);
+    QVERIFY(list != nullptr && list->inPlace);
+    const quint32 listChaser = list->chaser;
+    QCOMPARE(go->function(), listChaser);
+    for (const Cue &c : list->cues)
+        for (const Layer &l : c.layers)
+            QVERIFY(l.target.function != haze->id());          // captured
+    QCOMPARE(fx->path(true), QString());                       // the effect left as it is
+    QCOMPARE(loose->path(true), QString());
+
+    // One undo step for the lot, both ways.
+    QCOMPARE(st->undoText(), QString("Upgrade this show"));
+    QVERIFY(st->undo());
+    QVERIFY(st->productions().isEmpty());
+    QVERIFY(!st->canUndo());
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(chaser->path(true), QString());
+    QVERIFY(st->redo());
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(chaser->path(true), QString("Imported/Full Show (originals)"));
+
+    // Restore original from the same dialog (File ▸ Upgrade this show…).
+    bool restored = false;
+    view.setConverterRunner([&](ShowConverter *c) {
+        QCOMPARE(c->convertedLists(), QList<quint32>({ listId }));
+        restored = c->restore(listId);
+        QVERIFY(c->convertedLists().isEmpty());
+        QCOMPARE(c->chosen(), QList<quint32>({ chaser->id() }));   // offered again
+    });
+    view.openUpgrade();
+    QVERIFY(restored);
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(chaser->path(true), QString());
+    QVERIFY(st->undo());                                       // the restore
+    QCOMPARE(go->function(), listChaser);
+    QVERIFY(st->undo());                                       // the upgrade
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(go->function(), chaser->id());
 }
 
 QTEST_MAIN(ShowTreeView_Test)

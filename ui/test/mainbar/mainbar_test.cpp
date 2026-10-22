@@ -29,6 +29,10 @@
 #include <QSizeGrip>
 #include <QLayout>
 #include <QtMath>
+#include <QCheckBox>
+#include <QDoubleSpinBox>
+#include <QPushButton>
+#include <QMenu>
 
 #include "mainbar_test.h"
 
@@ -41,6 +45,10 @@
 #include "inputoutputmap.h"
 #include "fixturemanager.h"
 #include "virtualconsole.h"
+#include "programmingmanager.h"
+#include "showtreeview.h"
+#include "moveinblackbutton.h"
+#include "programmercontroller.h"
 #undef protected
 #undef private
 
@@ -48,7 +56,7 @@
    its in the universe list's pane (they act on the universe picked there);
    Simple Desk and Run have none. */
 static const QStringList kTabsWithTools = {
-    QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio"), QStringLiteral("Programming"),
+    QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio"), QStringLiteral("Build"),
     QStringLiteral("Show Tree"), QStringLiteral("Shows"), QStringLiteral("Virtual Console") };
 
 /* What a tab's tools hold: every action and every widget, by pointer. */
@@ -564,6 +572,133 @@ void MainBar_Test::operateModeStillHidesTheConsolesTools()
     QVERIFY(tools->isVisible());
 }
 
+void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
+{
+    ProgrammerController *pc = m_app->doc()->programmer();
+    QVERIFY(pc != nullptr);
+    m_app->resize(1280, 800);
+    m_app->setShowControlsPlacement(App::ShowControlsInTopBar);
+    showTab(QStringLiteral("Show Tree"));
+    QCoreApplication::processEvents();
+    ShowTreeView *st = m_app->findChild<ShowTreeView *>();
+    QVERIFY(st != nullptr);
+    MoveInBlackButton *mib = st->moveInBlackButton();
+    QVERIFY(mib != nullptr);
+    QVERIFY(mib->isVisibleTo(m_app));                  // in the top bar, with the Show Tree's tools
+    QVERIFY(m_app->m_mainBar->isAncestorOf(mib));
+    // Never folded into »: still in sight in a laptop-narrow window
+    m_app->resize(900, 800);
+    QCoreApplication::processEvents();
+    QVERIFY(mib->isVisibleTo(m_app));
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+    ProgrammingManager *pm = m_app->findChild<ProgrammingManager *>();
+    QVERIFY(pm != nullptr);
+
+    pc->setAutoMoveInBlack(false);
+    pc->setMoveInBlackDarkGapMs(800);
+    QVERIFY(!mib->isChecked());
+    QVERIFY(!pm->m_autoMibBtn->isChecked());
+
+    // 1. The Show Tree's MIB -> the show, Programming
+    mib->click();
+    QVERIFY(pc->isAutoMoveInBlack());
+    QVERIFY(mib->isChecked());
+    QVERIFY(mib->autoAction()->isChecked());
+    QVERIFY(pm->m_autoMibBtn->isChecked());
+    mib->leadSpin()->setValue(1.5);
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 1500);
+    QCOMPARE(pm->m_mibGapSpin->value(), 1.5);
+
+    // 2. Programming -> the show, the Show Tree
+    pm->m_autoMibBtn->setChecked(false);
+    QVERIFY(!pc->isAutoMoveInBlack());
+    QVERIFY(!mib->isChecked());
+    pm->m_mibGapSpin->setValue(2.0);
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 2000);
+    QCOMPARE(mib->leadSpin()->value(), 2.0);
+    // The menu's own switch is the same one
+    mib->autoAction()->trigger();
+    QVERIFY(pc->isAutoMoveInBlack());
+    QVERIFY(pm->m_autoMibBtn->isChecked());
+
+    // 3. Settings: opens on the show's, applies on OK, Cancel leaves it
+    {
+        AppSettings dlg(m_app);
+        QVERIFY(dlg.m_mibCheck->isChecked());
+        QCOMPARE(dlg.m_mibLeadSpin->value(), 2.0);
+        QLabel *note = dlg.findChild<QLabel *>(QStringLiteral("settingsMoveInBlackNote"));
+        QVERIFY(note != nullptr && note->text().contains(QStringLiteral("saved with this show")));
+        dlg.m_mibCheck->setChecked(false);
+        dlg.m_mibLeadSpin->setValue(3.0);
+        dlg.reject();
+    }
+    QVERIFY(pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 2000);
+    {
+        AppSettings dlg(m_app);
+        dlg.m_mibCheck->setChecked(false);
+        dlg.m_mibLeadSpin->setValue(3.0);
+        dlg.accept();
+    }
+    QVERIFY(!pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 3000);
+    QVERIFY(!mib->isChecked());
+    QCOMPARE(mib->leadSpin()->value(), 3.0);
+    QVERIFY(!pm->m_autoMibBtn->isChecked());
+    QCOMPARE(pm->m_mibGapSpin->value(), 3.0);
+
+    // Saved and loaded with the show: every view comes back with it
+    mib->click();
+    QVERIFY(pc->isAutoMoveInBlack());
+    const QString show = m_dir.filePath(QStringLiteral("mib.qxw"));
+    QCOMPARE(m_app->saveXML(show), QFile::NoError);
+    {
+        QFile f(show);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray xml = f.readAll();
+        QVERIFY(xml.contains("<MoveInBlack Auto=\"1\" DarkGapMs=\"3000\""));
+    }
+    pc->setAutoMoveInBlack(false);
+    pc->setMoveInBlackDarkGapMs(800);
+    QVERIFY(!mib->isChecked());
+    m_app->doc()->resetModified();
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    QCoreApplication::processEvents();
+    QVERIFY(pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 3000);
+    QVERIFY(mib->isChecked());
+    QCOMPARE(mib->leadSpin()->value(), 3.0);
+    QVERIFY(pm->m_autoMibBtn->isChecked());
+    QCOMPARE(pm->m_mibGapSpin->value(), 3.0);
+
+    const QString dir = QString::fromLocal8Bit(qgetenv("MIB_SHOTS"));
+    if (dir.isEmpty() == false)
+    {
+        m_app->resize(1280, 800);
+        showTab(QStringLiteral("Show Tree"));
+        m_app->grab().save(dir + "/mib-showtree.png");
+        mib->grab().save(dir + "/mib-button.png");
+        mib->menu()->popup(mib->mapToGlobal(QPoint(0, mib->height())));
+        QCoreApplication::processEvents();
+        mib->menu()->grab().save(dir + "/mib-menu.png");
+        mib->menu()->hide();
+        AppSettings dlg(m_app);
+        dlg.resize(dlg.sizeHint());
+        dlg.show();
+        QCoreApplication::processEvents();
+        dlg.grab().save(dir + "/mib-settings.png");
+        dlg.reject();
+        showTab(QStringLiteral("Programming"));
+        m_app->grab().save(dir + "/mib-programming.png");
+    }
+
+    // Leave the show as it was
+    pc->setAutoMoveInBlack(false);
+    pc->setMoveInBlackDarkGapMs(800);
+    m_app->doc()->resetModified();
+}
+
 void MainBar_Test::screenshots()
 {
     const QString dir = QString::fromLocal8Bit(qgetenv("MAINBAR_SHOTS"));
@@ -573,8 +708,8 @@ void MainBar_Test::screenshots()
     m_app->setShowControlsPlacement(App::ShowControlsInTopBar);
     showTab(QStringLiteral("Fixtures"));
     m_app->grab().save(dir + "/after-A-fixtures.png");
-    showTab(QStringLiteral("Programming"));
-    m_app->grab().save(dir + "/after-A-programming.png");
+    showTab(QStringLiteral("Build"));
+    m_app->grab().save(dir + "/after-A-build.png");
     showTab(QStringLiteral("Show Tree"));
     m_app->grab().save(dir + "/after-A-showtree.png");
     m_app->doc()->inputOutputMap()->setBlackout(true);
@@ -590,8 +725,8 @@ void MainBar_Test::screenshots()
     m_app->doc()->inputOutputMap()->setOutputInhibited(true);
     QCoreApplication::processEvents();
     m_app->grab().save(dir + "/after-B-fixtures-blackout-blind.png");
-    showTab(QStringLiteral("Programming"));
-    m_app->grab().save(dir + "/after-B-programming-blackout-blind.png");
+    showTab(QStringLiteral("Build"));
+    m_app->grab().save(dir + "/after-B-build-blackout-blind.png");
     m_app->doc()->inputOutputMap()->setBlackout(false);
     m_app->doc()->inputOutputMap()->setOutputInhibited(false);
     m_app->resize(760, 800);

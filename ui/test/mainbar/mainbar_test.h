@@ -58,6 +58,10 @@ private slots:
     void theShowTreesHintIsNeverFolded();
     /** Operate hides the Virtual Console's tools, in the top bar as at home */
     void operateModeStillHidesTheConsolesTools();
+    /** Auto move-in-black: one setting of the show, three views (Show
+     *  Tree MIB, Programming's Move in black menu, Settings → Show Tree),
+     *  each following the others, saved and loaded with the show */
+    void moveInBlackIsOneSettingInThreePlaces();
     /** Pictures for the record (MAINBAR_SHOTS=dir) */
     void screenshots();
     /** Kiosk: no top bar, no show controls, the tabs' tools at home. Last:

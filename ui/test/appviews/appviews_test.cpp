@@ -328,7 +328,7 @@ void AppViews_Test::helpOpensOnWhatIsInFront()
         { "Connections", "other-improvements.md#connections--patch" },
         { "Fixtures", "fixture-manager.md" },
         { "Lighting Studio", "lighting-studio.md" },
-        { "Programming", "programming-tab.md" },
+        { "Build", "build.md" },
         { "Virtual Console", "getting-started.md#running-the-show" },
         { "Shows", "shows.md" } };
     for (int i = 0; i < tabs->count(); ++i)

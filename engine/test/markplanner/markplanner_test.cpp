@@ -32,6 +32,10 @@
 #include "markeffect.h"
 #include "markplanner.h"
 #include "functionparent.h"
+#include "programmercontroller.h"
+#include <QBuffer>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 
 // A minimal mover: Pan + Dimmer (master intensity). Mirrors cueoutput_test's
 // fixture -- MarkPlanner's lit/dark check goes through the same CueOutput
@@ -212,6 +216,73 @@ void MarkPlanner_Test::aDarkFixtureIsPresetButAStagedOneIsNot()
     staged.setEnabled(true);
     QMetaObject::invokeMethod(&staged, "evaluate");
     QVERIFY(!m_mark->isMarked(m_fixtureA));
+}
+
+void MarkPlanner_Test::theShowsMoveInBlackSavesLoadsAndResets()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    QVERIFY(pc != nullptr);
+    QVERIFY(!pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), MarkPlanner::defaultDarkGapMs());
+
+    QSignalSpy spy(pc, &ProgrammerController::autoMoveInBlackChanged);
+    m_doc->resetModified();
+    pc->setAutoMoveInBlack(true);
+    QCOMPARE(spy.count(), 1);
+    QVERIFY(m_doc->isModified());                      // it's the show's
+    pc->setAutoMoveInBlack(true);                      // no change, no noise
+    QCOMPARE(spy.count(), 1);
+
+    m_doc->resetModified();
+    pc->setMoveInBlackDarkGapMs(1500);
+    QCOMPARE(spy.count(), 2);                          // the lead time is told too
+    QCOMPARE(spy.last().at(0).toBool(), true);
+    QVERIFY(m_doc->isModified());
+    pc->setMoveInBlackDarkGapMs(1500);
+    QCOMPARE(spy.count(), 2);
+
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        QVERIFY(pc->saveMoveInBlackXML(&w));
+    }
+    QVERIFY(xml.contains("Auto=\"1\""));
+    QVERIFY(xml.contains("DarkGapMs=\"1500\""));
+
+    // A new show: off, the default lead time, and the views are told.
+    m_doc->clearContents();
+    QVERIFY(!pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), MarkPlanner::defaultDarkGapMs());
+    QCOMPARE(spy.last().at(0).toBool(), false);
+
+    // Loading the show brings its own back.
+    QXmlStreamReader r(xml);
+    while (!r.atEnd() && !r.isStartElement())
+        r.readNext();
+    QVERIFY(pc->loadMoveInBlackXML(r));
+    QVERIFY(pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 1500);
+    QCOMPARE(spy.last().at(0).toBool(), true);
+    pc->setAutoMoveInBlack(false);
+}
+
+void MarkPlanner_Test::thePresetCountFollowsThePlanner()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    startChaserLightingFixtureA(m_doc, m_fixtureA);
+    QSignalSpy spy(pc, &ProgrammerController::moveInBlackPresetsChanged);
+    pc->setMoveInBlackDarkGapMs(0);                    // any lead time will do
+    QCOMPARE(pc->moveInBlackPresetCount(), 0);
+    pc->setAutoMoveInBlack(true);                      // evaluates at once
+    QCOMPARE(pc->moveInBlackPresetCount(), 1);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.last().at(0).toInt(), 1);
+    pc->setAutoMoveInBlack(false);                     // releases its pre-set
+    QCOMPARE(pc->moveInBlackPresetCount(), 0);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.last().at(0).toInt(), 0);
 }
 
 QTEST_GUILESS_MAIN(MarkPlanner_Test)

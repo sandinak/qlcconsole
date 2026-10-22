@@ -34,6 +34,7 @@
 #include <functional>
 
 #include "shutterautoopen.h"
+#include "itemicons.h"
 #include "programmingmanager.h"
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
@@ -390,7 +391,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
 
     // --- Looks column ---
     QVBoxLayout *lookCol = new QVBoxLayout();
-    lookCol->addWidget(new QLabel(tr("Looks"), this));
+    QLabel *looksLabel = new QLabel(tr("Looks"), this);
+    lookCol->addWidget(looksLabel);
     m_lookList = new QTreeWidget(this);
     m_lookList->setObjectName("sceneLooks");
     m_lookList->setColumnCount(LookColCount);
@@ -454,6 +456,10 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     lookCol->addLayout(lookBtns);
     cols->addLayout(lookCol);
 
+    m_listWidgets = { m_targetsLabel, m_unpatchedNote, m_targetList, m_removeTargetButton,
+                      looksLabel, m_lookList, m_stackNotes, m_removeLookButton,
+                      m_moveLookUpButton, m_moveLookDownButton };
+
     connect(m_removeTargetButton, SIGNAL(clicked()), this, SLOT(slotRemoveTarget()));
     connect(m_removeLookButton, SIGNAL(clicked()), this, SLOT(slotRemoveLook()));
     connect(m_moveLookUpButton, SIGNAL(clicked()), this, SLOT(slotMoveLookUp()));
@@ -484,6 +490,21 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
 
 SceneGroupLooks::~SceneGroupLooks()
 {
+}
+
+void SceneGroupLooks::setListsVisible(bool visible)
+{
+    m_listsVisible = visible;
+    for (QWidget *w : m_listWidgets)
+    {
+        if (!visible)
+            w->hide();
+        // The notes show only when they have something to say.
+        else if (w != m_unpatchedNote && w != m_stackNotes)
+            w->show();
+    }
+    if (visible)
+        reload();
 }
 
 QString SceneGroupLooks::lookLabel(quint32 paletteId) const
@@ -525,10 +546,10 @@ QString SceneGroupLooks::lookLabel(quint32 paletteId) const
 /** Returns a short "⚠ no look for: X, Y" string for capabilities the fixture
  *  has but the scene's current palette set does not cover.  Empty if all
  *  capabilities are covered (or the fixture has none of note). */
-static QString capCoverageHint(Fixture *fxi, const QSet<QLCPalette::PaletteType> &covered)
+QStringList SceneGroupLooks::missingLooks(Fixture *fxi, const QSet<QLCPalette::PaletteType> &covered)
 {
     if (!fxi || !fxi->fixtureMode())
-        return QString();
+        return QStringList();
 
     bool hasRGB = false, hasDimmer = false, hasPT = false, needsShutter = false;
     for (quint32 c = 0; c < fxi->channels(); ++c)
@@ -575,11 +596,61 @@ static QString capCoverageHint(Fixture *fxi, const QSet<QLCPalette::PaletteType>
                         !covered.contains(QLCPalette::Aim))    missing << QObject::tr("pan/tilt");
     if (needsShutter && !covered.contains(QLCPalette::Shutter))missing << QObject::tr("shutter");
 
+    return missing;
+}
+
+static QString capCoverageHint(Fixture *fxi, const QSet<QLCPalette::PaletteType> &covered)
+{
+    const QStringList missing = SceneGroupLooks::missingLooks(fxi, covered);
     if (missing.isEmpty())
         return QString();
     return QObject::tr("  ⚠ no look for: %1").arg(missing.join(", "));
 }
 
+
+QSet<QLCPalette::PaletteType> SceneGroupLooks::coveredTypes(Doc *doc, Scene *scene)
+{
+    QSet<QLCPalette::PaletteType> covered;
+    if (doc == nullptr || scene == nullptr)
+        return covered;
+    foreach (quint32 pid, scene->palettes())
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p == NULL)
+            continue;
+        covered.insert(p->type());
+        /* An effect covers what it drives: its category -- the folder it is
+           filed under, else the script's own -- so a colour effect is a look
+           for colour ("Effect/Color/sinewave" was flagged "no look for:
+           color"). */
+        if (p->type() == QLCPalette::Effect)
+        {
+            QString cat;
+            const QString prefix = QStringLiteral("Palettes/Effect/");
+            if (p->path().startsWith(prefix))
+                cat = p->path().mid(prefix.length()).section('/', 0, 0);
+            if (cat.isEmpty() && doc->effectScriptRunner() != NULL && !p->scriptPath().isEmpty())
+            {
+                EffectScriptCache *cache = doc->effectScriptRunner()->cache();
+                cat = EffectScriptCache::categoryForTypes(
+                          cache->scriptMeta(cache->nameFromPath(p->scriptPath())).fixtureTypes);
+            }
+            if (cat == QLatin1String("Color") || cat == QLatin1String("Matrix"))
+                covered.insert(QLCPalette::Color);
+            else if (cat == QLatin1String("Dimmer"))
+                covered.insert(QLCPalette::Dimmer);
+            else if (cat == QLatin1String("Position"))
+                covered.insert(QLCPalette::PanTilt);
+        }
+    }
+
+    // Auto-open shutters (the show's setting, Settings -> Advanced) opens a
+    // lit head's shutter by itself: no Shutter look needed for it.
+    if (doc->shutterAutoOpen() != NULL && doc->shutterAutoOpen()->isEnabled())
+        covered.insert(QLCPalette::Shutter);
+
+    return covered;
+}
 
 void SceneGroupLooks::scheduleReachCheck()
 {
@@ -595,11 +666,16 @@ void SceneGroupLooks::scheduleReachCheck()
 
 QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach() const
 {
+    return headsThatCannotReach(m_doc, m_scene);
+}
+
+QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach(Doc *doc, Scene *scene)
+{
     QHash<quint32, QStringList> out;
-    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
-    if (props == nullptr || m_scene == nullptr)
+    MonitorProperties *props = doc ? doc->monitorProperties() : nullptr;
+    if (props == nullptr || scene == nullptr)
         return out;
-    foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, m_scene))
+    foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(doc, scene))
     {
         StageTarget *t = props->stageTarget(a.targetId);
         if (t == nullptr)
@@ -642,42 +718,7 @@ void SceneGroupLooks::reload()
     const QColor cannotReachColour(220, 60, 50);
 
     // Which palette types does the current look cover?
-    QSet<QLCPalette::PaletteType> coveredTypes;
-    foreach (quint32 pid, m_scene->palettes())
-    {
-        QLCPalette *p = m_doc->palette(pid);
-        if (p == NULL)
-            continue;
-        coveredTypes.insert(p->type());
-        /* An effect covers what it drives: its category -- the folder it is
-           filed under, else the script's own -- so a colour effect is a look
-           for colour ("Effect/Color/sinewave" was flagged "no look for:
-           color"). */
-        if (p->type() == QLCPalette::Effect)
-        {
-            QString cat;
-            const QString prefix = QStringLiteral("Palettes/Effect/");
-            if (p->path().startsWith(prefix))
-                cat = p->path().mid(prefix.length()).section('/', 0, 0);
-            if (cat.isEmpty() && m_doc->effectScriptRunner() != NULL && !p->scriptPath().isEmpty())
-            {
-                EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
-                cat = EffectScriptCache::categoryForTypes(
-                          cache->scriptMeta(cache->nameFromPath(p->scriptPath())).fixtureTypes);
-            }
-            if (cat == QLatin1String("Color") || cat == QLatin1String("Matrix"))
-                coveredTypes.insert(QLCPalette::Color);
-            else if (cat == QLatin1String("Dimmer"))
-                coveredTypes.insert(QLCPalette::Dimmer);
-            else if (cat == QLatin1String("Position"))
-                coveredTypes.insert(QLCPalette::PanTilt);
-        }
-    }
-
-    // Auto-open shutters (the show's setting, Settings -> Advanced) opens a
-    // lit head's shutter by itself: no Shutter look needed for it.
-    if (m_doc->shutterAutoOpen() != NULL && m_doc->shutterAutoOpen()->isEnabled())
-        coveredTypes.insert(QLCPalette::Shutter);
+    const QSet<QLCPalette::PaletteType> coveredTypes = SceneGroupLooks::coveredTypes(m_doc, m_scene);
 
     // Groups = dynamic targets (top level).
     QList<FixtureGroup*> groups;
@@ -895,7 +936,7 @@ void SceneGroupLooks::reload()
         it->setText(LookColName, lookLabel(pid));
         it->setData(LookColName, Qt::UserRole, pid);
         if (p != NULL)
-            it->setIcon(LookColName, QIcon(p->iconResource()));
+            it->setIcon(LookColName, ItemIcons::paletteIcon(m_doc, p));
 
         const bool feedsEffect = scoped;
         // What a nested one does depends on the effect: one that takes
@@ -968,6 +1009,11 @@ void SceneGroupLooks::reload()
     m_lookList->expandAll();
     markStackIssues();
     m_lookList->blockSignals(false);
+    if (!m_listsVisible)
+    {
+        m_unpatchedNote->hide();
+        m_stackNotes->hide();
+    }
 }
 
 // Routed by MIME: palette -> look, fixture group -> dynamic target,
@@ -1013,50 +1059,15 @@ void SceneGroupLooks::placeDroppedLooks(const QList<quint32> &pids,
     if (m_scene == NULL || pids.isEmpty())
         return;
 
-    QList<quint32> order = m_scene->palettes();
-
     // Where the user aimed, if they aimed at a row.
     int at = -1;
     const QPoint lp = m_lookList->viewport()->mapFrom(this, dropPos);
     if (QTreeWidgetItem *it = m_lookList->itemAt(lp))
     {
         const quint32 pid = it->data(LookColName, Qt::UserRole).toUInt();
-        const int ix = order.indexOf(pid);
-        if (ix >= 0)
-            at = ix;
+        at = m_scene->palettes().indexOf(pid);
     }
-
-    if (at < 0)
-    {
-        // Before the first effect: a base look.
-        at = order.size();
-        for (int i = 0; i < order.size(); ++i)
-        {
-            QLCPalette *p = m_doc->palette(order.at(i));
-            if (p != NULL && p->type() == QLCPalette::Effect)
-            {
-                at = i;
-                break;
-            }
-        }
-    }
-
-    // Lift the new ones out and reinsert them together at the chosen point.
-    foreach (quint32 pid, pids)
-    {
-        const int cur = order.indexOf(pid);
-        if (cur >= 0)
-        {
-            order.removeAt(cur);
-            if (cur < at)
-                --at;
-        }
-    }
-    at = qBound(0, at, order.size());
-    for (int i = 0; i < pids.size(); ++i)
-        order.insert(at + i, pids.at(i));
-
-    m_scene->reorderPalettes(order);
+    placeLooks(m_doc, m_scene, pids, at);
     m_doc->setModified();
     reload();
     emit sceneModified();
@@ -1143,63 +1154,8 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
         {
             quint32 gid = 0;
             stream >> gid;
-            FixtureGroup *g = m_doc->fixtureGroup(gid);
-            if (g != NULL && m_scene->fixtureGroups().contains(gid) == false)
-            {
-                m_scene->addFixtureGroup(gid);
+            if (addGroupTarget(m_doc, m_scene, gid))
                 changed = true;
-
-                qDebug() << "[DROP] add group" << gid << (g ? g->name() : "?")
-                            << "members=" << g->fixtureList()
-                            << "| scene fixtures BEFORE=" << m_scene->fixtures()
-                            << "groups=" << m_scene->fixtureGroups();
-
-                // The group's applied looks (non-effect palettes) will assert on
-                // these fixtures at runtime. Only strip baked values those looks
-                // actually replace — stripping a channel no palette covers would
-                // leave the fixture dark (nothing else drives it).
-                QSet<quint64> covered;
-                foreach (quint32 pid, m_scene->palettes())
-                {
-                    QLCPalette *p = m_doc->palette(pid);
-                    if (p == NULL || p->type() == QLCPalette::Effect)
-                        continue;
-                    const int cOff = QLCPalette::colorSetOffset(m_doc, m_scene->palettes(), pid);
-                    foreach (const SceneValue &scv,
-                             p->valuesFromFixtureGroups(m_doc, QList<quint32>() << gid, nullptr, cOff))
-                        covered.insert((quint64(scv.fxi) << 32) | scv.channel);
-                }
-
-                foreach (quint32 fid, g->fixtureList())
-                {
-                    if (m_scene->fixtures().contains(fid) == false)
-                        continue;
-
-                    // Keep any baked value the group's looks don't cover, so the
-                    // fixture stays lit; drop only the covered ones.
-                    QList<SceneValue> keep;
-                    foreach (const SceneValue &scv, m_scene->values())
-                    {
-                        if (scv.fxi != fid)
-                            continue;
-                        if (covered.contains((quint64(fid) << 32) | scv.channel))
-                            m_scene->unsetValue(fid, scv.channel);
-                        else
-                            keep << scv;
-                    }
-                    // Only drop the fixed target if the group's looks fully cover
-                    // it; otherwise keep it so its uncovered channels still light.
-                    if (keep.isEmpty())
-                        m_scene->removeFixture(fid);
-
-                    qDebug() << "[DROP]   fixture" << fid
-                                << "coveredByLooks=" << (keep.isEmpty())
-                                << "keptBakedValues=" << keep.size();
-                }
-
-                qDebug() << "[DROP] scene fixtures AFTER=" << m_scene->fixtures()
-                            << "groups=" << m_scene->fixtureGroups();
-            }
         }
     }
 
@@ -1246,29 +1202,152 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     event->acceptProposedAction();
 }
 
-void SceneGroupLooks::reconcileAfterPaletteApply()
+bool SceneGroupLooks::addGroupTarget(Doc *doc, Scene *scene, quint32 gid)
 {
+    FixtureGroup *g = doc != nullptr ? doc->fixtureGroup(gid) : nullptr;
+    if (g == nullptr || scene == nullptr || scene->fixtureGroups().contains(gid))
+        return false;
+    scene->addFixtureGroup(gid);
+
+    // The group's applied looks (non-effect palettes) will assert on these
+    // fixtures at runtime. Only strip baked values those looks actually
+    // replace -- stripping a channel no palette covers would leave the
+    // fixture dark (nothing else drives it).
+    QSet<quint64> covered;
+    foreach (quint32 pid, scene->palettes())
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p == NULL || p->type() == QLCPalette::Effect)
+            continue;
+        const int cOff = QLCPalette::colorSetOffset(doc, scene->palettes(), pid);
+        foreach (const SceneValue &scv,
+                 p->valuesFromFixtureGroups(doc, QList<quint32>() << gid, nullptr, cOff))
+            covered.insert((quint64(scv.fxi) << 32) | scv.channel);
+    }
+
+    foreach (quint32 fid, g->fixtureList())
+    {
+        if (scene->fixtures().contains(fid) == false)
+            continue;
+
+        // Keep any baked value the group's looks don't cover, so the fixture
+        // stays lit; drop only the covered ones.
+        QList<SceneValue> keep;
+        foreach (const SceneValue &scv, scene->values())
+        {
+            if (scv.fxi != fid)
+                continue;
+            if (covered.contains((quint64(fid) << 32) | scv.channel))
+                scene->unsetValue(fid, scv.channel);
+            else
+                keep << scv;
+        }
+        // Only drop the fixed target if the group's looks fully cover it;
+        // otherwise keep it so its uncovered channels still light.
+        if (keep.isEmpty())
+            scene->removeFixture(fid);
+    }
+    return true;
+}
+
+void SceneGroupLooks::placeLooks(Doc *doc, Scene *scene, const QList<quint32> &pids, int at)
+{
+    if (scene == nullptr || pids.isEmpty())
+        return;
+    QList<quint32> order = scene->palettes();
+    if (at < 0)
+    {
+        // Before the first effect: a base look.
+        at = order.size();
+        for (int i = 0; i < order.size(); ++i)
+        {
+            QLCPalette *p = doc->palette(order.at(i));
+            if (p != NULL && p->type() == QLCPalette::Effect)
+            {
+                at = i;
+                break;
+            }
+        }
+    }
+    // Lift the new ones out and reinsert them together at the chosen point.
+    foreach (quint32 pid, pids)
+    {
+        const int cur = order.indexOf(pid);
+        if (cur >= 0)
+        {
+            order.removeAt(cur);
+            if (cur < at)
+                --at;
+        }
+    }
+    at = qBound(0, at, int(order.size()));
+    for (int i = 0; i < pids.size(); ++i)
+        order.insert(at + i, pids.at(i));
+    scene->reorderPalettes(order);
+}
+
+bool SceneGroupLooks::nestLooks(Doc *doc, Scene *scene, const QList<quint32> &pids, quint32 effectPid)
+{
+    if (scene == nullptr || pids.isEmpty())
+        return false;
+
+    QList<quint32> order = scene->palettes();
+    // Pull the moved palettes out, preserving their current relative order.
+    QList<quint32> block;
+    foreach (quint32 pid, order)
+        if (pids.contains(pid))
+            block << pid;
+    foreach (quint32 pid, block)
+        order.removeAll(pid);
+
+    int pos;
+    if (effectPid == QLCPalette::invalidId())
+    {
+        // Base: insert before the first Effect (so isEffectScoped() is false).
+        pos = order.size();
+        for (int i = 0; i < order.size(); ++i)
+        {
+            QLCPalette *p = doc->palette(order.at(i));
+            if (p != NULL && p->type() == QLCPalette::Effect) { pos = i; break; }
+        }
+    }
+    else
+    {
+        // Feed effect: insert right after it (becomes its first child).
+        pos = order.indexOf(effectPid) + 1;
+        if (pos == 0)
+            pos = order.size();   // effect vanished -- fall back to the end
+    }
+    for (int i = 0; i < block.size(); ++i)
+        order.insert(pos + i, block.at(i));
+    return scene->reorderPalettes(order);
+}
+
+void SceneGroupLooks::reconcileAfterPaletteApply(Doc *doc, Scene *scene, QWidget *parent)
+{
+    if (doc == nullptr || scene == nullptr)
+        return;
     // Channels covered by every currently-applied palette (key = fxi<<32|ch).
     QSet<quint64> covered;
-    foreach (quint32 pid, m_scene->palettes())
+    foreach (quint32 pid, scene->palettes())
     {
-        QLCPalette *p = m_doc->palette(pid);
+        QLCPalette *p = doc->palette(pid);
         if (p == NULL)
             continue;
-        const int cOff = QLCPalette::colorSetOffset(m_doc, m_scene->palettes(), pid);
-        foreach (const SceneValue &scv, p->valuesFromFixtureGroups(m_doc, m_scene->fixtureGroups(), nullptr, cOff))
+        const int cOff = QLCPalette::colorSetOffset(doc, scene->palettes(), pid);
+        foreach (const SceneValue &scv, p->valuesFromFixtureGroups(doc, scene->fixtureGroups(), nullptr, cOff))
             covered.insert((quint64(scv.fxi) << 32) | scv.channel);
-        foreach (const SceneValue &scv, p->valuesFromFixtures(m_doc, m_scene->fixtures(), nullptr, cOff))
+        foreach (const SceneValue &scv, p->valuesFromFixtures(doc, scene->fixtures(), nullptr, cOff))
             covered.insert((quint64(scv.fxi) << 32) | scv.channel);
     }
 
     // Strip baked values the palettes now control (palette paramount); gather
     // the rest (baked channels no applied look covers).
     QList<SceneValue> uncovered;
-    foreach (const SceneValue &scv, m_scene->values())
+    foreach (const SceneValue &scv, scene->values())
     {
         if (covered.contains((quint64(scv.fxi) << 32) | scv.channel))
-            m_scene->unsetValue(scv.fxi, scv.channel);
+            scene->unsetValue(scv.fxi, scv.channel);
         else
             uncovered << scv;
     }
@@ -1276,11 +1355,11 @@ void SceneGroupLooks::reconcileAfterPaletteApply()
     if (uncovered.isEmpty() == false)
     {
         // Count the distinct fixtures involved so the total reads sensibly
-        // (it's per-fixture channels × fixtures, not just "channels").
+        // (it's per-fixture channels x fixtures, not just "channels").
         QSet<quint32> fxis;
         foreach (const SceneValue &scv, uncovered)
             fxis.insert(scv.fxi);
-        const int ret = QMessageBox::question(this, tr("Apply look"),
+        const int ret = QMessageBox::question(parent, tr("Apply look"),
             tr("This scene still sets %1 channel value(s) across %2 fixture(s) "
                "that no applied look covers.\n"
                "Clear them so the applied looks fully control this scene?")
@@ -1289,10 +1368,14 @@ void SceneGroupLooks::reconcileAfterPaletteApply()
         if (ret == QMessageBox::Yes)
         {
             foreach (const SceneValue &scv, uncovered)
-                m_scene->unsetValue(scv.fxi, scv.channel);
+                scene->unsetValue(scv.fxi, scv.channel);
         }
     }
+}
 
+void SceneGroupLooks::reconcileAfterPaletteApply()
+{
+    reconcileAfterPaletteApply(m_doc, m_scene, this);
     // Trigger a second runtime reset so the scene fader is rebuilt from the
     // NOW-reconciled value list (baked channels stripped above).  The first
     // resetRuntime fired synchronously in the dropEvent's sceneModified path,
@@ -1406,46 +1489,12 @@ void SceneGroupLooks::moveLooksToTarget(const QList<quint32> &pids, quint32 effe
     if (pids.isEmpty())
         return;
 
-    QList<quint32> order = m_scene->palettes();
-    // Pull the moved palettes out, preserving their current relative order.
-    QList<quint32> block;
-    foreach (quint32 pid, order)
-        if (pids.contains(pid))
-            block << pid;
-    foreach (quint32 pid, block)
-        order.removeAll(pid);
-
-    int pos;
-    if (effectPid == QLCPalette::invalidId())
-    {
-        // Base: insert before the first Effect (so isEffectScoped() is false).
-        pos = order.size();
-        for (int i = 0; i < order.size(); ++i)
-        {
-            QLCPalette *p = m_doc->palette(order.at(i));
-            if (p != NULL && p->type() == QLCPalette::Effect) { pos = i; break; }
-        }
-    }
-    else
-    {
-        // Feed effect: insert right after it (becomes its first child).
-        pos = order.indexOf(effectPid) + 1;
-        if (pos == 0)
-            pos = order.size();   // effect vanished — fall back to the end
-    }
-    for (int i = 0; i < block.size(); ++i)
-        order.insert(pos + i, block.at(i));
-
-    // reload() unconditionally, even when reorderPalettes() finds the computed
-    // order identical to the current one (its own no-op guard): a freshly
-    // dropped palette was just appended by addPalette() and has never been
-    // RENDERED in the tree at all yet. When "nest right after this effect"
-    // happens to land at the same index addPalette()'s append already put it
-    // -- the ordinary case of dropping onto your only/last effect -- the
-    // reorder is a genuine no-op on the DATA, but the tree still needs its
-    // first render showing the palette nested as a child, not floating at
-    // the top level where it was drawn before this call ran at all.
-    if (m_scene->reorderPalettes(order))
+    // reload() unconditionally, even when the computed order is identical to
+    // the current one: a freshly dropped palette was just appended by
+    // addPalette() and has never been RENDERED in the tree at all yet; when
+    // "nest right after this effect" lands at the index the append already
+    // put it, the tree still needs its first render showing it nested.
+    if (nestLooks(m_doc, m_scene, pids, effectPid))
     {
         m_doc->setModified();
         emit sceneModified();

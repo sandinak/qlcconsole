@@ -164,11 +164,24 @@ QHash<quint64, uchar> ShowTreeController::staticCueOutput(const CueList &list, c
 int ShowTreeController::importDifferences(quint32 chaserId, quint32 listId, QStringList *lines,
                                           int *checked) const
 {
-    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(chaserId));
     const CueList *list = cueList(listId);
+    if (list == nullptr)
+    {
+        if (checked != nullptr)
+            *checked = 0;
+        return 0;
+    }
+    return importDifferences(chaserId, *list, lines, checked);
+}
+
+int ShowTreeController::importDifferences(quint32 chaserId, const CueList &theList, QStringList *lines,
+                                          int *checked) const
+{
+    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(chaserId));
+    const CueList *list = &theList;
     if (checked != nullptr)
         *checked = 0;
-    if (chaser == nullptr || list == nullptr)
+    if (chaser == nullptr)
         return 0;
 
     auto isHtp = [this](quint64 key) {
@@ -696,4 +709,170 @@ bool ShowTreeController::convertToTracking(quint32 listId, ConvertPlan *planOut)
                 }
         return false;
     });
+}
+
+/* The import's tracking reading (Branson, 2026-10-22): "a consistent
+   collection in a collection should be interpreted as that setting in the
+   first cue, and then tracking in the rest where it appears in line". A
+   layer read from the same function as one the cue before puts on stage
+   (DH's 0.0.0-base in every step, a scene two steps share) is set where it
+   starts and tracks on; an include of what the cue before already plays
+   goes too; what the cue before plays that this cue doesn't is released
+   there (it leaves as the step ended); back after a gap, it is set again.
+   Each cue only where every cue then plays exactly what it did -- the
+   same stage and the same scenes, as Convert checks -- else it stays
+   Block and repeats it, as the plain import does. */
+void ShowTreeController::trackRepeats(CueList &list, const QHash<quint32, quint32> &originIn, ImportReport &report,
+                                      const std::function<quint32()> &newId) const
+{
+    if (list.cues.count() < 2 || list.looks || list.isSubCues())
+        return;
+    const LineAimTest aimTest = lineAimTest();
+    QHash<quint32, quint32> origin = originIn;
+
+    auto plays = [&](const CueList &l) {
+        Plays out;
+        const QList<ResolvedCue> r = resolve(l, aimTest);
+        for (int i = 0; i < r.count(); ++i)
+        {
+            QStringList sigs;
+            for (const ScenePlan &p : planCue(l, r, i))
+                sigs << p.signature();
+            for (const ResolvedLayer &rl : r.at(i).layers)
+                if (rl.target.isOpaque())
+                    sigs << rl.target.signature();
+            if (!l.cues.at(i).mixOverlap)
+                sigs.sort();
+            out.insert(r.at(i).cueId, sigs);
+        }
+        return out;
+    };
+    auto stages = [&](const CueList &l) {
+        QMap<quint32, Stage> out;
+        for (const ResolvedCue &rc : resolve(l, aimTest))
+            out.insert(rc.cueId, stageOf(rc));
+        return out;
+    };
+    const QMap<quint32, Stage> stageBefore = stages(list);
+    const Plays playsBefore = plays(list);
+    auto same = [&](const CueList &l) {
+        return stages(l) == stageBefore && plays(l) == playsBefore;
+    };
+    auto name = [this](quint32 fid, const Target &target) {
+        const Function *f = m_doc->function(fid);
+        return f != nullptr ? f->name() : targetLabel(target);
+    };
+
+    // Each cue as it plays now (Block), made explicit; the list tracks.
+    CueList work = list;
+    for (Cue &c : work.cues)
+        if (c.mode == CueMode::ListDefault)
+            c.mode = effectiveMode(list, c);
+    work.mode = ListMode::Tracking;
+    if (!same(work))
+        return;
+
+    // What each step put on stage, by the function each layer came from
+    // (its own scenes, a nested collection's, an included step's).
+    QList<QSet<quint32>> onStage;
+    for (const ResolvedCue &rc : resolve(list, aimTest))
+    {
+        QSet<quint32> fs;
+        for (const ResolvedLayer &rl : rc.layers)
+            if (origin.contains(rl.layerId))
+                fs.insert(origin.value(rl.layerId));
+        onStage << fs;
+    }
+
+    int tracking = 0, layers = 0, includes = 0, releases = 0;
+    QStringList notes;
+    for (int i = 1; i < work.cues.count(); ++i)
+    {
+        const int p = playedBefore(work, i);
+        if (p < 0 || work.cues.at(i).skip || work.cues.at(i).reusable != invalidId()
+            || work.cues.at(p).reusable != invalidId())
+            continue;
+        const QList<ResolvedCue> now = resolve(work, aimTest);
+        CueList cand = work;
+        Cue &cc = cand.cues[i];
+        Cue &prev = cand.cues[p];
+        cc.mode = CueMode::ListDefault;
+
+        // What repeats from the cue before: not set again, it tracks in.
+        QStringList carried;
+        int layersGone = 0, includesGone = 0;
+        for (int k = int(cc.layers.count()) - 1; k >= 0; --k)
+        {
+            const Layer &l = cc.layers.at(k);
+            if (!origin.contains(l.id) || !onStage.at(p).contains(origin.value(l.id)))
+                continue;
+            carried.prepend(name(origin.value(l.id), l.target));
+            cc.layers.removeAt(k);
+            ++layersGone;
+        }
+        for (int k = int(cc.includes.count()) - 1; k >= 0; --k)
+        {
+            const int x = cand.indexOf(cc.includes.at(k));
+            if (x < 0 || onStage.at(x).isEmpty())
+                continue;
+            bool all = true;
+            for (quint32 f : onStage.at(x))
+                all = all && onStage.at(p).contains(f);
+            if (!all)
+                continue;
+            carried.prepend(tr("cue %1").arg(cueLabel(cand, x)));
+            cc.includes.removeAt(k);
+            ++includesGone;
+        }
+        if (layersGone + includesGone == 0)
+            continue;               // nothing repeats: it stays Block
+
+        // What the cue before plays that this one doesn't: released there.
+        QStringList released;
+        for (const ResolvedLayer &pl : now.at(p).passOn)
+        {
+            const quint32 fid = origin.value(pl.layerId, invalidId());
+            if (fid != invalidId() && onStage.at(i).contains(fid))
+                continue;
+            Layer *own = prev.layer(pl.layerId);
+            if (own != nullptr && own->parent != invalidId())
+                own = nullptr;
+            if (own == nullptr)
+            {
+                Layer fresh;
+                fresh.id = newId();
+                fresh.target = pl.target;
+                prev.layers << fresh;
+                own = &prev.layers.last();
+                if (fid != invalidId())
+                    origin.insert(fresh.id, fid);
+            }
+            if (!own->release)
+            {
+                own->release = true;
+                released << name(fid, pl.target);
+            }
+        }
+        if (!same(cand))
+            continue;               // it would play differently: stays Block
+        work = cand;
+        ++tracking;
+        layers += layersGone;
+        includes += includesGone;
+        releases += int(released.count());
+        carried.removeDuplicates();
+        notes << tr("Cue %1: tracks from %2; not set again, tracks in: %3")
+                 .arg(cueLabel(work, i), cueLabel(work, p), carried.join(QStringLiteral(", ")));
+        if (!released.isEmpty())
+            notes << tr("Cue %1: %2 released (cue %3 doesn't play it)")
+                     .arg(cueLabel(work, p), released.join(QStringLiteral(", ")), cueLabel(work, i));
+    }
+    if (tracking == 0)
+        return;
+    list = work;
+    report.trackingCues = tracking;
+    report.trackedLayers = layers;
+    report.trackedIncludes = includes;
+    report.trackReleases = releases;
+    report.trackNotes = notes;
 }

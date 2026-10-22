@@ -41,6 +41,7 @@ class QTreeWidget;
 class QPushButton;
 class QToolButton;
 class QGridLayout;
+class NoteEdit;
 class QComboBox;
 class QLineEdit;
 class QMimeData;
@@ -49,6 +50,7 @@ class QCheckBox;
 class QFormLayout;
 class QTextBrowser;
 class QLabel;
+class QFrame;
 class QMenu;
 class Doc;
 
@@ -71,6 +73,7 @@ class ShowTreeView final : public QWidget
 {
     Q_OBJECT
     Q_DISABLE_COPY(ShowTreeView)
+    friend class TreeCueStack;
 
 public:
     ShowTreeView(QWidget *parent, Doc *doc);
@@ -196,6 +199,47 @@ public:
      *  @a listId's chaser instead, in the last undo step (the import's).
      *  How many were moved. */
     int repointToList(quint32 chaserId, quint32 listId);
+
+    /** W5: the show converter (Import chaser… ▸ Convert an old show…, and
+     *  the open banner's Convert…). */
+    void openConverter();
+    /** In place of exec() for the converter (tests). */
+    typedef std::function<void(class ShowConverter *converter)> ConverterRunner;
+    void setConverterRunner(const ConverterRunner &runner) { m_converterRunner = runner; }
+    /** W5: Import in place -- the list takes over from chaser @a chaserId:
+     *  the originals filed under Imported/…, what fires the chaser (VC,
+     *  timelines, show control) fires the list; one undo step. What
+     *  happened, a line each. */
+    QStringList importInPlace(quint32 chaserId);
+    /** Upgrade this show… (File menu, and the open banner; §3.7): the
+     *  converter over every chaser and collection, with Capture into
+     *  palettes for raw scenes and Restore original; applied as one undo
+     *  step. Never opened on its own. */
+    void openUpgrade();
+    /** What Upgrade does: convert @a chasers (in place or beside), then
+     *  capture @a scenes into palettes, all one undo step ("Upgrade this
+     *  show"). What happened, a line each. */
+    QStringList upgradeShow(const QList<quint32> &chasers, bool inPlace, const QList<quint32> &scenes);
+    /** Import beside the chaser (the converter's other way): a line. */
+    QStringList importBeside(quint32 chaserId);
+    /** Send to Show Tree… (Build, on a chaser): Import in place of
+     *  @a chaserId through the import sheet (over @a parent), which also
+     *  offers "Done, show it in the Show Tree" -- this tab, the new list
+     *  selected. False: not sent (ShowTreeController::whyNotSend), or the
+     *  import undone. */
+    bool sendToShowTree(quint32 chaserId, QWidget *parent = nullptr);
+    /** W5: Restore original for list @a listId: asks, then the list leaves
+     *  the tree, the originals go back to their folders and what fires the
+     *  list fires the chaser again; one undo step. */
+    bool restoreOriginal(quint32 listId);
+    /** W5: Capture into palettes for raw scene @a sceneId (a ▣ row): shows
+     *  the plan, asks; one undo step. */
+    bool captureIntoPalettes(quint32 sceneId);
+    /** W5: the banner an old show opens with ("This show uses chasers…
+     *  Convert…"): shown while the show has chasers that look like cue
+     *  lists and no Show Tree, until dismissed (for this show). */
+    QWidget *bridgeBanner() const;
+    void updateBridgeBanner();
 
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
@@ -493,6 +537,31 @@ public:
     bool startRename();
     bool isRenaming() const { return m_renaming; }
 
+    /************************************************************************
+     * W3: Show Tree <-> Workbench (WORKFLOW_DESIGN.md §3.4). A cue, look or
+     * layer opens in the Workbench, docked in place of the page; ↩ puts
+     * the page back with the cue (and layer) selected. (showtreeworkbench.cpp)
+     ************************************************************************/
+public:
+    /** Open cue (or look) @a cueId in the Workbench, docked here, with its
+     *  layer @a layerId -- or the layer carried in on @a trackedSignature
+     *  -- selected. False: no such cue. */
+    bool openInWorkbench(quint32 cueId, quint32 layerId = 0xFFFFFFFF,
+                         const QString &trackedSignature = QString());
+    /** The tree's selection (a cue, a look, a layer) in the Workbench. */
+    bool openSelectionInWorkbench();
+    /** ↩: the page back, the Workbench handed back, the cue (and the layer
+     *  the Workbench had selected) selected in the tree. */
+    bool closeWorkbench();
+    bool isWorkbenchDocked() const;
+    /** The Workbench docked here (null: none). */
+    class Workbench *dockedWorkbench() const;
+    /** Where the Workbench comes from: Build's (App sets it) -- @a borrow
+     *  takes it out of Build, @a giveBack puts it back as it was. Without
+     *  one, the tree makes a Workbench of its own (tests). */
+    void setWorkbenchLender(const std::function<class Workbench *()> &borrow,
+                            const std::function<void(class Workbench *)> &giveBack);
+
     bool isPinned(int kind, quint32 id) const;
     void setPinned(int kind, quint32 id, bool pinned);
 
@@ -512,6 +581,8 @@ public slots:
     /** Import a chaser as a cue list (§7): shows the report, a sheet
      *  (W0) that also offers to fire the list from what fires the chaser. */
     void importChaser(quint32 chaserId, bool showReport = true);
+    /** This tab forward (and its window), the tree focused. */
+    void bringForward();
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -631,12 +702,15 @@ private:
     QComboBox *m_prodTimecode = nullptr;
     QLabel *m_prodInfo = nullptr;
     QComboBox *m_production = nullptr;
+    class MoveInBlackButton *m_moveInBlack = nullptr;
     void showProductionPage(quint32 productionId);
     void updateProductionSwitcher();
     /** The timecode choices: (label, universe) -- the show's, any, each universe. */
     QList<QPair<QString, qint32>> timecodeChoices() const;
 public:
     QComboBox *productionSwitcher() const { return m_production; }
+    /** Auto move-in-black (MIB) in the bar */
+    class MoveInBlackButton *moveInBlackButton() const { return m_moveInBlack; }
 private:
     QLabel *m_listTitle;
     QComboBox *m_listMode;
@@ -645,7 +719,7 @@ private:
     QWidget *m_cuePage;
     QLineEdit *m_cueNumber;
     QLineEdit *m_cueName;
-    QLineEdit *m_cueNote;
+    NoteEdit *m_cueNote;
     QComboBox *m_cueMode;
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
@@ -715,10 +789,32 @@ private:
     Confirm m_confirm;
     FunctionOpener m_functionOpener;
     SheetRunner m_sheetRunner;
+    ConverterRunner m_converterRunner;
+    QFrame *m_bridgeBanner = nullptr;
+    QLabel *m_bridgeText = nullptr;
+    bool m_bridgeDismissed = false;
+    QPushButton *m_listRestore = nullptr;
     bool confirm(const QString &title, const QString &text, const QString &details = QString());
     /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
     QString reuseLine(quint32 cueId, quint32 layerId) const;
     void reuseLinkActivated(const QString &link);
+    // W3 (showtreeworkbench.cpp)
+    struct WorkbenchDock;
+    WorkbenchDock *m_wb = nullptr;
+    /** The tree's selection moved while docked: the Workbench follows. */
+    void workbenchFollowTree();
+    /** The page (the inspector) lent to the docked Workbench's editor pane,
+     *  for cue @a cueId's layer @a layerId / carried-in @a signature (none:
+     *  the cue's page). */
+    QWidget *lendInspector(quint32 cueId, quint32 layerId, const QString &signature);
+    void takeBackInspector();
+    /** The Workbench selected a layer (or, none, the cue): the tree too,
+     *  without the tree moving the Workbench in turn. */
+    void selectForWorkbench(quint32 cueId, quint32 layerId, const QString &signature);
+    /** Leaving / coming back to the tab while docked. */
+    void suspendWorkbench();
+    void resumeWorkbench();
+    void destroyWorkbenchDock();
     QLabel *m_layerReuse = nullptr;
     QLabel *m_cueReuse = nullptr;
     QPushButton *m_listConvert = nullptr;
