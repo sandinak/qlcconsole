@@ -164,6 +164,11 @@ private:
     /** Update the list of steps */
     void updateStepList();
 
+    /** A Show Tree list's cues in their text colours (ShowTree::Cue::
+     *  colour, else their list's), readable on the list; a skipped one
+     *  stays grey. A plain chaser's steps are left as they are. */
+    void applyCueColours();
+
     /** timer for updating the step list */
     QTimer *m_updateTimer;
 

@@ -773,6 +773,7 @@ void Workbench::updateHeader()
     {
         m_crumb->setText(tr("Workbench"));
         m_title->setText(tr("Nothing loaded"));
+        m_title->setStyleSheet(QStringLiteral("QLabel { font-size: 15pt; font-weight: bold; }"));
         m_kind->hide();
         m_info->setText(tr("Click a scene, collection or chaser on the left. Its layers come up here, "
                            "the selected row's editor on the right."));
@@ -781,6 +782,14 @@ void Workbench::updateHeader()
     const QString where = m_stack->where();
     m_crumb->setText(where.isEmpty() ? tr("Workbench") : where.split(QLatin1Char('/')).join(QStringLiteral(" › ")));
     m_title->setText(m_stack->title());
+    {
+        // A Show Tree cue's text colour, readable on the header.
+        const QString hex = m_stack->titleColour();
+        const QColor c = hex.isEmpty() ? QColor()
+                         : ShowTree::readableOn(QColor(hex), m_title->palette().color(QPalette::Window));
+        m_title->setStyleSheet(QStringLiteral("QLabel { font-size: 15pt; font-weight: bold;%1 }")
+                               .arg(c.isValid() ? QStringLiteral(" color: %1;").arg(c.name()) : QString()));
+    }
     m_kind->setText(m_stack->kindText().toUpper());
     m_kind->setVisible(!m_stack->kindText().isEmpty());
     m_info->setText(m_stack->infoLines().join(QLatin1Char('\n')));

@@ -70,6 +70,7 @@ public:
     QString key() const override;
     WorkbenchStack *reopen(QObject *parent) const override;
     QString title() const override;
+    QString titleColour() const override;
     QString kindText() const override;
     QString where() const override;
     QStringList infoLines() const override;

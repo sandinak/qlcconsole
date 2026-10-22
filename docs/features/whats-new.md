@@ -4,6 +4,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Cue colours.** Give a cue list, or a single cue, a text colour:
+  right-click → **Colour ▸** (eight show-friendly colours, Custom… or
+  None), the **Text colour** button on its page, or type
+  `textcolour red`. A cue's own colour wins over its list's. It shows in
+  the Show Tree, the Run tab (the list, NOW and NEXT), the VC Cue Runner
+  and Cue List, and the Workbench header -- a shade lighter or darker where
+  the theme needs it to stay readable. See
+  [Text colours](show-tree.md#text-colours).
+
 - **Icons that say what a row is.** In Build (the outline and the
   Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
   look is a small pie filled to its level (a 45 % look is 45 % lit); a

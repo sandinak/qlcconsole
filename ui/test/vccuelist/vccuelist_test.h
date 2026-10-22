@@ -45,6 +45,7 @@ private slots:
     void nextPrevious();
     void aGoWaitingForItsBeatShowsOnNext();
     void cuesSkipsAndNextAreShown();
+    void showTreeTextColoursAreShown();
     void manualActivation();
     void keyboardNextPrevious();
 

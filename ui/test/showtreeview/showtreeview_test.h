@@ -116,6 +116,7 @@ private slots:
 
     // Skipped cues (2026-10-21)
     void skipCuesInTheTree();
+    void textColoursInTheTreePagesAndWorkbench();
     /** A picture of a real show with cues skipped: QLC_SKIPCUE_SHOW (a
      *  .qlcc, read only) and QLC_SKIPCUE_SHOT (a .png). */
     void pictureOfSkippedCues();

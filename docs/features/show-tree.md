@@ -989,6 +989,37 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
 - **Import and Convert.** Importing a chaser keeps each step's skip flag,
   and **Convert to tracking** keeps it.
 
+### Text colours
+
+A cue list, and any cue in it, can have a **text colour**: a quick way to
+read a long list at a glance -- songs in their own colour, the cues the
+stage manager calls in red. It changes how the cue reads, never what it
+plays.
+
+- **To set it:**
+  - right-click a cue list or a cue → **Colour ▸**: Red, Orange, Yellow,
+    Green, Cyan, Blue, Purple, Pink, **Custom…** (any colour) or **None**;
+  - on the cue list's or the cue's page, the **Text colour** button opens
+    the same menu;
+  - type `textcolour red` (the selected cue), `textcolour blue list` (the
+    whole list), `textcolour #33aa55 0.0.3 thru 0.0.5` or
+    `textcolour none 0.0.3` (`textcolor` works too).
+  With several cues selected, the menu acts on them all. Each change is
+  **one undo step**.
+- **Who wins.** A cue's own colour wins over its list's; a cue with
+  **None** takes its list's. A sub-cue takes its cue's, unless it has
+  its own.
+- **Where it shows:** the cue's row in the Show Tree, the docked
+  Workbench's header, the **Run** tab's list and its **NOW**, **NEXT** and
+  **SUB NEXT** lines, the **Cue Runner** widget (with its upcoming
+  lines), and a VC **Cue List** playing the list (its rows and *Next:*).
+- **Readable in every theme.** Where a colour would be hard to read on the
+  theme's background -- yellow on white, blue on a dark theme -- a lighter
+  or darker shade of the same colour is drawn instead. Done cues in the Run
+  tab and skipped cues stay grey.
+- **Saved with the show.** An older build opens the show as it was, without
+  the colours.
+
 ### Changing a tracked value
 
 A grey value came from an earlier cue. On its row, **⋯** offers two

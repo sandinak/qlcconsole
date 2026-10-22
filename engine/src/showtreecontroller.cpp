@@ -867,6 +867,62 @@ bool ShowTreeController::isCueSkipped(quint32 cueId) const
     return c != nullptr && c->skip;
 }
 
+bool ShowTreeController::setCuesColour(const QList<quint32> &cueIds, const QString &colour)
+{
+    QString hex;
+    if (!colour.isEmpty() && !parseTextColour(colour, &hex))
+        return false;
+    const QString label = cueIds.count() == 1 ? tr("Cue colour") : tr("Colour of %1 cues").arg(cueIds.count());
+    return edit(label, [&](QList<Production> &ps) {
+        bool changed = false;
+        for (quint32 cueId : cueIds)
+        {
+            Cue *c = cueIn(ps, cueId);
+            if (c == nullptr || c->colour == hex)
+                continue;
+            c->colour = hex;
+            changed = true;
+        }
+        return changed;
+    });
+}
+
+bool ShowTreeController::setListColour(quint32 listId, const QString &colour)
+{
+    QString hex;
+    if (!colour.isEmpty() && !parseTextColour(colour, &hex))
+        return false;
+    return edit(tr("Cue list colour"), [&](QList<Production> &ps) {
+        CueList *l = listIn(ps, listId);
+        if (l == nullptr || l->colour == hex)
+            return false;
+        l->colour = hex;
+        return true;
+    });
+}
+
+QString ShowTreeController::cueColour(quint32 cueId) const
+{
+    const Cue *c = cue(cueId);
+    if (c == nullptr)
+        return QString();
+    if (!c->colour.isEmpty())
+        return c->colour;
+    const CueList *l = listOfCue(cueId);
+    if (l == nullptr)
+        return QString();
+    if (!l->colour.isEmpty())
+        return l->colour;
+    // A sub-cue: its cue's.
+    return l->isSubCues() && l->subOf != cueId ? cueColour(l->subOf) : QString();
+}
+
+QString ShowTreeController::listColour(quint32 listId) const
+{
+    const CueList *l = cueList(listId);
+    return l == nullptr ? QString() : l->colour;
+}
+
 bool ShowTreeController::setCueMixOverlap(quint32 cueId, bool mix)
 {
     return edit(mix ? tr("Overlap: mix") : tr("Overlap: lower wins"), [&](QList<Production> &ps) {

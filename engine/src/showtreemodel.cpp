@@ -18,6 +18,8 @@
 */
 
 #include <QRegularExpression>
+#include <QColor>
+#include <QtMath>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QVector>
@@ -1105,6 +1107,95 @@ bool splitNumberedName(const QString &text, QString *number, QString *name)
 }
 
 /****************************************************************************
+ * Text colours
+ ****************************************************************************/
+
+const QList<TextColour> &textColours()
+{
+    // Mid-tone and saturated: each reads on a white list as on a black one
+    // once readableOn() has lightened or darkened it a little.
+    static const QList<TextColour> colours = {
+        { QStringLiteral("Red"), QStringLiteral("#e53935") },
+        { QStringLiteral("Orange"), QStringLiteral("#fb8c00") },
+        { QStringLiteral("Yellow"), QStringLiteral("#fdd835") },
+        { QStringLiteral("Green"), QStringLiteral("#43a047") },
+        { QStringLiteral("Cyan"), QStringLiteral("#00acc1") },
+        { QStringLiteral("Blue"), QStringLiteral("#1e88e5") },
+        { QStringLiteral("Purple"), QStringLiteral("#8e24aa") },
+        { QStringLiteral("Pink"), QStringLiteral("#d81b60") },
+    };
+    return colours;
+}
+
+bool parseTextColour(const QString &text, QString *hex)
+{
+    const QString t = text.trimmed();
+    QString out;
+    bool ok = false;
+    if (t.compare(QLatin1String("none"), Qt::CaseInsensitive) == 0
+        || t.compare(QLatin1String("off"), Qt::CaseInsensitive) == 0
+        || t.compare(QLatin1String("clear"), Qt::CaseInsensitive) == 0)
+        ok = true;
+    for (const TextColour &c : textColours())
+        if (!ok && t.compare(c.name, Qt::CaseInsensitive) == 0)
+        {
+            out = c.hex;
+            ok = true;
+        }
+    static const QRegularExpression re(QStringLiteral("^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"));
+    if (!ok && re.match(t).hasMatch())
+    {
+        out = QColor(t).name();
+        ok = true;
+    }
+    if (ok && hex != nullptr)
+        *hex = out;
+    return ok;
+}
+
+QString textColourName(const QString &hex)
+{
+    if (hex.isEmpty())
+        return QString();
+    for (const TextColour &c : textColours())
+        if (c.hex.compare(hex, Qt::CaseInsensitive) == 0)
+            return c.name;
+    return hex.toLower();
+}
+
+static double luminance(const QColor &c)
+{
+    auto lin = [](double v) { return v <= 0.03928 ? v / 12.92 : qPow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * lin(c.redF()) + 0.7152 * lin(c.greenF()) + 0.0722 * lin(c.blueF());
+}
+
+double contrastRatio(const QColor &a, const QColor &b)
+{
+    const double la = luminance(a), lb = luminance(b);
+    return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+}
+
+QColor readableOn(const QColor &colour, const QColor &background, double ratio)
+{
+    if (!colour.isValid() || !background.isValid() || contrastRatio(colour, background) >= ratio)
+        return colour;
+    // Toward white on a dark background, toward black on a light one (the
+    // side with the more room: 0.179 is where white and black contrast it
+    // equally), lightness only, so it stays the same colour.
+    const bool lighter = luminance(background) < 0.179;
+    float h = 0, s = 0, l = 0, a = 1;
+    colour.getHslF(&h, &s, &l, &a);
+    for (int i = 1; i <= 50; ++i)
+    {
+        const float nl = lighter ? l + (1.0f - l) * float(i) / 50.0f : l * (1.0f - float(i) / 50.0f);
+        const QColor c = QColor::fromHslF(h, s, nl);
+        if (contrastRatio(c, background) >= ratio)
+            return c;
+    }
+    return lighter ? QColor(Qt::white) : QColor(Qt::black);
+}
+
+/****************************************************************************
  * XML
  ****************************************************************************/
 
@@ -1232,6 +1323,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                                : list.isSubCues() ? KXMLShowTreeSubCues : KXMLShowTreeCueList);
         writeId(doc, QStringLiteral("ID"), list.id);
         doc->writeAttribute(QStringLiteral("Name"), list.name);
+        if (!list.colour.isEmpty())
+            doc->writeAttribute(QStringLiteral("Colour"), list.colour);
         writeId(doc, QStringLiteral("Cue"), list.subOf);
         if (list.isSubCues())
         {
@@ -1289,6 +1382,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Folder"), cue.folder);
             if (cue.skip && !list.looks)
                 doc->writeAttribute(QStringLiteral("Skip"), QStringLiteral("1"));
+            if (!cue.colour.isEmpty())
+                doc->writeAttribute(QStringLiteral("Colour"), cue.colour);
             if (list.isSubCues() && cue.follow)
             {
                 doc->writeAttribute(QStringLiteral("Follow"), QStringLiteral("Auto"));
@@ -1374,6 +1469,13 @@ static Layer loadLayer(QXmlStreamReader &root)
     return layer;
 }
 
+/** A Colour= text colour: "#rrggbb", else none. */
+static QString readColour(const QXmlStreamAttributes &a)
+{
+    QString hex;
+    return parseTextColour(a.value(QStringLiteral("Colour")).toString(), &hex) ? hex : QString();
+}
+
 bool loadXML(QXmlStreamReader &root, Production &production)
 {
     if (root.name() != KXMLShowTreeProduction)
@@ -1405,6 +1507,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
         list.looks = looks;
         list.id = readId(a, QStringLiteral("ID"));
         list.name = a.value(QStringLiteral("Name")).toString();
+        list.colour = readColour(a);
         list.mode = a.value(QStringLiteral("Mode")).toString() == QLatin1String("Tracking")
                     ? ListMode::Tracking : ListMode::NonTracking;
         list.baseCue = readId(a, QStringLiteral("Base"));
@@ -1469,6 +1572,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.unlinkedFrom = a.value(QStringLiteral("UnlinkedFrom")).toString();
             cue.collection = readId(a, QStringLiteral("Collection"));
             cue.skip = !looks && a.value(QStringLiteral("Skip")).toString() == QLatin1String("1");
+            cue.colour = readColour(a);
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();

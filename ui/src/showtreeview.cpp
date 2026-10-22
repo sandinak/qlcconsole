@@ -1167,6 +1167,23 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listBase->setToolTip(tr("The base cue: what a released layer goes back to (else dark)"));
         f->addRow(tr("Base cue"), m_listBase);
         connect(m_listBase, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotListBaseChanged);
+        m_listColour = new QToolButton(m_listPage);
+        m_listColour->setObjectName("stListColour");
+        m_listColour->setPopupMode(QToolButton::InstantPopup);
+        m_listColour->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        m_listColour->setToolTip(tr("The colour its cues' text is shown in -- here, in the Run tab and on the "
+                                    "VC -- unless a cue has its own. Only how it reads: nothing plays "
+                                    "differently."));
+        {
+            QMenu *m = new QMenu(m_listColour);
+            connect(m, &QMenu::aboutToShow, this, [this, m]() {
+                m->clear();
+                if (currentKind() == ListNode)
+                    colourMenu(m, {}, currentId());
+            });
+            m_listColour->setMenu(m);
+        }
+        f->addRow(tr("Text colour"), m_listColour);
         m_listInfo = new QLabel(m_listPage);
         m_listInfo->setWordWrap(true);
         f->addRow(m_listInfo);
@@ -1308,6 +1325,22 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Number"), m_cueNumber);
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
+        m_cueColour = new QToolButton(inner);
+        m_cueColour->setObjectName("stCueColour");
+        m_cueColour->setPopupMode(QToolButton::InstantPopup);
+        m_cueColour->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        m_cueColour->setToolTip(tr("The colour its text is shown in -- here, in the Run tab and on the VC. "
+                                   "None: its list's. Only how it reads: nothing plays differently."));
+        {
+            QMenu *m = new QMenu(m_cueColour);
+            connect(m, &QMenu::aboutToShow, this, [this, m]() {
+                m->clear();
+                if (m_pageCue != invalidId())
+                    colourMenu(m, { m_pageCue });
+            });
+            m_cueColour->setMenu(m);
+        }
+        f->addRow(tr("Text colour"), m_cueColour);
         // R3: a look is fired by VC buttons (P-D7): which, and Make VC page.
         m_lookFiredBy = new QLabel(inner);
         m_lookFiredBy->setObjectName("stLookFiredBy");
@@ -2174,6 +2207,8 @@ void ShowTreeView::buildTree()
             li->setText(1, list.mode == ListMode::Tracking ? tr("Tracking") : tr("Non-tracking"));
             li->setData(0, KindRole, ListNode);
             li->setData(0, IdRole, list.id);
+            if (!list.colour.isEmpty())
+                li->setForeground(0, treeTextColour(list.colour));
             if (!list.looks && list.id == mainListId && (currentProd || m_st->playableLists(prod.id).count() > 1))
             {
                 li->setText(1, li->text(1) + tr(" · main"));
@@ -2292,6 +2327,12 @@ void ShowTreeView::buildTree()
                 ci->setToolTip(0, QStringList({ nameTip, trackingTip }).join(QStringLiteral("\n\n")).trimmed());
                 ci->setData(0, KindRole, CueNode);
                 ci->setData(0, IdRole, cue.id);
+                // Its text colour: its own, else its list's (skipped: grey wins).
+                {
+                    const QString colour = m_st->cueColour(cue.id);
+                    if (!colour.isEmpty())
+                        ci->setForeground(0, treeTextColour(colour));
+                }
 
                 // A child layer sits under its parent's row (§3.5).
                 QHash<quint32, QTreeWidgetItem *> layerItems;
@@ -2829,6 +2870,8 @@ void ShowTreeView::updateInspector()
             m_listDetach->show();
             m_listVcPage->hide();
             m_listTitle->setText(list->name);
+            m_listForm->setRowVisible(m_listColour, true);
+            showColourButton(m_listColour, list->colour, QString());
             m_listMode->setCurrentIndex(list->mode == ListMode::Tracking ? 1 : 0);
             m_listBase->clear();
             m_listBase->addItem(tr("None: released layers go dark"), invalidId());
@@ -3028,6 +3071,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     }
     m_cueName->setText(cue.name);
     m_cueNote->setText(cue.note);
+    showColourButton(m_cueColour, cue.colour, cue.colour.isEmpty() ? m_st->cueColour(cue.id) : QString());
     m_cueMode->setCurrentIndex(m_cueMode->findData(int(cue.mode)));
     m_cueMode->setItemText(0, tr("List default (%1)").arg(list.mode == ListMode::Tracking ? tr("Track")
                                                                                            : tr("Block")));
@@ -4194,6 +4238,110 @@ void ShowTreeView::slotCueMixToggled(bool on)
     if (m_inspectorUpdating || m_pageCue == invalidId())
         return;
     m_st->setCueMixOverlap(m_pageCue, on);
+}
+
+/* A small square of @a colour for the colour menus and buttons. */
+static QIcon colourSwatch(const QColor &colour)
+{
+    QPixmap pm(14, 14);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QColor(0, 0, 0, 110));
+    p.setBrush(colour);
+    p.drawRoundedRect(QRectF(0.5, 0.5, 13, 13), 2.5, 2.5);
+    return QIcon(pm);
+}
+
+QColor ShowTreeView::treeTextColour(const QString &hex) const
+{
+    if (hex.isEmpty())
+        return QColor();
+    // On the rows and the alternate rows alike.
+    const QPalette pal = m_tree->palette();
+    return readableOn(readableOn(QColor(hex), pal.color(QPalette::Base)), pal.color(QPalette::AlternateBase));
+}
+
+void ShowTreeView::colourMenu(QMenu *menu, const QList<quint32> &cueIds, quint32 listId)
+{
+    const bool forList = listId != invalidId();
+    if (!forList && cueIds.isEmpty())
+        return;
+    // What they have now: one colour, or (mixed) none ticked.
+    QString current;
+    bool same = true;
+    if (forList)
+        current = m_st->listColour(listId);
+    for (int i = 0; !forList && i < cueIds.count(); ++i)
+    {
+        const Cue *c = m_st->cue(cueIds.at(i));
+        const QString have = c == nullptr ? QString() : c->colour;
+        if (i == 0)
+            current = have;
+        else if (have != current)
+            same = false;
+    }
+    auto apply = [this, cueIds, listId, forList](const QString &hex) {
+        if (forList ? m_st->setListColour(listId, hex) : m_st->setCuesColour(cueIds, hex))
+            m_hint->setText(hex.isEmpty() ? (forList ? tr("Text colour: none (the theme's)")
+                                                     : tr("Text colour: none (the list's)"))
+                                          : tr("Text colour: %1").arg(textColourName(hex)));
+    };
+    bool known = current.isEmpty();
+    for (const TextColour &tc : textColours())
+    {
+        QAction *a = menu->addAction(colourSwatch(QColor(tc.hex)), tc.name);
+        a->setObjectName(QStringLiteral("stColour%1").arg(tc.name));
+        a->setCheckable(true);
+        a->setChecked(same && current == tc.hex);
+        known = known || current == tc.hex;
+        const QString hex = tc.hex;
+        connect(a, &QAction::triggered, this, [apply, hex]() { apply(hex); });
+    }
+    menu->addSeparator();
+    QAction *custom = menu->addAction(same && !known ? colourSwatch(QColor(current)) : QIcon(), tr("Custom…"));
+    custom->setObjectName("stColourCustom");
+    custom->setCheckable(true);
+    custom->setChecked(same && !known);
+    connect(custom, &QAction::triggered, this, [this, apply, current]() {
+        const QColor c = QColorDialog::getColor(current.isEmpty() ? QColor(Qt::white) : QColor(current), this,
+                                                tr("Text colour"));
+        if (c.isValid())
+            apply(c.name());
+    });
+    QString noneText = tr("None");
+    if (!forList)
+    {
+        const CueList *l = m_st->listOfCue(cueIds.first());
+        const QString inherited = l == nullptr ? QString() : m_st->listColour(l->id);
+        noneText = inherited.isEmpty() ? tr("None") : tr("None (the list's: %1)").arg(textColourName(inherited));
+    }
+    QAction *none = menu->addAction(noneText);
+    none->setObjectName("stColourNone");
+    none->setCheckable(true);
+    none->setChecked(same && current.isEmpty());
+    connect(none, &QAction::triggered, this, [apply]() { apply(QString()); });
+}
+
+void ShowTreeView::showColourButton(QToolButton *button, const QString &own, const QString &inherited)
+{
+    if (button == nullptr)
+        return;
+    if (!own.isEmpty())
+    {
+        button->setIcon(colourSwatch(QColor(own)));
+        button->setText(textColourName(own));
+    }
+    else if (!inherited.isEmpty())
+    {
+        button->setIcon(colourSwatch(QColor(inherited)));
+        button->setText(tr("None (the list's: %1)").arg(textColourName(inherited)));
+    }
+    else
+    {
+        button->setIcon(QIcon());
+        button->setText(tr("None"));
+    }
 }
 
 void ShowTreeView::slotCueSkipToggled(bool on)
@@ -5678,6 +5826,17 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         }
         if (kind == CueNode)
         {
+            // Colour ▸: the selected cues' text, when this is one.
+            const quint32 cueId = item->data(0, IdRole).toUInt();
+            QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
+            if (!cues.contains(cueId))
+                cues = { cueId };
+            QMenu *colour = menu.addMenu(cues.count() == 1 ? tr("Colour") : tr("Colour (%1 cues)").arg(cues.count()));
+            colour->setObjectName("stColourMenu");
+            colourMenu(colour, cues);
+        }
+        if (kind == CueNode)
+        {
             const quint32 cueId = item->data(0, IdRole).toUInt();
             const CueList *list = m_st->listOfCue(cueId);
             const int at = list == nullptr ? -1 : list->indexOf(cueId);
@@ -5883,6 +6042,9 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             QAction *conv = menu.addAction(tr("Convert to tracking…"), this, [this, id]() { convertListToTracking(id); });
             conv->setObjectName("stConvertList");
             conv->setEnabled(mayConvert(m_st->cueList(id)));
+            QMenu *colour = menu.addMenu(tr("Colour"));
+            colour->setObjectName("stColourMenu");
+            colourMenu(colour, {}, id);
             menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
                 ->setObjectName("stDetachList");
             if (m_st->canRestoreOriginal(id))
@@ -8000,6 +8162,7 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
         return;
     for (QWidget *w : { static_cast<QWidget *>(m_listMode), static_cast<QWidget *>(m_listBase) })
         m_listForm->setRowVisible(w, false);
+    m_listForm->setRowVisible(m_listColour, false);
     m_listConvert->hide();
     m_listDetach->hide();
     m_listVcPage->show();
