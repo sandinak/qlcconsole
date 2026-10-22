@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Upgrade this show, in one place.** **File → Upgrade This Show…**
+  lists every chaser and collection with what would become of it: a cue
+  list (checked to play the same), an effect kept as a function, or left
+  alone. A second page offers to capture the raw scenes into palettes.
+  **Upgrade** does the ticked parts as one undo step, and **Restore
+  original…** puts a chaser back. Nothing happens on its own, and the
+  old way keeps working. See
+  [Upgrade this show](show-tree.md#upgrade-this-show).
 - **Bring an old show over, and back.** A show of chasers opens as it
   always did, with one line at the top of the Show Tree tab offering to
   convert it. **Convert an old show…** tells the chasers used as cue

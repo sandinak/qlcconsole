@@ -3487,17 +3487,7 @@ bool ShowTreeController::undo()
     if (m_undo.isEmpty())
         return false;
     const Snapshot s = m_undo.takeLast();
-    m_redo.append(Snapshot { s.label, snapshotXml(), s.stamp, s.outside, s.outsideBefore });
-    // Undone in the reverse order of doing: what the step changed outside
-    // after its tree change first (so the bake sees the show as it was: a
-    // timeline no longer playing a list's chaser lets the bake delete it),
-    // what it changed before its tree change last (a VC widget can point
-    // at the chaser again once the tree has made it again).
-    if (s.outside)
-        s.outside(true);
-    restoreSnapshot(s.xml);
-    if (s.outsideBefore)
-        s.outsideBefore(true);
+    m_redo.append(undoStep(s));
     return true;
 }
 
@@ -3506,12 +3496,78 @@ bool ShowTreeController::redo()
     if (m_redo.isEmpty())
         return false;
     const Snapshot s = m_redo.takeLast();
-    m_undo.append(Snapshot { s.label, snapshotXml(), s.stamp, s.outside, s.outsideBefore });
+    m_undo.append(redoStep(s));
+    return true;
+}
+
+ShowTreeController::Snapshot ShowTreeController::undoStep(const Snapshot &s)
+{
+    Snapshot back { s.label, QByteArray(), s.stamp, s.outside, s.outsideBefore, {} };
+    if (s.parts.empty())
+        back.xml = snapshotXml();
+    // Undone in the reverse order of doing: what the step changed outside
+    // after its tree change first (so the bake sees the show as it was: a
+    // timeline no longer playing a list's chaser lets the bake delete it),
+    // what it changed before its tree change last (a VC widget can point
+    // at the chaser again once the tree has made it again).
+    if (s.outside)
+        s.outside(true);
+    if (s.parts.empty())
+    {
+        restoreSnapshot(s.xml);
+    }
+    else
+    {
+        // A group: its parts last first, each as its own step would be.
+        back.parts.resize(s.parts.size());
+        for (size_t i = s.parts.size(); i-- > 0;)
+            back.parts[i] = undoStep(s.parts[i]);
+    }
+    if (s.outsideBefore)
+        s.outsideBefore(true);
+    return back;
+}
+
+ShowTreeController::Snapshot ShowTreeController::redoStep(const Snapshot &s)
+{
+    Snapshot back { s.label, QByteArray(), s.stamp, s.outside, s.outsideBefore, {} };
+    if (s.parts.empty())
+        back.xml = snapshotXml();
     if (s.outsideBefore)
         s.outsideBefore(false);
-    restoreSnapshot(s.xml);
+    if (s.parts.empty())
+    {
+        restoreSnapshot(s.xml);
+    }
+    else
+    {
+        back.parts.resize(s.parts.size());
+        for (size_t i = 0; i < s.parts.size(); ++i)
+            back.parts[i] = redoStep(s.parts[i]);
+    }
     if (s.outside)
         s.outside(false);
+    return back;
+}
+
+bool ShowTreeController::groupStepsSince(quint64 stamp, const QString &label)
+{
+    int n = 0;
+    while (n < m_undo.count() && m_undo.at(m_undo.count() - 1 - n).stamp > stamp)
+        ++n;
+    if (n == 0)
+        return false;
+    if (n == 1)
+    {
+        m_undo.last().label = label;
+        return true;
+    }
+    Snapshot group { label, QByteArray(), m_undo.last().stamp, {}, {}, {} };
+    group.parts.reserve(size_t(n));
+    for (int i = m_undo.count() - n; i < m_undo.count(); ++i)
+        group.parts.push_back(m_undo.at(i));
+    m_undo.erase(m_undo.end() - n, m_undo.end());
+    m_undo.append(group);
     return true;
 }
 
@@ -3599,6 +3655,7 @@ void ShowTreeController::clearUndo()
 {
     m_undo.clear();
     m_redo.clear();
+    m_snapshotRemap.clear();
 }
 
 /** The functions the tree's opaque layers play. */
@@ -3745,6 +3802,14 @@ QByteArray ShowTreeController::snapshotXml() const
     return xml;
 }
 
+void ShowTreeController::remapSnapshotFunction(quint32 from, quint32 to)
+{
+    for (auto it = m_snapshotRemap.begin(); it != m_snapshotRemap.end(); ++it)
+        if (it.value() == from)
+            it.value() = to;
+    m_snapshotRemap.insert(from, to);
+}
+
 void ShowTreeController::restoreSnapshot(const QByteArray &xml)
 {
     QXmlStreamReader r(xml);
@@ -3753,6 +3818,16 @@ void ShowTreeController::restoreSnapshot(const QByteArray &xml)
     m_snapshotDetached.clear();
     if (r.name() == KXMLQLCShowTree)
         loadState(r, true);
+    if (!m_snapshotRemap.isEmpty())
+        for (Production &p : m_productions)
+            for (CueList &l : p.lists)
+                for (Cue &c : l.cues)
+                    for (Layer &layer : c.layers)
+                    {
+                        const quint32 fid = layer.target.function;
+                        if (m_snapshotRemap.contains(fid) && (m_doc->function(fid) == nullptr || isGenerated(fid)))
+                            layer.target.function = m_snapshotRemap.value(fid);
+                    }
     applyDetachedLists();
     bake();
     // A scene Detach made after this snapshot (the detach is undone) goes,
@@ -5278,6 +5353,7 @@ void ShowTreeController::reset()
     m_generatedLabels.clear();
     m_undo.clear();
     m_redo.clear();
+    m_snapshotRemap.clear();
     m_nextId = 1;
     m_current = invalidId();
     applyProductionTimecode();

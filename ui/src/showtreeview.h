@@ -209,6 +209,17 @@ public:
      *  timelines, show control) fires the list; one undo step. What
      *  happened, a line each. */
     QStringList importInPlace(quint32 chaserId);
+    /** Upgrade this show… (File menu, and the open banner; §3.7): the
+     *  converter over every chaser and collection, with Capture into
+     *  palettes for raw scenes and Restore original; applied as one undo
+     *  step. Never opened on its own. */
+    void openUpgrade();
+    /** What Upgrade does: convert @a chasers (in place or beside), then
+     *  capture @a scenes into palettes, all one undo step ("Upgrade this
+     *  show"). What happened, a line each. */
+    QStringList upgradeShow(const QList<quint32> &chasers, bool inPlace, const QList<quint32> &scenes);
+    /** Import beside the chaser (the converter's other way): a line. */
+    QStringList importBeside(quint32 chaserId);
     /** W5: Restore original for list @a listId: asks, then the list leaves
      *  the tree, the originals go back to their folders and what fires the
      *  list fires the chaser again; one undo step. */

@@ -28,6 +28,8 @@
 
 class QTextBrowser;
 class QTreeWidget;
+class QTreeWidgetItem;
+class QTabWidget;
 class QPushButton;
 class QComboBox;
 class Doc;
@@ -45,13 +47,25 @@ class Doc;
  * and its same-output check, made without changing the show. Convert runs
  * the ticked rows, each its own undo step: Import in place (the default)
  * or beside the chaser. Nothing happens until Convert is pressed.
+ *
+ * Upgrade mode (File ▸ Upgrade this show…, §3.7) is the same table as a
+ * front end over all of W5: the show's collections listed too, each with
+ * what becomes of it; chasers already imported in place, with Restore
+ * original; a second page that offers Capture into palettes for the raw
+ * scenes the lists will play. Upgrade applies the lot as one undo step.
  */
 class ShowConverter final : public QDialog
 {
     Q_OBJECT
 
 public:
-    ShowConverter(Doc *doc, QWidget *parent = nullptr);
+    enum Mode
+    {
+        Convert,    //!< Import chaser… ▸ Convert an old show…
+        Upgrade     //!< File ▸ Upgrade this show…
+    };
+    ShowConverter(Doc *doc, QWidget *parent = nullptr, Mode mode = Convert);
+    Mode mode() const { return m_kind; }
 
     struct Row
     {
@@ -78,8 +92,42 @@ public:
     QStringList convert();
     QPushButton *convertButton() const { return m_convertButton; }
 
-    /** The table and the details as text (tests). */
+    /** The table and the details as text (tests); Upgrade: both pages. */
     QString text() const;
+
+    /** Upgrade: what Apply does with the ticked chasers (@a inPlace) and
+     *  the ticked raw scenes, as one undo step. The lines to show. */
+    typedef std::function<QStringList(const QList<quint32> &chasers, bool inPlace,
+                                      const QList<quint32> &scenes)> Upgrader;
+    void setUpgrader(const Upgrader &upgrader) { m_upgrader = upgrader; }
+    /** Upgrade: Restore original for an in-place list (asks; true: done). */
+    typedef std::function<bool(quint32 listId)> Restorer;
+    void setRestorer(const Restorer &restorer)
+    {
+        m_restorer = restorer;
+        updateButtons();
+    }
+
+    struct CaptureRow
+    {
+        quint32 scene = 0xFFFFFFFF;
+        ShowTreeController::CapturePlan plan;
+        bool inTree = false;            //!< a ▣ row of the tree plays it now
+        QList<quint32> chasers;         //!< cue-list chasers whose lists would
+    };
+    /** Upgrade: the raw scenes the tree plays, or would once converted. */
+    const QList<CaptureRow> &captureRows() const { return m_captureRows; }
+    /** The scenes ticked to capture into palettes. */
+    QList<quint32> chosenScenes() const;
+    void setCaptureChosen(quint32 sceneId, bool on);
+    /** Upgrade: the list rows made in place, with Restore original. */
+    QList<quint32> convertedLists() const;
+    /** Press Restore original… on in-place list @a listId's row. */
+    bool restore(quint32 listId);
+    QTabWidget *pages() const { return m_pages; }
+
+    /** A capture plan as lines: each layer with its looks, what stays raw. */
+    static QStringList captureLines(Doc *doc, const ShowTreeController::CapturePlan &plan);
 
     /** Whether a VC Cue List plays @a chaserId (a cue-list sign). */
     static bool playsInVcCueList(quint32 chaserId);
@@ -89,9 +137,15 @@ public:
 
 private:
     void build();
+    void buildUpgradeRows();
+    void buildCaptureRows();
     void updateButtons();
+    void updatePlanTexts();
+    void showItem(QTreeWidgetItem *item);
+    QString resultsHtml() const;
 
     Doc *m_doc;
+    Mode m_kind;
     QList<Row> m_rows;
     QTreeWidget *m_table = nullptr;
     QTextBrowser *m_details = nullptr;
@@ -99,6 +153,12 @@ private:
     QPushButton *m_convertButton = nullptr;
     Converter m_converter;
     QStringList m_results;
+    QTabWidget *m_pages = nullptr;
+    QTreeWidget *m_captureTable = nullptr;
+    QPushButton *m_restoreButton = nullptr;
+    QList<CaptureRow> m_captureRows;
+    Upgrader m_upgrader;
+    Restorer m_restorer;
 };
 
 /** @} */

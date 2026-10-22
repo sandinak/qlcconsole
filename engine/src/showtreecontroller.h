@@ -21,6 +21,7 @@
 #define SHOWTREECONTROLLER_H
 
 #include <functional>
+#include <vector>
 #include <QStringList>
 #include <QObject>
 #include <QHash>
@@ -700,6 +701,12 @@ public:
      *  to attach it to. */
     bool attachToLastStep(const std::function<void(bool undone)> &apply, bool beforeTree = false);
     void clearRedo() { m_redo.clear(); }
+    /** The steps taken since undoStamp() was @a stamp become one step named
+     *  @a label (Upgrade this show: several imports and captures, one
+     *  undo). Undo takes them back last first, each with what it changed
+     *  outside the tree; redo does them again in order. False when no
+     *  step was taken since. */
+    bool groupStepsSince(quint64 stamp, const QString &label);
     /** When the top undo / redo step was taken (0: none), comparable with
      *  the palette stack's (PaletteOps::nextUndoStamp()). */
     quint64 undoStamp() const { return m_undo.isEmpty() ? 0 : m_undo.last().stamp; }
@@ -743,9 +750,16 @@ private:
          *  after its tree change, and before it. */
         std::function<void(bool undone)> outside;
         std::function<void(bool undone)> outsideBefore;
+        /** A step made of several (groupStepsSince()), in the order they
+         *  were done; its own xml is unused. */
+        std::vector<Snapshot> parts;
     };
     QByteArray snapshotXml() const;
     void restoreSnapshot(const QByteArray &xml);
+    /** Undo / redo one step (a group: its parts, last first / in order);
+     *  the step that takes it back. */
+    Snapshot undoStep(const Snapshot &s);
+    Snapshot redoStep(const Snapshot &s);
 
     QList<Snapshot> m_undo;
     QList<Snapshot> m_redo;
@@ -834,6 +848,12 @@ private:
     QSet<quint32> m_detached;
     /** The detached scenes the snapshot being restored holds. */
     QSet<quint32> m_snapshotDetached;
+    /** A function an undo step's outside change had to make again under
+     *  another id (its own was taken meanwhile by a bake): every snapshot
+     *  restored from then on plays it there on its ▣ layers, where the old
+     *  id is gone or a generated function's. */
+    void remapSnapshotFunction(quint32 from, quint32 to);
+    QHash<quint32, quint32> m_snapshotRemap;
     /** Put an undo step (@a before: the state before it) on the stack. */
     void pushUndo(const QString &label, const QByteArray &before);
     bool applyReusable(quint32 paletteId, const QString &name, const QString &path);

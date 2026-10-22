@@ -12,11 +12,14 @@ under `~/.claude/.../memory/`.
 
 - **Workflow W5 leftovers (2026-10-22)** (feat/w5-bridge; design:
   WORKFLOW_DESIGN.md §3.5):
-  - **Upgrade this show… wizard** (§3.7) not built: the converter covers
-    the chasers; the wizard would add collections → busk looks and a
-    "raw scenes" section offering Capture into palettes in one pass.
-  - The open banner is in the Show Tree tab (Build is W1's); its ✕ lasts
-    until the next show is opened, not saved per show.
+  - **Upgrade this show…** built (feat/upgrade-show-menu): File menu +
+    banner, chasers and collections with plans, Capture page, one undo
+    step, Restore original. Not in it: a collection → **busk look** (§3.7
+    lists it; there is no collection-to-look conversion yet), and a
+    stand-alone chaser of collections becoming a cue list is what the
+    cue-list row already does. The banner's ✕ still lasts only until the
+    next show is opened.
+  - The open banner is in the Show Tree tab (Build is W1's).
   - Capture into palettes reads Dimmer, Colour (RGB/W/A/UV, CMY, a wheel
     slot), Position (whole degrees) and an unnamed Gobo value. Shutter,
     zoom, prism and effect-mode channels stay in the "(rest)" scene. A
