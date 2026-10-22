@@ -20,6 +20,7 @@
 #include <QRegularExpression>
 #include <QStringDecoder>
 #include <QFile>
+#include <QSet>
 #include <QtMath>
 
 #include <algorithm>
@@ -141,7 +142,7 @@ EosLevel EosAsciiParser::parseLevel(const QString &text, bool percent)
     const QString up = t.toUpper();
     static const QRegularExpression palRe(QStringLiteral("^([IFCB])P([0-9.]+)$"));
     static const QRegularExpression preRe(QStringLiteral("^PR([0-9.]+)$"));
-    static const QRegularExpression gelRe(QStringLiteral("^[.:]?G[0-9.]+#([0-9]+)$"));
+    static const QRegularExpression gelRe(QStringLiteral("^[.:]?G[A-Z]*[0-9.]+#([0-9]+)$"));
     QRegularExpressionMatch m;
     if ((m = palRe.match(up)).hasMatch())
     {
@@ -722,6 +723,22 @@ bool EosAsciiParser::parseText(const QString &text, EosShowData &data)
     {
         data.warnings << QObject::tr("This is not a USITT ASCII show file: no Ident line and no records.");
         return false;
+    }
+
+    // An Eos export writes the conventional patch twice: a USITT "Patch"
+    // record and a $Patch with the personality. The $Patch wins.
+    {
+        QSet<int> extended;
+        for (const EosPatch &p : data.patch)
+            if (p.personality != 0 || !p.personalityName.isEmpty() || !p.label.isEmpty())
+                extended.insert(p.channel);
+        for (int i = int(data.patch.count()) - 1; i >= 0; --i)
+        {
+            const EosPatch &p = data.patch.at(i);
+            if (p.personality == 0 && p.personalityName.isEmpty() && p.label.isEmpty()
+                && extended.contains(p.channel))
+                data.patch.removeAt(i);
+        }
     }
 
     // Groups dual-emitted as presets (other consoles' imports, some

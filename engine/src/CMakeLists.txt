@@ -108,6 +108,7 @@ add_library(${module_name} SHARED
     eosasciiparser.cpp eosasciiparser.h
     eosfixturemapper.cpp eosfixturemapper.h
     eosimporter.cpp eosimporter.h
+    eosmagicsheetparser.cpp eosmagicsheetparser.h
     rgbalgorithm.cpp rgbalgorithm.h
     rgbaudio.cpp rgbaudio.h
     rgbimage.cpp rgbimage.h

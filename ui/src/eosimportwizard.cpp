@@ -242,9 +242,10 @@ QWizardPage *EosImportWizard::createFilesPage()
     });
     lay->addLayout(form);
 
-    QLabel *note = new QLabel(tr("Magic sheets (Magic Sheet ▸ settings ▸ export, one XML each) and Augment3d "
-                                 "positions are listed here for the plot; this version reads the ASCII "
-                                 "file only and says so in the report."), page);
+    QLabel *note = new QLabel(tr("Magic sheets (Magic Sheet editor ▸ background settings ▸ export, one XML "
+                                 "each) put the channels on the 2D map, a layer per sheet, in the sheet's own "
+                                 "layout: move and scale the layer to the plot. Augment3d positions are not "
+                                 "read yet."), page);
     note->setWordWrap(true);
     lay->addWidget(note);
     lay->addStretch(1);

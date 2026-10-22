@@ -31,6 +31,8 @@ private slots:
     void presetsAndSubs();
     void warnings();
     void realExportIntoShowTree();
+    void magicSheet();
+    void showFromSampleDir();
 
 private:
     Doc *m_doc = nullptr;

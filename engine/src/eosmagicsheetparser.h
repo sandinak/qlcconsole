@@ -31,26 +31,30 @@
 
 /** One object on a magic sheet, decoded to the subset we care about.
  *  Only channel objects (TARGETTYPE=20) carry placement info usable for
- *  Lighting Studio; everything else is for cross-referencing. */
+ *  the 2D map; everything else is counted for the report. */
 class EosMagicSheetObject
 {
 public:
     enum Kind {
-        Channel = 20,        //!< TARGETLISTID = channel number
-        Cue = 2,
+        Channel = 20,        //!< TARGETID = channel number
+        Cue = 2,             //!< TARGETLISTID = cue list
         Group = 3,
         Macro = 4,
-        Palette = 6,         //!< sub 1-4: IP / FP / CP / BP
+        Palette = 6,         //!< TARGETLISTID 1-4: IP / FP / CP / BP
         Preset = 9,
+        Sub = 10,
+        Effect = 13,
         NestedSheet = 33,
         Fader = 45,
         Unknown = 0
     };
 
     Kind kind = Unknown;
-    int targetListId = 0;    //!< channel number for Channel; palette index etc. for Palette
-    int paletteSubType = 0;  //!< only meaningful when kind == Palette (1=IP, 2=FP, 3=CP, 4=BP)
-    QPointF position;        //!< sheet-local (x, y)
+    int targetType = 0;      //!< as written (an unknown code stays here)
+    QString targetId;        //!< the target's number: channel, group, cue...
+    int targetListId = 0;    //!< palette type (1=IP, 2=FP, 3=CP, 4=BP) or cue list
+    QString key;             //!< the object's KEY: ChannelButton, Button, Truss...
+    QPointF position;        //!< sheet-local (x, y), the object's centre
     QString label;
 };
 
@@ -58,22 +62,27 @@ public:
 class EosMagicSheet
 {
 public:
-    QString name;
-    QString uid;             //!< used for calibration-persistence keying
-    QList<EosMagicSheetObject> objects;
-    int imagesDropped = 0;   //!< background images are not round-tripped by Eos
+    QString name;            //!< the file's base name (the sheet's label isn't in the XML)
+    QString uid;             //!< SHOWFILE_VERSION + name, for calibration keying
+    QList<EosMagicSheetObject> objects;     //!< objects with a target
+    int imagesDropped = 0;   //!< images, shapes and lines: no target (not round-tripped by Eos either)
     int unknownKindsDropped = 0;
+
+    QList<EosMagicSheetObject> channels() const;
 };
 
 /**
  * Parser for Magic Sheet XML exports from the Eos Magic Sheet Editor
- * (settings tab → export icon). The XML schema is undocumented by ETC;
- * attribute set and TARGETTYPE enum values are per community reverse-
- * engineering in Codys-Wright/eos-toolkit.
+ * (background settings tab → export icon). The XML schema is undocumented by
+ * ETC; the element / attribute set and TARGETTYPE enum values are per
+ * community reverse-engineering in Codys-Wright/eos-toolkit (ms_gen.py):
+ *
+ *   MAGICSHEET SHOWFILE_VERSION / ETCGRAPHICSSCENE / ITEMLIST /
+ *     ITEM KEY POSX POSY / ITEMDATA / RECT X Y W H,
+ *       MAGICSHEET / TARGET TARGETTYPE TARGETID TARGETLISTID, TEXT STR
  *
  * See EOS_IMPORT_DESIGN.md § "Magic sheet XML — what it buys you" for how
- * the output feeds Lighting Studio layer placement + the per-sheet
- * calibration step.
+ * the output feeds 2D-map placement (+ the per-sheet calibration step).
  */
 class EosMagicSheetParser final
 {
@@ -87,10 +96,12 @@ public:
      * checks `sheet.name.isEmpty()`).
      *
      * Unknown TARGETTYPE codes are counted in `unknownKindsDropped` but do
-     * not fail the parse. Image elements and arbitrary shapes are counted
-     * in `imagesDropped`.
+     * not fail the parse. Items with no target (images, shapes, truss) are
+     * counted in `imagesDropped`.
      */
     EosMagicSheet parse(const QString &path, QStringList &warnings);
+    /** The same from XML already read; @a name names the sheet. */
+    EosMagicSheet parseXml(const QByteArray &xml, const QString &name, QStringList &warnings);
 };
 
 /** @} */

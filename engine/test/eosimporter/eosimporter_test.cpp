@@ -11,6 +11,8 @@
 #include "eosfixturemapper.h"
 #include "eosasciiparser.h"
 #include "eosimporter.h"
+#include "eosmagicsheetparser.h"
+#include "monitorproperties.h"
 #include "qlcfixturedefcache.h"
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
@@ -233,7 +235,7 @@ void EosImporter_Test::palettes()
     QCOMPARE(byName.value("Red")->value().toString(), QString("#ff0000"));
     QVERIFY(byName.contains("Mixed"));
     const QString w = r.warnings.join("\n");
-    QVERIFY(w.contains("CP 2 “Mixed”: its channels hold different values"));
+    QVERIFY(w.contains("hold different values on different channels") && w.contains("CP 2 “Mixed”"));
     QVERIFY(w.contains("BP 1 “Strobe”"));
 }
 
@@ -378,6 +380,150 @@ void EosImporter_Test::realExportIntoShowTree()
     QVERIFY(target->showTree()->undo());
     QVERIFY(target->showTree()->cueList(lists.first()) == nullptr);
     delete target;
+}
+
+void EosImporter_Test::magicSheet()
+{
+    // The shape of an Eos magic sheet export (eos-toolkit's ms_gen.py
+    // documents it; Eos writes UTF-16): two channel objects, a group
+    // button, a CP button, a decoration.
+    const QString xml = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n<!DOCTYPE ETC>\n"
+        "<MAGICSHEET SHOWFILE_VERSION=\"115\"><VIEW><VIEWPORT POSX=\"0\" POSY=\"0\"/></VIEW>"
+        "<ETCGRAPHICSSCENE><ITEMLIST>"
+        "<ITEM KEY=\"Triangle\" ROT=\"0\" POSX=\"-540\" POSY=\"40\"><ITEMDATA><RECT Y=\"0\" W=\"40\" X=\"0\" H=\"20\"/>"
+        "<MAGICSHEET><TARGET TARGETLISTID=\"-1\" TARGETID=\"51\" TARGETTYPE=\"20\"/><TEXT STR=\"51\"/></MAGICSHEET>"
+        "</ITEMDATA></ITEM>"
+        "<ITEM KEY=\"Triangle\" ROT=\"0\" POSX=\"-500\" POSY=\"40\"><ITEMDATA><RECT Y=\"0\" W=\"40\" X=\"0\" H=\"20\"/>"
+        "<MAGICSHEET><TARGET TARGETLISTID=\"-1\" TARGETID=\"52\" TARGETTYPE=\"20\"/></MAGICSHEET></ITEMDATA></ITEM>"
+        "<ITEM KEY=\"Button\" POSX=\"0\" POSY=\"0\"><ITEMDATA><MAGICSHEET>"
+        "<TARGET TARGETLISTID=\"-1\" TARGETID=\"1\" TARGETTYPE=\"3\"/></MAGICSHEET></ITEMDATA></ITEM>"
+        "<ITEM KEY=\"Button\" POSX=\"0\" POSY=\"0\"><ITEMDATA><MAGICSHEET>"
+        "<TARGET TARGETLISTID=\"3\" TARGETID=\"2\" TARGETTYPE=\"6\"/></MAGICSHEET></ITEMDATA></ITEM>"
+        "<ITEM KEY=\"Square\" POSX=\"0\" POSY=\"0\"><ITEMDATA><RECT Y=\"0\" W=\"1400\" X=\"0\" H=\"140\"/>"
+        "<MAGICSHEET><TARGET TARGETTYPE=\"0\" TARGETID=\"0\"/></MAGICSHEET></ITEMDATA></ITEM>"
+        "<ITEM KEY=\"Clock\" POSX=\"0\" POSY=\"0\"><ITEMDATA><MAGICSHEET>"
+        "<TARGET TARGETTYPE=\"77\" TARGETID=\"4\"/></MAGICSHEET></ITEMDATA></ITEM>"
+        "</ITEMLIST></ETCGRAPHICSSCENE></MAGICSHEET>\n");
+    QByteArray utf16;
+    utf16.append(char(0xFF)).append(char(0xFE));
+    utf16.append(reinterpret_cast<const char *>(xml.utf16()), xml.size() * 2);
+
+    QStringList warnings;
+    EosMagicSheetParser parser;
+    const EosMagicSheet sheet = parser.parseXml(utf16, "Magic Sheet 1", warnings);
+    QCOMPARE(sheet.name, QString("Magic Sheet 1"));
+    QCOMPARE(sheet.objects.count(), 4);
+    QCOMPARE(sheet.channels().count(), 2);
+    QCOMPARE(sheet.channels().at(0).targetId, QString("51"));
+    QCOMPARE(sheet.channels().at(0).position, QPointF(-520, 50));   // the object's centre
+    QCOMPARE(sheet.channels().at(0).label, QString("51"));
+    QCOMPARE(sheet.objects.at(3).kind, EosMagicSheetObject::Palette);
+    QCOMPARE(sheet.objects.at(3).targetListId, 3);                  // CP
+    QCOMPARE(sheet.imagesDropped, 1);
+    QCOMPARE(sheet.unknownKindsDropped, 1);
+
+    QVERIFY(parser.parseXml("<NOTASHEET/>", "x", warnings).name.isEmpty());
+
+    EosImportResult r = built(m_doc);
+    QCOMPARE(EosImporter::placeMagicSheet(sheet, m_doc, r), 2);
+    MonitorProperties *mon = m_doc->monitorProperties();
+    QVERIFY(mon->containsFixture(51));
+    QCOMPARE(mon->fixturePosition(51, 0, 0), QVector3D(-5200, 500, 0));
+    const quint32 layer = mon->fixtureLayer(51);
+    QCOMPARE(mon->layer(layer).name, QString("Imported — Magic Sheet 1"));
+    QVERIFY(r.warnings.last().contains("2 channel(s) placed"));
+}
+
+void EosImporter_Test::showFromSampleDir()
+{
+    // Real shows that can't live in the repo: point QLC_EOS_SAMPLE_DIR at a
+    // folder of Eos exports (*.asc, and magic sheet *.xml) to run them.
+    const QString dirPath = qEnvironmentVariable("QLC_EOS_SAMPLE_DIR");
+    if (dirPath.isEmpty())
+        QSKIP("QLC_EOS_SAMPLE_DIR not set");
+    QDir dir(dirPath);
+    const QStringList ascs = dir.entryList(QStringList() << "*.asc" << "*.ASC", QDir::Files);
+    QVERIFY2(!ascs.isEmpty(), "no .asc in QLC_EOS_SAMPLE_DIR");
+    QStringList sheets;
+    for (const QString &x : dir.entryList(QStringList() << "*.xml", QDir::Files))
+        sheets << dir.absoluteFilePath(x);
+
+    for (const QString &asc : ascs)
+    {
+        Doc *scratch = new Doc(this);
+        QDir fx(INTERNAL_FIXTUREDIR);
+        fx.setFilter(QDir::Files);
+        fx.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
+        scratch->fixtureDefCache()->loadMap(fx);
+
+        EosShowData data;
+        EosAsciiParser p;
+        QVERIFY(p.parse(dir.absoluteFilePath(asc), data));
+        EosFixtureMapper mapper(scratch->fixtureDefCache());
+        QHash<int, int> uses;
+        for (const EosPatch &pt : data.patch)
+            uses[pt.personality]++;
+        QStringList types;
+        int exact = 0, suggested = 0, generic = 0;
+        for (const EosPersonality &pers : data.personalities)
+        {
+            if (!uses.contains(pers.id))
+                continue;
+            const EosFixtureChoice c = mapper.resolve(pers);
+            const char *src = c.source == EosFixtureChoice::Exact ? "exact"
+                              : c.source == EosFixtureChoice::Suggested ? "suggested"
+                              : c.source == EosFixtureChoice::Saved ? "saved" : "generic";
+            exact += c.source == EosFixtureChoice::Exact;
+            suggested += c.source == EosFixtureChoice::Suggested;
+            generic += c.isGeneric();
+            types << QString("  %1 %2 (%3 ch) x%4 -> %5 %6").arg(pers.manufacturer, pers.model)
+                     .arg(pers.footprint).arg(uses.value(pers.id)).arg(src, c.text());
+        }
+        qInfo().noquote() << asc << "console" << data.console << "format" << data.format;
+        qInfo().noquote() << QString("patch %1, types %2 (exact %3, suggested %4, generic %5), groups %6, "
+                                     "cue lists %7, cues %8, palettes %9, presets %10, subs %11")
+                             .arg(data.patch.count()).arg(types.count()).arg(exact).arg(suggested).arg(generic)
+                             .arg(data.groups.count()).arg(data.cueLists.count()).arg(data.cueCount())
+                             .arg(data.palettes.count()).arg(data.presets.count()).arg(data.subs.count());
+        qInfo().noquote() << types.join("\n");
+
+        EosImportBundle bundle;
+        bundle.asciiPath = dir.absoluteFilePath(asc);
+        bundle.magicSheetPaths = sheets;
+        bundle.fixtureMapPath = QDir::temp().absoluteFilePath("no-such-eos-map.json");
+        EosImportResult r;
+        QCOMPARE(EosImporter::load(bundle, r, nullptr, scratch), scratch);
+        qInfo().noquote() << QString("built: fixtures %1 (generic %2, staged %3), groups %4, palettes %5, "
+                                     "cues %6, subs %7, sheets %8, placed %9")
+                             .arg(r.fixturesParsed).arg(r.fixturesUnmapped).arg(r.fixturesUnpatched)
+                             .arg(r.fixtureGroupsParsed).arg(r.palettesParsed).arg(r.cuesParsed)
+                             .arg(r.submastersParsed).arg(r.magicSheetsParsed).arg(r.channelObjectsPlaced);
+        qInfo().noquote() << "warnings:\n  " + r.warnings.join("\n  ");
+
+        Doc *target = new Doc(this);
+        target->fixtureDefCache()->loadMap(fx);
+        QList<quint32> fixtures, groups, functions, palettes;
+        for (Fixture *f : scratch->fixtures())
+            fixtures << f->id();
+        for (FixtureGroup *g : scratch->fixtureGroups())
+            groups << g->id();
+        for (Function *f : scratch->functions())
+            functions << f->id();
+        for (QLCPalette *pl : scratch->palettes())
+            palettes << pl->id();
+        const QxwImportResult m = QxwImporter::import(scratch, target, fixtures, groups, functions, palettes);
+        QCOMPARE(m.fixturesImported, r.fixturesParsed);
+        QList<quint32> chasers;
+        for (quint32 id : r.chasers)
+            chasers << m.functionMap.value(id);
+        QStringList lines;
+        const QList<quint32> lists = EosImporter::toShowTree(target, chasers, &lines);
+        QCOMPARE(lists.count(), r.cueListsParsed);
+        qInfo().noquote() << "show tree:\n  " + lines.join("\n  ");
+        delete target;
+        delete scratch;
+    }
 }
 
 QTEST_MAIN(EosImporter_Test)

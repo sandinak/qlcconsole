@@ -41,6 +41,8 @@
 #include "doc.h"
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
+#include "eosmagicsheetparser.h"
+#include "monitorproperties.h"
 
 namespace
 {
@@ -316,8 +318,9 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
         result.warnings << QObject::tr("%n extra part(s) of multi-part fixtures left out (each fixture "
                                        "comes in as its first part).", "", skippedParts);
     for (auto it = genericByPers.constBegin(); it != genericByPers.constEnd(); ++it)
-        result.warnings << QObject::tr("“%1”: no fixture definition matched; %n channel(s) patched as a "
-                                       "generic dimmer of the same size.", "", it.value()).arg(it.key());
+        result.warnings << QObject::tr("“%1”: no fixture definition chosen; %n channel(s) patched as a "
+                                       "generic dimmer of the same size (the import wizard offers close "
+                                       "matches).", "", it.value()).arg(it.key());
 
     /*** Groups ***/
     for (const EosGroup &g : data.groups)
@@ -356,7 +359,7 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
               pUV = paramByName(data, QStringLiteral("UV")),
               pPan = paramByName(data, QStringLiteral("Pan")),
               pTilt = paramByName(data, QStringLiteral("Tilt"));
-    QStringList bpSkipped;
+    QStringList bpSkipped, mixedPalettes;
     for (const EosPalette &pal : data.palettes)
     {
         const QString title = QStringLiteral("%1 %2").arg(paletteKindName(pal.kind), displayNumber(pal.number));
@@ -453,11 +456,13 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
             continue;
         }
         if (mixed)
-            result.warnings << QObject::tr("%1 “%2”: its channels hold different values; the palette plays "
-                                           "the most common one (the cues keep each channel's own).")
-                               .arg(title, name);
+            mixedPalettes << (pal.label.isEmpty() ? title : QStringLiteral("%1 “%2”").arg(title, pal.label));
         result.palettesParsed++;
     }
+    if (!mixedPalettes.isEmpty())
+        result.warnings << QObject::tr("%n palette(s) hold different values on different channels; each plays "
+                                       "the most common one (the cues keep every channel's own): %1", "",
+                                       int(mixedPalettes.count())).arg(mixedPalettes.join(QStringLiteral(", ")));
     if (!bpSkipped.isEmpty())
         result.warnings << QObject::tr("%n beam palette(s) not imported (the cues keep their values): %1",
                                        "", int(bpSkipped.count())).arg(bpSkipped.join(QStringLiteral(", ")));
@@ -646,12 +651,26 @@ Doc *EosImporter::load(const EosImportBundle &bundle, EosImportResult &result, E
         mapper = &own;
     }
 
-    if (!bundle.magicSheetPaths.isEmpty())
-        result.warnings << QObject::tr("%n magic sheet(s) chosen; magic sheets are not read yet.", "",
-                                       int(bundle.magicSheetPaths.count()));
-
     build(data, doc, *mapper, result, data.title.isEmpty() ? QFileInfo(bundle.asciiPath).completeBaseName()
                                                            : data.title);
+
+    if (!bundle.augment3dEsfPath.isEmpty())
+        result.warnings << QObject::tr("Augment3d positions (%1) are not read yet.")
+                           .arg(QFileInfo(bundle.augment3dEsfPath).fileName());
+
+    // Magic sheets: channel objects become 2D-map positions, a layer per
+    // sheet ("Imported — <sheet>"), the sheet's own coordinates at 10 mm a
+    // unit (no calibration yet: move / scale the layer to fit the plot). A
+    // channel on two sheets keeps the first sheet's place.
+    for (const QString &path : bundle.magicSheetPaths)
+    {
+        EosMagicSheetParser parser;
+        const EosMagicSheet sheet = parser.parse(path, result.warnings);
+        if (sheet.name.isEmpty())
+            continue;
+        result.magicSheetsParsed++;
+        placeMagicSheet(sheet, doc, result);
+    }
     return doc;
 }
 
@@ -711,4 +730,57 @@ QList<quint32> EosImporter::toShowTree(Doc *doc, const QList<quint32> &chasers, 
     }
     st->groupStepsSince(since, QObject::tr("Import Eos show"));
     return lists;
+}
+
+int EosImporter::placeMagicSheet(const EosMagicSheet &sheet, Doc *doc, EosImportResult &result)
+{
+    MonitorProperties *mon = doc == nullptr ? nullptr : doc->monitorProperties();
+    if (mon == nullptr)
+        return 0;
+    const QList<EosMagicSheetObject> chans = sheet.channels();
+    quint32 layer = MonitorProperties::defaultLayerId;
+    int placed = 0, missing = 0;
+    QSet<int> seen;
+    for (const EosMagicSheetObject &o : chans)
+    {
+        bool ok = false;
+        const int channel = o.targetId.toInt(&ok);
+        if (!ok || seen.contains(channel))
+            continue;
+        seen.insert(channel);
+        if (doc->fixture(quint32(channel)) == nullptr)
+        {
+            ++missing;
+            continue;
+        }
+        if (mon->containsFixture(quint32(channel)))
+            continue;
+        if (layer == MonitorProperties::defaultLayerId)
+            layer = mon->addLayer(QObject::tr("Imported — %1").arg(sheet.name));
+        FixturePreviewItem item;
+        item.m_baseItem.m_position = QVector3D(float(o.position.x() * 10.0), float(o.position.y() * 10.0), 0);
+        item.m_baseItem.m_rotation = QVector3D();
+        item.m_baseItem.m_scale = QVector3D(1, 1, 1);
+        item.m_baseItem.m_zoom = 0;
+        item.m_baseItem.m_flags = 0;
+        item.m_baseItem.m_layerId = layer;
+        mon->setFixtureProperties(quint32(channel), item);
+        ++placed;
+    }
+    result.channelObjectsPlaced += placed;
+
+    QStringList dropped;
+    const int controls = int(sheet.objects.count() - chans.count());
+    if (controls > 0)
+        dropped << QObject::tr("%n control object(s) (groups, palettes, cues…)", "", controls);
+    if (sheet.imagesDropped > 0)
+        dropped << QObject::tr("%n image(s), shape(s) and label(s)", "", sheet.imagesDropped);
+    if (sheet.unknownKindsDropped > 0)
+        dropped << QObject::tr("%n object(s) of a kind not known here", "", sheet.unknownKindsDropped);
+    result.warnings << QObject::tr("Magic sheet “%1”: %n channel(s) placed on the 2D map (layer “Imported — %1”, "
+                                   "uncalibrated: move and scale it to the plot)", "", placed).arg(sheet.name)
+                       + (dropped.isEmpty() ? QString() : QObject::tr("; not carried: %1").arg(dropped.join(QStringLiteral(", "))))
+                       + (missing > 0 ? QObject::tr("; %n channel(s) on it aren't patched", "", missing) : QString())
+                       + QLatin1Char('.');
+    return placed;
 }

@@ -28,6 +28,7 @@
 class Doc;
 class EosShowData;
 class EosFixtureMapper;
+class EosMagicSheet;
 
 /** @addtogroup engine Engine
  * @{
@@ -61,7 +62,7 @@ class EosImportBundle
 {
 public:
     QString asciiPath;                //!< Single USITT ASCII (.asc). REQUIRED.
-    QStringList magicSheetPaths;      //!< Zero-or-more magic sheet XMLs (phase 5).
+    QStringList magicSheetPaths;      //!< Zero-or-more magic sheet XMLs: channels onto the 2D map.
     QString augment3dEsfPath;         //!< Optional .esf3d for Augment3D. v2.
     QString fixtureMapPath;           //!< ~/.qlcconsole/eos-fixture-map.json
 };
@@ -117,6 +118,10 @@ public:
      *  cue's scene captured into looks and palettes, the list converted to
      *  tracking -- all one undo step ("Import Eos show"). The new lists'
      *  ids; @a lines gets what happened, a line each. */
+    /** Channel objects of @a sheet onto @a doc's 2D map (a layer per sheet,
+     *  10 mm a sheet unit); the number placed. */
+    static int placeMagicSheet(const EosMagicSheet &sheet, Doc *doc, EosImportResult &result);
+
     static QList<quint32> toShowTree(Doc *doc, const QList<quint32> &chasers, QStringList *lines = nullptr);
 };
 

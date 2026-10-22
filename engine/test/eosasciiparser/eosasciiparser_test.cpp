@@ -158,6 +158,7 @@ void EosAsciiParser_Test::levels()
     QCOMPARE(EosAsciiParser::parseLevel("r0", false).kind, EosLevel::Release);
     QCOMPARE(EosAsciiParser::parseLevel("n0", false).kind, EosLevel::Release);
     QCOMPARE(EosAsciiParser::parseLevel("G4#200", false).value, 200);
+    QCOMPARE(EosAsciiParser::parseLevel(".GR33#160", false).value, 160);   // a Rosco gel match
     QCOMPARE(EosAsciiParser::parseLevel("Q5", false).kind, EosLevel::Unsupported);
 }
 

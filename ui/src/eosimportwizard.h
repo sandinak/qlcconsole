@@ -45,7 +45,7 @@ class Doc;
  * point"). Two pages:
  *
  *   1. Files: the USITT ASCII export (required) and its companions --
- *      magic sheet XMLs (read in a later version), an Augment3d .esf3d
+ *      magic sheet XMLs (channels onto the 2D map), an Augment3d .esf3d
  *      (v2). Next reads the ASCII file.
  *   2. Fixture types: what the file holds, and each Eos personality ->
  *      the fixture definition to use (saved ones, exact matches, close
