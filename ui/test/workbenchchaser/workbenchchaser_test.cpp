@@ -727,6 +727,7 @@ void WorkbenchChaser_Test::danceHysteriaFullShow()
     const QString shots = qEnvironmentVariable("QLC_W2_SHOTS");
     if (shots.isEmpty())
         return;
+    mgr.setFixedSize(1700, 1000);     // the picture's size, whatever the content asks
     if (QSplitter *split = mgr.findChild<QSplitter *>("programmingSplitter"))
         split->setSizes({ 380, 1320 });
     if (QSplitter *bench = mgr.findChild<QSplitter *>("workbenchSplitter"))
@@ -789,9 +790,9 @@ void WorkbenchChaser_Test::sampleShowsChasers()
         return;
     mgr.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    mgr.setFixedSize(1700, 1000);     // the picture's size, whatever the content asks
     if (QSplitter *split = mgr.findChild<QSplitter *>("programmingSplitter"))
         split->setSizes({ 380, 1320 });
-    mgr.m_outline->expandEverything();
     for (Function *f : m_doc->functions())
         if (f->type() == Function::ChaserType)
         {
