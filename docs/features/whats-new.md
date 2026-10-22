@@ -4,6 +4,18 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Icons that say what a row is.** In Build (the outline and the
+  Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
+  look is a small pie filled to its level (a 45 % look is 45 % lit); a
+  Shutter look shows the gate open, closed or strobing, and a Strobe look
+  a flash with its rate around the ring. An Aim look and a stage target
+  show a yellow bullseye for a point, a line with square ends for a line.
+  Fixtures show what their definition makes them: a fixed wash, a moving
+  spot (gobo, prism or iris), a moving wash (zoom or colour mixing, no
+  gobo) or a plain moving head. A group of one kind wears that kind,
+  stacked; a mixed group keeps the group icon. See
+  [Stage targets](stage-targets.md).
+
 - **The effect designer.** Build an effect in detail on the heads it is
   for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
   menu of its Effect row) opens the effect browser at full height. Beside

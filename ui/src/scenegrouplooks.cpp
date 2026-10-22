@@ -34,6 +34,7 @@
 #include <functional>
 
 #include "shutterautoopen.h"
+#include "itemicons.h"
 #include "programmingmanager.h"
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
@@ -935,7 +936,7 @@ void SceneGroupLooks::reload()
         it->setText(LookColName, lookLabel(pid));
         it->setData(LookColName, Qt::UserRole, pid);
         if (p != NULL)
-            it->setIcon(LookColName, QIcon(p->iconResource()));
+            it->setIcon(LookColName, ItemIcons::paletteIcon(m_doc, p));
 
         const bool feedsEffect = scoped;
         // What a nested one does depends on the effect: one that takes

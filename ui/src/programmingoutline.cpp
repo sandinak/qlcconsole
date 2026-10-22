@@ -36,6 +36,7 @@
 #include <algorithm>
 
 #include "programmingoutline.h"
+#include "itemicons.h"
 #include "workbenchstack.h"
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
@@ -276,18 +277,6 @@ QTreeWidgetItem *ProgrammingOutline::folderItem(const QString &path,
     return it;
 }
 
-static QIcon swatch(const QColor &c)
-{
-    QPixmap pm(14, 14);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setPen(QColor(0, 0, 0, 140));
-    p.setBrush(c);
-    p.drawRoundedRect(QRectF(1.5, 1.5, 11, 11), 2, 2);
-    return QIcon(pm);
-}
-
 static QString paletteName(const QLCPalette *p)
 {
     if (p == nullptr)
@@ -413,7 +402,7 @@ void ProgrammingOutline::addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene)
     {
         QTreeWidgetItem *it = new QTreeWidgetItem(sceneItem);
         it->setText(NameCol, g->name());
-        it->setIcon(NameCol, QIcon(QStringLiteral(":/group.png")));
+        it->setIcon(NameCol, ItemIcons::groupIcon(m_doc, g));
         it->setData(NameCol, KindRole, GroupRow);
         it->setData(NameCol, IdRole, g->id());
         it->setData(NameCol, SceneRole, sid);
@@ -461,7 +450,7 @@ void ProgrammingOutline::addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene)
     {
         QTreeWidgetItem *it = new QTreeWidgetItem(sceneItem);
         it->setText(NameCol, f->name());
-        it->setIcon(NameCol, QIcon(QStringLiteral(":/fixture.png")));
+        it->setIcon(NameCol, ItemIcons::fixtureIcon(f));
         it->setData(NameCol, KindRole, FixtureRow);
         it->setData(NameCol, IdRole, f->id());
         it->setData(NameCol, SceneRole, sid);
@@ -512,8 +501,7 @@ void ProgrammingOutline::addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene)
         QTreeWidgetItem *it = new QTreeWidgetItem(nested ? effectItem : sceneItem);
         it->setText(NameCol, p != nullptr ? paletteName(p) : tr("(missing palette %1)").arg(pid));
         if (p != nullptr)
-            it->setIcon(NameCol, p->type() == QLCPalette::Color ? swatch(p->rgbValue())
-                                                                : QIcon(p->iconResource()));
+            it->setIcon(NameCol, ItemIcons::paletteIcon(m_doc, p));
         it->setData(NameCol, KindRole, PaletteRow);
         it->setData(NameCol, IdRole, pid);
         it->setData(NameCol, SceneRole, sid);

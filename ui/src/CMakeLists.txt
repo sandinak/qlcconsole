@@ -29,6 +29,7 @@ add_library(${module_name}
     appsettings.cpp appsettings.h
     controllertestdialog.cpp controllertestdialog.h
     apputil.cpp apputil.h
+    itemicons.cpp itemicons.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui
     audiobar.cpp audiobar.h
     audioeditor.cpp audioeditor.h audioeditor.ui

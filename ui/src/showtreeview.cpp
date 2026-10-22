@@ -72,6 +72,7 @@
 #include "linespread.h"
 #include "effectdesigner.h"
 #include "showtreeview.h"
+#include "itemicons.h"
 #include "importsheet.h"
 #include "showconverter.h"
 #include "functionmanager.h"
@@ -2269,6 +2270,20 @@ void ShowTreeView::buildTree()
                     if (layer.reusable != invalidId())
                         name = QStringLiteral("⟲ ") + name;
                     yi->setText(0, name);
+                    // What it lights, at a glance: one kind of fixture, or a group.
+                    if (const Function *fn = layer.target.isOpaque() ? m_doc->function(layer.target.function) : nullptr)
+                        yi->setIcon(0, fn->getIcon());
+                    else if (!layer.target.isOpaque())
+                    {
+                        QList<quint32> groups = layer.target.groups, fixtures = layer.target.fixtures;
+                        for (quint32 set : layer.target.sets)
+                            if (const GroupSet *gs = m_st->groupSet(set))
+                            {
+                                groups += gs->groups;
+                                fixtures += gs->fixtures;
+                            }
+                        yi->setIcon(0, ItemIcons::targetsIcon(m_doc, groups, fixtures));
+                    }
                     QStringList looks;
                     for (const Look &l : layer.looks)
                         looks << lookText(l);
@@ -6583,7 +6598,7 @@ void ShowTreeView::reloadLibrary()
             if (g == nullptr)
                 return nullptr;
             text = tr("%1 (%2)").arg(g->name()).arg(g->fixtureList().count());
-            icon = QIcon(":/group.png");
+            icon = ItemIcons::groupIcon(m_doc, g);
         }
         else if (kind == LibFixture)
         {
@@ -6591,7 +6606,7 @@ void ShowTreeView::reloadLibrary()
             if (f == nullptr)
                 return nullptr;
             text = f->name();
-            icon = QIcon(":/fixture.png");
+            icon = ItemIcons::fixtureIcon(f);
         }
         else if (kind == LibPalette)
         {
@@ -6599,14 +6614,7 @@ void ShowTreeView::reloadLibrary()
             if (p == nullptr)
                 return nullptr;
             text = p->name().isEmpty() ? tr("(unnamed)") : p->name();
-            if (p->type() == QLCPalette::Color)
-            {
-                QPixmap px(14, 14);
-                px.fill(p->rgbValue());
-                icon = QIcon(px);
-            }
-            else
-                icon = QIcon(p->iconResource());
+            icon = ItemIcons::paletteIcon(m_doc, p);
         }
         else if (kind == LibFunction)
         {
@@ -6623,7 +6631,7 @@ void ShowTreeView::reloadLibrary()
             if (t == nullptr)
                 return nullptr;
             text = t->isLine() ? tr("%1 (line)").arg(t->name()) : t->name();
-            icon = QIcon(":/target.png");
+            icon = ItemIcons::targetIcon(t);
         }
         else if (kind == LibSet)
         {
@@ -6639,7 +6647,7 @@ void ShowTreeView::reloadLibrary()
             if (!gs->fixtures.isEmpty())
                 members << tr("%n fixture(s)", "", int(gs->fixtures.count()));
             text = tr("%1 (%2)").arg(gs->name, members.join(QStringLiteral(" + ")));
-            icon = QIcon(":/group.png");
+            icon = ItemIcons::targetsIcon(m_doc, gs->groups, gs->fixtures);
         }
         else if (kind == LibReusable)
         {

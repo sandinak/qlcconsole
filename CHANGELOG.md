@@ -234,6 +234,16 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   (`ControllerKeepAlive`, `ProgrammerController::controllerKeepAlive()`).
 
 ### Changed
+- **Icons that say what a row is.** Dimmer looks show a pie of their
+  level; Shutter looks open / closed / strobe (from the capability their
+  value falls in); Strobe looks a flash with their rate (they had no icon);
+  Aim looks and stage targets a yellow bullseye (point) or a line with end
+  handles (line); fixtures a fixed wash, moving spot, moving wash or moving
+  head, read from the definition; a group of one kind that kind, stacked.
+  Drawn in code (`ui/src/itemicons.{h,cpp}`), crisp at any size, outlines
+  in the theme's text colour. Used in Build's outline/Workbench, the
+  Palettes list, the Show Tree's layers and Library, the Groups source and
+  the Fixture Manager tree.
 - **The Show Tree shows tracking as badges, with the details on hover.** A
   cue's tracked-in layers used to say *tracked from 0.0.1 Setup* in a column
   that grew to fit, covering the layer names. Now a cue row counts what it

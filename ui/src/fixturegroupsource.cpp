@@ -23,6 +23,7 @@
 #include <cmath>
 
 #include "createfixturegroup.h"
+#include "itemicons.h"
 #include "fixturegroupsource.h"
 #include "inputoutputmap.h"
 #include "universe.h"
@@ -133,7 +134,7 @@ void FixtureGroupSource::reload()
         const QList<quint32> members = g->fixtureList();
         QTreeWidgetItem *gi = new QTreeWidgetItem(folderItem(g->path()));
         gi->setText(0, tr("%1  (%n fixture(s))", "", members.count()).arg(g->name()));
-        gi->setIcon(0, QIcon(":/group.png"));
+        gi->setIcon(0, ItemIcons::groupIcon(m_doc, g));
         gi->setData(0, IdRole, g->id());
         gi->setData(0, KindRole, GroupNode);
         gi->setData(0, NameRole, g->name());   // plain name for inline rename
@@ -255,7 +256,7 @@ void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
 {
     QTreeWidgetItem *fi = new QTreeWidgetItem(parent);
     fi->setText(0, f->name());
-    fi->setIcon(0, QIcon(":/fixture.png"));
+    fi->setIcon(0, ItemIcons::fixtureIcon(f));
     fi->setData(0, IdRole, f->id());
     fi->setData(0, KindRole, FixtureNode);
     fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);

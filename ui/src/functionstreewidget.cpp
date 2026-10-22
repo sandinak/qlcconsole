@@ -30,6 +30,7 @@
 #include <QTimer>
 
 #include "functionstreewidget.h"
+#include "itemicons.h"
 #include "showtreecontroller.h"
 #include "qlcpalette.h"
 #include "function.h"
@@ -525,7 +526,7 @@ void FunctionsTreeWidget::updatePaletteItem(QTreeWidgetItem* item, const QLCPale
     Q_ASSERT(item != NULL);
     Q_ASSERT(palette != NULL);
     item->setText(COL_NAME, palette->name());
-    item->setIcon(COL_NAME, QIcon(palette->iconResource()));
+    item->setIcon(COL_NAME, ItemIcons::paletteIcon(m_doc, palette));
     item->setData(COL_NAME, Qt::UserRole, palette->id());
     item->setData(COL_NAME, Qt::UserRole + 1, Function::Undefined);
     item->setData(COL_NAME, NODE_KIND_ROLE, PaletteNode);
