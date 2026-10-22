@@ -41,6 +41,7 @@
 #include "functionselection.h"
 #include "effectspage.h"
 #include "effectdesigner.h"
+#include "itemicons.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "showtreecontroller.h"
@@ -201,6 +202,7 @@ App::App()
     , m_timelineSuspendAction(NULL)
     , m_followMtcAction(NULL)
     , m_lastLookAction(NULL)
+    , m_autoMibAction(NULL)
     , m_clearLastLookAction(NULL)
     , m_controlPanicAction(NULL)
     , m_dumpDmxAction(NULL)
@@ -617,7 +619,7 @@ void App::init()
     }
     // Build (WORKFLOW_DESIGN.md §3.1; it was "Programming"): makes the
     // show's palettes, effects, scenes and collections.
-    addTab(w, QIcon(":/scene.png"), tr("Build"));
+    addTab(w, ItemIcons::buildIcon(), tr("Build"));   // a hard hat
     // The Show Tree beside Build (SHOW_TREE_DESIGN.md D2): writing a show as
     // one tree of cue lists, cues and layers -- what Build made, in order.
     {
@@ -1800,6 +1802,30 @@ void App::initActions()
     connect(m_lastLookAction, SIGNAL(toggled(bool)),
             this, SLOT(slotLastLookToggled(bool)));
 
+    /* Auto move-in-black in the menu bar too, ticked while it is on: the
+       show's one setting, the same switch as Build's "Move in black" and the
+       Show Tree's MIB button (they all follow the controller). */
+    m_autoMibAction = new QAction(tr("Auto &Move in Black"), this);
+    m_autoMibAction->setObjectName(QStringLiteral("autoMoveInBlackAction"));
+    m_autoMibAction->setCheckable(true);
+    m_autoMibAction->setToolTip(tr(
+        "While the show runs, pre-position any dark mover the next cue will "
+        "reveal. Saved with the show; the same switch as Build → Move in black "
+        "and the Show Tree's MIB button."));
+    if (ProgrammerController *pc = m_doc->programmer())
+    {
+        m_autoMibAction->setChecked(pc->isAutoMoveInBlack());
+        connect(m_autoMibAction, &QAction::toggled, pc, [this, pc](bool on) {
+            pc->setAutoMoveInBlack(on);
+            const QSignalBlocker b(m_autoMibAction);
+            m_autoMibAction->setChecked(pc->isAutoMoveInBlack());   // if it said no
+        });
+        connect(pc, &ProgrammerController::autoMoveInBlackChanged, m_autoMibAction, [this](bool on) {
+            const QSignalBlocker b(m_autoMibAction);
+            m_autoMibAction->setChecked(on);
+        });
+    }
+
     m_clearLastLookAction = new QAction(QIcon(":/fileclose.png"),
                                         tr("&Clear Held Last Look"), this);
     m_clearLastLookAction->setToolTip(tr(
@@ -2442,6 +2468,8 @@ void App::initMenuBar()
     ctrlMenu->addAction(m_timelineSuspendAction);
     ctrlMenu->addAction(m_lastLookAction);
     ctrlMenu->addAction(m_clearLastLookAction);
+    ctrlMenu->addSeparator();
+    ctrlMenu->addAction(m_autoMibAction);
 
     /* ---- Window: every view, wherever it is ----
        "the menubar needs a windows thing so I can find them .. if I break out

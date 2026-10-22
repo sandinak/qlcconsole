@@ -48,6 +48,9 @@ private slots:
      *  enable/disable that feature via a toggle on window". */
     void shiftClickBreaksATabOutDoubleClickDoesNot();
     void functionsOpensFromTheWindowMenuNotATab();
+    /** "tab icon could be a construction hat": Build's tab and its
+     *  Window-menu jump wear a hard hat, crisp at 1x and 2x. */
+    void theBuildTabWearsAHardHat();
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();

@@ -478,6 +478,23 @@ QIcon lineTargetIcon()
     });
 }
 
+QIcon buildIcon()
+{
+    return cached(QStringLiteral("tab:build"), [](QPainter &p, const QColor &) {
+        // A yellow hard hat, side on: the dome, its ridge and the brim, each
+        // edged in amber so it reads on a light or a dark theme.
+        p.setPen(QPen(kAmber, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setBrush(kLight);
+        QPainterPath dome;
+        dome.moveTo(5.5, 22);
+        dome.arcTo(QRectF(5.5, 6, 21, 32), 180, -180);
+        dome.closeSubpath();
+        p.drawPath(dome);
+        p.drawRoundedRect(QRectF(13.5, 4.5, 5, 17.5), 2.2, 2.2);   // the ridge
+        p.drawRoundedRect(QRectF(1.5, 20.5, 29, 5.5), 2.6, 2.6);   // the brim
+    });
+}
+
 QIcon swatchIcon(const QColor &color)
 {
     return cached(QStringLiteral("swatch:%1").arg(color.name(QColor::HexArgb)),

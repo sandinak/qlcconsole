@@ -278,6 +278,49 @@ void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
     m_app->setShiftClickBreaksOut(was);
 }
 
+void AppViews_Test::theBuildTabWearsAHardHat()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    int build = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->tabBar()->tabData(i).toString() == QStringLiteral("Build"))
+            build = i;
+    QVERIFY(build >= 0);
+    const QIcon icon = tabs->tabIcon(build);
+    QCOMPARE(icon.name(), QStringLiteral("tab:build"));
+
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QStringLiteral("Build"))
+            jump = a;
+    QVERIFY(jump != nullptr);
+    QCOMPARE(jump->icon().name(), QStringLiteral("tab:build"));
+
+    // Drawn at the size asked for: hat yellow with an amber edge, at 1x and 2x
+    for (qreal dpr : { 1.0, 2.0 })
+    {
+        const QImage img = icon.pixmap(QSize(16, 16), dpr).toImage();
+        QCOMPARE(img.width(), int(16 * dpr));
+        int yellow = 0, amber = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.alpha() < 200)
+                    continue;
+                if (c.red() > 230 && c.green() > 180 && c.blue() < 90)
+                    ++yellow;
+                else if (c.red() > 120 && c.red() < 190 && c.green() < 140 && c.blue() < 40)
+                    ++amber;
+            }
+        QVERIFY2(yellow > img.width() * img.height() / 8, qPrintable(QString::number(yellow)));
+        QVERIFY2(amber > img.width(), qPrintable(QString::number(amber)));
+        const QString dir = QString::fromLocal8Bit(qgetenv("APPVIEWS_SHOTS"));
+        if (!dir.isEmpty())
+            img.save(QStringLiteral("%1/build-hat@%2x.png").arg(dir).arg(int(dpr)));
+    }
+}
+
 void AppViews_Test::functionsOpensFromTheWindowMenuNotATab()
 {
     QTabWidget *tabs = m_app->m_tab;

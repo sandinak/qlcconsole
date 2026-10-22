@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Build wears a hard hat.** The Build tab (and its Window-menu entry)
+  has a yellow construction hat for an icon. Build's **Move in black**
+  drop-down now shows when Auto is on: it is lit and reads **Move in
+  black · Auto**, or **MIB · n** while *n* heads pre-position, in step
+  with the Show Tree's **MIB** button and Settings. The menu bar has the
+  same switch, ticked while it is on: **Control ▸ Auto Move in Black**.
+  See [Build](build.md#layout).
+
 - **Icons that say what a row is.** In Build (the outline and the
   Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
   look is a small pie filled to its level (a 45 % look is 45 % lit); a

@@ -2,7 +2,8 @@
 
 *"Scenes hold looks. Looks are made of palettes."* — the app's own guide text.
 
-**Build** (it was the *Programming* tab) is where the show's vocabulary is
+**Build** (it was the *Programming* tab; its tab wears a yellow hard hat)
+is where the show's vocabulary is
 made: palettes, effects, scenes and collections. The [Show Tree](show-tree.md)
 puts them in order and runs them. Build works on ordinary QLC+ functions —
 a scene stays a `Scene`, a collection a `Collection` — so a show built the
@@ -74,7 +75,11 @@ Two panes, left to right:
   the tab, with the show controls in the status bar, or the tab in a
   window of its own): **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
-  **Move in black** (mark, unmark, auto move-in-black and its lead time),
+  **Move in black** (mark, unmark, auto move-in-black and its lead time;
+  while Auto is on the drop-down is lit and reads **Move in black · Auto**,
+  or **MIB · n** while it pre-positions *n* heads -- the same switch as the
+  Show Tree's **MIB** button, Settings and **Control ▸ Auto Move in
+  Black**, which is ticked while it is on),
   **Beat** (internal beat on, BPM, speed masters — the button reads the
   tempo) and **More** (snapshot live output, jog speed) as drop-downs.
   In a narrow window, what doesn't fit is under **»**.
