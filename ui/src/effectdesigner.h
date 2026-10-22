@@ -28,6 +28,7 @@
 #include "showtreemodel.h"
 
 class QPushButton;
+class QMenu;
 class QToolButton;
 class QComboBox;
 class QLabel;
@@ -152,6 +153,44 @@ public:
     void cancel();
 
     /************************************************************************
+     * Make a layer (the bench): the Try on groups + this effect, as a new
+     * layer of a Show Tree cue or in a Build scene
+     ************************************************************************/
+
+    /** Where the bench was opened from -- a cue (invalid: none), else a
+     *  plain scene -- Make a layer's first choice. */
+    void setCameFrom(quint32 cueId, quint32 sceneId);
+    quint32 cameFromCue() const { return m_fromCue; }
+    quint32 cameFromScene() const { return m_fromScene; }
+    /** Why Make a layer can't now ("Pick an effect first"); empty: it can. */
+    QString whyNoLayer() const;
+    /** The palette a layer made now would play: the palette it started
+     *  from, saved and unchanged; invalid: a one-off copy of the design
+     *  (made by the make*() calls, as Keep on this layer makes one). */
+    quint32 savedPaletteForLayer() const;
+
+    /** A new layer of cue @a cueId on the Try on groups, its Effect look
+     *  this effect (with its own looks): one Show Tree undo step. Returns
+     *  the layer (invalid: none made). */
+    quint32 makeLayerInCue(quint32 cueId);
+    /** Plain scene @a sceneId gets the Try on groups (those it lacks) and
+     *  this effect as a look: one undo step on Build's history. */
+    bool makeLayerInScene(quint32 sceneId);
+    /** A new scene named @a name (empty: asks, the effect and the groups
+     *  offered) with the Try on groups and this effect: one undo step on
+     *  Build's history. Returns its id (invalid: none made). */
+    quint32 makeLayerInNewScene(const QString &name = QString());
+    /** Make a layer ▾'s menu, as it is now (filled on show; tests). */
+    QMenu *makeLayerMenu();
+
+    /** Show a layer layerMade() reports: the cue's layer selected in the
+     *  Show Tree (or in @a workbench, when the tree has it docked), the
+     *  scene loaded in Build's Workbench (or @a workbench) with the look
+     *  selected. Deferred: the designer may go with what it replaces. */
+    static void revealLayer(Doc *doc, class Workbench *workbench, quint32 cueId, quint32 layerId,
+                            quint32 sceneId, quint32 paletteId);
+
+    /************************************************************************
      * Preview
      ************************************************************************/
 
@@ -171,6 +210,9 @@ signals:
     void cancelled();
     void soloChanged(bool solo);
     void presetSaved(const QString &name);
+    /** Make a layer made one: layer @a layerId of cue @a cueId, or in
+     *  scene @a sceneId (the other invalid); @a paletteId plays the effect. */
+    void layerMade(quint32 cueId, quint32 layerId, quint32 sceneId, quint32 paletteId);
 
 protected:
     void showEvent(QShowEvent *e) override;
@@ -194,6 +236,15 @@ private:
     void fillTryOnMenu();
     void loadTryOn();
     void scheduleBrowserReload();
+    void fillMakeLayerMenu();
+    void updateMakeLayerButton();
+    /** The palette a made layer plays (savedPaletteForLayer(), else a new
+     *  one-off copy of the draft named for @a where; @a made: a one-off). */
+    quint32 paletteForLayer(const QString &where, bool *made);
+    /** A one-off paletteForLayer() made that nothing took: gone again. */
+    void dropOneOff(quint32 paletteId);
+    /** "Towers, Truss" */
+    QString tryOnNames() const;
     /** The fixtures the preview plays on. */
     QList<quint32> previewFixtures() const;
     /** Keep the show's modified flag as it was across a change of our own. */
@@ -204,7 +255,9 @@ public:
     static QList<quint32> savedTryOnGroups(Doc *doc);
     /** Plug the designer into the Workbench's editor pane
      *  (Workbench::setEffectPaneFactory): the bench's requests -- Build ▸
-     *  Effects -- get a designer on the Try on groups. A cue layer's are
+     *  Effects -- get a designer on the Try on groups, told where it was
+     *  opened from (EffectRequest::fromCue / fromScene) for Make a layer,
+     *  whose new layer it then shows (revealLayer()). A cue layer's are
      *  declined for now (the Show Tree's Design effect… dialog does those),
      *  so the Workbench shows what it did before. */
     static void plugIntoWorkbench();
@@ -228,6 +281,8 @@ private:
     quint32 m_ownDimmer;
     QStringList m_lastSignature;
     QString m_oneOffWhere;
+    quint32 m_fromCue;
+    quint32 m_fromScene;
     bool m_oneOffAllowed = false;
     bool m_solo = false;
     bool m_reloadQueued = false;
@@ -246,6 +301,7 @@ private:
     LookEditor *m_look;
     QComboBox *m_ownColourCombo, *m_ownDimmerCombo;
     QPushButton *m_presetBtn, *m_cancelBtn, *m_updateBtn, *m_savePalBtn, *m_keepBtn;
+    QToolButton *m_makeLayerBtn = nullptr;
     QLabel *m_hint;
 };
 

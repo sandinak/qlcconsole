@@ -33,6 +33,20 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   Classic show a Show Tree, the same line offers the qlcconsole view once
   (`offerConsoleViewAfterUpgrade()`). `setFunctionsWindowShown()` remains
   the Functions switch; the view sets it.
+- **Make a layer, from the effect designer's bench** (board Q37). The
+  bench (Build ▸ Effects, Window ▸ Effects) has **Make a layer**: the Try
+  on groups and the effect as a new layer. It goes into the cue or scene
+  the bench was opened from (`Workbench::EffectRequest::fromCue` /
+  `fromScene`, filled from what was loaded and kept while the bench
+  shows), the Show Tree's selected cue, a picked scene, or a new scene.
+  A cue gets `addLayer` + `setLayerLook` in one tree batch; a scene gets
+  a `PaletteOps::sceneStep`; a new scene a `functionStep`. A saved,
+  unchanged palette plays by name, else a one-off copy of the draft (as
+  Keep on this layer makes). `EffectDesigner::layerMade` /
+  `revealLayer()` select the new layer in the Show Tree or Workbench.
+  `ShowTreeController::dropUnusedInlinePalettes` now keeps one-offs a
+  scene in Build's undo history still plays
+  (`PaletteOps::palettesInHistory()`).
 - **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
   tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
   yellow hard hat with an amber edge, crisp at any size and pixel ratio,

@@ -13,6 +13,14 @@ The latest changes, newest first. Each links to the guide with the detail.
   After **Upgrade This Show…**, a Classic show is offered the qlcconsole
   view. See [Views](getting-started.md#views).
 
+- **Make a layer from the effects bench.** In the effect designer on the
+  bench (Build ▸ Effects, Window ▸ Effects), **Make a layer** turns the
+  Try on groups and the effect into a new layer. It goes back into the
+  cue or scene you came from, or into the Show Tree's selected cue,
+  another scene, or a new one. A saved, unchanged palette plays by name;
+  otherwise the layer gets a one-off. It is one undo step, and the new
+  layer is selected afterwards. See [Make a layer](effects.md#make-a-layer).
+
 - **A Closed shutter look closes.** A Shutter look set to *Closed* used
   to open the shutter on any spot with an Open capability (the AT-Spots
   among them). It now closes it, *Strobe* strobes and *Open* opens;
