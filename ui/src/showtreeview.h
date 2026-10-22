@@ -22,6 +22,7 @@
 
 #include <functional>
 #include <QPointer>
+#include <QColor>
 #include <QWidget>
 #include <QPair>
 #include <QList>
@@ -344,6 +345,12 @@ public:
     /** ⌘/ in the tree: the selected cues skipped -- or, when every one of
      *  them is skipped already, put back. False: no cue selected. */
     bool toggleSkipSelected();
+    /** Colour ▸ (the menus and the pages' Text colour button): the text
+     *  colours (ShowTree::textColours()), Custom… and None, for cues
+     *  @a cueIds or -- @a listId valid -- the cue list. Each one undo step. */
+    void colourMenu(QMenu *menu, const QList<quint32> &cueIds, quint32 listId = 0xFFFFFFFF);
+    /** @a hex ("" none) as the tree shows text on its background. */
+    QColor treeTextColour(const QString &hex) const;
     /** Delete the cues and own layers selected in the tree (two or more)
      *  as one undo step; false (nothing done) when fewer, or a cue list
      *  or production is among them. */
@@ -738,6 +745,11 @@ private:
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
     QCheckBox *m_cueSkip = nullptr;
+    /** The pages' Text colour buttons (Colour ▸ menus). */
+    QToolButton *m_cueColour = nullptr;
+    QToolButton *m_listColour = nullptr;
+    /** What a Text colour button shows: @a own, else (dimmed) @a inherited. */
+    void showColourButton(QToolButton *button, const QString &own, const QString &inherited);
     QListWidget *m_cueIncludes;
     QToolButton *m_includeAdd;
     QToolButton *m_includeRemove;

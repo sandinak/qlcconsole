@@ -6094,6 +6094,141 @@ void ShowTreeView_Test::libraryGroupToolsOnARealShow()
     for (quint32 gid : tops)
         QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Truss tops"));
     QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));   // alike still
+/* Branson: "for cuelist, and cues can we save a color for the text in the
+   list as an option per cuelist or cue?" Colour ▸ on a list or cues (one
+   undo step), the pages' Text colour buttons, the rows in their colour (a
+   cue's own over its list's, a sub-cue its cue's; skipped stays grey), and
+   the docked Workbench's header. */
+void ShowTreeView_Test::textColoursInTheTreePagesAndWorkbench()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 4; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->setLayerLook(c[0], st->addLayer(c[0], groupTarget(towers->id())), st->lookForPalette(half));
+    const quint32 sub = st->addSubCue(c[1], "Hit");
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    auto listRow = [tree, list]() -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ListNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == list)
+                return *it;
+        return nullptr;
+    };
+    auto trigger = [](QMenu *menu, const QString &name) {
+        for (QAction *a : menu->actions())
+            if (a->objectName() == name)
+            {
+                a->trigger();
+                return true;
+            }
+        return false;
+    };
+    const QColor themeText = cueRow(tree, c[0])->foreground(0).color();
+
+    // The list: Colour ▸ Blue. Its row and every cue row without one.
+    {
+        QMenu menu;
+        view.colourMenu(&menu, {}, list);
+        QVERIFY(trigger(&menu, "stColourBlue"));
+    }
+    QCOMPARE(st->listColour(list), QString("#1e88e5"));
+    QCOMPARE(st->undoText(), QString("Cue list colour"));
+    tree->expandAll();
+    const QColor blue = view.treeTextColour("#1e88e5");
+    QVERIFY(blue.isValid() && blue != themeText);
+    QCOMPARE(listRow()->foreground(0).color(), blue);
+    for (quint32 id : c)
+        QCOMPARE(cueRow(tree, id)->foreground(0).color(), blue);
+    QCOMPARE(cueRow(tree, sub)->foreground(0).color(), blue);
+
+    // The list's page: its Text colour button says Blue.
+    tree->setCurrentItem(listRow());
+    QToolButton *listButton = view.findChild<QToolButton *>("stListColour");
+    QVERIFY(listButton != nullptr && listButton->isVisibleTo(&view));
+    QCOMPARE(listButton->text(), QString("Blue"));
+
+    // A cue's page: None (the list's: Blue); from its button's menu, Red.
+    QVERIFY(view.selectNode(c[1]));
+    QToolButton *cueButton = view.findChild<QToolButton *>("stCueColour");
+    QVERIFY(cueButton != nullptr && cueButton->isVisibleTo(&view));
+    QCOMPARE(cueButton->text(), QString("None (the list's: Blue)"));
+    QMenu *menu = cueButton->menu();
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QAction *none = menu->findChild<QAction *>("stColourNone");
+    QVERIFY(none != nullptr && none->isChecked());
+    QCOMPARE(none->text(), QString("None (the list's: Blue)"));
+    QVERIFY(trigger(menu, "stColourRed"));
+    QCOMPARE(st->cueColour(c[1]), QString("#e53935"));
+    QCOMPARE(st->undoText(), QString("Cue colour"));
+    QTRY_COMPARE(cueButton->text(), QString("Red"));
+    tree->expandAll();
+    const QColor red = view.treeTextColour("#e53935");
+    QCOMPARE(cueRow(tree, c[1])->foreground(0).color(), red);
+    QCOMPARE(cueRow(tree, sub)->foreground(0).color(), red);   // a sub-cue: its cue's
+    QCOMPARE(cueRow(tree, c[2])->foreground(0).color(), blue);
+    emit menu->aboutToShow();
+    QVERIFY(menu->findChild<QAction *>("stColourRed")->isChecked());
+
+    // Several selected, from the row's Colour ▸: one step for them all.
+    tree->clearSelection();
+    cueRow(tree, c[2])->setSelected(true);
+    cueRow(tree, c[3])->setSelected(true);
+    {
+        QMenu several;
+        view.colourMenu(&several, view.selectedCues());
+        QVERIFY(trigger(&several, "stColourGreen"));
+    }
+    QCOMPARE(st->undoText(), QString("Colour of 2 cues"));
+    QCOMPARE(st->cueColour(c[2]), QString("#43a047"));
+    QCOMPARE(st->cueColour(c[3]), QString("#43a047"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueColour(c[2]), QString("#1e88e5"));
+    QCOMPARE(st->cueColour(c[3]), QString("#1e88e5"));
+    tree->expandAll();
+    QCOMPARE(cueRow(tree, c[3])->foreground(0).color(), blue);
+
+    // Skipped: its grey wins over its colour.
+    QVERIFY(view.setCuesSkipped({ c[1] }, true));
+    tree->expandAll();
+    QVERIFY(cueRow(tree, c[1])->foreground(0).color() != red);
+    QVERIFY(view.setCuesSkipped({ c[1] }, false));
+
+    // The docked Workbench: its header in the cue's colour.
+    QVERIFY(view.selectNode(c[1]));
+    QVERIFY(view.openSelectionInWorkbench());
+    QLabel *title = view.dockedWorkbench()->findChild<QLabel *>("workbenchTitle");
+    QVERIFY(title != nullptr);
+    const QColor onHeader = readableOn(QColor("#e53935"), title->palette().color(QPalette::Window));
+    QVERIFY2(title->styleSheet().contains(onHeader.name()), qPrintable(title->styleSheet()));
+    QVERIFY(st->setCuesColour({ c[1] }, QString()));
+    QTRY_VERIFY2(title->styleSheet().contains(QColor(readableOn(QColor("#1e88e5"),
+                                                                 title->palette().color(QPalette::Window))).name()),
+                 qPrintable(title->styleSheet()));
+
+    const QString dir = qEnvironmentVariable("QLC_CUECOLOUR_SHOTS");
+    if (!dir.isEmpty())
+    {
+        QVERIFY(st->setCuesColour({ c[0] }, "Orange"));
+        QVERIFY(st->setCuesColour({ c[2] }, "Purple"));
+        QVERIFY(st->setCuesColour({ c[1] }, "Red"));
+        view.dockedWorkbench()->goBack();
+        QTest::qWait(50);
+        QVERIFY(view.selectNode(c[1]));
+        tree->expandAll();
+        QTest::qWait(50);
+        QVERIFY(view.grab().save(dir + "/showtree.png"));
+    }
 }
 
 QTEST_MAIN(ShowTreeView_Test)

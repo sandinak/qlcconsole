@@ -96,6 +96,9 @@ public:
      *  it is gone. */
     virtual WorkbenchStack *reopen(QObject *parent) const = 0;
     virtual QString title() const = 0;
+    /** The colour the title is shown in ("#rrggbb"; "" the theme's): a
+     *  Show Tree cue's text colour. */
+    virtual QString titleColour() const { return QString(); }
     /** "Scene", "Collection"... (the header's tag). */
     virtual QString kindText() const = 0;
     /** Where it is ("Show/0-Preshow"; "" none). */

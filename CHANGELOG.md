@@ -30,6 +30,18 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   selected after the Library reloads. `ShowTreeView::selectSimilarLibraryGroups()`
   / `moveLibraryGroupsToFolder()`. Build's Groups & fixtures and the
   Fixture Manager already had them; the Workbench has no group list.
+- **Cue colours.** An optional text colour per Show Tree cue list and per
+  cue (a cue's own over its list's; a sub-cue's over its cue's), set from
+  **Colour ▸** on a list's or cue's right-click menu (8 colours, Custom…,
+  None), the **Text colour** button on its page, or `textcolour <colour>
+  [list | cues]` on the command line; one undo step per change. Shown in
+  the Show Tree rows, the Run tab (list, NOW / NEXT / SUB NEXT), the VC Cue
+  Runner (incl. upcoming lines), the VC Cue List (rows and *Next:*) for a
+  tree list, and the docked Workbench header. A colour too faint on the
+  theme's background is drawn as a lighter or darker shade of itself
+  (4.5:1). Saved as an optional `Colour=` attribute on `<CueList>` and
+  `<Cue>`, which an older build ignores.
+
 - **Build ▸ Effects makes effects.** A **+ New ▾** button (effect palette
   in the designer, EFX, RGB Matrix — the classic ones on the Try on groups)
   and a right-click menu on the list (Design / edit…, Open in editor for

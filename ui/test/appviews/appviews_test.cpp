@@ -981,6 +981,112 @@ void AppViews_Test::aSkippedCueReadsInEveryTheme()
     QVERIFY(st->removeProduction(st->productions().first().id));
 }
 
+/* Every offered text colour, on a cue of the Show Tree and of the Run tab,
+   in each of the six themes: drawn readable (4.5:1) against what is really
+   behind the row -- a variant of it where the colour itself isn't. */
+void AppViews_Test::textColoursReadInEveryTheme()
+{
+    ShowTreeController *st = m_app->doc()->showTree();
+    const quint32 prod = st->addProduction("Colours");
+    const quint32 list = st->addCueList(prod, "Song", ShowTree::ListMode::Tracking);
+    QList<quint32> cues;
+    for (int i = 0; i < ShowTree::textColours().count(); ++i)
+    {
+        cues << st->addCue(list, i - 1, QStringLiteral("Cue in %1").arg(ShowTree::textColours().at(i).name));
+        QVERIFY(st->setCuesColour({ cues.last() }, ShowTree::textColours().at(i).hex));
+    }
+    st->setCurrentProduction(prod);
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    CueRunner *runner = nullptr;
+    QTabWidget *tabs = m_app->m_tab;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (CueRunner *r = qobject_cast<CueRunner *>(tabs->widget(i)))
+            runner = r;
+    QVERIFY(runner != nullptr);
+    m_app->resize(1400, 800);
+    m_app->showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(m_app));
+    const QString dir = qEnvironmentVariable("QLC_CUECOLOUR_SHOTS");
+
+    // The colour most of a row's pixels are: what is behind its text.
+    auto behind = [](QWidget *viewport, const QRect &rect) {
+        const QImage img = viewport->grab(rect).toImage();
+        QHash<QRgb, int> counts;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                ++counts[img.pixel(x, y) | 0xff000000];
+        QRgb bg = 0;
+        int most = -1;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            if (it.value() > most)
+            {
+                most = it.value();
+                bg = it.key();
+            }
+        return bg;
+    };
+
+    const int was = m_app->theme();
+    const int themes[] = { App::ThemeDefault, App::ThemeTan, App::ThemeBlue,
+                           App::ThemeQLCOriginal, App::ThemeRedShift, App::ThemeVSCodeDark };
+    for (int theme : themes)
+    {
+        m_app->setTheme(theme);
+        QCoreApplication::processEvents();
+        QTest::qWait(30);
+
+        // The Show Tree.
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->widget(i) == view || tabs->widget(i)->isAncestorOf(view))
+                tabs->setCurrentIndex(i);
+        QTreeWidget *tree = view->tree();
+        tree->expandAll();
+        tree->clearSelection();
+        QCoreApplication::processEvents();
+        for (int k = 0; k < cues.count(); ++k)
+        {
+            QTreeWidgetItem *row = nullptr;
+            for (QTreeWidgetItemIterator it(tree); *it; ++it)
+                if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                    && (*it)->data(0, ShowTreeView::IdRole).toUInt() == cues[k])
+                    row = *it;
+            QVERIFY(row != nullptr);
+            tree->scrollToItem(row);
+            const QColor fg = row->foreground(0).color();
+            const double c = contrast(fg.rgb(), behind(tree->viewport(), tree->visualItemRect(row)));
+            QVERIFY2(c >= 4.5, qPrintable(QString("theme %1, tree, %2: %3")
+                                          .arg(theme).arg(ShowTree::textColours().at(k).name).arg(c)));
+        }
+        if (!dir.isEmpty())
+            QVERIFY(view->grab().save(QStringLiteral("%1/showtree-theme-%2.png").arg(dir).arg(theme)));
+
+        // The Run tab.
+        tabs->setCurrentWidget(runner);
+        runner->refresh();
+        QCoreApplication::processEvents();
+        QTreeWidget *rt = runner->cueTree();
+        QCOMPARE(rt->topLevelItemCount(), cues.count());
+        for (int k = 0; k < cues.count(); ++k)
+        {
+            QTreeWidgetItem *row = rt->topLevelItem(k);
+            rt->scrollToItem(row);
+            const QColor fg = row->foreground(2).color();
+            const double c = contrast(fg.rgb(), behind(rt->viewport(), rt->visualItemRect(row)));
+            QVERIFY2(c >= 4.5, qPrintable(QString("theme %1, Run tab, %2: %3")
+                                          .arg(theme).arg(ShowTree::textColours().at(k).name).arg(c)));
+        }
+        const double next = ShowTree::contrastRatio(runner->textColour("next"),
+                                                     runner->palette().color(QPalette::Window));
+        QVERIFY2(next >= 4.5, qPrintable(QString("theme %1, NEXT: %2").arg(theme).arg(next)));
+        if (!dir.isEmpty())
+            QVERIFY(runner->grab().save(QStringLiteral("%1/run-theme-%2.png").arg(dir).arg(theme)));
+    }
+    m_app->setTheme(was);
+    m_app->hide();
+    QVERIFY(st->removeProduction(prod));
+}
+
 void AppViews_Test::quittingWithTheShowTreeShowing()
 {
     QTabWidget *tabs = m_app->m_tab;

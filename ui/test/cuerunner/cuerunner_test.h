@@ -50,6 +50,7 @@ private slots:
     void vcResizeGrowsTheInfo();
     void vcHandlesSizeAndPersist();
     void vcPropertiesRoundTrip();
+    void textColoursOnEveryLine();
     void screenshots();
 
 private:

@@ -254,6 +254,11 @@ private:
     Result runPalette(const QString &line, const Context &context);
     Result runLook(const QString &line, const Context &context);
     QStringList cueNumbers(const Context &context) const;
+    /** `<cue> [thru <cue>] [, <cue>…]` (@a rest) for @a verb: the cues named
+     *  -- in @a list, its main list, or a sub-cue of it -- in list order,
+     *  else the selected one. Returns why not ("" ok). */
+    QString cueRange(const QString &verb, const QString &rest, const ShowTree::CueList *list,
+                     const Context &ctx, QList<quint32> *cues) const;
     /** Reusable layers and cues by name: what `use` takes. */
     QStringList reusableNames() const;
     static QStringList keywords();

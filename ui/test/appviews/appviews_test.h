@@ -78,6 +78,7 @@ private slots:
      *  still reads in every theme; QLC_SKIPCUE_THEMES (a folder) keeps a
      *  picture of the tree in each. */
     void aSkippedCueReadsInEveryTheme();
+    void textColoursReadInEveryTheme();
 
     /** The rig network gate: the footer's red "Output held" says where the
      *  show belongs and where this machine is; Settings -> Network edits the

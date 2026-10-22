@@ -47,6 +47,7 @@
 #include "apputil.h"
 #include "chaser.h"
 #include "qmath.h"
+#include "showtreecontroller.h"
 #include "showcontrol.h"
 #include "doc.h"
 
@@ -295,6 +296,12 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
             this, SLOT(slotFunctionChanged(quint32)));
     connect(m_doc, SIGNAL(functionNameChanged(quint32)),
             this, SLOT(slotFunctionNameChanged(quint32)));
+    // A cue's (or its list's) text colour changed: nothing else need be.
+    if (ShowTreeController *st = m_doc->showTree())
+        connect(st, &ShowTreeController::changed, this, [this]() {
+            applyCueColours();
+            updateStandby();
+        });
 
     m_nextLatestValue = 0;
     m_previousLatestValue = 0;
@@ -409,6 +416,49 @@ void VCCueList::setChaser(quint32 id)
     }
     else
         slotFunctionStopped(m_chaserID);
+}
+
+void VCCueList::applyCueColours()
+{
+    Chaser *ch = chaser();
+    ShowTreeController *st = m_doc->showTree();
+    if (ch == NULL || st == NULL)
+        return;
+    quint32 listId = Function::invalidId();
+    if (st->productionOfChaser(ch->id(), &listId) == Function::invalidId() || st->cueList(listId) == NULL)
+        return;
+    const QColor background = m_tree->palette().color(QPalette::Base);
+    const QColor alternate = m_tree->palette().color(QPalette::AlternateBase);
+    const QList<ChaserStep> steps = ch->steps();
+    // A row tinted before that has no colour now: built again, as it was.
+    const int tintedRole = Qt::UserRole + 50;
+    bool rebuild = false;
+    auto paint = [&](QTreeWidgetItem *item, quint32 cueId, bool skipped) {
+        if (skipped)
+            return;                     // grey, as it was made
+        const QString hex = st->cueColour(cueId);
+        if (hex.isEmpty())
+        {
+            rebuild = rebuild || item->data(COL_NUM, tintedRole).toBool();
+            return;
+        }
+        const QBrush fg(ShowTree::readableOn(ShowTree::readableOn(QColor(hex), background), alternate));
+        item->setData(COL_NUM, tintedRole, true);
+        for (int col : { int(COL_NUM), int(COL_NAME), int(COL_CUE) })
+            if (item->foreground(col) != fg)
+                item->setForeground(col, fg);
+    };
+    for (int i = 0; i < m_tree->topLevelItemCount() && i < steps.count(); ++i)
+    {
+        QTreeWidgetItem *item = m_tree->topLevelItem(i);
+        paint(item, st->cueOfStep(listId, i), steps.at(i).skip);
+        Chaser *inner = ch->subCueChase(i);
+        const QList<ChaserStep> subs = inner == NULL ? QList<ChaserStep>() : inner->steps();
+        for (int j = 0; j < item->childCount() && j < subs.count(); ++j)
+            paint(item->child(j), st->cueOfStep(listId, i, j), subs.at(j).skip);
+    }
+    if (rebuild && !m_updateTimer->isActive())
+        m_updateTimer->start(UPDATE_TIMEOUT);
 }
 
 quint32 VCCueList::chaserID() const
@@ -549,6 +599,7 @@ void VCCueList::updateStepList()
         }
     }
 
+    applyCueColours();
     m_tree->setRootIsDecorated(anySubCues);
     m_tree->setItemsExpandable(anySubCues);
     const bool subGo = ch->hasSubGoSteps();
@@ -591,6 +642,7 @@ void VCCueList::updateStandby()
     Chaser *ch = chaser();
     const int next = standbyIndex();
     QString text;
+    int loadedSub = -1;
     if (ch == NULL)
         text = QString();
     else if (next < 0 || next >= ch->stepsCount())
@@ -599,8 +651,8 @@ void VCCueList::updateStandby()
     {
         // A sub-cue a show controller LOADed (LOAD 4.2): its number, and
         // its own step's name and note.
-        const int loadedSub = next == m_doc->showControl()->loadedStep(ch->id())
-                              ? m_doc->showControl()->standbySubCue(ch) : -1;
+        loadedSub = next == m_doc->showControl()->loadedStep(ch->id())
+                    ? m_doc->showControl()->standbySubCue(ch) : -1;
         const Chaser *inner = loadedSub >= 0 ? ch->subCueChase(next) : NULL;
         const ChaserStep step = inner != NULL ? inner->steps().at(loadedSub) : ch->steps().at(next);
         const Function *f = m_doc->function(step.fid);
@@ -623,6 +675,36 @@ void VCCueList::updateStandby()
         m_standbyLabel->setText(text);
         m_standbyLabel->setToolTip(text);
     }
+
+    // A Show Tree list's next cue: in its text colour, readable on the
+    // widget; else the widget's own.
+    QColor colour;
+    ShowTreeController *st = m_doc->showTree();
+    quint32 listId = Function::invalidId();
+    if (ch != NULL && st != NULL && next >= 0 && next < ch->stepsCount()
+        && st->productionOfChaser(ch->id(), &listId) != Function::invalidId())
+    {
+        const QString hex = st->cueColour(st->cueOfStep(listId, next, loadedSub));
+        if (!hex.isEmpty())
+            colour = ShowTree::readableOn(QColor(hex), palette().color(QPalette::Window));
+    }
+    if (!colour.isValid())
+    {
+        if (m_standbyLabel->property("tinted").toBool())
+        {
+            m_standbyLabel->setPalette(QPalette());     // the widget's again
+            m_standbyLabel->setProperty("tinted", false);
+        }
+        return;
+    }
+    QPalette pal = m_standbyLabel->palette();
+    if (pal.color(QPalette::Active, QPalette::WindowText) != colour)
+    {
+        pal.setColor(QPalette::Active, QPalette::WindowText, colour);
+        pal.setColor(QPalette::Inactive, QPalette::WindowText, colour);
+        m_standbyLabel->setPalette(pal);
+    }
+    m_standbyLabel->setProperty("tinted", true);
 }
 
 int VCCueList::getCurrentIndex() const

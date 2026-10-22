@@ -195,6 +195,11 @@ private slots:
     void skippedCuesSaveLoadAndUndo();
     void skipAndUnskipTyped();
     void importAndConvertKeepTheSkip();
+    // Text colours (2026-10-22)
+    void textColoursInheritSaveLoadAndUndo();
+    void textColoursAnOlderReaderIgnores();
+    void textColourTyped();
+    void textColoursAreMadeReadable();
 
 private:
     /** What a dry run of the import on a show file found (importARealShow). */

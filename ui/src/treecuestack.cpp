@@ -164,6 +164,11 @@ QString TreeCueStack::title() const
     return st()->cueLabel(*l, l->indexOf(m_cue));
 }
 
+QString TreeCueStack::titleColour() const
+{
+    return st() == nullptr ? QString() : st()->cueColour(m_cue);
+}
+
 QString TreeCueStack::kindText() const
 {
     if (st() == nullptr)

@@ -7069,6 +7069,225 @@ void ShowTree_Test::lookCommands()
         QVERIFY2(ShowTreeCommand::helpText(w).contains(QString("<b>%1</b>").arg(w)), w);
 }
 
+/* A cue list's text colour reaches its cues (and their sub-cues) that have
+   none of their own; a cue's own wins. One undo step each; saved as
+   Colour= and read back. Nothing is baked differently. */
+void ShowTree_Test::textColoursInheritSaveLoadAndUndo()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 sub = st->addSubCue(c2, "Hit");
+    QVERIFY(sub != invalidId());
+    QCOMPARE(st->cueColour(c1), QString());
+
+    QVERIFY(st->setListColour(listId, "Blue"));
+    QCOMPARE(st->undoText(), QString("Cue list colour"));
+    QCOMPARE(st->listColour(listId), QString("#1e88e5"));
+    QCOMPARE(st->cueColour(c1), QString("#1e88e5"));
+    QCOMPARE(st->cueColour(sub), QString("#1e88e5"));     // via its cue
+
+    QVERIFY(st->setCuesColour({ c2 }, "#FF0000"));
+    QCOMPARE(st->undoText(), QString("Cue colour"));
+    QCOMPARE(st->cueColour(c2), QString("#ff0000"));       // its own wins
+    QCOMPARE(st->cueColour(sub), QString("#ff0000"));      // a sub-cue: its cue's
+    QCOMPARE(st->cueColour(c3), QString("#1e88e5"));
+    QVERIFY(st->setCuesColour({ sub }, "green"));
+    QCOMPARE(st->cueColour(sub), QString("#43a047"));
+    QVERIFY(!st->setCuesColour({ c2 }, "#ff0000"));       // no change: no step
+    QVERIFY(!st->setCuesColour({ c2 }, "not a colour"));
+
+    // Several cues: one step.
+    QVERIFY(st->setCuesColour({ c1, c3 }, "Yellow"));
+    QCOMPARE(st->undoText(), QString("Colour of 2 cues"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueColour(c1), QString("#1e88e5"));
+    QCOMPARE(st->cueColour(c3), QString("#1e88e5"));
+    QVERIFY(st->redo());
+    QCOMPARE(st->cueColour(c3), QString("#fdd835"));
+
+    // Only how it reads: the chaser and collections are as they were.
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(ch != nullptr);
+    QCOMPARE(ch->stepsCount(), 3);
+
+    const QByteArray xml = engineXml(m_doc);
+    QVERIFY(xml.contains("Colour=\"#1e88e5\""));
+    QVERIFY(xml.contains("Colour=\"#ff0000\""));
+    Doc *other = new Doc(this);
+    {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+    }
+    QCOMPARE(other->showTree()->listColour(listId), QString("#1e88e5"));
+    QCOMPARE(other->showTree()->cueColour(c2), QString("#ff0000"));
+    QCOMPARE(other->showTree()->cueColour(c1), QString("#fdd835"));
+    QCOMPARE(other->showTree()->cueColour(sub), QString("#43a047"));
+    QCOMPARE(productionXml(other->showTree()->productions().first()), productionXml(st->productions().first()));
+    delete other;
+
+    // None: the list's again; the list's none: the theme's.
+    QVERIFY(st->setCuesColour({ c2 }, QString()));
+    QCOMPARE(st->cueColour(c2), QString("#1e88e5"));
+    QVERIFY(st->setListColour(listId, "none"));
+    QCOMPARE(st->cueColour(c2), QString());
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueColour(c2), QString("#1e88e5"));
+}
+
+/* An older build doesn't know Colour=: the show it reads is the same show
+   but for the colours -- the XML differs by the attributes only, and the
+   generated functions not at all. */
+void ShowTree_Test::textColoursAnOlderReaderIgnores()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(half));
+    const QByteArray plain = engineXml(m_doc);
+
+    QVERIFY(st->setListColour(listId, "Orange"));
+    QVERIFY(st->setCuesColour({ c2 }, "Purple"));
+    const QByteArray coloured = engineXml(m_doc);
+    QVERIFY(coloured != plain);
+    QByteArray stripped = coloured;
+    stripped.replace(" Colour=\"#fb8c00\"", "");
+    stripped.replace(" Colour=\"#8e24aa\"", "");
+    QCOMPARE(QString::fromUtf8(stripped), QString::fromUtf8(plain));
+
+    // Read as it is without them: no colour anywhere, the same chaser.
+    Doc *older = new Doc(this);
+    {
+        QXmlStreamReader r(stripped);
+        r.readNextStartElement();
+        QVERIFY(older->loadXML(r, false));
+    }
+    for (const Production &p : older->showTree()->productions())
+        for (const CueList &l : p.lists)
+        {
+            QVERIFY(l.colour.isEmpty());
+            for (const Cue &c : l.cues)
+                QVERIFY(c.colour.isEmpty());
+        }
+    QCOMPARE(older->showTree()->cueList(listId)->chaser, st->cueList(listId)->chaser);
+    delete older;
+
+    // A Colour= that isn't one is left out.
+    QByteArray bad = coloured;
+    bad.replace("Colour=\"#8e24aa\"", "Colour=\"chartreuse-ish\"");
+    Doc *other = new Doc(this);
+    {
+        QXmlStreamReader r(bad);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+    }
+    QCOMPARE(other->showTree()->cueColour(c2), QString("#fb8c00"));  // the list's
+    delete other;
+}
+
+/* textcolour red · textcolour blue list · a range · none; one step each,
+   Tab offers the colours, then list / cue numbers. */
+void ShowTree_Test::textColourTyped()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ShowTreeCommand::Result r = cmd.run("list \"Show\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    QList<quint32> c;
+    for (int i = 1; i <= 4; ++i)
+        c << st->addCueNumbered(ctx.list, QString("0.0.%1").arg(i), QString("C%1").arg(i));
+
+    ctx.cue = c[0];
+    r = cmd.run("textcolour red", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cueColour(c[0]), QString("#e53935"));
+    QCOMPARE(st->undoText(), QString("textcolour red"));
+
+    r = cmd.run("textcolor blue list", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->listColour(ctx.list), QString("#1e88e5"));
+    QCOMPARE(st->cueColour(c[0]), QString("#e53935"));
+    QCOMPARE(st->cueColour(c[1]), QString("#1e88e5"));
+
+    r = cmd.run("textcolour #33aa55 0.0.2 thru 0.0.4", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    for (int i = 1; i < 4; ++i)
+        QCOMPARE(st->cueColour(c[i]), QString("#33aa55"));
+    QVERIFY(st->undo());                                 // one step for the range
+    for (int i = 1; i < 4; ++i)
+        QCOMPARE(st->cueColour(c[i]), QString("#1e88e5"));
+    QVERIFY(st->redo());
+
+    r = cmd.run("textcolour none 0.0.3", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cueColour(c[2]), QString("#1e88e5"));
+
+    // Wrong: nothing changes.
+    const QString before = st->undoText();
+    r = cmd.run("textcolour mauve", ctx);
+    QVERIFY(!r.ok);
+    r = cmd.run("textcolour", ctx);
+    QVERIFY(!r.ok);
+    r = cmd.run("textcolour red 9.9.9", ctx);
+    QVERIFY(!r.ok);
+    QCOMPARE(st->undoText(), before);
+
+    // Tab: the colours, then list or cue numbers (and thru).
+    QStringList options;
+    QVERIFY(cmd.candidates("textcolour ", ctx, &options));
+    QVERIFY(options.contains("red"));
+    QVERIFY(options.contains("none"));
+    QVERIFY(cmd.candidates("textcolour red ", ctx, &options));
+    QVERIFY(options.contains("list"));
+    QVERIFY(options.contains("0.0.3"));
+    QVERIFY(cmd.candidates("textcolour red 0.0.3 ", ctx, &options));
+    QVERIFY(options.contains("thru"));
+    QVERIFY(ShowTreeCommand::helpText("textcolour").contains("list"));
+    QVERIFY(ShowTreeCommand::grammar().contains("textcolour"));
+}
+
+/* Every offered colour, on a white list and a black one (and mid greys):
+   itself when it reads, else the same hue lighter or darker until it does
+   (4.5:1). */
+void ShowTree_Test::textColoursAreMadeReadable()
+{
+    const QList<QColor> backgrounds = { Qt::white, Qt::black, QColor("#d4d4d4"), QColor("#252526"),
+                                        QColor("#150a05"), QColor("#2e2920"), QColor("#808080") };
+    for (const TextColour &tc : textColours())
+    {
+        QString hex;
+        QVERIFY(parseTextColour(tc.name.toUpper(), &hex));
+        QCOMPARE(hex, tc.hex);
+        QCOMPARE(textColourName(tc.hex), tc.name);
+        for (const QColor &bg : backgrounds)
+        {
+            const QColor c = readableOn(QColor(tc.hex), bg);
+            QVERIFY2(contrastRatio(c, bg) >= 4.5, qPrintable(QString("%1 on %2: %3").arg(tc.name, bg.name())
+                                                             .arg(contrastRatio(c, bg))));
+            if (contrastRatio(QColor(tc.hex), bg) >= 4.5)
+                QCOMPARE(c, QColor(tc.hex));            // kept as it is when it reads
+            else if (QColor(tc.hex).hslSaturationF() > 0.1 && c != QColor(Qt::white) && c != QColor(Qt::black))
+                QVERIFY(qAbs(c.hslHueF() - QColor(tc.hex).hslHueF()) < 0.02);   // the same colour
+        }
+    }
+    QString hex = "x";
+    QVERIFY(parseTextColour("none", &hex));
+    QVERIFY(hex.isEmpty());
+    QVERIFY(parseTextColour("#abc", &hex));
+    QCOMPARE(hex, QString("#aabbcc"));
+    QVERIFY(!parseTextColour("teal-ish", &hex));
+    QCOMPARE(textColourName("#123456"), QString("#123456"));
+}
+
 QTEST_MAIN(ShowTree_Test)
 
 /****************************************************************************

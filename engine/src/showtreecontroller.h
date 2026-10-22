@@ -303,6 +303,17 @@ public:
      *  false when none changed. */
     bool setCuesSkipped(const QList<quint32> &cueIds, bool skip);
     bool isCueSkipped(quint32 cueId) const;
+    /** The text colour of cues (Cue::colour: "#rrggbb", "" none -- they
+     *  take their list's again) or of a cue list (CueList::colour): how
+     *  they read in the tree, the Run tab and the VC, nothing more. One
+     *  undo step ("Cue colour" / "Cue list colour"); false when none
+     *  changed. */
+    bool setCuesColour(const QList<quint32> &cueIds, const QString &colour);
+    bool setListColour(quint32 listId, const QString &colour);
+    /** The colour cue @a cueId's text is shown in: its own, else its
+     *  list's -- a sub-cue's, else its cue's -- ("" none: the theme's). */
+    QString cueColour(quint32 cueId) const;
+    QString listColour(quint32 listId) const;
     /** Layers of the cue on fixtures in common: the lower wins what both
      *  set (false, the tree's rule), or they mix as a chaser's collection
      *  does (true, how an import keeps them). One undo step. */

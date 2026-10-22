@@ -883,6 +883,109 @@ void CueRunner_Test::vcPropertiesRoundTrip()
    Operate -- only when asked (QLC_CUERUNNER_SHOTS = the folder,
    QLC_CUERUNNER_WS = a copy of a workspace, QLC_CUERUNNER_SHOTS_TAG = a
    prefix). Offscreen, no output plugins: nothing is sent. */
+/* A cue's text colour (its own, else its list's; a sub-cue its cue's) in
+   the Run tab's list, on NOW / NEXT / SUB NEXT, and on the VC Cue Runner's
+   upcoming lines -- made readable on the theme; done rows stay grey. */
+void CueRunner_Test::textColoursOnEveryLine()
+{
+    const QList<quint32> ids = show();       // song, c1, c2, c3, s1, s2, keynote
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setListColour(ids[0], "Blue"));
+    QVERIFY(st->setCuesColour({ ids[1] }, "Red"));
+    QVERIFY(st->setCuesColour({ ids[4] }, "Green"));
+
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.refresh();
+    QTreeWidget *tree = runner.cueTree();
+    const QPalette tp = tree->palette();
+    auto onTree = [&tp](const char *hex) {
+        return readableOn(readableOn(QColor(hex), tp.color(QPalette::Base)), tp.color(QPalette::AlternateBase));
+    };
+    const QPalette rp = runner.palette();
+    auto onRunner = [&rp](const char *hex) { return readableOn(QColor(hex), rp.color(QPalette::Window)); };
+    QTreeWidgetItem *one = tree->topLevelItem(0);
+    QTreeWidgetItem *two = tree->topLevelItem(1);
+    QCOMPARE(one->foreground(2).color(), onTree("#e53935"));
+    QCOMPARE(one->foreground(1).color(), onTree("#e53935"));
+    QCOMPARE(two->foreground(2).color(), onTree("#1e88e5"));
+    QCOMPARE(two->child(0)->foreground(2).color(), onTree("#43a047"));
+    QCOMPARE(two->child(1)->foreground(2).color(), onTree("#1e88e5"));   // its cue's: the list's
+    QCOMPARE(tree->topLevelItem(2)->foreground(2).color(), onTree("#1e88e5"));
+    // Stopped: NEXT is cue 1, in red.
+    QCOMPARE(runner.textColour("next"), onRunner("#e53935"));
+
+    runner.go();
+    settle();
+    runner.refresh();
+    QCOMPARE(runner.textColour("now"), onRunner("#e53935"));
+    // GO into 2 plays 2.1 first: NEXT in 2.1's green.
+    QCOMPARE(runner.textColour("next"), onRunner("#43a047"));
+    runner.go();
+    settle();
+    runner.refresh();
+    QCOMPARE(runner.textColour("now"), onRunner("#43a047"));
+    QCOMPARE(runner.textColour("subnext"), onRunner("#1e88e5"));         // 2.2: its cue's
+    // Done: grey, whatever its colour.
+    QCOMPARE(tree->topLevelItem(0)->foreground(2).color(), runner.palette().color(QPalette::Disabled, QPalette::Text));
+
+    // None anywhere: the theme's again.
+    QVERIFY(st->setListColour(ids[0], QString()));
+    runner.refresh();
+    QCOMPARE(runner.textColour("subnext"), runner.palette().color(QPalette::WindowText));
+    QCOMPARE(tree->topLevelItem(2)->foreground(2).color(), runner.palette().color(QPalette::Text));
+
+    // The VC Cue Runner: NEXT and the upcoming lines.
+    runner.stop();
+    settle(3);
+    QVERIFY(st->setListColour(ids[0], "Purple"));
+    ScopedVc vc(m_doc);
+    VirtualConsole *console = VirtualConsole::instance();
+    VCFrame *contents = console->contents();
+    VCCueRunner *w = new VCCueRunner(contents, m_doc);
+    console->placeWidget(w, contents);
+    w->resize(QSize(320, 260));
+    w->runner()->setUpcomingCount(2);
+    console->resize(700, 500);
+    console->show();
+    QVERIFY(QTest::qWaitForWindowExposed(console));
+    w->runner()->refresh();
+    CueRunner *compact = w->runner();
+    const QPalette ip = compact->infoArea()->palette();
+    QCOMPARE(compact->textColour("next"), readableOn(QColor("#e53935"), ip.color(QPalette::Window)));
+    QCOMPARE(compact->upcomingTexts().count(), 2);
+    QCOMPARE(compact->textColour("upcoming0"), readableOn(QColor("#8e24aa"), ip.color(QPalette::Window)));
+    QCOMPARE(compact->textColour("upcoming1"), readableOn(QColor("#8e24aa"), ip.color(QPalette::Window)));
+    for (const char *part : { "next", "upcoming0" })
+        QVERIFY(contrastRatio(compact->textColour(part), ip.color(QPalette::Window)) >= 4.5);
+
+    const QString dir = qEnvironmentVariable("QLC_CUECOLOUR_SHOTS");
+    if (!dir.isEmpty())
+    {
+        QVERIFY(st->setCuesColour({ ids[3] }, "Orange"));
+        compact->refresh();
+        QTest::qWait(50);
+        QVERIFY(w->grab().save(dir + "/vc-cuerunner.png"));
+        runner.resize(900, 520);
+        runner.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&runner));
+        runner.go();
+        settle();
+        runner.refresh();
+        QTest::qWait(50);
+        QVERIFY(runner.grab().save(dir + "/run.png"));
+        // The VC Cue List on the same list.
+        VCCueList *cl = new VCCueList(contents, m_doc);
+        console->placeWidget(cl, contents);
+        cl->move(QPoint(330, 0));
+        cl->resize(QSize(360, 260));
+        cl->setChaser(runner.chaser()->id());
+        QTest::qWait(100);
+        QVERIFY(cl->grab().save(dir + "/vc-cuelist.png"));
+        runner.hide();
+    }
+    console->hide();
+}
+
 void CueRunner_Test::screenshots()
 {
     const QString dir = qEnvironmentVariable("QLC_CUERUNNER_SHOTS");
