@@ -70,6 +70,11 @@ void OutputRules_Test::cleanupTestCase()
 
 void OutputRules_Test::init()
 {
+    /* The universe of the moment: a show load that brings its own I/O
+       replaces them, and a stale pointer here crashed cleanup()'s reset(). */
+    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+    m_uni = ua.first();
+    m_doc->inputOutputMap()->releaseUniverses(false);
     addDimmer("House", House, Fixture::ExemptBlackout | Fixture::ExemptGrandMaster);
     addDimmer("Stage", Stage, 0);
     addDimmer("Relay", Relay, Fixture::Switch);
@@ -91,6 +96,9 @@ void OutputRules_Test::cleanup()
     m_doc->setMode(Doc::Design);
     m_doc->clearContents();
     m_doc->outputRuleKeeper()->rebuild();
+    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+    m_uni = ua.first();
+    m_doc->inputOutputMap()->releaseUniverses(false);
     m_uni->reset();
     for (int i = 0; i < 4; i++)
         m_uni->processFaders();
