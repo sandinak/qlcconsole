@@ -131,14 +131,22 @@ void EosImporter_Test::mapperExactAndSuggested()
     QCOMPARE(c.model, QString("ColorSource PAR"));
     QCOMPARE(c.mode, QString("3-channel (RGB)"));
 
-    // A Spot Jr isn't in the library: a 3-channel ColorSource is offered,
-    // never taken as exact.
+    // The Spot jr is in the library (ETC-ColorSource-Spot-jr.qxf).
     EosPersonality jr = par;
     jr.model = "ColorSource_SPOT_Jr_RGB";
     c = mapper.resolve(jr);
+    QCOMPARE(c.source, EosFixtureChoice::Exact);
+    QCOMPARE(c.model, QString("ColorSource Spot jr"));
+    QVERIFY(!c.mode.isEmpty());
+
+    // A ColorSource Linear isn't: a 3-channel ColorSource is offered,
+    // never taken as exact.
+    EosPersonality linear = par;
+    linear.model = "ColorSource_Linear_RGB";
+    c = mapper.resolve(linear);
     QCOMPARE(c.source, EosFixtureChoice::Suggested);
-    QVERIFY(!mapper.candidates(jr).isEmpty());
-    for (const EosFixtureChoice &cand : mapper.candidates(jr))
+    QVERIFY(!mapper.candidates(linear).isEmpty());
+    for (const EosFixtureChoice &cand : mapper.candidates(linear))
         QVERIFY(!cand.mode.isEmpty());
 
     EosPersonality none;
