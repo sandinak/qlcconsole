@@ -107,6 +107,17 @@ public:
      *  space), parented to @a parent -- public for tests and pictures. */
     class QMenu *effectsContextMenu(QTreeWidgetItem *clicked, QWidget *parent);
 
+    /** ⇧⌘N (and Edit ▸ New …) here: in the Workbench, what is loaded takes
+     *  it (a collection a new scene layer, a chaser a new step:
+     *  Workbench::newHere()); else by the section -- Scenes: a new scene in
+     *  the folder of the row selected (one undo step), selected, loaded and
+     *  renaming in place; Effects: a new effect in the designer. False:
+     *  nothing made (the Palettes section). */
+    bool newHere();
+    /** What newHere() would make now ("New Scene in Act 1"; empty:
+     *  nothing) -- the Edit menu's text. */
+    QString newHereLabel() const;
+
     /** The navigator's sections. */
     enum Section { PalettesSection = 0, EffectsSection, ScenesSection };
     void setSection(Section section);

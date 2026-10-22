@@ -1744,6 +1744,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     QShortcut *redo = new QShortcut(QKeySequence::Redo, this);
     redo->setContext(Qt::WidgetWithChildrenShortcut);
     connect(redo, &QShortcut::activated, this, &ShowTreeView::slotRedo);
+    // ⇧⌘N: the next thing the selection calls for (showtreenewhere.cpp) --
+    // here, the docked Workbench included. The Virtual Console's own ⇧⌘N
+    // (animation) is on another tab, never active with this one.
+    QShortcut *newHereSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), this);
+    newHereSc->setObjectName(QStringLiteral("stNewHere"));
+    newHereSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(newHereSc, &QShortcut::activated, this, [this]() { newHere(); });
     for (const QKeySequence &key : { QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace) })
     {
         QShortcut *sc = new QShortcut(key, m_tree);
@@ -1786,6 +1793,10 @@ ShowTreeView::~ShowTreeView()
 {
     // A docked Workbench goes back to Build (or with the tree's own).
     destroyWorkbenchDock();
+    // A field with the focus (a cue's name, just made) loses it as the
+    // widgets go: its editingFinished must not reach a half-gone view.
+    for (QObject *child : findChildren<QObject *>())
+        disconnect(child, nullptr, this, nullptr);
     if (s_instance == this)
         s_instance = nullptr;
     delete m_commander;

@@ -343,6 +343,10 @@ group in a sub-folder underneath it — gets its path updated to match.
 
 - **Right-click "Fixture Groups" or any folder → "New Group..."** — an empty
   group at your chosen grid size.
+- **⇧⌘N** with a group, a fixture in a group, a group folder or "Fixture
+  Groups" selected: an empty 4×4 group named *New Group* in that folder,
+  selected, with its name in the editor ready to type. The **Edit** menu
+  says where it goes (*New Group in Movers (⇧⌘N)*).
 - **Select fixtures and/or groups → Group → "Create Group(s) from
   Selection…"** — one group of the selection, a group per head type, or a
   group per head type for each fixture, previewed before any is made

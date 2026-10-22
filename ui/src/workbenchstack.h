@@ -269,6 +269,10 @@ public:
     bool insertSteps(const QList<quint32> &functionIds, int at);
     bool removeStep(int index);
     bool moveStep(int from, int to);
+    /** ⇧⌘N: a new empty scene, filed with the chaser, as a step after the
+     *  step walked to (the first, when it has none) -- one step -- walked
+     *  to. The scene's id (invalid: no chaser, or read-only). */
+    quint32 addNewStep();
     /** The step walked to plays a shared function: split it off (Make
      *  this step's own copy). One step. The copy's id, or invalid. */
     quint32 makeStepOwnCopy();

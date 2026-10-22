@@ -356,6 +356,23 @@ in that folder, open or close everything under it.
 row; its menu also makes a **collection**, a **chaser**, or a scene in a new
 folder. Each loads in the Workbench, ready to name (F2) and fill.
 
+### New here
+
+**⇧⌘N** makes the next thing for where you are in Build. The **Edit** menu
+names it first, for example *New Scene in Act 1 (⇧⌘N)*.
+
+| Where | ⇧⌘N makes |
+|---|---|
+| Scenes: a folder, or a scene in one | A new scene in that folder (nothing selected: at the top level), loaded, its name open to type |
+| The Workbench, a collection loaded | A new empty scene as a layer, as **+ Scene ▸ New empty scene** |
+| The Workbench, a chaser loaded | A new empty scene as the step after the one you are on, filed with the chaser, and walks to it |
+| Effects | A new effect, in the designer |
+| Palettes | Nothing: use **+ New** there |
+
+Each is one undo step, and the new row's name is open as **F2** opens it.
+The same key works in the [Show Tree](show-tree.md#new-here) and the
+[Fixtures tab](fixture-manager.md).
+
 ## Filing into folders
 
 **Scenes, collections and chasers** file by dragging their rows in the

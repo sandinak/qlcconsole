@@ -34,6 +34,13 @@ private slots:
     void cleanup();
 
     void theTreeShowsProductionsListsCuesAndLayers();
+    /** ⇧⌘N, New (here): nothing -- a production; a production -- a cue
+     *  list; a list -- a cue at its end; a cue -- the next cue after it
+     *  (D23 numbering; a sub-cue: the next main cue); groups in the
+     *  Library (focused) or a layer -- a layer on them; a layer with
+     *  nothing picked -- the cue and the Library's filter; a look -- a
+     *  look. Each one undo step, selected, renaming in place. */
+    void newHereMakesTheNextThing();
     void trackedLayersShowGreyWithWhereTheyCameFrom();
     void groupsDroppedOnACueBecomeLayers();
     void groupsDroppedOnALayerJoinIt();

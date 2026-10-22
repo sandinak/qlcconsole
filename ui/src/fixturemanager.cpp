@@ -156,6 +156,11 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         if (Monitor *mon = Monitor::instance())
             mon->undo();
     });
+    /* ⇧⌘N: a new group beside the group (or in the folder) selected. */
+    QShortcut *newHereSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), this);
+    newHereSc->setObjectName(QStringLiteral("fmNewHere"));
+    newHereSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(newHereSc, &QShortcut::activated, this, [this]() { newHere(); });
 
     new QVBoxLayout(this);
     layout()->setContentsMargins(0, 0, 0, 0);
@@ -3769,6 +3774,81 @@ bool FixtureManager::applyMoveToFolder(QWidget *parent, Doc *doc, const QList<qu
         return false;
     moveGroupsToFolder(doc, groupIds, v.toString());
     return true;
+}
+
+bool FixtureManager::newGroupFolder(QString *path) const
+{
+    QTreeWidgetItem *item = m_fixtures_tree->currentItem();
+    // A fixture (or a head) inside a group: that group.
+    while (item != NULL && !item->data(KColumnName, PROP_GROUP).isValid()
+           && !item->data(KColumnName, PROP_FOLDER).isValid()
+           && item->parent() != NULL)
+        item = item->parent();
+    if (item == NULL)
+        return false;
+    const QVariant folder = item->data(KColumnName, PROP_FOLDER);
+    if (folder.isValid())
+    {
+        *path = folder.toString();
+        return true;
+    }
+    const QVariant gv = item->data(KColumnName, PROP_GROUP);
+    FixtureGroup *grp = gv.isValid() ? m_doc->fixtureGroup(gv.toUInt()) : NULL;
+    if (grp == NULL)
+        return false;
+    *path = grp->path();
+    return true;
+}
+
+QString FixtureManager::newHereLabel() const
+{
+    QString path;
+    if (!newGroupFolder(&path))
+        return QString();
+    return path.isEmpty() ? tr("New Group") : tr("New Group in %1").arg(path);
+}
+
+quint32 FixtureManager::newHere()
+{
+    QString path;
+    if (!newGroupFolder(&path))
+        return FixtureGroup::invalidId();
+    QStringList taken;
+    foreach (FixtureGroup *g, m_doc->fixtureGroups())
+        taken << g->name();
+    QString name = tr("New Group");
+    for (int n = 2; taken.contains(name); ++n)
+        name = tr("New Group %1").arg(n);
+    // As New Group… makes one on a folder: an empty 4×4 grid to drop into.
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(name);
+    grp->setSize(QSize(4, 4));
+    grp->setPath(path);
+    if (!m_doc->addFixtureGroup(grp))
+    {
+        delete grp;
+        return FixtureGroup::invalidId();
+    }
+    updateGroupMenu();
+    updateView();
+    QTreeWidgetItem *item = m_fixtures_tree->groupItem(grp->id());
+    if (item != NULL)
+    {
+        for (QTreeWidgetItem *p = item->parent(); p != NULL; p = p->parent())
+            p->setExpanded(true);
+        m_fixtures_tree->clearSelection();
+        m_fixtures_tree->setCurrentItem(item);
+        m_fixtures_tree->scrollToItem(item);
+        slotSelectionChanged();
+    }
+    // Its name, in the editor, ready to type.
+    if (m_groupEditor != NULL)
+        if (QLineEdit *edit = m_groupEditor->findChild<QLineEdit *>(QStringLiteral("m_nameEdit")))
+        {
+            edit->setFocus(Qt::ShortcutFocusReason);
+            edit->selectAll();
+        }
+    return grp->id();
 }
 
 int FixtureManager::selectAllSimilar()

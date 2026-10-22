@@ -6,6 +6,7 @@
 */
 
 #include <QGuiApplication>
+#include <QApplication>
 #include <QWidgetAction>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -628,6 +629,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     QShortcut *redoSc = new QShortcut(QKeySequence::Redo, this);
     redoSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(redoSc, &QShortcut::activated, this, &ProgrammingManager::slotRedo);
+    // ⇧⌘N: the next thing where you are -- a scene in the selected folder, a
+    // step or a scene layer in the Workbench, an effect (newHere()).
+    QShortcut *newSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), this);
+    newSc->setObjectName(QStringLiteral("buildNewHere"));
+    newSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(newSc, &QShortcut::activated, this, [this]() { newHere(); });
 
     // Delete / Backspace (⌫ on a Mac) on the palette list: delete what's
     // selected — asking first, with where it's used. (The outline and the
@@ -1370,6 +1377,78 @@ void ProgrammingManager::setSection(Section section)
 ProgrammingManager::Section ProgrammingManager::section() const
 {
     return Section(m_sectionStack->currentIndex());
+}
+
+/* ⇧⌘N: in the Workbench (Build's own, not lent), what is loaded there. */
+static bool inWorkbench(Workbench *bench)
+{
+    QWidget *focus = QApplication::focusWidget();
+    return bench != nullptr && focus != nullptr && bench->isAncestorOf(focus);
+}
+
+QString ProgrammingManager::newHereLabel() const
+{
+    if (!isWorkbenchLent() && inWorkbench(m_workbench))
+    {
+        const QString bench = m_workbench->newHereLabel();
+        if (!bench.isEmpty())
+            return bench;
+    }
+    switch (section())
+    {
+    case EffectsSection:
+        return tr("New Effect");
+    case ScenesSection:
+    {
+        const QString folder = m_outline->folderFor(m_outline->currentItem());
+        return folder.isEmpty() ? tr("New Scene") : tr("New Scene in %1").arg(folder);
+    }
+    default:
+        return QString();
+    }
+}
+
+bool ProgrammingManager::newHere()
+{
+    // Typing a name in the outline: not now.
+    QWidget *focus = QApplication::focusWidget();
+    if (qobject_cast<QLineEdit *>(focus) != nullptr && m_outline->isAncestorOf(focus))
+        return false;
+    if (!isWorkbenchLent() && inWorkbench(m_workbench) && !m_workbench->newHereLabel().isEmpty())
+        return m_workbench->newHere() != Function::invalidId();
+    if (section() == EffectsSection)
+        return designEffect(QLCPalette::invalidId());
+    if (section() != ScenesSection || m_doc->paletteOps() == nullptr)
+        return false;
+    // As + Scene makes one, but one undo step: ⌘Z takes it away again.
+    const QString folder = m_outline->folderFor(m_outline->currentItem());
+    quint32 made = Function::invalidId();
+    m_doc->paletteOps()->functionStep(tr("new scene"), {}, [&](QList<quint32> &news) {
+        Scene *s = new Scene(m_doc);
+        if (!folder.isEmpty())
+            s->setPath(folder);
+        if (!m_doc->addFunction(s))
+        {
+            delete s;
+            return false;
+        }
+        s->setName(QStringLiteral("%1 %2").arg(tr("New Scene")).arg(s->id()));
+        news << s->id();
+        made = s->id();
+        return true;
+    });
+    if (made == Function::invalidId())
+        return false;
+    m_outline->rebuild();
+    showFunction(made);
+    // Named in place, as F2 would.
+    QTreeWidgetItem *cur = m_outline->currentItem();
+    if (cur != nullptr && (cur->flags() & Qt::ItemIsEditable))
+    {
+        m_outline->setFocus(Qt::ShortcutFocusReason);
+        m_outline->editItem(cur, ProgrammingOutline::NameCol);
+    }
+    return true;
 }
 
 void ProgrammingManager::slotOutlineSelectionChanged()

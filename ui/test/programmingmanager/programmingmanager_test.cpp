@@ -18,6 +18,7 @@
 #include <QtTest>
 #include <QXmlStreamReader>
 #include "qlcfile.h"
+#include <QShortcut>
 #include "scenetransition.h"
 #include <QSpinBox>
 #include <QSlider>
@@ -1992,6 +1993,57 @@ void ProgrammingManager_Test::scenesDragIntoAFolderAndBackOut()
     QVERIFY(plan.startsWith("!") && plan.contains("Workbench"));
     QVERIFY(!outlineDrop(o, mime, o->sceneItem(c)));
     QCOMPARE(m_doc->function(b)->path(true), QString());
+}
+
+void ProgrammingManager_Test::newHereMakesASceneInTheFolder()
+{
+    Scene *opener = new Scene(m_doc);
+    opener->setName("02-01.00-Opener");
+    m_doc->addFunction(opener);
+    opener->setPath("Act 1");
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1200, 800);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    QShortcut *sc = mgr.findChild<QShortcut *>("buildNewHere");
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->key(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+    ProgrammingOutline *o = mgr.m_outline;
+    mgr.setSection(ProgrammingManager::ScenesSection);
+    o->rebuild();
+
+    // A scene selected: a new scene beside it, in its folder.
+    QTreeWidgetItem *openerRow = o->sceneItem(opener->id());
+    QVERIFY(openerRow != nullptr);
+    o->clearSelection();
+    o->setCurrentItem(openerRow);
+    openerRow->setSelected(true);
+    QCOMPARE(mgr.newHereLabel(), QString("New Scene in Act 1"));
+    const int before = m_doc->functions().size();
+    QVERIFY(mgr.newHere());
+    QCOMPARE(m_doc->functions().size(), before + 1);
+    Scene *made = nullptr;
+    for (Function *f : m_doc->functions())
+        if (f != opener && qobject_cast<Scene *>(f) != nullptr)
+            made = qobject_cast<Scene *>(f);
+    QVERIFY(made != nullptr);
+    const quint32 madeId = made->id();
+    QCOMPARE(made->path(true), QString("Act 1"));
+    QCOMPARE(mgr.workbench()->loadedFunction(), madeId);      // loaded
+    QVERIFY(o->currentItem() != nullptr);
+    QCOMPARE(o->currentItem()->data(0, ProgrammingOutline::IdRole).toUInt(), madeId);
+    QCOMPARE(o->state(), QAbstractItemView::EditingState);    // renaming
+    // One step: ⌘Z takes it away.
+    QVERIFY(m_doc->showTree()->undoShared());
+    QVERIFY(m_doc->function(madeId) == nullptr);
+
+    // The Effects section: a new effect; Palettes: nothing.
+    mgr.setSection(ProgrammingManager::EffectsSection);
+    QCOMPARE(mgr.newHereLabel(), QString("New Effect"));
+    mgr.setSection(ProgrammingManager::PalettesSection);
+    QCOMPARE(mgr.newHereLabel(), QString());
+    QVERIFY(!mgr.newHere());
 }
 
 void ProgrammingManager_Test::aFolderRenamesWithWhatIsInIt()

@@ -13,6 +13,7 @@
 | ⌘L | Show-mode lock |
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |
+| ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a look; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
 | ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
@@ -72,6 +73,7 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | Double-click a ▣ layer | Open it in the Workbench (↩ comes back) |
 | ⌘→ / ⌘← | Expand / collapse every row |
 | ⌘Z / ⇧⌘Z | Undo / redo the last change, here or in the Show Tree (one history) |
+| ⇧⌘N | New here: a scene in the selected folder; in the Workbench a scene layer (collection) or the next step (chaser); in Effects a new effect ([New here](build.md#new-here)) |
 | Double-click a scene / function | Open it on the canvas |
 
 ## Show Tree
@@ -85,6 +87,7 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | **Return** / double-click (in the Library) | What is selected there goes to the tree's selection, as a drop would ([Adding layers](show-tree.md#adding-layers)) |
 | **⌘F**, or **/** in the tree | To the Library's filter; type, then Return adds the first match |
 | **Return** / **F2** (in the tree) | Rename the row in place ([Renaming](show-tree.md#renaming)) |
+| **⇧⌘N** | New here: a production, a cue list, the next cue after the selected one, a layer on the Library's groups, a look ([New here](show-tree.md#new-here)) |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag a cue onto another cue | Move it there; with **⌥**, include it |

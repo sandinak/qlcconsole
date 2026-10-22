@@ -13,6 +13,24 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **⇧⌘N, New here.** Context-aware "new" in the Show Tree
+  (`ShowTreeView::newHere()` / `newHereLabel()`, showtreenewhere.cpp):
+  nothing or a production → a cue list in it (no production → one);
+  a cue list → a cue at its end; a cue → the next cue after it (D23
+  numbering via `addCue`; a sub-cue → the next main cue, as + Cue); Library
+  groups/fixtures/sets with the Library focused, or a layer → a layer on
+  them in the cue (a layer with nothing picked → the cue selected and the
+  Library filter focused); a look → the next look. Each one undo step,
+  selected and renaming in place. Build (`ProgrammingManager::newHere()`):
+  a scene in the selected folder (now one undo step through
+  `PaletteOps::functionStep`), the Workbench's + Scene on a collection or a
+  new scene step after the step walked to on a chaser
+  (`FunctionStack::addNewStep()`), a new effect in Effects. Fixtures
+  (`FixtureManager::newHere()`): an empty 4×4 group in the selected
+  group's folder, its name field focused. Each tab owns the key as a
+  WidgetWithChildren `QShortcut` (so it also works broken out into a
+  window); **Edit ▸ New …** shows the label and runs it, unbound, as Undo
+  is, so the Virtual Console's ⇧⌘N (animation widget) is untouched.
 - **Build ▸ Effects makes effects.** A **+ New ▾** button (effect palette
   in the designer, EFX, RGB Matrix — the classic ones on the Try on groups)
   and a right-click menu on the list (Design / edit…, Open in editor for

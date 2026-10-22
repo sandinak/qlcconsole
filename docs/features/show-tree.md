@@ -1353,6 +1353,31 @@ Right-click in the tree for:
 - **Rename…** on a production or cue list, and **Delete** on anything but a
   grey row.
 
+### New here
+
+**⇧⌘N** makes the next thing for where you are. The **Edit** menu says what
+that is before you press it, for example *New Cue After 0.0.3 (⇧⌘N)*.
+
+| Selected | ⇧⌘N makes |
+|---|---|
+| Nothing, and no production yet | A production, **Show** |
+| Nothing, or a production | A cue list in it (the current production when nothing is selected) |
+| A cue list | A cue at its end |
+| A cue | The next cue after it, numbered as **+ Cue** numbers it: after 0.0.3 comes 0.0.4, or a point cue between when 0.0.4 is taken |
+| A sub-cue | The next main cue after its cue, as **+ Cue** does (**+ Sub-cue** makes another sub-cue) |
+| Groups, fixtures or sets in the Library, with the Library focused | A layer on them in the selected cue |
+| A layer | A new layer in its cue, on what the Library has selected. With nothing picked there, ⇧⌘N selects the cue and goes to the Library's filter: find the groups, then **Return** makes the layer |
+| A look, or Looks | The next look |
+
+The new row is selected with its name open to type, as **F2** opens it.
+**Return** keeps the name, **Esc** keeps the default. Making it is one undo
+step and the name is another.
+
+With the [Workbench docked](#working-on-a-cue-in-the-workbench) and the
+focus in it, a cue there follows the same rules. A collection or chaser you
+opened there with **▣ Open** gets the Workbench's own ⇧⌘N, as in
+[Build](build.md#new-here).
+
 **Moving cues.** Drag a cue onto another cue of its list to move it there;
 its number stays. With **⌥** held, the drop makes the other cue include it
 instead. One cue at a time: several selected cues dragged together are
@@ -1718,6 +1743,7 @@ set it, and they always agree:
 | **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
 | Double-click a cue, look or layer · **✎ Workbench** · `wb` | Open it in the Workbench, in place of the page ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)); **↩ Show Tree** comes back |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
+| **⇧⌘N** | New here: a production, cue list, the next cue, a layer or a look, by what is selected ([New here](#new-here)) |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
