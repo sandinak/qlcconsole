@@ -55,6 +55,14 @@ universe's address-usage grid. A fixture's info includes its **Connection**
 (DMX, or Network with its IP), its **Definition** source (Included or Local,
 below), and, for an unpatched one, "Unpatched -- in the inventory".
 
+**Renaming in the tree.** Select a fixture, a group, a group folder or a
+universe and press **Return** (or **F2**), type the new name, and press
+Return again; **Esc** keeps the old name. An empty name is ignored, and a
+fixture name another fixture already has is refused (group names may
+repeat). Double-clicking a group still opens its grid editor, and
+double-clicking a fixture its properties; the group editor's Name field
+follows a rename made in the tree.
+
 ## Inventory: design the rig before patching
 
 Stock QLC+ won't let a fixture exist until it has a universe and an address.

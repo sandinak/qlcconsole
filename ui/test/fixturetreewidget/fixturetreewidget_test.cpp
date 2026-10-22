@@ -24,6 +24,7 @@
 #include <QTimer>
 #include <QKeyEvent>
 #include <QMimeData>
+#include <QLineEdit>
 
 #define protected public
 #define private public
@@ -476,4 +477,126 @@ void FixtureTreeWidget_Test::duplicateNamesAreListedAndARenameToATakenNameIsRefu
     QCOMPARE(m_doc->makeFixtureNamesUnique(), 1);
     tree.updateTree();
     QVERIFY(findByRole(tree, PROP_DUPLICATES) == nullptr);
+}
+
+/* A group in a shown tree, with a fixture in it, for the in-place rename
+   tests: these drive the real inline editor (offscreen), not just setText(). */
+static FixtureGroup *addRenameGroup(Doc *doc)
+{
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("Par 1");
+    fxi->setChannels(4);
+    doc->addFixture(fxi);
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("Old Group");
+    grp->assignFixture(fxi->id());
+    doc->addFixtureGroup(grp);
+    doc->resetModified();
+    return grp;
+}
+
+/* The line edit the tree opened on Return / F2, or nullptr. */
+static QLineEdit *openEditor(FixtureTreeWidget &tree)
+{
+    foreach (QLineEdit *ed, tree.viewport()->findChildren<QLineEdit *>())
+        if (ed->isVisible())
+            return ed;
+    return nullptr;
+}
+
+void FixtureTreeWidget_Test::enterOnAGroupRowRenamesItInPlace()
+{
+    FixtureGroup *grp = addRenameGroup(m_doc);
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+
+    QTreeWidgetItem *row = findByRole(tree, PROP_GROUP, grp->id());
+    QVERIFY2(row != nullptr, "the group never appeared in the tree");
+    tree.setCurrentItem(row);
+    QTest::keyClick(&tree, Qt::Key_Return);
+
+    QLineEdit *ed = openEditor(tree);
+    QVERIFY2(ed != nullptr, "Return on a group row opened no editor");
+    QCOMPARE(ed->text(), QString("Old Group"));
+    ed->selectAll();
+    QTest::keyClicks(ed, "  Front Wash ");
+    QTest::keyClick(ed, Qt::Key_Return);
+
+    // The delegate commits a Return on the next event-loop pass.
+    QTRY_COMPARE(grp->name(), QString("Front Wash"));
+    QVERIFY(m_doc->isModified());
+    row = findByRole(tree, PROP_GROUP, grp->id());
+    QVERIFY(row != nullptr);
+    QCOMPARE(row->text(0), QString("Front Wash"));
+    QVERIFY2((row->flags() & Qt::ItemIsEditable) == 0,
+             "the group row stayed armed after the rename");
+
+    // Return on a fixture row still renames the fixture, not its group.
+    QTreeWidgetItem *fxRow = row->child(0);
+    QVERIFY(fxRow != nullptr && fxRow->data(0, PROP_ID).isValid());
+    tree.setCurrentItem(fxRow);
+    QTest::keyClick(&tree, Qt::Key_Return);
+    QTRY_VERIFY(openEditor(tree) != nullptr);
+    QCOMPARE(openEditor(tree)->text(), QString("Par 1"));
+    QTest::keyClick(openEditor(tree), Qt::Key_Escape);
+    QCOMPARE(grp->name(), QString("Front Wash"));
+    QVERIFY2((fxRow->flags() & Qt::ItemIsEditable) == 0,
+             "Esc left the fixture row armed");
+}
+
+void FixtureTreeWidget_Test::escCancelsAGroupRename()
+{
+    FixtureGroup *grp = addRenameGroup(m_doc);
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+
+    QTreeWidgetItem *row = findByRole(tree, PROP_GROUP, grp->id());
+    QVERIFY(row != nullptr);
+    tree.setCurrentItem(row);
+    QTest::keyClick(&tree, Qt::Key_Enter);   // the keypad Enter, too
+
+    QLineEdit *ed = openEditor(tree);
+    QVERIFY2(ed != nullptr, "Enter on a group row opened no editor");
+    ed->selectAll();
+    QTest::keyClicks(ed, "Never Mind");
+    QTest::keyClick(ed, Qt::Key_Escape);
+
+    QCOMPARE(grp->name(), QString("Old Group"));
+    QCOMPARE(row->text(0), QString("Old Group"));
+    QVERIFY(m_doc->isModified() == false);
+    QVERIFY2((row->flags() & Qt::ItemIsEditable) == 0,
+             "Esc left the group row armed -- double-click would edit it");
+}
+
+void FixtureTreeWidget_Test::f2OnAGroupAndAnEmptyNameIsRejected()
+{
+    FixtureGroup *grp = addRenameGroup(m_doc);
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+
+    QTreeWidgetItem *row = findByRole(tree, PROP_GROUP, grp->id());
+    QVERIFY(row != nullptr);
+    tree.setCurrentItem(row);
+    QTest::keyClick(&tree, Qt::Key_F2);
+
+    QLineEdit *ed = openEditor(tree);
+    QVERIFY2(ed != nullptr, "F2 on a group row opened no editor");
+    ed->selectAll();
+    QTest::keyClicks(ed, "   ");
+    QTest::keyClick(ed, Qt::Key_Return);
+    QTRY_VERIFY(openEditor(tree) == nullptr);   // committed (queued), closed
+
+    QCOMPARE(grp->name(), QString("Old Group"));
+    QCOMPARE(row->text(0), QString("Old Group"));
+    QVERIFY(m_doc->isModified() == false);
+    QVERIFY((row->flags() & Qt::ItemIsEditable) == 0);
 }

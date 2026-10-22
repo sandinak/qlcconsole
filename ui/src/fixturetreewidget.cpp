@@ -198,6 +198,20 @@ void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
             // that must not round-trip into the stored name.
             it->setText(KColumnName, m_doc->inputOutputMap()->getUniverseNameByID(uni));
             blockSignals(false);
+            m_armedIndex = indexFromItem(it, KColumnName);
+            editItem(it, KColumnName);
+            return;
+        }
+        // Rename a fixture group in place. Same rules as a fixture row below:
+        // a plain (non-checkable) tree only, armed without notifying
+        // slotItemChanged. Double-click keeps opening the group's editor.
+        if (it && m_channelSelection == false
+            && it->data(KColumnName, PROP_GROUP).isValid())
+        {
+            blockSignals(true);
+            it->setFlags(it->flags() | Qt::ItemIsEditable);
+            blockSignals(false);
+            m_armedIndex = indexFromItem(it, KColumnName);
             editItem(it, KColumnName);
             return;
         }
@@ -215,11 +229,43 @@ void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
             blockSignals(true);
             it->setFlags(it->flags() | Qt::ItemIsEditable);
             blockSignals(false);
+            m_armedIndex = indexFromItem(it, KColumnName);
             editItem(it, KColumnName);
             return;
         }
     }
     QTreeWidget::keyPressEvent(event);
+}
+
+void FixtureTreeWidget::closeEditor(QWidget *editor, QAbstractItemDelegate::EndEditHint hint)
+{
+    QTreeWidget::closeEditor(editor, hint);
+
+    // A committed edit has already been through slotItemChanged(), which
+    // disarms the row. One cancelled with Esc (or committed unchanged, which
+    // fires no itemChanged at all) is still armed: disarm it here, or the row
+    // would stay editable and the next double-click would open an editor
+    // instead of doing what double-click does on that row.
+    const QPersistentModelIndex idx = m_armedIndex;
+    m_armedIndex = QPersistentModelIndex();
+    QTreeWidgetItem *item = idx.isValid() ? itemFromIndex(idx) : NULL;
+    if (item == NULL || (item->flags() & Qt::ItemIsEditable) == 0
+        || item->data(KColumnName, PROP_FOLDER).isValid())
+        return;
+
+    blockSignals(true);
+    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+    if (item->data(KColumnName, PROP_GROUP).isValid())
+    {
+        FixtureGroup *grp = m_doc->fixtureGroup(item->data(KColumnName, PROP_GROUP).toUInt());
+        if (grp != NULL)
+            item->setText(KColumnName, grp->name());
+    }
+    blockSignals(false);
+    // A universe row was showing its bare name for the edit; put the
+    // "  —  destination" label back.
+    if (item->data(KColumnName, PROP_UNIVERSE).isValid())
+        updateUniverseLabels();
 }
 
 void FixtureTreeWidget::updateUniverseLabels()
@@ -308,6 +354,30 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
                 // Reject empty/no-op edits — restore the shown name.
                 item->setText(KColumnName, fxi->name());
             }
+        }
+        return;
+    }
+
+    // In-place group rename (Return / F2 on a group row), armed the same way.
+    // As everywhere else a group is renamed (its editor, Layers): an empty or
+    // unchanged name keeps the old one; group names need not be unique.
+    if ((item->flags() & Qt::ItemIsEditable)
+        && item->data(KColumnName, PROP_GROUP).isValid())
+    {
+        // Disarm FIRST so the setText()/setFlags() below can't re-enter here.
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+
+        FixtureGroup *grp = m_doc->fixtureGroup(item->data(KColumnName, PROP_GROUP).toUInt());
+        if (grp != NULL)
+        {
+            const QString newName = item->text(KColumnName).trimmed();
+            if (newName.isEmpty() == false && newName != grp->name())
+            {
+                grp->setName(newName);
+                m_doc->setModified();
+            }
+            if (item->text(KColumnName) != grp->name())
+                item->setText(KColumnName, grp->name());
         }
         return;
     }
