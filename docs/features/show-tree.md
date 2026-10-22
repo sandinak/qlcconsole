@@ -1695,9 +1695,9 @@ set it, and they always agree:
   it to turn it on (it lights up) or off. Its arrow holds the same switch
   and the **Lead time**. While it is moving lights, it says how many:
   *MIB · 3*.
-- **Programming → Move in black ▾**: **Auto move-in-black** and **Lead
+- **Build → Move in black ▾**: **Auto move-in-black** and **Lead
   time**, with marking lights by hand (see
-  [The Programming tab](programming-tab.md)).
+  [The Build tab](build.md)).
 - **Settings** (⌘,) → **Show Tree** → **Move in black**: the switch and the
   lead time, applied on OK. The note under them says it: saved with this
   show, not this computer. Another show keeps its own, and a new show
