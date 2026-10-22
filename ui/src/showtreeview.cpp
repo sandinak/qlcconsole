@@ -65,6 +65,7 @@
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "fixturegroupsource.h"
+#include "fixturemanager.h"
 #include "functionstreewidget.h"
 #include "linespreadpreview.h"
 #include "lineplanview.h"
@@ -78,7 +79,7 @@
 #include "noteedit.h"
 #include "importsheet.h"
 #include "showconverter.h"
-#include "functionmanager.h"
+#include "programmingmanager.h"
 #include "inputoutputmap.h"
 #include "paletteops.h"
 #include "usedby.h"
@@ -1167,6 +1168,23 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listBase->setToolTip(tr("The base cue: what a released layer goes back to (else dark)"));
         f->addRow(tr("Base cue"), m_listBase);
         connect(m_listBase, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotListBaseChanged);
+        m_listColour = new QToolButton(m_listPage);
+        m_listColour->setObjectName("stListColour");
+        m_listColour->setPopupMode(QToolButton::InstantPopup);
+        m_listColour->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        m_listColour->setToolTip(tr("The colour its cues' text is shown in -- here, in the Run tab and on the "
+                                    "VC -- unless a cue has its own. Only how it reads: nothing plays "
+                                    "differently."));
+        {
+            QMenu *m = new QMenu(m_listColour);
+            connect(m, &QMenu::aboutToShow, this, [this, m]() {
+                m->clear();
+                if (currentKind() == ListNode)
+                    colourMenu(m, {}, currentId());
+            });
+            m_listColour->setMenu(m);
+        }
+        f->addRow(tr("Text colour"), m_listColour);
         m_listInfo = new QLabel(m_listPage);
         m_listInfo->setWordWrap(true);
         f->addRow(m_listInfo);
@@ -1183,7 +1201,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listDetach = new QPushButton(tr("Detach to plain chaser…"), row);
         m_listDetach->setObjectName("stListDetach");
         m_listDetach->setToolTip(tr("The list's chaser and its cues' collections become ordinary functions you "
-                                    "edit in the Functions window; the list leaves the Show Tree. One undo step."));
+                                    "edit in Build (Scenes ▸ Classic); the list leaves the Show Tree. One undo step."));
         h->addWidget(m_listConvert);
         h->addWidget(m_listDetach);
         // W5: an import in place, undone.
@@ -1308,6 +1326,22 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Number"), m_cueNumber);
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
+        m_cueColour = new QToolButton(inner);
+        m_cueColour->setObjectName("stCueColour");
+        m_cueColour->setPopupMode(QToolButton::InstantPopup);
+        m_cueColour->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        m_cueColour->setToolTip(tr("The colour its text is shown in -- here, in the Run tab and on the VC. "
+                                   "None: its list's. Only how it reads: nothing plays differently."));
+        {
+            QMenu *m = new QMenu(m_cueColour);
+            connect(m, &QMenu::aboutToShow, this, [this, m]() {
+                m->clear();
+                if (m_pageCue != invalidId())
+                    colourMenu(m, { m_pageCue });
+            });
+            m_cueColour->setMenu(m);
+        }
+        f->addRow(tr("Text colour"), m_cueColour);
         // R3: a look is fired by VC buttons (P-D7): which, and Make VC page.
         m_lookFiredBy = new QLabel(inner);
         m_lookFiredBy->setObjectName("stLookFiredBy");
@@ -1744,6 +1778,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     QShortcut *redo = new QShortcut(QKeySequence::Redo, this);
     redo->setContext(Qt::WidgetWithChildrenShortcut);
     connect(redo, &QShortcut::activated, this, &ShowTreeView::slotRedo);
+    // ⇧⌘N: the next thing the selection calls for (showtreenewhere.cpp) --
+    // here, the docked Workbench included. The Virtual Console's own ⇧⌘N
+    // (animation) is on another tab, never active with this one.
+    QShortcut *newHereSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), this);
+    newHereSc->setObjectName(QStringLiteral("stNewHere"));
+    newHereSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(newHereSc, &QShortcut::activated, this, [this]() { newHere(); });
     for (const QKeySequence &key : { QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace) })
     {
         QShortcut *sc = new QShortcut(key, m_tree);
@@ -1786,6 +1827,10 @@ ShowTreeView::~ShowTreeView()
 {
     // A docked Workbench goes back to Build (or with the tree's own).
     destroyWorkbenchDock();
+    // A field with the focus (a cue's name, just made) loses it as the
+    // widgets go: its editingFinished must not reach a half-gone view.
+    for (QObject *child : findChildren<QObject *>())
+        disconnect(child, nullptr, this, nullptr);
     if (s_instance == this)
         s_instance = nullptr;
     delete m_commander;
@@ -2174,6 +2219,8 @@ void ShowTreeView::buildTree()
             li->setText(1, list.mode == ListMode::Tracking ? tr("Tracking") : tr("Non-tracking"));
             li->setData(0, KindRole, ListNode);
             li->setData(0, IdRole, list.id);
+            if (!list.colour.isEmpty())
+                li->setForeground(0, treeTextColour(list.colour));
             if (!list.looks && list.id == mainListId && (currentProd || m_st->playableLists(prod.id).count() > 1))
             {
                 li->setText(1, li->text(1) + tr(" · main"));
@@ -2292,6 +2339,12 @@ void ShowTreeView::buildTree()
                 ci->setToolTip(0, QStringList({ nameTip, trackingTip }).join(QStringLiteral("\n\n")).trimmed());
                 ci->setData(0, KindRole, CueNode);
                 ci->setData(0, IdRole, cue.id);
+                // Its text colour: its own, else its list's (skipped: grey wins).
+                {
+                    const QString colour = m_st->cueColour(cue.id);
+                    if (!colour.isEmpty())
+                        ci->setForeground(0, treeTextColour(colour));
+                }
 
                 // A child layer sits under its parent's row (§3.5).
                 QHash<quint32, QTreeWidgetItem *> layerItems;
@@ -2829,6 +2882,8 @@ void ShowTreeView::updateInspector()
             m_listDetach->show();
             m_listVcPage->hide();
             m_listTitle->setText(list->name);
+            m_listForm->setRowVisible(m_listColour, true);
+            showColourButton(m_listColour, list->colour, QString());
             m_listMode->setCurrentIndex(list->mode == ListMode::Tracking ? 1 : 0);
             m_listBase->clear();
             m_listBase->addItem(tr("None: released layers go dark"), invalidId());
@@ -3028,6 +3083,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     }
     m_cueName->setText(cue.name);
     m_cueNote->setText(cue.note);
+    showColourButton(m_cueColour, cue.colour, cue.colour.isEmpty() ? m_st->cueColour(cue.id) : QString());
     m_cueMode->setCurrentIndex(m_cueMode->findData(int(cue.mode)));
     m_cueMode->setItemText(0, tr("List default (%1)").arg(list.mode == ListMode::Tracking ? tr("Track")
                                                                                            : tr("Block")));
@@ -3511,15 +3567,9 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         {
             QPushButton *open = new QPushButton(tr("Open “%1”").arg(f->name()), box);
             open->setObjectName(QStringLiteral("stLayerOpen"));
-            open->setToolTip(tr("Open it in its own editor (Window → Functions). Double-clicking the layer does "
+            open->setToolTip(tr("Open it in the Workbench, in its own editor (↩ comes back). Double-clicking the layer does "
                                 "the same."));
-            connect(open, &QPushButton::clicked, this, [this, fid]() {
-                // W3: docked, it loads in the Workbench (↩ comes back).
-                if (Workbench *bench = dockedWorkbench())
-                    bench->open(fid);
-                else
-                    openFunction(fid);
-            });
+            connect(open, &QPushButton::clicked, this, [this, fid]() { openFunction(fid); });
             const Scene *raw = qobject_cast<const Scene *>(f);
             if (raw != nullptr && !raw->values().isEmpty())
             {
@@ -4196,6 +4246,110 @@ void ShowTreeView::slotCueMixToggled(bool on)
     m_st->setCueMixOverlap(m_pageCue, on);
 }
 
+/* A small square of @a colour for the colour menus and buttons. */
+static QIcon colourSwatch(const QColor &colour)
+{
+    QPixmap pm(14, 14);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QColor(0, 0, 0, 110));
+    p.setBrush(colour);
+    p.drawRoundedRect(QRectF(0.5, 0.5, 13, 13), 2.5, 2.5);
+    return QIcon(pm);
+}
+
+QColor ShowTreeView::treeTextColour(const QString &hex) const
+{
+    if (hex.isEmpty())
+        return QColor();
+    // On the rows and the alternate rows alike.
+    const QPalette pal = m_tree->palette();
+    return readableOn(readableOn(QColor(hex), pal.color(QPalette::Base)), pal.color(QPalette::AlternateBase));
+}
+
+void ShowTreeView::colourMenu(QMenu *menu, const QList<quint32> &cueIds, quint32 listId)
+{
+    const bool forList = listId != invalidId();
+    if (!forList && cueIds.isEmpty())
+        return;
+    // What they have now: one colour, or (mixed) none ticked.
+    QString current;
+    bool same = true;
+    if (forList)
+        current = m_st->listColour(listId);
+    for (int i = 0; !forList && i < cueIds.count(); ++i)
+    {
+        const Cue *c = m_st->cue(cueIds.at(i));
+        const QString have = c == nullptr ? QString() : c->colour;
+        if (i == 0)
+            current = have;
+        else if (have != current)
+            same = false;
+    }
+    auto apply = [this, cueIds, listId, forList](const QString &hex) {
+        if (forList ? m_st->setListColour(listId, hex) : m_st->setCuesColour(cueIds, hex))
+            m_hint->setText(hex.isEmpty() ? (forList ? tr("Text colour: none (the theme's)")
+                                                     : tr("Text colour: none (the list's)"))
+                                          : tr("Text colour: %1").arg(textColourName(hex)));
+    };
+    bool known = current.isEmpty();
+    for (const TextColour &tc : textColours())
+    {
+        QAction *a = menu->addAction(colourSwatch(QColor(tc.hex)), tc.name);
+        a->setObjectName(QStringLiteral("stColour%1").arg(tc.name));
+        a->setCheckable(true);
+        a->setChecked(same && current == tc.hex);
+        known = known || current == tc.hex;
+        const QString hex = tc.hex;
+        connect(a, &QAction::triggered, this, [apply, hex]() { apply(hex); });
+    }
+    menu->addSeparator();
+    QAction *custom = menu->addAction(same && !known ? colourSwatch(QColor(current)) : QIcon(), tr("Custom…"));
+    custom->setObjectName("stColourCustom");
+    custom->setCheckable(true);
+    custom->setChecked(same && !known);
+    connect(custom, &QAction::triggered, this, [this, apply, current]() {
+        const QColor c = QColorDialog::getColor(current.isEmpty() ? QColor(Qt::white) : QColor(current), this,
+                                                tr("Text colour"));
+        if (c.isValid())
+            apply(c.name());
+    });
+    QString noneText = tr("None");
+    if (!forList)
+    {
+        const CueList *l = m_st->listOfCue(cueIds.first());
+        const QString inherited = l == nullptr ? QString() : m_st->listColour(l->id);
+        noneText = inherited.isEmpty() ? tr("None") : tr("None (the list's: %1)").arg(textColourName(inherited));
+    }
+    QAction *none = menu->addAction(noneText);
+    none->setObjectName("stColourNone");
+    none->setCheckable(true);
+    none->setChecked(same && current.isEmpty());
+    connect(none, &QAction::triggered, this, [apply]() { apply(QString()); });
+}
+
+void ShowTreeView::showColourButton(QToolButton *button, const QString &own, const QString &inherited)
+{
+    if (button == nullptr)
+        return;
+    if (!own.isEmpty())
+    {
+        button->setIcon(colourSwatch(QColor(own)));
+        button->setText(textColourName(own));
+    }
+    else if (!inherited.isEmpty())
+    {
+        button->setIcon(colourSwatch(QColor(inherited)));
+        button->setText(tr("None (the list's: %1)").arg(textColourName(inherited)));
+    }
+    else
+    {
+        button->setIcon(QIcon());
+        button->setText(tr("None"));
+    }
+}
+
 void ShowTreeView::slotCueSkipToggled(bool on)
 {
     if (m_inspectorUpdating || m_pageCue == invalidId())
@@ -4487,6 +4641,64 @@ quint32 ShowTreeView::makeSetFromLibrary(const QString &name)
     if (id != invalidId())
         noteRecent(LibSet, id);
     return id;
+}
+
+QList<quint32> ShowTreeView::selectedLibraryGroups() const
+{
+    QList<quint32> groups;
+    for (QTreeWidgetItem *item : m_library->selectedItems())
+        if (item->data(0, KindRole).toInt() == LibGroup && !groups.contains(item->data(0, IdRole).toUInt()))
+            groups << item->data(0, IdRole).toUInt();
+    return groups;
+}
+
+int ShowTreeView::selectLibraryGroups(const QList<quint32> &groupIds)
+{
+    QTreeWidgetItem *first = nullptr;
+    QSet<quint32> found;
+    m_library->clearSelection();
+    for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        if (row->data(0, KindRole).toInt() != LibGroup || !groupIds.contains(row->data(0, IdRole).toUInt()))
+            continue;
+        row->setSelected(true);
+        found.insert(row->data(0, IdRole).toUInt());
+        for (QTreeWidgetItem *p = row->parent(); p != nullptr; p = p->parent())
+            p->setExpanded(true);
+        if (first == nullptr)
+            first = row;
+    }
+    if (first != nullptr)
+    {
+        m_library->setCurrentItem(first, 0, QItemSelectionModel::NoUpdate);
+        m_library->scrollToItem(first);
+    }
+    return int(found.count());
+}
+
+int ShowTreeView::selectSimilarLibraryGroups()
+{
+    const QList<quint32> like = selectedLibraryGroups();
+    if (like.isEmpty())
+        return 0;
+    const int n = selectLibraryGroups(FixtureManager::similarGroups(m_doc, like));
+    // What to do with them: a group set (Make set), offered next.
+    m_hint->setText(n > 1 ? tr("%1 similar groups selected: right-click → Make set… to keep them as a group set")
+                                .arg(n)
+                          : tr("No other group like it (same folder, same fixtures, as many heads)"));
+    return n;
+}
+
+int ShowTreeView::moveLibraryGroupsToFolder(const QString &path)
+{
+    const QList<quint32> groups = selectedLibraryGroups();
+    const int moved = FixtureManager::moveGroupsToFolder(m_doc, groups, path);
+    // Reloaded now, not on the next turn, so they stay selected where they went.
+    m_libraryTimer->stop();
+    reloadLibrary();
+    selectLibraryGroups(groups);
+    return moved;
 }
 
 const char *ShowTreeView::targetMimeType()
@@ -5678,6 +5890,17 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         }
         if (kind == CueNode)
         {
+            // Colour ▸: the selected cues' text, when this is one.
+            const quint32 cueId = item->data(0, IdRole).toUInt();
+            QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
+            if (!cues.contains(cueId))
+                cues = { cueId };
+            QMenu *colour = menu.addMenu(cues.count() == 1 ? tr("Colour") : tr("Colour (%1 cues)").arg(cues.count()));
+            colour->setObjectName("stColourMenu");
+            colourMenu(colour, cues);
+        }
+        if (kind == CueNode)
+        {
             const quint32 cueId = item->data(0, IdRole).toUInt();
             const CueList *list = m_st->listOfCue(cueId);
             const int at = list == nullptr ? -1 : list->indexOf(cueId);
@@ -5883,6 +6106,9 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             QAction *conv = menu.addAction(tr("Convert to tracking…"), this, [this, id]() { convertListToTracking(id); });
             conv->setObjectName("stConvertList");
             conv->setEnabled(mayConvert(m_st->cueList(id)));
+            QMenu *colour = menu.addMenu(tr("Colour"));
+            colour->setObjectName("stColourMenu");
+            colourMenu(colour, {}, id);
             menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
                 ->setObjectName("stDetachList");
             if (m_st->canRestoreOriginal(id))
@@ -5948,7 +6174,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         {
             QAction *open = new QAction(tr("Open “%1”…").arg(f->name()), &menu);
             open->setObjectName(QStringLiteral("stOpenFunction"));
-            open->setToolTip(tr("In its own editor (Window → Functions)"));
+            open->setToolTip(tr("In the Workbench, in its own editor (↩ comes back)"));
             connect(open, &QAction::triggered, this, [this, fid]() { openFunction(fid); });
             QAction *first = menu.actions().value(0);
             menu.insertAction(first, open);
@@ -6317,9 +6543,17 @@ bool ShowTreeView::openFunction(quint32 functionId)
     const Function *f = m_doc->function(functionId);
     if (f == nullptr)
         return false;
-    const bool ok = m_functionOpener ? m_functionOpener(functionId) : FunctionManager::openFunction(functionId);
-    m_hint->setText(ok ? tr("“%1” is open in the Functions window").arg(f->name())
-                       : tr("Couldn't open “%1”: no Functions window").arg(f->name()));
+    // W3: the Workbench docked here: it loads there (↩ comes back).
+    if (Workbench *bench = dockedWorkbench())
+    {
+        bench->open(functionId);
+        m_hint->setText(tr("“%1” is open in the Workbench: ↩ comes back").arg(f->name()));
+        return bench->loadedFunction() == functionId;
+    }
+    // Otherwise Build's Workbench (the Functions window is hidden).
+    const bool ok = m_functionOpener ? m_functionOpener(functionId) : ProgrammingManager::openFunction(functionId);
+    m_hint->setText(ok ? tr("“%1” is open in Build's Workbench").arg(f->name())
+                       : tr("Couldn't open “%1”: no Build tab").arg(f->name()));
     return ok;
 }
 
@@ -6546,14 +6780,14 @@ bool ShowTreeView::detachListToChaser(quint32 listId)
         return false;
     const QString name = list->name;
     if (!confirm(tr("Detach to plain chaser"),
-                 tr("Detach %1? Its chaser and its cues' collections become ordinary functions you edit in the "
-                    "Functions window (Productions folder), and the list leaves the Show Tree. VC widgets and "
+                 tr("Detach %1? Its chaser and its cues' collections become ordinary functions you edit in "
+                    "Build (Scenes, Productions folder), and the list leaves the Show Tree. VC widgets and "
                     "show control that play the chaser keep playing it. One undo step.").arg(name)))
         return false;
     const quint32 chaser = m_st->detachList(listId);
     if (chaser == Function::invalidId())
         return false;
-    m_hint->setText(tr("%1 is a plain chaser now (Functions → Productions)").arg(name));
+    m_hint->setText(tr("%1 is a plain chaser now (Build ▸ Scenes ▸ Productions)").arg(name));
     return true;
 }
 
@@ -7163,6 +7397,18 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         else if (k == LibFixture && !selFixtures.contains(sid))
             selFixtures << sid;
     }
+    if (kind == LibGroup)
+    {
+        // Select All Similar (as in the Fixture Manager and Build): the
+        // groups like these, selected -- for Make set, right below.
+        menu.addSeparator();
+        QAction *similar = menu.addAction(tr("Select all similar"), this, [this]() {
+            selectSimilarLibraryGroups();
+        });
+        similar->setObjectName("stSelectSimilarGroups");
+        similar->setToolTip(tr("Every group in the same folder made of the same fixtures (as many of each "
+                               "kind) and as many heads -- then Make set… for a group set of them"));
+    }
     if (kind == LibGroup || kind == LibFixture || kind == LibSet)
     {
         QAction *make = menu.addAction(tr("Make set…"), this, [this]() {
@@ -7176,6 +7422,24 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         make->setObjectName("stMakeSet");
         make->setToolTip(tr("A named set of the groups selected (⌘-click several), reusable by name "
                             "in any cue"));
+    }
+    if (kind == LibGroup && !selGroups.isEmpty())
+    {
+        // Move to folder (the Fixture Manager's folders): each folder in
+        // use, none, or New Folder… -- the groups stay selected.
+        QMenu *move = menu.addMenu(QIcon(":/folder.png"), selGroups.count() > 1
+                                       ? tr("Move %1 groups to folder").arg(selGroups.count())
+                                       : tr("Move to folder"));
+        move->setObjectName("stMoveGroupsToFolder");
+        FixtureManager::fillMoveToFolderMenu(move, m_doc, selGroups);
+        connect(move, &QMenu::triggered, this, [this, selGroups](QAction *chosen) {
+            if (!FixtureManager::applyMoveToFolder(this, m_doc, selGroups, chosen))
+                return;
+            m_libraryTimer->stop();
+            reloadLibrary();
+            selectLibraryGroups(selGroups);
+        });
+        menu.addSeparator();
     }
     if (kind == LibSet)
     {
@@ -8000,6 +8264,7 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
         return;
     for (QWidget *w : { static_cast<QWidget *>(m_listMode), static_cast<QWidget *>(m_listBase) })
         m_listForm->setRowVisible(w, false);
+    m_listForm->setRowVisible(m_listColour, false);
     m_listConvert->hide();
     m_listDetach->hide();
     m_listVcPage->show();

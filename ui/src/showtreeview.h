@@ -22,6 +22,7 @@
 
 #include <functional>
 #include <QPointer>
+#include <QColor>
 #include <QWidget>
 #include <QPair>
 #include <QList>
@@ -135,6 +136,15 @@ public:
     /** Make set (§1): the groups and fixtures selected in the Library as a
      *  group set named @a name. Invalid: nothing selected. */
     quint32 makeSetFromLibrary(const QString &name);
+    /** Select All Similar: every group in the Library like one selected
+     *  there (FixtureManager::similarGroups: same folder, same fixtures,
+     *  as many heads) -- selected, ready for Make set. Returns how many
+     *  groups are selected. */
+    int selectSimilarLibraryGroups();
+    /** Move to folder: file the groups selected in the Library in group
+     *  folder @a path ("" = none) -- reloaded with them still selected.
+     *  Returns how many moved. */
+    int moveLibraryGroupsToFolder(const QString &path);
     /** MIME type of group sets dragged from the Library (a stream of ids). */
     static const char *setMimeType();
     /** MIME type of stage targets (points, areas, lines) dragged from the
@@ -180,11 +190,13 @@ public:
      *  scene, EFX, RGB Matrix, Collection or chaser) -- a layer of a cue,
      *  or one carried into it. Function::invalidId() for anything else. */
     quint32 openableFunction(QTreeWidgetItem *item) const;
-    /** W0: open function @a functionId in its own editor (Window →
-     *  Functions): Open on an opaque layer, its double-click and its page.
-     *  What is changed there is what the cue plays. */
+    /** W0: open function @a functionId in its own editor, in the
+     *  Workbench: the one docked here (↩ comes back), else Build's (the
+     *  Functions window is hidden). Open on an opaque layer, its
+     *  double-click and its page. What is changed there is what the cue
+     *  plays. */
     bool openFunction(quint32 functionId);
-    /** In place of opening the Functions window (tests). */
+    /** In place of opening it in Build when nothing is docked (tests). */
     typedef std::function<bool(quint32 functionId)> FunctionOpener;
     void setFunctionOpener(const FunctionOpener &opener) { m_functionOpener = opener; }
     /** Where else @a functionId plays, besides cue @a cueId: "cue 0.0.3
@@ -335,6 +347,12 @@ public:
     /** ⌘/ in the tree: the selected cues skipped -- or, when every one of
      *  them is skipped already, put back. False: no cue selected. */
     bool toggleSkipSelected();
+    /** Colour ▸ (the menus and the pages' Text colour button): the text
+     *  colours (ShowTree::textColours()), Custom… and None, for cues
+     *  @a cueIds or -- @a listId valid -- the cue list. Each one undo step. */
+    void colourMenu(QMenu *menu, const QList<quint32> &cueIds, quint32 listId = 0xFFFFFFFF);
+    /** @a hex ("" none) as the tree shows text on its background. */
+    QColor treeTextColour(const QString &hex) const;
     /** Delete the cues and own layers selected in the tree (two or more)
      *  as one undo step; false (nothing done) when fewer, or a cue list
      *  or production is among them. */
@@ -538,6 +556,27 @@ public:
     bool isRenaming() const { return m_renaming; }
 
     /************************************************************************
+     * ⇧⌘N, New (here): the next thing the selection calls for
+     * (showtreenewhere.cpp)
+     ************************************************************************/
+public:
+    /** ⇧⌘N (and Edit ▸ New …): with groups, fixtures or sets selected in
+     *  the Library and the focus there, a layer on them in the selected
+     *  cue; else by the tree's selection -- nothing, or a production: a cue
+     *  list in it (no production yet: one); a cue list: a cue at its end; a
+     *  cue: the next cue after it (numbered as + Cue numbers one; a sub-cue:
+     *  the next main cue, as + Cue does); a layer: a new layer in its cue,
+     *  on what the Library has selected (nothing there: the cue selected and
+     *  the Library's filter focused, so Return makes it); a look: the next
+     *  look. Something other than a cue opened in the docked Workbench: its
+     *  + Scene / + Step. One undo step; the new row selected and renaming in
+     *  place. Its id (invalid: nothing made). */
+    quint32 newHere();
+    /** What newHere() would make now ("New Cue After 0.0.3"; empty:
+     *  nothing) -- the Edit menu's text. */
+    QString newHereLabel() const;
+
+    /************************************************************************
      * W3: Show Tree <-> Workbench (WORKFLOW_DESIGN.md §3.4). A cue, look or
      * layer opens in the Workbench, docked in place of the page; ↩ puts
      * the page back with the cue (and layer) selected. (showtreeworkbench.cpp)
@@ -609,6 +648,11 @@ private slots:
     void reloadLibrary();
 
 private:
+    /** The groups selected in the Library, in order, each once. */
+    QList<quint32> selectedLibraryGroups() const;
+    /** Select (only) the Library's rows of @a groupIds, their folders
+     *  opened, the first scrolled to. Returns how many groups. */
+    int selectLibraryGroups(const QList<quint32> &groupIds);
     void buildTree();
     void updateInspector();
     void updateButtons();
@@ -724,6 +768,11 @@ private:
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
     QCheckBox *m_cueSkip = nullptr;
+    /** The pages' Text colour buttons (Colour ▸ menus). */
+    QToolButton *m_cueColour = nullptr;
+    QToolButton *m_listColour = nullptr;
+    /** What a Text colour button shows: @a own, else (dimmed) @a inherited. */
+    void showColourButton(QToolButton *button, const QString &own, const QString &inherited);
     QListWidget *m_cueIncludes;
     QToolButton *m_includeAdd;
     QToolButton *m_includeRemove;
@@ -798,6 +847,11 @@ private:
     /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
     QString reuseLine(quint32 cueId, quint32 layerId) const;
     void reuseLinkActivated(const QString &link);
+    // ⇧⌘N (showtreenewhere.cpp): what newHere() makes, worked out once for
+    // the label and the doing.
+    struct NewHerePlan;
+    NewHerePlan planNewHere() const;
+
     // W3 (showtreeworkbench.cpp)
     struct WorkbenchDock;
     WorkbenchDock *m_wb = nullptr;

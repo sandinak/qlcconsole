@@ -122,6 +122,19 @@ public:
      *  similar by similarGroups(). Returns how many rows are selected. */
     int selectAllSimilar();
 
+    /** ⇧⌘N (and Edit ▸ New …): a group, a group folder or the Fixture
+     *  Groups row selected (or a fixture in a group) -- a new empty group
+     *  (4×4) in that folder, selected, its name field in the editor ready
+     *  to type. Its id (invalid: nothing a group goes with is selected). */
+    quint32 newHere();
+    /** What newHere() would make ("New Group in Movers"; empty: nothing). */
+    QString newHereLabel() const;
+
+private:
+    /** The folder a new group goes in, from the tree's current row; false:
+     *  not a group row (nor a group's fixture, a folder, the groups root). */
+    bool newGroupFolder(QString *path) const;
+
 private:
     /** The singleton FixtureManager instance */
     static FixtureManager* s_instance;

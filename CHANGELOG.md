@@ -13,6 +13,53 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Build tab hard-hat icon and a visible Auto move-in-black.** The Build
+  tab and its Window-menu jump use `ItemIcons::buildIcon()` (a painted
+  yellow hard hat with an amber edge, crisp at any size and pixel ratio,
+  the same in every theme). Build's **Move in black ▾** drop-down follows
+  `ProgrammerController::autoMoveInBlackChanged` /
+  `moveInBlackPresetsChanged`: lit in the theme's highlight with
+  "Move in black · Auto", or "MIB · n" while heads pre-position, like the
+  Show Tree's MIB button. New **Control ▸ Auto Move in Black** menu item
+  (checkable, ticked while on), the same show setting.
+- **Group tools in the Show Tree's Library.** A group row's right-click
+  adds *Select all similar* (`FixtureManager::similarGroups`, the rows
+  selected for *Make set…*, which follows it; the hint says so) and *Move
+  to folder ▸* (`fillMoveToFolderMenu` / `applyMoveToFolder`: folders in
+  use, no folder, *New Folder…*). Multi-select aware; the moved groups stay
+  selected after the Library reloads. `ShowTreeView::selectSimilarLibraryGroups()`
+  / `moveLibraryGroupsToFolder()`. Build's Groups & fixtures and the
+  Fixture Manager already had them; the Workbench has no group list.
+- **Cue colours.** An optional text colour per Show Tree cue list and per
+  cue (a cue's own over its list's; a sub-cue's over its cue's), set from
+  **Colour ▸** on a list's or cue's right-click menu (8 colours, Custom…,
+  None), the **Text colour** button on its page, or `textcolour <colour>
+  [list | cues]` on the command line; one undo step per change. Shown in
+  the Show Tree rows, the Run tab (list, NOW / NEXT / SUB NEXT), the VC Cue
+  Runner (incl. upcoming lines), the VC Cue List (rows and *Next:*) for a
+  tree list, and the docked Workbench header. A colour too faint on the
+  theme's background is drawn as a lighter or darker shade of itself
+  (4.5:1). Saved as an optional `Colour=` attribute on `<CueList>` and
+  `<Cue>`, which an older build ignores.
+
+- **⇧⌘N, New here.** Context-aware "new" in the Show Tree
+  (`ShowTreeView::newHere()` / `newHereLabel()`, showtreenewhere.cpp):
+  nothing or a production → a cue list in it (no production → one);
+  a cue list → a cue at its end; a cue → the next cue after it (D23
+  numbering via `addCue`; a sub-cue → the next main cue, as + Cue); Library
+  groups/fixtures/sets with the Library focused, or a layer → a layer on
+  them in the cue (a layer with nothing picked → the cue selected and the
+  Library filter focused); a look → the next look. Each one undo step,
+  selected and renaming in place. Build (`ProgrammingManager::newHere()`):
+  a scene in the selected folder (now one undo step through
+  `PaletteOps::functionStep`), the Workbench's + Scene on a collection or a
+  new scene step after the step walked to on a chaser
+  (`FunctionStack::addNewStep()`), a new effect in Effects. Fixtures
+  (`FixtureManager::newHere()`): an empty 4×4 group in the selected
+  group's folder, its name field focused. Each tab owns the key as a
+  WidgetWithChildren `QShortcut` (so it also works broken out into a
+  window); **Edit ▸ New …** shows the label and runs it, unbound, as Undo
+  is, so the Virtual Console's ⇧⌘N (animation widget) is untouched.
 - **Build ▸ Effects makes effects.** A **+ New ▾** button (effect palette
   in the designer, EFX, RGB Matrix — the classic ones on the Try on groups)
   and a right-click menu on the list (Design / edit…, Open in editor for

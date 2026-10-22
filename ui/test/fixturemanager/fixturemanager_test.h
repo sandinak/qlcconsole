@@ -103,6 +103,10 @@ private slots:
     /** The same tools on DanceHysteria-0.6's 50 groups, in the Fixture
      *  Manager and Build's Groups & fixtures list. */
     void groupToolsOnARealShow();
+    /** ⇧⌘N: a group selected (or a fixture in it, or a group folder) -- a
+     *  new empty group in that folder, selected, its name ready to type;
+     *  a loose fixture -- nothing. */
+    void newHereMakesAGroupInTheFolder();
 
 private:
     Doc* m_doc;

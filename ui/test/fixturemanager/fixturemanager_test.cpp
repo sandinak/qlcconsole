@@ -38,6 +38,7 @@
 #include "qlcfixturedefcache.h"
 #include "showembedding.h"
 
+#include <QShortcut>
 #define KColumnName 0
 
 #define protected public
@@ -1544,6 +1545,59 @@ void FixtureManager_Test::groupToolsOnARealShow()
     QVERIFY(n >= 1);
     foreach (QTreeWidgetItem *it, src.selectedItems())
         QCOMPARE(it->parent(), srcRow);
+}
+
+void FixtureManager_Test::newHereMakesAGroupInTheFolder()
+{
+    const QList<quint32> fids = addDimmers(m_doc, 3, 1, "Dim");
+    FixtureGroup *front = addGroup(m_doc, "Front", "Movers", fids.mid(0, 2));
+
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(1000, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    mgr.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&mgr));
+    QShortcut *sc = mgr.findChild<QShortcut *>("fmNewHere");
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->key(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+
+    // A group selected: a new one beside it, in its folder.
+    QTreeWidgetItem *row = groupRow(mgr, front->id());
+    QVERIFY(row != nullptr);
+    mgr.m_fixtures_tree->setCurrentItem(row);
+    QCOMPARE(mgr.newHereLabel(), QString("New Group in Movers"));
+    const quint32 gid = mgr.newHere();
+    FixtureGroup *made = m_doc->fixtureGroup(gid);
+    QVERIFY(made != nullptr);
+    QCOMPARE(made->name(), QString("New Group"));
+    QCOMPARE(made->path(), QString("Movers"));
+    QCOMPARE(made->size(), QSize(4, 4));
+    QCOMPARE(selectedGroups(mgr), QSet<quint32>({ gid }));
+    QVERIFY(mgr.m_groupEditor != nullptr);
+    QLineEdit *name = mgr.m_groupEditor->findChild<QLineEdit *>("m_nameEdit");
+    QVERIFY(name != nullptr);
+    QTRY_VERIFY(name->hasFocus());
+    QCOMPARE(name->selectedText(), QString("New Group"));
+
+    // Again, from the new one: the next free name.
+    QCOMPARE(m_doc->fixtureGroup(mgr.newHere())->name(), QString("New Group 2"));
+
+    // A fixture in a group: that group's folder. A loose one: nothing.
+    QTreeWidgetItem *inGroup = groupRow(mgr, front->id())->child(0);
+    QVERIFY(inGroup != nullptr);
+    mgr.m_fixtures_tree->setCurrentItem(inGroup);
+    QCOMPARE(mgr.newHereLabel(), QString("New Group in Movers"));
+    QTreeWidgetItem *loose = nullptr;
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it != nullptr; ++it)
+        if ((*it)->data(KColumnName, PROP_ID).isValid()
+            && (*it)->data(KColumnName, PROP_ID).toString().toUInt() == fids.at(2)
+            && ((*it)->parent() == nullptr || !(*it)->parent()->data(KColumnName, PROP_GROUP).isValid()))
+            loose = *it;
+    QVERIFY(loose != nullptr);
+    mgr.m_fixtures_tree->setCurrentItem(loose);
+    QCOMPARE(mgr.newHereLabel(), QString());
+    QCOMPARE(mgr.newHere(), FixtureGroup::invalidId());
 }
 
 QTEST_MAIN(FixtureManager_Test)

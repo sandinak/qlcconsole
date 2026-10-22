@@ -2,7 +2,8 @@
 
 *"Scenes hold looks. Looks are made of palettes."* — the app's own guide text.
 
-**Build** (it was the *Programming* tab) is where the show's vocabulary is
+**Build** (it was the *Programming* tab; its tab wears a yellow hard hat)
+is where the show's vocabulary is
 made: palettes, effects, scenes and collections. The [Show Tree](show-tree.md)
 puts them in order and runs them. Build works on ordinary QLC+ functions —
 a scene stays a `Scene`, a collection a `Collection` — so a show built the
@@ -74,7 +75,11 @@ Two panes, left to right:
   the tab, with the show controls in the status bar, or the tab in a
   window of its own): **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
-  **Move in black** (mark, unmark, auto move-in-black and its lead time),
+  **Move in black** (mark, unmark, auto move-in-black and its lead time;
+  while Auto is on the drop-down is lit and reads **Move in black · Auto**,
+  or **MIB · n** while it pre-positions *n* heads -- the same switch as the
+  Show Tree's **MIB** button, Settings and **Control ▸ Auto Move in
+  Black**, which is ticked while it is on),
   **Beat** (internal beat on, BPM, speed masters — the button reads the
   tempo) and **More** (snapshot live output, jog speed) as drop-downs.
   In a narrow window, what doesn't fit is under **»**.
@@ -298,6 +303,34 @@ everywhere.
   the Show Tree). Scenes still open up into their targets and looks, and a
   click loads any row in the Workbench.
 
+### Coming from the Functions window
+
+The Functions window is hidden. **Window → Functions** (⇧⌘4) opens
+**Build ▸ Scenes ▸ Classic** with the list focused, and everything the
+Function Manager did is here:
+
+| Functions window | Build |
+|---|---|
+| The function tree | **Scenes ▸ Classic** (by type, with folders) |
+| Double-click to edit | Click the row: it loads in the Workbench with its own editor (scene, chaser, sequence, collection, EFX, RGB Matrix, show, script, audio, video) |
+| Add ▸ Scene, Chaser, Sequence, EFX, Collection, RGB Matrix, Script, Audio, Video (⌘1 … ⌘9) | **+ Scene ▾ → New function ▸**, or right-click in the outline → **New function ▸**; ⌘1 … ⌘9 work with the Scenes section focused. **Show** is there too |
+| New folder | **+ Scene ▾ → New scene in a new folder…**; drag rows onto a folder to file them |
+| Rename / rename folder | **F2**, or right-click → **Rename** / **Rename folder** |
+| Delete folder | Right-click a folder → **Delete folder**: what is in it moves up a level, nothing is deleted |
+| Clone | Right-click → **Duplicate** (or ⌘C then ⌘V) |
+| Delete | **⌫**, or right-click → **Delete…** (the question lists where each is used) |
+| Select all | ⌘A in the outline |
+| Function Wizard | **+ Scene ▾ → Function Wizard…** (also on the outline's right-click) |
+| Select Startup Function | **+ Scene ▾ → Startup function…** |
+| Palettes… / New palette | **Build ▸ Palettes** |
+| Test / run in an editor | The same editors, with their own test and play buttons, in the Workbench |
+
+Elsewhere, anything that opened a function in the Functions window now
+loads it in the Workbench: **Open** on a Show Tree layer (in the
+Workbench docked there when it is, with **↩** back to the cue), a
+chaser step's **Edit Chase…** (↩ back to the chaser), and a show saved
+with the Functions window in front.
+
 A show you open that has no Show Tree (an old QLC+ show) opens on
 **Classic**; one with a Show Tree, and a new show, on **Folders**. The
 switch you make is remembered for that show.
@@ -356,22 +389,39 @@ in that folder, open or close everything under it.
 row; its menu also makes a **collection**, a **chaser**, or a scene in a new
 folder. Each loads in the Workbench, ready to name (F2) and fill.
 
+### New here
+
+**⇧⌘N** makes the next thing for where you are in Build. The **Edit** menu
+names it first, for example *New Scene in Act 1 (⇧⌘N)*.
+
+| Where | ⇧⌘N makes |
+|---|---|
+| Scenes: a folder, or a scene in one | A new scene in that folder (nothing selected: at the top level), loaded, its name open to type |
+| The Workbench, a collection loaded | A new empty scene as a layer, as **+ Scene ▸ New empty scene** |
+| The Workbench, a chaser loaded | A new empty scene as the step after the one you are on, filed with the chaser, and walks to it |
+| Effects | A new effect, in the designer |
+| Palettes | Nothing: use **+ New** there |
+
+Each is one undo step, and the new row's name is open as **F2** opens it.
+The same key works in the [Show Tree](show-tree.md#new-here) and the
+[Fixtures tab](fixture-manager.md).
+
 ## Filing into folders
 
 **Scenes, collections and chasers** file by dragging their rows in the
 outline onto a folder row (empty space takes them back out to the top);
 **F2** on a folder row renames it, and what is filed in it follows. **+ Scene
 → New scene in a new folder…** makes a folder with a scene in it. Folders
-are saved with the show and show the same in the Functions window. Filing
-and renaming are steps on the history.
+are saved with the show and are the same folders QLC+'s Function Manager
+shows. Filing and renaming are steps on the history.
 
 ### Taking something out of a collection, chaser or show
 
 A collection's members are its layers in the [Workbench](#the-workbench):
 select one and press **⌫** (or **Remove**). The function stays in the
 show. A chaser's steps come out with **Remove step** under its
-[step table](#walking-a-chaser); a show's tracks in **Shows**. The Functions window (Window
-menu) still has the stock editors.
+[step table](#walking-a-chaser); a show's tracks in **Shows**. The stock
+editors are the Workbench's editor pane.
 
 ### Deleting palettes and functions
 
@@ -654,7 +704,7 @@ The letters are drawn in the look's **first colour**, over its **second**
 when the look has one (otherwise the background is left as the rest of the
 look sets it).
 
-(The RGB Matrix's own **Text** algorithm, in the Functions window, gained a
+(The RGB Matrix's own **Text** algorithm, in its editor in the Workbench, gained a
 **Centered** animation style too: the whole text still, centred across and
 down, the X/Y offsets nudging it.)
 

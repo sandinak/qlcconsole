@@ -55,6 +55,10 @@ private slots:
      *  added after it, selected, its editor open; Undo takes the function
      *  away too, Redo brings it back with its id. */
     void newEffectsAreMadeOnTheSelectedLayer();
+    /** ⇧⌘N: a collection loaded, a new scene layer (named in place); a
+     *  chaser, a new scene as the step after the one walked to, walked to;
+     *  each one undo step. A lone scene takes nothing. */
+    void newHereMakesAStepOrALayer();
     /** A member used elsewhere says so: "also in N", where on hover. */
     void sharedMembersSayWhereElse();
     /** Design mode: what is loaded plays; a changed collection plays its new

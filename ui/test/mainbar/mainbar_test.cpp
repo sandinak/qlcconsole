@@ -599,6 +599,14 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     pc->setMoveInBlackDarkGapMs(800);
     QVERIFY(!mib->isChecked());
     QVERIFY(!pm->m_autoMibBtn->isChecked());
+    // Build's drop-down and the menu bar's item say so too
+    QToolButton *markMenu = pm->findChild<QToolButton *>(QStringLiteral("markMenu"));
+    QVERIFY(markMenu != nullptr);
+    QAction *menuMib = m_app->findChild<QAction *>(QStringLiteral("autoMoveInBlackAction"));
+    QVERIFY(menuMib != nullptr && menuMib->isCheckable());
+    QCOMPARE(markMenu->text(), QStringLiteral("Move in black"));
+    QVERIFY(!markMenu->property("mibAuto").toBool());
+    QVERIFY(!menuMib->isChecked());
 
     // 1. The Show Tree's MIB -> the show, Programming
     mib->click();
@@ -606,6 +614,27 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QVERIFY(mib->isChecked());
     QVERIFY(mib->autoAction()->isChecked());
     QVERIFY(pm->m_autoMibBtn->isChecked());
+    QCOMPARE(markMenu->text(), QString::fromUtf8("Move in black \u00b7 Auto"));
+    QVERIFY(markMenu->property("mibAuto").toBool());
+    QVERIFY(menuMib->isChecked());
+    // Lit: painted in the theme's highlight, not the bar's background
+    {
+        const QImage lit = markMenu->grab().toImage();
+        const QColor hl = markMenu->palette().color(QPalette::Highlight);
+        const QColor px = lit.pixelColor(lit.width() / 2, 2);
+        QVERIFY2(qAbs(px.red() - hl.red()) + qAbs(px.green() - hl.green())
+                 + qAbs(px.blue() - hl.blue()) < 40,
+                 qPrintable(px.name() + " vs " + hl.name()));
+    }
+    // The menu bar's item is the same switch, both ways
+    menuMib->trigger();
+    QVERIFY(!pc->isAutoMoveInBlack());
+    QVERIFY(!mib->isChecked());
+    QCOMPARE(markMenu->text(), QStringLiteral("Move in black"));
+    QVERIFY(!markMenu->property("mibAuto").toBool());
+    menuMib->trigger();
+    QVERIFY(pc->isAutoMoveInBlack());
+    QVERIFY(mib->isChecked() && pm->m_autoMibBtn->isChecked());
     mib->leadSpin()->setValue(1.5);
     QCOMPARE(pc->moveInBlackDarkGapMs(), 1500);
     QCOMPARE(pm->m_mibGapSpin->value(), 1.5);
@@ -644,6 +673,8 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QVERIFY(!pc->isAutoMoveInBlack());
     QCOMPARE(pc->moveInBlackDarkGapMs(), 3000);
     QVERIFY(!mib->isChecked());
+    QVERIFY(!menuMib->isChecked());
+    QVERIFY(!markMenu->property("mibAuto").toBool());
     QCOMPARE(mib->leadSpin()->value(), 3.0);
     QVERIFY(!pm->m_autoMibBtn->isChecked());
     QCOMPARE(pm->m_mibGapSpin->value(), 3.0);
@@ -689,8 +720,9 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
         QCoreApplication::processEvents();
         dlg.grab().save(dir + "/mib-settings.png");
         dlg.reject();
-        showTab(QStringLiteral("Programming"));
+        showTab(QStringLiteral("Build"));
         m_app->grab().save(dir + "/mib-programming.png");
+        markMenu->grab().save(dir + "/mib-build-dropdown.png");
     }
 
     // Leave the show as it was

@@ -92,6 +92,16 @@ public:
     /** Unload: nothing loaded, ↩ forgotten. */
     void clear();
 
+    /** ⇧⌘N on what is loaded: a chaser, a new empty scene as a step after
+     *  the step walked to (walked to); a collection (or a chaser step's), a
+     *  new empty scene as a layer (+ Scene ▸ New empty scene). One undo
+     *  step; the new row selected, renaming in place. Its id (invalid:
+     *  nothing loaded that takes one -- a cue is the Show Tree's). */
+    quint32 newHere();
+    /** What newHere() would make ("New Step After 2 in Chase"; empty:
+     *  nothing). */
+    QString newHereLabel() const;
+
     /** ↩: back to what was loaded before (or to setReturnTo()'s place). */
     bool goBack();
     bool canGoBack() const;
@@ -239,7 +249,7 @@ private:
     /** + Scene (an existing one, picked), + new scene / EFX / RGB Matrix on
      *  the selected layer, remove, ▲ ▼, ▣ Open. */
     void addExisting();
-    void addNew(Function::Type type);
+    quint32 addNew(Function::Type type);
     void removeSelectedLayers();
     void moveSelectedLayer(int delta);
     void openSelected();

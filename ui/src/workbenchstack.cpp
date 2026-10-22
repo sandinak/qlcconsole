@@ -328,7 +328,7 @@ QList<WorkbenchStack::Layer> FunctionStack::layers() const
     QList<Layer> out;
     // A chaser: the layers of the step walked to (W2).
     Function *f = layerSource();
-    if (f == nullptr)
+    if (f == nullptr || f->type() == Function::SequenceType)   // its steps: the overview's editor
         return out;
     const quint32 here = f->id();
 
@@ -614,7 +614,10 @@ static ChaserStep newStep(Chaser *ch, quint32 fid)
 
 Chaser *FunctionStack::chaser() const
 {
-    return qobject_cast<Chaser *>(function());
+    // A sequence is a chaser of one scene's values: no steps to walk or
+    // add (its editor is on the overview).
+    Function *f = function();
+    return f != nullptr && f->type() == Function::ChaserType ? qobject_cast<Chaser *>(f) : nullptr;
 }
 
 int FunctionStack::stepCount() const
@@ -783,6 +786,37 @@ bool FunctionStack::moveStep(int from, int to)
         ++m_step;
     emit changed();
     return true;
+}
+
+quint32 FunctionStack::addNewStep()
+{
+    Chaser *ch = chaser();
+    if (ch == nullptr || !readOnlyReason().isEmpty() || m_doc->paletteOps() == nullptr)
+        return Function::invalidId();
+    const int at = ch->stepsCount() == 0 ? 0 : qMin(m_step + 1, ch->stepsCount());
+    quint32 made = Function::invalidId();
+    const bool ok = m_doc->paletteOps()->functionStep(tr("add a new scene to %1 as step %2").arg(ch->name()).arg(at + 1),
+                                                     { m_fid }, [&](QList<quint32> &news) {
+        Scene *s = new Scene(m_doc);
+        // Filed with the chaser, as + Scene files one with a collection.
+        s->setPath(ch->path(true));
+        if (!m_doc->addFunction(s))
+        {
+            delete s;
+            return false;
+        }
+        s->setName(QStringLiteral("%1 %2").arg(tr("New Scene")).arg(s->id()));
+        news << s->id();
+        made = s->id();
+        ch->addStep(newStep(ch, s->id()), at >= ch->stepsCount() ? -1 : at);
+        return true;
+    });
+    if (!ok)
+        return Function::invalidId();
+    m_step = at;
+    emit layersReplaced();
+    emit changed();
+    return made;
 }
 
 quint32 FunctionStack::makeChaser(Doc *doc, const QList<quint32> &functionIds, const QString &folder)

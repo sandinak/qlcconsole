@@ -55,6 +55,7 @@
 #include "fixture.h"
 #include "chaserstep.h"
 #include "chaser.h"
+#include "collection.h"
 #include "scene.h"
 #include "efx.h"
 #include "doc.h"
@@ -680,6 +681,69 @@ void ShowTreeWorkbench_Test::solo()
     QCOMPARE(st->previewedCue(), invalidId());
     m_doc->setMode(Doc::Design);
     QCOMPARE(st->previewedCue(), s.c2);
+}
+
+void ShowTreeWorkbench_Test::newHereInTheDockedWorkbench()
+{
+    const Show s = SHOW();
+    Scene *member = new Scene(m_doc);
+    member->setName("Haze");
+    m_doc->addFunction(member);
+    Collection *coll = new Collection(m_doc);
+    coll->setName("Effects");
+    m_doc->addFunction(coll);
+    coll->addFunction(member->id());
+    ShowTreeController *st = m_doc->showTree();
+    Target ft;
+    ft.function = coll->id();
+    st->addLayer(s.c2, ft);
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(view.openInWorkbench(s.c1));
+    Workbench *bench = view.dockedWorkbench();
+    bench->rows()->setFocus();
+    QTRY_VERIFY(bench->rows()->hasFocus());
+
+    // A cue in the Workbench: the tree's next cue after it.
+    QCOMPARE(view.newHereLabel(), QString("New Cue After 1"));
+    const quint32 made = view.newHere();
+    QVERIFY(st->cue(made) != nullptr);
+    QCOMPARE(st->cueList(s.list)->indexOf(made), 1);
+    QCOMPARE(view.currentId(), made);
+    TreeCueStack *cs = qobject_cast<TreeCueStack *>(bench->stack());
+    QVERIFY(cs != nullptr);
+    QCOMPARE(cs->cueId(), made);                // the Workbench followed
+    QVERIFY(view.isRenaming());
+    QTreeWidgetItem *editing = view.tree()->currentItem();
+    view.tree()->closePersistentEditor(editing, 0);
+    editing->setText(0, "New");
+    QCoreApplication::processEvents();          // the rename lands after the editor
+    QCOMPARE(st->cue(made)->name, QString("New"));
+    view.slotUndo();
+    view.slotUndo();                            // the cue, one step
+    QVERIFY(st->cue(made) == nullptr);
+    QCOMPARE(st->cueList(s.list)->cues.count(), 2);
+
+    // A collection opened in the docked Workbench: its + Scene.
+    QVERIFY(view.openInWorkbench(s.c2));
+    bench = view.dockedWorkbench();
+    const int effects = layerNamed(bench->stack(), "Effects");
+    QVERIFY(effects >= 0);
+    emit bench->rows()->itemDoubleClicked(bench->rows()->layerItem(effects), 0);
+    QCOMPARE(bench->loadedFunction(), coll->id());
+    bench->rows()->setFocus();
+    QTRY_VERIFY(bench->rows()->hasFocus());
+    QCOMPARE(view.newHereLabel(), QString("New Scene in Effects"));
+    const quint32 scene = view.newHere();
+    QCOMPARE(coll->functions(), QList<quint32>({ member->id(), scene }));
+    QVERIFY(st->undoShared());
+    QCOMPARE(coll->functions(), QList<quint32>({ member->id() }));
 }
 
 void ShowTreeWorkbench_Test::opaqueLayersAndAddNew()

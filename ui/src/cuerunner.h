@@ -97,6 +97,10 @@ public:
     QString timecodeText() const;
     QString modeText() const;
     QTreeWidget *cueTree() const { return m_tree; }
+    /** The colour a line's text is drawn in now ("now", "next", "subnext",
+     *  "upcoming0".. ): the cue's text colour made readable, else the
+     *  theme's. For the tests. */
+    QColor textColour(const QString &part) const;
 
     static QString sizeToString(Size size);
     static Size stringToSize(const QString &str);
@@ -217,6 +221,9 @@ private:
     void fillFollowBox();
     /** "2.1" for the row's cue (or sub-cue). */
     QString rowCue(const QTreeWidgetItem *item) const;
+    /** Draw @a label in cue @a cueId's text colour (invalid, or none: the
+     *  theme's; @a dim: the theme's dimmed). */
+    void tint(QLabel *label, quint32 cueId, bool dim);
 
     Doc *m_doc;
     Size m_size;

@@ -48,6 +48,8 @@
 #include "functionparent.h"
 #include "showtreeview.h"
 #include "chasereditor.h"
+#include "sceneeditor.h"
+#include "sequence.h"
 #include "scripteditor.h"
 #include "audioeditor.h"
 #include "videoeditor.h"
@@ -71,6 +73,29 @@
 #include "show.h"
 #include "efx.h"
 #include "doc.h"
+
+/* A sequence's editor, as the Functions window had it: its steps (the
+   chaser editor) over its bound scene's channels (the scene editor); a click
+   on a step puts that step's values on the scene, a fader moved writes into
+   the step selected. Null: its bound scene is gone. */
+static QWidget *sequenceEditor(QWidget *parent, Sequence *sequence, Doc *doc)
+{
+    Scene *bound = qobject_cast<Scene *>(doc->function(sequence->boundSceneID()));
+    if (bound == nullptr)
+        return nullptr;
+    QSplitter *split = new QSplitter(Qt::Vertical, parent);
+    split->setObjectName(QStringLiteral("workbenchSequenceEditor"));
+    split->setChildrenCollapsible(false);
+    ChaserEditor *steps = new ChaserEditor(split, sequence, doc);
+    SceneEditor *channels = new SceneEditor(split, bound, doc, false);
+    split->addWidget(steps);
+    split->addWidget(channels);
+    QObject::connect(steps, SIGNAL(applyValues(QList<SceneValue>&)),
+                     channels, SLOT(slotSetSceneValues(QList<SceneValue>&)));
+    QObject::connect(channels, SIGNAL(fixtureValueChanged(SceneValue,bool)),
+                     steps, SLOT(slotUpdateCurrentStep(SceneValue,bool)));
+    return split;
+}
 
 #define SETTINGS_SPLITTER QStringLiteral("programming/workbenchSplitter")
 
@@ -660,7 +685,7 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
     // collection or chaser as a whole.
     Function *root = m_doc->function(loadedFunction());
     if (root != nullptr && root->type() != Function::CollectionType && root->type() != Function::ChaserType
-        && m_rows->topLevelItemCount() > 0)
+        && root->type() != Function::SequenceType && m_rows->topLevelItemCount() > 0)
         selectLayer(0);
     else
     {
@@ -773,6 +798,7 @@ void Workbench::updateHeader()
     {
         m_crumb->setText(tr("Workbench"));
         m_title->setText(tr("Nothing loaded"));
+        m_title->setStyleSheet(QStringLiteral("QLabel { font-size: 15pt; font-weight: bold; }"));
         m_kind->hide();
         m_info->setText(tr("Click a scene, collection or chaser on the left. Its layers come up here, "
                            "the selected row's editor on the right."));
@@ -781,6 +807,14 @@ void Workbench::updateHeader()
     const QString where = m_stack->where();
     m_crumb->setText(where.isEmpty() ? tr("Workbench") : where.split(QLatin1Char('/')).join(QStringLiteral(" › ")));
     m_title->setText(m_stack->title());
+    {
+        // A Show Tree cue's text colour, readable on the header.
+        const QString hex = m_stack->titleColour();
+        const QColor c = hex.isEmpty() ? QColor()
+                         : ShowTree::readableOn(QColor(hex), m_title->palette().color(QPalette::Window));
+        m_title->setStyleSheet(QStringLiteral("QLabel { font-size: 15pt; font-weight: bold;%1 }")
+                               .arg(c.isValid() ? QStringLiteral(" color: %1;").arg(c.name()) : QString()));
+    }
     m_kind->setText(m_stack->kindText().toUpper());
     m_kind->setVisible(!m_stack->kindText().isEmpty());
     m_info->setText(m_stack->infoLines().join(QLatin1Char('\n')));
@@ -957,16 +991,16 @@ void Workbench::addExisting()
         layersChanged();
 }
 
-void Workbench::addNew(Function::Type type)
+quint32 Workbench::addNew(Function::Type type)
 {
     if (m_stack == nullptr || !m_stack->canAddLayers())
-        return;
+        return Function::invalidId();
     const int layer = selectedLayer();
     const QList<quint32> groups = layerGroups(layer);
     const quint32 made = m_stack->addNew(type, layer, layerHeads(layer),
                                          groups.isEmpty() ? FixtureGroup::invalidId() : groups.first());
     if (made == Function::invalidId())
-        return;
+        return made;
     layersChanged();
     // The new layer, selected, its editor open.
     m_rows->rebuild();
@@ -979,6 +1013,50 @@ void Workbench::addNew(Function::Type type)
             break;
         }
     }
+    return made;
+}
+
+QString Workbench::newHereLabel() const
+{
+    FunctionStack *fs = qobject_cast<FunctionStack *>(m_stack);
+    if (fs == nullptr)
+        return QString();
+    if (Chaser *ch = fs->chaser())
+    {
+        if (!fs->readOnlyReason().isEmpty())
+            return QString();
+        return ch->stepsCount() == 0 ? tr("New Step in %1").arg(ch->name())
+                                     : tr("New Step After %1 in %2").arg(fs->step() + 1).arg(ch->name());
+    }
+    Function *f = m_doc->function(fs->functionId());
+    return f != nullptr && fs->canAddLayers() ? tr("New Scene in %1").arg(f->name()) : QString();
+}
+
+quint32 Workbench::newHere()
+{
+    FunctionStack *fs = qobject_cast<FunctionStack *>(m_stack);
+    if (fs == nullptr || newHereLabel().isEmpty())
+        return Function::invalidId();
+    quint32 made = Function::invalidId();
+    if (fs->chaser() != nullptr)
+    {
+        made = fs->addNewStep();
+        // The step's scene, its one layer, selected.
+        if (made != Function::invalidId() && m_rows->topLevelItemCount() > 0)
+            selectLayer(0);
+    }
+    else
+        made = addNew(Function::SceneType);
+    if (made == Function::invalidId())
+        return made;
+    // Named in place, as F2 would.
+    QTreeWidgetItem *cur = m_rows->currentItem();
+    if (cur != nullptr && (cur->flags() & Qt::ItemIsEditable))
+    {
+        m_rows->setFocus(Qt::ShortcutFocusReason);
+        m_rows->editItem(cur, 0);
+    }
+    return made;
 }
 
 void Workbench::removeSelectedLayers()
@@ -1073,6 +1151,17 @@ void Workbench::updateOverview()
               << tr("Click a layer to edit it. + Scene adds one from the show; + EFX and + RGB Matrix make a "
                     "new one on the selected layer's groups. Drag scenes here from the left, palettes, "
                     "groups and fixtures onto a layer.");
+    }
+    else if (Sequence *seq = qobject_cast<Sequence *>(root))
+    {
+        lines << QString()
+              << tr("A sequence: every step is its scene's channels at their own values. Click a step "
+                    "to see its values below; move a fader to change the step selected.");
+        if (QWidget *ed = sequenceEditor(m_overviewPage, seq, m_doc))
+        {
+            m_overviewEditor = ed;
+            m_overviewLayout->insertWidget(m_overviewLayout->count() - 1, ed, 10);
+        }
     }
     else if (Chaser *ch = qobject_cast<Chaser *>(root))
     {
@@ -1332,8 +1421,8 @@ void Workbench::loadFunctionEditor(quint32 fid)
                 ce->setLocked(ShowTreeView::lockedBanner(ce, m_doc, fid));
             ed = ce;
         }
-        else
-            note = tr("A sequence: edit it in the Functions window.");
+        else if ((ed = sequenceEditor(m_functionPage, qobject_cast<Sequence *>(f), m_doc)) == nullptr)
+            note = tr("A sequence whose scene is gone: it has nothing to play.");
         break;
     case Function::CollectionType:
         if (generated)

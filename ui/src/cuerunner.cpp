@@ -47,7 +47,8 @@ using namespace ShowTree;
 
 namespace
 {
-enum { RoleStep = Qt::UserRole, RoleSub = Qt::UserRole + 1, RoleCue = Qt::UserRole + 2 };
+enum { RoleStep = Qt::UserRole, RoleSub = Qt::UserRole + 1, RoleCue = Qt::UserRole + 2,
+       RoleColour = Qt::UserRole + 3 };
 enum { ColState = 0, ColCue, ColName, ColTiming, ColNote };
 
 QString seconds(uint ms)
@@ -1014,6 +1015,7 @@ void CueRunner::rebuildTree()
                 timing << tr("follow %1").arg(seconds(c.hold));
             QTreeWidgetItem *item = new QTreeWidgetItem(m_tree);
             row(item, i, -1, st->cueNumber(*list, i), c.name, timing.join(QStringLiteral(" · ")), c.note);
+            item->setData(ColCue, RoleColour, st->cueColour(c.id));
             if (const CueList *subs = st->cueList(st->subCueList(c.id)))
             {
                 for (int k = 0; k < subs->cues.count(); ++k)
@@ -1025,6 +1027,7 @@ void CueRunner::rebuildTree()
                         t << tr("fade %1").arg(seconds(s.fadeIn));
                     QTreeWidgetItem *si = new QTreeWidgetItem(item);
                     row(si, i, k, st->cueNumber(*subs, k), s.name, t.join(QStringLiteral(" · ")), s.note);
+                    si->setData(ColCue, RoleColour, st->cueColour(s.id));
                 }
                 item->setExpanded(true);
             }
@@ -1132,6 +1135,8 @@ void CueRunner::updateStates()
     {
         const QBrush grey = palette().brush(QPalette::Disabled, QPalette::Text);
         const QBrush normal = palette().brush(QPalette::Text);
+        const QColor background = m_tree->palette().color(QPalette::Base);
+        const QColor alternate = m_tree->palette().color(QPalette::AlternateBase);
         for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
         {
             QTreeWidgetItem *item = *it;
@@ -1168,8 +1173,17 @@ void CueRunner::updateStates()
                 for (int c = 0; c <= ColNote; ++c)
                     item->setFont(c, f);
             }
-            for (int c = 0; c <= ColNote; ++c)
-                item->setForeground(c, done ? grey : normal);
+            // Done: grey. Else the cue's text colour (its own, else its
+            // list's), made readable on the theme.
+            const QString colour = item->data(ColCue, RoleColour).toString();
+            const QBrush fg = done ? grey : colour.isEmpty() ? normal
+                                                             : QBrush(readableOn(readableOn(QColor(colour), background),
+                                                                                 alternate));
+            for (int c = ColCue; c <= ColNote; ++c)
+                if (item->foreground(c) != fg)
+                    item->setForeground(c, fg);
+            if (item->foreground(ColState) != (done ? grey : normal))
+                item->setForeground(ColState, done ? grey : normal);
         }
     }
 
@@ -1191,7 +1205,9 @@ void CueRunner::updateStates()
             t += tr("  %1%").arg(progress);
         m_now->setText(t);
     }
+    tint(m_now, nowCue, false);
 
+    quint32 nextCue = invalidId();
     if (ch == nullptr || standby < 0)
         m_next->setText(ch == nullptr ? QString() : tr("NEXT: end of the list"));
     else
@@ -1208,8 +1224,11 @@ void CueRunner::updateStates()
             t += QStringLiteral(": ") + (what.isEmpty() ? tr("no change") : what);
         }
         m_next->setText(t);
+        nextCue = toCue;
     }
+    tint(m_next, nextCue, false);
 
+    quint32 subNextCue = invalidId();
     if (subNext >= 0)
     {
         QString t = tr("SUB NEXT %1").arg(cueText(m_doc, ch, lid, cur, subNext));
@@ -1220,11 +1239,13 @@ void CueRunner::updateStates()
             t += QStringLiteral(": ") + (what.isEmpty() ? tr("no change") : what);
         }
         m_subNext->setText(t);
+        subNextCue = toCue;
     }
     else if (running && ch->isSubGoStep(cur))
         m_subNext->setText(tr("SUB: end of %1").arg(ch->stepCue(cur)));
     else
         m_subNext->setText(QString());
+    tint(m_subNext, subNextCue, false);
     const bool subNextShown = !m_subNext->text().isEmpty();
     const bool relayout = m_subNext->isVisibleTo(this) != subNextShown || m_next->text() != nextBefore
                           || (m_fade != nullptr && m_fade->isVisibleTo(this) != (running && progress >= 0));
@@ -1241,7 +1262,10 @@ void CueRunner::updateStates()
         QStringList up;
         const int count = ch == nullptr ? 0 : ch->stepsCount();
         for (int i = standby + 1; standby >= 0 && i < count && up.count() < m_upcomingCount; ++i)
+        {
+            tint(m_upcoming.value(up.count()), st->cueOfStep(lid, i, -1), true);
             up << tr("then %1").arg(cueText(m_doc, ch, lid, i, -1));
+        }
         if (up != m_upcomingTexts || relayout)
         {
             m_upcomingTexts = up;
@@ -1283,6 +1307,36 @@ void CueRunner::updateStates()
         m_flags = flags;
         emit statesChanged();
     }
+}
+
+void CueRunner::tint(QLabel *label, quint32 cueId, bool dim)
+{
+    if (label == nullptr)
+        return;
+    // The theme's (dimmed for the cues after NEXT), else the cue's text
+    // colour, made readable on what the label sits on.
+    const QWidget *under = label->parentWidget() != nullptr ? label->parentWidget() : this;
+    const QPalette base = under->palette();
+    QColor c = base.color(dim ? QPalette::Disabled : QPalette::Active, QPalette::WindowText);
+    const QString hex = cueId == invalidId() ? QString() : m_doc->showTree()->cueColour(cueId);
+    if (!hex.isEmpty())
+        c = readableOn(QColor(hex), base.color(QPalette::Window));
+    QPalette p = label->palette();
+    if (p.color(QPalette::Active, QPalette::WindowText) == c && p.color(QPalette::Inactive, QPalette::WindowText) == c)
+        return;
+    p.setColor(QPalette::Active, QPalette::WindowText, c);
+    p.setColor(QPalette::Inactive, QPalette::WindowText, c);
+    label->setPalette(p);
+}
+
+QColor CueRunner::textColour(const QString &part) const
+{
+    const QLabel *l = part == QLatin1String("now") ? m_now
+                      : part == QLatin1String("next") ? m_next
+                      : part == QLatin1String("subnext") ? m_subNext
+                      : part.startsWith(QLatin1String("upcoming")) ? m_upcoming.value(part.mid(8).toInt())
+                      : nullptr;
+    return l == nullptr ? QColor() : l->palette().color(QPalette::Active, QPalette::WindowText);
 }
 
 void CueRunner::refresh()

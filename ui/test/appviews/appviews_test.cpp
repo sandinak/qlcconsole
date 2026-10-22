@@ -56,6 +56,11 @@
 #include <QTabWidget>
 #include "measurementunits.h"
 #include "functionmanager.h"
+#include "programmingmanager.h"
+#include "programmingoutline.h"
+#include "workbench.h"
+#include "efxeditor.h"
+#include "efx.h"
 #define private public
 #define protected public
 #include "virtualconsole.h"
@@ -278,41 +283,147 @@ void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
     m_app->setShiftClickBreaksOut(was);
 }
 
-void AppViews_Test::functionsOpensFromTheWindowMenuNotATab()
+void AppViews_Test::theBuildTabWearsAHardHat()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    int build = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->tabBar()->tabData(i).toString() == QStringLiteral("Build"))
+            build = i;
+    QVERIFY(build >= 0);
+    const QIcon icon = tabs->tabIcon(build);
+    QCOMPARE(icon.name(), QStringLiteral("tab:build"));
+
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QStringLiteral("Build"))
+            jump = a;
+    QVERIFY(jump != nullptr);
+    QCOMPARE(jump->icon().name(), QStringLiteral("tab:build"));
+
+    // Drawn at the size asked for: hat yellow with an amber edge, at 1x and 2x
+    for (qreal dpr : { 1.0, 2.0 })
+    {
+        const QImage img = icon.pixmap(QSize(16, 16), dpr).toImage();
+        QCOMPARE(img.width(), int(16 * dpr));
+        int yellow = 0, amber = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.alpha() < 200)
+                    continue;
+                if (c.red() > 230 && c.green() > 180 && c.blue() < 90)
+                    ++yellow;
+                else if (c.red() > 120 && c.red() < 190 && c.green() < 140 && c.blue() < 40)
+                    ++amber;
+            }
+        QVERIFY2(yellow > img.width() * img.height() / 8, qPrintable(QString::number(yellow)));
+        QVERIFY2(amber > img.width(), qPrintable(QString::number(amber)));
+        const QString dir = QString::fromLocal8Bit(qgetenv("APPVIEWS_SHOTS"));
+        if (!dir.isEmpty())
+            img.save(QStringLiteral("%1/build-hat@%2x.png").arg(dir).arg(int(dpr)));
+    }
+}
+
+void AppViews_Test::functionsOpensBuildScenesClassic()
 {
     QTabWidget *tabs = m_app->m_tab;
     const QString functions = QString("Functions");
     for (int i = 0; i < tabs->count(); ++i)
         QVERIFY2(tabs->tabBar()->tabData(i).toString() != functions, "Functions should have no tab");
+    // Hidden, not gone: the one switch (setFunctionsWindowShown) shows it.
+    QVERIFY(FunctionManager::instance() != nullptr);
+    QVERIFY(!m_app->functionsWindowShown());
+    QVERIFY(m_app->m_parkedContexts.contains(FunctionManager::instance()));
+    QVERIFY(!FunctionManager::instance()->isVisible());
+    ProgrammingManager *build = ProgrammingManager::instance();
+    QVERIFY(build != nullptr);
     const int views = tabs->count();
 
+    // Still in the Window menu, at its old place and shortcut (⇧⌘4).
     QAction *jump = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == functions)
             jump = a;
     QVERIFY2(jump != nullptr, "Functions should be in the Window menu");
-    jump->trigger();
-    DetachedContext *dw = nullptr;
-    foreach (DetachedContext *w, m_app->findChildren<DetachedContext *>())
-        if (w->centralWidget() != nullptr && w->centralWidget() == FunctionManager::instance())
-            dw = w;
-    QVERIFY2(dw != nullptr && dw->isVisible(), "picking it should open its window");
-    QVERIFY(FunctionManager::instance()->isVisible());
-    QVERIFY2(m_app->detachedContexts().isEmpty(), "it has no tab to be put back in");
+    QCOMPARE(jump->objectName(), QString("windowFunctions"));
+    QCOMPARE(jump->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
+    QCOMPARE(m_app->m_windowJumps.indexOf(jump), 3);
+    QCOMPARE(m_app->m_windowJumps.at(4)->data().toString(), QString("Build"));
+    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_5));
 
-    dw->close();
+    // Away from Build, Folders, Palettes: the menu lands on Scenes ▸ Classic.
+    m_app->showContext("Simple Desk");
+    build->setSection(ProgrammingManager::PalettesSection);
+    build->m_outline->setArrangement(ProgrammingOutline::Folders);
+    jump->trigger();
+    QCOMPARE(tabs->tabBar()->tabData(tabs->currentIndex()).toString(), QString("Build"));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->section(), ProgrammingManager::ScenesSection);
+    QCOMPARE(build->m_outline->arrangement(), ProgrammingOutline::Classic);
+    QCOMPARE(m_app->focusWidget(), static_cast<QWidget *>(build->m_outline));
     QCOMPARE(tabs->count(), views);
-    QVERIFY(!FunctionManager::instance()->isVisible());
-    QVERIFY(FunctionManager::instance()->parentWidget() == m_app);
+    QVERIFY(m_app->findChildren<DetachedContext *>().isEmpty() ||
+            m_app->detachedContexts().isEmpty());
+    const QString shots = qEnvironmentVariable("QLC_NOFM_SHOTS");
+    if (!shots.isEmpty())
+    {
+        m_app->resize(1400, 860);
+        QVERIFY(m_app->grab().save(shots + "/window-functions-classic.png"));
+    }
 
-    // And again, after closing.
+    // A show saved with the Functions window in front opens there.
+    m_app->showContext("Simple Desk");
+    build->m_outline->setArrangement(ProgrammingOutline::Folders);
+    m_app->setActiveWindow("FunctionManager");
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->m_outline->arrangement(), ProgrammingOutline::Classic);
+
+    // Opening a function from outside Build: Build's Workbench.
+    Doc *doc = m_app->m_doc;
+    EFX *efx = new EFX(doc);
+    efx->setName("Window Functions EFX");
+    QVERIFY(doc->addFunction(efx));
+    m_app->showContext("Shows");
+    QVERIFY(ProgrammingManager::openFunction(efx->id()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->workbench()->loadedFunction(), efx->id());
+    QVERIFY(build->workbench()->findChild<EFXEditor *>() != nullptr);
+    if (!shots.isEmpty())
+        QVERIFY(m_app->grab().save(shots + "/open-function-in-workbench.png"));
+    doc->deleteFunction(efx->id());
+
+    // The switch: shown (a Classic QLC+ view), Functions is a tab again,
+    // at its old place, and Window → Functions brings it forward...
+    m_app->setFunctionsWindowShown(true);
+    QVERIFY(m_app->functionsWindowShown());
+    QCOMPARE(tabs->count(), views + 1);
+    const int at = tabs->indexOf(FunctionManager::instance());
+    QCOMPARE(at, 3);
+    QCOMPARE(tabs->tabBar()->tabData(at).toString(), functions);
+    m_app->showContext("Simple Desk");
     jump->trigger();
-    QVERIFY(FunctionManager::instance()->isVisible());
-    foreach (DetachedContext *w, m_app->findChildren<DetachedContext *>())
-        if (w->centralWidget() == FunctionManager::instance())
-            w->close();
-
-    // The tabs keep their own labels with one gone from among them.
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(FunctionManager::instance()));
+    m_app->setTabLabelMode(App::TabTextOnly);
+    for (int i = 0; i < tabs->count(); ++i)
+        QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
+    m_app->setTabLabelMode(App::TabIconAndText);
+    // ...opening a function from elsewhere still loads it in the Workbench.
+    EFX *again = new EFX(doc);
+    QVERIFY(doc->addFunction(again));
+    QVERIFY(ProgrammingManager::openFunction(again->id()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->workbench()->loadedFunction(), again->id());
+    doc->deleteFunction(again->id());
+    // Hidden again: no tab, and the menu lands on Build ▸ Scenes ▸ Classic.
+    m_app->setFunctionsWindowShown(false);
+    QCOMPARE(tabs->count(), views);
+    QCOMPARE(tabs->indexOf(FunctionManager::instance()), -1);
+    m_app->showContext("Simple Desk");
+    jump->trigger();
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(build));
+    QCOMPARE(build->m_outline->arrangement(), ProgrammingOutline::Classic);
     m_app->setTabLabelMode(App::TabTextOnly);
     for (int i = 0; i < tabs->count(); ++i)
         QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
@@ -936,6 +1047,112 @@ void AppViews_Test::aSkippedCueReadsInEveryTheme()
     m_app->setTheme(was);
     m_app->hide();
     QVERIFY(st->removeProduction(st->productions().first().id));
+}
+
+/* Every offered text colour, on a cue of the Show Tree and of the Run tab,
+   in each of the six themes: drawn readable (4.5:1) against what is really
+   behind the row -- a variant of it where the colour itself isn't. */
+void AppViews_Test::textColoursReadInEveryTheme()
+{
+    ShowTreeController *st = m_app->doc()->showTree();
+    const quint32 prod = st->addProduction("Colours");
+    const quint32 list = st->addCueList(prod, "Song", ShowTree::ListMode::Tracking);
+    QList<quint32> cues;
+    for (int i = 0; i < ShowTree::textColours().count(); ++i)
+    {
+        cues << st->addCue(list, i - 1, QStringLiteral("Cue in %1").arg(ShowTree::textColours().at(i).name));
+        QVERIFY(st->setCuesColour({ cues.last() }, ShowTree::textColours().at(i).hex));
+    }
+    st->setCurrentProduction(prod);
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    CueRunner *runner = nullptr;
+    QTabWidget *tabs = m_app->m_tab;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (CueRunner *r = qobject_cast<CueRunner *>(tabs->widget(i)))
+            runner = r;
+    QVERIFY(runner != nullptr);
+    m_app->resize(1400, 800);
+    m_app->showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(m_app));
+    const QString dir = qEnvironmentVariable("QLC_CUECOLOUR_SHOTS");
+
+    // The colour most of a row's pixels are: what is behind its text.
+    auto behind = [](QWidget *viewport, const QRect &rect) {
+        const QImage img = viewport->grab(rect).toImage();
+        QHash<QRgb, int> counts;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                ++counts[img.pixel(x, y) | 0xff000000];
+        QRgb bg = 0;
+        int most = -1;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            if (it.value() > most)
+            {
+                most = it.value();
+                bg = it.key();
+            }
+        return bg;
+    };
+
+    const int was = m_app->theme();
+    const int themes[] = { App::ThemeDefault, App::ThemeTan, App::ThemeBlue,
+                           App::ThemeQLCOriginal, App::ThemeRedShift, App::ThemeVSCodeDark };
+    for (int theme : themes)
+    {
+        m_app->setTheme(theme);
+        QCoreApplication::processEvents();
+        QTest::qWait(30);
+
+        // The Show Tree.
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->widget(i) == view || tabs->widget(i)->isAncestorOf(view))
+                tabs->setCurrentIndex(i);
+        QTreeWidget *tree = view->tree();
+        tree->expandAll();
+        tree->clearSelection();
+        QCoreApplication::processEvents();
+        for (int k = 0; k < cues.count(); ++k)
+        {
+            QTreeWidgetItem *row = nullptr;
+            for (QTreeWidgetItemIterator it(tree); *it; ++it)
+                if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                    && (*it)->data(0, ShowTreeView::IdRole).toUInt() == cues[k])
+                    row = *it;
+            QVERIFY(row != nullptr);
+            tree->scrollToItem(row);
+            const QColor fg = row->foreground(0).color();
+            const double c = contrast(fg.rgb(), behind(tree->viewport(), tree->visualItemRect(row)));
+            QVERIFY2(c >= 4.5, qPrintable(QString("theme %1, tree, %2: %3")
+                                          .arg(theme).arg(ShowTree::textColours().at(k).name).arg(c)));
+        }
+        if (!dir.isEmpty())
+            QVERIFY(view->grab().save(QStringLiteral("%1/showtree-theme-%2.png").arg(dir).arg(theme)));
+
+        // The Run tab.
+        tabs->setCurrentWidget(runner);
+        runner->refresh();
+        QCoreApplication::processEvents();
+        QTreeWidget *rt = runner->cueTree();
+        QCOMPARE(rt->topLevelItemCount(), cues.count());
+        for (int k = 0; k < cues.count(); ++k)
+        {
+            QTreeWidgetItem *row = rt->topLevelItem(k);
+            rt->scrollToItem(row);
+            const QColor fg = row->foreground(2).color();
+            const double c = contrast(fg.rgb(), behind(rt->viewport(), rt->visualItemRect(row)));
+            QVERIFY2(c >= 4.5, qPrintable(QString("theme %1, Run tab, %2: %3")
+                                          .arg(theme).arg(ShowTree::textColours().at(k).name).arg(c)));
+        }
+        const double next = ShowTree::contrastRatio(runner->textColour("next"),
+                                                     runner->palette().color(QPalette::Window));
+        QVERIFY2(next >= 4.5, qPrintable(QString("theme %1, NEXT: %2").arg(theme).arg(next)));
+        if (!dir.isEmpty())
+            QVERIFY(runner->grab().save(QStringLiteral("%1/run-theme-%2.png").arg(dir).arg(theme)));
+    }
+    m_app->setTheme(was);
+    m_app->hide();
+    QVERIFY(st->removeProduction(prod));
 }
 
 void AppViews_Test::quittingWithTheShowTreeShowing()

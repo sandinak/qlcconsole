@@ -42,6 +42,7 @@
 #include "chaser.h"
 #include "scene.h"
 #include "efx.h"
+#include "showtreecontroller.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -1019,6 +1020,58 @@ void VCCueList_Test::cuesSkipsAndNextAreShown()
     cl.m_tree->setCurrentItem(cl.m_tree->topLevelItem(3));
     cl.updateStandby();
     QVERIFY(cl.m_standbyLabel->text().startsWith("Next: 4"));
+}
+
+/* A Show Tree list in a VC Cue List: each cue in its text colour (its own,
+   else its list's; a sub-cue its cue's), readable on the list; skipped
+   stays grey; Next: in the next cue's. A colour taken away: as before. */
+void VCCueList_Test::showTreeTextColoursAreShown()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ShowTree::ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 4; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    const quint32 sub = st->addSubCue(c[1], "Hit");
+    QVERIFY(st->setListColour(list, "Cyan"));
+    QVERIFY(st->setCuesColour({ c[0] }, "Pink"));
+    QVERIFY(st->setCuesSkipped({ c[3] }, true));
+
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(st->cueList(list)->chaser);
+    cl.updateStepList();
+    const QPalette tp = cl.m_tree->palette();
+    auto onTree = [&tp](const char *hex) {
+        return ShowTree::readableOn(ShowTree::readableOn(QColor(hex), tp.color(QPalette::Base)),
+                                    tp.color(QPalette::AlternateBase));
+    };
+    const int colName = 1;
+    QCOMPARE(cl.m_tree->topLevelItem(0)->foreground(colName).color(), onTree("#d81b60"));
+    QCOMPARE(cl.m_tree->topLevelItem(1)->foreground(colName).color(), onTree("#00acc1"));
+    QCOMPARE(cl.m_tree->topLevelItem(1)->child(0)->foreground(colName).color(), onTree("#00acc1"));
+    QCOMPARE(cl.m_tree->topLevelItem(3)->foreground(colName).color(),
+             tp.color(QPalette::Disabled, QPalette::Text));          // skipped: grey
+    QVERIFY(ShowTree::contrastRatio(cl.m_tree->topLevelItem(1)->foreground(colName).color(),
+                                    tp.color(QPalette::Base)) >= 4.5);
+    // Next: the first cue, in pink.
+    QCOMPARE(cl.m_standbyLabel->palette().color(QPalette::WindowText),
+             ShowTree::readableOn(QColor("#d81b60"), cl.palette().color(QPalette::Window)));
+
+    // Changed in the tree: shown at once (no rebuild needed).
+    QVERIFY(st->setCuesColour({ sub }, "Yellow"));
+    QCOMPARE(cl.m_tree->topLevelItem(1)->child(0)->foreground(colName).color(), onTree("#fdd835"));
+    QVERIFY(st->setCuesColour({ c[0] }, "Orange"));
+    QCOMPARE(cl.m_tree->topLevelItem(0)->foreground(colName).color(), onTree("#fb8c00"));
+    QCOMPARE(cl.m_standbyLabel->palette().color(QPalette::WindowText),
+             ShowTree::readableOn(QColor("#fb8c00"), cl.palette().color(QPalette::Window)));
+
+    // Taken away: the list's plain text again.
+    QVERIFY(st->setListColour(list, QString()));
+    QVERIFY(st->setCuesColour({ c[0], sub }, QString()));
+    QTRY_VERIFY(!cl.m_tree->topLevelItem(1)->data(colName, Qt::ForegroundRole).isValid());
+    QVERIFY(!cl.m_tree->topLevelItem(0)->data(colName, Qt::ForegroundRole).isValid());
+    QCOMPARE(cl.m_standbyLabel->palette().color(QPalette::WindowText), cl.palette().color(QPalette::WindowText));
 }
 
 QTEST_MAIN(VCCueList_Test)

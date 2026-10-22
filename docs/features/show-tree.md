@@ -219,7 +219,7 @@ the tree and the Workbench follows it.
      alone.
    - **Import in place** (ticked): the chaser, and the collections and
      scenes only it plays, are filed under `Imported/<chaser> (originals)`
-     in the Functions window, and a Show timeline that played the chaser
+     in Build ▸ Scenes, and a Show timeline that played the chaser
      plays the list. Nothing is deleted; **Restore original** puts it all
      back ([how](#an-old-show-convert-it)). Untick it to keep both side by
      side.
@@ -308,7 +308,7 @@ two ways (**Convert by**):
 - **Import in place** (the default). The list takes over from the chaser:
   - the list is linked to the chaser it came from;
   - the chaser and the collections and scenes only it plays go to
-    `Imported/<chaser> (originals)` in the Functions window. What the list
+    `Imported/<chaser> (originals)` in Build ▸ Scenes. What the list
     still plays as it is (a raw scene on a ▣ row) and what another
     function plays stay where they are;
   - VC buttons, VC Cue Lists, sliders, speed dials, clocks, audio
@@ -449,9 +449,10 @@ Preshow (⌥: a layer for each group)"*.
   each, in one undo step.
 - **To edit what a ▣ layer plays**, double-click it, or right-click →
   **Open "Haze"…**, or select it and press **Open** on its page. The
-  function opens in its own editor in the Functions window (the scene,
-  EFX, RGB Matrix, collection or chaser editor), and what you change there
-  is what the cue plays. The page lists where else the function plays
+  function opens in its own editor in the Workbench (the scene,
+  EFX, RGB Matrix, collection or chaser editor): the Workbench docked
+  beside the tree when it is open there (**↩** comes back to the cue),
+  Build's otherwise. What you change there is what the cue plays. The page lists where else the function plays
   (**Also in:** other cues, the show's own collections and chasers): those
   change too.
 - **Below the tree's last row**, a drop is a new layer in the selected cue
@@ -533,6 +534,10 @@ cue, list or production: *Towers* = *SL* + *SR*.
 - **Make one:** in the Library, select the groups (⌘-click), right-click →
   **Make set…**, and name it. Or type `set "Towers" SL SR`. It shows under
   **All → Group sets**, as *"Towers (SL + SR)"*.
+- **Groups that are alike:** right-click a group → **Select all similar**
+  selects every group in the same folder made of the same fixtures (as
+  many of each kind) and as many heads: all the truss tops, say, but not
+  their RGB-only groups. **Make set…** is right below it on the same menu.
 - **Use it** as a group: drag it onto a cue for one layer on the whole set,
   or type its name (`Towers dimmer 45`). With **⌥**, you get a layer per
   member instead. Onto a layer, it joins it.
@@ -989,6 +994,37 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
 - **Import and Convert.** Importing a chaser keeps each step's skip flag,
   and **Convert to tracking** keeps it.
 
+### Text colours
+
+A cue list, and any cue in it, can have a **text colour**: a quick way to
+read a long list at a glance -- songs in their own colour, the cues the
+stage manager calls in red. It changes how the cue reads, never what it
+plays.
+
+- **To set it:**
+  - right-click a cue list or a cue → **Colour ▸**: Red, Orange, Yellow,
+    Green, Cyan, Blue, Purple, Pink, **Custom…** (any colour) or **None**;
+  - on the cue list's or the cue's page, the **Text colour** button opens
+    the same menu;
+  - type `textcolour red` (the selected cue), `textcolour blue list` (the
+    whole list), `textcolour #33aa55 0.0.3 thru 0.0.5` or
+    `textcolour none 0.0.3` (`textcolor` works too).
+  With several cues selected, the menu acts on them all. Each change is
+  **one undo step**.
+- **Who wins.** A cue's own colour wins over its list's; a cue with
+  **None** takes its list's. A sub-cue takes its cue's, unless it has
+  its own.
+- **Where it shows:** the cue's row in the Show Tree, the docked
+  Workbench's header, the **Run** tab's list and its **NOW**, **NEXT** and
+  **SUB NEXT** lines, the **Cue Runner** widget (with its upcoming
+  lines), and a VC **Cue List** playing the list (its rows and *Next:*).
+- **Readable in every theme.** Where a colour would be hard to read on the
+  theme's background -- yellow on white, blue on a dark theme -- a lighter
+  or darker shade of the same colour is drawn instead. Done cues in the Run
+  tab and skipped cues stay grey.
+- **Saved with the show.** An older build opens the show as it was, without
+  the colours.
+
 ### Changing a tracked value
 
 A grey value came from an earlier cue. On its row, **⋯** offers two
@@ -1275,7 +1311,11 @@ again what it opened.
   - **Group sets** ([Group sets](#group-sets)): right-click groups → **Make set…**;
   - **Reusable**: the [reusable layers and cues](#reusable-layers-and-cues),
     each with how many use it (hover: *Used by*);
-  - **Groups**, in the Fixture Manager's folders;
+  - **Groups**, in the Fixture Manager's folders. Right-click one (or
+    several) for **Select all similar**, **Make set…** and **Move to
+    folder ▸**: the folders in use, *no folder*, or **New Folder…** (made
+    inside the one they are in). They stay selected where they land. The
+    Fixture Manager uses the same folders;
   - **Palettes**, by type with your folders under each, or folders first
     ([Palettes in the Library](#palettes-in-the-library));
   - **Functions (played as they are)**: not chasers, and not what the tree
@@ -1352,6 +1392,31 @@ Right-click in the tree for:
   cue**, **Duplicate**;
 - **Rename…** on a production or cue list, and **Delete** on anything but a
   grey row.
+
+### New here
+
+**⇧⌘N** makes the next thing for where you are. The **Edit** menu says what
+that is before you press it, for example *New Cue After 0.0.3 (⇧⌘N)*.
+
+| Selected | ⇧⌘N makes |
+|---|---|
+| Nothing, and no production yet | A production, **Show** |
+| Nothing, or a production | A cue list in it (the current production when nothing is selected) |
+| A cue list | A cue at its end |
+| A cue | The next cue after it, numbered as **+ Cue** numbers it: after 0.0.3 comes 0.0.4, or a point cue between when 0.0.4 is taken |
+| A sub-cue | The next main cue after its cue, as **+ Cue** does (**+ Sub-cue** makes another sub-cue) |
+| Groups, fixtures or sets in the Library, with the Library focused | A layer on them in the selected cue |
+| A layer | A new layer in its cue, on what the Library has selected. With nothing picked there, ⇧⌘N selects the cue and goes to the Library's filter: find the groups, then **Return** makes the layer |
+| A look, or Looks | The next look |
+
+The new row is selected with its name open to type, as **F2** opens it.
+**Return** keeps the name, **Esc** keeps the default. Making it is one undo
+step and the name is another.
+
+With the [Workbench docked](#working-on-a-cue-in-the-workbench) and the
+focus in it, a cue there follows the same rules. A collection or chaser you
+opened there with **▣ Open** gets the Workbench's own ⇧⌘N, as in
+[Build](build.md#new-here).
 
 **Moving cues.** Drag a cue onto another cue of its list to move it there;
 its number stays. With **⌥** held, the drop makes the other cue include it
@@ -1455,7 +1520,7 @@ the rule would change, and reusable uses. A list that tracks already says
 `detach list`) hands a cue list back as an ordinary chaser:
 
 - the list's **chaser** and its cues' **collections** become your own
-  functions, unlocked and shown in the Functions window where they are
+  functions, unlocked and shown in Build ▸ Scenes where they are
   (`Productions/<production>/…`), to edit as any chaser;
 - the **scenes** only this list plays go with them; a scene another list
   still plays is **copied**, and the chaser plays the copy, so it is all
@@ -1646,7 +1711,7 @@ Cue Runner back into a Cue List).
 ## Playing it
 
 - Each cue list plays as a chaser of the same name, at
-  `Productions/<production>` in the Functions window. Its steps carry the
+  `Productions/<production>` in Build ▸ Scenes. Its steps carry the
   cue numbers, fades, holds and notes.
 - Play it from the **Run** tab or a **Cue Runner** widget
   ([The cue runner](#the-cue-runner)), pick the chaser in a Virtual Console
@@ -1659,7 +1724,7 @@ Cue Runner back into a Cue List).
   their place.
 - **They are changed here, and locked everywhere else.** Outside the tab,
   what the tree made says *"Made by the Show Tree — edit it there."*:
-  - **The chaser's editor** (Functions window, Build tab, Shows, a
+  - **The chaser's editor** (Build's Workbench, Shows, a
     Virtual Console widget's live edit) opens with its steps and name
     locked, under a bar that says so and has **Show in Show Tree**. Its
     playback settings stay yours to set and are kept: run order,
@@ -1718,6 +1783,7 @@ set it, and they always agree:
 | **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
 | Double-click a cue, look or layer · **✎ Workbench** · `wb` | Open it in the Workbench, in place of the page ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)); **↩ Show Tree** comes back |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
+| **⇧⌘N** | New here: a production, cue list, the next cue, a layer or a look, by what is selected ([New here](#new-here)) |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |

@@ -31,6 +31,7 @@
 #include <QSignalSpy>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QShortcut>
 #include <QLabel>
 #include <QCheckBox>
 #include <QSplitter>
@@ -50,6 +51,7 @@
 #include "universe.h"
 #include "programmingmanager.h"
 #include "workbench.h"
+#include "treecuestack.h"
 #undef protected
 #undef private
 #include "functionliveeditdialog.h"
@@ -63,6 +65,10 @@
 #include <QStackedWidget>
 #include <QRegularExpression>
 
+#include <QTemporaryDir>
+#include <memory>
+#include "showembedding.h"
+#include "fixturemanager.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
 #include "timecodesource.h"
@@ -214,6 +220,170 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
     QVERIFY(view.selectNode(c1));
     QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
     QCOMPARE(view.currentCueId(), c1);
+}
+
+void ShowTreeView_Test::newHereMakesTheNextThing()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeView view(nullptr, m_doc);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    // The shortcut is the view's own.
+    QShortcut *sc = view.findChild<QShortcut *>("stNewHere");
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->key(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+    // The new row is renaming in place: type a name and commit it.
+    auto name = [&](const QString &text) {
+        QVERIFY(view.isRenaming());
+        QTreeWidgetItem *editing = view.tree()->currentItem();
+        view.tree()->closePersistentEditor(editing, 0);
+        editing->setText(0, text);
+        QVERIFY(!view.isRenaming());
+        QCoreApplication::processEvents();      // the rename lands after the editor
+    };
+
+    // Nothing yet: a production. One step (the name is another).
+    view.tree()->setFocus();
+    QCOMPARE(view.newHereLabel(), QString("New Production"));
+    quint32 prod = view.newHere();
+    QVERIFY(st->production(prod) != nullptr);
+    QCOMPARE(view.currentKind(), ShowTreeView::ProductionNode);
+    name("Gig");
+    QCOMPARE(st->production(prod)->name, QString("Gig"));
+    view.slotUndo();
+    QCOMPARE(st->production(prod)->name, QString("Show"));
+    view.slotUndo();
+    QVERIFY(st->productions().isEmpty());
+    prod = view.newHere();
+    name("Gig");
+
+    // A production: a cue list in it (also with nothing selected).
+    QCOMPARE(view.newHereLabel(), QString("New Cue List in Gig"));
+    view.tree()->setCurrentItem(nullptr);
+    QCOMPARE(view.newHereLabel(), QString("New Cue List in Gig"));
+    QVERIFY(view.selectNode(prod));
+    const quint32 list = view.newHere();
+    QVERIFY(st->cueList(list) != nullptr);
+    QCOMPARE(st->cueList(list)->mode, ListMode::Tracking);
+    QCOMPARE(view.currentKind(), ShowTreeView::ListNode);
+    name("01-Opener");
+
+    // A cue list: a cue at its end.
+    QCOMPARE(view.newHereLabel(), QString("New Cue in 01-Opener"));
+    const quint32 c1 = view.newHere();
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    QCOMPARE(view.currentId(), c1);
+    name("Preset");
+    QCOMPARE(st->cue(c1)->name, QString("Preset"));
+    const CueList *l = st->cueList(list);
+    QCOMPARE(st->cueNumber(*l, 0), QString("1.0.0"));
+
+    // A cue: the next cue after it, numbered as + Cue numbers it.
+    QCOMPARE(view.newHereLabel(), QString("New Cue After 1.0.0"));
+    const quint32 c2 = view.newHere();
+    l = st->cueList(list);
+    QCOMPARE(l->indexOf(c2), 1);
+    QCOMPARE(st->cueNumber(*l, 1), QString("1.0.1"));
+    name("Walk-in");
+    // Back on the first: between them, as + Cue makes one there.
+    QVERIFY(view.selectNode(c1));
+    const quint32 between = view.newHere();
+    l = st->cueList(list);
+    QCOMPARE(l->indexOf(between), 1);
+    QCOMPARE(l->indexOf(c2), 2);
+    const QString betweenNumber = st->cueNumber(*l, 1);
+    QVERIFY(betweenNumber != "1.0.0" && betweenNumber != "1.0.1");
+    name("Point");
+    view.slotUndo();
+    view.slotUndo();                            // the cue, one step
+    QVERIFY(st->cue(between) == nullptr);
+    QCOMPARE(st->cueList(list)->cues.count(), 2);
+
+    // Groups picked in the Library, the focus there: a layer on them in the
+    // selected cue.
+    QVERIFY(view.selectNode(c1));
+    // (The Library is rebuilt after an edit: pick again each time.)
+    auto pickTowers = [&]() {
+        QTreeWidgetItem *towersRow = nullptr;
+        for (QTreeWidgetItemIterator it(view.library()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibGroup
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == towers->id())
+                towersRow = *it;
+        QVERIFY(towersRow != nullptr);
+        view.library()->clearSelection();
+        towersRow->setSelected(true);
+    };
+    QTest::qWait(10);
+    pickTowers();
+    view.library()->setFocus();
+    QTRY_VERIFY(view.library()->hasFocus());
+    QCOMPARE(view.newHereLabel(), QString("New Layer on Towers in 1.0.0 Preset"));
+    const quint32 layer = view.newHere();
+    QVERIFY(st->cue(c1)->layer(layer) != nullptr);
+    QCOMPARE(st->cue(c1)->layer(layer)->target.groups, QList<quint32>({ towers->id() }));
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QCOMPARE(view.currentId(), layer);
+    name("Sides");
+    QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Sides"));
+    view.slotUndo();
+    view.slotUndo();                            // the layer, one step
+    QVERIFY(st->cue(c1)->layers.isEmpty());
+
+    // The focus back in the tree, on the cue: the Library doesn't count --
+    // the next cue.
+    QVERIFY(view.selectNode(c1));
+    view.tree()->setFocus();
+    QTRY_VERIFY(view.tree()->hasFocus());
+    QCOMPARE(view.newHereLabel(), QString("New Cue After 1.0.0"));
+
+    // A layer selected, groups picked in the Library: a new layer on them.
+    Target t;
+    t.groups << towers->id();
+    const quint32 own = st->addLayer(c1, t);
+    QTest::qWait(10);
+    pickTowers();
+    QVERIFY(view.selectNode(own, c1));
+    QCOMPARE(view.newHereLabel(), QString("New Layer on Towers in 1.0.0 Preset"));
+    const quint32 second = view.newHere();
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QCOMPARE(view.currentId(), second);
+    name("Again");
+    view.slotUndo();
+    view.slotUndo();
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // ... nothing picked: the cue selected and the Library's filter, so
+    // Return makes the layer there. Nothing made yet.
+    view.library()->clearSelection();
+    QVERIFY(view.selectNode(own, c1));
+    QCOMPARE(view.newHereLabel(), QString::fromUtf8("New Layer in 1.0.0 Preset\u2026"));
+    QCOMPARE(view.newHere(), invalidId());
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    QCOMPARE(view.currentId(), c1);
+    QLineEdit *filter = view.findChild<QLineEdit *>("stLibraryFilter");
+    QVERIFY(filter != nullptr);
+    QTRY_VERIFY(filter->hasFocus());
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // A sub-cue: the next main cue after its cue, as + Cue makes it.
+    const quint32 sub = st->addSubCue(c1, "Flash");
+    QVERIFY(sub != invalidId());
+    QVERIFY(view.selectNode(sub));
+    view.tree()->setFocus();
+    QCOMPARE(view.newHereLabel(), QString("New Cue After 1.0.0"));
+    const quint32 afterSub = view.newHere();
+    QCOMPARE(st->cueList(list)->indexOf(afterSub), 1);
+    name("After");
+
+    // A look: the next look.
+    const quint32 look = st->addLook(prod, "Hit");
+    QVERIFY(view.selectNode(look));
+    QCOMPARE(view.newHereLabel(), QString("New Look"));
+    const quint32 look2 = view.newHere();
+    QVERIFY(st->isLook(look2));
 }
 
 void ShowTreeView_Test::trackedLayersShowGreyWithWhereTheyCameFrom()
@@ -5296,9 +5466,10 @@ void ShowTreeView_Test::openAnOpaqueLayer()
     view.hide();
 }
 
-/* Open with no stand-in: the Function Manager's own editor for it (the
-   window it lives in is App's to bring forward). */
-void ShowTreeView_Test::openUsesTheFunctionsWindowsEditor()
+/* Open with no stand-in (board Q32, the Functions window retired): the
+   Workbench -- the one docked in the tree when it is (↩ back to the cue),
+   Build's otherwise; opening one from elsewhere brings the docked one home. */
+void ShowTreeView_Test::openLandsInTheWorkbench()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
     const quint32 full = dimmer(255, "Full");
@@ -5306,18 +5477,52 @@ void ShowTreeView_Test::openUsesTheFunctionsWindowsEditor()
     EFX *efx = nullptr;
     Chaser *chaser = oldShow(m_doc, towers->id(), full, &haze, &efx);
     ShowTreeView view(nullptr, m_doc);
+    view.resize(1100, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
     view.importChaser(chaser->id(), false);
 
-    QVERIFY(!view.openFunction(haze->id()));        // no Functions window
+    QVERIFY(!view.openFunction(haze->id()));        // no Build tab
     {
-        FunctionManager fm(nullptr, m_doc);
-        QVERIFY(view.openFunction(haze->id()));
-        SceneEditor *se = fm.findChild<SceneEditor *>();
-        QVERIFY(se != nullptr);
+        ProgrammingManager build(nullptr, m_doc);
+        QPointer<ProgrammingManager> guard(&build);
+        view.setWorkbenchLender(
+            [guard]() -> Workbench * { return guard.isNull() ? nullptr : guard->lendWorkbench(); },
+            [guard](Workbench *wb) { if (!guard.isNull()) guard->returnWorkbench(wb); });
+
+        // Nothing docked: Build's Workbench, with the function's own editor.
         QVERIFY(view.openFunction(efx->id()));
-        QVERIFY(fm.findChild<EFXEditor *>() != nullptr);
+        QCOMPARE(build.workbench()->loadedFunction(), efx->id());
+        QVERIFY(build.workbench()->findChild<EFXEditor *>() != nullptr);
         QVERIFY(!view.openFunction(Function::invalidId()));
+
+        // Docked on a cue: it loads there, ↩ back to the cue.
+        const CueList *list = nullptr;
+        for (const Production &p : m_doc->showTree()->productions())
+            for (const CueList &l : p.lists)
+                list = &l;
+        QVERIFY(list != nullptr);
+        const quint32 cueId = list->cues.first().id;
+        QVERIFY(view.openInWorkbench(cueId));
+        QVERIFY(build.isWorkbenchLent());
+        Workbench *bench = view.dockedWorkbench();
+        QCOMPARE(bench, build.workbench());
+        QVERIFY(view.openFunction(haze->id()));
+        QCOMPARE(bench->loadedFunction(), haze->id());
+        QVERIFY(bench->canGoBack());
+        if (!w0Shot("open-in-docked-workbench.png").isEmpty())
+            QVERIFY(view.grab().save(w0Shot("open-in-docked-workbench.png")));
+        QVERIFY(bench->goBack());
+        QVERIFY(qobject_cast<TreeCueStack *>(bench->stack()) != nullptr);
+
+        // Opened from outside the tree: the Workbench goes home to Build.
+        QVERIFY(ProgrammingManager::openFunction(efx->id()));
+        QVERIFY(!view.isWorkbenchDocked());
+        QVERIFY(!build.isWorkbenchLent());
+        QCOMPARE(build.workbench()->loadedFunction(), efx->id());
+        view.setWorkbenchLender(nullptr, nullptr);
     }
+    view.hide();
 }
 
 /* Import chaser… shows a sheet: plays the same?, what each step became,
@@ -5907,6 +6112,326 @@ void ShowTreeView_Test::upgradeThisShow()
     QVERIFY(st->undo());                                       // the upgrade
     QVERIFY(st->productions().isEmpty());
     QCOMPARE(go->function(), chaser->id());
+}
+
+/* Library group rows, right-click (2026-10-22): Select all similar -- the
+   groups like these selected, ready for Make set (offered right after) --
+   and Move to folder ▸ / New Folder…, the Fixture Manager's own rules. */
+void ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove()
+{
+    FixtureGroup *sl = group("SL", 0, 2);
+    FixtureGroup *sr = group("SR", 2, 2);
+    FixtureGroup *mid = group("Mid", 4, 1);
+    sl->setPath("Towers");
+    sr->setPath("Towers");
+    mid->setPath("Towers");
+    FixtureGroup *other = group("Other", 4, 2);   // alike, but not in Towers
+    ShowTreeController *st = m_doc->showTree();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+    auto selectedGroups = [lib]() {
+        QSet<quint32> out;
+        for (QTreeWidgetItem *it : lib->selectedItems())
+            if (it->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibGroup)
+                out.insert(it->data(0, ShowTreeView::IdRole).toUInt());
+        return out;
+    };
+    QTreeWidgetItem *a = rowOf(lib, ShowTreeView::LibGroup, sl->id());
+    QVERIFY(a != nullptr);
+    QCOMPARE(view.selectSimilarLibraryGroups(), 0);   // nothing selected
+    lib->clearSelection();
+    for (QTreeWidgetItem *p = a->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    lib->scrollToItem(a);
+    a->setSelected(true);
+
+    // Through the menu: Select all similar, Make set right after it, then
+    // Move to folder.
+    QStringList names;
+    QTimer driver;
+    driver.setInterval(20);
+    connect(&driver, &QTimer::timeout, this, [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+            return;
+        driver.stop();
+        for (QAction *act : menu->actions())
+            if (!act->isSeparator())
+                names << (act->menu() != nullptr ? act->menu()->objectName() : act->objectName());
+        QAction *similar = menu->findChild<QAction *>("stSelectSimilarGroups");
+        menu->close();
+        if (similar != nullptr)
+            similar->trigger();
+    });
+    driver.start();
+    emit lib->customContextMenuRequested(lib->visualItemRect(a).center());
+    QTRY_VERIFY(!driver.isActive());
+    const int similarAt = names.indexOf("stSelectSimilarGroups");
+    QVERIFY2(similarAt >= 0, qPrintable(names.join(", ")));
+    QCOMPARE(names.value(similarAt + 1), QString("stMakeSet"));
+    QCOMPARE(names.value(similarAt + 2), QString("stMoveGroupsToFolder"));
+    QTRY_COMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
+    QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("Make set"));
+    QVERIFY(!selectedGroups().contains(mid->id()) && !selectedGroups().contains(other->id()));
+
+    // ...and the set from them.
+    const quint32 towers = view.makeSetFromLibrary("Towers");
+    QVERIFY(towers != invalidId());
+    QCOMPARE(QSet<quint32>(st->groupSet(towers)->groups.begin(), st->groupSet(towers)->groups.end()),
+             QSet<quint32>({ sl->id(), sr->id() }));
+
+    // Move to folder ▸ New Folder…: inside the one they are in, still selected.
+    QTest::qWait(50);   // the Library reloads with the new set
+    lib->clearSelection();
+    rowOf(lib, ShowTreeView::LibGroup, sl->id())->setSelected(true);
+    rowOf(lib, ShowTreeView::LibGroup, sr->id())->setSelected(true);
+    QTreeWidgetItem *b = rowOf(lib, ShowTreeView::LibGroup, sr->id());
+    for (QTreeWidgetItem *p = b->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    lib->scrollToItem(b);
+    QStringList folders;
+    std::unique_ptr<ModalCloser> closer;   // the New Folder… name, once the menu is gone
+    QTimer driver2;
+    driver2.setInterval(20);
+    connect(&driver2, &QTimer::timeout, this, [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+            return;
+        driver2.stop();
+        QMenu *move = menu->findChild<QMenu *>("stMoveGroupsToFolder");
+        QAction *nf = move == nullptr ? nullptr : move->findChild<QAction *>("newGroupFolder");
+        if (move != nullptr)
+            for (QAction *act : move->actions())
+                folders << act->text().trimmed();
+        menu->close();
+        closer.reset(new ModalCloser([](QWidget *w) {
+            QInputDialog *d = qobject_cast<QInputDialog *>(w);
+            if (d == nullptr)
+                return false;
+            d->setTextValue("Pair");
+            d->accept();
+            return true;
+        }));
+        if (nf != nullptr)
+            nf->trigger();
+    });
+    driver2.start();
+    emit lib->customContextMenuRequested(lib->visualItemRect(b).center());
+    QTRY_VERIFY2(sl->path() == QString("Towers/Pair"), qPrintable(sl->path() + " / " + folders.join(", ")));
+    QCOMPARE(sr->path(), QString("Towers/Pair"));
+    QCOMPARE(mid->path(), QString("Towers"));
+    QVERIFY2(folders.contains("Towers") && folders.contains("Fixture Groups (no folder)"),
+             qPrintable(folders.join(", ")));
+    QCOMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
+    QTreeWidgetItem *moved = rowOf(lib, ShowTreeView::LibGroup, sl->id());
+    QCOMPARE(moved->parent()->text(0), QString("Pair"));
+    QCOMPARE(moved->parent()->parent()->text(0), QString("Towers"));
+
+    // The API, to no folder: they go to the Groups heading.
+    QCOMPARE(view.moveLibraryGroupsToFolder(QString()), 2);
+    QCOMPARE(sl->path(), QString());
+    QCOMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
+    QCOMPARE(view.moveLibraryGroupsToFolder(QString()), 0);
+}
+
+/* The same on DanceHysteria-0.6 (a copy): DS1t's like, all the truss
+   tops, made a set and filed together. Skipped when the show is not here. */
+void ShowTreeView_Test::libraryGroupToolsOnARealShow()
+{
+    QString show = qEnvironmentVariable("QLC_SHOWTREE_DH_SHOW");
+    if (show.isEmpty())
+        show = QString::fromUtf8(QLC_SHOWTREE_DH_SHOW);
+    if (!QFileInfo::exists(show))
+        QSKIP("DanceHysteria-0.6 is not here (set QLC_SHOWTREE_DH_SHOW)");
+    QTemporaryDir dir;
+    const QString copy = dir.filePath(QStringLiteral("show.qlcc"));
+    QVERIFY(QFile::copy(show, copy));
+    delete m_doc;
+    m_doc = new Doc(this);
+    m_doc->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures"));
+    m_doc->setWorkspacePath(dir.path());
+    if (m_doc->showEmbedding()->readWorkspace(copy))
+        m_doc->showEmbedding()->apply(dir.path());
+    QFile file(copy);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlStreamReader r(&file);
+    bool loaded = false;
+    while (!r.atEnd() && !loaded)
+        if (r.readNextStartElement() && r.name() == QLatin1String("Engine"))
+            loaded = m_doc->loadXML(r, false);
+    QVERIFY(loaded);
+    QVERIFY2(m_doc->fixtureGroups().size() >= 40, "not the show with the groups");
+    FixtureGroup *ds1t = nullptr;
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+        if (g->name() == "DS1t")
+            ds1t = g;
+    QVERIFY(ds1t != nullptr);
+    const QList<quint32> tops = FixtureManager::similarGroups(m_doc, { ds1t->id() });
+    QVERIFY(tops.size() >= 4);
+
+    ShowTreeView view(nullptr, m_doc);
+    QTreeWidget *lib = view.library();
+    QTreeWidgetItem *row = rowOf(lib, ShowTreeView::LibGroup, ds1t->id());
+    QVERIFY(row != nullptr);
+    lib->clearSelection();
+    row->setSelected(true);
+    QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));
+    const quint32 set = view.makeSetFromLibrary("Truss tops");
+    QVERIFY(set != invalidId());
+    QCOMPARE(QSet<quint32>(m_doc->showTree()->groupSet(set)->groups.begin(),
+                           m_doc->showTree()->groupSet(set)->groups.end()),
+             QSet<quint32>(tops.begin(), tops.end()));
+    // Made, the Library reloads: select them again to file them.
+    QTest::qWait(50);
+    row = rowOf(lib, ShowTreeView::LibGroup, ds1t->id());
+    lib->clearSelection();
+    row->setSelected(true);
+    QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));
+    QCOMPARE(view.moveLibraryGroupsToFolder("Truss tops"), int(tops.size()));
+    for (quint32 gid : tops)
+        QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Truss tops"));
+    QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));   // alike still
+}
+
+/* Branson: "for cuelist, and cues can we save a color for the text in the
+   list as an option per cuelist or cue?" Colour ▸ on a list or cues (one
+   undo step), the pages' Text colour buttons, the rows in their colour (a
+   cue's own over its list's, a sub-cue its cue's; skipped stays grey), and
+   the docked Workbench's header. */
+void ShowTreeView_Test::textColoursInTheTreePagesAndWorkbench()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 4; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->setLayerLook(c[0], st->addLayer(c[0], groupTarget(towers->id())), st->lookForPalette(half));
+    const quint32 sub = st->addSubCue(c[1], "Hit");
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    auto listRow = [tree, list]() -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ListNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == list)
+                return *it;
+        return nullptr;
+    };
+    auto trigger = [](QMenu *menu, const QString &name) {
+        for (QAction *a : menu->actions())
+            if (a->objectName() == name)
+            {
+                a->trigger();
+                return true;
+            }
+        return false;
+    };
+    const QColor themeText = cueRow(tree, c[0])->foreground(0).color();
+
+    // The list: Colour ▸ Blue. Its row and every cue row without one.
+    {
+        QMenu menu;
+        view.colourMenu(&menu, {}, list);
+        QVERIFY(trigger(&menu, "stColourBlue"));
+    }
+    QCOMPARE(st->listColour(list), QString("#1e88e5"));
+    QCOMPARE(st->undoText(), QString("Cue list colour"));
+    tree->expandAll();
+    const QColor blue = view.treeTextColour("#1e88e5");
+    QVERIFY(blue.isValid() && blue != themeText);
+    QCOMPARE(listRow()->foreground(0).color(), blue);
+    for (quint32 id : c)
+        QCOMPARE(cueRow(tree, id)->foreground(0).color(), blue);
+    QCOMPARE(cueRow(tree, sub)->foreground(0).color(), blue);
+
+    // The list's page: its Text colour button says Blue.
+    tree->setCurrentItem(listRow());
+    QToolButton *listButton = view.findChild<QToolButton *>("stListColour");
+    QVERIFY(listButton != nullptr && listButton->isVisibleTo(&view));
+    QCOMPARE(listButton->text(), QString("Blue"));
+
+    // A cue's page: None (the list's: Blue); from its button's menu, Red.
+    QVERIFY(view.selectNode(c[1]));
+    QToolButton *cueButton = view.findChild<QToolButton *>("stCueColour");
+    QVERIFY(cueButton != nullptr && cueButton->isVisibleTo(&view));
+    QCOMPARE(cueButton->text(), QString("None (the list's: Blue)"));
+    QMenu *menu = cueButton->menu();
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QAction *none = menu->findChild<QAction *>("stColourNone");
+    QVERIFY(none != nullptr && none->isChecked());
+    QCOMPARE(none->text(), QString("None (the list's: Blue)"));
+    QVERIFY(trigger(menu, "stColourRed"));
+    QCOMPARE(st->cueColour(c[1]), QString("#e53935"));
+    QCOMPARE(st->undoText(), QString("Cue colour"));
+    QTRY_COMPARE(cueButton->text(), QString("Red"));
+    tree->expandAll();
+    const QColor red = view.treeTextColour("#e53935");
+    QCOMPARE(cueRow(tree, c[1])->foreground(0).color(), red);
+    QCOMPARE(cueRow(tree, sub)->foreground(0).color(), red);   // a sub-cue: its cue's
+    QCOMPARE(cueRow(tree, c[2])->foreground(0).color(), blue);
+    emit menu->aboutToShow();
+    QVERIFY(menu->findChild<QAction *>("stColourRed")->isChecked());
+
+    // Several selected, from the row's Colour ▸: one step for them all.
+    tree->clearSelection();
+    cueRow(tree, c[2])->setSelected(true);
+    cueRow(tree, c[3])->setSelected(true);
+    {
+        QMenu several;
+        view.colourMenu(&several, view.selectedCues());
+        QVERIFY(trigger(&several, "stColourGreen"));
+    }
+    QCOMPARE(st->undoText(), QString("Colour of 2 cues"));
+    QCOMPARE(st->cueColour(c[2]), QString("#43a047"));
+    QCOMPARE(st->cueColour(c[3]), QString("#43a047"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueColour(c[2]), QString("#1e88e5"));
+    QCOMPARE(st->cueColour(c[3]), QString("#1e88e5"));
+    tree->expandAll();
+    QCOMPARE(cueRow(tree, c[3])->foreground(0).color(), blue);
+
+    // Skipped: its grey wins over its colour.
+    QVERIFY(view.setCuesSkipped({ c[1] }, true));
+    tree->expandAll();
+    QVERIFY(cueRow(tree, c[1])->foreground(0).color() != red);
+    QVERIFY(view.setCuesSkipped({ c[1] }, false));
+
+    // The docked Workbench: its header in the cue's colour.
+    QVERIFY(view.selectNode(c[1]));
+    QVERIFY(view.openSelectionInWorkbench());
+    QLabel *title = view.dockedWorkbench()->findChild<QLabel *>("workbenchTitle");
+    QVERIFY(title != nullptr);
+    const QColor onHeader = readableOn(QColor("#e53935"), title->palette().color(QPalette::Window));
+    QVERIFY2(title->styleSheet().contains(onHeader.name()), qPrintable(title->styleSheet()));
+    QVERIFY(st->setCuesColour({ c[1] }, QString()));
+    QTRY_VERIFY2(title->styleSheet().contains(QColor(readableOn(QColor("#1e88e5"),
+                                                                 title->palette().color(QPalette::Window))).name()),
+                 qPrintable(title->styleSheet()));
+
+    const QString dir = qEnvironmentVariable("QLC_CUECOLOUR_SHOTS");
+    if (!dir.isEmpty())
+    {
+        QVERIFY(st->setCuesColour({ c[0] }, "Orange"));
+        QVERIFY(st->setCuesColour({ c[2] }, "Purple"));
+        QVERIFY(st->setCuesColour({ c[1] }, "Red"));
+        view.dockedWorkbench()->goBack();
+        QTest::qWait(50);
+        QVERIFY(view.selectNode(c[1]));
+        tree->expandAll();
+        QTest::qWait(50);
+        QVERIFY(view.grab().save(dir + "/showtree.png"));
+    }
 }
 
 QTEST_MAIN(ShowTreeView_Test)

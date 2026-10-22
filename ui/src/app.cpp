@@ -41,6 +41,7 @@
 #include "functionselection.h"
 #include "effectspage.h"
 #include "effectdesigner.h"
+#include "itemicons.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "showtreecontroller.h"
@@ -201,6 +202,7 @@ App::App()
     , m_timelineSuspendAction(NULL)
     , m_followMtcAction(NULL)
     , m_lastLookAction(NULL)
+    , m_autoMibAction(NULL)
     , m_clearLastLookAction(NULL)
     , m_controlPanicAction(NULL)
     , m_dumpDmxAction(NULL)
@@ -558,6 +560,7 @@ void App::init()
     // alongside another tab or on a second monitor.
     w = new Monitor(m_tab, m_doc);
     addTab(w, QIcon(":/grid.png"), tr("Lighting Studio"));
+    // Functions: shown or hidden by setFunctionsWindowShown() (below).
     w = new FunctionManager(m_tab, m_doc);
     addTab(w, QIcon(":/function.png"), tr("Functions"));
     QPointer<ProgrammingManager> buildTab;
@@ -617,7 +620,7 @@ void App::init()
     }
     // Build (WORKFLOW_DESIGN.md §3.1; it was "Programming"): makes the
     // show's palettes, effects, scenes and collections.
-    addTab(w, QIcon(":/scene.png"), tr("Build"));
+    addTab(w, ItemIcons::buildIcon(), tr("Build"));   // a hard hat
     // The Show Tree beside Build (SHOW_TREE_DESIGN.md D2): writing a show as
     // one tree of cue lists, cues and layers -- what Build made, in order.
     {
@@ -645,11 +648,10 @@ void App::init()
     w = new CueRunner(m_doc, CueRunner::Full, m_tab);
     w->setObjectName(QStringLiteral("runTab"));
     addTab(w, QIcon(":/chaser.png"), tr("Run"));
-    /* Functions: no tab ("I keep hitting it by mistake instead of
-       Programming"), but there to open from the Window menu, in a window of
-       its own. Closing that window puts it away again. */
-    parkContext(tr("Functions"));
-
+    /* Functions: hidden (board Q32) -- no tab, and Window → Functions opens
+       Build ▸ Scenes ▸ Classic, where everything it did lives. The view
+       modes (a Classic QLC+ view) show it again through the same switch. */
+    setFunctionsWindowShown(false);
     // Load and apply the tab label mode preference.
     {
         QSettings settings;
@@ -738,6 +740,12 @@ void App::setActiveWindow(const QString& name)
 {
     if (name.isEmpty() == true)
         return;
+    // A show saved with the Functions window in front: its home now.
+    if (name == QLatin1String(FunctionManager::staticMetaObject.className()))
+    {
+        showFunctions();
+        return;
+    }
 
     for (int i = 0; i < m_tab->count(); i++)
     {
@@ -1800,6 +1808,30 @@ void App::initActions()
     connect(m_lastLookAction, SIGNAL(toggled(bool)),
             this, SLOT(slotLastLookToggled(bool)));
 
+    /* Auto move-in-black in the menu bar too, ticked while it is on: the
+       show's one setting, the same switch as Build's "Move in black" and the
+       Show Tree's MIB button (they all follow the controller). */
+    m_autoMibAction = new QAction(tr("Auto &Move in Black"), this);
+    m_autoMibAction->setObjectName(QStringLiteral("autoMoveInBlackAction"));
+    m_autoMibAction->setCheckable(true);
+    m_autoMibAction->setToolTip(tr(
+        "While the show runs, pre-position any dark mover the next cue will "
+        "reveal. Saved with the show; the same switch as Build → Move in black "
+        "and the Show Tree's MIB button."));
+    if (ProgrammerController *pc = m_doc->programmer())
+    {
+        m_autoMibAction->setChecked(pc->isAutoMoveInBlack());
+        connect(m_autoMibAction, &QAction::toggled, pc, [this, pc](bool on) {
+            pc->setAutoMoveInBlack(on);
+            const QSignalBlocker b(m_autoMibAction);
+            m_autoMibAction->setChecked(pc->isAutoMoveInBlack());   // if it said no
+        });
+        connect(pc, &ProgrammerController::autoMoveInBlackChanged, m_autoMibAction, [this](bool on) {
+            const QSignalBlocker b(m_autoMibAction);
+            m_autoMibAction->setChecked(on);
+        });
+    }
+
     m_clearLastLookAction = new QAction(QIcon(":/fileclose.png"),
                                         tr("&Clear Held Last Look"), this);
     m_clearLastLookAction->setToolTip(tr(
@@ -2209,6 +2241,55 @@ void App::initMenuBar()
             else if (m_doc->showTree() != nullptr)
                 m_doc->showTree()->redoShared();
         });
+
+        /* ⇧⌘N, New (here): named for what it would make where you are
+           ("New Cue After 0.0.3"). The key is each tab's own (Show Tree,
+           Build, Fixtures -- broken out into a window too), as ⌘Z is: a
+           binding here would clash with the Virtual Console's ⇧⌘N. */
+        editMenu->addSeparator();
+        QAction *newHere = editMenu->addAction(tr("New"));
+        newHere->setObjectName(QStringLiteral("editNewHere"));
+        // Where it goes: the tab (or broken-out window) holding the focus,
+        // else the tab in front.
+        auto newHereHost = [current]() -> QWidget * {
+            for (QWidget *w = QApplication::focusWidget(); w != nullptr; w = w->parentWidget())
+                if (qobject_cast<ShowTreeView *>(w) != nullptr || qobject_cast<ProgrammingManager *>(w) != nullptr
+                    || qobject_cast<FixtureManager *>(w) != nullptr)
+                    return w;
+            QWidget *w = current();
+            if (w == nullptr)
+                return nullptr;
+            if (qobject_cast<ShowTreeView *>(w) != nullptr || qobject_cast<ProgrammingManager *>(w) != nullptr
+                || qobject_cast<FixtureManager *>(w) != nullptr)
+                return w;
+            if (ShowTreeView *v = w->findChild<ShowTreeView *>())
+                return v;
+            if (ProgrammingManager *pm = w->findChild<ProgrammingManager *>())
+                return pm;
+            return w->findChild<FixtureManager *>();
+        };
+        connect(editMenu, &QMenu::aboutToShow, this, [newHere, newHereHost]() {
+            QWidget *host = newHereHost();
+            QString label;
+            if (ShowTreeView *v = qobject_cast<ShowTreeView *>(host))
+                label = v->newHereLabel();
+            else if (ProgrammingManager *pm = qobject_cast<ProgrammingManager *>(host))
+                label = pm->newHereLabel();
+            else if (FixtureManager *fm = qobject_cast<FixtureManager *>(host))
+                label = fm->newHereLabel();
+            const QString key = QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N).toString(QKeySequence::NativeText);
+            newHere->setText(label.isEmpty() ? tr("New (%1)").arg(key) : tr("%1 (%2)").arg(label, key));
+            newHere->setEnabled(!label.isEmpty());
+        });
+        connect(newHere, &QAction::triggered, this, [newHereHost]() {
+            QWidget *host = newHereHost();
+            if (ShowTreeView *v = qobject_cast<ShowTreeView *>(host))
+                v->newHere();
+            else if (ProgrammingManager *pm = qobject_cast<ProgrammingManager *>(host))
+                pm->newHere();
+            else if (FixtureManager *fm = qobject_cast<FixtureManager *>(host))
+                fm->newHere();
+        });
     }
 
     /* ---- View: tools + jump to a workspace tab ---- */
@@ -2442,6 +2523,8 @@ void App::initMenuBar()
     ctrlMenu->addAction(m_timelineSuspendAction);
     ctrlMenu->addAction(m_lastLookAction);
     ctrlMenu->addAction(m_clearLastLookAction);
+    ctrlMenu->addSeparator();
+    ctrlMenu->addAction(m_autoMibAction);
 
     /* ---- Window: every view, wherever it is ----
        "the menubar needs a windows thing so I can find them .. if I break out
@@ -2456,7 +2539,7 @@ void App::initMenuBar()
         QAction* jump = windowMenu->addAction(m_tabOriginals.at(i).second,
                                               m_tabOriginals.at(i).first);
         // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
-        // the Function Manager's "add function" shortcuts.
+        // Build ▸ Scenes' "new function" shortcuts.
         // The tenth (Run) is ⇧⌘0.
         jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10)));
         /* Resolve by LABEL, not by construction order. Detaching a view calls
@@ -2465,9 +2548,16 @@ void App::initMenuBar()
            for the detached view itself. */
         const QString label = m_tabOriginals.at(i).first;
         jump->setData(label);
-        connect(jump, &QAction::triggered, this, [this, label]() {
-            showContext(label);
-        });
+        if (label == tr("Functions"))
+        {
+            jump->setObjectName(QStringLiteral("windowFunctions"));
+            jump->setToolTip(tr("Every function by type, as the Function Manager listed them: Build ▸ Scenes ▸ Classic"));
+            connect(jump, &QAction::triggered, this, &App::showFunctions);
+        }
+        else
+            connect(jump, &QAction::triggered, this, [this, label]() {
+                showContext(label);
+            });
         m_windowJumps << jump;
     }
     /* The Rig Overview is a window of its own, so it is offered here too, not
@@ -3360,6 +3450,54 @@ void App::slotCaptureUndoStackChanged()
         m_captureUndoAction->setText(tr("Undo Last Store"));
         m_captureUndoAction->setToolTip(tr("Revert the most recent capture commit"));
     }
+}
+
+void App::showFunctions()
+{
+    if (m_functionsWindowShown)
+    {
+        showContext(tr("Functions"));
+        return;
+    }
+    showContext(tr("Build"));
+    if (ProgrammingManager *pm = ProgrammingManager::instance())
+        pm->showClassic();
+}
+
+void App::setFunctionsWindowShown(bool shown)
+{
+    m_functionsWindowShown = shown;
+    FunctionManager *fm = FunctionManager::instance();
+    if (fm == NULL || m_tab == NULL)
+        return;
+    const QString label = tr("Functions");
+    if (!shown)
+    {
+        if (m_tab->indexOf(fm) >= 0)
+            parkContext(label);                 // off the tab bar
+        else if (!m_parkedContexts.contains(fm))
+        {
+            // In a window of its own: closing it puts it away, not back.
+            fm->setProperty("parked", true);
+            m_parkedContexts << fm;
+        }
+        updateWindowTitle();
+        return;
+    }
+    if (!m_parkedContexts.contains(fm))
+        return;                                 // a tab already
+    m_parkedContexts.removeAll(fm);
+    fm->setProperty("parked", false);
+    // Open in a window of its own: closing it puts it back as a tab.
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() == fm)
+            return;
+    const int idx = qBound(0, fm->property("tabIndex").toInt(), m_tab->count());
+    fm->setParent(m_tab);
+    m_tab->insertTab(idx, fm, fm->property("tabIcon").value<QIcon>(), label);
+    m_tab->tabBar()->setTabData(idx, label);
+    applyTabLabelMode();
+    updateWindowTitle();
 }
 
 void App::showContext(const QString &tabLabel)

@@ -29,6 +29,7 @@
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
+class QColor;
 class QXmlStreamWriter;
 
 /** @addtogroup engine Engine
@@ -238,6 +239,12 @@ namespace ShowTree
          *  Its chaser step is skipped (ChaserStep::skip). Kept so it can
          *  be put back; this use's, like its number (not a reusable's). */
         bool skip = false;
+        /** The colour its text is shown in -- the tree, the Run tab, the VC
+         *  Cue Runner and Cue List ("#rrggbb"; empty: its list's, else the
+         *  theme's). Only how it reads: nothing plays differently. This
+         *  use's, like its number. Saved as Colour=, which an older build
+         *  ignores. */
+        QString colour;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);
@@ -264,6 +271,9 @@ namespace ShowTree
         /** A Looks section's folders kept although no look is in them yet
          *  (New folder); a folder a look is in needs no entry. */
         QStringList folders;
+        /** The text colour of its cues that have none of their own
+         *  (Cue::colour; empty: the theme's). */
+        QString colour;
         /** A cue's sub-cues (P6, §3C, D9, D25): the sub-cues of cue @a subOf
          *  (in another list of the same production) as a list of their own,
          *  as a Looks section is -- so every cue operation works on a
@@ -509,6 +519,33 @@ namespace ShowTree
     /** Split "0.0.4-SHOUT" into "0.0.4" and "SHOUT"; false when @a text
      *  doesn't start with a number. */
     QLC_ENGINE_EXPORT bool splitNumberedName(const QString &text, QString *number, QString *name);
+
+    /************************************************************************
+     * Text colours (Cue::colour, CueList::colour)
+     ************************************************************************/
+
+    /** One of the colours offered for a cue's text: show-friendly, each
+     *  readable on light and dark backgrounds once readableOn() has had a
+     *  say. */
+    struct QLC_ENGINE_EXPORT TextColour
+    {
+        QString name;           //!< "Red"
+        QString hex;            //!< "#e53935"
+    };
+    QLC_ENGINE_EXPORT const QList<TextColour> &textColours();
+    /** A text colour from what a person types: a name of textColours()
+     *  ("red", any case), "#rgb" / "#rrggbb", or "none" / "off" / "clear"
+     *  (empty: the colour is taken away). False when it is none of these. */
+    QLC_ENGINE_EXPORT bool parseTextColour(const QString &text, QString *hex);
+    /** What a person reads for @a hex: its name if it is one of
+     *  textColours(), else the hex; "" for none. */
+    QLC_ENGINE_EXPORT QString textColourName(const QString &hex);
+    /** WCAG's contrast ratio of two colours (1..21). */
+    QLC_ENGINE_EXPORT double contrastRatio(const QColor &a, const QColor &b);
+    /** @a colour as text on @a background: itself when it reads (@a ratio,
+     *  WCAG's 4.5:1 for text), else the nearest variant of it that does --
+     *  lighter on a dark background, darker on a light one, the same hue. */
+    QLC_ENGINE_EXPORT QColor readableOn(const QColor &colour, const QColor &background, double ratio = 4.5);
 
     /************************************************************************
      * XML

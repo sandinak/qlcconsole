@@ -488,6 +488,56 @@ void Workbench_Test::newEffectsAreMadeOnTheSelectedLayer()
     QCOMPARE(fresh->path(true), QString("Show/0-Preshow"));
 }
 
+void Workbench_Test::newHereMakesAStepOrALayer()
+{
+    Scene *a = scene("Announcer", "Show/0-Preshow");
+    Scene *b = scene("Walk-in", "Show/0-Preshow");
+    Collection *c = collection("0.0.3-Announcer", { a->id() });
+    c->setPath("Show/0-Preshow");
+    ShowTreeController *st = m_doc->showTree();
+
+    // A lone scene: nothing to add to.
+    Workbench wb(m_doc);
+    wb.load(a->id());
+    QCOMPARE(wb.newHereLabel(), QString());
+    QCOMPARE(wb.newHere(), Function::invalidId());
+
+    // A collection: a new empty scene, as a layer at the end, filed with it.
+    wb.load(c->id());
+    QCOMPARE(wb.newHereLabel(), QString("New Scene in 0.0.3-Announcer"));
+    const quint32 made = wb.newHere();
+    QVERIFY(made != Function::invalidId());
+    QCOMPARE(c->functions(), QList<quint32>({ a->id(), made }));
+    QCOMPARE(m_doc->function(made)->path(true), QString("Show/0-Preshow"));
+    QCOMPARE(wb.rows()->layerOf(wb.rows()->currentItem()), 1);
+    QVERIFY(st->undoShared());                  // one step: layer and scene go
+    QCOMPARE(c->functions(), QList<quint32>({ a->id() }));
+    QVERIFY(m_doc->function(made) == nullptr);
+
+    // A chaser: a new scene as the step after the one walked to.
+    Chaser *ch = new Chaser(m_doc);
+    ch->setName("Walk");
+    m_doc->addFunction(ch);
+    ch->setPath("Show/0-Preshow");
+    ch->addStep(ChaserStep(a->id()));
+    ch->addStep(ChaserStep(b->id()));
+    wb.load(ch->id());
+    FunctionStack *fs = qobject_cast<FunctionStack *>(wb.stack());
+    QVERIFY(fs != nullptr);
+    QCOMPARE(fs->step(), 0);
+    QCOMPARE(wb.newHereLabel(), QString("New Step After 1 in Walk"));
+    const quint32 stepScene = wb.newHere();
+    QVERIFY(qobject_cast<Scene *>(m_doc->function(stepScene)) != nullptr);
+    QCOMPARE(ch->stepsCount(), 3);
+    QCOMPARE(ch->steps().at(1).fid, stepScene);
+    QCOMPARE(fs->step(), 1);                    // walked to
+    QCOMPARE(m_doc->function(stepScene)->path(true), QString("Show/0-Preshow"));
+    QVERIFY(st->undoShared());
+    QCOMPARE(ch->stepsCount(), 2);
+    QCOMPARE(ch->steps().at(1).fid, b->id());
+    QVERIFY(m_doc->function(stepScene) == nullptr);
+}
+
 void Workbench_Test::sharedMembersSayWhereElse()
 {
     Scene *back = scene("BackStage", "Show");
