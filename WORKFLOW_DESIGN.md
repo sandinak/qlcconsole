@@ -432,6 +432,45 @@ detail"*):
    - **Restore original** from the import link, which re-points VC back,
      for an import you regret.
 
+### 3.7 QLC+ power users: their two habits, kept and carried forward
+
+The old ways stay first-class. Nothing nags a user to convert, nothing
+converts on load, and a show built only the old way keeps working forever.
+The new tools are a path forward, not a gate.
+
+**Habit 1: set the rig, save a scene, chase the scenes, run.**
+
+| Step | Today | Proposed |
+|---|---|---|
+| Set the rig | fixture console, Simple Desk, Programming stage tools | same, plus the Workbench's channel console |
+| Save the look | five captures: Programming Snapshot, Show Tree Record, Live → Capture, VC SaveProgrammer, Simple Desk Record | **one Capture ▾** in Build, with a destination: *New scene* (raw values, exactly as QLC+ saves it), *Update scene*, *Palettes*, *Cue in the Show Tree* |
+| Chase the scenes | Function Manager → new chaser → add steps | Build ▸ Scenes ▸ Classic: select scenes → **Chaser from selection** (order = selection), or drag them onto a chaser; the Workbench walks its steps |
+| Run | VC button / cue list, Run | unchanged |
+| Step forward | — | **Send to Show Tree** on the chaser (Import in place) when ready |
+
+The new-world twin of habit 1 is the Show Tree's **Record**: set the rig,
+press Record, get the next cue. Same gesture, but the cue tracks and its
+layers stay editable.
+
+**Habit 2: build scenes, gather them into collections with EFX and RGB
+Matrix, run.**
+
+| Step | Today | Proposed |
+|---|---|---|
+| Make scenes | Scene editor / Programming canvas | Build ▸ Scenes, the Workbench |
+| Assemble | Collection editor, a list of function names | load the collection in the Workbench: each member is a layer, **+ Scene / + EFX / + RGB Matrix**, reorder, live preview of the whole |
+| Effects | EFX editor, RGB Matrix editor | the same stock editors in the Workbench's editor pane, or **Design effect** on a layer |
+| Run | VC buttons, chasers of collections | unchanged |
+| Step forward | — | a collection becomes a **cue** (members → layers) or a **busk look** (a VC button that fires it); a chaser of collections becomes a cue list |
+
+**Taking existing work forward** (a selling point; can wait): an
+**Upgrade this show…** wizard over the W5 pieces. It runs the show
+converter, lists each chaser and collection with its plan (cue list,
+effect chaser kept as a function, look, leave alone), offers Capture into
+palettes for raw scenes, runs the same-output check, and applies the plan
+as one undo step with Restore original. Every part is optional and the
+show still plays the old way at every point.
+
 ### 3.6 Option 3, option A and the outline: what to keep, change, drop
 
 | Piece | Verdict |
