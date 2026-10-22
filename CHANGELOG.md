@@ -13,6 +13,14 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Group tools in the Show Tree's Library.** A group row's right-click
+  adds *Select all similar* (`FixtureManager::similarGroups`, the rows
+  selected for *Make set…*, which follows it; the hint says so) and *Move
+  to folder ▸* (`fillMoveToFolderMenu` / `applyMoveToFolder`: folders in
+  use, no folder, *New Folder…*). Multi-select aware; the moved groups stay
+  selected after the Library reloads. `ShowTreeView::selectSimilarLibraryGroups()`
+  / `moveLibraryGroupsToFolder()`. Build's Groups & fixtures and the
+  Fixture Manager already had them; the Workbench has no group list.
 - **Build ▸ Effects makes effects.** A **+ New ▾** button (effect palette
   in the designer, EFX, RGB Matrix — the classic ones on the Try on groups)
   and a right-click menu on the list (Design / edit…, Open in editor for

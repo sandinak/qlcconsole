@@ -82,6 +82,8 @@ private slots:
 
     // P3 (2026-10-17)
     void groupSetsInTheLibrary();
+    void libraryGroupToolsSelectSimilarAndMove();
+    void libraryGroupToolsOnARealShow();
     void childLayersByMouse();
     void renameInPlace();
     void lineAimsInTheTab();

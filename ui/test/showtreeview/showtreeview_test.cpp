@@ -63,6 +63,10 @@
 #include <QStackedWidget>
 #include <QRegularExpression>
 
+#include <QTemporaryDir>
+#include <memory>
+#include "showembedding.h"
+#include "fixturemanager.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
 #include "timecodesource.h"
@@ -5907,6 +5911,189 @@ void ShowTreeView_Test::upgradeThisShow()
     QVERIFY(st->undo());                                       // the upgrade
     QVERIFY(st->productions().isEmpty());
     QCOMPARE(go->function(), chaser->id());
+}
+
+/* Library group rows, right-click (2026-10-22): Select all similar -- the
+   groups like these selected, ready for Make set (offered right after) --
+   and Move to folder ▸ / New Folder…, the Fixture Manager's own rules. */
+void ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove()
+{
+    FixtureGroup *sl = group("SL", 0, 2);
+    FixtureGroup *sr = group("SR", 2, 2);
+    FixtureGroup *mid = group("Mid", 4, 1);
+    sl->setPath("Towers");
+    sr->setPath("Towers");
+    mid->setPath("Towers");
+    FixtureGroup *other = group("Other", 4, 2);   // alike, but not in Towers
+    ShowTreeController *st = m_doc->showTree();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+    auto selectedGroups = [lib]() {
+        QSet<quint32> out;
+        for (QTreeWidgetItem *it : lib->selectedItems())
+            if (it->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibGroup)
+                out.insert(it->data(0, ShowTreeView::IdRole).toUInt());
+        return out;
+    };
+    QTreeWidgetItem *a = rowOf(lib, ShowTreeView::LibGroup, sl->id());
+    QVERIFY(a != nullptr);
+    QCOMPARE(view.selectSimilarLibraryGroups(), 0);   // nothing selected
+    lib->clearSelection();
+    for (QTreeWidgetItem *p = a->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    lib->scrollToItem(a);
+    a->setSelected(true);
+
+    // Through the menu: Select all similar, Make set right after it, then
+    // Move to folder.
+    QStringList names;
+    QTimer driver;
+    driver.setInterval(20);
+    connect(&driver, &QTimer::timeout, this, [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+            return;
+        driver.stop();
+        for (QAction *act : menu->actions())
+            if (!act->isSeparator())
+                names << (act->menu() != nullptr ? act->menu()->objectName() : act->objectName());
+        QAction *similar = menu->findChild<QAction *>("stSelectSimilarGroups");
+        menu->close();
+        if (similar != nullptr)
+            similar->trigger();
+    });
+    driver.start();
+    emit lib->customContextMenuRequested(lib->visualItemRect(a).center());
+    QTRY_VERIFY(!driver.isActive());
+    const int similarAt = names.indexOf("stSelectSimilarGroups");
+    QVERIFY2(similarAt >= 0, qPrintable(names.join(", ")));
+    QCOMPARE(names.value(similarAt + 1), QString("stMakeSet"));
+    QCOMPARE(names.value(similarAt + 2), QString("stMoveGroupsToFolder"));
+    QTRY_COMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
+    QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("Make set"));
+    QVERIFY(!selectedGroups().contains(mid->id()) && !selectedGroups().contains(other->id()));
+
+    // ...and the set from them.
+    const quint32 towers = view.makeSetFromLibrary("Towers");
+    QVERIFY(towers != invalidId());
+    QCOMPARE(QSet<quint32>(st->groupSet(towers)->groups.begin(), st->groupSet(towers)->groups.end()),
+             QSet<quint32>({ sl->id(), sr->id() }));
+
+    // Move to folder ▸ New Folder…: inside the one they are in, still selected.
+    QTest::qWait(50);   // the Library reloads with the new set
+    lib->clearSelection();
+    rowOf(lib, ShowTreeView::LibGroup, sl->id())->setSelected(true);
+    rowOf(lib, ShowTreeView::LibGroup, sr->id())->setSelected(true);
+    QTreeWidgetItem *b = rowOf(lib, ShowTreeView::LibGroup, sr->id());
+    for (QTreeWidgetItem *p = b->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    lib->scrollToItem(b);
+    QStringList folders;
+    std::unique_ptr<ModalCloser> closer;   // the New Folder… name, once the menu is gone
+    QTimer driver2;
+    driver2.setInterval(20);
+    connect(&driver2, &QTimer::timeout, this, [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+            return;
+        driver2.stop();
+        QMenu *move = menu->findChild<QMenu *>("stMoveGroupsToFolder");
+        QAction *nf = move == nullptr ? nullptr : move->findChild<QAction *>("newGroupFolder");
+        if (move != nullptr)
+            for (QAction *act : move->actions())
+                folders << act->text().trimmed();
+        menu->close();
+        closer.reset(new ModalCloser([](QWidget *w) {
+            QInputDialog *d = qobject_cast<QInputDialog *>(w);
+            if (d == nullptr)
+                return false;
+            d->setTextValue("Pair");
+            d->accept();
+            return true;
+        }));
+        if (nf != nullptr)
+            nf->trigger();
+    });
+    driver2.start();
+    emit lib->customContextMenuRequested(lib->visualItemRect(b).center());
+    QTRY_VERIFY2(sl->path() == QString("Towers/Pair"), qPrintable(sl->path() + " / " + folders.join(", ")));
+    QCOMPARE(sr->path(), QString("Towers/Pair"));
+    QCOMPARE(mid->path(), QString("Towers"));
+    QVERIFY2(folders.contains("Towers") && folders.contains("Fixture Groups (no folder)"),
+             qPrintable(folders.join(", ")));
+    QCOMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
+    QTreeWidgetItem *moved = rowOf(lib, ShowTreeView::LibGroup, sl->id());
+    QCOMPARE(moved->parent()->text(0), QString("Pair"));
+    QCOMPARE(moved->parent()->parent()->text(0), QString("Towers"));
+
+    // The API, to no folder: they go to the Groups heading.
+    QCOMPARE(view.moveLibraryGroupsToFolder(QString()), 2);
+    QCOMPARE(sl->path(), QString());
+    QCOMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
+    QCOMPARE(view.moveLibraryGroupsToFolder(QString()), 0);
+}
+
+/* The same on DanceHysteria-0.6 (a copy): DS1t's like, all the truss
+   tops, made a set and filed together. Skipped when the show is not here. */
+void ShowTreeView_Test::libraryGroupToolsOnARealShow()
+{
+    QString show = qEnvironmentVariable("QLC_SHOWTREE_DH_SHOW");
+    if (show.isEmpty())
+        show = QString::fromUtf8(QLC_SHOWTREE_DH_SHOW);
+    if (!QFileInfo::exists(show))
+        QSKIP("DanceHysteria-0.6 is not here (set QLC_SHOWTREE_DH_SHOW)");
+    QTemporaryDir dir;
+    const QString copy = dir.filePath(QStringLiteral("show.qlcc"));
+    QVERIFY(QFile::copy(show, copy));
+    delete m_doc;
+    m_doc = new Doc(this);
+    m_doc->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures"));
+    m_doc->setWorkspacePath(dir.path());
+    if (m_doc->showEmbedding()->readWorkspace(copy))
+        m_doc->showEmbedding()->apply(dir.path());
+    QFile file(copy);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlStreamReader r(&file);
+    bool loaded = false;
+    while (!r.atEnd() && !loaded)
+        if (r.readNextStartElement() && r.name() == QLatin1String("Engine"))
+            loaded = m_doc->loadXML(r, false);
+    QVERIFY(loaded);
+    QVERIFY2(m_doc->fixtureGroups().size() >= 40, "not the show with the groups");
+    FixtureGroup *ds1t = nullptr;
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+        if (g->name() == "DS1t")
+            ds1t = g;
+    QVERIFY(ds1t != nullptr);
+    const QList<quint32> tops = FixtureManager::similarGroups(m_doc, { ds1t->id() });
+    QVERIFY(tops.size() >= 4);
+
+    ShowTreeView view(nullptr, m_doc);
+    QTreeWidget *lib = view.library();
+    QTreeWidgetItem *row = rowOf(lib, ShowTreeView::LibGroup, ds1t->id());
+    QVERIFY(row != nullptr);
+    lib->clearSelection();
+    row->setSelected(true);
+    QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));
+    const quint32 set = view.makeSetFromLibrary("Truss tops");
+    QVERIFY(set != invalidId());
+    QCOMPARE(QSet<quint32>(m_doc->showTree()->groupSet(set)->groups.begin(),
+                           m_doc->showTree()->groupSet(set)->groups.end()),
+             QSet<quint32>(tops.begin(), tops.end()));
+    // Made, the Library reloads: select them again to file them.
+    QTest::qWait(50);
+    row = rowOf(lib, ShowTreeView::LibGroup, ds1t->id());
+    lib->clearSelection();
+    row->setSelected(true);
+    QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));
+    QCOMPARE(view.moveLibraryGroupsToFolder("Truss tops"), int(tops.size()));
+    for (quint32 gid : tops)
+        QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Truss tops"));
+    QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));   // alike still
 }
 
 QTEST_MAIN(ShowTreeView_Test)
