@@ -543,6 +543,10 @@ PaletteOps::State PaletteOps::capture(quint32 id) const
     s.exists = true;
     s.name = p->name();
     s.path = p->path();
+    s.values = p->values();
+    s.colourMacro = p->colourMacro();
+    s.goboName = p->goboName();
+    s.goboValues = p->goboValues();
     QBuffer buffer(&s.xml);
     buffer.open(QIODevice::WriteOnly);
     QXmlStreamWriter w(&buffer);
@@ -610,6 +614,18 @@ void PaletteOps::apply(const QList<State> &states, const QStringList &folders)
             have->setName(s.name);
         if (have->path() != s.path)
             have->setPath(s.path);
+        if (s.value)
+        {
+            have->setValues(s.values);
+            have->setColourMacro(s.colourMacro);
+            have->setGoboName(s.goboName);
+            have->setGoboValues(s.goboValues);
+            // Scenes read a palette as they run: the ones playing it, again.
+            for (Function *f : m_doc->functions())
+                if (Scene *sc = qobject_cast<Scene *>(f))
+                    if (sc->isRunning() && sc->palettes().contains(s.id))
+                        sc->requestPaletteRefresh();
+        }
     }
     m_emptyFolders = folders;
     m_doc->setModified();
@@ -707,6 +723,63 @@ bool PaletteOps::redo()
         if (ShowTreeController *tree = m_doc->showTree())
             tree->restoreOutsideUndoState(st.treeAfter);
     m_undo << st;
+    emit changed();
+    return true;
+}
+
+/****************************************************************************
+ * Value steps
+ ****************************************************************************/
+
+bool PaletteOps::valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
+                           const QString &mergeKey)
+{
+    if (m_doc->palette(paletteId) == nullptr)
+        return false;
+    if (!isManaged(paletteId))
+    {
+        change();
+        return false;
+    }
+    State before = capture(paletteId);
+    before.value = true;
+    change();
+    State after = capture(paletteId);
+    after.value = true;
+    if (!after.exists || (after.values == before.values && after.name == before.name
+                          && after.colourMacro == before.colourMacro && after.goboName == before.goboName
+                          && after.goboValues == before.goboValues))
+        return false;
+
+    const qint64 at = QDateTime::currentMSecsSinceEpoch();
+    if (!mergeKey.isEmpty() && !m_undo.isEmpty() && m_undo.last().mergeKey == mergeKey
+        && at - m_undo.last().mergeAt < 1500 && m_redo.isEmpty()
+        && m_undo.last().after.size() == 1 && m_undo.last().after.first().id == paletteId)
+    {
+        // The same palette, further on: keep where it started.
+        Step &top = m_undo.last();
+        top.after[0] = after;
+        top.mergeAt = at;
+        m_doc->setModified();
+        emit changed();
+        return true;
+    }
+
+    Step st;
+    st.label = label;
+    st.before << before;
+    st.after << after;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.mergeKey = mergeKey;
+    st.mergeAt = at;
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    if (ShowTreeController *tree = m_doc->showTree())
+        tree->clearRedo();
+    m_doc->setModified();
     emit changed();
     return true;
 }

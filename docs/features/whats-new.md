@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **A look's name follows its colour.** Change a colour look from red
+  to a darker red and "Red" becomes "Dark Red" as you drag. Only the
+  colour part changes ("Act2 Red" becomes "Act2 Dark Red"), and the look
+  stays in its folder. Intensity ("Intensity 45%" to "Intensity 60%"),
+  strobe and shutter names follow their values the same way. A name of
+  your own is left alone. The change and the rename are one Undo step.
+  See [The name follows the value](build.md#the-name-follows-the-value).
+
 - **The effect designer.** Build an effect in detail on the heads it is
   for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
   menu of its Effect row) opens the effect browser at full height. Beside

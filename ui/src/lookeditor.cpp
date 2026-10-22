@@ -48,6 +48,8 @@
 #include <cmath>
 #include "lookeditor.h"
 #include "programmercontroller.h"
+#include "palettenaming.h"
+#include "paletteops.h"
 #include "fadetimespin.h"
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
@@ -275,6 +277,24 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     nameRow->addWidget(m_nameEdit, 1);
     root->addLayout(nameRow);
     connect(m_nameEdit, &QLineEdit::editingFinished, this, &LookEditor::slotNameEdited);
+    /* This editor's own edits are what it shows; anything else that changes
+       the palette's value or name (Undo, Redo on the shared stack) shows. */
+    auto remember = [this](quint32 id) {
+        if (id == m_paletteId)
+            m_shownSignature = valueSignature(m_doc->palette(id));
+    };
+    connect(this, &LookEditor::paletteChanged, this, remember);
+    connect(this, &LookEditor::paletteValueChanged, this, remember);
+    if (PaletteOps *ops = m_doc->paletteOps())
+        connect(ops, &PaletteOps::changed, this, [this]() {
+            if (m_inValueEdit || m_loading)
+                return;
+            const QLCPalette *p = m_doc->palette(m_paletteId);
+            if (p == NULL || valueSignature(p) == m_shownSignature)
+                return;
+            setPalette(m_paletteId);
+            emit paletteChanged(m_paletteId);
+        });
 
     // Info line: "used by N scene(s)" — updated when a palette is selected
     m_title = new QLabel(tr("Look editor"), this);
@@ -1469,6 +1489,7 @@ void LookEditor::setPalette(quint32 paletteId)
     }
 
     m_loading = false;
+    m_shownSignature = valueSignature(p);
     emit lookFocusChanged(paletteId);
 
     /* A new effect look, nothing picked yet: picking is the first thing to
@@ -1529,10 +1550,20 @@ bool LookEditor::targetsHaveChannelGroup(int group) const
 void LookEditor::maybeAutoName(QLCPalette *p)
 {
     if (!p) return;
-    const QString cur = p->name().trimmed();
-    // Only overwrite factory-default name ("New Color", "New Dimmer", etc.)
-    const QString expected = QString("New %1").arg(QLCPalette::typeToString(p->type()));
-    if (cur != expected && !cur.isEmpty()) return;
+    // Only overwrite factory-default name ("New Color", "New Dimmer 2"...)
+    if (!PaletteNaming::isFactoryName(p->name(), QLCPalette::typeToString(p->type())))
+        return;
+
+    /* Its siblings -- the same type in the same folder -- may share a way of
+       naming ("Act2 Red", "Act2 Blue"): a new one is named their way. */
+    auto siblings = [this, p]() {
+        QStringList names;
+        const QString folder = PaletteOps::folderOf(p);
+        for (const QLCPalette *o : m_doc->palettes())
+            if (o != p && o->type() == p->type() && PaletteOps::folderOf(o) == folder)
+                names << o->name();
+        return names;
+    };
 
     QString autoName;
     switch (p->type())
@@ -1544,49 +1575,32 @@ void LookEditor::maybeAutoName(QLCPalette *p)
             autoName = p->colourMacro();        // the ring's slot it plays
             break;
         }
-        QColor c = p->rgbValue();
-        struct { int r, g, b; const char *name; } table[] = {
-            { 255,   0,   0, "Red" },
-            {   0, 255,   0, "Green" },
-            {   0,   0, 255, "Blue" },
-            { 255, 255,   0, "Yellow" },
-            { 255, 165,   0, "Orange" },
-            { 128,   0, 128, "Purple" },
-            { 255,   0, 255, "Magenta" },
-            {   0, 255, 255, "Cyan" },
-            { 255, 255, 255, "White" },
-            { 255, 200, 100, "Warm White" },
-            {   0,   0,   0, "Black" },
-        };
-        int bestDist = INT_MAX;
-        const char *bestName = nullptr;
-        for (auto &e : table)
-        {
-            int dr = c.red()   - e.r;
-            int dg = c.green() - e.g;
-            int db = c.blue()  - e.b;
-            int dist = dr*dr + dg*dg + db*db;
-            if (dist < bestDist) { bestDist = dist; bestName = e.name; }
-        }
-        if (bestName) autoName = bestName;
+        const QString colour = PaletteNaming::colourName(p->rgbValue(), p->wauvValue());
+        autoName = PaletteNaming::withConvention(colour, siblings(), true);
+        if (autoName.isEmpty())
+            autoName = colour;
         break;
     }
     case QLCPalette::Dimmer:
     {
-        int v = p->intValue1();
-        if (v >= 255)     autoName = tr("Full");
-        else if (v <= 0)  autoName = tr("Off");
-        else              autoName = tr("Intensity %1%").arg(qRound(v * 100.0 / 255.0));
+        const int v = p->intValue1();
+        autoName = PaletteNaming::dimmerName(v);
+        if (v > 0 && v < 255)
+        {
+            const QString pct = QStringLiteral("%1%").arg(qBound(1, qRound(v * 100.0 / 255.0), 99));
+            const QString conv = PaletteNaming::withConvention(pct, siblings(), false);
+            if (!conv.isEmpty())
+                autoName = conv;
+        }
         break;
     }
     case QLCPalette::Strobe:
-    {
-        int pct = qRound(p->value().toFloat() * 100.0f);
-        if (pct <= 0)       autoName = tr("Strobe Off");
-        else if (pct >= 100) autoName = tr("Strobe Max");
-        else                 autoName = tr("Strobe %1%").arg(pct);
+        autoName = PaletteNaming::strobeName(qRound(p->value().toFloat() * 100.0f));
         break;
-    }
+    case QLCPalette::Gobo:
+    case QLCPalette::Shutter:
+        autoName = capabilityNameAt(m_singleChannel, p->intValue1());
+        break;
     case QLCPalette::Effect:
     {
         // Prefer the preset's name ("Breathe") over the engine basename.
@@ -1614,6 +1628,106 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     m_nameEdit->setText(autoName);
     m_nameEdit->blockSignals(false);
     emit paletteRenamed(p->id());
+}
+
+QString LookEditor::valueSignature(const QLCPalette *p)
+{
+    if (p == NULL)
+        return QString();
+    QStringList parts;
+    parts << p->name() << p->colourMacro() << p->goboName();
+    for (const QVariant &v : p->values())
+        parts << v.toString();
+    return parts.join(QLatin1Char('\x1f'));
+}
+
+LookEditor::ValueBefore LookEditor::valueBefore(const QLCPalette *p) const
+{
+    ValueBefore b;
+    if (p == NULL)
+        return b;
+    b.name = p->name();
+    if (p->type() == QLCPalette::Color)
+    {
+        b.rgb = p->rgbValue();
+        b.wauv = p->wauvValue();
+        b.macro = p->colourMacro();
+    }
+    else if (p->type() == QLCPalette::Strobe)
+        b.strobe = qRound(p->value().toFloat() * 100.0f);
+    else if (!p->values().isEmpty())
+        b.value = p->intValue1();
+    if (p->type() == QLCPalette::Gobo || p->type() == QLCPalette::Shutter)
+        b.capability = capabilityNameAt(m_singleChannel, b.value);
+    return b;
+}
+
+void LookEditor::followName(QLCPalette *p, const ValueBefore &before)
+{
+    if (p == NULL)
+        return;
+    if (PaletteNaming::isFactoryName(p->name(), QLCPalette::typeToString(p->type())))
+    {
+        maybeAutoName(p);
+        return;
+    }
+    QString name;
+    switch (p->type())
+    {
+    case QLCPalette::Color:
+    {
+        const QString now = !p->colourMacro().isEmpty()
+                            ? p->colourMacro()
+                            : PaletteNaming::colourName(p->rgbValue(), p->wauvValue());
+        name = PaletteNaming::followColour(p->name(), before.rgb, before.wauv, before.macro, now);
+        break;
+    }
+    case QLCPalette::Dimmer:
+        name = PaletteNaming::followDimmer(p->name(), before.value, p->intValue1());
+        break;
+    case QLCPalette::Strobe:
+        name = PaletteNaming::followStrobe(p->name(), before.strobe, qRound(p->value().toFloat() * 100.0f));
+        break;
+    case QLCPalette::Gobo:
+    case QLCPalette::Shutter:
+        name = PaletteNaming::followPart(p->name(), before.capability,
+                                         capabilityNameAt(m_singleChannel, p->intValue1()));
+        break;
+    default:
+        return;
+    }
+    if (name.isEmpty() || name == p->name())
+        return;
+    // Only the name: the folder (the path) is never touched.
+    p->setName(name);
+    QSignalBlocker block(m_nameEdit);
+    m_nameEdit->setText(name);
+    emit paletteRenamed(p->id());
+}
+
+void LookEditor::editValue(const std::function<void(QLCPalette *)> &change)
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL)
+        return;
+    if (m_inValueEdit)
+    {
+        change(p);              // the outer edit names it and keeps the step
+        return;
+    }
+    const ValueBefore before = valueBefore(p);
+    auto run = [&]() {
+        change(p);
+        followName(p, before);
+    };
+    m_inValueEdit = true;
+    if (PaletteOps *ops = m_doc->paletteOps())
+        ops->valueStep(tr("Edit %1").arg(before.name), p->id(), run,
+                       QStringLiteral("lookvalue:%1").arg(p->id()));
+    else
+        run();
+    m_inValueEdit = false;
+    m_shownSignature = valueSignature(p);
 }
 
 void LookEditor::slotNameEdited()
@@ -1692,8 +1806,9 @@ void LookEditor::commitColor()
     const QColor rgb(m_redSlider->value(), m_greenSlider->value(), m_blueSlider->value());
     // wauv encodes White=red, Amber=green, UV=blue (see QLCPalette::Color).
     const QColor wauv(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value());
-    p->setValue(QLCPalette::colorToString(rgb, wauv));
-    maybeAutoName(p);
+    editValue([&](QLCPalette *pal) {
+        pal->setValue(QLCPalette::colorToString(rgb, wauv));
+    });
     updateColorWarning();
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
@@ -1839,18 +1954,22 @@ void LookEditor::slotColourMacroChanged(int index)
     const QString name = m_macroCombo->itemData(index).toString();
     if (name == p->colourMacro())
         return;
-    p->setColourMacro(name);
-    // A slot of one colour: the picker shows it too (and RGB fixtures play it).
-    QList<QColor> colours;
-    const QStringList names = colourSlotNames(&colours);
-    const int i = names.indexOf(name);
-    const QColor c = i >= 0 ? colours.value(i) : QColor();
-    if (!name.isEmpty() && c.isValid() && c != Qt::black && c.rgb() != m_colorDialog->currentColor().rgb())
-    {
-        m_colorDialog->setCurrentColor(c);      // commits, as a pick does
+    bool committed = false;
+    editValue([&](QLCPalette *pal) {
+        pal->setColourMacro(name);
+        // A slot of one colour: the picker shows it too (and RGB fixtures play it).
+        QList<QColor> colours;
+        const QStringList names = colourSlotNames(&colours);
+        const int i = names.indexOf(name);
+        const QColor c = i >= 0 ? colours.value(i) : QColor();
+        if (!name.isEmpty() && c.isValid() && c != Qt::black && c.rgb() != m_colorDialog->currentColor().rgb())
+        {
+            m_colorDialog->setCurrentColor(c);  // commits, as a pick does
+            committed = true;
+        }
+    });
+    if (committed)
         return;
-    }
-    maybeAutoName(p);
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }
@@ -1891,7 +2010,7 @@ void LookEditor::slotStrobeChanged(int pct)
     QLCPalette *p = m_doc->palette(m_paletteId);
     if (p == NULL || p->type() != QLCPalette::Strobe)
         return;
-    p->setValue(float(pct) / 100.0f);
+    editValue([pct](QLCPalette *pal) { pal->setValue(float(pct) / 100.0f); });
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }
@@ -1906,8 +2025,7 @@ void LookEditor::slotDimmerChanged(int v)
     QLCPalette *p = m_doc->palette(m_paletteId);
     if (p == NULL)
         return;
-    p->setValue(v);
-    maybeAutoName(p);
+    editValue([v](QLCPalette *pal) { pal->setValue(v); });
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }
@@ -2038,40 +2156,41 @@ void LookEditor::slotSingleValueChanged(int v)
     updateSinglePreview(v);
     if (m_loading)
         return;
-    QLCPalette *p = m_doc->palette(m_paletteId);
-    if (p == NULL)
+    if (m_doc->palette(m_paletteId) == NULL)
         return;
-    p->setValue(v);
-    if (p->type() == QLCPalette::Gobo)
-    {
-        // The slot is picked for the type being browsed; the look is named
-        // after it (first pick, or changing this type's own pick), so the
-        // other types play their gobo of that name.
-        const int src = m_singleSourceCombo->currentIndex();
-        const Fixture *fxi = (src >= 0 && src < m_singleSources.size() && !m_singleSources.at(src).fixtures.isEmpty())
-                             ? m_doc->fixture(m_singleSources.at(src).fixtures.first()) : NULL;
-        const QString def = QLCPalette::definitionKey(fxi);
-        auto capName = [this](int value) {
-            if (m_singleChannel == NULL || value < 0)
-                return QString();
-            for (const QLCCapability *cap : m_singleChannel->capabilities())
-                if (value >= cap->min() && value <= cap->max())
-                    return cap->name();
-            return QString();
-        };
-        if (!def.isEmpty())
+    editValue([&](QLCPalette *p) {
+        p->setValue(v);
+        if (p->type() == QLCPalette::Gobo)
         {
-            const QString was = capName(p->goboValues().value(def, -1));
-            const QString now = capName(v);
-            if (!now.isEmpty() && (p->goboName().isEmpty() || QLCPalette::sameGoboName(p->goboName(), was)))
+            // The slot is picked for the type being browsed; the look is named
+            // after it (first pick, or changing this type's own pick), so the
+            // other types play their gobo of that name.
+            const int src = m_singleSourceCombo->currentIndex();
+            const Fixture *fxi = (src >= 0 && src < m_singleSources.size() && !m_singleSources.at(src).fixtures.isEmpty())
+                                 ? m_doc->fixture(m_singleSources.at(src).fixtures.first()) : NULL;
+            const QString def = QLCPalette::definitionKey(fxi);
+            auto capName = [this](int value) {
+                if (m_singleChannel == NULL || value < 0)
+                    return QString();
+                for (const QLCCapability *cap : m_singleChannel->capabilities())
+                    if (value >= cap->min() && value <= cap->max())
+                        return cap->name();
+                return QString();
+            };
+            if (!def.isEmpty())
             {
-                p->setGoboName(now);
-                m_goboNameEdit->setText(now);
+                const QString was = capName(p->goboValues().value(def, -1));
+                const QString now = capName(v);
+                if (!now.isEmpty() && (p->goboName().isEmpty() || QLCPalette::sameGoboName(p->goboName(), was)))
+                {
+                    p->setGoboName(now);
+                    m_goboNameEdit->setText(now);
+                }
+                p->setGoboValue(def, v);
             }
-            p->setGoboValue(def, v);
+            updateGoboMatches();
         }
-        updateGoboMatches();
-    }
+    });
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }
