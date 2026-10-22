@@ -1,0 +1,39 @@
+/*
+  Q Light Controller Plus - qlcconsole
+  eosimporter_test.h
+
+  Licensed under the Apache License, Version 2.0.
+*/
+
+#ifndef EOSIMPORTER_TEST_H
+#define EOSIMPORTER_TEST_H
+
+#include <QObject>
+
+class Doc;
+
+class EosImporter_Test : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void initTestCase();
+    void init();
+    void cleanup();
+
+    void mapperWords();
+    void mapperExactAndSuggested();
+    void mapperSavedChoice();
+    void fixtures();
+    void groups();
+    void palettes();
+    void cueLists();
+    void presetsAndSubs();
+    void warnings();
+    void realExportIntoShowTree();
+
+private:
+    Doc *m_doc = nullptr;
+};
+
+#endif

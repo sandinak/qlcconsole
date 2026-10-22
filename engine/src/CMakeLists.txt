@@ -105,6 +105,9 @@ add_library(${module_name} SHARED
     qlcphysical.cpp qlcphysical.h
     qlcpoint.cpp qlcpoint.h
     qxwimporter.cpp qxwimporter.h
+    eosasciiparser.cpp eosasciiparser.h
+    eosfixturemapper.cpp eosfixturemapper.h
+    eosimporter.cpp eosimporter.h
     rgbalgorithm.cpp rgbalgorithm.h
     rgbaudio.cpp rgbaudio.h
     rgbimage.cpp rgbimage.h
