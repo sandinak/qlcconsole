@@ -1,6 +1,6 @@
 # Show Tree
 
-The Show Tree tab (beside Programming, **⇧⌘6**) is where you write a show
+The Show Tree tab (beside Build, **⇧⌘6**) is where you write a show
 as cues. Everything is in one tree:
 
 **Production → Cue list → Cue → Layer**
@@ -24,8 +24,9 @@ as cues. Everything is in one tree:
   tab and the **Cue Runner** VC widget play it all
   ([The cue runner](#the-cue-runner)).
 
-**The Programming tab works alongside it.** It is the palette and effect
-workshop: effect design, `.qxfx` files, Bundles and raw-value scenes. The
+**The Build tab works alongside it.** It makes what the tree schedules:
+palettes, effect design, `.qxfx` files, Bundles, scenes and collections,
+in its Workbench. The
 everyday palette work — new, rename, folders, delete — is also in the
 Library here ([Palettes in the Library](#palettes-in-the-library)). Both
 tabs use the same palettes, groups and Look Editor, and the same palette
@@ -92,7 +93,9 @@ from the Library lands in the tree right beside it.
     fade in / out, hold, its **sub-cues** (and + Sub-cue), cue looks, every
     layer on stage in it, a dashed drop area, and *Next cue receives*. A
     **sub-cue** shows **Advance** (Sub GO, or Auto-follow after a wait) in
-    place of the mode, base, includes and hold.
+    place of the mode, base, includes and hold. The **note** opens up
+    while you type in it: Return applies it, Shift+Return starts a new
+    line, Esc puts it back.
   - **A layer** shows what it contains, then one row per attribute.
   - **A look** shows its name, note, *Fired by* (the VC buttons, **Make VC
     page**, **Move to folder…**), its looks and layers; **Looks** or a
@@ -106,13 +109,71 @@ from the Library lands in the tree right beside it.
 
 The dividers between them can be dragged; their places are kept.
 
+## Working on a cue in the Workbench
+
+To work on a cue's layers in detail, open it in the **Workbench** — the
+same editor Build has ([The Workbench](build.md#the-workbench)), here in
+place of the page. **Double-click** a cue, a look or a layer, press
+**✎ Workbench** in the header, choose **Open in Workbench** from its
+right-click menu, or type **`wb`** (`wb 0.0.3` for another cue of the
+list). The Library and the tree stay where they are: click another cue in
+the tree and the Workbench follows it.
+
+![A cue in the Workbench: its own layers, and Washes tracking in grey](../images/show-tree-workbench.png)
+
+- **The header** names the cue, its list and production, its mode, fades
+  and hold, how many layers are its own and how many are carried in, its
+  includes, its note — and what is on the rig.
+- **The rows** are what is on stage in the cue, in order. Each of its own
+  layers opens up into one row per attribute (*Colour Blue*, *Dimmer
+  Intensity 45%*…). A layer carried in — tracked, included, back to the
+  base — is **grey**, with where it comes from (*⤳ tracked from 0.0.1
+  Setup*); so is a value inherited from an earlier cue or a cue look. A
+  layer that plays a function as it is (**▣**: a raw scene, an EFX, a
+  collection) opens in the Workbench itself with **▣ Open** or a
+  double-click; **↩** comes back to the cue.
+- **The editor pane**, beside the rows, edits what is selected:
+  - nothing: the cue's own page (number, name, mode, fades, includes…);
+  - a layer: its page as the tree has it — every attribute with **✎** and
+    **⋯**, Release, Make reusable, a line aim's strip;
+  - a value: its palette in the **Look Editor**, at full height. It says
+    whether the palette is shared (changing it changes every cue that uses
+    it) or a one-off of this cue.
+- **Changing things.** Drop palettes, groups and fixtures from the Library
+  onto a layer row (below the rows: onto the cue), exactly as onto the tree.
+  Right-click a value for the tree's menu (set, clear, off, Level…);
+  **⌫** on a value clears it, so it inherits again. Right-click a layer for
+  Solo, Release, Remove. **+ Scene** plays scenes (or any function) from
+  the show as layers; **+ EFX** / **+ RGB Matrix** make a new one on the
+  selected layer's fixtures. **▲ ▼** and **Remove** work on the cue's own
+  layers.
+- **Carried-in rows are read-only.** They aren't removed, moved or
+  cleared here: they belong to the cue they come from. Setting a value on
+  one (a drop, or a value's menu) makes it this cue's own, as in the tree.
+- **On the rig.** In Design mode the cue plays **in context** — what tracks
+  in too — and every edit shows at once; the selected layer's fixtures are
+  highlighted on the 2D view, and clicking a fixture there selects the
+  layer that lights it. **Solo** plays only the selected layer. **Stop**
+  holds the preview, **Play** brings it back. In Operate nothing previews,
+  as everywhere in the tree.
+- **Undo.** Every edit is one step of the tree's, on the one history:
+  **⌘Z** in the Show Tree takes it back.
+- **↩ Show Tree** puts the page back, with the cue — and the layer the
+  Workbench had selected — selected in the tree. The Workbench goes back to
+  Build, loaded as it was there. Leaving the tab does the same; coming back
+  opens the cue again.
+
 ## Quick start
 
 ### From a chaser you already have
 
 1. **Import chaser…** → pick the chaser. A new production named after it
-   holds a Non-tracking cue list that plays exactly as the chaser did. The
-   chaser itself is not touched.
+   holds a cue list that plays exactly as the chaser did. What repeats
+   from step to step is set once and tracks
+   ([below](#what-repeats-is-set-once-and-tracks)). The
+   chaser itself plays as it did; the sheet below offers to file it away
+   (**Import in place**). For a whole show at once, use
+   [Convert an old show…](#an-old-show-convert-it).
 2. A sheet says what was made:
    - **Plays the same**: each cue's channels checked against its step's.
      *0 channels differ* means every cue puts out what its step did;
@@ -126,6 +187,11 @@ The dividers between them can be dragged; their places are kept.
      - A scene of groups and palettes became a layer.
      - A step's collection used inside another step became an
        **include**.
+     - A collection inside a step that is **no step itself** (a
+       `0.0.0-base` every step holds) is read into the cue: its scenes
+       become the cue's layers, as the step's own do. One that plays
+       nothing is left out. **Collections read into the cues** lists
+       them.
      - Anything else plays as it is (▣). That covers raw channel values,
        EFX, RGB Matrix, a scene with its own fades, and so on.
        **Played as they are, and why** gives the reason once per
@@ -134,6 +200,11 @@ The dividers between them can be dragged; their places are kept.
      - A chaser of raw scenes with their own fades (a looping par chase)
        plays the same too: the list fades from one scene to the next as
        the chaser did, even when a step is shorter than the fade.
+   - **Set once, then tracking**: the cues that track and what each no
+     longer repeats, with the releases made
+     ([below](#what-repeats-is-set-once-and-tracks)). In the table, **⤳**
+     marks a cue that tracks and **○** a layer released when its cue
+     ends.
    - **Two scenes on one group**: where two scenes in one cue set the same
      group, the chaser ran both, HTP on intensity and LTP on the rest. The
      cue list keeps the later scene's values, and the check above shows
@@ -146,9 +217,16 @@ The dividers between them can be dragged; their places are kept.
      looks as it did. The sheet names each such cue and how many channels
      the rule would change. Cues where the rule plays the same are left
      alone.
+   - **Import in place** (ticked): the chaser, and the collections and
+     scenes only it plays, are filed under `Imported/<chaser> (originals)`
+     in the Functions window, and a Show timeline that played the chaser
+     plays the list. Nothing is deleted; **Restore original** puts it all
+     back ([how](#an-old-show-convert-it)). Untick it to keep both side by
+     side.
    - **Fire the cue list from what fires the chaser now** (ticked): VC
-     buttons, VC Cue Lists and sliders that played the chaser, the main
-     cue list and its cue-list number move to the new list. It is part of
+     buttons, VC Cue Lists, sliders, speed dials, clocks and audio
+     triggers that played the chaser, the main cue list and its cue-list
+     number move to the new list. It is part of
      the import's undo step: **Undo** puts them back on the chaser. Untick
      it to leave them on the chaser. It isn't offered when nothing fires
      the chaser.
@@ -156,9 +234,36 @@ The dividers between them can be dragged; their places are kept.
 3. Click a cue. In Design mode it plays on the rig. Open a layer and change
    it.
 
-**To convert the import to tracking:** select the list → **Convert to
-tracking…** ([how](#convert-to-tracking)). It shows what it will change,
-and every cue then plays exactly as before.
+#### What repeats is set once and tracks
+
+A chaser repeats whatever stays on: the same `0.0.0-base` collection in
+every step, the same scene in three steps running, the step before's
+collection inside the next. The import reads that the way a console
+would:
+
+- it is **set in the first cue** where it appears, and the cues after it
+  **track** it, as long as it appears in each step in a row. Those cues
+  don't repeat it;
+- in the **last cue** where it appears, its layer is ticked **Release**,
+  so it leaves when the next step doesn't play it (a layer that only
+  tracked into that cue gets a Release layer of its own there);
+- after a **gap** (in steps 1 and 2, not 3, back in 4) it is **set
+  again** in the cue where it comes back;
+- an **include** of a step whose layers the cue before already plays is
+  taken out: tracking brings them.
+
+"The same" means the same function (the same scene, EFX or collection
+member), not two that happen to set the same values. The first cue stays
+**Block**. Every cue is checked: one that would then play differently stays
+Block and repeats what it has, as before. Where anything tracks, the list
+is **Tracking**; where nothing repeats, it stays Non-tracking. The sheet's
+**Plays the same** check runs on the result.
+
+**To go further:** select the list → **Convert to tracking…**
+([how](#convert-to-tracking)). It also tracks values that only repeat what
+is on stage (two scenes with the same looks) and makes cues Cue-only where
+that saves repeating. It shows what it will change, and every cue then
+plays exactly as before.
 
 By hand instead (or after it, to go further):
 
@@ -169,6 +274,113 @@ By hand instead (or after it, to go further):
 5. Remove includes of the cue before (the cue page, **Includes**, **−**).
 
 *Next cue receives* on each cue page shows what carries on as you go.
+
+### An old show: convert it
+
+A show made the QLC+ way (scenes, collections, chasers, no Show Tree)
+opens as it is: nothing is converted on load, and it plays and saves as
+before. The Show Tree tab says so once, in a line at the top: *This show
+uses chasers: 2 look like cue lists (Full Show, New Chaser 8)…*.
+**Upgrade this show…** opens the upgrade (below); **✕** puts the line
+away for this show. The upgrade is always at **File → Upgrade This
+Show…**, and the converter on its own at **Import chaser… → Convert an
+old show…**.
+One chaser at a time from Build: **Send to Show Tree…**
+([below](#send-to-show-tree-from-build)).
+
+**The converter** lists every chaser of the show, told apart by how it
+runs:
+
+- **Cue list**: it waits for GO on some step, has notes or cue numbers,
+  answers to a cue-list number, is the show's main cue list or plays in
+  a VC Cue List. It is ticked, with its plan below: the cues, layers, ▣
+  rows, includes and nested collections it would make, and **Plays the
+  same**: the import's channel-by-channel check, run without changing
+  anything.
+- **Effect**: it only loops on its own timing (a strobe, a par chase, a
+  pan sweep). It is not offered: it stays a function, and plays as a ▣
+  layer wherever you drop it on a cue. **Import chaser…** still takes it
+  if you want it as a list anyway.
+
+**Convert** imports each ticked chaser, each its own undo step, in one of
+two ways (**Convert by**):
+
+- **Import in place** (the default). The list takes over from the chaser:
+  - the list is linked to the chaser it came from;
+  - the chaser and the collections and scenes only it plays go to
+    `Imported/<chaser> (originals)` in the Functions window. What the list
+    still plays as it is (a raw scene on a ▣ row) and what another
+    function plays stay where they are;
+  - VC buttons, VC Cue Lists, sliders, speed dials, clocks, audio
+    triggers, Show timelines, the main cue list and the cue-list number
+    fire the list instead.
+- **Import beside the chaser**: the list is made and both stay, as the
+  plain import does.
+
+#### Send to Show Tree, from Build
+
+A chaser you are working on in Build goes over from there: load it in the
+Workbench and click **Send to Show Tree…** in its header, or right-click
+its row in **Build ▸ Scenes** (Folders or Classic) → **Send to Show
+Tree…**. It is **Import in place** for that chaser, with the same sheet
+(**Plays the same**, a row per cue, what tracks). The sheet's **Done, show
+it in the Show Tree** keeps it and goes to the new list in the Show Tree
+tab; **Done** keeps it and stays in Build; **Undo import** takes it back. A
+chaser the tree made, or one sent already, has the item greyed with the
+reason.
+
+The list's page says where it came from. **Restore original…** (on the
+list's page or its right-click menu) undoes Import in place: the list
+leaves the tree, with any change made to it since; the chaser and its
+originals go back to their folders; and what fires the list fires the
+chaser again. It asks first and is one undo step.
+
+**Raw scenes into palettes.** A ▣ row that plays a scene of raw channel
+values has **Capture into palettes…** (on its page and its right-click
+menu). It reads the scene fixture by fixture into Dimmer, Colour,
+Position and Gobo looks that put out exactly its values, reusing the
+show's palettes where one plays the same value and naming new ones as the
+show names its own. Fixtures with the same looks become one layer (on a
+group when one holds exactly them). What no look plays exactly (an
+effect-mode channel, say) stays raw in a scene of its own, *Wash-Red
+(rest)*, beside the new layers. It asks with the plan, then changes every
+cue that plays the scene as it is, but only where every cue of the list
+then puts out exactly what it did; a cue that would change keeps the
+scene. The scene itself is kept. One undo step. A scene with its own
+fade times, a transition, a blend mode or a speed master isn't offered:
+a layer would play it differently.
+
+### Upgrade this show
+
+**File → Upgrade This Show…** (or **Upgrade this show…** on the old-show
+line) is the converter with everything around it, in one place. Nothing
+happens until you press **Upgrade**, and none of it is needed: a show
+built the old way keeps playing as it always has.
+
+**1. Chasers and collections** lists every chaser and collection with
+what would become of it:
+
+- a **cue-list chaser**, ticked: *cue list:* its cues and layers, and
+  **Plays the same** (the channel-by-channel check). Untick it to
+  **leave it alone**;
+- an **effect chaser**: *kept as a function*;
+- a **collection**: *read into the cues of* the ticked lists that play
+  it, or *leave alone* (it plays as it is; drop it on a cue for a ▣
+  layer). One already filed by an import says so;
+- a chaser already **imported in place**: *Converted*, with **Restore
+  original…** at the bottom of the dialog.
+
+**2. Raw scenes into palettes** lists the raw scenes the tree plays on ▣
+rows, and the ones a ticked list would. Tick one to **Capture it into
+palettes** (as above): the row shows how many layers and palettes it
+makes and what stays raw; select it for the looks. None is ticked for
+you. A scene that can't be captured says why (its own fades, say).
+
+**Convert by** is the converter's: in place (the default) or beside the
+chaser. **Upgrade** converts the ticked chasers, then captures the ticked
+scenes. A capture still keeps the scene in any cue that would come out
+different. The whole upgrade is **one undo step** (*Undo Upgrade this
+show*). **Restore original…** later puts one chaser back.
 
 ### Three cues with the mouse
 
@@ -402,8 +614,8 @@ Each row shows its value, where it comes from, and four controls:
   that attribute (or, for a gobo by name, that gobo). The rest ignore the
   look; hover to see which ones.
 - **✎** opens the value's palette in the **Look Editor** at the bottom of the
-  tab (the Programming tab's, see
-  [The inline Look Editor](programming-tab.md#the-inline-look-editor)). A
+  tab (the Build tab's, see
+  [The inline Look Editor](build.md#the-inline-look-editor)). A
   named palette is shared, and the editor says so: changing it changes every
   cue and scene that uses it.
 - **⋯** opens a menu:
@@ -657,7 +869,7 @@ works on the command line as its groups do (`Truss wash dimmer 45`), and
 Tab completes it; with a layer selected, the command line says what it
 holds.
 
-- **In place, as in the Programming tab:** select the row in the tree and
+- **In place, as in the Build tab:** select the row in the tree and
   press **Return** (or **F2**). Type, then **Return** to keep it or **Esc**
   to leave it as it was. An empty name goes back to the groups' name.
 - It works the same on a cue (its name; its number stays), a cue list and
@@ -935,6 +1147,7 @@ is always there and calls the same operations as the mouse.
 | `look "Hit 1"` · `look "Hit 1" in "Hits"` | Selects that **look** of the production, or makes it (and the Looks section); `in` files it. Then set its layers as on a cue |
 | `vcpage` | **Make VC page** for the selected look's folder (else every look) |
 | `adopt "Old Busk"` | **Adopt as look**: a scene becomes a look |
+| `wb` · `wb 0.0.3` | The selected cue (or layer), or that cue, in the **Workbench** ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)) |
 | `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo (one history with the palettes, [Undo](#undo)) |
 | `help` · `help spread` · `?` | The language, with examples (see below) |
 
@@ -1027,18 +1240,18 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
   chaser and collections (locked again); Redo hands them over again.
 - **Palettes are on the same history.** A palette made, renamed,
   duplicated, filed or deleted — in the Library, typed, or in the
-  Programming tab's palette list — is a step too, and Undo takes back
+  Build tab's palette list — is a step too, and Undo takes back
   whichever came last: a tree change or a palette change. Undoing a
   palette's delete brings it back with its id, and every cue, layer, look,
   reusable, scene and effect slot the delete cleared has it back in its
   place — one step, the show exactly as it was.
 - **What undo doesn't cover:**
   - a palette's values changed in the Look Editor (a colour dragged, a
-    level moved): those are the palette's, as in the Programming tab;
+    level moved): those are the palette's, as in the Build tab;
   - a palette a command made (`dimmer 30` with none at 30%): undo takes the
     value off the cue, and the palette stays, as an ordinary palette;
   - a VC page made by **Make VC page** (delete the frame on the console).
-- **The Programming tab is on the same history.** ⌘Z / ⇧⌘Z there take
+- **The Build tab is on the same history.** ⌘Z / ⇧⌘Z there take
   back whatever was done last: an edit to the look open on its canvas, a
   Bundle stamp, or a step of this one history (a tree change or a palette
   operation, from either tab). The **Edit** menu's Undo / Redo name the
@@ -1073,7 +1286,7 @@ Layer**.
 
 ### Palettes in the Library
 
-The everyday palette work happens here, without going to Programming. Every
+The everyday palette work happens here, without going to Build. Every
 operation is one undo step on the tab's [Undo](#undo).
 
 - **+ Palette** (beside the filter, or right-click a palette folder →
@@ -1103,14 +1316,14 @@ operation is one undo step on the tab's [Undo](#undo).
   ticked (the default), Colour, Dimmer… each with your folders under it;
   unticked, your folders first with every type inside, and the palettes in
   no folder below. It is remembered.
-- **One folder model** with the Programming tab's palette list: the same
+- **One folder model** with the Build tab's palette list: the same
   folders, the same palettes in them, whichever tab files them.
 - **Older shows** kept a folder per type (*Color › 01-Song*, *Dimmer ›
   01-Song*). Opening one makes those one folder, *01-Song*. Only what is
   really that old layout changes: a folder you made that happens to be
   called like a type (*Color* holding levels) or *Colour* stays as it is.
   Saved, every path says it is the new kind, and is never changed again.
-- **Still in Programming:** designing effects (the browser, presets, WLED),
+- **Still in Build:** designing effects (the browser, presets, WLED),
   `.qxfx` import and export, Bundles, and capturing.
 
 ## Editing the tree
@@ -1201,8 +1414,10 @@ reusables are reusable *arrangements*.
 
 ## Convert to tracking
 
-An imported list is Non-tracking: every cue repeats what stays on, or
-includes the cue before. **Convert to tracking…** (the list's page,
+An imported list tracks only what its steps repeated
+([what repeats is set once](#what-repeats-is-set-once-and-tracks)); the
+rest of its cues are Block, repeating what stays on or including the cue
+before. **Convert to tracking…** (the list's page,
 right-click the list, or `convert`) makes it a Tracking list that plays
 **exactly** as it did, cue by cue:
 
@@ -1444,7 +1659,7 @@ Cue Runner back into a Cue List).
   their place.
 - **They are changed here, and locked everywhere else.** Outside the tab,
   what the tree made says *"Made by the Show Tree — edit it there."*:
-  - **The chaser's editor** (Functions window, Programming tab, Shows, a
+  - **The chaser's editor** (Functions window, Build tab, Shows, a
     Virtual Console widget's live edit) opens with its steps and name
     locked, under a bar that says so and has **Show in Show Tree**. Its
     playback settings stay yours to set and are kept: run order,
@@ -1480,9 +1695,9 @@ set it, and they always agree:
   it to turn it on (it lights up) or off. Its arrow holds the same switch
   and the **Lead time**. While it is moving lights, it says how many:
   *MIB · 3*.
-- **Programming → Move in black ▾**: **Auto move-in-black** and **Lead
+- **Build → Move in black ▾**: **Auto move-in-black** and **Lead
   time**, with marking lights by hand (see
-  [The Programming tab](programming-tab.md)).
+  [The Build tab](build.md)).
 - **Settings** (⌘,) → **Show Tree** → **Move in black**: the switch and the
   lead time, applied on OK. The note under them says it: saved with this
   show, not this computer. Another show keeps its own, and a new show
@@ -1501,6 +1716,7 @@ set it, and they always agree:
 | Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it |
 | **⌥** held as you drop groups | A layer for each group (a set: each member) |
 | **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
+| Double-click a cue, look or layer · **✎ Workbench** · `wb` | Open it in the Workbench, in place of the page ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)); **↩ Show Tree** comes back |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |

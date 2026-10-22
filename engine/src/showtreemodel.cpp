@@ -1244,6 +1244,17 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                                                         : QStringLiteral("NonTracking"));
             writeId(doc, QStringLiteral("Base"), list.baseCue);
             writeId(doc, QStringLiteral("Chaser"), list.chaser);
+            // W5: the chaser it came from, and what Import in place filed.
+            writeId(doc, QStringLiteral("Source"), list.source);
+            if (list.inPlace)
+                doc->writeAttribute(QStringLiteral("InPlace"), QStringLiteral("1"));
+            for (const CueList::Original &o : list.originals)
+            {
+                doc->writeStartElement(QStringLiteral("Original"));
+                writeId(doc, QStringLiteral("ID"), o.function);
+                doc->writeAttribute(QStringLiteral("Path"), o.path);
+                doc->writeEndElement();
+            }
         }
         for (const QString &f : list.folders)
         {
@@ -1398,6 +1409,11 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                     ? ListMode::Tracking : ListMode::NonTracking;
         list.baseCue = readId(a, QStringLiteral("Base"));
         list.chaser = readId(a, QStringLiteral("Chaser"));
+        if (!looks && !subs)
+        {
+            list.source = readId(a, QStringLiteral("Source"));
+            list.inPlace = a.value(QStringLiteral("InPlace")).toString() == QLatin1String("1");
+        }
         if (subs)
         {
             list.subOf = readId(a, QStringLiteral("Cue"));
@@ -1417,6 +1433,17 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                 const QString f = root.attributes().value(QStringLiteral("Path")).toString();
                 if (!f.isEmpty() && !list.folders.contains(f))
                     list.folders << f;
+                root.skipCurrentElement();
+                continue;
+            }
+            if (!looks && !subs && root.name() == QLatin1String("Original"))
+            {
+                const QXmlStreamAttributes oa = root.attributes();
+                CueList::Original o;
+                o.function = readId(oa, QStringLiteral("ID"));
+                o.path = oa.value(QStringLiteral("Path")).toString();
+                if (o.function != invalidId())
+                    list.originals << o;
                 root.skipCurrentElement();
                 continue;
             }

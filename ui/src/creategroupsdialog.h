@@ -71,6 +71,11 @@ public:
 
     void setSplit(HeadTypeGroups::Split split);
 
+    /** The folder the groups go in, until one is typed: the folder the
+     *  selection was made in. A group per fixture goes in a folder of its
+     *  own inside it. */
+    void setFolder(const QString &folder);
+
 public slots:
     void accept() override;
 
@@ -106,6 +111,7 @@ private:
     QLineEdit *m_baseEdit;
     QLineEdit *m_folderEdit;
     bool m_folderEdited = false;
+    QString m_baseFolder;                 ///< setFolder(): where the selection is
     QString m_givenBase;                  ///< the name the dialog was opened with
     QString m_suggestedBase;              ///< what the fixtures' names share
     QTreeWidget *m_list;

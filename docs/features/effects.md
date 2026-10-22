@@ -3,7 +3,7 @@
 An **Effect** palette runs a small script on its look's fixtures, many
 times a second: colour chases, flicker, pan/tilt shapes, pixel patterns,
 music-driven effects. Pick one in the look editor's effect browser (see
-[The effect browser](programming-tab.md#the-effect-browser)); its settings
+[The effect browser](build.md#the-effect-browser)); its settings
 appear beside the list. They're grouped here by what they do (the
 browser's tabs group them by the kind of fixture they're for); its search
 finds any of them by name.
@@ -14,6 +14,62 @@ works in any colour.
 
 See [How a look stacks](#how-a-look-stacks) for exactly how a look's
 colours, dimmers, positions and effects combine, and which wins.
+
+## The effect designer
+
+To build an effect in detail, on the heads it is for, use the **effect
+designer**. It has the effect browser down one side at full height, with
+presets, Recent and WLED. Beside it are the effect's settings: its
+parameters, Spread, the speed master and On the beat. Under those is the
+effect's **own** colour and dimmer, which apply inside that effect only.
+Whatever you pick plays at once on the rig, in Design mode, on just those
+heads.
+
+Open it from any of three places:
+
+- **On a Show Tree layer.** Right-click a layer and choose **Design
+  effect…**, or use **Design effect…** in the ⋯ menu of a layer's Effect
+  row. The designer plays on that layer's fixtures. The layer's own colour
+  and dimmer play under the effect, so it looks as it will in the cue.
+  **In context** keeps the rest of the cue playing; **Solo** plays only the
+  effect.
+- **Build ▸ Effects.** **+ New**, or click an effect palette: the
+  designer opens in the Workbench's editor pane, on the **bench**
+  described next. Right-click an effect for Duplicate, Rename, Move to
+  folder… and Delete. See [Making effects](build.md#making-effects).
+- **Window ▸ Effects.** Every effect in the show in one window. On the
+  left are the effect palettes in their folders, then the **classic
+  effects**: QLC+ EFX and RGB Matrix functions, each marked as one. On the
+  right is the designer on the **bench**. **Try on ▾** picks the groups
+  the bench plays on, and it remembers them. Selecting an effect palette
+  loads a copy of it onto the bench. Selecting an EFX or RGB Matrix opens
+  it in its own editor. **+ New** makes an effect palette, an EFX (on the
+  Try on groups' heads) or an RGB Matrix (on the first Try on group).
+
+The designer works on a copy, so nothing in the show changes until you
+pick one of these:
+
+- **Keep on this layer** (on a layer): a one-off for that layer, named
+  after the effect and the cue ("Color Chase · 0.0.3 Announcer
+  AT-W-ALL"). It works like a value picked in the tree. Its row offers
+  **Make reusable** later. If the layer already had an effect of another
+  kind, this one replaces it. Designing the layer's own one-off again
+  changes that one-off; it doesn't make a second.
+- **Save as palette…**: names the effect and files it where the show keeps
+  its effect palettes, so you can use it anywhere. On a layer it also goes
+  on the layer.
+- **Update "name"**: shown when the designer started from a named
+  palette. It writes the design into that palette, which changes it
+  everywhere it plays.
+- **Save as preset…**: keeps the effect and its settings as a starting
+  point in the browser, for this show and others. You stay in the
+  designer.
+- **Cancel** (or closing the window) throws the copy away. The show is
+  left as it was, and a show that was saved stays saved.
+
+The preview is a hidden scene on the chosen heads. It plays only in Design
+mode and only while the designer is on screen; in Operate nothing
+previews.
 
 ## Colour
 
@@ -84,7 +140,7 @@ stands on stage. For pixel boxes and panels see also
 | **Confetti** | Random coloured speckles that blink and fade |
 | **Meteor** | A meteor with a fading trail sweeps across the pixels |
 | **Plasma** | Smooth shifting colour fields |
-| **Text** | Words on the grid — scrolling, or still in the middle; see [Text](programming-tab.md#text) |
+| **Text** | Words on the grid — scrolling, or still in the middle; see [Text](build.md#text) |
 | **Wand** | A bright wand sweeps across once, then clears |
 
 ## Matrix effects
@@ -228,7 +284,7 @@ driven apart.
 
 Effects that follow the beat (a **Beat sync** setting, or a beat-made
 effect) all read **one beat clock**, so they're on the same beat however far
-apart they were started. Turn the clock on in the Programming toolbar's
+apart they were started. Turn the clock on in the Build toolbar's
 **Beat** menu (**Internal beat on**, and the **BPM**; the button then reads
 "Beat 120"), or **Tap** it: the tempo comes from
 your last four taps (pause two seconds to start over), and the beat lands
@@ -274,7 +330,7 @@ the same point, which is a look in itself.
 ### Speed masters
 
 Tempo masters for effects to run on, so one tap or one fader moves
-everything on a master together. Open them from the Programming toolbar's
+everything on a master together. Open them from the Build toolbar's
 **Beat** menu → **Speed masters…**. **Masters:** at the top sets how many
 the show uses — 4 to 16 (fixed slots, so a control surface can map them).
 Each row has:
@@ -422,14 +478,15 @@ own uses them. An effect with its own uses its own.
 
 ### The stack checker
 
-![A covered movement effect, marked in the Looks list](../images/effects-stack-checker.png)
+![A covered movement effect, marked in the Build tab's outline](../images/effects-stack-checker.png)
 
 1. **A marked look** — a warning sign in its row; hover it for why. Here two
    movement effects are on the same heads: the lower wins, so the upper one
    is **Covered**.
-2. **The line under the list** says how many are marked.
+2. **The scene's row** counts what is marked in it (⚠ n); its page lists
+   them in full.
 
-The Looks list checks the stack against these rules as you build it, and
+The Build tab's outline checks the stack against these rules as you build it, and
 marks a look (a warning sign in its row; the reason in its tooltip) when it
 won't do what it seems to, with a line under the list saying how many:
 
@@ -494,7 +551,7 @@ is checked end to end, through to DMX, on all four kinds of fixture.
 | Effect | What it does |
 |---|---|
 | **Grid Probe** | Colours each pixel by its grid column (red) and row (blue) — shows how a group's layout maps onto the rig |
-| **Step Test Pattern** | For LED-strip steps: each strip counted, each step numbered and named, a spinner that stops if output freezes — see [Step Test Pattern](programming-tab.md#step-test-pattern) |
+| **Step Test Pattern** | For LED-strip steps: each strip counted, each step numbered and named, a spinner that stops if output freezes — see [Step Test Pattern](build.md#step-test-pattern) |
 
 ## WLED
 
@@ -504,7 +561,7 @@ is checked end to end, through to DMX, on all four kinds of fixture.
 | **WLED Android, Aurora, Blends, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase 2, Chase 3, Chase Flash, Chase Flash Rnd, Chase Rainbow, Chase Random, Chunchun, Color Clouds, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Dissolve Rnd, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fairytwinkle, Fill Noise, Fire 2012, Fire Flicker, Fireworks, Fireworks 1D, Fireworks Starburst, Flow, Flow Stripe, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, ICU, Juggle, Lake, Lighthouse, Lightning, Loading, Meteor, Meteor Smooth, Multi Comet, Noise 1, Noise 2, Noise 3, Noise 4, Noise Pal, Oscillate, Pacifica, PacMan, Palette, Percent, Perlin Move, Phased, Phased Noise, Plasma, Police, Popcorn, Pride 2015, PS 1D Balance, PS Chase, PS Dancing Shadows, PS DripDrop, PS Fire 1D, PS Fireworks 1D, PS Hourglass, PS Pinball, PS Sparkler, PS Spray 1D, PS Springy, PS Starburst, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scan Dual, Scanner, Scanner Dual, Shimmer, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Solid Pattern, Solid Pattern Tri, Sparkle, Sparkle Dark, Sparkle+, Spots, Spots Fade, Stream, Stream 2, Strobe, Strobe Mega, Strobe Rainbow, Sunrise, Sweep, Sweep Random, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Twinkleup, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe, Wipe Random** | WLED's effects with a qlcconsole version that runs on the look's other fixtures too, at WLED's speed, intensity, palette and colours |
 | **WLED DJ Light, Freqmap, Freqpixels, Freqwave, Gravcenter, Gravcentric, Gravfreq, Gravimeter, Juggles, Matripix, Midnoise, Noisefire, Noisemeter, Noisemove, Plasmoid, PS GEQ 1D, PS Sonic Boom, PS Sonic Stream, Puddlepeak, Puddles, Ripple Peak, Rocktaves, Waterfall** | WLED's sound-reactive effects, the same way, following the audio input (Inputs/Outputs); dark with none |
 
-See [WLED effects](programming-tab.md#wled-effects).
+See [WLED effects](build.md#wled-effects).
 
 ## RGB Matrix algorithms
 

@@ -44,6 +44,12 @@ public:
            NameRole = Qt::UserRole + 3  /*!< plain group name (no count suffix) */ };
     enum NodeKind { CategoryNode = 0, GroupNode = 1, FixtureNode = 2, UniverseNode = 3 };
 
+    /** Select every row similar to the selection (and @p also, the row
+     *  right-clicked): FixtureManager::similarFixtures() -- in the group a
+     *  fixture was picked in, or across the rig -- and similarGroups().
+     *  Returns how many rows are selected. */
+    int selectAllSimilar(QTreeWidgetItem *also = nullptr);
+
 public slots:
     /** Rebuild the tree from the Doc's fixtures and groups. */
     void reload();
@@ -94,10 +100,6 @@ private slots:
     void slotItemDoubleClicked(QTreeWidgetItem *item, int column);
 
 private:
-    /** Create a new FixtureGroup from the given fixtures (name/size prompted
-     *  via CreateFixtureGroup), assigning each fixture's heads into the grid. */
-    void createGroupFromFixtures(const QList<quint32> &fixtureIds);
-
     /** Get/create the folder item for a "/"-separated path (empty=root). */
     QTreeWidgetItem *folderItem(const QString &path);
 

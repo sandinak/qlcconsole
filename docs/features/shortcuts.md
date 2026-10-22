@@ -15,7 +15,7 @@
 | ⌘D | Dump the current DMX values into a function |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
-| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Programming, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
+| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
 | ⇧⌘M | Lighting Studio |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
@@ -60,14 +60,18 @@ previous head, arrows nudge 0.1° (⇧ for 1°), + / − step size, Return save,
 Backspace revert, 0 zero, R the other reference, ⌘Z undo the last save, Esc
 leave. See [Focus mode](lighting-studio.md#focus-mode).
 
-## Programming
+## Build
 
 | Keys / mouse | Does |
 |---|---|
-| Drag a group onto **Targets** | Dynamic target (follows the group) |
-| Drag a fixture onto **Targets** | Fixed target |
-| Drag a palette onto **Looks** | Add it to the look |
-| ⌘Z | Undo the last change to the open scene (else the last bundle stamped) |
+| Drag a group onto a scene (outline or Workbench) | Dynamic target (follows the group) |
+| Drag a fixture onto a scene | Fixed target |
+| Drag a palette onto a scene | Add it as a look |
+| Drag a scene onto the Workbench's layers | Add it to the collection loaded |
+| ⌫ on a Workbench layer | Take it out of the collection (the function stays) |
+| Double-click a ▣ layer | Open it in the Workbench (↩ comes back) |
+| ⌘→ / ⌘← | Expand / collapse every row |
+| ⌘Z / ⇧⌘Z | Undo / redo the last change, here or in the Show Tree (one history) |
 | Double-click a scene / function | Open it on the canvas |
 
 ## Show Tree

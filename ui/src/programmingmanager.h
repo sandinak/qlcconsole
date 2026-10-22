@@ -2,17 +2,18 @@
   Q Light Controller Plus
   programmingmanager.h
 
-  Fork-owned top-level "Programming" tab: a drag-drop authoring surface.
-  Three panes:
-    - left:   a function tree (folders) of what you build; select a scene
-              to edit it (chaser/collection canvases come later)
-    - center: the selected scene's canvas (reuses SceneGroupLooks)
-    - right:  a Palettes tree + a Fixtures & Groups tree, dragged into the
-              canvas (palette -> look, group -> dynamic target, fixture ->
-              fixed target)
+  Fork-owned top-level "Build" tab (WORKFLOW_DESIGN.md §3.3; it was
+  "Programming"): it makes the show's vocabulary -- palettes, effects,
+  scenes, collections.
+    - left:   the navigator, by section (Palettes | Effects | Scenes): the
+              palette list, effect palettes and classic effects, the outline
+              of scene folders (ProgrammingOutline); groups and fixtures
+              under it in every section, to drag
+    - right:  the Workbench: what is loaded (a scene, a collection, a
+              chaser...), its layers, and the editor for the selected row
 
-  It edits plain Scenes, so everything stays compatible with the classic
-  Function Manager / scene editor.
+  It edits plain functions, so everything stays compatible with the classic
+  Function Manager and with QLC+.
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */
@@ -22,13 +23,19 @@
 
 #include <QWidget>
 #include <QSet>
+#include <QSharedPointer>
 #include <QElapsedTimer>
 #include "function.h"
 #include "powerdistribution.h"
 
 class QTreeWidgetItem;
+class QTreeWidget;
 class Scene;
 class FunctionsTreeWidget;
+class ProgrammingOutline;
+class Workbench;
+class QButtonGroup;
+class QStackedWidget;
 class FixtureGroupSource;
 class Fixture;
 class SceneGroupLooks;
@@ -67,10 +74,43 @@ public:
     ProgrammingManager(QWidget *parent, Doc *doc);
     ~ProgrammingManager();
 
-    /** Select + host the function with the given id in the canvas, exactly as
-     *  clicking it in the nav tree would (nests its subtree, previews it).
-     *  Public entry for external navigation / automated screenshots. */
+    /** Load function @a fid in the Workbench, as clicking it in the
+     *  navigator would (and select it there). Public entry for external
+     *  navigation / automated screenshots. */
     void showFunction(quint32 fid);
+    /** Send to Show Tree… on chaser @a chaserId (the Workbench's header
+     *  button, a chaser row's right-click): the Show Tree's Import in
+     *  place, its sheet offering to go there. Whether it was sent. */
+    bool sendToShowTree(quint32 chaserId);
+
+    /** The Workbench (W3 docks this same widget in the Show Tree). */
+    Workbench *workbench() const { return m_workbench; }
+    /** W3: lend the Workbench to the Show Tree (it docks it there); a note
+     *  stands in its place. Null: lent already. */
+    Workbench *lendWorkbench();
+    /** ...and have it back, loaded as it was before it was lent. */
+    void returnWorkbench(Workbench *workbench);
+    bool isWorkbenchLent() const { return m_workbenchStandIn != nullptr; }
+
+    /** Build ▸ Effects: design effect palette @a paletteId (invalid: a new
+     *  effect) in the effect designer, in the Workbench's editor pane --
+     *  Workbench::designEffect() on the bench, the path a docked Show Tree
+     *  cue's Effect row takes. False: no designer plugged in. */
+    bool designEffect(quint32 paletteId);
+    /** + New ▸ EFX / RGB Matrix: a new one on the designer's Try on groups,
+     *  listed, selected and loaded. Returns its id (invalid: refused). */
+    quint32 newClassicEffect(Function::Type type);
+    /** The designer the Workbench shows for the Effects section (null: none
+     *  showing). */
+    class EffectDesigner *effectDesigner() const;
+    /** The Effects list's context menu for row @a clicked (null: empty
+     *  space), parented to @a parent -- public for tests and pictures. */
+    class QMenu *effectsContextMenu(QTreeWidgetItem *clicked, QWidget *parent);
+
+    /** The navigator's sections. */
+    enum Section { PalettesSection = 0, EffectsSection, ScenesSection };
+    void setSection(Section section);
+    Section section() const;
 
     /** Open the power-distribution (circuits) editor dialog. Public entry so
      *  the app status-bar Power chip can reach it — the readout moved there,
@@ -90,52 +130,42 @@ public:
      *  that tracking. */
     quint32 currentPaletteId() const;
 
-    /** The scene currently shown in the canvas (Function::invalidId() if
-     *  none, e.g. nothing open or a non-scene function is open) — lets a
-     *  control surface enumerate "what should Select/Load(1-10) address
-     *  right now" without its own scene-tracking. */
+    /** The scene the Workbench edits: the selected layer's, or the scene
+     *  loaded (Function::invalidId() if none, e.g. a collection with no
+     *  layer selected) — lets a control surface enumerate "what should
+     *  Select/Load(1-10) address right now" without its own tracking. */
     quint32 currentSceneId() const;
 
 protected:
-    bool eventFilter(QObject *watched, QEvent *event) override;
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
 
 private slots:
-    void slotFunctionActivated(QTreeWidgetItem *item);
-    void slotFuncTreeMenu(const QPoint &pos);
+    /** The navigator's selection changed: load what is selected. */
+    void slotOutlineSelectionChanged();
     void slotPaletteTreeMenu(const QPoint &pos);
-    void slotCanvasModified();
     void slotModeChanged();
-    void slotLookEdited(quint32 paletteId);
-    /** The look editor now shows @p paletteId: if the look on the canvas
-     *  doesn't have it, try it on that look (Scene::setTrialPalette) so the
-     *  rig follows the edit; say so, or say there is no look to show it on. */
-    void updateTrialPalette(quint32 paletteId);
     void slotCopy();
     void slotPaste();
     void slotPaletteDoubleClicked(QTreeWidgetItem *item);
+    /** Fixtures picked (the 2D view): the Workbench shows their channels. */
     void slotFixturesSelected(const QList<quint32> &fixtureIds);
     void slotFixGroupSourceSelectionChanged();
-    void slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value);
-    void slotFixtureChecked(quint32 fxi, quint32 ch, bool state);
+    /** What is selected changed in the Workbench: Flash, Park, Mark follow. */
+    void slotSelectionTools();
 
     // Bundle CRUD
     void slotStampBundle(const QString &bundleName);
     void slotSaveAsBundle();
-    void slotUndoStamp();
 
-    /** Undo (⌘Z): whichever was done last of the open scene's canvas edits,
-     *  a bundle stamp, and the shared history (open 24: the Show Tree's
-     *  steps and the palette operations -- New / Duplicate / Delete / Move
-     *  to folder here, the Library there -- are one history, so ⌘Z in
-     *  either tab undoes whatever was done last in it). */
+    /** Undo (⌘Z) / Redo (⇧⌘Z): the one shared history (open 24, P1): the
+     *  Show Tree's steps, the palette operations and every scene and
+     *  collection edit made here -- whatever was done last, in either tab. */
     void slotUndo();
-    /** Redo (⇧⌘Z): the shared history's (canvas edits have no redo). */
     void slotRedo();
 
     // Power/amperage estimate (Design mode only)
-    /** Re-estimate the load of the previewed look and refresh the footer. */
+    /** Re-estimate the load of what is lit and refresh the footer. */
     void recomputePower();
 
     // Highlight
@@ -164,7 +194,6 @@ private slots:
     void slotFollowSpotClearBindings();
     void slotFollowSpotBindingChanged();
     void slotJoystickUpdated(float pan, float tilt);
-    /** Dispatches controller button actions from ProgrammerController. */
     /** The full 'how a look is built' explanation. Shown once on a first
      *  run, and on demand after that. */
     void showProgrammingGuide();
@@ -176,6 +205,7 @@ private:
     /** True exactly once, ever -- and records that it has answered. */
     static bool takeFirstRunGuideFlag();
 
+    /** Dispatches controller button actions from ProgrammerController. */
     void slotButtonAction(const QString &action);
 
     // BPM / internal beat generator
@@ -189,82 +219,55 @@ private:
     void slotFollowSpotPinChanged(bool visible, float xMeters, float yMeters);
 
 private:
+    /** The navigator's three sections and the groups & fixtures under them. */
+    QWidget *buildNavigator();
+    QWidget *buildScenesSection();
+    QWidget *buildPalettesSection();
+    QWidget *buildEffectsSection();
+    /** The Effects section's list: effect palettes and classic effects
+     *  (queued: a draft or a preview scene added mid-click must not pull
+     *  the rows away). */
+    void rebuildEffects();
+    void rebuildEffectsNow();
+    /** Select the Effects row of palette (@a palette) or function @a id. */
+    void selectEffectRow(bool palette, quint32 id);
+    /** The effect palettes / classic effects a menu on @a clicked acts on:
+     *  the selection if the clicked row is in it, else the clicked row. */
+    void effectTargets(QTreeWidgetItem *clicked, QList<quint32> &palettes, QList<quint32> &functions) const;
+
     /** Enable/label the Park button (Park vs Unpark) from selection + park state. */
     void updateParkButtonLabel();
     void updateMarkButtonLabel();
-    void loadCanvas(quint32 sceneId);
-    /** Host the stock editor for a non-scene function in the canvas. */
-    void loadFunctionEditor(Function *function);
-    /** Create a new function of @p type in @p folder, name it, select it in the
-     *  nav tree, and open it in the canvas. Shared by the func-tree's
-     *  right-click "New …" menu and the nav toolbar's "Add" menu. No-op if
-     *  @p type isn't one of the creatable types (Scene/Chaser/Collection/EFX/
-     *  RGBMatrix/Show). */
+
+    /** Select @a sceneId's row in the navigator (and so load it). */
+    void revealScene(quint32 sceneId);
+    /** Create a new function of @p type in @p folder, name it, select it in
+     *  the navigator and load it. No-op if @p type isn't one of the
+     *  creatable types (Scene/Chaser/Collection/EFX/RGBMatrix/Show). */
     void addNewFunction(Function::Type type, const QString &folder);
-    /** Host the fixture-group head-layout editor in the canvas (visualize a
-     *  group double-clicked in the Fixtures & Groups source). */
-    void loadGroupEditor(quint32 groupId);
-    /** Tear down whichever canvas editor is currently shown. */
-    void clearEditors();
-    void updateTitle();
-
-    /** True if two fixtures share a channel layout (same def+mode, or both
-     *  generic with equal channel counts) and so can be edited together. */
-    bool sameFixtureType(const Fixture *a, const Fixture *b) const;
-
-    /** Show the look editor in the bottom panel (pivoting away from the
-     *  per-fixture DMX console if it's showing). */
-    void showLookEditorPanel();
 
     /** Create a new palette of the given QLCPalette::PaletteType in the
      *  selected palette folder and open it in the look editor. */
     void createPalette(int paletteType);
-    /** Select and scroll the source palette tree to @p paletteId (e.g. after
-     *  creating a palette or auto-renaming an effect, so it's easy to find). */
+    /** Select and scroll the palette list to @p paletteId (the Palettes
+     *  section shows). */
     void revealPalette(quint32 paletteId);
-
 
     /** Duplicate palette $pid ("… (copy)"), add it, and open it for editing. */
     void duplicatePalette(quint32 pid);
 
-    /** Folder path a func-tree row lives in (its own path, or the folder path if
-     *  it is a folder row). Empty for null / root. */
-    QString funcFolderPathFor(QTreeWidgetItem *item) const;
-    /** Folder path of the current func-tree selection (for new functions). */
-    QString selectedFuncFolderPath() const;
-    /** How many chasers/collections reference this function. */
-    int functionUsageCount(quint32 fid) const;
-
-    /** Function ids the func-tree context menu should act on: the whole current
-     *  selection if @p clicked is part of it, otherwise just @p clicked. Folder
-     *  rows contribute no id. */
-    QList<quint32> funcTreeTargetIds(QTreeWidgetItem *clicked) const;
-    /** Same convention for the palette tree. */
+    /** Same convention for the palette tree: the selection if the clicked
+     *  row is in it, otherwise the clicked row alone. */
     QList<quint32> paletteTreeTargetIds(QTreeWidgetItem *clicked) const;
     /** Open the Bundle editor pre-filled with @p paletteIds and save the result. */
     void saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene = nullptr);
+    /** W2: the Folders | Classic switch over the Scenes navigator. */
+    class QLayout *buildArrangementSwitch(QWidget *page);
+    /** Chaser from selection: a new chaser of @a functionIds, loaded. */
+    void makeChaserFrom(const QList<quint32> &functionIds, const QString &folder);
+
     /** Duplicate each function (smart-incremented name), select the last copy. */
     void duplicateFunctions(const QList<quint32> &fids);
-
-    /** A function row shown nested under a collection / chaser / show track
-     *  in the nav tree: which container it belongs to and where in it. */
-    struct MemberRef
-    {
-        quint32 container = 0;   ///< Collection / Chaser / Show id
-        quint32 fid = 0;         ///< the member function
-        int stepIndex = -1;      ///< Collection member / Chaser step index
-        quint32 trackId = 0;     ///< Show: the track
-        quint32 showFuncId = 0;  ///< Show: the placed ShowFunction
-    };
-
-    /** Member rows among the rows a context-menu click on $clicked acts on
-     *  (the selection if $clicked is in it). */
-    QList<MemberRef> funcTreeMemberTargets(QTreeWidgetItem *clicked) const;
-
-    /** Take the $refs out of their containers — the membership only, the
-     *  functions stay. Asks first for chaser steps / show items (they lose
-     *  their timing) unless $confirm is false. Returns how many were removed. */
-    int removeMembers(const QList<MemberRef> &refs, bool confirm = true);
 
     /** The confirmation text for deleting palettes $pids: where each is used
      *  (scene looks, effect-look slots) and what deleting does to them. */
@@ -273,15 +276,15 @@ private:
     /** Delete palettes $pids after asking (unless $confirm is false). */
     bool deletePalettes(const QList<quint32> &pids, bool confirm = true);
 
-    /** Delete/Backspace on a tree: the selection's functions or palettes, or
-     *  the selected folder. */
+    /** Delete/Backspace on the palette tree: the selected palettes, or the
+     *  selected folder. */
     void deleteTreeSelection(FunctionsTreeWidget *tree);
 
     /** The confirmation text for deleting $fids (says it is the function
      *  itself, everywhere, and where else each one is used). */
     QString deleteFunctionsMessage(const QList<quint32> &fids) const;
     /** Delete each function after confirmation. Collects by id first, since the
-     *  first deletion rebuilds the tree and invalidates every item pointer. */
+     *  first deletion rebuilds the outline and invalidates every item pointer. */
     void deleteFunctions(const QList<quint32> &fids);
 
     /** Delete the user folder $item of $tree. Its functions/palettes and
@@ -291,124 +294,35 @@ private:
     bool deleteTreeFolder(FunctionsTreeWidget *tree, QTreeWidgetItem *item,
                           bool confirm = true);
 
-    /** Add @p fids to collection @p containerId (skipping self / duplicates /
-     *  cycles) and refresh the nav tree + canvas editor if they show it. Called
-     *  when functions are dropped onto a collection node in the nav tree. */
-    void addFunctionsToCollection(quint32 containerId, const QList<quint32> &fids);
-
-    /** Show the members/steps of the given collection/chaser nested under
-     *  its node in the function tree (read-only nav; invalidId clears). */
-    void syncMemberNodes(quint32 containerId);
-    /** Recursively nest the members of a container function under treeNode
-     *  (collections-in-chasers-in-…, and shows as tracks→functions); visited
-     *  guards against cycles. */
-    void addMemberChildren(QTreeWidgetItem *treeNode, quint32 containerId,
-                           QSet<quint32> &visited, int depth);
-    /** Create one nested member leaf (with optional zero-padded order prefix)
-     *  under parentNode and recurse into it. Shared by chaser/collection member
-     *  lists and show-track placements. */
-    QTreeWidgetItem *addMemberLeaf(QTreeWidgetItem *parentNode, quint32 mid,
-                                   int orderIdx, int width, bool ordered,
-                                   QSet<quint32> &visited, int depth);
-
-    /** Is fid anywhere in the container's tree (recursively)? */
-    bool isContainerMember(quint32 containerId, quint32 fid) const;
-    bool containerHas(quint32 containerId, quint32 fid,
-                      QSet<quint32> &visited, int depth) const;
-
-    /** Live-preview the canvas scene by running it (Design mode only), so
-     *  the DMX/2D view reflects the look as you build. Blind/live handling
-     *  comes later. */
-    void startPreview();
-    void stopPreview();
-    /** In Operate mode, run the canvas scene directly (all channels live)
-     *  so lights stay on when the show mode is active. A followspot.js effect
-     *  look overrides pan/tilt on joystick moves on top. */
-    void startOperateScene();
-    void stopOperateScene();
-    /** Re-apply the running preview after an edit WITHOUT churning
-     *  start/stop (resetRuntime if running; start if not). */
-    void refreshPreview();
-
 private:
     Doc *m_doc;
 
-    FunctionsTreeWidget *m_funcTree;
-    QToolButton *m_addFuncBtn; //!< "Add" dropdown consolidating New Scene/Chaser/…/Folder
+    Workbench *m_workbench = nullptr;
+    // W3: while the Show Tree has the Workbench
+    QWidget *m_workbenchStandIn = nullptr;
+    QSharedPointer<class WorkbenchStack> m_lentFrom;     //!< what Build had loaded
+    QString m_lentSelection;                            //!< its selected row's key
 
-    QVBoxLayout *m_canvasLayout;
-    /** The canvas over the editor of what's selected, a handle between. */
-    class QSplitter *m_canvasSplit = nullptr;
+    // The navigator
+    QButtonGroup *m_sections = nullptr;
+    QStackedWidget *m_sectionStack = nullptr;
+    ProgrammingOutline *m_outline = nullptr;
+    QLabel *m_outlineHint = nullptr;  //!< what a drag would do / what the outline is
+    QToolButton *m_addFuncBtn; //!< "+ New" dropdown
     class QSplitter *m_mainSplit = nullptr;
-    QVBoxLayout *m_canvasTopLayout = nullptr;   //!< the canvas / function editor
-    QWidget *m_editorPane = nullptr;            //!< look editor / fixture console
-    QVBoxLayout *m_editorLayout = nullptr;
-    /** Show the editor pane only while one of its editors shows. */
-    void syncEditorPane();
-    QLabel *m_canvasTitle;
-    /** In a fixture group's layout view: back to the scene that was open
-     *  before it ("clicked back on an effect .. I can't get back"). */
-    class QPushButton *m_groupBackButton = nullptr;
-    quint32 m_groupReturnScene = UINT_MAX;
-    QWidget *m_canvasPlaceholder;   ///< empty-state: one line plus a way in
-    QLabel  *m_canvasHint;          ///< the one line
-    SceneGroupLooks *m_canvas;
-    QWidget *m_funcEditor;     //!< stock editor for non-scene functions
-    LookEditor *m_lookEditor;      //!< bottom pane; sizes to content (no scroll)
-    QScrollArea *m_fixtureScroll;  //!< wraps the per-fixture console (bottom)
-    FixtureConsole *m_fixtureConsole;
-    QLabel *m_fixtureMixedNote;    //!< shown when selected fixed fixtures differ in type
-    QList<quint32> m_selectedFixtures; //!< fixed fixtures edited together (same type)
-    quint32 m_selectedFixturesScene = UINT_MAX; //!< the scene m_selectedFixtures was announced for
-    quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
-    quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
-    quint32 m_previewFunction;    //!< the function we started for live preview
-    quint32 m_trialScene;         //!< scene a palette is being tried on (updateTrialPalette)
-    quint32 m_operateFunction;   //!< scene we started in Operate mode (all channels live)
+    class QSplitter *m_navSplit = nullptr;
+    QTreeWidget *m_effectsList = nullptr;
+    bool m_effectsRebuildQueued = false;
+    bool m_effectsRebuilding = false;
+    bool m_navigating = false;    //!< the navigator follows a load: don't load again
+
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
     quint32 m_clipboardPalette;   //!< Cmd-C source palette for Cmd-V duplicate
-    quint32 m_memberContainer;    //!< collection/chaser whose members are nested
 
     FunctionsTreeWidget *m_paletteTree;
     FixtureGroupSource  *m_fixGroupSource;
     BundleBrowser       *m_bundleBrowser = nullptr;
     BundleCache         *m_bundleCache   = nullptr;
-
-    // Bundle stamp undo (one-level: save prior palette list, restore on Ctrl+Z)
-    QList<quint32>       m_stampUndoPalettes;
-    // Per-look fade overrides (paletteId -> {fadeInMs, fadeOutMs}) at stamp time,
-    // so undo restores them (stamping removePalette()s them away).
-    QHash<quint32, QPair<int, int> > m_stampUndoFades;
-    quint32              m_stampUndoSceneId = quint32(-1);
-
-    /** When each canvas snapshot / the bundle stamp was taken
-     *  (PaletteOps::nextUndoStamp()), against the shared history. */
-    QList<quint64>       m_undoStamps;
-    quint64              m_stampUndoStamp = 0;
-    // General per-scene undo: detached Scene copies of the pre-edit state.
-    // m_undoBaseline holds the state as of the last load/undo; on each canvas
-    // edit it is pushed to m_undoStack and re-captured. Scene-canvas only.
-    QList<Scene*>        m_undoStack;
-    Scene               *m_undoBaseline = nullptr;
-    quint32              m_undoSceneId = quint32(-1);
-    /** Snapshot @p scene's full state into a detached Scene (caller owns it). */
-    Scene *snapshotScene(Scene *scene);
-    /** Reset the undo history for a newly loaded scene (id invalid clears it). */
-    void resetUndoFor(quint32 sceneId);
-    /** Record the pre-edit baseline before the current edit takes effect. */
-    void pushUndoSnapshot();
-
-    // Last Effect-palette signature synced to ESR — used to avoid recreating
-    // instances on every refreshPreview() call when only non-Effect palettes (or
-    // a running effect's own params) changed. The signature includes each Effect
-    // palette's id AND its script path + preset, so SWITCHING the effect script
-    // on an existing palette (same id) still forces a re-sync; a param-slider
-    // drag (same script) does not, preserving live JS state.
-    QStringList          m_lastSyncedEffectPalettes;
-
-    /** Build the Effect-palette sync signature for @p scene (id|script|preset per
-     *  Effect palette). Empty scene / non-scene → empty list. */
-    QStringList effectPaletteSignature(Scene *scene) const;
 
     // Toolbar buttons
     QPushButton *m_highlightBtn;
@@ -444,8 +358,8 @@ private:
 
     // Power/amperage estimate (Design mode only). The readout lives in the
     // app status-bar chip now (powerEstimateChanged); the timer here just
-    // drives the periodic re-estimate, stopped whenever the tab is hidden or
-    // the show goes live, so Run mode pays nothing.
+    // drives the periodic re-estimate, stopped whenever the show goes live,
+    // so Run mode pays nothing.
     QTimer      *m_powerTimer = nullptr;
 
 public:
@@ -461,7 +375,7 @@ private:
     void updatePowerEstimateActive();
 
 signals:
-    /** Emitted when the user confirms Save in the Programming tab. */
+    /** Emitted when the user confirms Save Positions. */
     void requestSave();
     /** Re-emits LookEditor::lookFocusChanged — the on-screen look changed
      *  (or was redrawn in place). Lets a control-surface overlay recompute

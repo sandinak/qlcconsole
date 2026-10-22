@@ -48,12 +48,21 @@ namespace
 /* The guides, in the order to read them. */
 const char *const kTopics[] = {
     "getting-started.md", "whats-new.md", "README.md", "lighting-studio.md",
-    "programming-tab.md", "show-tree.md", "fixture-manager.md", "definition-updates.md",
+    "build.md", "show-tree.md", "fixture-manager.md", "definition-updates.md",
     "stage-targets.md", "shows.md",
     "show-control.md",
     "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md", "updates.md",
     "EFFECTSCRIPT_API.md"
 };
+
+/* A guide that moved: its old name, from a link or a topic kept from
+   before, opens the new one (the headings came along). */
+QString movedGuide(const QString &file)
+{
+    if (file == QLatin1String("programming-tab.md"))     // the Programming tab is Build now
+        return QStringLiteral("build.md");
+    return file;
+}
 
 QString readGuide(const QString &file)
 {
@@ -193,7 +202,7 @@ QString HelpBrowser::headingSlug(const QString &heading)
 
 void HelpBrowser::showTopic(const QString &topic)
 {
-    QString file = topic.section(QLatin1Char('#'), 0, 0);
+    QString file = movedGuide(topic.section(QLatin1Char('#'), 0, 0));
     if (file.isEmpty() || !QFile::exists(resourcePath(file)))
         file = QStringLiteral("getting-started.md");
     load(file, topic.section(QLatin1Char('#'), 1), true);
@@ -396,7 +405,7 @@ void HelpBrowser::followLink(const QUrl &url)
     }
     // Another guide: by its name, wherever the link was written to find it
     // ("other-improvements.md", "../../EFFECTSCRIPT_API.md").
-    const QString file = QUrl(QStringLiteral("qrc:/help/") + m_file).resolved(url).fileName();
+    const QString file = movedGuide(QUrl(QStringLiteral("qrc:/help/") + m_file).resolved(url).fileName());
     if (QFile::exists(resourcePath(file)))
         load(file, url.fragment(), true);
 }

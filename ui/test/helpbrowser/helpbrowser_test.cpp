@@ -147,6 +147,14 @@ void HelpBrowser_Test::aLinkToAHeadingScrollsToIt()
     // Unknown topics fall back to Getting Started.
     help.showTopic(QStringLiteral("nonsense.md"));
     QCOMPARE(help.currentFile(), QString("getting-started.md"));
+    // A guide that moved: the Programming tab's is the Build tab's now, its
+    // headings with it -- a topic or a link kept from before lands there.
+    help.showTopic(QStringLiteral("programming-tab.md#the-effect-browser"));
+    QCOMPARE(help.currentFile(), QString("build.md"));
+    QCOMPARE(help.currentHeading(), QString("The effect browser"));
+    help.followLink(QUrl(QStringLiteral("programming-tab.md#the-outline")));
+    QCOMPARE(help.currentFile(), QString("build.md"));
+    QCOMPARE(help.currentHeading(), QString("The outline"));
 }
 
 void HelpBrowser_Test::searchFindsTheGuidesThatSayIt()

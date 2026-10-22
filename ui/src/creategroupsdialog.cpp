@@ -242,6 +242,12 @@ void CreateGroupsDialog::setSplit(HeadTypeGroups::Split split)
      : split == HeadTypeGroups::PerType ? m_perTypeRadio : m_perFixtureRadio)->setChecked(true);
 }
 
+void CreateGroupsDialog::setFolder(const QString &folder)
+{
+    m_baseFolder = folder;
+    slotReplan();
+}
+
 HeadTypeGroups::Options CreateGroupsDialog::options() const
 {
     HeadTypeGroups::Options o;
@@ -274,7 +280,14 @@ void CreateGroupsDialog::slotReplan()
     /* A group per fixture is many groups: they go in a folder named after
        the selection, until a folder is typed. */
     if (!m_folderEdited)
-        m_folderEdit->setText(perFixture ? m_baseEdit->text().trimmed() : QString());
+    {
+        QStringList parts;
+        if (!m_baseFolder.isEmpty())
+            parts << m_baseFolder;
+        if (perFixture && !m_baseEdit->text().trimmed().isEmpty())
+            parts << m_baseEdit->text().trimmed();
+        m_folderEdit->setText(parts.join(QLatin1Char('/')));
+    }
 
     const QString keep = m_list->currentItem() != nullptr
                              ? m_list->currentItem()->data(COL_NAME, Qt::UserRole).toString()

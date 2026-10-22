@@ -46,6 +46,7 @@
 #include <QComboBox>
 #include "speedmasters.h"
 #include "chasereditor.h"
+#include "noteedit.h"
 #include "showcontrol.h"
 #include "mastertimer.h"
 #include "chaserstep.h"
@@ -128,6 +129,8 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
 
     /* Disable editing of steps number */
     m_tree->setItemDelegateForColumn(COL_NUM, new NoEditDelegate(this));
+    /* A note opens up while it's typed in; elided, all of it in the tooltip */
+    m_tree->setItemDelegateForColumn(COL_NOTES, new NoteDelegate(this));
 
     /* Speed masters (SPEED_SPREAD_DESIGN.md, S2): the chase's, for every
        step, and a step's own where it differs. */

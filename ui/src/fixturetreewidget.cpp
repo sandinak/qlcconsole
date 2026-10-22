@@ -30,6 +30,7 @@
 
 #include <QMap>
 #include "fixturetreewidget.h"
+#include "itemicons.h"
 #include "apputil.h"
 #include "qlcfixturedef.h"
 #include "fixturegroup.h"
@@ -731,7 +732,7 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
         return;
 
     item->setText(KColumnName, fixture->name());
-    item->setIcon(KColumnName, fixture->getIconFromType());
+    item->setIcon(KColumnName, ItemIcons::fixtureIcon(fixture));
     item->setData(KColumnName, PROP_ID, QString::number(fixture->id()));
     if (m_channelSelection)
     {
@@ -862,7 +863,7 @@ void FixtureTreeWidget::updateGroupItem(QTreeWidgetItem* item, const FixtureGrou
     Q_ASSERT(grp != NULL);
 
     item->setText(KColumnName, grp->name());
-    item->setIcon(KColumnName, QIcon(":/group.png"));
+    item->setIcon(KColumnName, ItemIcons::groupIcon(m_doc, grp));
     item->setData(KColumnName, PROP_GROUP, grp->id());
 
     // This should be a safe check because simultaneous add/removal is not possible,

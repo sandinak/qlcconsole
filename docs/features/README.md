@@ -22,7 +22,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Getting started](getting-started.md) | Starting the app, show files and autosave, finding your way around, and the ways a show comes together — designing first, patch first, at a venue, a row of like structures |
 | [What's new](whats-new.md) | The latest changes |
 | [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, locks; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
-| [Programming Tab](programming-tab.md) | Building "looks" out of reusable palettes instead of raw DMX, drag-and-drop targets, the inline look editor and effect browser, scene transitions, WLED effects |
+| [Build Tab](build.md) | Making the show's palettes, effects, scenes and collections: the navigator by section, the Workbench (a scene or a collection as layers, + EFX / + RGB Matrix), looks out of reusable palettes instead of raw DMX, the inline look editor and effect browser, scene transitions, WLED effects |
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Layers panel, Studio groups, Blind/Park/Highlight, and more |
@@ -58,13 +58,13 @@ anyone knows which node a fixture will end up on:
    devices get a universe each, by IP.
 5. **Organize fixtures** into groups, laid out in the head-layout grid —
    or straight from where they stand on stage — for effects and
-   Programming-tab drag targets (see [Fixture Manager](fixture-manager.md)).
+   Build-tab drag targets (see [Fixture Manager](fixture-manager.md)).
 6. **Mark places that matter** — a mark on the deck, a drum kit, a person —
    as **Stage Targets**, so moving heads can aim at them instead of you
    dialing in pan/tilt by hand (see [Stage Targets](stage-targets.md)).
-7. **Build looks** in the **Programming Tab** by dragging color/dimmer/aim
+7. **Build looks** in the **Build Tab** by dragging color/dimmer/aim
    palettes onto scenes, instead of setting raw channel values, and give
-   scenes transitions (see [Programming Tab](programming-tab.md)).
+   scenes transitions (see [Build Tab](build.md)).
 8. **Check the footer.** When it says **Ready**, nothing is unpatched,
    clashing, unrouted or missing; when it says **Not ready**, click it and
    fix what it lists (see

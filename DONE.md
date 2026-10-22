@@ -6,6 +6,37 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-22 — Workflow W5: the bridge from an old show *(feat/w5-bridge, not merged)*
+
+Phase W5 of WORKFLOW_DESIGN.md (design/programming-redesign), built on W0.
+
+- Engine, `engine/src/showtreebridge.cpp`: `classifyChaser()` (cue list vs
+  effect), `convertibleChasers()`, `planImport()` (importChaser's build,
+  `buildImport()`, without touching the show + the same-output check on a
+  list not in the tree), `importInPlace()` / `fileOriginals()` /
+  `originalsOf()` (filing under `Imported/<chaser> (originals)`, Show
+  timelines re-pointed), `restoreOriginal()`, `planCapture()` /
+  `captureIntoPalettes()`. Model: `CueList::source`, `inPlace`,
+  `originals` (XML `Source=`, `InPlace=`, `Original` children; older
+  builds skip them). Import flattens nested non-step collections.
+- Undo: `attachToLastStep(apply, beforeTree)`; several attach per step;
+  undo runs after-tree changes first (a timeline off the list's chaser
+  lets the bake delete it), before-tree ones after the tree is back.
+- UI: `ShowConverter` dialog; the open banner (`stBridgeBanner`); import
+  sheet's Import in place tick and "Collections read into the cues";
+  Restore original on the list page / menu; Capture into palettes on a raw
+  ▣ row's page / menu. `ImportSheet::planRepoint()` also moves speed
+  dials, clocks and audio triggers.
+- Numbers (showtree_test bridgeDanceHysteria / bridgeTheSampleShow, played
+  tick for tick): DanceHysteria-0.1 Full Show 15 ▣ → 8 (7 empty
+  `0.0.0-base` left out), 9 originals filed, the "full show" timeline
+  re-pointed; Wash-Red, Wash-Base, Show captured (Effects channel left in
+  "(rest)"); 0 channels differ imported and captured; Restore original
+  XML-equal. Sample.qxw: 13 effect chasers (none offered); in place anyway
+  0 differ, 4 raw scenes captured (LST), the rest have their own fades.
+  An origin/main build loads the in-place, captured DanceHysteria and
+  plays it the same (its importARealShow, 0 differ).
+
 ### 2026-10-22 — Workflow W0: seam fixes, no new layout *(feat/w0-seam-fixes)*
 
 Phase W0 of WORKFLOW_DESIGN.md (design/programming-redesign), approved by

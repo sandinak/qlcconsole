@@ -30,6 +30,11 @@
 #include "vccuelist.h"
 #include "vcbutton.h"
 #include "vcslider.h"
+#include "vcspeeddial.h"
+#include "vcspeeddialfunction.h"
+#include "vcclock.h"
+#include "vcaudiotriggers.h"
+#include "audiobar.h"
 #include "vcframe.h"
 #include "chaser.h"
 #include "doc.h"
@@ -42,7 +47,8 @@ using namespace ShowTree;
 
 int ImportSheet::Repoint::count() const
 {
-    return int(buttons.count() + cueLists.count() + sliders.count()) + (mainCueList ? 1 : 0)
+    return int(buttons.count() + cueLists.count() + sliders.count() + speedDials.count() + clocks.count()
+               + audioTriggers.count()) + (mainCueList ? 1 : 0)
            + (cueListNumber.isEmpty() ? 0 : 1);
 }
 
@@ -58,6 +64,15 @@ QStringList ImportSheet::Repoint::lines() const
     for (const QPointer<VCSlider> &s : sliders)
         if (s)
             out << tr("VC slider “%1”").arg(s->caption());
+    for (const QPointer<VCSpeedDial> &d : speedDials)
+        if (d)
+            out << tr("VC speed dial “%1”").arg(d->caption());
+    for (const QPointer<VCClock> &c : clocks)
+        if (c)
+            out << tr("VC clock “%1” (its schedule)").arg(c->caption());
+    for (const QPointer<VCAudioTriggers> &a : audioTriggers)
+        if (a)
+            out << tr("VC audio triggers “%1”").arg(a->caption());
     if (mainCueList)
         out << tr("the main cue list (GO with no list, OSC and MSC)");
     if (!cueListNumber.isEmpty())
@@ -77,6 +92,42 @@ void ImportSheet::Repoint::apply(Doc *doc, bool forward) const
     for (const QPointer<VCSlider> &s : sliders)
         if (s)
             s->setPlaybackFunction(now);
+    // These hold the chaser among other functions: only its entries move.
+    const quint32 was = forward ? from : to;
+    for (const QPointer<VCSpeedDial> &d : speedDials)
+    {
+        if (!d)
+            continue;
+        QList<VCSpeedDialFunction> fs = d->functions();
+        for (VCSpeedDialFunction &f : fs)
+            if (f.functionId == was)
+                f.functionId = now;
+        d->setFunctions(fs);
+    }
+    for (const QPointer<VCClock> &c : clocks)
+    {
+        if (!c)
+            continue;
+        const QList<VCClockSchedule> schedules = c->schedules();
+        for (int i = int(schedules.count()) - 1; i >= 0; --i)
+            c->removeSchedule(i);
+        for (VCClockSchedule sch : schedules)
+        {
+            if (sch.function() == was)
+                sch.setFunction(now);
+            c->addSchedule(sch);
+        }
+    }
+    for (const QPointer<VCAudioTriggers> &a : audioTriggers)
+    {
+        if (!a)
+            continue;
+        Function *f = doc->function(now);
+        for (AudioBar *bar : a->getAudioBars())
+            if (bar != nullptr && bar->m_type == AudioBar::FunctionBar && bar->m_function != nullptr
+                && bar->m_function->id() == was && f != nullptr)
+                bar->attachFunction(f);
+    }
     if (mainCueList && doc->showControl() != nullptr)
         doc->showControl()->setMainCueList(now);
     if (!cueListNumber.isEmpty())
@@ -111,6 +162,28 @@ ImportSheet::Repoint ImportSheet::planRepoint(Doc *doc, quint32 from, quint32 to
         for (VCSlider *s : vc->contents()->findChildren<VCSlider *>())
             if (s->playbackFunction() == from)
                 r.sliders << s;
+        for (VCSpeedDial *d : vc->contents()->findChildren<VCSpeedDial *>())
+            for (const VCSpeedDialFunction &f : d->functions())
+                if (f.functionId == from)
+                {
+                    r.speedDials << d;
+                    break;
+                }
+        for (VCClock *c : vc->contents()->findChildren<VCClock *>())
+            for (const VCClockSchedule &sch : c->schedules())
+                if (sch.function() == from)
+                {
+                    r.clocks << c;
+                    break;
+                }
+        for (VCAudioTriggers *a : vc->contents()->findChildren<VCAudioTriggers *>())
+            for (AudioBar *bar : a->getAudioBars())
+                if (bar != nullptr && bar->m_type == AudioBar::FunctionBar && bar->m_function != nullptr
+                    && bar->m_function->id() == from)
+                {
+                    r.audioTriggers << a;
+                    break;
+                }
     }
     if (doc->showControl() != nullptr && doc->showControl()->mainCueList() == from)
         r.mainCueList = true;
@@ -138,8 +211,40 @@ ImportSheet::ImportSheet(Doc *doc, const ShowTreeController::ImportReport &repor
     m_body = new QTextBrowser(this);
     m_body->setObjectName(QStringLiteral("stImportBody"));
     m_body->setOpenLinks(false);
-    m_body->setHtml(html(doc, report, name));
+    m_body->setHtml(html(doc, report, doc->showTree()->cueList(report.list), name));
     root->addWidget(m_body, 1);
+
+    // W5, Import in place: the originals out of the way, under Imported/….
+    m_file = new QCheckBox(this);
+    m_file->setObjectName(QStringLiteral("stImportFile"));
+    {
+        QList<quint32> timelines;
+        const QList<quint32> originals = doc->showTree()->originalsOf(report.list, &timelines);
+        if (originals.isEmpty() && timelines.isEmpty())
+        {
+            m_file->setChecked(false);
+            m_file->hide();
+        }
+        else
+        {
+            const QString folder = ShowTreeController::originalsFolder(name);
+            m_file->setText(tr("Import in place: file “%1” and what only it plays (%n function(s)) under %2",
+                               "", int(originals.count())).arg(name, folder));
+            QStringList tip;
+            tip << tr("The list takes over from the chaser: the originals stay in the show, out of the way, "
+                      "and Restore original (on the cue list) puts them back.");
+            QStringList shows;
+            for (quint32 id : timelines)
+                if (const Function *f = doc->function(id))
+                    shows << f->name();
+            if (!shows.isEmpty())
+                tip << tr("The Show timeline(s) %1 play the cue list from now on.").arg(shows.join(QStringLiteral(", ")));
+            tip << tr("Unticked: both stay side by side, as the chaser was.");
+            m_file->setToolTip(tip.join(QStringLiteral("\n\n")));
+            m_file->setChecked(true);
+            root->addWidget(m_file);
+        }
+    }
 
     // The offer: what fires the chaser fires the list (W0; the rest of
     // Import in place is W5).
@@ -173,6 +278,7 @@ ImportSheet::ImportSheet(Doc *doc, const ShowTreeController::ImportReport &repor
     }
 
     QDialogButtonBox *buttons = new QDialogButtonBox(this);
+    m_buttons = buttons;
     QPushButton *undo = buttons->addButton(tr("Undo import"), QDialogButtonBox::DestructiveRole);
     undo->setObjectName(QStringLiteral("stImportUndo"));
     connect(undo, &QPushButton::clicked, this, [this]() {
@@ -186,6 +292,25 @@ ImportSheet::ImportSheet(Doc *doc, const ShowTreeController::ImportReport &repor
     root->addWidget(buttons);
 }
 
+void ImportSheet::offerShowTree()
+{
+    if (findChild<QPushButton *>(QStringLiteral("stImportGoTo")) != nullptr)
+        return;
+    QPushButton *go = m_buttons->addButton(tr("Done, show it in the Show Tree"), QDialogButtonBox::AcceptRole);
+    go->setObjectName(QStringLiteral("stImportGoTo"));
+    go->setToolTip(tr("Keep the import and go to the new cue list in the Show Tree tab"));
+    go->setDefault(true);
+    connect(go, &QPushButton::clicked, this, [this]() {
+        m_goTo = true;
+        accept();
+    });
+}
+
+bool ImportSheet::fileOriginals() const
+{
+    return !m_undo && !m_file->isHidden() && m_file->isChecked();
+}
+
 bool ImportSheet::repoint() const
 {
     // Not offered (nothing fires the chaser): never ticked.
@@ -195,19 +320,23 @@ bool ImportSheet::repoint() const
 QString ImportSheet::text() const
 {
     QString out = m_body->toPlainText();
+    if (!m_file->isHidden())
+        out += QStringLiteral("\n[%1] %2").arg(m_file->isChecked() ? QStringLiteral("x") : QStringLiteral(" "),
+                                               m_file->text());
     if (!m_repoint->isHidden())
         out += QStringLiteral("\n[%1] %2").arg(m_repoint->isChecked() ? QStringLiteral("x") : QStringLiteral(" "),
                                                m_repoint->text());
     return out;
 }
 
-QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep, const QString &chaser) const
+QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep, const CueList *list,
+                          const QString &chaser, bool planned)
 {
     ShowTreeController *st = doc->showTree();
-    const CueList *list = st->cueList(rep.list);
     auto esc = [](const QString &s) { return s.toHtmlEscaped(); };
     QString h;
-    h += QStringLiteral("<h2>%1</h2>").arg(esc(tr("Imported “%1”").arg(chaser)));
+    if (!planned)
+        h += QStringLiteral("<h2>%1</h2>").arg(esc(tr("Imported “%1”").arg(chaser)));
     if (list == nullptr)
     {
         h += QStringLiteral("<p>%1</p>").arg(esc(tr("Nothing was imported.")));
@@ -216,10 +345,20 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
         return h;
     }
     const Production *prod = st->production(rep.production);
-    h += QStringLiteral("<p>%1</p>").arg(esc(
-        tr("A new production, %1, with the cue list %2: %n cue(s), Non-tracking, so each cue plays what its "
-           "step played. The chaser itself is unchanged.", "", rep.cues)
-        .arg(prod == nullptr ? chaser : prod->name, list->name)));
+    const bool tracks = list->mode == ListMode::Tracking;
+    const QString how = tracks
+            ? tr("Tracking: what repeats from step to step is set in the cue where it starts and tracks on, "
+                 "so each cue plays what its step played.")
+            : tr("Non-tracking, so each cue plays what its step played.");
+    if (planned)
+        h += QStringLiteral("<p>%1</p>").arg(esc(
+            tr("A new production, %1, with the cue list %2: %n cue(s).", "", rep.cues).arg(chaser, list->name)
+            + QLatin1Char(' ') + how));
+    else
+        h += QStringLiteral("<p>%1</p>").arg(esc(
+            tr("A new production, %1, with the cue list %2: %n cue(s).", "", rep.cues)
+            .arg(prod == nullptr ? chaser : prod->name, list->name)
+            + QLatin1Char(' ') + how + QLatin1Char(' ') + tr("The chaser itself is unchanged.")));
 
     // Plays the same?
     h += QStringLiteral("<h3>%1</h3>").arg(esc(tr("Plays the same")));
@@ -241,10 +380,15 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
 
     // What each step became.
     h += QStringLiteral("<h3>%1</h3>").arg(esc(tr("What each step became")));
-    h += QStringLiteral("<p>%1</p>").arg(esc(
-        tr("%1 layer(s) from scenes of groups and palettes, %2 played as they are, %3 include(s); "
-           "%4 scene(s) made for the layers.")
-        .arg(rep.layers).arg(rep.opaqueLayers).arg(rep.includes).arg(rep.generatedScenes)));
+    if (planned)
+        h += QStringLiteral("<p>%1</p>").arg(esc(
+            tr("%1 layer(s) from scenes of groups and palettes, %2 played as they are, %3 include(s).")
+            .arg(rep.layers).arg(rep.opaqueLayers).arg(rep.includes)));
+    else
+        h += QStringLiteral("<p>%1</p>").arg(esc(
+            tr("%1 layer(s) from scenes of groups and palettes, %2 played as they are, %3 include(s); "
+               "%4 scene(s) made for the layers.")
+            .arg(rep.layers).arg(rep.opaqueLayers).arg(rep.includes).arg(rep.generatedScenes)));
     h += QStringLiteral("<table cellspacing=\"0\" cellpadding=\"3\" border=\"0\" width=\"100%\">"
                         "<tr><th align=\"left\">%1</th><th align=\"left\">%2</th><th align=\"left\">%3</th></tr>")
          .arg(esc(tr("Cue")), esc(tr("Layers")), esc(tr("Plays as it is / includes")));
@@ -254,11 +398,14 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
         QStringList layers, opaque;
         for (const Layer &l : c.layers)
         {
+            const QString released = l.release ? QStringLiteral(" ○") : QString();
             if (l.target.isOpaque())
-                opaque << QStringLiteral("▣ ") + st->targetLabel(l.target);
+                opaque << QStringLiteral("▣ ") + st->targetLabel(l.target) + released;
             else
-                layers << (l.name.isEmpty() ? st->targetLabel(l.target) : l.name);
+                layers << (l.name.isEmpty() ? st->targetLabel(l.target) : l.name) + released;
         }
+        if (tracks && i > 0 && c.mode != CueMode::Block)
+            layers.prepend(QStringLiteral("⤳"));
         for (quint32 inc : c.includes)
             opaque << tr("includes %1").arg(st->cueLabel(*list, list->indexOf(inc)));
         QString label = st->cueLabel(*list, i);
@@ -274,6 +421,30 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
         h += QStringLiteral("<p><small>%1</small></p>").arg(esc(
             tr("▣ plays a function as it is: select it in the tree and Open (or double-click it) to edit it in "
                "its own editor. ≈ the cue mixes overlapping layers, as the chaser did.")));
+    if (tracks)
+        h += QStringLiteral("<p><small>%1</small></p>").arg(esc(
+            tr("⤳ the cue tracks: it starts from the cue before and lists only what it sets. ○ the layer is "
+               "released when its cue ends (the next step doesn't play it).")));
+
+    // Set once, then tracking.
+    if (!rep.trackNotes.isEmpty())
+    {
+        h += QStringLiteral("<h3>%1</h3><p>%2</p><ul>").arg(esc(tr("Set once, then tracking")), esc(
+            tr("%n cue(s) track: %1 layer(s) and %2 include(s) the steps repeated are set once, %3 release(s).",
+               "", rep.trackingCues).arg(rep.trackedLayers).arg(rep.trackedIncludes).arg(rep.trackReleases)));
+        for (const QString &s : rep.trackNotes)
+            h += QStringLiteral("<li>%1</li>").arg(esc(s));
+        h += QStringLiteral("</ul>");
+    }
+
+    // W5: collections inside a step that are no step themselves.
+    if (!rep.flattenNotes.isEmpty())
+    {
+        h += QStringLiteral("<h3>%1</h3><ul>").arg(esc(tr("Collections read into the cues")));
+        for (const QString &s : rep.flattenNotes)
+            h += QStringLiteral("<li>%1</li>").arg(esc(s));
+        h += QStringLiteral("</ul>");
+    }
 
     // Played as they are, and why: once each, with how often.
     if (!rep.opaqueReasons.isEmpty())
@@ -291,6 +462,9 @@ QString ImportSheet::html(Doc *doc, const ShowTreeController::ImportReport &rep,
             h += QStringLiteral("<li>%1</li>").arg(esc(times.value(r) > 1 ? tr("%1 (×%2)").arg(r).arg(times.value(r))
                                                                          : r));
         h += QStringLiteral("</ul>");
+        h += QStringLiteral("<p><small>%1</small></p>").arg(esc(
+            tr("A scene with channel values of its own can become palettes: select its ▣ row in the tree and "
+               "Capture into palettes… (checked channel for channel; the scene is kept).")));
     }
 
     if (!rep.htpConflicts.isEmpty())

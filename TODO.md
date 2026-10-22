@@ -8,7 +8,101 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Build + Workbench (WORKFLOW_DESIGN.md, phases W0–W7)
+
+- **W1 Build tab + Workbench — built on feat/w1-build-workbench
+  (2026-10-22), not merged.** Branson to try it in the dev app first. It
+  carries the P1 outline (feat/programming-outline, never merged) as
+  Build ▸ Scenes. Left over / open from W1:
+  - A lone scene takes no + Scene / + EFX / + RGB Matrix (a scene is one
+    layer); "make a collection of this scene and…" could come later.
+  - (Chasers: done in W2, below.)
+  - Palettes and Effects sections are today's lists behind the switch; the
+    shared Library (P2/W6), the bench (W4) and the effect designer on a
+    layer (W4) are to come. No command bar yet (W6).
+  - Look Editor *value* edits (a colour, a level) are not on the history
+    yet — only scene and collection edits are. Deleting a function is still
+    not undoable.
+  - Several look rows of one type selected don't edit together yet.
+  - The Workbench's expansion is remembered per show folder and loaded
+    function id.
+- **W3 Show Tree ↔ Workbench — built on feat/w3-showtree-workbench
+  (2026-10-22, from W1), not merged.** `TreeCueStack` (the engine's
+  Simple Desk owns the name `CueStack`), docked in place of the tree's
+  page; the tree's cue / layer pages lent to the editor pane. Left over:
+  - Rows of a cue don't drag (reorder with ▲ ▼; layers between cues: in
+    the tree). A layer row's own menu is short (Solo, Release, Remove,
+    Show in the tree); the tree's full layer menu (split, make reusable,
+    detach…) stays in the tree.
+  - + Scene / + EFX put the new layer last (the tree's order), not after
+    the selected one.
+  - Cue looks (D6) show in the header count, not as rows of their own;
+    edit them on the cue's page in the pane.
+  - W4: `Workbench::setEffectPaneFactory()` is the plug for the effect
+    designer on an Effect row / Design effect (EffectLayerDialog's
+    designer can be hosted there); until then an effect row opens its
+    palette in the Look Editor.
+  - The dock is one per tree; a detached Show Tree window docks the
+    Workbench there too (untested on a second monitor).
+- **W2 Chasers in the Workbench + Classic — built on feat/w2-chasers-classic
+  (2026-10-22, cut from W1), not merged.** Step walker (`ChaserWalker`,
+  `FunctionStack` chaser step), step header + step table, Chaser from
+  selection, drops on a chaser, Make own copy (layer / step), Scenes ▸
+  Folders | Classic. Left over / open from W2:
+  - The chaser's own settings (run order, direction, speed modes) are still
+    edited in the stock Chaser editor in the editor pane, and its edits are
+    not on the shared history (as in W1).
+  - No ⌥↑ / ⌥↓ shortcut for ◀ ▶ yet (a window-wide one would clash with
+    the Show Tree); the step table takes ↑ ↓ when it has focus.
+  - A scene step takes no + Scene / + EFX (a step plays one function);
+    "make this step a collection" could come later.
+  - Preview plays the step's function alone, not the chaser running
+    through its steps (Play the chaser from VC / the Functions window).
+  - Classic folder rename renames that folder for every function type
+    filed in it (paths are shared, as in Folders).
+  - Retire the Functions window now Classic covers it (open question 4) —
+    Branson's call.
+- W2 and W3 merged together on feat/w3-showtree-workbench (2026-10-22).
+- Then W4 → W5 → W6 → W7.
+
 ## Small fixes and leftovers
+
+- **W4 effect designer: follow-ons (2026-10-22)** (feat/w4-effect-designer,
+  WORKFLOW_DESIGN.md §3.3/§3.4):
+  - Host it in the Workbench's editor pane (W1/W3) and in Build ▸ Effects
+    once the Build tab exists. The widget is `EffectDesigner`: hosts call
+    `setTargets()`, `setEffect()`, `setOneOffAllowed()` and
+    `setContextChoice()`, and listen to `effectChosen()`. Then retire
+    Window ▸ Effects or keep it as a shortcut.
+  - In context, the layer's old effect keeps playing under the draft. On
+    intensity, highest-takes-precedence (HTP) can let it show through;
+    Solo shows the draft alone. Muting just that layer's scene while
+    designing would need a preview hook in `ShowTreeController`.
+  - `pickEffect()` (a command, a test) doesn't add to the browser's
+    Recent tab or switch to the effect's tab.
+  - The bench's Try on is a menu, not a drop target; the design has groups
+    dropped on it.
+  - Not yet seen on the real rig (ender / show VLAN): the preview on
+    AT-W-ALL and on the XL-450 boxes was checked offscreen only.
+- **Workflow W5 leftovers (2026-10-22)** (feat/w5-bridge; design:
+  WORKFLOW_DESIGN.md §3.5):
+  - **Upgrade this show…** built (feat/upgrade-show-menu): File menu +
+    banner, chasers and collections with plans, Capture page, one undo
+    step, Restore original. Not in it: a collection → **busk look** (§3.7
+    lists it; there is no collection-to-look conversion yet), and a
+    stand-alone chaser of collections becoming a cue list is what the
+    cue-list row already does. The banner's ✕ still lasts only until the
+    next show is opened.
+  - The open banner is in the Show Tree tab (Build is W1's).
+  - Capture into palettes reads Dimmer, Colour (RGB/W/A/UV, CMY, a wheel
+    slot), Position (whole degrees) and an unnamed Gobo value. Shutter,
+    zoom, prism and effect-mode channels stay in the "(rest)" scene. A
+    scene with its own fades isn't offered (most of Sample.qxw's).
+  - The originals' "Imported into Show Tree" mark is the list's record
+    (`Original` entries) and the folder name, not an attribute on each
+    function; the Functions window shows no banner on them yet.
+  - Restore original re-points everything firing the list back to the
+    chaser, including widgets pointed at the list after the import.
 
 - **Workflow W0 leftovers (2026-10-22)** (feat/w0-seam-fixes, DONE.md;
   design: WORKFLOW_DESIGN.md on design/programming-redesign):
@@ -19,10 +113,10 @@ under `~/.claude/.../memory/`.
     differ mid-fade. None of the real shows does this; the dry run would
     show it.
   - The import re-point moves VC buttons, VC Cue Lists, VC sliders
-    (playback), the main cue list and the cue-list number. Not covered:
-    speed dials / XY pads / anything else holding the chaser's id, input
-    profiles' MSC/OSC by name. W5's Import in place should reuse
-    `ImportSheet::planRepoint()` and extend it.
+    (playback), speed dials, clocks, audio triggers, Show timelines, the
+    main cue list and the cue-list number (W5). XY pads and matrices
+    can't hold a chaser. Not covered: input profiles' MSC/OSC by name,
+    Scripts that start the chaser by id.
   - The sheet's check is static (as the cues stand); fades and effects
     aren't compared. The dry run (`importARealShow`) still plays both.
 
