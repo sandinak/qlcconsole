@@ -242,8 +242,10 @@ A show made the QLC+ way (scenes, collections, chasers, no Show Tree)
 opens as it is: nothing is converted on load, and it plays and saves as
 before. The Show Tree tab says so once, in a line at the top: *This show
 uses chasers: 2 look like cue lists (Full Show, New Chaser 8)…*.
-**Convert…** opens the converter; **✕** puts the line away for this show.
-The converter is always at **Import chaser… → Convert an old show…**.
+**Upgrade this show…** opens the upgrade (below); **✕** puts the line
+away for this show. The upgrade is always at **File → Upgrade This
+Show…**, and the converter on its own at **Import chaser… → Convert an
+old show…**.
 
 **The converter** lists every chaser of the show, told apart by how it
 runs:
@@ -294,6 +296,38 @@ then puts out exactly what it did; a cue that would change keeps the
 scene. The scene itself is kept. One undo step. A scene with its own
 fade times, a transition, a blend mode or a speed master isn't offered:
 a layer would play it differently.
+
+### Upgrade this show
+
+**File → Upgrade This Show…** (or **Upgrade this show…** on the old-show
+line) is the converter with everything around it, in one place. Nothing
+happens until you press **Upgrade**, and none of it is needed: a show
+built the old way keeps playing as it always has.
+
+**1. Chasers and collections** lists every chaser and collection with
+what would become of it:
+
+- a **cue-list chaser**, ticked: *cue list:* its cues and layers, and
+  **Plays the same** (the channel-by-channel check). Untick it to
+  **leave it alone**;
+- an **effect chaser**: *kept as a function*;
+- a **collection**: *read into the cues of* the ticked lists that play
+  it, or *leave alone* (it plays as it is; drop it on a cue for a ▣
+  layer). One already filed by an import says so;
+- a chaser already **imported in place**: *Converted*, with **Restore
+  original…** at the bottom of the dialog.
+
+**2. Raw scenes into palettes** lists the raw scenes the tree plays on ▣
+rows, and the ones a ticked list would. Tick one to **Capture it into
+palettes** (as above): the row shows how many layers and palettes it
+makes and what stays raw; select it for the looks. None is ticked for
+you. A scene that can't be captured says why (its own fades, say).
+
+**Convert by** is the converter's: in place (the default) or beside the
+chaser. **Upgrade** converts the ticked chasers, then captures the ticked
+scenes. A capture still keeps the scene in any cue that would come out
+different. The whole upgrade is **one undo step** (*Undo Upgrade this
+show*). **Restore original…** later puts one chaser back.
 
 ### Three cues with the mouse
 

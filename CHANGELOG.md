@@ -104,6 +104,17 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   replaces the old one) and by `EffectsPage` (**Window ▸ Effects**:
   effect palettes by folder, EFX and RGB Matrix as classic effects, and
   + New for each). Covered by `ui/test/effectdesigner`.
+- **Upgrade this show…** (File menu, and the Show Tree's old-show line;
+  WORKFLOW_DESIGN.md §3.7): the show converter in an Upgrade mode
+  (`ShowConverter::Upgrade`). Page 1 lists every chaser (cue list, ticked,
+  with its same-output check / effect kept as a function / left alone)
+  and every collection (read into the ticked lists' cues, or left alone),
+  plus chasers already imported in place, with **Restore original…**.
+  Page 2 offers Capture into palettes for the raw scenes the tree plays
+  or a ticked list would; none is ticked for you. **Upgrade**
+  (`ShowTreeView::upgradeShow()`) converts, then captures, and groups the
+  steps into one (`ShowTreeController::groupStepsSince()`: undo takes the
+  parts back last first, each with its outside changes; redo in order).
 - **The bridge from an old show** (W5 of the workflow design):
   - **Show converter** (Show Tree → Import chaser… → Convert an old
     show…, and a dismissable line at the top of the tab for a show with

@@ -2667,6 +2667,147 @@ void ShowTree_Test::bridgeTheSampleShow()
     QVERIFY(b.restoredEqual);
 }
 
+/* Upgrade this show (§3.7): the converter's imports and the captures, as
+   many steps as they take, grouped into one; one undo puts the whole show
+   back XML for XML, redo brings the upgrade back as it was. On a copy. */
+QStringList ShowTree_Test::upgradeAsOneStep(const QString &path, bool cueListsOnly, int *steps)
+{
+    QStringList problems;
+    QTemporaryDir home;
+    HomeAway away(home.path());
+    QTemporaryDir dir;
+    const QString copy = dir.filePath(QFileInfo(path).fileName());
+    if (!QFile::copy(path, copy))
+        return QStringList(QString("can't copy %1").arg(path));
+    DryRun run;
+    if (!loadShowFile(copy, run))
+        return run.problems << QString("can't load %1").arg(copy);
+    ShowTreeController *st = m_doc->showTree();
+    auto withoutTree = [](QByteArray xml) {
+        const int a = xml.indexOf("<ShowTree");
+        if (a >= 0)
+        {
+            int b = xml.indexOf("</ShowTree>", a);
+            b = b < 0 ? xml.indexOf("/>", a) + 2 : b + 11;
+            xml.remove(a, b - a);
+        }
+        return xml;
+    };
+    const QByteArray before = withoutTree(engineXml(m_doc));
+    const quint64 since = st->undoStamp();
+    *steps = 0;
+    for (quint32 id : st->convertibleChasers())
+    {
+        if (cueListsOnly && st->classifyChaser(id).kind != ShowTreeController::ChaserKind::CueList)
+            continue;
+        const ShowTreeController::ImportReport rep = st->importInPlace(id);
+        const CueList *list = st->cueList(rep.list);
+        if (list == nullptr)
+        {
+            problems << QString("%1 not imported").arg(id);
+            continue;
+        }
+        ++*steps;
+        QList<quint32> raws;
+        for (const Cue &c : list->cues)
+            for (const Layer &l : c.layers)
+                if (l.target.isOpaque() && !raws.contains(l.target.function))
+                    raws << l.target.function;
+        for (quint32 fid : raws)
+            if (st->captureIntoPalettes(fid))
+                ++*steps;
+    }
+    // Redo bakes the generated functions again, with new ids: what the show
+    // holds is compared, not the ids.
+    auto shape = [this, st]() {
+        QStringList out;
+        for (const Function *f : m_doc->functions())
+            out << QString("%1|%2|%3").arg(f->type()).arg(f->name(), f->path(true));
+        out << QString("palettes %1").arg(m_doc->palettes().count());
+        for (const Production &p : st->productions())
+            for (const CueList &l : p.lists)
+            {
+                int layers = 0;
+                for (const Cue &c : l.cues)
+                {
+                    layers += c.layers.count();
+                    for (const Layer &layer : c.layers)
+                        if (layer.target.isOpaque())
+                        {
+                            const Function *f = m_doc->function(layer.target.function);
+                            out << QString("%1 %2 plays %3").arg(l.name, c.name,
+                                                                 f == nullptr ? QString("(missing)") : f->name());
+                        }
+                }
+                out << QString("list %1: %2 cues, %3 layers, in place %4").arg(l.name).arg(l.cues.count())
+                       .arg(layers).arg(l.inPlace);
+            }
+        out.sort();
+        return out;
+    };
+    const QStringList after = shape();
+    if (!st->groupStepsSince(since, "Upgrade this show"))
+        return problems << "nothing to group";
+    if (st->undoText() != "Upgrade this show")
+        problems << "undo text: " + st->undoText();
+
+    if (!st->undo())
+        problems << "undo failed";
+    if (st->undoStamp() > since)
+        problems << "a step of the upgrade is left on the stack";
+    QString d = firstDifference(before, withoutTree(engineXml(m_doc)));
+    if (!d.isEmpty())
+        problems << "undone differs at " + d;
+    if (!st->productions().isEmpty())
+        problems << "undone, the tree is not empty";
+    if (!st->redo())
+        problems << "redo failed";
+    const QStringList redone = shape();
+    if (redone != after)
+        for (int i = 0; i < qMax(after.count(), redone.count()); ++i)
+            if (after.value(i) != redone.value(i))
+            {
+                problems << QString("redone differs: %1 | %2").arg(after.value(i), redone.value(i));
+                break;
+            }
+    if (!st->undo())
+        problems << "second undo failed";
+    d = firstDifference(before, withoutTree(engineXml(m_doc)));
+    if (!d.isEmpty())
+        problems << "undone again differs at " + d;
+    // And once more: redo twice is the same as once.
+    if (!st->redo())
+        problems << "second redo failed";
+    const QStringList twice = shape();
+    for (int i = 0; i < qMax(after.count(), twice.count()); ++i)
+        if (after.value(i) != twice.value(i))
+        {
+            problems << QString("redone twice differs: %1 | %2").arg(after.value(i), twice.value(i));
+            break;
+        }
+    if (!st->undo() || withoutTree(engineXml(m_doc)) != before)
+        problems << "undone a third time differs";
+    return problems;
+}
+
+void ShowTree_Test::upgradeAShowIsOneUndoStep()
+{
+    int steps = 0;
+    const QStringList problems = upgradeAsOneStep(QStringLiteral(DH_SHOW), true, &steps);
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join(" | ")));
+    qInfo().noquote() << QString("UPGRADE DANCEHYSTERIA: %1 steps as one").arg(steps);
+    QVERIFY(steps > 2);
+}
+
+void ShowTree_Test::upgradeTheSampleShowIsOneUndoStep()
+{
+    int steps = 0;
+    const QStringList problems = upgradeAsOneStep(QStringLiteral(SAMPLE_SHOW), false, &steps);
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join(" | ")));
+    qInfo().noquote() << QString("UPGRADE SAMPLE: %1 steps as one").arg(steps);
+    QVERIFY(steps >= 13);
+}
+
 /* A dry run on a real show: QLC_SHOWTREE_IMPORT=<a COPY of a .qxw/.qlcc>.
    The show is opened as App opens it (its embedded definitions first, the
    user folder kept out); every chaser in it is imported (in memory only --

@@ -5643,4 +5643,134 @@ void ShowTreeView_Test::captureFromTheOpaqueRow()
     QVERIFY(layerRow(view.tree(), "Haze") != nullptr);
 }
 
+/* Upgrade this show (§3.7, the File menu and the banner): every chaser and
+   collection with its plan, raw scenes offered for Capture into palettes
+   once their list is ticked; Upgrade is one undo step; Restore original
+   from the same dialog. */
+void ShowTreeView_Test::upgradeThisShow()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    Chaser *fx = strobe(m_doc);
+    Collection *loose = new Collection(m_doc);
+    loose->setName("Busk Haze");
+    m_doc->addFunction(loose);
+    loose->addFunction(haze->id());
+    ScopedVc vc(m_doc);
+    VCFrame *contents = VirtualConsole::instance()->contents();
+    VCButton *go = new VCButton(contents, m_doc);
+    VirtualConsole::instance()->placeWidget(go, contents);
+    go->setFunction(chaser->id());
+    ShowTreeController *st = m_doc->showTree();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.setConfirm([](const QString &, const QString &, const QString &) { return true; });
+    view.updateBridgeBanner();
+    QPushButton *bannerButton = view.bridgeBanner()->findChild<QPushButton *>("stBridgeUpgrade");
+    QVERIFY(bannerButton != nullptr);
+    QCOMPARE(bannerButton->text(), QString("Upgrade this show…"));
+
+    QString planText, untickedText, afterText;
+    QStringList results;
+    quint32 listId = ShowTree::invalidId();
+    int opened = 0;
+    view.setConverterRunner([&](ShowConverter *c) {
+        ++opened;
+        QCOMPARE(c->mode(), ShowConverter::Upgrade);
+        QCOMPARE(c->windowTitle(), QString("Upgrade this show"));
+        QCOMPARE(c->chosen(), QList<quint32>({ chaser->id() }));
+        QVERIFY(c->chosenScenes().isEmpty());        // capture is never ticked for you
+        QVERIFY(st->productions().isEmpty());        // nothing changed by opening it
+        // Haze is offered: Full Show's list would play it raw.
+        bool hazeOffered = false;
+        for (const ShowConverter::CaptureRow &r : c->captureRows())
+            if (r.scene == haze->id())
+                hazeOffered = !r.plan.layers.isEmpty() && r.chasers.contains(chaser->id()) && !r.inTree;
+        QVERIFY(hazeOffered);
+        c->setChosen(chaser->id(), false);
+        untickedText = c->text();
+        c->setChosen(chaser->id(), true);
+        c->setCaptureChosen(haze->id(), true);
+        QCOMPARE(c->chosenScenes(), QList<quint32>({ haze->id() }));
+        planText = c->text();
+        c->resize(1000, 720);
+        c->show();
+        QVERIFY(QTest::qWaitForWindowExposed(c));
+        if (!w0Shot("upgrade-show.png").isEmpty())
+        {
+            QVERIFY(c->grab().save(w0Shot("upgrade-show.png")));
+            c->pages()->setCurrentIndex(1);
+            QVERIFY(c->grab().save(w0Shot("upgrade-capture.png")));
+            c->pages()->setCurrentIndex(0);
+        }
+        results = c->convert();
+        afterText = c->text();
+        QVERIFY(c->chosen().isEmpty());
+        QCOMPARE(c->convertedLists().count(), 1);
+        listId = c->convertedLists().first();
+        if (!w0Shot("upgrade-done.png").isEmpty())
+            QVERIFY(c->grab().save(w0Shot("upgrade-done.png")));
+    });
+    bannerButton->click();
+    QCOMPARE(opened, 1);
+
+    for (const QString &want : { QString("[x] Full Show | Cue list — waits for GO on 2 of 2"),
+                                 QString("cue list: 2 cue(s)"), QString("✓ 0 channels differ"),
+                                 QString("Strobe | Effect — loops"), QString("kept as a function"),
+                                 QString("0.0.1-Open | Collection — 2 function(s) | read into the cues of Full Show"),
+                                 QString("Busk Haze | Collection — 1 function(s) | leave alone: plays as it is"),
+                                 QString("[x] Haze | Full Show (once converted)") })
+        QVERIFY2(planText.contains(want), qPrintable(want + " not in:\n" + planText));
+    for (const QString &want : { QString("[ ] Full Show"), QString("leave alone: plays as it is"),
+                                 QString("( ) Haze") })
+        QVERIFY2(untickedText.contains(want), qPrintable(want + " not in:\n" + untickedText));
+    const QString all = results.join("\n");
+    QVERIFY2(all.contains("Full Show: a cue list of 2 cue(s); plays the same (0 channels differ)."), qPrintable(all));
+    QVERIFY2(all.contains("Haze: captured into palettes in 2 cue(s), 0 channels differ."), qPrintable(all));
+    QVERIFY2(afterText.contains("Full Show | Converted — the cue list Full Show, in place"), qPrintable(afterText));
+    QVERIFY2(afterText.contains("takes the whole upgrade back as one step"), qPrintable(afterText));
+
+    const CueList *list = st->cueList(listId);
+    QVERIFY(list != nullptr && list->inPlace);
+    const quint32 listChaser = list->chaser;
+    QCOMPARE(go->function(), listChaser);
+    for (const Cue &c : list->cues)
+        for (const Layer &l : c.layers)
+            QVERIFY(l.target.function != haze->id());          // captured
+    QCOMPARE(fx->path(true), QString());                       // the effect left as it is
+    QCOMPARE(loose->path(true), QString());
+
+    // One undo step for the lot, both ways.
+    QCOMPARE(st->undoText(), QString("Upgrade this show"));
+    QVERIFY(st->undo());
+    QVERIFY(st->productions().isEmpty());
+    QVERIFY(!st->canUndo());
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(chaser->path(true), QString());
+    QVERIFY(st->redo());
+    QCOMPARE(go->function(), listChaser);
+    QCOMPARE(chaser->path(true), QString("Imported/Full Show (originals)"));
+
+    // Restore original from the same dialog (File ▸ Upgrade this show…).
+    bool restored = false;
+    view.setConverterRunner([&](ShowConverter *c) {
+        QCOMPARE(c->convertedLists(), QList<quint32>({ listId }));
+        restored = c->restore(listId);
+        QVERIFY(c->convertedLists().isEmpty());
+        QCOMPARE(c->chosen(), QList<quint32>({ chaser->id() }));   // offered again
+    });
+    view.openUpgrade();
+    QVERIFY(restored);
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(go->function(), chaser->id());
+    QCOMPARE(chaser->path(true), QString());
+    QVERIFY(st->undo());                                       // the restore
+    QCOMPARE(go->function(), listChaser);
+    QVERIFY(st->undo());                                       // the upgrade
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(go->function(), chaser->id());
+}
+
 QTEST_MAIN(ShowTreeView_Test)

@@ -2114,6 +2114,22 @@ void App::initMenuBar()
             dlg.exec();
         });
         fileMenu->addAction(showDefs);
+
+        // Upgrade this show (WORKFLOW_DESIGN.md §3.7): the W5 converter
+        // over every chaser and collection, Capture into palettes, one undo
+        // step. Only ever opened from here or the Show Tree's banner.
+        QAction *upgrade = new QAction(tr("&Upgrade This Show…"), this);
+        upgrade->setObjectName(QStringLiteral("fileUpgradeShow"));
+        upgrade->setToolTip(tr("Make the show's cue-list chasers Show Tree cue lists, checked channel "
+                               "for channel, and raw scenes palettes: every part optional, one undo step"));
+        connect(upgrade, &QAction::triggered, this, [this]() {
+            ShowTreeView *view = ShowTreeView::instance();
+            if (view == nullptr)
+                return;
+            switchToTabContaining(view);
+            view->openUpgrade();
+        });
+        fileMenu->addAction(upgrade);
     }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS

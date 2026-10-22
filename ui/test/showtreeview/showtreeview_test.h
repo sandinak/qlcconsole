@@ -130,6 +130,7 @@ private slots:
     void theConverterImportsCueListsInPlace();
     void restoreOriginalPointsVcBack();
     void captureFromTheOpaqueRow();
+    void upgradeThisShow();
 
 private:
     quint32 dimmer(int level, const QString &name);
