@@ -224,12 +224,23 @@ static QString rowKey(int kind, quint32 scene, quint32 id, const QString &path =
     case ProgrammingOutline::GroupRow:   return QStringLiteral("g:%1:%2").arg(scene).arg(id);
     case ProgrammingOutline::FixtureRow: return QStringLiteral("x:%1:%2").arg(scene).arg(id);
     case ProgrammingOutline::PaletteRow: return QStringLiteral("p:%1:%2").arg(scene).arg(id);
+    case ProgrammingOutline::CueLayerRow: return QStringLiteral("c:%1").arg(id);
+    case ProgrammingOutline::AttributeRow: return QStringLiteral("a:%1:%2").arg(scene).arg(id);
     default:                             return QStringLiteral("h");
     }
 }
 
 QTreeWidgetItem *ProgrammingOutline::itemFor(const Row &row) const
 {
+    // W3: a cue's rows are keyed by their layer's target (stable while the
+    // layers around them change); found by place here.
+    if (row.kind == CueLayerRow || row.kind == AttributeRow)
+    {
+        for (QTreeWidgetItemIterator it(const_cast<ProgrammingOutline *>(this)); *it; ++it)
+            if (rowOf(*it) == row)
+                return *it;
+        return nullptr;
+    }
     const QString k = rowKey(row.kind, row.scene, row.id);
     for (QTreeWidgetItemIterator it(const_cast<ProgrammingOutline *>(this)); *it; ++it)
         if (key(*it) == k)
@@ -251,7 +262,7 @@ bool ProgrammingOutline::defaultExpanded(const QTreeWidgetItem *item) const
     // its own colour and dimmer. On the Workbench a layer is open: it is
     // what you loaded it for.
     const int kind = item->data(NameCol, KindRole).toInt();
-    if (m_mode == Stack && kind == SceneRow)
+    if (m_mode == Stack && (kind == SceneRow || kind == CueLayerRow))
         return true;
     return kind == FolderRow || kind == PaletteRow;
 }
@@ -822,6 +833,11 @@ void ProgrammingOutline::rebuildStack()
     int index = 0;
     for (const WorkbenchStack::Layer &l : layers)
     {
+        if (l.kind == WorkbenchStack::Layer::CueLayer)
+        {
+            addCueLayerRows(l, index++);
+            continue;
+        }
         Function *f = m_doc->function(l.functionId);
         Scene *s = l.kind == WorkbenchStack::Layer::SceneLayer ? qobject_cast<Scene *>(f) : nullptr;
         QTreeWidgetItem *it = new QTreeWidgetItem(this);
@@ -865,12 +881,72 @@ void ProgrammingOutline::rebuildStack()
             it->setToolTip(NameCol, it->toolTip(NameCol).isEmpty() ? l.tip
                                     : it->toolTip(NameCol) + QStringLiteral("\n\n") + l.tip);
         }
+        if (l.tracked)
+            it->setForeground(NameCol, grey);
         ++index;
     }
     if (layers.isEmpty())
         hint(m_stack->canAddLayers()
                  ? tr("No layers yet: + Scene, + EFX or + RGB Matrix below, or drag scenes here.")
                  : tr("Nothing in it."));
+}
+
+void ProgrammingOutline::addCueLayerRows(const WorkbenchStack::Layer &l, int index)
+{
+    /* W3: a Show Tree cue's layer, as the tree shows it -- one row per
+       attribute set or carried in; what is carried in (a tracked layer, a
+       value from an earlier cue) is grey and says where it comes from.
+       Every edit goes through the back end (the tree's controller). */
+    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
+    QTreeWidgetItem *it = new QTreeWidgetItem(this);
+    it->setText(NameCol, l.label);
+    it->setIcon(NameCol, QIcon(QStringLiteral(":/group.png")));
+    it->setData(NameCol, KindRole, CueLayerRow);
+    it->setData(NameCol, IdRole, index);
+    it->setData(NameCol, SceneRole, kInvalid);
+    it->setData(NameCol, LayerRole, index);
+    it->setData(NameCol, KeyRole, QStringLiteral("c:") + l.targetSignature);
+    it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+    it->setText(BadgeCol, l.badge);
+    it->setToolTip(NameCol, l.tip);
+    it->setToolTip(BadgeCol, l.tip);
+    it->setForeground(BadgeCol, grey);
+    if (l.tracked)
+    {
+        it->setForeground(NameCol, grey);
+        QFont f = it->font(NameCol);
+        f.setItalic(true);
+        it->setFont(NameCol, f);
+    }
+    int a = 0;
+    for (const WorkbenchStack::Layer::Attribute &attr : l.attributes)
+    {
+        QTreeWidgetItem *row = new QTreeWidgetItem(it);
+        row->setText(NameCol, QStringLiteral("%1  %2").arg(attr.label, attr.value));
+        row->setText(BadgeCol, attr.origin);
+        row->setData(NameCol, KindRole, AttributeRow);
+        row->setData(NameCol, IdRole, a);
+        row->setData(NameCol, SceneRole, index);
+        row->setData(NameCol, KeyRole, QStringLiteral("a:%1:%2").arg(l.targetSignature, attr.key));
+        row->setData(NameCol, PathRole, attr.key);
+        row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+        if (QLCPalette *p = m_doc->palette(attr.palette))
+            row->setIcon(NameCol, p->type() == QLCPalette::Color ? swatch(p->rgbValue())
+                                                                 : QIcon(p->iconResource()));
+        const QString tip = attr.origin.isEmpty() ? tr("%1: %2, set here").arg(attr.label, attr.value)
+                                                  : tr("%1: %2 — %3").arg(attr.label, attr.value, attr.origin);
+        row->setToolTip(NameCol, tip);
+        row->setToolTip(BadgeCol, tip);
+        row->setForeground(BadgeCol, grey);
+        if (attr.inherited)
+        {
+            row->setForeground(NameCol, grey);
+            QFont f = row->font(NameCol);
+            f.setItalic(true);
+            row->setFont(NameCol, f);
+        }
+        ++a;
+    }
 }
 
 void ProgrammingOutline::scheduleRebuild()
@@ -1507,6 +1583,9 @@ QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, b
         return QString();
     if (m_mode == Stack && m_stack != nullptr && !m_stack->readOnlyReason().isEmpty())
         return QStringLiteral("!") + m_stack->readOnlyReason();
+    // W3: a Show Tree cue takes every drop as the tree does.
+    if (m_mode == Stack && m_stack != nullptr && m_stack->takesDrops())
+        return m_stack->dropPlanOn(layerOf(itemAt(pos)), mime, copy);
     QTreeWidgetItem *it = itemAt(pos);
     const Row at = rowOf(it);
     Scene *dst = (at.kind == SceneRow || at.kind == GroupRow || at.kind == FixtureRow || at.kind == PaletteRow)
@@ -1651,7 +1730,8 @@ QString ProgrammingOutline::stackDropPlan(const QMimeData *mime, const QPoint &p
 
 void ProgrammingOutline::dragEnterEvent(QDragEnterEvent *event)
 {
-    if (event->mimeData()->hasFormat(rowMimeType()) || fromSources(event->mimeData()))
+    if (event->mimeData()->hasFormat(rowMimeType()) || fromSources(event->mimeData())
+        || (m_mode == Stack && m_stack != nullptr && m_stack->takesDrops()))
         event->acceptProposedAction();
     else
         event->ignore();
@@ -1690,6 +1770,18 @@ void ProgrammingOutline::dropEvent(QDropEvent *event)
     if (plan.isEmpty() || plan.startsWith(QLatin1Char('!')))
     {
         event->ignore();
+        return;
+    }
+    if (m_mode == Stack && m_stack != nullptr && m_stack->takesDrops())
+    {
+        // W3: the back end's (⌥: one layer per group, as in the tree).
+        if (m_stack->dropOn(layerOf(itemAt(qlcEventPos(event))), mime, copy))
+        {
+            QTimer::singleShot(0, this, [this]() { rebuild(); emit itemSelectionChanged(); });
+            emit layersEdited();
+        }
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
         return;
     }
     if (mime->hasFormat(rowMimeType()))
@@ -1790,11 +1882,20 @@ void ProgrammingOutline::keyPressEvent(QKeyEvent *event)
     case Qt::Key_Delete:
     case Qt::Key_Backspace:
     {
+        // W3: a cue's attribute row clears that value (it inherits again).
+        if (m_mode == Stack && m_stack != nullptr && cur != nullptr
+            && rowOf(cur).kind == AttributeRow)
+        {
+            if (m_stack->clearAttribute(int(rowOf(cur).scene), int(rowOf(cur).id)))
+                emit layersEdited();
+            return;
+        }
         const QList<Row> rows = selectedRows();
         QList<quint32> scenes;
         QList<Row> parts;
         for (const Row &r : rows)
-            (r.kind == SceneRow || r.kind == FunctionRow ? (void)(scenes << r.id) : (void)(parts << r));
+            (r.kind == SceneRow || r.kind == FunctionRow || r.kind == CueLayerRow ? (void)(scenes << r.id)
+                                                                                  : (void)(parts << r));
         if (!parts.isEmpty())
             removeRows(parts);
         else if (m_mode == Stack)
@@ -1900,6 +2001,13 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         else if (r.kind == GroupRow || r.kind == FixtureRow || r.kind == PaletteRow)
             parts << r;
     }
+
+    // W3: a cue's layer or attribute row: the tree's own menu for it.
+    if (m_mode == Stack && m_stack != nullptr && clicked != nullptr
+        && (at.kind == CueLayerRow || at.kind == AttributeRow)
+        && m_stack->showMenu(layerOf(clicked), at.kind == AttributeRow ? int(at.id) : -1,
+                             viewport()->mapToGlobal(pos)))
+        return;
 
     QMenu menu(this);
     menu.setToolTipsVisible(true);

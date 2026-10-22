@@ -213,6 +213,16 @@ back with its id), and every edit in the outline and the editor pane — is
 one step on the **one history** Build and the Show Tree share: **⌘Z** takes
 it back, **⇧⌘Z** puts it back, in either tab.
 
+### On a Show Tree cue
+
+The Show Tree opens a cue, a look or a layer in this same Workbench, in
+place of its page (double-click, **✎ Workbench**, or `wb`): the cue's own
+layers, each opening into one row per attribute, and — grey, read-only —
+what tracks in, with where it comes from. Every edit there is a step of the
+tree's. While it is there, Build shows a note in its place; **↩ Show Tree**
+hands it back, loaded as it was. See [Working on a cue in the
+Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
+
 ## The outline
 
 Build ▸ Scenes: one tree of your scene folders, so a scene doesn't have to be

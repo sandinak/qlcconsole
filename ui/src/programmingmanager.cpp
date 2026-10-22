@@ -95,6 +95,7 @@
 #include "functionmanager.h"
 #include "programmingoutline.h"
 #include "workbench.h"
+#include "workbenchstack.h"
 #include "splitterhandles.h"
 #include <QButtonGroup>
 #include <QHeaderView>
@@ -2661,4 +2662,64 @@ void ProgrammingManager::slotRedo()
     m_paletteTree->updateTree();
     m_outline->rebuild();
     m_workbench->refreshAll();
+}
+
+/*****************************************************************************
+ * W3: the Workbench lent to the Show Tree
+ *****************************************************************************/
+
+Workbench *ProgrammingManager::lendWorkbench()
+{
+    if (m_workbench == nullptr || m_workbenchStandIn != nullptr || m_mainSplit == nullptr)
+        return nullptr;
+    const int index = m_mainSplit->indexOf(m_workbench);
+    if (index < 0)
+        return nullptr;
+    // What Build had loaded comes back with it.
+    m_lentFrom.reset(m_workbench->stack() != nullptr ? m_workbench->stack()->reopen(nullptr) : nullptr);
+    QTreeWidgetItem *cur = m_workbench->rows()->currentItem();
+    m_lentSelection = cur != nullptr && cur->isSelected()
+                      ? cur->data(0, ProgrammingOutline::KeyRole).toString() : QString();
+
+    QLabel *note = new QLabel(tr("The Workbench is in the Show Tree, open on a cue.\n"
+                                 "↩ Show Tree there brings it back here."));
+    note->setObjectName(QStringLiteral("workbenchLentNote"));
+    note->setAlignment(Qt::AlignCenter);
+    note->setWordWrap(true);
+    note->setEnabled(false);
+    m_workbenchStandIn = note;
+    m_mainSplit->replaceWidget(index, note);     // the Workbench's parent: none, for now
+    return m_workbench;
+}
+
+void ProgrammingManager::returnWorkbench(Workbench *workbench)
+{
+    if (workbench == nullptr || workbench != m_workbench || m_workbenchStandIn == nullptr)
+        return;
+    const int index = m_mainSplit->indexOf(m_workbenchStandIn);
+    QWidget *standIn = m_workbenchStandIn;
+    m_workbenchStandIn = nullptr;
+    if (index >= 0)
+        m_mainSplit->replaceWidget(index, m_workbench);
+    else
+        m_mainSplit->addWidget(m_workbench);
+    standIn->deleteLater();
+    m_workbench->setReturnTo(QString(), nullptr);
+    // Loaded as it was (if it is still there).
+    WorkbenchStack *back = m_lentFrom.isNull() ? nullptr : m_lentFrom->reopen(m_workbench);
+    m_lentFrom.reset();
+    if (back != nullptr)
+    {
+        m_workbench->setStack(back);
+        if (!m_lentSelection.isEmpty())
+            for (QTreeWidgetItemIterator it(m_workbench->rows()); *it; ++it)
+                if ((*it)->data(0, ProgrammingOutline::KeyRole).toString() == m_lentSelection)
+                {
+                    m_workbench->rows()->setCurrentItem(*it);
+                    break;
+                }
+    }
+    else
+        m_workbench->clear();
+    m_workbench->show();
 }

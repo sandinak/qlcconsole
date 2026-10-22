@@ -28,7 +28,9 @@
 #include "grouphead.h"
 #include "function.h"
 
+class QMimeData;
 class QWidget;
+class QPoint;
 class Doc;
 
 /** @addtogroup ui_functions
@@ -43,7 +45,7 @@ class Doc;
  * edit, one step on the shared history.
  *
  * FunctionStack (below) edits real functions: a scene, a collection's
- * members. W3's CueStack will edit a Show Tree cue through its controller.
+ * members. W3's TreeCueStack will edit a Show Tree cue through its controller.
  */
 class WorkbenchStack : public QObject
 {
@@ -56,13 +58,31 @@ public:
         enum Kind
         {
             SceneLayer,     //!< a scene: opens up into its targets and looks
-            FunctionLayer   //!< played as it is (▣): an EFX, RGB Matrix, chaser...
+            FunctionLayer,  //!< played as it is (▣): an EFX, RGB Matrix, chaser...
+            CueLayer        //!< W3: a Show Tree cue's layer, one row per attribute
+        };
+        /** W3: one attribute row of a CueLayer ("Colour  Blue"). */
+        struct Attribute
+        {
+            QString key;            //!< ShowTree key ("Colour", "Effect.Color")
+            QString label;          //!< "Colour"
+            QString value;          //!< "Blue + Red", "off"
+            QString origin;         //!< "" its own; "from 0.0.2", "cue look"...
+            bool inherited = false; //!< not set on this layer here: grey
+            quint32 palette = 0xFFFFFFFF;   //!< the value's (first) palette
         };
         Kind kind = FunctionLayer;
         quint32 functionId = Function::invalidId();
         QString label;      //!< the row's name ("" the function's)
         QString badge;      //!< the badge column ("also in 2", "EFX ▣")
         QString tip;        //!< the hover
+        /** W3 (TreeCueStack): carried into the cue (tracked, included, base),
+         *  not its own -- a grey row; a value set on it makes it own. */
+        bool tracked = false;
+        QList<Attribute> attributes;
+        quint32 cueId = 0xFFFFFFFF;     //!< the cue it is a layer of
+        quint32 layerId = 0xFFFFFFFF;   //!< its id there (invalid: carried in)
+        QString targetSignature;        //!< ShowTree::Target::signature()
     };
 
     explicit WorkbenchStack(Doc *doc, QObject *parent = nullptr);
@@ -112,6 +132,46 @@ public:
      *  @a after (-1: the end). One step. Its id, or invalid. */
     virtual quint32 addNew(Function::Type type, int after, const QList<GroupHead> &heads,
                            quint32 group);
+
+    /************************************************************************
+     * W3: what a Show Tree cue (TreeCueStack) needs from the Workbench. The
+     * defaults: none of it.
+     ************************************************************************/
+    /** Drops on the rows are the back end's (all of them, any MIME). */
+    virtual bool takesDrops() const { return false; }
+    /** What dropping @a mime on layer @a layer (-1: below the rows) would
+     *  do; "!why" refused, "" nothing. */
+    virtual QString dropPlanOn(int layer, const QMimeData *mime, bool separate) const;
+    /** Drop it: one step. */
+    virtual bool dropOn(int layer, const QMimeData *mime, bool separate);
+    /** The context menu of layer @a layer (or its attribute row
+     *  @a attribute, -1: the layer). False: the Workbench's own. */
+    virtual bool showMenu(int layer, int attribute, const QPoint &globalPos);
+    /** ⌫ on attribute row @a attribute of layer @a layer: one step. */
+    virtual bool clearAttribute(int layer, int attribute);
+    /** A page of the back end's own for the editor pane (layer @a layer,
+     *  -1: the whole), lent: handed back with returnPane(). Null: none. */
+    virtual QWidget *lendPane(int layer, int attribute);
+    virtual void returnPane(QWidget *pane);
+    /** The fixtures layer @a layer lights (the 2D view highlights them). */
+    virtual QList<quint32> layerFixtures(int layer) const;
+    /** The layer that lights fixture @a fixtureId (-1: none). */
+    virtual int layerOfFixture(quint32 fixtureId) const;
+    /** The scene layer @a layer plays (a Look Editor's context). */
+    virtual quint32 layerScene(int layer) const;
+    /** The back end plays what is loaded itself (the Show Tree's preview),
+     *  not previewFunction() under the Workbench. */
+    virtual bool playsItself() const { return false; }
+    virtual void startOwnPreview() {}
+    virtual void stopOwnPreview() {}
+    /** "▶ On the rig: …" while it plays (empty: the Workbench's words). */
+    virtual QString ownPreviewText() const { return QString(); }
+    /** In context (all of it) or Solo (only the selected layer). */
+    virtual bool canSolo() const { return false; }
+    virtual bool solo() const { return false; }
+    virtual void setSolo(bool solo) { Q_UNUSED(solo) }
+    /** The layer selected now (Solo plays it; -1: none). */
+    virtual void setFocusLayer(int layer) { Q_UNUSED(layer) }
 
     /************************************************************************
      * W2: chasers, shared members

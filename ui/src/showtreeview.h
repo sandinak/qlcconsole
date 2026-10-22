@@ -72,6 +72,7 @@ class ShowTreeView final : public QWidget
 {
     Q_OBJECT
     Q_DISABLE_COPY(ShowTreeView)
+    friend class TreeCueStack;
 
 public:
     ShowTreeView(QWidget *parent, Doc *doc);
@@ -518,6 +519,31 @@ public:
     bool startRename();
     bool isRenaming() const { return m_renaming; }
 
+    /************************************************************************
+     * W3: Show Tree <-> Workbench (WORKFLOW_DESIGN.md §3.4). A cue, look or
+     * layer opens in the Workbench, docked in place of the page; ↩ puts
+     * the page back with the cue (and layer) selected. (showtreeworkbench.cpp)
+     ************************************************************************/
+public:
+    /** Open cue (or look) @a cueId in the Workbench, docked here, with its
+     *  layer @a layerId -- or the layer carried in on @a trackedSignature
+     *  -- selected. False: no such cue. */
+    bool openInWorkbench(quint32 cueId, quint32 layerId = 0xFFFFFFFF,
+                         const QString &trackedSignature = QString());
+    /** The tree's selection (a cue, a look, a layer) in the Workbench. */
+    bool openSelectionInWorkbench();
+    /** ↩: the page back, the Workbench handed back, the cue (and the layer
+     *  the Workbench had selected) selected in the tree. */
+    bool closeWorkbench();
+    bool isWorkbenchDocked() const;
+    /** The Workbench docked here (null: none). */
+    class Workbench *dockedWorkbench() const;
+    /** Where the Workbench comes from: Build's (App sets it) -- @a borrow
+     *  takes it out of Build, @a giveBack puts it back as it was. Without
+     *  one, the tree makes a Workbench of its own (tests). */
+    void setWorkbenchLender(const std::function<class Workbench *()> &borrow,
+                            const std::function<void(class Workbench *)> &giveBack);
+
     bool isPinned(int kind, quint32 id) const;
     void setPinned(int kind, quint32 id, bool pinned);
 
@@ -749,6 +775,23 @@ private:
     /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
     QString reuseLine(quint32 cueId, quint32 layerId) const;
     void reuseLinkActivated(const QString &link);
+    // W3 (showtreeworkbench.cpp)
+    struct WorkbenchDock;
+    WorkbenchDock *m_wb = nullptr;
+    /** The tree's selection moved while docked: the Workbench follows. */
+    void workbenchFollowTree();
+    /** The page (the inspector) lent to the docked Workbench's editor pane,
+     *  for cue @a cueId's layer @a layerId / carried-in @a signature (none:
+     *  the cue's page). */
+    QWidget *lendInspector(quint32 cueId, quint32 layerId, const QString &signature);
+    void takeBackInspector();
+    /** The Workbench selected a layer (or, none, the cue): the tree too,
+     *  without the tree moving the Workbench in turn. */
+    void selectForWorkbench(quint32 cueId, quint32 layerId, const QString &signature);
+    /** Leaving / coming back to the tab while docked. */
+    void suspendWorkbench();
+    void resumeWorkbench();
+    void destroyWorkbenchDock();
     QLabel *m_layerReuse = nullptr;
     QLabel *m_cueReuse = nullptr;
     QPushButton *m_listConvert = nullptr;
