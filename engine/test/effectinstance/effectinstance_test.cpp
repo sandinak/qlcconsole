@@ -18,6 +18,9 @@
 #include <QCryptographicHash>
 #include <QImage>
 #include <functional>
+#if defined(Q_OS_UNIX)
+#include <time.h>
+#endif
 
 #include "effectinstance_test.h"
 #define private public                  // MasterTimer::timerTick(), and the instance's insides
@@ -3087,6 +3090,20 @@ void EffectInstance_Test::matrixImagePlaysAGifKeptInTheShow()
    (600 pixels): each scope it has, through the host. The engine ticks
    at 50 a second, every effect on the one thread: an effect taking a
    good part of the 20ms would starve the rest. */
+/* This thread's CPU time, in ns: what a tick of an effect costs itself,
+   whatever else the machine is doing (a gate's other builds and tests made
+   wall-clock time fail the budget at a high load). Where there is no
+   per-thread clock: wall-clock time, as before. */
+static qint64 threadCpuNs(const QElapsedTimer &wall)
+{
+#if defined(Q_OS_UNIX) && defined(CLOCK_THREAD_CPUTIME_ID)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
+        return qint64(ts.tv_sec) * 1000000000LL + qint64(ts.tv_nsec);
+#endif
+    return wall.nsecsElapsed();
+}
+
 void EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()
 {
     MasterTimer timer(m_doc);
@@ -3156,9 +3173,10 @@ void EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()
                 QVERIFY2(!inst.dmxWrites().isEmpty(), qPrintable(file + ": nothing out"));
             QElapsedTimer clock;
             clock.start();
+            const qint64 from = threadCpuNs(clock);
             for (int i = 0; i < ticks; ++i)
                 inst.runTick();
-            const double ms = double(clock.nsecsElapsed()) / 1e6 / ticks;
+            const double ms = double(threadCpuNs(clock) - from) / 1e6 / ticks;
             worst = qMax(worst, ms);
             row << QString::number(ms, 'f', 2);
             if (budget > 0 && ms > budget)
@@ -3167,7 +3185,7 @@ void EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()
         }
         table << QString("%1 %2").arg(file, -26).arg(row.join(" / "));
     }
-    qInfo().noquote() << "8 x XL-450, ms a tick (whole canvas / each box / staggered):\n  "
+    qInfo().noquote() << "8 x XL-450, CPU ms a tick (whole canvas / each box / staggered):\n  "
                          + table.join("\n  ");
     QVERIFY2(slow.isEmpty(), qPrintable(slow.join("; ")));
     scene->stop(FunctionParent::master());
