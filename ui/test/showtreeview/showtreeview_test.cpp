@@ -31,6 +31,7 @@
 #include <QSignalSpy>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QShortcut>
 #include <QLabel>
 #include <QCheckBox>
 #include <QSplitter>
@@ -218,6 +219,170 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
     QVERIFY(view.selectNode(c1));
     QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
     QCOMPARE(view.currentCueId(), c1);
+}
+
+void ShowTreeView_Test::newHereMakesTheNextThing()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeView view(nullptr, m_doc);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    // The shortcut is the view's own.
+    QShortcut *sc = view.findChild<QShortcut *>("stNewHere");
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->key(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+    // The new row is renaming in place: type a name and commit it.
+    auto name = [&](const QString &text) {
+        QVERIFY(view.isRenaming());
+        QTreeWidgetItem *editing = view.tree()->currentItem();
+        view.tree()->closePersistentEditor(editing, 0);
+        editing->setText(0, text);
+        QVERIFY(!view.isRenaming());
+        QCoreApplication::processEvents();      // the rename lands after the editor
+    };
+
+    // Nothing yet: a production. One step (the name is another).
+    view.tree()->setFocus();
+    QCOMPARE(view.newHereLabel(), QString("New Production"));
+    quint32 prod = view.newHere();
+    QVERIFY(st->production(prod) != nullptr);
+    QCOMPARE(view.currentKind(), ShowTreeView::ProductionNode);
+    name("Gig");
+    QCOMPARE(st->production(prod)->name, QString("Gig"));
+    view.slotUndo();
+    QCOMPARE(st->production(prod)->name, QString("Show"));
+    view.slotUndo();
+    QVERIFY(st->productions().isEmpty());
+    prod = view.newHere();
+    name("Gig");
+
+    // A production: a cue list in it (also with nothing selected).
+    QCOMPARE(view.newHereLabel(), QString("New Cue List in Gig"));
+    view.tree()->setCurrentItem(nullptr);
+    QCOMPARE(view.newHereLabel(), QString("New Cue List in Gig"));
+    QVERIFY(view.selectNode(prod));
+    const quint32 list = view.newHere();
+    QVERIFY(st->cueList(list) != nullptr);
+    QCOMPARE(st->cueList(list)->mode, ListMode::Tracking);
+    QCOMPARE(view.currentKind(), ShowTreeView::ListNode);
+    name("01-Opener");
+
+    // A cue list: a cue at its end.
+    QCOMPARE(view.newHereLabel(), QString("New Cue in 01-Opener"));
+    const quint32 c1 = view.newHere();
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    QCOMPARE(view.currentId(), c1);
+    name("Preset");
+    QCOMPARE(st->cue(c1)->name, QString("Preset"));
+    const CueList *l = st->cueList(list);
+    QCOMPARE(st->cueNumber(*l, 0), QString("1.0.0"));
+
+    // A cue: the next cue after it, numbered as + Cue numbers it.
+    QCOMPARE(view.newHereLabel(), QString("New Cue After 1.0.0"));
+    const quint32 c2 = view.newHere();
+    l = st->cueList(list);
+    QCOMPARE(l->indexOf(c2), 1);
+    QCOMPARE(st->cueNumber(*l, 1), QString("1.0.1"));
+    name("Walk-in");
+    // Back on the first: between them, as + Cue makes one there.
+    QVERIFY(view.selectNode(c1));
+    const quint32 between = view.newHere();
+    l = st->cueList(list);
+    QCOMPARE(l->indexOf(between), 1);
+    QCOMPARE(l->indexOf(c2), 2);
+    const QString betweenNumber = st->cueNumber(*l, 1);
+    QVERIFY(betweenNumber != "1.0.0" && betweenNumber != "1.0.1");
+    name("Point");
+    view.slotUndo();
+    view.slotUndo();                            // the cue, one step
+    QVERIFY(st->cue(between) == nullptr);
+    QCOMPARE(st->cueList(list)->cues.count(), 2);
+
+    // Groups picked in the Library, the focus there: a layer on them in the
+    // selected cue.
+    QVERIFY(view.selectNode(c1));
+    // (The Library is rebuilt after an edit: pick again each time.)
+    auto pickTowers = [&]() {
+        QTreeWidgetItem *towersRow = nullptr;
+        for (QTreeWidgetItemIterator it(view.library()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibGroup
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == towers->id())
+                towersRow = *it;
+        QVERIFY(towersRow != nullptr);
+        view.library()->clearSelection();
+        towersRow->setSelected(true);
+    };
+    QTest::qWait(10);
+    pickTowers();
+    view.library()->setFocus();
+    QTRY_VERIFY(view.library()->hasFocus());
+    QCOMPARE(view.newHereLabel(), QString("New Layer on Towers in 1.0.0 Preset"));
+    const quint32 layer = view.newHere();
+    QVERIFY(st->cue(c1)->layer(layer) != nullptr);
+    QCOMPARE(st->cue(c1)->layer(layer)->target.groups, QList<quint32>({ towers->id() }));
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QCOMPARE(view.currentId(), layer);
+    name("Sides");
+    QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Sides"));
+    view.slotUndo();
+    view.slotUndo();                            // the layer, one step
+    QVERIFY(st->cue(c1)->layers.isEmpty());
+
+    // The focus back in the tree, on the cue: the Library doesn't count --
+    // the next cue.
+    QVERIFY(view.selectNode(c1));
+    view.tree()->setFocus();
+    QTRY_VERIFY(view.tree()->hasFocus());
+    QCOMPARE(view.newHereLabel(), QString("New Cue After 1.0.0"));
+
+    // A layer selected, groups picked in the Library: a new layer on them.
+    Target t;
+    t.groups << towers->id();
+    const quint32 own = st->addLayer(c1, t);
+    QTest::qWait(10);
+    pickTowers();
+    QVERIFY(view.selectNode(own, c1));
+    QCOMPARE(view.newHereLabel(), QString("New Layer on Towers in 1.0.0 Preset"));
+    const quint32 second = view.newHere();
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QCOMPARE(view.currentId(), second);
+    name("Again");
+    view.slotUndo();
+    view.slotUndo();
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // ... nothing picked: the cue selected and the Library's filter, so
+    // Return makes the layer there. Nothing made yet.
+    view.library()->clearSelection();
+    QVERIFY(view.selectNode(own, c1));
+    QCOMPARE(view.newHereLabel(), QString::fromUtf8("New Layer in 1.0.0 Preset\u2026"));
+    QCOMPARE(view.newHere(), invalidId());
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    QCOMPARE(view.currentId(), c1);
+    QLineEdit *filter = view.findChild<QLineEdit *>("stLibraryFilter");
+    QVERIFY(filter != nullptr);
+    QTRY_VERIFY(filter->hasFocus());
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // A sub-cue: the next main cue after its cue, as + Cue makes it.
+    const quint32 sub = st->addSubCue(c1, "Flash");
+    QVERIFY(sub != invalidId());
+    QVERIFY(view.selectNode(sub));
+    view.tree()->setFocus();
+    QCOMPARE(view.newHereLabel(), QString("New Cue After 1.0.0"));
+    const quint32 afterSub = view.newHere();
+    QCOMPARE(st->cueList(list)->indexOf(afterSub), 1);
+    name("After");
+
+    // A look: the next look.
+    const quint32 look = st->addLook(prod, "Hit");
+    QVERIFY(view.selectNode(look));
+    QCOMPARE(view.newHereLabel(), QString("New Look"));
+    const quint32 look2 = view.newHere();
+    QVERIFY(st->isLook(look2));
 }
 
 void ShowTreeView_Test::trackedLayersShowGreyWithWhereTheyCameFrom()
@@ -6094,6 +6259,8 @@ void ShowTreeView_Test::libraryGroupToolsOnARealShow()
     for (quint32 gid : tops)
         QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Truss tops"));
     QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));   // alike still
+}
+
 /* Branson: "for cuelist, and cues can we save a color for the text in the
    list as an option per cuelist or cue?" Colour ▸ on a list or cues (one
    undo step), the pages' Text colour buttons, the rows in their colour (a

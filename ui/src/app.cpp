@@ -2235,6 +2235,55 @@ void App::initMenuBar()
             else if (m_doc->showTree() != nullptr)
                 m_doc->showTree()->redoShared();
         });
+
+        /* ⇧⌘N, New (here): named for what it would make where you are
+           ("New Cue After 0.0.3"). The key is each tab's own (Show Tree,
+           Build, Fixtures -- broken out into a window too), as ⌘Z is: a
+           binding here would clash with the Virtual Console's ⇧⌘N. */
+        editMenu->addSeparator();
+        QAction *newHere = editMenu->addAction(tr("New"));
+        newHere->setObjectName(QStringLiteral("editNewHere"));
+        // Where it goes: the tab (or broken-out window) holding the focus,
+        // else the tab in front.
+        auto newHereHost = [current]() -> QWidget * {
+            for (QWidget *w = QApplication::focusWidget(); w != nullptr; w = w->parentWidget())
+                if (qobject_cast<ShowTreeView *>(w) != nullptr || qobject_cast<ProgrammingManager *>(w) != nullptr
+                    || qobject_cast<FixtureManager *>(w) != nullptr)
+                    return w;
+            QWidget *w = current();
+            if (w == nullptr)
+                return nullptr;
+            if (qobject_cast<ShowTreeView *>(w) != nullptr || qobject_cast<ProgrammingManager *>(w) != nullptr
+                || qobject_cast<FixtureManager *>(w) != nullptr)
+                return w;
+            if (ShowTreeView *v = w->findChild<ShowTreeView *>())
+                return v;
+            if (ProgrammingManager *pm = w->findChild<ProgrammingManager *>())
+                return pm;
+            return w->findChild<FixtureManager *>();
+        };
+        connect(editMenu, &QMenu::aboutToShow, this, [newHere, newHereHost]() {
+            QWidget *host = newHereHost();
+            QString label;
+            if (ShowTreeView *v = qobject_cast<ShowTreeView *>(host))
+                label = v->newHereLabel();
+            else if (ProgrammingManager *pm = qobject_cast<ProgrammingManager *>(host))
+                label = pm->newHereLabel();
+            else if (FixtureManager *fm = qobject_cast<FixtureManager *>(host))
+                label = fm->newHereLabel();
+            const QString key = QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N).toString(QKeySequence::NativeText);
+            newHere->setText(label.isEmpty() ? tr("New (%1)").arg(key) : tr("%1 (%2)").arg(label, key));
+            newHere->setEnabled(!label.isEmpty());
+        });
+        connect(newHere, &QAction::triggered, this, [newHereHost]() {
+            QWidget *host = newHereHost();
+            if (ShowTreeView *v = qobject_cast<ShowTreeView *>(host))
+                v->newHere();
+            else if (ProgrammingManager *pm = qobject_cast<ProgrammingManager *>(host))
+                pm->newHere();
+            else if (FixtureManager *fm = qobject_cast<FixtureManager *>(host))
+                fm->newHere();
+        });
     }
 
     /* ---- View: tools + jump to a workspace tab ---- */

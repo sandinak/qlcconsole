@@ -966,16 +966,16 @@ void Workbench::addExisting()
         layersChanged();
 }
 
-void Workbench::addNew(Function::Type type)
+quint32 Workbench::addNew(Function::Type type)
 {
     if (m_stack == nullptr || !m_stack->canAddLayers())
-        return;
+        return Function::invalidId();
     const int layer = selectedLayer();
     const QList<quint32> groups = layerGroups(layer);
     const quint32 made = m_stack->addNew(type, layer, layerHeads(layer),
                                          groups.isEmpty() ? FixtureGroup::invalidId() : groups.first());
     if (made == Function::invalidId())
-        return;
+        return made;
     layersChanged();
     // The new layer, selected, its editor open.
     m_rows->rebuild();
@@ -988,6 +988,50 @@ void Workbench::addNew(Function::Type type)
             break;
         }
     }
+    return made;
+}
+
+QString Workbench::newHereLabel() const
+{
+    FunctionStack *fs = qobject_cast<FunctionStack *>(m_stack);
+    if (fs == nullptr)
+        return QString();
+    if (Chaser *ch = fs->chaser())
+    {
+        if (!fs->readOnlyReason().isEmpty())
+            return QString();
+        return ch->stepsCount() == 0 ? tr("New Step in %1").arg(ch->name())
+                                     : tr("New Step After %1 in %2").arg(fs->step() + 1).arg(ch->name());
+    }
+    Function *f = m_doc->function(fs->functionId());
+    return f != nullptr && fs->canAddLayers() ? tr("New Scene in %1").arg(f->name()) : QString();
+}
+
+quint32 Workbench::newHere()
+{
+    FunctionStack *fs = qobject_cast<FunctionStack *>(m_stack);
+    if (fs == nullptr || newHereLabel().isEmpty())
+        return Function::invalidId();
+    quint32 made = Function::invalidId();
+    if (fs->chaser() != nullptr)
+    {
+        made = fs->addNewStep();
+        // The step's scene, its one layer, selected.
+        if (made != Function::invalidId() && m_rows->topLevelItemCount() > 0)
+            selectLayer(0);
+    }
+    else
+        made = addNew(Function::SceneType);
+    if (made == Function::invalidId())
+        return made;
+    // Named in place, as F2 would.
+    QTreeWidgetItem *cur = m_rows->currentItem();
+    if (cur != nullptr && (cur->flags() & Qt::ItemIsEditable))
+    {
+        m_rows->setFocus(Qt::ShortcutFocusReason);
+        m_rows->editItem(cur, 0);
+    }
+    return made;
 }
 
 void Workbench::removeSelectedLayers()

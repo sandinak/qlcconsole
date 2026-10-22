@@ -60,6 +60,10 @@ private slots:
     /** A ▣ layer opens in the Workbench (↩ back to the cue); + EFX is one
      *  tree step with its function. */
     void opaqueLayersAndAddNew();
+    /** ⇧⌘N with the focus in the docked Workbench: a cue there makes the
+     *  tree's next cue (the Workbench follows to it); a collection opened
+     *  there gets a new scene layer -- each one undo step. */
+    void newHereInTheDockedWorkbench();
 
     /** W3_SHOTS=<dir> W3_SHOW_06=<copy of DanceHysteria-0.6.qlcc>
      *  W3_SHOW_01=<copy of DanceHysteria-0.1.qlcc>: real-cue pictures. */

@@ -554,6 +554,27 @@ public:
     bool isRenaming() const { return m_renaming; }
 
     /************************************************************************
+     * ⇧⌘N, New (here): the next thing the selection calls for
+     * (showtreenewhere.cpp)
+     ************************************************************************/
+public:
+    /** ⇧⌘N (and Edit ▸ New …): with groups, fixtures or sets selected in
+     *  the Library and the focus there, a layer on them in the selected
+     *  cue; else by the tree's selection -- nothing, or a production: a cue
+     *  list in it (no production yet: one); a cue list: a cue at its end; a
+     *  cue: the next cue after it (numbered as + Cue numbers one; a sub-cue:
+     *  the next main cue, as + Cue does); a layer: a new layer in its cue,
+     *  on what the Library has selected (nothing there: the cue selected and
+     *  the Library's filter focused, so Return makes it); a look: the next
+     *  look. Something other than a cue opened in the docked Workbench: its
+     *  + Scene / + Step. One undo step; the new row selected and renaming in
+     *  place. Its id (invalid: nothing made). */
+    quint32 newHere();
+    /** What newHere() would make now ("New Cue After 0.0.3"; empty:
+     *  nothing) -- the Edit menu's text. */
+    QString newHereLabel() const;
+
+    /************************************************************************
      * W3: Show Tree <-> Workbench (WORKFLOW_DESIGN.md §3.4). A cue, look or
      * layer opens in the Workbench, docked in place of the page; ↩ puts
      * the page back with the cue (and layer) selected. (showtreeworkbench.cpp)
@@ -824,6 +845,11 @@ private:
     /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
     QString reuseLine(quint32 cueId, quint32 layerId) const;
     void reuseLinkActivated(const QString &link);
+    // ⇧⌘N (showtreenewhere.cpp): what newHere() makes, worked out once for
+    // the label and the doing.
+    struct NewHerePlan;
+    NewHerePlan planNewHere() const;
+
     // W3 (showtreeworkbench.cpp)
     struct WorkbenchDock;
     WorkbenchDock *m_wb = nullptr;

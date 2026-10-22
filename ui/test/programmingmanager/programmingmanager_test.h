@@ -140,6 +140,10 @@ private slots:
     void libraryAndProgrammingAgreeOnFolders();
     void undoHereReachesTheSharedHistory();
     void deletingHereClearsTheShowTreesUses();
+    /** ⇧⌘N in Build: a folder or a scene selected -- a new scene in that
+     *  folder (one undo step), selected and renaming; the Effects section
+     *  -- a new effect; the Palettes section -- nothing. */
+    void newHereMakesASceneInTheFolder();
 
 private:
     Doc* m_doc;

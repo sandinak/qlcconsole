@@ -67,6 +67,14 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
+- **⇧⌘N New here (2026-10-22, feat/new-next-thing): leftovers.** Built in
+  the Show Tree, Build (+ Workbench) and Fixtures, Edit ▸ New … names it.
+  Open: making a group in Fixtures isn't an undo step (New Group… never
+  was); a layer with nothing picked in the Library goes to the filter
+  rather than asking; the Palettes section and the Lighting Studio have
+  none yet; the Edit item shows the key in its text, not as a bound
+  shortcut (a binding there would clash with the VC's ⇧⌘N).
+
 - **W4 effect designer: follow-ons (2026-10-22)** (feat/w4-effect-designer,
   WORKFLOW_DESIGN.md §3.3/§3.4):
   - Host it in the Workbench's editor pane (W1/W3) and in Build ▸ Effects

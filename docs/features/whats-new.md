@@ -36,6 +36,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   the theme needs it to stay readable. See
   [Text colours](show-tree.md#text-colours).
 
+- **⇧⌘N makes the next thing.** In the Show Tree it makes what the
+  selection calls for: a production, a cue list, the next cue after the
+  one selected (0.0.3 → 0.0.4, or a point cue when 0.0.4 is taken), a
+  layer on the groups picked in the Library, a look. In Build it makes a
+  scene in the selected folder, a new step or scene layer in the
+  Workbench, or an effect; in Fixtures, a group in the folder. The
+  **Edit** menu names it first (*New Cue After 0.0.3*). The new row's
+  name is open to type, and ⌘Z takes it away in one step. See
+  [New here](show-tree.md#new-here).
+
 - **Icons that say what a row is.** In Build (the outline and the
   Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
   look is a small pie filled to its level (a 45 % look is 45 % lit); a
