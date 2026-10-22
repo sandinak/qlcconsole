@@ -53,6 +53,11 @@ public:
     QList<quint32> selectedFixtures() const;
     QList<quint32> selectedFixtureGroups() const;
     QList<quint32> selectedFunctions() const;
+    QList<quint32> selectedPalettes() const;
+
+    /** Everything selected to start with (an Eos import brings the lot
+     *  unless the user picks). */
+    void selectAll();
 
 private:
     void populate();
@@ -62,6 +67,7 @@ private:
     QTreeWidget *m_fixtureTree;
     QTreeWidget *m_groupTree;
     QTreeWidget *m_functionTree;
+    QTreeWidget *m_paletteTree;
 };
 
 /** @} */

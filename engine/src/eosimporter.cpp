@@ -617,7 +617,8 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
     return true;
 }
 
-Doc *EosImporter::load(const EosImportBundle &bundle, EosImportResult &result, EosFixtureMapper *mapper)
+Doc *EosImporter::load(const EosImportBundle &bundle, EosImportResult &result, EosFixtureMapper *mapper,
+                       Doc *into)
 {
     EosShowData data;
     EosAsciiParser parser;
@@ -627,11 +628,15 @@ Doc *EosImporter::load(const EosImportBundle &bundle, EosImportResult &result, E
         return nullptr;
     }
 
-    Doc *doc = new Doc(nullptr);
-    doc->fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
-    doc->fixtureDefCache()->loadMap(QLCFixtureDefCache::systemDefinitionDirectory());
-    doc->modifiersCache()->load(QLCModifiersCache::systemTemplateDirectory(), true);
-    doc->modifiersCache()->load(QLCModifiersCache::userTemplateDirectory());
+    Doc *doc = into;
+    if (doc == nullptr)
+    {
+        doc = new Doc(nullptr);
+        doc->fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
+        doc->fixtureDefCache()->loadMap(QLCFixtureDefCache::systemDefinitionDirectory());
+        doc->modifiersCache()->load(QLCModifiersCache::systemTemplateDirectory(), true);
+        doc->modifiersCache()->load(QLCModifiersCache::userTemplateDirectory());
+    }
 
     EosFixtureMapper own(doc->fixtureDefCache());
     if (mapper == nullptr)

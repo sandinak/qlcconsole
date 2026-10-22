@@ -101,10 +101,11 @@ public:
      * parse failure (e.g. no readable ASCII file); recoverable issues go
      * into result.warnings and the Doc is returned populated with whatever
      * did parse. @a mapper: the wizard's (with the user's choices); null
-     * reads the bundle's map file.
+     * reads the bundle's map file. @a into: populate this (empty) Doc,
+     * its definition cache already loaded, instead of a new one (tests).
      */
     static Doc *load(const EosImportBundle &bundle, EosImportResult &result,
-                     EosFixtureMapper *mapper = nullptr);
+                     EosFixtureMapper *mapper = nullptr, Doc *into = nullptr);
 
     /** Populate @a doc (empty, its definition cache loaded) from parsed
      *  @a data. @a showName names the cue lists' productions. */
