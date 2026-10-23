@@ -72,7 +72,7 @@ instead, at its right end beside Ready and the other show chips: the top
 is then the tab's own tools alone. It changes at once, no restart, and the
 shortcuts are the same either way (⌘⇧Esc Stop all, ⌘F12 Design / Operate).
 There, they are icons only (their tooltips name them) unless
-**View ▸ Toolbar Style** is **Text Only**, and the footer's own DESIGN and
+**Settings ▸ Appearance ▸ Toolbar style** is **Text only**, and the footer's own DESIGN and
 BLACKOUT chips step aside for them. A tab moved to a window of its own
 keeps its tools at its own top.
 

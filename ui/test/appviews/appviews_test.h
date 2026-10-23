@@ -75,6 +75,12 @@ private slots:
      *  entry, kept for the person, read by the fixture editor too. */
     void settingsChoosesTheUnits();
     void settingsAdvancedHoldsAutoOpen();
+    /** Q65: theme, toolbar style, the footer's chips and the speed masters'
+     *  beat are in Settings ▸ Appearance, not the View menu, and set the
+     *  same settings the View menu did. */
+    void settingsAppearanceHoldsHowTheWindowLooks();
+    /** Q65: View is only what you look at. */
+    void theViewMenuIsOnlyViews();
     /** The grid follows Settings -> Units: an old show in feet seeds an
      *  unset preference once, a show opens in the person's unit, and is
      *  saved with Units from the preference */

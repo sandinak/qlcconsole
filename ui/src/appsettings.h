@@ -21,6 +21,7 @@
 #define APPSETTINGS_H
 
 #include <QDialog>
+#include <QMap>
 
 class QCheckBox;
 class QComboBox;
@@ -63,6 +64,7 @@ private slots:
 private:
     App *m_app;
     QTabWidget *m_tabs = nullptr;
+    QWidget *m_advancedPage = nullptr;
     // Advanced: the show's auto-open shutters (ShutterAutoOpen)
     QCheckBox *m_autoOpenCheck = nullptr;
     class QComboBox *m_onAtOpenCombo = nullptr;
@@ -71,8 +73,13 @@ private:
     QCheckBox *m_autosaveEnabledCheck;
     QSpinBox  *m_autosaveIntervalSpin;
 
-    // Tab label mode
-    QComboBox *m_tabLabelModeCombo;
+    // Appearance: theme, toolbar style (tab label mode), footer chips and
+    // the speed masters' beat -- this computer's (was the View menu)
+    QComboBox *m_themeCombo = nullptr;
+    QComboBox *m_tabLabelModeCombo = nullptr;
+    QMap<int, QCheckBox *> m_footerChecks;      ///< App::FooterChip -> its box
+    QComboBox *m_beatStyleCombo = nullptr;
+    QComboBox *m_beatWhenCombo = nullptr;
     QComboBox *m_workspaceViewCombo = nullptr;   ///< the show's view (View ▸ Workspace)
     // Show controls: top bar or status bar (App::ShowControlsPlacement)
     QComboBox *m_showControlsCombo;

@@ -86,6 +86,7 @@
 #include "ioplugincache.h"
 #include "qlcfile.h"
 #include "showstatus.h"
+#include "speedmastersfooter.h"
 #undef protected
 #undef private
 
@@ -734,9 +735,10 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
         AppSettings dlg(m_app);
         QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
         QVERIFY(tabs != nullptr);
-        QCOMPARE(tabs->count(), 2);
-        QCOMPARE(tabs->tabText(1), QStringLiteral("Advanced"));
-        QWidget *adv = tabs->widget(1);
+        QCOMPARE(tabs->count(), 3);
+        QCOMPARE(tabs->tabText(1), QStringLiteral("Appearance"));
+        QCOMPARE(tabs->tabText(2), QStringLiteral("Advanced"));
+        QWidget *adv = tabs->widget(2);
         QCheckBox *box = adv->findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"));
         QVERIFY(box != nullptr);
         QVERIFY(box->isChecked());
@@ -745,7 +747,7 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
         QVERIFY(adv->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) == nullptr);
         QVERIFY(tabs->widget(0)->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) != nullptr);
         dlg.showAdvanced();
-        QCOMPARE(tabs->currentIndex(), 1);
+        QCOMPARE(tabs->currentIndex(), 2);
 
         box->setChecked(false);
         dlg.reject();                   // Cancel keeps it
@@ -764,6 +766,92 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
     }
     ao->setEnabled(true);
     m_app->doc()->resetModified();
+}
+
+void AppViews_Test::settingsAppearanceHoldsHowTheWindowLooks()
+{
+    const int wasTheme = m_app->theme();
+    const int wasMode = m_app->tabLabelMode();
+    const bool wasGM = m_app->footerChipShown(App::FooterGrandMaster);
+    const SpeedMasterButton::BeatStyle wasStyle = SpeedMastersFooter::beatStyle();
+    const SpeedMastersFooter::BeatWhen wasWhen = SpeedMastersFooter::beatWhen();
+    auto restore = qScopeGuard([=]() {
+        m_app->setTheme(wasTheme);
+        m_app->setTabLabelMode(wasMode);
+        m_app->setFooterChipShown(App::FooterGrandMaster, wasGM);
+        SpeedMastersFooter::setBeatStyle(wasStyle);
+        SpeedMastersFooter::setBeatWhen(wasWhen);
+        m_app->reloadFooterBeatOptions();
+    });
+    m_app->setTheme(App::ThemeDefault);
+    m_app->setTabLabelMode(App::TabIconAndText);
+    m_app->setFooterChipShown(App::FooterGrandMaster, true);
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Blink);
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::WhilePlaying);
+
+    {
+        AppSettings dlg(m_app);
+        QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
+        QWidget *look = tabs->widget(1);
+        QCOMPARE(look->objectName(), QStringLiteral("settingsAppearance"));
+        QComboBox *theme = look->findChild<QComboBox *>("settingsTheme");
+        QComboBox *style = look->findChild<QComboBox *>("settingsToolbarStyle");
+        QComboBox *beat = look->findChild<QComboBox *>("settingsFooterBeatStyle");
+        QComboBox *when = look->findChild<QComboBox *>("settingsFooterBeatWhen");
+        QVERIFY(theme && style && beat && when);
+        QCOMPARE(theme->count(), 6);
+        QCOMPARE(theme->currentData().toInt(), int(App::ThemeDefault));
+        QCOMPARE(style->currentData().toInt(), int(App::TabIconAndText));
+        for (const char *name : { "settingsFooterLoad", "settingsFooterPower",
+                                  "settingsFooterGrandMaster", "settingsFooterSpeedMasters" })
+            QVERIFY2(look->findChild<QCheckBox *>(name) != nullptr, name);
+        QVERIFY(look->findChild<QCheckBox *>("settingsFooterGrandMaster")->isChecked());
+        // Toolbar style is here only, not on General.
+        QVERIFY(tabs->widget(0)->findChild<QComboBox *>("settingsToolbarStyle") == nullptr);
+
+        theme->setCurrentIndex(theme->findData(int(App::ThemeRedShift)));
+        style->setCurrentIndex(style->findData(int(App::TabTextOnly)));
+        look->findChild<QCheckBox *>("settingsFooterGrandMaster")->setChecked(false);
+        beat->setCurrentIndex(beat->findData(int(SpeedMasterButton::Bar)));
+        when->setCurrentIndex(when->findData(int(SpeedMastersFooter::Always)));
+        dlg.accept();
+    }
+    // The same settings, under the same keys, as the View menu set.
+    QSettings settings;
+    QCOMPARE(m_app->theme(), int(App::ThemeRedShift));
+    QCOMPARE(settings.value("workspace/theme").toInt(), int(App::ThemeRedShift));
+    QCOMPARE(m_app->tabLabelMode(), int(App::TabTextOnly));
+    QCOMPARE(settings.value("workspace/tabLabelMode").toInt(), int(App::TabTextOnly));
+    QVERIFY(m_app->footerChipShown(App::FooterGrandMaster) == false);
+    QCOMPARE(settings.value("workspace/showFooterGM").toBool(), false);
+    QVERIFY(m_app->m_statusGrandMasterBox->isHidden());
+    QCOMPARE(SpeedMastersFooter::beatStyle(), SpeedMasterButton::Bar);
+    QCOMPARE(SpeedMastersFooter::beatWhen(), SpeedMastersFooter::Always);
+
+    // Cancel keeps what is set.
+    {
+        AppSettings dlg(m_app);
+        QComboBox *theme = dlg.findChild<QComboBox *>("settingsTheme");
+        QCOMPARE(theme->currentData().toInt(), int(App::ThemeRedShift));
+        theme->setCurrentIndex(theme->findData(int(App::ThemeBlue)));
+        dlg.reject();
+    }
+    QCOMPARE(m_app->theme(), int(App::ThemeRedShift));
+}
+
+void AppViews_Test::theViewMenuIsOnlyViews()
+{
+    QMenu *view = nullptr;
+    foreach (QAction *a, m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->text().remove('&') == "View")
+            view = a->menu();
+    QVERIFY(view != nullptr);
+    QStringList items;
+    foreach (QAction *a, view->actions())
+        if (!a->isSeparator())
+            items << a->text();
+    QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "Rig Overview…"
+                                  << "Focus Mode…");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()

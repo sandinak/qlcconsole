@@ -67,6 +67,12 @@ their house lights, relays and subs.
   the Workbench; new functions of any type and the Function Wizard are on
   **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab. See
   [Coming from the Functions window](build.md#coming-from-the-functions-window).
+- **Settings ▸ Appearance.** The theme, the toolbar style, which chips
+  the footer shows and how the speed masters show their beat are in a new
+  **Appearance** tab in Settings, out of the View menu; your choices carry
+  over. **View** is now only what you look at: **Workspace**, **Address
+  Tool**, **Rig Overview…** and **Focus Mode…**. See
+  [Appearance settings](other-improvements.md#appearance-settings).
 - **File ▸ Import is a menu of file types**: **QLC+ / qlcconsole
   Workspace**, **ETC Eos Show (ASCII .asc)** and **QLC+ Fixtures List
   (.qxfl)**, each with a file dialog for that kind, then **Any Supported

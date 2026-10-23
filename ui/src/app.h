@@ -241,6 +241,16 @@ public:
     /** The palette @p theme gives, built on @p base (the native one for
      *  ThemeDefault) -- what applyTheme() sets; a test renders with it. */
     static QPalette themePalette(int theme, const QPalette &base);
+    /** Every theme and its name, in the order Settings ▸ Appearance lists them. */
+    static QList<QPair<int, QString> > themeChoices();
+
+    /** The footer's optional chips (Settings ▸ Appearance), each shown or
+     *  hidden for this computer (QSettings workspace/showFooter*). */
+    enum FooterChip { FooterLoad, FooterPower, FooterGrandMaster, FooterSpeedMasters };
+    bool footerChipShown(FooterChip chip) const;
+    void setFooterChipShown(FooterChip chip, bool on);
+    /** The speed masters' beat (SpeedMastersFooter's settings) read again. */
+    void reloadFooterBeatOptions();
 
 private:
     int m_theme = ThemeDefault;
@@ -858,7 +868,7 @@ private:
     QLabel* m_statusLoadLabel;
     QLabel* m_statusPowerLabel = nullptr;
     // Whether the engine-load / power-estimate / GM-fader footer chips are
-    // shown at all, toggleable from the View menu and persisted
+    // shown at all, set in Settings ▸ Appearance and persisted
     // (workspace/showFooterLoad, workspace/showFooterPower,
     // workspace/showFooterGM). Independent of whether a chip currently has
     // anything to show (e.g. Power only ever appears once an estimate exists).
@@ -866,11 +876,7 @@ private:
     bool m_showFooterPower = true;
     bool m_showFooterGM = true;
     bool m_showFooterSpeed = true;
-    QAction* m_showFooterSpeedAction = nullptr;
     class SpeedMastersFooter* m_statusSpeedMasters = nullptr;
-    QAction* m_showFooterLoadAction = nullptr;
-    QAction* m_showFooterPowerAction = nullptr;
-    QAction* m_showFooterGMAction = nullptr;
     // Move-in-black dangle warning: marked (positioned-but-dark) fixtures no
     // upcoming cue is about to light. Hidden when empty; ProgrammerController
     // forwards MarkPlanner::dangleFixturesChanged() into this.

@@ -612,7 +612,7 @@ void App::init()
                 m_statusPowerLabel->hide();
                 return;
             }
-            if (m_showFooterPower == false)   // View menu: chip disabled
+            if (m_showFooterPower == false)   // Settings ▸ Appearance: chip off
                 return;
             m_statusPowerLabel->setText(overload
                 ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
@@ -2403,147 +2403,9 @@ void App::initMenuBar()
     focusAct->setToolTip(tr("Aim each moving head at its reference and nudge its calibration offsets"));
     connect(focusAct, &QAction::triggered, this, &App::slotFocusMode);
 
-
-    // Backstage color themes: low-glare palettes for working near a stage/
-    // audience. Persisted (App::setTheme() -> workspace/theme).
-    viewMenu->addSeparator();
-    QMenu* themeMenu = viewMenu->addMenu(tr("Theme"));
-    QActionGroup* themeGroup = new QActionGroup(themeMenu);
-    struct { const char* label; int id; } themeChoices[] = {
-        { QT_TR_NOOP("Default"),      ThemeDefault },
-        { QT_TR_NOOP("Tan"),          ThemeTan },
-        { QT_TR_NOOP("Blue"),         ThemeBlue },
-        { QT_TR_NOOP("QLC+ Original"), ThemeQLCOriginal },
-        { QT_TR_NOOP("Red Shift"),    ThemeRedShift },
-        { QT_TR_NOOP("VS Code Dark"), ThemeVSCodeDark },
-    };
-    for (const auto& choice : themeChoices)
-    {
-        QAction* themeAction = themeMenu->addAction(tr(choice.label));
-        themeAction->setCheckable(true);
-        themeAction->setActionGroup(themeGroup);
-        themeAction->setChecked(m_theme == choice.id);
-        connect(themeAction, &QAction::triggered, this, [this, choice]() {
-            setTheme(choice.id);
-        });
-    }
-
-    // Toolbar style: icon+text / icons only / text only, for the tab strip,
-    // the main toolbar, and every per-manager toolbar's own "Add"/"Edit"
-    // dropdowns (Function Manager, Virtual Console, Programming, Shows,
-    // Fixture Manager, Input/Output Manager, the 2D Monitor). Backed by the
-    // same "workspace/tabLabelMode" setting those toolbars already read;
-    // this was previously set-once-at-startup with no way to change it
-    // short of hand-editing the setting.
-    QMenu* toolbarStyleMenu = viewMenu->addMenu(tr("Toolbar Style"));
-    QActionGroup* toolbarStyleGroup = new QActionGroup(toolbarStyleMenu);
-    struct { const char* label; int id; } toolbarStyleChoices[] = {
-        { QT_TR_NOOP("Icons && Text"), TabIconAndText },
-        { QT_TR_NOOP("Icons Only"),    TabIconOnly },
-        { QT_TR_NOOP("Text Only"),     TabTextOnly },
-    };
-    for (const auto& choice : toolbarStyleChoices)
-    {
-        QAction* styleAction = toolbarStyleMenu->addAction(tr(choice.label));
-        styleAction->setCheckable(true);
-        styleAction->setActionGroup(toolbarStyleGroup);
-        styleAction->setChecked(m_tabLabelMode == choice.id);
-        connect(styleAction, &QAction::triggered, this, [this, choice]() {
-            setTabLabelMode(choice.id);
-        });
-    }
-
-    // Footer chip visibility: engine load / estimated power draw. Persisted
-    // (workspace/showFooterLoad, workspace/showFooterPower).
-    m_showFooterLoadAction = viewMenu->addAction(tr("Show Engine Load in Footer"));
-    m_showFooterLoadAction->setCheckable(true);
-    m_showFooterLoadAction->setChecked(m_showFooterLoad);
-    connect(m_showFooterLoadAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterLoad = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_LOAD, on);
-        if (m_statusLoadLabel != NULL)
-            m_statusLoadLabel->setVisible(on);
-    });
-
-    m_showFooterPowerAction = viewMenu->addAction(tr("Show Power Estimate in Footer"));
-    m_showFooterPowerAction->setCheckable(true);
-    m_showFooterPowerAction->setChecked(m_showFooterPower);
-    connect(m_showFooterPowerAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterPower = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_POWER, on);
-        if (m_statusPowerLabel != NULL && on == false)
-            m_statusPowerLabel->hide();
-        // When re-enabled, the chip stays hidden until the next
-        // powerEstimateChanged signal repopulates it (Design mode only).
-    });
-
-    m_showFooterGMAction = viewMenu->addAction(tr("Show Grand Master in Footer"));
-    m_showFooterGMAction->setCheckable(true);
-    m_showFooterGMAction->setChecked(m_showFooterGM);
-    connect(m_showFooterGMAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterGM = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_GM, on);
-        if (m_statusGrandMasterBox != NULL)
-            m_statusGrandMasterBox->setVisible(on);
-    });
-
-    m_showFooterSpeedAction = viewMenu->addAction(tr("Show Speed Masters in Footer"));
-    m_showFooterSpeedAction->setObjectName(QStringLiteral("showFooterSpeedMasters"));
-    m_showFooterSpeedAction->setCheckable(true);
-    m_showFooterSpeedAction->setChecked(m_showFooterSpeed);
-    connect(m_showFooterSpeedAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterSpeed = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
-        if (m_statusSpeedMasters != NULL)
-            m_statusSpeedMasters->setVisible(on);
-    });
-    /* How the masters in the footer show their beat: a blink, a bar across
-       each beat, or not at all -- always, or only while something on that
-       master is playing. */
-    {
-        QMenu *beat = viewMenu->addMenu(tr("Speed Master Beat in Footer"));
-        beat->setObjectName(QStringLiteral("speedFooterBeatMenu"));
-        QActionGroup *styles = new QActionGroup(beat);
-        const QList<QPair<QString, SpeedMasterButton::BeatStyle> > styleItems = {
-            { tr("Blink"), SpeedMasterButton::Blink },
-            { tr("Bar Across Each Beat"), SpeedMasterButton::Bar },
-            { tr("No Beat"), SpeedMasterButton::NoBeat } };
-        for (const auto &it : styleItems)
-        {
-            QAction *a = beat->addAction(it.first);
-            a->setCheckable(true);
-            a->setChecked(SpeedMastersFooter::beatStyle() == it.second);
-            a->setData(int(it.second));
-            styles->addAction(a);
-        }
-        beat->addSeparator();
-        QActionGroup *whens = new QActionGroup(beat);
-        const QList<QPair<QString, SpeedMastersFooter::BeatWhen> > whenItems = {
-            { tr("Always"), SpeedMastersFooter::Always },
-            { tr("Only While Something on It Plays"), SpeedMastersFooter::WhilePlaying } };
-        for (const auto &it : whenItems)
-        {
-            QAction *a = beat->addAction(it.first);
-            a->setCheckable(true);
-            a->setChecked(SpeedMastersFooter::beatWhen() == it.second);
-            a->setData(int(it.second));
-            whens->addAction(a);
-        }
-        connect(styles, &QActionGroup::triggered, this, [this](QAction *a) {
-            SpeedMastersFooter::setBeatStyle(SpeedMasterButton::BeatStyle(a->data().toInt()));
-            if (m_statusSpeedMasters != NULL)
-                m_statusSpeedMasters->reloadBeatOptions();
-        });
-        connect(whens, &QActionGroup::triggered, this, [this](QAction *a) {
-            SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::BeatWhen(a->data().toInt()));
-            if (m_statusSpeedMasters != NULL)
-                m_statusSpeedMasters->reloadBeatOptions();
-        });
-    }
+    /* Appearance -- theme, toolbar style, which chips the footer shows and
+       the speed masters' beat -- is in Settings ▸ Appearance (Q65); View is
+       only what you look at. */
 
     /* ---- Fixtures: document-wide fixture actions ----
      * Import/Export/Remap and Channels Fade Configuration used to live on
@@ -5210,6 +5072,68 @@ int App::theme() const
     return m_theme;
 }
 
+QList<QPair<int, QString> > App::themeChoices()
+{
+    return { { ThemeDefault,     tr("Default") },
+             { ThemeTan,         tr("Tan") },
+             { ThemeBlue,        tr("Blue") },
+             { ThemeQLCOriginal, tr("QLC+ Original") },
+             { ThemeRedShift,    tr("Red Shift") },
+             { ThemeVSCodeDark,  tr("VS Code Dark") } };
+}
+
+bool App::footerChipShown(FooterChip chip) const
+{
+    switch (chip)
+    {
+    case FooterLoad:         return m_showFooterLoad;
+    case FooterPower:        return m_showFooterPower;
+    case FooterGrandMaster:  return m_showFooterGM;
+    case FooterSpeedMasters:
+    default:                 return m_showFooterSpeed;
+    }
+}
+
+void App::setFooterChipShown(FooterChip chip, bool on)
+{
+    QSettings settings;
+    switch (chip)
+    {
+    case FooterLoad:
+        m_showFooterLoad = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_LOAD, on);
+        if (m_statusLoadLabel != NULL)
+            m_statusLoadLabel->setVisible(on);
+        break;
+    case FooterPower:
+        m_showFooterPower = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_POWER, on);
+        // Turned back on, the chip stays hidden until the next
+        // powerEstimateChanged repopulates it (Design mode only).
+        if (m_statusPowerLabel != NULL && on == false)
+            m_statusPowerLabel->hide();
+        break;
+    case FooterGrandMaster:
+        m_showFooterGM = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_GM, on);
+        if (m_statusGrandMasterBox != NULL)
+            m_statusGrandMasterBox->setVisible(on);
+        break;
+    case FooterSpeedMasters:
+        m_showFooterSpeed = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
+        if (m_statusSpeedMasters != NULL)
+            m_statusSpeedMasters->setVisible(on);
+        break;
+    }
+}
+
+void App::reloadFooterBeatOptions()
+{
+    if (m_statusSpeedMasters != NULL)
+        m_statusSpeedMasters->reloadBeatOptions();
+}
+
 void App::setTheme(int theme)
 {
     if (m_theme == theme)
@@ -5684,7 +5608,7 @@ void App::initStatusBar()
         }
         connect(m_statusGrandMasterSlider, &QSlider::valueChanged,
                 this, &App::slotFooterGrandMasterMoved);
-        gmBox->setVisible(m_showFooterGM);   // View menu preference
+        gmBox->setVisible(m_showFooterGM);   // Settings ▸ Appearance
         sb->addWidget(gmBox, 0);
     }
 
@@ -5693,7 +5617,7 @@ void App::initStatusBar()
     if (m_doc != NULL)
     {
         m_statusSpeedMasters = new SpeedMastersFooter(m_doc, this);
-        m_statusSpeedMasters->setVisible(m_showFooterSpeed);   // View menu preference
+        m_statusSpeedMasters->setVisible(m_showFooterSpeed);   // Settings ▸ Appearance
         sb->addWidget(m_statusSpeedMasters, 0);
     }
 
@@ -5754,7 +5678,7 @@ void App::initStatusBar()
         QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
-    m_statusLoadLabel->setVisible(m_showFooterLoad);   // View menu preference
+    m_statusLoadLabel->setVisible(m_showFooterLoad);   // Settings ▸ Appearance
     sb->addWidget(m_statusLoadLabel, 0);
 
     // Estimated electrical load (Design mode) — the designed peak draw across the

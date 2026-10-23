@@ -47,6 +47,7 @@
 #include "programmercontroller.h"
 #include "doc.h"
 #include "app.h"
+#include "speedmastersfooter.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
     : QDialog(parent)
@@ -57,8 +58,9 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     setWindowTitle(tr("Application Settings"));
     setMinimumWidth(400);
 
-    // Two tabs: General, what everyone sets, and Advanced -- settings for
-    // the experienced, and the show's output behaviour (auto-open shutters).
+    // Three tabs: General, what everyone sets; Appearance, how the window
+    // looks (it was the View menu's); and Advanced -- settings for the
+    // experienced, and the show's output behaviour (auto-open shutters).
     QVBoxLayout *dialogLayout = new QVBoxLayout(this);
     m_tabs = new QTabWidget(this);
     m_tabs->setObjectName(QStringLiteral("settingsTabs"));
@@ -67,11 +69,78 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     generalPage->setObjectName(QStringLiteral("settingsGeneral"));
     QVBoxLayout *mainLayout = new QVBoxLayout(generalPage);
     m_tabs->addTab(generalPage, tr("General"));
+    QWidget *appearancePage = new QWidget(m_tabs);
+    appearancePage->setObjectName(QStringLiteral("settingsAppearance"));
+    appearancePage->setProperty("helpTopic", QStringLiteral("other-improvements.md#appearance-settings"));
+    QVBoxLayout *lookLayout = new QVBoxLayout(appearancePage);
+    m_tabs->addTab(appearancePage, tr("Appearance"));
     QWidget *advancedPage = new QWidget(m_tabs);
+    m_advancedPage = advancedPage;
     advancedPage->setObjectName(QStringLiteral("settingsAdvanced"));
     advancedPage->setProperty("helpTopic", QStringLiteral("other-improvements.md#advanced-settings"));
     QVBoxLayout *advLayout = new QVBoxLayout(advancedPage);
     m_tabs->addTab(advancedPage, tr("Advanced"));
+
+    // --- Appearance: this computer's, not the show's. Same settings the
+    // View menu used to set (workspace/theme, workspace/tabLabelMode,
+    // workspace/showFooter*, the speed masters' beat). Applied on OK.
+    {
+        QGroupBox *winGroup = new QGroupBox(tr("Window"), appearancePage);
+        QFormLayout *winForm = new QFormLayout(winGroup);
+        m_themeCombo = new QComboBox(winGroup);
+        m_themeCombo->setObjectName(QStringLiteral("settingsTheme"));
+        for (const auto &t : App::themeChoices())
+            m_themeCombo->addItem(t.second, t.first);
+        m_themeCombo->setCurrentIndex(qMax(0, m_themeCombo->findData(m_app->theme())));
+        m_themeCombo->setToolTip(tr("The colours of the whole window. Red Shift and the dark "
+                                    "themes are kinder near a stage or an audience."));
+        winForm->addRow(tr("Theme:"), m_themeCombo);
+        m_tabLabelModeCombo = new QComboBox(winGroup);
+        m_tabLabelModeCombo->setObjectName(QStringLiteral("settingsToolbarStyle"));
+        m_tabLabelModeCombo->addItem(tr("Icons and text"), App::TabIconAndText);
+        m_tabLabelModeCombo->addItem(tr("Icons only"),     App::TabIconOnly);
+        m_tabLabelModeCombo->addItem(tr("Text only"),      App::TabTextOnly);
+        m_tabLabelModeCombo->setCurrentIndex(m_tabLabelModeCombo->findData(m_app->tabLabelMode()));
+        m_tabLabelModeCombo->setToolTip(tr("The tabs, the top bar and every tab's own tools: "
+                                           "icons and text, icons only (tooltips name them) "
+                                           "or text only."));
+        winForm->addRow(tr("Toolbar style:"), m_tabLabelModeCombo);
+        lookLayout->addWidget(winGroup);
+
+        QGroupBox *footGroup = new QGroupBox(tr("Footer"), appearancePage);
+        footGroup->setObjectName(QStringLiteral("settingsFooter"));
+        QVBoxLayout *footLayout = new QVBoxLayout(footGroup);
+        const struct { App::FooterChip chip; const char *name; const char *label; } chips[] = {
+            { App::FooterLoad,         "settingsFooterLoad",         QT_TR_NOOP("Show the engine load") },
+            { App::FooterPower,        "settingsFooterPower",        QT_TR_NOOP("Show the power estimate") },
+            { App::FooterGrandMaster,  "settingsFooterGrandMaster",  QT_TR_NOOP("Show the grand master") },
+            { App::FooterSpeedMasters, "settingsFooterSpeedMasters", QT_TR_NOOP("Show the speed masters") } };
+        for (const auto &c : chips)
+        {
+            QCheckBox *box = new QCheckBox(tr(c.label), footGroup);
+            box->setObjectName(QString::fromLatin1(c.name));
+            box->setChecked(m_app->footerChipShown(c.chip));
+            footLayout->addWidget(box);
+            m_footerChecks.insert(int(c.chip), box);
+        }
+        QFormLayout *beatForm = new QFormLayout();
+        m_beatStyleCombo = new QComboBox(footGroup);
+        m_beatStyleCombo->setObjectName(QStringLiteral("settingsFooterBeatStyle"));
+        m_beatStyleCombo->addItem(tr("Blink"), int(SpeedMasterButton::Blink));
+        m_beatStyleCombo->addItem(tr("Bar across each beat"), int(SpeedMasterButton::Bar));
+        m_beatStyleCombo->addItem(tr("No beat"), int(SpeedMasterButton::NoBeat));
+        m_beatStyleCombo->setCurrentIndex(qMax(0, m_beatStyleCombo->findData(int(SpeedMastersFooter::beatStyle()))));
+        beatForm->addRow(tr("Speed master beat:"), m_beatStyleCombo);
+        m_beatWhenCombo = new QComboBox(footGroup);
+        m_beatWhenCombo->setObjectName(QStringLiteral("settingsFooterBeatWhen"));
+        m_beatWhenCombo->addItem(tr("Always"), int(SpeedMastersFooter::Always));
+        m_beatWhenCombo->addItem(tr("Only while something on it plays"), int(SpeedMastersFooter::WhilePlaying));
+        m_beatWhenCombo->setCurrentIndex(qMax(0, m_beatWhenCombo->findData(int(SpeedMastersFooter::beatWhen()))));
+        beatForm->addRow(tr("Show the beat:"), m_beatWhenCombo);
+        footLayout->addLayout(beatForm);
+        lookLayout->addWidget(footGroup);
+        lookLayout->addStretch();
+    }
 
     // --- Advanced: Output (this show) ---
     // The show's, saved with it: it changes what the rig does.
@@ -173,15 +242,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     // Tab Label Mode Group
     QGroupBox *tabGroup = new QGroupBox(tr("Tab Bar"), this);
     QHBoxLayout *tabLayout = new QHBoxLayout(tabGroup);
-    tabLayout->addWidget(new QLabel(tr("Tab labels:"), tabGroup));
-    m_tabLabelModeCombo = new QComboBox(tabGroup);
-    m_tabLabelModeCombo->addItem(tr("Icons and text"), App::TabIconAndText);
-    m_tabLabelModeCombo->addItem(tr("Icons only"),     App::TabIconOnly);
-    m_tabLabelModeCombo->addItem(tr("Text only"),      App::TabTextOnly);
-    m_tabLabelModeCombo->setCurrentIndex(m_tabLabelModeCombo->findData(m_app->tabLabelMode()));
-    tabLayout->addWidget(m_tabLabelModeCombo);
     // Which tabs show (View ▸ Workspace): the show's, saved with it.
-    tabLayout->addSpacing(12);
     tabLayout->addWidget(new QLabel(tr("View (this show):"), tabGroup));
     m_workspaceViewCombo = new QComboBox(tabGroup);
     m_workspaceViewCombo->setObjectName(QStringLiteral("settingsWorkspaceView"));
@@ -481,7 +542,7 @@ AppSettings::~AppSettings()
 
 void AppSettings::showAdvanced()
 {
-    m_tabs->setCurrentIndex(1);
+    m_tabs->setCurrentWidget(m_advancedPage);
 }
 
 void AppSettings::focusRigNetworks()
@@ -584,9 +645,24 @@ void AppSettings::accept()
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());
     m_app->setAutosaveInterval(m_autosaveIntervalSpin->value());
 
-    // Apply tab label mode
+    // Appearance (this computer's)
     const int mode = m_tabLabelModeCombo->currentData().toInt();
-    m_app->setTabLabelMode(mode);
+    if (mode != m_app->tabLabelMode())
+        m_app->setTabLabelMode(mode);
+    const int theme = m_themeCombo->currentData().toInt();
+    if (theme != m_app->theme())
+        m_app->setTheme(theme);
+    for (auto it = m_footerChecks.constBegin(); it != m_footerChecks.constEnd(); ++it)
+        if (it.value()->isChecked() != m_app->footerChipShown(App::FooterChip(it.key())))
+            m_app->setFooterChipShown(App::FooterChip(it.key()), it.value()->isChecked());
+    const auto style = SpeedMasterButton::BeatStyle(m_beatStyleCombo->currentData().toInt());
+    const auto when = SpeedMastersFooter::BeatWhen(m_beatWhenCombo->currentData().toInt());
+    if (style != SpeedMastersFooter::beatStyle() || when != SpeedMastersFooter::beatWhen())
+    {
+        SpeedMastersFooter::setBeatStyle(style);
+        SpeedMastersFooter::setBeatWhen(when);
+        m_app->reloadFooterBeatOptions();
+    }
 
     // The show's view (marks the show modified only when it changes)
     m_app->setWorkspaceView(App::WorkspaceView(m_workspaceViewCombo->currentData().toInt()));

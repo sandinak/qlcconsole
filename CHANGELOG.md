@@ -185,6 +185,12 @@ circuits and subs.
 - **The boot window shows the version**, build and commit.
 - **The Lighting Studio plot draws a pixel fixture's heads where its LED
   layout puts them.**
+- **Settings ▸ Appearance.** Theme, toolbar style, the four footer chips
+  (engine load, power estimate, grand master, speed masters) and the speed
+  masters' beat moved out of the View menu into a new Appearance tab in
+  Settings, applied on OK. The same settings, so earlier choices carry
+  over. View now holds Workspace, Address Tool, Rig Overview and Focus
+  Mode.
 - **No outputs: preview only.** With nothing patched to any output, the
   footer's readiness chip reads *No outputs: preview only* in grey (with
   *· N to check* when something else is listed; a click opens Connections
