@@ -35,6 +35,7 @@
 #include <QTabBar>
 #include <QStackedWidget>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QMenu>
 #include <QAction>
 #include <QDialog>
@@ -354,24 +355,29 @@ QByteArray sends(Doc *doc, const QString &fixture, int n = 3)
 /* ---- Helpers for Lessons 1.2-1.5: each is what a student does with the
    mouse, and returns what the top right said while (or after) doing it. */
 
-/* Answers the next QInputDialog asking for a whole number (Level…). */
-void answerNextIntDialog(int value)
+/* The docked picker (Q61): ⋯ → Level… opened it in the Show Tree; type
+   @a value and Apply, as a student does. */
+bool pickDockedLevel(ShowTreeView *view, int value)
 {
-    QTimer *t = new QTimer();
-    t->setInterval(20);
-    QObject::connect(t, &QTimer::timeout, [t, value]() {
-        for (QWidget *w : QApplication::topLevelWidgets())
-            if (QInputDialog *d = qobject_cast<QInputDialog *>(w))
-                if (d->isVisible())
-                {
-                    d->setIntValue(value);
-                    d->accept();
-                    t->stop();
-                    t->deleteLater();
-                    return;
-                }
-    });
-    t->start();
+    QSpinBox *spin = view->findChild<QSpinBox *>(QStringLiteral("stPickerLevel"));
+    QPushButton *apply = view->findChild<QPushButton *>(QStringLiteral("stPickerApply"));
+    if (spin == nullptr || apply == nullptr || !view->dockedPickerOpen())
+        return false;
+    spin->setValue(value);
+    apply->click();
+    return !view->dockedPickerOpen();
+}
+
+/* The docked picker's colour (⋯ → Colour…): pick @a c and Apply. */
+bool pickDockedColour(ShowTreeView *view, const QColor &c)
+{
+    QColorDialog *picker = view->findChild<QColorDialog *>(QStringLiteral("stPickerColour"));
+    QPushButton *apply = view->findChild<QPushButton *>(QStringLiteral("stPickerApply"));
+    if (picker == nullptr || apply == nullptr || !view->dockedPickerOpen())
+        return false;
+    picker->setCurrentColor(c);
+    apply->click();
+    return !view->dockedPickerOpen();
 }
 
 QLabel *hintOf(ShowTreeView *view)
@@ -1168,8 +1174,10 @@ static bool lessonTwoByMouse(Doc *doc, ShowTreeView *view)
     LESSON_STEP(rowText(view, KeyColour).startsWith("Lavender"), rowText(view, KeyColour));
 
     // Step 4: Dimmer ⋯ → Level… 40.
-    answerNextIntDialog(40);
     LESSON_STEP(rowMenu(view, KeyDimmer, "Level…"), "Level…");
+    // It opens docked in the window, never behind it (Q61).
+    LESSON_STEP(view->dockedPickerOpen(), "the Level picker, docked");
+    LESSON_STEP(pickDockedLevel(view, 40), "Level 40, Apply");
     settle(50);
     qInfo().noquote() << "[L2] after Level:" << hint->text() << "|" << rowText(view, KeyDimmer);
     LESSON_STEP(rowText(view, KeyDimmer).startsWith("40%"), rowText(view, KeyDimmer));
@@ -1744,26 +1752,10 @@ void CourseShow_Test::lessonTwoColourPicker()
     QVERIFY(view->selectNode(cueNumbered(doc, "1.0.1")));
     settle(50);
     QVERIFY(clickCueRow(view, "StepTops"));
-    bool answered = false;
-    QTimer *t = new QTimer();
-    t->setInterval(20);
-    QObject::connect(t, &QTimer::timeout, [t, &answered]() {
-        for (QWidget *w : QApplication::topLevelWidgets())
-            if (QColorDialog *d = qobject_cast<QColorDialog *>(w))
-                if (d->isVisible())
-                {
-                    d->setCurrentColor(QColor(0x6a, 0x0d, 0xad));
-                    d->accept();
-                    answered = true;
-                    t->stop();
-                    t->deleteLater();
-                    return;
-                }
-    });
-    t->start();
     QVERIFY(rowMenu(view, KeyColour, "Colour…"));
+    QVERIFY(view->dockedPickerOpen());          // in the window (Q61)
+    QVERIFY(pickDockedColour(view, QColor(0x6a, 0x0d, 0xad)));
     settle(100);
-    QVERIFY(answered);
     qInfo().noquote() << "[L2] picked colour row:" << rowText(view, KeyColour);
     QVERIFY2(rowText(view, KeyColour).startsWith("#6a0dad"), qPrintable(rowText(view, KeyColour)));
     QVERIFY(stFind<QLabel>(view, QStringLiteral("stReuse:%1").arg(KeyColour)) != nullptr);
@@ -2576,8 +2568,8 @@ void CourseShow_Test::lessonPictures()
             QVERIFY(shoot(f, d, "layer-page"));
         }
         QVERIFY(rowMenu(v, KeyColour, "Set to", "Lavender"));
-        answerNextIntDialog(40);
         QVERIFY(rowMenu(v, KeyDimmer, "Level…"));
+        QVERIFY(pickDockedLevel(v, 40));
         settle(100);
         {
             HelpShots::Frame f = showTreeFrame(m_app, v);

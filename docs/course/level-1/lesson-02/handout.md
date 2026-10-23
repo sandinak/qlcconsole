@@ -87,8 +87,9 @@ Switch roles after each part.
    - *You should see:* the row reads **Lavender**, and the top bar
      reads **Changed: 1.0.1 Verse, 1.0.2 Chorus**. The chorus changed too,
      because StepTops tracks into it.
-6. On the **Dimmer** row, click **⋯ → Level…**. A small window asks for
-   the **Level (%)**; type **40** and click **OK**.
+6. On the **Dimmer** row, click **⋯ → Level…**. A strip opens at the
+   bottom of the Show Tree with a slider and a box; type **40** and click
+   **Apply** (or press Return).
    - *You should see:* the row reads **40% · 1.0.1 Verse StepTops**, with
      **Make reusable** beside it. 40% isn't one of our palettes, so it's
      stored as a **one-off** value on this layer. On stage, the risers are
@@ -146,7 +147,7 @@ Switch roles after each part.
 | Problem | Try |
 |---|---|
 | There are no ⋯ buttons | The ⋯ buttons are on the layer's page, so click the **StepTops** row on the cue's page first. |
-| The small Level window is behind the main window | Click the qlcconsole icon in the Dock, or press ⌘Tab. |
+| The Level strip is still open at the bottom | Click **Apply** to use the level, or **Cancel** (Esc) to leave the row as it was. |
 | Red went onto only one layer | It was dropped on a row. Undo (⌘Z) and drop it on the **dashed box**. |
 | The rows in Scream are still empty after the drop | Check that **1.0.3 Scream** is the cue selected in the tree. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |
@@ -154,7 +155,8 @@ Switch roles after each part.
 ## Done early? (Extension)
 
 1. **Any colour.** On the verse's StepTops **Colour** row, click
-   **⋯ → Colour…**, pick a colour in the colour window and click **OK**.
+   **⋯ → Colour…**, pick a colour in the strip that opens at the bottom of
+   the Show Tree and click **Apply**.
    The row shows its code, like **#6a0dad-ish**, with **Make reusable**.
    Is it better than Lavender? If not, undo it.
 2. **A puzzle.** Click **1.0.0 Pose** and drag **Green** onto its dashed

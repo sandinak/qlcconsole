@@ -335,6 +335,17 @@ public:
      *  away on its row. */
     bool setOneOffDimmer(quint32 cueId, quint32 layerId, int percent);
     bool setOneOffColour(quint32 cueId, quint32 layerId, const QColor &colour);
+    /** The docked picker (Q61): ⋯ → Level… and Colour… open in a strip
+     *  above the command line, inside the window (never a separate window
+     *  that can fall behind it). @a editor goes in the strip; Apply (or
+     *  Return) runs @a apply and closes it, Cancel (or Esc) just closes it.
+     *  One at a time: opening another replaces it. */
+    void openDockedPicker(const QString &title, QWidget *editor, QWidget *focus,
+                          const std::function<void()> &apply);
+    /** The docked picker's Apply / Cancel (tests and keys). */
+    void applyDockedPicker();
+    void closeDockedPicker();
+    bool dockedPickerOpen() const;
     /** The Library's Recent palettes, newest first. */
     QList<quint32> recentPalettes() const;
 
@@ -878,6 +889,11 @@ private:
 
     // Command line
     QWidget *m_commandBar = nullptr;
+    /** The docked picker strip (Q61), its body and what Apply runs. */
+    QWidget *m_picker = nullptr;
+    class QLabel *m_pickerTitle = nullptr;
+    class QHBoxLayout *m_pickerBody = nullptr;
+    std::function<void()> m_pickerApply;
     QLineEdit *m_command = nullptr;
     QLabel *m_commandMsg = nullptr;
     QTextBrowser *m_commandHelp = nullptr;

@@ -359,10 +359,10 @@ worked around in the course and checked by the course test.
 10. **The command line's last message carries over to the next show** (the
     bottom right still said *✓ TrussW-RGB colour White dimmer Full* after
     File → Open). Cosmetic.
-11. **Not checked: the Mac's own colour panel.** The course test drives
-    Qt's colour window for **⋯ → Colour…** (Lesson 1.2's extension); on a
-    Mac, Qt may show the system colour panel instead. A volunteer should
-    try it on the Mac (VOLUNTEER.md lists it).
+11. **Settled: the colour picker is docked.** **⋯ → Colour…** (Lesson
+    1.2's extension) and **⋯ → Level…** open in a strip at the bottom of the
+    Show Tree, never a separate window (board Q61), so the Mac's own colour
+    panel no longer comes into it.
 
 Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 (the SR tower's shelves were changed after the last build: now 1.0 /

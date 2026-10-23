@@ -78,7 +78,7 @@ On the projector, the class telling you what to click:
 2. On the **Colour** row, **⋯ → Set to → Lavender**. Read the note in the top bar
    aloud: *"Changed: 1.0.1 Verse, 1.0.2 Chorus"*. "Why did the chorus
    change? (*StepTops tracks into it.*)"
-3. On the **Dimmer** row, **⋯ → Level…**, type **40**, OK. The row says
+3. On the **Dimmer** row, **⋯ → Level…**, type **40**, Apply. The row says
    *40% · 1.0.1 Verse StepTops* and **Make reusable**: "40% isn't one of
    our palettes, so it's a **one-off**, just for this layer."
 4. **Undo** (⌘Z) and **Redo** (⇧⌘Z): "Nothing is permanent. Try things."
@@ -101,7 +101,7 @@ Stop there; the students do the rest, including the scream.
 | The palette went on the wrong layer | Dropped on a row instead of the dashed area (or the other way) | "Undo, and read the note in the top bar while you drag: it says where it goes." |
 | The Scream's rows have no colour after the drop | Red was dropped on the grey row of another layer | "Drop it on the **dashed area**, below the rows." |
 | "My chorus changed too!" | Tracking | "Good! StepTops carries on until a cue changes it." |
-| A dialog with a number | **Level…** | "Type 40 and click OK." |
+| A strip with a slider at the bottom | **Level…** | "Type 40 and click Apply." |
 
 ## 4. Check for understanding (while circulating)
 
@@ -148,6 +148,6 @@ or on paper.
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,
 `lessonsOneTwoToOneFourWithTheMouse` and `lessonTwoColourPicker`): the
-clicks on the rows, the ⋯ menus, the Level window, Make reusable, Undo and
+clicks on the rows, the ⋯ menus, the Level strip, Make reusable, Undo and
 Redo, the drops and the hint text, offscreen on the real app. The
 pictures are taken by the same test.

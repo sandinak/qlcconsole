@@ -20,6 +20,7 @@
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QFrame>
+#include <QSlider>
 #include <QDialog>
 #include <QApplication>
 #include <QRadioButton>
@@ -1065,6 +1066,46 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     QSplitter *split = new QSplitter(Qt::Horizontal, this);
     split->setObjectName("stSplitter");
     main->addWidget(split, 1);
+    {
+        /* The docked picker (Q61): Level… and Colour… open here, in the
+           window, above the command line. */
+        m_picker = new QFrame(this);
+        m_picker->setObjectName("stDockedPicker");
+        qobject_cast<QFrame *>(m_picker)->setFrameShape(QFrame::StyledPanel);
+        QHBoxLayout *row = new QHBoxLayout(m_picker);
+        row->setContentsMargins(8, 6, 8, 6);
+        m_pickerTitle = new QLabel(m_picker);
+        m_pickerTitle->setObjectName("stPickerTitle");
+        QFont bold = m_pickerTitle->font();
+        bold.setBold(true);
+        m_pickerTitle->setFont(bold);
+        row->addWidget(m_pickerTitle, 0, Qt::AlignTop);
+        m_pickerBody = new QHBoxLayout;
+        row->addLayout(m_pickerBody, 1);
+        QVBoxLayout *buttons = new QVBoxLayout;
+        QPushButton *apply = new QPushButton(tr("Apply"), m_picker);
+        apply->setObjectName("stPickerApply");
+        apply->setDefault(true);
+        QPushButton *cancel = new QPushButton(tr("Cancel"), m_picker);
+        cancel->setObjectName("stPickerCancel");
+        buttons->addWidget(apply);
+        buttons->addWidget(cancel);
+        buttons->addStretch(1);
+        row->addLayout(buttons);
+        connect(apply, &QPushButton::clicked, this, &ShowTreeView::applyDockedPicker);
+        connect(cancel, &QPushButton::clicked, this, &ShowTreeView::closeDockedPicker);
+        for (const QKeySequence &k : { QKeySequence(Qt::Key_Return), QKeySequence(Qt::Key_Enter) })
+        {
+            QShortcut *sc = new QShortcut(k, m_picker);
+            sc->setContext(Qt::WidgetWithChildrenShortcut);
+            connect(sc, &QShortcut::activated, this, &ShowTreeView::applyDockedPicker);
+        }
+        QShortcut *esc = new QShortcut(QKeySequence(Qt::Key_Escape), m_picker);
+        esc->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(esc, &QShortcut::activated, this, &ShowTreeView::closeDockedPicker);
+        m_picker->hide();
+        main->addWidget(m_picker);
+    }
     main->addWidget(m_commandBar);
     QSplitter *vsplit = new QSplitter(Qt::Vertical, split);
     vsplit->setObjectName("stVSplitter");
@@ -4265,28 +4306,48 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
     if (key == KeyDimmer)
     {
         menu.addAction(tr("Level…"), this, [this, cueId, layerId, target]() {
-            bool ok = false;
-            const int pc = QInputDialog::getInt(this, tr("Dimmer"), tr("Level (%)"), 100, 0, 100, 1, &ok);
-            if (!ok)
-                return;
-            const quint32 pid = valuePalette(cueId, layerId, target, QLCPalette::Dimmer,
-                                             { qBound(0, qRound(pc * 255.0 / 100.0), 255) },
-                                             tr("%1%").arg(pc));
-            if (pid != QLCPalette::invalidId())
-                applyLook(cueId, layerId, target, m_st->lookForPalette(pid));
+            QWidget *box = new QWidget;
+            QHBoxLayout *h = new QHBoxLayout(box);
+            h->setContentsMargins(0, 0, 0, 0);
+            QSlider *slider = new QSlider(Qt::Horizontal, box);
+            slider->setObjectName("stPickerLevelSlider");
+            slider->setRange(0, 100);
+            QSpinBox *spin = new QSpinBox(box);
+            spin->setObjectName("stPickerLevel");
+            spin->setRange(0, 100);
+            spin->setSuffix(QStringLiteral("%"));
+            connect(slider, &QSlider::valueChanged, spin, &QSpinBox::setValue);
+            connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), slider, &QSlider::setValue);
+            spin->setValue(100);
+            h->addWidget(slider, 1);
+            h->addWidget(spin);
+            openDockedPicker(tr("Dimmer level"), box, spin, [this, cueId, layerId, target, spin]() {
+                const int pc = spin->value();
+                const quint32 pid = valuePalette(cueId, layerId, target, QLCPalette::Dimmer,
+                                                 { qBound(0, qRound(pc * 255.0 / 100.0), 255) },
+                                                 tr("%1%").arg(pc));
+                if (pid != QLCPalette::invalidId())
+                    applyLook(cueId, layerId, target, m_st->lookForPalette(pid));
+            });
         });
     }
     else if (key == KeyColour)
     {
         menu.addAction(tr("Colour…"), this, [this, cueId, layerId, target]() {
-            const QColor c = QColorDialog::getColor(Qt::white, this, tr("Colour"));
-            if (!c.isValid())
-                return;
-            const quint32 pid = valuePalette(cueId, layerId, target, QLCPalette::Color,
-                                             { QLCPalette::colorToString(c, QColor(Qt::black)) },
-                                             tr("%1-ish").arg(c.name()));
-            if (pid != QLCPalette::invalidId())
-                applyLook(cueId, layerId, target, m_st->lookForPalette(pid));
+            QColorDialog *picker = new QColorDialog(Qt::white);
+            picker->setObjectName("stPickerColour");
+            picker->setWindowFlags(Qt::Widget);
+            picker->setOptions(QColorDialog::NoButtons | QColorDialog::DontUseNativeDialog);
+            openDockedPicker(tr("Colour"), picker, picker, [this, cueId, layerId, target, picker]() {
+                const QColor c = picker->currentColor();
+                if (!c.isValid())
+                    return;
+                const quint32 pid = valuePalette(cueId, layerId, target, QLCPalette::Color,
+                                                 { QLCPalette::colorToString(c, QColor(Qt::black)) },
+                                                 tr("%1-ish").arg(c.name()));
+                if (pid != QLCPalette::invalidId())
+                    applyLook(cueId, layerId, target, m_st->lookForPalette(pid));
+            });
         });
     }
     if (isEffectKey(key) && key != QLatin1String("Effect."))
@@ -5951,6 +6012,52 @@ bool ShowTreeView::setOneOffColour(quint32 cueId, quint32 layerId, const QColor 
                                       { QLCPalette::colorToString(colour, QColor(Qt::black)) },
                                       tr("%1-ish").arg(colour.name()));
     return pid != QLCPalette::invalidId() && applyLook(cueId, layerId, Target(), m_st->lookForPalette(pid));
+}
+
+void ShowTreeView::openDockedPicker(const QString &title, QWidget *editor, QWidget *focus,
+                                   const std::function<void()> &apply)
+{
+    closeDockedPicker();
+    m_pickerTitle->setText(title);
+    editor->setParent(m_picker);
+    m_pickerBody->addWidget(editor, 1);
+    m_pickerApply = apply;
+    m_picker->show();
+    editor->show();
+    if (focus != nullptr)
+        focus->setFocus(Qt::OtherFocusReason);
+}
+
+void ShowTreeView::applyDockedPicker()
+{
+    if (!dockedPickerOpen())
+        return;
+    const std::function<void()> apply = m_pickerApply;
+    closeDockedPicker();
+    if (apply)
+        apply();
+}
+
+void ShowTreeView::closeDockedPicker()
+{
+    m_pickerApply = nullptr;
+    while (QLayoutItem *item = m_pickerBody->takeAt(0))
+    {
+        if (QWidget *w = item->widget())
+        {
+            w->hide();
+            w->deleteLater();
+        }
+        delete item;
+    }
+    if (m_picker->isVisible() && m_tree != nullptr)
+        m_tree->setFocus(Qt::OtherFocusReason);
+    m_picker->hide();
+}
+
+bool ShowTreeView::dockedPickerOpen() const
+{
+    return m_picker != nullptr && !m_picker->isHidden();
 }
 
 bool ShowTreeView::setEffectOwn(quint32 cueId, quint32 layerId, const QString &key,

@@ -150,6 +150,10 @@ private slots:
     /** Q59: the command line's syntax folded away, shown on ? / F1 / the
      *  button, remembered. */
     void commandSyntaxFoldsAwayAndIsRemembered();
+    /** Q61: Level… / Colour… open docked in the window, not in a separate
+     *  window that can fall behind it: Return / Apply applies, Esc / Cancel
+     *  just closes, one at a time. */
+    void pickersDockInTheWindow();
     /** Q60: a typed time is kept when focus leaves its field -- a click on
      *  another cue, Tab, the page changing; Esc puts it back. */
     void typedTimesAreKeptWhenFocusLeaves();

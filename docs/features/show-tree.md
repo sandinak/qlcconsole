@@ -642,7 +642,10 @@ Each row shows its value, where it comes from, and four controls:
     that kind, the ones you used recently first.
   - **Update cue X**, for a tracked or included value: see
     [Changing a tracked value](#changing-a-tracked-value).
-  - **Level…** (Dimmer) or **Colour…** (Colour): a value you pick. See
+  - **Level…** (Dimmer) or **Colour…** (Colour): a value you pick, in a
+    strip that opens at the bottom of the Show Tree (inside the window,
+    never behind it). **Apply** or Return sets it; **Cancel** or Esc leaves
+    the row as it was. See
     [Values you pick or type](#values-you-pick-or-type).
   - **Its own colour / dimmer** (on an effect row): see
     [Effects](#effects).

@@ -220,8 +220,6 @@ Good first jobs for you:
 - Try the **Level 1 rubric** (in the Level 1 check) on a made-up group:
   is it fair and clear?
 - Draft the **Level 2** lessons from the plan, starting with 2.1.
-- Check the **Colour…** picker on the Mac (Lesson 1.2's extension): say
-  whether the steps match what you see.
 
 ## 9. Who to ask
 

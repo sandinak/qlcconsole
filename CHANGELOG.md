@@ -165,6 +165,13 @@ circuits and subs.
 
 ### Changed
 
+- **Level… and Colour… are docked** in the Show Tree (board Q61): they open
+  in a strip above the command line, inside the window, instead of a
+  separate window that could fall behind the main one. Apply / Return sets
+  the value, Cancel / Esc leaves it.
+- **Help pictures never show this machine's network**: help-shots.sh loads
+  only the Loopback plugin (new QLC_IOPLUGIN_DIR override).
+
 - **"Classic" means stock QLC+ only.** Build ▸ Scenes has no Classic
   arrangement any more (the Folders | Classic switch is gone; Scenes lists
   your scene folders). **Window ▸ Functions** opens the stock Functions tab,

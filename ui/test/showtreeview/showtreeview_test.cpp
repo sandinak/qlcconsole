@@ -60,6 +60,8 @@
 #include "chasereditor.h"
 #include "noteedit.h"
 #include <QInputDialog>
+#include <QPointer>
+#include <QSpinBox>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QBuffer>
@@ -6845,3 +6847,55 @@ void ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves()
 }
 
 QTEST_MAIN(ShowTreeView_Test)
+
+void ShowTreeView_Test::pickersDockInTheWindow()
+{
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QWidget *strip = view.findChild<QWidget *>("stDockedPicker");
+    QVERIFY(strip != nullptr);
+    QVERIFY(!view.dockedPickerOpen());
+
+    // Return applies; the editor lives inside the view, not a window.
+    int applied = 0;
+    QSpinBox *spin = new QSpinBox;
+    view.openDockedPicker(QStringLiteral("Dimmer level"), spin, spin, [&applied]() { ++applied; });
+    QVERIFY(view.dockedPickerOpen());
+    QVERIFY(strip->isVisible());
+    QVERIFY(!spin->isWindow());
+    QCOMPARE(spin->window(), static_cast<QWidget *>(&view));
+    QCOMPARE(view.findChild<QLabel *>("stPickerTitle")->text(), QString("Dimmer level"));
+    QTRY_VERIFY(spin->hasFocus());
+    QTest::keyClick(spin, Qt::Key_Return);
+    QCOMPARE(applied, 1);
+    QVERIFY(!view.dockedPickerOpen());
+
+    // Esc just closes.
+    QSpinBox *spin2 = new QSpinBox;
+    view.openDockedPicker(QStringLiteral("Dimmer level"), spin2, spin2, [&applied]() { ++applied; });
+    QTRY_VERIFY(spin2->hasFocus());
+    QTest::keyClick(spin2, Qt::Key_Escape);
+    QCOMPARE(applied, 1);
+    QVERIFY(!view.dockedPickerOpen());
+
+    // One at a time: a second replaces the first; Cancel applies nothing.
+    QSpinBox *first = new QSpinBox;
+    view.openDockedPicker(QStringLiteral("One"), first, first, [&applied]() { applied += 10; });
+    QPointer<QSpinBox> gone(first);
+    QSpinBox *second = new QSpinBox;
+    view.openDockedPicker(QStringLiteral("Two"), second, second, [&applied]() { applied += 100; });
+    QTRY_VERIFY(gone.isNull());
+    view.findChild<QPushButton *>("stPickerCancel")->click();
+    QCOMPARE(applied, 1);
+    QVERIFY(!view.dockedPickerOpen());
+
+    // Apply runs the newest only.
+    QSpinBox *third = new QSpinBox;
+    view.openDockedPicker(QStringLiteral("Three"), third, third, [&applied]() { applied += 1000; });
+    view.findChild<QPushButton *>("stPickerApply")->click();
+    QCOMPARE(applied, 1001);
+}
