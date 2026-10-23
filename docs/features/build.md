@@ -41,7 +41,7 @@ QLC+ plays it.
    where it is used, what fires it, what is on the rig.
 4. **Its layers** — what is loaded, one row per layer
    ([The Workbench](#the-workbench)).
-5. **+ Scene, + EFX, + RGB Matrix**, ▲ ▼, **Remove**, **▣ Open**.
+5. **+ Scene, + Effect ▾** (EFX or RGB Matrix), ▲ ▼, **Remove**, **▣ Open**.
 6. **The editor pane** — what the selected row edits; here, the Look Editor.
 7. **Groups &amp; fixtures** — under every section, to drag onto a layer.
 
@@ -159,7 +159,7 @@ selected again. Loading something from the navigator starts afresh.
 - **+ Scene** adds scenes (or any function) from the show, picked in a list,
   after the selected layer; its menu's **New empty scene** makes one, filed
   with the collection.
-- **+ EFX** / **+ RGB Matrix** make a **new** one on the selected layer's
+- **+ Effect ▾** → **EFX** or **RGB Matrix** makes a **new** one on the selected layer's
   groups — an EFX on its heads, an RGB Matrix on its first group — add it
   after that layer and open it in the editor pane. With no layer selected,
   it goes at the end, on nothing yet.
@@ -222,7 +222,7 @@ editor lists it, one step at a time, each step opened up. Under the header:
   move the step, **Remove step** takes it out (its function stays).
 
 Under the walker are **the step's layers**. A collection step works exactly
-like a collection loaded on its own: + Scene, + EFX, + RGB Matrix, ⌫, ▲ ▼,
+like a collection loaded on its own: + Scene, + Effect ▾, ⌫, ▲ ▼,
 drag scenes in, a scene layer opened up into its looks. What you change is
 the collection itself, so the chaser plays it at that step. The step you
 are on plays on the rig (Design mode); walk to another and that plays
@@ -252,7 +252,7 @@ puts it back. See
   append them as steps.
 - **Scenes into collections with EFX and RGB Matrix, run.** Load a
   collection (or walk to a chaser step that plays one) and add layers with
-  + Scene / + EFX / + RGB Matrix. The chaser of collections plays as QLC+
+  + Scene / + Effect ▾. The chaser of collections plays as QLC+
   plays it; nothing is converted.
 
 **Live preview.** In Design mode what is loaded plays — a collection with
@@ -539,8 +539,8 @@ and Bundles stay here.
    row there (⌥ copies it).
 9. Gathering scenes into a collection? **+ Scene ▸ New collection** over the
    outline, then drag scenes onto its layers — or load one you have, and add
-   an EFX or RGB Matrix on a layer's groups with **+ EFX** / **+ RGB
-   Matrix** ([The Workbench](#the-workbench)).
+   an EFX or RGB Matrix on a layer's groups with **+ Effect ▾**
+   ([The Workbench](#the-workbench)).
 10. Save the workspace normally (⌘S).
 
 If some of a scene's targets are still in the inventory (not patched), the

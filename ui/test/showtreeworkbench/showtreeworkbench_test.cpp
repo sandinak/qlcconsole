@@ -797,7 +797,7 @@ void ShowTreeWorkbench_Test::opaqueLayersAndAddNew()
     QVERIFY(bench->selectRow(row(ProgrammingOutline::CueLayerRow, 0xFFFFFFFF, quint32(towers))));
     QVERIFY(bench->m_addEfxBtn->isEnabled());
     const int before = m_doc->functions().size();
-    bench->m_addEfxBtn->click();
+    bench->m_addEfxBtn->trigger();
     QCOMPARE(st->cue(s.c2)->layers.size(), 3);
     const quint32 efxId = st->cue(s.c2)->layers.last().target.function;
     EFX *efx = qobject_cast<EFX *>(m_doc->function(efxId));

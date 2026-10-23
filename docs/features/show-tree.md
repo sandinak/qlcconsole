@@ -148,8 +148,8 @@ the tree and the Workbench follows it.
   Right-click a value for the tree's menu (set, clear, off, Level…);
   **⌫** on a value clears it, so it inherits again. Right-click a layer for
   Solo, Release, Remove. **+ Scene** plays scenes (or any function) from
-  the show as layers; **+ EFX** / **+ RGB Matrix** make a new one on the
-  selected layer's fixtures. **▲ ▼** and **Remove** work on the cue's own
+  the show as layers; **+ Effect ▾** → **EFX** or **RGB Matrix** makes a
+  new one on the selected layer's fixtures. **▲ ▼** and **Remove** work on the cue's own
   layers.
 - **Carried-in rows are read-only.** They aren't removed, moved or
   cleared here: they belong to the cue they come from. Setting a value on

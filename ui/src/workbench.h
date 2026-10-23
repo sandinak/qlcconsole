@@ -322,8 +322,11 @@ private:
     ProgrammingOutline *m_rows = nullptr;
     QLabel *m_rowsHint = nullptr;
     QToolButton *m_addSceneBtn = nullptr;
-    QPushButton *m_addEfxBtn = nullptr;
-    QPushButton *m_addMatrixBtn = nullptr;
+    /** + Effect ▾ (Q94): one button for the QLC+ effects, as Build ▸
+     *  Effects' + New ▾; its EFX and RGB Matrix are these actions. */
+    QToolButton *m_addEffectBtn = nullptr;
+    QAction *m_addEfxBtn = nullptr;
+    QAction *m_addMatrixBtn = nullptr;
     QToolButton *m_upBtn = nullptr;
     QToolButton *m_downBtn = nullptr;
     QToolButton *m_removeBtn = nullptr;

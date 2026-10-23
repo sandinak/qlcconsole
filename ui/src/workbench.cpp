@@ -403,14 +403,21 @@ void Workbench::buildAddBar(QWidget *column)
     connect(m_addSceneBtn, &QToolButton::clicked, this, &Workbench::addExisting);
     hl->addWidget(m_addSceneBtn);
 
-    m_addEfxBtn = new QPushButton(tr("+ EFX"), bar);
+    // One + Effect ▾ for the QLC+ effects, as Build ▸ Effects' + New ▾ (Q94).
+    m_addEffectBtn = new QToolButton(bar);
+    m_addEffectBtn->setObjectName(QStringLiteral("workbenchAddEffect"));
+    m_addEffectBtn->setText(tr("+ Effect"));
+    m_addEffectBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *effectMenu = new QMenu(m_addEffectBtn);
+    effectMenu->setToolTipsVisible(true);
+    m_addEfxBtn = effectMenu->addAction(QIcon(QStringLiteral(":/efx.png")), tr("EFX"));
     m_addEfxBtn->setObjectName(QStringLiteral("workbenchAddEfx"));
-    connect(m_addEfxBtn, &QPushButton::clicked, this, [this]() { addNew(Function::EFXType); });
-    hl->addWidget(m_addEfxBtn);
-    m_addMatrixBtn = new QPushButton(tr("+ RGB Matrix"), bar);
+    connect(m_addEfxBtn, &QAction::triggered, this, [this]() { addNew(Function::EFXType); });
+    m_addMatrixBtn = effectMenu->addAction(QIcon(QStringLiteral(":/rgbmatrix.png")), tr("RGB Matrix"));
     m_addMatrixBtn->setObjectName(QStringLiteral("workbenchAddMatrix"));
-    connect(m_addMatrixBtn, &QPushButton::clicked, this, [this]() { addNew(Function::RGBMatrixType); });
-    hl->addWidget(m_addMatrixBtn);
+    connect(m_addMatrixBtn, &QAction::triggered, this, [this]() { addNew(Function::RGBMatrixType); });
+    m_addEffectBtn->setMenu(effectMenu);
+    hl->addWidget(m_addEffectBtn);
     hl->addStretch(1);
 
     auto tool = [bar, hl](const QString &text, const QString &name, const QString &tip) {
@@ -989,6 +996,8 @@ void Workbench::updateAddBar()
 
     m_addSceneBtn->setEnabled(add);
     m_addSceneBtn->setToolTip(add ? tr("Add a scene from the show as a layer (the menu: a new empty one)") : why);
+    m_addEffectBtn->setEnabled(add);
+    m_addEffectBtn->setToolTip(add ? tr("A new EFX or RGB Matrix, added as a layer") : why);
     m_addEfxBtn->setEnabled(add);
     m_addEfxBtn->setToolTip(!add ? why
                             : hasGroups ? tr("A new EFX on the selected layer's fixtures, added after it")
