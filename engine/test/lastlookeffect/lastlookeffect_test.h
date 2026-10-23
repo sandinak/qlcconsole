@@ -32,6 +32,7 @@ private slots:
     void cleanup();
 
     void holdAssertsForceLTP();
+    void holdSurvivesTheUniverseFrame();
     void clearReleases();
     void emptyHoldIsInactive();
     void releaseFixtureYieldsOnlyThatFixture();
