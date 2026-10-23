@@ -27,9 +27,8 @@ their house lights, relays and subs.
   [The Workbench](build.md#the-workbench).
 - **Every scene in one tree.** Build ▸ Scenes is an outline of folders,
   scenes, collections and chasers, each scene opening into its targets and
-  looks. Drag a row to another scene to move it (⌥ copies). **Scenes ▸
-  Classic** lists the show by function type, as QLC+'s Function Manager
-  does. See [The outline](build.md#the-outline).
+  looks. Drag a row to another scene to move it (⌥ copies). Every function by
+  type is the stock Functions tab. See [The outline](build.md#the-outline).
 - **Walk a chaser.** A chaser loads step by step: **◀ ▶**, the step's
   fades, hold, cue number and note edited in place, the step table above
   its layers. **Chaser from selection** makes a chaser of the scenes you

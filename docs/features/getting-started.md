@@ -128,10 +128,10 @@ Connections is ⇧⌘1, the Show Tree ⇧⌘5 and Run ⇧⌘9, in Classic QLC+
 Fixtures is ⇧⌘1. The tabs the view hides are listed after them, with no
 shortcut. Shift-click
 a tab to break it out into its own window; Window brings it back.
-**Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
-scripts, audio, video) is in Build too: **Window ▸ Functions** opens Functions in a view that shows it as a tab, and **Build ▸ Scenes ▸
-Classic** in the qlcconsole view — every function by type, each one
-edited in the Workbench. **View ▸ Rig Overview** (⇧⌘R) opens the whole rig
+**Functions** (QLC+'s Function Manager — chasers, EFX, RGB matrices,
+scripts, audio, video) is the stock tab in the Classic QLC+ and Everything
+views; **Window ▸ Functions** opens it, switching view from qlcconsole.
+Build edits any of them in the Workbench. **View ▸ Rig Overview** (⇧⌘R) opens the whole rig
 in 3D.
 
 **Design and Operate.** In **Design** mode (the default) you build: the
