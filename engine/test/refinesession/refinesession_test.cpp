@@ -172,16 +172,14 @@ void RefineSession_Test::refusesWhatItCannotRefine()
     QVERIFY(!r->start(empty, 0xFFFFFFFF, &why));
     QVERIFY(why.contains("layer"));
 
-    m_doc->setMode(Doc::Operate);
-    QVERIFY(!r->start(m_cue, 0xFFFFFFFF, &why));
-    m_doc->setMode(Doc::Design);
     QVERIFY(r->start(m_cue));
     QVERIFY(r->isActive());
     QCOMPARE(st->previewedCue(), m_cue);
-    // Into Operate, it ends.
+    // Into Operate it carries on (Q112a).
     m_doc->setMode(Doc::Operate);
-    QVERIFY(!r->isActive());
+    QVERIFY(r->isActive());
     m_doc->setMode(Doc::Design);
+    r->stop();
 }
 
 void RefineSession_Test::degreesFromDmx()
@@ -428,6 +426,12 @@ void RefineSession_Test::anAimedLayerAsksForAFixture()
 
 void RefineSession_Test::theOperatorIsToldWhereTheyAre()
 {
+    // The layer at 80%: the rest of it dims below that.
+    QLCPalette *bright = new QLCPalette(QLCPalette::Dimmer);
+    bright->setName("80");
+    bright->setValue(204);
+    m_doc->addPalette(bright);
+    QVERIFY(m_doc->showTree()->setLayerLook(m_cue, m_layer, lookOf(KeyDimmer, { bright->id() })));
     RefineSession *r = m_doc->programmer()->refineSession();
     QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
     QVERIFY(r->start(m_cue));
@@ -488,6 +492,141 @@ void RefineSession_Test::oneToolOwnsTheController()
     float pan = 0.0f, tilt = 0.0f;
     QVERIFY(r->pendingPosition(m_spots.first(), pan, tilt));
     QVERIFY(pan > 272.0f);
+    r->stop();
+}
+
+void RefineSession_Test::operateHoldsWhatIsKept()
+{
+    ShowTreeController *st = m_doc->showTree();
+    m_doc->setMode(Doc::Operate);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QString why;
+    QVERIFY2(r->start(m_cue, invalidId(), &why), qPrintable(why));
+    // The show runs on: Refine does not preview the cue in Operate.
+    QVERIFY(st->previewedCue() != m_cue);
+    QVERIFY(r->nudgePosition(4.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(said.last().at(0).toString(), QString("Kept. It plays from the next GO."));
+    QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
+             QVariantList({ 274, 135 }));
+    // Held on the rig until the next GO plays it.
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(!r->hasPending());
+    QVERIFY(sentDegrees(m_doc, r->pendingWrites(), m_spots.at(2), pan, tilt));
+    QVERIFY(qAbs(pan - 274.0f) < 0.05f);
+    // Back in Design the cue is previewed with it, and nothing is held.
+    m_doc->setMode(Doc::Design);
+    QVERIFY(r->isActive());
+    QCOMPARE(st->previewedCue(), m_cue);
+    QVERIFY(r->pendingWrites().isEmpty());
+    r->stop();
+}
+
+void RefineSession_Test::dimsOnlyWhatIsBrighter()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QLCPalette *bright = new QLCPalette(QLCPalette::Dimmer);
+    bright->setName("80");
+    bright->setValue(204);
+    m_doc->addPalette(bright);
+    QLCPalette *low = new QLCPalette(QLCPalette::Dimmer);
+    low->setName("5");
+    low->setValue(13);
+    m_doc->addPalette(low);
+    QVERIFY(st->setLayerLook(m_cue, m_layer, lookOf(KeyDimmer, { bright->id() })));
+    // Spot 1 has its own, low level.
+    Target one;
+    one.fixtures << m_spots.at(0);
+    const quint32 child = st->addChildLayer(m_cue, m_layer, one);
+    QVERIFY(child != invalidId());
+    QVERIFY(st->setLayerLook(m_cue, child, lookOf(KeyDimmer, { low->id() })));
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    r->nextItem();
+    QCOMPARE(r->currentFixture(), m_spots.at(2));
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    const int dim = qRound(RefineSession::dimLevel() * 255.0f);
+    auto dimmer = [this](int i) {
+        return qMakePair(0, int(m_doc->fixture(m_spots.at(i))->address()) + 4);
+    };
+    // Brighter than the dim level: down to it.
+    QCOMPARE(int(w.value(dimmer(1))), dim);
+    QCOMPARE(int(w.value(dimmer(3))), dim);
+    // Below it already: never raised.
+    QVERIFY(!w.contains(dimmer(0)));
+    // The one picked: as the cue has it.
+    QVERIFY(!w.contains(dimmer(2)));
+    r->stop();
+}
+
+void RefineSession_Test::groupScopeKeepsTheFan()
+{
+    ShowTreeController *st = m_doc->showTree();
+    // Two groups on the layer: AT left (spots 1, 2), AT right (spots 3, 4).
+    FixtureGroup *left = new FixtureGroup(m_doc);
+    left->setName("AT left");
+    left->setSize(QSize(2, 1));
+    left->assignFixture(m_spots.at(0), QLCPoint(0, 0));
+    left->assignFixture(m_spots.at(1), QLCPoint(1, 0));
+    m_doc->addFixtureGroup(left);
+    FixtureGroup *right = new FixtureGroup(m_doc);
+    right->setName("AT right");
+    right->setSize(QSize(2, 1));
+    right->assignFixture(m_spots.at(2), QLCPoint(0, 0));
+    right->assignFixture(m_spots.at(3), QLCPoint(1, 0));
+    m_doc->addFixtureGroup(right);
+    Target both;
+    both.groups << left->id() << right->id();
+    QVERIFY(st->setLayerTarget(m_cue, m_layer, both));
+    // A fan inside AT left: spot 1 already points elsewhere.
+    Target one;
+    one.fixtures << m_spots.at(0);
+    const quint32 own = st->addChildLayer(m_cue, m_layer, one);
+    const quint32 pos = st->createInlinePalette(QLCPalette::PanTilt, { 250, 135 }, "Own");
+    QVERIFY(st->setLayerLook(m_cue, own, lookOf(KeyPosition, { pos })));
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->cycleScope();
+    QCOMPARE(r->scope(), RefineSession::GroupScope);
+    QCOMPARE(r->scopeFixtures(), QList<quint32>({ m_spots.at(0), m_spots.at(1) }));
+    QVERIFY(r->nudgePosition(5.0f, 0.0f));
+    // Each from its own position: the fan is kept.
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(r->pendingPosition(m_spots.at(0), pan, tilt));
+    QCOMPARE(pan, 255.0f);
+    QVERIFY(r->pendingPosition(m_spots.at(1), pan, tilt));
+    QCOMPARE(pan, 275.0f);
+    QVERIFY(!r->pendingPosition(m_spots.at(2), pan, tilt));
+
+    QVERIFY(r->keep());
+    auto positionOf = [&](quint32 fid) {
+        Target t;
+        t.fixtures << fid;
+        for (const Layer &l : st->cue(m_cue)->layers)
+            if (l.parent == m_layer && l.target == t && l.look(KeyPosition) != nullptr)
+                return m_doc->palette(l.look(KeyPosition)->palettes.first())->values().first().toInt();
+        return -1;
+    };
+    QCOMPARE(positionOf(m_spots.at(0)), 255);
+    QCOMPARE(positionOf(m_spots.at(1)), 275);
+    QCOMPARE(positionOf(m_spots.at(2)), -1);
+    // No group-wide position was made.
+    Target leftT;
+    leftT.groups << left->id();
+    for (const Layer &l : st->cue(m_cue)->layers)
+        QVERIFY(!(l.target == leftT && l.look(KeyPosition) != nullptr));
+    // The layer's own look is as it was.
+    QCOMPARE(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes, QList<quint32>({ m_position }));
+
+    // X at group scope: the group's position exceptions go.
+    QVERIFY(r->clearException());
+    QCOMPARE(positionOf(m_spots.at(0)), -1);
+    QCOMPARE(positionOf(m_spots.at(1)), -1);
     r->stop();
 }
 

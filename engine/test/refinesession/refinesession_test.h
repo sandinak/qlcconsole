@@ -54,6 +54,15 @@ private slots:
     void theOperatorIsToldWhereTheyAre();
     /** The verbs by role; starting Refine ends Focus mode and back. */
     void oneToolOwnsTheController();
+    /** Q112a: in Operate the show runs on; what is kept is held on the rig
+     *  until the next GO, and back in Design the preview shows it. */
+    void operateHoldsWhatIsKept();
+    /** Q112b: the rest of the layer is dimmed only where the cue has it
+     *  brighter than the dim level -- never raised. */
+    void dimsOnlyWhatIsBrighter();
+    /** Q112c: a group's position moves each fixture from its own, kept on
+     *  each fixture, so a fan inside the group stays a fan. */
+    void groupScopeKeepsTheFan();
 
 private:
     Doc *m_doc = nullptr;

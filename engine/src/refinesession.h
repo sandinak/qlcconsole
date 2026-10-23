@@ -31,8 +31,9 @@
 #include "showtreemodel.h"
 #include "outputlayer.h"
 
+#include "scenevalue.h"
+
 class QLCPalette;
-class SceneValue;
 class Fixture;
 class QTimer;
 class Doc;
@@ -63,8 +64,14 @@ class Doc;
  *    the value as its own look. The parent lights the rest; X takes the
  *    exception off again.
  *
- * Design mode only in this first version (the cue is the Show Tree's
- * preview, so a kept edit is seen at once); Operate is an open question.
+ * In Design the cue is the Show Tree's preview, so a kept edit is seen at
+ * once. In Operate (board Q112a) the show runs on; a kept edit is held on
+ * the rig until Refine ends, and plays from the cue's next GO.
+ *
+ * At Group scope a position is an offset from each fixture's own (Q112c):
+ * it is kept on each fixture, so a fan inside the group stays a fan.
+ * Out-of-scope fixtures of the layer are dimmed only where the cue has
+ * them brighter than the dim level (Q112b).
  */
 class QLC_ENGINE_EXPORT RefineSession final : public QObject
 {
@@ -235,6 +242,9 @@ private:
     QString targetName(const ShowTree::Target &t) const;
     QList<SceneValue> previewValues(const Edit &e) const;
     void rebuildWrites();
+    /** The intensity the cue gives @p fid's @p channel (its Dimmer look,
+     *  else the output as it was before Refine dimmed it), 0..255. */
+    int cueLevel(quint32 fid, quint32 channel);
     void onFlashTick();
     void say(const QString &text) { emit announce(text); }
 
@@ -250,6 +260,9 @@ private:
     Page m_page = BeamPage;
     QHash<QString, Edit> m_edits;
     QList<QString> m_editOrder;
+    /** Kept in Operate: held on the rig until the next GO plays it. */
+    QList<SceneValue> m_kept;
+    QHash<QPair<quint32, quint32>, int> m_levelCache;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };
     float m_deadzone = 0.05f;

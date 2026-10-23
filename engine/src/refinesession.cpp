@@ -67,10 +67,19 @@ RefineSession::RefineSession(Doc *doc, QObject *parent)
     m_flashTimer = new QTimer(this);
     m_flashTimer->setInterval(30);
     connect(m_flashTimer, &QTimer::timeout, this, &RefineSession::onFlashTick);
+    /* Board Q112a: Refine works in Operate too. Back in Design the cue is
+       previewed again and shows what was kept; nothing need be held. */
     if (m_doc != nullptr)
         connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
-            if (mode == Doc::Operate)
-                stop();
+            if (!m_active)
+                return;
+            m_levelCache.clear();
+            if (mode == Doc::Design)
+            {
+                m_kept.clear();
+                m_doc->showTree()->previewCue(m_cue);
+            }
+            rebuildWrites();
         });
 }
 
@@ -92,9 +101,6 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
     if (st == nullptr || st->cue(cueId) == nullptr)
         return refuse(tr("Choose a cue to refine."));
-    if (m_doc->mode() == Doc::Operate)
-        return refuse(tr("Refine works in Design mode for now: switch out of Operate first."));
-
     QList<quint32> layers;
     for (const ShowTree::Layer &l : st->cue(cueId)->layers)
         if (l.parent == kInvalid && !l.target.isOpaque() && !st->targetFixtures(l.target).isEmpty())
@@ -113,8 +119,11 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     m_edits.clear();
     m_editOrder.clear();
     m_active = true;
-    // The cue up, as the Show Tree previews it: a kept edit is seen at once.
-    if (st->previewedCue() != cueId)
+    m_kept.clear();
+    m_levelCache.clear();
+    /* In Design, the cue up as the Show Tree previews it: a kept edit is
+       seen at once. In Operate the show is running and stays as it is. */
+    if (m_doc->mode() != Doc::Operate && st->previewedCue() != cueId)
         st->previewCue(cueId);
     rebuildWrites();
     emit started();
@@ -133,6 +142,8 @@ void RefineSession::stop()
     m_edits.clear();
     m_editOrder.clear();
     m_layers.clear();
+    m_kept.clear();
+    m_levelCache.clear();
     m_layerIndex = -1;
     m_cue = kInvalid;
     for (int s = 0; s < 2; ++s)
@@ -192,6 +203,7 @@ void RefineSession::setLayerIndex(int index)
     const int n = m_layers.size();
     m_layerIndex = ((index % n) + n) % n;
     m_groupIndex = m_fixtureIndex = 0;
+    m_levelCache.clear();
     // A new layer starts as a whole: the layer is what a trigger steps to.
     m_scope = LayerScope;
     rebuildWrites();
@@ -538,6 +550,15 @@ bool RefineSession::nudgePosition(float dPan, float dTilt)
         e.pan += dPan;
         e.tilt += dTilt;
     }
+    else if (m_scope == GroupScope)
+    {
+        /* Board Q112c: a group keeps its fan. The nudge is an offset from
+           each fixture's own position, not one position for all. */
+        Edit &e = edit();
+        e.hasPos = true;
+        e.pan += dPan;
+        e.tilt += dTilt;
+    }
     else
     {
         Edit &e = edit();
@@ -664,7 +685,7 @@ bool RefineSession::pendingPosition(quint32 fid, float &pan, float &tilt) const
         const Edit &e = m_edits[k];
         if (!e.hasPos || !e.fixtures.contains(fid))
             continue;
-        if (e.scope == LayerScope)
+        if (e.scope != FixtureScope)
         {
             float p = 0.0f, t = 0.0f;
             if (!cuePosition(fid, p, t))
@@ -717,12 +738,56 @@ bool RefineSession::keep(QString *why)
         return int(m_edits[a].scope) < int(m_edits[b].scope);
     });
 
+    /* A group's positions, each fixture's own plus the nudge: read before
+       anything in the cue changes. */
+    QHash<QString, QList<QPair<quint32, QPair<float, float>>>> groupPositions;
+    for (const QString &k : order)
+    {
+        const Edit &e = m_edits[k];
+        if (e.scope != GroupScope || !e.hasPos)
+            continue;
+        for (quint32 fid : e.fixtures)
+        {
+            float p = 0.0f, t = 0.0f;
+            if (cuePosition(fid, p, t))
+                groupPositions[k] << qMakePair(fid, qMakePair(p + e.pan, t + e.tilt));
+        }
+    }
+    // In Operate, what is kept lands on the next GO: hold it on the rig.
+    if (m_doc->mode() == Doc::Operate)
+        for (const QString &k : order)
+            m_kept << previewValues(m_edits[k]);
+
     st->beginBatch(tr("Refine"));
     bool ok = true;
     for (const QString &k : order)
     {
         const Edit e = m_edits.value(k);
         quint32 onLayer = e.layer;
+        // A group's positions: an exception on each fixture, its fan kept.
+        for (const auto &fp : groupPositions.value(k))
+        {
+            ShowTree::Target one;
+            one.fixtures << fp.first;
+            const ShowTree::Layer *child = childOn(e.layer, one);
+            const quint32 cid = child != nullptr ? child->id : st->addChildLayer(m_cue, e.layer, one, why);
+            if (cid == kInvalid)
+            {
+                ok = false;
+                break;
+            }
+            ShowTree::Look look;
+            look.key = ShowTree::KeyPosition;
+            look.palettes << st->createInlinePalette(QLCPalette::PanTilt,
+                                                     { qRound(fp.second.first), qRound(fp.second.second) },
+                                                     tr("Refined position"));
+            ok = ok && st->setLayerLook(m_cue, cid, look);
+        }
+        if (!ok)
+            break;
+        const bool rest = e.hasZoom || e.hasFocus || e.colour != kInvalid || e.gobo != kInvalid;
+        if (e.scope == GroupScope && !rest)
+            continue;
         if (e.scope != LayerScope)
         {
             const ShowTree::Layer *child = childOn(e.layer, e.target);
@@ -733,7 +798,7 @@ bool RefineSession::keep(QString *why)
                 break;
             }
         }
-        if (e.hasPos)
+        if (e.hasPos && e.scope != GroupScope)
         {
             ShowTree::Look look;
             look.key = ShowTree::KeyPosition;
@@ -823,6 +888,7 @@ bool RefineSession::keep(QString *why)
     st->endBatch(ok);
     if (!ok)
     {
+        m_kept.clear();
         if (why != nullptr && why->isEmpty())
             *why = tr("The Show Tree did not take the change.");
         say(tr("Not kept."));
@@ -830,9 +896,10 @@ bool RefineSession::keep(QString *why)
     }
     m_edits.clear();
     m_editOrder.clear();
+    m_levelCache.clear();
     rebuildWrites();
     emit changed();
-    say(tr("Kept."));
+    say(m_doc->mode() == Doc::Operate ? tr("Kept. It plays from the next GO.") : tr("Kept."));
     return true;
 }
 
@@ -860,13 +927,43 @@ bool RefineSession::clearException()
     const QString key = editKey();
     if (m_edits.remove(key) > 0)
         m_editOrder.removeAll(key);
+    // A group's positions are kept on each of its fixtures (Q112c).
+    QList<quint32> fixtureChildren;
+    if (m_scope == GroupScope && m_page == BeamPage)
+        for (quint32 fid : scopeFixtures())
+        {
+            ShowTree::Target one;
+            one.fixtures << fid;
+            if (const ShowTree::Layer *fc = childOn(currentLayer(), one))
+                if (fc->look(ShowTree::KeyPosition) != nullptr)
+                    fixtureChildren << fc->id;
+        }
     const ShowTree::Layer *child = childOn(currentLayer(), scopeTarget());
-    if (child == nullptr)
+    if (child == nullptr && fixtureChildren.isEmpty())
     {
         rebuildWrites();
         emit changed();
         say(tr("No exception here."));
         return false;
+    }
+    if (child == nullptr)
+    {
+        ShowTreeController *st = m_doc->showTree();
+        st->beginBatch(tr("Refine: clear exception"));
+        for (quint32 id : fixtureChildren)
+        {
+            ShowTree::Look empty;
+            empty.key = ShowTree::KeyPosition;
+            st->setLayerLook(m_cue, id, empty);
+            const ShowTree::Layer *fc = layer(id);
+            if (fc != nullptr && fc->looks.isEmpty())
+                st->removeLayer(m_cue, id);
+        }
+        st->endBatch(true);
+        rebuildWrites();
+        emit changed();
+        say(tr("Exception cleared."));
+        return true;
     }
     const quint32 childId = child->id;
     QStringList keys;
@@ -887,6 +984,15 @@ bool RefineSession::clearException()
     child = layer(childId);
     if (child != nullptr && child->looks.isEmpty())
         st->removeLayer(m_cue, childId);
+    for (quint32 id : fixtureChildren)
+    {
+        ShowTree::Look empty;
+        empty.key = ShowTree::KeyPosition;
+        st->setLayerLook(m_cue, id, empty);
+        const ShowTree::Layer *fc = layer(id);
+        if (fc != nullptr && fc->looks.isEmpty())
+            st->removeLayer(m_cue, id);
+    }
     st->endBatch(true);
     rebuildWrites();
     emit changed();
@@ -1080,7 +1186,7 @@ QList<SceneValue> RefineSession::previewValues(const Edit &e) const
                         own = true;
             float pan = e.pan, tilt = e.tilt;
             bool have = !own;
-            if (have && e.scope == LayerScope)
+            if (have && e.scope != FixtureScope)
             {
                 float p0 = 0.0f, t0 = 0.0f;
                 have = cuePosition(fid, p0, t0);
@@ -1111,6 +1217,37 @@ QList<SceneValue> RefineSession::previewValues(const Edit &e) const
     return out;
 }
 
+int RefineSession::cueLevel(quint32 fid, quint32 channel)
+{
+    const QPair<quint32, quint32> key(fid, channel);
+    const auto cached = m_levelCache.constFind(key);
+    if (cached != m_levelCache.constEnd())
+        return cached.value();
+    int level = -1;
+    // What the cue's Dimmer look gives it...
+    QList<quint32> lit;
+    if (const ShowTree::Look *look = lookFor(fid, ShowTree::KeyDimmer, &lit))
+        for (quint32 pid : look->palettes)
+            if (QLCPalette *p = m_doc->palette(pid))
+                for (const SceneValue &sv : p->valuesFromFixtures(m_doc, lit))
+                    if (sv.fxi == fid && sv.channel == channel)
+                        level = sv.value;
+    // ...else what it is at now (before anything here dims it: cached).
+    if (level < 0)
+    {
+        level = 0;
+        Fixture *fx = m_doc->fixture(fid);
+        QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+        const int u = fx != nullptr ? int(fx->universe()) : -1;
+        if (u >= 0 && u < unis.size() && unis.at(u) != nullptr
+                && int(fx->address() + channel) < UNIVERSE_SIZE)
+            level = unis.at(u)->preGMValue(int(fx->address() + channel));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+    m_levelCache.insert(key, level);
+    return level;
+}
+
 void RefineSession::rebuildWrites()
 {
     QHash<QPair<int, int>, uchar> writes;
@@ -1121,6 +1258,10 @@ void RefineSession::rebuildWrites()
             if (addr < UNIVERSE_SIZE)
                 writes.insert(qMakePair(int(fx->universe()), addr), value);
         };
+        // What was kept in Operate, until the next GO plays it.
+        for (const SceneValue &sv : m_kept)
+            if (Fixture *fx = m_doc->fixture(sv.fxi))
+                put(fx, sv.channel, sv.value);
         // The pending values, the most specific last.
         QList<QString> order = m_editOrder;
         std::stable_sort(order.begin(), order.end(), [this](const QString &a, const QString &b) {
@@ -1146,11 +1287,17 @@ void RefineSession::rebuildWrites()
                 continue;   // as the cue has it
             if (!picked && m_scope == LayerScope)
                 continue;
-            const uchar level = picked ? 0 : uchar(qRound(dimLevel() * 255.0f));
+            const uchar dim = uchar(qRound(dimLevel() * 255.0f));
             for (quint32 c = 0; c < fx->channels(); ++c)
                 if (const QLCChannel *ch = fx->fixtureMode()->channel(c))
                     if (ch->group() == QLCChannel::Intensity && ch->colour() == QLCChannel::NoColour)
-                        put(fx, c, level);
+                    {
+                        if (picked)
+                            put(fx, c, 0);
+                        // Board Q112b: down to the dim level, never up to it.
+                        else if (cueLevel(fid, c) > dim)
+                            put(fx, c, dim);
+                    }
         }
     }
     QList<OutputLayer::Level> levels;

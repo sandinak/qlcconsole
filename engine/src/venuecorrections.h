@@ -23,6 +23,7 @@
 #include <QDateTime>
 #include <QObject>
 #include <QString>
+#include <QSet>
 #include <QList>
 #include <QMap>
 
@@ -153,6 +154,13 @@ public:
     /** The doc was cleared: forget everything without touching the rig. */
     void reset();
 
+    /** Fixtures whose calibration is moving under a tool that records it
+     *  itself on a save (Focus mode's heads while it runs): a live,
+     *  unsaved nudge is not a correction. Any other change to a fixture's
+     *  calibration while a venue is applied -- the fixture dialog, say --
+     *  is recorded into the venue at once (board Q111). */
+    void setHeld(const QList<quint32> &fids);
+
 signals:
     void activeVenueChanged(const QString &name);
     void venuesChanged();
@@ -162,12 +170,15 @@ private:
     void apply();
     void unapply();
     void writeRig(quint32 fid, const RigCalibration &c);
+    void onRigPropsChanged(quint32 fid);
 
 private:
     Doc *m_doc;
     QString m_showFile;
     QList<Venue> m_venues;
     QString m_active;
+    bool m_writing = false;
+    QSet<quint32> m_held;
 };
 
 /** @} */

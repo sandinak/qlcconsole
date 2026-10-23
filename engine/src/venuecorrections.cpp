@@ -46,6 +46,35 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
     : QObject(parent)
     , m_doc(doc)
 {
+    /* Board Q111: with a venue applied, a calibration changed anywhere --
+       the fixture dialog, the Lighting Studio -- is that venue's, and goes
+       into its file, not the show's. */
+    if (m_doc != nullptr && m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged,
+                this, &VenueCorrections::onRigPropsChanged);
+    // A fixture added while a venue is applied: its calibration is held too.
+    if (m_doc != nullptr)
+        connect(m_doc, &Doc::fixtureAdded, this, [this](quint32 fid) {
+            if (isActive())
+                ensureBase(fid);
+        });
+}
+
+void VenueCorrections::onRigPropsChanged(quint32 fid)
+{
+    if (!isActive() || m_writing || m_held.contains(fid) || m_doc->fixture(fid) == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    const RigCalibration now = RigCalibration::of(props->fixtureRigProps(fid));
+    const RigCalibration was = hasCorrection(fid) ? correction(fid) : baseOf(fid);
+    if (now == was)
+        return;     // something else about the fixture: its place, its mount
+    record(fid);
+}
+
+void VenueCorrections::setHeld(const QList<quint32> &fids)
+{
+    m_held = QSet<quint32>(fids.begin(), fids.end());
 }
 
 VenueCorrections::~VenueCorrections()
@@ -358,7 +387,11 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
     if (RigCalibration::of(rp) == c)
         return;
     c.applyTo(rp);
+    // Its own writes are not edits to record.
+    const bool was = m_writing;
+    m_writing = true;
     props->setFixtureRigProps(fid, rp);
+    m_writing = was;
 }
 
 void VenueCorrections::ensureBase(quint32 fid)
