@@ -76,6 +76,9 @@ private slots:
      *  where it landed along it, not only the one over it. */
     void aGroupDroppedOnATrussAllHang();
     void theStageStaysCentredWithFixturesOffIt();
+    /** "can't c/p stage features": scenery, towers, booms and stands copy
+     *  and paste, one undo step. */
+    void stageFeaturesCopyAndPaste();
     void dropOffTrussDetachesAndStays();
     /** Bound, dragged a little off the bar (inside the two-widths zone):
      *  stays bound, keeps the sideways offset, and stays where dropped. */

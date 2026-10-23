@@ -176,6 +176,9 @@ circuits and subs.
 - **Connections opens where you'd look for it**: in Classic QLC+ on its
   **Universes** sub-tab (QLC+'s own Inputs/Outputs page, was "Detailed"),
   in the other views on **Devices**.
+- **Copy and paste scenery, towers, booms and stands** in the Lighting
+  Studio, as trusses, decks and targets already did: everything they have
+  (a wall's door too), offset and named "… copy"; one undo.
 - **Paste a truss without its fixtures**: the paste's question has
   **Truss only**.
 - **A quieter footer** (board Q88, Q89, Q98): the Engine Load chip is off

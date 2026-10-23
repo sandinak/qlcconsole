@@ -1014,6 +1014,48 @@ void Monitor_Test::theStageStaysCentredWithFixturesOffIt()
                             .arg(grid.x()).arg(grid.y())));
 }
 
+void Monitor_Test::stageFeaturesCopyAndPaste()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(35000, 20000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Scenery *wall = props->addScenery();
+    wall->setKind(Scenery::Wall);
+    wall->setName("Side wall");
+    wall->setOriginX(2.0f);
+    wall->setOriginY(3.0f);
+    wall->setDoorWidth(1.0f);
+    Tower *tw = props->addTower();
+    tw->setName("Tower A");
+    tw->setOriginX(5.0f);
+    tw->setOriginY(5.0f);
+    rig.gv->updatePlatforms();
+    const int sceneries = props->sceneries().size(), towers = props->towers().size();
+    rig.gv->scene()->clearSelection();
+    QVERIFY(rig.gv->m_sceneryItems.contains(wall->id()) && rig.gv->m_towerItems.contains(tw->id()));
+    rig.gv->m_sceneryItems.value(wall->id())->setSelected(true);
+    rig.gv->m_towerItems.value(tw->id())->setSelected(true);
+    rig.mon->slotCopySelected();
+    QVERIFY(rig.mon->clipboardHasFeatures());
+    QVERIFY(rig.mon->pasteClipboard(1.0f, 0.5f));
+    QCOMPARE(props->sceneries().size(), sceneries + 1);
+    QCOMPARE(props->towers().size(), towers + 1);
+    Scenery *copy = nullptr;
+    for (Scenery *sc : props->sceneries())
+        if (sc->name() == QLatin1String("Side wall copy"))
+            copy = sc;
+    QVERIFY(copy != nullptr && copy->id() != wall->id());
+    QCOMPARE(copy->kind(), int(Scenery::Wall));
+    QVERIFY(copy->hasDoor());                           // everything it has, the door too
+    QVERIFY(qAbs(copy->originX() - 3.0f) < 0.01f && qAbs(copy->originY() - 3.5f) < 0.01f);
+    // One Ctrl+Z takes them away again.
+    rig.mon->undo();
+    QCOMPARE(props->sceneries().size(), sceneries);
+    QCOMPARE(props->towers().size(), towers);
+    props->removeScenery(wall->id());
+    props->removeTower(tw->id());
+}
+
 void Monitor_Test::dropOnTrussAttachesAndStays()
 {
     DropRig rig;

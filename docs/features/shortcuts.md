@@ -45,7 +45,7 @@ Shift-click off, if it gets in the way.
 | ⇧-drag on empty canvas | Pan |
 | ⇧-scroll | Zoom, centred on the pointer |
 | ⌘A | Select all |
-| ⌘C / ⌘V | Copy / paste trusses, decks and targets; a truss brings its fixtures as new copies, and the paste asks: **Patch at next free addresses** (after the originals), **Leave unpatched** (**Patch Others Like This** addresses them later) or **Cancel**. The status line says what happened |
+| ⌘C / ⌘V | Copy / paste trusses, decks, targets, scenery, towers, booms and stands; a truss brings its fixtures as new copies, and the paste asks: **Patch at next free addresses** (after the originals), **Leave unpatched** (**Patch Others Like This** addresses them later), **Truss only** or **Cancel**. The status line says what happened |
 | ⌘Z | Undo the last move, paste or edit |
 | ] / [ | Turn the selection 15° clockwise / anticlockwise |
 | } / { | Turn it 1° |

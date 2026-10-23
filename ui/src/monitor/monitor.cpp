@@ -124,6 +124,7 @@
 #include "pipeitem.h"
 #include "standitem.h"
 #include "toweritem.h"
+#include "sceneryitem.h"
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
 #include "rigeditsession.h"
@@ -3027,7 +3028,8 @@ bool Monitor::clipboardHasFeatures() const
 {
     return !m_trussClipboard.isEmpty()
         || !m_platformClipboard.isEmpty()
-        || !m_targetClipboard.isEmpty();
+        || !m_targetClipboard.isEmpty()
+        || !m_structureClipboard.isEmpty();
 }
 
 void Monitor::slotCopySelected()
@@ -3036,9 +3038,48 @@ void Monitor::slotCopySelected()
     QList<quint32>      trussIds;   // parallel to trusses
     QList<PlatformClip> platforms;
     QList<TargetClip>   targets;
+    QList<StructureClip> structures;
+    /* Their own XML, minus the id (the paste gets a new one) and the group
+       (a copy is its own object). */
+    auto clipOf = [](StructureClip::Kind kind, const std::function<void(QXmlStreamWriter *)> &save) {
+        StructureClip c;
+        c.kind = kind;
+        QXmlStreamWriter w(&c.xml);
+        save(&w);
+        static const QRegularExpression drop(QStringLiteral(" (ID|GroupId)=\"[^\"]*\""));
+        const int end = c.xml.indexOf('>');
+        QString head = QString::fromUtf8(c.xml.left(end));
+        head.remove(drop);
+        c.xml = head.toUtf8() + c.xml.mid(end);
+        return c;
+    };
 
     foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
     {
+        if (SceneryItem *si = dynamic_cast<SceneryItem *>(gi))
+        {
+            if (Scenery *sc = m_props->scenery(si->sceneryId()))
+                structures << clipOf(StructureClip::SceneryKind, [sc](QXmlStreamWriter *w) { sc->saveXML(w); });
+            continue;
+        }
+        if (TowerItem *twi = dynamic_cast<TowerItem *>(gi))
+        {
+            if (Tower *tw = m_props->tower(twi->towerId()))
+                structures << clipOf(StructureClip::TowerKind, [tw](QXmlStreamWriter *w) { tw->saveXML(w); });
+            continue;
+        }
+        if (PipeItem *pii = dynamic_cast<PipeItem *>(gi))
+        {
+            if (Pipe *pp = m_props->pipe(pii->pipeId()))
+                structures << clipOf(StructureClip::PipeKind, [pp](QXmlStreamWriter *w) { pp->saveXML(w); });
+            continue;
+        }
+        if (StandItem *sti = dynamic_cast<StandItem *>(gi))
+        {
+            if (Stand *st = m_props->stand(sti->standId()))
+                structures << clipOf(StructureClip::StandKind, [st](QXmlStreamWriter *w) { st->saveXML(w); });
+            continue;
+        }
         if (TrussItem *ti = dynamic_cast<TrussItem *>(gi))
         {
             Truss *t = ti->truss();
@@ -3074,7 +3115,7 @@ void Monitor::slotCopySelected()
         }
     }
 
-    if (trusses.isEmpty() && platforms.isEmpty() && targets.isEmpty())
+    if (trusses.isEmpty() && platforms.isEmpty() && targets.isEmpty() && structures.isEmpty())
         return;   // nothing copyable selected: keep any previous clipboard
 
     /* A truss comes with what hangs on it (shortcuts.md: structures copy
@@ -3106,6 +3147,7 @@ void Monitor::slotCopySelected()
     m_fixtureClipboard  = fixtures;
     m_platformClipboard = platforms;
     m_targetClipboard   = targets;
+    m_structureClipboard = structures;
     m_pasteCount        = 0;
 
     if (m_pasteAction)
@@ -3257,10 +3299,37 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
     }
 
     m_graphicsView->updateTrusses();
+    /* Scenery, towers, booms and stands: each a new object loaded from the
+       copy, offset and named like the rest, on the active layer. One undo
+       step of its own (the rig as it was before them). */
+    const QByteArray structuresBefore = m_structureClipboard.isEmpty() ? QByteArray() : rigSnapshot();
+    foreach (const StructureClip &c, m_structureClipboard)
+    {
+        QXmlStreamReader r(c.xml);
+        if (!r.readNextStartElement())
+            continue;
+        auto place = [&](auto *obj) {
+            obj->loadXML(r);
+            obj->setName(obj->name() + tr(" copy"));
+            obj->setOriginX(obj->originX() + dxM);
+            obj->setOriginY(obj->originY() + dyM);
+            obj->setLayerId(m_props->activeLayerId());
+        };
+        switch (c.kind)
+        {
+            case StructureClip::SceneryKind: place(m_props->addScenery()); break;
+            case StructureClip::TowerKind:   place(m_props->addTower());   break;
+            case StructureClip::PipeKind:    place(m_props->addPipe());    break;
+            case StructureClip::StandKind:   place(m_props->addStand());   break;
+        }
+    }
+
     m_graphicsView->updatePlatforms();
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();   // show the copies in the tree
     m_doc->setModified();
+    if (!structuresBefore.isEmpty())
+        pushRigUndo(structuresBefore);
 
     /* Patched before the undo entry is made: the entry deletes the pasted
        fixtures, patch and all, so one Ctrl+Z still takes the whole paste. */
@@ -7772,7 +7841,7 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                        this, SLOT(slotRemoveSelected()));
     }
     // Duplicate = copy the current selection and paste it offset by ~0.5 m, in
-    // one step. Works for trusses / platforms / targets.
+    // one step. Works for everything copy does (slotCopySelected()).
     if (!m_graphicsView->scene()->selectedItems().isEmpty())
     {
         menu.addAction(QIcon(":/editcopy.png"), tr("Duplicate selected"),

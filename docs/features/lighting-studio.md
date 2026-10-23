@@ -605,7 +605,8 @@ of, and doesn't override, the real locks above.
   scenery, targets, nodes, fixtures — and a deck brings its fixtures back
   with it), or everything one dialog did when you pressed OK.
 - **Copy and paste** (Ctrl/⌘+C, Ctrl/⌘+V; **Duplicate selected**, **Paste
-  features here**) — trusses, decks and targets. A truss brings the
+  features here**) — trusses, decks, targets, scenery (walls, drapes, the
+  cyc), towers, booms and stands. A truss brings the
   fixtures hung on it as new copies, and the paste asks what they get:
   **Patch at next free addresses** (after the originals, in their universe;
   when that universe has no room the rest go on into the next, and any

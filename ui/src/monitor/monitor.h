@@ -729,6 +729,14 @@ private:
     QList<FixtureClip>  m_fixtureClipboard;
     QList<PlatformClip> m_platformClipboard;
     QList<TargetClip>   m_targetClipboard;
+    /** Scenery, towers, booms and stands: kept as their own XML, without
+     *  their id and group, so a paste is a copy of everything they have. */
+    struct StructureClip
+    {
+        enum Kind { SceneryKind, TowerKind, PipeKind, StandKind } kind;
+        QByteArray xml;
+    };
+    QList<StructureClip> m_structureClipboard;
     /** How many times the current clipboard has been pasted; each paste
      *  cascades a little further so repeats don't stack exactly. Reset on copy. */
     int                 m_pasteCount = 0;
