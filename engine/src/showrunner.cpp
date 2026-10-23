@@ -55,8 +55,11 @@ static bool compareShowFunctions(const ShowFunction *sf1, const ShowFunction *sf
 }
 
 /** Map a track's role to a fader priority. Background yields to everything (a
- *  base wash the VC/other tracks beat); Override wins LTP (an accent); Normal
- *  is Auto (symmetric last-writer-wins, the default). */
+ *  base wash the VC/other tracks beat); Override wins every channel it plays,
+ *  intensity too -- a scene at Universe::Override writes its channels with
+ *  FadeChannel::Override (Scene::overrideWanted), so a lower level on it pulls
+ *  a light below a Normal track; Park, Focus, Flash and Highlight still beat
+ *  it. Normal is Auto (symmetric last-writer-wins, the default). */
 static int trackFadePriority(Track *track)
 {
     if (track == NULL)

@@ -267,7 +267,10 @@ bool Show::addTrack(Track *track, quint32 id)
      track->setShowId(this->id());
      m_tracks[id] = track;
 
-     registerAttribute(QString("%1-%2").arg(track->name()).arg(track->id()));
+     // The track's intensity attribute starts at its submaster (a loaded or
+     // copied track keeps its level): one value, see setTrackIntensity().
+     registerAttribute(QString("%1-%2").arg(track->name()).arg(track->id()),
+                       Multiply, 0.0, 1.0, track->intensity());
 
      return true;
 }
@@ -361,6 +364,16 @@ void Show::moveTrack(Track *track, int direction)
     m_tracks[trkID] = swapTrack;
     track->setId(swapID);
     swapTrack->setId(trkID);
+
+    // A track's attribute goes by its place: keep each one on its track's level.
+    int i = 0;
+    const int attrCount = attributes().count();
+    foreach (Track *t, m_tracks)
+    {
+        if (i >= attrCount)
+            break;
+        Function::adjustAttribute(t->intensity(), i++);
+    }
 }
 
 QList <Track*> Show::tracks() const
@@ -375,9 +388,33 @@ void Show::setTrackIntensity(quint32 trackId, qreal fraction)
     if (track == NULL)
         return;
     track->setIntensity(fraction);
+
+    /* One source of truth: the track's attribute follows its fader (and
+       adjustAttribute() on the attribute moves the fader), so whichever was
+       set last is what preRun() starts the track at. A Virtual Console
+       override on the attribute still multiplies on top. */
+    const int idx = trackAttributeIndex(track);
+    qreal level = track->intensity();
+    if (idx >= 0)
+    {
+        Function::adjustAttribute(track->intensity(), idx);
+        level = getAttributeValue(idx);
+    }
+
     QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)
-        m_runner->adjustIntensity(fraction, track); // live scale while running
+        m_runner->adjustIntensity(level, track); // live scale while running
+}
+
+int Show::trackAttributeIndex(Track *track) const
+{
+    // The index preRun() and adjustAttribute() use: the track's place in
+    // m_tracks, if there is an attribute for it.
+    QMutexLocker locker(&m_tracksMutex);
+    const int idx = m_tracks.values().indexOf(track);
+    if (idx < 0 || idx >= attributes().count())
+        return -1;
+    return idx;
 }
 
 quint32 Show::createTrackId()
@@ -594,10 +631,18 @@ void Show::preRun(MasterTimer* timer)
         }
         m_runner = new ShowRunner(doc(), this->id(), elapsed());
     }
+    // Each track starts at its submaster (Track::intensity(), which its
+    // attribute mirrors), or at what a Virtual Console override on that
+    // attribute makes of it.
     int i = 0;
     QMutexLocker locker(&m_tracksMutex);
+    const QList<Attribute> attrs = attributes();
     foreach (Track *track, m_tracks)
-        m_runner->adjustIntensity(getAttributeValue(i++), track);
+    {
+        const bool overridden = i < attrs.count() && attrs.at(i).m_isOverridden;
+        m_runner->adjustIntensity(overridden ? getAttributeValue(i) : track->intensity(), track);
+        i++;
+    }
 
     m_runner->setTimecodeFollow(m_timecodeFollow);
 
@@ -756,6 +801,15 @@ void Show::slotChildStopped(quint32 fid)
 int Show::adjustAttribute(qreal fraction, int attributeId)
 {
     int attrIndex = Function::adjustAttribute(fraction, attributeId);
+
+    // The attribute's own value (not a Virtual Console override, whose ids
+    // start well past any track's index) is the track's submaster: move it.
+    if (attrIndex >= 0 && attrIndex == attributeId)
+    {
+        QList<Track*> trkList = tracks();   // locked snapshot
+        if (attrIndex < trkList.count() && trkList.at(attrIndex) != NULL)
+            trkList.at(attrIndex)->setIntensity(attributes().at(attrIndex).m_value);
+    }
 
     QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)

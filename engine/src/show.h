@@ -160,10 +160,16 @@ public:
     QList <Track*> tracks() const;
 
     /** Set a track's intensity submaster (0..1) and, if the show is running,
-     *  apply it live to that track's output. Persists on the Track. */
+     *  apply it live to that track's output. Persists on the Track, and the
+     *  track's attribute follows it: Track::intensity() is the one value
+     *  (adjustAttribute() on the attribute sets it too), so the level set
+     *  last, before Start or during the show, is what plays. */
     void setTrackIntensity(quint32 trackId, qreal fraction);
 
 private:
+    /** The attribute index of @a track (its place in m_tracks), or -1 */
+    int trackAttributeIndex(Track *track) const;
+
     /** Create a new track ID */
     quint32 createTrackId();
 

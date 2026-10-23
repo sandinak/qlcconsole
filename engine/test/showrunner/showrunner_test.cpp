@@ -31,6 +31,7 @@
 #include "inputoutputmap.h"
 #include "functionparent.h"
 #include "lastlookeffect.h"
+#include "parkeffect.h"
 #include "fixture.h"
 #include "show.h"
 #include "track.h"
@@ -367,13 +368,95 @@ void ShowRunner_Test::anOverrideTrackWinsAndABackgroundTrackYields()
         rig.track(rig.scene(rig.dims[0], 200), 0, 2000);
         rig.start();
         rig.playTo(200);
-        QEXPECT_FAIL("", "BUG: an Override track does not win an HTP (intensity) channel -- "
-                         "the fader priority only orders writers, and intensity is still "
-                         "blended highest-takes-precedence, so a Normal track at a higher "
-                         "level beats it (docs/features/shows.md says Override: this track wins)",
-                     Continue);
         QCOMPARE(rig.at(0), 100);
     }
+}
+
+void ShowRunner_Test::anOverrideTrackPullsADimmerBelowANormalTrack()
+{
+    Rig rig(this);
+    // The Normal track at full, added (and so started) after the Override one.
+    Track *over = rig.track(rig.scene(rig.dims[0], 60), 0, 2000);
+    over->setPriority(Track::Override);
+    rig.track(rig.scene(rig.dims[0], 255), 0, 2000);
+    rig.track(rig.scene(rig.dims[1], 255), 0, 2000);    // a channel it doesn't touch
+    rig.start();
+    rig.playTo(200);
+    QCOMPARE(rig.at(0), 60);
+    QCOMPARE(rig.at(1), 255);
+
+    // Its intensity submaster scales it below that, still winning.
+    rig.show->setTrackIntensity(over->id(), 0.5);
+    rig.tick(3);
+    QVERIFY2(qAbs(rig.at(0) - 30) <= 1, qPrintable(QString("half of 60 is %1").arg(rig.at(0))));
+
+    // The Grand Master still applies to it.
+    rig.show->setTrackIntensity(over->id(), 1.0);
+    rig.doc->inputOutputMap()->setGrandMasterValue(127);
+    rig.tick(3);
+    QCOMPARE(rig.at(0), 60);
+    {
+        QList<Universe *> ua = rig.doc->inputOutputMap()->claimUniverses();
+        const int post = uchar(ua.first()->postGMValues()->at(0));
+        rig.doc->inputOutputMap()->releaseUniverses(false);
+        QVERIFY2(qAbs(post - 30) <= 1, qPrintable(QString("60 at half GM is %1").arg(post)));
+    }
+    rig.doc->inputOutputMap()->setGrandMasterValue(255);
+}
+
+void ShowRunner_Test::aParkBeatsAnOverrideTrack()
+{
+    Rig rig(this);
+    Track *over = rig.track(rig.scene(rig.dims[0], 60), 0, 2000);
+    over->setPriority(Track::Override);
+    rig.track(rig.scene(rig.dims[0], 255), 0, 2000);
+    rig.start();
+    rig.playTo(200);
+    QCOMPARE(rig.at(0), 60);
+
+    {
+        ParkEffect park(rig.doc);
+        park.parkFixture(rig.dims[0], { { 0, 150 } });
+        rig.tick(2);
+        QCOMPARE(rig.at(0), 150);           // parked: over the Override track
+        park.unparkFixture(rig.dims[0]);
+        rig.tick(2);
+        QCOMPARE(rig.at(0), 60);            // unparked: the Override track again
+    }
+}
+
+void ShowRunner_Test::theNormalTrackReturnsWhenTheOverrideItemEnds()
+{
+    Rig rig(this);
+    Track *over = rig.track(rig.scene(rig.dims[0], 60), 0, 600);
+    over->setPriority(Track::Override);
+    rig.track(rig.scene(rig.dims[0], 200), 0, 2000);
+    Track *back = rig.track(rig.scene(rig.dims[1], 220), 0, 2000);
+    back->setPriority(Track::Background);
+    Track *overBack = rig.track(rig.scene(rig.dims[1], 40), 0, 600);
+    overBack->setPriority(Track::Override);
+    rig.start();
+    rig.playTo(300);
+    QCOMPARE(rig.at(0), 60);                // the Override item, over Normal
+    QCOMPARE(rig.at(1), 40);                // ...and over Background
+
+    rig.playTo(600);                        // past the Override items' end
+    QCOMPARE(rig.at(0), 200);               // the Normal track's level is back
+    QCOMPARE(rig.at(1), 220);               // and the Background's
+
+    // The show stopped with an Override track running: nothing is left over.
+    Rig rig2(this);
+    Track *o2 = rig2.track(rig2.scene(rig2.dims[0], 60), 0, 2000);
+    o2->setPriority(Track::Override);
+    Scene *normal = rig2.scene(rig2.dims[0], 200);
+    rig2.start();
+    rig2.playTo(200);
+    QCOMPARE(rig2.at(0), 60);
+    rig2.show->stop(FunctionParent::master());
+    normal->start(rig2.doc->masterTimer(), FunctionParent::master());
+    rig2.tick(5);
+    QCOMPARE(rig2.at(0), 200);              // a plain cue: no Override stuck to it
+    QCOMPARE(normal->fadePriority(), int(Universe::Auto));
 }
 
 void ShowRunner_Test::aTrackAtHalfIntensityPlaysAtHalf()
@@ -387,11 +470,6 @@ void ShowRunner_Test::aTrackAtHalfIntensityPlaysAtHalf()
     rig.start();
     rig.playTo(200);
     QCOMPARE(rig.at(1), 200);                   // the other track: untouched
-    QEXPECT_FAIL("", "BUG: a track's intensity submaster set before the show starts is lost -- "
-                     "Show::preRun() queues adjustIntensity(getAttributeValue(i)) for every "
-                     "track, and those attributes stay 1.0 (Show::setTrackIntensity() never "
-                     "updates them), so ShowRunner starts the track at full, not Track::intensity()",
-                 Continue);
     QVERIFY2(qAbs(rig.at(0) - 100) <= 2, qPrintable(QString("half of 200 is %1").arg(rig.at(0))));
 
     // Moved while it plays: the submaster scales it at once.
@@ -402,6 +480,63 @@ void ShowRunner_Test::aTrackAtHalfIntensityPlaysAtHalf()
     rig.tick(3);
     QVERIFY2(qAbs(rig.at(0) - 100) <= 2, qPrintable(QString("half of 200 is %1").arg(rig.at(0))));
     QCOMPARE(rig.at(1), 200);
+}
+
+void ShowRunner_Test::theTrackFaderAndItsAttributeAreOneValue()
+{
+    Rig rig(this);
+    Track *a = rig.track(rig.scene(rig.dims[0], 200), 0, 2000);
+    Track *b = rig.track(rig.scene(rig.dims[1], 200), 0, 2000);
+    const int ia = rig.show->tracks().indexOf(a);
+    const int ib = rig.show->tracks().indexOf(b);
+
+    // The fader moves the attribute...
+    rig.show->setTrackIntensity(a->id(), 0.5);
+    QCOMPARE(rig.show->getAttributeValue(ia), 0.5);
+    // ...and the attribute moves the fader; the last one set wins.
+    rig.show->adjustAttribute(0.25, ia);
+    QCOMPARE(a->intensity(), 0.25);
+    rig.show->setTrackIntensity(b->id(), 0.75);
+    rig.show->adjustAttribute(0.5, ib);
+    QCOMPARE(b->intensity(), 0.5);
+
+    rig.start();
+    rig.playTo(200);
+    QVERIFY2(qAbs(rig.at(0) - 50) <= 2, qPrintable(QString("a quarter of 200 is %1").arg(rig.at(0))));
+    QVERIFY2(qAbs(rig.at(1) - 100) <= 2, qPrintable(QString("half of 200 is %1").arg(rig.at(1))));
+}
+
+void ShowRunner_Test::aTrackIntensityIsSavedAndPlaysAfterLoad()
+{
+    Rig rig(this);
+    Track *half = rig.track(rig.scene(rig.dims[0], 200), 0, 2000);
+    rig.show->setTrackIntensity(half->id(), 0.5);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(rig.show->saveXML(&xmlWriter));
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    // Loaded into a fresh show on the same rig (the scene is still there).
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    Show *loaded = new Show(rig.doc);
+    QVERIFY(loaded->loadXML(xmlReader));
+    rig.doc->deleteFunction(rig.show->id());
+    rig.show = loaded;
+    rig.doc->addFunction(loaded);
+
+    QCOMPARE(loaded->tracks().count(), 1);
+    Track *t = loaded->tracks().first();
+    QCOMPARE(t->intensity(), 0.5);
+    QCOMPARE(loaded->getAttributeValue(0), 0.5);
+
+    rig.start();
+    rig.playTo(200);
+    QVERIFY2(qAbs(rig.at(0) - 100) <= 2, qPrintable(QString("half of 200 is %1").arg(rig.at(0))));
 }
 
 void ShowRunner_Test::theShowStopsAtItsConfiguredEnd()

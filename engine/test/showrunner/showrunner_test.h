@@ -49,9 +49,22 @@ private slots:
     /** Priority: an Override track wins a channel over a Normal one that
      *  started after it; a Background track yields to a Normal one. */
     void anOverrideTrackWinsAndABackgroundTrackYields();
+    /** An Override track wins an intensity channel at a lower level than a
+     *  Normal track at full; its submaster and the Grand Master still apply. */
+    void anOverrideTrackPullsADimmerBelowANormalTrack();
+    /** A parked fixture beats an Override track; unparked, the track again. */
+    void aParkBeatsAnOverrideTrack();
+    /** When an Override item ends (or the show stops), what plays under it
+     *  comes back -- Normal and Background -- and nothing stays Override. */
+    void theNormalTrackReturnsWhenTheOverrideItemEnds();
     /** A track's intensity submaster scales what it plays, set before the
      *  show starts and moved while it runs. */
     void aTrackAtHalfIntensityPlaysAtHalf();
+    /** The track fader and the show's attribute for it are one value: the
+     *  one set last plays. */
+    void theTrackFaderAndItsAttributeAreOneValue();
+    /** A track's intensity survives saving and loading the show. */
+    void aTrackIntensityIsSavedAndPlaysAfterLoad();
     /** The show's configured length ends playback there, items running past
      *  it or not, and the look parks. */
     void theShowStopsAtItsConfiguredEnd();

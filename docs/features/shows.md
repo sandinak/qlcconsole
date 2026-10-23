@@ -32,10 +32,17 @@ Right-click a track's header:
   those fixtures, takes them over.
 - **Solo-safe (mute-exempt)** — soloing another track doesn't mute this
   one (house light, a haze track).
-- **Priority / role** — **Normal** (the last item to write a channel wins),
-  **Override** (this track wins), or **Background** (yields to every other
-  track).
+- **Priority / role** — **Normal** (a dimmer takes the highest level of
+  what plays; any other channel, the last item to write it),
+  **Override** (this track wins every channel its scenes play, dimmers
+  too: a lower level on it pulls a light below a Normal track or a cue at
+  full; when its item ends, the levels underneath come back), or
+  **Background** (yields to every other track). Parked fixtures, Focus
+  mode, a flash and a highlight still beat an Override track, and the
+  Grand Master and Blackout still apply to it.
 - **Intensity submaster** — the track's fader scales everything on it.
+  It's saved with the show, and the level you set last, before Start or
+  while the show plays, is the one that plays.
 - **Track colour…**, **Track name**, **Delete Track**.
 
 ## Doing things

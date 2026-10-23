@@ -380,6 +380,14 @@ public:
                      with intensity, any function's write takes an LTP
                      channel (and a starting cue releases its fixtures).
          Tracked ... SimpleDesk   functions, the programmer, the desk.
+                     In it, Override holds the scenes that win what
+                     they touch, intensity too: an edit preview
+                     (Scene::setEditOverride) and a Show track set to
+                     Override. Their channels are FadeChannel::Override
+                     | EditOverride (writeOverride): they replace the
+                     faders below, HTP among themselves; let go of when
+                     the scene stops, so its fade-out ends in what plays
+                     underneath.
          Highlight   the highlighted fixtures (HighlightEffect), Override:
                      their highlight look over anything running. The Grand
                      Master and Blackout still apply.
