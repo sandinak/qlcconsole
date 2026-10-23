@@ -559,6 +559,16 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Shows timeline: Undo keeps each track's settings.** The timeline's undo
+  snapshot (`ShowManager::captureSnapshot`) held a track's name, mute,
+  colour and items only, and Undo rebuilds every track from it -- so any
+  Undo reset Hold last look, Solo / Solo-safe, priority, intensity and the
+  track lock on every track, unlocked locked items, and dropped a marker's
+  cue-list link. They are now in the snapshot and put back.
+- **Build: the Beat button shows the tempo a Tap set.** It kept the old
+  tempo: `slotTapBeat()` set the BPM under a signal blocker the button's
+  text follows. Only `slotBpmChanged()` (which would restart the tapped
+  beat) is held off now.
 - **A Closed shutter look closes.** A Shutter palette resolved to the
   fixture's Open capability whenever it had one (and to 0, open, on a
   strobe-preset channel), whatever the look's value -- so *Closed* (and
