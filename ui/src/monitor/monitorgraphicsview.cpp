@@ -6846,18 +6846,16 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
            structure>…" in the fixture's menu now.) A selection the user made
            of several fixtures opens for all of them; a group's or a truss's
            worth selected together by one click opens for just this one. */
-        const bool selectedTogether = (itemGroupId(fi) != 0 || fi->isBoundToTruss());
-        if (!selectedTogether && m_savedSelection.contains(fi) && m_savedSelection.size() > 1)
-        {
-            m_scene->clearSelection();
-            foreach (QGraphicsItem *gi, m_savedSelection)
-                gi->setSelected(true);
-        }
-        else if (selectedTogether)
+        /* Whatever was selected, this one among it: a group or a truss's
+           worth too ("when I select several fixtures and edit fixture
+           properties .. should apply to all of them"). Click again picks one
+           out of a selection first, to edit it alone. */
+        if (m_savedSelection.contains(fi) && m_savedSelection.size() > 1)
         {
             m_extendingSelection = true;
             m_scene->clearSelection();
-            fi->setSelected(true);
+            foreach (QGraphicsItem *gi, m_savedSelection)
+                gi->setSelected(true);
             m_extendingSelection = false;
         }
         emit fixtureDoubleClicked(fi->fixtureID());

@@ -209,6 +209,8 @@ private:
 
     /** (kind,id) of every leaf item covered by the current tree selection
      *  (selected leaves plus every leaf under a selected group). */
+    /** The selection when the last click began (see eventFilter()). */
+    QList<QPair<QString, quint32> > m_pressSelection;
     QList<QPair<QString, quint32> > selectedObjects() const;
     void collectLeaves(QTreeWidgetItem *node, QList<QPair<QString, quint32> > &out) const;
 

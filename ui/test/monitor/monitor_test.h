@@ -75,6 +75,7 @@ private slots:
     /** Several fixtures dropped together on a truss all hang on it, each
      *  where it landed along it, not only the one over it. */
     void aGroupDroppedOnATrussAllHang();
+    void aDoubleClickEditsTheWholeSelection();
     void theStageStaysCentredWithFixturesOffIt();
     /** "can't c/p stage features": scenery, towers, booms and stands copy
      *  and paste, one undo step. */

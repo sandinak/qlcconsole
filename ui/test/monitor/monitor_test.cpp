@@ -994,6 +994,51 @@ void Monitor_Test::aGroupDroppedOnATrussAllHang()
 
 /* "why is the grid not centered?": a fixture far off the stage grows the
    scene; a resize still puts the stage in the middle of the view. */
+/* "when I select several fixtures and edit fixture properties .. should
+   apply to all of them": a real double-click on one of two selected fixtures
+   in a studio group (the case that opened just the one) edits both. */
+void Monitor_Test::aDoubleClickEditsTheWholeSelection()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(12000, 8000, 0));
+    rig.gv->addFixture(other->id(), QPointF(12000, 8000));
+    MonitorFixtureItem *second = rig.gv->m_fixtures.value(other->id(), nullptr);
+    QVERIFY(second != nullptr);
+    rig.parent.resize(1230, 760);
+    rig.parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.gv->updateFixture(other->id());
+    rig.gv->scene()->clearSelection();
+    rig.item->setSelected(true);
+    second->setSelected(true);
+    QVERIFY(rig.gv->createStudioGroupFromSelection() != 0);
+    rig.item->setSelected(true);
+    second->setSelected(true);
+
+    int selectedThen = -1;
+    QObject::disconnect(rig.gv, &MonitorGraphicsView::fixtureDoubleClicked, nullptr, nullptr);
+    connect(rig.gv, &MonitorGraphicsView::fixtureDoubleClicked, this, [&](quint32) {
+        selectedThen = rig.gv->selectedFixtureItems().size();
+    });
+    const QPoint at = rig.gv->mapFromScene(rig.item->iconCentreScene());
+    QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QTest::mouseRelease(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(at), rig.gv->viewport()->mapToGlobal(QPointF(at)),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &dbl);
+    QCOMPARE(selectedThen, 2);
+}
+
 void Monitor_Test::theStageStaysCentredWithFixturesOffIt()
 {
     DropRig rig;
@@ -20094,6 +20139,20 @@ void Monitor_Test::layersListsEveryGroupAFixtureIsIn()
         // On one layer, so under that layer.
         QVERIFY(across->parent() != nullptr);
         QCOMPARE(across->parent()->data(0, Qt::UserRole).toInt(), int(MonitorLayersPanel::NodeLayer));
+
+        // Selecting a fixture group's row picks its fixtures on the plot.
+        parent.resize(1200, 800);
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        panel->m_tree->clearSelection();
+        across = groupRow("Wide RGB");          // showing rebuilt the list
+        QVERIFY(across != nullptr);
+        across->setSelected(true);
+        QStringList picked;
+        for (MonitorFixtureItem *fi : mon.m_graphicsView->selectedFixtureItems())
+            picked << doc->fixture(fi->fixtureID())->name();
+        picked.sort();
+        QCOMPARE(picked, QStringList({ "FART-SL-1", "FART-SR-2" }));
     }
     delete doc;
     delete def;

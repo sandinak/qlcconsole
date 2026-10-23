@@ -339,6 +339,10 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+- **Fixture Properties edits every selected fixture**: double-clicking one
+  of several selected fixtures, on the plot or in Plot layers, opens the
+  editor for all of them (fixtures in a group or on a truss opened alone
+  before; a double-click in the list kept only its own row).
 - **Mount on ▸ Truss / Boom / Hanger / Tower acts on every selected
   fixture** when the one right-clicked is among them (it says how many),
   as Deck already did; each keeps its place along.

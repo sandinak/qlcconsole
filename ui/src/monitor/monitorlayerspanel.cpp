@@ -257,6 +257,7 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setDropIndicatorShown(true);
     m_tree->installEventFilter(this);   // Enter-to-rename only
+    m_tree->viewport()->installEventFilter(this);   // the selection a double-click starts from
     LayersNameDelegate *names = new LayersNameDelegate(m_tree);
     m_tree->setItemDelegate(names);
     // The reload held back while a name was typed in, now it is in.
@@ -1213,6 +1214,10 @@ void MonitorLayersPanel::reload()
 
 bool MonitorLayersPanel::eventFilter(QObject *obj, QEvent *event)
 {
+    /* A double-click's first click leaves only its own row selected; what
+       was selected before it is what the double-click means to edit. */
+    if (obj == m_tree->viewport() && event->type() == QEvent::MouseButtonPress)
+        m_pressSelection = selectedObjects();
     if (obj == m_tree && event->type() == QEvent::KeyPress)
     {
         QKeyEvent *ke = static_cast<QKeyEvent *>(event);
@@ -1448,10 +1453,18 @@ void MonitorLayersPanel::slotItemDoubleClicked(QTreeWidgetItem *item, int)
     }
     else if (type == NodeItem)
     {
-        // Open the item's editor on the canvas.
-        if (m_view)
-            m_view->requestEditItem(item->data(0, NodeKindRole).toString(),
-                                    item->data(0, NodeIdRole).toUInt());
+        // Open the item's editor on the canvas: for every fixture selected
+        // when this one was among them.
+        const QPair<QString, quint32> me(item->data(0, NodeKindRole).toString(),
+                                         item->data(0, NodeIdRole).toUInt());
+        if (m_view && me.first == QLatin1String("fixture") && m_pressSelection.size() > 1
+                && m_pressSelection.contains(me))
+        {
+            m_view->selectMapItems(m_pressSelection);
+            emit m_view->fixtureDoubleClicked(me.second);
+        }
+        else if (m_view)
+            m_view->requestEditItem(me.first, me.second);
     }
     else if (type == NodeGroup && m_view)
     {
