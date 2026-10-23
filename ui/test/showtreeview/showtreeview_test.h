@@ -160,6 +160,9 @@ private slots:
     /** Q96: + Production, + Sub-cue and Merge under More ▾; + Production
      *  on the bar too while the show has none. */
     void theHeaderFoldsUnderMore();
+    /** Q93: a cue's right-click keeps what acts on a selection; + Production
+     *  only on a production or empty space. */
+    void aCuesRightClickIsShort();
 
 private:
     quint32 dimmer(int level, const QString &name);

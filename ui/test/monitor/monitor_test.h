@@ -76,6 +76,9 @@ private slots:
      *  where it landed along it, not only the one over it. */
     void aGroupDroppedOnATrussAllHang();
     void aDoubleClickEditsTheWholeSelection();
+    /** The truss editor's fixture list: a double-click on one of several
+     *  selected rows edits them all. */
+    void aTrussEditorsDoubleClickEditsItsSelectedRows();
     /** Q100: a fixed light's editor aims it by Pan and Tilt. */
     void aFixedLightsEditorAimsItByPanAndTilt();
     void theStageStaysCentredWithFixturesOffIt();

@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QScrollArea>
 #include <QToolButton>
+#include <QMenu>
 #include <QTextBrowser>
 #include <QDialog>
 #include <QPushButton>
@@ -619,6 +620,31 @@ void LookEditor_Test::anEffectsTextIsTypedIn()
     QCOMPARE(box->text(), QString("HELLO"));
     box->setText("SHOW TIME");
     QCOMPARE(look->effectStringParam("text"), QString("SHOW TIME"));
+}
+
+/* Q95: New script… and Edit script… are one Script ▾ on the effect page,
+   not two buttons beside the effect. */
+void LookEditor_Test::scriptsAreUnderOneScriptButton()
+{
+    Doc doc(this);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Sign");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+
+    QToolButton *script = ed.findChild<QToolButton *>("lookEditorScript");
+    QVERIFY(script != nullptr);
+    QCOMPARE(script->text(), QString("Script"));
+    QCOMPARE(script->popupMode(), QToolButton::InstantPopup);
+    QVERIFY(script->menu() != nullptr);
+    QCOMPARE(script->menu()->actions(), QList<QAction *>({ ed.m_newScriptButton, ed.m_editScriptButton }));
+    QCOMPARE(ed.m_newScriptButton->text(), QString::fromUtf8("New script…"));
+    QCOMPARE(ed.m_editScriptButton->text(), QString::fromUtf8("Edit script…"));
+    for (QAbstractButton *b : ed.findChildren<QAbstractButton *>())
+        QVERIFY2(!b->text().contains("script…"), qPrintable(b->text()));
 }
 
 /* Matrix Image's picture: what it is, shown beside the buttons to choose

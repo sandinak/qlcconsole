@@ -57,6 +57,8 @@ private slots:
     void effectsArePickedFromABrowserWithWledsOwn();
     /** "can we put the sets in alpha order?" */
     void anEffectsTextIsTypedIn();
+    /** Q95: New script… / Edit script… under one Script ▾. */
+    void scriptsAreUnderOneScriptButton();
     void anEffectsPictureIsShownAndCleared();
     void previewsShowWhatEachEffectDoes();
     void anEffectIsPutOnASpeedMaster();

@@ -993,8 +993,6 @@ void Monitor_Test::aGroupDroppedOnATrussAllHang()
     QCOMPARE(props->fixtureRigProps(other->id()).trussId, t2->id());
 }
 
-/* "why is the grid not centered?": a fixture far off the stage grows the
-   scene; a resize still puts the stage in the middle of the view. */
 /* "when I select several fixtures and edit fixture properties .. should
    apply to all of them": a real double-click on one of two selected fixtures
    in a studio group (the case that opened just the one) edits both. */
@@ -1067,6 +1065,80 @@ void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
     QCOMPARE(rp.aimDown, 40.0f);
 }
 
+namespace { void inspectModal(const std::function<void(QWidget *)> &look); }
+
+/* The truss editor's "Fixtures and bars on this object" list: a
+   double-click on one of several selected fixture rows edits them all, as
+   on the plot; with only it selected, just it. */
+void Monitor_Test::aTrussEditorsDoubleClickEditsItsSelectedRows()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("EditBar");
+    const quint32 barId = t->id();
+    auto dropTruss = qScopeGuard([&]() { props->removeTruss(barId); });
+    t->setOrigin(QVector3D(2.0f, 4.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(6500, 2000, 0));
+    rig.gv->addFixture(other->id(), QPointF(6500, 2000));
+    for (quint32 fid : { rig.fxi->id(), other->id() })
+    {
+        FixtureRigProps rp;
+        rp.trussId = barId;
+        rp.trussOffset = fid == other->id() ? 3.0f : 1.0f;
+        props->setFixtureRigProps(fid, rp);
+    }
+
+    QDialog dlg;
+    StructureStudioView *view = nullptr;
+    rig.mon->makeStudioPane(&dlg, 2 /* truss */, barId, nullptr, &view);
+    QTreeWidget *tree = nullptr;
+    QList<QTreeWidgetItem *> rows;
+    for (QTreeWidget *tw : dlg.findChildren<QTreeWidget *>())
+    {
+        QList<QTreeWidgetItem *> found;
+        for (QTreeWidgetItemIterator it(tw); *it; ++it)
+        {
+            const QVariant v = (*it)->data(0, Qt::UserRole);
+            if (v.isValid() && (v.toUInt() == rig.fxi->id() || v.toUInt() == other->id()))
+                found << *it;
+        }
+        if (found.size() == 2)
+        {
+            tree = tw;
+            rows = found;
+        }
+    }
+    QVERIFY2(tree != nullptr, "the truss editor should list both fixtures");
+
+    QString title;
+    tree->clearSelection();
+    rows[0]->setSelected(true);
+    rows[1]->setSelected(true);
+    inspectModal([&title](QWidget *d) { title = d->windowTitle(); });
+    emit tree->itemDoubleClicked(rows[0], 0);
+    QVERIFY2(title.contains("2 fixtures"), qPrintable(title));
+
+    title.clear();
+    tree->clearSelection();
+    rows[1]->setSelected(true);
+    inspectModal([&title](QWidget *d) { title = d->windowTitle(); });
+    emit tree->itemDoubleClicked(rows[1], 0);
+    QVERIFY2(!title.isEmpty() && !title.contains("fixtures"), qPrintable(title));
+}
+
+/* "why is the grid not centered?": a fixture far off the stage grows the
+   scene; a resize still puts the stage in the middle of the view. */
 void Monitor_Test::theStageStaysCentredWithFixturesOffIt()
 {
     DropRig rig;

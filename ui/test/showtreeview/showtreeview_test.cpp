@@ -6916,6 +6916,61 @@ void ShowTreeView_Test::theHeaderFoldsUnderMore()
     m_doc->showTree()->addCueList(m_doc->showTree()->productions().first().id, "01-Everybody Scream");
     QTest::qWait(50);
     QTRY_VERIFY(!upgrade->isVisible());
+    // ... and a chaser of the show's own brings it back while it's there.
+    Chaser *old = new Chaser(m_doc);
+    old->setName("Old cues");
+    QVERIFY(m_doc->addFunction(old));
+    QTRY_VERIFY(upgrade->isVisible());
+    QVERIFY(m_doc->deleteFunction(old->id()));
+    QTRY_VERIFY(!upgrade->isVisible());
+}
+
+/* Q93: a cue's right-click keeps what acts on a selection. Duplicate (⌘D)
+   is there once, not also "Duplicate cue"; the base cue, Mode and Include
+   cue are on the cue's page; + Production only on a production or empty
+   space. */
+void ShowTreeView_Test::aCuesRightClickIsShort()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    st->addCue(list, 0, "Two");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+
+    auto menuOn = [&](const QPoint &pos) {
+        QStringList texts;
+        ModalCloser closer([&](QWidget *w) {
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+            {
+                for (QAction *a : m->actions())
+                    if (!a->isSeparator())
+                        texts << a->text();
+                m->close();
+                return true;
+            }
+            return false;
+        });
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos));
+        return texts;
+    };
+
+    QVERIFY(view.selectNode(c1));
+    const QStringList cue = menuOn(tree->visualItemRect(cueRow(tree, c1)).center());
+    QVERIFY2(!cue.isEmpty(), "no menu on a cue");
+    QVERIFY2(cue.contains("Duplicate"), qPrintable(cue.join(" | ")));
+    for (const char *gone : { "Duplicate cue", "Make the base cue", "Not the base cue", "Mode",
+                              "Include cue", "+ Production…" })
+        QVERIFY2(!cue.contains(QString::fromUtf8(gone)), gone);
+
+    // Empty space: + Production.
+    const QStringList empty = menuOn(QPoint(10, tree->viewport()->height() - 5));
+    QVERIFY2(empty.contains(QString::fromUtf8("+ Production…")), qPrintable(empty.join(" | ")));
 }
 
 QTEST_MAIN(ShowTreeView_Test)

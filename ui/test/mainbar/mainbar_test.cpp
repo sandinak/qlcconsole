@@ -60,6 +60,7 @@
 #include "fixturemanager.h"
 #include "virtualconsole.h"
 #include "programmingmanager.h"
+#include "powerdistribution.h"
 #include "showtreeview.h"
 #include "moveinblackbutton.h"
 #include "programmercontroller.h"
@@ -692,6 +693,40 @@ void MainBar_Test::theFooterGrandMasterDimsTheRig()
     io->setGrandMasterValue(255);
     QCOMPARE(fader->value(), 255);
     QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 255, 5000);
+}
+
+/* Q89: the power estimate is shown only for a show with its power set up:
+   an estimate against no supply is noise. */
+void MainBar_Test::thePowerChipNeedsPowerSetUp()
+{
+    QLabel *chip = m_app->m_statusPowerLabel;
+    QVERIFY(chip != nullptr);
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr);
+    PowerDistribution *power = m_app->doc()->powerDistribution();
+    QVERIFY(power != nullptr);
+    const bool wasOn = m_app->m_showFooterPower;
+    const QList<PowerSource> wasSources = power->sources();
+    auto tidy = qScopeGuard([&]() {
+        power->sources() = wasSources;
+        m_app->m_showFooterPower = wasOn;
+        chip->hide();
+    });
+    m_app->m_showFooterPower = true;
+
+    power->sources().clear();
+    chip->hide();
+    emit pm->powerEstimateChanged(12.5, 1.4, false, QString());
+    QVERIFY(chip->isHidden());
+
+    power->sources().append(PowerSource());
+    emit pm->powerEstimateChanged(12.5, 1.4, false, QString());
+    QVERIFY(!chip->isHidden());
+    QCOMPARE(chip->text(), QString::fromUtf8("12.5 A · 1.40 kW"));
+
+    // Cleared (Operate): hidden again.
+    emit pm->powerEstimateChanged(0.0, 0.0, false, QString());
+    QVERIFY(chip->isHidden());
 }
 
 void MainBar_Test::thePlacementRoundTripsAndSwitchesLive()

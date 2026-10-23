@@ -83,6 +83,8 @@ private slots:
     void theFooterNamesTheCurrentProduction();
     /** The footer's Grand Master: moving it sets the GM and dims the rig */
     void theFooterGrandMasterDimsTheRig();
+    /** Q89: the power estimate only for a show with its power set up */
+    void thePowerChipNeedsPowerSetUp();
     /** Auto move-in-black: one setting of the show, three views (Show
      *  Tree MIB, Programming's Move in black menu, Settings → Show Tree),
      *  each following the others, saved and loaded with the show */

@@ -24,6 +24,7 @@
 #include <QTemporaryDir>
 #include <QButtonGroup>
 #include <QToolButton>
+#include <QMenu>
 #include <QPushButton>
 #include <QDropEvent>
 #include <QMimeData>
@@ -212,6 +213,7 @@ void Workbench_Test::aSceneIsOneLayer()
     // A scene is one layer: nothing is added to it here.
     QVERIFY(!wb.m_addSceneBtn->isEnabled());
     QVERIFY(!wb.m_addEfxBtn->isEnabled());
+    QVERIFY(!wb.m_addEffectBtn->isEnabled());
     QVERIFY(wb.m_addEfxBtn->toolTip().contains("load a collection"));
     QVERIFY(!wb.m_removeBtn->isEnabled());
     QCOMPARE(wb.stack()->addNew(Function::EFXType, 0, {}, FixtureGroup::invalidId()), Function::invalidId());
@@ -261,6 +263,18 @@ void Workbench_Test::aCollectionsMembersAreLayers()
     QCOMPARE(wb.currentPage(), Workbench::OverviewPage);
     QVERIFY(wb.m_overviewText->text().contains("4 layer"));
     QVERIFY(wb.m_addSceneBtn->isEnabled() && wb.m_addEfxBtn->isEnabled() && wb.m_addMatrixBtn->isEnabled());
+    // One + Effect ▾ holds EFX and RGB Matrix (Q94): no button each.
+    {
+        QToolButton *effect = wb.findChild<QToolButton *>("workbenchAddEffect");
+        QVERIFY(effect != nullptr && effect->isEnabled());
+        QCOMPARE(effect->text(), QString("+ Effect"));
+        QVERIFY(effect->menu() != nullptr);
+        QCOMPARE(effect->menu()->actions(), QList<QAction *>({ wb.m_addEfxBtn, wb.m_addMatrixBtn }));
+        QCOMPARE(wb.m_addEfxBtn->text(), QString("EFX"));
+        QCOMPARE(wb.m_addMatrixBtn->text(), QString("RGB Matrix"));
+        for (QAbstractButton *b : wb.findChildren<QAbstractButton *>())
+            QVERIFY2(!b->text().startsWith("+ EFX") && !b->text().startsWith("+ RGB"), qPrintable(b->text()));
+    }
     QCOMPARE(wb.currentSceneId(), Function::invalidId());
 
     // A ▣ EFX row: its stock editor in the editor pane.

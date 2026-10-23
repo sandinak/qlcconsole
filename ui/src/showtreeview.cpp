@@ -2035,6 +2035,15 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_bridgeDismissed = false;
         updateBridgeBanner();
     });
+    // A chaser made or deleted elsewhere (Build, Functions): the header's
+    // Upgrade This Show… follows it (Q90), not only the next tree change.
+    // (Not while a show loads: Doc::loaded does it once at the end.)
+    auto chasersChanged = [this]() {
+        if (m_doc->loadStatus() != Doc::Loading)
+            updateBridgeBanner();
+    };
+    connect(m_doc, &Doc::functionAdded, this, chasersChanged);
+    connect(m_doc, &Doc::functionRemoved, this, chasersChanged);
     // Palettes made, renamed, filed, deleted (here, typed or in the
     // Programming tab) and the shared undo: the Library and the buttons.
     connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() {
