@@ -24,6 +24,8 @@
 #include <QLabel>
 #include <QToolButton>
 #include <QMenuBar>
+#include "lastlookeffect.h"
+#include "programmercontroller.h"
 #include <QStatusBar>
 #include <QComboBox>
 #include <QSizeGrip>
@@ -486,6 +488,33 @@ void MainBar_Test::operateLocksProgrammingNotTheGrandMaster()
     doc->setMode(Doc::Design);
     QVERIFY(!doc->isShowLocked());
     QVERIFY(shows->m_showview->isEditable());
+}
+
+void MainBar_Test::oneChipListsAndClearsOverrides()
+{
+    Doc *doc = m_app->doc();
+    QToolButton *chip = m_app->m_statusOverridesChip;
+    QVERIFY(chip != nullptr);
+    QVERIFY(m_app->activeOverrides().isEmpty());
+    QTRY_VERIFY(chip->isHidden());
+
+    quint32 fid = Fixture::invalidId();
+    QVERIFY(addDimmerScene(&fid) != Function::invalidId());
+    doc->programmer()->parkFixtures({ fid });
+    doc->lastLook()->hold({ { fid, 2, 0, 200 } });
+    m_app->slotControlBlind(true);
+    const QStringList now = m_app->activeOverrides();
+    QVERIFY2(now.contains("Park (1)") && now.contains("Hold at end") && now.contains("Blind"),
+             qPrintable(now.join(", ")));
+    QTRY_VERIFY(!chip->isHidden());
+    QVERIFY2(chip->text().startsWith("Overrides: Park (1)"), qPrintable(chip->text()));
+
+    chip->click();
+    QVERIFY(!doc->programmer()->hasParkedFixtures());
+    QVERIFY(!doc->lastLook()->isActive());
+    QVERIFY(!doc->inputOutputMap()->outputInhibited());
+    QVERIFY(m_app->activeOverrides().isEmpty());
+    QTRY_VERIFY(chip->isHidden());
 }
 
 /* A cue list of two scenes, infinite hold, as the show's main cue list. */

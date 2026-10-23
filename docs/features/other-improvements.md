@@ -414,6 +414,15 @@ type, the Function Wizard and the startup function are on **+ Scene ▾** and
 the outline's right-click; see
 [Coming from the Functions window](build.md#coming-from-the-functions-window).
 
+## Overrides chip
+
+When something holds the rig over the show, the footer says so in one
+amber chip: **Overrides: Park (3), Hold at end · Clear**. It lists Park,
+Highlight, Hold at end, Focus mode and Blind, and is hidden when none of
+them is on. Click it to let go of all of them at once (Focus mode asks
+first if it has unsaved offsets). If the rig looks wrong and you don't
+know why, look there first.
+
 ## Readiness footer
 
 The status chip at the bottom of the window reads **Ready** when nothing

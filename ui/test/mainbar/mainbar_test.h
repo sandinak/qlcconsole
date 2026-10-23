@@ -69,6 +69,10 @@ private slots:
      *  parameter faders, while a console GM fader still works; Design
      *  gives it all back */
     void operateLocksProgrammingNotTheGrandMaster();
+    /** Q80: one footer chip lists what holds the rig over the show (Park,
+     *  Hold at end, Blind...), hidden when nothing does; a click lets go of
+     *  all of it */
+    void oneChipListsAndClearsOverrides();
     /** GO / Back (Ctrl+Return, Ctrl+Shift+Return) from anywhere, in the
      *  Control menu: they step the main cue list 1, 2, back to 1 */
     void goAndBackStepTheMainCueList();

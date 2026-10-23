@@ -517,6 +517,12 @@ public slots:
      *  from a view without it, showContext() switches view as it does for
      *  any hidden tab. */
     void showFunctions();
+    /** What is overriding the rig right now (Q80), by name, in footer
+     *  order: "Park (3)", "Highlight", "Hold at end", "Focus mode", "Blind". */
+    QStringList activeOverrides() const;
+    /** Let go of every override activeOverrides() lists (Focus mode may ask
+     *  about unsaved offsets first). */
+    void clearOverrides();
     /** Window → Effects: Build ▸ Effects, effects' one home (there is no
      *  Effects window of its own). */
     void showEffects();
@@ -860,6 +866,11 @@ private:
      *  always-on "you are here" readout anywhere. This is that readout,
      *  same footer-chip pattern as Blackout/Blind. */
     QLabel* m_statusModeChipLabel = nullptr;
+    /** The one override indicator (Q80): what is holding the rig over the
+     *  show right now -- Park, Highlight, Hold at end, Focus mode, Blind --
+     *  and a click clears them all. Hidden when nothing is. */
+    class QToolButton* m_statusOverridesChip = nullptr;
+    class QTimer* m_overridesPoll = nullptr;
     /** Compact footer Grand Master fader — GM previously lived only inside
      *  the Virtual Console tab, unlike its safety-tier siblings (Blackout,
      *  Blind, Show Lock), which are all global-toolbar/footer. This mirrors

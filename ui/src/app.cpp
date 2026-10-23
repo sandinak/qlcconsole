@@ -93,6 +93,7 @@
 #include "eosimportwizard.h"
 #include "eosimporter.h"
 #include "lastlookeffect.h"
+#include "focusmodepanel.h"
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -3631,6 +3632,47 @@ void App::showEffects()
         pm->setSection(ProgrammingManager::EffectsSection);
 }
 
+QStringList App::activeOverrides() const
+{
+    QStringList out;
+    if (m_doc == nullptr)
+        return out;
+    if (ProgrammerController *pc = m_doc->programmer())
+    {
+        if (pc->hasParkedFixtures())
+            out << tr("Park (%1)").arg(pc->parkedFixtures().count());
+        if (pc->isHighlightActive())
+            out << tr("Highlight");
+    }
+    if (m_doc->lastLook() != nullptr && m_doc->lastLook()->isActive())
+        out << tr("Hold at end");
+    if (FocusModePanel::instance() != nullptr)
+        out << tr("Focus mode");
+    if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited())
+        out << tr("Blind");
+    return out;
+}
+
+void App::clearOverrides()
+{
+    if (m_doc == nullptr)
+        return;
+    if (FocusModePanel *focus = FocusModePanel::instance())
+        if (!focus->requestExit())
+            return;   // Cancel: leave everything as it is
+    if (ProgrammerController *pc = m_doc->programmer())
+    {
+        pc->unparkAllFixtures();
+        pc->setHighlightActive(false);
+    }
+    if (m_doc->lastLook() != nullptr)
+        m_doc->lastLook()->clear();
+    if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited())
+        slotControlBlind(false);
+    if (m_controlBlindAction != nullptr)
+        m_controlBlindAction->setChecked(false);
+}
+
 void App::showFunctions()
 {
     // The stock QLC+ Function Manager: a tab in Classic QLC+ and Everything;
@@ -5813,6 +5855,35 @@ void App::initStatusBar()
     m_statusPadModeLabel->hide();
     sb->addPermanentWidget(m_statusPadModeLabel);
 
+
+    // The one override indicator (Q80): hidden unless something holds the
+    // rig over the show; a click lets go of all of it.
+    m_statusOverridesChip = new QToolButton(this);
+    m_statusOverridesChip->setObjectName("footerOverrides");
+    m_statusOverridesChip->setAutoRaise(true);
+    m_statusOverridesChip->setStyleSheet("QToolButton { color: #a06000; font-weight: bold; }");
+    m_statusOverridesChip->hide();
+    connect(m_statusOverridesChip, &QToolButton::clicked, this, &App::clearOverrides);
+    sb->addPermanentWidget(m_statusOverridesChip);
+    m_overridesPoll = new QTimer(this);
+    m_overridesPoll->setInterval(250);
+    connect(m_overridesPoll, &QTimer::timeout, this, [this]() {
+        const QStringList now = activeOverrides();
+        if (now.isEmpty())
+        {
+            m_statusOverridesChip->hide();
+            return;
+        }
+        const QString text = tr("Overrides: %1 · Clear").arg(now.join(QStringLiteral(", ")));
+        if (m_statusOverridesChip->text() != text)
+        {
+            m_statusOverridesChip->setText(text);
+            m_statusOverridesChip->setToolTip(tr("Holding the rig over the show: %1. Click to let go of all of it.")
+                                                  .arg(now.join(QStringLiteral(", "))));
+        }
+        m_statusOverridesChip->show();
+    });
+    m_overridesPoll->start();
 
     // Persistent Design/Operate indicator — see app.h for why this is
     // separate from the mode-toggle button (which shows the destination

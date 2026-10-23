@@ -18,6 +18,10 @@ symbols and output rules on fixtures, and Eos shows with their special
 circuits and subs.
 
 ### Added
+
+- **One Overrides chip** (board Q80) in the footer: "Overrides: Park (3),
+  Hold at end · Clear" whenever Park, Highlight, Hold at end, Focus mode or
+  Blind holds the rig; one click lets go of all of them.
 - **Build tab and the Workbench** (WORKFLOW_DESIGN.md W1–W4). The
   Programming tab is **Build**: **Palettes | Effects | Scenes** picks what
   the navigator lists, with Groups & fixtures under each, and the
