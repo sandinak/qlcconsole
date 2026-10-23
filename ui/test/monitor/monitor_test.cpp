@@ -20153,6 +20153,15 @@ void Monitor_Test::layersListsEveryGroupAFixtureIsIn()
             picked << doc->fixture(fi->fixtureID())->name();
         picked.sort();
         QCOMPARE(picked, QStringList({ "FART-SL-1", "FART-SR-2" }));
+        // ...and they stay picked after the click that selected the row
+        // ("they lighted for a second and then went back out").
+        panel->slotItemClicked(across, 0);
+        QTest::qWait(500);
+        picked.clear();
+        for (MonitorFixtureItem *fi : mon.m_graphicsView->selectedFixtureItems())
+            picked << doc->fixture(fi->fixtureID())->name();
+        picked.sort();
+        QCOMPARE(picked, QStringList({ "FART-SL-1", "FART-SR-2" }));
     }
     delete doc;
     delete def;

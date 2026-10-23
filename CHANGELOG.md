@@ -339,6 +339,8 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+- **A fixture group's row in Plot layers keeps its fixtures selected** on
+  the plot: they lit and went out again a moment later.
 - **Fixture Properties edits every selected fixture**: double-clicking one
   of several selected fixtures, on the plot or in Plot layers, opens the
   editor for all of them (fixtures in a group or on a truss opened alone

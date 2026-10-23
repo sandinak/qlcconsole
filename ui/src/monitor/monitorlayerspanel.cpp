@@ -1722,6 +1722,12 @@ void MonitorLayersPanel::slotItemClicked(QTreeWidgetItem *item, int)
         m_syncingSelection = true;
         if (type == NodeGroup)
             m_view->selectItemsInGroup(id);
+        else if (type == NodeFixtureGroup)
+            /* Its fixtures, as the selection already picked them. Taken as an
+               item, it had no kind, selected nothing and cleared the plot a
+               moment after the row lit it ("they lighted for a second and
+               then went back out"). */
+            m_view->selectMapItems(selectedObjects());
         else // NodeItem
             m_view->selectMapItem(item->data(0, NodeKindRole).toString(), id);
         m_syncingSelection = false;
