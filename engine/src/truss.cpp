@@ -10,6 +10,7 @@
 #include <QtMath>
 
 #include "truss.h"
+#include "doc.h"
 
 #define KXMLTruss           QStringLiteral("Truss")
 #define KXMLTrussID         QStringLiteral("ID")
@@ -194,7 +195,7 @@ bool Truss::loadXML(QXmlStreamReader &root)
     return true;
 }
 
-bool Truss::saveXML(QXmlStreamWriter *doc) const
+bool Truss::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) const
 {
     doc->writeStartElement(KXMLTruss);
     doc->writeAttribute(KXMLTrussID,      QString::number(m_id));
@@ -236,7 +237,8 @@ bool Truss::saveXML(QXmlStreamWriter *doc) const
         if (m_sockTo >= 0.0f)
             doc->writeAttribute(QStringLiteral("SockTo"), QString::number(double(m_sockTo), 'f', 3));
         if (!m_sockPattern.isEmpty())
-            doc->writeAttribute(QStringLiteral("SockPattern"), m_sockPattern);
+            doc->writeAttribute(QStringLiteral("SockPattern"), mainDocument != nullptr
+                                ? mainDocument->normalizeComponentPath(m_sockPattern) : m_sockPattern);
         if (m_sockPatternOpacity < 1.0f)
             doc->writeAttribute(QStringLiteral("SockPatternOpacity"),
                                 QString::number(double(m_sockPatternOpacity), 'f', 2));

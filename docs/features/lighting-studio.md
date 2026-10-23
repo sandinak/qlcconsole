@@ -193,6 +193,10 @@ it, filtered by the fabric's colour. **Sock printed** adds an image
 (**Pattern…** to choose, **×** to clear) stretched over the fabric, with an
 opacity percentage beside it; the print still glows, filtering the light,
 and a PNG's clear parts show the sock colour beneath.
+When the show is saved, a picture chosen from outside the show's folder
+(your Downloads, say) is copied into an **images** folder next to the
+show, and the show keeps the copy: move or share the show's folder and its
+pictures go with it. Tower faces' pictures work the same way.
 
 ### Tower faces
 

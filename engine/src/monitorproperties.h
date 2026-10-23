@@ -1012,6 +1012,13 @@ public:
      * @param doc The master XML document to save to.
      * @param wksp_root The workspace root element
      */
+    /** Pattern pictures travel with the show: a truss sock or tower face
+     *  picture picked from elsewhere (~/Downloads, say) is copied into the
+     *  show's images/ folder (Doc::keepWithShow()) and the rig uses the copy
+     *  from then on, which saveXML() writes relative (board Q85). Called
+     *  when the show is saved, not for undo snapshots. */
+    void keepPatternsWithShow(const Doc *mainDocument);
+
     bool saveXML(QXmlStreamWriter *doc, const Doc * mainDocument) const;
 };
 

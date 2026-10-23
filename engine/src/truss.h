@@ -36,6 +36,7 @@
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
+class Doc;
 
 /** @addtogroup engine Engine
  * @{
@@ -218,7 +219,9 @@ public:
      * Load & Save
      ********************************************************************/
     bool loadXML(QXmlStreamReader &root);
-    bool saveXML(QXmlStreamWriter *doc) const;
+    /** With @p mainDocument, the sock pattern is saved relative to the show
+     *  when it is in the show's folder (Doc::normalizeComponentPath()). */
+    bool saveXML(QXmlStreamWriter *doc, const Doc *mainDocument = nullptr) const;
 
 private:
     quint32   m_id;

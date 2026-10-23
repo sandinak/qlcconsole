@@ -1403,6 +1403,73 @@ void MonitorProperties_Test::theGoboLibraryImportsAndResolves()
     GoboLibrary::setUserDirectoryOverride(QString());
 }
 
+void MonitorProperties_Test::patternPicturesAreKeptWithTheShow()
+{
+    QTemporaryDir show, downloads;
+    QVERIFY(show.isValid() && downloads.isValid());
+    auto writeFile = [](const QString &path, const QByteArray &bytes) {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(bytes);
+    };
+    const QString picked = downloads.filePath("stones.jpg");
+    writeFile(picked, "stones");
+
+    Doc doc(this);
+    MonitorProperties *mp = doc.monitorProperties();
+    Truss *t = mp->addTruss();
+    t->setSock(true);
+    t->setSockPattern(picked);
+    Tower *tw = mp->addTower();
+    tw->setFaces(true);
+    tw->setFacesPattern(picked);
+
+    auto save = [&doc]() {
+        QByteArray out;
+        QXmlStreamWriter w(&out);
+        doc.monitorProperties()->keepPatternsWithShow(&doc);
+        doc.monitorProperties()->saveXML(&w, &doc);
+        return out;
+    };
+
+    // An unsaved show has no folder yet: the picture stays where it is.
+    doc.setWorkspacePath(QString());
+    QVERIFY(save().contains(picked.toUtf8()));
+    QCOMPARE(t->sockPattern(), picked);
+
+    // Saved into a folder: copied into images/, written relative, used from there.
+    doc.setWorkspacePath(show.path());
+    QByteArray xml = save();
+    const QString copy = QDir(show.path()).absoluteFilePath("images/stones.jpg");
+    QVERIFY(QFile::exists(copy));
+    QVERIFY(xml.contains("SockPattern=\"images/stones.jpg\""));
+    QVERIFY(xml.contains("FacesPattern=\"images/stones.jpg\""));
+    QVERIFY(!xml.contains(downloads.path().toUtf8()));
+    QCOMPARE(QFileInfo(t->sockPattern()).canonicalFilePath(), QFileInfo(copy).canonicalFilePath());
+
+    // Saving again copies nothing more.
+    save();
+    QCOMPARE(QDir(show.filePath("images")).entryList(QDir::Files).count(), 1);
+
+    // A different picture of the same name doesn't overwrite it.
+    QTemporaryDir other;
+    writeFile(other.filePath("stones.jpg"), "other stones");
+    t->setSockPattern(other.filePath("stones.jpg"));
+    xml = save();
+    QVERIFY(xml.contains("SockPattern=\"images/stones-2.jpg\""));
+    QVERIFY(xml.contains("FacesPattern=\"images/stones.jpg\""));
+
+    // Loading resolves them against the show's folder.
+    MonitorProperties back;
+    QXmlStreamReader reader(xml);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(back.loadXML(reader, &doc));
+    QCOMPARE(back.trusses().count(), 1);
+    QCOMPARE(QFileInfo(back.trusses().first()->sockPattern()).canonicalFilePath(),
+             QFileInfo(show.filePath("images/stones-2.jpg")).canonicalFilePath());
+}
+
 QTEST_GUILESS_MAIN(MonitorProperties_Test)
 
 /* A hanger is rigging, like a bar: put on a tower truss part way up, its

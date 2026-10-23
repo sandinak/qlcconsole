@@ -108,6 +108,18 @@ public:
      */
     QString normalizeComponentPath(const QString& filePath) const;
 
+    /** Keep a picture the show uses with the show: a file outside the
+     *  workspace directory is copied into its @p subdir ("images/") and the
+     *  copy's absolute path returned, so normalizeComponentPath() saves it
+     *  relative. A file already there, an unsaved show (no workspace path)
+     *  or a failed copy returns @p filePath unchanged. A different file of
+     *  the same name gets "-2", "-3"... rather than overwriting.
+     *
+     *  Purpose: a show that opens without reaching into ~/Downloads (which
+     *  macOS asks about) and that works on another computer. */
+    QString keepWithShow(const QString& filePath,
+                         const QString& subdir = QStringLiteral("images")) const;
+
     /** If filePath is relative path, it is resolved relative to the workspace
      *  directory (absolute path is returned).
      *  If filePath is absolute, it is returned unchanged (symlinks and .. are resolved).

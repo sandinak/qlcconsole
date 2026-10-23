@@ -146,6 +146,11 @@ private slots:
      *  default and then not written; on survives save, load and a snapshot,
      *  and says when it changes. */
     void autoStageLooksIsSavedWithTheShow();
+
+    /** Board Q85: a sock or tower-face picture from outside the show's
+     *  folder (~/Downloads) is copied into its images/ folder on save and
+     *  saved relative; loading resolves it against the show's folder. */
+    void patternPicturesAreKeptWithTheShow();
 };
 
 #endif

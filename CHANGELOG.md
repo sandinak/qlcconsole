@@ -305,6 +305,12 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+- **The rig view no longer asks for your Downloads folder** (board Q85). A
+  truss sock or tower face picture chosen from outside the show's folder is
+  copied into an **images** folder next to the show when it's saved and
+  saved relative to the show, like QLC+'s audio and video files; it opened
+  the original every time before, which macOS asks about, and the show
+  lost its pictures on another computer.
 - **A fade or hold typed on a Show Tree cue is kept when you click away.**
   It was applied only on Return: clicking another cue lost it. Tab, a click
   on another cue or anywhere else, and the page moving on now apply it to

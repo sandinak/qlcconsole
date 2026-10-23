@@ -42,6 +42,7 @@
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
+class Doc;
 
 /** @addtogroup engine Engine
  * @{
@@ -147,7 +148,9 @@ public:
     void setFacesPatternOpacity(float o) { m_facesPatternOpacity = qBound(0.0f, o, 1.0f); }
 
     bool loadXML(QXmlStreamReader &root);
-    bool saveXML(QXmlStreamWriter *doc) const;
+    /** With @p mainDocument, the faces pattern is saved relative to the show
+     *  when it is in the show's folder (Doc::normalizeComponentPath()). */
+    bool saveXML(QXmlStreamWriter *doc, const Doc *mainDocument = nullptr) const;
 
 private:
     quint32      m_id;

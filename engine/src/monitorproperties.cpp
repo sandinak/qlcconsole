@@ -151,6 +151,24 @@ void MonitorProperties::setAutoStageLooks(bool on)
     emit autoStageLooksChanged(on);
 }
 
+void MonitorProperties::keepPatternsWithShow(const Doc *mainDocument)
+{
+    if (mainDocument == NULL)
+        return;
+    foreach (Truss *t, m_trusses)
+    {
+        const QString kept = mainDocument->keepWithShow(t->sockPattern());
+        if (kept != t->sockPattern())
+            t->setSockPattern(kept);
+    }
+    foreach (Tower *t, m_towers)
+    {
+        const QString kept = mainDocument->keepWithShow(t->facesPattern());
+        if (kept != t->facesPattern())
+            t->setFacesPattern(kept);
+    }
+}
+
 QByteArray MonitorProperties::snapshot(const Doc *mainDocument) const
 {
     QByteArray out;
@@ -2671,7 +2689,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         {
             Truss *t = new Truss(nextTrussId(), this);
             if (t->loadXML(root))
+            {
+                // Saved relative to the show when it's in the show's folder.
+                if (mainDocument != NULL && !t->sockPattern().isEmpty())
+                    t->setSockPattern(mainDocument->denormalizeComponentPath(t->sockPattern()));
                 m_trusses.insert(t->id(), t);
+            }
             else
                 delete t;
         }
@@ -2746,6 +2769,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             Tower *t = new Tower(nextTowerId(), this);
             if (t->loadXML(root) && !m_towers.contains(t->id()))
             {
+                if (mainDocument != NULL && !t->facesPattern().isEmpty())
+                    t->setFacesPattern(mainDocument->denormalizeComponentPath(t->facesPattern()));
                 m_towers.insert(t->id(), t);
             }
             else
@@ -3538,7 +3563,7 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
 
     // Trusses
     foreach (const Truss *t, m_trusses)
-        t->saveXML(doc);
+        t->saveXML(doc, mainDocument);
 
     // Stage platforms
     foreach (const StagePlatform *p, m_platforms)
@@ -3554,7 +3579,7 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
 
     // Towers
     foreach (const Tower *t, m_towers)
-        t->saveXML(doc);
+        t->saveXML(doc, mainDocument);
 
     // Hangers (after what they hang on)
     foreach (const Hanger *h, m_hangers)

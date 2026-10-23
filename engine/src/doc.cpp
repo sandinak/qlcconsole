@@ -424,6 +424,47 @@ QString Doc::normalizeComponentPath(const QString& filePath) const
     }
 }
 
+QString Doc::keepWithShow(const QString& filePath, const QString& subdir) const
+{
+    if (filePath.isEmpty() || workspacePath().isEmpty())
+        return filePath;
+
+    QFileInfo src(filePath);
+    if (!src.isAbsolute() || !src.isFile())
+        return filePath;
+    if (normalizeComponentPath(src.absoluteFilePath()) != src.absoluteFilePath())
+        return filePath;                    // already in the show's folder
+
+    QDir dir(workspacePath());
+    if (!dir.mkpath(subdir) || !dir.cd(subdir))
+        return filePath;
+
+    QFile in(src.absoluteFilePath());
+    if (!in.open(QIODevice::ReadOnly))
+        return filePath;
+    const QByteArray bytes = in.readAll();
+
+    for (int n = 1; n < 1000; n++)
+    {
+        const QString name = n == 1 ? src.fileName()
+            : QStringLiteral("%1-%2.%3").arg(src.completeBaseName()).arg(n).arg(src.suffix());
+        const QString dest = dir.absoluteFilePath(name);
+        QFile out(dest);
+        if (out.exists())
+        {
+            // The same picture copied before: use it.
+            if (out.open(QIODevice::ReadOnly) && out.size() == bytes.size() && out.readAll() == bytes)
+                return dest;
+            continue;
+        }
+        if (out.open(QIODevice::WriteOnly) && out.write(bytes) == bytes.size())
+            return dest;
+        out.remove();
+        return filePath;
+    }
+    return filePath;
+}
+
 QString Doc::denormalizeComponentPath(const QString& filePath) const
 {
     if (filePath.isEmpty())
@@ -2544,7 +2585,10 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
         m_programmer->saveMoveInBlackXML(doc);
 
     if (m_monitorProps != NULL)
+    {
+        m_monitorProps->keepPatternsWithShow(this);
         m_monitorProps->saveXML(doc, this);
+    }
 
     /* End the <Engine> tag */
     doc->writeEndElement();

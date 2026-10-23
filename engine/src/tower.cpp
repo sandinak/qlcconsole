@@ -16,6 +16,7 @@
 #include <QtMath>
 
 #include "tower.h"
+#include "doc.h"
 
 #define KXMLTower        QStringLiteral("Tower")
 #define KXMLTowerID      QStringLiteral("ID")
@@ -162,7 +163,7 @@ bool Tower::loadXML(QXmlStreamReader &root)
     return true;
 }
 
-bool Tower::saveXML(QXmlStreamWriter *doc) const
+bool Tower::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) const
 {
     doc->writeStartElement(KXMLTower);
     doc->writeAttribute(KXMLTowerID,      QString::number(m_id));
@@ -190,7 +191,8 @@ bool Tower::saveXML(QXmlStreamWriter *doc) const
         if (m_facesTo >= 0.0f)
             doc->writeAttribute(QStringLiteral("FacesTo"), QString::number(double(m_facesTo), 'f', 3));
         if (!m_facesPattern.isEmpty())
-            doc->writeAttribute(QStringLiteral("FacesPattern"), m_facesPattern);
+            doc->writeAttribute(QStringLiteral("FacesPattern"), mainDocument != nullptr
+                                ? mainDocument->normalizeComponentPath(m_facesPattern) : m_facesPattern);
         if (m_facesPatternOpacity < 1.0f)
             doc->writeAttribute(QStringLiteral("FacesPatternOpacity"),
                                 QString::number(double(m_facesPatternOpacity), 'f', 2));
