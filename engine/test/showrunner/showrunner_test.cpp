@@ -316,10 +316,6 @@ void ShowRunner_Test::holdLastKeepsTheLookThroughAGap()
     rig.playTo(400);                            // to 800
     QVERIFY(rig.doc->lastLook()->isActive());   // its look was captured
     QCOMPARE(rig.at(1), 0);
-    QEXPECT_FAIL("", "BUG: the hold is captured but its dimmer never reaches the output -- "
-                     "LastLookEffect::writeDMX() writes before Universe::processFaders(), whose "
-                     "zeroIntensityChannels() clears it every frame (the same bug "
-                     "LastLookEffect_Test::holdSurvivesTheUniverseFrame marks)", Continue);
     QCOMPARE(rig.at(0), 200);
 
     // Its next item takes the fixture back.
@@ -432,10 +428,6 @@ void ShowRunner_Test::theShowStopsAtItsConfiguredEnd()
     QVERIFY(!late->isRunning());                // clamped: never started
     QCOMPARE(rig.at(1), 0);
     QVERIFY(rig.doc->lastLook()->isActive());   // parked: the look is held...
-    QEXPECT_FAIL("", "BUG: ...but the held dimmer is zeroed every frame -- LastLookEffect::"
-                     "writeDMX() writes before Universe::processFaders()'s "
-                     "zeroIntensityChannels() (see LastLookEffect_Test::"
-                     "holdSurvivesTheUniverseFrame), so a parked show goes dark", Continue);
     QCOMPARE(rig.at(0), 200);                   // ...and stays up
     rig.doc->setMode(Doc::Design);
 }

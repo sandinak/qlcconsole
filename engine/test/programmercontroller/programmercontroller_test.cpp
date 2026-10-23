@@ -621,23 +621,20 @@ void ProgrammerController_Test::aParkedFixtureHoldsItsOutput()
     Scene *cold = sceneOf(m_doc, fid, { { 0, 10 }, { 2, 180 }, { 3, 255 } });
     warm->start(m_doc->masterTimer(), FunctionParent::master());
     tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(255));     // a frame out: the rig shows it
     pc->parkFixtures({ fid });
     warm->stop(FunctionParent::master());
     tick(m_doc, 4);
 
     // Nothing running: the parked fixture stays lit where it was.
-    QEXPECT_FAIL("", "BUG: ParkEffect writes with Universe::write() from the MasterTimer tick, "
-                     "and the universe's processFaders() then zeroes intensity channels "
-                     "before the frame goes out, so a park does not hold a lit fixture", Continue);
+    QCOMPARE(preGM(m_doc, 0), uchar(200));
     QCOMPARE(preGM(m_doc, 3), uchar(255));
 
-    // The next cue would turn it blue: parked, it stays red.
+    // The next cue would turn it blue and dim its red: parked, it stays as
+    // it was -- even where the cue is higher (blue, an HTP channel).
     cold->start(m_doc->masterTimer(), FunctionParent::master());
     tick(m_doc, 4);
-    QEXPECT_FAIL("", "BUG: a running cue's fader writes over the parked values every frame "
-                     "(ParkEffect writes before processFaders(), not through a fader)", Continue);
     QCOMPARE(preGM(m_doc, 0), uchar(200));
-    QEXPECT_FAIL("", "BUG: as above -- the cue's blue reaches the parked fixture", Continue);
     QCOMPARE(preGM(m_doc, 2), uchar(0));
 
     // Unparked, the fixture follows the show.
@@ -663,9 +660,6 @@ void ProgrammerController_Test::highlightDrivesTheSelectionToFull()
     pc->setHighlightActive(true);
     QVERIFY(pc->isHighlightActive());
     tick(m_doc);
-    QEXPECT_FAIL("", "BUG: HighlightEffect writes with Universe::write() before the universe's "
-                     "processFaders(), which zeroes intensity and lays the running scene on top: "
-                     "the highlighted fixture shows the scene, not full", Continue);
     QCOMPARE(preGM(m_doc, 3), uchar(255));
 
     pc->setHighlightActive(false);
@@ -673,6 +667,66 @@ void ProgrammerController_Test::highlightDrivesTheSelectionToFull()
     QCOMPARE(preGM(m_doc, 3), uchar(60));                // back to the show
     dim->stop(FunctionParent::master());
     tick(m_doc);
+}
+
+/* Highlight is over everything that runs, not merged with it: a cyan
+   channel goes to 0 for the white whatever the cue gives it (an LTP channel
+   the cue's fader used to rewrite every frame). Park is over Highlight. */
+void ProgrammerController_Test::highlightBeatsARunningCue()
+{
+    QScopedPointer<QLCFixtureDef> def(new QLCFixtureDef());
+    def->setManufacturer("Test");
+    def->setModel("Dimmer CMY");
+    QLCFixtureMode *mode = new QLCFixtureMode(def.data());
+    mode->setName("2ch");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim);
+    mode->insertChannel(dim, 0);
+    QLCChannel *cyan = new QLCChannel();
+    cyan->setName("Cyan");
+    cyan->setGroup(QLCChannel::Colour);                 // LTP
+    cyan->setColour(QLCChannel::Cyan);
+    def->addChannel(cyan);
+    mode->insertChannel(cyan, 1);
+    def->addMode(mode);
+    Fixture *fxi = makeFixture(m_doc, def.data(), "2ch", 0);
+    QVERIFY(fxi != nullptr);
+    ProgrammerController *pc = m_doc->programmer();
+
+    Scene *cue = sceneOf(m_doc, fxi->id(), { { 0, 90 }, { 1, 200 } });
+    cue->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 0), uchar(90));
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+
+    pc->setProgrammerSelection({ fxi->id() });
+    pc->setHighlightActive(true);
+    tick(m_doc, 4);
+    QCOMPARE(preGM(m_doc, 0), uchar(255));
+    QCOMPARE(preGM(m_doc, 1), uchar(0));                 // the cue's 200 loses
+
+    // Parked (at the cue's look) while highlighted: Park is on top.
+    pc->setHighlightActive(false);
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+    pc->parkFixtures({ fxi->id() });
+    pc->setHighlightActive(true);
+    tick(m_doc, 4);
+    QCOMPARE(preGM(m_doc, 0), uchar(90));
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+    pc->unparkAllFixtures();
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 1), uchar(0));                 // highlight again
+
+    pc->setHighlightActive(false);
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 0), uchar(90));                // back to the show
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+    cue->stop(FunctionParent::master());
+    tick(m_doc);
+    m_doc->clearContents();                              // before the def goes
 }
 
 void ProgrammerController_Test::aLearnedControlTogglesItsFunction()

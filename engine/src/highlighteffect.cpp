@@ -10,41 +10,26 @@
 #include "fixture.h"
 #include "qlcchannel.h"
 #include "qlcfixturemode.h"
-#include "mastertimer.h"
-#include "universe.h"
+#include "fadechannel.h"
 
 HighlightEffect::HighlightEffect(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
+    , m_layer(doc, Universe::Highlight, FadeChannel::Override, QStringLiteral("Highlight"))
 {
 }
 
 HighlightEffect::~HighlightEffect()
 {
-    if (m_registered && m_doc && m_doc->masterTimer())
-        m_doc->masterTimer()->unregisterDMXSource(this);
 }
 
 void HighlightEffect::setFixtures(const QList<quint32>& fixtureIds)
 {
-    QList<FixEntry> entries = buildEntries(fixtureIds);
-
-    {
-        QMutexLocker locker(&m_mutex);
-        m_entries = entries;
-    }
-
-    bool hasWork = !entries.isEmpty();
-    if (hasWork && !m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->registerDMXSource(this);
-        m_registered = true;
-    }
-    else if (!hasWork && m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->unregisterDMXSource(this);
-        m_registered = false;
-    }
+    QList<OutputLayer::Level> levels;
+    for (const FixEntry &e : buildEntries(fixtureIds))
+        for (const auto &w : e.writes)
+            levels.append({ e.fixtureId, quint32(w.first), w.second });
+    m_layer.set(levels);
 }
 
 QList<HighlightEffect::FixEntry>
@@ -58,6 +43,7 @@ HighlightEffect::buildEntries(const QList<quint32>& fixtureIds) const
             continue;
 
         FixEntry entry;
+        entry.fixtureId = fid;
         entry.universeId = (int)fxi->universe();
 
         quint32 nCh = fxi->channels();
@@ -67,11 +53,10 @@ HighlightEffect::buildEntries(const QList<quint32>& fixtureIds) const
             if (!ch)
                 continue;
 
+            // An over-addressed fixture (patched so its channel count runs
+            // past 511; Fixture::setAddress only checks the start address):
+            // nothing to write past the end.
             int absAddr = (int)fxi->address() + (int)c;
-            // Universe::write() only guards this with a Q_ASSERT, which is
-            // compiled out in release — an over-addressed fixture (patched so
-            // its channel count runs past 511; Fixture::setAddress only checks
-            // the start address) would be an out-of-bounds heap write.
             if (absAddr >= UNIVERSE_SIZE)
                 break;
 
@@ -110,28 +95,11 @@ HighlightEffect::buildEntries(const QList<quint32>& fixtureIds) const
             }
 
             if (include)
-                entry.writes.append(qMakePair(absAddr, value));
+                entry.writes.append(qMakePair(int(c), value));
         }
 
         if (!entry.writes.isEmpty())
             result.append(entry);
     }
     return result;
-}
-
-void HighlightEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
-{
-    Q_UNUSED(timer)
-    QMutexLocker locker(&m_mutex);
-
-    for (const FixEntry &e : m_entries)
-    {
-        if (e.universeId < 0 || e.universeId >= universes.size())
-            continue;
-        Universe *uni = universes.at(e.universeId);
-        if (!uni)
-            continue;
-        for (const auto &w : e.writes)
-            uni->write(w.first, w.second, /*forceLTP=*/true);
-    }
 }

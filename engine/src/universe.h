@@ -368,8 +368,43 @@ protected:
      * Faders
      ************************************************************************/
 public:
+    /* Precedence, lowest first: requestFader() keeps m_faders sorted by
+       priority and processFaders() writes them in that order, after
+       zeroIntensityChannels(). An HTP channel takes the highest value of
+       the faders that write it -- unless a fader's channel is Override,
+       which replaces what the faders below it wrote. LTP channels take the
+       last (so highest-priority) writer.
+
+         Hold        a held last look (LastLookEffect): a base under
+                     everything, merged like a running function -- HTP
+                     with intensity, any function's write takes an LTP
+                     channel (and a starting cue releases its fixtures).
+         Tracked ... SimpleDesk   functions, the programmer, the desk.
+         Highlight   the highlighted fixtures (HighlightEffect), Override:
+                     their highlight look over anything running. The Grand
+                     Master and Blackout still apply.
+         Park        parked fixtures (ParkEffect), Override and past the
+                     Grand Master (writePastGM): a parked channel sends
+                     its parked value whatever runs and wherever the Grand
+                     Master is. Blackout still takes it out, as it does
+                     everything but Ignore-Blackout fixtures (an Ignore-
+                     Blackout fixture that is parked sends its park through
+                     Blackout too). Blind mutes it like everything else.
+
+       After the faders, the post-fader stage works out what goes out, the
+       same on every path that does (the frame, a Grand Master move, an
+       output-rule change; updatePostGMValue()): the Grand Master (not on
+       Ignore-GM, relay or parked channels), the modifiers, the On-when-not-
+       in-use floor on channels nothing sets, a relay's snap; then the
+       auto-open shutters. Blackout and Blind are applied to that on the way
+       out (dumpOutput()).
+
+       Nothing writes into the pre-GM buffer from outside a fader to hold a
+       level: processFaders() zeroes intensity every frame, so such a write
+       never reaches the output (bug B1). See OutputLayer. */
     enum FaderPriority
     {
+        Hold = -3,       /** Under everything: a held last look (LastLookEffect) */
         Tracked = -2,    /** Under everything: a cue list's tracked state put back
                             after Back or a jump (ChaserRunner::restack) */
         Background = -1, /** Below Auto: the Show timeline's base layer, so a
@@ -377,7 +412,9 @@ public:
         Auto = 0,
         Override,
         Flashing, /** Priority to override slider values and running chasers by flash scene */
-        SimpleDesk
+        SimpleDesk,
+        Highlight,  /** Over everything that runs: the highlighted fixtures */
+        Park        /** Over everything, Highlight too: the parked fixtures */
     };
 
     /** Request a new GenericFader used to compose the final values of
@@ -474,6 +511,9 @@ private:
     /** After the faders: the OnAtOpen channels nothing sets go to full;
      *  the ones that no longer should, back to what is stored. */
     void applyOnAtOpen();
+    /** What an OnAtOpen channel nothing sets sends: full, through the Grand
+     *  Master (unless exempt or a relay) and the modifiers, a relay snapped */
+    uchar onAtOpenValue(int channel);
 
     QMutex m_outputRulesMutex;
     QVector<int> m_onAtOpenChannels;
@@ -544,6 +584,15 @@ private:
     std::unique_ptr<std::atomic<quint8>[]> m_held;
     /** Counts processFaders() frames; starts past 1 so nothing is "recent" */
     std::atomic<quint32> m_frame { 16 };
+    /** The frame each channel was last written past the Grand Master in
+     *  (writePastGM()). Only the frame being built counts: a park let go
+     *  of is under the Grand Master again on the very next frame. */
+    std::unique_ptr<std::atomic<quint32>[]> m_pastGMFrame;
+    bool pastGM(int address) const
+    {
+        return m_pastGMFrame[address].load(std::memory_order_relaxed)
+               == m_frame.load(std::memory_order_relaxed);
+    }
 
 signals:
     void universeWritten(quint32 universeID, const QByteArray& universeData);
@@ -714,6 +763,14 @@ public:
      * preview of a cue that mixes plays what GO plays).
      */
     bool writeOverride(int address, uchar value);
+
+    /**
+     * Write a channel from a Park fader: replaces what every fader below
+     * wrote (as forceLTP) and is sent past the Grand Master this frame, as
+     * a channel set to Ignore the Grand Master is. Call from a fader only,
+     * on the universe thread (processFaders()).
+     */
+    bool writePastGM(int address, uchar value);
 
     /**
      * Write a value representing one or multiple channels
