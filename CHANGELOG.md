@@ -169,6 +169,11 @@ circuits and subs.
 
 ### Changed
 
+- **Classic QLC+ looks like QLC+** (board Q78): QLC+'s main toolbar, the
+  Fixtures tab's twelve buttons and the Functions tab's new-function
+  buttons (icons, as QLC+ draws them), and a footer of the mode, the Grand
+  Master and Ready only. The other views are unchanged.
+
 - **Show-mode Lock is part of Operate** (board Q80): no separate Control ▸
   Show-mode Lock or ⌘L. Operate locks programmer faders on the Virtual
   Console and the Shows timeline; a console Grand Master fader now works

@@ -62,6 +62,9 @@ public:
     /** Match the main window's icon/text display preference
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();
+    /** Classic QLC+ view (Q78): the stock QLC+ toolbar -- one button per
+     *  new function type and a folder -- instead of the Add dropdown. */
+    void setClassicToolbar(bool classic);
 
 signals:
     /** Emitted when the FunctionManager's tab is de/activated */
@@ -154,6 +157,9 @@ protected slots:
 protected:
     QToolBar* m_toolbar;
     QToolButton* m_addButton;   //!< "Add" dropdown consolidating New Scene/Chaser/…/Folder
+    QAction* m_addButtonAction = nullptr;
+    /** The stock toolbar's buttons (Q78), shown only in Classic QLC+. */
+    QList<QAction *> m_classicToolbarActions;
 
     QAction* m_addSceneAction;
     QAction* m_addChaserAction;

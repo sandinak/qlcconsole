@@ -1663,6 +1663,42 @@ void FixtureManager::initToolBar()
 
     toolbar->addAction(m_addChannelsGroupAction);
 
+    // The stock QLC+ toolbar (Q78), for the Classic QLC+ view: each button
+    // a QToolButton on the shared action, so hiding the button never hides
+    // the action in the menus that also hold it.
+    {
+        auto button = [this, toolbar](QAction *a) {
+            if (a == nullptr)
+                return;
+            QToolButton *b = new QToolButton(toolbar);
+            b->setDefaultAction(a);
+            b->setToolButtonStyle(Qt::ToolButtonIconOnly);   // QLC+'s toolbar: icons, names in tooltips
+            QAction *w = toolbar->addWidget(b);
+            w->setVisible(false);
+            m_classicToolbarActions << w;
+        };
+        auto separator = [this, toolbar]() {
+            QAction *s = toolbar->addSeparator();
+            s->setVisible(false);
+            m_classicToolbarActions << s;
+        };
+        button(m_addAction);
+        button(m_addRGBAction);
+        button(m_removeAction);
+        button(m_propertiesAction);
+        button(m_fadeConfigAction);
+        separator();
+        button(m_groupAction);
+        button(m_unGroupAction);
+        separator();
+        button(m_moveUpAction);
+        button(m_moveDownAction);
+        separator();
+        button(m_importAction);
+        button(m_exportAction);
+        button(m_remapAction);
+    }
+
     // Initial per-tab visibility: the fixtures tab (index 0) is active at
     // startup, and slotTabChanged() isn't guaranteed to fire before this
     // (its QTabWidget::currentChanged connection is only made once both
@@ -1671,6 +1707,14 @@ void FixtureManager::initToolBar()
 
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();
+}
+
+void FixtureManager::setClassicToolbar(bool classic)
+{
+    for (QAction *a : m_classicToolbarActions)
+        a->setVisible(classic);
+    if (m_addFixtureButtonAction != nullptr)
+        m_addFixtureButtonAction->setVisible(!classic);
 }
 
 void FixtureManager::applyToolbarLabelMode()

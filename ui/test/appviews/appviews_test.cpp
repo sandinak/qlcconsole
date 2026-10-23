@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QMenu>
 #include <QMenuBar>
+#include <QToolBar>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTabWidget>
@@ -70,13 +71,13 @@
 #define private public
 #define protected public
 #include "virtualconsole.h"
+#include "fixturemanager.h"
 #undef protected
 #undef private
 #include "helpbrowser.h"
 #include "simpledesk.h"
 #include "showmanager.h"
 #include "inputoutputmanager.h"
-#include "fixturemanager.h"
 #include "showconverter.h"
 #include <QToolButton>
 #include "inputoutputmap.h"
@@ -506,6 +507,53 @@ void AppViews_Test::virtualConsoleKeysDontClashWithTheApp()
     QCOMPARE(vc->m_addButtonMatrixAction->shortcut(), QKeySequence("CTRL+SHIFT+G"));
     QCOMPARE(vc->m_addAnimationAction->shortcut(), QKeySequence("CTRL+SHIFT+N"));
     vc->disableEdit();
+}
+
+void AppViews_Test::classicLooksLikeQlcPlus()
+{
+    m_app->setWorkspaceView(App::ClassicView);
+    QToolBar *main = m_app->findChild<QToolBar *>("classicToolbar");
+    QVERIFY(main != nullptr);
+    QVERIFY(!main->isHidden());
+    const QList<QAction *> acts = main->actions();
+    for (QAction *a : { m_app->m_fileNewAction, m_app->m_fileOpenAction, m_app->m_fileSaveAction,
+                        m_app->m_rigOverviewAction, m_app->m_addressToolAction, m_app->m_dumpDmxAction })
+        QVERIFY2(acts.contains(a), qPrintable(a->text()));
+
+    // The stock Fixtures and Functions toolbars.
+    FixtureManager *fm = FixtureManager::instance();
+    QVERIFY(fm != nullptr);
+    QCOMPARE(fm->m_classicToolbarActions.count(), 15);       // 12 buttons, 3 separators
+    for (QAction *a : fm->m_classicToolbarActions)
+        QVERIFY(a->isVisible());
+    QVERIFY(!fm->m_addFixtureButtonAction->isVisible());
+    FunctionManager *fn = FunctionManager::instance();
+    QVERIFY(fn != nullptr);
+    for (QAction *a : fn->m_classicToolbarActions)
+        QVERIFY(a->isVisible());
+    QVERIFY(!fn->m_addButtonAction->isVisible());
+
+    // The footer: no load, timecode or Next.
+    QVERIFY(m_app->m_statusLoadLabel->isHidden());
+    QVERIFY(m_app->m_statusTimecodeLabel->isHidden());
+    QVERIFY(m_app->m_statusStandby->isHidden());
+    const QString shots = qEnvironmentVariable("QLC_UX_SHOTS");
+    if (!shots.isEmpty())
+    {
+        m_app->resize(1400, 860);
+        m_app->showContext("Fixtures");
+        QVERIFY(m_app->grab().save(shots + "/classic-fixtures.png"));
+        m_app->showContext("Functions");
+        QVERIFY(m_app->grab().save(shots + "/classic-functions.png"));
+    }
+
+    // Back in qlcconsole: none of it.
+    m_app->setWorkspaceView(App::ConsoleView);
+    QVERIFY(main->isHidden());
+    for (QAction *a : fm->m_classicToolbarActions)
+        QVERIFY(!a->isVisible());
+    QVERIFY(fm->m_addFixtureButtonAction->isVisible());
+    QVERIFY(!m_app->m_statusTimecodeLabel->isHidden());
 }
 
 void AppViews_Test::editUndoSaysWhereItWorks()

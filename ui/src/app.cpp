@@ -611,7 +611,7 @@ void App::init()
                 m_statusPowerLabel->hide();
                 return;
             }
-            if (m_showFooterPower == false)   // Settings ▸ Appearance: chip off
+            if (m_showFooterPower == false || m_classicChrome)   // chip off, or Classic QLC+ (Q78)
                 return;
             m_statusPowerLabel->setText(overload
                 ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
@@ -3914,6 +3914,66 @@ void App::applyWorkspaceTabs()
     updateWorkspaceViewActions();
     updateWindowJumps();
     slotTabChanged(m_tab->currentIndex());
+    applyClassicChrome();
+}
+
+void App::applyClassicChrome()
+{
+    const bool classic = m_workspaceView == ClassicView;
+    m_classicChrome = classic;
+
+    // The QLC+ main toolbar: files, the Rig Overview (QLC+'s Monitor), the
+    // address tool, help, dump and live edit, then Stop all, Blackout and
+    // Design/Operate -- the same actions as the menus and the top bar.
+    if (classic && m_classicToolbar == nullptr)
+    {
+        m_classicToolbar = new QToolBar(tr("QLC+ toolbar"), this);
+        m_classicToolbar->setObjectName(QStringLiteral("classicToolbar"));
+        m_classicToolbar->setMovable(false);
+        m_classicToolbar->setFloatable(false);
+        m_classicToolbar->setIconSize(QSize(20, 20));
+        m_classicToolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);   // as QLC+ draws it
+        // Stop all, Blackout and Design/Operate are already in the top bar.
+        const QList<QAction *> actions = {
+            m_fileNewAction, m_fileOpenAction, m_fileSaveAction, m_fileSaveAsAction, nullptr,
+            m_rigOverviewAction, m_addressToolAction, nullptr, m_helpIndexAction, nullptr,
+            m_dumpDmxAction, m_liveEditAction, m_liveEditVirtualConsoleAction };
+        for (QAction *a : actions)
+        {
+            if (a == nullptr)
+                m_classicToolbar->addSeparator();
+            else
+                m_classicToolbar->addAction(a);
+        }
+        // QLC+'s Monitor and Help buttons had icons; these actions are menu
+        // items here, so give the toolbar's buttons theirs.
+        if (m_rigOverviewAction != nullptr && m_rigOverviewAction->icon().isNull())
+            m_rigOverviewAction->setIcon(QIcon(":/monitor.png"));
+        if (m_helpIndexAction != nullptr && m_helpIndexAction->icon().isNull())
+            m_helpIndexAction->setIcon(QIcon(":/help.png"));
+        addToolBar(Qt::TopToolBarArea, m_classicToolbar);
+    }
+    if (m_classicToolbar != nullptr)
+        m_classicToolbar->setVisible(classic);
+
+    if (FixtureManager *fm = FixtureManager::instance())
+        fm->setClassicToolbar(classic);
+    if (FunctionManager *fn = FunctionManager::instance())
+        fn->setClassicToolbar(classic);
+
+    // The footer: the mode, the Grand Master and Ready only.
+    if (m_statusLoadLabel != NULL)
+        m_statusLoadLabel->setVisible(m_showFooterLoad && !classic);
+    if (m_statusPowerLabel != NULL && classic)
+        m_statusPowerLabel->hide();
+    if (m_statusTimecodeLabel != NULL)
+        m_statusTimecodeLabel->setVisible(!classic);
+    if (m_statusSpeedMasters != NULL)
+        m_statusSpeedMasters->setVisible(m_showFooterSpeed && !classic);
+    if (m_statusStandby != NULL && classic)
+        m_statusStandby->hide();
+    else
+        slotUpdateStandby();
 }
 
 void App::updateWorkspaceViewActions()
@@ -5179,7 +5239,7 @@ void App::setFooterChipShown(FooterChip chip, bool on)
         m_showFooterLoad = on;
         settings.setValue(SETTINGS_SHOW_FOOTER_LOAD, on);
         if (m_statusLoadLabel != NULL)
-            m_statusLoadLabel->setVisible(on);
+            m_statusLoadLabel->setVisible(on && !m_classicChrome);
         break;
     case FooterPower:
         m_showFooterPower = on;
@@ -5199,7 +5259,7 @@ void App::setFooterChipShown(FooterChip chip, bool on)
         m_showFooterSpeed = on;
         settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
         if (m_statusSpeedMasters != NULL)
-            m_statusSpeedMasters->setVisible(on);
+            m_statusSpeedMasters->setVisible(on && !m_classicChrome);
         break;
     }
 }
@@ -6514,6 +6574,11 @@ void App::slotUpdateStandby()
 {
     if (m_statusStandby == NULL || m_doc == NULL)
         return;
+    if (m_classicChrome)   // Classic QLC+'s footer has no Next (Q78)
+    {
+        m_statusStandby->hide();
+        return;
+    }
     ShowControl *sc = m_doc->showControl();
     Chaser *list = sc->cueList(QString());
     if (list == NULL)

@@ -399,7 +399,30 @@ void FunctionManager::initToolbar()
     addMenu->addSeparator();
     addMenu->addAction(m_addFolderAction);
     m_addButton->setMenu(addMenu);
-    m_toolbar->addWidget(m_addButton);
+    m_addButtonAction = m_toolbar->addWidget(m_addButton);
+
+    // The stock QLC+ toolbar (Q78), for the Classic QLC+ view: a button per
+    // type, each a QToolButton on the shared action (hiding the button never
+    // hides the action in the Add menu or the tree's right-click).
+    for (QAction *a : { m_addSceneAction, m_addChaserAction, m_addSequenceAction, m_addEFXAction,
+                        m_addCollectionAction, m_addRGBMatrixAction, m_addScriptAction,
+                        m_addAudioAction, m_addVideoAction, static_cast<QAction *>(nullptr),
+                        m_addFolderAction })
+    {
+        if (a == nullptr)
+        {
+            QAction *s = m_toolbar->addSeparator();
+            s->setVisible(false);
+            m_classicToolbarActions << s;
+            continue;
+        }
+        QToolButton *b = new QToolButton(m_toolbar);
+        b->setDefaultAction(a);
+        b->setToolButtonStyle(Qt::ToolButtonIconOnly);   // QLC+'s toolbar: icons, names in tooltips
+        QAction *w = m_toolbar->addWidget(b);
+        w->setVisible(false);
+        m_classicToolbarActions << w;
+    }
 
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_autostartAction);
@@ -413,6 +436,14 @@ void FunctionManager::initToolbar()
 
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();
+}
+
+void FunctionManager::setClassicToolbar(bool classic)
+{
+    for (QAction *a : m_classicToolbarActions)
+        a->setVisible(classic);
+    if (m_addButtonAction != nullptr)
+        m_addButtonAction->setVisible(!classic);
 }
 
 void FunctionManager::applyToolbarLabelMode()

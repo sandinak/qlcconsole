@@ -102,7 +102,10 @@ Which of these you see depends on the view (below).
   tab: **Window ▸ Functions** switches to Everything to show it.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
-  Connections tab).
+  Connections tab), with QLC+'s toolbars: the main one (New, Open, Save,
+  Save As, the Rig Overview as QLC+'s Monitor, the address tool, help, dump,
+  live edit) and the Fixtures and Functions tabs' full rows of buttons. The
+  footer shows only the mode, the Grand Master and Ready.
 - **Everything** — every tab.
 
 A view only shows and hides tabs. The show itself doesn't change, and

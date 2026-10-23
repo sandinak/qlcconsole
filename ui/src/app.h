@@ -191,6 +191,10 @@ private:
     /** Put the tab bar in step with the view: its tabs in its order, the
      *  rest put away (or left in their own windows). */
     void applyWorkspaceTabs();
+    /** Classic QLC+ looks like QLC+ (Q78): its main toolbar, the stock
+     *  Fixtures and Functions toolbars, and a footer of the mode, the Grand
+     *  Master and Ready only. Run on every view change. */
+    void applyClassicChrome();
     /** Whether @p label is a tab of the current view. */
     bool tabInView(const QString &label) const;
     /** Where @p label goes in the tab bar now: after the docked tabs that
@@ -603,6 +607,10 @@ private:
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
     QAction* m_rigOverviewAction;
+    /** Classic QLC+'s main toolbar (Q78); hidden in the other views. */
+    class QToolBar* m_classicToolbar = nullptr;
+    /** Classic QLC+'s footer: no load, power, timecode, Next or speed chips. */
+    bool m_classicChrome = false;
     QList<QAction *> m_windowJumps;         ///< Window menu: a view each (Everything's order)
     QMenu *m_windowMenu = nullptr;
     QAction *m_windowHiddenSeparator = nullptr;  ///< Window menu: before the view's hidden tabs

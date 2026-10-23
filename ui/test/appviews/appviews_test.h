@@ -67,6 +67,10 @@ private slots:
      *  the Lighting Studio -- and elsewhere says "Nothing to undo on this
      *  tab" (greyed) instead of undoing another tab's step. */
     void editUndoSaysWhereItWorks();
+    /** Q78: Classic QLC+ looks like QLC+ -- its main toolbar, the stock
+     *  Fixtures and Functions toolbars, and a footer of mode, GM and Ready;
+     *  the qlcconsole view puts it all back. */
+    void classicLooksLikeQlcPlus();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
      *  production run": a show's definitions come from this computer. */

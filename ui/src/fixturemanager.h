@@ -68,6 +68,10 @@ public:
     /** Match the main window's icon/text display preference
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();
+    /** Classic QLC+ view (Q78): the stock QLC+ toolbar -- Add, Add RGB
+     *  panel, Remove, Properties, Fade configuration | Group, Ungroup |
+     *  Up, Down | Import, Export, Remap -- instead of the Add dropdown. */
+    void setClassicToolbar(bool classic);
 
     /** Append the document-wide fixture actions (Import/Export/Remap/Fade
      *  Configuration) to @p menu — used by App to build its "Fixtures" menu
@@ -445,6 +449,8 @@ private:
      *  themselves, which stay usable from the fixture context menu on
      *  either state. */
     QAction* m_addFixtureButtonAction;
+    /** The stock toolbar's buttons (Q78), shown only in Classic QLC+. */
+    QList<QAction *> m_classicToolbarActions;
     /** "Add Channel Group..." — the Channel Groups tab's own creation
      *  action, split out from m_addAction so its toolbar label is never
      *  wrong (previously m_addAction did double duty, dispatching by tab in
