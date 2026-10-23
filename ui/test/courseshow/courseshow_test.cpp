@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QDockWidget>
 #include <QTreeWidgetItemIterator>
 #include <QApplication>
 #include <QTemporaryDir>

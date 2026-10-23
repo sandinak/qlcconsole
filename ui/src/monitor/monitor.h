@@ -331,9 +331,11 @@ public:
 protected:
 
 private:
-    /** The rig-overview window, kept so a second click raises the one that is
-     *  already open rather than stacking another. Cleared when it closes. */
-    class QDialog *m_overviewDlg = NULL;
+    /** The Rig Overview (Q79): a dock on the main window -- docked beside
+     *  the tabs, or dragged out to float on top -- never a window that falls
+     *  behind. Kept so a second click raises it rather than stacking
+     *  another; cleared when it closes. */
+    class QDockWidget *m_overviewDlg = NULL;
     /** The overview's renderer, so the active scene can reach it too --
      *  it shows the same aim the studio draws as dashed lines. */
     class StructureStudioView *m_overviewView = NULL;

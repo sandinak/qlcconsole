@@ -2376,9 +2376,8 @@ void App::initMenuBar()
               QT_TR_NOOP("The QLC+ tabs, in QLC+'s order: Fixtures, Functions, Shows, "
                          "Virtual Console, Simple Desk, Inputs/Outputs") },
             { ConsoleView, "viewWorkspaceConsole",
-              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows, "
-                         "Virtual Console, Simple Desk and Run; the stock Functions tab is in "
-                         "Classic QLC+ and Everything") },
+              QT_TR_NOOP("Connections, Fixtures, Build, Show Tree, Virtual Console, Simple Desk "
+                         "and Run; Lighting Studio, Shows and Functions are in Everything") },
             { EverythingView, "viewWorkspaceEverything",
               QT_TR_NOOP("Every tab") } };
         for (const auto &v : views)
@@ -3699,12 +3698,12 @@ QStringList App::workspaceViewTabs(WorkspaceView view)
         return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
                  tr("Simple Desk"), tr("Connections") };
     case ConsoleView:
-        // No Functions tab (board Q32; Window ▸ Functions switches view). Simple
-        // Desk, a QLC+ user's channel check, sits where Everything has it:
-        // after the Virtual Console, before Run (Q71).
-        return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Build"),
-                 tr("Show Tree"), tr("Shows"), tr("Virtual Console"), tr("Simple Desk"),
-                 tr("Run") };
+        // Seven tabs, in show order (Q79): no Functions (Q32), Lighting
+        // Studio or Shows -- they are in Everything, and the Rig Overview is a
+        // dock. Build stays (Q74). Simple Desk, a QLC+ user's channel check,
+        // sits after the Virtual Console, before Run (Q71).
+        return { tr("Connections"), tr("Fixtures"), tr("Build"), tr("Show Tree"),
+                 tr("Virtual Console"), tr("Simple Desk"), tr("Run") };
     case EverythingView:
     default:
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Functions"),

@@ -65,8 +65,8 @@ their house lights, relays and subs.
   shows and settings are as they were. See
   [Plot symbols](lighting-studio.md#plot-symbols).
 - **Three views.** **View ▸ Workspace** picks the tabs: **qlcconsole**
-  (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
-  Virtual Console, Simple Desk, Run), **Classic QLC+** (QLC+'s own tabs, in its order
+  (Connections, Fixtures, Build, Show Tree, Virtual Console, Simple Desk,
+  Run; Lighting Studio, Shows and Functions in Everything), **Classic QLC+** (QLC+'s own tabs, in its order
   and names) or **Everything**. The view is saved with the show. An old
   QLC+ show opens in Classic QLC+; everything else, and a new show, in
   qlcconsole. Choosing a hidden tab from the Window menu shows Everything,
@@ -81,7 +81,7 @@ their house lights, relays and subs.
 - **⇧⌘1… follow the tabs on screen.** The Window menu numbers the view's
   tabs in the order you see them, so ⇧⌘1 is always the first tab: in
   Classic QLC+ that is Fixtures, in qlcconsole Connections (the Show Tree
-  is ⇧⌘5 and Run ⇧⌘9 there). Change the view and they renumber. Tabs the
+  is ⇧⌘4 and Run ⇧⌘7 there). Change the view and they renumber. Tabs the
   view hides come after, with no shortcut. See
   [Keyboard and mouse](shortcuts.md).
 - **Settings ▸ Appearance.** The theme, the toolbar style, which chips

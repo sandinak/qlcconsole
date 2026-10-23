@@ -42,6 +42,7 @@
 #include <QCheckBox>
 #include <QScopeGuard>
 #include <QDialog>
+#include <QDockWidget>
 #include <QTreeWidget>
 #include <QSettings>
 
@@ -572,16 +573,17 @@ void Monitor_Test::theRigOverviewShortcutTogglesIt()
 {
     QWidget parent;
     Monitor mon(&parent, m_doc);
-    auto overview = []() -> QDialog * {
+    // A dock (Q79); with no main window it floats as its own window.
+    auto overview = []() -> QDockWidget * {
         foreach (QWidget *w, QApplication::topLevelWidgets())
-            if (QDialog *d = qobject_cast<QDialog *>(w))
+            if (QDockWidget *d = qobject_cast<QDockWidget *>(w))
                 if (d->windowTitle() == QString("Rig Overview") && d->isVisible())
                     return d;
         return nullptr;
     };
 
     mon.toggleStageOverview();
-    QPointer<QDialog> dlg = overview();
+    QPointer<QDockWidget> dlg = overview();
     QVERIFY(dlg != nullptr);
     dlg->activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(dlg));
@@ -639,9 +641,9 @@ void Monitor_Test::layersShowAndHideFromTheRigOverviewInAnyMode()
 
         // The overview's own menu.
         mon.toggleStageOverview();
-        QDialog *dlg = nullptr;
+        QDockWidget *dlg = nullptr;
         foreach (QWidget *w, QApplication::topLevelWidgets())
-            if (QDialog *d = qobject_cast<QDialog *>(w))
+            if (QDockWidget *d = qobject_cast<QDockWidget *>(w))
                 if (d->windowTitle() == QString("Rig Overview") && d->isVisible())
                     dlg = d;
         QVERIFY(dlg != nullptr);

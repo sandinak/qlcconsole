@@ -42,7 +42,7 @@ connected to real lights**, so you can't break anything. Try everything.
    and finish files are in the same folder.
 2. Make a folder **Documents → qlcconsole** and keep your files there.
 3. In qlcconsole: **File → Open**, then pick the file.
-4. Click the **Show Tree** tab at the bottom (⇧⌘5).
+4. Click the **Show Tree** tab at the bottom (⇧⌘4).
 5. **View → Rig Overview** (⇧⌘R) opens the stage in its own window.
 6. The footer says **No outputs: preview only**, in grey. That's expected:
    the show has no outputs on purpose. Red in the footer means a real

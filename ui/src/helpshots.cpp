@@ -26,6 +26,7 @@
 #include <QTabWidget>
 #include <QListWidget>
 #include <QCheckBox>
+#include <QDockWidget>
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -665,6 +666,7 @@ QList<HelpShots::Shot> HelpShots::shots()
         // The software renderer: offscreen there is no graphics card to ask.
         if (QCheckBox *gpu = mon->m_overviewDlg->findChild<QCheckBox *>(QStringLiteral("rigGpu")))
             gpu->setChecked(false);
+        mon->m_overviewDlg->setFloating(true);   // a picture of the panel alone
         mon->m_overviewDlg->resize(1100, 760);
         settle();
         f.grab = mon->m_overviewDlg;

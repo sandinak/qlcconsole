@@ -156,7 +156,7 @@ later), and **(6)** the tabs.
 Your production is the one GO plays. It's the only production in the
 show, so there's nothing to choose.
 
-13. Click the **Run** tab (⇧⌘9) and press **GO** (or **Space**) three
+13. Click the **Run** tab (⇧⌘7) and press **GO** (or **Space**) three
     times.
     - *You should see:* NEXT steps down the list as the stage goes from
       Pose to Verse to Chorus.

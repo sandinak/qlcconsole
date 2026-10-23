@@ -32,6 +32,7 @@
 #include <QFileInfo>
 #include <QCursor>
 #include <QDialog>
+#include <QDockWidget>
 #include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
@@ -2489,20 +2490,42 @@ void Monitor::showStageOverview()
         return;
     }
 
-    QDialog *dlgPtr = new QDialog(this);
-    QDialog &dlg = *dlgPtr;
-    m_overviewDlg = dlgPtr;
-    connect(dlgPtr, &QObject::destroyed, this, [this]() {
+    /* A dock on the main window (Q79): docked beside the tabs by default, or
+       dragged out to float on top of the window -- it can't fall behind it
+       ("the Rig Overview is behind the main window", lesson 0.2). Without a
+       main window (a test) it floats on its own. */
+    QMainWindow *main = nullptr;
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        if (w->inherits("App"))
+            main = qobject_cast<QMainWindow *>(w);
+    QDockWidget *dock = new QDockWidget(tr("Rig Overview"), main != nullptr ? static_cast<QWidget *>(main) : this);
+    dock->setObjectName(QStringLiteral("rigOverviewDock"));
+    m_overviewDlg = dock;
+    connect(dock, &QObject::destroyed, this, [this]() {
         m_overviewDlg = NULL;
         m_overviewView = NULL;
     });
-    dlg.setAttribute(Qt::WA_DeleteOnClose);
-    dlg.setWindowTitle(tr("Rig Overview"));
-    dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#angled--the-free-3d-view"));
+    dock->setAttribute(Qt::WA_DeleteOnClose);
+    dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable
+                      | QDockWidget::DockWidgetFloatable);
+    dock->setProperty("helpTopic", QStringLiteral("lighting-studio.md#angled--the-free-3d-view"));
+    QWidget *dlgPtr = new QWidget(dock);
+    QWidget &dlg = *dlgPtr;
+    dock->setWidget(dlgPtr);
     // ⌘W closes it like any other window; ⇧⌘R (toggleStageOverview()) too.
     QShortcut *closeKey = new QShortcut(QKeySequence::Close, dlgPtr);
-    connect(closeKey, &QShortcut::activated, dlgPtr, &QDialog::close);
-    dlg.resize(1100, 760);
+    closeKey->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(closeKey, &QShortcut::activated, dock, &QDockWidget::close);
+    if (main != nullptr)
+    {
+        main->addDockWidget(Qt::RightDockWidgetArea, dock);
+        main->resizeDocks({ dock }, { qMax(420, main->width() * 2 / 5) }, Qt::Horizontal);
+    }
+    else
+    {
+        dock->setFloating(true);
+        dock->resize(1100, 760);
+    }
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
 
     StructureStudioView *view =
@@ -2735,7 +2758,7 @@ void Monitor::showStageOverview()
     vl->addWidget(view, 1);
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
-    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::close);
+    connect(bb, &QDialogButtonBox::rejected, dock, &QDockWidget::close);
     vl->addWidget(bb);
 
     /* Follow the rig while it is open: structures and fixtures move under it as
@@ -2746,7 +2769,8 @@ void Monitor::showStageOverview()
     connect(m_graphicsView, &MonitorGraphicsView::layerStateChanged, view,
             &StructureStudioView::layersChanged);
 
-    dlg.show();
+    dock->show();
+    dock->raise();
 }
 
 void Monitor::slotPOVChanged(int index)

@@ -40,7 +40,7 @@ Switch roles after each cue.
 ### Get ready
 
 1. Open qlcconsole. **File → Open** → `lesson-N-N-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5). Open **View → Rig Overview** (⇧⌘R).
+2. Click the **Show Tree** tab (⇧⌘4). Open **View → Rig Overview** (⇧⌘R).
 
 ### TODO: a heading per cue or task
 

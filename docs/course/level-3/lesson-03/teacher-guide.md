@@ -21,7 +21,7 @@ Students can:
 
 - [ ] qlcconsole on the projector computer and the class laptops.
 - [ ] `ShowChoir-Classroom.qlcc` on each laptop (from `docs/course/shows/`).
-- [ ] On the projector: the show open, the **Lighting Studio** tab (⇧⌘3).
+- [ ] On the projector: the show open, **Window ▸ Lighting Studio** (it switches to the Everything view).
 - [ ] A printed lighting plot from any real show (a USITT-style plot with
   a symbol key is ideal), and the [handout](handout.md) and
   [exit ticket](exit-ticket.md).

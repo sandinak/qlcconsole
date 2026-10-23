@@ -47,7 +47,7 @@ our rig). Switch roles after each correction.
 ### Get ready
 
 1. Open qlcconsole. **File → Open** → `ShowChoir-Classroom.qlcc`.
-2. Click the **Lighting Studio** tab (⇧⌘3).
+2. Choose **Window ▸ Lighting Studio**: it switches to the Everything view, with a line at the top to go back.
    - *You should see:* the plot: the stage from above, with the trusses
      upstage, the risers, and the audience towers out in the house.
 
@@ -78,7 +78,7 @@ our rig). Switch roles after each correction.
      (from above, their base). A lantern throws no beam: when it is lit,
      its glow spreads round it. Their icons in the Fixtures tab changed
      too.
-8. Click the **Show Tree** tab (⇧⌘5) and open the Library's groups.
+8. Click the **Show Tree** tab (⇧⌘4) and open the Library's groups.
    - *You should see:* the same icons there: the app uses one icon per
      fixture everywhere.
 

@@ -389,8 +389,8 @@ try it on your own devices before relying on it for a show.
 Every tab is in **Window**. The tabs the [workspace view](getting-started.md#views)
 shows come first, in its order, numbered as they are on screen: ⇧⌘1 is
 the first tab, ⇧⌘0 the tenth. In the qlcconsole view that is ⇧⌘1
-Connections, ⇧⌘2 Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Build, ⇧⌘5 Show
-Tree, ⇧⌘6 Shows, ⇧⌘7 Virtual Console, ⇧⌘8 Simple Desk, ⇧⌘9 Run; in
+Connections, ⇧⌘2 Fixtures, ⇧⌘3 Build, ⇧⌘4 Show Tree, ⇧⌘5 Virtual
+Console, ⇧⌘6 Simple Desk, ⇧⌘7 Run; in
 Classic QLC+, ⇧⌘1 Fixtures … ⇧⌘6 Inputs/Outputs. They renumber when the
 view changes. The tabs the view hides follow, with no shortcut.
 Choosing one brings it forward — its

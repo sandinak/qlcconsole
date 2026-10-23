@@ -67,7 +67,7 @@ right cue, right time?). Switch after each run.
 
 1. Open qlcconsole, choose **File → Open** and open
    `lesson-1-5-start.qlcc` (where Lesson 1.4 finished).
-2. Click the **Run** tab (⇧⌘9) and open **View → Rig Overview** (⇧⌘R)
+2. Click the **Run** tab (⇧⌘7) and open **View → Rig Overview** (⇧⌘R)
    beside it.
 3. Click **Operate** at the top right of the window.
    - *You should see:* **LIVE** in the Run tab's top right corner. From
@@ -135,7 +135,7 @@ what it changes, **(3)** **GO** (or **Space**), **(4)** **Back**, **(5)**
    **Hit** on the drum fill right after the chorus. The SM has already
    written 1.0.3 and 1.0.4 into the script, so those numbers must not
    change. Press **Stop**, click **Design**, then the **Show Tree** tab
-   (⇧⌘5).
+   (⇧⌘4).
    1. Click **1.0.2 Chorus**, click **+ Cue**, type `Hit` and press
       **Return**.
       - *You should see:* **1.0.2.5 Hit** between the Chorus and the

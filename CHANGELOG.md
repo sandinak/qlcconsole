@@ -169,6 +169,12 @@ circuits and subs.
 
 ### Changed
 
+- **A smaller qlcconsole view** (board Q79): seven tabs in show order —
+  Connections, Fixtures, Build, Show Tree, Virtual Console, Simple Desk,
+  Run (⇧⌘1–⇧⌘7). The Lighting Studio, Shows and Functions are in
+  Everything. The **Rig Overview** is a dock panel beside the tabs (drag it
+  out to float on top) instead of a window that could fall behind.
+
 - **One Upgrade door** (board Q76): Upgrade This Show… replaces the Show
   Tree's Import chaser… menu and Convert an old show…; Build's Send to Show
   Tree… opens it with just that chaser ticked (the list is filed and shown

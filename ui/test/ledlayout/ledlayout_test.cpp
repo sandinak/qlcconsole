@@ -15,6 +15,7 @@
   limitations under the License.
 */
 
+#include <QDockWidget>
 #include <QtTest>
 #include <QTreeWidget>
 #include <QPushButton>
