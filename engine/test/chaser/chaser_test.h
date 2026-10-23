@@ -32,6 +32,10 @@ private slots:
     void cleanupTestCase();
     void init();
     void deletingARunningFunctionLetsGoOfItsChannels();
+    /** The same with the MasterTimer on its own thread, as in the app: a
+     *  chaser deleted mid-step, over and over, never takes the timer down
+     *  (the chaser's teardown racing its runner) and lets go of the rig. */
+    void deletingAChaserWhileTheTimerRunsIsSafe();
     void cleanup();
 
     void initial();

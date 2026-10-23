@@ -23,6 +23,7 @@
 #include <chrono>
 
 #define private public
+#define protected public                // Universe::processFaders()
 #include "mastertimer_test.h"
 #include "dmxsource_stub.h"
 #include "function_stub.h"
@@ -34,6 +35,11 @@
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "scene.h"
+#include "fixture.h"
+#include "inputoutputmap.h"
+#include "functionparent.h"
+#undef protected
 #undef private
 
 #include "../common/resource_paths.h"
@@ -702,6 +708,69 @@ void MasterTimer_Test::internalBeatsFireOnTheClocksBeats()
     QVERIFY(beats >= 3);
     mt->setBeatSourceType(MasterTimer::None);
     disconnect(mt, &MasterTimer::beat, this, nullptr);
+}
+
+void MasterTimer_Test::fadeAndStopAllFadesTheOutputThenStops()
+{
+    // A Doc of its own whose timer is never started: ticked by hand, a tick
+    // being MasterTimer::tick() ms, so no wall clock is involved.
+    Doc *doc = new Doc(this);
+    MasterTimer *mt = doc->masterTimer();
+    Fixture *fx = new Fixture(doc);
+    fx->setChannels(1);                     // a dimmer
+    fx->setUniverse(0);
+    fx->setAddress(0);
+    QVERIFY(doc->addFixture(fx));
+    Scene *scene = new Scene(doc);
+    scene->setValue(fx->id(), 0, 200);
+    QVERIFY(doc->addFunction(scene));
+
+    auto tick = [&]() {
+        mt->timerTick();
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        doc->inputOutputMap()->releaseUniverses(false);
+    };
+    auto level = [&]() {
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(0));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+
+    scene->start(mt, FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        tick();
+    QVERIFY(scene->isRunning());
+    QCOMPARE(level(), 200);
+
+    // fadeAndStopAll() waits for the timer to stop everything, so it runs
+    // beside this thread, which plays the timer.
+    const int fadeMs = int(MasterTimer::tick()) * 50;
+    std::future<void> done = std::async(std::launch::async, [mt, fadeMs]() { mt->fadeAndStopAll(fadeMs); });
+    QElapsedTimer guard;
+    guard.start();
+    while (!mt->m_stopAllFunctions && guard.elapsed() < 10000)
+        QThread::msleep(1);
+    QVERIFY(mt->m_stopAllFunctions);        // the fade is set; now waiting for a tick
+
+    tick();                                 // the function is stopped on this tick
+    QVERIFY(done.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+    QVERIFY(!scene->isRunning());
+    QCOMPARE(mt->runningFunctions(), 0);
+
+    // Half way through the fade (25 of its 50 ticks): about half.
+    for (int i = 1; i < 25; ++i)
+        tick();
+    const int mid = level();
+    QVERIFY2(mid > 80 && mid < 120, qPrintable(QString("half way: %1").arg(mid)));
+
+    // Past its end: dark, and nothing playing.
+    for (int i = 25; i < 55; ++i)
+        tick();
+    QCOMPARE(level(), 0);
+    QVERIFY(!scene->isRunning());
+    delete doc;
 }
 
 QTEST_MAIN(MasterTimer_Test)

@@ -289,7 +289,8 @@ void GenericFader::write(Universe *universe)
             showOnFixture(fc, value);
             const bool zeroDone = fc.current() == 0 && fc.target() == 0 && fc.isReady();
             if (((iflags & FadeChannel::Intensity) && (iflags & FadeChannel::HTP)
-                 && m_blendMode == Universe::NormalBlend) || m_fadeOut)
+                 && m_blendMode == Universe::NormalBlend) || m_fadeOut
+                || (iflags & FadeChannel::Release))
             {
                 if (zeroDone)
                 {
@@ -382,7 +383,8 @@ void GenericFader::write(Universe *universe)
 
         if (((flags & FadeChannel::Intensity) &&
             (flags & FadeChannel::HTP) &&
-            m_blendMode == Universe::NormalBlend) || m_fadeOut)
+            m_blendMode == Universe::NormalBlend) || m_fadeOut
+            || (flags & FadeChannel::Release))
         {
             // Remove all channels that reach their target _zero_ value.
             // They have no effect either way so removing them saves a bit of CPU.
@@ -395,7 +397,7 @@ void GenericFader::write(Universe *universe)
             // A one-shot writer (slider, programmer edit) leaves the value
             // where it put it: still set, for auto-open shutters. A fade-out
             // (SetTarget) is a function letting go, not setting anything.
-            if (m_fadeOut == false)
+            if (m_fadeOut == false && (flags & FadeChannel::Release) == 0)
                 universe->holdChannels(int(address), channelCount);
             it.remove();
         }
@@ -507,6 +509,38 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime, const QHash<quint32, u
         const uint t = channelFadeTimes.value(it.key(), fadeTime);
         fc.setFadeTime(fc.canFade() ? t : 0);
         fc.removeFlag(FadeChannel::Flashing);
+    }
+}
+
+void GenericFader::release(const std::function<bool(const FadeChannel &)> &which, uint fadeTime)
+{
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    QMutableHashIterator <quint32,FadeChannel> it(m_channels);
+    while (it.hasNext() == true)
+    {
+        FadeChannel& fc(it.next().value());
+        if (!which(fc))
+            continue;
+        if (fadeTime == 0 || !fc.canFade())
+        {
+            // At once, as a stop with no fade: an intensity is zeroed by
+            // the universe next frame, anything else keeps its value.
+            if (fc.isInert())
+                showOnFixture(fc, 0);
+            it.remove();
+            continue;
+        }
+        fc.setStart(fc.current());
+        if (((fc.flags() & FadeChannel::Flashing) == 0) &&
+            ((fc.flags() & FadeChannel::Intensity) == 0))
+            fc.addFlag(FadeChannel::SetTarget);
+        fc.setTarget(0);
+        fc.setElapsed(0);
+        fc.setReady(false);
+        fc.setFadeTime(fadeTime);
+        fc.setDelay(0);
+        fc.removeFlag(FadeChannel::Flashing);
+        fc.addFlag(FadeChannel::Release);
     }
 }
 

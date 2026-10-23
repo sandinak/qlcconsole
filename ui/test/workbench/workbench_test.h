@@ -64,6 +64,14 @@ private slots:
     /** Design mode: what is loaded plays; a changed collection plays its new
      *  layers; Stop / Play; hidden, nothing plays. */
     void whatIsLoadedPlays();
+    /** Operate mode: what is loaded runs as the show's output; to Design,
+     *  a function started elsewhere keeps running; hidden, the Workbench
+     *  stops only what it started. */
+    void operateRunsWhatIsLoadedAndStopsOnlyItsOwn();
+    void designPreviewLeavesAnotherRunAlone();
+    /** Two layers set one channel: the lower layer wins on the DMX; ▲
+     *  swaps them and the output follows; ⌘Z puts it back. */
+    void theLowerLayerWinsAndFollowsAReorder();
     /** The navigator: a look in a scene opened up there selects that row on
      *  the Workbench; the Workbench follows; the section switch; control
      *  surfaces' currentSceneId()/currentPaletteId(). */

@@ -40,6 +40,22 @@ private slots:
     void timecodeFollow();
     void timecodeDriveAndFreeze();
 
+    /** With a track soloed only it plays; another track is silent unless it
+     *  is solo-safe, and un-soloing brings the others back mid-run. */
+    void aSoloTrackPlaysAndTheOthersOnlyIfSoloSafe();
+    /** Hold last look: a gap after a hold-last track's item keeps its look
+     *  up; a track without the flag goes dark in the same gap. */
+    void holdLastKeepsTheLookThroughAGap();
+    /** Priority: an Override track wins a channel over a Normal one that
+     *  started after it; a Background track yields to a Normal one. */
+    void anOverrideTrackWinsAndABackgroundTrackYields();
+    /** A track's intensity submaster scales what it plays, set before the
+     *  show starts and moved while it runs. */
+    void aTrackAtHalfIntensityPlaysAtHalf();
+    /** The show's configured length ends playback there, items running past
+     *  it or not, and the look parks. */
+    void theShowStopsAtItsConfiguredEnd();
+
 private:
     Doc *m_doc;
     Show *m_show;

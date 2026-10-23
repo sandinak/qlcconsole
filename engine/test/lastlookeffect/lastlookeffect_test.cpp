@@ -20,9 +20,12 @@
 #include <atomic>
 
 #include "lastlookeffect_test.h"
+#define protected public                // Universe::processFaders()
+#include "universe.h"
+#undef protected
 #include "lastlookeffect.h"
 #include "inputoutputmap.h"
-#include "universe.h"
+#include "qlcchannel.h"
 #include "doc.h"
 
 void LastLookEffect_Test::initTestCase()
@@ -71,6 +74,33 @@ void LastLookEffect_Test::holdAssertsForceLTP()
     // A second tick keeps re-asserting (the hold is persistent).
     unis.at(0)->reset(10, 2);
     ll.writeDMX(nullptr, unis);
+    QCOMPARE(unis.at(0)->preGMValue(10), uchar(200));
+}
+
+/* The order a real frame runs in: the MasterTimer ticks the DMX sources
+   (the holder writes), then the universe thread's processFaders() zeroes
+   the intensity channels, lays the faders on and sends the frame. */
+void LastLookEffect_Test::holdSurvivesTheUniverseFrame()
+{
+    LastLookEffect ll(m_doc);
+    QList<LastLookEffect::ChannelHold> holds;
+    holds.append({1, 0, 10, uchar(200)});   // a dimmer
+    holds.append({1, 0, 11, uchar(128)});   // a pan
+    ll.hold(holds);
+
+    QList<Universe*> unis = m_doc->inputOutputMap()->universes();
+    unis.at(0)->setChannelCapability(10, QLCChannel::Intensity);
+    unis.at(0)->setChannelCapability(11, QLCChannel::Pan);
+
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        ll.writeDMX(nullptr, unis);
+        unis.at(0)->processFaders();
+    }
+    QCOMPARE(unis.at(0)->preGMValue(11), uchar(128));    // an LTP channel holds
+    QEXPECT_FAIL("", "BUG: the holder writes before processFaders(), whose "
+                     "zeroIntensityChannels() clears the held dimmer every frame -- "
+                     "the last look's intensity never reaches the output", Continue);
     QCOMPARE(unis.at(0)->preGMValue(10), uchar(200));
 }
 

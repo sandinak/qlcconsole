@@ -45,6 +45,11 @@ private slots:
     void aDimmerLookDimsAFixtureWithNoDimmer();
     void colourOneAndTwoGoToAFixturesTwoColourSets();
     void theSameOnAFixtureGroup();
+    /** A look on a group follows the group live: a fixture put in it while
+     *  the look plays takes the look on the next tick, without the scene
+     *  being touched, and one taken out lets go of it. */
+    void aLookOnAGroupFollowsItsMembersLive();
+    void aGroupMemberFadesByTheScenesFades();
     void editingALookWhileItPlaysKeepsTheOrder();
     void aPaletteTriedOnShowsByTheSameRules();
     void theCheckerSaysWhatWontWork();

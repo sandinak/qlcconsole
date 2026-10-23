@@ -29,6 +29,8 @@
 #include <QLineEdit>
 #include <QToolButton>
 #include <QTreeWidgetItemIterator>
+#include <QInputDialog>
+#include <QMessageBox>
 #include <QtTest>
 
 #define private public
@@ -671,6 +673,54 @@ void EffectDesigner_Test::escLeavesTheBench()
     QCOMPARE(bench->loadedFunction(), scene->id());
 }
 
+/* Answers every modal box that opens while it lives, noting a question's
+   text: a QMessageBox gets Yes, a QInputDialog @a text; the rest rejected. */
+class ModalAnswerer final : public QObject
+{
+public:
+    explicit ModalAnswerer(const QString &text = QString())
+    {
+        connect(&m_timer, &QTimer::timeout, this, [this, text]() {
+            QWidget *w = QApplication::activeModalWidget();
+            if (w == nullptr)
+                return;
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+            {
+                seen << mb->text();
+                if (QAbstractButton *yes = mb->button(QMessageBox::Yes))
+                    yes->click();
+                else
+                    mb->accept();
+            }
+            else if (QInputDialog *in = qobject_cast<QInputDialog *>(w))
+            {
+                seen << in->labelText();
+                in->setTextValue(text);
+                in->accept();
+            }
+            else if (QDialog *d = qobject_cast<QDialog *>(w))
+            {
+                seen << QString::fromLatin1(d->metaObject()->className());
+                d->reject();
+            }
+        });
+        m_timer.start(20);
+    }
+    QStringList seen;
+
+private:
+    QTimer m_timer;
+};
+
+/* A listed (not one-off) palette named @a name. */
+static QLCPalette *namedPalette(Doc *doc, const QString &name)
+{
+    for (QLCPalette *p : doc->palettes())
+        if (p->name() == name && !doc->showTree()->isInlinePalette(p->id()))
+            return p;
+    return nullptr;
+}
+
 void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
 {
     FixtureGroup *towers = group("Towers", 0, 3);
@@ -1272,3 +1322,174 @@ void EffectDesigner_Test::picturesOfARealShow()
 }
 
 QTEST_MAIN(EffectDesigner_Test)
+
+void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *phaser = effectPalette(m_doc, "Phaser", "Dimmer Phaser");
+    const quint32 phaserId = phaser->id();
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Circle");
+    m_doc->addFunction(efx);
+    const quint32 efxId = efx->id();
+    Scene *song = new Scene(m_doc);
+    song->setName("01-01.01-Towers");
+    song->addFixtureGroup(towers->id());
+    song->addPalette(phaserId);
+    m_doc->addFunction(song);
+    Collection *shout = new Collection(m_doc);
+    shout->setName("0.0.4-SHOUT");
+    m_doc->addFunction(shout);
+    shout->addFunction(efxId);
+
+    EffectDesigner::plugIntoWorkbench();            // as the app does
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    pm.setSection(ProgrammingManager::EffectsSection);
+    QTreeWidget *list = pm.findChild<QTreeWidget *>("buildEffects");
+    QVERIFY(list != nullptr);
+    ShowTreeController *st = m_doc->showTree();
+    QTRY_VERIFY(effectsRow(list, "Phaser") != nullptr && effectsRow(list, "Circle") != nullptr);
+
+    // The row's right-click menu, one action run from it.
+    auto run = [&](const QString &row, const char *action) {
+        QCoreApplication::processEvents();          // a queued rebuild: rows are new
+        QTreeWidgetItem *item = effectsRow(list, row);
+        if (item == nullptr)
+            return false;
+        QMenu *menu = pm.effectsContextMenu(item, &pm);
+        QAction *a = menuAction(menu, action);
+        if (a != nullptr)
+            a->trigger();
+        delete menu;
+        return a != nullptr;
+    };
+    // Rename: its in-place editor, typed in and committed.
+    auto rename = [&](const QString &row, const QString &name) {
+        if (!run(row, "effectsRename"))
+            return false;
+        QLineEdit *editor = nullptr;
+        for (QLineEdit *e : list->viewport()->findChildren<QLineEdit *>())
+            if (e->isVisible())
+                editor = e;
+        if (editor == nullptr)
+            return false;
+        editor->setText(name);
+        QTest::keyClick(editor, Qt::Key_Return);
+        QCoreApplication::processEvents();
+        return true;
+    };
+
+    /* An effect palette. */
+
+    // Duplicate: a copy, one step; ⌘Z takes it away.
+    QString undoBefore = pm.undoText();
+    QVERIFY(run("Phaser", "effectsDuplicate"));
+    QTRY_VERIFY(namedPalette(m_doc, "Phaser (copy)") != nullptr);
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QVERIFY(namedPalette(m_doc, "Phaser (copy)") == nullptr);
+    QCOMPARE(pm.undoText(), undoBefore);
+    QVERIFY(m_doc->palette(phaserId) != nullptr);
+
+    // Rename (F2 in place), one step.
+    QVERIFY(rename("Phaser", "Phaser Prime"));
+    QCOMPARE(m_doc->palette(phaserId)->name(), QString("Phaser Prime"));
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->palette(phaserId)->name(), QString("Phaser"));
+    QCOMPARE(pm.undoText(), undoBefore);
+
+    // Move to folder…, one step.
+    {
+        ModalAnswerer folder("01-Song");
+        QVERIFY(run("Phaser", "effectsMove"));
+        QCOMPARE(folder.seen.count(), 1);
+    }
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(phaserId)), QString("01-Song"));
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(phaserId)), QString());
+    QCOMPARE(pm.undoText(), undoBefore);
+
+    // Delete: the question names the scene using it; one step brings it
+    // back, in that scene.
+    {
+        ModalAnswerer yes;
+        QVERIFY(run("Phaser", "effectsDelete"));
+        QCOMPARE(yes.seen.count(), 1);
+        QVERIFY2(yes.seen.first().contains("01-01.01-Towers"), qPrintable(yes.seen.first()));
+    }
+    QVERIFY(m_doc->palette(phaserId) == nullptr);
+    QVERIFY(!song->palettes().contains(phaserId));
+    QTRY_VERIFY(effectsRow(list, "Phaser") == nullptr);
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->palette(phaserId) != nullptr);
+    QCOMPARE(song->palettes(), QList<quint32>({ phaserId }));
+    QCOMPARE(pm.undoText(), undoBefore);
+
+    /* An EFX. */
+
+    // Rename, one step.
+    QTRY_VERIFY(effectsRow(list, "Circle") != nullptr);
+    QVERIFY(rename("Circle", "Orbit"));
+    QCOMPARE(efx->name(), QString("Orbit"));
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->function(efxId)->name(), QString("Circle"));
+    QCOMPARE(pm.undoText(), undoBefore);
+
+    // Move to folder…, one step.
+    {
+        ModalAnswerer folder("Act 1");
+        QVERIFY(run("Circle", "effectsMove"));
+        QCOMPARE(folder.seen.count(), 1);
+    }
+    QCOMPARE(m_doc->function(efxId)->path(true), QString("Act 1"));
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->function(efxId)->path(true), QString());
+    QCOMPARE(pm.undoText(), undoBefore);
+
+    // Duplicate: a copy beside it, loaded.
+    const int functions = m_doc->functions().count();
+    QVERIFY(run("Circle", "effectsDuplicate"));
+    QCOMPARE(m_doc->functions().count(), functions + 1);
+    const quint32 copyId = pm.workbench()->loadedFunction();
+    QVERIFY(copyId != efxId && qobject_cast<EFX *>(m_doc->function(copyId)) != nullptr);
+    QVERIFY(m_doc->function(copyId)->name() != "Circle");
+    // One step: ⌘Z takes the copy away, ⌘⇧Z brings it back with its id.
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->function(copyId) == nullptr);
+    QCOMPARE(pm.undoText(), undoBefore);
+    QVERIFY(st->redoShared());
+    QVERIFY(qobject_cast<EFX *>(m_doc->function(copyId)) != nullptr);
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->function(copyId) == nullptr);
+    undoBefore = pm.undoText();
+
+    // Delete: the question names the collection using it.
+    {
+        ModalAnswerer yes;
+        QVERIFY(run("Circle", "effectsDelete"));
+        QCOMPARE(yes.seen.count(), 1);
+        QVERIFY2(yes.seen.first().contains("0.0.4-SHOUT"), qPrintable(yes.seen.first()));
+    }
+    QVERIFY(m_doc->function(efxId) == nullptr);
+    QVERIFY(shout->functions().isEmpty());
+    // One step: ⌘Z brings it back, with its id, in the collection.
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QVERIFY(qobject_cast<EFX *>(m_doc->function(efxId)) != nullptr);
+    QCOMPARE(m_doc->function(efxId)->name(), QString("Circle"));
+    QCOMPARE(shout->functions(), QList<quint32>({ efxId }));
+    QCOMPARE(pm.undoText(), undoBefore);
+    QVERIFY(st->redoShared());
+    QVERIFY(m_doc->function(efxId) == nullptr);
+    QVERIFY(shout->functions().isEmpty());
+    pm.hide();
+}

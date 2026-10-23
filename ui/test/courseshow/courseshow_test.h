@@ -87,6 +87,11 @@ private slots:
      *  over 3 s, the Scream holds 2 s and the Solo follows by itself. */
     void lessonFourPlaysTheFades();
 
+    /** What a student builds is what they keep: Lessons 1.1-1.4 done with
+     *  the mouse, saved as a .qlcc (Save As), opened again: every cue the
+     *  same, and GO in the Run tab still lights the rig as Lesson 1.1 says. */
+    void aMouseBuiltShowSavesOpensAndPlays();
+
     /** Lesson 1.5, running the show: GO, Back, LOAD (a click: STANDBY),
      *  a jump (double-click) and Stop, in the Run tab. */
     void lessonFiveRunsTheShow();
@@ -114,6 +119,11 @@ private slots:
      *  wizard's special circuits, into a new show: groups, rules, the cue
      *  list in the Show Tree and the sub as a Virtual Console fader. */
     void lessonFromEos();
+
+    /** Lesson 1.5's "Stuck?": Design while cues run asks "Really stop
+     *  them...?" -- No stays LIVE with the stage lit; Yes stops everything
+     *  and goes to Design with the stage dark. */
+    void lessonFiveDesignWhileRunningAsksFirst();
 
     /** COURSE_BUILD=1: makes Lessons 1.2-1.5's start and finish files, each
      *  lesson done with the mouse from the one before's finish. Skipped

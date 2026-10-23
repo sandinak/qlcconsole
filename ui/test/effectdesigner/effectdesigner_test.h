@@ -74,6 +74,11 @@ private slots:
      *  first (Keep designing / Leave). Clicking away doesn't ask. */
     void escLeavesTheBench();
 
+    /** Build ▸ Effects' right-click Duplicate, Rename, Move and Delete run
+     *  on an effect palette and on an EFX: each changes the show and is one
+     *  undo step; Delete's question names where the effect is used. */
+    void buildEffectsRightClickActionsChangeTheShow();
+
     /** Make a layer (board Q37), into a Show Tree cue: a saved, unchanged
      *  palette plays by name; a changed design is a one-off copy (the bench
      *  keeps its own). One tree undo step each; undo and redo restore. */

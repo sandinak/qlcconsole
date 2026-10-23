@@ -6,6 +6,10 @@
 */
 
 #include <QtTest>
+#include "qlccapability.h"
+#include "qlcchannel.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include <QTemporaryDir>
 
 #include "eosfixturemapper.h"
@@ -160,6 +164,46 @@ void EosImporter_Test::mapperExactAndSuggested()
     dimmer.model = "Dimmer";
     dimmer.footprint = 1;
     QVERIFY(mapper.resolve(dimmer).isGeneric());
+}
+
+void EosImporter_Test::colorSourceDefinitionsAndTheirRgbPersonalities()
+{
+    struct Def { QString model; int direct; QString eos; };
+    const QList<Def> defs = {
+        { "ColorSource Spot", 6, "ColorSource_SPOT_RGB" },
+        { "ColorSource Spot jr", 6, "ColorSource_SPOT_Jr_RGB" },
+        { "ColorSource CYC", 7, "ColorSource_Cyc_RGB" },
+    };
+    EosFixtureMapper mapper(m_doc->fixtureDefCache());
+    for (const Def &d : defs)
+    {
+        QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("ETC", d.model);
+        QVERIFY2(def != nullptr, qPrintable(d.model));
+        const QList<QPair<QString, int>> modes = {
+            { "5-Channel", 5 }, { "Direct", d.direct }, { "1-Channel", 1 }, { "RGB", 3 } };
+        for (const auto &m : modes)
+        {
+            QLCFixtureMode *mode = def->mode(m.first);
+            QVERIFY2(mode != nullptr, qPrintable(d.model + " " + m.first));
+            QCOMPARE(int(mode->channels().size()), m.second);
+        }
+        // The 5-Channel strobe: open at both ends, strobing between.
+        QLCFixtureMode *five = def->mode("5-Channel");
+        const QLCChannel *strobe = five->channels().last();
+        QCOMPARE(strobe->group(), QLCChannel::Shutter);
+        QCOMPARE(strobe->searchCapability(0)->preset(), QLCCapability::ShutterOpen);
+        QCOMPARE(strobe->searchCapability(255)->preset(), QLCCapability::ShutterOpen);
+        QCOMPARE(strobe->searchCapability(128)->preset(), QLCCapability::StrobeFreqRange);
+
+        EosPersonality p;
+        p.manufacturer = "ETC_Fixtures";
+        p.model = d.eos;
+        p.footprint = 3;
+        const EosFixtureChoice c = mapper.resolve(p);
+        QCOMPARE(int(c.source), int(EosFixtureChoice::Exact));
+        QCOMPARE(c.model, d.model);
+        QCOMPARE(c.mode, QStringLiteral("RGB"));
+    }
 }
 
 void EosImporter_Test::mapperSavedChoice()

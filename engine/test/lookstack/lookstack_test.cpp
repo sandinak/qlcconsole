@@ -542,6 +542,117 @@ void LookStack_Test::theSameOnAFixtureGroup()
     IS(dimmerOf(d, m_par), 128);
 }
 
+/* "dynamic (a group, membership tracked live)" (docs/features/build.md):
+   the scene names the group, never its fixtures. */
+void LookStack_Test::aLookOnAGroupFollowsItsMembersLive()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(grp);
+    grp->assignFixture(m_par->id());
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(colour(kBlue)->id());
+    scene->addPalette(dimmer(200)->id());
+    m_playing = scene;
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    QByteArray d = tickAndRead();
+    IS(dimmerOf(d, m_par), 200);
+    RGB_IS(rgbOf(d, m_par), kBlue);
+    IS(dimmerOf(d, m_mover), 0);                // not in the group yet
+
+    // Into the group while it plays: the look reaches it, the scene as it was.
+    const QList<SceneValue> before = scene->values();
+    grp->assignFixture(m_mover->id());
+    d = tickAndRead();
+    QCOMPARE(scene->values(), before);
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ grp->id() }));
+    IS(dimmerOf(d, m_par), 200);                // the one already there unchanged
+    QVERIFY2(dimmerOf(d, m_mover) == 200 && rgbOf(d, m_mover) == kBlue,
+             qPrintable(QString("the new member: dimmer %1, colour %2")
+                        .arg(dimmerOf(d, m_mover)).arg(rgb(rgbOf(d, m_mover)))));
+
+    // The group is the target, not a copy of it: started again, the new
+    // member has the look.
+    auto restart = [&]() {
+        scene->stop(FunctionParent::master());
+        tickAndRead();
+        scene->start(m_doc->masterTimer(), FunctionParent::master());
+        return tickAndRead();
+    };
+    d = restart();
+    IS(dimmerOf(d, m_mover), 200);
+    RGB_IS(rgbOf(d, m_mover), kBlue);
+
+    // Out again while it plays: it lets go.
+    grp->resignFixture(m_mover->id());
+    d = tickAndRead();
+    IS(dimmerOf(d, m_par), 200);
+    QVERIFY2(dimmerOf(d, m_mover) == 0 && rgbOf(d, m_mover) == QColor(0, 0, 0),
+             qPrintable(QString("the old member: dimmer %1, colour %2")
+                        .arg(dimmerOf(d, m_mover)).arg(rgb(rgbOf(d, m_mover)))));
+    d = restart();
+    IS(dimmerOf(d, m_mover), 0);
+    IS(dimmerOf(d, m_par), 200);
+}
+
+/* Joining or leaving a playing scene's group is a fade by the scene's own
+   times: in over its fade-in, out over its fade-out (as it stopping would),
+   the members that stay untouched. */
+void LookStack_Test::aGroupMemberFadesByTheScenesFades()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(grp);
+    grp->assignFixture(m_par->id());
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(dimmer(200)->id());
+    scene->setFadeInSpeed(1000);
+    scene->setFadeOutSpeed(1000);
+    m_playing = scene;
+    // Frame by frame: the faders step once a universe frame.
+    auto frames = [this](int n) {
+        QByteArray out;
+        for (int i = 0; i < n; ++i)
+        {
+            m_doc->masterTimer()->timerTick();
+            QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+            for (Universe *u : unis)
+                u->processFaders();
+            out = unis.first()->preGMValues().left(64);
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+        return out;
+    };
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    QByteArray d = frames(70);
+    IS(dimmerOf(d, m_par), 200);
+    IS(dimmerOf(d, m_mover), 0);
+
+    grp->assignFixture(m_mover->id());
+    d = frames(15);
+    QVERIFY2(dimmerOf(d, m_mover) > 0 && dimmerOf(d, m_mover) < 200,
+             qPrintable(QString("fading in: %1").arg(dimmerOf(d, m_mover))));
+    IS(dimmerOf(d, m_par), 200);
+    d = frames(60);
+    IS(dimmerOf(d, m_mover), 200);
+
+    grp->resignFixture(m_mover->id());
+    d = frames(15);
+    QVERIFY2(dimmerOf(d, m_mover) > 0 && dimmerOf(d, m_mover) < 200,
+             qPrintable(QString("fading out: %1").arg(dimmerOf(d, m_mover))));
+    IS(dimmerOf(d, m_par), 200);
+    d = frames(60);
+    IS(dimmerOf(d, m_mover), 0);
+    IS(dimmerOf(d, m_par), 200);
+
+    // Back in while it plays: it fades in again (the let-go channel is kept).
+    grp->assignFixture(m_mover->id());
+    d = frames(75);
+    IS(dimmerOf(d, m_mover), 200);
+}
+
 /* A look edited while it plays is re-painted by the same rules. */
 void LookStack_Test::editingALookWhileItPlaysKeepsTheOrder()
 {

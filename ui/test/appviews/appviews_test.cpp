@@ -35,6 +35,10 @@
 #include <QDialogButtonBox>
 #include <QXmlStreamReader>
 #include <QFile>
+#include <QElapsedTimer>
+#include <QScopeGuard>
+#include <QTimer>
+#include <QMessageBox>
 
 #include "cuerunner.h"
 #include "showtreemodel.h"
@@ -46,6 +50,8 @@
 #define private public
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "fixture.h"
 #include "doc.h"
 #include "monitor.h"
 #include "monitorproperties.h"
@@ -601,6 +607,99 @@ void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
 
     qputenv("USERPROFILE", realProfile);
 #endif
+}
+
+/* Answers the next modal message box with @a answer, keeping its text. */
+static void answerNextBox(QMessageBox::StandardButton answer, QString *text)
+{
+    QTimer::singleShot(0, [answer, text]() {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 5000)
+        {
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            {
+                if (text != nullptr)
+                    *text = box->text();
+                box->button(answer)->click();
+                return;
+            }
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
+    });
+}
+
+void AppViews_Test::missingDefinitionsAreAskedAboutAndFetchedBack()
+{
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+#ifdef Q_OS_WIN
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("USERPROFILE", home.path().toUtf8());
+#endif
+    auto restoreHome = qScopeGuard([&]() {
+        qputenv("HOME", realHome);
+#ifdef Q_OS_WIN
+        qputenv("USERPROFILE", realProfile);
+#endif
+    });
+
+    // A show of two heads whose definitions this computer hasn't got.
+    QTemporaryDir shows;
+    const QString show = shows.filePath("away.qlcc");
+    QFile f(show);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("<?xml version=\"1.0\"?><!DOCTYPE Workspace><Workspace><Engine>"
+            "<Fixture><Manufacturer>Branson</Manufacturer><Model>Late Head</Model>"
+            "<Mode>Mode 1</Mode><ID>0</ID><Name>Late</Name><Universe>0</Universe>"
+            "<Address>0</Address><Channels>6</Channels></Fixture>"
+            "<Fixture><Manufacturer>Branson</Manufacturer><Model>Never Head</Model>"
+            "<Mode>Mode 1</Mode><ID>1</ID><Name>Never</Name><Universe>0</Universe>"
+            "<Address>10</Address><Channels>6</Channels></Fixture>"
+            "</Engine></Workspace>");
+    f.close();
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    Doc *doc = m_app->doc();
+    QCOMPARE(doc->fixtures().count(), 2);
+    for (Fixture *fx : doc->fixtures())
+        QVERIFY2(fx->definitionUnavailable(), qPrintable(fx->name()));
+
+    // Save asks first and names them; Cancel saves nothing.
+    QString asked;
+    answerNextBox(QMessageBox::Cancel, &asked);
+    QVERIFY(!m_app->confirmSaveWithoutDefinitions());
+    QVERIFY2(asked.contains("Branson Late Head") && asked.contains("Branson Never Head"),
+             qPrintable(asked));
+
+    // One definition arrives in the user folder.
+    QFile src(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/Futurelight/Futurelight-DJScan250.qxf");
+    QVERIFY(src.open(QIODevice::ReadOnly));
+    QString text = QString::fromUtf8(src.readAll());
+    text.replace(QRegularExpression("<Manufacturer>[^<]*</Manufacturer>"), "<Manufacturer>Branson</Manufacturer>");
+    text.replace(QRegularExpression("<Model>[^<]*</Model>"), "<Model>Late Head</Model>");
+    QDir userDefs = QLCFixtureDefCache::userDefinitionDirectory();
+    QVERIFY(userDefs.mkpath("."));
+    QFile late(userDefs.absoluteFilePath("Branson-Late-Head.qxf"));
+    QVERIFY(late.open(QIODevice::WriteOnly));
+    late.write(text.toUtf8());
+    late.close();
+
+    QString told;
+    answerNextBox(QMessageBox::Ok, &told);
+    m_app->recoverUnavailableDefinitions(m_app);
+    Fixture *lateFx = doc->fixture(0);
+    Fixture *neverFx = doc->fixture(1);
+    QVERIFY(!lateFx->definitionUnavailable());
+    QVERIFY(lateFx->fixtureDef() != nullptr);
+    QCOMPARE(lateFx->fixtureDef()->model(), QStringLiteral("Late Head"));
+    QCOMPARE(lateFx->fixtureMode()->name(), QStringLiteral("Mode 1"));
+    QVERIFY(neverFx->definitionUnavailable());
+    QVERIFY2(told.contains("1 fixture(s) have their definitions back") && told.contains("Never"),
+             qPrintable(told));
+
+    m_app->clearDocument();
 }
 
 void AppViews_Test::settingsChoosesTheUnits()

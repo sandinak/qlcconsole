@@ -24,6 +24,7 @@
 
 #include "effectinstance_test.h"
 #define private public                  // MasterTimer::timerTick(), and the instance's insides
+#define protected public                // Universe::processFaders()
 #include "doc.h"
 #include "fixture.h"
 #include "fixturegroup.h"
@@ -43,6 +44,9 @@
 #include "effectscriptcache.h"
 #include "wledfixture.h"
 #include "matriximage.h"
+#include "universe.h"
+#include "inputoutputmap.h"
+#undef protected
 #undef private
 #include "monitorproperties.h"
 #include "righeads.h"
@@ -1401,6 +1405,163 @@ void EffectInstance_Test::followSpotZoomsToHoldSizeOnSubject()
     inst.setParamValue("sizeOnSubject", 0.0);
     inst.runTick();
     QCOMPARE(zoomWrite(value), 0);
+}
+
+void EffectInstance_Test::followSpotMovesEveryHeadToTheSamePoint()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *pipe = props->addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(-3.0f, 0.0f, 6.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.29f);
+
+    // 16-bit pan and tilt in the head, so where a beam lands reads to a
+    // centimetre or so; the dimmer fixture-wide.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Spot 16bit");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("5ch");
+    const struct { const char *name; QLCChannel::Group group; QLCChannel::ControlByte byte; } chans[] = {
+        { "Pan", QLCChannel::Pan, QLCChannel::MSB }, { "Pan fine", QLCChannel::Pan, QLCChannel::LSB },
+        { "Tilt", QLCChannel::Tilt, QLCChannel::MSB }, { "Tilt fine", QLCChannel::Tilt, QLCChannel::LSB },
+        { "Dimmer", QLCChannel::Intensity, QLCChannel::MSB } };
+    for (int k = 0; k < 5; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans[k].name);
+        ch->setGroup(chans[k].group);
+        ch->setControlByte(chans[k].byte);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    for (int k = 0; k < 4; ++k)
+        head.addChannel(k);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    // Two of them, four metres apart on the pipe.
+    QList<Fixture *> spots;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *spot = new Fixture(m_doc);
+        spot->setName(QString("Spot %1").arg(i + 1));
+        spot->setFixtureDefinition(def, mode);
+        spot->setUniverse(0);
+        spot->setAddress(100 + 10 * i);
+        QVERIFY(m_doc->addFixture(spot));
+        FixtureRigProps rp;
+        rp.trussId = pipe->id();
+        rp.trussOffset = i == 0 ? 1.0f : 5.0f;
+        rp.mountingType = Truss::TopHung;
+        props->setFixtureRigProps(spot->id(), rp);
+        spots << spot;
+    }
+
+    StageTarget *who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(0.0f, 2.0f, 0.0f));
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, m_doc);
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    QVERIFY(m_doc->addPalette(follow));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Solo");
+    m_doc->addFunction(scene);
+    for (Fixture *spot : spots)
+        scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(follow->id());
+
+    MasterTimer timer(m_doc);
+    auto play = [&]() {
+        for (int k = 0; k < 5; ++k)
+        {
+            timer.timerTick();
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            ua.first()->processFaders();
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+    };
+    // Where a head's beam passes nearest @p point, by its pan and tilt as DMX
+    // has them: metres off.
+    auto missBy = [&](Fixture *spot, const QVector3D &point) {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const QByteArray dmx = ua.first()->preGMValues();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        const int a = int(spot->address());
+        const double pan16 = (uchar(dmx.at(a)) << 8) | uchar(dmx.at(a + 1));
+        const double tilt16 = (uchar(dmx.at(a + 2)) << 8) | uchar(dmx.at(a + 3));
+        const double pan = 540.0 * pan16 / 65535.0 - 270.0;     // centred
+        const double tilt = 270.0 * tilt16 / 65535.0 - 135.0;
+        AimSolver::Frame frame;
+        if (!AimSolver::frameFor(m_doc, spot->id(), frame))
+            return 1.0e9;
+        QVector3D dir;
+        if (!AimSolver::beamDirection(props->fixtureRigProps(spot->id()), pan, tilt, dir))
+            return 1.0e9;
+        const QVector3D to = point - frame.position;
+        const float along = QVector3D::dotProduct(to, dir);
+        if (along <= 0.0f)
+            return 1.0e9;                                       // pointing away
+        return double((to - along * dir).length());
+    };
+    // The one point both heads should be on (a person: the same for both).
+    auto spotPoint = [&]() {
+        const QVector3D p0 = AimSolver::aimPointFor(m_doc, spots[0]->id(), who, true);
+        const QVector3D p1 = AimSolver::aimPointFor(m_doc, spots[1]->id(), who, true);
+        return (p0 - p1).length() < 0.001f ? p0 : QVector3D(1.0e6f, 0.0f, 0.0f);
+    };
+    auto show = [](double d) { return QString::number(d, 'f', 3); };
+
+    scene->start(&timer, FunctionParent::master());
+    play();
+    QVERIFY(scene->isRunning());
+    const QVector3D first = spotPoint();
+    QVERIFY(first.x() < 1.0e5f);
+    for (Fixture *spot : spots)
+        QVERIFY2(missBy(spot, first) < 0.05,
+                 qPrintable(QString("%1 misses the spot by %2 m").arg(spot->name(), show(missBy(spot, first)))));
+
+    // The effect itself leaves pan and tilt to the Aim look.
+    EffectInstance inst(m_doc, scene->id(), follow->id());
+    QVERIFY2(inst.isValid(), "followspot.js did not load");
+    inst.runTick();
+    foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+        QVERIFY2(w.channel > 3, qPrintable(QString("the effect wrote channel %1").arg(w.channel)));
+
+    // The follow-spot point moves (what the stick does: the target moves and
+    // the look re-aims): both heads move onto the same new point.
+    who->setPosition(QVector3D(1.5f, 4.0f, 0.0f));
+    scene->requestReaim();
+    play();
+    const QVector3D moved = spotPoint();
+    QVERIFY(moved.x() < 1.0e5f);
+    QVERIFY((moved - first).length() > 2.0f);
+    for (Fixture *spot : spots)
+    {
+        QVERIFY2(missBy(spot, moved) < 0.05,
+                 qPrintable(QString("%1 misses the moved spot by %2 m").arg(spot->name(), show(missBy(spot, moved)))));
+        QVERIFY2(missBy(spot, first) > 1.0,
+                 qPrintable(QString("%1 is still on the old spot").arg(spot->name())));
+    }
+    inst.runTick();
+    foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+        QVERIFY2(w.channel > 3, qPrintable(QString("the effect wrote channel %1").arg(w.channel)));
+
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
 }
 
 /* "is it possible to visualize w/o patching?": an effect on a look whose

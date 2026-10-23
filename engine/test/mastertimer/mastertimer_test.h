@@ -54,6 +54,10 @@ private slots:
     void tapSetsTheTempoAndTheBeat();
     void internalBeatsFireOnTheClocksBeats();
 
+    /** Stop all with a fade (fadeAndStopAll): every function stops at once
+     *  and its output fades down over the time, to nothing. */
+    void fadeAndStopAllFadesTheOutputThenStops();
+
 private:
     Doc* m_doc;
 };

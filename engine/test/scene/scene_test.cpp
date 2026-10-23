@@ -1452,4 +1452,95 @@ void Scene_Test::aLookWipesInAndOutAcrossTheStage()
     // MasterTimer on the stack still holds it until this returns.
 }
 
+/* docs/features/build.md, Transitions: "It doesn't apply when the scene's
+   tempo is Beats." The same wipe as above, on a Beats scene with no fades. */
+void Scene_Test::aTransitionIsIgnoredWhenTheTempoIsBeats()
+{
+    Doc *doc = new Doc(this);
+    MasterTimer timer(doc);
+    QList<Fixture *> fx;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setChannels(1);                      // a dimmer
+        f->setAddress(quint32(i));
+        f->setUniverse(0);
+        QVERIFY(doc->addFixture(f));
+        doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(3000.0f * i, 0.0f, 1.0f));
+        fx << f;
+    }
+    SceneTransition wipe;
+    wipe.shape = SceneTransition::WipeToStageLeft;
+    wipe.time = MasterTimer::tick() * 20;
+    wipe.softness = 0.2;
+    auto makeScene = [&](Function::TempoType tempo) {
+        Scene *s = new Scene(doc);
+        doc->addFunction(s);
+        for (Fixture *f : fx)
+            s->setValue(f->id(), 0, 200);
+        s->setTempoType(tempo);
+        s->setFadeInSpeed(0);
+        s->setFadeOutSpeed(0);
+        s->setTransitionIn(wipe);
+        s->setTransitionOut(wipe);
+        return s;
+    };
+    // What the three read now (tick() has already laid the faders on).
+    auto levels = [&]() {
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        QList<int> v;
+        for (int i = 0; i < 3; ++i)
+            v << int(uchar(ua[0]->preGMValues()[i]));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    auto tick = [&](int n) {
+        for (int k = 0; k < n; ++k)
+        {
+            timer.timerTick();
+            QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+            ua[0]->processFaders();
+            doc->inputOutputMap()->releaseUniverses(false);
+        }
+    };
+    auto str = [](const QList<int> &v) { return QString("%1 %2 %3").arg(v[0]).arg(v[1]).arg(v[2]); };
+
+    // In Time the wipe is there: stage right comes up first, and goes first.
+    Scene *timed = makeScene(Function::Time);
+    timed->start(&timer, FunctionParent::master());
+    tick(3);
+    QList<int> v = levels();
+    QVERIFY2(v[0] > 0 && v[2] == 0, qPrintable(str(v)));
+    tick(30);
+    QCOMPARE(levels(), QList<int>({ 200, 200, 200 }));
+    timed->stop(FunctionParent::master());
+    tick(3);
+    v = levels();
+    QVERIFY2(v[0] < 200 && v[2] == 200, qPrintable(str(v)));
+    tick(30);
+    QCOMPARE(levels(), QList<int>({ 0, 0, 0 }));
+
+    // In Beats it isn't: all three arrive together, frame by frame. (With no
+    // fade a Beats scene still lands on the next beat -- MasterTimer::
+    // nextBeatTimeOffset() -- so how long it takes follows the clock; that
+    // it is all three at once does not.)
+    Scene *beats = makeScene(Function::Beats);
+    QCOMPARE(beats->tempoType(), Function::Beats);
+    QVERIFY(beats->transitionIn().isActive());      // set, just not applied
+    QVERIFY(beats->transitionOut().isActive());
+    beats->start(&timer, FunctionParent::master());
+    for (int k = 0; k < 40; ++k)                    // 800 ms: past any beat at 120 BPM
+    {
+        tick(1);
+        v = levels();
+        QVERIFY2(v[0] == v[1] && v[1] == v[2], qPrintable(QString("tick %1: %2").arg(k).arg(str(v))));
+    }
+    QCOMPARE(levels(), QList<int>({ 200, 200, 200 }));
+
+    // And away the same: no fade out, all three gone together at once.
+    beats->stop(FunctionParent::master());
+    tick(2);
+    QCOMPARE(levels(), QList<int>({ 0, 0, 0 }));
+}
+
 QTEST_APPLESS_MAIN(Scene_Test)

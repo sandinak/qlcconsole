@@ -23,6 +23,10 @@ private slots:
 
     void mapperWords();
     void mapperExactAndSuggested();
+    /** ETC ColorSource Spot, Spot jr and CYC: each has 5-Channel, Direct,
+     *  1-Channel and RGB with ETC's footprints and a strobe that is open at
+     *  0 and 255; Eos's _RGB personalities resolve Exact to RGB. */
+    void colorSourceDefinitionsAndTheirRgbPersonalities();
     void mapperSavedChoice();
     void fixtures();
     void groups();

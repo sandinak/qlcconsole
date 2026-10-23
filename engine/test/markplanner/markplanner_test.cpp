@@ -31,6 +31,7 @@
 #include "chaser.h"
 #include "markeffect.h"
 #include "markplanner.h"
+#include "cuelookahead.h"
 #include "functionparent.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
@@ -351,6 +352,48 @@ void MarkPlanner_Test::perListAndPerCueMoveInBlack()
     plan();
     QVERIFY(!m_mark->isMarked(m_fixtureA));
     chaser->stop(FunctionParent::master());
+}
+
+void MarkPlanner_Test::aCueTooSoonIsNotMovedInBlack()
+{
+    startChaserLightingFixtureA(m_doc, m_fixtureA);
+    // How far off the next cue is, as the planner sees it (the chaser is not
+    // ticked again, so this holds still).
+    const QList<CueLookahead::UpcomingCue> cues = CueLookahead::upcoming(m_doc, 60000);
+    QCOMPARE(cues.count(), 1);
+    const int fire = cues.first().fireInMs;
+    QVERIFY2(fire > 1 && fire < INT_MAX, qPrintable(QString("fires in %1 ms").arg(fire)));
+
+    // A lead time longer than that: too soon, nothing moves in black.
+    MarkPlanner planner(m_doc, m_mark);
+    auto plan = [&planner]() { QMetaObject::invokeMethod(&planner, "evaluate"); };
+    planner.setDarkGapMs(fire + 1);
+    planner.setEnabled(true);
+    plan();
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 0);
+
+    // Exactly the lead time away is enough.
+    planner.setDarkGapMs(fire);
+    plan();
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 1);
+
+    // The cue now inside the lead time: what was pre-set stays pre-set.
+    planner.setDarkGapMs(fire + 1);
+    plan();
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 1);
+    planner.setEnabled(false);                         // releases its pre-set
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+
+    // Well clear of the lead time: moved in black.
+    MarkPlanner early(m_doc, m_mark);
+    early.setDarkGapMs(fire / 2);
+    early.setEnabled(true);
+    QMetaObject::invokeMethod(&early, "evaluate");
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    early.setEnabled(false);
 }
 
 QTEST_GUILESS_MAIN(MarkPlanner_Test)

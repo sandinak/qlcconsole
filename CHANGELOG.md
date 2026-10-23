@@ -186,6 +186,62 @@ circuits and subs.
   both.
 - **Esc in the Look Editor's colour picker** no longer hides the picker
   for good.
+- **A playing scene follows its group's members live**, as Build's help
+  says. Its group's fixtures were resolved when it started, so a fixture
+  put in the group stayed dark (and one taken out kept the look) until the
+  scene restarted. A running scene now picks the change up on the next
+  frame: a fixture that joins fades in over the look's fade-in, one that
+  leaves is let go of over the scene's fade-out (or at once with none), as
+  the scene stopping would, and the rest play on untouched.
+- **Lighting Studio: a pasted truss brings its fixtures.** ⌘C / ⌘V (and
+  Duplicate selected, Paste features here) copied the truss alone, though the
+  shortcuts help said structures copy with their fixtures. Each fixture on a
+  copied truss now comes too: a new fixture with the same definition, mode
+  and settings, a name of its own ("LX1-1 #2"), hung at the same place on
+  the copy. They arrive **unpatched** -- which addresses copies take is a
+  patching choice (Patch Others Like This) -- and the plot's status line
+  says so. One ⌘Z takes the truss and its fixtures away.
+- **Hiding the Workbench stops only what it started.** It started and
+  stopped what is loaded (the Design preview, the Operate run) with the
+  Master parent, and a Master stop clears every source -- so a function a
+  VC button, the Run tab or a cue was already running stopped when the
+  Workbench hid or let go of it. It now plays under its own parent and
+  takes only that away.
+- **Build: deleting and duplicating a function can be undone.** Delete,
+  Duplicate, ⌘C ⌘V and Build ▸ Effects' Duplicate / Delete of an EFX or RGB
+  Matrix went straight to the show with no step on the shared history, so ⌘Z
+  couldn't take them back. Each is now one `PaletteOps::functionStep`: Undo
+  brings a deleted function back with its id, in its place in each
+  collection, chaser and show track (they ride in the step whole), and hands
+  it back to the VC buttons, cue lists and main cue list that let go of it;
+  Redo deletes it again. A duplicate's Undo takes the copy away, its Redo
+  brings it back with the same id.
+- **Shows timeline: Undo keeps each track's settings.** The timeline's undo
+  snapshot (`ShowManager::captureSnapshot`) held a track's name, mute,
+  colour and items only, and Undo rebuilds every track from it -- so any
+  Undo reset Hold last look, Solo / Solo-safe, priority, intensity and the
+  track lock on every track, unlocked locked items, and dropped a marker's
+  cue-list link. They are now in the snapshot and put back.
+- **Build: the Beat button shows the tempo a Tap set.** It kept the old
+  tempo: `slotTapBeat()` set the BPM under a signal blocker the button's
+  text follows. Only `slotBpmChanged()` (which would restart the tapped
+  beat) is held off now.
+- **A Closed shutter look closes.** A Shutter palette resolved to the
+  fixture's Open capability whenever it had one (and to 0, open, on a
+  strobe-preset channel), whatever the look's value -- so *Closed* (and
+  *Strobe*) sent Open on the AT-Spots, and auto-open had nothing to defer
+  to. `QLCPalette::shutterIntent()` now reads the look's value on the
+  first target whose shutter has a tagged (then a named) Open, Closed or
+  Strobe capability there, and `shutterValueFor()` sends each fixture the
+  value as set where it means the same, else its own closed / open / a
+  strobe at the same rate. No value or 0 (every look made before, the
+  course shows' "Open" among them) is still Open; a strobe-preset channel
+  never decides it and has no closed, so it stays open. The Shutter icon
+  uses the same code, so a Closed look shows closed; the Look Editor shows
+  an open look as the type's Open, keeps a Closed picked at 0 as 1, and no
+  longer offers a strobe-only channel's single "Strobe" as a Shutter
+  source.
+
 - **Move in black no longer carries over to the next show**: a new show,
   or one saved without it, starts off with the default lead time.
 - **An imported chaser of raw scenes plays as the chaser did** (Sample.qxw's

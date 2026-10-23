@@ -23,6 +23,8 @@
 #include <QXmlStreamWriter>
 #include <QTemporaryDir>
 #include <QBuffer>
+#include <atomic>
+#include <thread>
 #define private public
 #include "monitorproperties.h"
 #include "righeads.h"
@@ -2360,6 +2362,54 @@ void MonitorProperties_Test::anLedMapLivesInTheLibraryAndTheShow()
         if (reader.name() == QStringLiteral("Monitor"))
             QVERIFY(mp2.loadXML(reader, nullptr));
     QCOMPARE(mp2.headLayoutFor(&fx), mine);
+
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+    fx.setFixtureDefinition(nullptr, nullptr);
+    delete def;
+}
+
+void MonitorProperties_Test::anLedMapReadWhileItIsSetIsWhole()
+{
+    QTemporaryDir lib;
+    HeadLayoutLibrary::setUserDirectoryOverride(lib.path());   // no library copy
+    QLCFixtureMode *mode = nullptr;
+    QLCFixtureDef *def = xl450(&mode);
+    Fixture fx(this);
+    fx.setFixtureDefinition(def, mode);
+
+    const HeadLayout rows = HeadLayout::fromRowPattern(&fx, { "RGB", "W", "RGB", "W", "RGB" });
+    QVERIFY(rows.isValid());
+    HeadLayout swapped = rows;
+    std::swap(swapped.cells[0], swapped.cells[1]);
+    const HeadLayout order = HeadLayout::headOrder(&fx);
+
+    MonitorProperties mp;
+    std::atomic<bool> stop(false);
+    std::atomic<int> reads(0), torn(0);
+    std::thread dmx([&]() {                  // the matrix effect's tick
+        while (!stop.load())
+        {
+            const HeadLayout got = mp.headLayoutFor(&fx);
+            if (!(got == rows || got == swapped || got == order))
+                torn.fetch_add(1);
+            reads.fetch_add(1);
+        }
+    });
+    QElapsedTimer clock;
+    clock.start();
+    int sets = 0;
+    // The editor, and File > New, for as long as the reader is reading.
+    while ((reads.load() < 20000 || sets < 3000) && clock.elapsed() < 10000)
+    {
+        mp.setHeadLayout(sets % 2 ? rows : swapped);
+        if (sets % 7 == 0)
+            mp.reset();
+        ++sets;
+    }
+    stop.store(true);
+    dmx.join();
+    QVERIFY2(reads.load() >= 20000, qPrintable(QString::number(reads.load())));
+    QCOMPARE(torn.load(), 0);
 
     HeadLayoutLibrary::setUserDirectoryOverride(QString());
     fx.setFixtureDefinition(nullptr, nullptr);

@@ -33,8 +33,20 @@
 #include <QDoubleSpinBox>
 #include <QPushButton>
 #include <QMenu>
+#include <QScopeGuard>
+#include <QSlider>
+#include <QElapsedTimer>
 
 #include "mainbar_test.h"
+#include "showtreecontroller.h"
+#include "functionparent.h"
+#include "showcontrol.h"
+#include "mastertimer.h"
+#include "chaserstep.h"
+#include "universe.h"
+#include "fixture.h"
+#include "chaser.h"
+#include "scene.h"
 
 #define private public
 #define protected public
@@ -49,6 +61,10 @@
 #include "showtreeview.h"
 #include "moveinblackbutton.h"
 #include "programmercontroller.h"
+#include "showmanager.h"
+#include "multitrackview.h"
+#include "vcslider.h"
+#include "vcframe.h"
 #undef protected
 #undef private
 
@@ -321,6 +337,378 @@ void MainBar_Test::theShowControlsWorkInBothPlacements()
         QCOMPARE(sc->stopAllButton()->popupMode(), QToolButton::DelayedPopup);
         QVERIFY(sc->stopAllButton()->defaultAction()->menu() != nullptr);
     }
+}
+
+void MainBar_Test::operateClearsBlindAndGreysIt()
+{
+    InputOutputMap *io = m_app->doc()->inputOutputMap();
+    ShowControls *sc = m_app->m_showControls;
+    QVERIFY(sc != nullptr);
+    QCOMPARE(m_app->doc()->mode(), Doc::Design);
+
+    sc->blindButton()->click();
+    QVERIFY(io->outputInhibited());
+    QVERIFY(m_app->m_controlBlindAction->isEnabled());
+
+    sc->operateButton()->click();
+    QCOMPARE(m_app->doc()->mode(), Doc::Operate);
+    QVERIFY(!io->outputInhibited());                    // the rig speaks again
+    QVERIFY(!m_app->m_controlBlindAction->isEnabled()); // and can't be muted mid-show
+    QVERIFY(!sc->blindButton()->isEnabled());
+    QVERIFY(!sc->blindButton()->isChecked());
+
+    sc->designButton()->click();
+    QCOMPARE(m_app->doc()->mode(), Doc::Design);
+    QVERIFY(m_app->m_controlBlindAction->isEnabled());
+    QVERIFY(!io->outputInhibited());                    // not switched back on by itself
+}
+
+/* A one-channel dimmer on universe 3 (the demo show uses only universe 1)
+   and a scene holding it at full. Both go again in
+   removeAddedFunctionsAndFixtures(). */
+quint32 MainBar_Test::addDimmerScene(quint32 *fixtureId)
+{
+    Doc *doc = m_app->doc();
+    Fixture *f = new Fixture(doc);
+    f->setName("Test dimmer");
+    f->setChannels(1);
+    f->setUniverse(2);
+    f->setAddress(0);
+    if (!doc->addFixture(f))
+    {
+        delete f;
+        return Function::invalidId();
+    }
+    m_addedFixtures << f->id();
+    Scene *s = new Scene(doc);
+    s->setName("Test dimmer full");
+    s->setValue(f->id(), 0, 255);
+    doc->addFunction(s);
+    m_addedFunctions << s->id();
+    if (fixtureId != nullptr)
+        *fixtureId = f->id();
+    return s->id();
+}
+
+void MainBar_Test::removeAddedFunctionsAndFixtures()
+{
+    Doc *doc = m_app->doc();
+    doc->masterTimer()->stopAllFunctions();
+    for (quint32 id : std::as_const(m_addedFunctions))
+        doc->deleteFunction(id);
+    for (quint32 id : std::as_const(m_addedFixtures))
+        doc->deleteFixture(id);
+    m_addedFunctions.clear();
+    m_addedFixtures.clear();
+    doc->showControl()->setMainCueList(Function::invalidId());
+    doc->resetModified();
+}
+
+static Universe *universeAt(Doc *doc, int index)
+{
+    const QList<Universe *> unis = doc->inputOutputMap()->universes();
+    return index < unis.size() ? unis.at(index) : nullptr;
+}
+
+void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    ShowControls *sc = m_app->m_showControls;
+    QVERIFY(sc != nullptr);
+    const quint32 sid = addDimmerScene(nullptr);
+    Function *scene = doc->function(sid);
+    QVERIFY(scene != nullptr);
+    Universe *uni = universeAt(doc, 2);
+    QVERIFY(uni != nullptr);
+
+    scene->start(doc->masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(scene->isRunning(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 255, 5000);
+    QTRY_VERIFY(sc->stopAllButton()->isEnabled());          // something to stop
+
+    // The stop-all button's own menu (hold the button).
+    QMenu *menu = sc->stopAllButton()->defaultAction()->menu();
+    QVERIFY(menu != nullptr);
+    QAction *fade1 = nullptr;
+    for (QAction *a : menu->actions())
+        if (a->text() == QStringLiteral("Fade 1 second and stop"))
+            fade1 = a;
+    QVERIFY(fade1 != nullptr);
+    QCOMPARE(fade1->data().toInt(), 1000);
+
+    QElapsedTimer clock;
+    clock.start();
+    fade1->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(!scene->isRunning(), 5000);
+    // Mid-fade: neither at full nor out yet.
+    QTRY_VERIFY2_WITH_TIMEOUT(uni->postGMValue(0) > 0 && uni->postGMValue(0) < 255,
+                              qPrintable(QString("output %1").arg(uni->postGMValue(0))), 900);
+    // ...and out after the second, not before most of it has gone by.
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 0, 5000);
+    QVERIFY2(clock.elapsed() >= 500, qPrintable(QString("out after %1 ms").arg(clock.elapsed())));
+    QTRY_VERIFY(!sc->stopAllButton()->isEnabled());         // nothing left running
+}
+
+void MainBar_Test::showModeLockLocksAndUnlocks()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *io = doc->inputOutputMap();
+    QAction *lock = m_app->m_showLockAction;
+    QVERIFY(lock != nullptr);
+    QCOMPARE(lock->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_L));
+    QCOMPARE(lock->shortcut().toString(QKeySequence::PortableText), QString("Ctrl+L"));
+    QVERIFY(lock->isCheckable());
+    QVERIFY(!doc->isShowLocked());
+    QVERIFY(!lock->isChecked());
+
+    ShowManager *shows = ShowManager::instance();
+    QVERIFY(shows != nullptr);
+    QVERIFY(shows->m_showview->isEditable());
+    QVERIFY(m_app->m_statusShowLockLabel != nullptr);
+    QVERIFY(m_app->m_statusShowLockLabel->isHidden());
+
+    // A Virtual Console fader on the Grand Master.
+    VirtualConsole *vc = VirtualConsole::instance();
+    QVERIFY(vc != nullptr);
+    VCSlider *gm = new VCSlider(vc->contents(), doc);
+    auto tidy = qScopeGuard([gm, io, doc]() {
+        delete gm;
+        doc->setShowLocked(false);
+        io->setGrandMasterValue(255);
+    });
+    gm->setSliderMode(VCSlider::GrandMaster);
+    io->setGrandMasterValue(255);
+
+    lock->trigger();
+    QVERIFY(doc->isShowLocked());
+    QVERIFY(doc->programmer()->isShowLocked());
+    QVERIFY(lock->isChecked());
+    QVERIFY(!m_app->m_statusShowLockLabel->isHidden());
+    QCOMPARE(m_app->m_statusShowLockLabel->text(), QString("SHOW LOCKED"));
+    QVERIFY2(!shows->m_showview->isEditable(), "the Shows timeline is read-only while locked");
+    gm->setSliderValue(100, false);
+    QCOMPARE(int(io->grandMasterValue()), 255);             // the move is dropped
+
+    lock->trigger();
+    QVERIFY(!doc->isShowLocked());
+    QVERIFY(!lock->isChecked());
+    QVERIFY(m_app->m_statusShowLockLabel->isHidden());
+    QVERIFY(shows->m_showview->isEditable());
+    gm->setSliderValue(100, false);
+    QCOMPARE(int(io->grandMasterValue()), 100);             // and heard again
+}
+
+/* A cue list of two scenes, infinite hold, as the show's main cue list. */
+static Chaser *makeMainCueList(Doc *doc, QList<quint32> *added, Chaser *subGoInner = nullptr)
+{
+    Chaser *list = new Chaser(doc);
+    list->setName("Cue list");
+    list->setDurationMode(Chaser::Common);
+    list->setDuration(Function::infiniteSpeed());
+    doc->addFunction(list);
+    *added << list->id();
+    for (int i = 0; i < 3; ++i)
+    {
+        if (i == 1 && subGoInner != nullptr)
+        {
+            ChaserStep step(subGoInner->id());
+            step.subCues = ChaserStep::SubGo;
+            list->addStep(step);
+            continue;
+        }
+        Scene *s = new Scene(doc);
+        s->setName(QString("Cue %1").arg(i + 1));
+        doc->addFunction(s);
+        *added << s->id();
+        list->addStep(ChaserStep(s->id()));
+    }
+    doc->showControl()->setMainCueList(list->id());
+    return list;
+}
+
+void MainBar_Test::goAndBackStepTheMainCueList()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    QAction *go = m_app->m_cueGoAction;
+    QAction *back = m_app->m_cueBackAction;
+    QVERIFY(go != nullptr && back != nullptr);
+    QCOMPARE(go->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Return));
+    QCOMPARE(back->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return));
+    // From any window: the Virtual Console's, a broken-out tab's.
+    QCOMPARE(go->shortcutContext(), Qt::ApplicationShortcut);
+    QCOMPARE(back->shortcutContext(), Qt::ApplicationShortcut);
+
+    // In the Control menu.
+    QMenu *control = nullptr;
+    for (QAction *a : m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->menu()->actions().contains(go))
+            control = a->menu();
+    QVERIFY(control != nullptr);
+    QCOMPARE(control->title(), QString("&Control"));
+    QVERIFY(control->actions().contains(back));
+
+    Chaser *list = makeMainCueList(doc, &m_addedFunctions);
+    QVERIFY(!list->isRunning());
+
+    go->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    go->trigger();
+    QTRY_COMPARE_WITH_TIMEOUT(list->currentStepIndex(), 1, 5000);
+    back->trigger();
+    QTRY_COMPARE_WITH_TIMEOUT(list->currentStepIndex(), 0, 5000);
+    QVERIFY(list->isRunning());
+}
+
+void MainBar_Test::theFootersNextMenuLoadsASubCue()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    Chaser *inner = new Chaser(doc);
+    inner->setName("Inner");
+    doc->addFunction(inner);
+    m_addedFunctions << inner->id();
+    for (int i = 0; i < 2; ++i)
+    {
+        Scene *s = new Scene(doc);
+        s->setName(QString("Inner %1").arg(i + 1));
+        doc->addFunction(s);
+        m_addedFunctions << s->id();
+        inner->addStep(ChaserStep(s->id()));
+    }
+    Chaser *list = makeMainCueList(doc, &m_addedFunctions, inner);
+    ShowControl *sc = doc->showControl();
+
+    QToolButton *footer = m_app->m_statusStandby;
+    QVERIFY(footer != nullptr);
+    m_app->slotUpdateStandby();
+    QVERIFY(!footer->isHidden());
+    QVERIFY2(footer->text().startsWith(QString("Next: 1 — Cue 1")), qPrintable(footer->text()));
+
+    QMenu *menu = footer->menu();
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();                       // what opening it does
+    QList<QAction *> acts = menu->actions();
+    QVERIFY(acts.contains(m_app->m_cueGoAction));
+    QVERIFY(acts.contains(m_app->m_cueBackAction));
+    QVERIFY(acts.contains(m_app->m_cueSubGoAction));    // there is a Sub GO step
+    QAction *stop = nullptr, *open = nullptr;
+    QMenu *load = nullptr;
+    for (QAction *a : acts)
+    {
+        if (a->text() == QStringLiteral("Stop Cue list"))
+            stop = a;
+        else if (a->text() == QStringLiteral("Open the Cue List"))
+            open = a;
+        else if (a->menu() != nullptr && a->text() == QStringLiteral("Load"))
+            load = a->menu();
+    }
+    QVERIFY(stop != nullptr);
+    QVERIFY(open != nullptr);
+    QVERIFY(load != nullptr);
+
+    QStringList loadTexts;
+    for (QAction *a : load->actions())
+        loadTexts << a->text();
+    QCOMPARE(loadTexts, (QStringList{ QString("1 — Cue 1"), QString("2 — Inner"),
+                                      QString("    2.1 — Inner 1"), QString("    2.2 — Inner 2"),
+                                      QString("3 — Cue 3") }));
+    QVERIFY(load->actions().at(0)->isChecked());           // on standby now
+
+    // Choose 2.2: on standby, and what the footer says GO plays.
+    load->actions().at(3)->trigger();
+    QCOMPARE(sc->standbyStep(list), 1);
+    QCOMPARE(sc->standbySubCue(list), 1);
+    m_app->slotUpdateStandby();
+    QVERIFY2(footer->text().startsWith(QString("Next: 2.2 — Inner 2")), qPrintable(footer->text()));
+    emit menu->aboutToShow();
+    for (QAction *a : menu->actions())
+        if (a->menu() != nullptr && a->text() == QStringLiteral("Load"))
+            load = a->menu();
+    QVERIFY(load->actions().at(3)->isChecked());
+    QVERIFY(!load->actions().at(0)->isChecked());
+
+    // GO plays it.
+    m_app->m_cueGoAction->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 1
+                             && list->currentSubCueIndex() == 1, 5000);
+    // Stop, from the menu.
+    emit menu->aboutToShow();
+    for (QAction *a : menu->actions())
+        if (a->text() == QStringLiteral("Stop Cue list"))
+            a->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+
+    // No main cue list: the footer goes.
+    sc->setMainCueList(Function::invalidId());
+    m_app->slotUpdateStandby();
+    QVERIFY(footer->isHidden());
+}
+
+void MainBar_Test::theFooterNamesTheCurrentProduction()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Dance Hysteria");
+    auto tidy = qScopeGuard([this, st, prod]() {
+        st->setCurrentProduction(ShowTree::invalidId());
+        st->removeProduction(prod);
+        removeAddedFunctionsAndFixtures();
+    });
+    const quint32 list = st->addCueList(prod, "Act 1", ShowTree::ListMode::Tracking);
+    QVERIFY(st->addCue(list, -1, "Opening") != ShowTree::invalidId());
+    QVERIFY(st->setCurrentProduction(prod));
+    QVERIFY(doc->showControl()->cueList(QString()) != nullptr);   // its list is GO's
+
+    m_app->slotUpdateStandby();
+    QToolButton *footer = m_app->m_statusStandby;
+    QVERIFY(!footer->isHidden());
+    QVERIFY2(footer->text().startsWith(QString("Dance Hysteria ▸ Next:")), qPrintable(footer->text()));
+
+    // None current: just Next:.
+    st->setCurrentProduction(ShowTree::invalidId());
+    Chaser *plain = makeMainCueList(doc, &m_addedFunctions);
+    QVERIFY(plain != nullptr);
+    m_app->slotUpdateStandby();
+    QVERIFY2(footer->text().startsWith(QString("Next:")), qPrintable(footer->text()));
+}
+
+void MainBar_Test::theFooterGrandMasterDimsTheRig()
+{
+    auto tidy = qScopeGuard([this]() {
+        m_app->doc()->inputOutputMap()->setGrandMasterValue(255);
+        removeAddedFunctionsAndFixtures();
+    });
+    Doc *doc = m_app->doc();
+    InputOutputMap *io = doc->inputOutputMap();
+    QSlider *fader = m_app->m_statusGrandMasterSlider;
+    QVERIFY(fader != nullptr);
+    QCOMPARE(fader->maximum(), 255);
+    io->setGrandMasterValue(255);
+    QCOMPARE(fader->value(), 255);
+
+    const quint32 sid = addDimmerScene(nullptr);
+    Function *scene = doc->function(sid);
+    QVERIFY(scene != nullptr);
+    Universe *uni = universeAt(doc, 2);
+    QVERIFY(uni != nullptr);
+    scene->start(doc->masterTimer(), FunctionParent::master());
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 255, 5000);
+
+    fader->setValue(51);                                    // 20 %
+    QCOMPARE(int(io->grandMasterValue()), 51);
+    QCOMPARE(m_app->m_statusGrandMasterValueLabel->text(), QString("20%"));
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 51, 5000);
+    QCOMPARE(int(uni->preGMValue(0)), 255);                  // the scene still asks for full
+
+    fader->setValue(0);
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 0, 5000);
+
+    // Set from elsewhere (a console fader, OSC): the footer follows.
+    io->setGrandMasterValue(255);
+    QCOMPARE(fader->value(), 255);
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 255, 5000);
 }
 
 void MainBar_Test::thePlacementRoundTripsAndSwitchesLive()

@@ -63,6 +63,9 @@ private slots:
      *  transition, each fixture at its own moment. */
     void transitionTimingAndPlaces();
     void aLookWipesInAndOutAcrossTheStage();
+    /** A transition doesn't apply when the scene's tempo is Beats: the look
+     *  arrives and leaves by its own fades, every fixture together. */
+    void aTransitionIsIgnoredWhenTheTempoIsBeats();
     void writeHTPTwoTicksIntensity();
     void writeLTPReady();
 

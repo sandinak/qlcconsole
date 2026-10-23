@@ -465,7 +465,10 @@ A scene, collection or chaser: select its row in the outline (several,
 ⇧/⌘-click) and press **⌫**, or right-click → **Delete…**. The question says
 it deletes the function itself, everywhere, and names each collection,
 chaser step and show track using it. (On the Workbench, ⌫ only takes a layer
-out.)
+out.) It is one step on the shared history: **⌘Z** brings each function back
+with its id, in its place in every collection, chaser and show track, and on
+the VC buttons and cue lists that played it; **⇧⌘Z** deletes it again.
+**Duplicate** and **⌘C ⌘V** are one step too: ⌘Z takes the copies away.
 
 A palette: in Build ▸ Palettes, right-click → **Delete**, or select and press **⌫**.
 The question lists every place the palette is used — each scene and which

@@ -92,6 +92,10 @@ private slots:
     /** Size On Subject zooms a head so its beam is that wide where it lands,
      *  whatever the throw, within the lens's range. */
     void followSpotZoomsToHoldSizeOnSubject();
+    /** A follow spot on an Aim look: two heads in different places both
+     *  land on the follow-spot point, and moving the point moves both to
+     *  the same new place (they converge; the effect leaves pan/tilt alone). */
+    void followSpotMovesEveryHeadToTheSamePoint();
     /** A script that leaves out notes, lifecycle and the rest: empty and
      *  the defaults -- not the word "undefined" shown under the effect. */
     void aScriptsMissingTextIsEmptyNotUndefined();

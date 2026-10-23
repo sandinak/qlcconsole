@@ -103,6 +103,15 @@ static QWidget *sequenceEditor(QWidget *parent, Sequence *sequence, Doc *doc)
 
 #define SETTINGS_SPLITTER QStringLiteral("programming/workbenchSplitter")
 
+/** The Workbench plays what is loaded (the Design preview, the Operate run)
+ *  under its own parent: hiding it lets go of that run only. A function a
+ *  VC button, the Run tab or a cue was already running keeps running --
+ *  Function::stop(master()) would clear every source. */
+static FunctionParent workbenchParent()
+{
+    return FunctionParent(FunctionParent::AutoVCWidget, 0xFFFFFF57);
+}
+
 static QList<quint32> membersOf(Function *f)
 {
     if (Collection *c = qobject_cast<Collection *>(f))
@@ -1939,7 +1948,7 @@ void Workbench::startPreview()
         updateOnRig();
         return;
     }
-    f->start(m_doc->masterTimer(), FunctionParent::master());
+    f->start(m_doc->masterTimer(), workbenchParent());
     m_previewFunction = fid;
     m_previewMembers = membersOf(f);
     m_lastSyncedEffects = effectSignature(qobject_cast<Scene *>(m_doc->function(m_currentScene)));
@@ -1959,7 +1968,7 @@ void Workbench::stopPreview()
         return;
     Function *f = m_doc->function(m_previewFunction);
     if (f != nullptr)
-        f->stop(FunctionParent::master());
+        f->stop(workbenchParent());
     m_previewFunction = Function::invalidId();
     m_previewMembers.clear();
     updateOnRig();
@@ -1987,7 +1996,7 @@ void Workbench::refreshPreview()
     if (!root->isRunning() && !m_restartTimer->isActive())
     {
         // It stopped on its own (a scene empty until now): start it.
-        root->start(m_doc->masterTimer(), FunctionParent::master());
+        root->start(m_doc->masterTimer(), workbenchParent());
         m_previewFunction = root->id();
         m_previewMembers = membersOf(root);
         m_lastSyncedEffects = effectSignature(qobject_cast<Scene *>(m_doc->function(m_currentScene)));
@@ -2028,7 +2037,7 @@ void Workbench::startOperate()
     Function *f = m_doc->function(fid);
     if (f == nullptr)
         return;
-    f->start(m_doc->masterTimer(), FunctionParent::master());
+    f->start(m_doc->masterTimer(), workbenchParent());
     m_operateFunction = fid;
     updateOnRig();
 }
@@ -2038,7 +2047,7 @@ void Workbench::stopOperate()
     if (m_operateFunction == Function::invalidId())
         return;
     if (Function *f = m_doc->function(m_operateFunction))
-        f->stop(FunctionParent::master());
+        f->stop(workbenchParent());
     m_operateFunction = Function::invalidId();
     updateOnRig();
 }

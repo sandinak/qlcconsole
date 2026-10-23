@@ -129,6 +129,10 @@ private slots:
     void headKindsAreReadFromTheChannels();
     void aRowPatternMapsEachKindToItsRows();
     void anLedMapLivesInTheLibraryAndTheShow();
+    /** A matrix effect reads the show's LED maps on the DMX thread while the
+     *  editor sets them and a new show clears them: every read is a whole
+     *  map (one of those set, or the head order), never a torn one. */
+    void anLedMapReadWhileItIsSetIsWhole();
 
     /** Undo and Cancel put the whole rig back from a snapshot; what they
      *  replace is retired, not freed, while the DMX thread may hold it. */
