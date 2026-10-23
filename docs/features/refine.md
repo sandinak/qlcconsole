@@ -11,14 +11,16 @@ once.
 
 ## Starting
 
-In the [Show Tree](show-tree.md), with Design mode on:
+In the [Show Tree](show-tree.md), in Design or Operate:
 
 - a cue's page: **Refine on the controller…**, or
 - right-click a layer: **Refine on the controller…** (it starts on that
   layer).
 
-The cue is previewed on the rig, and the Refine panel shows the cue, the
-layer, the scope, what the D-pad sets, and what is pending.
+In Design the cue is previewed on the rig. In Operate the show carries on
+as it is running (see [Refine during the show](#refine-during-the-show)).
+The Refine panel shows the cue, the layer, the scope, what the D-pad sets,
+and what is pending.
 
 ## Scope: layer, group, fixture
 
@@ -27,7 +29,10 @@ layer, the scope, what the D-pad sets, and what is pending.
 - **Layer** — the layer's own look changes, for all of its fixtures.
   A position keeps its fanning: the whole fan moves.
 - **Group** — one of the layer's groups (only where the layer has more
-  than one). Kept as an exception for that group.
+  than one). A move is an **offset** from each fixture's own position, so
+  a fan inside the group stays a fan: it is kept as a position exception
+  on each of the group's fixtures. Zoom, focus, colour and gobo are kept
+  as one exception for the group.
 - **Fixture** — one fixture. Kept as an **exception**: a
   [child layer](show-tree.md) of that layer on just that fixture, with the
   value as its own look. The layer still lights it with everything else.
@@ -81,11 +86,19 @@ its own.
 The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
 
 - **The lights.** At Group or Fixture scope, what is picked keeps the
-  cue's level and the rest of the layer dims; on every change it blinks
-  three times.
+  cue's level and the rest of the layer dims to 15% — only the fixtures
+  the cue has brighter than that; one already lower is never raised. On
+  every change what is picked blinks three times.
 - **The voice.** "AT spots, layer." "AT spots, fixture 3 of 8."
   "DS wash, group 2 of 3." "Kept." "Back to the cue." **Where am I?**
   adds the cue: "Cue 4, AT spots, fixture 3 of 8."
 
-Refine works in Design mode; going to Operate ends it, dropping what is
-pending.
+## Refine during the show
+
+Refine works in Operate too, and switching between Design and Operate
+does not end it. In Operate the cue list runs on as it is: what you move
+is shown on the rig at once, and **A** keeps it in the cue as in Design.
+The running cue plays it from its **next GO**; until then Refine holds what
+was kept on the rig, and the voice says "Kept. It plays from the next GO."
+Leaving Refine lets go of that hold. Back in Design, the cue is previewed
+with everything kept.
