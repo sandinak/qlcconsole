@@ -1,0 +1,101 @@
+/*
+  Q Light Controller Plus
+  focuscallsdialog.h
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#ifndef FOCUSCALLSDIALOG_H
+#define FOCUSCALLSDIALOG_H
+
+#include <QDialog>
+
+#include "focuscalls.h"
+
+class QListWidget;
+class QPlainTextEdit;
+class QPushButton;
+class QComboBox;
+class QLineEdit;
+class QLabel;
+class Doc;
+
+/** @addtogroup ui UI
+ * @{
+ */
+
+/**
+ * The show's focus calls, and starting them (FOCUS_REFINE_DESIGN.md
+ * section 4): the calls in the order they are run -- each some fixture
+ * groups and the point they focus to, with a note for the crew -- and the
+ * venue the corrections are saved for. Start runs them in Focus mode.
+ *
+ * The calls are the show's (saved with it); the venue is beside it.
+ */
+class FocusCallsDialog final : public QDialog
+{
+    Q_OBJECT
+
+public:
+    FocusCallsDialog(Doc *doc, QWidget *parent = nullptr);
+
+    /** Open it; Start runs the calls in Focus mode. */
+    static void run(Doc *doc, QWidget *parent);
+
+    /** The calls as edited (they are the show's once Start or Save). */
+    QList<FocusCall> calls() const { return m_calls; }
+    void setCalls(const QList<FocusCall> &calls);
+
+    /** The venue chosen: a name (new or existing), or empty for the show's
+     *  own calibration. */
+    QString venueChoice() const;
+    void setVenueChoice(const QString &name);
+
+    /** Write the calls into the show and apply the venue chosen (made if
+     *  new). False, with @p why, when a venue is chosen and the show has no
+     *  file yet to keep it beside. */
+    bool apply(QString *why = nullptr);
+
+    QListWidget *callList() const { return m_list; }
+
+private:
+    void fillCallList();
+    void loadCall(int index);
+    void storeCall();
+    void addCall();
+    void removeCall();
+    void moveCall(int by);
+    void refreshVenue();
+
+private:
+    Doc *m_doc;
+    QList<FocusCall> m_calls;
+    int m_current = -1;
+    bool m_loading = false;
+
+    QListWidget *m_list;
+    QLineEdit *m_name;
+    QListWidget *m_groups;
+    QComboBox *m_target;
+    QLineEdit *m_note;
+    QComboBox *m_venue;
+    QLineEdit *m_newVenue;
+    QLabel *m_venueNote;
+    QPushButton *m_start;
+};
+
+/** @} */
+
+#endif

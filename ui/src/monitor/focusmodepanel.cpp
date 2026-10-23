@@ -38,6 +38,7 @@
 #include "controllertestdialog.h"
 #include "controllerkeepalive.h"
 #include "focuscontrolmap.h"
+#include "venuecorrections.h"
 #include "focusmodepanel.h"
 #include "programmercontroller.h"
 #include "monitorproperties.h"
@@ -482,6 +483,19 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
 
     m_titleLabel = new QLabel(this);
     m_titleLabel->setObjectName(QStringLiteral("focusTitle"));
+    m_callLabel = new QLabel(this);
+    m_callLabel->setObjectName(QStringLiteral("focusCall"));
+    m_callLabel->setWordWrap(true);
+    {
+        QFont cf = m_callLabel->font();
+        cf.setPointSizeF(cf.pointSizeF() * 1.25);
+        cf.setBold(true);
+        m_callLabel->setFont(cf);
+    }
+    m_callLabel->hide();
+    m_scopeLabel = new QLabel(this);
+    m_scopeLabel->setObjectName(QStringLiteral("focusScope"));
+    m_scopeLabel->setWordWrap(true);
     m_nameLabel = new QLabel(this);
     m_nameLabel->setObjectName(QStringLiteral("focusFixture"));
     QFont big = m_nameLabel->font();
@@ -515,6 +529,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_progressLabel->setObjectName(QStringLiteral("focusProgress"));
 
     vl->addWidget(m_titleLabel);
+    vl->addWidget(m_callLabel);
     vl->addWidget(m_nameLabel);
     QHBoxLayout *lampRow = new QHBoxLayout;
     lampRow->addWidget(m_lamp);
@@ -524,6 +539,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     vl->addWidget(m_offsetLabel);
     vl->addWidget(m_beamLabel);
     vl->addWidget(m_savedLabel);
+    vl->addWidget(m_scopeLabel);
     QHBoxLayout *meta = new QHBoxLayout;
     meta->addWidget(m_stepLabel);
     meta->addStretch();
@@ -626,6 +642,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     connect(m_session, &FocusSession::unsavedChanged, this, &FocusModePanel::refreshSaveStatus);
     connect(m_session, &FocusSession::headSaved, m_lamp, &FocusStatusLamp::flash);
     connect(m_session, &FocusSession::referenceChanged, this, &FocusModePanel::refresh);
+    connect(m_session, &FocusSession::callChanged, this, &FocusModePanel::refresh);
+    connect(m_session, &FocusSession::scopeChanged, this, &FocusModePanel::refresh);
     connect(m_session, &FocusSession::exitRequested, this, [this]() { requestExit(); });
     // Ended under it -- into Perform, say: close without asking.
     connect(m_session, &FocusSession::stopped, this, [this]() {
@@ -678,8 +696,41 @@ void FocusModePanel::refresh()
         }
     }
     refreshSaveStatus();
-    m_titleLabel->setText(tr("Focus \342\200\224 head %1 of %2")
-                          .arg(m_session->index() + 1).arg(m_session->count()));
+    m_titleLabel->setText(m_session->isRunningCalls()
+                          ? tr("Focus calls \342\200\224 fixture %1 of %2")
+                            .arg(m_session->index() + 1).arg(m_session->count())
+                          : tr("Focus \342\200\224 head %1 of %2")
+                            .arg(m_session->index() + 1).arg(m_session->count()));
+    // One layout, in this tool's words (ControllerScheme).
+    m_map->setTool(m_session->isRunningCalls() ? ControllerScheme::FocusCallsTool
+                                               : ControllerScheme::FocusTool);
+    if (m_session->isRunningCalls())
+    {
+        const FocusSession::Call call = m_session->currentCall();
+        m_callLabel->setText(tr("Call %1 of %2: %3%4").arg(m_session->callIndex() + 1)
+                             .arg(m_session->callCount()).arg(call.name,
+                                  call.note.isEmpty() ? QString()
+                                                      : QStringLiteral("\n") + call.note));
+        m_callLabel->show();
+    }
+    else
+        m_callLabel->hide();
+    {
+        VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+        const QString where = m_session->savesToVenue()
+            ? tr("Saves to venue \342\200\234%1\342\200\235 (not the show file)").arg(venues->activeVenue())
+            : tr("Saves to the show's own calibration");
+        m_scopeLabel->setText(tr("%1 \342\200\224 %2.  Y switches.  %3")
+                              .arg(m_session->scope() == FocusSession::GroupScope
+                                   ? tr("The whole %1 (%2)").arg(m_session->isRunningCalls()
+                                                                 ? tr("call") : tr("list"))
+                                     .arg(m_session->order().size())
+                                   : tr("One fixture"),
+                                   m_session->scope() == FocusSession::GroupScope
+                                   ? tr("nudges, saves and reverts all of them")
+                                   : tr("bumpers step fixtures"),
+                                   where));
+    }
     m_nameLabel->setText(fx != nullptr ? tr("%1  (ID %2)").arg(fx->name()).arg(fid) : QString());
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
         m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
@@ -865,6 +916,11 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Delete:   m_session->revert(); break;
         case Qt::Key_0:        m_session->zero(); break;
         case Qt::Key_R:        m_session->toggleReference(); break;
+        // Focus calls and the scope (the triggers and Y on the controller).
+        case Qt::Key_PageDown: m_session->nextCall(); break;
+        case Qt::Key_PageUp:   m_session->previousCall(); break;
+        case Qt::Key_G:        m_session->cycleScope(); break;
+        case Qt::Key_W:        m_session->whereAmI(); break;
         // The beam (Q103): narrower, wider; ⇧ for 5°.
         case Qt::Key_Comma:
         case Qt::Key_Less:     m_session->nudgeBeam(shift ? -5.0f : -1.0f); refresh(); break;

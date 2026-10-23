@@ -219,9 +219,9 @@ void FocusMode_Test::theMapShowsTheProfilesBindings()
     // Each control: what it does here, by its role, under its own name.
     QCOMPARE(map->actionText(R::A), QString("Save"));
     QCOMPARE(map->controlName(R::A), QString("Cross"));
-    QCOMPARE(map->actionText(R::RB), QString("Next head"));
+    QCOMPARE(map->actionText(R::RB), QString("Next fixture"));
     QCOMPARE(map->controlName(R::RB), QString("R1"));
-    QCOMPARE(map->actionText(R::LB), QString("Previous head"));
+    QCOMPARE(map->actionText(R::LB), QString("Previous fixture"));
     QCOMPARE(map->actionText(R::B), QString("Revert"));
     QCOMPARE(map->actionText(R::X), QString("Zero"));
     QCOMPARE(map->actionText(R::Back), QString("Undo save"));
@@ -237,7 +237,8 @@ void FocusMode_Test::theMapShowsTheProfilesBindings()
     // use says nothing.
     QVERIFY(map->isMapped(R::A));
     QVERIFY(!map->isMapped(R::Y));
-    QCOMPARE(map->actionText(R::Y), QString("Second reference"));
+    QCOMPARE(map->actionText(R::Y), QString("Scope: group \342\206\224 fixture"));
+    QCOMPARE(map->actionText(R::LS), QString("Second reference"));
     QVERIFY(!map->isMapped(R::LeftTrigger));
     QVERIFY(map->actionText(R::LeftTrigger).isEmpty());
 

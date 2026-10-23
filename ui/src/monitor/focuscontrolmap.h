@@ -26,6 +26,7 @@
 #include <QMap>
 #include <QSet>
 
+#include "controllerscheme.h"
 #include "gamepadrole.h"
 
 /** @addtogroup ui UI
@@ -54,6 +55,11 @@ public:
 
     Mode mode() const { return m_mode; }
     void setMode(Mode mode);
+
+    /** Which tool's words the controller is labelled with (Focus mode,
+     *  Focus calls, Refine: one layout, ControllerScheme). */
+    ControllerScheme::Tool tool() const { return m_tool; }
+    void setTool(ControllerScheme::Tool tool);
 
     /** The controller's controls: GamepadRole::Role -> the profile's name
      *  for it (empty: named by role only). */
@@ -116,6 +122,7 @@ private:
 
 private:
     Mode m_mode = ControllerMap;
+    ControllerScheme::Tool m_tool = ControllerScheme::FocusTool;
     QMap<int, QString> m_controls;
     float m_step = 0.1f;
     QSet<int> m_lit;              ///< roles held

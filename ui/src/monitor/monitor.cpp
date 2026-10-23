@@ -91,6 +91,7 @@
 #include <QMutexLocker>
 #include <memory>
 #include "monitorfixtureitem.h"
+#include "focuscallsdialog.h"
 #include "focusmodepanel.h"
 #include "aimsolver.h"
 #include "powerdistribution.h"
@@ -2046,6 +2047,15 @@ void Monitor::initGraphicsToolbar()
                             "nudge its calibration offsets until it lands there "
                             "(controller: View + Menu)"));
     connect(focusAct, &QAction::triggered, this, &Monitor::openFocusMode);
+    /* Focus calls: the show's own order of focus, saved with it, run on
+       the controller and saved per venue (FOCUS_REFINE_DESIGN.md). */
+    QAction *callsAct = m_graphicsToolBar->addAction(QIcon(":/target.png"), tr("Focus calls"));
+    callsAct->setObjectName(QStringLiteral("focusCallsAction"));
+    callsAct->setToolTip(tr("Focus calls: the show's focus, group by group to its point, "
+                            "corrections saved for this venue (not the show)"));
+    connect(callsAct, &QAction::triggered, this, [this]() {
+        FocusCallsDialog::run(m_doc, window());
+    });
 
     m_moreBtn = new QToolButton(this);
     QToolButton *moreBtn = m_moreBtn;

@@ -95,6 +95,8 @@
 #include "eosimporter.h"
 #include "lastlookeffect.h"
 #include "focusmodepanel.h"
+#include "venuecorrections.h"
+#include "operatorvoice.h"
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -638,6 +640,9 @@ void App::init()
     {
         // View + Menu on the controller.
         connect(pc, &ProgrammerController::focusModeRequested, this, &App::slotFocusMode);
+        /* Focus calls and Refine say where the controller is, from the
+           laptop, to whoever holds it on stage (board Q107). */
+        new OperatorAnnouncer(pc, OperatorVoice::create(this), this);
         connect(pc, &ProgrammerController::dangleFixturesChanged, this,
                 [this](const QList<quint32> &fixtureIds) {
             if (m_statusDangleLabel == NULL)
@@ -4688,6 +4693,9 @@ QFile::FileError App::loadXML(const QString& fileName)
         else
         {
             setFileName(fileName);
+            /* The venue it was last focused for, from the file beside it:
+               applied over the show's own calibration, never into it. */
+            m_doc->programmer()->venueCorrections()->setShowFile(fileName, true);
             m_doc->resetModified();
             retval = QFile::NoError;
             cacheShowDefinitions();     // the next run of it needs nothing remote
@@ -4996,6 +5004,8 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
         /* Set the file name for the current Doc instance and
            set it also in an unmodified state. */
         setFileName(fileName);
+        // Saved under a new name: its venues go with it.
+        m_doc->programmer()->venueCorrections()->setShowFile(fileName, false);
         m_doc->resetModified();
         cacheShowDefinitions();     // what it uses, kept on this computer
     }

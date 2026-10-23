@@ -95,6 +95,7 @@ add_library(${module_name}
     monitor/monitor.cpp monitor/monitor.h
     monitor/focuscontrolmap.cpp monitor/focuscontrolmap.h
     monitor/focusmodepanel.cpp monitor/focusmodepanel.h
+    monitor/focuscallsdialog.cpp monitor/focuscallsdialog.h
     monitor/monitorbackgroundselection.cpp monitor/monitorbackgroundselection.h monitor/monitorbackgroundselection.ui
     monitor/monitorfixture.cpp monitor/monitorfixture.h
     monitor/monitorfixtureitem.cpp monitor/monitorfixtureitem.h
@@ -183,6 +184,8 @@ add_library(${module_name}
     workbench.cpp workbench.h
     workbenchstack.cpp workbenchstack.h
     showtreeview.cpp showtreeview.h
+    refinepanel.cpp refinepanel.h
+    operatorvoice.cpp operatorvoice.h
     showtreeworkbench.cpp showtreenewhere.cpp treecuestack.cpp treecuestack.h
     importsheet.cpp importsheet.h
     showconverter.cpp showconverter.h
@@ -292,6 +295,15 @@ target_link_libraries(${module_name} PUBLIC
     Qt6::Widgets
     qlcplusengine
 )
+
+# The voice that tells the operator on stage where the controller is
+# (operatorvoice.cpp): Qt's TextToSpeech where this Qt has it. A Mac uses its
+# own `say` and needs nothing more deployed, so it is not linked there.
+find_package(Qt6 QUIET COMPONENTS TextToSpeech)
+if(Qt6TextToSpeech_FOUND AND NOT APPLE)
+    target_link_libraries(${module_name} PUBLIC Qt6::TextToSpeech)
+    target_compile_definitions(${module_name} PRIVATE QLC_HAVE_TEXTTOSPEECH)
+endif()
 
 # Add resources and RGB Script deps
 target_link_libraries(${module_name} PUBLIC Qt6::Qml)
