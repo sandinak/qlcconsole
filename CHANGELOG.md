@@ -10,7 +10,7 @@ active work in [TODO.md](TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
-## [Unreleased]
+## [0.2.2] - Unreleased
 
 The 0.2.2 release candidate: the Build tab and its Workbench, the
 Classic QLC+ / qlcconsole / Everything views, Upgrade This Show, stage
@@ -294,6 +294,16 @@ circuits and subs.
   the targets.
 - The show's LED layouts are guarded against a running matrix effect while
   they are edited.
+
+### Known issues
+
+- A timeline **Override** track doesn't win an intensity channel (intensity
+  still mixes highest-wins); the help says it does. Waiting on a decision.
+- A track's intensity set before **Start** is replaced by the show's saved
+  value when the show starts. Waiting on a decision.
+- Under very heavy machine load a fade can finish late (seen in the course
+  test's 3 s fade taking ~8 s with dozens of builds running); the universe
+  threads run at normal priority.
 
 ## [0.2.1] - 2026-10-21
 
