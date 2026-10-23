@@ -241,12 +241,31 @@ hired rig with a patch sheet):
    ([A fixture's maximum draw](other-improvements.md#a-fixtures-maximum-draw))
 6. Save under a new name for the venue.
 
+### Importing into a show
+
+**File ▸ Import** brings things from another file into the show that's
+open, without replacing it (**Open** replaces it). Pick what kind of file
+it is; each entry's file dialog shows only that kind:
+
+- **From a show file**
+  - **QLC+ / qlcconsole Workspace (.qxw, .qlcc)…** — pick the fixtures,
+    groups, functions and palettes to bring in from another show. Clashing
+    IDs and addresses are sorted out for you.
+  - **ETC Eos Show (ASCII .asc)…** — see
+    [Importing an Eos show](#importing-an-eos-show) below.
+- **Fixtures &amp; patch**
+  - **QLC+ Fixtures List (.qxfl)…** — the fixtures and groups of a list
+    saved with **Fixtures ▸ Export fixtures** (**Fixtures ▸ Import
+    fixtures** does the same).
+- **Any Supported File…** — one dialog for all of them; the importer is
+  picked by the file's extension, as the single Import used to do.
+
 ### Importing an Eos show
 
 If the venue's rig lives on an ETC Eos-family desk (Element, Ion, Gio),
 bring its show across instead of rebuilding it. On the Eos: **File ▸
-Export ▸ USITT ASCII**. Here: **File ▸ Import** and pick the `.asc`. The
-wizard goes through three pages:
+Export ▸ USITT ASCII**. Here: **File ▸ Import ▸ ETC Eos Show (ASCII
+.asc)…** and pick the `.asc`. The wizard goes through three pages:
 
 1. **The show's files.** The `.asc`, plus any magic sheet XML exports
    (their channels land on the 2D map, a layer per sheet).

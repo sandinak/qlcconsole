@@ -379,6 +379,12 @@ public:
      *  step on the plot when the Monitor is open). */
     static void fillStageLookMenu(QMenu *menu, Doc *doc, const QList<quint32> &fids);
 
+    /** Add the fixtures and groups of the Fixtures List @p fileName (a
+     *  .qxfl, as Export fixtures writes) to @p doc. Returns how many came
+     *  in, or -1 when the file isn't a readable Fixtures List. Used by the
+     *  Fixtures menu's Import fixtures and File ▸ Import. */
+    static int importFixtureList(Doc *doc, const QString &fileName);
+
 private:
 
     /** Edit properties for the selected channels group */

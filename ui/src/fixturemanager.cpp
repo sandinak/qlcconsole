@@ -2618,86 +2618,99 @@ QString FixtureManager::createDialog(bool import)
 void FixtureManager::slotImport()
 {
     QString fileName = createDialog(true);
+    if (fileName.isEmpty())
+        return;
+    importFixtureList(m_doc, fileName);
+    updateView();
+}
 
-    QXmlStreamReader *doc = QLCFile::getXMLReader(fileName);
-    if (doc == NULL || doc->device() == NULL || doc->hasError())
+int FixtureManager::importFixtureList(Doc *doc, const QString &fileName)
+{
+    QXmlStreamReader *reader = QLCFile::getXMLReader(fileName);
+    if (reader == NULL || reader->device() == NULL || reader->hasError())
     {
         qWarning() << Q_FUNC_INFO << "Unable to read from" << fileName;
-        return;
+        QLCFile::releaseXMLReader(reader);
+        return -1;
     }
 
-    while (!doc->atEnd())
+    while (!reader->atEnd())
     {
-        if (doc->readNext() == QXmlStreamReader::DTD)
+        if (reader->readNext() == QXmlStreamReader::DTD)
             break;
     }
-    if (doc->hasError())
+    if (reader->hasError() || reader->dtdName() != KXMLQLCFixturesList)
     {
-        QLCFile::releaseXMLReader(doc);
-        return;
+        QLCFile::releaseXMLReader(reader);
+        return -1;
     }
 
-    if (doc->dtdName() == KXMLQLCFixturesList)
+    reader->readNextStartElement();
+    if (reader->name() != KXMLQLCFixturesList)
     {
-        doc->readNextStartElement();
-        if (doc->name() != KXMLQLCFixturesList)
-        {
-            qWarning() << Q_FUNC_INFO << "Fixture Definition node not found";
-            QLCFile::releaseXMLReader(doc);
-            return;
-        }
+        qWarning() << Q_FUNC_INFO << "Fixture Definition node not found";
+        QLCFile::releaseXMLReader(reader);
+        return -1;
+    }
 
-        while (doc->readNextStartElement())
+    int added = 0;
+    while (reader->readNextStartElement())
+    {
+        if (reader->name() == KXMLFixture)
         {
-            if (doc->name() == KXMLFixture)
+            Fixture* fxi = new Fixture(doc);
+            Q_ASSERT(fxi != NULL);
+
+            if (fxi->loadXML(*reader, doc, doc->fixtureDefCache()) == true)
             {
-                Fixture* fxi = new Fixture(m_doc);
-                Q_ASSERT(fxi != NULL);
-
-                if (fxi->loadXML(*doc, m_doc, m_doc->fixtureDefCache()) == true)
+                if (doc->addFixture(fxi /*, fxi->id()*/) == true)
                 {
-                    if (m_doc->addFixture(fxi /*, fxi->id()*/) == true)
-                    {
-                        /* Success */
-                        qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "successfully created.";
-                    }
-                    else
-                    {
-                        /* Doc is full */
-                        qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be created.";
-                        delete fxi;
-                    }
+                    /* Success */
+                    qDebug() << Q_FUNC_INFO << "Fixture" << fxi->name() << "successfully created.";
+                    ++added;
                 }
                 else
                 {
-                    qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be loaded.";
+                    /* Doc is full */
+                    qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be created.";
                     delete fxi;
-                }
-            }
-            else if (doc->name() == KXMLQLCFixtureGroup)
-            {
-                FixtureGroup* grp = new FixtureGroup(m_doc);
-                Q_ASSERT(grp != NULL);
-
-                if (grp->loadXML(*doc) == true)
-                {
-                    m_doc->addFixtureGroup(grp, grp->id());
-                }
-                else
-                {
-                    qWarning() << Q_FUNC_INFO << "FixtureGroup" << grp->name() << "cannot be loaded.";
-                    delete grp;
                 }
             }
             else
             {
-                qWarning() << Q_FUNC_INFO << "Unknown label tag:" << doc->name().toString();
-                doc->skipCurrentElement();
+                qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be loaded.";
+                delete fxi;
             }
         }
-        updateView();
+        else if (reader->name() == KXMLQLCFixtureGroup)
+        {
+            FixtureGroup* grp = new FixtureGroup(doc);
+            Q_ASSERT(grp != NULL);
+
+            if (grp->loadXML(*reader) == true)
+            {
+                doc->addFixtureGroup(grp, grp->id());
+                ++added;
+            }
+            else
+            {
+                qWarning() << Q_FUNC_INFO << "FixtureGroup" << grp->name() << "cannot be loaded.";
+                delete grp;
+            }
+        }
+        else if (reader->name() == KXMLQLCCreator)
+        {
+            // The header every export writes: who made it, nothing to load.
+            reader->skipCurrentElement();
+        }
+        else
+        {
+            qWarning() << Q_FUNC_INFO << "Unknown label tag:" << reader->name().toString();
+            reader->skipCurrentElement();
+        }
     }
-    QLCFile::releaseXMLReader(doc);
+    QLCFile::releaseXMLReader(reader);
+    return added;
 }
 
 void FixtureManager::slotExport()
