@@ -85,7 +85,7 @@ with GO.*
 
 *Outcome: students program a whole song the way a pro does: with
 tracking, reusable palettes, effects on the pixel fixtures, moving lights
-on lines, and busking looks for the unexpected.*
+on lines, and busking hits for the unexpected.*
 
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
@@ -94,8 +94,8 @@ on lines, and busking looks for the unexpected.*
 | 2.3 | **Parts of a group** | Highlight one row of singers. Symmetry. | Child layers (`US in Steps`), group sets (a set of Trusses SR + Trusses SL), Split / Merge. |
 | 2.4 | **Effects: sparkle, chase, matrix** | Energy and rhythm. Eye candy vs. light on people. | Effects on the Steps and the truss pixel boxes (Sinelon, chase, sparkle); an effect on the cue across the whole stage; its own colour; speed masters. |
 | 2.5 | **Moving lights and lines** | Beams as scenery; fans and crosses on the button of a song. | The Riser Line target, Spread / Grouping / Cross, the plan view, with Truss-Spots and USTs. Colour rings on the Truss-Spots. |
-| 2.6 | **Busking with Looks** | When the band vamps, or the soloist goes long. | The Looks section, **Make VC page**, firing looks from Virtual Console buttons over a running list. |
-| 2.7 | **Hits inside a cue** | Hits, stomps and buttons in a chorus. | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
+| 2.6 | **Busking with Hits** | When the band vamps, or the soloist goes long. | The Hits section, **Make VC page**, firing hits from Virtual Console buttons over a running list. |
+| 2.7 | **Sub-cues: stomps inside a cue** | Stomps, stings and buttons in a chorus. | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
 
 ### Level 3 — Advanced (10 lessons)
 

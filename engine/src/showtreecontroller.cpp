@@ -3640,7 +3640,7 @@ QString ShowTreeController::cueLabel(const CueList &list, int index) const
     const Cue &c = list.cues.at(index);
     // A look goes by its name alone: its number is only the tree's.
     if (list.looks)
-        return c.name.isEmpty() ? tr("Look %1").arg(index + 1) : c.name;
+        return c.name.isEmpty() ? tr("Hit %1").arg(index + 1) : c.name;
     const QString number = cueNumber(list, index);
     return c.name.isEmpty() ? number : QStringLiteral("%1 %2").arg(number, c.name);
 }
@@ -4261,7 +4261,7 @@ void ShowTreeController::bake()
                             scene->setPath(folder);
                         keepScenes.insert(sid);
                         m_generatedLabels.insert(sid, list.looks
-                                                      ? tr("Layer %1 in look %2 of %3")
+                                                      ? tr("Layer %1 in hit %2 of %3")
                                                         .arg(layerName, label, prod.name)
                                                       : tr("Layer %1 in cue %2 of %3")
                                                         .arg(layerName, label, list.name));
@@ -4319,7 +4319,7 @@ void ShowTreeController::bake()
                         coll->addFunction(fid);
                 }
                 keepCollections.insert(coll->id());
-                m_generatedLabels.insert(coll->id(), list.looks ? tr("Look %1 in %2").arg(label, prod.name)
+                m_generatedLabels.insert(coll->id(), list.looks ? tr("Hit %1 in %2").arg(label, prod.name)
                                                                 : tr("Cue %1 in %2").arg(label, list.name));
                 if (list.looks)
                     continue;

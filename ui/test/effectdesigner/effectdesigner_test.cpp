@@ -466,28 +466,12 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
     QVERIFY(st->previewedCue() == c1 || st->previewedCue() == invalidId());
 }
 
-void EffectDesigner_Test::saveAsPresetListsIt()
+void EffectDesigner_Test::thereIsNoSaveAsPreset()
 {
-    const QString dir = EffectPresetCache::userPresetsDirectory().absolutePath();
-    if (!dir.startsWith(QDir(m_home.path()).canonicalPath()) && !dir.startsWith(m_home.path()))
-        QSKIP("the user's preset folder isn't under the test's HOME here");
-    group("Towers", 0, 3);
-    EffectDesigner ed(m_doc);
-    ed.setEffect(QLCPalette::invalidId());
-    QVERIFY(!ed.saveAsPreset("Nothing"));           // nothing picked
-    QVERIFY(ed.pickEffect("Dimmer Phaser"));
-    ed.draft()->setEffectParamValue("speed", 5);
-    QSignalSpy saved(&ed, &EffectDesigner::presetSaved);
-    QVERIFY(ed.saveAsPreset("Slow Phaser"));
-    QCOMPARE(saved.count(), 1);
-    QVERIFY(m_doc->effectScriptRunner()->presetCache()->contains("Slow Phaser"));
-    QCOMPARE(ed.draft()->effectPreset(), QString("Slow Phaser"));
-    QCOMPARE(ed.effectName(), QString("Slow Phaser"));
-    QVERIFY(ed.draftId() != QLCPalette::invalidId());       // the design goes on
-    // And it is offered to pick from.
-    QApplication::processEvents();
-    QVERIFY(ed.pickEffect("Slow Phaser"));
-    ed.cancel();
+    EffectDesigner ed(m_doc, nullptr);
+    QVERIFY(ed.findChild<QPushButton *>("edSavePreset") == nullptr);
+    for (QPushButton *b : ed.findChildren<QPushButton *>())
+        QVERIFY2(!b->text().contains("preset", Qt::CaseInsensitive), qPrintable(b->text()));
 }
 
 void EffectDesigner_Test::theEffectsPageListsEveryEffect()

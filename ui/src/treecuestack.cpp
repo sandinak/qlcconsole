@@ -190,7 +190,7 @@ QString TreeCueStack::where() const
     const Production *p = st()->production(prod);
     QString name = l->name;
     if (l->looks)
-        name = tr("Looks");
+        name = tr("Hits");
     else if (l->isSubCues())
         if (const CueList *parentList = st()->listOfCue(l->subOf))
             name = QStringLiteral("%1/%2").arg(parentList->name,

@@ -56,9 +56,10 @@ pick one of these:
 - **Update "name"**: shown when the designer started from a named
   palette. It writes the design into that palette, which changes it
   everywhere it plays.
-- **Save as preset…**: keeps the effect and its settings as a starting
-  point in the browser, for this show and others. You stay in the
-  designer.
+- To take an effect to another show, **Export…** it from the effect pane
+  (a portable .qxfx file) and **Import…** it there. The browser's presets —
+  the ones that come with qlcconsole and any you saved before — are still
+  starting points.
 - **Cancel** (or closing the window) throws the copy away. The show is
   left as it was, and a show that was saved stays saved. On the bench in
   Build, **Esc** goes back to the scene you came from and asks first if

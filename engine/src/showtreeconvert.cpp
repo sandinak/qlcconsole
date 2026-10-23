@@ -267,7 +267,7 @@ ShowTreeController::ConvertPlan ShowTreeController::planConvertToTracking(quint3
     }
     if (src->looks)
     {
-        plan.why = tr("Looks never track: each plays only what it has.");
+        plan.why = tr("Hits never track: each plays only what it has.");
         return plan;
     }
     if (src->isSubCues() || subCueListsOf(listId) > 0)

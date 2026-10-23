@@ -151,9 +151,6 @@ public:
     quint32 saveAsPalette(const QString &name = QString(), const QString &folder = QString());
     /** Write the design into the palette it started from. */
     bool updateOriginal();
-    /** Save the effect + settings as a preset (a starting point for other
-     *  shows). Empty @a name asks. Not an outcome: the design goes on. */
-    bool saveAsPreset(const QString &name = QString());
     /** Throw the draft away. */
     void cancel();
 
@@ -309,7 +306,7 @@ private:
     QComboBox *m_effectCombo;   ///< the Look Editor's, which the browser mirrors
     LookEditor *m_look;
     QComboBox *m_ownColourCombo, *m_ownDimmerCombo;
-    QPushButton *m_presetBtn, *m_cancelBtn, *m_updateBtn, *m_savePalBtn, *m_keepBtn;
+    QPushButton *m_cancelBtn, *m_updateBtn, *m_savePalBtn, *m_keepBtn;
     QToolButton *m_makeLayerBtn = nullptr;
     QLabel *m_hint;
 };

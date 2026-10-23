@@ -7269,7 +7269,7 @@ void ShowTree_Test::paletteCommands()
 
 /* A look (P-D5) is built as a cue is, and bakes to one Collection of its
    own: shown (VC function pickers list it by name), filed under
-   Productions/<p>/Looks/<folder>, locked; no chaser. Its id stays as it is
+   Productions/<p>/Hits/<folder>, locked; no chaser. Its id stays as it is
    edited, so a VC button keeps firing it. */
 void ShowTree_Test::aLookBakesToACollectionOfItsOwn()
 {
@@ -7286,7 +7286,7 @@ void ShowTree_Test::aLookBakesToACollectionOfItsOwn()
     QVERIFY(section != invalidId());
     QVERIFY(st->isLooks(section));
     QVERIFY(st->isLook(hit));
-    QCOMPARE(st->cueList(section)->name, QString("Looks"));
+    QCOMPARE(st->cueList(section)->name, QString("Hits"));
     QCOMPARE(st->undoText(), QString("New look"));                 // section and look: one step
     QCOMPARE(st->cueList(section)->chaser, invalidId());
 
@@ -7298,9 +7298,9 @@ void ShowTree_Test::aLookBakesToACollectionOfItsOwn()
     QVERIFY(st->isGenerated(fid));
     QVERIFY(coll->isVisible());
     QCOMPARE(coll->name(), QString("Hit 1"));
-    QCOMPARE(coll->path(true), QString("Productions/DanceHysteria/Looks/Hits"));
+    QCOMPARE(coll->path(true), QString("Productions/DanceHysteria/Hits/Hits"));
     QCOMPARE(coll->functions().count(), 1);
-    QCOMPARE(st->describeGenerated(fid), QString("Look Hit 1 in DanceHysteria"));
+    QCOMPARE(st->describeGenerated(fid), QString("Hit Hit 1 in DanceHysteria"));
     QCOMPARE(st->lookOfFunction(fid), hit);
     for (const Function *f : m_doc->functions())
         QVERIFY(f->type() != Function::ChaserType);
@@ -7312,7 +7312,7 @@ void ShowTree_Test::aLookBakesToACollectionOfItsOwn()
     st->renameNode(hit, "Big Hit");
     QCOMPARE(coll->name(), QString("Big Hit"));
     QVERIFY(st->setLookFolder({ hit }, QString()));
-    QCOMPARE(coll->path(true), QString("Productions/DanceHysteria/Looks"));
+    QCOMPARE(coll->path(true), QString("Productions/DanceHysteria/Hits"));
 
     // It plays what it has.
     coll->start(m_doc->masterTimer(), FunctionParent(FunctionParent::ManualVCWidget, 7));

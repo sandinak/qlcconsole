@@ -188,7 +188,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     // The browser is here, at full height: the Look Editor's own picker
     // window would be a second one.
     // Its name, "used by", and Save as Effect are the designer's to say and
-    // do (the draft is named when it is kept; Save as preset is below).
+    // do (the draft is named when it is kept).
     for (const char *name : { "effectChange", "effectSaveAs", "lookName", "lookNameLabel", "lookTitle" })
         if (QWidget *w = m_look->findChild<QWidget *>(QLatin1String(name)))
             w->hide();
@@ -248,11 +248,8 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
 
     // The outcomes.
     QHBoxLayout *btns = new QHBoxLayout();
-    m_presetBtn = new QPushButton(tr("Save as preset…"), this);
-    m_presetBtn->setObjectName(QStringLiteral("edSavePreset"));
-    m_presetBtn->setToolTip(tr("Keep this effect and its settings as a preset: a starting point in "
-                               "the browser, for this show and others"));
-    btns->addWidget(m_presetBtn);
+    // No "Save as preset" (Q77): a palette is the effect kept; Export… in
+    // the effect pane carries it to another show.
     btns->addStretch(1);
     m_cancelBtn = new QPushButton(tr("Cancel"), this);
     m_cancelBtn->setObjectName(QStringLiteral("edCancel"));
@@ -300,7 +297,6 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_hint->setStyleSheet(QStringLiteral("color: palette(mid);"));
     v->addWidget(m_hint);
 
-    connect(m_presetBtn, &QPushButton::clicked, this, [this]() { saveAsPreset(); });
     connect(m_cancelBtn, &QPushButton::clicked, this, &EffectDesigner::cancel);
     connect(m_updateBtn, &QPushButton::clicked, this, &EffectDesigner::updateOriginal);
     connect(m_savePalBtn, &QPushButton::clicked, this, [this]() { saveAsPalette(); });
@@ -903,57 +899,6 @@ bool EffectDesigner::updateOriginal()
     return true;
 }
 
-bool EffectDesigner::saveAsPreset(const QString &name)
-{
-    QLCPalette *d = draft();
-    if (d == nullptr || m_doc->effectScriptRunner() == nullptr)
-        return false;
-    if (d->scriptPath().isEmpty())
-    {
-        if (name.isEmpty())
-            QMessageBox::information(this, tr("Save as preset"),
-                                     tr("Pick an effect first, then save it as a preset."));
-        return false;
-    }
-    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
-    EffectPresetCache *pcache = m_doc->effectScriptRunner()->presetCache();
-    QString n = name.trimmed();
-    if (n.isEmpty())
-    {
-        bool ok = false;
-        n = QInputDialog::getText(this, tr("Save as preset"), tr("Preset name:"), QLineEdit::Normal,
-                                  effectName(), &ok).trimmed();
-        if (!ok || n.isEmpty())
-            return false;
-        if (pcache->contains(n)
-            && QMessageBox::question(this, tr("Save as preset"),
-                                     tr("A preset named \"%1\" already exists. Replace it?").arg(n),
-                                     QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-            return false;
-    }
-    const QString base = EffectScriptCache::portableName(d->scriptPath());
-    const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
-    EffectPresetCache::Preset preset;
-    preset.name = n;
-    preset.script = base;
-    preset.category = EffectScriptCache::categoryForTypes(meta.fixtureTypes);
-    preset.description = meta.description;
-    preset.params = d->effectParamValues();
-    if (!pcache->savePreset(preset))
-    {
-        if (name.isEmpty())
-            QMessageBox::warning(this, tr("Save as preset"),
-                                 tr("Could not write the preset file. Check folder permissions."));
-        return false;
-    }
-    // The draft is that preset now; the browser lists it.
-    quietly([&]() { d->setEffectPreset(n); });
-    m_look->setPalette(m_draftId);
-    updateHeader();
-    emit presetSaved(n);
-    return true;
-}
-
 void EffectDesigner::cancel()
 {
     release(false);
@@ -1481,7 +1426,6 @@ void EffectDesigner::updateButtons()
     const bool named = o != nullptr && !m_doc->showTree()->isInlinePalette(o->id());
     m_keepBtn->setEnabled(picked);
     m_savePalBtn->setEnabled(picked);
-    m_presetBtn->setEnabled(draft() != nullptr && !draft()->scriptPath().isEmpty());
     m_updateBtn->setVisible(named);
     m_updateBtn->setEnabled(named && isModified());
     updateMakeLayerButton();
@@ -1499,7 +1443,7 @@ void EffectDesigner::updateButtons()
     else
         m_hint->setText(tr("Pick an effect and shape it on the bench. Save as palette keeps it for the show; "
                            "Make a layer puts it on the Try on groups in a cue or a scene; "
-                           "Save as preset keeps it as a starting point for other shows."));
+                           "Export… takes it to another show."));
 }
 
 void EffectDesigner::scheduleBrowserReload()

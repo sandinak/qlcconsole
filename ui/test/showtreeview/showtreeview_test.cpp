@@ -4485,8 +4485,8 @@ void ShowTreeView_Test::makeVcPageUpdatesItsFrame()
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QString msg;
     QVERIFY(view.makeVcPage(section, "Hits", &msg));
-    QCOMPARE(framesCalled("Looks — Hits").count(), 1);
-    VCFrame *frame = framesCalled("Looks — Hits").first();
+    QCOMPARE(framesCalled("Hits — Hits").count(), 1);
+    VCFrame *frame = framesCalled("Hits — Hits").first();
     QCOMPARE(st->lookVcFrame(section, "Hits"), frame->id());
 
     // The user moves and resizes A's button and adds a widget of their own.
@@ -4508,8 +4508,8 @@ void ShowTreeView_Test::makeVcPageUpdatesItsFrame()
     QVERIFY(st->removeCue(b));
     QVERIFY(view.makeVcPage(section, "Hits", &msg));
     QVERIFY2(msg.contains("1 button(s) added, 1 taken away"), qPrintable(msg));
-    QCOMPARE(framesCalled("Looks — Hits").count(), 1);       // the same frame
-    QCOMPARE(framesCalled("Looks — Hits").first(), frame);
+    QCOMPARE(framesCalled("Hits — Hits").count(), 1);       // the same frame
+    QCOMPARE(framesCalled("Hits — Hits").first(), frame);
     QCOMPARE(ba->geometry(), userPlace);                     // left as the user put it
     QVERIFY(buttonFor(frame, st->lookFunction(c)) != nullptr);
     QVERIFY(!buttonFor(frame, st->lookFunction(c))->geometry().intersects(own->geometry()));
@@ -4531,9 +4531,9 @@ void ShowTreeView_Test::makeVcPageUpdatesItsFrame()
     console->removeWidget(frame);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QVERIFY(view.makeVcPage(section, "Hits", &msg));
-    QCOMPARE(framesCalled("Looks — Hits").count(), 1);
+    QCOMPARE(framesCalled("Hits — Hits").count(), 1);
     QVERIFY(st->lookVcFrame(section, "Hits") != invalidId());
-    QCOMPARE(framesCalled("Looks — Hits").first()->findChildren<VCButton *>().count(), 2);
+    QCOMPARE(framesCalled("Hits — Hits").first()->findChildren<VCButton *>().count(), 2);
 }
 
 /****************************************************************************
@@ -4560,7 +4560,7 @@ void ShowTreeView_Test::looksSectionInTheTree()
     QVERIFY(hit != invalidId());
     QVERIFY(st->isLook(hit));
     QCOMPARE(view.currentId(), hit);
-    QCOMPARE(view.findChild<QToolButton *>("stNewCue")->text(), QString("+ Look"));
+    QCOMPARE(view.findChild<QToolButton *>("stNewCue")->text(), QString("+ Hit"));
     // Named on its page; groups dropped on it make a layer, as on a cue.
     QLineEdit *name = view.findChild<QLineEdit *>("stCueName");
     name->setText("Hit 1");
@@ -4569,7 +4569,7 @@ void ShowTreeView_Test::looksSectionInTheTree()
     QVERIFY(view.dropTargets(hit, { towers->id() }, {}));
     const quint32 layer = st->cue(hit)->layers.first().id;
     QVERIFY(view.dropPalettes(hit, layer, { full }));
-    QVERIFY(treeText(view.tree()).contains("  Looks [busking]"));
+    QVERIFY(treeText(view.tree()).contains("  Hits [busking]"));
     QVERIFY(treeText(view.tree()).contains("    Hit 1"));
     // A look's page: no number, mode, includes or timing; who fires it.
     QVERIFY(view.selectNode(hit));
@@ -4680,7 +4680,7 @@ void ShowTreeView_Test::makeVcPageAndAdoptAsLook()
         QVERIFY2(msg.contains("2 button"), qPrintable(msg));
         VCFrame *frame = nullptr;
         for (VCFrame *f : VirtualConsole::instance()->contents()->findChildren<VCFrame *>())
-            if (f->caption() == "Looks — Hits")
+            if (f->caption() == "Hits — Hits")
                 frame = f;
         QVERIFY(frame != nullptr);
         const QList<VCButton *> buttons = frame->findChildren<VCButton *>();

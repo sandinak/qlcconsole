@@ -98,7 +98,7 @@ quint32 ShowTreeController::addLooksSection(quint32 productionId)
                 continue;
             CueList l;
             l.id = id;
-            l.name = tr("Looks");
+            l.name = tr("Hits");
             l.looks = true;
             l.mode = ListMode::NonTracking;
             p.lists << l;
@@ -128,7 +128,7 @@ quint32 ShowTreeController::addLook(quint32 productionId, const QString &name, c
                 // The first look makes the section, in the same step.
                 CueList fresh;
                 fresh.id = sectionId;
-                fresh.name = tr("Looks");
+                fresh.name = tr("Hits");
                 fresh.looks = true;
                 p.lists << fresh;
                 l = &p.lists.last();
@@ -360,7 +360,7 @@ quint32 ShowTreeController::adoptAsLook(quint32 productionId, quint32 functionId
             {
                 CueList fresh;
                 fresh.id = sectionId;
-                fresh.name = tr("Looks");
+                fresh.name = tr("Hits");
                 fresh.looks = true;
                 p.lists << fresh;
                 l = &p.lists.last();
@@ -407,7 +407,7 @@ quint32 ShowTreeController::copyCueToLook(quint32 cueId)
             {
                 CueList fresh;
                 fresh.id = sectionId;
-                fresh.name = tr("Looks");
+                fresh.name = tr("Hits");
                 fresh.looks = true;
                 p.lists << fresh;
                 l = &p.lists.last();

@@ -287,20 +287,23 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
               "palette Blue rename \"Navy\"", "palette Blue move \"01-Song\"", "palette Blue dup",
               "palette Blue edit", "palette folder \"01-Song\"", "palette folder \"01-Song\" rename \"02-Song\"" },
             { "colour", "look" }, { "pal" });
-        // looks (R3): busking looks beside the cue lists
+        // hits (R3, named Q77): busking states beside the cue lists
+        add("hit", "busking", "hit \"name\" [in <folder>]",
+            "Selects that hit of the selected production, or makes it in its Hits section (made too, the "
+            "first time); in files it in a folder. Then set its layers as on a cue: Towers colour Blue. A "
+            "hit never tracks; a VC button fires it. (look \"name\" still works.)",
+            { "hit \"Hit 1\"", "hit \"Blackout Hit\" in \"Stings\"" }, { "vcpage", "adopt" });
         add("look", "busking", "look \"name\" [in <folder>]",
-            "Selects that busking look of the selected production, or makes it in its Looks section (made too, "
-            "the first time); in files it in a folder. Then set its layers as on a cue: Towers colour Blue. A "
-            "look never tracks; a VC button fires it.",
-            { "look \"Hit 1\"", "look \"Blackout Hit\" in \"Hits\"" }, { "vcpage", "adopt" });
+            "The old name for hit: the same command.",
+            { "look \"Hit 1\"" }, { "hit" });
         add("vcpage", "busking", "vcpage",
-            "Make VC page: a frame on the Virtual Console with one button per look of the selected look's "
-            "folder (else every look), captioned with its name, coloured by its first colour.",
-            { "vcpage" }, { "look" });
+            "Make VC page: a frame on the Virtual Console with one button per hit of the selected hit's "
+            "folder (else every hit), captioned with its name, coloured by its first colour.",
+            { "vcpage" }, { "hit" });
         add("adopt", "busking", "adopt <scene>",
-            "Adopt as look: a scene (say a Programming one) becomes a look of the selected production -- its "
+            "Adopt as a hit: a scene (say a Build one) becomes a hit of the selected production -- its "
             "groups and palettes a layer, or else the scene played as it is. The scene stays.",
-            { "adopt Haze" }, { "look" });
+            { "adopt Haze" }, { "hit" });
         // W3: the Workbench
         add("wb", "navigate", "wb [<cue number>]",
             "Opens the selected cue (or its layer, or a busking look) in the Workbench, docked in place of the "
@@ -408,7 +411,7 @@ QString ShowTreeCommand::helpText(const QString &w)
         { "navigate", tr("Navigate") }, { "build", tr("Build") }, { "looks", tr("Looks") },
         { "tracking", tr("Tracking") }, { "record", tr("Record and copy") },
         { "reuse", tr("Reuse, detach, convert") }, { "palettes", tr("Palettes") },
-        { "busking", tr("Looks (busking)") }, { "subcues", tr("Sub-cues") }, { "undo", tr("Undo") },
+        { "busking", tr("Hits (busking)") }, { "subcues", tr("Sub-cues") }, { "undo", tr("Undo") },
         { "help", tr("Help") } };
     QString out = tr("Every word (<code>help &lt;word&gt;</code> for one, with examples; Tab completes):");
     for (const auto &g : groups)
@@ -950,7 +953,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         return res;
     }
 
-    const QString w0 = r.peek().toLower();
+    // "hit" is the busking word now (Q77); "look" still works.
+    const QString w0 = r.peek().toLower() == QLatin1String("hit") ? QStringLiteral("look") : r.peek().toLower();
     if (w0 == QLatin1String("help") || w0 == QLatin1String("?"))
     {
         // The language, from the table the parser's words come from.
@@ -1751,7 +1755,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                  : tr("%1: move in black as the show's (%2)").arg(l->name, show ? tr("on") : tr("off"));
         };
         if (target == nullptr || target->looks)
-            error = tr("A Looks section has no move in black.");
+            error = tr("A Hits section has no move in black.");
         else if (what.isEmpty())
             res.message = said(target);
         else if ((what != QLatin1String("on") && what != QLatin1String("off") && what != QLatin1String("show")
@@ -2483,7 +2487,9 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
     Context &ctx = res.context;
     Reader r;
     r.src = line.trimmed();
-    const QString w0 = r.word().toLower();
+    QString w0 = r.word().toLower();
+    if (w0 == QLatin1String("hit"))   // Q77: the busking word; "look" still works
+        w0 = QStringLiteral("look");
     auto fail = [&res, &context](const QString &why) {
         res.message = why;
         res.context = context;
@@ -2501,7 +2507,7 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
         if (name.isEmpty())
             name = r.word();
         if (name.trimmed().isEmpty())
-            return fail(tr("look \"name\" [in \"folder\"]"));
+            return fail(tr("hit \"name\" [in \"folder\"]"));
         QString folder;
         bool folderGiven = false;
         if (r.peek().toLower() == QLatin1String("in"))
@@ -2515,7 +2521,7 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
             folderGiven = true;
         }
         if (!r.atEnd())
-            return fail(tr("look \"name\" [in \"folder\"] -- don't know “%1”").arg(r.peek()));
+            return fail(tr("hit \"name\" [in \"folder\"] -- don't know “%1”").arg(r.peek()));
         quint32 have = invalidId();
         if (const CueList *l = m_st->cueList(section))
             for (const Cue &c : l->cues)
@@ -2528,7 +2534,7 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
             ctx.list = section;
             ctx.cue = have;
             ctx.layer = invalidId();
-            res.message = tr("look “%1”").arg(name.trimmed());
+            res.message = tr("hit “%1”").arg(name.trimmed());
         }
         else
         {
@@ -2539,11 +2545,11 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
                     folder = c->folder;
             const quint32 id = m_st->addLook(ctx.production, name.trimmed(), folder, after);
             if (id == invalidId())
-                return fail(tr("Couldn't make the look."));
+                return fail(tr("Couldn't make the hit."));
             ctx.list = m_st->looksSection(ctx.production);
             ctx.cue = id;
             ctx.layer = invalidId();
-            res.message = tr("new look “%1”").arg(name.trimmed());
+            res.message = tr("new hit “%1”").arg(name.trimmed());
         }
     }
     else if (w0 == QLatin1String("vcpage"))
@@ -2551,7 +2557,7 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
         if (!r.atEnd())
             return fail(tr("vcpage -- then nothing more"));
         if (section == invalidId() || m_st->looksIn(section, QString()).isEmpty())
-            return fail(tr("No looks yet: look \"name\" makes one."));
+            return fail(tr("No hits yet: hit \"name\" makes one."));
         QString folder;
         if (m_st->isLook(ctx.cue))
             if (const Cue *c = m_st->cue(ctx.cue))
@@ -2583,8 +2589,8 @@ ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Cont
         ctx.list = m_st->looksSection(ctx.production);
         ctx.cue = id;
         ctx.layer = invalidId();
-        res.message = why.isEmpty() ? tr("“%1” is a look").arg(name)
-                                    : tr("“%1” is a look, played as it is (%2)").arg(name, why);
+        res.message = why.isEmpty() ? tr("“%1” is a hit").arg(name)
+                                    : tr("“%1” is a hit, played as it is (%2)").arg(name, why);
     }
     res.ok = true;
     res.message = QStringLiteral("✓ %1").arg(res.message);
@@ -2722,7 +2728,7 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         *out = keywords() + targets;
         return true;
     }
-    const QString w0 = r.peek().toLower();
+    const QString w0 = r.peek().toLower() == QLatin1String("hit") ? QStringLiteral("look") : r.peek().toLower();
     if (w0 == QLatin1String("record"))
     {
         r.word();

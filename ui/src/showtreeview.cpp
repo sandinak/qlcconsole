@@ -874,7 +874,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_newSubCue, &QToolButton::clicked, this, [this]() { newSubCue(); });
     // W3: the selected cue / look / layer in the Workbench, docked here.
     {
-        QToolButton *wb = button(tr("✎ Workbench"), tr("Open the selected cue, look or layer in the Workbench, "
+        QToolButton *wb = button(tr("✎ Workbench"), tr("Open the selected cue, hit or layer in the Workbench, "
                                                       "here in place of the page (double-click, or wb): its "
                                                       "layers and what tracks in, each value's editor at full "
                                                       "height. ↩ Show Tree comes back."), "stOpenWorkbench");
@@ -1309,7 +1309,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         // R3: a Looks section or folder -- a VC page of buttons for it.
         m_listVcPage = new QPushButton(tr("Make VC page"), row);
         m_listVcPage->setObjectName("stMakeVcPage");
-        m_listVcPage->setToolTip(tr("A frame on the Virtual Console with one button per look here, "
+        m_listVcPage->setToolTip(tr("A frame on the Virtual Console with one button per hit here, "
                                     "captioned with its name and coloured by its first colour"));
         h->addWidget(m_listVcPage);
         h->addStretch(1);
@@ -2451,17 +2451,17 @@ void ShowTreeView::buildTree()
                 f->setData(0, KindRole, LookFolderNode);
                 f->setData(0, IdRole, list.id);
                 f->setData(0, FolderRole, path);
-                f->setToolTip(0, tr("A folder of looks: drag looks onto it; Make VC page makes a button for each"));
+                f->setToolTip(0, tr("A folder of hits: drag hits onto it; Make VC page makes a button for each"));
                 folderItems.insert(path, f);
                 return f;
             };
             if (list.looks)
             {
-                li->setText(0, tr("Looks"));
+                li->setText(0, tr("Hits"));
                 li->setText(1, tr("busking"));
                 li->setData(0, FolderRole, QStringLiteral("/"));
                 li->setIcon(0, QIcon(":/collection.png"));
-                li->setToolTip(0, tr("Busking looks: built with layers like cues, never tracking; each plays from a "
+                li->setToolTip(0, tr("Hits, for busking: built with layers like cues, never tracking; each plays from a "
                                      "VC button (Make VC page), over whatever runs."));
                 for (const QString &path : m_st->lookFolders(list.id))
                     folderItem(path);
@@ -2985,8 +2985,8 @@ void ShowTreeView::updateButtons()
     m_newList->setEnabled(kind != NoNode);
     // In a Looks section, + Cue makes a look (R3).
     const bool looks = selectionInLooks();
-    m_newCue->setText(looks ? tr("+ Look") : tr("+ Cue"));
-    m_newCue->setToolTip(looks ? tr("A new busking look after the selected one, in its folder")
+    m_newCue->setText(looks ? tr("+ Hit") : tr("+ Cue"));
+    m_newCue->setToolTip(looks ? tr("A new hit after the selected one, in its folder")
                                : tr("A new cue after the selected one, numbered for you (never renumbers)"));
     m_newCue->setEnabled(kind == ListNode || kind == CueNode || kind == LayerNode
                          || kind == TrackedLayerNode || kind == LookFolderNode);
@@ -3302,7 +3302,7 @@ void ShowTreeView::showProductionPage(quint32 productionId)
     const quint32 looks = m_st->looksSection(productionId);
     m_prodInfo->setText(tr("%n cue list(s)", "", int(m_st->playableLists(productionId).count()))
                         + (looks == invalidId() ? QString()
-                           : tr(", %n look(s)", "", int(m_st->looksIn(looks, QString()).count())))
+                           : tr(", %n hit(s)", "", int(m_st->looksIn(looks, QString()).count())))
                         + QStringLiteral(".\n\n")
                         + (single ? tr("GO, the footer, show control and the Cue Runner play its main list. "
                                        "With a second production you choose which one plays.")
@@ -3366,7 +3366,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
             m_lookFiredBy->setText((fired.isEmpty() ? tr("no VC button yet") : fired.join(QStringLiteral(", ")).toHtmlEscaped())
                                    + QStringLiteral(" · <a href=\"vcpage\">%1</a>").arg(tr("Make VC page"))
                                    + QStringLiteral(" · <a href=\"folder\">%1</a>").arg(tr("Move to folder…")));
-            m_lookFiredBy->setToolTip(tr("A look plays from a VC button like any function: Toggle or Flash. "
+            m_lookFiredBy->setToolTip(tr("A hit plays from a VC button like any function: Toggle or Flash. "
                                          "Over a running cue list it mixes as any function does -- the "
                                          "highest intensity wins, the last started sets the rest."));
         }
@@ -5224,8 +5224,8 @@ void ShowTreeView::slotDelete()
         case ListNode:
             if (m_st->isLooks(id))
             {
-                if (confirm(tr("Delete the Looks section"),
-                            tr("Delete the Looks section and its %n look(s)? VC buttons firing them stop "
+                if (confirm(tr("Delete the Hits section"),
+                            tr("Delete the Hits section and its %n hit(s)? VC buttons firing them stop "
                                "doing anything. (Undo brings it back.)", "",
                                int(m_st->looksIn(id, QString()).count()))))
                     m_st->removeCueList(id);
@@ -6355,7 +6355,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         const bool inLooks = selectionInLooks();
         menu.addAction(tr("+ Cue list…"), this, &ShowTreeView::slotNewCueList);
         // R3: busking looks, beside the cue lists.
-        menu.addAction(tr("+ Look"), this, [this]() { newLook(); })->setObjectName("stNewLook");
+        menu.addAction(tr("+ Hit"), this, [this]() { newLook(); })->setObjectName("stNewLook");
         if (kind != ProductionNode && !inLooks)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
         if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
@@ -6410,7 +6410,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         if (kind == CueNode && !inLooks)
         {
             const quint32 cueId = item->data(0, IdRole).toUInt();
-            menu.addAction(tr("Copy to look"), this, [this, cueId]() {
+            menu.addAction(tr("Copy to a hit"), this, [this, cueId]() {
                 const quint32 id = m_st->copyCueToLook(cueId);
                 if (id != invalidId())
                     selectNode(id);
@@ -7159,7 +7159,7 @@ QStringList ShowTreeView::alsoIn(quint32 functionId, quint32 cueId) const
                 for (const Layer &layer : c.layers)
                     if (layer.target.function == functionId)
                     {
-                        out << (l.looks ? tr("look %1").arg(m_st->cueLabel(l, i))
+                        out << (l.looks ? tr("hit %1").arg(m_st->cueLabel(l, i))
                                         : tr("cue %1 of %2").arg(m_st->cueLabel(l, i), l.name));
                         break;
                     }
@@ -8126,7 +8126,7 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
     {
         const Function *f = m_doc->function(id);
         if (f != nullptr && f->type() == Function::SceneType)
-            menu.addAction(tr("Adopt as look"), this, [this, id]() { adoptAsLook(id); })
+            menu.addAction(tr("Adopt as a hit"), this, [this, id]() { adoptAsLook(id); })
                 ->setObjectName("stAdoptAsLook");
     }
     if (kind == LibPalette && m_st->isInlinePalette(id))
@@ -8640,7 +8640,7 @@ QString ShowTreeView::lookFolderDropHint(const QList<quint32> &lookIds, quint32 
     if (!any)
         return QString();
     const QString what = lookIds.count() == 1 ? m_st->cueLabel(*list, list->indexOf(lookIds.first()))
-                                              : tr("%1 looks").arg(lookIds.count());
+                                              : tr("%1 hits").arg(lookIds.count());
     return folder.isEmpty() ? tr("%1 → out of its folder").arg(what) : tr("%1 → %2").arg(what, folder);
 }
 
@@ -8675,7 +8675,7 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
     const QList<quint32> looks = m_st->looksIn(listId, folder);
     if (list == nullptr || !list->looks || looks.isEmpty())
     {
-        say(tr("No looks there yet."));
+        say(tr("No hits there yet."));
         return false;
     }
     const Production *prod = m_st->production(prodId);
@@ -8795,8 +8795,8 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
 
     frame = new VCFrame(contents, m_doc, true);
     vc->placeWidget(frame, contents);
-    frame->setCaption(folder.isEmpty() ? tr("Looks — %1").arg(prod == nullptr ? QString() : prod->name)
-                                       : tr("Looks — %1").arg(folder));
+    frame->setCaption(folder.isEmpty() ? tr("Hits — %1").arg(prod == nullptr ? QString() : prod->name)
+                                       : tr("Hits — %1").arg(folder));
     frame->setHeaderVisible(true);
     frame->move(QPoint(10, y));
     frame->resize(QSize(10 + cols * (size + gap), header + rows * (size + gap) + 4));
@@ -8815,7 +8815,7 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
     m_doc->setModified();
     buildTree();
     updateInspector();
-    say(tr("VC page “%1”: %n button(s), one per look (Virtual Console)", "", n).arg(frame->caption()));
+    say(tr("VC page “%1”: %n button(s), one per hit (Virtual Console)", "", n).arg(frame->caption()));
     return n > 0;
 }
 
@@ -8839,8 +8839,8 @@ quint32 ShowTreeView::adoptAsLook(quint32 functionId)
     // the scene stays either way.
     const QList<VCButton *> buttons = UsedBy::vcButtons({ functionId });
     if (!buttons.isEmpty()
-        && confirm(tr("Adopt as look"),
-                   tr("%n VC button(s) fire “%1”. Fire the look instead?", "", int(buttons.count())).arg(f->name()),
+        && confirm(tr("Adopt as a hit"),
+                   tr("%n VC button(s) fire “%1”. Fire the hit instead?", "", int(buttons.count())).arg(f->name()),
                    UsedBy::vcLines({ functionId }).join(QStringLiteral("\n"))))
     {
         const quint32 fid = m_st->lookFunction(id);
@@ -8849,8 +8849,8 @@ quint32 ShowTreeView::adoptAsLook(quint32 functionId)
         m_doc->setModified();
     }
     selectNode(id);
-    m_hint->setText(why.isEmpty() ? tr("“%1” is a look: its groups and palettes are a layer").arg(f->name())
-                                  : tr("“%1” is a look, played as it is: %2").arg(f->name(), why));
+    m_hint->setText(why.isEmpty() ? tr("“%1” is a hit: its groups and palettes are a layer").arg(f->name())
+                                  : tr("“%1” is a hit, played as it is: %2").arg(f->name(), why));
     return id;
 }
 
@@ -8868,7 +8868,7 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
     m_listVcPage->show();
     const QList<quint32> looks = m_st->looksIn(listId, folder);
     m_listVcPage->setEnabled(!looks.isEmpty());
-    m_listTitle->setText(folder.isEmpty() ? tr("Looks") : tr("Looks › %1").arg(folder));
+    m_listTitle->setText(folder.isEmpty() ? tr("Hits") : tr("Hits › %1").arg(folder));
     QStringList lines;
     for (quint32 id : looks)
     {
@@ -8876,13 +8876,13 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
         lines << QStringLiteral("• %1%2").arg(m_st->cueLabel(*list, list->indexOf(id)),
                                              fired.isEmpty() ? QString() : QStringLiteral(" — ") + fired.join(QStringLiteral(", ")));
     }
-    m_listInfo->setText(tr("%n busking look(s) here.", "", int(looks.count()))
+    m_listInfo->setText(tr("%n hit(s) here.", "", int(looks.count()))
                         + (lines.isEmpty() ? QString() : QStringLiteral("\n") + lines.join(QLatin1Char('\n')))
                         + QStringLiteral("\n\n")
-                        + tr("A look is built like a cue -- layers, attribute rows, effects -- but never tracks: "
+                        + tr("A hit is built like a cue -- layers, attribute rows, effects -- but never tracks: "
                              "it plays only what it has. It plays from a VC button (Toggle or Flash), over "
                              "whatever runs: the highest intensity wins, the last started sets the rest. Make "
-                             "VC page puts a button for each on the Virtual Console; + Look adds one; drag looks "
+                             "VC page puts a button for each on the Virtual Console; + Hit adds one; drag hits "
                              "onto a folder to file them."));
     m_pages->setCurrentWidget(m_listPage);
 }

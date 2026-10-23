@@ -393,7 +393,7 @@ their house lights, relays and subs.
   drag to file, duplicate, delete that names every cue, look and VC button
   using it — on one **Undo** with the tree (and with the Programming tab's
   palette list). Typed: `palette …`, `look …`, `vcpage`, `adopt`. See
-  [Looks](show-tree.md#looks-busking) and
+  [Looks](show-tree.md#hits-busking) and
   [Palettes in the Library](show-tree.md#palettes-in-the-library).
 - **Show Tree P4: reusable layers and cues, Convert to tracking, Detach a
   list.** Right-click a layer or a cue → **Make reusable…**: it goes into

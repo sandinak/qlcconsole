@@ -402,7 +402,7 @@ void ShowTreePlay_Test::oneUndoHistoryAcrossProductions()
 }
 
 /* Each production has its own Looks section: its looks bake to its own
-   collections, under Productions/<name>/Looks. */
+   collections, under Productions/<name>/Hits. */
 void ShowTreePlay_Test::looksSectionsPerProduction()
 {
     FixtureGroup *a = group("A", { m_fixtures[0] });
@@ -421,8 +421,8 @@ void ShowTreePlay_Test::looksSectionsPerProduction()
     const Function *fa = m_doc->function(st->lookFunction(hitA));
     const Function *fb = m_doc->function(st->lookFunction(hitB));
     QVERIFY(fa != nullptr && fb != nullptr && fa != fb);
-    QCOMPARE(fa->path(true), QString("Productions/Dance/Looks"));
-    QCOMPARE(fb->path(true), QString("Productions/Corporate/Looks"));
+    QCOMPARE(fa->path(true), QString("Productions/Dance/Hits"));
+    QCOMPARE(fb->path(true), QString("Productions/Corporate/Hits"));
     // A look's section is not a list GO plays.
     QVERIFY(!st->playableLists(pa).contains(st->looksSection(pa)));
 }

@@ -169,6 +169,14 @@ circuits and subs.
 
 ### Changed
 
+- **One word per idea, part 2** (board Q77): the Show Tree's busking
+  **Looks** are now **Hits** (+ Hit, the Hits section, Adopt as a hit, Copy
+  to a hit, `hit "name"` — `look` still works); a layer's looks are
+  unchanged. New sections are named Hits; older shows open as they were.
+  The effect designer's **Save as preset…** is gone: a palette keeps the
+  effect, **Export…** takes it to another show; existing presets stay in
+  the browser.
+
 - **Run is where GO is** (board Q74): the footer's **Next:** is status only
   (no GO/Back/Stop/Load menu of its own); a click brings the Run tab
   forward. ⌘↩ / Control ▸ GO and VC widgets work as before. Build ▸ Scenes

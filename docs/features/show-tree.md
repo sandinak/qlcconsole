@@ -15,9 +15,9 @@ as cues. Everything is in one tree:
 - Cues have **Track / Block / Cue-only** modes, **Release**, a **base cue**
   and **includes**. Values that come from somewhere else show grey and say
   where they came from.
-- Beside its cue lists, a production has a **Looks** section: busking looks
+- Beside its cue lists, a production has a **Hits** section: busking states
   built the same way, fired from Virtual Console buttons
-  ([Looks](#looks-busking)).
+  ([Hits](#hits-busking)).
 - A show can hold **several productions**; the **current** one is what GO
   plays ([Productions](#productions)). A cue can have **sub-cues** 4.1,
   4.2… that **Sub GO** steps through ([Sub-cues](#sub-cues)). The **Run**
@@ -43,8 +43,8 @@ is changed only in the tree: elsewhere it is locked. See
 
 ## The tab
 
-- **Header.** It has + Production, + Cue list, + Cue (**+ Look** in a
-  Looks section), + Layer, Record, **+ Sub-cue**, Merge, Delete, Undo, Redo,
+- **Header.** It has + Production, + Cue list, + Cue (**+ Hit** in a
+  Hits section), + Layer, Record, **+ Sub-cue**, Merge, Delete, Undo, Redo,
   **Upgrade This Show…** and the **Production** switcher (shown once there
   are two productions).
   At its right end, by the show controls, is **MIB**, the show's auto
@@ -82,8 +82,8 @@ from the Library lands in the tree right beside it.
   text too long for its column ends in "…". Both are remembered. A layer
   that plays a function as it is shows **▣**. A use
   of a [reusable](#reusable-layers-and-cues) layer or cue shows **⟲** and
-  how many uses there are. Under the cue lists, **Looks** holds the
-  production's busking looks, in their folders; a look a VC button fires
+  how many uses there are. Under the cue lists, **Hits** holds the
+  production's busking hits, in their folders; a hit a VC button fires
   shows **VC ×1**.
 - **Right: the page** for what is selected:
   - **A production** shows whether it is **current**, its **main list**
@@ -1303,9 +1303,9 @@ is always there and calls the same operations as the mouse.
 | `palette Amber rename "Amber 3"` · `move "01-Song"` · `move none` · `dup` · `edit` | Rename, file in a folder (or none), duplicate, open in the Look Editor |
 | `palette Amber delete` · `delete anyway` | Delete: refused while something uses it (it says what), unless `anyway` — then every use is cleared with it (Undo puts them back) |
 | `palette folder "01-Song"` · `rename "02-Song"` · `delete` | A palette folder: new, renamed, deleted (what is in it moves up) |
-| `look "Hit 1"` · `look "Hit 1" in "Hits"` | Selects that **look** of the production, or makes it (and the Looks section); `in` files it. Then set its layers as on a cue |
-| `vcpage` | **Make VC page** for the selected look's folder (else every look) |
-| `adopt "Old Busk"` | **Adopt as look**: a scene becomes a look |
+| `hit "Stab"` · `hit "Stab" in "Stings"` | Selects that **hit** of the production, or makes it (and the Hits section); `in` files it. Then set its layers as on a cue (`look` still works) |
+| `vcpage` | **Make VC page** for the selected hit's folder (else every hit) |
+| `adopt "Old Busk"` | **Adopt as a hit**: a scene becomes a hit |
 | `wb` · `wb 0.0.3` | The selected cue (or layer), or that cue, in the **Workbench** ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)) |
 | `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo (one history with the palettes, [Undo](#undo)) |
 | `help` · `help spread` · `?` | The language, with examples (see below) |
@@ -1444,7 +1444,7 @@ again what it opened.
   - **Palettes**, by type with your folders under each, or folders first
     ([Palettes in the Library](#palettes-in-the-library));
   - **Functions (played as they are)**: not chasers, and not what the tree
-    made. Right-click a scene → **Adopt as look** ([Looks](#looks-busking)).
+    made. Right-click a scene → **Adopt as a hit** ([Hits](#hits-busking)).
 
 Select several items (⌘- or ⇧-click) to drag them together or use **+
 Layer**.
@@ -1501,8 +1501,8 @@ layers](#editing-several-layers)), and Merge and Delete take them all.
 
 Right-click in the tree for:
 
-- **+ Production…**, **+ Cue list…**, **+ Look**, **+ Cue**;
-- on a cue: **Copy to look** (what it puts on stage, as a new look);
+- **+ Production…**, **+ Cue list…**, **+ Hit**, **+ Cue**;
+- on a cue: **Copy to a hit** (what it puts on stage, as a new hit);
 - on Looks or a look folder: **New folder…**, **Rename folder**, **Delete
   folder**, **Make VC page**; on a look: **Move to folder**, **Make VC
   page**;
@@ -1659,53 +1659,54 @@ the rule would change, and reusable uses. A list that tracks already says
 It asks first, and is one undo step: undo puts the list back on the same
 chaser and collections.
 
-## Looks (busking)
+## Hits (busking)
 
-A **look** is a state you fire by hand from a Virtual Console button — a
-hit, a blackout, a crowd wash — rather than a cue in a list. Each
-production has a **Looks** section beside its cue lists.
+A **hit** is a state you fire by hand from a Virtual Console button — a
+stab, a blackout, a crowd wash — rather than a cue in a list. Each
+production has a **Hits** section beside its cue lists. (Older shows called
+them looks; they open as they were.)
 
-- **Make one.** **+ Look** (the header in a Looks section, or right-click
-  anywhere → **+ Look**), or type `look "Hit 1"`. The first look makes the
+- **Make one.** **+ Hit** (the header in a Hits section, or right-click
+  anywhere → **+ Hit**), or type `hit "Stab"`. The first hit makes the
   section. Name it on its page.
-- **Build it as a cue.** A look has the same layers, attribute rows,
+- **Build it as a cue.** A hit has the same layers, attribute rows,
   child layers, group sets, effects, line aims and reusable layers as a cue,
   and the same drops, pickers and commands (`Towers colour Red dimmer
   Full`). Its page has no number, mode, includes, fades or *Next cue
-  receives*, and its layers no Release: **a look never tracks** — it plays
+  receives*, and its layers no Release: **a hit never tracks** — it plays
   only what it has.
-- **Folders.** **New folder…** on Looks or a folder; drag looks onto a
-  folder (or onto *Looks* for none), or **Move to folder**. **F2** renames
+- **Folders.** **New folder…** on Hits or a folder; drag hits onto a
+  folder (or onto *Hits* for none), or **Move to folder**. **F2** renames
   a folder; **Delete** moves what is in it up.
-- **Fire it from VC.** Each look plays as a **collection** of its own,
+- **Fire it from VC.** Each hit plays as a **collection** of its own,
   named after it and shown in the function pickers under
-  `Productions/<production>/Looks/<folder>` — assign it to any VC button as
+  `Productions/<production>/Hits/<folder>` — assign it to any VC button as
   you would any function (Toggle or Flash). Its id stays the same as you
-  edit the look, so the button keeps firing it. **Make VC page** (on Looks,
-  a folder, a look's page, or `vcpage`) puts a frame on the Virtual Console
-  with one Toggle button per look there, captioned with its name and
+  edit the hit, so the button keeps firing it. **Make VC page** (on Hits,
+  a folder, a hit's page, or `vcpage`) puts a frame on the Virtual Console
+  with one Toggle button per hit there, captioned with its name and
   coloured by its first colour. **Again**, it updates that frame: a button
-  for each look added since, the buttons it made for looks since deleted (or
+  for each hit added since, the buttons it made for hits since deleted (or
   filed elsewhere) taken away; buttons you moved or resized and widgets of
   your own in the frame stay as they are. Delete the frame on the console
-  and the next Make VC page makes a new one. The look's page lists the buttons that fire
+  and the next Make VC page makes a new one. The hit's page lists the buttons that fire
   it (*Fired by*); the tree marks them **VC ×N**.
-- **Over a running cue list** a look mixes as any function does: the
+- **Over a running cue list** a hit mixes as any function does: the
   highest intensity wins, and for colour, position and the rest the last
   started wins. Stop it, and what the list plays is back.
-- **Seeing it.** Selected in Design, a look plays on the rig, as a cue does
+- **Seeing it.** Selected in Design, a hit plays on the rig, as a cue does
   (it wins over what runs); in Operate nothing previews — what runs owns the
-  stage. **Record as new cue → everything lit** records a look a button
+  stage. **Record as new cue → everything lit** records a hit a button
   fired as its layers.
-- **Copy to look** (right-click a cue) freezes what the cue puts on stage —
-  tracked, included and its own — into a new look. **Copy / Paste** move
-  layers and cues between lists and looks too.
-- **Adopt as look** (Library → Functions, right-click a scene, or `adopt`)
-  makes a look from an existing scene: its groups and palettes become a
+- **Copy to a hit** (right-click a cue) freezes what the cue puts on stage —
+  tracked, included and its own — into a new hit. **Copy / Paste** move
+  layers and cues between lists and hits too.
+- **Adopt as a hit** (Library → Functions, right-click a scene, or `adopt`)
+  makes a hit from an existing scene: its groups and palettes become a
   layer when they play exactly the same, else the scene plays as it is
-  inside the look. The scene stays. When VC buttons fire the scene, it
-  offers to point them at the look.
-- What the tree made for a look is locked elsewhere, as for cues.
+  inside the hit. The scene stays. When VC buttons fire the scene, it
+  offers to point them at the hit.
+- What the tree made for a hit is locked elsewhere, as for cues.
 
 ## Productions
 

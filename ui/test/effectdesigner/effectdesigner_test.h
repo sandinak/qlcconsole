@@ -59,8 +59,9 @@ private slots:
     /** The Show Tree opens it: Design effect… in a layer's right-click
      *  menu and in its Effect row's ⋯ menu, and what is kept lands there. */
     void theShowTreeOpensItOnALayer();
-    /** Save as preset: a starting point in the browser. */
-    void saveAsPresetListsIt();
+    /** Q77: no Save as preset -- a palette is the effect kept, Export…
+     *  carries it to another show. */
+    void thereIsNoSaveAsPreset();
     /** Window ▸ Effects: effect palettes in folders, classic effects marked,
      *  one-offs left out; + New EFX on the Try on groups opens its editor. */
     void theEffectsPageListsEveryEffect();
