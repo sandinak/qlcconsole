@@ -49,7 +49,14 @@ writes that file at once, so quitting or a crash loses nothing. The show
 file is never changed by them: while a venue is applied the rig shows its
 corrections, and **File → Save** still writes the show's own calibration.
 When the show is opened again, the venue it was last focused for is
-applied again. Choosing another venue (or None) takes one venue's
+applied again.
+
+**Any calibration change is the venue's while it is applied.** A pan or
+tilt offset typed in the fixture's properties, a fixed light's aim or a
+lens set by hand goes into the venue and its file at once, not into the
+show. (A Focus mode nudge goes in when it is saved with A.) Typed back to
+the show's own value, the venue's correction for it goes. With **None**
+applied, those edits change the show as always. Choosing another venue (or None) takes one venue's
 corrections off and puts the other's on.
 
 The venue file holds, per fixture: a moving head's pan and tilt offsets,

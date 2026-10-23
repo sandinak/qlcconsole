@@ -1,6 +1,6 @@
 # Focus calls and Refine — design (board Q105–Q108)
 
-Branch `feat/focus-calls-refine`, 2026-10-23. A design plus a first working
+Branch `feat/focus-calls-refine`, 2026-10-23 (decisions Q109–Q113 built the same night). A design plus a first working
 version. Not merged.
 
 **The idea.** Kids already know game controllers, so the controller is the
@@ -26,7 +26,7 @@ Contents:
 8. Mockups
 9. Code map
 10. Out of scope
-11. Open questions for the owner
+11. Decisions (Q109–Q113)
 12. Status and next steps
 
 ---
@@ -139,7 +139,10 @@ the show is touched.
 - **Refine.**
   - Layer scope: nothing is dimmed; the cue looks as it will.
   - Group or Fixture scope: the selected fixtures keep the **cue's own
-    level**, and the rest of *that layer* is held at 15%.
+    level**, and the rest of *that layer* is dimmed to 15% — only the
+    fixtures the cue has brighter than that; one already lower is never
+    raised (Q112b). The cue's level is read from its Dimmer look, else
+    from the output before Refine touched it.
   - Other layers are left as the cue has them.
   - The flash darkens the selected fixtures in the "off" phase.
 
@@ -257,7 +260,7 @@ Each fixture holds a `RigCalibration` (new, in `truss.h`):
 - a fixed light's `fixedAim`, `panZeroDir` and `aimDown`;
 - a hand-zoomed `lensDeg`.
 
-The values are absolute (this venue's value), not deltas. See §11.
+The values are absolute (this venue's value), not deltas. Decided: absolute (Q110, §11).
 
 **Naming a venue.** The Focus calls dialog offers:
 
@@ -319,7 +322,7 @@ Refine uses exactly those. It adds nothing to the cue model.
 | Scope | What a change edits | Stored as |
 |---|---|---|
 | **Layer** | The layer's own look, for all its fixtures. | A new **inline palette** (one-off, owned by the tree) with the new value, set on the layer by `setLayerLook()`. For position, the old palette's degrees plus the nudge, **fanning copied**, so the whole fan moves. A named palette that other cues use is never edited in place. |
-| **Group** | One of the layer's groups (`Layer::pieces()`). | A **child layer** on that group (made with `addChildLayer()` the first time, reused after), with the value as its own look. |
+| **Group** | One of the layer's groups (`Layer::pieces()`). | **Position** (Q112c): an **offset** from each fixture's own position, kept as a position exception (child layer) on **each** fixture of the group, so a fan inside the group stays a fan. Zoom, focus, colour, gobo: one **child layer** on the group (made with `addChildLayer()` the first time, reused after). X at Group scope clears both. |
 | **Fixture** | One fixture. | A **child layer** on `{fixture}`, as above: the per-fixture exception. |
 
 **Pending until A.** Every nudge is pending and shown on the rig through an
@@ -352,10 +355,17 @@ Fixture, so the most specific wins. **B** drops it.
 - **Colour / gobo** (LS-click page) step through the show's named Colour /
   Gobo palettes, in name order. Keeping sets that palette on the look.
 
-**Mode.** Refine is Design mode only in v1. It previews the cue
-(`ShowTreeController::previewCue`), and a kept edit re-bakes and shows at
-once. Going to Operate ends it. Operate is an open question (§11): a
-structural edit there only lands on the next GO.
+**Mode (Q112a).** Refine works in Design and in Operate, and switching
+between them does not end it.
+
+- **Design:** it previews the cue (`ShowTreeController::previewCue`), and
+  a kept edit re-bakes and shows at once.
+- **Operate:** the cue list runs on; Refine does not preview. A kept edit
+  is in the tree at once, but the running cue's generated scene only
+  changes at its next GO. Until then Refine **holds what was kept** on the
+  rig through its OutputLayer, and says "Kept. It plays from the next GO."
+  Leaving Refine lets go. Going back to Design drops the hold and
+  previews the cue with the edit.
 
 **Layers listed.** The cue's **own top-level** layers on fixtures. Opaque
 function layers, and layers that are only tracked in, are not listed (§12).
@@ -385,7 +395,7 @@ that cue would:
 
 It belongs at the top of a "Pre-show" list, so the stage manager's checklist
 and the focus are one list. It needs Operate-mode Focus, because the list
-runs in Operate (see §11).
+runs in Operate (Refine already works there, Q112a).
 
 ---
 
@@ -515,7 +525,6 @@ Help:
   **conflicts** with triggers stepping calls. See §11.
 - Rumble or vibration feedback (the HID plugin has no output path to the
   pad).
-- Refine in Operate (live during a show).
 - Refine of tracked-in layers (only the cue's own layers), of effects, and
   of intensity. The dimmer is deliberately not on the controller: the
   flash and dim feedback use it.
@@ -526,42 +535,25 @@ Help:
 
 ---
 
-## 11. Open questions for the owner
+## 11. Decisions (board Q109–Q113, 2026-10-23)
 
-1. **Y moved in plain Focus mode.** The second reference is now the left
-   stick click, so that Y means "scope" everywhere. Is that OK, or should
-   plain Focus mode keep Y?
-2. **Absolute or delta corrections?** A venue stores absolute offsets
-   ("here, this head is +1.25°"). If the show's own calibration is
-   re-done later, the venue still wins for the fixtures it corrected.
-   Deltas (relative to the show's) would follow such a change, but are
-   harder to read. Which one?
-3. **Unnamed venues.** They default to "Venue 2026-10-23 19:04". Should the
-   dialog insist on a name instead? Teachers may prefer "Lincoln HS".
-4. **Corrections made outside Focus calls while a venue is applied.** For
-   example, an offset typed in the fixture dialog. They are held out of the
-   show file but are *not* recorded to the venue, so they are lost on
-   reopen. Should they record into the venue, or should the fixture dialog
-   warn?
-5. **Refine in Operate.** In Operate, a Show Tree edit that changes a
-   layer's structure lands on the next GO. Live-refining a running cue
-   could hold the pending overlay after A until the cue is re-run. Is
-   Operate wanted for v2? A focus-call cue in a running list needs the
-   same.
-6. **Shutters vs triggers.** If shutters come to Focus mode, which control
-   picks the side? Suggestion: the **D-pad on a "shutter page"** (LS click),
-   matching Refine's pages, so the triggers stay "big step".
-7. **Refine's dim level.** Out-of-scope fixtures in the layer go to an
-   absolute 15%. That can *raise* a fixture the cue has below 15%. Fine as
-   is, or scale the cue's level instead?
-8. **Group scope position in Refine.** A group exception takes the group's
-   first fixture's position for the whole group, which collapses a fan
-   inside the group. Keep it, or give a group exception a fanned copy?
-9. **Voice.** Is the rate right (`say -r 210`)? Which voice? Should it also
-   speak the fixture's name ("fixture 3 of 8, AT Spot 3")? Should the voice
-   be off by default in a classroom?
-10. **Rumble.** Is it worth adding HID output for rumble (one buzz on Keep,
-    two on refuse)?
+The open questions were answered on the board after the first version:
+
+| Q | Question | Decision | Done |
+|---|---|---|---|
+| Q109 | Y moved to scope in plain Focus mode (second reference on the left stick click)? | **Y is scope everywhere.** Keep as built. | As built |
+| Q110 | Absolute or delta corrections? Must a venue be named? | **Absolute** values; a **date-and-time** name is fine. Keep as built. | As built |
+| Q111 | A calibration typed in the fixture dialog while a venue is applied? | It goes **into the venue** and its `Show.venues.xml`, not the show. | `VenueCorrections` records any calibration change from `MonitorProperties::rigPropsChanged` while a venue is applied (only the calibration fields; a change of place or mount is not one). Focus mode's heads are *held* while it runs, so a live nudge is recorded only when saved with A, and a discarded one never. Typed back to the show's value, the correction goes. Test: `focuscalls_test anEditElsewhereGoesToTheVenue`. |
+| Q112a | Refine in Operate? | **Allowed.** | §6 Mode. Test: `refinesession_test operateHoldsWhatIsKept`. |
+| Q112b | Refine's dim raises a fixture below 15%? | **Dim only what is brighter** than 15%; never raise one the cue has lower. | `RefineSession::cueLevel()`. Test: `dimsOnlyWhatIsBrighter`. |
+| Q112c | A group exception collapses a fan? | **Keep the fan:** the change is an offset to each fixture's own position. | §6 table. Test: `groupScopeKeepsTheFan`. |
+| Q113 | Voice (rate, which voice, names, default), rumble, shutters? | **Wait** until he has tried it. Nothing changed. | — |
+
+Still open from Q113, for after the trial: the voice's rate and voice,
+whether it says fixture names, whether it is off by default in class;
+rumble; and which control picks a shutter side (suggestion: a D-pad
+"shutter page" on the left stick click, so the triggers keep meaning "big
+step").
 
 ---
 
@@ -598,7 +590,6 @@ Help:
 
 - A focus-call cue in a list (designed in §7).
 - A Refine button on the Build Workbench.
-- Refine in Operate.
 - Refine of tracked-in layers.
 - A venue manager UI (rename and delete exist in the engine only).
 - Help screenshots for the new panels (`./help-shots.sh` entries).
@@ -606,9 +597,9 @@ Help:
 
 **Next, in order:**
 
-1. Owner review of §11.
+1. Branson tries it; then voice, rumble and shutters (Q113).
 2. A Refine button on the Workbench header when a cue is on loan.
-3. The focus-call cue (needs Operate-mode Focus).
+3. The focus-call cue (needs Focus mode in Operate, as Refine now is).
 4. A venue manager (rename/delete) in the dialog.
 5. Help shots.
 6. A real-rig check on `ender`/the show VLAN: flash timing visible at
