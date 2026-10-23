@@ -143,9 +143,24 @@ public:
     bool isActive() const { return m_active; }
     const Options &options() const { return m_options; }
 
-    /** The heads @p fixtures holds that Focus mode can work: they can pan or
-     *  tilt and they are placed on the plot. In their order, once each. */
+    /** The heads @p fixtures holds that Focus mode can work: moving heads
+     *  (they can pan or tilt) and fixed lights (see fixedLights()), placed
+     *  on the plot. In their order, once each. */
     static QList<quint32> focusable(Doc *doc, const QList<quint32> &fixtures);
+    /** The moving heads among focusable(). */
+    static QList<quint32> movingHeads(Doc *doc, const QList<quint32> &fixtures);
+    /** The FIXED lights among them (board Q102): one head, no pan or tilt,
+     *  a light, placed on the plot. Focus mode moves where such a light lands
+     *  (at head height) and sets its Pan and Tilt (FixtureRigProps::fixedAim)
+     *  from it -- matching the plot to a light focused by hand. */
+    static QList<quint32> fixedLights(Doc *doc, const QList<quint32> &fixtures);
+    /** How high above the deck a fixed light's landing point is: head height. */
+    static constexpr float subjectHeight() { return 1.6f; }
+    /** How far a fixed light's landing point moves per degree of nudge
+     *  (arrow keys, D-pad, sticks), metres. */
+    static constexpr float metresPerDegree() { return 0.5f; }
+    /** True when @p fid is a fixed light in this session. */
+    bool isFixedLight(quint32 fid) const { return m_heads.value(fid).fixed; }
 
     /** @p fixtures front to back (downstage first), then house left to right
      *  within a row -- rows are heads within 0.75 m of the row's first. */
@@ -203,7 +218,7 @@ public:
 public:
     Offset liveOffset(quint32 fid) const;
     Offset savedOffset(quint32 fid) const;
-    bool isDirty(quint32 fid) const { return liveOffset(fid) != savedOffset(fid); }
+    bool isDirty(quint32 fid) const { return m_heads.contains(fid) && m_heads.value(fid).dirty(); }
     bool hasUnsaved() const;
     QList<quint32> unsavedFixtures() const;
     /** Saved at least once this session. */
@@ -295,13 +310,29 @@ private:
         bool hasSecond = false;
         Offset saved;
         Offset live;
+        /* A fixed light: where it lands (first is the live point), as
+           saved, and how its rig aimed it before the session. */
+        bool fixed = false;
+        QVector3D landSaved;
+        bool savedIsOriginal = true;
+        bool origAim = false;
+        float origPan = 0.0f, origDown = 90.0f;
+        bool dirty() const { return fixed ? (first != landSaved) : (live != saved); }
     };
     struct UndoEntry
     {
         quint32 fid;
         Offset before;
         bool wasChecked;
+        QVector3D landBefore;
+        bool wasOriginal = false;
     };
+    /** A fixed light's landing point from its rig, at head height. */
+    QVector3D fixedLanding(quint32 fid) const;
+    /** Point a fixed light's rig at @p landing (or back to how it was). */
+    void applyLanding(quint32 fid, const Head &h, bool original);
+    /** A head back to what is saved for it (offsets, or where it lands). */
+    void backToSaved(quint32 fid, Head &h);
 
     void resolveReferences();
     /** The calibration-free aim of @p fid, centred fixture degrees as DMX

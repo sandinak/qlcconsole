@@ -77,7 +77,9 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     QVBoxLayout *vl = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("Align the rig: each head in turn is aimed at its reference "
                                   "and lit, and you nudge its calibration offsets until the "
-                                  "light lands there."), this);
+                                  "light lands there. A fixed light (a par, a fixed spot) is "
+                                  "lit and you move where it lands, at head height, to where "
+                                  "the real one does: that sets its Pan and Tilt."), this);
     intro->setWordWrap(true);
     vl->addWidget(intro);
 
@@ -87,13 +89,15 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     QList<quint32> all;
     for (Fixture *fx : m_doc->fixtures())
         all << fx->id();
-    const int allCount = FocusSession::focusable(m_doc, all).size();
+    const int allCount = FocusSession::movingHeads(m_doc, all).size();
+    const int fixedCount = FocusSession::fixedLights(m_doc, all).size();
 
     m_whichCombo = new QComboBox(this);
     m_whichCombo->setObjectName(QStringLiteral("focusWhich"));
     if (!m_selection.isEmpty())
         m_whichCombo->addItem(tr("The selected heads (%1)").arg(m_selection.size()), 0);
     m_whichCombo->addItem(tr("Every moving head on the plot (%1)").arg(allCount), 1);
+    m_whichCombo->addItem(tr("Every fixed light on the plot (%1)").arg(fixedCount), 2);
     form->addRow(tr("Heads:"), m_whichCombo);
 
     m_orderCombo = new QComboBox(this);
@@ -178,7 +182,17 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     bb->button(QDialogButtonBox::Ok)->setText(tr("Start"));
-    bb->button(QDialogButtonBox::Ok)->setEnabled(m_firstCombo->count() > 0);
+    /* Fixed lights need nothing to aim at (they are moved to where they
+       land), so they can start with no scene aim or target in the show. */
+    auto updateStart = [this, bb]() {
+        const QList<quint32> fx = options().fixtures;
+        const bool allFixed = !fx.isEmpty()
+            && FocusSession::fixedLights(m_doc, fx).size() == FocusSession::focusable(m_doc, fx).size();
+        bb->button(QDialogButtonBox::Ok)->setEnabled(m_firstCombo->count() > 0 || allFixed);
+    };
+    updateStart();
+    connect(m_whichCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [updateStart](int) { updateStart(); });
     connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     vl->addWidget(bb);
@@ -223,11 +237,17 @@ FocusSession::InputDevice FocusModeSetupDialog::inputDevice() const
 FocusSession::Options FocusModeSetupDialog::options() const
 {
     FocusSession::Options o;
-    if (m_whichCombo->currentData().toInt() == 0)
+    const int which = m_whichCombo->currentData().toInt();
+    if (which == 0)
         o.fixtures = m_selection;
     else
+    {
+        QList<quint32> all;
         for (Fixture *fx : m_doc->fixtures())
-            o.fixtures << fx->id();
+            all << fx->id();
+        o.fixtures = (which == 1) ? FocusSession::movingHeads(m_doc, all)
+                                  : FocusSession::fixedLights(m_doc, all);
+    }
     o.order = FocusSession::Order(m_orderCombo->currentData().toInt());
     o.first = referenceOf(m_firstCombo);
     o.second = referenceOf(m_secondCombo);
@@ -494,6 +514,22 @@ void FocusModePanel::refresh()
     const FocusSession::Offset live = m_session->liveOffset(fid);
     const FocusSession::Offset saved = m_session->savedOffset(fid);
     m_offsetLabel->setText(tr("Pan %1    Tilt %2").arg(signedDegrees(live.pan), signedDegrees(live.tilt)));
+    if (m_session->isFixedLight(fid))
+    {
+        // A fixed light: where it lands, and the aim that gives it.
+        const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
+        m_offsetLabel->setText(tr("Pan %1\302\260 from downstage    Tilt %2\302\260 down")
+                               .arg(double(rp.panZeroDir), 0, 'f', 1).arg(double(rp.aimDown), 0, 'f', 1));
+        m_savedLabel->setText(m_session->isDirty(fid) ? tr("Unsaved (A or Return to save, B to revert)")
+                              : m_session->isChecked(fid) ? tr("Saved \342\234\223") : tr("As it was"));
+        m_savedLabel->setStyleSheet(m_session->isDirty(fid) ? QStringLiteral("color: #d08a1c;")
+                                                            : QStringLiteral("color: #3a9a4a;"));
+        m_stepLabel->setText(tr("Step %1 m").arg(double(m_session->stepDegrees() * FocusSession::metresPerDegree()),
+                                                 0, 'g', 3));
+        m_progressLabel->setText(tr("%1 of %2 checked").arg(m_session->checkedCount()).arg(m_session->count()));
+        m_map->setStepDegrees(m_session->stepDegrees());
+        return;
+    }
     if (m_session->isDirty(fid))
     {
         m_savedLabel->setText(tr("Unsaved \342\200\224 saved is pan %1, tilt %2 (A to save, B to revert)")

@@ -190,7 +190,7 @@ void FocusSession_Test::refusesWhatItCannotFocus()
     QVERIFY(!s->start(none, &why));
     QVERIFY(!why.isEmpty());
 
-    // A dimmer cannot be focused.
+    // A par is a fixed light now (Q102): focused by where it lands.
     QLCFixtureDef *def = new QLCFixtureDef();
     def->setManufacturer("Test"); def->setModel("Par");
     QLCFixtureMode *mode = new QLCFixtureMode(def);
@@ -203,8 +203,25 @@ void FocusSession_Test::refusesWhatItCannotFocus()
     par->setAddress(100);
     QVERIFY(m_doc->addFixture(par));
     m_doc->monitorProperties()->setFixturePosition(par->id(), 0, 0, QVector3D(2000, 2000, 5));
+    QVERIFY(s->start(optionsFor({ par->id() }, mark->id())));
+    QVERIFY(s->isFixedLight(par->id()));
+    s->stop();
+
+    // Something with no light and no pan or tilt cannot.
+    QLCFixtureDef *fdef = new QLCFixtureDef();
+    fdef->setManufacturer("Test"); fdef->setModel("Fog");
+    QLCFixtureMode *fmode = new QLCFixtureMode(fdef);
+    QLCChannel *fog = new QLCChannel();
+    fog->setName("Fog"); fog->setGroup(QLCChannel::Effect);
+    fdef->addChannel(fog); fmode->insertChannel(fog, 0);
+    fdef->addMode(fmode);
+    Fixture *fogger = new Fixture(m_doc);
+    fogger->setFixtureDefinition(fdef, fmode);
+    fogger->setAddress(110);
+    QVERIFY(m_doc->addFixture(fogger));
+    m_doc->monitorProperties()->setFixturePosition(fogger->id(), 0, 0, QVector3D(3000, 2000, 5));
     why.clear();
-    QVERIFY(!s->start(optionsFor({ par->id() }, mark->id()), &why));
+    QVERIFY(!s->start(optionsFor({ fogger->id() }, mark->id()), &why));
     QVERIFY(!why.isEmpty());
 
     m_doc->setMode(Doc::Operate);
@@ -766,6 +783,68 @@ void FocusSession_Test::theSessionKeepsTheControllerAwake()
     QCOMPARE(begun, 2);
     QCOMPARE(ended, 2);
     stub->m_channelRoles.clear();
+}
+
+void FocusSession_Test::aFixedLightIsFocusedByWhereItLands()
+{
+    // A dimmer par hung at 5 m, 4 m across, on the upstage line (y = 0).
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Focus Par");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim); mode->insertChannel(dim, 0);
+    def->addMode(mode);
+    Fixture *par = new Fixture(m_doc);
+    par->setName("FOH 1");
+    par->setFixtureDefinition(def, mode);
+    par->setAddress(20);
+    QVERIFY(m_doc->addFixture(par));
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(4000, 0, 5));
+    QCOMPARE(FocusSession::fixedLights(m_doc, { par->id() }), QList<quint32>({ par->id() }));
+    QVERIFY(FocusSession::movingHeads(m_doc, { par->id() }).isEmpty());
+
+    // No reference needed: it starts where it lands now -- straight down.
+    FocusSession::Options o;
+    o.fixtures = { par->id() };
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QString why;
+    QVERIFY2(s->start(o, &why), qPrintable(why));
+    QVector3D at;
+    QVERIFY(s->referencePoint(par->id(), at));
+    QVERIFY(qAbs(at.x() - 4.0f) < 1e-3f && qAbs(at.y()) < 1e-3f);
+    QVERIFY(qAbs(at.z() - FocusSession::subjectHeight()) < 1e-3f);
+    // Lit at its level, and nothing else.
+    const QHash<QPair<int, int>, uchar> w = s->pendingWrites();
+    QCOMPARE(w.value(qMakePair(0, 20)), uchar(qRound(0.8 * 255)));
+
+    // Down on the stick or key: downstage. Four steps of 1° = 2 m.
+    for (int i = 0; i < 4; ++i)
+        s->nudge(0.0f, -1.0f);
+    QVERIFY(s->referencePoint(par->id(), at));
+    QVERIFY(qAbs(at.y() - 2.0f) < 1e-3f);
+    FixtureRigProps rp = props->fixtureRigProps(par->id());
+    QVERIFY(rp.fixedAim);
+    QVERIFY(qAbs(rp.panZeroDir) < 0.05f);                       // toward the house
+    const double down = qRadiansToDegrees(qAtan2(5.0 - FocusSession::subjectHeight(), 2.0));
+    QVERIFY2(qAbs(rp.aimDown - down) < 0.1, qPrintable(QString::number(rp.aimDown)));
+    QVERIFY(s->isDirty(par->id()));
+
+    // Revert: the rig as it was before the session, not aimed.
+    s->revert();
+    QVERIFY(!props->fixtureRigProps(par->id()).fixedAim);
+    QVERIFY(!s->isDirty(par->id()));
+
+    // Right goes toward stage left (+X); save keeps it, past the session.
+    s->nudge(2.0f, 0.0f);
+    s->save();
+    QVERIFY(s->isChecked(par->id()));
+    QVERIFY(!s->isDirty(par->id()));
+    s->stop();
+    rp = props->fixtureRigProps(par->id());
+    QVERIFY(rp.fixedAim);
+    QVERIFY2(qAbs(rp.panZeroDir - 270.0f) < 0.05f, qPrintable(QString::number(rp.panZeroDir)));   // stage left
 }
 
 QTEST_MAIN(FocusSession_Test)

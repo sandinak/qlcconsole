@@ -876,8 +876,9 @@ controller or the keyboard.
 Rig Overview's bar, **View → Focus Mode…** (⌘⌥F), or by holding **View +
 Menu** on the controller. Choose:
 
-- **Heads** — the ones selected in the programmer, or every moving head on
-  the plot (only heads that can pan or tilt and are placed on the plot).
+- **Heads** — the ones selected in the programmer, every moving head on
+  the plot, or every **fixed light** on the plot (pars, fixed spots: see
+  [Fixed lights](#fixed-lights-pars-and-fixed-spots) below).
 - **Order** — by stage position (front to back, then house left to right)
   or as selected (a group's own order).
 - **Aim at** — the selected scene's aim (each head its own point: on a
@@ -1068,6 +1069,25 @@ Controller test shows whether Input Monitoring is allowed, and offers
 **qlcconsole** (or **Terminal**, if you start qlcconsole from a terminal),
 then quit and reopen qlcconsole. (There is no entitlement or
 usage-description text for it: the prompt is macOS's own.)
+
+### Fixed lights: pars and fixed spots
+
+A light with no pan or tilt was focused by hand on the ladder, so here it's
+the other way round: you make the plot match the real light. Pick **Every
+fixed light on the plot** (or select some), and it needs no **Aim at**.
+
+Each in turn is lit, and a **person** stands where it lands, at head height
+(1.6 m above whatever is there), so you see what the light gives. Move
+where it lands until it matches the real one: **right** is toward stage
+left, **up** is upstage — the left stick (fast), the right stick (fine), the
+D-pad or the arrow keys (⇧ for bigger steps; **+** / **−** change the
+step). The panel shows the light's **Pan** (° from downstage) and **Tilt**
+(° down from level) as you go: they are set from where it lands (see
+Aiming a fixed light, under [Mounting a fixture](#mounting-a-fixture)).
+
+**A** (or Return) saves it, **B** (or ⌫) puts it back as it was, and Back
+(⌘Z) undoes a save, as for moving heads. Leaving with unsaved lights asks
+first.
 
 ## Lanterns
 

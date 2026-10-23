@@ -33,6 +33,8 @@
 #include <cmath>
 
 #include "structurestudioview.h"
+#include "focussession.h"
+#include "programmercontroller.h"
 #include "righeads.h"
 #include "humanfigure.h"
 #include "fixturevisualtraits.h"
@@ -1089,9 +1091,29 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
     const double roomLevel = 0.18 + 0.82 * m_ambient;
     static const int SEG = 12;
 
-    foreach (StageTarget *t, props->stageTargets())
+    /* Focus mode on a fixed light (Q102): a person stands where it lands,
+       its head in the light, to show what the light gives. Drawn as one,
+       never added to the show. */
+    QList<StageTarget *> targets = props->stageTargets();
+    StageTarget focusFigure(0xFFFFFFFF);
+    if (FocusSession *fs = (m_doc->programmer() != nullptr) ? m_doc->programmer()->focusSession() : nullptr)
     {
-        if (t == nullptr || !layerShown(t->layerId()))
+        QVector3D at;
+        const quint32 cur = fs->isActive() ? fs->currentFixture() : 0xFFFFFFFF;
+        if (cur != 0xFFFFFFFF && fs->isFixedLight(cur) && fs->referencePoint(cur, at))
+        {
+            focusFigure.setKind(StageTarget::Kind::Person);
+            focusFigure.setX(at.x());
+            focusFigure.setY(at.y());
+            focusFigure.setAimHeightOverride(FocusSession::subjectHeight());
+            focusFigure.setLayerId(MonitorProperties::defaultLayerId);
+            targets << &focusFigure;
+        }
+    }
+
+    foreach (StageTarget *t, targets)
+    {
+        if (t == nullptr || (t != &focusFigure && !layerShown(t->layerId())))
             continue;
 
         /* A line: the curve at its real heights, with a small cross at each

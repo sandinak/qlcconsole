@@ -36,6 +36,9 @@ private slots:
     void nextAndPreviousWrap();
     /** Perform mode, no reference, nothing aimable: refused, and why. */
     void refusesWhatItCannotFocus();
+    /** Q102: a fixed light is focused by where it lands at head height;
+     *  that sets its Pan and Tilt, and revert puts it back as it was. */
+    void aFixedLightIsFocusedByWhereItLands();
     /** A nudge changes the live offset, the rig's calibration and the DMX,
      *  and does not mark the show modified. */
     void aNudgeMovesTheLightNotTheShow();

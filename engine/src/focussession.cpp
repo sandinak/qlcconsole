@@ -75,6 +75,17 @@ FocusSession::~FocusSession()
 
 QList<quint32> FocusSession::focusable(Doc *doc, const QList<quint32> &fixtures)
 {
+    const QList<quint32> movers = movingHeads(doc, fixtures);
+    const QList<quint32> fixed = fixedLights(doc, fixtures);
+    QList<quint32> out;
+    for (quint32 fid : fixtures)
+        if ((movers.contains(fid) || fixed.contains(fid)) && !out.contains(fid))
+            out << fid;
+    return out;
+}
+
+QList<quint32> FocusSession::movingHeads(Doc *doc, const QList<quint32> &fixtures)
+{
     QList<quint32> out;
     if (doc == nullptr)
         return out;
@@ -85,6 +96,77 @@ QList<quint32> FocusSession::focusable(Doc *doc, const QList<quint32> &fixtures)
             out << fid;
     }
     return out;
+}
+
+QList<quint32> FocusSession::fixedLights(Doc *doc, const QList<quint32> &fixtures)
+{
+    QList<quint32> out;
+    MonitorProperties *props = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (props == nullptr)
+        return out;
+    for (quint32 fid : fixtures)
+    {
+        Fixture *fx = doc->fixture(fid);
+        if (fx == nullptr || fx->fixtureMode() == nullptr || out.contains(fid)
+                || !props->containsFixture(fid) || fx->heads() > 1)
+            continue;
+        if (fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB) != QLCChannel::invalid()
+                || fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) != QLCChannel::invalid())
+            continue;
+        // A light: something that makes it brighter.
+        bool light = false;
+        for (quint32 c = 0; c < fx->channels() && !light; ++c)
+            if (const QLCChannel *ch = fx->fixtureMode()->channel(c))
+                light = ch->group() == QLCChannel::Intensity;
+        if (light)
+            out << fid;
+    }
+    return out;
+}
+
+QVector3D FocusSession::fixedLanding(quint32 fid) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const QVector3D pos = props->fixtureRigPosition(fid);
+    QVector3D dir;
+    if (!rp.fixedAimDirection(dir))
+        dir = (rp.mountingType == Truss::TopHung) ? QVector3D(0, 0, -1) : QVector3D(0, 0, 1);
+    // Where the beam crosses head height -- or, if it never does, in front.
+    const float headZ = props->platformHeightAt(pos.x(), pos.y()) + subjectHeight();
+    QVector3D at = pos + QVector3D(0.0f, 2.0f, 0.0f);
+    if (qAbs(dir.z()) > 1e-3f)
+    {
+        const float t = (headZ - pos.z()) / dir.z();
+        if (t > 0.0f)
+            at = pos + dir * t;
+    }
+    at.setZ(props->platformHeightAt(at.x(), at.y()) + subjectHeight());
+    return at;
+}
+
+void FocusSession::applyLanding(quint32 fid, const Head &h, bool original)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (original)
+    {
+        rp.fixedAim = h.origAim;
+        rp.panZeroDir = h.origPan;
+        rp.aimDown = h.origDown;
+    }
+    else
+    {
+        const QVector3D d = h.first - props->fixtureRigPosition(fid);
+        const double across = qSqrt(double(d.x()) * d.x() + double(d.y()) * d.y());
+        double bearing = qRadiansToDegrees(qAtan2(-double(d.x()), double(d.y())));
+        if (bearing < 0.0)
+            bearing += 360.0;
+        rp.fixedAim = true;
+        rp.panZeroDir = float(qRound(bearing * 10.0) / 10.0);
+        rp.aimDown = float(qRound(qRadiansToDegrees(qAtan2(-double(d.z()), across)) * 10.0) / 10.0);
+    }
+    props->setFixtureRigProps(fid, rp);
 }
 
 QList<quint32> FocusSession::stageOrder(Doc *doc, const QList<quint32> &fixtures)
@@ -136,13 +218,14 @@ bool FocusSession::start(const Options &options, QString *why)
     /* A Design-mode tool: in Perform the rig belongs to the show. */
     if (m_doc->mode() == Doc::Operate)
         return refuse(tr("Focus mode works in Design mode only: switch out of Operate first."));
-    if (!options.first.isValid())
-        return refuse(tr("Choose what the heads should aim at."));
-
     QList<quint32> heads = focusable(m_doc, options.fixtures);
     if (heads.isEmpty())
-        return refuse(tr("None of these fixtures can be focused: they need pan or tilt "
-                         "and a place on the plot."));
+        return refuse(tr("None of these fixtures can be focused: they need a place on the "
+                         "plot, and pan and tilt or a light of their own."));
+    const QList<quint32> fixed = fixedLights(m_doc, heads);
+    // A fixed light needs no reference: it is moved to where it really lands.
+    if (!options.first.isValid() && fixed.size() < heads.size())
+        return refuse(tr("Choose what the heads should aim at."));
 
     if (m_active)
         stop();
@@ -162,6 +245,13 @@ bool FocusSession::start(const Options &options, QString *why)
         h.saved.pan = rp.panOffsetDeg;
         h.saved.tilt = rp.tiltOffsetDeg;
         h.live = h.saved;
+        if (fixed.contains(fid))
+        {
+            h.fixed = true;
+            h.origAim = rp.fixedAim;
+            h.origPan = rp.panZeroDir;
+            h.origDown = rp.aimDown;
+        }
         m_heads.insert(fid, h);
     }
     resolveReferences();
@@ -265,7 +355,7 @@ bool FocusSession::referencePoint(quint32 fid, QVector3D &point) const
     const auto it = m_heads.constFind(fid);
     if (it == m_heads.constEnd())
         return false;
-    if (m_useSecond && it->hasSecond)
+    if (m_useSecond && it->hasSecond && !it->fixed)
     {
         point = it->second;
         return true;
@@ -283,7 +373,7 @@ bool FocusSession::referencePoint(quint32 fid, QVector3D &point) const
 bool FocusSession::intendedCentred(quint32 fid, FixtureRigProps &rp,
                                    double &panCentredDeg, double &tiltCentredDeg) const
 {
-    if (!m_active || fid != currentFixture())
+    if (!m_active || fid != currentFixture() || m_heads.value(fid).fixed)
         return false;
     QVector3D point;
     if (!referencePoint(fid, point))
@@ -316,6 +406,15 @@ bool FocusSession::intendedAngles(quint32 fid, double &panRelDeg, double &tiltRe
 
 bool FocusSession::intendedDirection(quint32 fid, QVector3D &dir) const
 {
+    if (m_active && fid == currentFixture() && m_heads.value(fid).fixed)
+    {
+        // Toward where it lands.
+        dir = m_heads.value(fid).first - m_doc->monitorProperties()->fixtureRigPosition(fid);
+        if (dir.lengthSquared() < 1e-9f)
+            return false;
+        dir.normalize();
+        return true;
+    }
     FixtureRigProps rp;
     double pan = 0.0, tilt = 0.0;
     if (!intendedCentred(fid, rp, pan, tilt))
@@ -325,6 +424,8 @@ bool FocusSession::intendedDirection(quint32 fid, QVector3D &dir) const
 
 QString FocusSession::referenceName() const
 {
+    if (m_heads.value(currentFixture()).fixed)
+        return tr("where it lands, at head height");
     const Reference &ref = (m_useSecond && m_options.second.isValid())
                            ? m_options.second : m_options.first;
     if (ref.kind == Reference::SceneAim)
@@ -382,6 +483,14 @@ void FocusSession::resolveReferences()
     const QHash<quint32, QVector3D> second = resolve(m_options.second);
     for (auto it = m_heads.begin(); it != m_heads.end(); ++it)
     {
+        if (it->fixed)
+        {
+            // Its own point: where it lands now, at head height.
+            it->first = it->landSaved = fixedLanding(it.key());
+            it->hasFirst = true;
+            it->hasSecond = false;
+            continue;
+        }
         it->hasFirst = first.contains(it.key());
         it->first = first.value(it.key());
         it->hasSecond = second.contains(it.key());
@@ -406,7 +515,7 @@ FocusSession::Offset FocusSession::savedOffset(quint32 fid) const
 bool FocusSession::hasUnsaved() const
 {
     for (auto it = m_heads.constBegin(); it != m_heads.constEnd(); ++it)
-        if (it->live != it->saved)
+        if (it->dirty())
             return true;
     return false;
 }
@@ -437,6 +546,23 @@ void FocusSession::nudge(float dPan, float dTilt)
     if (!m_heads.contains(fid) || (dPan == 0.0f && dTilt == 0.0f))
         return;
     Head &h = m_heads[fid];
+    if (h.fixed)
+    {
+        /* Move where it lands: right is toward stage left (+X), up is
+           upstage (-Y), at head height on whatever is there. */
+        MonitorProperties *props = m_doc->monitorProperties();
+        QVector3D at = h.first + QVector3D(dPan * metresPerDegree(), -dTilt * metresPerDegree(), 0.0f);
+        at = QVector3D(float(qRound(double(at.x()) * 1000.0) / 1000.0),
+                       float(qRound(double(at.y()) * 1000.0) / 1000.0), 0.0f);
+        at.setZ(props->platformHeightAt(at.x(), at.y()) + subjectHeight());
+        if (at == h.first)
+            return;
+        h.first = at;
+        applyLanding(fid, h, false);
+        rebuildWrites();
+        emit offsetChanged(fid);
+        return;
+    }
     Offset o = h.live;
     o.pan = roundOffset(qBound(-kPanOffsetLimit, o.pan + dPan, kPanOffsetLimit));
     o.tilt = roundOffset(qBound(-kTiltOffsetLimit, o.tilt + dTilt, kTiltOffsetLimit));
@@ -466,12 +592,35 @@ void FocusSession::save()
     if (!m_heads.contains(fid))
         return;
     Head &h = m_heads[fid];
-    m_undo.append({ fid, h.saved, m_checked.contains(fid) });
-    h.saved = h.live;
+    m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal });
+    if (h.fixed)
+    {
+        h.landSaved = h.first;
+        h.savedIsOriginal = false;
+        applyLanding(fid, h, false);
+    }
+    else
+    {
+        h.saved = h.live;
+        applyOffset(fid, h.live);
+    }
     m_checked.insert(fid);
-    applyOffset(fid, h.live);
     markModified();
     emit offsetChanged(fid);
+}
+
+void FocusSession::backToSaved(quint32 fid, Head &h)
+{
+    if (h.fixed)
+    {
+        h.first = h.landSaved;
+        applyLanding(fid, h, h.savedIsOriginal);
+    }
+    else
+    {
+        h.live = h.saved;
+        applyOffset(fid, h.live);
+    }
 }
 
 void FocusSession::revert()
@@ -480,10 +629,9 @@ void FocusSession::revert()
     if (!m_heads.contains(fid))
         return;
     Head &h = m_heads[fid];
-    if (h.live == h.saved)
+    if (!h.dirty())
         return;
-    h.live = h.saved;
-    applyOffset(fid, h.live);
+    backToSaved(fid, h);
     rebuildWrites();
     emit offsetChanged(fid);
 }
@@ -494,6 +642,16 @@ void FocusSession::zero()
     if (!m_heads.contains(fid))
         return;
     Head &h = m_heads[fid];
+    if (h.fixed)
+    {
+        // As it pointed when the session began.
+        if (!h.dirty())
+            return;
+        backToSaved(fid, h);
+        rebuildWrites();
+        emit offsetChanged(fid);
+        return;
+    }
     if (h.live == Offset())
         return;
     h.live = Offset();
@@ -512,9 +670,11 @@ bool FocusSession::undoSave()
     Head &h = m_heads[e.fid];
     h.saved = e.before;
     h.live = e.before;
+    h.landSaved = e.landBefore;
+    h.savedIsOriginal = e.wasOriginal;
     if (!e.wasChecked)
         m_checked.remove(e.fid);
-    applyOffset(e.fid, h.live);
+    backToSaved(e.fid, h);
     markModified();
     rebuildWrites();
     emit offsetChanged(e.fid);
@@ -527,12 +687,21 @@ void FocusSession::saveAll()
     for (quint32 fid : m_order)
     {
         Head &h = m_heads[fid];
-        if (h.live == h.saved)
+        if (!h.dirty())
             continue;
-        m_undo.append({ fid, h.saved, m_checked.contains(fid) });
-        h.saved = h.live;
+        m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal });
+        if (h.fixed)
+        {
+            h.landSaved = h.first;
+            h.savedIsOriginal = false;
+            applyLanding(fid, h, false);
+        }
+        else
+        {
+            h.saved = h.live;
+            applyOffset(fid, h.live);
+        }
         m_checked.insert(fid);
-        applyOffset(fid, h.live);
         any = true;
         emit offsetChanged(fid);
     }
@@ -545,10 +714,9 @@ void FocusSession::discardAll()
     for (quint32 fid : m_order)
     {
         Head &h = m_heads[fid];
-        if (h.live == h.saved)
+        if (!h.dirty())
             continue;
-        h.live = h.saved;
-        applyOffset(fid, h.live);
+        backToSaved(fid, h);
         emit offsetChanged(fid);
     }
     rebuildWrites();
@@ -743,7 +911,8 @@ void FocusSession::rebuildWrites()
             // rig (applyOffset()): the same DMX an Aim look would send.
             QVector3D point;
             AimSolver::Solution sol;
-            if (referencePoint(fid, point) && AimSolver::reach(m_doc, fid, point, sol))
+            if (!m_heads.value(fid).fixed            // a fixed light only lights
+                && referencePoint(fid, point) && AimSolver::reach(m_doc, fid, point, sol))
             {
                 for (const SceneValue &sv : fx->positionToValues(QLCChannel::Pan, sol.panDeg))
                     put(fx, sv.channel, sv.value);

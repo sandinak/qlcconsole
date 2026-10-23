@@ -19,6 +19,11 @@ circuits and subs.
 
 ### Added
 
+- **Focus mode for fixed lights** (board Q102): pars and fixed spots step
+  through Focus mode too. Each is lit and a person stands where it lands at
+  head height; move that spot (sticks, D-pad, arrows) to where the real
+  light lands, and its Pan and Tilt are set from it. Save, revert and undo
+  as for moving heads; it needs no target.
 - **Aim a fixed light by Pan and Tilt** (board Q100): a par or profile's
   **Aim & Mount** has **Pan** (° from downstage, seen from above) and
   **Tilt** (° down from level); the 3D beam, where the light lands and what
