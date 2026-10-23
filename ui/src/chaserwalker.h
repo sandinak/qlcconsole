@@ -73,7 +73,11 @@ protected:
 
 private:
     void buildTable();
-    void commitTime(int which, const QString &text);
+    /** Step @a step's (-1: the one shown) fade in, hold or fade out. */
+    void commitTime(int which, const QString &text, int step = -1);
+    /** Q60: what is typed in the header and not yet applied, to the step
+     *  it was typed for -- before the walker shows another. */
+    void commitPending();
     /** Step @a step's (-1: the one walked to) cue number or note. */
     void commitText(int which, const QString &text, int step = -1);
     void addStepsPicked();
@@ -97,6 +101,9 @@ private:
     QToolButton *m_downStep = nullptr;
     QToolButton *m_removeStep = nullptr;
     QLabel *m_dropHint = nullptr;
+    /** The step (and chaser) the header shows: typed edits are its. */
+    int m_shownStep = -1;
+    quint32 m_shownChaser = 0xffffffff;
     bool m_refreshing = false;
     bool m_refreshQueued = false;
 };

@@ -2198,7 +2198,8 @@ void App::initMenuBar()
 
         // Upgrade this show (WORKFLOW_DESIGN.md §3.7): the W5 converter
         // over every chaser and collection, Capture into palettes, one undo
-        // step. Only ever opened from here or the Show Tree's banner.
+        // step. Opened from here, the Show Tree's banner and the Run tab's
+        // empty state.
         QAction *upgrade = new QAction(tr("&Upgrade This Show…"), this);
         upgrade->setObjectName(QStringLiteral("fileUpgradeShow"));
         upgrade->setToolTip(tr("Make the show's cue-list chasers Show Tree cue lists, checked channel "
@@ -2214,6 +2215,8 @@ void App::initMenuBar()
             offerConsoleViewAfterUpgrade();
         });
         fileMenu->addAction(upgrade);
+        // The Run tab's empty state offers it too (Q62).
+        CueRunner::setUpgradeAction(upgrade);
     }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS

@@ -284,6 +284,67 @@ void WorkbenchChaser_Test::walkingAChasersSteps()
     m_doc->masterTimer()->stop();
 }
 
+void WorkbenchChaser_Test::typedStepTimesGoToTheirStep()
+{
+    Scene *a = scene("A");
+    Scene *b = scene("B");
+    Scene *c = scene("C");
+    Chaser *ch = new Chaser(m_doc);
+    ch->setName("Walk");
+    m_doc->addFunction(ch);
+    ch->setFadeInMode(Chaser::PerStep);
+    ch->setFadeOutMode(Chaser::PerStep);
+    ch->setDurationMode(Chaser::PerStep);
+    ch->addStep(ChaserStep(a->id(), 0, 1000, 0));
+    ch->addStep(ChaserStep(b->id(), 0, 1000, 0));
+    ch->addStep(ChaserStep(c->id(), 0, 1000, 0));
+
+    Workbench wb(m_doc);
+    wb.resize(1300, 800);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    wb.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&wb));
+    wb.load(ch->id());
+    ChaserWalker *walker = walkerOf(wb);
+    FunctionStack *stack = stackOf(wb);
+    QVERIFY(walker != nullptr);
+    auto typeIn = [](QLineEdit *e, const QString &text) {
+        e->setFocus();
+        QTRY_VERIFY(e->hasFocus());
+        e->selectAll();
+        QTest::keyClicks(e, text);
+    };
+
+    // Typed, no Return, then ▶ (a button: the field keeps the focus): the
+    // time is step 1's; the field shows step 2's own.
+    typeIn(walker->m_fadeIn, "2s");
+    walker->m_next->click();
+    QCOMPARE(stack->step(), 1);
+    QCOMPARE(ch->steps().at(0).fadeIn, 2000u);
+    QCOMPARE(ch->steps().at(1).fadeIn, 0u);
+    QCOMPARE(walker->m_fadeIn->text(), Function::speedToString(0));
+    // Typed, then step 3 picked in the table (the field still has the
+    // keyboard): step 2's.
+    typeIn(walker->m_fadeOut, "3s");
+    select(walker->stepTable(), walker->stepTable()->topLevelItem(2));
+    QCOMPARE(stack->step(), 2);
+    QCOMPARE(ch->steps().at(1).fadeOut, 3000u);
+    QCOMPARE(ch->steps().at(2).fadeOut, 0u);
+    // Tab: applied, to the step shown.
+    typeIn(walker->m_hold, "4s");
+    QTest::keyClick(walker->m_hold, Qt::Key_Tab);
+    QCOMPARE(ch->steps().at(2).hold, 4000u);
+    // Esc puts it back: nothing applied, not when walking on either.
+    typeIn(walker->m_fadeIn, "9s");
+    QTest::keyClick(walker->m_fadeIn, Qt::Key_Escape);
+    QCOMPARE(walker->m_fadeIn->text(), Function::speedToString(0));
+    walker->m_prev->click();
+    QCOMPARE(stack->step(), 1);
+    QCOMPARE(ch->steps().at(2).fadeIn, 0u);
+    QCOMPARE(ch->steps().at(1).fadeIn, 0u);
+}
+
 void WorkbenchChaser_Test::theStepHeaderEditsTheStep()
 {
     Scene *a = scene("A");

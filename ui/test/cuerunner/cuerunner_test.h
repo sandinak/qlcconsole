@@ -52,6 +52,8 @@ private slots:
     void vcPropertiesRoundTrip();
     void textColoursOnEveryLine();
     void screenshots();
+    /** Q62: no main cue list -- GO and the rest grey, why, and Upgrade. */
+    void noMainListGreysGoAndOffersUpgrade();
 
 private:
     /** Production "Dance" (current) with "Song": cue 1 (A Half), cue 2

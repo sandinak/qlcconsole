@@ -56,7 +56,8 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks
 ### Type the times
 
 To enter a time, click in the box, select what's there (⌘A), type the
-number and press **Return**.
+number and press **Return**. Tab, or clicking the next cue, keeps it too;
+**Esc** puts the old time back.
 
 3. Click **1.0.0 Pose**, then in **Fade in** type **3** and press
    **Return**.
@@ -106,7 +107,7 @@ only play when you run the cues with **GO**.
 
 | Problem | Try |
 |---|---|
-| The box went back to 0.00 | Press **Return** after typing, before you click anywhere else. |
+| The box went back to its old time | **Esc** puts the old time back. Type it again, then press **Return** or click the next cue. |
 | Nothing fades when you click cues | That's expected: fades only play with **GO** in the Run tab. |
 | GO starts in the middle | Press **Stop**; the next **GO** starts from 1.0.0. |
 | The Solo never follows on its own | Check that the Scream's **Hold** is 2.00 s, not ∞. |

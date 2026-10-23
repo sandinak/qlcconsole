@@ -29,6 +29,8 @@ class CueRunnerHandle;
 class QProgressBar;
 class QTreeWidget;
 class QToolButton;
+class QPushButton;
+class QAction;
 class QComboBox;
 class QLabel;
 class QTimer;
@@ -101,6 +103,15 @@ public:
      *  "upcoming0".. ): the cue's text colour made readable, else the
      *  theme's. For the tests. */
     QColor textColour(const QString &part) const;
+
+    /** Q62: the Run tab with no main cue list says so and offers to
+     *  upgrade the show: its button triggers @a action (File ▸ Upgrade
+     *  This Show…, set by the App; a test's own). Null: no button. */
+    static void setUpgradeAction(QAction *action);
+    static QAction *upgradeAction();
+    /** The Run tab's empty state (no main cue list) shown now. */
+    bool isEmptyStateShown() const;
+    QPushButton *upgradeButton() const { return m_upgrade; }
 
     static QString sizeToString(Size size);
     static Size stringToSize(const QString &str);
@@ -248,6 +259,9 @@ private:
     QToolButton *m_back = nullptr;
     QToolButton *m_pause = nullptr;
     QToolButton *m_stop = nullptr;
+    /** Q62: no main cue list -- what that means, and Upgrade (Run tab). */
+    QWidget *m_empty = nullptr;
+    QPushButton *m_upgrade = nullptr;
 
     // The VC sizes.
     QWidget *m_info = nullptr;

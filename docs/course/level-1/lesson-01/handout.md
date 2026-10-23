@@ -193,7 +193,7 @@ would turn that off.
    layer of the chorus itself rather than a tracked one.
 2. **Type it.** Open `lesson-1-1-start.qlcc` again and build the same
    three cues from the **Command** line at the bottom (click it, type a
-   line, press Enter):
+   line, press Enter; the **?** button beside it shows what you can type):
 
    ```
    production "Spring Show"

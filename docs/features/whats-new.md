@@ -118,6 +118,12 @@ their house lights, relays and subs.
 - **Tracking as badges.** A cue row counts what it sets (● 2), releases
   (○ 1) and what tracks in (⤳ 5); a grey row shows the cue it came from.
   Hover for the details.
+- **Typed times are kept.** A fade or hold typed on a cue's page is
+  applied when you leave the field (Tab, or a click on another cue), not
+  only on Return; **Esc** puts it back. See [The tab](show-tree.md#the-tab).
+- **A quieter command line.** Its syntax lines are folded away: the **?**
+  button beside it, **?** typed first, or **F1** in the line shows them.
+  See [The command line](show-tree.md#the-command-line).
 - **Notes open up while you type**, in the cue page and in a chaser's
   steps, up to six lines; **Return** applies, **Shift+Return** starts a
   new line.
@@ -137,6 +143,8 @@ their house lights, relays and subs.
   into palettes. **Upgrade** does the ticked parts as one undo step;
   **Restore original…** puts a chaser back. Nothing happens on its own.
   After an upgrade, a Classic QLC+ show is offered the qlcconsole view.
+  The **Run tab** of a show with no cue list says so and offers the same
+  **Upgrade This Show…**; its GO is grey until there is something to play.
   See [Upgrade this show](show-tree.md#upgrade-this-show) and
   [An old show: convert it](show-tree.md#an-old-show-convert-it).
 - **Import chaser… shows a sheet**: whether the cue list plays the same

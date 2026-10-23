@@ -30,6 +30,9 @@
 #include <QToolTip>
 #include <QTextLayout>
 #include <QPainter>
+#include <QPointer>
+#include <QPushButton>
+#include <QAction>
 #include <QLabel>
 #include <QStyle>
 #include <QTimer>
@@ -56,6 +59,23 @@ QString seconds(uint ms)
     return QStringLiteral("%1s").arg(ms / 1000.0);
 }
 } // namespace
+
+static QPointer<QAction> s_upgradeAction;
+
+void CueRunner::setUpgradeAction(QAction *action)
+{
+    s_upgradeAction = action;
+}
+
+QAction *CueRunner::upgradeAction()
+{
+    return s_upgradeAction.data();
+}
+
+bool CueRunner::isEmptyStateShown() const
+{
+    return m_empty != nullptr && !m_empty->isHidden();
+}
 
 CueRunner::CueRunner(Doc *doc, Size size, QWidget *parent)
     : QWidget(parent)
@@ -418,6 +438,34 @@ void CueRunner::buildFullLayout()
     m_tree->setFont(big);
     v->addWidget(m_tree, 1);
 
+    // Q62: no main cue list (a 4.x show): what that means, and the way on.
+    m_empty = new QWidget(this);
+    m_empty->setObjectName(QStringLiteral("crEmpty"));
+    {
+        QVBoxLayout *ev = new QVBoxLayout(m_empty);
+        ev->addStretch(1);
+        QLabel *why = new QLabel(tr("This show has no cue list yet. Upgrade turns its chasers into one."),
+                                 m_empty);
+        why->setObjectName(QStringLiteral("crEmptyText"));
+        why->setFont(big);
+        why->setAlignment(Qt::AlignCenter);
+        why->setWordWrap(true);
+        ev->addWidget(why);
+        m_upgrade = new QPushButton(tr("Upgrade This Show…"), m_empty);
+        m_upgrade->setObjectName(QStringLiteral("crUpgrade"));
+        m_upgrade->setFont(big);
+        m_upgrade->setToolTip(tr("File ▸ Upgrade This Show…: the show's cue-list chasers become Show Tree "
+                                 "cue lists, checked channel for channel. One undo step."));
+        connect(m_upgrade, &QPushButton::clicked, this, []() {
+            if (QAction *a = CueRunner::upgradeAction())
+                a->trigger();
+        });
+        ev->addWidget(m_upgrade, 0, Qt::AlignHCenter);
+        ev->addStretch(2);
+    }
+    m_empty->hide();
+    v->addWidget(m_empty, 1);
+
     m_now = new QLabel(this);
     m_now->setObjectName(QStringLiteral("crNow"));
     m_now->setFont(hf);
@@ -437,7 +485,10 @@ void CueRunner::buildFullLayout()
     v->addWidget(m_subNext);
 
     makeButtons();
-    m_go->setStyleSheet(QStringLiteral("QToolButton { background: #2e7d32; color: white; }"));
+    // Green only when GO has something to play (Q62).
+    m_go->setStyleSheet(QStringLiteral("QToolButton { background: #2e7d32; color: white; }"
+                                       "QToolButton:disabled { background: palette(mid); "
+                                       "color: palette(midlight); }"));
     for (QToolButton *b : { m_go, m_subGo })
     {
         b->setFont(huge);
@@ -1087,6 +1138,17 @@ void CueRunner::updateStates()
             head = p != nullptr && l != nullptr ? QStringLiteral("%1 · %2").arg(p->name, l->name) : ch->name();
         }
         m_header->setText(head);
+        // The Run tab with no main cue list: why, and Upgrade.
+        if (m_empty != nullptr)
+        {
+            const bool empty = ch == nullptr && m_follow == invalidId();
+            if (empty != !m_empty->isHidden())
+            {
+                m_empty->setVisible(empty);
+                m_tree->setVisible(!empty);
+            }
+            m_upgrade->setVisible(upgradeAction() != nullptr);
+        }
     }
     // LIVE / DESIGN, the timecode.
     {
