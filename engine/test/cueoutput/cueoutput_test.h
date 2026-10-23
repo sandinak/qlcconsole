@@ -26,6 +26,9 @@ private slots:
     void unlitFixtureReportsDark();
     /** A Collection unions its member scenes, later member winning a shared channel. */
     void collectionUnionsMembersLastWins();
+    /** A fixture with no dimmer channel shows the look's Dimmer as its colour
+     *  scaled (as Scene::write does); one with a dimmer keeps its colour whole. */
+    void aDimmerlessFixturesColourIsScaledByTheLooksDimmer();
 
 private:
     Doc *m_doc = nullptr;

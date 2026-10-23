@@ -30,6 +30,7 @@
 #include "powerdistribution.h"
 
 class QTreeWidgetItem;
+class QKeyEvent;
 class QTreeWidget;
 class Scene;
 class FunctionsTreeWidget;
@@ -185,6 +186,9 @@ public:
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
+    /** Esc with the focus in the navigator: the Workbench backs out (a
+     *  palette opened from the list goes back to what was showing). */
+    void keyPressEvent(QKeyEvent *ev) override;
 
 private slots:
     /** The navigator's selection changed: load what is selected. */
@@ -327,6 +331,10 @@ private:
     /** Delete each function after confirmation. Collects by id first, since the
      *  first deletion rebuilds the outline and invalidates every item pointer. */
     void deleteFunctions(const QList<quint32> &fids);
+    /** Delete $fids (no question) as one step on the shared history: Undo
+     *  brings them back with their ids, in every collection, chaser, show,
+     *  VC button and cue list that had them. */
+    void deleteFunctionsUndoably(const QList<quint32> &fids);
 
     /** Delete the user folder $item of $tree. Its functions/palettes and
      *  sub-folders move up into the parent folder — nothing is deleted. A

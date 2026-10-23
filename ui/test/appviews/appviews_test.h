@@ -65,6 +65,11 @@ private slots:
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
      *  production run": a show's definitions come from this computer. */
     void aShowsDefinitionsComeFromTheShowCache();
+    /** Fixtures whose definitions are missing: Save asks first, naming the
+     *  models (Cancel saves nothing); the footer's Fetch Definitions gives
+     *  each back its definition once it is on this computer -- where the
+     *  mode and channel count match -- and says which still have none. */
+    void missingDefinitionsAreAskedAboutAndFetchedBack();
 
     /** "set the h,w,d by the configured measurement type": one Settings
      *  entry, kept for the person, read by the fixture editor too. */

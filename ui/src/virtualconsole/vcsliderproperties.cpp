@@ -39,6 +39,7 @@
 #include "vcslider.h"
 #include "fixture.h"
 #include "doc.h"
+#include "itemicons.h"
 
 #define KColumnName  0
 #define KColumnType  1
@@ -458,7 +459,7 @@ void VCSliderProperties::levelUpdateFixtureNode(quint32 id)
     }
 
     item->setText(KColumnName, fxi->name());
-    item->setIcon(KColumnName, fxi->getIconFromType());
+    item->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
     item->setText(KColumnType, fxi->typeString());
 
     levelUpdateChannels(item, fxi);

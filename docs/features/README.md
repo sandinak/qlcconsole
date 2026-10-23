@@ -19,11 +19,13 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 
 | Guide | What it covers |
 |---|---|
-| [Getting started](getting-started.md) | Starting the app, show files and autosave, finding your way around, and the ways a show comes together — designing first, patch first, at a venue, a row of like structures |
+| [Getting started](getting-started.md) | Starting the app, show files and autosave, finding your way around (the tabs and the Classic QLC+ / qlcconsole / Everything views), importing (another show, an ETC Eos show), and the ways a show comes together — designing first, patch first, at a venue, a row of like structures |
 | [What's new](whats-new.md) | The latest changes |
-| [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, locks; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
+| [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, stage looks, locks; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
 | [Build Tab](build.md) | Making the show's palettes, effects, scenes and collections: the navigator by section, the Workbench (a scene or a collection as layers, + EFX / + RGB Matrix), looks out of reusable palettes instead of raw DMX, the inline look editor and effect browser, scene transitions, WLED effects |
-| [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog |
+| [Show Tree](show-tree.md) | Writing the show as one tree of cue lists, cues and layers: tracking, cue numbers and reordering, move in black, looks for busking, the Run tab and the cue runner |
+| [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog, output rules (relays, house and work lights), stage looks and icons |
+| [Definition updates](definition-updates.md) | Bringing old fixture definitions up to date, in your fixture folder and inside saved shows, with a way back |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Layers panel, Studio groups, Blind/Park/Highlight, and more |
 | [Shows (the timeline)](shows.md) | Tracks, items, sequences and cues, the show end, track flags, following timecode |
@@ -69,8 +71,10 @@ anyone knows which node a fixture will end up on:
    clashing, unrouted or missing; when it says **Not ready**, click it and
    fix what it lists (see
    [Other improvements](other-improvements.md#readiness-footer)).
-9. Run the show from Virtual Console / Simple Desk / Show Manager, same as
-   stock QLC+.
+9. **Put it in order** in the **Show Tree** — cue lists, cues and the
+   layers in them — and run it from the **Run** tab, the Virtual Console
+   or show control (see [Show Tree](show-tree.md)). Virtual Console,
+   Simple Desk and Show Manager still work as in stock QLC+.
 
 If you already know the patch, the stock order still works: patch in
 Connections first, add fixtures at their addresses, then build the rig

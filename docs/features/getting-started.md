@@ -5,7 +5,7 @@ comes together — from an empty workspace, from a patch you already have, and
 from a show file you're bringing to a venue. Each step links to the guide
 with the detail.
 
-Press **F1** anywhere for the help on what you're looking at; **Help →
+Press **F1** anywhere for the help on what you're looking at; **Help ▸
 qlcconsole Help** opens this guide set. The numbered pictures are shrunk to fit the
 page — click one to see it full size.
 
@@ -34,7 +34,7 @@ not opened — and saving then can write an empty workspace over it.
 - **.qxw** (stock QLC+) opens fine; save it as .qlcc to keep everything this
   fork adds (the rig, palettes, looks, power profiles, layers…).
 - **Autosave** writes a recovery copy every 5 minutes while there are
-  unsaved changes (**Settings → Autosave** sets it on or off and how
+  unsaved changes (**Settings ▸ General ▸ Autosave** sets it on or off and how
   often). If the app stops without saving,
   the next launch offers to **recover the unsaved work**. A clean quit
   removes the recovery copy.
@@ -43,7 +43,7 @@ not opened — and saving then can write an empty workspace over it.
   complete on another computer; where that computer's copy differs, the
   show keeps its own until you choose. See
   [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
-  **File → Collect for Transfer…** writes the show and those files into one
+  **File ▸ Collect for Transfer…** writes the show and those files into one
   folder.
 - This computer also keeps a copy of every non-shipped definition a show
   uses — the **show cache** — for shows saved as .qxw. See
@@ -67,12 +67,12 @@ not opened — and saving then can write an empty workspace over it.
 4. **The footer** — is the show ready to run, how busy the output is, Design
    or Operate (below).
 
-**Settings → Show Controls** can put the show controls in the status bar
+**Settings ▸ General ▸ Show Controls** can put the show controls in the status bar
 instead, at its right end beside Ready and the other show chips: the top
 is then the tab's own tools alone. It changes at once, no restart, and the
 shortcuts are the same either way (⌘⇧Esc Stop all, ⌘F12 Design / Operate).
 There, they are icons only (their tooltips name them) unless
-**View → Toolbar Style** is **Text Only**, and the footer's own DESIGN and
+**View ▸ Toolbar Style** is **Text Only**, and the footer's own DESIGN and
 BLACKOUT chips step aside for them. A tab moved to a window of its own
 keeps its tools at its own top.
 
@@ -83,6 +83,7 @@ The tabs follow the order a show is built in:
 | **Connections** | How the console is wired: protocols, interfaces, the universes they carry, what each universe is sending | [Connections & patch](other-improvements.md#connections--patch) |
 | **Fixtures** | The fixtures in the show, the inventory, groups and their head layouts, patching | [Fixture Manager](fixture-manager.md) |
 | **Lighting Studio** | The physical rig: structures, where every fixture hangs, the network, the 3D Rig Overview | [Lighting Studio](lighting-studio.md) |
+| **Functions** | Every function by type, as in QLC+ (Classic QLC+ and Everything views only) | [Build ▸ Scenes ▸ Classic](build.md#coming-from-the-functions-window) |
 | **Build** | Scenes built from looks, looks built from palettes and effects | [Build Tab](build.md) |
 | **Show Tree** | A show as one tree: cue lists, cues and the layers in them; the scenes and chaser are made for you | [Show Tree](show-tree.md) |
 | **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
@@ -94,10 +95,10 @@ Which of these you see depends on the view (below).
 
 ### Views
 
-**View → Workspace** picks which tabs the main window shows:
+**View ▸ Workspace** picks which tabs the main window shows:
 
 - **qlcconsole** — Connections, Fixtures, Lighting Studio, Build, Show
-  Tree, Shows, Virtual Console and Run. Functions has no tab: **Window →
+  Tree, Shows, Virtual Console and Run. Functions has no tab: **Window ▸
   Functions** opens **Build ▸ Scenes ▸ Classic**.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
@@ -109,23 +110,24 @@ nothing on a hidden tab stops working. The view is saved with the show: it
 marks the show changed, but it isn't an undo step. QLC+ ignores it when it
 opens the file. A show saved without a view opens in **Classic QLC+** if
 it is an old QLC+ show with no Show Tree, and in **qlcconsole** otherwise.
-A new show, and the first launch, start in **qlcconsole**. **Settings**
-shows the open show's view and can change it.
+A new show, and the first launch, start in **qlcconsole**. **Settings ▸
+General ▸ Tab Bar** shows the open show's view and can change it.
 
 Choosing a tab the view hides (from **Window** or a link such as *Open in
 Build*) switches to **Everything**. A line above the tabs says so and has
 a button to go back. A tab broken out into its own window stays there
 when the view changes. If the new view hides that tab, closing its window
-puts it away instead of back on the tab bar. After **File → Upgrade This
+puts it away instead of back on the tab bar. After **File ▸ Upgrade This
 Show…** gives a Classic QLC+ show a Show Tree, a line above the tabs
 offers the **qlcconsole** view, once.
 
-**Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘0). Shift-click
+**Window** lists every tab with its shortcut (⇧⌘1 … ⇧⌘0). Shift-click
 a tab to break it out into its own window; Window brings it back.
 **Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
-scripts, audio, video) is in Build now: **Window → Functions** (⇧⌘4)
-opens **Build ▸ Scenes ▸ Classic**, every function by type, each one
-edited in the Workbench. **View → Rig Overview** (⇧⌘R) opens the whole rig
+scripts, audio, video) is in Build too: **Window ▸ Functions** (⇧⌘4)
+opens Functions in a view that shows it as a tab, and **Build ▸ Scenes ▸
+Classic** in the qlcconsole view — every function by type, each one
+edited in the Workbench. **View ▸ Rig Overview** (⇧⌘R) opens the whole rig
 in 3D.
 
 **Design and Operate.** In **Design** mode (the default) you build: the
@@ -241,17 +243,38 @@ hired rig with a patch sheet):
    ([A fixture's maximum draw](other-improvements.md#a-fixtures-maximum-draw))
 6. Save under a new name for the venue.
 
+### Importing into a show
+
+**File ▸ Import** brings things from another file into the show that's
+open, without replacing it (**Open** replaces it). Pick what kind of file
+it is; each entry's file dialog shows only that kind:
+
+- **From a show file**
+  - **QLC+ / qlcconsole Workspace (.qxw, .qlcc)…** — pick the fixtures,
+    groups, functions and palettes to bring in from another show. Clashing
+    IDs and addresses are sorted out for you.
+  - **ETC Eos Show (ASCII .asc)…** — see
+    [Importing an Eos show](#importing-an-eos-show) below.
+- **Fixtures &amp; patch**
+  - **QLC+ Fixtures List (.qxfl)…** — the fixtures and groups of a list
+    saved with **Fixtures ▸ Export fixtures** (**Fixtures ▸ Import
+    fixtures** does the same).
+- **Any Supported File…** — one dialog for all of them; the importer is
+  picked by the file's extension, as the single Import used to do.
+
 ### Importing an Eos show
 
 If the venue's rig lives on an ETC Eos-family desk (Element, Ion, Gio),
 bring its show across instead of rebuilding it. On the Eos: **File ▸
-Export ▸ USITT ASCII**. Here: **File ▸ Import** and pick the `.asc`. The
-wizard goes through three pages:
+Export ▸ USITT ASCII**. Here: **File ▸ Import ▸ ETC Eos Show (ASCII
+.asc)…** and pick the `.asc`. The wizard goes through three pages:
 
 1. **The show's files.** The `.asc`, plus any magic sheet XML exports
    (their channels land on the 2D map, a layer per sheet).
 2. **Fixture types.** Each Eos personality and the fixture definition to
-   patch it as. Your choices can be remembered for the next import.
+   patch it as. Your choices can be remembered for the next import, and
+   a tick (on unless you take it off) brings the cue lists into the Show
+   Tree.
 3. **Special circuits.** Channels that aren't stage lights, read from
    their Eos labels: **Relay (power)**, **House**, **Work**, **Backstage /
    hall** (hall lights, backstage blues, stairs, exits) or **Normal**. The

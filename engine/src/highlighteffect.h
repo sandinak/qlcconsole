@@ -3,25 +3,24 @@
   highlighteffect.h
 
   Forces selected fixtures to full-bright white so the operator can
-  visually identify them in the rig. Implemented as a DMXSource that
-  writes on every MasterTimer tick with forceLTP, overriding all
-  running functions for the duration.
+  visually identify them in the rig, over all running functions for the
+  duration: an OutputLayer at Universe::Highlight, with Override. Only Park
+  is above it; the Grand Master and Blackout still apply (see
+  Universe::FaderPriority for the whole model).
 
-  Licensed under the Apache License, Version 2.0 (the "License");
 */
 
 #ifndef HIGHLIGHTEFFECT_H
 #define HIGHLIGHTEFFECT_H
 
-#include <QMutex>
 #include <QObject>
 #include <QList>
 
-#include "dmxsource.h"
+#include "outputlayer.h"
 
 class Doc;
 
-class HighlightEffect final : public QObject, public DMXSource
+class HighlightEffect final : public QObject
 {
     Q_OBJECT
 
@@ -33,21 +32,18 @@ public:
      *  from the UI thread at any time. Passing an empty list stops writing. */
     void setFixtures(const QList<quint32>& fixtureIds);
 
-    /** DMXSource override — called every master timer tick. */
-    void writeDMX(MasterTimer *timer, QList<Universe*> universes) override;
-
 private:
     struct FixEntry {
+        quint32 fixtureId;
         int universeId;
-        QList<QPair<int, uchar>> writes; // (universe-local address, value)
+        QList<QPair<int, uchar>> writes; // (channel index, value)
     };
 
     QList<FixEntry> buildEntries(const QList<quint32>& fixtureIds) const;
 
     Doc *m_doc;
-    QList<FixEntry> m_entries;
-    QMutex m_mutex;
-    bool m_registered = false;
+    /** The Highlight fader on each universe */
+    OutputLayer m_layer;
 };
 
 #endif // HIGHLIGHTEFFECT_H

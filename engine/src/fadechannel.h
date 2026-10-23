@@ -54,8 +54,12 @@ public:
         AutoRemove  = (1 << 9),     /** Automatically remove the channel once target is reached */
         CrossFade   = (1 << 10),    /** Channel subject to crossfade */
         ForceLTP    = (1 << 11),    /** Force LTP for flashing scenes */
-        EditOverride = (1 << 12)    /** With Override: an edit preview's scene -- HTP between
+        EditOverride = (1 << 12),   /** With Override: an edit preview's scene -- HTP between
                                         such channels in a frame (Universe::writeOverride) */
+        Release     = (1 << 13),    /** Let go of by a fader that plays on (GenericFader::
+                                        release): fades out like a stop, then goes */
+        PastGM      = (1 << 14)     /** With Override: a parked channel, sent past the
+                                        Grand Master (Universe::writePastGM) */
     };
 
     /** Create a new FadeChannel with empty/invalid values */

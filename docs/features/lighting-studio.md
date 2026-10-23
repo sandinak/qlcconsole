@@ -473,9 +473,11 @@ somewhere else.
 
 A definition's type says too little about what a fixture looks like: a
 *Color Changer* can be a PAR, a staff or a cyc. **Stage look** says it. Set
-it in Fixture Properties (one fixture, or several at once -- a row they
+it in Fixture Properties (one fixture, or several at once — a row they
 differ on reads "mixed"), or right-click fixtures or groups in the Fixture
-Manager → **Stage Look ▸**.
+Manager → **Stage Look ▸** (offered in Operate too: a look changes only the
+picture). The fixture's icon follows its look in every fixture list
+([Icons](fixture-manager.md#icons)).
 
 **Auto**, the default, draws the fixture as its definition's type always
 has; the picker names the look that type is closest to, as *Auto (LED PAR /
@@ -492,10 +494,10 @@ The other looks, in four sections:
   hurricane lantern, or the one by a door) and **Staff** (a pole with LED
   strip wound round it from top to bottom).
 
-On the plot each look has its own outline -- a followspot is a long barrel
+On the plot each look has its own outline — a followspot is a long barrel
 with its lens at the front, a bar wash a wide strip, a
 square wash a square with a square lens, a round wash a round base, a spot
-a chamfered one -- and its heads sit where its light comes out, square or
+a chamfered one — and its heads sit where its light comes out, square or
 round to match. Marks over the lens say the rest: a spot's gobo, an LED
 PAR's ring of LEDs, a Fresnel's rings, a strobe's two cells. The lens still
 shows the fixture's live colour and level. A definition with no dimensions
@@ -506,7 +508,7 @@ glass and base from the front or side (its base, from above). It throws no
 beam: its glass glows in its colour and level and the glow spreads round
 it, and in the studio it lights what is near it, as the LED lanterns do
 ([Lanterns](#lanterns)). A **staff** is a pole on a foot from the front or
-side, its strip in diagonal turns down its length -- the turns show the
+side, its strip in diagonal turns down its length — the turns show the
 staff's live colour, the pole between them is dark. From above it is a
 small round dot.
 
@@ -517,23 +519,23 @@ type.
 A look changes only the picture: how the fixture is driven, its beam and
 its pool are its definition's. A moving-head look draws its yoke and aims
 by pan and tilt as a moving head does; the fixed looks and the practicals
-do not -- give a
+do not — give a
 moving head that is used as a followspot *Moving head spot*, not
-*Followspot*, to keep its aim on the plot. Setting a look is one Ctrl+Z on
+*Followspot*, to keep its aim on the plot. Setting a look is one ⌘Z on
 the plot.
 
 **Showing Auto fixtures as their closest look.** On the plot's **Show**
 menu, **Show Auto fixtures as their closest stage look** shows every
-fixture left on Auto as the look its picker names -- a colour changer as an
+fixture left on Auto as the look its picker names — a colour changer as an
 LED PAR, a moving head with a gobo as a moving head spot, a dimmer channel
-as an ellipsoidal -- exactly as if that look were set: its icon in the
+as an ellipsoidal — exactly as if that look were set: its icon in the
 fixture lists (the Fixture Manager, Build's groups and fixtures, the Show
 Tree's Library and layers), and its shape, proportions and lens marks on
 the plot and in the studio. A group whose fixtures all come out as one look
 shows that look's icon with the group badge. A look you set still wins, and
 the output-rules badge still shows. Turning it off draws them as before. It belongs to the show and is
 saved with it (only when on), so the plot looks the same on every computer;
-a new show starts with it off. Turning it on or off is one Ctrl+Z.
+a new show starts with it off. Turning it on or off is one ⌘Z.
 
 The look is saved in the show only when it is not Auto, so a show without
 looks saves exactly as before, and QLC+ opens a show with looks (it skips
@@ -596,14 +598,14 @@ of, and doesn't override, the real locks above.
   your units — feet-and-inches, or metres (see below); colours are one swatch
   button showing the colour and its hex value, with **Reset**.
 - **Units are yours, not the show's.** The grid, rulers, H/V/Z readouts,
-  dimension labels and every length field use **Settings → Units**:
+  dimension labels and every length field use **Settings → General → Units**:
   **metres** for mm, cm or m, **feet-and-inches** for inches or feet (finer
   units would only crowd a stage grid). The Grid button's menu shows which,
   and says where to change it. A show opens in your units whatever it was
   saved in — the stage stays the same size, converted exactly — and is
   saved in them (whole numbers for older versions, the exact size beside
   them). The first show you ever open decides for you, once, if you had
-  never chosen: one saved in feet sets **Settings → Units** to feet.
+  never chosen: one saved in feet sets **Settings → General → Units** to feet.
 - **Select All Similar** — on a fixture (plot or list), every fixture of the
   same model and mode; on a fixture group's Layers row, the groups of the
   same fixtures laid out the same way.
@@ -843,7 +845,9 @@ Menu** on the controller. Choose:
 
 It is a Design-mode tool: in Perform it refuses, and switching to Perform
 ends it (unsaved nudges go back). If functions are running it says so — it
-takes over only the heads it is focusing.
+takes over only the heads it is focusing: over whatever is running on them
+(only a parked fixture stays parked), with the Grand Master and Blackout
+still applying.
 
 Each head in turn is aimed at its reference, lit white with its shutter
 open, and ringed on the plot and in the Rig Overview (also when you open the

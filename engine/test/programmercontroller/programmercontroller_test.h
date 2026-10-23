@@ -74,6 +74,26 @@ private slots:
      *  real FixtureGroup id (the "Custom"/no-group bucket shape). */
     void saveBucketAsGroupSceneRequiresARealFixtureGroup();
 
+    /** Park records where a fixture sits; the park is saved with the show,
+     *  a new show drops it, and loading the show parks it again. */
+    void aParkIsSavedWithTheShow();
+    /** A parked fixture holds its output with nothing running and against a
+     *  cue that sets its channels; unparked, it follows the cue. */
+    void aParkedFixtureHoldsItsOutput();
+    /** Highlight drives the selected fixtures to full over a running cue,
+     *  and turning it off gives them back to the cue. */
+    void highlightDrivesTheSelectionToFull();
+    /** Highlight wins over a running cue where the cue's value is higher
+     *  (cyan to 0), and Park wins over Highlight. */
+    void highlightBeatsARunningCue();
+    /** A Flash shows over a running cue -- up on a dim fixture, down on a
+     *  bright one -- and the cue has it back when it ends (B1). */
+    void aFlashShowsOverARunningCue();
+    /** Control Map learn: the next press (not a release) binds a control to
+     *  a function; each press then toggles it; a second learn on the same
+     *  control replaces the binding; clear removes it. */
+    void aLearnedControlTogglesItsFunction();
+
 private:
     Doc *m_doc;
     QLCFixtureDef *m_scannerDef;   //!< Futurelight DJScan250: Pan/Tilt/Colour-wheel/Gobo/GoboRotation/Shutter

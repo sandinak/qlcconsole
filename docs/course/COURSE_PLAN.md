@@ -5,10 +5,13 @@ nav_order: 2
 
 # Show Tree course — plan for review
 
-*Status (2026-10-20): Level 0 and Level 1 are written — 0.1, 0.2, 1.1–1.5
+*Status (2026-10-22): Level 0 and Level 1 are written — 0.1, 0.2, 1.1–1.5
 and the Level 1 check — each with teacher guide, handout, slides outline,
-exit ticket and at-home page, every app step checked on qlcconsole 0.2.0
-by the course test. Levels 2 and 3 are outlines. Volunteers start at
+exit ticket and at-home page, every app step checked by the course test,
+now on the 0.2.2 release candidate. Level 2 is an outline. Level 3 has
+three short lessons written for 0.2.2's features — 3.3 stage looks, 3.7
+house lights, work lights and power, 3.10 coming from Eos — checked by the
+course test without pictures yet; the rest of Level 3 is an outline. Volunteers start at
 [For volunteers](VOLUNTEER.md); new lessons start from `_template/`.*
 
 The Show Tree is the main tool for this year's show. This course takes a
@@ -76,7 +79,7 @@ with GO.*
 | 1.2 | **Colour and intensity tell the mood** *(written)* | Warm vs cool; saturated vs pale; bright isn't always better. Contrast between sections. The director's note: the verse is too cosy. | The verse's StepTops in place: ⋯ → **Set to** Lavender, ⋯ → **Level…** 40, **Make reusable**; Undo / Redo. A new cue 1.0.3 *Scream*: TrussW-RGB and Lanterns with **cue looks** Red, Full. Extension: **Colour…**. |
 | 1.3 | **Direction: aim the light** *(written)* | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | AT-W-ALL Warm White, Full in the verse — it lights the front row as it is — then **Aim Center** (Library → Targets). A **Block** cue 1.0.4 *Solo*: AT-Spots White, Full light the floor (the shutter opens by itself; no position yet), then **Aim Soloist DS**. |
 | 1.4 | **Timing: fades and holds** *(written)* | A snap is a hit; a slow fade is a breath. Cue timing follows the music. | Fade in / Fade out / Hold typed on the cue page: Pose 3 s, Verse 2 s, Chorus a snap, Scream hold 2 s and fade out 3 s (the Solo, fade in 3 s, follows by itself). Played in the Run tab. |
-| 1.5 | **Calling and running the show** *(written)* | Standby / GO. The stage manager calls; the board op runs. | **Operate** (LIVE); Run tab: GO, Back, LOAD a cue (STANDBY), double-click to jump, Stop; Design again. Students call each other's cues. **Level check** (its own page, with the rubric): light a 30-second clip (3–5 cues) and run it. |
+| 1.5 | **Calling and running the show** *(written)* | Standby / GO. The stage manager calls; the board op runs. | **Operate** (LIVE); Run tab: GO, Back, LOAD a cue (STANDBY), double-click to jump, Stop; Design again. Students call each other's cues. Extension: a late cue as a **point cue** (1.0.2.5), dragged to a new place and renumbered for it; **Renumber this level…**. **Level check** (its own page, with the rubric): light a 30-second clip (3–5 cues) and run it. |
 
 ### Level 2 — Intermediate (7 lessons)
 
@@ -94,7 +97,7 @@ on lines, and busking looks for the unexpected.*
 | 2.6 | **Busking with Looks** | When the band vamps, or the soloist goes long. | The Looks section, **Make VC page**, firing looks from Virtual Console buttons over a running list. |
 | 2.7 | **Hits inside a cue** | Hits, stomps and buttons in a chorus. | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
 
-### Level 3 — Advanced (7 lessons)
+### Level 3 — Advanced (10 lessons)
 
 *Outcome: students can set up the real rig, fix it when it breaks, and run
 the show. Patching and everything else that touches real hardware lives
@@ -104,11 +107,14 @@ here.*
 |---|---|---|
 | 3.1 | **DMX, universes and patching** | Addresses and channels; universes; Art-Net and sACN; the Patch dialog; Connections. *(First lesson on the real network, with Branson.)* |
 | 3.2 | **Fixtures and definitions** | The Fixture Manager; definitions and modes; the Fixture Editor; groups by head type (a pixel box's RGB and white heads; colour rings). Shows that carry their own definitions. |
-| 3.3 | **Building the rig** | Lighting Studio: structures, mounting fixtures, layers, stage targets and lines; why the rig must match the room for aims to work. |
-| 3.4 | **Show control** | QLab (or a sound op) firing cues by number; OSC / MIDI Show Control; timecode. |
-| 3.5 | **Focus and calibration** | Test orientation, Locate, the Step Test Pattern; aiming the real movers at the real targets. |
-| 3.6 | **Running a real show** | Operate mode, Show-mode Lock, the panic button, the preshow checklist, power. |
-| 3.7 | **Troubleshooting** | The Not ready list, a light that won't come on, a cue that looks wrong, Undo and backups. **Capstone** (below). |
+| 3.3 | **Reading the plot: stage looks** *(written)* | A plot and its symbol key. The Lighting Studio plot's **Show ▸ Show Auto fixtures as their closest stage look**; **Stage Look ▸** to correct the guesses (AT-W-ALL: *Moving head round wash*); the Lanterns as **practicals**. A look is only the picture. |
+| 3.4 | **Building the rig** | Lighting Studio: structures, mounting fixtures, layers, stage targets and lines; why the rig must match the room for aims to work. |
+| 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC / MIDI Show Control; timecode. |
+| 3.6 | **Focus and calibration** | Test orientation, Locate, the Step Test Pattern; aiming the real movers at the real targets. |
+| 3.7 | **House lights, work lights and power** *(written)* | Three generic dimmers (House Lights, Work Lights, Stage Power); **Output Rules…**: Ignore Blackout, Ignore the Grand Master, Switch (relay), On when not in use; Settings ▸ Advanced ▸ Output; a preshow list typed; Blackout, the GM slider and Blind. Part 3 on the theatre's own house and work lights. |
+| 3.8 | **Running a real show** | Operate mode, Show-mode Lock, the panic button, the preshow checklist, power. |
+| 3.9 | **Troubleshooting** | The Not ready list, a light that won't come on, a cue that looks wrong, Undo and backups. **Capstone** (below). |
+| 3.10 | **Coming from Eos** *(written, optional)* | For students from an Eos programme, any time after 3.7: **File ▸ Import ▸ ETC Eos Show** with `shows/classroom-eos.asc`; the **Special circuits** page (one wrong guess to fix); where channels, groups, cue lists and subs land. |
 
 ---
 
@@ -363,6 +369,22 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 1.524 / 2.438 m, with its spot and washes on different shelves). The bare AT-W-ALL still lights the front row
 (Lesson 1.3's first picture), and the aims still land.
 
+
+### Found writing Level 3's lessons (on the 0.2.2 release candidate)
+
+12. **A Grand Master move briefly drops an "On when not in use" relay.**
+    In the course test, Stage Power (Switch, Ignore the Grand Master, On
+    when not in use, set by nothing) read 0 right after the GM moved, and
+    full again on the next engine frame. A relay on real hardware could
+    click off for a frame. Not changed here (no app code on this branch);
+    the test waits for the next frame and says why.
+13. **The virtual stage has no house lights.** Lesson 3.7's students set
+    the rules and watch the cyc go dark on Blackout; the house lights'
+    behaviour is checked by the course test and shown on the real rig in
+    Part 3.
+14. **Auto guesses the AT-W-ALL washes as spots** (*Auto (Moving head
+    spot)*) and the LED lanterns as LED PARs. Lesson 3.3 uses both as the
+    corrections students make.
 
 ## 9. Decisions (Branson, 2026-10-18) and what's still open
 

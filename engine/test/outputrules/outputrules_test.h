@@ -44,11 +44,21 @@ private slots:
     void grandMasterLeavesExemptAlone();
     void grandMasterAllChannelsMode();
     void blackoutKeepsExemptLive();
+    /** Park replaces a running cue's level, higher or not; let go, the
+     *  cue's level is back */
+    void parkBeatsACueAboveIt();
+    /** A parked channel goes out past the Grand Master */
+    void parkIgnoresTheGrandMaster();
+    /** Blackout still takes a parked dimmer to zero */
+    void blackoutTakesAParkOut();
     void switchSnapsAtHalf();
     void switchNeverFades();
     void grandMasterCannotSwitchARelayOff();
     void powerLimitsLeaveARelayAlone();
     void onAtOpenFollowsItsSetting();
+    /** A Grand Master move never drops an On-when-not-in-use relay to 0,
+     *  not even before the next frame */
+    void grandMasterNeverDropsAnOnAtOpenRelay();
     void onAtOpenSettingIsSavedWithTheShow();
     void onAtOpenYieldsToTheShow();
     void blindFollowsItsSetting();

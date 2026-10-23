@@ -30,7 +30,7 @@
 
 #include "qlcengine_export.h"
 #include "gamepadrole.h"
-#include "dmxsource.h"
+#include "outputlayer.h"
 
 class Doc;
 struct FixtureRigProps;
@@ -57,10 +57,13 @@ struct FixtureRigProps;
  * bound axes, the HID profile's deadzone and sensitivity, its 50 Hz joystick
  * tick -- and owns the controller while it is on.
  *
- * Its light is a DMXSource, like Highlight: it overrides, for the heads it
- * uses, whatever else is running, and lets go when it stops.
+ * Its light goes out through an OutputLayer at Universe::Focus, with
+ * Override: for the heads it uses it is over whatever else is running
+ * (only a park is above it; the Grand Master and Blackout apply), and it
+ * lets go when it stops. (It used to write the universes from the
+ * MasterTimer tick, where processFaders() zeroed its dimmers: B1.)
  */
-class QLC_ENGINE_EXPORT FocusSession final : public QObject, public DMXSource
+class QLC_ENGINE_EXPORT FocusSession final : public QObject
 {
     Q_OBJECT
 
@@ -268,11 +271,8 @@ public:
      * DMX
      *********************************************************************/
 public:
-    /** @reimp -- the focused head's aim and light, the others' level. */
-    void writeDMX(MasterTimer *timer, QList<Universe*> universes) override;
-
-    /** The writes writeDMX() makes, (universe, absolute address) -> value,
-     *  for a test or a readout. */
+    /** What it sends, (universe, absolute address) -> value: the focused
+     *  head's aim and light, the others' level. For a test or a readout. */
     QHash<QPair<int, int>, uchar> pendingWrites() const;
 
 signals:
@@ -337,7 +337,8 @@ private:
 
     mutable QMutex m_writesMutex;
     QHash<QPair<int, int>, uchar> m_writes;
-    bool m_registered = false;
+    /** The Focus fader on each universe */
+    OutputLayer m_layer;
 };
 
 /** @} */

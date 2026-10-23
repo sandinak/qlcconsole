@@ -53,7 +53,7 @@ Selecting a fixture, group, universe, or power item swaps the right-hand pane
 between an info browser, the group grid editor, the power view, or a
 universe's address-usage grid. A fixture's info includes its **Connection**
 (DMX, or Network with its IP), its **Definition** source (Included or Local,
-below), and, for an unpatched one, "Unpatched -- in the inventory".
+below), and, for an unpatched one, "Unpatched — in the inventory".
 
 **Renaming in the tree.** Select a fixture, a group, a group folder or a
 universe and press **Return** (or **F2**), type the new name, and press
@@ -300,12 +300,12 @@ channel makeup.
 - Click-drag an occupied cell (or a multi-cell selection) to move a block; a
   wireframe preview shows the drop target and only accepts drops that don't
   collide with anything outside the moving set.
-- Shift+click/drag extends a rectangular marquee selection; Ctrl+click toggles
+- Shift+click/drag extends a rectangular marquee selection; ⌘-click toggles
   one cell at a time.
 - Right-click a cell for **"Move `<fixture>` up/down/left/right"** (shifts
   every head of that one fixture as a unit) or, on a pasted block,
   **"Move sub-group up/down/left/right"**.
-- Ctrl+Z undoes the last edit (50-deep history).
+- ⌘Z undoes the last edit (50-deep history).
 
 ## Fixture-group folders
 
@@ -596,17 +596,19 @@ without them is unchanged; QLC+ and older qlcconsole builds skip them.
 Right-click is laid out by what it is about, in the same order whatever is
 selected, and only offers what applies:
 
-1. **The fixture itself** — Fixture Properties…, Definition & Mode…,
-   Edit Fixture Definition… and [LED Layout…](#led-layout) (one fixture),
-   Change Definition… (fixtures of one definition, when another is a
-   drop-in for it), **Stage Look ▸** (below) and
-   [Output Rules…](#output-rules).
+1. **The fixture itself** — Fixture Properties… (several fixtures at once
+   too), Definition & Mode… and [LED Layout…](#led-layout) (one fixture),
+   **Edit Fixture Definition…** (one fixture, several fixtures or one group,
+   when they all share one definition; several definitions show it greyed
+   out as *(several definitions)*), Change Definition… (fixtures of one
+   definition, when another is a drop-in for it), **Stage Look ▸** (below)
+   and [Output Rules…](#output-rules).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….
 3. **Finding it on the rig** — Test Fixture…, Locate, Reset.
 4. **Organising it** — a **Group** submenu (Create Group(s) from Selection…,
-   Add to Group ▸, Remove from Group; for a group: Move to Folder…, Remove
+   Add to Group ▸, Remove from Group; for a group: Move to Folder ▸, Remove
    Group (Keep Fixtures), Rebuild Composite), a **Power** submenu (Add to
    Circuit ▸, Remove from Circuit), and Channel Behaviour & Modifiers….
 5. **Deleting it** — Delete….
@@ -623,15 +625,40 @@ patched ones is Design mode's — the same rule everywhere.
 
 ### Stage Look
 
-**Stage Look ▸** sets what the fixtures selected -- and every fixture of a
-group selected -- look like: **Auto** (named for what their type is closest
+**Stage Look ▸** sets what the fixtures selected — and every fixture of a
+group selected — look like: **Auto** (named for what their type is closest
 to, as *Auto (Moving head spot)*), then the looks under **Moving**, **Fixed
 conventional**, **Fixed LED** and **Practicals** (Lantern, Staff), with
 icons. The one they all share is
 ticked. A fixture with a look shows its icon in this list and the other
 fixture lists, and its shape on the plot and in the studio; see
 [Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
-same choice as its **Stage look** row.
+same choice as its **Stage look** row. A look changes only the icon and the
+drawing, never the DMX, so Stage Look ▸ is offered in Operate mode too, and
+⌘Z undoes it.
+
+### Icons
+
+A fixture has one icon, and it is the same wherever the fixture is listed:
+here, Build's *Groups & fixtures* and Scenes outline, the Show Tree and its
+Library, the plot's Inventory and Layers panels, Fixture Properties, the
+channels-group and remap dialogs and the Virtual Console's fixture lists.
+What decides it, in order:
+
+1. **Its stage look**, when you have given it one (Stage Look ▸ above).
+2. **A curtain** — a fixture that gives no light and has an *Open*,
+   *Position* or *Fly* channel (the plot draws it as its drape) — shows a
+   drape on its track.
+3. **Its closest look**, when it is on Auto and the plot's **Show ▸ Show
+   Auto fixtures as their closest stage look** is on.
+4. Otherwise **what it is**: a fixed wash, a moving spot, a moving wash or
+   a moving head, else its definition's type (a hazer, a fan, a strobe...).
+
+A fixture with [output rules](#output-rules) adds the amber badge. A group
+shows the group version of its fixtures' shared icon — all curtains, one
+look (with the setting on) or one kind — and the plain group icon when they
+differ. Every list redoes its icons when a look, the rules or the setting
+change.
 
 ### Patching a universe's output
 
@@ -687,8 +714,9 @@ there are any. See [Definition Updates](definition-updates.md).
 
 ### The fixture editor
 
-**"Edit Fixture Definition..."** (right-click a fixture) opens the fixture
-editor on its definition. On top of stock QLC+'s editor:
+**"Edit Fixture Definition..."** (right-click a fixture, several fixtures
+of one definition, or a group of them) opens the fixture editor on its
+definition. On top of stock QLC+'s editor:
 
 - **Repair view.** A definition that won't load opens in a Repair view
   instead of "unable to load": it says where it breaks (line, column, why),
@@ -711,7 +739,7 @@ editor on its definition. On top of stock QLC+'s editor:
   values no capability covers. Double-click one to jump to it. Saving with
   errors asks first.
 - **Physical tab → Dimensions in your own units.** Width, height, depth
-  and weight show in the unit chosen in qlcconsole's **Settings → Units**
+  and weight show in the unit chosen in qlcconsole's **Settings ▸ General ▸ Units**
   (millimetres, centimetres, metres, inches, or feet and inches; weight in
   kg with the metric ones, lb with inches and feet). Type a bare number in
   that unit, or any unit with the number and it's converted: `7.5"`,

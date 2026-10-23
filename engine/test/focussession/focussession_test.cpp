@@ -19,7 +19,15 @@
 #include <QSignalSpy>
 #include <QtMath>
 
+#define private public                  // MasterTimer::timerTick()
+#include "mastertimer.h"
+#undef private
 #include "focussession_test.h"
+#define protected public                // Universe::processFaders()
+#include "universe.h"
+#undef protected
+#include "genericfader.h"
+#include "fadechannel.h"
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
 #include "qlcfile.h"
@@ -332,7 +340,7 @@ void FocusSession_Test::theFocusedHeadIsAimedAndLit()
 
     QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
     QVERIFY(!ua.isEmpty());
-    s->writeDMX(m_doc->masterTimer(), ua);
+    ua[0]->processFaders();                     // a frame
     QVector3D point;
     QVERIFY(s->referencePoint(a->id(), point));
     const QPair<uchar, uchar> want = solvedDmx(m_doc, a->id(), point);
@@ -348,6 +356,50 @@ void FocusSession_Test::theFocusedHeadIsAimedAndLit()
     s->next();
     QCOMPARE(int(s->pendingWrites().value(qMakePair(0, int(a->address()) + 2))), 0);
     QCOMPARE(int(s->pendingWrites().value(qMakePair(0, int(b->address()) + 2))), qRound(0.6 * 255));
+}
+
+/* Focus mode takes over the heads it uses, over whatever runs (B1): its
+   light survives the universe's frame -- which zeroes intensity and lays
+   the running faders on -- and beats a cue that is brighter, on the head
+   being focused and on the others it darkens. */
+void FocusSession_Test::itsLightHoldsOverARunningCue()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 6.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(4.0f, 6.0f, 0.0f));
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+
+    // A running cue: both dimmers at 200.
+    QSharedPointer<GenericFader> cue = uni->requestFader();
+    for (Fixture *f : { a, b })
+    {
+        GenericFader::ChannelRef fc = cue->getChannelFader(m_doc, uni, f->id(), 2);
+        fc->setStart(200);
+        fc->setCurrent(200);
+        fc->setTarget(200);
+    }
+    uni->processFaders();
+    QCOMPARE(int(uni->preGMValue(int(a->address()) + 2)), 200);
+
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusSession::Options o = optionsFor({ a->id(), b->id() }, mark->id());
+    o.level = 0.6f;
+    QVERIFY(s->start(o));
+    for (int i = 0; i < 3; ++i)
+    {
+        m_doc->masterTimer()->timerTick();
+        uni->processFaders();
+    }
+    QCOMPARE(int(uni->preGMValue(int(a->address()) + 2)), qRound(0.6 * 255));
+    QCOMPARE(int(uni->preGMValue(int(b->address()) + 2)), 0);      // dark, not the cue's 200
+
+    // Stopped, the cue has them back.
+    s->stop();
+    m_doc->masterTimer()->timerTick();
+    uni->processFaders();
+    QCOMPARE(int(uni->preGMValue(int(a->address()) + 2)), 200);
+    QCOMPARE(int(uni->preGMValue(int(b->address()) + 2)), 200);
+    uni->dismissFader(cue);
 }
 
 void FocusSession_Test::secondReferenceToggles()

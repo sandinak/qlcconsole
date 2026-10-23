@@ -370,6 +370,12 @@ public:
      *  address, name and groups. Returns how many changed. */
     static int changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFixtureDef *def);
 
+    /** The .qxf every fixture of @p fids is defined by, when they all share
+     *  one definition that has a file; empty otherwise. @p definitions, when
+     *  given, gets how many distinct definitions they have. */
+    static QString sharedDefinitionSourceFile(Doc *doc, const QList<quint32> &fids,
+                                              int *definitions = NULL);
+
     /** Give @p fids the stage look @p look (Fixture::StageLook). Returns how
      *  many changed; marks the show modified when any did. */
     static int setStageLook(Doc *doc, const QList<quint32> &fids, int look);
@@ -378,6 +384,12 @@ public:
      *  all share checked. Choosing one sets it on all of them (one Ctrl+Z
      *  step on the plot when the Monitor is open). */
     static void fillStageLookMenu(QMenu *menu, Doc *doc, const QList<quint32> &fids);
+
+    /** Add the fixtures and groups of the Fixtures List @p fileName (a
+     *  .qxfl, as Export fixtures writes) to @p doc. Returns how many came
+     *  in, or -1 when the file isn't a readable Fixtures List. Used by the
+     *  Fixtures menu's Import fixtures and File ▸ Import. */
+    static int importFixtureList(Doc *doc, const QString &fileName);
 
 private:
 

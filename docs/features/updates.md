@@ -39,7 +39,7 @@ If one of these is true when you quit, the update is left for the next quit.
 
 ## Settings
 
-The **Software Update** group in **Settings** belongs to this computer, not
+The **Software Update** group in **Settings → General** belongs to this computer, not
 to the show:
 
 - **Check for updates (once a day, from GitHub)** turns checking on or off.

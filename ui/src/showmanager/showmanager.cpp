@@ -973,6 +973,12 @@ ShowManager::TimelineSnapshot ShowManager::captureSnapshot() const
         ts.mute = track->isMute();
         ts.color = track->color();
         ts.sceneID = track->getSceneID();
+        ts.locked = track->isLocked();
+        ts.solo = track->isSolo();
+        ts.soloSafe = track->isSoloSafe();
+        ts.holdLast = track->isHoldLast();
+        ts.priority = int(track->priority());
+        ts.intensity = track->intensity();
         foreach (ShowFunction *sf, track->showFunctions())
         {
             SFSnapshot fs;
@@ -980,6 +986,7 @@ ShowManager::TimelineSnapshot ShowManager::captureSnapshot() const
             fs.startTime = sf->startTime();
             fs.duration = sf->duration();
             fs.color = sf->color();
+            fs.locked = sf->isLocked();
             ts.funcs.append(fs);
         }
         snap.tracks.append(ts);
@@ -1029,6 +1036,11 @@ void ShowManager::restoreSnapshot(const TimelineSnapshot &snap)
         track->setName(ts.name);
         track->setMute(ts.mute);
         track->setColor(ts.color);
+        track->setSolo(ts.solo);
+        track->setSoloSafe(ts.soloSafe);
+        track->setHoldLast(ts.holdLast);
+        track->setPriority(Track::Priority(ts.priority));
+        track->setIntensity(ts.intensity);
         m_show->addTrack(track);
         foreach (const SFSnapshot &fs, ts.funcs)
         {
@@ -1036,7 +1048,10 @@ void ShowManager::restoreSnapshot(const TimelineSnapshot &snap)
             sf->setStartTime(fs.startTime);
             sf->setDuration(fs.duration);
             sf->setColor(fs.color);
+            sf->setLocked(fs.locked);
         }
+        // Last: a locked track takes no more items.
+        track->setLocked(ts.locked);
     }
 
     // Replace markers.
@@ -1048,6 +1063,9 @@ void ShowManager::restoreSnapshot(const TimelineSnapshot &snap)
     {
         mit.next();
         m_show->setMarker(mit.key(), mit.value().end, mit.value().label, mit.value().color);
+        // setMarker() keeps no cue-list link; put the marker's back.
+        if (mit.value().cueListId != Function::invalidId())
+            m_show->setMarkerCueList(mit.key(), mit.value().cueListId);
     }
 
     m_doc->setModified();

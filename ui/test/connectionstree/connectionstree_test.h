@@ -140,6 +140,10 @@ private slots:
     void bothViewsListTheSameTargets();
     void offlinePatchesShowKeptNotUnpatched();
 
+    /** Connections' Ctrl+N adds a universe, Ctrl+D deletes the last one,
+     *  and Undo Patch Change (Ctrl+Z there) puts either back */
+    void ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack();
+
 private:
     Doc *m_doc;
 };

@@ -88,8 +88,9 @@ public:
     /** Get a QTreeWidgetItem whose fixture ID is $id */
     QTreeWidgetItem* fixtureItem(quint32 id) const;
 
-    /** Show fixture @p id's current name on every row that stands for it
-     *  (a fixture can be listed under its universe and in groups). */
+    /** Show fixture @p id's current name and icon on every row that stands
+     *  for it (a fixture can be listed under its universe and in groups),
+     *  and the icons of the groups it is in. On Doc::fixtureChanged(). */
     void refreshFixtureName(quint32 id);
 
     /** Every fixture and group row's icon again: what Auto fixtures are

@@ -56,6 +56,15 @@ private slots:
     /** A group of one kind wears that kind (stacked); a mixed one the group
      *  icon; a layer on a group the same. */
     void aGroupOfOneKindShowsIt();
+    /** A curtain (Scenery::isCurtainFixture()) shows the curtain, on Auto
+     *  whatever its type is closest to; a group of curtains the group
+     *  variant; a set look still wins; a hazer keeps its hazer icon. */
+    void aCurtainShowsAsACurtain();
+    /** The same fixture or group wears the same icon in every list: the
+     *  Fixture Manager tree, Build's groups list, the Show Tree Library and
+     *  the plot's inventory and layers panels -- pixel for pixel
+     *  fixtureIcon() / groupIcon(), with the show setting off and on. */
+    void theSameIconEverywhere();
     /** Crisp at 1x and 2x: the same picture, twice the pixels. */
     void iconsAreCrispAtTwoX();
     /** Pictures of Build ▸ Scenes, the Palettes list and the Show Tree, in
@@ -65,6 +74,8 @@ private slots:
 private:
     Fixture *makeFixture(int type, const QString &model,
                          const QList<QPair<int, int>> &channels);
+    /** A Generic > Stage Curtain like one: no light, an "Open" channel. */
+    Fixture *makeCurtain(int type, const QString &name);
     Doc *m_doc = nullptr;
 };
 

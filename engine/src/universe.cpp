@@ -70,10 +70,12 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     m_modifiers.fill(NULL, UNIVERSE_SIZE);
     m_writtenFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     m_held.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
+    m_pastGMFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     for (int i = 0; i < UNIVERSE_SIZE; i++)
     {
         m_writtenFrame[i].store(0, std::memory_order_relaxed);
         m_held[i].store(0, std::memory_order_relaxed);
+        m_pastGMFrame[i].store(0, std::memory_order_relaxed);
     }
 
     connect(m_grandMaster, SIGNAL(valueChanged(uchar)),
@@ -209,6 +211,7 @@ bool Universe::inhibitOutput() const
 
 void Universe::slotGMValueChanged()
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     {
         for (int i = 0; i < m_intensityChannels.size(); ++i)
         {
@@ -340,6 +343,11 @@ void Universe::tick()
 
 void Universe::processFaders()
 {
+    /* One frame at a time, and never while the roles or the value arrays
+       are being reallocated (see m_frameMutex). Released before the
+       signal: its receivers are free to call back in. */
+    QMutexLocker frameLocker(&m_frameMutex);
+
     flushInput();
     zeroIntensityChannels();
     if (m_overrideWritten.size() != UNIVERSE_SIZE)
@@ -391,6 +399,7 @@ void Universe::processFaders()
         dataChanged = true;
     }
     dumpOutput(postGM, dataChanged);
+    frameLocker.unlock();
 
     if (dataChanged)
         emit universeWritten(id(), postGM);
@@ -515,17 +524,22 @@ void Universe::applyOnAtOpen()
         if (isChannelSet(c))
             continue;
 
-        const uchar mask = uchar(m_channelsMask->at(c));
-        uchar value = UCHAR_MAX;
-        if ((mask & (GMExempt | SwitchOutput)) == 0)
-            value = applyGM(c, value);
-        value = applyModifiers(c, value);
-        if (mask & SwitchOutput)
-            value = value >= 128 ? UCHAR_MAX : 0;
         if (c >= m_usedChannels)
             m_usedChannels = c + 1;
-        (*m_postGMValues)[c] = char(value);
+        (*m_postGMValues)[c] = char(onAtOpenValue(c));
     }
+}
+
+uchar Universe::onAtOpenValue(int channel)
+{
+    const uchar mask = uchar(m_channelsMask->at(channel));
+    uchar value = UCHAR_MAX;
+    if ((mask & (GMExempt | SwitchOutput)) == 0)
+        value = applyGM(channel, value);
+    value = applyModifiers(channel, value);
+    if (mask & SwitchOutput)
+        value = value >= 128 ? UCHAR_MAX : 0;
+    return value;
 }
 
 bool Universe::hasBlackoutExempt(int count) const
@@ -682,6 +696,7 @@ void Universe::run()
 
 void Universe::reset()
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     for (int i = 0; i < UNIVERSE_SIZE; i++)
         m_held[i].store(0, std::memory_order_relaxed);
     m_preGMValues->fill(0);
@@ -798,6 +813,9 @@ QString Universe::blendModeToString(Universe::BlendMode mode)
 
 const QByteArray Universe::preGMValues() const
 {
+    /* A shallow copy shares the array: copied while a frame detaches it
+       (reset() on the universe thread), the two raced on its header. */
+    QMutexLocker frameLocker(&m_frameMutex);
     return *m_preGMValues;
 }
 
@@ -851,14 +869,25 @@ uchar Universe::applyPassthrough(int channel, uchar value)
 
 void Universe::updatePostGMValue(int channel)
 {
-    uchar value = preGMValue(channel);
     const uchar mask = uchar(m_channelsMask->at(channel));
+
+    /* An On-when-not-in-use channel nothing sets stays at its floor on
+       every path that works out the output -- a Grand Master move
+       (slotGMValueChanged) as much as the frame (applyOnAtOpen): computed
+       from the stored 0 here, a relay dropped out until the next frame. */
+    if ((mask & OnAtOpenOutput) && onAtOpenArmed() && isChannelSet(channel) == false)
+    {
+        (*m_postGMValues)[channel] = char(onAtOpenValue(channel));
+        return;
+    }
+
+    uchar value = preGMValue(channel);
 
     /* Output rules: a GM-exempt channel is never scaled, and neither is a
        relay -- the Grand Master pulled to 30% would otherwise switch it off.
        The relay's snap comes last, so nothing after it (a modifier, the
        input passthrough) can hand it a level between off and on. */
-    if (value != 0 && (mask & (GMExempt | SwitchOutput)) == 0)
+    if (value != 0 && (mask & (GMExempt | SwitchOutput)) == 0 && pastGM(channel) == false)
         value = applyGM(channel, value);
 
     value = applyModifiers(channel, value);
@@ -1147,6 +1176,7 @@ void Universe::disconnectInputPatch()
 
 void Universe::setChannelCapability(ushort channel, QLCChannel::Group group, ChannelType forcedType)
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     if (channel >= (ushort)m_channelsMask->length())
         return;
 
@@ -1214,6 +1244,7 @@ uchar Universe::channelCapabilities(ushort channel)
 
 void Universe::setChannelDefaultValue(ushort channel, uchar value)
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     if (channel >= m_totalChannels)
     {
         m_totalChannels = channel + 1;
@@ -1229,6 +1260,7 @@ void Universe::setChannelDefaultValue(ushort channel, uchar value)
 
 void Universe::setChannelModifier(ushort channel, ChannelModifier *modifier)
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     if (channel >= (ushort)m_modifiers.count())
         return;
 
@@ -1350,6 +1382,16 @@ bool Universe::writeOverride(int address, uchar value)
     if ((m_channelsMask->at(address) & HTP) && m_overrideWritten.at(address))
         value = qMax(value, uchar(m_preGMValues->at(address)));
     m_overrideWritten[address] = char(1);
+    return write(address, value, true);
+}
+
+bool Universe::writePastGM(int address, uchar value)
+{
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
+    // Stamped before the write: write() works out the post-GM value.
+    m_pastGMFrame[address].store(m_frame.load(std::memory_order_relaxed),
+                                 std::memory_order_relaxed);
     return write(address, value, true);
 }
 

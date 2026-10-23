@@ -52,10 +52,10 @@ OutputRulesDialog::OutputRulesDialog(Doc *doc, const QList<quint32> &fixtureIds,
     switch (k != nullptr ? k->onAtOpenWhen() : OutputRuleKeeper::kDefaultOnAtOpenWhen)
     {
         case OutputRuleKeeper::OnAtOperate:
-            onWhen = tr("from when you switch to Operate (the show's setting, in Settings > Output)");
+            onWhen = tr("from when you switch to Operate (the show's setting, in Settings ▸ Advanced ▸ Output)");
         break;
         case OutputRuleKeeper::OnAtShowOpen:
-            onWhen = tr("from when the show opens (the show's setting, in Settings > Output)");
+            onWhen = tr("from when the show opens (the show's setting, in Settings ▸ Advanced ▸ Output)");
         break;
     }
     const bool blindToo = k == nullptr || k->blindHoldsExempt();

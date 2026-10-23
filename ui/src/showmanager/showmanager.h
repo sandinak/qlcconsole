@@ -338,6 +338,7 @@ private:
         quint32 startTime;
         quint32 duration;
         QColor  color;
+        bool    locked;
     };
     /** One track's identity + its placed functions. */
     struct TrackSnapshot
@@ -346,6 +347,14 @@ private:
         bool    mute;
         QColor  color;
         quint32 sceneID;
+        // The track's own settings (Shows "Flags"), so an Undo that rebuilds
+        // the tracks doesn't reset them.
+        bool    locked;
+        bool    solo;
+        bool    soloSafe;
+        bool    holdLast;
+        int     priority;
+        qreal   intensity;
         QList<SFSnapshot> funcs;
     };
     /** The whole timeline of the current show (tracks + markers). */

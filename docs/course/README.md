@@ -32,7 +32,7 @@ virtual copy of a show choir stage.
 | [0 — First look](level-0/index.md) | What light does; the virtual stage | 2 (written) |
 | [1 — Basics](level-1/index.md) | A song → cues: colour, intensity, direction, timing, GO ("Everybody Scream") | 5 (written) |
 | [2 — Intermediate](level-2/index.md) | Tracking, palettes, effects, moving lights, busking | 7 |
-| [3 — Advanced](level-3/index.md) | Patching, fixtures, building the rig, show control, running a real show — on the real rig from December/January | 7 |
+| [3 — Advanced](level-3/index.md) | Patching, fixtures, reading and building the rig, show control, house lights and power, running a real show — on the real rig from December/January; an optional lesson for students coming from Eos | 10 (3 written) |
 
 ## What's in this folder
 
@@ -69,7 +69,8 @@ virtual copy of a show choir stage.
 
 The lessons are checked against the app: `ui/test/courseshow` opens the
 teaching show offscreen, does every step of Lessons 0.2 and 1.1–1.5 with
-the mouse (and 1.1 typed), plays them with GO in the Run tab, and checks
+the mouse (and 1.1 typed), plays them with GO in the Run tab, runs Level
+3's written lessons (3.3, 3.7, 3.10) through the app's own code, and checks
 the shows can't send DMX. It runs with
 the rest of the app's tests. If the app changes so a lesson step stops
 working, that test fails. The pictures are taken by the same test (see

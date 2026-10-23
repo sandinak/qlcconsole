@@ -6,6 +6,31 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-22 — 0.2.2 release candidate: docs and course sweep *(docs/rc-022-sweep, from trial/batch7)*
+
+- **Help (docs/features):** one story across the guides — the three
+  views and where Functions lives, Settings paths with their tab
+  (Settings ▸ Advanced ▸ Output, ▸ General ▸ Show Tree), cue numbers that
+  change only when typed, dragged or renumbered, Move in black's four
+  places, output rules in every right-click that has them, Esc and Stop
+  all, the Eos import from the Show Tree. build.md's Esc section moved out
+  of the Layout list. 7 help shots retaken. whats-new.md's 0.2.2 is one
+  section by area; CHANGELOG Unreleased is Added / Changed / Fixed.
+- **UI text:** the Output Rules dialog says Settings ▸ Advanced ▸ Output;
+  move-in-black tooltips say Build → Move in black and Settings → General
+  → Show Tree; *Fade 10 / 30 seconds and stop*.
+- **Course:** Lesson 1.5's late-cue extension (point cue, drag,
+  Renumber this level…); Level 3 lessons 3.3 (stage looks), 3.7 (house and
+  work lights, power relays, Blackout / GM / Blind) and 3.10 (coming from
+  Eos, `shows/classroom-eos.asc`); new glossary terms; every lesson picture
+  retaken. courseshow_test: 18 pass (new: lessonFiveLateCue,
+  lessonStageLooks, lessonHouseLights, lessonFromEos). helpbrowser_test:
+  10 pass.
+- Found on the way (TODO.md, Small fixes): the GM's one-frame drop of an
+  unset On-when-not-in-use relay; helpbrowser_test's Functions-tab check;
+  help shots on Classic.
+
+
 ### 2026-10-22 — Workflow W5: the bridge from an old show *(feat/w5-bridge, not merged)*
 
 Phase W5 of WORKFLOW_DESIGN.md (design/programming-redesign), built on W0.

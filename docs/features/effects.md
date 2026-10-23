@@ -65,7 +65,10 @@ pick one of these:
   point in the browser, for this show and others. You stay in the
   designer.
 - **Cancel** (or closing the window) throws the copy away. The show is
-  left as it was, and a show that was saved stays saved.
+  left as it was, and a show that was saved stays saved. On the bench in
+  Build, **Esc** goes back to the scene you came from and asks first if
+  the effect hasn't been kept
+  ([Backing out](build.md#backing-out-esc)).
 
 ### Make a layer
 

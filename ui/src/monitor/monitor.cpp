@@ -164,6 +164,7 @@
 #include <QTimer>
 #include "qlcfile.h"
 #include "qlceventpos.h"
+#include "itemicons.h"
 
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
@@ -482,11 +483,8 @@ void Monitor::initGraphicsView()
     });
     connect(m_inventoryPanel, &MonitorInventoryPanel::addRequested, this, &Monitor::slotAddToInventory);
     connect(m_graphicsView, &MonitorGraphicsView::fixturesDropped, this, &Monitor::slotFixturesDropped);
-    // Keep the panel true to the show: fixtures come and go, get patched, or
-    // land on the plot from elsewhere.
-    connect(m_doc, &Doc::fixtureAdded, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
-    connect(m_doc, &Doc::fixtureRemoved, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
-    connect(m_doc, &Doc::fixtureChanged, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    // The panel keeps itself true to the show (fixtures come and go, get
+    // patched, change their look): MonitorInventoryPanel's constructor.
     // A repatch changes which port a fixture is on, so the cable runs follow.
     connect(m_doc, &Doc::fixtureChanged, m_graphicsView, [this](quint32) { m_graphicsView->scheduleNetworkRuns(); });
 
@@ -1085,6 +1083,20 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
                                      "framing. Click to select them.", "", n));
     });
     addSep();
+
+    // The status line: what an edit did that the plot can't show.
+    m_noticeLabel = new QLabel(footer);
+    m_noticeLabel->setObjectName(QStringLiteral("plotNotice"));
+    m_noticeLabel->setStyleSheet("QLabel { color: #e0a030; }");
+    m_noticeLabel->setVisible(false);
+    fl->addWidget(m_noticeLabel);
+    m_noticeTimer = new QTimer(this);
+    m_noticeTimer->setSingleShot(true);
+    m_noticeTimer->setInterval(12000);
+    connect(m_noticeTimer, &QTimer::timeout, this, [this]() {
+        m_noticeLabel->clear();
+        m_noticeLabel->setVisible(false);
+    });
 
     // Live coordinate readout, right-aligned.
     m_readoutLabel = new QLabel(tr("—"));
@@ -2991,6 +3003,7 @@ bool Monitor::clipboardHasFeatures() const
 void Monitor::slotCopySelected()
 {
     QList<TrussClip>    trusses;
+    QList<quint32>      trussIds;   // parallel to trusses
     QList<PlatformClip> platforms;
     QList<TargetClip>   targets;
 
@@ -2999,6 +3012,7 @@ void Monitor::slotCopySelected()
         if (TrussItem *ti = dynamic_cast<TrussItem *>(gi))
         {
             Truss *t = ti->truss();
+            trussIds.append(t->id());
             TrussClip c;
             c.name = t->name();   c.type = int(t->type());
             c.origin = t->origin(); c.direction = t->direction();
@@ -3033,7 +3047,29 @@ void Monitor::slotCopySelected()
     if (trusses.isEmpty() && platforms.isEmpty() && targets.isEmpty())
         return;   // nothing copyable selected: keep any previous clipboard
 
+    /* A truss comes with what hangs on it (shortcuts.md: structures copy
+       "with their fixtures"), each kept by value: the original may be
+       edited or deleted before the paste. */
+    QList<FixtureClip> fixtures;
+    for (int i = 0; i < trussIds.size(); ++i)
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            const FixtureRigProps rp = m_props->fixtureRigProps(fx->id());
+            if (rp.trussId != trussIds.at(i) || !m_props->containsFixture(fx->id()))
+                continue;
+            FixtureClip c;
+            c.truss = i;
+            QXmlStreamWriter w(&c.xml);
+            w.writeStartDocument();
+            fx->saveXML(&w);
+            w.writeEndDocument();
+            c.item = m_props->fixtureProperties(fx->id());
+            c.rig = rp;
+            fixtures.append(c);
+        }
+
     m_trussClipboard    = trusses;
+    m_fixtureClipboard  = fixtures;
     m_platformClipboard = platforms;
     m_targetClipboard   = targets;
     m_pasteCount        = 0;
@@ -3047,7 +3083,7 @@ void Monitor::pasteClipboard(float dxM, float dyM)
     if (!clipboardHasFeatures())
         return;
 
-    QList<quint32> newTrussIds, newPlatformIds, newTargetIds, newPaletteIds;
+    QList<quint32> newTrussIds, newPlatformIds, newTargetIds, newPaletteIds, newFixtureIds;
 
     foreach (const TrussClip &c, m_trussClipboard)
     {
@@ -3062,6 +3098,46 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         t->setLocked(false);   // a duplicate must be movable, even if the source was locked
         t->setLayerId(m_props->activeLayerId());
         newTrussIds.append(t->id());
+    }
+
+    /* The fixtures on the copied trusses: new fixtures, same definition, mode
+       and settings, a name of their own, hung at the same place on the copy.
+       Unpatched: which addresses a copy should take is a patching decision
+       (Patch Others Like This, the Patch dialog), and taking any free one
+       here could land them on channels meant for something else. */
+    foreach (const FixtureClip &c, m_fixtureClipboard)
+    {
+        if (c.truss < 0 || c.truss >= newTrussIds.size())
+            continue;
+        QXmlStreamReader r(c.xml);
+        while (!r.atEnd() && !r.isStartElement())
+            r.readNext();
+        Fixture *fx = new Fixture(m_doc);
+        if (!r.isStartElement() || !fx->loadXML(r, m_doc, m_doc->fixtureDefCache()))
+        {
+            delete fx;
+            continue;
+        }
+        fx->setPatched(false);
+        fx->setAddressClash(false);
+        fx->setName(m_doc->uniqueFixtureName(fx->name()));
+        if (!m_doc->addFixture(fx))
+        {
+            delete fx;
+            continue;
+        }
+        const quint32 fid = fx->id();
+        FixtureRigProps rp = c.rig;
+        rp.trussId = newTrussIds.at(c.truss);
+        m_props->setFixtureRigProps(fid, rp);
+        FixturePreviewItem item = c.item;
+        item.m_baseItem.m_position += QVector3D(dxM * 1000.0f, dyM * 1000.0f, 0.0f);
+        item.m_baseItem.m_layerId = m_props->activeLayerId();
+        item.m_baseItem.m_groupId = 0;      // the original's map group isn't the copy's
+        m_props->setFixtureProperties(fid, item);
+        const QVector3D at = item.m_baseItem.m_position;
+        m_graphicsView->addFixture(fid, QPointF(at.x(), at.y()));
+        newFixtureIds.append(fid);
     }
 
     foreach (const PlatformClip &c, m_platformClipboard)
@@ -3114,7 +3190,25 @@ void Monitor::pasteClipboard(float dxM, float dyM)
 
     // Register the paste on the canvas undo stack so Ctrl+Z removes the copies.
     m_graphicsView->recordFeaturePaste(newTrussIds, newPlatformIds,
-                                       newTargetIds, newPaletteIds);
+                                       newTargetIds, newPaletteIds, newFixtureIds);
+    if (!newFixtureIds.isEmpty())
+    {
+        m_graphicsView->refreshFixtureLabels();
+        const int n = int(newFixtureIds.size());
+        showNotice(n == 1 ? tr("Pasted 1 fixture unpatched: Patch Others Like This (or Patch…) "
+                               "gives it an address.")
+                          : tr("Pasted %1 fixtures unpatched: Patch Others Like This (or Patch…) "
+                               "gives them addresses.").arg(n));
+    }
+}
+
+void Monitor::showNotice(const QString &text)
+{
+    if (m_noticeLabel == nullptr)
+        return;
+    m_noticeLabel->setText(text);
+    m_noticeLabel->setVisible(true);
+    m_noticeTimer->start();
 }
 
 void Monitor::slotPasteFeatures()
@@ -6324,7 +6418,7 @@ void Monitor::slotEditScenery(quint32 sid)
         driveCombo->addItem(tr("Nothing (stays as set)"), uint(Fixture::invalidId()));
         foreach (Fixture *fx, m_doc->fixtures())
             if (fx != nullptr && (Scenery::isCurtainFixture(fx) || fx->id() == select))
-                driveCombo->addItem(fx->name(), uint(fx->id()));
+                driveCombo->addItem(ItemIcons::fixtureIcon(fx), fx->name(), uint(fx->id()));
         driveCombo->setCurrentIndex(qMax(0, driveCombo->findData(uint(select))));
     };
     fillDrivers(s->driverFixture());

@@ -4,409 +4,232 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
-- **Auto fixtures can be shown as their closest look.** The plot's
-  **Show** menu has **Show Auto fixtures as their closest stage look**: a
-  fixture left on Auto gets the look its type is closest to (an LED PAR, a
-  moving head spot, an ellipsoidal...) -- its icon in the fixture lists and
-  the Show Tree, its shape on the plot and in the studio; a group of one
-  look shows it too. Off by default; saved with the show, so its plot is the same on
-  any computer. See [Stage looks](lighting-studio.md#stage-looks).
+The Programming tab is now **Build**, with a Workbench that edits scenes,
+collections and chasers as layers; the Show Tree and Build share it. Old
+QLC+ shows open in a **Classic QLC+** view and can be upgraded in one
+step. Fixtures get stage looks and output rules, and Eos shows import with
+their house lights, relays and subs.
 
-- **Lanterns and staffs are practicals.** In the stage-look picker they
-  have their own **Practicals** section. A **Lantern** is now a hurricane
-  or porch lantern -- hook, cap, glass and base -- that glows all round
-  instead of throwing a beam, and lights what is near it in the studio. A
-  **Staff** is a pole wound with LED strip: diagonal turns of light down it
-  from the front or side, a small dot from above. Both have new icons. A
-  dimmer channel's *Auto* is now *Ellipsoidal / profile spot*. Shows that
-  already use these looks keep them. See
-  [Stage looks](lighting-studio.md#stage-looks).
-
-- **Output rules for relays, house and work lights.** Right-click
-  fixtures or a group → **Output Rules…** (Fixture Manager, Build, the
-  Show Tree's Library): **Ignore Blackout** (it also holds through
-  Blind), **Ignore the Grand Master**, **Switch (relay)** — on at 50%,
-  off below, never faded, and the Grand Master cannot switch it off — and
-  **On when not in use**: full whenever nothing in the show sets it. When
-  those come on is the show's setting in Settings ▸ Advanced ▸ Output: *When you
-  switch to Operate* (the default) or *When the show opens*. Fixtures
-  with rules carry an amber badge. See
-  [Output rules](fixture-manager.md#output-rules).
-
-- **Eos import: special circuits and subs.** Importing an Eos show now
-  has a **Special circuits** page. It sorts relay, house, work and
-  backstage / hall circuits by their labels, and you can change any of
-  them. They come in with [output rules](fixture-manager.md#output-rules):
-  relays are switches that ignore blackout and the Grand Master and are
-  on when not in use; house, work and backstage circuits ignore blackout
-  and the Grand Master. Relays come on at Operate unless Settings ▸
-  Advanced ▸ Output says otherwise. Each kind gets an **Eos** group
-  (**Power relays**, **House &amp; Work**, **Backstage**). Each Eos sub
-  becomes a Playback fader in a new Virtual Console frame, **Eos subs**.
-  See
-  [Importing an Eos show](getting-started.md#importing-an-eos-show).
-
-- **Three views.** **View → Workspace** picks the tabs: **qlcconsole**
-  (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
-  Virtual Console, Run), **Classic QLC+** (the QLC+ tabs, in QLC+'s order
-  and names) or **Everything**. The view is saved with the show. An old
-  QLC+ show opens in Classic QLC+, everything else (and a new show) in
-  qlcconsole. Choosing a hidden tab shows Everything, with a way back.
-  After **Upgrade This Show…**, a Classic show is offered the qlcconsole
-  view. See [Views](getting-started.md#views).
-
-- **Make a layer from the effects bench.** In the effect designer on the
-  bench (Build ▸ Effects, Window ▸ Effects), **Make a layer** turns the
-  Try on groups and the effect into a new layer. It goes back into the
-  cue or scene you came from, or into the Show Tree's selected cue,
-  another scene, or a new one. A saved, unchanged palette plays by name;
-  otherwise the layer gets a one-off. It is one undo step, and the new
-  layer is selected afterwards. See [Make a layer](effects.md#make-a-layer).
-
-- **Move in black per cue list and per cue.** The **MIB** switch is now
-  the show's default. A cue list can say **On** or **Off** whatever the
-  show says (right-click → **Move in black ▸**, its page, or
-  `mib off list`). A single cue can say **Don't move in black into this
-  cue** (its page, right-click, or `nomib 0.0.3`). The tree badges a list
-  or cue that differs from the show (**⊘ MIB** / **▸ MIB**), and the MIB
-  button's tooltip counts them. The lead time stays the show's. See
-  [Move in black](show-tree.md#move-in-black).
-
-- **More ETC ColorSource fixtures.** The library now has the
-  **ColorSource Spot jr** and the **ColorSource CYC**, and the
-  **ColorSource Spot** has all its modes: 5-Channel, Direct, 1-Channel and
-  RGB, laid out as ETC documents them. A show from an Eos console that
-  patched them in RGB mode comes across as these fixtures, not as generic
-  dimmers. A show with the old ColorSource Spot inside it is offered the
-  new one; see [Definition updates](definition-updates.md).
-
-- **Rename a group in the Fixtures tree.** Select a fixture group and
-  press **Return** (or **F2**) to type a new name right in the tree;
-  Return keeps it, **Esc** cancels. Fixtures, folders and universes
-  already renamed this way. Double-click still opens the group's grid
-  editor. See [Fixture Manager](fixture-manager.md#layout).
-
-- **Stage looks: say what a fixture looks like.** Fixture Properties has
-  a **Stage look** row, and the Fixture Manager a right-click **Stage
-  Look ▸** for fixtures and groups: Auto (its type), or a moving head
-  spot, round or square wash; a lantern, PAR can, ellipsoidal, Fresnel or
-  followspot; an LED PAR, square, bar, uplight or cyc wash, a strobe or a
-  staff. The fixture gets that look's icon in the fixture lists and its
-  shape on the plot and in the studio's flat views -- a followspot a long
-  barrel, a staff a thin rod -- still in its live colour. See
-  [Stage looks](lighting-studio.md#stage-looks).
-
-- **A Closed shutter look closes.** A Shutter look set to *Closed* used
-  to open the shutter on any spot with an Open capability (the AT-Spots
-  among them). It now closes it, *Strobe* strobes and *Open* opens;
-  auto-open still opens a shutter only when no look sets it. The Look
-  Editor shows a new Shutter look as the type's *Open*, and its icon
-  shows closed for a Closed look. See
-  [Auto-open shutters](other-improvements.md#auto-open-shutters).
-
-- **Build wears a hard hat.** The Build tab (and its Window-menu entry)
-  has a yellow construction hat for an icon. Build's **Move in black**
-  drop-down now shows when Auto is on: it is lit and reads **Move in
-  black · Auto**, or **MIB · n** while *n* heads pre-position, in step
-  with the Show Tree's **MIB** button and Settings. The menu bar has the
-  same switch, ticked while it is on: **Control ▸ Auto Move in Black**.
-  See [Build](build.md#layout).
-
-- **Group tools in the Show Tree's Library.** Right-click a group (or
-  several) in the Library for **Select all similar**: every group in the
-  same folder made of the same fixtures and heads. **Make set…** is right
-  below, to keep them as a group set. **Move to folder ▸** lists the
-  folders in use, *no folder* and **New Folder…**. See
-  [Group sets](show-tree.md#group-sets) and [The Library](show-tree.md#the-library).
-
-- **Cue colours.** Give a cue list, or a single cue, a text colour:
-  right-click → **Colour ▸** (eight show-friendly colours, Custom… or
-  None), the **Text colour** button on its page, or type
-  `textcolour red`. A cue's own colour wins over its list's. It shows in
-  the Show Tree, the Run tab (the list, NOW and NEXT), the VC Cue Runner
-  and Cue List, and the Workbench header -- a shade lighter or darker where
-  the theme needs it to stay readable. See
-  [Text colours](show-tree.md#text-colours).
-
-- **⇧⌘N makes the next thing.** In the Show Tree it makes what the
-  selection calls for: a production, a cue list, the next cue after the
-  one selected (0.0.3 → 0.0.4, or a point cue when 0.0.4 is taken), a
-  layer on the groups picked in the Library, a look. In Build it makes a
-  scene in the selected folder, a new step or scene layer in the
-  Workbench, or an effect; in Fixtures, a group in the folder. The
-  **Edit** menu names it first (*New Cue After 0.0.3*). The new row's
-  name is open to type, and ⌘Z takes it away in one step. See
-  [New here](show-tree.md#new-here).
-
-- **The Functions window is now Build ▸ Scenes ▸ Classic.**
-  **Window → Functions** (⇧⌘4) opens Build with the Scenes outline set to
-  Classic, every function by type, and each one edits in the Workbench.
-  A new function of any type (⌘1 … ⌘9), the Function Wizard and the
-  startup function are on **+ Scene ▾** and the outline's right-click; a
-  sequence edits there now too. Show Tree **Open** and a step's **Edit
-  Chase…** load in the Workbench, with **↩** back. See
-  [Coming from the Functions window](build.md#coming-from-the-functions-window).
-
-- **Icons that say what a row is.** In Build (the outline and the
-  Workbench), the Palettes list, the Show Tree and its Library, a Dimmer
-  look is a small pie filled to its level (a 45 % look is 45 % lit); a
-  Shutter look shows the gate open, closed or strobing, and a Strobe look
-  a flash with its rate around the ring. An Aim look and a stage target
-  show a yellow bullseye for a point, a line with square ends for a line.
-  Fixtures show what their definition makes them: a fixed wash, a moving
-  spot (gobo, prism or iris), a moving wash (zoom or colour mixing, no
-  gobo) or a plain moving head. A group of one kind wears that kind
-  with a small group badge; a mixed group keeps the group icon. See
-  [Stage targets](stage-targets.md).
-
-- **Make effects in Build.** Build ▸ Effects has a **+ New ▾** button
-  (an effect palette, an EFX or an RGB Matrix) and a right-click menu
-  (Design / edit…, Open in editor, Duplicate, Rename, Move to folder…,
-  Delete, and New on empty space). Clicking an effect palette opens it in
-  the effect designer, full height in the Workbench. See
-  [Making effects](build.md#making-effects).
-
-- **Notes open up while you type.** A chaser step's note -- in the
-  Workbench's step header and step table, the Chaser editor's **Notes**
-  column -- and a Show Tree cue's note now word-wrap and grow as you type,
-  up to six lines, so you can read back what you wrote. **Return** applies
-  it, **Shift+Return** starts a new line, **Esc** puts it back. Closed up,
-  a long note is cut short with *…*; hover it to read all of it. See
-  [Walking a chaser](build.md#walking-a-chaser).
-
-- **A look's name follows its colour.** Change a colour look from red
-  to a darker red and "Red" becomes "Dark Red" as you drag. Only the
-  colour part changes ("Act2 Red" becomes "Act2 Dark Red"), and the look
-  stays in its folder. Intensity ("Intensity 45%" to "Intensity 60%"),
-  strobe and shutter names follow their values the same way. A name of
-  your own is left alone. The change and the rename are one Undo step.
-  See [The name follows the value](build.md#the-name-follows-the-value).
-
-
-- **Group tools: select all similar, move to folder.** Right-click a
-  fixture or a group in the Fixtures tab (or in Build's Groups &
-  fixtures) for **Select All Similar** — fixtures of the same definition
-  and mode, or groups in the same folder made of the same fixtures and
-  heads. Then
-  **Move to Folder ▸** lists the folders in use plus **New Folder…**, and
-  **Create Group(s) from Selection…** starts in the folder the selection
-  was made in. See
-  [Fixture-group folders](fixture-manager.md#fixture-group-folders).
-
-- **Send a chaser to the Show Tree from Build.** Load a chaser in the
-  Workbench and click **Send to Show Tree…**, or right-click its row in
-  Build ▸ Scenes. It is the Show Tree's Import in place for that chaser,
-  with the same sheet, and **Done, show it in the Show Tree** takes you to
-  the new list. See
-  [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
-- **An imported chaser tracks what it repeats.** A collection or scene
-  that appears in several steps in a row is set in the first of those cues
-  and tracks through the rest. It is released where it stops and set again
-  where it comes back. Every cue still plays exactly what its step did. See
-  [What repeats is set once and tracks](show-tree.md#what-repeats-is-set-once-and-tracks).
-- **The effect designer.** Build an effect in detail on the heads it is
-  for. **Design effect…** on a Show Tree layer (right-click it, or use the ⋯
-  menu of its Effect row) opens the effect browser at full height. Beside
-  it are the effect's settings and its own colour and dimmer, playing live
-  on just that layer's fixtures, in context or Solo. **Keep on this
-  layer** makes a one-off. **Save as palette…** names and files it.
-  **Save as preset…** keeps it as a starting point for other shows.
-  **Window ▸ Effects** lists every effect palette and every EFX and RGB
-  Matrix in the show, with the same designer on a **Try on** bench. See
-  [The effect designer](effects.md#the-effect-designer).
-
-
-- **Upgrade this show, in one place.** **File → Upgrade This Show…**
-  lists every chaser and collection with what would become of it: a cue
-  list (checked to play the same), an effect kept as a function, or left
-  alone. A second page offers to capture the raw scenes into palettes.
-  **Upgrade** does the ticked parts as one undo step, and **Restore
-  original…** puts a chaser back. Nothing happens on its own, and the
-  old way keeps working. See
-  [Upgrade this show](show-tree.md#upgrade-this-show).
-- **Bring an old show over, and back.** A show of chasers opens as it
-  always did, with one line at the top of the Show Tree tab offering to
-  convert it. **Convert an old show…** tells the chasers used as cue
-  lists (they wait for GO, carry notes or cue numbers) from the ones used
-  as effects (strobes and chases, which stay functions), and shows each
-  list's plan, checked channel by channel before anything changes.
-  **Import in place** files the originals under `Imported/…` and moves
-  the VC, timelines and show control over to the list; **Restore
-  original** undoes it. Collections that every cue holds (a "base") no
-  longer show up as ▣ rows, and a raw scene's ▣ row can **Capture into
-  palettes…**. See
-  [An old show: convert it](show-tree.md#an-old-show-convert-it).
-
-- **Move in black from the Show Tree and Settings.** The show's auto
-  move-in-black is now a **MIB** button in the Show Tree's header, beside
-  the show controls, with the lead time under its arrow, and in
-  **Settings → Show Tree**, as well as in Programming → Move in black. All
-  three are the same one setting, saved with the show. While it is moving
-  lights in black, the button says how many (*MIB · 3*). A new show now
-  starts with it off instead of keeping the last show's. See
-  [Move in black](show-tree.md#move-in-black).
-- **Open what an old show's layer plays.** In the Show Tree, a layer that
-  plays a function as it is (▣ — a raw scene, an EFX, an RGB Matrix)
-  now opens it: double-click it, right-click → **Open**, or **Open** on
-  its page. It opens in its own editor (now in the Workbench), and what
-  you change there is what the cue plays. The page also says where else
-  it plays. See [Adding layers](show-tree.md#adding-layers).
-- **The import tells you what it did, and takes over the buttons.**
-  **Import chaser…** now shows a sheet: whether the cue list plays the
-  same as the chaser (checked channel by channel), a row per cue, and
-  what plays as it is and why. It offers to move the VC buttons, VC Cue
-  Lists and show control that fire the chaser over to the new list —
-  ticked, and undone with the import. See
-  [From a chaser you already have](show-tree.md#from-a-chaser-you-already-have).
-- **The stock sample imports the same.** A looping chase of scenes with
-  their own fades (the sample show's par chasers) now plays in the cue
-  list exactly as in the chaser, where it used to run at about half the
-  level.
-- **The version on the boot window.** While qlcconsole starts, its window
-  shows the release — "qlcconsole 0.2.2" — and below it the build and
-  commit, so you can tell which version is starting.
-- **The Cue Runner widget, mapped and less crowded.** Each of its actions
-  (GO, Sub GO, Back, Sub Back, Pause, Stop, Load next / previous) takes a
-  controller input and a key in its properties' new **External Input**
-  tab, with feedback that lights GO while there's a cue to GO to and Sub
-  GO while a sub-cue waits. The info now gets the room: made bigger, the
-  cue name grows and more of the cues to come show, while GO and Sub GO
-  keep their height. In Design mode, handles inside it set the buttons'
-  height and the GO / Sub GO split. See
-  [The cue runner](show-tree.md#the-cue-runner).
-- **No false warning for a curtain.** A show with a stage curtain no longer
-  lists it under "fixture types declare no light output": a curtain is not
-  a light. Hazers, smoke machines and fans with no light of their own are
-  left out too; a real light with no output set is still listed.
-
-### Build, and the Workbench
+### Build and the Workbench
 
 - **The Programming tab is Build.** Over its left side, **Palettes |
-  Effects | Scenes** picks what is listed; groups and fixtures are under
-  every one of them. On the right, the **Workbench** shows whatever you
-  load. See [Build Tab](build.md).
-- **A collection as layers.** Click a collection in Build ▸ Scenes and each
-  member is a layer: a scene opens up into its groups and looks, an EFX or
-  an RGB Matrix plays as it is (▣). **+ Scene**, **+ EFX** and **+ RGB
-  Matrix** add one — a new EFX or matrix is made on the selected layer's
-  groups and opens beside it in its own editor. ▲ ▼ reorder, ⌫ takes a
-  layer out (the scene stays in the show), drag scenes in from the left.
-  What is loaded plays on the rig as you work (Design mode). See
+  Effects | Scenes** picks what is listed, with groups and fixtures under
+  each. On the right, the **Workbench** shows whatever you load. The tab
+  wears a yellow hard hat. See [Build](build.md).
+- **A collection as layers.** Click a collection in Build ▸ Scenes and
+  each member is a layer: a scene opens up into its groups and looks, an
+  EFX or an RGB Matrix plays as it is (▣). **+ Scene**, **+ EFX** and **+
+  RGB Matrix** add one; ▲ ▼ reorder, ⌫ takes a layer out (the scene stays
+  in the show), and scenes drag in from the left. **▣ Open** loads a layer
+  on its own and **↩** comes back. A scene used elsewhere says **also in
+  2**; **Own copy** splits it off. What is loaded plays on the rig as you
+  work (Design mode), and every change is one ⌘Z. See
   [The Workbench](build.md#the-workbench).
-- **Open, and come back.** **▣ Open** (or a double-click) loads a nested
-  collection, a chaser's step or a scene on its own; **↩** in the header
-  returns, with the same row selected.
-- **Shared members say so.** A scene used in other collections or chaser
-  steps shows **also in 2** — hover for where. An edit changes it
-  everywhere.
-- **Every scene and what's in it, in one tree.** Build ▸ Scenes is the
-  outline: folders, scenes, collections and chasers, each scene opening
-  into its targets and looks. Drag a row to another scene to move it (⌥
-  copies it), open everything with ⊞. See [The outline](build.md#the-outline).
-- **Old QLC+ shows stay as they are.** A show made the old way opens, plays
-  and saves as QLC+ made it; nothing is converted and nothing asks. Its
-  collections load in the Workbench as layers.
-- **One Undo.** Adding, removing and reordering layers, a new EFX or RGB
-  Matrix, filing and renaming — each is one ⌘Z, in Build or the Show Tree.
-- **A cue in the Workbench.** In the Show Tree, double-click a cue (or a
-  layer, or a look), press **✎ Workbench** or type `wb`: the cue opens in
-  the Workbench, right there in place of the page. Its own layers open up
-  into a row per attribute; what tracks in is grey, with where it comes
-  from, and isn't changed here. Click a value for its palette in the Look
-  Editor at full height, a layer for its page with every ⋯; drop palettes
-  and groups from the Library onto a layer. The cue plays in context as you
-  work, or **Solo** just the selected layer. **↩ Show Tree** goes back with
-  the same layer selected. See [Working on a cue in the
-  Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
-
-### Chasers in the Workbench, and Classic
-
-- **Walk a chaser.** Click a chaser and the Workbench walks it step by
-  step: **◀ ▶**, *Step 3 of 7*, and the step's fade in, hold, fade out, cue
-  number and note to edit in place. The step table (the Chaser editor's
-  columns) sits over the step's layers: click a step to go to it. A
-  collection step opens up into its layers — add an EFX, take a scene out,
-  reorder — and the chaser plays it that way. See
+- **Every scene in one tree.** Build ▸ Scenes is an outline of folders,
+  scenes, collections and chasers, each scene opening into its targets and
+  looks. Drag a row to another scene to move it (⌥ copies). **Scenes ▸
+  Classic** lists the show by function type, as QLC+'s Function Manager
+  does. See [The outline](build.md#the-outline).
+- **Walk a chaser.** A chaser loads step by step: **◀ ▶**, the step's
+  fades, hold, cue number and note edited in place, the step table above
+  its layers. **Chaser from selection** makes a chaser of the scenes you
+  pick, in the order you pick them. See
   [Walking a chaser](build.md#walking-a-chaser).
-- **Chaser from selection.** Select scenes in Build ▸ Scenes in the order
-  you want them, then **Chaser from selection** (+ Scene's menu, or
-  right-click). Drag scenes onto a chaser's row, or onto its step table, to
-  add steps.
-- **Make own copy.** A scene shared with other collections — or a step
-  whose collection plays elsewhere too — says **also in …**; **Own copy**
-  splits it off so your edit changes only this one. One ⌘Z puts it back.
-- **Scenes ▸ Classic.** The navigator can list the show by function type,
-  as QLC+'s Function Manager does. An old QLC+ show opens that way; your
-  choice is remembered per show.
+- **Make effects in Build.** Build ▸ Effects has **+ New ▾** (an effect
+  palette, an EFX or an RGB Matrix) and a right-click menu. An effect
+  palette opens in the **effect designer**: the effect browser at full
+  height beside its settings, its own colour and dimmer, playing live on
+  the heads it is for. **Make a layer** turns the bench's groups and
+  effect into a new layer of the cue or scene you came from. See
+  [Making effects](build.md#making-effects),
+  [The effect designer](effects.md#the-effect-designer) and
+  [Make a layer](effects.md#make-a-layer).
+- **A look's name follows its value.** Change a colour look from red to a
+  darker red and "Red" becomes "Dark Red"; only that part of the name
+  changes, and a name of your own is left alone. Intensity, strobe and
+  shutter names follow the same way. See
+  [The name follows the value](build.md#the-name-follows-the-value).
+- **Send a chaser to the Show Tree from Build.** **Send to Show Tree…** on
+  a loaded chaser, or on its row's right-click, imports it in place. See
+  [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
 
-### More Matrix effects, and staggered boxes
+### Views, menus and keys
 
-- **Twelve more Matrix effects** for pixel boxes, in the effect browser's
-  **Matrix** tab: **Fire** (flames from the bottom, classic, blue or the
-  look's colours), **Starfield** (warp speed out of a point), **Spiral**,
-  **Lissajous** (a figure-8 with a fading trail), **Kaleidoscope** (2 to
-  8-fold, from clouds or bars), **Bouncing Balls** (with or without
-  gravity), **Fireworks** (bursting on the beat), **Scanner** (KITT),
-  **Dissolve**, **Gradient Sweep**, **Box VU** (each box a VU meter from
-  the audio input) and **Image** — a picture or animated GIF, kept inside
-  the show. Each takes the look's colours in order (its own when the look
-  has none), and keeps the white rows of a box like the XL-450 lit as they
-  should be. See [Matrix effects](effects.md#matrix-effects) and
-  [Pictures and GIFs](effects.md#pictures-and-gifs).
-- **Each box, staggered.** A new scope for every Matrix effect that has
-  one: the same picture in every box, each a little behind the last — left
-  to right, right to left, out from the middle or at random — so a ripple
-  rolls from box to box. **stagger** sets how far, as a part of the
-  effect's cycle.
+- **Three views.** **View ▸ Workspace** picks the tabs: **qlcconsole**
+  (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
+  Virtual Console, Run), **Classic QLC+** (QLC+'s own tabs, in its order
+  and names) or **Everything**. The view is saved with the show. An old
+  QLC+ show opens in Classic QLC+; everything else, and a new show, in
+  qlcconsole. Choosing a hidden tab from the Window menu shows Everything,
+  with a way back. See [Views](getting-started.md#views).
+- **Functions.** In the qlcconsole view, **Window ▸ Functions** (⇧⌘4)
+  opens Build ▸ Scenes ▸ Classic, every function by type, each edited in
+  the Workbench; new functions of any type and the Function Wizard are on
+  **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab. See
+  [Coming from the Functions window](build.md#coming-from-the-functions-window).
+- **File ▸ Import is a menu of file types**: **QLC+ / qlcconsole
+  Workspace**, **ETC Eos Show (ASCII .asc)** and **QLC+ Fixtures List
+  (.qxfl)**, each with a file dialog for that kind, then **Any Supported
+  File…**. See [Importing into a show](getting-started.md#importing-into-a-show).
+- **Esc backs out.** Esc takes you back one level from an editor that
+  covers a page: a palette opened over Build's rows (it has **↩ Back**
+  now), a group's layout, the effect bench (asking first if the effect
+  isn't kept), a ▣ opened layer, the Workbench docked in the Show Tree,
+  the Show Tree's Look Editor. Edits stay. Esc in a rename still only
+  cancels the rename, and plain Esc never stops playback (**Stop all** is
+  ⌘⇧Esc). See [Backing out](build.md#backing-out-esc).
+- **⇧⌘N makes the next thing** for where you are: a cue list, the next
+  cue, a layer on the groups picked in the Library, a scene in Build's
+  selected folder, a group in the Fixtures tab. **Edit** names it first
+  (*New Cue After 0.0.3*). See [New here](show-tree.md#new-here).
+- **The boot window shows the version** that is starting, and the build
+  and commit below it.
 
-### Show Tree: skip a cue
+### Show Tree
 
-- **Skip a cue without deleting it.** Untick the box on a cue's row (or
-  right-click → **Skip cue**, or **⌘/**, or type `skip 0.0.3` or
-  `skip 0.0.3 thru 0.0.5`) and GO, auto-follow and Back pass over it. It
-  turns grey and struck through; untick it again, or `unskip`, to put it
-  back. Its changes don't track on: the next cue plays as if it weren't in
-  the list. A jump straight to it still plays it. See
-  [Skipping cues](show-tree.md#skipping-cues).
+- **Cue order is number order.** Type a new number (the cue's **Number**
+  field, or **F2** on its row) and the cue moves to its place; a number
+  already taken is refused. Drag one cue or several and each dropped cue
+  is numbered for its new place (between 2 and 3 → 2.5); no other cue is
+  renumbered. Right-click a cue → **Renumber this level…** numbers its
+  level 1, 2, 3… (or from a start, in steps), point cues and sub-cues
+  following. Each is one undo step. See
+  [Reordering and numbering](show-tree.md#reordering-and-numbering).
+- **A cue in the Workbench.** Double-click a cue, a layer or a look, press
+  **✎ Workbench** or type `wb`: the cue opens in the Workbench in place of
+  the page, its own layers opened up a row per attribute, what tracks in
+  greyed with where it comes from. It plays in context, or **Solo** the
+  selected layer. **↩ Show Tree** goes back. See
+  [Working on a cue in the Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
+- **Skip a cue without deleting it.** Untick its box (or **⌘/**, or
+  `skip 0.0.3`): GO, auto-follow and Back pass over it, and the next cue
+  plays as if it weren't there. See [Skipping cues](show-tree.md#skipping-cues).
+- **Move in black, per list and per cue.** The show's auto move-in-black
+  is the **MIB** button in the Show Tree's header (*MIB · 3* while it
+  pre-positions), Build's **Move in black ▾**, **Control ▸ Auto Move in
+  Black** and Settings ▸ General ▸ Show Tree — one setting, saved with the
+  show; a new show starts with it off. A cue list can say **On** or
+  **Off** whatever the show says, and a cue can say **Don't move in black
+  into this cue**. See [Move in black](show-tree.md#move-in-black).
+- **Cue colours.** Give a cue list or a cue a text colour (right-click →
+  **Colour ▸**, or `textcolour red`). It shows in the tree, the Run tab,
+  the VC Cue Runner and Cue List and the Workbench header. See
+  [Text colours](show-tree.md#text-colours).
+- **Tracking as badges.** A cue row counts what it sets (● 2), releases
+  (○ 1) and what tracks in (⤳ 5); a grey row shows the cue it came from.
+  Hover for the details.
+- **Notes open up while you type**, in the cue page and in a chaser's
+  steps, up to six lines; **Return** applies, **Shift+Return** starts a
+  new line.
+- **Group tools in the Library.** Right-click groups for **Select all
+  similar**, **Make set…**, **Move to folder ▸** and **Output Rules…**. See
+  [The Library](show-tree.md#the-library).
+- **The Cue Runner widget** takes a controller input and a key for each
+  action in a new **External Input** tab, and gives the cue information
+  the room as it grows. See [The cue runner](show-tree.md#the-cue-runner).
 
-### Definition updates
+### Old shows
 
-- **Old definitions, brought up to date.** **Fixtures → Definition
-  Updates…** lists your fixture definitions that are older than the
-  current version of the same fixture — the included one, or a newer copy
-  of your own — the ones the open show uses first. Each says what an
-  update changes (modes and channels added, removed or changed), and
-  **Update from Current**, **Update All**, **Keep Mine** or **Ignore This
-  Version**. Every update keeps the old files in a dated backup, and **Undo
-  Last Update** puts them back. A copy someone changed on purpose is never
-  called old. The footer says when there are any. See
-  [Definition Updates](definition-updates.md).
-- **Synced QLC+ folder.** Links into the old QLC+ folder are handled
-  explicitly: update the synced original (every computer gets it), or
-  replace the link with a file of its own. Old originals left behind there
-  are found too.
-- **Old copies inside a show.** **File → Show Definitions…** lists what a
-  .qlcc carries and how each compares with this computer's — which is
-  newer (by the version that saved it, then the dates), and what changes.
-  **Use This Computer's** updates the show's copy, each fixture keeping its
-  mode by name; a changed channel layout names the fixtures and functions
-  it touches and asks first; **Undo** goes back in one step. When the
-  show's copy is the newer one, **Install the Show's** puts it in your
-  folder. See [Old definitions inside a show](definition-updates.md#old-definitions-inside-a-show).
+- **Upgrade This Show…** (File menu, and the line at the top of the Show
+  Tree for a show of chasers) lists every chaser and collection with what
+  would become of it — a cue list, checked to play the same; an effect
+  kept as a function; or left alone — and offers to capture raw scenes
+  into palettes. **Upgrade** does the ticked parts as one undo step;
+  **Restore original…** puts a chaser back. Nothing happens on its own.
+  After an upgrade, a Classic QLC+ show is offered the qlcconsole view.
+  See [Upgrade this show](show-tree.md#upgrade-this-show) and
+  [An old show: convert it](show-tree.md#an-old-show-convert-it).
+- **Import chaser… shows a sheet**: whether the cue list plays the same
+  (checked channel by channel), a row per cue, and what plays as it is and
+  why. It moves the VC buttons, VC Cue Lists and show control that fire
+  the chaser over to the new list. What the steps repeat is set once and
+  tracks. See
+  [From a chaser you already have](show-tree.md#from-a-chaser-you-already-have)
+  and [What repeats is set once and tracks](show-tree.md#what-repeats-is-set-once-and-tracks).
+- **Open what a layer plays.** A ▣ layer (a raw scene, an EFX, an RGB
+  Matrix) opens its function in the Workbench; its page says where else it
+  plays. See [Adding layers](show-tree.md#adding-layers).
+- **The stock sample imports the same.** A chase of scenes with their own
+  fades now plays in the cue list as in the chaser (it used to run at
+  about half the level).
 
-### LED Layout: a pixel fixture as it is built
+### Fixtures and the plot
 
-- **LED Layout…** on a fixture's right-click menu (Fixture Manager, the
-  Lighting Studio plot and Layers tree, the Rig Overview) and in Fixture
-  Properties opens the layout of its model: every head in its cell,
-  numbered, coloured by kind — RGB rows a rainbow in head order, white rows
-  white. Type the rows (`RGB, W, RGB, W, RGB` for an XL-450), click to swap
-  or move heads, flip, resize the grid, and **Preview Order** walks the
-  heads one by one — on the real fixture too — to check it. No group is
-  made. **Save to Show**, and **Save as Default for This Model** to use it
-  in new shows; a show's own layout still wins. Matrix effects, groups by
-  head type, the plot and the Rig Overview all draw from it. See
+- **Stage looks.** Fixture Properties and the Fixtures tab's right-click
+  **Stage Look ▸** say what a fixture looks like: Auto, or one of fifteen
+  looks in four sections — moving heads, fixed conventionals (PAR can,
+  ellipsoidal, Fresnel, followspot), fixed LEDs and **Practicals**
+  (Lantern, Staff). The plot and the studio draw that shape in the live
+  colour, and the fixture lists show its icon. It changes only the
+  picture, so it is offered in Operate too. See
+  [Stage looks](lighting-studio.md#stage-looks).
+- **Auto fixtures as their closest look.** The plot's **Show** menu has
+  **Show Auto fixtures as their closest stage look**, saved with the show.
+- **One icon per fixture, everywhere**, and curtains have a drape. Icons
+  say what a row is: a Dimmer look is a pie of its level, a Shutter look
+  open, closed or strobing, an aim a bullseye, a fixture a fixed wash,
+  moving spot or moving wash. See [Icons](fixture-manager.md#icons) and
+  [Stage targets](stage-targets.md).
+- **Output rules for relays, house and work lights.** Right-click
+  fixtures or a group → **Output Rules…** (Fixtures tab, Build, the Show
+  Tree's Library): **Ignore Blackout** (it holds through Blind too),
+  **Ignore the Grand Master**, **Switch (relay)** — on at 50 %, off below,
+  never faded — and **On when not in use**. When those come on is the
+  show's setting in **Settings ▸ Advanced ▸ Output**: when you switch to
+  Operate (the default) or when the show opens. Fixtures with rules carry
+  an amber badge. See [Output rules](fixture-manager.md#output-rules).
+- **Edit one definition from several fixtures.** Select fixtures, or a
+  group, that share a definition and right-click → **Edit Fixture
+  Definition…**. The toolbar's **Properties** opens several at once. See
+  [Context menu](fixture-manager.md#context-menu).
+- **Rename a group in the tree** with **Return** or **F2**; **Select All
+  Similar**, **Move to Folder ▸** and **Create Group(s) from Selection…**
+  work in the group's folder. See
+  [Fixture-group folders](fixture-manager.md#fixture-group-folders).
+- **LED Layout…** on a multi-head fixture edits where each head of its
+  model really is, saved with the show or as the model's default. See
   [LED Layout](fixture-manager.md#led-layout).
+- **Definition updates.** **Fixtures ▸ Definition Updates…** lists your
+  fixture definitions older than the current version, with what an update
+  changes, a dated backup and **Undo Last Update**; **File ▸ Show
+  Definitions…** does the same for the copies a show carries. See
+  [Definition Updates](definition-updates.md).
+- **ETC ColorSource Spot jr and CYC**, and the ColorSource Spot's other
+  modes (Direct, 1-Channel, RGB).
+- **No false warning for a curtain**, fan, hazer or smoke machine in the
+  footer's Not ready list.
+
+### Importing an Eos show
+
+- **Special circuits and subs.** The Eos import has a **Special circuits**
+  page: relay, house, work and backstage / hall channels, read from their
+  Eos labels, each changeable. They come in with
+  [output rules](fixture-manager.md#output-rules) and a group each under
+  **Eos** (**Power relays**, **House &amp; Work**, **Backstage**). Each Eos
+  sub becomes a Playback fader in a new Virtual Console frame, **Eos
+  subs**. See [Importing an Eos show](getting-started.md#importing-an-eos-show).
+
+### Effects
+
+- **Twelve more Matrix effects** — Fire, Starfield, Spiral, Lissajous,
+  Kaleidoscope, Bouncing Balls, Fireworks, Scanner, Dissolve, Gradient
+  Sweep, Box VU and Image (a picture or animated GIF kept in the show) —
+  and an **Each box, staggered** scope that rolls the same picture from
+  box to box. See [Matrix effects](effects.md#matrix-effects) and
+  [Pictures and GIFs](effects.md#pictures-and-gifs).
+- **A Closed shutter look closes.** *Closed* used to open the shutter on
+  any spot with an Open capability; now *Closed* closes, *Strobe* strobes
+  and *Open* opens. See
+  [Auto-open shutters](other-improvements.md#auto-open-shutters).
+
+### Controllers
+
+- **Controller test** (Focus mode's setup; Settings ▸ Advanced ▸ Game
+  controllers) lists every input a game controller sends as it arrives.
+  Focus mode says when the controller is paused, and why. A controller
+  keeps working with qlcconsole behind other windows, is found again when
+  switched back on or after the Mac sleeps, and every Xbox model is read
+  in the right layout. See [Controller test](lighting-studio.md#controller-test).
 
 ## 0.2.1 (October 2026)
 

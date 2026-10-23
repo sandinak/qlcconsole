@@ -40,6 +40,17 @@ private slots:
     void autosaveFilePathWithFileName();
     void aQlccShowSavesAndOpensAgain();
     void aMissingShowFileIsAnErrorNotAnEmptyShow();
+    /** A modified show's recovery copy is written beside it and loads back
+     *  with the change; an unmodified one writes nothing */
+    void aModifiedShowWritesARecoveryCopyThatLoadsBack();
+    /** An untitled show's recovery copy goes to the user folder, where the
+     *  next start looks for it */
+    void anUntitledShowsRecoveryCopyIsWhereStartUpLooks();
+    /** With nobody to ask (offscreen, QLC_NO_RECOVERY_PROMPT) a recovery
+     *  file found at start is left for a later session, the show untouched */
+    void aRecoveryFileIsKeptWhenThereIsNobodyToAsk();
+    /** Saved, or discarded on purpose: the recovery copy goes */
+    void savingOrDiscardingRemovesTheRecoveryCopy();
 
 private:
     App *m_app;

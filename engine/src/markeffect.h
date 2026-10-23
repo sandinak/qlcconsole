@@ -11,7 +11,10 @@
   a small threshold) the mark for that fixture AUTO-RELEASES, handing the fixture
   over seamlessly. Marks round-trip to the workspace <Mark> element.
 
-  Mirrors ParkEffect (a captured-value DMXSource); the two are independent.
+  Started as a copy of ParkEffect (captured values); the two are independent.
+  A mark writes no intensity (the fixture is dark), so a DMXSource writing
+  the universes directly is enough here -- Park itself now goes through a
+  fader (OutputLayer), since processFaders() zeroes intensity every frame.
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */

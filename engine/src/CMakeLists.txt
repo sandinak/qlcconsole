@@ -57,6 +57,7 @@ add_library(${module_name} SHARED
     showtreelooks.cpp
     showtreeproductions.cpp
     showtreesubcues.cpp
+    showtreenumbering.cpp
     showtreerunner.cpp
     showtreereusable.cpp
     showtreemodel.cpp showtreemodel.h
@@ -124,6 +125,7 @@ add_library(${module_name} SHARED
     controllerkeepalive.cpp controllerkeepalive.h
     gamepadrole.cpp gamepadrole.h
     parkeffect.cpp parkeffect.h
+    outputlayer.cpp outputlayer.h
     markeffect.cpp markeffect.h
     cueoutput.cpp cueoutput.h
     cuelookahead.cpp cuelookahead.h

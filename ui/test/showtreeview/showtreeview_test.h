@@ -59,6 +59,7 @@ private slots:
     void dropsOnTheTreeWidget();
     void anEffectGetsLooksOfItsOwn();
     void theLookEditorEditsARowsPalette();
+    void cuesReorderAndRenumber();
     void selectingACuePreviewsItOnTheRig();
     void inDesignTheEditShowsOverItsRunningList();
     // P2: tracking in the tab

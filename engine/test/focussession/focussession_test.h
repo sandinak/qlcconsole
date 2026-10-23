@@ -47,6 +47,8 @@ private slots:
      *  dark, and writeDMX puts it in the universes. */
     void theFocusedHeadIsAimedAndLit();
     /** Y swaps to the second reference, per head. */
+    /** Its light survives the frame and beats a brighter running cue (B1) */
+    void itsLightHoldsOverARunningCue();
     void secondReferenceToggles();
     /** A line target gives each head its own point. */
     void aLineTargetSpreadsTheHeads();

@@ -11,12 +11,13 @@
 | ⌘, | Settings (autosave, appearance, …) |
 | ⌘F12 | Switch between **Design** and **Operate** |
 | ⌘L | Show-mode lock |
+| **Esc** | **Back out** of an editor to what was showing before: a palette opened from a list, a group's layout, the effect bench, a ▣ layer, the Workbench docked in the Show Tree, the Show Tree's Look Editor. What you changed stays changed. In a rename or another inline edit, Esc cancels just that edit; in a dialog it closes the dialog. Plain Esc stops nothing |
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |
 | ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a look; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
-| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (Build ▸ Scenes ▸ Classic), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
+| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (its tab in the Classic QLC+ and Everything views; Build ▸ Scenes ▸ Classic in the qlcconsole view), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)). A tab the [view](getting-started.md#views) hides switches it to Everything |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
 | ⇧⌘M | Lighting Studio |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
@@ -25,11 +26,11 @@
 | ⇧F1 | The stock QLC+ reference (online) |
 
 **Right-click** a **tab** → **Open in Its Own Window**, or **Shift-click**
-it, to break it out into its own window (or **Window → Move … to Its Own
+it, to break it out into its own window (or **Window ▸ Move … to Its Own
 Window**). On a Mac, if the app isn't in front, the first click only brings
 it forward — Shift-click again, or use the right-click menu, which works
-either way; **Window → Put Back in Main Window** returns
-it. **Window → Shift-Click a Tab to Open It in a Window** turns the
+either way; **Window ▸ Put Back in Main Window** returns
+it. **Window ▸ Shift-Click a Tab to Open It in a Window** turns the
 Shift-click off, if it gets in the way.
 
 ## Lighting Studio (the plot)
@@ -45,7 +46,7 @@ Shift-click off, if it gets in the way.
 | ⇧-drag on empty canvas | Pan |
 | ⇧-scroll | Zoom, centred on the pointer |
 | ⌘A | Select all |
-| ⌘C / ⌘V | Copy / paste structures with their fixtures |
+| ⌘C / ⌘V | Copy / paste trusses, decks and targets; a truss brings its fixtures, as new unpatched copies (the status line says so — **Patch Others Like This** addresses them) |
 | ⌘Z | Undo the last move, paste or edit |
 | ] / [ | Turn the selection 15° clockwise / anticlockwise |
 | } / { | Turn it 1° |
@@ -71,6 +72,7 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | Drag a scene onto the Workbench's layers | Add it to the collection loaded |
 | ⌫ on a Workbench layer | Take it out of the collection (the function stays) |
 | Double-click a ▣ layer | Open it in the Workbench (↩ comes back) |
+| **Esc** | Back out one level: a palette double-clicked open goes back to the page it covered (as its **↩ Back**), a group's layout to its scene (**← Back**), the effect bench to the scene it was opened from (asking first if the effect hasn't been kept), a ▣ layer to its collection (**↩**) ([Backing out](build.md#backing-out-esc)) |
 | ⌘→ / ⌘← | Expand / collapse every row |
 | ⌘Z / ⇧⌘Z | Undo / redo the last change, here or in the Show Tree (one history) |
 | ⇧⌘N | New here: a scene in the selected folder; in the Workbench a scene layer (collection) or the next step (chaser); in Effects a new effect ([New here](build.md#new-here)) |
@@ -90,10 +92,11 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | **⇧⌘N** | New here: a production, a cue list, the next cue after the selected one, a layer on the Library's groups, a look ([New here](show-tree.md#new-here)) |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
-| Drag a cue onto another cue | Move it there; with **⌥**, include it |
+| Drag cues up or down (before / after a row) | Move them there, renumbered for their place; with **⌥**, include it ([Reordering and numbering](show-tree.md#reordering-and-numbering)) |
 | Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
 | **:** (in the tree) | To the command line at the bottom ([The command line](show-tree.md#the-command-line)) |
 | **Esc** (in the command line) | Close the help, then back to the tree |
+| **Esc** (anywhere else in the tab) | The Workbench docked: back out a level, then **↩ Show Tree**. Otherwise the Look Editor under the page closes (**↩ Back** on it does the same) |
 | **Tab** (in the command line) | Complete the word; again, the next match |
 | `help` / `?` (in the command line) | Every word, or `help <word>` with examples |
 | ↑ / ↓ (in the command line) | Earlier / later commands |

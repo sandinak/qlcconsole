@@ -289,7 +289,7 @@ void MasterTimerPrivate::run()
                      << "cpu_us:" << long(mt->tickCpuMs() * 1000.0)
                      << "budget_us:" << (nsTickTime / 1000);
             /* No need to sleep. Immediately process the next tick */
-            mt->timerTick();
+            mt->timerTick(true);
             /* Now the finish time needs to be recalibrated */
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
             clock_get_time(cclock, finish);
@@ -342,7 +342,7 @@ void MasterTimerPrivate::run()
         }
 #endif
         /* Execute the next timer event */
-        mt->timerTick();
+        mt->timerTick(true);
     }
 
     free(finish);

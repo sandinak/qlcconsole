@@ -46,12 +46,19 @@ private slots:
     void anOverrunningTickRunsAlone();
     void stopWaitsForATickInProgress();
     void stopRightAfterStartReturns();
+    void aStopReachesTheUniversesWithTheGuiThreadBusy();
+    void aTickByHandLeavesTheFramesToItsCaller();
+    void framesRolesAndTeardownFromEveryThread();
 
     void theBeatClockRunsAtTheTempo();
     void aTempoChangeKeepsTheBeatsPlace();
     void alignBeatPutsTheBeatNow();
     void tapSetsTheTempoAndTheBeat();
     void internalBeatsFireOnTheClocksBeats();
+
+    /** Stop all with a fade (fadeAndStopAll): every function stops at once
+     *  and its output fades down over the time, to nothing. */
+    void fadeAndStopAllFadesTheOutputThenStops();
 
 private:
     Doc* m_doc;

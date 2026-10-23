@@ -189,6 +189,18 @@ protected:
     bool m_reaimRequested = false;
     bool m_repaletteRequested = false;
 
+    /** A group the scene plays on changed its members (any group: the
+     *  diff decides): the next write() lets go of who left and fades in
+     *  who joined, the rest playing on. Under m_valueListMutex. */
+    bool m_regroupRequested = false;
+    /** The fixtures the scene's groups held when its faders were built (or
+     *  last followed). Under m_valueListMutex. */
+    QSet<quint32> m_groupMembers;
+    /** Every fixture in the scene's groups, now. */
+    QSet<quint32> groupMembers() const;
+    /** m_regroupRequested, in write(): under m_valueListMutex. */
+    void followGroupMembers(MasterTimer *timer, QList<Universe *> ua);
+
     /** Line of sight: the heads an Aim look with "Dim lights that can't see
      *  the target" has dimmed because something on stage is in their way
      *  (QLCPalette::dimWhenBlocked). Under m_valueListMutex, like the faders. */
@@ -252,6 +264,10 @@ protected:
      *********************************************************************/
 public slots:
     void slotFixtureRemoved(quint32 fxi_id) override;
+
+private slots:
+    /** A group's members changed: a running scene follows them. */
+    void slotFixtureGroupChanged(quint32 id);
 
 public:
     void addFixture(quint32 fixtureId);

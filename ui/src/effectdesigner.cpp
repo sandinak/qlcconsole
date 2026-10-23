@@ -25,6 +25,7 @@
 #include <QMenu>
 #include <QTimer>
 #include <QPixmap>
+#include <QXmlStreamWriter>
 #include <QIcon>
 #include <algorithm>
 
@@ -304,6 +305,10 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     connect(m_updateBtn, &QPushButton::clicked, this, &EffectDesigner::updateOriginal);
     connect(m_savePalBtn, &QPushButton::clicked, this, [this]() { saveAsPalette(); });
     connect(m_keepBtn, &QPushButton::clicked, this, &EffectDesigner::keepOneOff);
+    // Kept (saved, updated, a layer): nothing to lose by leaving now.
+    connect(this, &EffectDesigner::effectChosen, this, [this]() { markKept(); });
+    connect(this, &EffectDesigner::layerMade, this, [this]() { markKept(); });
+    connect(this, &EffectDesigner::presetSaved, this, [this]() { markKept(); });
 
     // An edit: the preview follows. A new effect re-takes the scene's
     // instances; a setting is pushed to the running one (as the
@@ -630,6 +635,32 @@ void EffectDesigner::setEffect(quint32 paletteId, const QList<quint32> &own)
     refreshPreview(false);
     updateHeader();
     updateButtons();
+    markKept();         // as opened: nothing to lose yet
+}
+
+QString EffectDesigner::draftSignature() const
+{
+    QLCPalette *d = draft();
+    if (d == nullptr)
+        return QString();
+    QString out;
+    {
+        QXmlStreamWriter w(&out);
+        d->saveXML(&w);
+    }
+    // Its own colour and dimmer are part of what was designed.
+    out += QStringLiteral("|%1|%2").arg(m_ownColour).arg(m_ownDimmer);
+    return out;
+}
+
+void EffectDesigner::markKept()
+{
+    m_keptSignature = draftSignature();
+}
+
+bool EffectDesigner::hasUnkeptChanges() const
+{
+    return draft() != nullptr && draftSignature() != m_keptSignature;
 }
 
 QList<quint32> EffectDesigner::ownLooks() const

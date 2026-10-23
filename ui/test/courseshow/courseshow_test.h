@@ -87,6 +87,11 @@ private slots:
      *  over 3 s, the Scream holds 2 s and the Solo follows by itself. */
     void lessonFourPlaysTheFades();
 
+    /** What a student builds is what they keep: Lessons 1.1-1.4 done with
+     *  the mouse, saved as a .qlcc (Save As), opened again: every cue the
+     *  same, and GO in the Run tab still lights the rig as Lesson 1.1 says. */
+    void aMouseBuiltShowSavesOpensAndPlays();
+
     /** Lesson 1.5, running the show: GO, Back, LOAD (a click: STANDBY),
      *  a jump (double-click) and Stop, in the Run tab. */
     void lessonFiveRunsTheShow();
@@ -94,6 +99,31 @@ private slots:
     /** Lesson 1.5's show time: Operate (LIVE), where a click in the Show
      *  Tree doesn't change the stage; Stop, then Design again. */
     void lessonFiveOperate();
+
+    /** Lesson 1.5's late-cue extension: + Cue after the Chorus is the
+     *  point cue 1.0.2.5 Hit; dropped after the Solo it is 1.0.5 at the
+     *  end (the drop note says so first); Undo puts it back. */
+    void lessonFiveLateCue();
+
+    /** Lesson 3.3, stage looks: the plot's Show menu draws Auto fixtures as
+     *  their closest look, and Stage Look ▸ Practicals ▸ Lantern on the
+     *  Lanterns group, as the handout says. */
+    void lessonStageLooks();
+
+    /** Lesson 3.7, house and work lights and a power relay: three generic
+     *  dimmers given output rules stay through Blackout and the Grand
+     *  Master, and the relay comes on at Operate. */
+    void lessonHouseLights();
+
+    /** Lesson 3.10, from Eos: the course's Eos sample through the import
+     *  wizard's special circuits, into a new show: groups, rules, the cue
+     *  list in the Show Tree and the sub as a Virtual Console fader. */
+    void lessonFromEos();
+
+    /** Lesson 1.5's "Stuck?": Design while cues run asks "Really stop
+     *  them...?" -- No stays LIVE with the stage lit; Yes stops everything
+     *  and goes to Design with the stage dark. */
+    void lessonFiveDesignWhileRunningAsksFirst();
 
     /** COURSE_BUILD=1: makes Lessons 1.2-1.5's start and finish files, each
      *  lesson done with the mouse from the one before's finish. Skipped

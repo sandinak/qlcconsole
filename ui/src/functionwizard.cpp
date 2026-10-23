@@ -46,6 +46,7 @@
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "vcframepageshortcut.h"
+#include "itemicons.h"
 
 #define KFixtureColumnName          0
 #define KFixtureColumnCaps          1
@@ -217,7 +218,7 @@ void FunctionWizard::addFixture(quint32 fxi_id)
 
         QTreeWidgetItem* item = new QTreeWidgetItem(groupItem);
         item->setText(KFixtureColumnName, fxi->name());
-        item->setIcon(KFixtureColumnName, fxi->getIconFromType());
+        item->setIcon(KFixtureColumnName, ItemIcons::fixtureIcon(fxi));
         item->setData(KFixtureColumnName, Qt::UserRole, fxi_id);
         item->setText(KFixtureColumnCaps, caps.join(", "));
     }

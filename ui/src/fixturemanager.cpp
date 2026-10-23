@@ -89,6 +89,8 @@
 #include "qlcioplugin.h"
 #include "patchundo.h"
 #include "showstatus.h"
+#include "itemicons.h"
+#include "scenery.h"
 
 // Bumped when the power pane was added as a third section: an older 2-section
 // saved state would collapse the new pane to zero width and hide it.
@@ -180,11 +182,8 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         grpItem->setExpanded(true);
 
     /* Connect fixture list change signals from the new document object */
-    // A fixture renamed elsewhere (the Studio, Layers) shows here too.
-    connect(m_doc, &Doc::fixtureChanged, this, [this](quint32 id) {
-        if (m_fixtures_tree != NULL)
-            m_fixtures_tree->refreshFixtureName(id);
-    });
+    // A fixture renamed elsewhere (the Studio, Layers) shows here too: the
+    // tree follows Doc::fixtureChanged itself (refreshFixtureName()).
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
 
@@ -373,7 +372,9 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             }
             else
             {
-                m_propertiesAction->setEnabled(false);
+                /* Several fixtures: Fixture Properties edits them together
+                   (the rows they share, "mixed" where they differ). */
+                m_propertiesAction->setEnabled(Monitor::instance() != NULL);
                 m_testAction->setEnabled(false);
                 m_resetAction->setEnabled(false);
             }
@@ -2154,6 +2155,32 @@ int FixtureManager::changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFi
     return n;
 }
 
+QString FixtureManager::sharedDefinitionSourceFile(Doc *doc, const QList<quint32> &fids,
+                                                  int *definitions)
+{
+    QSet<QLCFixtureDef *> defs;
+    bool allHaveFile = true;
+    if (doc != NULL)
+    {
+        foreach (quint32 fid, fids)
+        {
+            Fixture *fxi = doc->fixture(fid);
+            if (fxi == NULL)
+                continue;
+            QLCFixtureDef *def = fxi->fixtureDef();
+            if (def == NULL || def->definitionSourceFile().isEmpty())
+                allHaveFile = false;
+            if (def != NULL)
+                defs.insert(def);
+        }
+    }
+    if (definitions != NULL)
+        *definitions = defs.size();
+    if (defs.size() != 1 || !allHaveFile)
+        return QString();
+    return (*defs.begin())->definitionSourceFile();
+}
+
 int FixtureManager::setStageLook(Doc *doc, const QList<quint32> &fids, int look)
 {
     if (doc == NULL)
@@ -2206,9 +2233,10 @@ void FixtureManager::fillStageLookMenu(QMenu *menu, Doc *doc, const QList<quint3
         });
     };
     const Fixture::StageLook autoLook = first != NULL ? first->autoStageLook() : Fixture::AutoLook;
-    addLook(autoLook != Fixture::AutoLook ? QIcon(Fixture::stageLookIconResource(autoLook))
-                                          : (first != NULL ? QIcon(first->typeIconResource()) : QIcon()),
-            autoLook != Fixture::AutoLook
+    // A curtain on Auto is shown as a curtain (ItemIcons::autoLookIcon()).
+    addLook(ItemIcons::autoLookIcon(first),
+            Scenery::isCurtainFixture(first) ? tr("Auto (Curtain)")
+            : autoLook != Fixture::AutoLook
                 ? tr("Auto (%1)").arg(Fixture::stageLookName(autoLook)) : tr("Auto"),
             int(Fixture::AutoLook));
     int section = -1;
@@ -2361,6 +2389,20 @@ void FixtureManager::slotProperties()
     if (m_currentTabIndex == 1)
     {
         editChannelGroupProperties();
+        return;
+    }
+    // Several fixtures selected: Fixture Properties for all of them at once.
+    QList<quint32> fids;
+    foreach (QTreeWidgetItem *sel, m_fixtures_tree->selectedItems())
+    {
+        const QVariant fv = sel->data(KColumnName, PROP_ID);
+        if (fv.isValid() && sel->data(KColumnName, PROP_HEAD).isValid() == false
+            && fids.contains(fv.toUInt()) == false)
+            fids << fv.toUInt();
+    }
+    if (fids.size() > 1 && Monitor::instance() != NULL)
+    {
+        Monitor::instance()->editFixturesProperties(fids);
         return;
     }
     // A fixture: Fixture Properties, the one dialog for a fixture everywhere.
@@ -2618,86 +2660,99 @@ QString FixtureManager::createDialog(bool import)
 void FixtureManager::slotImport()
 {
     QString fileName = createDialog(true);
+    if (fileName.isEmpty())
+        return;
+    importFixtureList(m_doc, fileName);
+    updateView();
+}
 
-    QXmlStreamReader *doc = QLCFile::getXMLReader(fileName);
-    if (doc == NULL || doc->device() == NULL || doc->hasError())
+int FixtureManager::importFixtureList(Doc *doc, const QString &fileName)
+{
+    QXmlStreamReader *reader = QLCFile::getXMLReader(fileName);
+    if (reader == NULL || reader->device() == NULL || reader->hasError())
     {
         qWarning() << Q_FUNC_INFO << "Unable to read from" << fileName;
-        return;
+        QLCFile::releaseXMLReader(reader);
+        return -1;
     }
 
-    while (!doc->atEnd())
+    while (!reader->atEnd())
     {
-        if (doc->readNext() == QXmlStreamReader::DTD)
+        if (reader->readNext() == QXmlStreamReader::DTD)
             break;
     }
-    if (doc->hasError())
+    if (reader->hasError() || reader->dtdName() != KXMLQLCFixturesList)
     {
-        QLCFile::releaseXMLReader(doc);
-        return;
+        QLCFile::releaseXMLReader(reader);
+        return -1;
     }
 
-    if (doc->dtdName() == KXMLQLCFixturesList)
+    reader->readNextStartElement();
+    if (reader->name() != KXMLQLCFixturesList)
     {
-        doc->readNextStartElement();
-        if (doc->name() != KXMLQLCFixturesList)
-        {
-            qWarning() << Q_FUNC_INFO << "Fixture Definition node not found";
-            QLCFile::releaseXMLReader(doc);
-            return;
-        }
+        qWarning() << Q_FUNC_INFO << "Fixture Definition node not found";
+        QLCFile::releaseXMLReader(reader);
+        return -1;
+    }
 
-        while (doc->readNextStartElement())
+    int added = 0;
+    while (reader->readNextStartElement())
+    {
+        if (reader->name() == KXMLFixture)
         {
-            if (doc->name() == KXMLFixture)
+            Fixture* fxi = new Fixture(doc);
+            Q_ASSERT(fxi != NULL);
+
+            if (fxi->loadXML(*reader, doc, doc->fixtureDefCache()) == true)
             {
-                Fixture* fxi = new Fixture(m_doc);
-                Q_ASSERT(fxi != NULL);
-
-                if (fxi->loadXML(*doc, m_doc, m_doc->fixtureDefCache()) == true)
+                if (doc->addFixture(fxi /*, fxi->id()*/) == true)
                 {
-                    if (m_doc->addFixture(fxi /*, fxi->id()*/) == true)
-                    {
-                        /* Success */
-                        qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "successfully created.";
-                    }
-                    else
-                    {
-                        /* Doc is full */
-                        qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be created.";
-                        delete fxi;
-                    }
+                    /* Success */
+                    qDebug() << Q_FUNC_INFO << "Fixture" << fxi->name() << "successfully created.";
+                    ++added;
                 }
                 else
                 {
-                    qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be loaded.";
+                    /* Doc is full */
+                    qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be created.";
                     delete fxi;
-                }
-            }
-            else if (doc->name() == KXMLQLCFixtureGroup)
-            {
-                FixtureGroup* grp = new FixtureGroup(m_doc);
-                Q_ASSERT(grp != NULL);
-
-                if (grp->loadXML(*doc) == true)
-                {
-                    m_doc->addFixtureGroup(grp, grp->id());
-                }
-                else
-                {
-                    qWarning() << Q_FUNC_INFO << "FixtureGroup" << grp->name() << "cannot be loaded.";
-                    delete grp;
                 }
             }
             else
             {
-                qWarning() << Q_FUNC_INFO << "Unknown label tag:" << doc->name().toString();
-                doc->skipCurrentElement();
+                qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name() << "cannot be loaded.";
+                delete fxi;
             }
         }
-        updateView();
+        else if (reader->name() == KXMLQLCFixtureGroup)
+        {
+            FixtureGroup* grp = new FixtureGroup(doc);
+            Q_ASSERT(grp != NULL);
+
+            if (grp->loadXML(*reader) == true)
+            {
+                doc->addFixtureGroup(grp, grp->id());
+                ++added;
+            }
+            else
+            {
+                qWarning() << Q_FUNC_INFO << "FixtureGroup" << grp->name() << "cannot be loaded.";
+                delete grp;
+            }
+        }
+        else if (reader->name() == KXMLQLCCreator)
+        {
+            // The header every export writes: who made it, nothing to load.
+            reader->skipCurrentElement();
+        }
+        else
+        {
+            qWarning() << Q_FUNC_INFO << "Unknown label tag:" << reader->name().toString();
+            reader->skipCurrentElement();
+        }
     }
-    QLCFile::releaseXMLReader(doc);
+    QLCFile::releaseXMLReader(reader);
+    return added;
 }
 
 void FixtureManager::slotExport()
@@ -2829,6 +2884,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     // ---- The fixture itself ----
     QAction *editDefinition = NULL;
+    QString editDefinitionPath;
     if (haveFixtureOrGroupSelection)
     {
         menu.addAction(m_propertiesAction);
@@ -2866,18 +2922,34 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 });
             }
         }
-        /* The definition file itself, in the Fixture Editor -- one real
-           fixture with a .qxf; a generic dimmer has none. */
-        if (selFixtures.size() == 1 && selGroups.isEmpty())
+        /* The definition file itself, in the Fixture Editor -- for one real
+           fixture with a .qxf (a generic dimmer has none), or for several
+           fixtures, or one group, that all share one: fixing the icons of
+           twelve movers is one file. Several definitions: said, not offered. */
+        if (selGroups.size() <= 1 && (selGroups.isEmpty() || selFixtures.isEmpty()))
         {
-            Fixture *fxi = m_doc->fixture(selFixtures.first());
-            if (fxi != NULL && fxi->fixtureDef() != NULL &&
-                fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
+            QList<quint32> defFids = selFixtures;
+            if (selGroups.size() == 1)
+            {
+                if (FixtureGroup *grp = m_doc->fixtureGroup(selGroups.first()))
+                    defFids = grp->fixtureList();
+            }
+            int defCount = 0;
+            editDefinitionPath = sharedDefinitionSourceFile(m_doc, defFids, &defCount);
+            if (editDefinitionPath.isEmpty() == false)
+            {
                 editDefinition = menu.addAction(tr("Edit Fixture Definition…"));
+                editDefinition->setObjectName(QStringLiteral("editFixtureDefinitionAction"));
+            }
+            else if (defCount > 1)
+            {
+                menu.addAction(tr("Edit Fixture Definition… (several definitions)"))
+                    ->setEnabled(false);
+            }
         }
         /* What they look like on stage -- icon, plot and studio shape -- for
-           every fixture selected and every fixture of a selected group. */
-        if (m_doc->mode() != Doc::Operate)
+           every fixture selected and every fixture of a selected group. No
+           DMX changes, so it is offered in Operate too. */
         {
             QList<quint32> lookFids = selFixtures;
             foreach (quint32 gid, selGroups)
@@ -3401,9 +3473,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     if (editDefinition != NULL && chosen == editDefinition)
     {
-        Fixture *fxi = m_doc->fixture(selFixtures.first());
-        if (fxi != NULL && fxi->fixtureDef() != NULL)
-            AppUtil::launchFixtureEditor(fxi->fixtureDef()->definitionSourceFile(), this);
+        AppUtil::launchFixtureEditor(editDefinitionPath, this);
         return;
     }
 

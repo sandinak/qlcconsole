@@ -1243,9 +1243,9 @@ void ProgrammerController::setHighlightActive(bool active)
     if (m_highlightActive == active)
         return;
     m_highlightActive = active;
-    // HighlightEffect registers/unregisters a DMXSource, which takes
-    // MasterTimer::m_dmxSourceListMutex — so take the locked copy of the
-    // selection FIRST and call out with no lock held.
+    // HighlightEffect requests/dismisses universe faders (their own locks),
+    // so take the locked copy of the selection FIRST and call out with no
+    // lock held.
     const QList<quint32> selection = programmerSelection();
     if (m_highlightEffect)
         m_highlightEffect->setFixtures(active ? selection : QList<quint32>());

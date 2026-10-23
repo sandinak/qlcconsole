@@ -1024,17 +1024,6 @@ static QString numberAt(const CueList &list, int index)
     return n.isEmpty() ? QString::number(index + 1) : n;
 }
 
-static bool numberUsed(const CueList &list, const QString &number, const QStringList &taken = QStringList())
-{
-    for (int i = 0; i < list.cues.count(); ++i)
-        if (compareNumbers(numberAt(list, i), number) == 0)
-            return true;
-    for (const QString &t : taken)
-        if (compareNumbers(t, number) == 0)
-            return true;
-    return false;
-}
-
 QString cueNumberAt(const CueList &list, int index, const QString &parentNumber)
 {
     if (index < 0 || index >= list.cues.count())
@@ -1053,6 +1042,102 @@ int indexOfNumber(const CueList &list, const QString &number)
     return -1;
 }
 
+bool isCueNumber(const QString &number)
+{
+    static const QRegularExpression re(QStringLiteral("^\\d+(?:\\.\\d+)*$"));
+    return re.match(number).hasMatch();
+}
+
+static bool numberFits(const QString &candidate, const QString &prev, const QString &next,
+                       const QStringList &used)
+{
+    if (!prev.isEmpty() && compareNumbers(candidate, prev) <= 0)
+        return false;
+    if (!next.isEmpty() && compareNumbers(candidate, next) >= 0)
+        return false;
+    for (const QString &u : used)
+        if (compareNumbers(u, candidate) == 0)
+            return false;
+    return true;
+}
+
+/* D23 between @a prev and @a next: the next whole number in the last place,
+   else a point cue one level down (5, 6, 7, 8, 9, then 1, 2, 3, 4), else
+   the same one more level down from prev.0 -- at most three levels below
+   prev. */
+static QString numberAfter(const QString &prev, const QString &next, const QStringList &used, int deeper)
+{
+    QStringList parts = prev.split(QLatin1Char('.'));
+    bool ok = false;
+    const int last = parts.last().toInt(&ok);
+    if (ok)
+    {
+        parts.last() = QString::number(last + 1);
+        const QString candidate = parts.join(QLatin1Char('.'));
+        if (numberFits(candidate, prev, next, used))
+            return candidate;
+    }
+    for (int k : { 5, 6, 7, 8, 9, 1, 2, 3, 4 })
+    {
+        const QString candidate = QStringLiteral("%1.%2").arg(prev).arg(k);
+        if (numberFits(candidate, prev, next, used))
+            return candidate;
+    }
+    if (deeper < 2)
+        return numberAfter(prev + QStringLiteral(".0"), next, used, deeper + 1);
+    return QString();
+}
+
+QString numberBetween(const QString &prev, const QString &next, const QStringList &used)
+{
+    if (!prev.isEmpty())
+        return numberAfter(prev, next, used, 0);
+    if (next.isEmpty())
+        return QStringLiteral("1");
+
+    // Above the first: one less in its last place while that stays 1 or
+    // more (5 -> 4, 0.0.3 -> 0.0.2); else it cut short, longest first,
+    // ending 1 or more (2.1 -> 2); else a point cue above it with its last
+    // place that isn't 0 one less (1 -> 0.5, 0.0.1 -> 0.0.0.5, 1.0.0 -> 0.0.1).
+    const QStringList parts = next.split(QLatin1Char('.'));
+    QList<int> places;
+    for (const QString &p : parts)
+    {
+        bool ok = false;
+        places << p.toInt(&ok);
+        if (!ok)
+            return QString();
+    }
+    auto join = [](const QList<int> &ps) {
+        QStringList out;
+        for (int p : ps)
+            out << QString::number(p);
+        return out.join(QLatin1Char('.'));
+    };
+    if (places.last() > 1)
+    {
+        QList<int> one = places;
+        one.last() -= 1;
+        if (numberFits(join(one), QString(), next, used))
+            return join(one);
+    }
+    for (int n = places.count() - 1; n > 0; --n)
+    {
+        const QList<int> cut = places.mid(0, n);
+        if (cut.last() >= 1 && numberFits(join(cut), QString(), next, used))
+            return join(cut);
+    }
+    for (int i = places.count() - 1; i >= 0; --i)
+    {
+        if (places.at(i) == 0)
+            continue;
+        QList<int> base = places;
+        base[i] -= 1;
+        return numberAfter(join(base), next, used, 0);
+    }
+    return QString();
+}
+
 QString numberForInsert(const CueList &list, int afterIndex, const QStringList &taken)
 {
     // Sub-cues are numbered under their cue: 1, 2... (4.1, 4.2).
@@ -1069,39 +1154,20 @@ QString numberForInsert(const CueList &list, int afterIndex, const QStringList &
         return QStringLiteral("1");
     }
 
+    QStringList used = taken;
+    for (int i = 0; i < list.cues.count(); ++i)
+        used << numberAt(list, i);
+
     if (afterIndex < 0)
-    {
-        // Above the first: a point below it.
-        const QString first = numberAt(list, 0);
-        for (const QString &c : { QStringLiteral("0.5"), QStringLiteral("0.1") })
-            if (compareNumbers(c, first) < 0 && !numberUsed(list, c, taken))
-                return c;
-        return QString();
-    }
+        return numberBetween(QString(), numberAt(list, 0), used);
 
     afterIndex = qMin(afterIndex, int(list.cues.count()) - 1);
     const QString prev = numberAt(list, afterIndex);
     const QString next = afterIndex + 1 < list.cues.count() ? numberAt(list, afterIndex + 1) : QString();
-
-    QStringList parts = prev.split(QLatin1Char('.'));
-    bool ok = false;
-    const int last = parts.last().toInt(&ok);
-    if (ok)
-    {
-        parts.last() = QString::number(last + 1);
-        const QString candidate = parts.join(QLatin1Char('.'));
-        if (!numberUsed(list, candidate, taken) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
-            return candidate;
-    }
-
-    // A point cue: 0.0.4 and 0.0.5 taken -> 0.0.4.5.
-    for (int k : { 5, 6, 7, 8, 9, 1, 2, 3, 4 })
-    {
-        const QString candidate = QStringLiteral("%1.%2").arg(prev).arg(k);
-        if (!numberUsed(list, candidate, taken) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
-            return candidate;
-    }
-    return QStringLiteral("%1.5.5").arg(prev);
+    const QString n = numberBetween(prev, next, used);
+    // Nothing fits three levels down: as before, a point of a point (out
+    // of order, but never a number already taken).
+    return n.isEmpty() ? QStringLiteral("%1.5.5").arg(prev) : n;
 }
 
 bool splitNumberedName(const QString &text, QString *number, QString *name)

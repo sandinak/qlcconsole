@@ -876,12 +876,13 @@ public:
     void undoLastMove();
 
     /** Record a stage-feature paste on the undo stack so Ctrl+Z removes the
-     *  copies (and any palettes created for pasted targets). IDs are the
-     *  newly-created feature/palette IDs. */
+     *  copies (and any palettes created for pasted targets, and the fixtures
+     *  pasted with a truss). IDs are the newly-created ones. */
     void recordFeaturePaste(const QList<quint32> &trussIds,
                             const QList<quint32> &platformIds,
                             const QList<quint32> &targetIds,
-                            const QList<quint32> &paletteIds);
+                            const QList<quint32> &paletteIds,
+                            const QList<quint32> &fixtureIds = QList<quint32>());
 
     /** Record the rig as it was before an edit (a dialog's, a studio's) so
      *  one Ctrl+Z puts it back. @p before is a Monitor::rigSnapshot(). */
@@ -1257,6 +1258,7 @@ private:
         QList<quint32> pastedPlatformIds;
         QList<quint32> pastedTargetIds;
         QList<quint32> pastedPaletteIds;
+        QList<quint32> pastedFixtureIds;
         QByteArray rigBefore;                       ///< type == RigEdit
     };
     std::function<void(const QByteArray &)> m_rigRestorer;

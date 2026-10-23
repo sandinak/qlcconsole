@@ -70,6 +70,11 @@ public:
     explicit EffectDesigner(Doc *doc, QWidget *parent = nullptr);
     ~EffectDesigner() override;
 
+    /** The draft differs from what it was opened with (or last kept: saved
+     *  as a palette or a preset, updated, kept on a layer, made a layer),
+     *  so leaving would drop it. */
+    bool hasUnkeptChanges() const;
+
     /************************************************************************
      * What it plays on
      ************************************************************************/
@@ -280,6 +285,10 @@ private:
     quint32 m_ownColour;
     quint32 m_ownDimmer;
     QStringList m_lastSignature;
+    /** The draft as opened or last kept (hasUnkeptChanges()). */
+    QString m_keptSignature;
+    QString draftSignature() const;
+    void markKept();
     QString m_oneOffWhere;
     quint32 m_fromCue;
     quint32 m_fromScene;

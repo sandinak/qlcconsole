@@ -103,7 +103,8 @@ from the Library lands in the tree right beside it.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
   palette is used (*"Used by: 6 cue(s), 2 look(s) · 1 VC button"*); click
-  *which* for the list, and a cue or look to go there. At the
+  *which* for the list, and a cue or look to go there. **↩ Back** at its
+  top, or **Esc**, closes it; what you changed stays. At the
   bottom, full width, is **[the command line](#the-command-line)**, which
   is always there.
 
@@ -162,6 +163,9 @@ the tree and the Workbench follows it.
   Workbench had selected — selected in the tree. The Workbench goes back to
   Build, loaded as it was there. Leaving the tab does the same; coming back
   opens the cue again.
+- **Esc** backs out one level at a time. A palette opened over the page
+  goes back to the page first, then the next Esc is **↩ Show Tree**. Your
+  edits stay ([Backing out](build.md#backing-out-esc)).
 
 ## Quick start
 
@@ -381,6 +385,13 @@ chaser. **Upgrade** converts the ticked chasers, then captures the ticked
 scenes. A capture still keeps the scene in any cue that would come out
 different. The whole upgrade is **one undo step** (*Undo Upgrade this
 show*). **Restore original…** later puts one chaser back.
+
+### From an Eos show
+
+**File ▸ Import ▸ ETC Eos Show (ASCII .asc)…** brings an Eos-family
+desk's show in: its patch, groups and palettes, and each of its cue lists
+as a tracking cue list here, in Eos's cue numbers. See
+[Importing an Eos show](getting-started.md#importing-an-eos-show).
 
 ### Three cues with the mouse
 
@@ -1003,7 +1014,7 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
 ### Text colours
 
 A cue list, and any cue in it, can have a **text colour**: a quick way to
-read a long list at a glance -- songs in their own colour, the cues the
+read a long list at a glance — songs in their own colour, the cues the
 stage manager calls in red. It changes how the cue reads, never what it
 plays.
 
@@ -1025,7 +1036,7 @@ plays.
   **SUB NEXT** lines, the **Cue Runner** widget (with its upcoming
   lines), and a VC **Cue List** playing the list (its rows and *Next:*).
 - **Readable in every theme.** Where a colour would be hard to read on the
-  theme's background -- yellow on white, blue on a dark theme -- a lighter
+  theme's background — yellow on white, blue on a dark theme — a lighter
   or darker shade of the same colour is drawn instead. Done cues in the Run
   tab and skipped cues stay grey.
 - **Saved with the show.** An older build opens the show as it was, without
@@ -1062,7 +1073,7 @@ Record just records it. When they differ, it **asks**. In Design the dialog
 starts on the selected cue; in Operate, on the running cue. Tick **Don't ask
 again** to make your answer the default.
 
-The defaults live in **Settings** (⌘,) → **Show Tree**. There is one for
+The defaults live in **Settings** (⌘,) → **General** → **Show Tree**. There is one for
 Design and one for Perform (Operate), each set to Ask or one of the three.
 A default that names something not on stage (the running cue, with nothing
 running) asks instead. Typing `record selected`, `record running` or
@@ -1085,8 +1096,105 @@ usual.
 Record and Duplicate number the new cue as + Cue does. + Cue goes after the
 selected cue and counts up its last number when that is free (1.0.0 →
 1.0.1). Otherwise it makes a point cue: with 0.0.4 and 0.0.5 taken, you get
-0.0.4.5. **Cues are never renumbered**, because show control fires them by
-number. You can type a number into a cue's **Number** field yourself.
+0.0.4.5. **Adding a cue never renumbers the others**, because show control
+fires them by number. A cue's number changes only when you change it: type
+a new one, drag the cue to another place, or **Renumber this level…**
+([Reordering and numbering](#reordering-and-numbering)).
+
+## Reordering and numbering
+
+A cue list's order is always its cue numbers' order, compared level by
+level as numbers (0.0.4 < 0.0.4.5 < 0.0.5 < 0.0.10). So a number and a place
+are one thing: change one and the other follows.
+
+**Typing a number moves the cue.** Change a cue's number in its **Number**
+field, or rename its row in place (**F2**: the row opens as it reads, *2.5
+Fog*, so you can change the number, the name or both). The cue moves to its
+place in the list at once and stays selected. Number and name together are
+one undo step. A number another cue of the list has is refused, with a
+message naming that cue. So is a sub-cue's number: 4.1 is sub-cue 1 of cue
+4, and a main cue numbered 4.1 would hide it from show control. So is a
+number that would put the cue's own sub-cues on another cue's number.
+Numbers are digits and dots only.
+
+**Dragging a cue renumbers it.** Drag cues up or down within their list.
+Drop on the upper half of a row to go before it, on the lower half to go
+after it. The hint at the top right says where they go and the number they
+will get, for example *Move 4 Fog after 2 Bump, as 2.5*. The dropped cue is
+numbered between its new neighbours by the same rule **+ Cue** uses, and no
+other cue is renumbered:
+
+1. The cue before it with its last place counted up, if that is still below
+   the cue after it and free: dropped after 2, before 5 → **3**. Dropped
+   after the last cue → its last place + 1 (after 4.5 → **4.6**).
+2. Otherwise a point cue one level down from the cue before, trying .5,
+   .6, .7, .8, .9, then .1, .2, .3, .4: between 2 and 3 → **2.5**; between
+   2 and 2.5 → **2.1**; between 1.0.2 and 1.0.3 → **1.0.2.5**.
+3. Otherwise the same from one more level down, up to three levels below
+   the cue before: between 2 and 2.1 → **2.0.5**.
+4. Dropped above the first cue: one less in its last place while that stays
+   1 or more (above 5 → **4**, above 0.0.3 → **0.0.2**); else the first
+   number cut short (above 2.1 → **2**); else a point cue just under it
+   (above 1 → **0.5**, above 0.0.1 → **0.0.0.5**).
+
+A number a sub-cue already answers to is skipped (with sub-cues 4.1 to 4.5,
+a cue dropped between 4 and 4.6 becomes 4.0.5). If nothing fits three levels
+down, the drop is refused and the hint says to use **Renumber this level…**
+first. **Move up** and **Move down** on a cue's right-click menu renumber in
+the same way.
+
+Several selected cues dragged together move as a block. They keep their
+order, and each is numbered in turn after the one before it (three cues
+after 3, at the end: 4, 5, 6). They stay selected. Holding **⌥** still
+makes the cue you drop on include the dragged one; that takes one cue at a
+time.
+
+**Renumber this level…** (right-click a cue) renumbers the cues at that
+cue's level: the ones with the same number of places and everything before
+the last place the same. With 1.0.0, 1.0.1, 1.0.1.5 and 1.0.4, the level of
+1.0.1 is 1.0.0, 1.0.1 and 1.0.4. They become 1, 2, 3… in the last place, in
+list order, or from **Start** in steps of **Step** (from 10 in tens: 1.0.10,
+1.0.20…). A point cue under one of them keeps its own places under its
+cue's new number (1.0.1.5 → 1.0.2.5 when 1.0.1 becomes 1.0.2), and sub-cues
+follow their cue (1.0.4.1 → 1.0.3.1). Right-click the point cue itself to
+renumber the points at its level. The dialog lists every number that
+changes before you press OK. A renumber that would make two cues share a
+number or put the level out of order with the cues around it is refused.
+
+**What follows a new number.** Inside the tree, cues refer to each other by
+the cue itself, not its number: includes, the base cue, sub-cues and
+reusable cues all follow. The cue list's chaser, its steps' cue numbers and
+the collections' names (*2.5-Fog*) are made again straight away. So the Run
+tab, the VC Cue Runner and Cue List, the **Cue** menu's Load, the command
+line's `goto` and show control (OSC, MSC, QLab) see the new number at once.
+A cue LOADed on standby by show control stays loaded when it moves. The show
+itself stores no cue number anywhere else. Anything **outside** the show
+that fires cues by number will fire whatever now has that number: a QLab
+cue, a desk's macros, a MIDI or OSC controller. If OSC or MSC is listening
+(Show control settings), **Renumber this level…** lists the numbers that
+change and asks before it renumbers.
+
+**Tracking follows the new order.** A cue tracks from the cue before it in
+the list. A cue that moves therefore starts from its new neighbour's state,
+and the cue after its old place now starts from the cue that was before it.
+What a moved cue sets itself is unchanged. What it receives by tracking, and
+what it passes on, are now those of its new place. This is expected; check
+the tracked values (**Tracked in**, the ⤳ counts) after a move.
+
+**Undo.** Every move, typed number and renumber is one step on the tab's
+shared undo history, whatever it changed.
+
+**Operate.** These edits work in Operate as other tree edits do: they are
+blind. The running list picks up the new order and numbers at the next
+GO.
+
+**Older shows.** Numbers are saved as typed (`Number="2.5"`,
+`Number="0.0.4.5"`), so point cues round-trip, and a show saved before this
+loads as it was. Nothing is re-sorted or renumbered on load. A list whose
+cues are out of number order stays so until you move or renumber a cue in
+it. A cue with no number answers to its position. The first move or
+renumber in its list gives it that number to keep, so it doesn't change
+under you.
 
 ## Seeing it on the rig
 
@@ -1323,7 +1431,9 @@ again what it opened.
     several) for **Select all similar**, **Make set…** and **Move to
     folder ▸**: the folders in use, *no folder*, or **New Folder…** (made
     inside the one they are in). They stay selected where they land. The
-    Fixture Manager uses the same folders;
+    Fixture Manager uses the same folders. **Output Rules…** (on groups
+    and fixtures) sets [output rules](fixture-manager.md#output-rules) on
+    every member;
   - **Palettes**, by type with your folders under each, or folders first
     ([Palettes in the Library](#palettes-in-the-library));
   - **Functions (played as they are)**: not chasers, and not what the tree
@@ -1390,7 +1500,8 @@ Right-click in the tree for:
   folder**, **Make VC page**; on a look: **Move to folder**, **Make VC
   page**;
 - on a cue: **Make the base cue**, **Include cue**, **Mode**, **Record as new
-  cue**, **Duplicate cue**, **Move up** / **Move down**;
+  cue**, **Duplicate cue**, **Move up** / **Move down**, **Renumber this
+  level…** ([Reordering and numbering](#reordering-and-numbering));
 - on a cue: **Make cue reusable…** (or, on a use, **Unlink here**);
 - on a layer: **Rename…**, **Detach to plain scene**, **Make reusable…** (or
   **Unlink here**), **Add child layer**, **Split layer**, **Merge layers**,
@@ -1426,10 +1537,11 @@ focus in it, a cue there follows the same rules. A collection or chaser you
 opened there with **▣ Open** gets the Workbench's own ⇧⌘N, as in
 [Build](build.md#new-here).
 
-**Moving cues.** Drag a cue onto another cue of its list to move it there;
-its number stays. With **⌥** held, the drop makes the other cue include it
-instead. One cue at a time: several selected cues dragged together are
-refused, and the top right says so.
+**Moving cues.** Drag cues up or down in their list: before a row (its upper
+half) or after it (its lower half). Each dropped cue is renumbered for its
+new place, and several move as a block ([Reordering and
+numbering](#reordering-and-numbering)). With **⌥** held, the drop makes the
+other cue include it instead (one cue at a time).
 
 **Deleting.** **Delete** (or Backspace) in the tree deletes the selected cue
 or layer at once. With several cues and layers selected, they all go, in one
@@ -1590,7 +1702,7 @@ production has a **Looks** section beside its cue lists.
 
 ## Productions
 
-A show can hold several productions -- a tour's two sets, the dance show
+A show can hold several productions — a tour's two sets, the dance show
 and the corporate gig in the same venue. They share the Library (groups,
 palettes, targets, reusables); each has its own cue lists and its own Looks
 section. **Undo is one history** for all of them.
@@ -1609,7 +1721,7 @@ section. **Undo is one history** for all of them.
   production is current.
 - **Its timecode source.** The production page's **Timecode** picks where its
   timecode comes from while it is current: the show's setting (Connections →
-  Show control & sync), any source, or one universe -- QLab's MTC for one
+  Show control & sync), any source, or one universe — QLab's MTC for one
   production, a desk's for the other. The show's own setting is kept.
 - Switching production never stops a list that runs: the next GO plays the
   new one. Which production is current is saved with the show, and is not a
@@ -1618,7 +1730,7 @@ section. **Undo is one history** for all of them.
 
 ## Sub-cues
 
-A cue can have **sub-cues** -- 4.1, 4.2… -- that **Sub GO** (**⌥⌘↩**)
+A cue can have **sub-cues** — 4.1, 4.2… — that **Sub GO** (**⌥⌘↩**)
 steps through while GO still goes on to cue 5: the hit, the sweep and the
 strobe inside a chorus.
 
@@ -1627,7 +1739,7 @@ strobe inside a chorus.
   sub-cue. They are numbered under their cue (4.1, 4.2), and a new main cue
   never takes one of their numbers.
 - **Each is a cue of its own**: layers, cue looks, groups and palettes
-  dropped on it, its own fade in and out, a name and a note -- everything a
+  dropped on it, its own fade in and out, a name and a note — everything a
   cue has but a mode, base, includes or hold.
 - **Advance** (on its page): **Sub GO** waits for Sub GO; **Auto-follow
   after** a wait goes on by itself that long after the sub-cue before it has
@@ -1642,7 +1754,7 @@ strobe inside a chorus.
   previous sub-cue. Show control fires a sub-cue by its number (`/go 4.2`,
   MSC GO 4.2), and `/subgo` / `/subback` step ([Show control](show-control.md)).
 - Under the hood, cue 4's step plays a hidden chaser of the sub-cues'
-  collections, held on Sub GO -- the same sub-cues a hand-made chaser gets
+  collections, held on Sub GO — the same sub-cues a hand-made chaser gets
   ([sub-cues in the chaser editor](show-control.md#sub-cues)). A scene two
   sub-cues share keeps running through Sub GO, with no re-fade.
 
@@ -1656,12 +1768,12 @@ Console widget is the same runner on a VC page.
   the current production, or any list of any production), the **timecode**
   (*TC 01:02:03:15*, *hold* when it stops arriving) and **LIVE / DESIGN**
   (⌘F12 switches).
-- **The list:** every cue, its sub-cues under it, each with its state --
+- **The list:** every cue, its sub-cues under it, each with its state —
   **▶** running (with its fade's progress), **▷ STANDBY** (loaded), **NEXT**,
-  **SUB NEXT** -- its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and
+  **SUB NEXT** — its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and
   its note. Done cues are grey.
 - **What changes.** NEXT (or STANDBY) and SUB NEXT carry one line: only what
-  differs between the stage now and that cue, from the tracking -- *"Towers
+  differs between the stage now and that cue, from the tracking — *"Towers
   → Red, spread +5, gobo Breakup; BackStage in → Green, Intensity 45%;
   USTs out"*. GO into a cue with sub-cues shows what its first sub-cue
   brings.
@@ -1670,7 +1782,7 @@ Console widget is the same runner on a VC page.
   fade and an auto-follow's wait) and **Stop** (⌘⇧Esc stops everything).
   Back and a jump land on the cue as GO from the top would
   ([Tracking](#tracking)).
-- **Click a cue: LOAD** -- it becomes STANDBY, what the next GO plays.
+- **Click a cue: LOAD** — it becomes STANDBY, what the next GO plays.
   **Double-click: jump** to it now (a sub-cue: its cue first).
 - **One state everywhere.** The Run tab, every Cue Runner widget, the
   footer, the keys and QLab / OSC / MSC all drive the same list: what one
@@ -1678,7 +1790,7 @@ Console widget is the same runner on a VC page.
 
 **The Cue Runner VC widget.** Virtual Console → Add → **New Cue Runner**.
 Its properties (double-click in Design) choose what it **plays** (the
-current production, or one list -- several widgets can each follow a
+current production, or one list — several widgets can each follow a
 different list or production) and its **size**: **Compact** (on now, next,
 GO and Sub GO) or **List** (the whole runner). The old **Cue List**
 widget stays for plain chasers. **Edit → Swap Widget** turns a Cue List
@@ -1760,7 +1872,7 @@ left alone, so nobody sees it move. Each light is let go as its cue lights
 it. A next cue closer than the **lead time** (0.8 s for a new show) is too
 soon to move in black, so nothing new is sent for it.
 
-It is one setting of the show, saved with it. There are three places to
+It is one setting of the show, saved with it. There are four places to
 set it, and they always agree:
 
 - **The Show Tree's header: MIB**, at its right end, just left of Stop
@@ -1768,10 +1880,12 @@ set it, and they always agree:
   it to turn it on (it lights up) or off. Its arrow holds the same switch
   and the **Lead time**. While it is moving lights, it says how many:
   *MIB · 3*.
-- **Build → Move in black ▾**: **Auto move-in-black** and **Lead
-  time**, with marking lights by hand (see
-  [The Build tab](build.md)).
-- **Settings** (⌘,) → **Show Tree** → **Move in black**: the switch and the
+- **Build → Move in black ▾** (the Build tab's top bar): **Auto
+  move-in-black** and **Lead time**, with marking lights by hand. While
+  Auto is on it reads **Move in black · Auto** (see
+  [The Build tab](build.md#layout)).
+- **Control → Auto Move in Black** in the menu bar: the switch alone.
+- **Settings** (⌘,) → **General** → **Show Tree** → **Move in black**: the switch and the
   lead time, applied on OK. The note under them says it: saved with this
   show, not this computer. Another show keeps its own, and a new show
   starts with it off.
@@ -1824,7 +1938,7 @@ and *MIB · n* counts the lights a list set **On** is moving.
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
-| Drag a cue onto another cue | Move it there; with **⌥**, include it |
+| Drag cues up or down (before / after a row) | Move them there, renumbered for their place ([Reordering and numbering](#reordering-and-numbering)); with **⌥**, include it |
 | Click / **⌘-click** / **⇧-click** (in the tree) | Select a row / add or remove one / take the rows between |
 | Delete / Backspace (in the tree) | Delete the selected cues and layers, one undo step (a list or production asks) |
 | **F2** (in the Library) | Rename the palette or palette folder in place |

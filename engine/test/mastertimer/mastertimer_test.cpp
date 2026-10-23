@@ -18,18 +18,29 @@
 */
 
 #include <QtTest>
+#include <functional>
 #include <future>
 #include <chrono>
 
 #define private public
+#define protected public                // Universe::processFaders()
 #include "mastertimer_test.h"
 #include "dmxsource_stub.h"
 #include "function_stub.h"
 #include "mastertimer.h"
 #include "qlcchannel.h"
+#include "inputoutputmap.h"
+#include "fixture.h"
+#include "scene.h"
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "scene.h"
+#include "fixture.h"
+#include "inputoutputmap.h"
+#include "functionparent.h"
+#include "outputlayer.h"
+#undef protected
 #undef private
 
 #include "../common/resource_paths.h"
@@ -542,6 +553,157 @@ void MasterTimer_Test::stopRightAfterStartReturns()
              "stop() right after start() did not return");
 }
 
+/* A universe's frame (its faders, the fades, the zeroed intensities) runs
+   on its own thread, woken once per tick. It used to be woken through a
+   queued call on the GUI thread: while that thread was busy -- or, on a
+   loaded machine, simply not scheduled -- the engine stopped a function on
+   time but the rig kept showing it, a Stop leaving a light at full for as
+   long as the GUI was away (the Lesson 1.5 Stop under a loaded gate). The
+   frames must come with the master timer, not with the event loop. */
+void MasterTimer_Test::aStopReachesTheUniversesWithTheGuiThreadBusy()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setChannels(1);                        // one dimmer: HTP intensity
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(fxi->id());
+    scene->setValue(fxi->id(), 0, 255);
+    QVERIFY(m_doc->addFunction(scene));
+
+    auto level = [this]() {
+        QList<Universe *> us = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(us.at(0)->preGMValues().at(0));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    /* This thread is the GUI thread, busy: no events handled until the
+       wait is over (or @a ok holds). */
+    auto busyUntil = [](std::function<bool()> ok, int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (!ok() && t.elapsed() < ms)
+            QThread::msleep(5);
+        return ok();
+    };
+
+    m_doc->inputOutputMap()->startUniverses();
+    mt->start();
+    scene->start(mt, FunctionParent::master());
+    QTRY_COMPARE_WITH_TIMEOUT(level(), 255, 2000 * clockSlack());
+
+    // Busy from here: the stop and the dark stage come without the GUI.
+    QVERIFY2(busyUntil([level]() { return level() == 255; }, 200), "lit before the stop");
+    scene->stop(FunctionParent::master());
+    QVERIFY2(busyUntil([level]() { return level() == 0; }, 1000 * clockSlack()),
+             "a stopped scene still lit while the GUI thread was busy");
+    QVERIFY(scene->isRunning() == false);
+
+    mt->stop();
+}
+
+/* A tick called by hand (as most engine tests do) leaves the universe
+   threads asleep: the caller computes the frames itself. When the hand
+   tick woke them too, the universe thread and the test computed the same
+   universe's frame at once and corrupted the heap (the 0.2.2 RC gate:
+   trackback_test, showtree_test), and every fade ran twice as fast. */
+void MasterTimer_Test::aTickByHandLeavesTheFramesToItsCaller()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    QVERIFY(mt->m_functionList.isEmpty());
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setChannels(1);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    m_doc->inputOutputMap()->startUniverses();
+
+    Universe *uni = m_doc->inputOutputMap()->universe(0);
+    QVERIFY(uni != NULL);
+    QTRY_VERIFY(uni->isRunning());
+    const quint32 before = uni->m_frame.load();
+    for (int i = 0; i < 10; i++)
+        mt->timerTick();
+    QTest::qWait(5 * int(MasterTimer::tick()));
+    QCOMPARE(uni->m_frame.load(), before);
+
+    uni->processFaders();
+    QCOMPARE(uni->m_frame.load(), before + 1);
+}
+
+/* Everything that touches a universe, from every thread it comes from, on a
+   Doc built and torn down while its timer runs: the universe threads compute
+   the frames, the test thread computes some by hand, changes the channel
+   roles and copies the values, a running scene and an OutputLayer (Park,
+   Highlight, Flash, Focus, the held look) write through their faders. Run
+   under ASan / TSan this is the 0.2.2 RC heap corruption's reproducer. */
+void MasterTimer_Test::framesRolesAndTeardownFromEveryThread()
+{
+    for (int round = 0; round < 8; round++)
+    {
+        Doc *doc = new Doc(this);
+        QList<Fixture *> fixtures;
+        for (int u = 0; u < 2; u++)
+        {
+            for (int f = 0; f < 4; f++)
+            {
+                Fixture *fxi = new Fixture(doc);
+                fxi->setChannels(4);
+                fxi->setAddress(quint32(f * 4));
+                fxi->setUniverse(quint32(u));
+                QVERIFY(doc->addFixture(fxi));
+                fixtures << fxi;
+            }
+        }
+
+        Scene *scene = new Scene(doc);
+        for (Fixture *fxi : fixtures)
+            for (quint32 c = 0; c < fxi->channels(); c++)
+                scene->setValue(fxi->id(), c, 200);
+        QVERIFY(doc->addFunction(scene));
+
+        OutputLayer *layer = new OutputLayer(doc, Universe::Park, 0, QStringLiteral("test"));
+        QList<OutputLayer::Level> levels;
+        for (Fixture *fxi : fixtures)
+            levels << OutputLayer::Level { fxi->id(), 0, 255 };
+
+        MasterTimer *mt = doc->masterTimer();
+        doc->inputOutputMap()->startUniverses();
+        mt->start();
+        scene->start(mt, FunctionParent::master());
+
+        QElapsedTimer t;
+        t.start();
+        int n = 0;
+        while (t.elapsed() < 150)
+        {
+            layer->set(n % 2 ? levels : levels.mid(0, 3));
+            QList<Universe *> us = doc->inputOutputMap()->universes();
+            for (Universe *uni : us)
+            {
+                uni->processFaders();
+                (void)uni->preGMValues();
+                uni->setChannelCapability(ushort(100 + n % 50), n % 3 ? QLCChannel::Intensity
+                                                                     : QLCChannel::Colour);
+                uni->setChannelDefaultValue(ushort(200 + n % 50), uchar(n));
+            }
+            n++;
+        }
+        QVERIFY(n > 0);
+
+        /* Torn down running: the timer, the scene and the layer still live.
+           The layer goes first, or as the effects' does: with its owner, a
+           child of the Doc, once the Doc has let go of its universes. */
+        if (round % 2)
+            delete layer;
+        else
+            connect(doc, &QObject::destroyed, [layer]() { delete layer; });
+        delete doc;
+    }
+}
+
 /* The beat clock (SPEED_SPREAD_DESIGN.md, S1): one running beat count every
    effect reads. */
 static double frac(double v) { return v - std::floor(v); }
@@ -647,6 +809,69 @@ void MasterTimer_Test::internalBeatsFireOnTheClocksBeats()
     QVERIFY(beats >= 3);
     mt->setBeatSourceType(MasterTimer::None);
     disconnect(mt, &MasterTimer::beat, this, nullptr);
+}
+
+void MasterTimer_Test::fadeAndStopAllFadesTheOutputThenStops()
+{
+    // A Doc of its own whose timer is never started: ticked by hand, a tick
+    // being MasterTimer::tick() ms, so no wall clock is involved.
+    Doc *doc = new Doc(this);
+    MasterTimer *mt = doc->masterTimer();
+    Fixture *fx = new Fixture(doc);
+    fx->setChannels(1);                     // a dimmer
+    fx->setUniverse(0);
+    fx->setAddress(0);
+    QVERIFY(doc->addFixture(fx));
+    Scene *scene = new Scene(doc);
+    scene->setValue(fx->id(), 0, 200);
+    QVERIFY(doc->addFunction(scene));
+
+    auto tick = [&]() {
+        mt->timerTick();
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        doc->inputOutputMap()->releaseUniverses(false);
+    };
+    auto level = [&]() {
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(0));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+
+    scene->start(mt, FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        tick();
+    QVERIFY(scene->isRunning());
+    QCOMPARE(level(), 200);
+
+    // fadeAndStopAll() waits for the timer to stop everything, so it runs
+    // beside this thread, which plays the timer.
+    const int fadeMs = int(MasterTimer::tick()) * 50;
+    std::future<void> done = std::async(std::launch::async, [mt, fadeMs]() { mt->fadeAndStopAll(fadeMs); });
+    QElapsedTimer guard;
+    guard.start();
+    while (!mt->m_stopAllFunctions && guard.elapsed() < 10000)
+        QThread::msleep(1);
+    QVERIFY(mt->m_stopAllFunctions);        // the fade is set; now waiting for a tick
+
+    tick();                                 // the function is stopped on this tick
+    QVERIFY(done.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+    QVERIFY(!scene->isRunning());
+    QCOMPARE(mt->runningFunctions(), 0);
+
+    // Half way through the fade (25 of its 50 ticks): about half.
+    for (int i = 1; i < 25; ++i)
+        tick();
+    const int mid = level();
+    QVERIFY2(mid > 80 && mid < 120, qPrintable(QString("half way: %1").arg(mid)));
+
+    // Past its end: dark, and nothing playing.
+    for (int i = 25; i < 55; ++i)
+        tick();
+    QCOMPARE(level(), 0);
+    QVERIFY(!scene->isRunning());
+    delete doc;
 }
 
 QTEST_MAIN(MasterTimer_Test)

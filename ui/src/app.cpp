@@ -1751,9 +1751,13 @@ void App::initActions()
     m_fileOpenAction->setShortcut(QKeySequence("CTRL+O"));
     connect(m_fileOpenAction, SIGNAL(triggered(bool)), this, SLOT(slotFileOpen()));
 
-    m_fileImportAction = new QAction(QIcon(":/fileimport.png"), tr("&Import..."), this);
-    m_fileImportAction->setToolTip(tr("Bring fixtures/groups/functions in from another workspace, "
-                                       "without replacing what's already open"));
+    // File ▸ Import ▸ Any Supported File…: the submenu's last entry, the
+    // one Import there used to be (it picks the importer by extension). The
+    // typed entries above it come from importSources().
+    m_fileImportAction = new QAction(QIcon(":/fileimport.png"), tr("&Any Supported File…"), this);
+    m_fileImportAction->setObjectName(QStringLiteral("fileImport_any"));
+    m_fileImportAction->setToolTip(tr("Import any file the app can read, picking the importer "
+                                       "by its extension, without replacing what's already open"));
     connect(m_fileImportAction, SIGNAL(triggered(bool)), this, SLOT(slotFileImport()));
 
     m_fileSaveAction = new QAction(QIcon(":/filesave.png"), tr("&Save"), this);
@@ -1948,12 +1952,12 @@ void App::initActions()
     connect(fade5, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade5);
 
-    QAction *fade10 = new QAction(tr("Fade 10 second and stop"), this);
+    QAction *fade10 = new QAction(tr("Fade 10 seconds and stop"), this);
     fade10->setData(QVariant(10000));
     connect(fade10, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade10);
 
-    QAction *fade30 = new QAction(tr("Fade 30 second and stop"), this);
+    QAction *fade30 = new QAction(tr("Fade 30 seconds and stop"), this);
     fade30->setData(QVariant(30000));
     connect(fade30, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade30);
@@ -2159,7 +2163,9 @@ void App::initMenuBar()
     QMenu* fileMenu = mb->addMenu(tr("&File"));
     fileMenu->addAction(m_fileNewAction);
     fileMenu->addAction(m_fileOpenAction);
-    fileMenu->addAction(m_fileImportAction);
+    m_fileImportMenu = fileMenu->addMenu(QIcon(":/fileimport.png"), tr("&Import"));
+    m_fileImportMenu->setObjectName(QStringLiteral("fileImportMenu"));
+    populateImportMenu(m_fileImportMenu);
     // Recent-files list becomes an "Open Recent" submenu (kept up to date by
     // updateFileOpenMenu(); no longer attached to the removed toolbar button).
     updateFileOpenMenu("");
@@ -2987,39 +2993,166 @@ Doc *App::loadScratchDoc(const QString &fileName, QString &error)
     return scratchDoc;
 }
 
-void App::slotFileImport()
+/* File ▸ Import's table. One row per kind of file that can be brought into
+   the open show; the submenu, its sections, each entry's file dialog and
+   "Any Supported File…" all read it. Next expected: QLab (a workspace's cue
+   lists into the Show Tree), on the EosImportWizard pattern
+   (EOS_IMPORT_DESIGN.md) -- one row here and its handler. Only importers
+   that work go in: no disabled placeholders. */
+QList<App::ImportSource> App::importSources() const
 {
-    /* Pick the source workspace -- read-only, current document is untouched
-       until the user actually confirms a selection below. */
+#if defined(WIN32) || defined(Q_OS_WIN)
+    const QString all = tr("All Files (*.*)");
+#else
+    const QString all = tr("All Files (*)");
+#endif
+    const QString fromShow = tr("From a show file");
+    const QString fixtures = tr("Fixtures && patch");
+
+    QList<ImportSource> sources;
+    sources << ImportSource{
+        QStringLiteral("workspace"), fromShow,
+        tr("QLC+ / qlcconsole &Workspace (.qxw, .qlcc)…"),
+        tr("Import from a Workspace"),
+        tr("Bring fixtures, groups, functions and palettes in from another workspace, "
+           "without replacing what's already open"),
+        QStringLiteral(":/qlcconsole.png"),
+        QStringList{ tr("Workspaces (*%1 *%2)").arg(KExtWorkspaceConsole, KExtWorkspace),
+                     tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole),
+                     tr("QLC+ Workspaces (*%1)").arg(KExtWorkspace), all },
+        QStringList{ KExtWorkspaceConsole, KExtWorkspace },
+        &App::importWorkspaceFile };
+    sources << ImportSource{
+        QStringLiteral("eos"), fromShow,
+        tr("ETC &Eos Show (ASCII .asc)…"),
+        tr("Import an Eos show"),
+        tr("An ETC Eos-family show exported as USITT ASCII: patch, groups, palettes, "
+           "presets, subs, and its cue lists into the Show Tree"),
+        QString(),
+        QStringList{ tr("ETC Eos shows, USITT ASCII export (*.asc *.ASC)"), all },
+        QStringList{ QStringLiteral(".asc") },
+        &App::importEosShow };
+    sources << ImportSource{
+        QStringLiteral("fixturelist"), fixtures,
+        tr("QLC+ &Fixtures List (.qxfl)…"),
+        tr("Import Fixtures List"),
+        tr("Add the fixtures and groups of a Fixtures List (Fixtures ▸ Export fixtures) "
+           "to this show"),
+        QStringLiteral(":/fixture.png"),
+        QStringList{ tr("Fixtures List (*%1)").arg(KExtFixtureList), all },
+        QStringList{ KExtFixtureList },
+        &App::importFixtureListFile };
+    return sources;
+}
+
+void App::populateImportMenu(QMenu *menu)
+{
+    QString section;
+    foreach (const ImportSource &src, importSources())
+    {
+        if (src.section != section)
+        {
+            section = src.section;
+            menu->addSection(section);
+        }
+        QAction *a = menu->addAction(src.label);
+        a->setObjectName(QStringLiteral("fileImport_") + src.key);
+        a->setToolTip(src.tip);
+        a->setStatusTip(src.tip);
+        if (src.icon.isEmpty() == false)
+            a->setIcon(QIcon(src.icon));
+        const QString key = src.key;
+        connect(a, &QAction::triggered, this, [this, key]() {
+            foreach (const ImportSource &s, importSources())
+            {
+                if (s.key != key)
+                    continue;
+                const QString fn = pickImportFile(s.title, s.filters);
+                if (fn.isEmpty() == false)
+                    runImport(s, fn);
+                return;
+            }
+        });
+    }
+    // The one Import there used to be, by extension, for muscle memory.
+    menu->addSeparator();
+    menu->addAction(m_fileImportAction);
+}
+
+QString App::pickImportFile(const QString &title, const QStringList &filters)
+{
+    if (m_importFilePicker)
+        return m_importFilePicker(title, filters);
+
+    /* Read-only: the current document is untouched until the user confirms
+       a selection in the importer that follows. */
     QFileDialog dialog(this);
-    dialog.setWindowTitle(tr("Import from Workspace"));
+    dialog.setWindowTitle(title);
     dialog.setAcceptMode(QFileDialog::AcceptOpen);
     if (m_workingDirectory.exists() == true)
         dialog.setDirectory(m_workingDirectory);
-
-    QStringList filters;
-    filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
-    filters << tr("QLC+ Workspaces (*%1)").arg(KExtWorkspace);
-    filters << tr("ETC Eos shows, USITT ASCII export (*.asc *.ASC)");
-#if defined(WIN32) || defined(Q_OS_WIN)
-    filters << tr("All Files (*.*)");
-#else
-    filters << tr("All Files (*)");
-#endif
     dialog.setNameFilters(filters);
 
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    QString fn = dialog.selectedFiles().first();
-    if (fn.isEmpty() == true)
-        return;
+    if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty())
+        return QString();
+    return dialog.selectedFiles().first();
+}
 
-    if (fn.endsWith(QLatin1String(".asc"), Qt::CaseInsensitive))
+void App::runImport(const ImportSource &source, const QString &path)
+{
+    if (m_importRunHook)
     {
-        importEosShow(fn);
+        m_importRunHook(source.key, path);
         return;
     }
+    (this->*source.handler)(path);
+}
 
+void App::importFile(const QString &path)
+{
+    const QList<ImportSource> sources = importSources();
+    Q_ASSERT(sources.isEmpty() == false);
+    foreach (const ImportSource &src, sources)
+    {
+        foreach (const QString &ext, src.extensions)
+        {
+            if (path.endsWith(ext, Qt::CaseInsensitive))
+            {
+                runImport(src, path);
+                return;
+            }
+        }
+    }
+    // Unknown: read as a workspace, which says so if it isn't one.
+    runImport(sources.first(), path);
+}
+
+void App::slotFileImport()
+{
+    QStringList patterns;
+    QStringList own;
+    const QList<ImportSource> sources = importSources();
+    foreach (const ImportSource &src, sources)
+    {
+        foreach (const QString &ext, src.extensions)
+            patterns << QStringLiteral("*") + ext;
+        // Each type's own filter, then All Files once at the end.
+        for (int i = 0; i < src.filters.size() - 1; ++i)
+            if (own.contains(src.filters.at(i)) == false)
+                own << src.filters.at(i);
+    }
+    QStringList filters;
+    filters << tr("All supported files (%1)").arg(patterns.join(QLatin1Char(' ')));
+    filters << own;
+    filters << sources.first().filters.last();
+
+    const QString fn = pickImportFile(tr("Import"), filters);
+    if (fn.isEmpty() == false)
+        importFile(fn);
+}
+
+void App::importWorkspaceFile(const QString &fn)
+{
     QString err;
     Doc *scratchDoc = loadScratchDoc(fn, err);
     if (scratchDoc == NULL)
@@ -3048,6 +3181,23 @@ void App::slotFileImport()
     QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, fixtures, groups, functions, palettes);
     delete scratchDoc;
     showImportSummary(result);
+}
+
+void App::importFixtureListFile(const QString &path)
+{
+    const int added = FixtureManager::importFixtureList(m_doc, path);
+    if (added < 0)
+    {
+        QMessageBox::warning(this, tr("Import"),
+                             tr("%1 is not a Fixtures List").arg(QDir::toNativeSeparators(path)));
+        return;
+    }
+    if (FixtureManager::instance() != NULL)
+        FixtureManager::instance()->updateView();
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->updateList();
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->updateView();
 }
 
 void App::showImportSummary(const QxwImportResult &result, const QStringList &before,

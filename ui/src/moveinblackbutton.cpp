@@ -119,8 +119,8 @@ void MoveInBlackButton::sync()
     QString tip = tr("Auto move-in-black: while the show runs, look ahead to the next cue and "
                      "pre-position any dark mover it will reveal, if the next cue is at least "
                      "the lead time away (now %1 s). The arrow sets the lead time. Saved with "
-                     "the show; the same switch as Programming → Move in black and "
-                     "Settings → Show Tree.").arg(lead, 0, 'f', 1);
+                     "the show; the same switch as Build → Move in black and "
+                     "Settings → General → Show Tree.").arg(lead, 0, 'f', 1);
     if (on)
         tip += QLatin1Char('\n') + (presets > 0
             ? tr("Pre-positioning %n head(s) in black for the next cue.", "", presets)

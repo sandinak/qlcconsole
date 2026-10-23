@@ -18,10 +18,14 @@
 #include <QtTest>
 #include <QSignalSpy>
 #include <QColor>
+#include <QBuffer>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 
 #define protected public
 #define private public
 #include "programmercontroller.h"
+#include "programmerflasher.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "qlcchannel.h"
@@ -31,6 +35,10 @@
 #include "qlcfile.h"
 #include "scene.h"
 #include "doc.h"
+#include "mastertimer.h"
+#include "universe.h"
+#include "inputoutputmap.h"
+#include "parkeffect.h"
 #undef private
 #undef protected
 
@@ -64,6 +72,13 @@ void ProgrammerController_Test::cleanup()
     // separate concern the real Save gesture only clears explicitly at the
     // very end (see programmercontroller.h's own doc comment on
     // clearProgrammerValues()). Reset both so each test starts clean.
+    // A test that fails part-way leaves its functions running; stop them
+    // before clearContents() deletes them under the next test's ticks.
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->m_stopAllFunctions = true;
+    timer->timerTick();
+    timer->timerTick();
+    timer->m_stopAllFunctions = false;
     m_doc->clearContents();
     m_doc->clearProgrammerValues();
 }
@@ -519,6 +534,309 @@ void ProgrammerController_Test::saveBucketAsGroupSceneRequiresARealFixtureGroup(
     QCOMPARE(id, Function::invalidId());
     QVERIFY2(m_doc->functions().isEmpty(),
              "saveBucketAsGroupScene() left behind a Scene despite returning invalidId()");
+}
+
+static void tick(Doc *doc, int n = 3)
+{
+    for (int i = 0; i < n; ++i)
+        doc->masterTimer()->timerTick();
+}
+
+static uchar preGM(Doc *doc, int address)
+{
+    QList<Universe *> unis = doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : unis)
+        u->processFaders();
+    const uchar v = unis.first()->preGMValue(address);
+    doc->inputOutputMap()->releaseUniverses(false);
+    return v;
+}
+
+/* Park records the fixture's output at the moment it is parked. */
+static Scene *sceneOf(Doc *doc, quint32 fid, const QList<QPair<quint32, uchar>> &values)
+{
+    Scene *sc = new Scene(doc);
+    sc->addFixture(fid);
+    for (const auto &v : values)
+        sc->setValue(fid, v.first, v.second);
+    doc->addFunction(sc);
+    return sc;
+}
+
+void ProgrammerController_Test::aParkIsSavedWithTheShow()
+{
+    Fixture *fxi = makeFixture(m_doc, m_rgbDef, "RGB Dimmer", 0);
+    QVERIFY(fxi != nullptr);
+    const quint32 fid = fxi->id();
+    ProgrammerController *pc = m_doc->programmer();
+    QSignalSpy parkSpy(pc, &ProgrammerController::parkChanged);
+
+    Scene *warm = sceneOf(m_doc, fid, { { 0, 200 }, { 3, 255 } });
+    warm->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 0), uchar(200));
+
+    pc->parkFixtures({ fid });
+    QVERIFY(pc->isFixtureParked(fid));
+    QVERIFY(parkSpy.count() >= 1);
+    QCOMPARE(pc->m_parkEffect->m_parked.value(fid).value(0), uchar(200));   // where it sat
+    QCOMPARE(pc->m_parkEffect->m_parked.value(fid).value(3), uchar(255));
+    warm->stop(FunctionParent::master());
+    tick(m_doc);
+
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        QVERIFY(m_doc->saveXML(&w));
+        w.writeEndDocument();
+    }
+    QVERIFY(xml.contains("<Park"));
+
+    // A new show lets go of it...
+    m_doc->clearContents();
+    QVERIFY(!pc->hasParkedFixtures());
+
+    // ...and loading this one parks it again, at the same values.
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(m_doc->loadXML(r, false));
+    QVERIFY(pc->isFixtureParked(fid));
+    QCOMPARE(pc->m_parkEffect->m_parked.value(fid).value(0), uchar(200));
+    QCOMPARE(pc->m_parkEffect->m_parked.value(fid).value(3), uchar(255));
+
+    pc->unparkAllFixtures();
+    QVERIFY(!pc->hasParkedFixtures());
+}
+
+void ProgrammerController_Test::aParkedFixtureHoldsItsOutput()
+{
+    Fixture *fxi = makeFixture(m_doc, m_rgbDef, "RGB Dimmer", 0);
+    QVERIFY(fxi != nullptr);
+    const quint32 fid = fxi->id();
+    ProgrammerController *pc = m_doc->programmer();
+
+    Scene *warm = sceneOf(m_doc, fid, { { 0, 200 }, { 3, 255 } });
+    Scene *cold = sceneOf(m_doc, fid, { { 0, 10 }, { 2, 180 }, { 3, 255 } });
+    warm->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(255));     // a frame out: the rig shows it
+    pc->parkFixtures({ fid });
+    warm->stop(FunctionParent::master());
+    tick(m_doc, 4);
+
+    // Nothing running: the parked fixture stays lit where it was.
+    QCOMPARE(preGM(m_doc, 0), uchar(200));
+    QCOMPARE(preGM(m_doc, 3), uchar(255));
+
+    // The next cue would turn it blue and dim its red: parked, it stays as
+    // it was -- even where the cue is higher (blue, an HTP channel).
+    cold->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc, 4);
+    QCOMPARE(preGM(m_doc, 0), uchar(200));
+    QCOMPARE(preGM(m_doc, 2), uchar(0));
+
+    // Unparked, the fixture follows the show.
+    pc->unparkAllFixtures();
+    tick(m_doc, 4);
+    QCOMPARE(preGM(m_doc, 0), uchar(10));
+    QCOMPARE(preGM(m_doc, 2), uchar(180));
+    cold->stop(FunctionParent::master());
+    tick(m_doc);
+}
+
+void ProgrammerController_Test::highlightDrivesTheSelectionToFull()
+{
+    Fixture *fxi = makeFixture(m_doc, m_rgbDef, "RGB Dimmer", 0);
+    QVERIFY(fxi != nullptr);
+    ProgrammerController *pc = m_doc->programmer();
+    Scene *dim = sceneOf(m_doc, fxi->id(), { { 0, 40 }, { 3, 60 } });
+    dim->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(60));
+
+    pc->setProgrammerSelection({ fxi->id() });
+    pc->setHighlightActive(true);
+    QVERIFY(pc->isHighlightActive());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(255));
+
+    pc->setHighlightActive(false);
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(60));                // back to the show
+    dim->stop(FunctionParent::master());
+    tick(m_doc);
+}
+
+/* Highlight is over everything that runs, not merged with it: a cyan
+   channel goes to 0 for the white whatever the cue gives it (an LTP channel
+   the cue's fader used to rewrite every frame). Park is over Highlight. */
+void ProgrammerController_Test::highlightBeatsARunningCue()
+{
+    QScopedPointer<QLCFixtureDef> def(new QLCFixtureDef());
+    def->setManufacturer("Test");
+    def->setModel("Dimmer CMY");
+    QLCFixtureMode *mode = new QLCFixtureMode(def.data());
+    mode->setName("2ch");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim);
+    mode->insertChannel(dim, 0);
+    QLCChannel *cyan = new QLCChannel();
+    cyan->setName("Cyan");
+    cyan->setGroup(QLCChannel::Colour);                 // LTP
+    cyan->setColour(QLCChannel::Cyan);
+    def->addChannel(cyan);
+    mode->insertChannel(cyan, 1);
+    def->addMode(mode);
+    Fixture *fxi = makeFixture(m_doc, def.data(), "2ch", 0);
+    QVERIFY(fxi != nullptr);
+    ProgrammerController *pc = m_doc->programmer();
+
+    Scene *cue = sceneOf(m_doc, fxi->id(), { { 0, 90 }, { 1, 200 } });
+    cue->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 0), uchar(90));
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+
+    pc->setProgrammerSelection({ fxi->id() });
+    pc->setHighlightActive(true);
+    tick(m_doc, 4);
+    QCOMPARE(preGM(m_doc, 0), uchar(255));
+    QCOMPARE(preGM(m_doc, 1), uchar(0));                 // the cue's 200 loses
+
+    // Parked (at the cue's look) while highlighted: Park is on top.
+    pc->setHighlightActive(false);
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+    pc->parkFixtures({ fxi->id() });
+    pc->setHighlightActive(true);
+    tick(m_doc, 4);
+    QCOMPARE(preGM(m_doc, 0), uchar(90));
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+    pc->unparkAllFixtures();
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 1), uchar(0));                 // highlight again
+
+    pc->setHighlightActive(false);
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 0), uchar(90));                // back to the show
+    QCOMPARE(preGM(m_doc, 1), uchar(200));
+    cue->stop(FunctionParent::master());
+    tick(m_doc);
+    m_doc->clearContents();                              // before the def goes
+}
+
+/* A Flash is over a running cue for its length (B1): up to full on a dim
+   fixture, down to 0 on a bright one -- not HTP-merged with the cue -- and
+   the cue has the fixture back once it ends. */
+void ProgrammerController_Test::aFlashShowsOverARunningCue()
+{
+    Fixture *fxi = makeFixture(m_doc, m_rgbDef, "RGB Dimmer", 0);
+    QVERIFY(fxi != nullptr);
+    Scene *dim = sceneOf(m_doc, fxi->id(), { { 3, 60 } });
+    dim->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(60));
+    {
+        ProgrammerFlasher up(m_doc);
+        up.flashFixture(fxi->id(), 60000);
+        tick(m_doc, 3);
+        QCOMPARE(preGM(m_doc, 3), uchar(255));           // up: the fixture was dim
+    }                                                    // a flasher that goes lets go
+    QCOMPARE(preGM(m_doc, 3), uchar(60));
+    dim->stop(FunctionParent::master());
+    tick(m_doc);
+
+    ProgrammerFlasher down(m_doc);
+    Scene *bright = sceneOf(m_doc, fxi->id(), { { 3, 230 } });
+    bright->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(230));
+    down.flashFixture(fxi->id(), 60);
+    tick(m_doc, 2);
+    QCOMPARE(preGM(m_doc, 3), uchar(0));                 // down: it was bright
+
+    // Over: the cue is back (generous wait, wall-clock flash).
+    QElapsedTimer t;
+    t.start();
+    uchar v = 0;
+    while (t.elapsed() < 5000)
+    {
+        tick(m_doc);
+        v = preGM(m_doc, 3);
+        if (v == 230)
+            break;
+        QTest::qWait(20);
+    }
+    QCOMPARE(v, uchar(230));
+    bright->stop(FunctionParent::master());
+    tick(m_doc);
+}
+
+void ProgrammerController_Test::aLearnedControlTogglesItsFunction()
+{
+    Fixture *fxi = makeFixture(m_doc, m_rgbDef, "RGB Dimmer", 0);
+    QVERIFY(fxi != nullptr);
+    Scene *a = new Scene(m_doc);
+    a->addFixture(fxi->id());
+    a->setValue(fxi->id(), 3, 255);
+    m_doc->addFunction(a);
+    Scene *b = new Scene(m_doc);
+    b->addFixture(fxi->id());
+    b->setValue(fxi->id(), 0, 255);
+    m_doc->addFunction(b);
+    ProgrammerController *pc = m_doc->programmer();
+
+    QSignalSpy changed(pc, &ProgrammerController::functionTriggerChanged);
+    pc->learnFunctionTrigger(a->id());
+    pc->slotControllerInputChanged(0, 36, 0, QString());   // a release: not bound
+    QVERIFY(!pc->hasFunctionTrigger(a->id()));
+    pc->slotControllerInputChanged(0, 36, 127, QString()); // the press binds
+    QVERIFY(pc->hasFunctionTrigger(a->id()));
+    QCOMPARE(pc->functionTriggerLabel(a->id()), QStringLiteral("Uni 1 Ch 36"));
+    QCOMPARE(changed.count(), 1);
+    QVERIFY(!a->isRunning());                               // learning didn't fire it
+
+    // Press: on. Release: nothing. Press again: off.
+    pc->slotControllerInputChanged(0, 36, 127, QString());
+    tick(m_doc);
+    QVERIFY(a->isRunning());
+    QCOMPARE(preGM(m_doc, 3), uchar(255));
+    pc->slotControllerInputChanged(0, 36, 0, QString());
+    tick(m_doc);
+    QVERIFY(a->isRunning());
+    pc->slotControllerInputChanged(0, 36, 127, QString());
+    tick(m_doc);
+    QVERIFY(!a->isRunning());
+
+    // Another control does nothing.
+    pc->slotControllerInputChanged(0, 37, 127, QString());
+    tick(m_doc);
+    QVERIFY(!a->isRunning());
+
+    // The same control learned for B: one control, one function.
+    pc->learnFunctionTrigger(b->id());
+    pc->slotControllerInputChanged(0, 36, 127, QString());
+    QVERIFY(pc->hasFunctionTrigger(b->id()));
+    QVERIFY(!pc->hasFunctionTrigger(a->id()));
+    pc->slotControllerInputChanged(0, 36, 127, QString());
+    tick(m_doc);
+    QVERIFY(b->isRunning());
+    QVERIFY(!a->isRunning());
+    pc->slotControllerInputChanged(0, 36, 127, QString());
+    tick(m_doc);
+    QVERIFY(!b->isRunning());
+
+    // Cleared: the control is free again.
+    pc->clearFunctionTrigger(b->id());
+    QVERIFY(!pc->hasFunctionTrigger(b->id()));
+    pc->slotControllerInputChanged(0, 36, 127, QString());
+    tick(m_doc);
+    QVERIFY(!b->isRunning());
 }
 
 QTEST_MAIN(ProgrammerController_Test)

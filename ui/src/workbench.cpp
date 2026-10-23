@@ -26,10 +26,12 @@
 #include <QHBoxLayout>
 #include <QShowEvent>
 #include <QHideEvent>
+#include <QKeyEvent>
 #include <QSplitter>
 #include <QLabel>
 #include <QTimer>
 #include <QMenu>
+#include <QMessageBox>
 #include <QDebug>
 
 #include "workbench.h"
@@ -47,6 +49,7 @@
 #include "fixtureconsole.h"
 #include "functionparent.h"
 #include "showtreeview.h"
+#include "effectdesigner.h"
 #include "treecuestack.h"
 #include "chasereditor.h"
 #include "sceneeditor.h"
@@ -99,6 +102,15 @@ static QWidget *sequenceEditor(QWidget *parent, Sequence *sequence, Doc *doc)
 }
 
 #define SETTINGS_SPLITTER QStringLiteral("programming/workbenchSplitter")
+
+/** The Workbench plays what is loaded (the Design preview, the Operate run)
+ *  under its own parent: hiding it lets go of that run only. A function a
+ *  VC button, the Run tab or a cue was already running keeps running --
+ *  Function::stop(master()) would clear every source. */
+static FunctionParent workbenchParent()
+{
+    return FunctionParent(FunctionParent::AutoVCWidget, 0xFFFFFF57);
+}
 
 static QList<quint32> membersOf(Function *f)
 {
@@ -515,6 +527,8 @@ void Workbench::buildEditorPane()
     // A look: the Look Editor at full height; scrolls when the window is shorter.
     m_lookEditor = new LookEditor(m_doc, this);
     m_lookEditor->setObjectName(QStringLiteral("lookEditor"));
+    // ↩ Back: a palette opened from a list goes back to what was showing.
+    connect(m_lookEditor, &LookEditor::backRequested, this, [this]() { backOut(); });
     {
         QScrollArea *lookScroll = new QScrollArea(m_page);
         lookScroll->setObjectName(QStringLiteral("programmingLookPage"));
@@ -577,12 +591,17 @@ void Workbench::buildEditorPane()
         m_functionHeading->setWordWrap(true);
         hl->addWidget(m_functionHeading, 1);
         m_groupBackButton = new QPushButton(m_functionPage);
-        m_groupBackButton->setToolTip(tr("Back to the scene that was open before this group"));
+        m_groupBackButton->setObjectName(QStringLiteral("workbenchGroupBack"));
+        m_groupBackButton->setToolTip(tr("Back to what was open before this group (Esc)"));
         m_groupBackButton->hide();
         connect(m_groupBackButton, &QPushButton::clicked, this, [this]() {
             const quint32 sid = m_groupReturnScene;
             if (m_doc->function(sid) == nullptr)
+            {
+                // No scene to go back to: the page the rows have selected.
+                slotRowsSelectionChanged();
                 return;
+            }
             ProgrammingOutline::Row r;
             r.kind = ProgrammingOutline::SceneRow;
             r.scene = r.id = sid;
@@ -704,6 +723,73 @@ void Workbench::clear()
 {
     m_back.clear();
     setStackImpl(nullptr, Fresh);
+}
+
+bool Workbench::backOut()
+{
+    // A palette opened from a list: the page the rows have selected again
+    // (the look's edits are the palette's already).
+    if (m_paletteDetour && currentPage() == LookPage)
+    {
+        slotRowsSelectionChanged();
+        m_rows->setFocus(Qt::OtherFocusReason);
+        return true;
+    }
+    // A group's layout: its ← Back.
+    if (currentPage() == FunctionPage && qobject_cast<FixtureGroupEditor *>(m_funcEditor) != nullptr
+        && !m_groupBackButton->isHidden())
+    {
+        m_groupBackButton->click();
+        m_rows->setFocus(Qt::OtherFocusReason);
+        return true;
+    }
+    // The effect bench: left as clicking away leaves it (its draft goes with
+    // the designer, as its Cancel), back to the scene it was opened from --
+    // asked first when what is designed hasn't been kept.
+    if (m_benchPane && effectPane() != nullptr)
+    {
+        EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane());
+        if (ed != nullptr && ed->hasUnkeptChanges())
+        {
+            const QString title = tr("Effect designer");
+            const QString text = tr("Leave the effect designer? This effect hasn't been kept.");
+            bool leave = false;
+            if (m_confirm)
+                leave = m_confirm(title, text);
+            else
+            {
+                QMessageBox box(QMessageBox::Question, title, text, QMessageBox::NoButton, this);
+                QPushButton *keep = box.addButton(tr("Keep designing"), QMessageBox::RejectRole);
+                QPushButton *go = box.addButton(tr("Leave"), QMessageBox::DestructiveRole);
+                box.setDefaultButton(keep);
+                box.setEscapeButton(keep);
+                box.exec();
+                leave = box.clickedButton() == go;
+            }
+            if (!leave)
+                return true;        // Esc was answered: still designing
+        }
+        const quint32 scene = m_benchFromScene;
+        clear();
+        if (m_doc->function(scene) != nullptr)
+            load(scene);
+        else if (m_returnTo)
+            m_returnTo();
+        m_rows->setFocus(Qt::OtherFocusReason);
+        return true;
+    }
+    return goBack();
+}
+
+void Workbench::keyPressEvent(QKeyEvent *ev)
+{
+    // Esc backs out one level; with nowhere to go it goes on (ignored).
+    if (ev->key() == Qt::Key_Escape && ev->modifiers() == Qt::NoModifier && backOut())
+    {
+        ev->accept();
+        return;
+    }
+    QWidget::keyPressEvent(ev);
 }
 
 bool Workbench::canGoBack() const
@@ -1114,6 +1200,9 @@ void Workbench::showPage(Page page)
                : page == OverviewPage && m_stack != nullptr ? m_overviewPage : m_emptyPage;
     if (w == m_overviewPage)
         updateOverview();
+    // Whatever shows now is the rows' page (editPalette() sets it again).
+    m_paletteDetour = false;
+    m_lookEditor->setBackText(QString());
     m_page->setCurrentWidget(w);
     // The bench's designer has the width; the layers come back with anything else.
     m_split->widget(0)->setVisible(!(w == m_functionPage && m_benchPane && !m_effectPane.isNull()
@@ -1504,13 +1593,9 @@ void Workbench::showGroupLayout(quint32 groupId)
     m_functionHeading->setText(tr("<b>Fixture group: %1</b> — %n head(s)", "", grp->headList().count())
                                .arg(grp->name().toHtmlEscaped()));
     showPage(FunctionPage);
-    if (back != nullptr)
-    {
-        m_groupBackButton->setText(tr("← Back to %1").arg(back->name()));
-        m_groupBackButton->show();
-    }
-    else
-        m_groupBackButton->hide();
+    // ← Back (Esc): to the scene that was open, else to what the rows have.
+    m_groupBackButton->setText(back != nullptr ? tr("← Back to %1").arg(back->name()) : tr("← Back"));
+    m_groupBackButton->show();
 }
 
 void Workbench::editPalette(quint32 paletteId)
@@ -1523,6 +1608,16 @@ void Workbench::editPalette(quint32 paletteId)
         m_groupBackButton->click();
     m_lookEditor->setPalette(paletteId);
     showPage(LookPage);
+    // Over what was showing (from a list, not the look row selected):
+    // ↩ Back, and Esc, go back to it.
+    QTreeWidgetItem *cur = m_rows->currentItem();
+    const ProgrammingOutline::Row row = ProgrammingOutline::rowOf(cur);
+    if (cur == nullptr || !cur->isSelected() || row.kind != ProgrammingOutline::PaletteRow
+        || row.id != paletteId)
+    {
+        m_paletteDetour = true;
+        m_lookEditor->setBackText(tr("↩ Back"));
+    }
 }
 
 quint32 Workbench::currentPaletteId() const
@@ -1853,7 +1948,7 @@ void Workbench::startPreview()
         updateOnRig();
         return;
     }
-    f->start(m_doc->masterTimer(), FunctionParent::master());
+    f->start(m_doc->masterTimer(), workbenchParent());
     m_previewFunction = fid;
     m_previewMembers = membersOf(f);
     m_lastSyncedEffects = effectSignature(qobject_cast<Scene *>(m_doc->function(m_currentScene)));
@@ -1873,7 +1968,7 @@ void Workbench::stopPreview()
         return;
     Function *f = m_doc->function(m_previewFunction);
     if (f != nullptr)
-        f->stop(FunctionParent::master());
+        f->stop(workbenchParent());
     m_previewFunction = Function::invalidId();
     m_previewMembers.clear();
     updateOnRig();
@@ -1901,7 +1996,7 @@ void Workbench::refreshPreview()
     if (!root->isRunning() && !m_restartTimer->isActive())
     {
         // It stopped on its own (a scene empty until now): start it.
-        root->start(m_doc->masterTimer(), FunctionParent::master());
+        root->start(m_doc->masterTimer(), workbenchParent());
         m_previewFunction = root->id();
         m_previewMembers = membersOf(root);
         m_lastSyncedEffects = effectSignature(qobject_cast<Scene *>(m_doc->function(m_currentScene)));
@@ -1942,7 +2037,7 @@ void Workbench::startOperate()
     Function *f = m_doc->function(fid);
     if (f == nullptr)
         return;
-    f->start(m_doc->masterTimer(), FunctionParent::master());
+    f->start(m_doc->masterTimer(), workbenchParent());
     m_operateFunction = fid;
     updateOnRig();
 }
@@ -1952,7 +2047,7 @@ void Workbench::stopOperate()
     if (m_operateFunction == Function::invalidId())
         return;
     if (Function *f = m_doc->function(m_operateFunction))
-        f->stop(FunctionParent::master());
+        f->stop(workbenchParent());
     m_operateFunction = Function::invalidId();
     updateOnRig();
 }
@@ -2188,6 +2283,7 @@ bool Workbench::designEffect(const EffectRequest &request)
 void Workbench::hostEffectPane(QWidget *pane, const QString &heading, bool bench)
 {
     clearEditors();
+    m_groupBackButton->hide();
     m_funcEditor = pane;
     m_effectPane = pane;
     m_benchPane = bench;

@@ -106,6 +106,12 @@ public:
     /** Remove all channels */
     void removeAll();
 
+    /** Let go of the channels @a which picks while the rest play on, as a
+     *  stop would: over @a fadeTime ms an intensity fades to zero and any
+     *  other channel to what is under it, then each goes; with no fade they
+     *  go at once. (A scene's group losing a member, Scene::write.) */
+    void release(const std::function<bool(const FadeChannel &)> &which, uint fadeTime);
+
     /** Swap the whole channel set for $channels in one step. A source that
      *  rebuilds its fader every tick must use this, not removeAll() + replace():
      *  universes process their faders on their own threads, and one that got
