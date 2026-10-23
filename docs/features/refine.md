@@ -1,0 +1,91 @@
+# Refine
+
+Changing a cue from the stage, with the controller: where its lights
+point, their zoom, focus, colour and gobo — the cue's own values, seen on
+the real rig as you move them.
+
+Refine is not focusing. [Focus calls](focus-calls.md) correct the rig's
+calibration for a venue; Refine changes what a **cue** does. The
+controller is laid out the same way in both, so it only has to be learnt
+once.
+
+## Starting
+
+In the [Show Tree](show-tree.md), with Design mode on:
+
+- a cue's page: **Refine on the controller…**, or
+- right-click a layer: **Refine on the controller…** (it starts on that
+  layer).
+
+The cue is previewed on the rig, and the Refine panel shows the cue, the
+layer, the scope, what the D-pad sets, and what is pending.
+
+## Scope: layer, group, fixture
+
+**Y** goes Layer → Group → Fixture → Layer.
+
+- **Layer** — the layer's own look changes, for all of its fixtures.
+  A position keeps its fanning: the whole fan moves.
+- **Group** — one of the layer's groups (only where the layer has more
+  than one). Kept as an exception for that group.
+- **Fixture** — one fixture. Kept as an **exception**: a
+  [child layer](show-tree.md) of that layer on just that fixture, with the
+  value as its own look. The layer still lights it with everything else.
+
+The **triggers** step the cue's layers (a new layer starts at Layer
+scope); the **bumpers** step the groups or fixtures. A bumper at Layer
+scope picks the first fixture.
+
+## Changing values
+
+| Do | Controller | Keyboard |
+|---|---|---|
+| Next / previous layer | RT / LT | PgDn / PgUp |
+| Next / previous fixture (or group) | RB / LB | ] / [ |
+| Scope: layer → group → fixture | Y | G |
+| Move (coarse, fine) | Left stick, right stick | Arrows (⇧: 5°) |
+| Zoom wider / narrower | D-pad up / down | . / , |
+| Focus nearer / farther | D-pad left / right | ; / ' |
+| D-pad page: beam / colour / gobo | LS (left stick click) | P |
+| Keep in the cue | A | Return |
+| Back to the cue | B | Backspace |
+| Clear the exception | X | 0 |
+| Undo | View | ⌘Z |
+| Where am I? | RS (right stick click) | W |
+| Leave | Menu | Esc |
+
+On the **colour** and **gobo** pages, D-pad left and right step through
+the show's colour or gobo palettes and say the name of each.
+
+What you change is **pending**: the rig shows it at once, but the cue is
+not changed until **A**. Then everything pending is kept as **one** Show
+Tree step (⌘Z or View undoes it). **B** drops what is pending and the rig
+shows the cue again. Leaving with something pending asks whether to keep
+it.
+
+**X** at Group or Fixture scope takes the exception off: the child layer
+loses what it set on this page (position, zoom and focus on the beam
+page), and goes when nothing is left on it. The fixture is lit by its
+layer again.
+
+Positions are kept in whole degrees, as the Show Tree's position values
+are.
+
+A layer aimed at a stage target (an Aim position) cannot be moved by
+degrees as a whole: it would stop following its target. Move the target
+in the Lighting Studio, or pick one fixture (Y) and give it a position of
+its own.
+
+## Where am I?
+
+The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
+
+- **The lights.** At Group or Fixture scope, what is picked keeps the
+  cue's level and the rest of the layer dims; on every change it blinks
+  three times.
+- **The voice.** "AT spots, layer." "AT spots, fixture 3 of 8."
+  "DS wash, group 2 of 3." "Kept." "Back to the cue." **Where am I?**
+  adds the cue: "Cue 4, AT spots, fixture 3 of 8."
+
+Refine works in Design mode; going to Operate ends it, dropping what is
+pending.

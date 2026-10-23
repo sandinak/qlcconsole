@@ -1019,14 +1019,26 @@ and jump as you nudged.)
 | Save this head | A | Return |
 | Back to what was saved | B | Backspace |
 | Zero the offsets | X | 0 |
-| The other reference | Y | R |
+| This head / all of them (scope) | Y | G |
+| The other reference | LS (left stick click) | R |
+| Where am I? (said and flashed) | RS (right stick click) | W |
+| Next / previous focus call | RT / LT | PgDn / PgUp |
 | Undo the last save | View | ⌘Z |
 | Leave | Menu | Esc |
+
+The layout is the one every on-stage tool uses — Focus mode,
+[Focus calls](focus-calls.md) and [Refine](refine.md): the triggers step
+the big unit, the bumpers the fixture, **Y** the scope, **A** keeps, **B**
+goes back. **Y** works on the whole list at once (a truss trimmed a little
+low: one nudge for every head on it); a bumper picks one head again. On a
+change of head or scope the head(s) picked blink three times and the
+laptop says where you are ("Fixture 3 of 8"): see
+[Telling the operator where they are](focus-calls.md#telling-the-operator-where-they-are).
 
 ### The controller map
 
 The panel draws the device it is using, with each control labelled by what
-it does in Focus mode — **Next head** on RB, **Save** on A, **Nudge** on the
+it does in Focus mode — **Next fixture** on RB, **Save** on A, **Nudge** on the
 left stick, **Fine nudge** on the right, zoom and focus on the D-pad — and,
 under each, the controller's own name for it. Here RB is held and the left
 stick pushed up and to the right:
@@ -1040,8 +1052,10 @@ stick pushed up and to the right:
   controller profile's roles (see **Controllers** below), not from a fixed
   picture: another make of pad is drawn the same way with its own names
   (Cross, Circle, R1, Options…), and a control its profile does not have is
-  greyed and marked *not on this controller*. The triggers, the stick clicks
-  and the Guide button are not used and are always grey.
+  greyed and marked *not on this controller*. The Guide button is not
+  used. The triggers step focus calls (they say so when calls are being
+  run), the left stick click is the second reference and the right stick
+  click is **Where am I?**
 - **Click a control** on the map to do what pressing it would.
 
 ### Controller or keyboard
@@ -1071,8 +1085,11 @@ picks which device drives the nudges and which map is shown.
 
 A nudge changes the head live but is not an edit until you save it (A or
 Return): then it is the head's offset, marks the show changed, and **File →
-Save** keeps it. The panel says **Unsaved** while a head differs from what
-was saved, and counts the heads you have checked.
+Save** keeps it. With a **venue** applied (see
+[Venues](focus-calls.md#venues-corrections-that-stay-with-the-room)) a save
+goes to that venue's corrections, in a file beside the show, at once —
+the show file is not changed. The panel says **Unsaved** while a head
+differs from what was saved, and counts the heads you have checked.
 
 **The status lamp**, at the top of the panel, is big enough to read from
 the stage:

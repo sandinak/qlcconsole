@@ -10,6 +10,22 @@ QLC+ shows open in a **Classic QLC+** view and can be upgraded in one
 step. Fixtures get plot symbols and output rules, and Eos shows import with
 their house lights, relays and subs.
 
+### Focus calls and Refine: the controller on stage
+
+- **Focus calls.** The show keeps its focus in order — "DH Tspots →
+  DSC", then "AT spots → Soloist DS" — and runs it on the controller:
+  triggers step the calls, bumpers the fixtures, the stick nudges, A
+  saves. Corrections are saved **for the venue**, in a file beside the
+  show, the moment A is pressed; the show file never takes them. See
+  [Focus calls](focus-calls.md).
+- **Refine.** The same controller on a Show Tree cue's own values:
+  position, zoom, focus, colour, gobo — the layer as a whole, or one
+  fixture as an exception (a child layer). See [Refine](refine.md).
+- **Where am I?** What is picked blinks, and the laptop says it: "AT
+  spots, layer", "fixture 3 of 8".
+- **One layout.** Y is now the scope in Focus mode too (one head, or all
+  of them); the second reference moved to the left stick click.
+
 ### Build and the Workbench
 
 - **The Programming tab is Build.** Over its left side, **Palettes |
