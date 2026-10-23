@@ -35,6 +35,7 @@
 #include <QDebug>
 
 #include "workbench.h"
+#include "shrinkablebar.h"
 #include "workbenchstack.h"
 #include "chaserwalker.h"
 #include "programmercontroller.h"
@@ -444,7 +445,8 @@ void Workbench::buildAddBar(QWidget *column)
                      tr("Load the selected layer in the Workbench on its own (double-click); ↩ comes back"));
     connect(m_openBtn, &QToolButton::clicked, this, &Workbench::openSelected);
 
-    col->addWidget(bar);
+    // Scrolls sideways rather than holding Build wide (ShrinkableBar).
+    col->addWidget(new ShrinkableBar(bar, column));
 }
 
 void Workbench::buildEditorPane()

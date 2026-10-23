@@ -45,6 +45,7 @@
 #include <QTreeWidgetItemIterator>
 
 #include "connectionstree.h"
+#include "shrinkablebar.h"
 #include "networkroute.h"
 #include "universeoutputview.h"
 #include "deviceprofile.h"
@@ -241,7 +242,10 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     });
     labelUnused();
 
-    QHBoxLayout *bar = new QHBoxLayout;
+    // Scrolls sideways rather than holding Connections wide (ShrinkableBar).
+    QWidget *barRow = new QWidget(this);
+    QHBoxLayout *bar = new QHBoxLayout(barRow);
+    bar->setContentsMargins(0, 0, 0, 0);
     bar->addWidget(m_byUniverse);
     bar->addWidget(m_showUnused);
     bar->addSpacing(12);
@@ -249,7 +253,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     bar->addStretch(1);
     bar->addWidget(m_undo);
     bar->addWidget(m_rescan);
-    lay->addLayout(bar);
+    lay->addWidget(new ShrinkableBar(barRow, this));
 
     if (m_doc->inputOutputMap() != NULL
             && m_doc->inputOutputMap()->patchUndo() != NULL)

@@ -6887,6 +6887,14 @@ void ShowTreeView_Test::theHeaderFoldsUnderMore()
     QTRY_VERIFY(!prod->isVisible());     // the tree follows the controller
     // The menu still offers it.
     QVERIFY(more->menu()->actions().first()->isEnabled());
+
+    // Q90: a show made here has nothing to upgrade, its lists' own chasers
+    // included.
+    QToolButton *upgrade = view.findChild<QToolButton *>("stUpgradeShow");
+    QVERIFY(upgrade != nullptr);
+    m_doc->showTree()->addCueList(m_doc->showTree()->productions().first().id, "01-Everybody Scream");
+    QTest::qWait(50);
+    QTRY_VERIFY(!upgrade->isVisible());
 }
 
 QTEST_MAIN(ShowTreeView_Test)

@@ -926,6 +926,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_import = button(tr("Upgrade This Show…"), tr("Make the show's cue-list chasers Show Tree cue lists, "
                                                    "checked channel for channel: tick the ones you want"),
                       "stUpgradeShow");
+    m_importAction = bar->actions().last();     // a bar's widget is shown and hidden by its action
     connect(m_import, &QToolButton::clicked, this, [this]() { openUpgrade(); });
     // P5: the current production -- what GO, the footer, VC and show
     // control play.
@@ -6899,8 +6900,12 @@ void ShowTreeView::updateBridgeBanner()
     /* The header's Upgrade This Show… only while there's a chaser to upgrade
        (Q90): a show made here never needs it. File ▸ Upgrade This Show…
        stays. */
-    if (m_import != nullptr)
-        m_import->setVisible(!m_st->convertibleChasers().isEmpty());
+    /* Deferred: this runs as a function is added, and a cue list's own
+       chaser is only marked the tree's (generated) once that's done. */
+    QTimer::singleShot(0, this, [this]() {
+        if (m_importAction != nullptr)
+            m_importAction->setVisible(!m_st->convertibleChasers().isEmpty());
+    });
     if (m_bridgeBanner == nullptr)
         return;
     // Only a show with no tree yet, and only until dismissed: it never

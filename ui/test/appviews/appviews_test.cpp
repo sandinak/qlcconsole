@@ -1238,6 +1238,21 @@ void AppViews_Test::goInDesignOffersOperateOnce()
     m_app->m_doc->setMode(Doc::Design);
 }
 
+void AppViews_Test::pagesSquashWithTheWindow()
+{
+    m_app->setWorkspaceView(App::ConsoleView);
+    for (int i = 0; i < m_app->m_tab->count(); i++)
+    {
+        const QString tab = m_app->m_tab->tabText(i);
+        if (tab == QLatin1String("Simple Desk"))
+            continue;       // QLC+'s own page, as it is upstream
+        m_app->m_tab->setCurrentIndex(i);
+        QCoreApplication::processEvents();
+        const int w = m_app->m_tab->widget(i)->minimumSizeHint().width();
+        QVERIFY2(w <= 700, qPrintable(QString("%1 is at least %2 px wide").arg(tab).arg(w)));
+    }
+}
+
 QTEST_MAIN(AppViews_Test)
 
 /* WCAG relative luminance and contrast. */

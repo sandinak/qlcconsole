@@ -145,7 +145,7 @@ start. **Operate** (⌘F12) runs the show for real — and locks the editing
 that would disturb it (moving fixtures, re-patching). The mode shows in
 the footer.
 
-![The footer: readiness, grand master, speed masters, timecode, load, mode](../images/footer.png)
+![The footer: readiness, grand master, speed masters, what's next, mode](../images/footer.png)
 
 1. **Ready** / **Not ready (N)** — click it for the list. With nothing
    patched to an output it reads **No outputs: preview only**, in grey.
@@ -153,19 +153,22 @@ the footer.
 3. **Speed masters** — one button per master the show uses, showing its
    tempo; click one to set it
    ([Speed masters](effects.md#speed-masters)).
-4. **Next:** — what the main cue list's GO (⌘↩) plays next; click for
-   GO, Back and loading another cue
+4. **Next:** — what the main cue list's GO (⌘↩) plays next; click it to
+   bring the Run tab forward
    ([Show control](show-control.md#whats-next-and-go-from-anywhere)).
-5. **MTC** — the timecode the Shows timeline follows.
-6. **Load** — how much of each DMX tick the show uses.
-7. **DESIGN** / **OPERATE** — click to switch.
+5. **DESIGN** / **OPERATE** — click to switch.
+
+Others appear when they have something to say: **Overrides** (amber)
+while something holds the rig, **MTC** once a timecode source is picked,
+the **power estimate** for a show with its power set up, and **Load** if
+you turn it on in Settings ▸ Appearance.
 
 **The footer** says whether the show is ready to run: **Ready**, or **Not
 ready (N)** in red — click it for the list (unpatched or clashing
 fixtures, universes going nowhere, missing definitions, WLED devices that
-don't answer or aren't set up for the show…), each with its fix. Beside it,
-**Load** is how much of each 20 ms DMX tick the show is using; **MTC** is
-the timecode source. See
+don't answer or aren't set up for the show…), each with its fix. **Load**,
+when turned on, is how much of each 20 ms DMX tick the show is using;
+**MTC** is the timecode source. See
 [Readiness footer](other-improvements.md#readiness-footer).
 
 ## Workflow 1 — a new show, designing first

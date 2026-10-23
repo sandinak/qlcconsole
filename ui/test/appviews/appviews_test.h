@@ -146,6 +146,9 @@ private slots:
     void theReadinessChipIsGreyWithNoOutputs();
     /** Q92: GO in Design offers Operate once a session, in the notice bar. */
     void goInDesignOffersOperateOnce();
+    /** "resize still has problems": no qlcconsole page holds the window
+     *  wide (a page narrower than it is cut off on the right). */
+    void pagesSquashWithTheWindow();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

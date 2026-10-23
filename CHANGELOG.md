@@ -330,6 +330,11 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+- **Pages squash with the window** instead of being cut off on the right:
+  the Lighting Studio's bottom bar, the Workbench's buttons and the
+  Connections ▸ Devices row scroll sideways when the window is narrower
+  than them. The Lighting Studio no longer needs 1006 px, Build 861 or
+  Connections 823 (all now under 640).
 - **The rig view no longer asks for your Downloads folder** (board Q85). A
   truss sock or tower face picture chosen from outside the show's folder is
   copied into an **images** folder next to the show when it's saved and

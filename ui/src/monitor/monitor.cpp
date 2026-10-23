@@ -150,6 +150,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "shrinkablebar.h"
 #include "patchplanner.h"
 #include "ledlayouteditor.h"
 #include "beamocclusion.h"
@@ -1109,7 +1110,10 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_readoutLabel->setFont(rf);
     fl->addWidget(m_readoutLabel);
 
-    qobject_cast<QVBoxLayout *>(gcontainer->layout())->addWidget(footer);
+    /* In a ShrinkableBar: the row is ~780 px of controls, and as a plain row
+       it held the Lighting Studio (and the window) at least that wide, or
+       was cut off on the right when the window was made narrower anyway. */
+    qobject_cast<QVBoxLayout *>(gcontainer->layout())->addWidget(new ShrinkableBar(footer, gcontainer));
 
     // Restore ruler visibility (default on).
     QSettings settings;

@@ -172,6 +172,7 @@ add_library(${module_name}
     helpshots.cpp helpshots.h
     showcontrollistener.cpp showcontrollistener.h
     showcontrolsyncpage.cpp showcontrolsyncpage.h
+    shrinkablebar.h
     universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
