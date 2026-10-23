@@ -41,8 +41,9 @@ circuits and subs.
   height beside the effect's settings and its own colour and dimmer,
   previewing live on the target heads. Keep it as a one-off, a new
   palette, an update or a preset. Hosted by **Design effect…** on a Show
-  Tree layer, by Build ▸ Effects (**+ New ▾** and a right-click menu) and
-  by **Window ▸ Effects**. **Make a layer** turns the bench's groups and
+  Tree layer and by Build ▸ Effects (**+ New ▾** and a right-click menu),
+  effects' one home: **Window ▸ Effects** brings it forward (there is no
+  separate Effects window). **Make a layer** turns the bench's groups and
   effect into a new layer of the cue or scene it came from, the selected
   cue, a picked scene or a new one.
 - **Show Tree ↔ Workbench (W3).** A cue, look or layer opens in the
@@ -53,10 +54,11 @@ circuits and subs.
   Everything**, saved per show (an optional `View=` attribute older
   builds ignore). Classic shows QLC+'s tabs in its order (Connections reads
   *Inputs/Outputs*); qlcconsole shows Connections, Fixtures, Lighting
-  Studio, Build, Show Tree, Shows, Virtual Console and Run; Everything all
-  ten. A show with no Show Tree not saved by qlcconsole opens in Classic.
+  Studio, Build, Show Tree, Shows, Virtual Console, Simple Desk and Run
+  (Simple Desk, a QLC+ user's channel check, joined after the Virtual
+  Console); Everything all ten. A show with no Show Tree not saved by qlcconsole opens in Classic.
   A Window-menu jump to a hidden tab switches to Everything with a *Back
-  to …* line. Settings ▸ General ▸ Tab Bar shows the view.
+  to …* line.
 - **Upgrade This Show…** (File menu and the Show Tree's old-show line;
   W5): every chaser (cue list with its same-output check, effect kept as a
   function, or left alone) and collection, then Capture into palettes for
@@ -163,7 +165,7 @@ circuits and subs.
 
 ### Changed
 - **The Functions window lives in Build ▸ Scenes ▸ Classic** in the
-  qlcconsole view: **Window ▸ Functions** (⇧⌘4) opens it, and new
+  qlcconsole view: **Window ▸ Functions** opens it, and new
   functions of every type, the Function Wizard and the startup function
   are on **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab.
 - **File ▸ Import is a submenu** of source types — *From a show file*:
@@ -193,6 +195,29 @@ circuits and subs.
 - **The boot window shows the version**, build and commit.
 - **The Lighting Studio plot draws a pixel fixture's heads where its LED
   layout puts them.**
+- **Tab shortcuts follow the view.** ⇧⌘1, ⇧⌘2… number the tabs the
+  current workspace view shows, in its order (⇧⌘0 the tenth), and
+  renumber when the view changes; the Window menu lists them so, then the
+  hidden tabs with no shortcut. In Classic QLC+, Fixtures is ⇧⌘1; in
+  qlcconsole the Show Tree is ⇧⌘5 and Run ⇧⌘9 (they were ⇧⌘6 and ⇧⌘0).
+- **Settings ▸ Appearance.** Theme, toolbar style, the four footer chips
+  (engine load, power estimate, grand master, speed masters) and the speed
+  masters' beat moved out of the View menu into a new Appearance tab in
+  Settings, applied on OK. The same settings, so earlier choices carry
+  over. View now holds Workspace, Address Tool, Rig Overview and Focus
+  Mode.
+- **One switch each.** The workspace view is set only in View ▸ Workspace
+  (Settings ▸ General no longer has a copy), and the toolbar style only in
+  Settings ▸ Appearance.
+- **No outputs: preview only.** With nothing patched to any output, the
+  footer's readiness chip reads *No outputs: preview only* in grey (with
+  *· N to check* when something else is listed; a click opens Connections
+  or the list) instead of a red *Not ready*. Red is kept for real problems
+  on a rig with outputs. The course no longer tells students to ignore red.
+- **Auto-open shutters is off for a QLC+ 4.x show.** A show saved
+  without the setting loads with it off unless qlcconsole saved it, so an
+  old show sends the same DMX here as in QLC+. New shows keep it on, and a
+  show now always saves the setting, on or off.
 - **Settings, tooltip and menu text** name the paths the help uses:
   Settings ▸ Advanced ▸ Output in the Output Rules dialog, Build → Move in
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.

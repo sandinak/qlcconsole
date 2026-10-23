@@ -315,10 +315,10 @@ and into this branch), and the course updated to match:
    lands on Center. Lesson 1.3 can start bare and then aim. For the real
    show (DanceHysteria) the change is Branson's: the per-fixture facing
    and how the SL heads are set on the tower.
-4. **The footer is red in class.** Unchanged and intended: the teaching
-   show has no outputs, so it says **Not ready** ("13 universe(s) with
-   fixtures but no output"). The handout, install and rig pages say to
-   expect it.
+4. ~~**The footer is red in class.**~~ **Done.** The teaching show has no
+   outputs, so the footer says **No outputs: preview only** in grey, not
+   a red **Not ready**; red is kept for real problems on a rig with
+   outputs. The handout, install and rig pages say to expect it.
 5. ~~**Blue on the cyc looks pale.**~~ **Done.** Coloured light on the grey
    cyc is clearly coloured — brightest at the top, as the cyc boxes aim
    upward. The handout now says "a clear blue, brightest at the top"

@@ -85,6 +85,8 @@
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "qlcfile.h"
+#include "showstatus.h"
+#include "speedmastersfooter.h"
 #undef protected
 #undef private
 
@@ -179,8 +181,8 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QVERIFY(windowMenu != nullptr);
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
-    // And Functions and Simple Desk, which have no tab in the qlcconsole view.
-    QCOMPARE(m_app->m_windowJumps.size(), views + 2);
+    // And Functions, which has no tab in the qlcconsole view.
+    QCOMPARE(m_app->m_windowJumps.size(), views + 1);
     // The Rig Overview is a window too: offered here as well as under View.
     QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
     QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
@@ -354,17 +356,18 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
     QVERIFY(build != nullptr);
     const int views = tabs->count();
 
-    // Still in the Window menu, at its old place and shortcut (⇧⌘4).
+    // Still in the Window menu, at its old place; no shortcut, as it has no
+    // tab here (Q69: ⇧⌘4 is the view's fourth tab, Build).
     QAction *jump = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == functions)
             jump = a;
     QVERIFY2(jump != nullptr, "Functions should be in the Window menu");
     QCOMPARE(jump->objectName(), QString("windowFunctions"));
-    QCOMPARE(jump->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
+    QVERIFY(jump->shortcut().isEmpty());
     QCOMPARE(m_app->m_windowJumps.indexOf(jump), 3);
     QCOMPARE(m_app->m_windowJumps.at(4)->data().toString(), QString("Build"));
-    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_5));
+    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
 
     // Away from Build, Folders, Palettes: the menu lands on Scenes ▸ Classic.
     m_app->showContext("Virtual Console");
@@ -445,6 +448,24 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
 
 /* F1 opens the guide for what is in front: each view its own, a dialog or
    view inside one its own, and the Help menu lists the guides. */
+void AppViews_Test::windowEffectsIsBuildEffects()
+{
+    QAction *effects = m_app->menuBar()->findChild<QAction *>("windowEffects");
+    QVERIFY(effects != nullptr);
+    QCOMPARE(effects->text(), QString("Effects"));   // no "…": no window of its own
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr);
+    pm->setSection(ProgrammingManager::ScenesSection);
+    const int windowsBefore = QApplication::topLevelWidgets().count();
+    effects->trigger();
+    QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(pm));
+    QCOMPARE(pm->section(), ProgrammingManager::EffectsSection);
+    QCOMPARE(QApplication::topLevelWidgets().count(), windowsBefore);
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        QVERIFY2(QString(w->metaObject()->className()) != "EffectsPage", "an Effects window opened");
+    pm->setSection(ProgrammingManager::ScenesSection);
+}
+
 void AppViews_Test::helpOpensOnWhatIsInFront()
 {
     QTabWidget *tabs = m_app->m_tab;
@@ -529,7 +550,8 @@ void AppViews_Test::theRunTabIsTheCueRunner()
         if (a->data().toString() == QLatin1String("Run"))
             jump = a;
     QVERIFY(jump != nullptr);
-    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+0"));
+    // The qlcconsole view's ninth tab (Q69).
+    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+9"));
     jump->trigger();
     QWidget *page = m_app->m_tab->currentWidget();
     CueRunner *runner = qobject_cast<CueRunner *>(page);
@@ -537,10 +559,10 @@ void AppViews_Test::theRunTabIsTheCueRunner()
     QCOMPARE(runner->runnerSize(), CueRunner::Full);
     QCOMPARE(runner->follow(), ShowTree::invalidId());    // the current production
     QCOMPARE(page->property("helpTopic").toString(), QString("show-tree.md#the-cue-runner"));
-    // The others keep their keys (⇧⌘9 is still Simple Desk).
+    // The others are numbered by the view too (⇧⌘8 is Simple Desk).
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == QLatin1String("Simple Desk"))
-            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+9"));
+            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+8"));
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
@@ -733,9 +755,10 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
         AppSettings dlg(m_app);
         QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
         QVERIFY(tabs != nullptr);
-        QCOMPARE(tabs->count(), 2);
-        QCOMPARE(tabs->tabText(1), QStringLiteral("Advanced"));
-        QWidget *adv = tabs->widget(1);
+        QCOMPARE(tabs->count(), 3);
+        QCOMPARE(tabs->tabText(1), QStringLiteral("Appearance"));
+        QCOMPARE(tabs->tabText(2), QStringLiteral("Advanced"));
+        QWidget *adv = tabs->widget(2);
         QCheckBox *box = adv->findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"));
         QVERIFY(box != nullptr);
         QVERIFY(box->isChecked());
@@ -744,7 +767,7 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
         QVERIFY(adv->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) == nullptr);
         QVERIFY(tabs->widget(0)->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) != nullptr);
         dlg.showAdvanced();
-        QCOMPARE(tabs->currentIndex(), 1);
+        QCOMPARE(tabs->currentIndex(), 2);
 
         box->setChecked(false);
         dlg.reject();                   // Cancel keeps it
@@ -763,6 +786,92 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
     }
     ao->setEnabled(true);
     m_app->doc()->resetModified();
+}
+
+void AppViews_Test::settingsAppearanceHoldsHowTheWindowLooks()
+{
+    const int wasTheme = m_app->theme();
+    const int wasMode = m_app->tabLabelMode();
+    const bool wasGM = m_app->footerChipShown(App::FooterGrandMaster);
+    const SpeedMasterButton::BeatStyle wasStyle = SpeedMastersFooter::beatStyle();
+    const SpeedMastersFooter::BeatWhen wasWhen = SpeedMastersFooter::beatWhen();
+    auto restore = qScopeGuard([=]() {
+        m_app->setTheme(wasTheme);
+        m_app->setTabLabelMode(wasMode);
+        m_app->setFooterChipShown(App::FooterGrandMaster, wasGM);
+        SpeedMastersFooter::setBeatStyle(wasStyle);
+        SpeedMastersFooter::setBeatWhen(wasWhen);
+        m_app->reloadFooterBeatOptions();
+    });
+    m_app->setTheme(App::ThemeDefault);
+    m_app->setTabLabelMode(App::TabIconAndText);
+    m_app->setFooterChipShown(App::FooterGrandMaster, true);
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Blink);
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::WhilePlaying);
+
+    {
+        AppSettings dlg(m_app);
+        QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
+        QWidget *look = tabs->widget(1);
+        QCOMPARE(look->objectName(), QStringLiteral("settingsAppearance"));
+        QComboBox *theme = look->findChild<QComboBox *>("settingsTheme");
+        QComboBox *style = look->findChild<QComboBox *>("settingsToolbarStyle");
+        QComboBox *beat = look->findChild<QComboBox *>("settingsFooterBeatStyle");
+        QComboBox *when = look->findChild<QComboBox *>("settingsFooterBeatWhen");
+        QVERIFY(theme && style && beat && when);
+        QCOMPARE(theme->count(), 6);
+        QCOMPARE(theme->currentData().toInt(), int(App::ThemeDefault));
+        QCOMPARE(style->currentData().toInt(), int(App::TabIconAndText));
+        for (const char *name : { "settingsFooterLoad", "settingsFooterPower",
+                                  "settingsFooterGrandMaster", "settingsFooterSpeedMasters" })
+            QVERIFY2(look->findChild<QCheckBox *>(name) != nullptr, name);
+        QVERIFY(look->findChild<QCheckBox *>("settingsFooterGrandMaster")->isChecked());
+        // Toolbar style is here only, not on General.
+        QVERIFY(tabs->widget(0)->findChild<QComboBox *>("settingsToolbarStyle") == nullptr);
+
+        theme->setCurrentIndex(theme->findData(int(App::ThemeRedShift)));
+        style->setCurrentIndex(style->findData(int(App::TabTextOnly)));
+        look->findChild<QCheckBox *>("settingsFooterGrandMaster")->setChecked(false);
+        beat->setCurrentIndex(beat->findData(int(SpeedMasterButton::Bar)));
+        when->setCurrentIndex(when->findData(int(SpeedMastersFooter::Always)));
+        dlg.accept();
+    }
+    // The same settings, under the same keys, as the View menu set.
+    QSettings settings;
+    QCOMPARE(m_app->theme(), int(App::ThemeRedShift));
+    QCOMPARE(settings.value("workspace/theme").toInt(), int(App::ThemeRedShift));
+    QCOMPARE(m_app->tabLabelMode(), int(App::TabTextOnly));
+    QCOMPARE(settings.value("workspace/tabLabelMode").toInt(), int(App::TabTextOnly));
+    QVERIFY(m_app->footerChipShown(App::FooterGrandMaster) == false);
+    QCOMPARE(settings.value("workspace/showFooterGM").toBool(), false);
+    QVERIFY(m_app->m_statusGrandMasterBox->isHidden());
+    QCOMPARE(SpeedMastersFooter::beatStyle(), SpeedMasterButton::Bar);
+    QCOMPARE(SpeedMastersFooter::beatWhen(), SpeedMastersFooter::Always);
+
+    // Cancel keeps what is set.
+    {
+        AppSettings dlg(m_app);
+        QComboBox *theme = dlg.findChild<QComboBox *>("settingsTheme");
+        QCOMPARE(theme->currentData().toInt(), int(App::ThemeRedShift));
+        theme->setCurrentIndex(theme->findData(int(App::ThemeBlue)));
+        dlg.reject();
+    }
+    QCOMPARE(m_app->theme(), int(App::ThemeRedShift));
+}
+
+void AppViews_Test::theViewMenuIsOnlyViews()
+{
+    QMenu *view = nullptr;
+    foreach (QAction *a, m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->text().remove('&') == "View")
+            view = a->menu();
+    QVERIFY(view != nullptr);
+    QStringList items;
+    foreach (QAction *a, view->actions())
+        if (!a->isSeparator())
+            items << a->text();
+    QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "Rig Overview…"
+                                  << "Focus Mode…");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()
@@ -1287,7 +1396,7 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     const QStringList classic = { "Fixtures", "Functions", "Shows", "Virtual Console",
                                   "Simple Desk", "Connections" };
     const QStringList console = { "Connections", "Fixtures", "Lighting Studio", "Build",
-                                  "Show Tree", "Shows", "Virtual Console", "Run" };
+                                  "Show Tree", "Shows", "Virtual Console", "Simple Desk", "Run" };
     const QStringList everything = { "Connections", "Fixtures", "Lighting Studio", "Functions",
                                      "Build", "Show Tree", "Shows", "Virtual Console",
                                      "Simple Desk", "Run" };
@@ -1338,15 +1447,14 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     tabs->setCurrentIndex(0);
     viewShot(m_app, "view-classic.png");
 
-    // The Settings dialog shows (and sets) the show's view.
+    // One switch: View ▸ Workspace. Settings has none (Q67).
     {
         AppSettings dlg(m_app, m_app);
-        QComboBox *combo = dlg.findChild<QComboBox *>("settingsWorkspaceView");
-        QVERIFY(combo != nullptr);
-        QCOMPARE(combo->currentText(), QString("Classic QLC+"));
-        combo->setCurrentIndex(combo->findData(int(App::EverythingView)));
+        QVERIFY(dlg.findChild<QComboBox *>("settingsWorkspaceView") == nullptr);
         dlg.accept();
     }
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);   // OK left it alone
+    toAll->trigger();
     QCOMPARE(m_app->workspaceView(), App::EverythingView);
     QVERIFY(toAll->isChecked());
     QCOMPARE(tabLabels(tabs), everything);
@@ -1356,11 +1464,6 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     toConsole->trigger();
     QCOMPARE(tabLabels(tabs), console);
     QVERIFY(!m_app->functionsWindowShown());
-    {
-        AppSettings dlg(m_app, m_app);
-        QComboBox *combo = dlg.findChild<QComboBox *>("settingsWorkspaceView");
-        QCOMPARE(combo->currentText(), QString("qlcconsole"));
-    }
     m_app->doc()->resetModified();
 }
 
@@ -1371,35 +1474,46 @@ void AppViews_Test::aJumpToAHiddenTabShowsEverything()
     QVERIFY(!m_app->m_viewNotice->isVisible());
     QAction *desk = nullptr;
     QAction *functions = nullptr;
+    QAction *tree = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
     {
         if (a->data().toString() == "Simple Desk")
             desk = a;
         if (a->data().toString() == "Functions")
             functions = a;
+        if (a->data().toString() == "Show Tree")
+            tree = a;
     }
-    QVERIFY(desk && functions);
+    QVERIFY(desk && functions && tree);
 
     // Window → Functions in qlcconsole: Build ▸ Scenes ▸ Classic, view kept.
     functions->trigger();
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(ProgrammingManager::instance()));
 
-    // Window → Simple Desk: not in qlcconsole, so Everything, with a note.
+    // Window → Simple Desk: a tab in qlcconsole (Q71), so no view change.
+    desk->trigger();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(SimpleDesk::instance()));
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+
+    // Window → Show Tree from Classic QLC+: not there, so Everything, with
+    // a note and a way back.
     m_app->resize(1400, 860);
     m_app->show();
-    desk->trigger();
+    m_app->setWorkspaceView(App::ClassicView);
+    tree->trigger();
     QCOMPARE(m_app->workspaceView(), App::EverythingView);
-    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(SimpleDesk::instance()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(ShowTreeView::instance()));
     QVERIFY(m_app->m_viewNotice->isVisible());
-    QVERIFY2(m_app->m_viewNoticeText->text().contains("Simple Desk isn't in the qlcconsole view"),
+    QVERIFY2(m_app->m_viewNoticeText->text().contains("Show Tree isn't in the Classic QLC+ view"),
              qPrintable(m_app->m_viewNoticeText->text()));
-    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Back to qlcconsole"));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Back to Classic QLC+"));
     viewShot(m_app, "view-hidden-jump-note.png");
     m_app->m_viewNoticeButton->click();
-    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
     QVERIFY(!m_app->m_viewNotice->isVisible());
-    QCOMPARE(tabs->indexOf(SimpleDesk::instance()), -1);
+    QCOMPARE(tabs->indexOf(ShowTreeView::instance()), -1);
 
     // The same from Classic: Window → Build shows Everything.
     m_app->setWorkspaceView(App::ClassicView);
@@ -1412,6 +1526,72 @@ void AppViews_Test::aJumpToAHiddenTabShowsEverything()
     QCOMPARE(m_app->workspaceView(), App::EverythingView);
     m_app->setWorkspaceView(App::ConsoleView);
     m_app->hide();
+    m_app->doc()->resetModified();
+}
+
+/* The Window menu's tab jumps as shown: label and shortcut, in menu order,
+   up to the Rig Overview; "|" marks the line before the hidden tabs. */
+static QStringList windowJumpsAsShown(App *app)
+{
+    app->updateWindowMenu();
+    QMenu *menu = app->menuBar()->findChild<QMenu *>("windowMenu");
+    QStringList out;
+    if (menu == nullptr)
+        return out;
+    foreach (QAction *a, menu->actions())
+    {
+        if (a == app->m_rigOverviewAction)
+            break;
+        if (a->isSeparator())
+        {
+            if (a->objectName() == "windowHiddenTabs" && a->isVisible())
+                out << "|";
+            continue;
+        }
+        const QString key = a->shortcut().toString(QKeySequence::PortableText);
+        out << (key.isEmpty() ? a->text() : a->text() + " " + key.right(1));
+    }
+    return out;
+}
+
+void AppViews_Test::windowShortcutsFollowTheView()
+{
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(windowJumpsAsShown(m_app),
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Build 4",
+                           "Show Tree 5", "Shows 6", "Virtual Console 7", "Simple Desk 8", "Run 9",
+                           "|", "Functions" }));
+
+    m_app->setWorkspaceView(App::ClassicView);
+    QCOMPARE(windowJumpsAsShown(m_app),
+             QStringList({ "Fixtures 1", "Functions 2", "Shows 3", "Virtual Console 4",
+                           "Simple Desk 5", "Inputs/Outputs 6",
+                           "|", "Lighting Studio", "Build", "Show Tree", "Run" }));
+    // ⇧⌘1 is the first tab on screen, and it goes there.
+    QAction *first = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_1))
+            first = a;
+    QVERIFY(first != nullptr);
+    first->trigger();
+    QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(FixtureManager::instance()));
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+
+    m_app->setWorkspaceView(App::EverythingView);
+    QCOMPARE(windowJumpsAsShown(m_app),
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Functions 4",
+                           "Build 5", "Show Tree 6", "Shows 7", "Virtual Console 8",
+                           "Simple Desk 9", "Run 0" }));
+
+    // A tab in a window of its own keeps its number.
+    m_app->setWorkspaceView(App::ConsoleView);
+    QTabWidget *tabs = m_app->m_tab;
+    m_app->slotDetachContext(tabs->indexOf(ShowManager::instance()));
+    QStringList shown = windowJumpsAsShown(m_app);
+    QCOMPARE(shown.value(5), QString("Shows — in its own window 6"));
+    QCOMPARE(shown.value(6), QString("Virtual Console 7"));
+    reattach(m_app, "Shows");
+    QCOMPARE(windowJumpsAsShown(m_app).value(5), QString("Shows 6"));
     m_app->doc()->resetModified();
 }
 
@@ -1460,7 +1640,8 @@ void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
     QCOMPARE(tabs->indexOf(build), 3);
     showsWin->close();
     QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Lighting Studio", "Build",
-                                            "Show Tree", "Shows", "Virtual Console", "Run" }));
+                                            "Show Tree", "Shows", "Virtual Console", "Simple Desk",
+                                            "Run" }));
     m_app->doc()->resetModified();
 }
 
@@ -1637,6 +1818,105 @@ void AppViews_Test::upgradingAClassicShowOffersTheConsoleView()
     view->setConverterRunner(nullptr);
     m_app->hide();
     m_app->clearDocument();
+}
+
+void AppViews_Test::autoOpenFollowsWhoSavedTheShow()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath("stock.qxw");
+    ShutterAutoOpen *ao = m_app->doc()->shutterAutoOpen();
+
+    // A QLC+ 4.x show never had it: off, the DMX QLC+ sends.
+    writeStockShow(path, "Q Light Controller Plus", false);
+    m_app->clearDocument();
+    QVERIFY(ao->isEnabled());
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(ao->isEnabled() == false);
+    QVERIFY(!m_app->doc()->isModified());
+
+    // Saved by qlcconsole before the setting was always written: on.
+    writeStockShow(path, "qlcconsole", false);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(ao->isEnabled());
+
+    // A new show: on, and saved so, so it reloads on.
+    writeStockShow(path, "Q Light Controller Plus", false);
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(ao->isEnabled() == false);
+    QVERIFY(m_app->slotFileNew());
+    QVERIFY(ao->isEnabled());
+    const QString saved = dir.filePath("new.qxw");
+    QCOMPARE(m_app->saveXML(saved), QFile::NoError);
+    QFile f(saved);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(f.readAll().contains("<ShutterAutoOpen Enabled=\"1\"/>"));
+    f.close();
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(saved), QFile::NoError);
+    QVERIFY(ao->isEnabled());
+    QVERIFY(m_app->slotFileNew());
+}
+
+void AppViews_Test::theReadinessChipIsGreyWithNoOutputs()
+{
+    QLabel *chip = m_app->findChild<QLabel *>("footerReadiness");
+    QVERIFY(chip != nullptr);
+    m_app->clearDocument();
+    m_app->clearStatusMessage();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    ShowStatus *status = ShowStatus::instance();
+    QVERIFY(m_app->rigHasOutputs() == false);
+    auto isRed = [chip]() { return chip->styleSheet().contains("#e04030"); };
+
+    // Whatever an earlier test left registered goes first.
+    const QList<ShowStatus::Entry> before = status->allEntries();
+    for (const ShowStatus::Entry &e : before)
+        status->clearStatus(e.key);
+    QCOMPARE(chip->text(), QString("No outputs: preview only"));
+    QCOMPARE(chip->toolTip().contains("Click to open Connections"), true);
+
+    // Universes with fixtures going nowhere: what the chip already says.
+    status->setStatus("universes.nooutput", ShowStatus::Warning,
+                      "1 universe(s) with fixtures but no output");
+    QCOMPARE(chip->text(), QString("No outputs: preview only"));
+    QVERIFY(chip->styleSheet().contains("#909090"));
+    QVERIFY(!isRed());
+    QVERIFY(chip->toolTip().contains("Nothing is patched to an output"));
+
+    // Something else to look at: counted, still grey.
+    status->setStatus("test.problem", ShowStatus::Warning, "A test problem");
+    QCOMPARE(chip->text(), QString("No outputs: preview only · 1 to check"));
+    QVERIFY(!isRed());
+    QVERIFY(chip->toolTip().contains("A test problem"));
+
+    // A universe with an output: a rig. Now a problem is red.
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    if (cache->plugin(QStringLiteral("I/O Plugin Stub")) == nullptr)
+        cache->load(stubDir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(cache->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0));
+    QVERIFY(m_app->rigHasOutputs());
+    QVERIFY2(chip->text().startsWith("Not ready"), qPrintable(chip->text()));
+    QVERIFY(isRed());
+
+    status->clearStatus("test.problem");
+    status->clearStatus("universes.nooutput");
+    QCOMPARE(chip->text(), QString("Ready"));
+    QVERIFY(!isRed());
+
+    // Unpatched again: back to the grey preview line.
+    QVERIFY(iom->setOutputPatch(0, KOutputNone, "", QLCIOPlugin::invalidLine(), false, 0));
+    QCOMPARE(iom->outputPatchesCount(0), 0);
+    QVERIFY(m_app->rigHasOutputs() == false);
+    QCOMPARE(chip->text(), QString("No outputs: preview only"));
+
+    m_app->clearDocument();
+    stub->m_openOutputs.clear();
 }
 
 void AppViews_Test::quittingWithTheShowTreeShowing()

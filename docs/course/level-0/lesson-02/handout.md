@@ -52,9 +52,9 @@ questions). Switch roles after each part.
 
 1. Open qlcconsole, choose **File → Open** and open
    `lesson-1-1-finish.qlcc` (in **Documents → qlcconsole**).
-   - *You should see:* the qlcconsole window, with **Not ready** in red
-     at the bottom left of the footer. That's expected: the course shows
-     aren't connected to any real lights.
+   - *You should see:* the qlcconsole window, with **No outputs: preview
+     only** in grey at the bottom left of the footer. That's expected: the
+     course shows aren't connected to any real lights.
 2. Choose **View → Rig Overview** (⇧⌘R).
    - *You should see:* a new window showing our stage from the house at
      an angle (**View: 45°**): the cyc at the back, the risers in the
@@ -103,7 +103,7 @@ much light there is in the room.
 
 7. Set **Room** back to **House**, and arrange the Rig Overview so you can
    see it beside the main window.
-8. In the main window, click the **Run** tab at the bottom (⇧⌘0).
+8. In the main window, click the **Run** tab at the bottom (⇧⌘9).
 9. Press **GO** (or **Space**) and watch the stage. Press it twice more,
    for three cues in all.
    - *You should see:* first the cyc turns **blue**, then the risers are

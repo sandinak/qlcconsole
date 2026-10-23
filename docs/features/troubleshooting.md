@@ -164,7 +164,7 @@ tab from **Window** shows it anyway, switching to Everything with a line
 to go back. See [Views](getting-started.md#views).
 
 **Where did the Functions tab go?** The qlcconsole view has none; it is
-**Build ▸ Scenes ▸ Classic**. **Window ▸ Functions** (⇧⌘4) takes you
+**Build ▸ Scenes ▸ Classic**. **Window ▸ Functions** takes you
 there: Build, the Scenes section, the outline set to **Classic**, which
 lists every function by type as the Function Manager did. Click one to
 edit it in the Workbench. New functions of every type, the Function Wizard

@@ -37,14 +37,9 @@ Open it from any of three places:
   designer opens in the Workbench's editor pane, on the **bench**
   described next. Right-click an effect for Duplicate, Rename, Move to
   folder… and Delete. See [Making effects](build.md#making-effects).
-- **Window ▸ Effects.** Every effect in the show in one window. On the
-  left are the effect palettes in their folders, then the **classic
-  effects**: QLC+ EFX and RGB Matrix functions, each marked as one. On the
-  right is the designer on the **bench**. **Try on ▾** picks the groups
-  the bench plays on, and it remembers them. Selecting an effect palette
-  loads a copy of it onto the bench. Selecting an EFX or RGB Matrix opens
-  it in its own editor. **+ New** makes an effect palette, an EFX (on the
-  Try on groups' heads) or an RGB Matrix (on the first Try on group).
+- **Window ▸ Effects** brings Build ▸ Effects forward: effects have one
+  home, and no window of their own any more. **Try on ▾** on the bench
+  picks the groups it plays on, and it remembers them.
 
 The designer works on a copy, so nothing in the show changes until you
 pick one of these:
@@ -399,13 +394,14 @@ button for each, reading its tempo ("Pars 120", or "paused") and lit
 orange on its beat — none at all until something is on a master. While its
 **rate** is being moved (the fader, or a controller), a green bar fills the
 button left to right to the level (half way is 100 %, full is 200 %), then
-fades a second after you let go. **View → Speed Master Beat in Footer**
-chooses how the beat shows: a **Blink**, a **Bar Across Each Beat** (an
-orange bar filling the button's foot through each beat), or **No Beat** —
-**Only While Something on It Plays** (the default: a look, chase or effect
-on that master, or on one following it, is running), or **Always**;
-click one to open this window at that master. **View → Show Speed Masters
-in Footer** turns them off. With more than eight in use the names are
+fades a second after you let go. **Settings ▸ Appearance ▸ Speed master
+beat** chooses how the beat shows: a **Blink**, a **Bar across each beat**
+(an orange bar filling the button's foot through each beat), or **No
+beat**, and **Show the beat** chooses when: **Only while something on it
+plays** (the default: a look, chase or effect on that master, or on one
+following it, is running), or **Always**. Click one to open this window at
+that master. **Settings ▸ Appearance ▸ Show the speed masters** turns them
+off. With more than eight in use the names are
 shortened (an unnamed one shows its number, "S9"); the tooltip has it all.
 
 **What runs on a master** — choose **Speed** in any of these; the

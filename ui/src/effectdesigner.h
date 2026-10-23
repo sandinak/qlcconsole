@@ -50,8 +50,8 @@ class Doc;
  * and reports what the user chose with effectChosen(). Nothing in the show
  * changes until then, and cancel() (or destroying it) leaves no trace.
  *
- * Hosts: EffectLayerDialog (a Show Tree layer), EffectsPage (Window ▸
- * Effects), and in time the Workbench's editor pane and Build ▸ Effects.
+ * Hosts: EffectLayerDialog (a Show Tree layer), the Workbench's editor
+ * pane (Build ▸ Effects), and EffectsPage.
  */
 class EffectDesigner final : public QWidget
 {

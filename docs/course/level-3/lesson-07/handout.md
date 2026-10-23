@@ -83,7 +83,7 @@ Switch roles after each fixture.
 
 ### The preshow, typed
 
-9. Click the **Show Tree** tab (⇧⌘6). Click the **Command** line at the
+9. Click the **Show Tree** tab (⇧⌘5). Click the **Command** line at the
    bottom and type each line, then **Return**:
 
    ```

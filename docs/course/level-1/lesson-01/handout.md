@@ -60,13 +60,14 @@ Switch roles after each cue.
 
 1. Open qlcconsole, choose **File → Open** and open
    `lesson-1-1-start.qlcc`.
-2. Click the **Show Tree** tab at the bottom (or press ⇧⌘6).
+2. Click the **Show Tree** tab at the bottom (or press ⇧⌘5).
 3. Open the stage with **View → Rig Overview** (⇧⌘R), and arrange it so
    you can see it and the Show Tree together.
    - *You should see:* a dark stage with three rows of risers, a white cyc
      at the back and trusses across the back on both sides.
-   - The footer says **Not ready** in red. That's expected in class,
-     because the course show isn't connected to real lights.
+   - The footer says **No outputs: preview only**, in grey. That's
+     expected in class, because the course show isn't connected to real
+     lights.
 
 ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
@@ -156,7 +157,7 @@ Your production is already the one GO plays: the tree marks it
 **▶ current**. Leave its **Current** button alone, because clicking it
 would turn that off.
 
-13. Click the **Run** tab (⇧⌘0) and press **GO** (or **Space**) three
+13. Click the **Run** tab (⇧⌘9) and press **GO** (or **Space**) three
     times.
     - *You should see:* NEXT steps down the list as the stage goes from
       Pose to Verse to Chorus.

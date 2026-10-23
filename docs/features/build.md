@@ -299,8 +299,9 @@ the tab.
 
 Loading anything else in the Workbench puts the designer away, and an
 unsaved design with it; **Esc** asks first
-([Backing out](#backing-out-esc)). Window ▸ Effects is the same designer in a
-window of its own.
+([Backing out](#backing-out-esc)). Build ▸ Effects is effects' one home:
+**Window ▸ Effects** brings it forward (there is no separate Effects
+window any more).
 
 ![Build ▸ Effects: the right-click menu, and the effect designer in the Workbench](../images/build-effects-menu.png)
 
@@ -342,7 +343,7 @@ everywhere.
 
 The **qlcconsole** view doesn't show Functions as a tab; the **Classic QLC+** and
 **Everything** views still show it
-([Views](getting-started.md#views)). **Window → Functions** (⇧⌘4) opens
+([Views](getting-started.md#views)). **Window → Functions** opens
 Functions where the view shows it as a tab, and otherwise **Build ▸ Scenes ▸
 Classic** with the list focused. Everything the Function Manager did is
 here:

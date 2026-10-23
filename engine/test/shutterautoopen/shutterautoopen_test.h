@@ -45,6 +45,10 @@ private slots:
     void aOneShotClosedStaysClosed();
     void aSceneWithOnlyALevelLights();
     void itIsSavedWithTheShow();
+    void aQlcPlusShowLoadsWithItOff();
+    void aQlcconsoleShowWithoutItLoadsOn();
+    void theSavedSettingWinsOverTheCreator();
+    void aNewShowSavesItOnAndReloadsOn();
 
     void aShutterLookMeansWhatItSays();
     void aShutterLookOnAMixedRig();

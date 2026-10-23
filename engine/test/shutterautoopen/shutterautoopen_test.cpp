@@ -45,6 +45,7 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "doc.h"
+#include "qlcconfig.h"
 
 #include "../common/resource_paths.h"
 
@@ -310,7 +311,8 @@ void ShutterAutoOpen_Test::itIsSavedWithTheShow()
         QXmlStreamWriter w(&on);
         ao->saveXML(&w);
     }
-    QVERIFY(on.isEmpty());              // as before: nothing written
+    // Written either way now: a show without it loads by who saved it.
+    QVERIFY(on.contains("<ShutterAutoOpen Enabled=\"1\"/>"));
 
     ao->setEnabled(false);
     QByteArray off;
@@ -344,6 +346,100 @@ void ShutterAutoOpen_Test::itIsSavedWithTheShow()
     QVERIFY(m_doc->loadXML(r2, false));
     QVERIFY(ao->isEnabled() == false);
     ao->setEnabled(true);
+}
+
+/* An <Engine> as a show file carries it: @p element is put inside (empty:
+   saved without the setting). Loaded into the test's Doc, whose spot stays. */
+static bool loadEngine(Doc *doc, const QString &creator, const QString &element)
+{
+    if (creator.isEmpty() == false)
+        doc->shutterAutoOpen()->setLoadingCreator(creator);
+    const QByteArray xml = QStringLiteral("<Engine>%1</Engine>").arg(element).toUtf8();
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    const bool ok = doc->loadXML(r, false);
+    doc->shutterAutoOpen()->rebuild();
+    return ok;
+}
+
+void ShutterAutoOpen_Test::aQlcPlusShowLoadsWithItOff()
+{
+    ShutterAutoOpen *ao = m_doc->shutterAutoOpen();
+    QVERIFY(ao->isEnabled());           // a new show's
+    QVERIFY(ShutterAutoOpen::savedByQlcconsole(QStringLiteral("Q Light Controller Plus")) == false);
+
+    // Saved by QLC+ 4.x: it never had the setting. Same DMX as QLC+.
+    QSignalSpy changed(ao, &ShutterAutoOpen::enabledChanged);
+    QVERIFY(loadEngine(m_doc, QStringLiteral("Q Light Controller Plus"), QString()));
+    QVERIFY(ao->isEnabled() == false);
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(ao->ruleCount(), 0);
+
+    QSharedPointer<GenericFader> fader = m_uni->requestFader();
+    put(m_doc, fader, m_uni, m_dimmer, 255);
+    QCOMPARE(frame(), 0);               // the closed spot stays closed
+    QCOMPARE(frame(), 0);
+    m_uni->dismissFader(fader);
+
+    // No creator at all (a bare engine): not qlcconsole's, so off too.
+    ao->reset();
+    QVERIFY(loadEngine(m_doc, QString(), QString()));
+    QVERIFY(ao->isEnabled() == false);
+    ao->reset();
+}
+
+void ShutterAutoOpen_Test::aQlcconsoleShowWithoutItLoadsOn()
+{
+    ShutterAutoOpen *ao = m_doc->shutterAutoOpen();
+    // qlcconsole saved it before the setting was always written: then
+    // nothing meant on.
+    ao->setEnabled(false);
+    QVERIFY(loadEngine(m_doc, QStringLiteral(APPNAME), QString()));
+    QVERIFY(ao->isEnabled());
+    QVERIFY(ao->ruleCount() > 0);
+
+    QSharedPointer<GenericFader> fader = m_uni->requestFader();
+    put(m_doc, fader, m_uni, m_dimmer, 255);
+    QVERIFY(frame() > 0);               // it opens, as it did
+    m_uni->dismissFader(fader);
+
+    // The creator is read once: the next show without one is QLC+'s.
+    QVERIFY(loadEngine(m_doc, QString(), QString()));
+    QVERIFY(ao->isEnabled() == false);
+    ao->reset();
+}
+
+void ShutterAutoOpen_Test::theSavedSettingWinsOverTheCreator()
+{
+    ShutterAutoOpen *ao = m_doc->shutterAutoOpen();
+    QVERIFY(loadEngine(m_doc, QStringLiteral("Q Light Controller Plus"),
+                       QStringLiteral("<ShutterAutoOpen Enabled=\"1\"/>")));
+    QVERIFY(ao->isEnabled());
+    QVERIFY(loadEngine(m_doc, QStringLiteral(APPNAME),
+                       QStringLiteral("<ShutterAutoOpen Enabled=\"0\"/>")));
+    QVERIFY(ao->isEnabled() == false);
+    ao->reset();
+}
+
+void ShutterAutoOpen_Test::aNewShowSavesItOnAndReloadsOn()
+{
+    ShutterAutoOpen *ao = m_doc->shutterAutoOpen();
+    m_doc->clearContents();
+    QVERIFY(ao->isEnabled());           // a new show made here
+    QByteArray show;
+    {
+        QXmlStreamWriter w(&show);
+        w.writeStartDocument();
+        QVERIFY(m_doc->saveXML(&w));
+        w.writeEndDocument();
+    }
+    QVERIFY(show.contains("<ShutterAutoOpen Enabled=\"1\"/>"));
+
+    // Reloaded, even with no creator to go by: the same as it was saved.
+    QXmlStreamReader r(show);
+    r.readNextStartElement();
+    QVERIFY(m_doc->loadXML(r, false));
+    QVERIFY(ao->isEnabled());
 }
 
 /* The value a Shutter look puts on @p fx's shutter channel (-1: none). */

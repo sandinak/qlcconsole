@@ -2299,6 +2299,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     m_loadStatus = Loading;
     emit loading();
 
+    /* Auto-open shutters as for a show saved without the setting (QLC+:
+       off); its <ShutterAutoOpen>, when there is one, overrides. */
+    m_shutterAutoOpen->beginLoad();
+
     /* Progress reporting: loading a big workspace is dominated by fixtures and
        fixture groups, and it happens with the main window already up, so
        without this the app just looks hung. Emit at most every 8 items to keep

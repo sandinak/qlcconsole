@@ -241,6 +241,16 @@ public:
     /** The palette @p theme gives, built on @p base (the native one for
      *  ThemeDefault) -- what applyTheme() sets; a test renders with it. */
     static QPalette themePalette(int theme, const QPalette &base);
+    /** Every theme and its name, in the order Settings ▸ Appearance lists them. */
+    static QList<QPair<int, QString> > themeChoices();
+
+    /** The footer's optional chips (Settings ▸ Appearance), each shown or
+     *  hidden for this computer (QSettings workspace/showFooter*). */
+    enum FooterChip { FooterLoad, FooterPower, FooterGrandMaster, FooterSpeedMasters };
+    bool footerChipShown(FooterChip chip) const;
+    void setFooterChipShown(FooterChip chip, bool on);
+    /** The speed masters' beat (SpeedMastersFooter's settings) read again. */
+    void reloadFooterBeatOptions();
 
 private:
     int m_theme = ThemeDefault;
@@ -505,10 +515,13 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
-    /** Window → Functions (⇧⌘4): the Functions tab when it is shown
+    /** Window → Functions: the Functions tab when it is shown
      *  (setFunctionsWindowShown()); otherwise Build ▸ Scenes ▸ Classic, the
      *  list focused. */
     void showFunctions();
+    /** Window → Effects: Build ▸ Effects, effects' one home (there is no
+     *  Effects window of its own). */
+    void showEffects();
     /** THE switch for the Functions window (Function Manager), board Q32:
      *  shown, it is a tab of its own again and Window → Functions brings it
      *  forward; hidden -- the qlcconsole view -- it has no tab and Window →
@@ -535,6 +548,10 @@ public slots:
     void reattachAllContexts();
     /** The Window menu, as things are: which views are in their own windows. */
     void updateWindowMenu();
+    /** The Window menu's tab jumps in the view's order, numbered by it:
+     *  ⇧⌘1 is the first tab the view shows, ⇧⌘0 the tenth. Tabs the view
+     *  hides follow, with no shortcut. Run on every view change (Q69). */
+    void updateWindowJumps();
 
     void slotDetachContext(int index);
 
@@ -582,7 +599,10 @@ private:
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
     QAction* m_rigOverviewAction;
-    QList<QAction *> m_windowJumps;         ///< Window menu: a view each
+    QList<QAction *> m_windowJumps;         ///< Window menu: a view each (Everything's order)
+    QMenu *m_windowMenu = nullptr;
+    QAction *m_windowHiddenSeparator = nullptr;  ///< Window menu: before the view's hidden tabs
+    QAction *m_windowJumpsEnd = nullptr;         ///< Window menu: after the last tab jump
     QMenu *m_windowDockMenu = nullptr;      ///< Window > Put Back in Main Window
     QAction *m_windowDockAll = nullptr;
     QAction *m_windowBreakOut = nullptr;    ///< Window > Move <view> to Its Own Window
@@ -765,6 +785,11 @@ public:
     /** Clear the mode message from the status bar */
     void clearStatusMessage();
 
+    /** True when any universe is patched to an output. Without one nothing
+     *  reaches a rig: the readiness chip reads "No outputs: preview only",
+     *  in grey, instead of a red "Not ready". */
+    bool rigHasOutputs() const;
+
 private:
     /** Initialize the status bar */
     void initStatusBar();
@@ -853,7 +878,7 @@ private:
     QLabel* m_statusLoadLabel;
     QLabel* m_statusPowerLabel = nullptr;
     // Whether the engine-load / power-estimate / GM-fader footer chips are
-    // shown at all, toggleable from the View menu and persisted
+    // shown at all, set in Settings ▸ Appearance and persisted
     // (workspace/showFooterLoad, workspace/showFooterPower,
     // workspace/showFooterGM). Independent of whether a chip currently has
     // anything to show (e.g. Power only ever appears once an estimate exists).
@@ -861,11 +886,7 @@ private:
     bool m_showFooterPower = true;
     bool m_showFooterGM = true;
     bool m_showFooterSpeed = true;
-    QAction* m_showFooterSpeedAction = nullptr;
     class SpeedMastersFooter* m_statusSpeedMasters = nullptr;
-    QAction* m_showFooterLoadAction = nullptr;
-    QAction* m_showFooterPowerAction = nullptr;
-    QAction* m_showFooterGMAction = nullptr;
     // Move-in-black dangle warning: marked (positioned-but-dark) fixtures no
     // upcoming cue is about to light. Hidden when empty; ProgrammerController
     // forwards MarkPlanner::dangleFixturesChanged() into this.

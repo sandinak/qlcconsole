@@ -48,7 +48,7 @@ private slots:
      *  enable/disable that feature via a toggle on window". */
     void shiftClickBreaksATabOutDoubleClickDoesNot();
     /** Board Q32: the Functions window is hidden (one switch). Window → Functions
-     *  (⇧⌘4) lands on Build ▸ Scenes ▸ Classic with the list focused; no
+     *  lands on Build ▸ Scenes ▸ Classic with the list focused; no
      *  Function Manager is built; a show saved with it in front opens
      *  there; opening a function from outside Build loads it in Build's
      *  Workbench. */
@@ -56,10 +56,12 @@ private slots:
     /** "tab icon could be a construction hat": Build's tab and its
      *  Window-menu jump wear a hard hat, crisp at 1x and 2x. */
     void theBuildTabWearsAHardHat();
+    /** Q68: Window ▸ Effects is Build ▸ Effects; no Effects window. */
+    void windowEffectsIsBuildEffects();
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
-    /* P7: the Run tab -- the full-screen cue runner, ⇧⌘0. */
+    /* P7: the Run tab -- the full-screen cue runner (⇧⌘9 in qlcconsole). */
     void theRunTabIsTheCueRunner();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
@@ -75,6 +77,12 @@ private slots:
      *  entry, kept for the person, read by the fixture editor too. */
     void settingsChoosesTheUnits();
     void settingsAdvancedHoldsAutoOpen();
+    /** Q65: theme, toolbar style, the footer's chips and the speed masters'
+     *  beat are in Settings ▸ Appearance, not the View menu, and set the
+     *  same settings the View menu did. */
+    void settingsAppearanceHoldsHowTheWindowLooks();
+    /** Q65: View is only what you look at. */
+    void theViewMenuIsOnlyViews();
     /** The grid follows Settings -> Units: an old show in feet seeds an
      *  unset preference once, a show opens in the person's unit, and is
      *  saved with Units from the preference */
@@ -103,6 +111,10 @@ private slots:
     /** A Window-menu jump to a tab the view hides shows Everything, with a
      *  note and a way back; Window → Functions in qlcconsole is Build. */
     void aJumpToAHiddenTabShowsEverything();
+    /** Q69: ⇧⌘1… number the tabs the view shows, in its order, and are
+     *  renumbered when the view changes; the Window menu lists them so,
+     *  then the hidden tabs with no shortcut. */
+    void windowShortcutsFollowTheView();
     /** A view in a window of its own stays there through view switches,
      *  and goes back to its place (or is put away) when closed. */
     void aBrokenOutViewSurvivesAViewSwitch();
@@ -116,6 +128,14 @@ private slots:
     /** File ▸ Upgrade This Show… on a Classic show: offered (once) the
      *  qlcconsole view, as a quiet line with a button. */
     void upgradingAClassicShowOffersTheConsoleView();
+    /** Q63: auto-open shutters for a show saved without the setting: off
+     *  for a QLC+ 4.x show, on for one qlcconsole saved, on for a new show. */
+    void autoOpenFollowsWhoSavedTheShow();
+
+    /** Q64: nothing patched to any output -- a grey "No outputs: preview
+     *  only", never red; red "Not ready" for a real problem once a universe
+     *  has an output. */
+    void theReadinessChipIsGreyWithNoOutputs();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

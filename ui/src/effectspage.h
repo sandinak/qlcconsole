@@ -2,11 +2,12 @@
   Q Light Controller Plus
   effectspage.h
 
-  Window ▸ Effects (WORKFLOW_DESIGN.md W4): every effect of the show in one
-  place -- effect palettes in their folders, and the classic effects (EFX
-  and RGB Matrix functions) marked as such -- beside the effect designer on
-  the Try on bench. + New makes an effect palette, an EFX or an RGB Matrix.
-  The Build tab's Effects section will host the same parts.
+  Every effect of the show in one place (WORKFLOW_DESIGN.md W4) -- effect
+  palettes in their folders, and the classic effects (EFX and RGB Matrix
+  functions) marked as such -- beside the effect designer on the Try on
+  bench. + New makes an effect palette, an EFX or an RGB Matrix. It was the
+  Window ▸ Effects window; Build ▸ Effects is effects' one home now (Q68)
+  and the app no longer opens it. Kept for the effect designer's tests.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -41,9 +42,6 @@ class EffectsPage final : public QWidget
 public:
     explicit EffectsPage(Doc *doc, QWidget *parent = nullptr);
     ~EffectsPage() override;
-
-    /** Open the page (one per app, a window of its own) and bring it up. */
-    static EffectsPage *open(Doc *doc, QWidget *parent);
 
     EffectDesigner *designer() const { return m_designer; }
     QTreeWidget *navigator() const { return m_nav; }

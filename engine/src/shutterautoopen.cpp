@@ -22,6 +22,7 @@
 #include <QTimer>
 
 #include "shutterautoopen.h"
+#include "qlcconfig.h"
 #include "inputoutputmap.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -60,6 +61,28 @@ void ShutterAutoOpen::reset()
     {
         m_enabled = true;
         emit enabledChanged(true);
+    }
+    scheduleRebuild();
+}
+
+void ShutterAutoOpen::setLoadingCreator(const QString &name)
+{
+    m_loadingFromHere = savedByQlcconsole(name);
+}
+
+bool ShutterAutoOpen::savedByQlcconsole(const QString &creatorName)
+{
+    return creatorName.trimmed() == QLatin1String(APPNAME);
+}
+
+void ShutterAutoOpen::beginLoad()
+{
+    const bool on = m_loadingFromHere;
+    m_loadingFromHere = false;
+    if (on != m_enabled)
+    {
+        m_enabled = on;
+        emit enabledChanged(on);
     }
     scheduleRebuild();
 }
@@ -230,12 +253,11 @@ void ShutterAutoOpen::rebuild()
 
 void ShutterAutoOpen::saveXML(QXmlStreamWriter *doc) const
 {
-    // Only when it differs from a new show's: shows that never touched it
-    // save as they always did, and open with it on.
-    if (m_enabled)
-        return;
+    // Always, on or off: a show without it loads by who saved it
+    // (beginLoad()), and a show saved here must reload the same.
     doc->writeStartElement(KXMLQLCShutterAutoOpen);
-    doc->writeAttribute(KXMLQLCShutterAutoOpenEnabled, QStringLiteral("0"));
+    doc->writeAttribute(KXMLQLCShutterAutoOpenEnabled,
+                        m_enabled ? QStringLiteral("1") : QStringLiteral("0"));
     doc->writeEndElement();
 }
 

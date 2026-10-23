@@ -50,7 +50,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks
 
 1. Open qlcconsole, choose **File → Open** and open
    `lesson-1-4-start.qlcc` (where Lesson 1.3 finished).
-2. Click the **Show Tree** tab (⇧⌘6) and open **View → Rig Overview**
+2. Click the **Show Tree** tab (⇧⌘5) and open **View → Rig Overview**
    (⇧⌘R) beside it.
 
 ### Type the times
@@ -81,7 +81,7 @@ only play when you run the cues with **GO**.
 ### Play it
 
 8. Click **Spring Show** in the tree, so no cue is being previewed, then
-   click the **Run** tab (⇧⌘0). Keep the Rig Overview in view.
+   click the **Run** tab (⇧⌘9). Keep the Rig Overview in view.
    - *You should see:* a **Timing** column reading *fade 3s*, *fade 2s*,
      nothing for the chorus (a snap), *follow 2s* and *fade 3s*.
 9. Press **GO** and watch the cyc.

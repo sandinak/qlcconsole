@@ -94,4 +94,5 @@ yourself. In class, download it and **File → Open** it.
 ## Real lights and the network
 
 The course shows aren't connected to any real lights and send nothing
-on the network. That's why the footer reads **Not ready** in red.
+on the network. That's why the footer reads **No outputs: preview only**,
+in grey.

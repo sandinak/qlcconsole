@@ -39,7 +39,6 @@
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
 #include "functionselection.h"
-#include "effectspage.h"
 #include "effectdesigner.h"
 #include "itemicons.h"
 #include "functionmanager.h"
@@ -86,6 +85,7 @@
 #include <atomic>
 #include <QProgressDialog>
 #include "doc.h"
+#include "shutterautoopen.h"
 #include "fixture.h"
 #include "programmercontroller.h"
 #include "qxwimporter.h"
@@ -611,7 +611,7 @@ void App::init()
                 m_statusPowerLabel->hide();
                 return;
             }
-            if (m_showFooterPower == false)   // View menu: chip disabled
+            if (m_showFooterPower == false)   // Settings ▸ Appearance: chip off
                 return;
             m_statusPowerLabel->setText(overload
                 ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
@@ -2361,7 +2361,8 @@ void App::initMenuBar()
                          "Virtual Console, Simple Desk, Inputs/Outputs") },
             { ConsoleView, "viewWorkspaceConsole",
               QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows, "
-                         "Virtual Console and Run; Functions lives in Build ▸ Scenes ▸ Classic") },
+                         "Virtual Console, Simple Desk and Run; Functions lives in Build ▸ "
+                         "Scenes ▸ Classic") },
             { EverythingView, "viewWorkspaceEverything",
               QT_TR_NOOP("Every tab") } };
         for (const auto &v : views)
@@ -2405,147 +2406,9 @@ void App::initMenuBar()
     focusAct->setToolTip(tr("Aim each moving head at its reference and nudge its calibration offsets"));
     connect(focusAct, &QAction::triggered, this, &App::slotFocusMode);
 
-
-    // Backstage color themes: low-glare palettes for working near a stage/
-    // audience. Persisted (App::setTheme() -> workspace/theme).
-    viewMenu->addSeparator();
-    QMenu* themeMenu = viewMenu->addMenu(tr("Theme"));
-    QActionGroup* themeGroup = new QActionGroup(themeMenu);
-    struct { const char* label; int id; } themeChoices[] = {
-        { QT_TR_NOOP("Default"),      ThemeDefault },
-        { QT_TR_NOOP("Tan"),          ThemeTan },
-        { QT_TR_NOOP("Blue"),         ThemeBlue },
-        { QT_TR_NOOP("QLC+ Original"), ThemeQLCOriginal },
-        { QT_TR_NOOP("Red Shift"),    ThemeRedShift },
-        { QT_TR_NOOP("VS Code Dark"), ThemeVSCodeDark },
-    };
-    for (const auto& choice : themeChoices)
-    {
-        QAction* themeAction = themeMenu->addAction(tr(choice.label));
-        themeAction->setCheckable(true);
-        themeAction->setActionGroup(themeGroup);
-        themeAction->setChecked(m_theme == choice.id);
-        connect(themeAction, &QAction::triggered, this, [this, choice]() {
-            setTheme(choice.id);
-        });
-    }
-
-    // Toolbar style: icon+text / icons only / text only, for the tab strip,
-    // the main toolbar, and every per-manager toolbar's own "Add"/"Edit"
-    // dropdowns (Function Manager, Virtual Console, Programming, Shows,
-    // Fixture Manager, Input/Output Manager, the 2D Monitor). Backed by the
-    // same "workspace/tabLabelMode" setting those toolbars already read;
-    // this was previously set-once-at-startup with no way to change it
-    // short of hand-editing the setting.
-    QMenu* toolbarStyleMenu = viewMenu->addMenu(tr("Toolbar Style"));
-    QActionGroup* toolbarStyleGroup = new QActionGroup(toolbarStyleMenu);
-    struct { const char* label; int id; } toolbarStyleChoices[] = {
-        { QT_TR_NOOP("Icons && Text"), TabIconAndText },
-        { QT_TR_NOOP("Icons Only"),    TabIconOnly },
-        { QT_TR_NOOP("Text Only"),     TabTextOnly },
-    };
-    for (const auto& choice : toolbarStyleChoices)
-    {
-        QAction* styleAction = toolbarStyleMenu->addAction(tr(choice.label));
-        styleAction->setCheckable(true);
-        styleAction->setActionGroup(toolbarStyleGroup);
-        styleAction->setChecked(m_tabLabelMode == choice.id);
-        connect(styleAction, &QAction::triggered, this, [this, choice]() {
-            setTabLabelMode(choice.id);
-        });
-    }
-
-    // Footer chip visibility: engine load / estimated power draw. Persisted
-    // (workspace/showFooterLoad, workspace/showFooterPower).
-    m_showFooterLoadAction = viewMenu->addAction(tr("Show Engine Load in Footer"));
-    m_showFooterLoadAction->setCheckable(true);
-    m_showFooterLoadAction->setChecked(m_showFooterLoad);
-    connect(m_showFooterLoadAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterLoad = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_LOAD, on);
-        if (m_statusLoadLabel != NULL)
-            m_statusLoadLabel->setVisible(on);
-    });
-
-    m_showFooterPowerAction = viewMenu->addAction(tr("Show Power Estimate in Footer"));
-    m_showFooterPowerAction->setCheckable(true);
-    m_showFooterPowerAction->setChecked(m_showFooterPower);
-    connect(m_showFooterPowerAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterPower = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_POWER, on);
-        if (m_statusPowerLabel != NULL && on == false)
-            m_statusPowerLabel->hide();
-        // When re-enabled, the chip stays hidden until the next
-        // powerEstimateChanged signal repopulates it (Design mode only).
-    });
-
-    m_showFooterGMAction = viewMenu->addAction(tr("Show Grand Master in Footer"));
-    m_showFooterGMAction->setCheckable(true);
-    m_showFooterGMAction->setChecked(m_showFooterGM);
-    connect(m_showFooterGMAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterGM = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_GM, on);
-        if (m_statusGrandMasterBox != NULL)
-            m_statusGrandMasterBox->setVisible(on);
-    });
-
-    m_showFooterSpeedAction = viewMenu->addAction(tr("Show Speed Masters in Footer"));
-    m_showFooterSpeedAction->setObjectName(QStringLiteral("showFooterSpeedMasters"));
-    m_showFooterSpeedAction->setCheckable(true);
-    m_showFooterSpeedAction->setChecked(m_showFooterSpeed);
-    connect(m_showFooterSpeedAction, &QAction::toggled, this, [this](bool on) {
-        m_showFooterSpeed = on;
-        QSettings settings;
-        settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
-        if (m_statusSpeedMasters != NULL)
-            m_statusSpeedMasters->setVisible(on);
-    });
-    /* How the masters in the footer show their beat: a blink, a bar across
-       each beat, or not at all -- always, or only while something on that
-       master is playing. */
-    {
-        QMenu *beat = viewMenu->addMenu(tr("Speed Master Beat in Footer"));
-        beat->setObjectName(QStringLiteral("speedFooterBeatMenu"));
-        QActionGroup *styles = new QActionGroup(beat);
-        const QList<QPair<QString, SpeedMasterButton::BeatStyle> > styleItems = {
-            { tr("Blink"), SpeedMasterButton::Blink },
-            { tr("Bar Across Each Beat"), SpeedMasterButton::Bar },
-            { tr("No Beat"), SpeedMasterButton::NoBeat } };
-        for (const auto &it : styleItems)
-        {
-            QAction *a = beat->addAction(it.first);
-            a->setCheckable(true);
-            a->setChecked(SpeedMastersFooter::beatStyle() == it.second);
-            a->setData(int(it.second));
-            styles->addAction(a);
-        }
-        beat->addSeparator();
-        QActionGroup *whens = new QActionGroup(beat);
-        const QList<QPair<QString, SpeedMastersFooter::BeatWhen> > whenItems = {
-            { tr("Always"), SpeedMastersFooter::Always },
-            { tr("Only While Something on It Plays"), SpeedMastersFooter::WhilePlaying } };
-        for (const auto &it : whenItems)
-        {
-            QAction *a = beat->addAction(it.first);
-            a->setCheckable(true);
-            a->setChecked(SpeedMastersFooter::beatWhen() == it.second);
-            a->setData(int(it.second));
-            whens->addAction(a);
-        }
-        connect(styles, &QActionGroup::triggered, this, [this](QAction *a) {
-            SpeedMastersFooter::setBeatStyle(SpeedMasterButton::BeatStyle(a->data().toInt()));
-            if (m_statusSpeedMasters != NULL)
-                m_statusSpeedMasters->reloadBeatOptions();
-        });
-        connect(whens, &QActionGroup::triggered, this, [this](QAction *a) {
-            SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::BeatWhen(a->data().toInt()));
-            if (m_statusSpeedMasters != NULL)
-                m_statusSpeedMasters->reloadBeatOptions();
-        });
-    }
+    /* Appearance -- theme, toolbar style, which chips the footer shows and
+       the speed masters' beat -- is in Settings ▸ Appearance (Q65); View is
+       only what you look at. */
 
     /* ---- Fixtures: document-wide fixture actions ----
      * Import/Export/Remap and Channels Fade Configuration used to live on
@@ -2620,14 +2483,14 @@ void App::initMenuBar()
        all of them. */
     QMenu* windowMenu = mb->addMenu(tr("&Window"));
     windowMenu->setObjectName("windowMenu");
+    m_windowMenu = windowMenu;
     for (int i = 0; i < m_tabOriginals.size(); i++)
     {
         QAction* jump = windowMenu->addAction(m_tabOriginals.at(i).second,
                                               m_tabOriginals.at(i).first);
-        // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
-        // Build ▸ Scenes' "new function" shortcuts.
-        // The tenth (Run) is ⇧⌘0.
-        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10)));
+        // Ctrl+Shift+<n> (⇧⌘n on macOS), numbered by the view's tabs
+        // (updateWindowJumps()): the plain Ctrl+<n> row is taken by Build ▸
+        // Scenes' "new function" shortcuts.
         /* Resolve by LABEL, not by construction order. Detaching a view calls
            removeTab(), so every index after it shifts and a raw
            setCurrentIndex(i) lands on the wrong page -- or on nothing at all
@@ -2646,16 +2509,21 @@ void App::initMenuBar()
             });
         m_windowJumps << jump;
     }
+    // Then the tabs the view hides (no shortcut), after this line.
+    m_windowHiddenSeparator = windowMenu->addSeparator();
+    m_windowHiddenSeparator->setObjectName(QStringLiteral("windowHiddenTabs"));
+    m_windowJumpsEnd = windowMenu->addSeparator();
     /* The Rig Overview is a window of its own, so it is offered here too, not
        only under View: the Window menu is where people go looking for one
        ("there's no option in Windows"). The same action, so one shortcut. */
     windowMenu->addAction(m_rigOverviewAction);
-    /* The effect designer on the Try on bench, with every effect palette
-       and EFX / RGB Matrix of the show (W4; Build ▸ Effects in time). */
-    QAction *effectsAct = windowMenu->addAction(tr("Effects…"));
+    /* Effects: Build ▸ Effects, their one home (Q68) -- every effect
+       palette, EFX and RGB Matrix of the show, designed in the Workbench.
+       There is no separate Effects window any more. */
+    QAction *effectsAct = windowMenu->addAction(tr("Effects"));
     effectsAct->setObjectName(QStringLiteral("windowEffects"));
-    connect(effectsAct, &QAction::triggered, this, [this]() { EffectsPage::open(m_doc, this); });
-    // ...and in the Workbench's editor pane (Build ▸ Effects).
+    effectsAct->setToolTip(tr("Every effect in the show, and the effect designer: Build ▸ Effects"));
+    connect(effectsAct, &QAction::triggered, this, &App::showEffects);
     EffectDesigner::plugIntoWorkbench();
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
@@ -2680,6 +2548,7 @@ void App::initMenuBar()
             w->showMinimized();
     });
     connect(windowMenu, &QMenu::aboutToShow, this, &App::updateWindowMenu);
+    updateWindowJumps();
     updateWindowMenu();
 
     /* ---- Help ---- */
@@ -3770,6 +3639,13 @@ void App::slotCaptureUndoStackChanged()
     }
 }
 
+void App::showEffects()
+{
+    showContext(tr("Build"));
+    if (ProgrammingManager *pm = ProgrammingManager::instance())
+        pm->setSection(ProgrammingManager::EffectsSection);
+}
+
 void App::showFunctions()
 {
     if (m_functionsWindowShown)
@@ -3801,9 +3677,12 @@ QStringList App::workspaceViewTabs(WorkspaceView view)
         return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
                  tr("Simple Desk"), tr("Connections") };
     case ConsoleView:
-        // Functions folds into Build ▸ Scenes ▸ Classic (board Q32).
+        // Functions folds into Build ▸ Scenes ▸ Classic (board Q32). Simple
+        // Desk, a QLC+ user's channel check, sits where Everything has it:
+        // after the Virtual Console, before Run (Q71).
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Build"),
-                 tr("Show Tree"), tr("Shows"), tr("Virtual Console"), tr("Run") };
+                 tr("Show Tree"), tr("Shows"), tr("Virtual Console"), tr("Simple Desk"),
+                 tr("Run") };
     case EverythingView:
     default:
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Functions"),
@@ -4011,6 +3890,7 @@ void App::applyWorkspaceTabs()
     m_tab->blockSignals(blocked);
     applyTabLabelMode();
     updateWorkspaceViewActions();
+    updateWindowJumps();
     slotTabChanged(m_tab->currentIndex());
 }
 
@@ -4145,6 +4025,40 @@ QStringList App::detachedContexts() const
             && !dw->centralWidget()->property("parked").toBool())   // no tab to go back to
             out << dw->centralWidget()->property("tabLabel").toString();
     return out;
+}
+
+void App::updateWindowJumps()
+{
+    if (m_windowMenu == NULL || m_windowHiddenSeparator == NULL || m_windowJumpsEnd == NULL
+        || m_windowJumps.isEmpty())
+        return;
+    /* Numbered by what is on screen (Q69): in Classic QLC+, Fixtures is the
+       first tab and ⇧⌘1. A tab in a window of its own keeps its number. */
+    const QStringList order = effectiveViewTabs();
+    QList<QAction *> shown, hidden;
+    foreach (const QString &label, order)
+        foreach (QAction *jump, m_windowJumps)
+            if (jump->data().toString() == label)
+                shown << jump;
+    foreach (QAction *jump, m_windowJumps)
+        if (shown.contains(jump) == false)
+            hidden << jump;
+
+    for (int i = 0; i < shown.size(); i++)
+    {
+        QAction *jump = shown.at(i);
+        m_windowMenu->removeAction(jump);
+        m_windowMenu->insertAction(m_windowHiddenSeparator, jump);
+        jump->setShortcut(i < 10 ? QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10))
+                                 : QKeySequence());
+    }
+    foreach (QAction *jump, hidden)
+    {
+        m_windowMenu->removeAction(jump);
+        m_windowMenu->insertAction(m_windowJumpsEnd, jump);
+        jump->setShortcut(QKeySequence());
+    }
+    m_windowHiddenSeparator->setVisible(hidden.isEmpty() == false);
 }
 
 void App::updateWindowMenu()
@@ -4762,6 +4676,9 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
                 else
                     doc.skipCurrentElement();
             }
+            /* And auto-open shutters for a show saved without it: on when
+               qlcconsole saved it, off (as QLC+) otherwise. */
+            m_doc->shutterAutoOpen()->setLoadingCreator(m_loadedCreator);
         }
         else if (doc.name() == KXMLShowEmbedded)
         {
@@ -5207,6 +5124,68 @@ void App::switchToTabContaining(QWidget *w)
 int App::theme() const
 {
     return m_theme;
+}
+
+QList<QPair<int, QString> > App::themeChoices()
+{
+    return { { ThemeDefault,     tr("Default") },
+             { ThemeTan,         tr("Tan") },
+             { ThemeBlue,        tr("Blue") },
+             { ThemeQLCOriginal, tr("QLC+ Original") },
+             { ThemeRedShift,    tr("Red Shift") },
+             { ThemeVSCodeDark,  tr("VS Code Dark") } };
+}
+
+bool App::footerChipShown(FooterChip chip) const
+{
+    switch (chip)
+    {
+    case FooterLoad:         return m_showFooterLoad;
+    case FooterPower:        return m_showFooterPower;
+    case FooterGrandMaster:  return m_showFooterGM;
+    case FooterSpeedMasters:
+    default:                 return m_showFooterSpeed;
+    }
+}
+
+void App::setFooterChipShown(FooterChip chip, bool on)
+{
+    QSettings settings;
+    switch (chip)
+    {
+    case FooterLoad:
+        m_showFooterLoad = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_LOAD, on);
+        if (m_statusLoadLabel != NULL)
+            m_statusLoadLabel->setVisible(on);
+        break;
+    case FooterPower:
+        m_showFooterPower = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_POWER, on);
+        // Turned back on, the chip stays hidden until the next
+        // powerEstimateChanged repopulates it (Design mode only).
+        if (m_statusPowerLabel != NULL && on == false)
+            m_statusPowerLabel->hide();
+        break;
+    case FooterGrandMaster:
+        m_showFooterGM = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_GM, on);
+        if (m_statusGrandMasterBox != NULL)
+            m_statusGrandMasterBox->setVisible(on);
+        break;
+    case FooterSpeedMasters:
+        m_showFooterSpeed = on;
+        settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
+        if (m_statusSpeedMasters != NULL)
+            m_statusSpeedMasters->setVisible(on);
+        break;
+    }
+}
+
+void App::reloadFooterBeatOptions()
+{
+    if (m_statusSpeedMasters != NULL)
+        m_statusSpeedMasters->reloadBeatOptions();
 }
 
 void App::setTheme(int theme)
@@ -5683,7 +5662,7 @@ void App::initStatusBar()
         }
         connect(m_statusGrandMasterSlider, &QSlider::valueChanged,
                 this, &App::slotFooterGrandMasterMoved);
-        gmBox->setVisible(m_showFooterGM);   // View menu preference
+        gmBox->setVisible(m_showFooterGM);   // Settings ▸ Appearance
         sb->addWidget(gmBox, 0);
     }
 
@@ -5692,7 +5671,7 @@ void App::initStatusBar()
     if (m_doc != NULL)
     {
         m_statusSpeedMasters = new SpeedMastersFooter(m_doc, this);
-        m_statusSpeedMasters->setVisible(m_showFooterSpeed);   // View menu preference
+        m_statusSpeedMasters->setVisible(m_showFooterSpeed);   // Settings ▸ Appearance
         sb->addWidget(m_statusSpeedMasters, 0);
     }
 
@@ -5753,7 +5732,7 @@ void App::initStatusBar()
         QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
-    m_statusLoadLabel->setVisible(m_showFooterLoad);   // View menu preference
+    m_statusLoadLabel->setVisible(m_showFooterLoad);   // Settings ▸ Appearance
     sb->addWidget(m_statusLoadLabel, 0);
 
     // Estimated electrical load (Design mode) — the designed peak draw across the
@@ -5947,6 +5926,25 @@ void App::initStatusBar()
     // the footer at all, for every current AND future source alike.
     connect(ShowStatus::instance(), &ShowStatus::changed,
             this, &App::updateStatusBar);
+    /* And whether anything is patched out at all ("No outputs: preview
+       only"): a universe gaining or losing its outputs, or coming and going. */
+    {
+        InputOutputMap *io = m_doc->inputOutputMap();
+        auto watchUniverse = [this](Universe *u) {
+            if (u != NULL)
+                connect(u, &Universe::outputPatchesCountChanged, this, &App::updateStatusBar,
+                        Qt::UniqueConnection);
+        };
+        foreach (Universe *u, io->universes())
+            watchUniverse(u);
+        connect(io, &InputOutputMap::universeAdded, this, [this, io, watchUniverse](quint32 id) {
+            foreach (Universe *u, io->universes())
+                if (u != NULL && u->id() == id)
+                    watchUniverse(u);
+            updateStatusBar();
+        });
+        connect(io, &InputOutputMap::universeRemoved, this, &App::updateStatusBar);
+    }
 
     updateStatusBar();
 }
@@ -6196,7 +6194,13 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     // reads "Ready" — showStatusDetails() itself checks and returns.
     if (watched == m_statusModeLabel && event->type() == QEvent::MouseButtonPress)
     {
-        showStatusDetails();
+        // "No outputs: preview only" with nothing else listed: the fix is
+        // giving a universe an output.
+        if (m_statusModeLabel->property("previewOnly").toBool()
+            && ShowStatus::instance()->allEntries().isEmpty())
+            showContext(tr("Connections"));
+        else
+            showStatusDetails();
         return true;
     }
     return QMainWindow::eventFilter(watched, event);
@@ -7053,6 +7057,44 @@ void App::updateStatusBar()
         QList<ShowStatus::Entry> entries, notes;
         foreach (const ShowStatus::Entry &e, all)
             (e.severity == ShowStatus::Ok ? notes : entries) << e;
+        /* Nothing patched to any output: nothing reaches a rig, so nothing
+           listed can go wrong on stage. Grey, not red -- red that a class or
+           a laptop session is told to ignore teaches people to ignore red.
+           Universes "with no output" are what this chip already says. */
+        const bool previewOnly = rigHasOutputs() == false;
+        if (previewOnly)
+        {
+            QList<ShowStatus::Entry> toCheck;
+            foreach (const ShowStatus::Entry &e, entries)
+                if (e.key != QLatin1String("universes.nooutput"))
+                    toCheck << e;
+            if (toCheck.isEmpty() && m_statusMessage.isEmpty() == false)
+            {
+                m_statusModeLabel->setText(m_statusMessage);
+                m_statusModeLabel->setStyleSheet(QString());
+            }
+            else
+            {
+                m_statusModeLabel->setText(toCheck.isEmpty()
+                    ? tr("No outputs: preview only")
+                    : tr("No outputs: preview only · %n to check", "", toCheck.count()));
+                m_statusModeLabel->setStyleSheet("QLabel { color: #909090; }");
+            }
+            m_statusModeLabel->setCursor(Qt::PointingHandCursor);
+            QStringList lines;
+            lines << tr("Nothing is patched to an output, so nothing reaches a rig: "
+                        "looks play on screen only. Give a universe an output in "
+                        "Connections to light the rig.");
+            foreach (const ShowStatus::Entry &e, all)
+                if (e.key != QLatin1String("universes.nooutput"))
+                    lines << (e.summary.isEmpty() ? e.key : e.summary);
+            lines << QString() << (toCheck.isEmpty() && notes.isEmpty()
+                                   ? tr("Click to open Connections") : tr("Click for details"));
+            m_statusModeLabel->setToolTip(lines.join("\n"));
+            m_statusModeLabel->setProperty("previewOnly", true);
+            return;
+        }
+        m_statusModeLabel->setProperty("previewOnly", false);
         if (entries.isEmpty() && !notes.isEmpty())
         {
             m_statusModeLabel->setText(m_statusMessage.isEmpty()
@@ -7165,6 +7207,17 @@ void App::showStatusDetails()
         return;
     ShowStatusDialog dlg(this);
     dlg.exec();
+}
+
+bool App::rigHasOutputs() const
+{
+    if (m_doc == NULL || m_doc->inputOutputMap() == NULL)
+        return false;
+    InputOutputMap *io = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < io->universesCount(); u++)
+        if (io->outputPatchesCount(u) > 0)
+            return true;
+    return false;
 }
 
 void App::setStatusMessage(const QString& message)

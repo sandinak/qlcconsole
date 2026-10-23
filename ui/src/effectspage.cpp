@@ -36,14 +36,10 @@
 #include "efx.h"
 #include "doc.h"
 
-#define SETTINGS_GEOMETRY QStringLiteral("effectspage/geometry")
-
 namespace
 {
     enum { KindRole = Qt::UserRole, IdRole = Qt::UserRole + 1 };
     enum { KindHeader = 0, KindNewEffect, KindPalette, KindFunction };
-
-    QPointer<EffectsPage> s_page;
 }
 
 EffectsPage::EffectsPage(Doc *doc, QWidget *parent)
@@ -165,29 +161,6 @@ EffectsPage::~EffectsPage()
     closeEditor();
     delete m_designer;
     m_designer = nullptr;
-}
-
-EffectsPage *EffectsPage::open(Doc *doc, QWidget *parent)
-{
-    if (s_page.isNull())
-    {
-        s_page = new EffectsPage(doc, parent);
-        s_page->setWindowFlags(Qt::Window);
-        s_page->setAttribute(Qt::WA_DeleteOnClose, false);
-        s_page->resize(1320, 820);
-        const QByteArray geo = QSettings().value(SETTINGS_GEOMETRY).toByteArray();
-        if (!geo.isEmpty())
-            s_page->restoreGeometry(geo);
-        // Remember where it was put.
-        QObject::connect(qApp, &QCoreApplication::aboutToQuit, s_page, []() {
-            if (!s_page.isNull())
-                QSettings().setValue(SETTINGS_GEOMETRY, s_page->saveGeometry());
-        });
-    }
-    s_page->show();
-    s_page->raise();
-    s_page->activateWindow();
-    return s_page;
 }
 
 QStringList EffectsPage::navigatorText() const

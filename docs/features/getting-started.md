@@ -72,7 +72,7 @@ instead, at its right end beside Ready and the other show chips: the top
 is then the tab's own tools alone. It changes at once, no restart, and the
 shortcuts are the same either way (⌘⇧Esc Stop all, ⌘F12 Design / Operate).
 There, they are icons only (their tooltips name them) unless
-**View ▸ Toolbar Style** is **Text Only**, and the footer's own DESIGN and
+**Settings ▸ Appearance ▸ Toolbar style** is **Text only**, and the footer's own DESIGN and
 BLACKOUT chips step aside for them. A tab moved to a window of its own
 keeps its tools at its own top.
 
@@ -98,8 +98,8 @@ Which of these you see depends on the view (below).
 **View ▸ Workspace** picks which tabs the main window shows:
 
 - **qlcconsole** — Connections, Fixtures, Lighting Studio, Build, Show
-  Tree, Shows, Virtual Console and Run. Functions has no tab: **Window ▸
-  Functions** opens **Build ▸ Scenes ▸ Classic**.
+  Tree, Shows, Virtual Console, Simple Desk and Run. Functions has no
+  tab: **Window ▸ Functions** opens **Build ▸ Scenes ▸ Classic**.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
   Connections tab).
@@ -110,8 +110,8 @@ nothing on a hidden tab stops working. The view is saved with the show: it
 marks the show changed, but it isn't an undo step. QLC+ ignores it when it
 opens the file. A show saved without a view opens in **Classic QLC+** if
 it is an old QLC+ show with no Show Tree, and in **qlcconsole** otherwise.
-A new show, and the first launch, start in **qlcconsole**. **Settings ▸
-General ▸ Tab Bar** shows the open show's view and can change it.
+A new show, and the first launch, start in **qlcconsole**. **View ▸
+Workspace** is the one place to change it.
 
 Choosing a tab the view hides (from **Window** or a link such as *Open in
 Build*) switches to **Everything**. A line above the tabs says so and has
@@ -121,11 +121,15 @@ puts it away instead of back on the tab bar. After **File ▸ Upgrade This
 Show…** gives a Classic QLC+ show a Show Tree, a line above the tabs
 offers the **qlcconsole** view, once.
 
-**Window** lists every tab with its shortcut (⇧⌘1 … ⇧⌘0). Shift-click
+**Window** lists the view's tabs in their order, numbered as you see them:
+⇧⌘1 is the first tab on screen, ⇧⌘2 the next, and so on (⇧⌘0 the tenth).
+Change the view and the numbers follow it; in the qlcconsole view
+Connections is ⇧⌘1, the Show Tree ⇧⌘5 and Run ⇧⌘9, in Classic QLC+
+Fixtures is ⇧⌘1. The tabs the view hides are listed after them, with no
+shortcut. Shift-click
 a tab to break it out into its own window; Window brings it back.
 **Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
-scripts, audio, video) is in Build too: **Window ▸ Functions** (⇧⌘4)
-opens Functions in a view that shows it as a tab, and **Build ▸ Scenes ▸
+scripts, audio, video) is in Build too: **Window ▸ Functions** opens Functions in a view that shows it as a tab, and **Build ▸ Scenes ▸
 Classic** in the qlcconsole view — every function by type, each one
 edited in the Workbench. **View ▸ Rig Overview** (⇧⌘R) opens the whole rig
 in 3D.
@@ -138,7 +142,8 @@ the footer.
 
 ![The footer: readiness, grand master, speed masters, timecode, load, mode](../images/footer.png)
 
-1. **Ready** / **Not ready (N)** — click it for the list.
+1. **Ready** / **Not ready (N)** — click it for the list. With nothing
+   patched to an output it reads **No outputs: preview only**, in grey.
 2. **GM** — the grand master, over everything that's sent.
 3. **Speed masters** — one button per master the show uses, showing its
    tempo; click one to set it

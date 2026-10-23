@@ -69,8 +69,9 @@ everyone means the same place.
 On the projector:
 
 1. Open qlcconsole. **File → Open** → `lesson-1-1-finish.qlcc`.
-2. Point at the red **Not ready** in the footer: "It isn't connected to
-   real lights, on purpose. We can't break anything."
+2. Point at the grey **No outputs: preview only** in the footer: "It
+   isn't connected to real lights, on purpose. We can't break anything.
+   If that corner ever turns red, something is really wrong."
 3. **View → Rig Overview** (⇧⌘R). The stage, at 45°. Drag in the picture
    to swing round; the mouse wheel zooms.
 4. **Room: Work light**: the stage parts show clearly. Walk through them,
@@ -81,7 +82,7 @@ On the projector:
 5. **View: Top**: "This is the plan, seen from above. Stage right is on the
    left of the picture, downstage at the bottom." **View: Front**, then
    back to **45°**.
-6. **Room: House**. Click the **Run** tab (⇧⌘0) and press **GO** once:
+6. **Room: House**. Click the **Run** tab (⇧⌘9) and press **GO** once:
    the cyc turns blue. "That's a **cue**. You'll make this in Lesson 1.1."
 
 ## 3. Hands-on (20 min)
@@ -99,7 +100,7 @@ On the projector:
 | Everything looks dark | **Room** is on Blackout or Dim | "Set **Room: Work light**." |
 | The view is upside down or far away | They dragged or zoomed a lot | "Pick **View: 45°** again." |
 | GO does nothing | The Run tab isn't the one showing, or the show isn't open | "Click the **Run** tab. Is the show open?" |
-| "It says Not ready" | Expected | "Not connected to real lights, on purpose." |
+| "It says No outputs" | Expected | "Not connected to real lights, on purpose: it's a preview." |
 
 ## 4. Check for understanding (while circulating)
 

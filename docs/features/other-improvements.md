@@ -386,24 +386,28 @@ try it on your own devices before relying on it for a show.
 
 ## Window menu
 
-Every tab is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
-Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Build, ⇧⌘6 Show
-Tree, ⇧⌘7 Shows, ⇧⌘8 Virtual Console, ⇧⌘9 Simple Desk, ⇧⌘0 Run):
-choosing one brings it forward — its
+Every tab is in **Window**. The tabs the [workspace view](getting-started.md#views)
+shows come first, in its order, numbered as they are on screen: ⇧⌘1 is
+the first tab, ⇧⌘0 the tenth. In the qlcconsole view that is ⇧⌘1
+Connections, ⇧⌘2 Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Build, ⇧⌘5 Show
+Tree, ⇧⌘6 Shows, ⇧⌘7 Virtual Console, ⇧⌘8 Simple Desk, ⇧⌘9 Run; in
+Classic QLC+, ⇧⌘1 Fixtures … ⇧⌘6 Inputs/Outputs. They renumber when the
+view changes. The tabs the view hides follow, with no shortcut.
+Choosing one brings it forward — its
 tab, or its own window when it has been broken out (right-click a tab →
 **Open in Its Own Window**, Shift-click it, or **Move … to Its Own
 Window**),
 which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
-as usual. **Rig Overview…** (⇧⌘R) and **Effects…** (the effect designer)
-are here too. A tab that the workspace view hides (**View ▸
+as usual. **Rig Overview…** (⇧⌘R) is here too, and **Effects**, which
+brings [Build ▸ Effects](build.md#making-effects) forward. A tab that the workspace view hides (**View ▸
 Workspace**) switches the view to **Everything** when you choose it, with
 a line above the tabs to go back; see
 [Views](getting-started.md#views).
 
 **Functions is Build ▸ Scenes ▸ Classic.** The qlcconsole view doesn't show
 Functions as a tab (the Classic QLC+ and Everything views do). There,
-**Window ▸ Functions** (⇧⌘4) brings Build forward with the
+**Window ▸ Functions** brings Build forward with the
 Scenes outline set to **Classic** — every function by type, as the
 Function Manager listed them — and the list focused; in a view that shows
 Functions as a tab it opens that. In Build each function opens
@@ -416,7 +420,12 @@ the outline's right-click; see
 ## Readiness footer
 
 The status chip at the bottom of the window reads **Ready** when nothing
-needs attention, and **Not ready (N)** in red when something does. Hover it
+needs attention, and **Not ready (N)** in red when something does. A show
+with **nothing patched to any output** reads **No outputs: preview only**
+in grey instead (with **· N to check** when something else is listed):
+nothing reaches a rig, so nothing there is urgent, and red stays for real
+problems on a rig with outputs. Click it then to open Connections, or for
+the list when it has one. Hover it
 for a one-line reason per problem; click it for the full list, where each
 problem can be fixed on the spot. It checks for:
 
@@ -647,12 +656,12 @@ estimates use the readings (and the cap) wherever a fixture has them.
 
 ## Advanced settings
 
-**Settings** has two tabs. **General** holds what everyone sets: autosave,
-the tab bar (tab labels, and the show's
-[workspace view](getting-started.md#views)), where the show controls go,
+**Settings** has three tabs. **General** holds what everyone sets: autosave,
+where the show controls go,
 units, the Show Tree's Record choices and the show's
 [move in black](show-tree.md#move-in-black) (saved with the show), the rig
-network and software updates. **Advanced** holds settings for experienced
+network and software updates. **Appearance** holds how the window looks
+([below](#appearance-settings)). **Advanced** holds settings for experienced
 users and the show's output behaviour:
 
 - **Output (saved with this show)**: **Auto-open shutters when a light is
@@ -668,6 +677,24 @@ users and the show's output behaviour:
 - **Show control (QLab)**: the **Open** button that takes you to
   Connections → Show control &amp; sync. It used to be on the one Settings
   page too.
+
+### Appearance settings
+
+**Settings ▸ Appearance** is how the window looks, on this computer (not
+saved with the show). It used to be in the View menu; the choices you made
+there carry over.
+
+- **Window**: the **Theme** (Default, Tan, Blue, QLC+ Original, Red Shift,
+  VS Code Dark) and the **Toolbar style** of the tabs, the top bar and
+  every tab's tools: **Icons and text**, **Icons only** (tooltips name
+  them) or **Text only**.
+- **Footer**: whether it shows **the engine load**, **the power
+  estimate**, **the grand master** and **the speed masters**, and how the
+  speed masters show their beat (**Speed master beat**: Blink, Bar across
+  each beat or No beat; **Show the beat**: Always, or Only while something
+  on it plays). See [Speed masters](effects.md#speed-masters).
+
+They apply when you press **OK**.
 
 ### Auto-open shutters
 
@@ -708,9 +735,12 @@ With **Auto-open shutters** on, qlcconsole works like a lighting console's
   the values your looks store are unchanged, and turning it off puts every
   shutter back to what the show sets.
 
-It is **on** for new shows and for shows saved before it existed. It is
-**saved with the show**, not with this computer, because it changes what
-the rig does: a show programmed with it on looks the same on any computer.
+It is **on** for new shows and for shows qlcconsole saved before it
+existed. It is **off** for a show saved by QLC+ 4.x, so an old show opened
+here sends the same DMX it sends in QLC+; turn it on in Settings ▸ Advanced
+if you want it. It is **saved with the show**, not with this computer,
+because it changes what the rig does: a show programmed with it on looks
+the same on any computer.
 Turn it off when a show wants every shutter to be programmed by hand, as
 in QLC+. While it is on, the Build tab no longer warns "no look for:
 shutter".

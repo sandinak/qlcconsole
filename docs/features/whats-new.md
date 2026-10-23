@@ -57,16 +57,28 @@ their house lights, relays and subs.
 
 - **Three views.** **View ▸ Workspace** picks the tabs: **qlcconsole**
   (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
-  Virtual Console, Run), **Classic QLC+** (QLC+'s own tabs, in its order
+  Virtual Console, Simple Desk, Run), **Classic QLC+** (QLC+'s own tabs, in its order
   and names) or **Everything**. The view is saved with the show. An old
   QLC+ show opens in Classic QLC+; everything else, and a new show, in
   qlcconsole. Choosing a hidden tab from the Window menu shows Everything,
   with a way back. See [Views](getting-started.md#views).
-- **Functions.** In the qlcconsole view, **Window ▸ Functions** (⇧⌘4)
+- **Functions.** In the qlcconsole view, **Window ▸ Functions**
   opens Build ▸ Scenes ▸ Classic, every function by type, each edited in
   the Workbench; new functions of any type and the Function Wizard are on
   **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab. See
   [Coming from the Functions window](build.md#coming-from-the-functions-window).
+- **⇧⌘1… follow the tabs on screen.** The Window menu numbers the view's
+  tabs in the order you see them, so ⇧⌘1 is always the first tab: in
+  Classic QLC+ that is Fixtures, in qlcconsole Connections (the Show Tree
+  is ⇧⌘5 and Run ⇧⌘9 there). Change the view and they renumber. Tabs the
+  view hides come after, with no shortcut. See
+  [Keyboard and mouse](shortcuts.md).
+- **Settings ▸ Appearance.** The theme, the toolbar style, which chips
+  the footer shows and how the speed masters show their beat are in a new
+  **Appearance** tab in Settings, out of the View menu; your choices carry
+  over. **View** is now only what you look at: **Workspace**, **Address
+  Tool**, **Rig Overview…** and **Focus Mode…**. See
+  [Appearance settings](other-improvements.md#appearance-settings).
 - **File ▸ Import is a menu of file types**: **QLC+ / qlcconsole
   Workspace**, **ETC Eos Show (ASCII .asc)** and **QLC+ Fixtures List
   (.qxfl)**, each with a file dialog for that kind, then **Any Supported
@@ -157,6 +169,14 @@ their house lights, relays and subs.
 - **Open what a layer plays.** A ▣ layer (a raw scene, an EFX, an RGB
   Matrix) opens its function in the Workbench; its page says where else it
   plays. See [Adding layers](show-tree.md#adding-layers).
+- **No outputs: preview only.** A show with nothing patched to an output
+  says so in the footer, in grey, instead of a red **Not ready**: nothing
+  reaches a rig, so nothing there is urgent. Red is kept for real problems
+  on a rig with outputs. See [Readiness footer](other-improvements.md#readiness-footer).
+- **Same show, same output.** A show saved by QLC+ 4.x opens with
+  **Auto-open shutters** off, so it sends the DMX it sends in QLC+. Shows
+  made in qlcconsole keep it on. Turn it on in Settings ▸ Advanced. See
+  [Auto-open shutters](other-improvements.md#auto-open-shutters).
 - **The stock sample imports the same.** A chase of scenes with their own
   fades now plays in the cue list as in the chaser (it used to run at
   about half the level).
@@ -272,8 +292,8 @@ their house lights, relays and subs.
 - **Auto-open shutters.** A spot whose shutter rests closed now lights
   from a level alone: give it White at Full and it opens its shutter, as a
   lighting console does. A shutter look (Closed, Strobe...) still wins, and
-  a light with no level stays as it is. It is on for every show, saved
-  with the show, and turned off in the new **Settings → Advanced** tab,
+  a light with no level stays as it is. It is on for new shows (0.2.2:
+  off for a show saved by QLC+), saved with the show, and turned off in the new **Settings → Advanced** tab,
   which also now holds the effect script editor choice and the Show control
   (QLab) button. See [Auto-open shutters](other-improvements.md#auto-open-shutters).
 
