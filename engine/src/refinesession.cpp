@@ -422,7 +422,47 @@ bool RefineSession::cuePosition(quint32 fid, float &pan, float &tilt) const
 
     QHash<quint32, uchar> ch;
     QList<quint32> lit;
-    if (const ShowTree::Look *look = lookFor(fid, ShowTree::KeyPosition, &lit))
+    const ShowTree::Look *look = lookFor(fid, ShowTree::KeyPosition, &lit);
+    if (look != nullptr)
+    {
+        /* Degrees the palettes hold, as they are, when they hold them for
+           every fixture alike (no fanning): exact, where the DMX read back
+           is only as fine as the fixture's channels. */
+        bool exact = !look->palettes.isEmpty();
+        float p = 0.0f, t = 0.0f;
+        bool hasP = false, hasT = false;
+        for (quint32 pid : look->palettes)
+        {
+            const QLCPalette *pal = m_doc->palette(pid);
+            if (pal == nullptr || pal->fanningType() != QLCPalette::Flat || pal->values().isEmpty())
+                exact = false;
+            else if (pal->type() == QLCPalette::PanTilt && pal->values().size() >= 2)
+            {
+                p = pal->values().at(0).toFloat();
+                t = pal->values().at(1).toFloat();
+                hasP = hasT = true;
+            }
+            else if (pal->type() == QLCPalette::Pan)
+            {
+                p = pal->values().at(0).toFloat();
+                hasP = true;
+            }
+            else if (pal->type() == QLCPalette::Tilt)
+            {
+                t = pal->values().at(0).toFloat();
+                hasT = true;
+            }
+            else
+                exact = false;
+        }
+        if (exact && hasP && hasT)
+        {
+            pan = p;
+            tilt = t;
+            return true;
+        }
+    }
+    if (look != nullptr)
     {
         for (quint32 pid : look->palettes)
             if (QLCPalette *p = m_doc->palette(pid))
