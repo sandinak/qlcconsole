@@ -9046,6 +9046,46 @@ void MonitorGraphicsView::rebuildReachOverlay()
     m_reachItem->setVisible(true);
 }
 
+void MonitorGraphicsView::persistElevationDrop(quint32 fid, MonitorFixtureItem *item)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    /* A free-placed fixture's stored position is MIXED UNITS: X and Y
+       in millimetres, Z in METRES (see the tail of
+       MonitorProperties::fixtureRigPosition, which divides X/Y by 1000
+       and passes Z straight through). Writing a plain mm vector put a
+       metre value of, say, 2500 into Z -- two and a half kilometres up
+       -- and the redraw then placed the fixture nowhere near the drop,
+       which reads as snapping back. Convert on the way in and out. */
+    item->setAttachMode(false);
+
+    const QVector3D stored = props->fixturePosition(fid, 0, 0);
+    const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
+
+    /* Read the drop with the SAME anchor updateFixture places with.
+       An unbound elevation fixture is anchored top-left (setPos(p)),
+       a decked one bottom-centre. Reading the centre here while the
+       redraw placed the top-left shifted the item by half an icon on
+       every single drop -- the reported "jumps somewhere else". */
+    const FixtureRigProps arp = props->fixtureRigProps(fid);
+    QPointF dropPx = item->pos();
+    if (arp.onDeck())
+        dropPx += halfIcon(item) + QPointF(0.0, halfIcon(item).y());
+
+    const QVector3D newMm = unprojectMm(dropPx, curMm);
+
+    if (!qFuzzyCompare(newMm, curMm))
+    {
+        props->setFixturePosition(fid, 0, 0,
+            QVector3D(newMm.x(), newMm.y(), newMm.z() / 1000.0f));
+        /* Keep the top view's cache in step, or switching views after
+           an elevation move snaps X/Y back to wherever they were. */
+        item->setRealPosition(QPointF(double(newMm.x()), double(newMm.y())));
+        updateFixture(fid);
+        emit fixtureMoved(fid, QPointF(double(newMm.x()), double(newMm.y())));
+        m_doc->setModified();
+    }
+}
+
 void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
 {
     scheduleNetworkRuns();
@@ -9059,53 +9099,35 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         /* Free-placed fixture: no truss to slide along, so the drop simply IS
            its new position -- unprojected for the view it was dropped in, with
            the axis that is not on screen left as it was. */
+        /* Several free fixtures dragged together: Qt moves them all, so every
+           one is kept where it was dropped -- or, dropped on a truss, they all
+           hang on it, each where it landed along it ("only moves one"). */
+        QList<MonitorFixtureItem *> freeItems;
         if (fid != Fixture::invalidId() && !elevationFixtureDraggable(fid)
                 && (item->flags() & QGraphicsItem::ItemIsMovable))
         {
-            /* A free-placed fixture's stored position is MIXED UNITS: X and Y
-               in millimetres, Z in METRES (see the tail of
-               MonitorProperties::fixtureRigPosition, which divides X/Y by 1000
-               and passes Z straight through). Writing a plain mm vector put a
-               metre value of, say, 2500 into Z -- two and a half kilometres up
-               -- and the redraw then placed the fixture nowhere near the drop,
-               which reads as snapping back. Convert on the way in and out. */
-            /* Released over a truss: bind to it. Attaching is not a top-view
-               privilege -- hanging a light on a bar is exactly the thing you
-               do while looking at the bar from the front. */
+            freeItems << item;
+            foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            {
+                MonitorFixtureItem *other = dynamic_cast<MonitorFixtureItem *>(gi);
+                const quint32 ofid = other != nullptr ? m_fixtures.key(other, Fixture::invalidId())
+                                                      : Fixture::invalidId();
+                if (other != nullptr && other != item && ofid != Fixture::invalidId()
+                        && !elevationFixtureDraggable(ofid) && (other->flags() & QGraphicsItem::ItemIsMovable))
+                    freeItems << other;
+            }
+        }
+        if (!freeItems.isEmpty())
+        {
             if (TrussItem *over = trussUnderFixture(item, 1.0f, true))
             {
-                attachFixtureToTrussAt(fid, over, item);
+                for (MonitorFixtureItem *mi : freeItems)
+                    attachFixtureToTrussAt(m_fixtures.key(mi), over, mi);
                 updateTrussAnchorLines();
                 return;
             }
-            item->setAttachMode(false);
-
-            const QVector3D stored = props->fixturePosition(fid, 0, 0);
-            const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
-
-            /* Read the drop with the SAME anchor updateFixture places with.
-               An unbound elevation fixture is anchored top-left (setPos(p)),
-               a decked one bottom-centre. Reading the centre here while the
-               redraw placed the top-left shifted the item by half an icon on
-               every single drop -- the reported "jumps somewhere else". */
-            const FixtureRigProps arp = props->fixtureRigProps(fid);
-            QPointF dropPx = item->pos();
-            if (arp.onDeck())
-                dropPx += halfIcon(item) + QPointF(0.0, halfIcon(item).y());
-
-            const QVector3D newMm = unprojectMm(dropPx, curMm);
-
-            if (!qFuzzyCompare(newMm, curMm))
-            {
-                props->setFixturePosition(fid, 0, 0,
-                    QVector3D(newMm.x(), newMm.y(), newMm.z() / 1000.0f));
-                /* Keep the top view's cache in step, or switching views after
-                   an elevation move snaps X/Y back to wherever they were. */
-                item->setRealPosition(QPointF(double(newMm.x()), double(newMm.y())));
-                updateFixture(fid);
-                emit fixtureMoved(fid, QPointF(double(newMm.x()), double(newMm.y())));
-                m_doc->setModified();
-            }
+            for (MonitorFixtureItem *mi : freeItems)
+                persistElevationDrop(m_fixtures.key(mi), mi);
             updateTrussAnchorLines();
             return;
         }
@@ -9218,6 +9240,15 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 mfi->setPos(mfi->pos() + delta);
         }
     }
+
+    /* Free fixtures dragged together onto a truss all hang on it, each where
+       it landed along it, when the one under the pointer lands on it -- not
+       only those that happen to overlap it ("only moves one"). */
+    TrussItem *groupTruss = nullptr;
+    if (item != nullptr && movedItems.size() > 1 && m_cellPixels > 0
+            && m_doc->monitorProperties()->fixtureRigProps(m_fixtures.key(item, Fixture::invalidId())).trussId
+               == Truss::invalidId())
+        groupTruss = trussUnderFixture(item, 1.0f, true);
 
     foreach (MonitorFixtureItem *mfi, movedItems)
     {
@@ -9371,7 +9402,10 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                release without ever having gone green, or go green and then
                not attach. The promise the colour makes is now the promise the
                drop keeps. */
-            if (TrussItem *over = trussUnderFixture(mfi, 1.0f, true))
+            TrussItem *over = trussUnderFixture(mfi, 1.0f, true);
+            if (over == nullptr)
+                over = groupTruss;
+            if (over != nullptr)
             {
                 attachFixtureToTrussAt(fid, over, mfi);
                 rp = props->fixtureRigProps(fid);   // attach just changed this

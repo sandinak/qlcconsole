@@ -435,7 +435,9 @@ fixture. To hang it on the truss or pipe — or stand it on the deck — you
 drop it over, **hold Shift as you let go**. While you drag, the fixture's
 outline turns **green** whenever letting go would attach it (pressing or
 releasing Shift updates it at once), and **red** while you are pulling one
-off the truss it is on.
+off the truss it is on. Several selected fixtures dragged together all hang
+on the truss when the one under the pointer goes green, each where it
+landed along it, so their spacing is kept.
 
 - **Coming off needs no Shift.** Drag a fixture well off its truss, or off
   every deck, and it comes off, as before.
@@ -600,8 +602,8 @@ of, and doesn't override, the real locks above.
   **Patch at next free addresses** (after the originals, in their universe;
   when that universe has no room the rest go on into the next, and any
   that still don't fit stay unpatched), **Leave unpatched** (address them
-  later with **Patch Others Like This**), or **Cancel** (nothing is
-  pasted). The plot's status line says what happened, and one Undo takes
+  later with **Patch Others Like This**), **Truss only** (the truss
+  without its fixtures), or **Cancel** (nothing is pasted). The plot's status line says what happened, and one Undo takes
   the truss and its fixtures away.
 - **Rotate** — right-click → **Rotate…** (an angle, clockwise seen from
   above; less than 0 the other way), or **]** / **[** for 15° clockwise /

@@ -72,6 +72,9 @@ private slots:
     void dropStaysPutFrontView();
     void dropStaysPutSideView();
     void dropOnTrussAttachesAndStays();
+    /** Several fixtures dropped together on a truss all hang on it, each
+     *  where it landed along it, not only the one over it. */
+    void aGroupDroppedOnATrussAllHang();
     void dropOffTrussDetachesAndStays();
     /** Bound, dragged a little off the bar (inside the two-widths zone):
      *  stays bound, keeps the sideways offset, and stays where dropped. */

@@ -226,6 +226,7 @@ public:
     {
         PastePatched,       ///< patched at the next free addresses after the originals
         PasteUnpatched,     ///< left unpatched (Patch Others Like This later)
+        PasteTrussOnly,     ///< the truss without its fixtures
         PasteCancelled      ///< nothing is pasted
     };
     /** In place of the paste's question (tests): asked with how many

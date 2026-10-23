@@ -130,6 +130,9 @@ public:
 
     /** Bind @p fid to @p trussItem, taking its along-position from where it
      *  was dropped. */
+    /** A free fixture dropped in Front or Side: keep it where it landed
+     *  (the axis not on screen as it was). */
+    void persistElevationDrop(quint32 fid, MonitorFixtureItem *item);
     void attachFixtureToTrussAt(quint32 fid, class TrussItem *trussItem,
                                 class MonitorFixtureItem *mfi);
 

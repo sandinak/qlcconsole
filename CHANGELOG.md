@@ -172,6 +172,8 @@ circuits and subs.
 - **Connections opens where you'd look for it**: in Classic QLC+ on its
   **Universes** sub-tab (QLC+'s own Inputs/Outputs page, was "Detailed"),
   in the other views on **Devices**.
+- **Paste a truss without its fixtures**: the paste's question has
+  **Truss only**.
 - **A quieter footer** (board Q88, Q89, Q98): the Engine Load chip is off
   unless you turn it on (Settings ▸ Appearance); the power estimate shows
   only for a show with its power set up; the MTC chip only once a timecode
@@ -330,6 +332,10 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+- **Fixtures dragged together onto a truss all hang on it** (Shift-drop),
+  each where it landed along it, not only the one over the truss; in Front
+  and Side every free fixture of the selection keeps its drop instead of
+  snapping back.
 - **Pages squash with the window** instead of being cut off on the right:
   the Lighting Studio's bottom bar, the Workbench's buttons and the
   Connections ▸ Devices row scroll sideways when the window is narrower

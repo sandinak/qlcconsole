@@ -3140,11 +3140,14 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
             QPushButton *patchBtn = box.addButton(tr("Patch at next free addresses"),
                                                   QMessageBox::AcceptRole);
             QPushButton *leaveBtn = box.addButton(tr("Leave unpatched"), QMessageBox::AcceptRole);
+            QPushButton *bareBtn = box.addButton(tr("Truss only"), QMessageBox::AcceptRole);
+            bareBtn->setToolTip(tr("The truss without its fixtures"));
             box.addButton(QMessageBox::Cancel);
             box.setDefaultButton(patchBtn);
             box.exec();
             withFixtures = box.clickedButton() == patchBtn ? PastePatched
                          : box.clickedButton() == leaveBtn ? PasteUnpatched
+                         : box.clickedButton() == bareBtn  ? PasteTrussOnly
                                                            : PasteCancelled;
         }
         if (withFixtures == PasteCancelled)
@@ -3177,7 +3180,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
     for (int ci = 0; ci < m_fixtureClipboard.size(); ++ci)
     {
         const FixtureClip &c = m_fixtureClipboard.at(ci);
-        if (c.truss < 0 || c.truss >= newTrussIds.size())
+        if (c.truss < 0 || c.truss >= newTrussIds.size() || withFixtures == PasteTrussOnly)
             continue;
         QXmlStreamReader r(c.xml);
         while (!r.atEnd() && !r.isStartElement())

@@ -917,6 +917,53 @@ void Monitor_Test::dropStaysPutSideView()
 
 }
 
+void Monitor_Test::aGroupDroppedOnATrussAllHang()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("GroupBar");
+    t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+
+    // A second fixture 1.5 m to the right and 3 m upstage of the first.
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(6500, 2000, 0));
+    rig.gv->addFixture(other->id(), QPointF(6500, 2000));
+    MonitorFixtureItem *second = rig.gv->m_fixtures.value(other->id(), nullptr);
+    QVERIFY(second != nullptr);
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.gv->updateFixture(other->id());
+
+    // Both selected, moved together so the first lands on the truss and the
+    // second, 3 m away from it, doesn't.
+    rig.item->setSelected(true);
+    second->setSelected(true);
+    const QPointF onTrussPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
+    const QPointF delta = onTrussPx - rig.item->iconCentreScene();
+    rig.item->setPos(rig.item->pos() + delta);
+    second->setPos(second->pos() + delta);
+    rig.gv->setAttachOnDrop(true);
+    rig.gv->slotFixtureMoved(rig.item);
+    rig.gv->setAttachOnDrop(false);
+
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).trussId, t->id());
+    QCOMPARE(props->fixtureRigProps(other->id()).trussId, t->id());
+    // Each where it landed along the run: 2 m and 3.5 m.
+    QVERIFY(qAbs(props->fixtureRigProps(rig.fxi->id()).trussOffset - 2.0f) < 0.1f);
+    QVERIFY(qAbs(props->fixtureRigProps(other->id()).trussOffset - 3.5f) < 0.1f);
+}
+
 void Monitor_Test::dropOnTrussAttachesAndStays()
 {
     DropRig rig;
@@ -22750,6 +22797,12 @@ void Monitor_Test::pastingATrussAsksWhatItsFixturesGet()
                 QCOMPARE(props->trusses().size(), 2);
                 QCOMPARE(mon.m_pasteCount, 1);
                 QVERIFY2(notice->text().contains("2 fixtures unpatched"), qPrintable(notice->text()));
+                // Truss only: another truss, no fixtures with it.
+                const int fixturesNow = doc->fixtures().size();
+                mon.setPasteFixturesAsk([](int) { return Monitor::PasteTrussOnly; });
+                mon.slotPasteFeatures();
+                QCOMPARE(props->trusses().size(), 3);
+                QCOMPARE(doc->fixtures().size(), fixturesNow);
                 continue;
             }
 
