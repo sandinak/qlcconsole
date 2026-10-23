@@ -28,6 +28,7 @@ nav_order: 2
 | **LOAD (STANDBY)** | Clicking a cue in the Run tab makes it **▷ STANDBY**, the cue the next GO plays, even if it isn't next in the list. |
 | **Stop** | Stops the cue list, and the stage goes dark. |
 | **Design / Operate** | **Design** is for building the show: clicking a cue shows it on stage. **Operate** is for running it: the Run tab says **LIVE**, and only GO changes the stage. |
+| **Point cue** | A cue numbered between two others (1.0.2.5 between 1.0.2 and 1.0.3), so a late cue doesn't change anyone else's number. *(Extension.)* |
 
 ## Part 1 — The call (everyone, no computers)
 
@@ -129,5 +130,28 @@ what it changes, **(3)** **GO** (or **Space**), **(4)** **Back**, **(5)**
 1. **Recovery drill.** The SM calls a GO too early on purpose; the op
    recovers with **Back** and waits for the next call.
 2. On paper, design a sixth cue for the **ending** of the song: when it
-   happens, why, which lights, and its timing. You can build it next
-   lesson.
+   happens, why, which lights, and its timing.
+3. **A late cue.** At rehearsal the director asks for one more moment, a
+   **Hit** on the drum fill right after the chorus. The SM has already
+   written 1.0.3 and 1.0.4 into the script, so those numbers must not
+   change. Press **Stop**, click **Design**, then the **Show Tree** tab
+   (⇧⌘6).
+   1. Click **1.0.2 Chorus**, click **+ Cue**, type `Hit` and press
+      **Return**.
+      - *You should see:* **1.0.2.5 Hit** between the Chorus and the
+        Scream. It's a **point cue**: it fits between two cues without
+        changing either number.
+   2. Give it a look: drag **Lanterns** onto its drop area, then **White**
+      and **Full** onto the Lanterns row.
+   3. The director changes their mind: the hit goes after the Solo.
+      Drag the **1.0.2.5 Hit** row in the tree onto the lower half of
+      **1.0.4 Solo**. Before you let go, the note in the top bar says
+      where it goes and its new number.
+      - *You should see:* **1.0.5 Hit** at the end of the list. A cue's
+        number always matches its place in the list, so moving a cue
+        gives it a new number; the other cues keep theirs.
+   4. **Undo** (⌘Z) puts it back at 1.0.2.5.
+
+   On a list that nobody has written numbers down for yet, right-click a
+   cue → **Renumber this level…** numbers the cues 1, 2, 3… in one go. Once
+   the SM's script (or QLab) uses the numbers, add point cues instead.

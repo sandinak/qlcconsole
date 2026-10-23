@@ -10,6 +10,7 @@
 | `lesson-1-3-start.qlcc` · `lesson-1-3-finish.qlcc` | 1.3: AT-W-ALL Warm White, Full, Aim Center in the verse; 1.0.4 *Solo* (Block) with the AT-Spots White, Full, Aim Soloist DS (their shutter opens by itself). |
 | `lesson-1-4-start.qlcc` · `lesson-1-4-finish.qlcc` | 1.4: fades and a hold (Pose fade in 3 s, Verse 2 s, Scream hold 2 s and fade out 3 s, Solo fade in 3 s). |
 | `lesson-1-5-start.qlcc` | 1.5 runs the show: 1.4's finish. Nothing is built, so there is no finish file. |
+| `classroom-eos.asc` | Lesson 3.10: a small Eos show in USITT ASCII, written by hand for the course (not a real production): ten dimmer channels — front, back, a cyc, specials, and house, work, relay and backstage circuits, one labelled so the import guesses it wrong — a cue list of four cues and one sub. |
 
 Each lesson starts from the one before's finish, so a student who missed
 a lesson starts the next one from its own start file.

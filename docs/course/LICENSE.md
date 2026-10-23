@@ -10,7 +10,7 @@ nav_order: 10
 | What | Licence |
 |---|---|
 | The course text (every `.md` page) and its pictures (`images/`) | [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) |
-| The teaching show files (`shows/*.qlcc`), the scripts (`tools/`) and the course test (`ui/test/courseshow`) | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), as qlcconsole and QLC+ are (see `COPYING` at the top of the repo) |
+| The teaching show files (`shows/*.qlcc`, and `shows/classroom-eos.asc`, an Eos export written for Lesson 3.10), the scripts (`tools/`) and the course test (`ui/test/courseshow`) | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), as qlcconsole and QLC+ are (see `COPYING` at the top of the repo) |
 
 **Why these two.** The app is Apache-2.0, which asks only for credit and
 the licence notice. CC BY 4.0 is the matching licence for teaching

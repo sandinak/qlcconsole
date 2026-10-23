@@ -24,6 +24,9 @@ brackets.
 | **House** | Where the audience sits. **Front of house (FOH)**: lights out there, pointing at the stage. [0.2] |
 | **Rig** | All the lighting fixtures and everything they hang on. [0.2] |
 | **Proscenium** | The frame around the stage opening, where the main drape hangs. [0.2] |
+| **Practical** | A light that is part of the set and is seen as a light by the audience: a hanging lantern, a lamp on a table, a light-up staff. Our **Lanterns** are practicals. [3.3] |
+| **House lights** | The lights over the audience. Up before the show and at intermission, out when the show starts. [3.7] |
+| **Work lights** | Plain bright lights for working on stage when there's no show: rigging, rehearsal set-up, cleaning. [3.7] |
 | **Stage manager (SM)** | Runs the show during performance and **calls** every cue. [1.5] |
 | **Board operator (board op)** | Runs the lighting console, taking each cue when the SM calls it. [1.5] |
 
@@ -61,7 +64,9 @@ brackets.
 |---|---|
 | **Production** | The whole show: every cue list in it. The **current** production is the one GO plays. [1.1] |
 | **Cue list** | One song's cues, in order. [1.1] |
-| **Cue** | A planned lighting change, tied to a moment in the song. Numbered 1.0.0, 1.0.1… and never renumbered. [1.1] |
+| **Cue** | A planned lighting change, tied to a moment in the song. Numbered 1.0.0, 1.0.1…; a list plays its cues in number order. [1.1] |
+| **Point cue** | A cue numbered between two others, such as 1.0.2.5 between 1.0.2 and 1.0.3. It is how a cue is added late without changing any other cue's number. [1.5] |
+| **Renumber** | Give cues new numbers. Dragging a cue renumbers it for its new place; **Renumber this level…** numbers a whole level 1, 2, 3… Do it before anyone has written the numbers down. [1.5] |
 | **Group** | A named set of lights that are always used together, like *Steps* or *TrussC-RGB*. [1.1] |
 | **Layer** | One group (or several) doing one thing in a cue. [1.1] |
 | **Look** | What a layer does, one value per attribute: colour, intensity, position… [1.1] |
@@ -95,3 +100,11 @@ brackets.
 | **Patch** | Which address each light is at. [3.1] |
 | **Art-Net / sACN** | DMX sent over a network cable. [3.1] |
 | **Fixture definition** | The file that tells the app what each channel of a light does. [3.2] |
+| **Stage look** | What a fixture looks like on the plot and in the studio: a moving head, a PAR can, an LED bar, a lantern… Set per fixture; **Auto** draws it from its type. [3.3] |
+| **Relay** | A switch the console controls, for power: it is either on or off, never dimmed. Used for a circuit that powers LED fixtures, or for house lights on a relay panel. [3.7] |
+| **Grand Master (GM)** | The one fader over everything: at 50 % every light is at half its level. [3.7] |
+| **Blackout** | A switch that takes every light to zero at once, whatever is running; press it again to bring them back. [3.7] |
+| **Blind** | Building without the real lights showing it: the rig is muted while the screen preview stays live. Design mode only. [3.7] |
+| **Output rules** | Per-fixture rules for circuits that aren't show lights: ignore Blackout, ignore the Grand Master, switch like a relay, on when not in use. [3.7] |
+| **Special circuit** | On an Eos desk, a channel that isn't a stage light: a relay, house lights, work lights, backstage blues. [3.10] |
+| **Sub (submaster)** | On an Eos desk, a fader that brings up a set of levels by hand. An imported sub becomes a Virtual Console fader. [3.10] |

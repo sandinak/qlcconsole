@@ -43,6 +43,8 @@
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QTimer>
+#include <QCheckBox>
+#include <QRegularExpression>
 #include <QFile>
 #include <QDir>
 #include <QtTest>
@@ -54,6 +56,7 @@
 #include "fixturemanager.h"
 #include "mainbar.h"
 #include "showtreeview.h"
+#include "addfixture.h"
 #undef protected
 #undef private
 #include "structurestudioview.h"
@@ -71,6 +74,13 @@
 #include "stagetarget.h"
 #include "qlcpalette.h"
 #include "cuerunner.h"
+#include "outputrulesdialog.h"
+#include "eosimportwizard.h"
+#include "eosimporter.h"
+#include "qxwimporter.h"
+#include "virtualconsole.h"
+#include "vcframe.h"
+#include "vcslider.h"
 #include "helpshots.h"
 #include "showstatus.h"
 #include "universe.h"
@@ -1775,6 +1785,340 @@ void CourseShow_Test::lessonFiveOperate()
     settle(100);
     QCOMPARE(doc->mode(), Doc::Design);
     QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("DESIGN"), kRigWait);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonFiveLateCue()
+{
+    // Lesson 1.5's extension 3, in Design: a point cue after the Chorus,
+    // dragged after the Solo (renumbered for its place), and Undo.
+    QVERIFY(open(kL5Start));
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    ShowTreeView *view = showTree();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.2")));
+    settle(50);
+    QVERIFY(newCueNamed(view, "Hit"));
+    const quint32 hit = view->currentCueId();
+    QCOMPARE(st->cue(hit)->number, QStringLiteral("1.0.2.5"));
+    const CueList *list = st->listOfCue(hit);
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->indexOf(hit), list->indexOf(cueNumbered(doc, "1.0.2")) + 1);
+    QCOMPARE(cueNumbered(doc, "1.0.3"), list->cues.at(list->indexOf(hit) + 1).id);
+
+    QCOMPARE(dropGroupOnZone(doc, view, "Lanterns"), QStringLiteral("a new layer on Lanterns in 1.0.2.5 Hit"));
+    for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
+        QVERIFY(dropPaletteOnRow(doc, view, "Lanterns", pal).startsWith(pal + " → layer Lanterns in 1.0.2.5 Hit"));
+    settle(100);
+    QVERIFY2(cueRow(view, "Lanterns") != nullptr && cueRow(view, "Lanterns")->text().contains("White, Full"),
+             qPrintable(view->cueLayerItems().join(" | ")));
+
+    // The drag onto the lower half of 1.0.4 Solo: the note first, then the drop.
+    const quint32 solo = cueNumbered(doc, "1.0.4");
+    bool refused = true;
+    const QString note = view->cuesDropHint({ hit }, solo, true, &refused);
+    QVERIFY2(!refused && note.contains("1.0.5"), qPrintable(note));
+    QVERIFY(view->dropCues({ hit }, solo, true));
+    settle(100);
+    QCOMPARE(st->cue(hit)->number, QStringLiteral("1.0.5"));
+    list = st->listOfCue(hit);
+    QCOMPARE(list->indexOf(hit), int(list->cues.count()) - 1);
+    QCOMPARE(st->cue(solo)->number, QStringLiteral("1.0.4"));
+    QVERIFY(cueNumbered(doc, "1.0.3") != ShowTree::invalidId());
+
+    stFind<QToolButton>(view, "stUndo")->click();
+    settle(100);
+    QCOMPARE(st->cue(hit)->number, QStringLiteral("1.0.2.5"));
+    list = st->listOfCue(hit);
+    QCOMPARE(list->indexOf(hit), list->indexOf(cueNumbered(doc, "1.0.2")) + 1);
+    doc->resetModified();
+}
+
+static QList<quint32> fixturesOf(Doc *doc, const QString &group)
+{
+    FixtureGroup *g = groupNamed(doc, group);
+    return g == nullptr ? QList<quint32>() : g->fixtureList();
+}
+
+void CourseShow_Test::lessonStageLooks()
+{
+    // Lesson 3.3: what each kind of light is drawn as, on Auto; the plot's
+    // Show menu; Stage Look ▸ Lantern for the Lanterns.
+    QVERIFY(open(kClassroom));
+    Doc *doc = m_app->doc();
+    QStringList seen;
+    for (Fixture *f : doc->fixtures())
+    {
+        const QString line = QStringLiteral("%1 (%2) -> %3")
+            .arg(QString(f->name()).remove(QRegularExpression(" ?[0-9]+$| Top S[RL]$")),
+                 f->fixtureDef() != nullptr ? f->fixtureDef()->model() : QStringLiteral("generic"),
+                 Fixture::stageLookName(f->autoStageLook()));
+        if (!seen.contains(line))
+            seen << line;
+    }
+    qInfo().noquote() << "[3.3] Auto looks:" << seen.join(" | ");
+    QVERIFY(!doc->monitorProperties()->autoStageLooks());
+
+    QAction *autoLooks = nullptr;
+    for (QAction *a : Monitor::instance()->findChildren<QAction *>())
+        if (a->text() == QLatin1String("Show Auto fixtures as their closest stage look"))
+            autoLooks = a;
+    QVERIFY(autoLooks != nullptr);
+    autoLooks->trigger();
+    settle(50);
+    QVERIFY(doc->monitorProperties()->autoStageLooks());
+
+    // Fixtures tab: right-click the Lanterns → Stage Look ▸.
+    const QList<quint32> lanterns = fixturesOf(doc, "Lanterns");
+    QCOMPARE(lanterns.count(), 6);
+    QMenu menu;
+    FixtureManager::fillStageLookMenu(&menu, doc, lanterns);
+    QStringList sections, items;
+    for (QAction *a : menu.actions())
+        (a->isSeparator() ? sections : items) << a->text();
+    QCOMPARE(sections, QStringList({ "Moving", "Fixed conventional", "Fixed LED", "Practicals" }));
+    qInfo().noquote() << "[3.3] Lanterns' Stage Look menu:" << items.join(" | ");
+    QVERIFY(items.first().startsWith("Auto"));
+    QAction *lantern = menu.findChild<QAction *>(
+        QStringLiteral("stageLook_%1").arg(Fixture::stageLookToString(Fixture::LanternLook)));
+    QVERIFY(lantern != nullptr);
+    QCOMPARE(lantern->text(), QStringLiteral("Lantern"));
+    lantern->trigger();
+    settle(50);
+    for (quint32 id : lanterns)
+        QCOMPARE(doc->fixture(id)->stageLook(), Fixture::LanternLook);
+    QCOMPARE(Fixture::stageLookSection(Fixture::LanternLook), int(Fixture::PracticalSection));
+
+    // The front washes: Auto guesses a spot; they are round washes.
+    const QList<quint32> washes = fixturesOf(doc, "AT-W-ALL");
+    QCOMPARE(washes.count(), 4);
+    QMenu washMenu;
+    FixtureManager::fillStageLookMenu(&washMenu, doc, washes);
+    QCOMPARE(washMenu.actions().first()->text(), QStringLiteral("Auto (Moving head spot)"));
+    QAction *round = washMenu.findChild<QAction *>(
+        QStringLiteral("stageLook_%1").arg(Fixture::stageLookToString(Fixture::MovingRoundWashLook)));
+    QVERIFY(round != nullptr);
+    QCOMPARE(round->text(), QStringLiteral("Moving head round wash"));
+    round->trigger();
+    settle(50);
+    for (quint32 id : washes)
+        QCOMPARE(doc->fixture(id)->stageLook(), Fixture::MovingRoundWashLook);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonHouseLights()
+{
+    // Lesson 3.7, in the classroom show: House Lights, Work Lights and
+    // Stage Power, each a one-channel generic dimmer as Add fixture makes.
+    QVERIFY(open(kClassroom));
+    Doc *doc = m_app->doc();
+    QMap<QString, quint32> ids;
+    for (const QString &name : { QStringLiteral("House Lights"), QStringLiteral("Work Lights"),
+                                 QStringLiteral("Stage Power") })
+    {
+        const quint32 at = AddFixture::findAddress(1, doc->fixtures(), doc->inputOutputMap()->universesCount());
+        QVERIFY(at != QLCChannel::invalid());
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setUniverse(at >> 9);
+        f->setAddress(at & 0x01FF);
+        f->setChannels(1);
+        QVERIFY(doc->addFixture(f));
+        ids[name] = f->id();
+    }
+    // Output Rules…: the boxes as the handout ticks them.
+    auto rules = [doc](quint32 id, QList<Fixture::OutputRule> on) {
+        OutputRulesDialog dlg(doc, { id });
+        for (Fixture::OutputRule r : on)
+            dlg.box(r)->setChecked(true);
+        return dlg.apply();
+    };
+    QVERIFY(rules(ids["House Lights"], { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster }));
+    QVERIFY(rules(ids["Work Lights"], { Fixture::ExemptBlackout, Fixture::ExemptGrandMaster }));
+    QVERIFY(rules(ids["Stage Power"], { Fixture::Switch, Fixture::ExemptBlackout, Fixture::ExemptGrandMaster,
+                                        Fixture::OnAtOpen }));
+    settle(100);
+    const auto out = [doc](const QString &name) {
+        for (Fixture *f : doc->fixtures())
+            if (f->name() == name)
+                return outputValue(doc, name, f->channel(0)->name());
+        return -1;
+    };
+    // The relay waits for Operate (the default), then is on by itself.
+    QTest::qWait(200);
+    QCOMPARE(out("Stage Power"), 0);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QTRY_COMPARE_WITH_TIMEOUT(out("Stage Power"), 255, kRigWait);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Design);
+    QTRY_COMPARE_WITH_TIMEOUT(out("Stage Power"), 255, kRigWait);
+
+    // The preshow list, typed.
+    ShowTreeView *view = showTree();
+    for (const QString &cmd : { QStringLiteral("production \"Spring Show\""), QStringLiteral("list \"00-Preshow\""),
+                                QStringLiteral("cue + \"House up\""),
+                                QStringLiteral("\"House Lights\" dimmer Full"),
+                                QStringLiteral("TrussC-RGB colour Blue dimmer Full"),
+                                QStringLiteral("cue + \"House to half\""),
+                                QStringLiteral("\"House Lights\" dimmer Half"),
+                                QStringLiteral("cue + \"House out\""),
+                                QStringLiteral("\"House Lights\" dimmer Out") })
+        QVERIFY2(view->runCommand(cmd), qPrintable(cmd + ": " + view->commandMessage()));
+    qInfo().noquote() << "[3.7]" << describe(doc).join(" | ");
+    QVERIFY(view->selectNode(cueNumbered(doc, "0.0.0")));
+    settle(50);
+    QTRY_COMPARE_WITH_TIMEOUT(out("House Lights"), 255, kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), kRigWait);
+
+    // Blackout: the cyc goes dark, the house lights and the relay don't.
+    // (The classroom show has no outputs, so read the frame Blackout sends.)
+    const auto cycOut = [doc]() {
+        for (Fixture *f : doc->fixtures())
+            if (f->name() == QLatin1String("SR Truss Cyc 1"))
+                return outputValue(doc, f->name(), f->channel(2)->name());
+        return -1;
+    };
+    const auto blackoutOut = [doc](const QString &name, quint32 ch) {
+        for (Fixture *f : doc->fixtures())
+            if (f->name() == name)
+            {
+                QList<Universe *> us = doc->inputOutputMap()->claimUniverses();
+                Universe *u = us.at(int(f->universe()));
+                const QByteArray frame = u->blackoutFrame(*u->postGMValues());
+                doc->inputOutputMap()->releaseUniverses(false);
+                return int(uchar(frame.at(int(f->address() + ch))));
+            }
+        return -1;
+    };
+    m_app->m_controlBlackoutAction->trigger();
+    QVERIFY(doc->inputOutputMap()->blackout());
+    QCOMPARE(cycOut(), 255);
+    QCOMPARE(blackoutOut("SR Truss Cyc 1", 2), 0);
+    QCOMPARE(blackoutOut("House Lights", 0), 255);
+    QCOMPARE(blackoutOut("Stage Power", 0), 255);
+    m_app->m_controlBlackoutAction->trigger();
+    QVERIFY(!doc->inputOutputMap()->blackout());
+
+    // The Grand Master at 0: the same.
+    doc->inputOutputMap()->setGrandMasterValue(0);
+    QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 0, kRigWait);
+    QCOMPARE(out("House Lights"), 255);
+    // The relay ("On when not in use", set by nothing) is put back at the
+    // next frame: a Grand Master move rewrites it from its unset 0 first.
+    QTRY_COMPARE_WITH_TIMEOUT(out("Stage Power"), 255, kRigWait);
+    doc->inputOutputMap()->setGrandMasterValue(255);
+    QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 255, kRigWait);
+
+    // House to half, then out: the cues still move them.
+    QVERIFY(view->selectNode(cueNumbered(doc, "0.0.1")));
+    QTRY_VERIFY_WITH_TIMEOUT(qAbs(out("House Lights") - 127) <= 1, kRigWait);
+    QVERIFY(view->selectNode(cueNumbered(doc, "0.0.2")));
+    QTRY_COMPARE_WITH_TIMEOUT(out("House Lights"), 0, kRigWait);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonFromEos()
+{
+    // Lesson 3.10: File ▸ New, then File ▸ Import ▸ ETC Eos Show with the
+    // course's sample; the wizard's guesses, one fixed; then what lands.
+    const QString asc = kShows + QStringLiteral("/classroom-eos.asc");
+    QVERIFY(QFileInfo::exists(asc));
+    m_app->doc()->resetModified();
+    m_app->clearDocument();
+    settle(50);
+    Doc *doc = m_app->doc();
+
+    EosImportWizard w(nullptr, doc, asc);
+    w.setRemember(false);
+    QVERIFY(w.readAscii());
+    QStringList roles;
+    for (int ch : w.circuitChannels())
+        roles << QStringLiteral("%1=%2").arg(ch).arg(EosCircuit::roleName(EosCircuit::Role(w.circuitRole(ch))));
+    qInfo().noquote() << "[3.10] circuits:" << roles.join(" ");
+    QCOMPARE(w.circuitRole(11), int(EosCircuit::House));
+    QCOMPARE(w.circuitRole(12), int(EosCircuit::Work));
+    QCOMPARE(w.circuitRole(13), int(EosCircuit::Relay));
+    QCOMPARE(w.circuitRole(14), int(EosCircuit::Backstage));
+    // The cyc's blue is a stage light, not a backstage blue: set it back.
+    QCOMPARE(w.circuitRole(5), int(EosCircuit::Backstage));
+    w.setCircuitRoles({ 5 }, EosCircuit::Normal);
+    QVERIFY(w.toShowTree());
+
+    EosImportResult eos;
+    Doc *scratch = new Doc(this);
+    scratch->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures"));
+    QCOMPARE(EosImporter::load(w.bundle(), eos, w.mapper(), scratch), scratch);
+    QList<quint32> fixtures, groups, functions, palettes;
+    for (Fixture *f : scratch->fixtures())
+        fixtures << f->id();
+    for (FixtureGroup *g : scratch->fixtureGroups())
+        groups << g->id();
+    for (Function *f : scratch->functions())
+        functions << f->id();
+    for (QLCPalette *pl : scratch->palettes())
+        palettes << pl->id();
+    const QxwImportResult m = QxwImporter::import(scratch, doc, fixtures, groups, functions, palettes);
+    delete scratch;
+    QList<quint32> chasers;
+    for (quint32 id : eos.chasers)
+        if (m.functionMap.contains(id))
+            chasers << m.functionMap.value(id);
+    QStringList lines;
+    EosImporter::toShowTree(doc, chasers, &lines);
+    QList<EosImportedSub> subs;
+    for (EosImportedSub s : eos.subs)
+        if (m.functionMap.contains(s.function))
+        {
+            s.function = m.functionMap.value(s.function);
+            subs << s;
+        }
+    VCFrame *frame = EosImportWizard::addSubFaders(doc, subs, &lines);
+    settle(100);
+    qInfo().noquote() << "[3.10] report:" << eos.warnings.join(" | ") << "||" << lines.join(" | ");
+
+    QCOMPARE(doc->fixtures().count(), 10);
+    QStringList groupNames;
+    for (FixtureGroup *g : doc->fixtureGroups())
+        groupNames << QStringLiteral("%1/%2 (%3)").arg(g->path(), g->name()).arg(g->fixtureList().count());
+    groupNames.sort();
+    qInfo().noquote() << "[3.10] groups:" << groupNames.join(", ");
+    QMap<QString, Fixture::OutputRules> rulesByName;
+    for (Fixture *f : doc->fixtures())
+        rulesByName[f->name()] = f->outputRules();
+    QStringList names = rulesByName.keys();
+    qInfo().noquote() << "[3.10] fixtures:" << names.join(", ");
+    for (Fixture *f : doc->fixtures())
+    {
+        const Fixture::OutputRules r = f->outputRules();
+        if (f->name().contains("House") || f->name().contains("Work") || f->name().contains("Backstage"))
+            QCOMPARE(r, Fixture::OutputRules(Fixture::ExemptBlackout | Fixture::ExemptGrandMaster));
+        else if (f->name().contains("Relay"))
+            QCOMPARE(r, Fixture::OutputRules(Fixture::Switch | Fixture::ExemptBlackout
+                                             | Fixture::ExemptGrandMaster | Fixture::OnAtOpen));
+        else
+            QCOMPARE(int(r), 0);
+    }
+    QVERIFY(frame != nullptr);
+    QCOMPARE(frame->caption(), QStringLiteral("Eos subs"));
+    const QList<VCSlider *> sliders = frame->findChildren<VCSlider *>(QString(), Qt::FindDirectChildrenOnly);
+    QCOMPARE(sliders.count(), 1);
+    qInfo().noquote() << "[3.10] sub fader:" << sliders.first()->caption();
+    QStringList tree;
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+        {
+            QStringList cues;
+            for (const Cue &c : l.cues)
+                cues << c.number + " " + c.name;
+            tree << p.name + " / " + l.name + ": " + cues.join(", ");
+        }
+    qInfo().noquote() << "[3.10] Show Tree:" << tree.join(" | ");
+    QCOMPARE(tree.count(), 1);
+    QVERIFY2(tree.first().contains("Preshow") && tree.first().contains("Opening"), qPrintable(tree.first()));
     doc->resetModified();
 }
 

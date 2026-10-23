@@ -111,7 +111,7 @@ Stop there; the students build the rest.
 | **+ Cue list** asks nothing / does nothing | The production isn't selected | "Click Spring Show first." |
 | A layer in the wrong cue | Dropped while another cue was selected | "Undo, click the right cue, drop again." |
 | Stage stays dark | No cue selected (the stage shows the selected cue in Design), or the Rig Overview's **Live** is off | "Click your cue in the tree." |
-| Cue numbers 1.0.0.5 or similar | + Cue pressed with an earlier cue selected | Fine for now; cue numbers never renumber. Delete and redo if it bothers them. |
+| Cue numbers 1.0.0.5 or similar | + Cue pressed with an earlier cue selected: the new cue goes in after it, as a **point cue** | "Drag it below the last cue: it takes the next number." (Lesson 1.5's extension covers point cues and renumbering.) |
 | GO does nothing in the Run tab | The production was un-set (someone clicked its **▶ Current** button) | "Click Spring Show, then its Current button once." |
 | Footer says **Not ready** in red | Expected: the show has no outputs | "That's because it isn't plugged into real lights — on purpose." |
 
