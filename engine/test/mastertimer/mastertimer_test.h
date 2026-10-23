@@ -46,6 +46,7 @@ private slots:
     void anOverrunningTickRunsAlone();
     void stopWaitsForATickInProgress();
     void stopRightAfterStartReturns();
+    void aStopReachesTheUniversesWithTheGuiThreadBusy();
 
     void theBeatClockRunsAtTheTempo();
     void aTempoChangeKeepsTheBeatsPlace();
