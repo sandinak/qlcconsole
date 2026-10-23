@@ -574,13 +574,31 @@ void AppViews_Test::editUndoSaysWhereItWorks()
     QVERIFY(st != nullptr);
     const quint32 prod = st->addProduction(QStringLiteral("Undo test"));   // a Show Tree step
 
-    // Fixtures: no undo of its own, and it doesn't reach into the Show Tree's.
-    m_app->showContext("Fixtures");
+    // The Virtual Console: no undo of its own, and it doesn't reach into
+    // the Show Tree's.
+    m_app->showContext("Virtual Console");
     emit edit->aboutToShow();
     QCOMPARE(undo->text(), QString("Nothing to undo on this tab"));
     QVERIFY(!undo->isEnabled());
     undo->trigger();
     QVERIFY(st->production(prod) != nullptr);
+
+    // Fixtures: the rig's history, the Lighting Studio's too.
+    Fixture *fx = new Fixture(m_app->m_doc);
+    fx->setName("Undo me");
+    fx->setChannels(1);
+    QVERIFY(m_app->m_doc->addFixture(fx));
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    const QByteArray before = mon->rigSnapshot();
+    fx->setName("Renamed");
+    mon->pushRigUndo(before);
+    m_app->showContext("Fixtures");
+    emit edit->aboutToShow();
+    QVERIFY2(undo->isEnabled() && undo->text().startsWith("Undo "), qPrintable(undo->text()));
+    undo->trigger();
+    QCOMPARE(fx->name(), QString("Undo me"));
+    m_app->m_doc->deleteFixture(fx->id());
 
     // The Show Tree: its step, named, and undone.
     m_app->showContext("Show Tree");

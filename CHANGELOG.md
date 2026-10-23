@@ -204,7 +204,9 @@ circuits and subs.
   in Operate (the lock used to drop it).
 
 - **Edit ▸ Undo says where it works** (board Q81): it undoes the tab in
-  front (Build, the Show Tree, the Lighting Studio's rig) and elsewhere
+  front (Build, the Show Tree, Fixtures and the Lighting Studio -- the last
+  two share the rig's history; renaming a fixture in the tree is now a
+  step of it too) and elsewhere
   reads "Nothing to undo on this tab", greyed. It no longer undoes a Show
   Tree step from another tab.
 

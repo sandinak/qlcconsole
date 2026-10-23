@@ -30,6 +30,7 @@
 
 #include <QMap>
 #include "fixturetreewidget.h"
+#include "monitor.h"
 #include "monitor/fixturevisualtraits.h"
 #include "itemicons.h"
 #include "apputil.h"
@@ -348,8 +349,13 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
             if (newName.isEmpty() == false && newName != fxi->name()
                 && AppUtil::refuseTakenFixtureName(this, m_doc, fid, newName) == false)
             {
+                // One rig undo step (⌘Z on Fixtures or the Studio).
+                Monitor *mon = Monitor::instance();
+                const QByteArray before = mon != nullptr ? mon->rigSnapshot() : QByteArray();
                 fxi->setName(newName);
                 m_doc->setModified();
+                if (mon != nullptr)
+                    mon->pushRigUndo(before);
             }
             else if (item->text(KColumnName) != fxi->name())
             {

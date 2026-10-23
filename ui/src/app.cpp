@@ -2256,8 +2256,12 @@ void App::initMenuBar()
             ShowTreeView *v = qobject_cast<ShowTreeView *>(w);
             return v != nullptr ? v : (w != nullptr ? w->findChild<ShowTreeView *>() : nullptr);
         };
+        // The rig's undo: the Lighting Studio's own, and the Fixtures tab's
+        // (its ⌘Z is the same history -- patch, properties, renames).
         auto studio = [current]() -> Monitor * {
             QWidget *w = current();
+            if (qobject_cast<FixtureManager *>(w) != nullptr)
+                return Monitor::instance();
             Monitor *m = qobject_cast<Monitor *>(w);
             return m != nullptr ? m : (w != nullptr ? w->findChild<Monitor *>() : nullptr);
         };
@@ -2285,7 +2289,7 @@ void App::initMenuBar()
             if (!known)
             {
                 undo->setText(tr("Nothing to undo on this tab"));
-                undo->setToolTip(tr("Undo works in Build, the Show Tree and the Lighting Studio so far"));
+                undo->setToolTip(tr("Undo works in Build, the Show Tree, Fixtures and the Lighting Studio so far"));
                 undo->setEnabled(false);
                 redo->setText(tr("Redo"));
                 redo->setEnabled(false);

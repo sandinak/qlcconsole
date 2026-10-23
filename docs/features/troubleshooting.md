@@ -163,8 +163,11 @@ without Build, the Show Tree or the Lighting Studio). Choosing a hidden
 tab from **Window** shows it anyway, switching to Everything with a line
 to go back. See [Views](getting-started.md#views).
 
-**⌘Z did nothing.** Undo works in **Build**, the **Show Tree** and the
-**Lighting Studio** so far; on other tabs **Edit ▸ Undo** reads *Nothing
+**⌘Z did nothing.** Undo works in **Build**, the **Show Tree**,
+**Fixtures** and the **Lighting Studio** so far (Fixtures and the Studio
+share the rig's history: patching, properties, renames, plot symbols,
+output rules); adding or deleting fixtures and editing groups aren't undone
+yet; on other tabs **Edit ▸ Undo** reads *Nothing
 to undo on this tab* and is greyed. The menu always undoes the tab in
 front, never another tab's step.
 
