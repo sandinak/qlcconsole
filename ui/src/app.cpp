@@ -1958,7 +1958,9 @@ void App::initActions()
     m_cueGoAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueGoAction, &QAction::triggered, this, [this]() {
         m_doc->showControl()->execute({ ShowControl::Go, QString(), QString() });
+        offerOperateAfterGo();
     });
+    CueRunner::setGoHook([this]() { offerOperateAfterGo(); });
     m_cueBackAction = new QAction(tr("Back (Main Cue List)"), this);
     m_cueBackAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return));
     m_cueBackAction->setShortcutContext(Qt::ApplicationShortcut);
@@ -3984,6 +3986,23 @@ void App::hideViewNotice()
         return;
     m_viewNotice->hide();
     m_viewNoticeAction = nullptr;
+}
+
+void App::offerOperateAfterGo()
+{
+    /* Q92: GO in Design plays, but Design isn't for running a show (a
+       click on a cue puts it on stage, edits go live). Say so once a
+       session, from the Run tab's GO or Control ▸ GO only -- never from
+       OSC, MSC or the VC -- and never hold GO up. */
+    if (m_operateOffered || m_doc == nullptr || m_doc->mode() != Doc::Design)
+        return;
+    m_operateOffered = true;
+    showViewNotice(tr("GO played in Design. To run the show, switch to Operate: "
+                      "clicking a cue no longer puts it on stage, and the show is locked."),
+                   tr("Switch to Operate"), [this]() {
+        hideViewNotice();
+        slotModeOperate();
+    });
 }
 
 bool App::offerConsoleViewAfterUpgrade()

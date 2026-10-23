@@ -21,6 +21,7 @@
 #define CUERUNNER_H
 
 #include <QWidget>
+#include <functional>
 
 #include "showcontrol.h"
 
@@ -109,6 +110,9 @@ public:
      *  This Show…, set by the App; a test's own). Null: no button. */
     static void setUpgradeAction(QAction *action);
     static QAction *upgradeAction();
+    /** Q92: called when the Run tab's GO is pressed (set by the App, which
+     *  offers Operate if it was pressed in Design). Not for Compact. */
+    static void setGoHook(const std::function<void()> &hook);
     /** The Run tab's empty state (no main cue list) shown now. */
     bool isEmptyStateShown() const;
     QPushButton *upgradeButton() const { return m_upgrade; }

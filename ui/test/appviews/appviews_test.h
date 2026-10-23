@@ -144,6 +144,8 @@ private slots:
      *  only", never red; red "Not ready" for a real problem once a universe
      *  has an output. */
     void theReadinessChipIsGreyWithNoOutputs();
+    /** Q92: GO in Design offers Operate once a session, in the notice bar. */
+    void goInDesignOffersOperateOnce();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

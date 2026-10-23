@@ -1217,6 +1217,27 @@ void AppViews_Test::rigNetworkSettingsRoundTrip()
         settings.remove(App::rigNetworkGateSettingKey());
 }
 
+void AppViews_Test::goInDesignOffersOperateOnce()
+{
+    m_app->m_doc->setMode(Doc::Design);
+    m_app->hideViewNotice();
+    m_app->m_operateOffered = false;
+    m_app->m_cueGoAction->trigger();
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    QVERIFY(m_app->m_viewNoticeText->text().contains("Operate"));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Switch to Operate"));
+    // Once a session.
+    m_app->hideViewNotice();
+    m_app->m_cueGoAction->trigger();
+    QVERIFY(m_app->m_viewNotice->isHidden());
+    // Never in Operate.
+    m_app->m_operateOffered = false;
+    m_app->m_doc->setMode(Doc::Operate);
+    m_app->m_cueGoAction->trigger();
+    QVERIFY(m_app->m_viewNotice->isHidden());
+    m_app->m_doc->setMode(Doc::Design);
+}
+
 QTEST_MAIN(AppViews_Test)
 
 /* WCAG relative luminance and contrast. */

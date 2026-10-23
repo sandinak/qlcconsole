@@ -67,6 +67,13 @@ void CueRunner::setUpgradeAction(QAction *action)
     s_upgradeAction = action;
 }
 
+static std::function<void()> s_goHook;
+
+void CueRunner::setGoHook(const std::function<void()> &hook)
+{
+    s_goHook = hook;
+}
+
 QAction *CueRunner::upgradeAction()
 {
     return s_upgradeAction.data();
@@ -934,6 +941,8 @@ bool CueRunner::execute(ShowControl::Command command, const QString &cue)
 void CueRunner::go()
 {
     execute(ShowControl::Go);
+    if (m_size == Full && s_goHook)
+        s_goHook();
 }
 
 void CueRunner::back()

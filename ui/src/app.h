@@ -183,6 +183,9 @@ public:
     /** After Upgrade This Show… on a Classic show that now has a Show Tree:
      *  offer (once per show) the qlcconsole view. True: offered. */
     bool offerConsoleViewAfterUpgrade();
+    /** Q92: the first GO pressed in Design this session (Run tab or Control
+     *  ▸ GO) offers Operate in the notice bar. Once a session. */
+    void offerOperateAfterGo();
 
 private:
     /** The current view's tabs, in order, with Functions in or out by
@@ -895,6 +898,7 @@ private:
     // (workspace/showFooterLoad, workspace/showFooterPower,
     // workspace/showFooterGM). Independent of whether a chip currently has
     // anything to show (e.g. Power only ever appears once an estimate exists).
+    bool m_operateOffered = false;   ///< Q92: offered once a session
     bool m_showFooterLoad = false;
     bool m_showFooterPower = true;
     bool m_showFooterGM = true;
