@@ -43,6 +43,11 @@ if ! grep -qxF "QLC_MACOS_BUNDLE:PATH=$APP" "$BUILD/CMakeCache.txt" 2>/dev/null;
     -DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake" \
     -DQLC_MACOS_BUNDLE="$APP" \
     -DQLC_MACOS_DEV_BUNDLE=ON
+else
+  # Configured already: refresh it anyway (a couple of seconds), so the build
+  # number and commit in the app's version are this commit's, not the last
+  # configure's. QTDIR is exported above, so the Qt plugin paths stay right.
+  cmake "$BUILD" >/dev/null
 fi
 
 step "Build (-j$JOBS)"
