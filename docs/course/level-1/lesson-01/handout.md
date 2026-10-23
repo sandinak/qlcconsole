@@ -140,7 +140,8 @@ later), and **(6)** the tabs.
    **(1)** the cyc, tracked from Pose (in grey), **(2)** your new layer,
    and **(3)** the same grey row in the tree. The tree keeps it short: the
    row shows only the cue it came from, **1.0.0**, and the cue's own row
-   counts **● 1** (set in this cue) and **⤳ 1** (tracked in). Hold the
+   has **1** under **Sets** (set in this cue) and **1** under **Tracks
+   in**. Hold the
    pointer over either one to see the colour and level it carries.
 
 ### Cue 1.0.2 — Chorus

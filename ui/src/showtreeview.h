@@ -103,6 +103,16 @@ public:
         FolderRole = Qt::UserRole + 5   //!< a look folder's / palette folder's own path ("Hits")
     };
 
+    /** The tree's columns (Q104): the name; what a list, a production or a
+     *  carried layer says (InfoCol); then a column each for what a cue sets,
+     *  tracks and releases (a count on a cue, a dot on a layer) and its mode,
+     *  and the occasional flags as words. */
+    enum TreeColumn
+    {
+        NameCol = 0, InfoCol, SetsCol, TracksCol, ReleasesCol, ModeCol,
+        FlagsCol, TreeColumnCount
+    };
+
     /** Library item kinds. */
     enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet, LibTarget,
                        LibReusable, LibPaletteFolder };

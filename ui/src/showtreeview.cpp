@@ -1210,7 +1210,46 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QTimer::singleShot(0, this, [this]() { buildTree(); });
     });
     m_tree->setObjectName("stTree");
-    m_tree->setHeaderLabels({ tr("Show"), tr("") });
+    m_tree->setHeaderLabels({ tr("Show"), tr(""), tr("Sets"), tr("Tracks in"), tr("Releases"),
+                              tr("Mode"), tr("Flags") });
+    {
+        // What each column is, on its header (Q104).
+        const QStringList tips = {
+            QString(), QString(),
+            tr("A cue: how many layers it sets here. A layer: \u25cf it sets values in this cue."),
+            tr("A cue: how many layers track into it from earlier cues. A carried layer: \u25cf."),
+            tr("A cue: how many layers it lets go. A layer: \u25cf it is released here."),
+            tr("Block (starts from nothing) or Cue-only (its changes don't pass on); blank: it tracks."),
+            tr("base: the list's base cue. skip: GO passes over it. no MIB: no move in black into it. "
+               "\u2295 includes, \u00d7 reusable uses, mix, VC buttons that fire it.") };
+        for (int c = 0; c < tips.size(); ++c)
+            if (!tips.at(c).isEmpty())
+                m_tree->headerItem()->setToolTip(c, tips.at(c));
+    }
+    /* Right-click the header: show or hide each flag column, remembered. */
+    m_tree->header()->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree->header(), &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QMenu menu(this);
+        for (int c = SetsCol; c < TreeColumnCount; ++c)
+        {
+            QAction *a = menu.addAction(m_tree->headerItem()->text(c));
+            a->setCheckable(true);
+            a->setChecked(!m_tree->isColumnHidden(c));
+            connect(a, &QAction::toggled, this, [this, c](bool on) {
+                m_tree->setColumnHidden(c, !on);
+                QStringList hidden;
+                for (int k = SetsCol; k < TreeColumnCount; ++k)
+                    if (m_tree->isColumnHidden(k))
+                        hidden << QString::number(k);
+                QSettings().setValue(QStringLiteral("showtree/hiddenColumns"), hidden);
+                fitTreeColumns();
+            });
+        }
+        menu.exec(m_tree->header()->mapToGlobal(pos));
+    });
+    for (const QString &c : QSettings().value(QStringLiteral("showtree/hiddenColumns")).toStringList())
+        if (c.toInt() >= SetsCol && c.toInt() < TreeColumnCount)
+            m_tree->setColumnHidden(c.toInt(), true);
     // The names get the room (Branson, 2026-10-21: the "tracked from …"
     // column grew to its text and covered the layer names). The badge
     // column is narrow and fixed as the pane is resized; dragging the line
@@ -1221,15 +1260,21 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->header()->setSectionResizeMode(QHeaderView::Interactive);
     m_tree->header()->setMinimumSectionSize(24);
     m_badgeWidth = QSettings().value(SETTINGS_BADGE_COLUMN,
-                                     m_tree->fontMetrics().horizontalAdvance(QStringLiteral("● 99  ⤳ 99  ⊘ block"))
+                                     m_tree->fontMetrics().horizontalAdvance(QStringLiteral("Tracking · main"))
                                      + 12).toInt();
     m_tree->viewport()->installEventFilter(this);
     connect(m_tree->header(), &QHeaderView::sectionResized, this, [this](int section, int, int size) {
         if (m_fittingColumns)
             return;
-        // Dragged by hand: the line between the columns (the badges get
-        // what is left of the pane) or the badge column's own edge.
-        m_badgeWidth = qMax(24, section == 0 ? m_tree->viewport()->width() - size : size);
+        // Dragged by hand: the line between the first two columns or the
+        // info column's own edge; the flag columns keep their width.
+        if (section > InfoCol)
+            return;
+        int flags = 0;
+        for (int c = SetsCol; c < TreeColumnCount; ++c)
+            if (!m_tree->isColumnHidden(c))
+                flags += m_tree->header()->sectionSize(c);
+        m_badgeWidth = qMax(24, section == 0 ? m_tree->viewport()->width() - flags - size : size);
         QSettings().setValue(SETTINGS_BADGE_COLUMN, m_badgeWidth);
         fitTreeColumns();
     });
@@ -2516,16 +2561,20 @@ void ShowTreeView::buildTree()
                 QTreeWidgetItem *ci = new QTreeWidgetItem(parentItem != nullptr ? parentItem
                                                           : list.looks ? folderItem(cue.folder) : li);
                 ci->setText(0, m_st->cueLabel(list, i));
-                QStringList badges;
+                /* Its flags, a column each (Q104): a dot where it has one,
+                   counts for what it sets, tracks and releases; the rest
+                   under Also. */
+                const QString dot = QStringLiteral("\u25cf");
+                QStringList badges;     // Also
                 if (list.baseCue == cue.id)
-                    badges << tr("■ base");
+                    badges << tr("base");
                 const CueMode mode = effectiveMode(list, cue);
                 if (cue.mode != CueMode::ListDefault || list.mode == ListMode::Tracking)
                 {
                     if (mode == CueMode::Block && list.mode == ListMode::Tracking)
-                        badges << tr("⊘ block");
+                        ci->setText(ModeCol, tr("Block"));
                     else if (mode == CueMode::CueOnly)
-                        badges << tr("◐ cue-only");
+                        ci->setText(ModeCol, tr("Cue-only"));
                 }
                 if (!cue.includes.isEmpty())
                     badges << tr("⊕ %1").arg(cue.includes.count());
@@ -2542,7 +2591,7 @@ void ShowTreeView::buildTree()
                 QString badgeTip;
                 if (cue.mixOverlap)
                 {
-                    badges << tr("≈ mix");
+                    badges << tr("mix");
                     badgeTip = (tr("Overlapping layers mix here as the imported chaser did (the highest "
                                          "intensity wins, the last started sets the rest) instead of the one "
                                          "rule (the most specific source, then the deeper, then the lower "
@@ -2558,7 +2607,7 @@ void ShowTreeView::buildTree()
                                           ? m_st->listOfCue(list.subOf)->id : list.id;
                     if (m_st->listMovesInBlack(owner, m_st->showMoveInBlack()))
                     {
-                        badges << tr("⊘ MIB");
+                        badges << tr("no MIB");
                         badgeTip = QStringList({ badgeTip, tr("Don't move in black into this cue: no head is "
                                                               "pre-positioned for it, although its list and the "
                                                               "show would.") }).join(QStringLiteral("\n\n")).trimmed();
@@ -2573,19 +2622,24 @@ void ShowTreeView::buildTree()
                     int own = 0, released = 0, carried = 0;
                     for (const ResolvedLayer &rl : resolved.at(i).layers)
                         (rl.own ? (rl.release ? released : own) : carried)++;
-                    QStringList counts;
                     if (own > 0)
-                        counts << tr("● %1").arg(own);
+                        ci->setText(SetsCol, QString::number(own));
                     if (released > 0)
-                        counts << tr("○ %1").arg(released);
+                        ci->setText(ReleasesCol, QString::number(released));
                     if (carried > 0)
-                        counts << tr("⤳ %1").arg(carried);
-                    badges = counts + badges;
+                        ci->setText(TracksCol, QString::number(carried));
                 }
-                ci->setText(1, badges.join(QStringLiteral("  ")));
-                ci->setForeground(1, grey);
+                if (!list.looks && cue.skip)
+                    badges.prepend(tr("skip"));
+                ci->setText(FlagsCol, badges.join(QStringLiteral(", ")));
                 const QString trackingTip = list.looks ? QString() : cueTrackingTip(cue.id);
-                ci->setToolTip(1, QStringList({ trackingTip, badgeTip }).join(QStringLiteral("\n\n")).trimmed());
+                for (int c = InfoCol; c < TreeColumnCount; ++c)
+                {
+                    ci->setForeground(c, grey);
+                    if (c >= SetsCol && c < FlagsCol)
+                        ci->setTextAlignment(c, Qt::AlignCenter);
+                    ci->setToolTip(c, QStringList({ trackingTip, badgeTip }).join(QStringLiteral("\n\n")).trimmed());
+                }
                 const QString nameTip = cue.reusable == invalidId()
                                ? (cue.unlinkedFrom.isEmpty() ? cue.note
                                   : tr("Unlinked from %1. %2").arg(cue.unlinkedFrom, cue.note).trimmed())
@@ -2635,14 +2689,15 @@ void ShowTreeView::buildTree()
                         looks << lookText(l);
                     // ● sets values here (a tracking list: the rest track
                     // in); ○ lets them go.
-                    QStringList col1;
+                    // Sets or Releases (Q104): a dot in its column.
                     if (layer.release)
-                        col1 << tr("○ release");
+                        yi->setText(ReleasesCol, dot);
                     else if (list.mode == ListMode::Tracking && !list.looks)
-                        col1 << tr("●");
+                        yi->setText(SetsCol, dot);
                     if (layer.reusable != invalidId())
-                        col1 << tr("×%1").arg(m_st->reusableUses(layer.reusable).count());
-                    yi->setText(1, col1.join(QStringLiteral(" ")));
+                        yi->setText(FlagsCol, tr("×%1").arg(m_st->reusableUses(layer.reusable).count()));
+                    for (int c = SetsCol; c < FlagsCol; ++c)
+                        yi->setTextAlignment(c, Qt::AlignCenter);
                     QString tip = QStringLiteral("%1\n%2").arg(m_st->targetContents(layer.target),
                                                                looks.join(QStringLiteral(", "))).trimmed();
                     if (layer.reusable != invalidId())
@@ -2683,8 +2738,10 @@ void ShowTreeView::buildTree()
                                             + tr("Select it and set a value to make it this cue's own.");
                         ti->setToolTip(0, tip);
                         ti->setToolTip(1, tip);
-                        ti->setForeground(0, grey);
-                        ti->setForeground(1, grey);
+                        ti->setText(TracksCol, dot);
+                        ti->setTextAlignment(TracksCol, Qt::AlignCenter);
+                        for (int c = NameCol; c < TreeColumnCount; ++c)
+                            ti->setForeground(c, grey);
                         ti->setData(0, KindRole, TrackedLayerNode);
                         ti->setData(0, IdRole, rl.layerId);
                         ti->setData(0, CueRole, cue.id);
@@ -2733,8 +2790,7 @@ void ShowTreeView::buildTree()
                 {
                     const QString why = tr("Skipped: GO passes over it. It tracks as if it weren't in the list; "
                                            "a jump straight to it still plays it. Tick it (or ⌘/) to put it back.");
-                    ci->setText(1, (tr("⦸ skip") + QStringLiteral("  ") + ci->text(1)).trimmed());
-                    for (int c = 0; c < 2; ++c)
+                    for (int c = 0; c < TreeColumnCount; ++c)
                     {
                         ci->setToolTip(c, (why + QStringLiteral("\n\n") + ci->toolTip(c)).trimmed());
                         if (c == 0)
@@ -2752,8 +2808,8 @@ void ShowTreeView::buildTree()
                     while (!todo.isEmpty())
                     {
                         QTreeWidgetItem *under = todo.takeFirst();
-                        under->setForeground(0, skipGrey);
-                        under->setForeground(1, skipGrey);
+                        for (int c = 0; c < TreeColumnCount; ++c)
+                            under->setForeground(c, skipGrey);
                         for (int k = 0; k < under->childCount(); ++k)
                             todo << under->child(k);
                     }
@@ -3730,12 +3786,36 @@ void ShowTreeView::fitTreeColumns()
 {
     if (m_tree == nullptr)
         return;
-    const int room = m_tree->viewport()->width();
-    // The names keep at least 60% of the pane, however wide the badges were set.
-    const int badges = qBound(24, m_badgeWidth, qMax(24, room * 2 / 5));
+    int room = m_tree->viewport()->width();
     m_fittingColumns = true;
-    m_tree->header()->resizeSection(0, qMax(40, room - badges));
-    m_tree->header()->resizeSection(1, badges);
+    /* The flag columns: as wide as their headers -- but the names and the
+       info column keep 220 px, so in a narrow pane they shrink (their
+       headers end in "…") or fold away; a cue's tooltip still says it all. */
+    const QFontMetrics fm = m_tree->header()->fontMetrics();
+    QHash<int, int> want;
+    int total = 0;
+    for (int c = SetsCol; c < TreeColumnCount; ++c)
+        if (!m_tree->isColumnHidden(c))
+        {
+            const int w = qMax(28, fm.horizontalAdvance(m_tree->headerItem()->text(c)) + 14)
+                          + (c == FlagsCol ? 40 : 0);
+            want.insert(c, w);
+            total += w;
+        }
+    const int avail = qMax(0, room - 220);          // the names and info keep 220 px
+    const double scale = (total > avail && total > 0) ? double(avail) / total : 1.0;
+    for (auto it = want.constBegin(); it != want.constEnd(); ++it)
+    {
+        int w = int(it.value() * scale);
+        if (w < 18)
+            w = 0;                                 // too narrow to read: folded away
+        m_tree->header()->resizeSection(it.key(), w);
+        room -= w;
+    }
+    // The names keep at least 60% of what is left, however wide InfoCol was set.
+    const int badges = qBound(24, m_badgeWidth, qMax(24, room * 2 / 5));
+    m_tree->header()->resizeSection(NameCol, qMax(40, room - badges));
+    m_tree->header()->resizeSection(InfoCol, badges);
     m_fittingColumns = false;
 }
 
@@ -7342,7 +7422,7 @@ bool ShowTreeView::convertListToTracking(quint32 listId)
                          .arg(name).arg(plan.tracking).arg(plan.looksRemoved).arg(plan.layersRemoved)
                          .arg(plan.includesRemoved).arg(plan.releases).arg(plan.cueOnly).arg(plan.mixCleared)
                          + (plan.mixKept.isEmpty() ? QString()
-                            : tr(" %n cue(s) keep mixing (≈ mix in the tree): the one rule would change "
+                            : tr(" %n cue(s) keep mixing (mix, under Flags in the tree): the one rule would change "
                                  "what they play.", "", int(plan.mixKept.count())));
     const QString details = plan.changes.join(QStringLiteral("\n"));
     if (m_confirm)

@@ -186,8 +186,14 @@ static QStringList treeText(QTreeWidget *tree)
         for (QTreeWidgetItem *p = (*it)->parent(); p != nullptr; p = p->parent())
             ++depth;
         QString line = QString(depth * 2, QLatin1Char(' ')) + (*it)->text(0);
-        if (!(*it)->text(1).isEmpty())
-            line += QStringLiteral(" [%1]").arg((*it)->text(1));
+        // The info column as it reads, each flag column by its header (Q104).
+        QStringList cols;
+        for (int c = 1; c < tree->columnCount(); ++c)
+            if (!(*it)->text(c).isEmpty())
+                cols << (c == ShowTreeView::InfoCol ? (*it)->text(c)
+                                                    : tree->headerItem()->text(c) + " " + (*it)->text(c));
+        if (!cols.isEmpty())
+            line += QStringLiteral(" [%1]").arg(cols.join(", "));
         out << line;
     }
     return out;
@@ -428,8 +434,8 @@ void ShowTreeView_Test::trackedLayersShowGreyWithWhereTheyCameFrom()
     ShowTreeView view(nullptr, m_doc);
     const QStringList text = treeText(view.tree());
     // The row says where by the cue's number; the tooltip says the rest.
-    QVERIFY2(text.contains("      ⤳ Towers [1]"), qPrintable(text.join("\n")));
-    QVERIFY2(text.contains("    2 Two [● 1  ⤳ 1]"), qPrintable(text.join("\n")));
+    QVERIFY2(text.contains("      ⤳ Towers [1, Tracks in ●]"), qPrintable(text.join("\n")));
+    QVERIFY2(text.contains("    2 Two [Sets 1, Tracks in 1]"), qPrintable(text.join("\n")));
 
     // Selecting the tracked row shows it, read from where it was set.
     QTreeWidgetItem *tracked = nullptr;
@@ -1469,7 +1475,7 @@ void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
     base->setCurrentIndex(1);
     emit base->activated(1);
     QCOMPARE(st->cueList(list)->baseCue, c1);
-    QVERIFY(treeText(view.tree()).contains("    1 One [● 1  ■ base]"));
+    QVERIFY(treeText(view.tree()).contains("    1 One [Sets 1, Flags base]"));
     // ...and from the cue page's check box.
     QVERIFY(view.selectNode(c2));
     QCheckBox *isBase = view.findChild<QCheckBox *>("stCueBase");
@@ -1488,7 +1494,7 @@ void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
     emit cueMode->activated(cueMode->currentIndex());
     QCOMPARE(st->cue(c2)->mode, CueMode::Block);
     QVERIFY(trackedRow(view.tree(), c2, "Towers") == nullptr);
-    QVERIFY(treeText(view.tree()).contains("    2 Two [⊘ block]"));
+    QVERIFY(treeText(view.tree()).contains("    2 Two [Mode Block]"));
 }
 
 void ShowTreeView_Test::includesAddMoveRemoveAndNoLoops()
@@ -1655,7 +1661,7 @@ void ShowTreeView_Test::recordAsNewCueFromTheHeader()
     QCOMPARE(rec.number, QString("3"));
     QCOMPARE(rec.mode, CueMode::Block);
     QCOMPARE(rec.layers.count(), 2);                 // Towers (tracked) and USTs, now its own
-    QVERIFY(treeText(view.tree()).contains("    3 Two (recorded) [● 2  ⊘ block]"));
+    QVERIFY(treeText(view.tree()).contains("    3 Two (recorded) [Sets 2, Mode Block]"));
     // What changed on stage: only the new cue.
     QCOMPARE(view.findChild<QLabel *>("stDropHint")->text(), QString("Changed: 3 Two (recorded)"));
 }
@@ -4695,7 +4701,7 @@ void ShowTreeView_Test::makeVcPageAndAdoptAsLook()
         QCOMPARE(byCaption.value("Red Hit")->backgroundColor(), QColor(Qt::red));
         // The look says who fires it; the tree shows it.
         QCOMPARE(view.lookFiredBy(a), QStringList({ "VC button “Red Hit”" }));
-        QVERIFY(treeText(view.tree()).join("\n").contains("Red Hit [VC ×1]"));
+        QVERIFY(treeText(view.tree()).join("\n").contains("Red Hit [Flags VC ×1]"));
         // Pressed: it plays (red on the RGB-less dimmers is nothing, so a
         // look playing Full shows it).
         QVERIFY(st->setLayerLook(a, st->cue(a)->layers.first().id, st->lookForPalette(full)));
@@ -5071,10 +5077,14 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     QTest::qWait(20);
 
     // The kinds: ● set here, ○ released, ⤳ tracked in, ⊘ a Block cue.
-    QCOMPARE(cueRow(view.tree(), c1)->text(1), QString("● 2"));
-    QCOMPARE(cueRow(view.tree(), c2)->text(1), QString("● 1  ○ 1  ⤳ 1"));
-    QVERIFY(cueRow(view.tree(), c3)->text(1).contains("⊘ block"));
-    QVERIFY(!cueRow(view.tree(), c3)->text(1).contains("⤳"));
+    // Q104: a column each, headed by what it is.
+    QCOMPARE(cueRow(view.tree(), c1)->text(ShowTreeView::SetsCol), QString("2"));
+    QCOMPARE(cueRow(view.tree(), c2)->text(ShowTreeView::SetsCol), QString("1"));
+    QCOMPARE(cueRow(view.tree(), c2)->text(ShowTreeView::ReleasesCol), QString("1"));
+    QCOMPARE(cueRow(view.tree(), c2)->text(ShowTreeView::TracksCol), QString("1"));
+    QCOMPARE(cueRow(view.tree(), c3)->text(ShowTreeView::ModeCol), QString("Block"));
+    QVERIFY(cueRow(view.tree(), c3)->text(ShowTreeView::TracksCol).isEmpty());
+    QCOMPARE(view.tree()->headerItem()->text(ShowTreeView::TracksCol), QString("Tracks in"));
     QVERIFY(cueRow(view.tree(), c3)->toolTip(1).contains("⊘ Block"));
     QTreeWidgetItem *carried = trackedRow(view.tree(), c2, "Towers");
     QVERIFY(carried != nullptr);
@@ -5082,7 +5092,7 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     QCOMPARE(carried->text(1), QString("1"));
     bool released = false;
     for (int i = 0; i < cueRow(view.tree(), c2)->childCount(); ++i)
-        released = released || cueRow(view.tree(), c2)->child(i)->text(1) == QString("○ release");
+        released = released || cueRow(view.tree(), c2)->child(i)->text(ShowTreeView::ReleasesCol) == QString("\u25cf");
     QVERIFY(released);
 
     // On hover: the group, each attribute's value, and the cue it came from.
@@ -5110,8 +5120,11 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     // name fits beside it (a long cue name ends in "…" within its own).
     QTreeWidget *tree = view.tree();
     const int room = tree->viewport()->width();
-    QVERIFY(tree->header()->sectionSize(0) >= room * 3 / 5 - 1);
-    QVERIFY(tree->header()->sectionSize(0) + tree->header()->sectionSize(1) <= room);
+    int flagCols = 0;
+    for (int c = ShowTreeView::SetsCol; c < ShowTreeView::TreeColumnCount; ++c)
+        flagCols += tree->header()->sectionSize(c);
+    QVERIFY(tree->header()->sectionSize(0) >= (room - flagCols) * 3 / 5 - 1);
+    QVERIFY(tree->header()->sectionSize(0) + tree->header()->sectionSize(1) + flagCols <= room);
     QVERIFY(!tree->horizontalScrollBar()->isVisible());
     for (QTreeWidgetItemIterator it(tree); *it; ++it)
     {
@@ -5143,7 +5156,7 @@ void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
     st->addCue(st->addCueList(st->addProduction("P"), "L", ListMode::Tracking), -1, "One");
     {
         ShowTreeView view(nullptr, m_doc);
-        view.resize(1000, 500);
+        view.resize(1600, 500);
         view.show();
         QVERIFY(QTest::qWaitForWindowExposed(&view));
         QSplitter *split = view.findChild<QSplitter *>("stSplitter");
@@ -5153,9 +5166,13 @@ void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
         QCOMPARE(header->sectionResizeMode(0), QHeaderView::Interactive);
         QCOMPARE(header->sectionResizeMode(1), QHeaderView::Interactive);
 
-        // Dragging the line between the columns (a user resize).
+        // Dragging the line between the first two columns (a user resize);
+        // the flag columns (Q104) keep their width.
+        int flags = 0;
+        for (int c = ShowTreeView::SetsCol; c < ShowTreeView::TreeColumnCount; ++c)
+            flags += header->sectionSize(c);
         const int room = view.tree()->viewport()->width();
-        header->resizeSection(0, room - 70);
+        header->resizeSection(0, room - flags - 70);
         QCOMPARE(view.badgeColumnWidth(), 70);
         QCOMPARE(settings.value("showtree/badgeColumn").toInt(), 70);
         QCOMPARE(header->sectionSize(1), 70);
@@ -5167,12 +5184,15 @@ void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
         split->setSizes(sizes);
         QTest::qWait(20);
         QCOMPARE(header->sectionSize(1), 70);
-        QCOMPARE(header->sectionSize(0), view.tree()->viewport()->width() - 70);
+        int flagsNow = 0;           // a wider pane can give the flag columns their full width
+        for (int c = ShowTreeView::SetsCol; c < ShowTreeView::TreeColumnCount; ++c)
+            flagsNow += header->sectionSize(c);
+        QCOMPARE(header->sectionSize(0), view.tree()->viewport()->width() - flagsNow - 70);
         view.hide();
     }
     // A new view (the next start): as it was left.
     ShowTreeView again(nullptr, m_doc);
-    again.resize(1000, 500);
+    again.resize(1600, 500);
     again.show();
     QVERIFY(QTest::qWaitForWindowExposed(&again));
     QCOMPARE(again.badgeColumnWidth(), 70);
@@ -5229,7 +5249,7 @@ void ShowTreeView_Test::skipCuesInTheTree()
     tree->expandAll();
     QTreeWidgetItem *row = cueRow(tree, c[1]);
     QCOMPARE(row->checkState(0), Qt::Unchecked);
-    QVERIFY2(row->text(1).startsWith("⦸ skip"), qPrintable(row->text(1)));
+    QVERIFY(row->text(ShowTreeView::FlagsCol).startsWith("skip"));
     QVERIFY(row->font(0).strikeOut());
     const QColor skipGrey = row->foreground(0).color();
     QVERIFY(skipGrey != tree->palette().color(QPalette::Text));
@@ -6463,7 +6483,7 @@ void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()
         return false;
     };
     QVERIFY(!listRow()->text(1).contains("MIB"));
-    QVERIFY(!cueRow(tree, c[1])->text(1).contains("MIB"));
+    QVERIFY(!cueRow(tree, c[1])->text(ShowTreeView::FlagsCol).contains("MIB"));
 
     // The list's page: Move in black, "Use show's (On)".
     tree->setCurrentItem(listRow());
@@ -6506,9 +6526,9 @@ void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()
     QVERIFY(st->isCueNoMoveInBlack(c[1]));
     QCOMPARE(st->undoText(), QString("Don't move in black into cue"));
     tree->expandAll();
-    QVERIFY2(cueRow(tree, c[1])->text(1).contains("⊘ MIB"), qPrintable(cueRow(tree, c[1])->text(1)));
+    QVERIFY(cueRow(tree, c[1])->text(ShowTreeView::FlagsCol).contains("no MIB"));
     QVERIFY(cueRow(tree, c[1])->toolTip(1).contains("Don't move in black into this cue"));
-    QVERIFY(!cueRow(tree, c[0])->text(1).contains("MIB"));
+    QVERIFY(!cueRow(tree, c[0])->text(ShowTreeView::FlagsCol).contains("MIB"));
     QVERIFY(view.selectNode(c[1]));
     QVERIFY(view.findChild<QCheckBox *>("stCueNoMib")->isChecked());
 

@@ -66,11 +66,17 @@ from the Library lands in the tree right beside it.
   layers. Grey **⤳** rows under a cue are layers it doesn't hold itself but
   that are on stage in it. Beside each is only the number of the cue it
   came from: plain for *tracked from*, **⊕ 1.0.0** for *included from*,
-  **↳ 4.1** for a sub-cue, **■ base** for the base. A tracking cue's row
-  counts its layers: **● 2** set in this cue, **○ 1** released here, **⤳ 5**
-  tracked in. Its other badges are **■ base**, **⊘ block**, **◐ cue-only**
-  and **⊕ N** (includes N). On a layer row, **●** means it sets values here
-  and **○ release** that it lets them go.
+  **↳ 4.1** for a sub-cue, **■ base** for the base. Then a column each,
+  headed by what it is (hover a header for more):
+  - **Sets**, **Tracks in**, **Releases** — on a cue, how many layers it
+    sets here, how many track into it, how many it lets go; on a layer, a
+    **●** in the one that applies (a carried row's is under Tracks in).
+  - **Mode** — **Block** or **Cue-only**; blank when it tracks.
+  - **Flags** — the rest, in words: **base**, **skip**, **no MIB**,
+    **⊕ N** (includes N), **×N** (reusable, N uses), **mix**, **VC ×N**.
+
+  Right-click the header to hide a column you don't need; it stays hidden.
+  In a narrow pane the columns shrink, and fold away before the names do.
 - **Hover for the details.** A grey row's tooltip names the layer, where
   it came from, and each value it brings (*Colour: Blue*, *Dimmer: Full*),
   with its own cue when a value came from somewhere else. A cue row's
@@ -715,7 +721,7 @@ another at a level above its own on the same fixtures: in a cue that
 mixes, an included cue's layers play beside the cue's own instead of
 giving way to them (what it passes on to a tracking cue is the rule's).
 Its page has **Overlapping layers
-mix (as a chaser)** ticked and the tree marks it **≈ mix**, with a tooltip.
+mix (as a chaser)** ticked and the tree's Flags column says **mix**, with a tooltip.
 **Convert to tracking** puts every such cue on the rule where that plays
 exactly the same, and lists the ones where it would not, which keep mixing.
 Untick the box to put one on the rule anyway.
@@ -1627,7 +1633,7 @@ right-click the list, or `convert`) makes it a Tracking list that plays
   *0.0.7* goes back to 0.0.5) is made **Cue-only** where that takes
   repetition out: the next cue starts from what it started from, so no
   Release is needed and what would only repeat goes;
-- a cue that **mixes** (an import, *≈ mix*) is put on the tree's one rule
+- a cue that **mixes** (an import, *mix* under Flags) is put on the tree's one rule
   ([Who wins](#who-wins)) where every channel plays the same; where it
   wouldn't, the plan says so (*"1 Red-Base: stays Mix — the one rule would
   change 1056 channel(s) on 22 fixture(s)"*) and it keeps mixing.
@@ -1924,8 +1930,8 @@ say otherwise:
   No light is moved in black for that cue, whatever its list and the
   show say. Use it for a cue where the audience should see the heads
   move, or one that comes too close after the cue before it. A cue that
-  says so, in a list that would move in black, shows **⊘ MIB** in the
-  badge column. A sub-cue also takes its cue's tick.
+  says so, in a list that would move in black, shows **no MIB** under
+  Flags. A sub-cue also takes its cue's tick.
 - **Typed:** `mib off list`, `mib on list`, `mib show list` (back to the
   show's), `mib` alone says what the list does; `nomib 0.0.3`,
   `nomib 0.0.3 thru 0.0.5` (no number: the selected cue), and

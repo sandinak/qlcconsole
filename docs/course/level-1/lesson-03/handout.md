@@ -96,8 +96,8 @@ Switch roles after each part.
    - *You should see:* **1.0.4 Solo**, with a long list of grey rows:
      everything from the earlier cues is still on, red included.
 8. On the Solo's page, set **Mode** to **Block**.
-   - *You should see:* the grey rows disappear, **⊘ block** appears
-     beside 1.0.4 in the tree, and the stage goes dark.
+   - *You should see:* the grey rows disappear, **Block** appears in
+     the tree's **Mode** column beside 1.0.4, and the stage goes dark.
 9. From **Groups → AT**, drag **AT-Spots** onto the dashed box, then drag
    **White** and **Full** onto the **AT-Spots** row.
    - *You should see:* two pools of light on the floor at the foot of
@@ -117,8 +117,8 @@ Switch roles after each part.
 
 ![The Solo cue's page](../../images/lesson-1-3/solo-cue.png)
 
-   **(1)** Mode: Block, **(2)** the spots' layer, and **(3)** ⊘ block in
-   the tree.
+   **(1)** Mode: Block, **(2)** the spots' layer, and **(3)** Block in
+   the tree's Mode column.
 
 11. Click the **AT-Spots** row to see everything a spot needs to light
     someone.

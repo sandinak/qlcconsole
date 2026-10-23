@@ -85,7 +85,7 @@ brackets.
 | **Back / Stop** | Back: the cue before. Stop: stops the list; the stage goes dark. [1.5] |
 | **Stage target** | A named place on stage (Soloist DS, Center) that moving lights can aim at. Library → All → Targets. [1.3] |
 | **Aim** | Point moving lights at a stage target: drop the target on the layer. The Position row then says *Aim Center*. [1.3] |
-| **Block cue** | A cue that starts from a dark stage, with nothing tracking into it (Mode: Block, **⊘ block** in the tree). [1.3] |
+| **Block cue** | A cue that starts from a dark stage, with nothing tracking into it (Mode: Block; **Block** in the tree's Mode column). [1.3] |
 | **Fade** | How long a change takes. **Fade in**: how long a cue takes to arrive; **fade out**: how long its lights take to go when the next cue takes over. [1.4] |
 | **Hold / follow** | How long a cue waits before the next one plays by itself (∞: waits for GO). A cue that plays by itself **follows**. [1.4] |
 | **Release** | A layer that leaves when its cue ends. [2.1] |

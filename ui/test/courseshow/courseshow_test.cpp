@@ -1312,7 +1312,7 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
         for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
             for (int col = 0; col < (*it)->columnCount(); ++col)
                 if ((*it)->text(0).contains(QStringLiteral("Solo"))
-                    && (*it)->text(col).contains(QStringLiteral("⊘ block")))
+                    && (*it)->text(col) == QStringLiteral("Block"))
                     badged = true;
         LESSON_STEP(badged, "no ⊘ block badge on the Solo");
         const auto dark = [doc]() {
