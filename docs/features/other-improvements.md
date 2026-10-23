@@ -577,9 +577,10 @@ Build tab's tools:
   and Blind mutes it with the rest. Unpark it and it follows the show again
   from the next frame.
 - **Highlight** / **Flash** briefly drive selected fixtures to full white,
-  for identifying which physical fixture is which. Highlight is over
-  everything that runs (only a park is above it); the Grand Master and
-  Blackout still apply to it.
+  for identifying which physical fixture is which. Both are over
+  everything that runs (only a park is above them): a Flash takes a dim
+  fixture up to full and a bright one down to dark for its moment, whatever
+  the cue gives it. The Grand Master and Blackout still apply to them.
 
 **Blackout** (top bar, Control menu) takes every light to zero whatever
 is running, except fixtures set to **Ignore Blackout**, which keep their

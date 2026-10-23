@@ -86,6 +86,9 @@ private slots:
     /** Highlight wins over a running cue where the cue's value is higher
      *  (cyan to 0), and Park wins over Highlight. */
     void highlightBeatsARunningCue();
+    /** A Flash shows over a running cue -- up on a dim fixture, down on a
+     *  bright one -- and the cue has it back when it ends (B1). */
+    void aFlashShowsOverARunningCue();
     /** Control Map learn: the next press (not a release) binds a control to
      *  a function; each press then toggles it; a second learn on the same
      *  control replaces the binding; clear removes it. */

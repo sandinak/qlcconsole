@@ -8,6 +8,7 @@
 #include <QDebug>
 
 #include "programmerflasher.h"
+#include "fadechannel.h"
 #include "doc.h"
 #include "fixture.h"
 #include "mastertimer.h"
@@ -17,6 +18,7 @@
 ProgrammerFlasher::ProgrammerFlasher(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
+    , m_layer(doc, Universe::Flash, FadeChannel::Override, QStringLiteral("Flash"))
 {
 }
 
@@ -54,10 +56,8 @@ void ProgrammerFlasher::flashFixture(quint32 fixtureId, int durationMs)
                 addrs.append(int(fxi->address()) + int(ch));
         }
     }
-    // Drop any address that runs past the end of the universe. Universe::write()
-    // only guards this with a Q_ASSERT (compiled out in release), so a fixture
-    // patched close enough to 511 that its channels overrun would otherwise be
-    // an out-of-bounds heap write.
+    // Drop any address that runs past the end of the universe: a fixture
+    // patched close enough to 511 that its channels overrun.
     for (int i = addrs.count() - 1; i >= 0; --i)
     {
         if (addrs.at(i) < 0 || addrs.at(i) >= UNIVERSE_SIZE)
@@ -94,24 +94,20 @@ void ProgrammerFlasher::writeDMX(MasterTimer *timer, QList<Universe*> universes)
 {
     Q_UNUSED(timer)
     QMutexLocker locker(&m_mutex);
-    if (m_entries.isEmpty())
-        return;
 
+    bool changed = false;
     QMutableListIterator<Entry> it(m_entries);
     while (it.hasNext())
     {
         Entry &e = it.next();
-        if (e.universeId < 0 || e.universeId >= universes.size())
+        if (e.universeId < 0 || e.universeId >= universes.size()
+            || universes.at(e.universeId) == nullptr)
         {
             it.remove();
+            changed = true;
             continue;
         }
         Universe *uni = universes.at(e.universeId);
-        if (uni == nullptr)
-        {
-            it.remove();
-            continue;
-        }
 
         // First tick: sample the current pre-GM value to decide
         // whether we should flash UP (currently dim) or DOWN
@@ -129,19 +125,26 @@ void ProgrammerFlasher::writeDMX(MasterTimer *timer, QList<Universe*> universes)
             const int curr = n > 0 ? (avg / n) : 0;
             e.target = (curr < 128) ? uchar(255) : uchar(0);
             e.sampled = true;
+            changed = true;
         }
 
         if (e.elapsed.elapsed() >= e.durationMs)
         {
             it.remove();
-            continue;
+            changed = true;
         }
+    }
 
-        // Force-LTP write so the flash value beats running scenes for
-        // the duration. After the entry is removed, the running source
-        // takes back over on the next tick.
-        for (int a : e.dmxAddresses)
-            uni->write(a, e.target, /*forceLTP=*/true);
+    // The levels only change when a flash starts or ends: the fader holds
+    // them in between, over the running scenes (Override).
+    if (changed)
+    {
+        QList<OutputLayer::Level> levels;
+        for (const Entry &e : m_entries)
+            for (int a : e.dmxAddresses)
+                levels.append({ Fixture::invalidId(),
+                                quint32(e.universeId) * UNIVERSE_SIZE + quint32(a), e.target });
+        m_layer.set(levels);
     }
 
     // Auto-unregister when there's nothing left to do — keeps the

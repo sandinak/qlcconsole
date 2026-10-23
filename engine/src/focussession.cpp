@@ -30,6 +30,7 @@
 #include "qlcchannel.h"
 #include "aimsolver.h"
 #include "universe.h"
+#include "fadechannel.h"
 #include "fixture.h"
 #include "scene.h"
 #include "truss.h"
@@ -53,6 +54,7 @@ float roundOffset(float v)
 FocusSession::FocusSession(Doc *doc, QObject *parent)
     : QObject(parent)
     , m_doc(doc)
+    , m_layer(doc, Universe::Focus, FadeChannel::Override, QStringLiteral("Focus"))
 {
     /* Into Perform, the rig belongs to the show: Focus mode ends, and a head
        still being nudged goes back to what was saved. */
@@ -65,8 +67,6 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
 
 FocusSession::~FocusSession()
 {
-    if (m_registered && m_doc != nullptr && m_doc->masterTimer() != nullptr)
-        m_doc->masterTimer()->unregisterDMXSource(this);
 }
 
 /*****************************************************************************
@@ -183,11 +183,6 @@ bool FocusSession::start(const Options &options, QString *why)
     m_index = 0;
     m_active = true;
     rebuildWrites();
-    if (!m_registered && m_doc->masterTimer() != nullptr)
-    {
-        m_doc->masterTimer()->registerDMXSource(this);
-        m_registered = true;
-    }
     emit started();
     emit currentChanged(currentFixture());
     return true;
@@ -204,11 +199,7 @@ void FocusSession::stop()
         QMutexLocker locker(&m_writesMutex);
         m_writes.clear();
     }
-    if (m_registered && m_doc->masterTimer() != nullptr)
-    {
-        m_doc->masterTimer()->unregisterDMXSource(this);
-        m_registered = false;
-    }
+    m_layer.clear();
     m_heads.clear();
     m_order.clear();
     m_undo.clear();
@@ -689,7 +680,7 @@ void FocusSession::rebuildWrites()
     {
         auto put = [&](Fixture *fx, quint32 ch, uchar value) {
             const int addr = int(fx->address()) + int(ch);
-            // Universe::write() only Q_ASSERTs the bound (compiled out in release).
+            // Nothing past the end of the universe (an over-addressed fixture).
             if (addr < UNIVERSE_SIZE)
                 writes.insert(qMakePair(int(fx->universe()), addr), value);
         };
@@ -762,25 +753,21 @@ void FocusSession::rebuildWrites()
             lightLevel(fx, m_options.level, true);
         }
     }
-    QMutexLocker locker(&m_writesMutex);
-    m_writes = writes;
+    QList<OutputLayer::Level> levels;
+    levels.reserve(writes.size());
+    for (auto it = writes.constBegin(); it != writes.constEnd(); ++it)
+        levels.append({ Fixture::invalidId(),
+                        quint32(it.key().first) * UNIVERSE_SIZE + quint32(it.key().second),
+                        it.value() });
+    {
+        QMutexLocker locker(&m_writesMutex);
+        m_writes = writes;
+    }
+    m_layer.set(levels);
 }
 
 QHash<QPair<int, int>, uchar> FocusSession::pendingWrites() const
 {
     QMutexLocker locker(&m_writesMutex);
     return m_writes;
-}
-
-void FocusSession::writeDMX(MasterTimer *timer, QList<Universe *> universes)
-{
-    Q_UNUSED(timer)
-    QMutexLocker locker(&m_writesMutex);
-    for (auto it = m_writes.constBegin(); it != m_writes.constEnd(); ++it)
-    {
-        const int u = it.key().first;
-        if (u < 0 || u >= universes.size() || universes.at(u) == nullptr)
-            continue;
-        universes.at(u)->write(it.key().second, it.value(), /*forceLTP=*/true);
-    }
 }

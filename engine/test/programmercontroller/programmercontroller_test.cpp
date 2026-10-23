@@ -25,6 +25,7 @@
 #define protected public
 #define private public
 #include "programmercontroller.h"
+#include "programmerflasher.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "qlcchannel.h"
@@ -727,6 +728,53 @@ void ProgrammerController_Test::highlightBeatsARunningCue()
     cue->stop(FunctionParent::master());
     tick(m_doc);
     m_doc->clearContents();                              // before the def goes
+}
+
+/* A Flash is over a running cue for its length (B1): up to full on a dim
+   fixture, down to 0 on a bright one -- not HTP-merged with the cue -- and
+   the cue has the fixture back once it ends. */
+void ProgrammerController_Test::aFlashShowsOverARunningCue()
+{
+    Fixture *fxi = makeFixture(m_doc, m_rgbDef, "RGB Dimmer", 0);
+    QVERIFY(fxi != nullptr);
+    Scene *dim = sceneOf(m_doc, fxi->id(), { { 3, 60 } });
+    dim->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(60));
+    {
+        ProgrammerFlasher up(m_doc);
+        up.flashFixture(fxi->id(), 60000);
+        tick(m_doc, 3);
+        QCOMPARE(preGM(m_doc, 3), uchar(255));           // up: the fixture was dim
+    }                                                    // a flasher that goes lets go
+    QCOMPARE(preGM(m_doc, 3), uchar(60));
+    dim->stop(FunctionParent::master());
+    tick(m_doc);
+
+    ProgrammerFlasher down(m_doc);
+    Scene *bright = sceneOf(m_doc, fxi->id(), { { 3, 230 } });
+    bright->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc);
+    QCOMPARE(preGM(m_doc, 3), uchar(230));
+    down.flashFixture(fxi->id(), 60);
+    tick(m_doc, 2);
+    QCOMPARE(preGM(m_doc, 3), uchar(0));                 // down: it was bright
+
+    // Over: the cue is back (generous wait, wall-clock flash).
+    QElapsedTimer t;
+    t.start();
+    uchar v = 0;
+    while (t.elapsed() < 5000)
+    {
+        tick(m_doc);
+        v = preGM(m_doc, 3);
+        if (v == 230)
+            break;
+        QTest::qWait(20);
+    }
+    QCOMPARE(v, uchar(230));
+    bright->stop(FunctionParent::master());
+    tick(m_doc);
 }
 
 void ProgrammerController_Test::aLearnedControlTogglesItsFunction()

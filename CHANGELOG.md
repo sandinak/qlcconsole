@@ -232,7 +232,12 @@ circuits and subs.
   function takes an LTP channel, and a starting cue still takes its fixtures
   from the hold. `ParkEffect`, `HighlightEffect` and `LastLookEffect` are no
   longer DMX sources. The precedence is written up on
-  `Universe::FaderPriority`.
+  `Universe::FaderPriority`. **Flash** (`ProgrammerFlasher`) and **Focus
+  mode** (`FocusSession`) had the same bug -- a flash or a focused head's
+  light lost its dimmer to the frame and to a running cue -- and go out the
+  same way, at `Flash` and `Focus` (Override, between Highlight and Park;
+  GM and Blackout apply). `FocusSession` is no longer a DMX source;
+  `ProgrammerFlasher` still is, only to time its flashes.
 - **A Grand Master move no longer drops an On-when-not-in-use relay.**
   Moving the Grand Master recomputes the output at once
   (`Universe::slotGMValueChanged()` -> `updatePostGMValue()`), from the

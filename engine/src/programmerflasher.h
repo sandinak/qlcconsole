@@ -9,9 +9,14 @@
   Behavior: at flash start, samples the fixture's current intensity
   (post-running-functions). Picks an inverted target — 255 if the
   fixture is currently dim (<128), 0 if currently bright. Holds that
-  target for `durationMs`, then stops asserting. The next master timer
-  tick lets the natural source (running scene/programmer) take back
-  over. Net effect: a brief, visible blip on the chosen fixture.
+  target for `durationMs`, then lets go and the running scene/programmer
+  has the fixture back. Net effect: a brief, visible blip on the chosen
+  fixture.
+
+  The DMXSource only keeps time (samples, expires); the levels go out
+  through an OutputLayer at Universe::Flash with Override, over anything
+  running (a direct universe write was zeroed by processFaders(): B1).
+  The Grand Master and Blackout apply.
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */
@@ -25,6 +30,7 @@
 #include <QList>
 
 #include "dmxsource.h"
+#include "outputlayer.h"
 
 class Doc;
 
@@ -62,6 +68,8 @@ private:
     QList<Entry> m_entries;
     QMutex m_mutex;
     bool m_registered = false;
+    /** The Flash fader on each universe */
+    OutputLayer m_layer;
 };
 
 #endif
