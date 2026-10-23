@@ -8,6 +8,18 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Focus calls and refining a cue from the stage (design, 2026-10-23)
+
+Two jobs, being designed on the board (Q105-Q108), built after the freeze:
+- **Focus calls** (pre-show alignment on a new stage): focus groups saved
+  with the show, in order, each with a target; run from a list cue or Run;
+  triggers step groups, bumpers step fixtures, stick nudges, A saves the
+  fixture's calibration -- so every cue lands right on this stage.
+- **Refining a cue in place**: with a cue live, the controller edits the
+  cue's own values (aim, zoom, focus, gobo, colour) at a chosen scope
+  (layer / group / fixture), with feedback to the operator on stage (the
+  selection flashing, spoken status from the laptop, rumble).
+
 ## Focus mode: shutters on profiles (future, asked 2026-10-23)
 
 Framing shutters on a profile/ellipsoidal (and a par with barn doors): how
