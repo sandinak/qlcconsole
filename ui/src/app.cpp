@@ -1317,7 +1317,12 @@ void App::initDoc()
         if (m_startupWindow != NULL)
             m_startupWindow->logDetail(name);
     });
-    m_doc->ioPluginCache()->load(IOPluginCache::systemPluginDirectory());
+    /* QLC_IOPLUGIN_DIR: load the I/O plugins from there instead. The help
+       pictures use it (help-shots.sh) so they show generic Loopback lines,
+       never this machine's network, nodes or MIDI ports. */
+    const QString ioPluginDir = QString::fromLocal8Bit(qgetenv("QLC_IOPLUGIN_DIR"));
+    m_doc->ioPluginCache()->load(ioPluginDir.isEmpty() ? IOPluginCache::systemPluginDirectory()
+                                                       : QDir(ioPluginDir));
     /* Outputs in trouble -- WLED devices that stop answering or fade to a
        weak signal, Art-Net / E1.31 outputs that can't send, Art-Net nodes
        that stop answering: the footer, whichever plugin says so. */
