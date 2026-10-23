@@ -303,7 +303,7 @@ void ShowRunner_Test::holdLastKeepsTheLookThroughAGap()
     Track *held = rig.track(rig.scene(rig.dims[0], 200), 0, 400);
     rig.item(held, rig.scene(rig.dims[0], 60), 1200, 400);
     held->setHoldLast(true);
-    Track *plain = rig.track(rig.scene(rig.dims[1], 180), 0, 400);
+    rig.track(rig.scene(rig.dims[1], 180), 0, 400);     // a plain track
     rig.track(rig.scene(rig.dims[2], 90), 0, 2000);      // keeps the show running
 
     rig.start();
