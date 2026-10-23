@@ -32,6 +32,8 @@ private slots:
     void cleanup();
 
     void holdAssertsForceLTP();
+    void holdIsABaseUnderTheShow();
+    void aLaterCueTakesItsFixturesFromTheHold();
     void holdSurvivesTheUniverseFrame();
     void clearReleases();
     void emptyHoldIsInactive();

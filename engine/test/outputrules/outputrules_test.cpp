@@ -37,6 +37,7 @@
 #include "fadechannel.h"
 #include "grandmaster.h"
 #include "qlcfile.h"
+#include "parkeffect.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -231,6 +232,64 @@ void OutputRules_Test::blackoutKeepsExemptLive()
     QCOMPARE(int(uchar(m_stub->m_universe.at(Stage))), 180);
 }
 
+/* Park against the rest of the output (B1): a hard override of the cue,
+   past the Grand Master, but Blackout still takes it out. */
+void OutputRules_Test::parkBeatsACueAboveIt()
+{
+    const quint32 stage = m_doc->fixtureForAddress(Stage);
+    put(Stage, 200);                       // a running cue
+    QCOMPARE(frame(Stage), 200);
+
+    {
+        ParkEffect park(m_doc);
+        park.parkFixture(stage, { { 0, 50 } });
+        QCOMPARE(frame(Stage), 50);        // not HTP-merged: the park wins
+        put(Stage, 255);
+        QCOMPARE(frame(Stage), 50);
+
+        // Let go: the cue's level is back on the very next frame.
+        park.unparkFixture(stage);
+        QCOMPARE(frame(Stage), 255);
+
+        park.parkFixture(stage, { { 0, 50 } });
+        QCOMPARE(frame(Stage), 50);
+    }                                      // a park that goes away lets go too
+    QCOMPARE(frame(Stage), 255);
+}
+
+void OutputRules_Test::parkIgnoresTheGrandMaster()
+{
+    Fixture *spare = addDimmer("Spare", 14, 0);
+    QVERIFY(spare != nullptr);
+    ParkEffect park(m_doc);
+    park.parkFixture(m_doc->fixtureForAddress(Stage), { { 0, 200 } });
+    put(14, 200);                          // the same level, not parked
+    m_doc->inputOutputMap()->setGrandMasterValue(128);
+    QCOMPARE(frame(Stage), 200);
+    QCOMPARE(frame(14), 100);
+
+    // Unparked, the Grand Master has it again.
+    put(Stage, 200);
+    park.unparkAll();
+    QCOMPARE(frame(Stage), 100);
+}
+
+void OutputRules_Test::blackoutTakesAParkOut()
+{
+    ParkEffect park(m_doc);
+    park.parkFixture(m_doc->fixtureForAddress(Stage), { { 0, 200 } });
+    put(House, 180);
+    QCOMPARE(frame(Stage), 200);
+    m_doc->inputOutputMap()->setBlackout(true);
+    frame(Stage);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(Stage))), 0);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(House))), 180);   // Ignore Blackout
+
+    m_doc->inputOutputMap()->setBlackout(false);
+    frame(Stage);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(Stage))), 200);   // still parked
+}
+
 void OutputRules_Test::switchSnapsAtHalf()
 {
     put(Relay, 102);    // 40%
@@ -342,6 +401,35 @@ void OutputRules_Test::onAtOpenFollowsItsSetting()
     m_doc->clearContents();
     QCOMPARE(k->onAtOpenWhen(), OutputRuleKeeper::kDefaultOnAtOpenWhen);
     QVERIFY(k->onAtOpenArmed() == false);
+}
+
+/* Moving the Grand Master recomputes the output straight away (no frame in
+   between): an On-when-not-in-use relay must not read 0 there, not even
+   for one frame. */
+void OutputRules_Test::grandMasterNeverDropsAnOnAtOpenRelay()
+{
+    QVERIFY(addDimmer("Pump", 15, Fixture::OnAtOpen | Fixture::Switch) != nullptr);
+    QVERIFY(addDimmer("Fans", 16, Fixture::OnAtOpen | Fixture::Switch
+                                  | Fixture::ExemptGrandMaster) != nullptr);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->setMode(Doc::Operate);                       // arms On when not in use
+    QVERIFY(m_doc->outputRuleKeeper()->onAtOpenArmed());
+    QCOMPARE(frame(15), 255);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(15))), 255);
+
+    auto out = [this](int address) { return int(uchar(m_uni->postGMValues()->at(address))); };
+    for (uchar gm : { uchar(255), uchar(77), uchar(0), uchar(255) })
+    {
+        m_doc->inputOutputMap()->setGrandMasterValue(gm);
+        // Before any frame: what the GM change itself left.
+        QCOMPARE(out(15), 255);
+        QCOMPARE(out(16), 255);
+        QCOMPARE(out(Work), gm == 0 ? 0 : int(gm));     // a plain one dims with the GM
+        // And what goes out on the next one.
+        frame(15);
+        QCOMPARE(int(uchar(m_stub->m_universe.at(15))), 255);
+        QCOMPARE(int(uchar(m_stub->m_universe.at(16))), 255);
+    }
 }
 
 void OutputRules_Test::onAtOpenSettingIsSavedWithTheShow()

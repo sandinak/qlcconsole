@@ -12,19 +12,18 @@
 #include "parkeffect.h"
 #include "doc.h"
 #include "fixture.h"
-#include "mastertimer.h"
-#include "universe.h"
+#include "fadechannel.h"
 
 ParkEffect::ParkEffect(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
+    , m_layer(doc, Universe::Park, FadeChannel::Override | FadeChannel::PastGM,
+              QStringLiteral("Park"))
 {
 }
 
 ParkEffect::~ParkEffect()
 {
-    if (m_registered && m_doc && m_doc->masterTimer())
-        m_doc->masterTimer()->unregisterDMXSource(this);
 }
 
 void ParkEffect::parkFixture(quint32 fixtureId, const QHash<quint32, uchar> &values)
@@ -70,6 +69,7 @@ bool ParkEffect::isEmpty() const
 void ParkEffect::rebuild()
 {
     QList<FixEntry> entries;
+    QList<OutputLayer::Level> levels;
 
     for (QHash<quint32, QHash<quint32, uchar>>::const_iterator it = m_parked.constBegin();
          it != m_parked.constEnd(); ++it)
@@ -88,50 +88,20 @@ void ParkEffect::rebuild()
             if (vit.key() >= fxi->channels())
                 continue;
             int absAddr = (int)fxi->address() + (int)vit.key();
-            // Universe::write() only Q_ASSERTs the bound (compiled out in
-            // release), so guard against an over-addressed fixture here.
+            // Guard against an over-addressed fixture (patched so its
+            // channels run past 511): nothing to write there.
             if (absAddr < 0 || absAddr >= UNIVERSE_SIZE)
                 continue;
             entry.writes.append(qMakePair(absAddr, vit.value()));
+            levels.append({ it.key(), vit.key(), vit.value() });
         }
 
         if (!entry.writes.isEmpty())
             entries.append(entry);
     }
 
-    {
-        QMutexLocker locker(&m_mutex);
-        m_entries = entries;
-    }
-
-    bool hasWork = !m_parked.isEmpty();
-    if (hasWork && !m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->registerDMXSource(this);
-        m_registered = true;
-    }
-    else if (!hasWork && m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->unregisterDMXSource(this);
-        m_registered = false;
-    }
-}
-
-void ParkEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
-{
-    Q_UNUSED(timer)
-    QMutexLocker locker(&m_mutex);
-
-    for (const FixEntry &e : m_entries)
-    {
-        if (e.universeId < 0 || e.universeId >= universes.size())
-            continue;
-        Universe *uni = universes.at(e.universeId);
-        if (!uni)
-            continue;
-        for (const auto &w : e.writes)
-            uni->write(w.first, w.second, /*forceLTP=*/true);
-    }
+    m_entries = entries;
+    m_layer.set(levels);
 }
 
 bool ParkEffect::saveXML(QXmlStreamWriter *doc) const

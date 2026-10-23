@@ -83,6 +83,9 @@ private slots:
     /** Highlight drives the selected fixtures to full over a running cue,
      *  and turning it off gives them back to the cue. */
     void highlightDrivesTheSelectionToFull();
+    /** Highlight wins over a running cue where the cue's value is higher
+     *  (cyan to 0), and Park wins over Highlight. */
+    void highlightBeatsARunningCue();
     /** Control Map learn: the next press (not a release) binds a control to
      *  a function; each press then toggles it; a second learn on the same
      *  control replaces the binding; clear removes it. */

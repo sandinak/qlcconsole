@@ -689,7 +689,7 @@ void FocusSession::rebuildWrites()
     {
         auto put = [&](Fixture *fx, quint32 ch, uchar value) {
             const int addr = int(fx->address()) + int(ch);
-            // Universe::write() only Q_ASSERTs the bound (see HighlightEffect).
+            // Universe::write() only Q_ASSERTs the bound (compiled out in release).
             if (addr < UNIVERSE_SIZE)
                 writes.insert(qMakePair(int(fx->universe()), addr), value);
         };

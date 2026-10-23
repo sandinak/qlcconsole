@@ -566,9 +566,16 @@ Build tab's tools:
   Blind, as through Blackout: a universe with any sends them live and
   everything else as Blackout would.
 - **Park** holds selected fixtures' output frozen, out of cue control, and
-  persists that with the workspace.
+  persists that with the workspace. A parked fixture sends exactly what it
+  was showing when you parked it, whatever runs (a cue, a fader, Highlight,
+  the programmer) and wherever the **Grand Master** is. **Blackout** still
+  takes it out, like everything except fixtures set to **Ignore Blackout**,
+  and Blind mutes it with the rest. Unpark it and it follows the show again
+  from the next frame.
 - **Highlight** / **Flash** briefly drive selected fixtures to full white,
-  for identifying which physical fixture is which.
+  for identifying which physical fixture is which. Highlight is over
+  everything that runs (only a park is above it); the Grand Master and
+  Blackout still apply to it.
 
 **Blackout** (top bar, Control menu) takes every light to zero whatever
 is running, except fixtures set to **Ignore Blackout**, which keep their

@@ -559,6 +559,31 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Park, Highlight and a held last look hold their dimmers.** All three
+  wrote the universes straight from the MasterTimer tick, before the
+  universe thread's `processFaders()` -- which zeroes every intensity
+  channel and then lays the running faders on top. So a parked or
+  highlighted fixture went dark or showed the running cue, and a timeline
+  track's *Hold last look* and the look a show parks on at its end both went
+  dark (pan/tilt held; B1, in the fork since each feature came in). They now
+  go out through faders of their own (`OutputLayer`), at new
+  `Universe::FaderPriority` levels: **Park** on top, Override and past the
+  Grand Master (`Universe::writePastGM`, a new `FadeChannel::PastGM`), still
+  taken out by Blackout; **Highlight** just under it, Override, with the
+  Grand Master and Blackout applying; the **held last look** under
+  everything (`Hold`), merged like any running function -- intensity HTP, a
+  function takes an LTP channel, and a starting cue still takes its fixtures
+  from the hold. `ParkEffect`, `HighlightEffect` and `LastLookEffect` are no
+  longer DMX sources. The precedence is written up on
+  `Universe::FaderPriority`.
+- **A Grand Master move no longer drops an On-when-not-in-use relay.**
+  Moving the Grand Master recomputes the output at once
+  (`Universe::slotGMValueChanged()` -> `updatePostGMValue()`), from the
+  stored value -- 0 for an On-when-not-in-use channel nothing sets -- and
+  the floor only came back with the next frame's `applyOnAtOpen()`, so a
+  relay could drop for a frame. `updatePostGMValue()` now applies the floor
+  itself (`onAtOpenValue()`), so every path that works out the output has
+  it.
 - **Shows timeline: Undo keeps each track's settings.** The timeline's undo
   snapshot (`ShowManager::captureSnapshot`) held a track's name, mute,
   colour and items only, and Undo rebuilds every track from it -- so any

@@ -352,12 +352,16 @@ void GenericFader::write(Universe *universe)
             // An edit preview's scenes: HTP among themselves (as at Auto),
             // over everything else. Other overrides (an effect owning a
             // channel) write verbatim.
+            // A parked channel goes past the Grand Master as well.
             const bool edit = flags & FadeChannel::EditOverride;
+            const bool pastGM = flags & FadeChannel::PastGM;
             for (int i = 0; i < channelCount; i++)
             {
                 const uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
                 if (edit)
                     universe->writeOverride(address + i, b);
+                else if (pastGM)
+                    universe->writePastGM(int(address) + i, b);
                 else
                     universe->write(address + i, b, true);
             }

@@ -17,7 +17,7 @@ for the scene you're building.
 | **Chaser** | Steps that are each **any** function, in any order (forward, backward, ping-pong, random). Put one on the timeline when the steps aren't all one scene. |
 | **Cue** | One step of a sequence on the timeline: when it starts, its fade in, its hold, its fade out ("fade in 2 s · hold 4 s · fade out 1 s · starts 1:12.5"). Select several to move or **Scale cue timing** together. |
 | **Cursor / playhead** | The vertical line: where playback starts and where it is. The time field shows it. |
-| **Show end** | The handle at the end of the timeline: the show's length. Drag it, or right-click it — **Fit end to content**, **End at current playhead**, **End at SMPTE…**, **Set length…**. When the show reaches its end it stops there and **parks** — the last look stays up — instead of running on into nothing. |
+| **Show end** | The handle at the end of the timeline: the show's length. Drag it, or right-click it — **Fit end to content**, **End at current playhead**, **End at SMPTE…**, **Set length…**. When the show reaches its end it stops there and **parks** — the last look stays up, as a base under whatever you play next — instead of running on into nothing. |
 | **Time markers** | The ruler's units: time, or BPM in 4/4, 3/4 or 2/2 (with the tempo beside it). **Snap to grid** (⌘G) puts items on the marks. |
 
 ### A track's flags
@@ -25,7 +25,11 @@ for the scene you're building.
 Right-click a track's header:
 
 - **Hold last look (stays up between cues)** — a gap between items keeps
-  the last look on, rather than going dark.
+  the last look on, rather than going dark. The held look is a base under
+  everything else: anything that plays on top of it mixes with it as two
+  cues would (the higher level of a dimmer shows; a position or colour
+  goes to what plays), and the track's next item, or any cue that drives
+  those fixtures, takes them over.
 - **Solo-safe (mute-exempt)** — soloing another track doesn't mute this
   one (house light, a haze track).
 - **Priority / role** — **Normal** (the last item to write a channel wins),
