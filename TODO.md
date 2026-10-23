@@ -8,6 +8,14 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Lighting Studio: handles on the plot (future, asked 2026-10-23)
+
+With the plot unlocked, objects get handles instead of only the editor:
+drag a wall's, truss's or pipe's **ends** to lengthen it, **⌥-drag an end**
+to rotate it about the other end, and so on for decks and scenery. After
+the feature freeze; needs a design pass (which objects, which handles, snap,
+undo as one step, how it reads in Front/Side).
+
 ## Eos import (EOS_IMPORT_DESIGN.md)
 
 - **Phases 1–4 + magic-sheet placement, special circuits and subs as VC

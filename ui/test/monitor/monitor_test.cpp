@@ -14210,11 +14210,7 @@ void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
                 opening = shown("sceneryOpeningWidth");
                 curtain = shown("sceneryState");
                 door = shown("sceneryDoorWidth");
-                QDoubleSpinBox *thick = nullptr;
-                foreach (QDoubleSpinBox *sp, dlg->findChildren<QDoubleSpinBox *>())
-                    if (sp->toolTip().startsWith("How thick"))
-                        thick = sp;
-                thickness = thick != nullptr && thick->isVisibleTo(dlg);
+                thickness = shown("sceneryThickness");
                 return true;
             });
             mon.slotAddScenery(kind);

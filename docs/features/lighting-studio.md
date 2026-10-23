@@ -255,7 +255,9 @@ goes where you clicked) offers each kind and puts it where it usually goes:
 | **Wall** | a low built wall: a planter, a fountain's rim |
 
 Its editor (live preview, Cancel reverts) has the kind, position, width,
-height, bottom trim, facing, colour and **bow** — curving the middle away
+height, bottom trim, facing, colour and **bow** (a wall or back wall reads
+**Length**, **Width** and **Height**: how long it runs, how thick it is, how
+high) — curving the middle away
 from the audience, or toward them below 0. The rows that only make sense
 for some kinds show only there:
 

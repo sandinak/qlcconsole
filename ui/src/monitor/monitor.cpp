@@ -6562,6 +6562,7 @@ void Monitor::slotEditScenery(quint32 sid)
     QDoubleSpinBox *depthSpin = mkSpin(s->depth(), 0.05, posR);
     QDoubleSpinBox *thickSpin = mkSpin(s->thickness(), 0.0, isFeet ? 10.0 : 3.0);
     thickSpin->setDecimals(3);
+    thickSpin->setObjectName("sceneryThickness");
     // A curtain whose opening was never set shows the one it is drawn with.
     const float openNow = (s->hasState() && s->openingWidth() >= s->width()) ? 0.68f * s->width()
                                                                              : s->openingWidth();
@@ -6650,9 +6651,9 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Centre Y:"), ySpin);
     form->addRow(tr("Shape:"), outlineCombo);
     form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Thickness:"), thickSpin);
     form->addRow(tr("Depth:"), depthSpin);
     form->addRow(tr("Height:"), hSpin);
-    form->addRow(tr("Thickness:"), thickSpin);
     form->addRow(tr("Bottom trim:"), bSpin);
     form->addRow(tr("Bow:"), bowSpin);
     form->addRow(tr("Facing:"), rotSpin);
@@ -6678,6 +6679,16 @@ void Monitor::slotEditScenery(quint32 sid)
         showRow(depthSpin, u);
         showRow(bowSpin, !u && !arch);
         showRow(thickSpin, built);
+        /* A wall is long, wide and high ("wall should have length .. width
+           and height"): its run is its length and its thickness its width.
+           Cloth and the arch keep width and thickness. */
+        const bool wall = built && !arch;
+        if (QLabel *l = qobject_cast<QLabel *>(form->labelForField(wSpin)))
+            l->setText(wall ? tr("Length:") : tr("Width:"));
+        if (QLabel *l = qobject_cast<QLabel *>(form->labelForField(thickSpin)))
+            l->setText(wall ? tr("Width:") : tr("Thickness:"));
+        wSpin->setToolTip(wall ? tr("How long the wall runs, end to end") : QString());
+        thickSpin->setToolTip(wall ? tr("How wide (thick) the wall is") : tr("How thick it is; 0 for cloth"));
         const bool curtain = (k == Scenery::MainDrape || k == Scenery::Traveler);
         const bool driven = curtain && driveCombo->currentData().toUInt() != Fixture::invalidId();
         showRow(openWSpin, arch || (curtain && (driven || stateCombo->currentData().toInt() == Scenery::Open)));
