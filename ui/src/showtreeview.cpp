@@ -1210,18 +1210,23 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QTimer::singleShot(0, this, [this]() { buildTree(); });
     });
     m_tree->setObjectName("stTree");
-    m_tree->setHeaderLabels({ tr("Show"), tr(""), tr("Sets"), tr("Tracks in"), tr("Releases"),
-                              tr("Mode"), tr("Flags") });
+    /* One letter each, the full name and meaning on hover ("the new
+       columns are too wide .. S for sets .. T for tracks .. R for
+       releases with mouseover on title"). */
+    m_tree->setHeaderLabels({ tr("Show"), tr(""), tr("S"), tr("T"), tr("R"), tr("M"), tr("F") });
     {
         // What each column is, on its header (Q104).
         const QStringList tips = {
             QString(), QString(),
-            tr("A cue: how many layers it sets here. A layer: \u25cf it sets values in this cue."),
-            tr("A cue: how many layers track into it from earlier cues. A carried layer: \u25cf."),
-            tr("A cue: how many layers it lets go. A layer: \u25cf it is released here."),
-            tr("Block (starts from nothing) or Cue-only (its changes don't pass on); blank: it tracks."),
-            tr("base: the list's base cue. skip: GO passes over it. no MIB: no move in black into it. "
-               "\u2295 includes, \u00d7 reusable uses, mix, VC buttons that fire it.") };
+            tr("S \u2014 Sets. A cue: how many layers it sets here. A layer: \u25cf it sets values "
+               "in this cue."),
+            tr("T \u2014 Tracks in. A cue: how many layers track into it from earlier cues. A carried "
+               "layer: \u25cf."),
+            tr("R \u2014 Releases. A cue: how many layers it lets go. A layer: \u25cf it is released here."),
+            tr("M \u2014 Mode. B: Block (starts from nothing). C: Cue-only (its changes don't pass on). "
+               "Blank: it tracks."),
+            tr("F \u2014 Flags. base: the list's base cue. skip: GO passes over it. no MIB: no move in "
+               "black into it. \u2295 includes, \u00d7 reusable uses, mix, VC buttons that fire it.") };
         for (int c = 0; c < tips.size(); ++c)
             if (!tips.at(c).isEmpty())
                 m_tree->headerItem()->setToolTip(c, tips.at(c));
@@ -1232,15 +1237,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QMenu menu(this);
         for (int c = SetsCol; c < TreeColumnCount; ++c)
         {
-            QAction *a = menu.addAction(m_tree->headerItem()->text(c));
+            // Its full name: the tooltip's "S — Sets." part.
+            const QString tip = m_tree->headerItem()->toolTip(c);
+            QAction *a = menu.addAction(tip.section(QLatin1Char('.'), 0, 0));
             a->setCheckable(true);
-            a->setChecked(!m_tree->isColumnHidden(c));
+            a->setChecked(!m_hiddenColumns.contains(c));
             connect(a, &QAction::toggled, this, [this, c](bool on) {
-                m_tree->setColumnHidden(c, !on);
+                if (on)
+                    m_hiddenColumns.remove(c);
+                else
+                    m_hiddenColumns.insert(c);
                 QStringList hidden;
-                for (int k = SetsCol; k < TreeColumnCount; ++k)
-                    if (m_tree->isColumnHidden(k))
-                        hidden << QString::number(k);
+                for (int k : std::as_const(m_hiddenColumns))
+                    hidden << QString::number(k);
                 QSettings().setValue(QStringLiteral("showtree/hiddenColumns"), hidden);
                 fitTreeColumns();
             });
@@ -1249,7 +1258,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     });
     for (const QString &c : QSettings().value(QStringLiteral("showtree/hiddenColumns")).toStringList())
         if (c.toInt() >= SetsCol && c.toInt() < TreeColumnCount)
-            m_tree->setColumnHidden(c.toInt(), true);
+            m_hiddenColumns.insert(c.toInt());
     // The names get the room (Branson, 2026-10-21: the "tracked from …"
     // column grew to its text and covered the layer names). The badge
     // column is narrow and fixed as the pane is resized; dragging the line
@@ -1272,7 +1281,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             return;
         int flags = 0;
         for (int c = SetsCol; c < TreeColumnCount; ++c)
-            if (!m_tree->isColumnHidden(c))
+            if (!m_tree->header()->isSectionHidden(c))
                 flags += m_tree->header()->sectionSize(c);
         m_badgeWidth = qMax(24, section == 0 ? m_tree->viewport()->width() - flags - size : size);
         QSettings().setValue(SETTINGS_BADGE_COLUMN, m_badgeWidth);
@@ -2572,9 +2581,9 @@ void ShowTreeView::buildTree()
                 if (cue.mode != CueMode::ListDefault || list.mode == ListMode::Tracking)
                 {
                     if (mode == CueMode::Block && list.mode == ListMode::Tracking)
-                        ci->setText(ModeCol, tr("Block"));
+                        ci->setText(ModeCol, tr("B"));
                     else if (mode == CueMode::CueOnly)
-                        ci->setText(ModeCol, tr("Cue-only"));
+                        ci->setText(ModeCol, tr("C"));
                 }
                 if (!cue.includes.isEmpty())
                     badges << tr("⊕ %1").arg(cue.includes.count());
@@ -3795,10 +3804,11 @@ void ShowTreeView::fitTreeColumns()
     QHash<int, int> want;
     int total = 0;
     for (int c = SetsCol; c < TreeColumnCount; ++c)
-        if (!m_tree->isColumnHidden(c))
+        if (m_hiddenColumns.contains(c))
+            m_tree->header()->hideSection(c);
+        else
         {
-            const int w = qMax(28, fm.horizontalAdvance(m_tree->headerItem()->text(c)) + 14)
-                          + (c == FlagsCol ? 40 : 0);
+            const int w = (c == FlagsCol) ? 80 : qMax(24, fm.horizontalAdvance(QStringLiteral("99")) + 12);
             want.insert(c, w);
             total += w;
         }
@@ -3806,9 +3816,13 @@ void ShowTreeView::fitTreeColumns()
     const double scale = (total > avail && total > 0) ? double(avail) / total : 1.0;
     for (auto it = want.constBegin(); it != want.constEnd(); ++it)
     {
-        int w = int(it.value() * scale);
-        if (w < 18)
-            w = 0;                                 // too narrow to read: folded away
+        const int w = int(it.value() * scale);
+        if (w < m_tree->header()->minimumSectionSize())
+        {
+            m_tree->header()->hideSection(it.key());   // too narrow to read: folded away
+            continue;
+        }
+        m_tree->header()->showSection(it.key());
         m_tree->header()->resizeSection(it.key(), w);
         room -= w;
     }

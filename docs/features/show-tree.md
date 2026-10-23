@@ -66,13 +66,13 @@ from the Library lands in the tree right beside it.
   layers. Grey **⤳** rows under a cue are layers it doesn't hold itself but
   that are on stage in it. Beside each is only the number of the cue it
   came from: plain for *tracked from*, **⊕ 1.0.0** for *included from*,
-  **↳ 4.1** for a sub-cue, **■ base** for the base. Then a column each,
-  headed by what it is (hover a header for more):
-  - **Sets**, **Tracks in**, **Releases** — on a cue, how many layers it
-    sets here, how many track into it, how many it lets go; on a layer, a
-    **●** in the one that applies (a carried row's is under Tracks in).
-  - **Mode** — **Block** or **Cue-only**; blank when it tracks.
-  - **Flags** — the rest, in words: **base**, **skip**, **no MIB**,
+  **↳ 4.1** for a sub-cue, **■ base** for the base. Then a narrow column
+  each, headed by a letter (hover the header for its name and meaning):
+  - **S** (Sets), **T** (Tracks in), **R** (Releases) — on a cue, how many
+    layers it sets here, how many track into it, how many it lets go; on a
+    layer, a **●** in the one that applies (a carried row's is under T).
+  - **M** (Mode) — **B** for Block, **C** for Cue-only; blank when it tracks.
+  - **F** (Flags) — the rest, in words: **base**, **skip**, **no MIB**,
     **⊕ N** (includes N), **×N** (reusable, N uses), **mix**, **VC ×N**.
 
   Right-click the header to hide a column you don't need; it stays hidden.

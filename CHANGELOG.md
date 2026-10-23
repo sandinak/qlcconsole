@@ -360,11 +360,12 @@ circuits and subs.
 ### Fixed
 - **A fixture group's row in Plot layers keeps its fixtures selected** on
   the plot: they lit and went out again a moment later.
-- **The Show Tree's columns say what they are** (board Q104): **Sets**,
-  **Tracks in** and **Releases** (a count on a cue, a dot on a layer),
-  **Mode** (Block, Cue-only) and **Flags** (base, skip, no MIB, includes,
-  reusable, mix, VC) instead of one column of symbols. Right-click the
-  header to hide any; in a narrow pane they shrink and fold away first.
+- **The Show Tree's flags in columns** (board Q104): **S** (Sets), **T**
+  (Tracks in) and **R** (Releases) — a count on a cue, a dot on a layer —
+  **M** (Mode: B, C) and **F** (Flags: base, skip, no MIB, includes,
+  reusable, mix, VC), each header naming itself on hover, instead of one
+  column of symbols. Right-click the header to hide any; in a narrow pane
+  they fold away before the names do.
 - **Shorter layer names in the Show Tree**: a layer on many fixtures names
   the fixture groups they make up ("FOH + 1st Elect") and the rest as the
   first few and a count, instead of every fixture ("Next cue receives",
