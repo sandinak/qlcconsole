@@ -30,6 +30,7 @@
 
 #include <QMap>
 #include "fixturetreewidget.h"
+#include "monitor/fixturevisualtraits.h"
 #include "itemicons.h"
 #include "apputil.h"
 #include "qlcfixturedef.h"
@@ -633,6 +634,32 @@ FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
             this, SLOT(slotItemExpanded()));
     connect(this, SIGNAL(itemChanged(QTreeWidgetItem*, int)),
             this, SLOT(slotItemChanged(QTreeWidgetItem*, int)));
+    if (m_doc != NULL)
+        connect(m_doc, &Doc::stageLooksChanged, this, &FixtureTreeWidget::refreshStageLookIcons);
+}
+
+void FixtureTreeWidget::refreshStageLookIcons()
+{
+    const bool was = blockSignals(true);      // not an edit: no itemChanged
+    for (QTreeWidgetItemIterator it(this); *it != NULL; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        if (item->data(KColumnName, PROP_LOOK).isValid())
+        {
+            Fixture *fxi = m_doc->fixture(item->data(KColumnName, PROP_ID).toUInt());
+            if (fxi == NULL)
+                continue;
+            item->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
+            item->setData(KColumnName, PROP_LOOK, int(drawnStageLook(fxi)));
+        }
+        else if (item->data(KColumnName, PROP_GROUP).isValid()
+                 && !item->data(KColumnName, PROP_ID).isValid())
+        {
+            if (FixtureGroup *grp = m_doc->fixtureGroup(item->data(KColumnName, PROP_GROUP).toUInt()))
+                item->setIcon(KColumnName, ItemIcons::groupIcon(m_doc, grp));
+        }
+    }
+    blockSignals(was);
 }
 
 void FixtureTreeWidget::setFlags(quint32 flags)
@@ -747,10 +774,10 @@ void FixtureTreeWidget::refreshFixtureName(quint32 id)
             item->setText(KColumnName, fxi->name());
         // Its stage look changed (Fixture Properties, Stage look ▸): its icon.
         if (item->data(KColumnName, PROP_LOOK).isValid()
-            && item->data(KColumnName, PROP_LOOK).toInt() != int(fxi->stageLook()))
+            && item->data(KColumnName, PROP_LOOK).toInt() != int(drawnStageLook(fxi)))
         {
             item->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
-            item->setData(KColumnName, PROP_LOOK, int(fxi->stageLook()));
+            item->setData(KColumnName, PROP_LOOK, int(drawnStageLook(fxi)));
         }
     }
     blockSignals(was);
@@ -812,7 +839,7 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
 
     item->setText(KColumnName, fixture->name());
     item->setIcon(KColumnName, ItemIcons::fixtureIcon(fixture));
-    item->setData(KColumnName, PROP_LOOK, int(fixture->stageLook()));
+    item->setData(KColumnName, PROP_LOOK, int(drawnStageLook(fixture)));
     // The badge's meaning, in words (Output rules…).
     item->setToolTip(KColumnName, fixture->outputRules() == Fixture::OutputRules()
                          ? QString()

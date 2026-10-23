@@ -522,13 +522,16 @@ moving head that is used as a followspot *Moving head spot*, not
 *Followspot*, to keep its aim on the plot. Setting a look is one Ctrl+Z on
 the plot.
 
-**Drawing Auto fixtures as their closest look.** On the plot's **Show**
-menu, **Draw Auto fixtures as their closest stage look** draws every
+**Showing Auto fixtures as their closest look.** On the plot's **Show**
+menu, **Show Auto fixtures as their closest stage look** shows every
 fixture left on Auto as the look its picker names -- a colour changer as an
 LED PAR, a moving head with a gobo as a moving head spot, a dimmer channel
-as an ellipsoidal -- on the plot and in the studio, exactly as if that look
-were set: its shape, its proportions, its lens marks. A look you set still
-wins. Turning it off draws them as before. It belongs to the show and is
+as an ellipsoidal -- exactly as if that look were set: its icon in the
+fixture lists (the Fixture Manager, Build's groups and fixtures, the Show
+Tree's Library and layers), and its shape, proportions and lens marks on
+the plot and in the studio. A group whose fixtures all come out as one look
+shows that look's icon with the group badge. A look you set still wins, and
+the output-rules badge still shows. Turning it off draws them as before. It belongs to the show and is
 saved with it (only when on), so the plot looks the same on every computer;
 a new show starts with it off. Turning it on or off is one Ctrl+Z.
 

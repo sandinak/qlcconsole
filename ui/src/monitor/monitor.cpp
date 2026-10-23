@@ -841,12 +841,12 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     /* Fixtures left on Auto drawn as their closest stage look (an LED PAR,
        a moving head spot...) instead of by their definition's type. Per
        show, saved with it; one Ctrl+Z, like any change to the plot. */
-    QAction *autoLooksBtn = showMenu->addAction(tr("Draw Auto fixtures as their closest stage look"));
+    QAction *autoLooksBtn = showMenu->addAction(tr("Show Auto fixtures as their closest stage look"));
     autoLooksBtn->setObjectName(QStringLiteral("autoStageLooksAction"));
     autoLooksBtn->setCheckable(true);
     autoLooksBtn->setChecked(m_props->autoStageLooks());
-    autoLooksBtn->setToolTip(tr("Draw every fixture whose Stage look is Auto as the look its type is "
-                                "closest to -- on the plot and in the studio. Saved with the show."));
+    autoLooksBtn->setToolTip(tr("Show every fixture whose Stage look is Auto as the look its type is "
+                                "closest to -- its icon in the lists, and its shape on the plot and in the studio. Saved with the show."));
     connect(autoLooksBtn, &QAction::toggled, this, [this](bool on) {
         if (on == m_props->autoStageLooks())
             return;

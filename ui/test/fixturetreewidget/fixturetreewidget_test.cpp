@@ -36,6 +36,8 @@
 #include "fixturegroup.h"
 #include "inputoutputmap.h"
 #include "doc.h"
+#include "monitorproperties.h"
+#include "itemicons.h"
 #undef private
 #undef protected
 
@@ -600,3 +602,62 @@ void FixtureTreeWidget_Test::f2OnAGroupAndAnEmptyNameIsRejected()
     QVERIFY(m_doc->isModified() == false);
     QVERIFY((row->flags() & Qt::ItemIsEditable) == 0);
 }
+
+void FixtureTreeWidget_Test::iconsFollowTheAutoLookSetting()
+{
+    // A dimmer channel's closest look is an ellipsoidal.
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Auto dimmer");
+    fxi->setChannels(1);
+    QVERIFY(m_doc->addFixture(fxi));
+    QCOMPARE(fxi->autoStageLook(), Fixture::EllipsoidalLook);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Dimmers");
+    m_doc->addFixtureGroup(grp);
+    QVERIFY(grp->assignFixture(fxi->id()));
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+    auto rows = [&tree, fxi](bool group) {
+        QList<QTreeWidgetItem *> out;
+        for (QTreeWidgetItemIterator it(&tree); *it != NULL; ++it)
+        {
+            QTreeWidgetItem *item = *it;
+            const bool isFixture = item->data(0, PROP_ID).isValid()
+                                   && item->data(0, PROP_ID).toUInt() == fxi->id()
+                                   && !item->data(0, PROP_HEAD).isValid();
+            const bool isGroup = item->data(0, PROP_GROUP).isValid()
+                                 && !item->data(0, PROP_ID).isValid();
+            if (group ? isGroup : isFixture)
+                out << item;
+        }
+        return out;
+    };
+    auto image = [](const QIcon &icon) { return icon.pixmap(32, 32).toImage(); };
+    QVERIFY(!rows(false).isEmpty());
+    QVERIFY(!rows(true).isEmpty());
+    const QImage today = image(rows(false).first()->icon(0));
+    const QImage todayGroup = image(rows(true).first()->icon(0));
+    const QImage look = image(QIcon(Fixture::stageLookIconResource(Fixture::EllipsoidalLook)));
+    QVERIFY(!look.isNull());
+    QVERIFY(look != today);
+
+    // On: every row of the fixture, and its group, without a rebuild.
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QByteArray offSnap = props->snapshot(m_doc);
+    props->setAutoStageLooks(true);
+    foreach (QTreeWidgetItem *row, rows(false))
+        QCOMPARE(image(row->icon(0)), look);
+    foreach (QTreeWidgetItem *row, rows(true))
+        QCOMPARE(row->icon(0).name(),
+                 ItemIcons::lookGroupIcon(Fixture::EllipsoidalLook).name());
+
+    // Back by an undo snapshot: today's again.
+    QVERIFY(props->restoreSnapshot(offSnap, m_doc));
+    QVERIFY(!props->autoStageLooks());
+    foreach (QTreeWidgetItem *row, rows(false))
+        QCOMPARE(image(row->icon(0)), today);
+    foreach (QTreeWidgetItem *row, rows(true))
+        QCOMPARE(image(row->icon(0)), todayGroup);
+}
+

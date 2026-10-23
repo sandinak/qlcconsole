@@ -843,6 +843,12 @@ signals:
     /** Signal that a fixture's properties have changed */
     void fixtureChanged(quint32 fxi_id);
 
+    /** What every Auto fixture looks like may have changed at once: the
+     *  show's "Auto fixtures as their closest stage look" was turned on or
+     *  off (MonitorProperties::autoStageLooksChanged(), undo included).
+     *  Lists that cache fixture or group icons redo them. */
+    void stageLooksChanged();
+
 private slots:
     /** Catch fixture property changes */
     void slotFixtureChanged(quint32 fxi_id);

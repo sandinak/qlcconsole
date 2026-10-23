@@ -41,6 +41,7 @@
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "itemicons.h"
+#include "monitor/fixturevisualtraits.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -608,10 +609,13 @@ QIcon fixtureIcon(const Fixture *fixture)
 {
     if (fixture == nullptr)
         return QIcon(QStringLiteral(":/fixture.png"));
-    // The LD's own word for what it looks like wins over what is guessed.
+    /* The LD's own word for what it looks like wins over what is guessed --
+       and on Auto, its closest look when the show shows Auto fixtures so.
+       One decision with the plot and the studio: drawnStageLook(). */
     QIcon icon;
-    if (fixture->stageLook() != Fixture::AutoLook)
-        icon = QIcon(fixture->iconResource());
+    const Fixture::StageLook look = drawnStageLook(fixture);
+    if (look != Fixture::AutoLook)
+        icon = QIcon(Fixture::stageLookIconResource(look));
     else
     {
         const FixtureKind kind = fixtureKind(fixture);
@@ -629,7 +633,43 @@ QIcon outputRulesBadged(const QIcon &base)
 
 QIcon groupIcon(Doc *doc, const FixtureGroup *group)
 {
+    /* Showing Auto fixtures as their closest look: a group whose fixtures
+       all come out as one look shows it, with the group badge. */
+    const Fixture::StageLook look = groupStageLook(doc, group);
+    if (look != Fixture::AutoLook)
+        return lookGroupIcon(look);
     return kindIcon(groupKind(doc, group), true);
+}
+
+Fixture::StageLook groupStageLook(Doc *doc, const FixtureGroup *group)
+{
+    if (doc == nullptr || group == nullptr || doc->monitorProperties() == nullptr
+        || !doc->monitorProperties()->autoStageLooks())
+        return Fixture::AutoLook;
+    Fixture::StageLook shared = Fixture::AutoLook;
+    bool first = true;
+    for (quint32 fid : group->fixtureList())
+    {
+        const Fixture::StageLook look = drawnStageLook(doc->fixture(fid));
+        if (look == Fixture::AutoLook || (!first && look != shared))
+            return Fixture::AutoLook;
+        shared = look;
+        first = false;
+    }
+    return shared;
+}
+
+QIcon lookGroupIcon(Fixture::StageLook look)
+{
+    const QString res = Fixture::stageLookIconResource(look);
+    if (res.isEmpty())
+        return kindIcon(OtherKind, true);
+    return cached(QStringLiteral("lookgroup:%1").arg(int(look)), [res](QPainter &p, const QColor &ink) {
+        // The look, a little smaller, with the badge -- as a kind's group.
+        const QPixmap pm = QIcon(res).pixmap(64, 64);
+        p.drawPixmap(QRectF(0, 0, 27, 27), pm, QRectF(pm.rect()));
+        drawGroupBadge(p, ink);
+    });
 }
 
 QIcon targetsIcon(Doc *doc, const QList<quint32> &groups, const QList<quint32> &fixtures)
