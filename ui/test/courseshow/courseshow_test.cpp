@@ -1887,7 +1887,7 @@ void CourseShow_Test::lessonFiveLateCue()
     QCOMPARE(doc->mode(), Doc::Design);
     QVERIFY(view->selectNode(cueNumbered(doc, "1.0.2")));
     settle(50);
-    QVERIFY(newCueNamed(view, "Hit"));
+    QVERIFY(newCueNamed(view, "Fill"));
     const quint32 hit = view->currentCueId();
     QCOMPARE(st->cue(hit)->number, QStringLiteral("1.0.2.5"));
     const CueList *list = st->listOfCue(hit);
@@ -1895,9 +1895,9 @@ void CourseShow_Test::lessonFiveLateCue()
     QCOMPARE(list->indexOf(hit), list->indexOf(cueNumbered(doc, "1.0.2")) + 1);
     QCOMPARE(cueNumbered(doc, "1.0.3"), list->cues.at(list->indexOf(hit) + 1).id);
 
-    QCOMPARE(dropGroupOnZone(doc, view, "Lanterns"), QStringLiteral("a new layer on Lanterns in 1.0.2.5 Hit"));
+    QCOMPARE(dropGroupOnZone(doc, view, "Lanterns"), QStringLiteral("a new layer on Lanterns in 1.0.2.5 Fill"));
     for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
-        QVERIFY(dropPaletteOnRow(doc, view, "Lanterns", pal).startsWith(pal + " → layer Lanterns in 1.0.2.5 Hit"));
+        QVERIFY(dropPaletteOnRow(doc, view, "Lanterns", pal).startsWith(pal + " → layer Lanterns in 1.0.2.5 Fill"));
     settle(100);
     QVERIFY2(cueRow(view, "Lanterns") != nullptr && cueRow(view, "Lanterns")->text().contains("White, Full"),
              qPrintable(view->cueLayerItems().join(" | ")));

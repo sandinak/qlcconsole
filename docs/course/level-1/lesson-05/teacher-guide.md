@@ -122,7 +122,7 @@ From the handout: call the whole song with a "hold" (the SM stops a cue
 with **Back**), and design a sixth cue for the ending.
 
 **A late cue** (handout, extension 3), in Design: + Cue with 1.0.2 Chorus
-selected makes **1.0.2.5 Hit**, a point cue, so the SM's 1.0.3 and 1.0.4
+selected makes **1.0.2.5 Fill**, a point cue, so the SM's 1.0.3 and 1.0.4
 keep their numbers. Dragged onto the lower half of 1.0.4 Solo it becomes
 **1.0.5**: a list plays in number order, so a cue's place and its number
 move together. Worth saying out loud: real shows are full of point cues,
@@ -150,6 +150,6 @@ says LIVE, File → Open is greyed), GO twice, Back, a click that LOADs
 1.0.2 (STANDBY), GO, a double-click that jumps to 1.0.4, Stop (the stage
 goes dark, NEXT is 1.0.0 again), Design again — and that in LIVE a click
 on a cue in the Show Tree leaves the stage alone. The late-cue extension is
-`lessonFiveLateCue`: + Cue after the Chorus gives 1.0.2.5 Hit, the drop
+`lessonFiveLateCue`: + Cue after the Chorus gives 1.0.2.5 Fill, the drop
 note names 1.0.5, the drop makes it 1.0.5 at the end, and Undo puts it
 back. The picture is taken by the same test.

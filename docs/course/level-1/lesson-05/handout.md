@@ -131,23 +131,23 @@ what it changes, **(3)** **GO** (or **Space**), **(4)** **Back**, **(5)**
    recovers with **Back** and waits for the next call.
 2. On paper, design a sixth cue for the **ending** of the song: when it
    happens, why, which lights, and its timing.
-3. **A late cue.** At rehearsal the director asks for one more moment, a
-   **Hit** on the drum fill right after the chorus. The SM has already
-   written 1.0.3 and 1.0.4 into the script, so those numbers must not
-   change. Press **Stop**, click **Design**, then the **Show Tree** tab
+3. **A late cue.** At rehearsal the director asks for one more moment: a
+   cue called **Fill** on the drum fill right after the chorus. The SM has
+   already written 1.0.3 and 1.0.4 into the script, so those numbers must
+   not change. Press **Stop**, click **Design**, then the **Show Tree** tab
    (⇧⌘5).
-   1. Click **1.0.2 Chorus**, click **+ Cue**, type `Hit` and press
+   1. Click **1.0.2 Chorus**, click **+ Cue**, type `Fill` and press
       **Return**.
-      - *You should see:* **1.0.2.5 Hit** between the Chorus and the
+      - *You should see:* **1.0.2.5 Fill** between the Chorus and the
         Scream. It's a **point cue**: it fits between two cues without
         changing either number.
    2. Give it a look: drag **Lanterns** onto its drop area, then **White**
       and **Full** onto the Lanterns row.
-   3. The director changes their mind: the hit goes after the Solo.
-      Drag the **1.0.2.5 Hit** row in the tree onto the lower half of
+   3. The director changes their mind: the fill goes after the Solo.
+      Drag the **1.0.2.5 Fill** row in the tree onto the lower half of
       **1.0.4 Solo**. Before you let go, the note in the top bar says
       where it goes and its new number.
-      - *You should see:* **1.0.5 Hit** at the end of the list. A cue's
+      - *You should see:* **1.0.5 Fill** at the end of the list. A cue's
         number always matches its place in the list, so moving a cue
         gives it a new number; the other cues keep theirs.
    4. **Undo** (⌘Z) puts it back at 1.0.2.5.
