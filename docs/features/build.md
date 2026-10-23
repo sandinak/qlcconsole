@@ -35,7 +35,8 @@ QLC+ plays it.
 
 1. **Palettes | Effects | Scenes** — the section switch. Only the navigator
    under it changes.
-2. **The navigator** — here Build ▸ Scenes: your scene folders, with their
+2. **The navigator** — here Build ▸ Scenes, arranged **Classic** (every
+   function by type); **Folders** shows your scene folders with their
    scenes, collections and chasers ([The outline](#the-outline)).
 3. **The Workbench's header** — ↩ back, where it is, its name and kind,
    where it is used, what fires it, what is on the rig.
@@ -57,6 +58,41 @@ Two panes, left to right:
     right-click make new ones ([Making effects](#making-effects)).
   - **Scenes**: [the outline](#the-outline) of your scene folders. Click a
     scene, a collection or a chaser and it loads in the Workbench.
+
+  Under every section, **Groups &amp; fixtures**, with a **Search fixtures &
+  groups…** box: a row stays when it or anything under it matches, the
+  folders on the way down open, and a matching group keeps all its
+  fixtures. Right-click a row for **Select all similar** (the
+  [Fixture Manager's rule](fixture-manager.md#fixture-group-folders)),
+  **Create fixture group from selection…** (filed in the folder it was
+  made in), [Output Rules…](fixture-manager.md#output-rules) and, on
+  groups, **Move to folder ▸** (a folder in use, or **New Folder…**). The section you pick is the one the tab opens on next
+  time.
+- **Right — [the Workbench](#the-workbench)**: what is loaded, its layers,
+  and the editor pane for the selected row. It is the same in every
+  section: switching to Palettes to drag a colour onto a layer leaves the
+  Workbench as it was.
+- **The tab's tools**, in the top bar beside the show controls (or over
+  the tab, with the show controls in the status bar, or the tab in a
+  window of its own): **Highlight**, **Flash**, **Tap** and
+  **Save Positions** as buttons; **Park** (park selected, unpark all),
+  **Move in black** (mark, unmark, auto move-in-black and its lead time;
+  while Auto is on the drop-down is lit and reads **Move in black · Auto**,
+  or **MIB · n** while it pre-positions *n* heads — the same switch as the
+  Show Tree's **MIB** button, **Settings ▸ General ▸ Show Tree** and
+  **Control ▸ Auto Move in Black**, which is ticked while it is on; see
+  [Move in black](show-tree.md#move-in-black) for a cue list or cue that
+  says otherwise),
+  **Beat** (internal beat on, BPM, speed masters — the button reads the
+  tempo) and **More** (snapshot live output, jog speed) as drop-downs.
+  In a narrow window, what doesn't fit is under **»**.
+
+**Resizing:** drag the handles — between the navigator and the Workbench,
+between the layers and the editor pane, and over Groups &amp; fixtures. A
+handle moves its edge and stops where a pane reaches its smallest — no pane
+snaps shut. **Double-click a handle** to put it back where it started. The
+badge columns are handles of their own (drag the line between the columns).
+Where you leave them is remembered.
 
 ### Backing out (Esc)
 
@@ -80,39 +116,6 @@ with the focus in the navigator or in the Workbench:
 What you changed stays changed. Palette and scene edits are made as you go,
 and **⌘Z** undoes them. Esc in a rename only cancels the rename. Esc never
 stops playback: that is **⌘⇧Esc**, Stop all.
-
-  Under every section, **Groups &amp; fixtures**, with a **Search fixtures &
-  groups…** box: a row stays when it or anything under it matches, the
-  folders on the way down open, and a matching group keeps all its
-  fixtures. Right-click a row for **Select all similar** (the
-  [Fixture Manager's rule](fixture-manager.md#fixture-group-folders)),
-  **Create fixture group from selection…** (filed in the folder it was
-  made in) and, on groups, **Move to folder ▸** (a folder in use, or
-  **New Folder…**). The section you pick is the one the tab opens on next
-  time.
-- **Right — [the Workbench](#the-workbench)**: what is loaded, its layers,
-  and the editor pane for the selected row. It is the same in every
-  section: switching to Palettes to drag a colour onto a layer leaves the
-  Workbench as it was.
-- **The tab's tools**, in the top bar beside the show controls (or over
-  the tab, with the show controls in the status bar, or the tab in a
-  window of its own): **Highlight**, **Flash**, **Tap** and
-  **Save Positions** as buttons; **Park** (park selected, unpark all),
-  **Move in black** (mark, unmark, auto move-in-black and its lead time;
-  while Auto is on the drop-down is lit and reads **Move in black · Auto**,
-  or **MIB · n** while it pre-positions *n* heads -- the same switch as the
-  Show Tree's **MIB** button, Settings and **Control ▸ Auto Move in
-  Black**, which is ticked while it is on),
-  **Beat** (internal beat on, BPM, speed masters — the button reads the
-  tempo) and **More** (snapshot live output, jog speed) as drop-downs.
-  In a narrow window, what doesn't fit is under **»**.
-
-**Resizing:** drag the handles — between the navigator and the Workbench,
-between the layers and the editor pane, and over Groups &amp; fixtures. A
-handle moves its edge and stops where a pane reaches its smallest — no pane
-snaps shut. **Double-click a handle** to put it back where it started. The
-badge columns are handles of their own (drag the line between the columns).
-Where you leave them is remembered.
 
 ## The Workbench
 
@@ -280,8 +283,8 @@ the tab.
 - **Click an effect palette** to open it in the designer. The designer
   works on a copy: **Update “name”** writes it back, **Save as
   palette…** keeps it as a new one.
-- **Make a layer** puts the Try on groups and the effect into
-  programming. If a scene was loaded in the Workbench when you opened the
+- **Make a layer** puts the Try on groups and the effect into a scene
+  as a layer. If a scene was loaded in the Workbench when you opened the
   bench, the button puts them back into that scene. Its menu offers the
   Show Tree's selected cue, another scene, or a new one. Each is one undo
   step, and the new layer is selected afterwards. See
@@ -293,7 +296,8 @@ the tab.
   for **New effect…**, **New EFX** and **New RGB Matrix**.
 
 Loading anything else in the Workbench puts the designer away, and an
-unsaved design with it. Window ▸ Effects is the same designer in a
+unsaved design with it; **Esc** asks first
+([Backing out](#backing-out-esc)). Window ▸ Effects is the same designer in a
 window of its own.
 
 ![Build ▸ Effects: the right-click menu, and the effect designer in the Workbench](../images/build-effects-menu.png)
@@ -334,9 +338,12 @@ everywhere.
 
 ### Coming from the Functions window
 
-The Functions window is hidden. **Window → Functions** (⇧⌘4) opens
-**Build ▸ Scenes ▸ Classic** with the list focused, and everything the
-Function Manager did is here:
+The **qlcconsole** view doesn't show Functions as a tab; the **Classic QLC+** and
+**Everything** views still show it
+([Views](getting-started.md#views)). **Window → Functions** (⇧⌘4) opens
+Functions where the view shows it as a tab, and otherwise **Build ▸ Scenes ▸
+Classic** with the list focused. Everything the Function Manager did is
+here:
 
 | Functions window | Build |
 |---|---|

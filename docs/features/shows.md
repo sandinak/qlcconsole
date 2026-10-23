@@ -70,5 +70,5 @@ channel over live.
 
 - [Getting started → Running the show](getting-started.md#running-the-show)
 - [Keyboard and mouse → Shows](shortcuts.md#shows-timeline)
-- The upstream QLC+ reference (Help → QLC+ Reference) for the stock Show
+- The upstream QLC+ reference (Help → QLC+ Reference (online)) for the stock Show
   Manager in depth.

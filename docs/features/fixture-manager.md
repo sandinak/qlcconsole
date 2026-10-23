@@ -53,7 +53,7 @@ Selecting a fixture, group, universe, or power item swaps the right-hand pane
 between an info browser, the group grid editor, the power view, or a
 universe's address-usage grid. A fixture's info includes its **Connection**
 (DMX, or Network with its IP), its **Definition** source (Included or Local,
-below), and, for an unpatched one, "Unpatched -- in the inventory".
+below), and, for an unpatched one, "Unpatched — in the inventory".
 
 **Renaming in the tree.** Select a fixture, a group, a group folder or a
 universe and press **Return** (or **F2**), type the new name, and press
@@ -300,12 +300,12 @@ channel makeup.
 - Click-drag an occupied cell (or a multi-cell selection) to move a block; a
   wireframe preview shows the drop target and only accepts drops that don't
   collide with anything outside the moving set.
-- Shift+click/drag extends a rectangular marquee selection; Ctrl+click toggles
+- Shift+click/drag extends a rectangular marquee selection; ⌘-click toggles
   one cell at a time.
 - Right-click a cell for **"Move `<fixture>` up/down/left/right"** (shifts
   every head of that one fixture as a unit) or, on a pasted block,
   **"Move sub-group up/down/left/right"**.
-- Ctrl+Z undoes the last edit (50-deep history).
+- ⌘Z undoes the last edit (50-deep history).
 
 ## Fixture-group folders
 
@@ -608,7 +608,7 @@ selected, and only offers what applies:
    several) and Return to Inventory….
 3. **Finding it on the rig** — Test Fixture…, Locate, Reset.
 4. **Organising it** — a **Group** submenu (Create Group(s) from Selection…,
-   Add to Group ▸, Remove from Group; for a group: Move to Folder…, Remove
+   Add to Group ▸, Remove from Group; for a group: Move to Folder ▸, Remove
    Group (Keep Fixtures), Rebuild Composite), a **Power** submenu (Add to
    Circuit ▸, Remove from Circuit), and Channel Behaviour & Modifiers….
 5. **Deleting it** — Delete….
@@ -625,8 +625,8 @@ patched ones is Design mode's — the same rule everywhere.
 
 ### Stage Look
 
-**Stage Look ▸** sets what the fixtures selected -- and every fixture of a
-group selected -- look like: **Auto** (named for what their type is closest
+**Stage Look ▸** sets what the fixtures selected — and every fixture of a
+group selected — look like: **Auto** (named for what their type is closest
 to, as *Auto (Moving head spot)*), then the looks under **Moving**, **Fixed
 conventional**, **Fixed LED** and **Practicals** (Lantern, Staff), with
 icons. The one they all share is
@@ -635,7 +635,7 @@ fixture lists, and its shape on the plot and in the studio; see
 [Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
 same choice as its **Stage look** row. A look changes only the icon and the
 drawing, never the DMX, so Stage Look ▸ is offered in Operate mode too, and
-Ctrl+Z undoes it.
+⌘Z undoes it.
 
 ### Icons
 
@@ -646,8 +646,8 @@ channels-group and remap dialogs and the Virtual Console's fixture lists.
 What decides it, in order:
 
 1. **Its stage look**, when you have given it one (Stage Look ▸ above).
-2. **A curtain** -- a fixture that gives no light and has an *Open*,
-   *Position* or *Fly* channel (the plot draws it as its drape) -- shows a
+2. **A curtain** — a fixture that gives no light and has an *Open*,
+   *Position* or *Fly* channel (the plot draws it as its drape) — shows a
    drape on its track.
 3. **Its closest look**, when it is on Auto and the plot's **Show ▸ Show
    Auto fixtures as their closest stage look** is on.
@@ -655,8 +655,8 @@ What decides it, in order:
    a moving head, else its definition's type (a hazer, a fan, a strobe...).
 
 A fixture with [output rules](#output-rules) adds the amber badge. A group
-shows the group version of its fixtures' shared icon -- all curtains, one
-look (with the setting on) or one kind -- and the plain group icon when they
+shows the group version of its fixtures' shared icon — all curtains, one
+look (with the setting on) or one kind — and the plain group icon when they
 differ. Every list redoes its icons when a look, the rules or the setting
 change.
 
@@ -739,7 +739,7 @@ definition. On top of stock QLC+'s editor:
   values no capability covers. Double-click one to jump to it. Saving with
   errors asks first.
 - **Physical tab → Dimensions in your own units.** Width, height, depth
-  and weight show in the unit chosen in qlcconsole's **Settings → Units**
+  and weight show in the unit chosen in qlcconsole's **Settings ▸ General ▸ Units**
   (millimetres, centimetres, metres, inches, or feet and inches; weight in
   kg with the metric ones, lb with inches and feet). Type a bare number in
   that unit, or any unit with the number and it's converted: `7.5"`,

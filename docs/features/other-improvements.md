@@ -93,7 +93,7 @@ to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so
 the list and the output view get the window's height.) A full patch-change **undo**
-(Ctrl+Z, from any of the patching sub-tabs) snapshots and restores the whole
+(⌘Z, from any of the patching sub-tabs) snapshots and restores the whole
 patch state, not just the last single edit.
 
 Compared to stock QLC+, this fork also fixed a number of real patching
@@ -153,7 +153,7 @@ Wi-Fi — must not put show traffic on it. Each show can say which networks
 its output belongs on, its **rig networks**, and network output then goes
 out only from this computer's interfaces on them.
 
-Set them in **Settings → Network**: **This show's rig networks** takes one
+Set them in **Settings → General → Network**: **This show's rig networks** takes one
 or more IPv4 networks, separated by commas (for example 172.18.0.0/20).
 They are checked as you type — an address without its /size, or anything
 that isn't an IPv4 network, is pointed out in red and OK waits until it
@@ -386,23 +386,27 @@ try it on your own devices before relying on it for a show.
 
 ## Window menu
 
-Every view is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
+Every tab is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
 Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Build, ⇧⌘6 Show
-Tree, ⇧⌘7 Shows, ⇧⌘8 Virtual Console, ⇧⌘9 Simple Desk): choosing one brings it forward — its
+Tree, ⇧⌘7 Shows, ⇧⌘8 Virtual Console, ⇧⌘9 Simple Desk, ⇧⌘0 Run):
+choosing one brings it forward — its
 tab, or its own window when it has been broken out (right-click a tab →
 **Open in Its Own Window**, Shift-click it, or **Move … to Its Own
 Window**),
 which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
-as usual. A view that the current workspace view hides (**View →
-Workspace**) switches to **Everything** when you choose it; see
+as usual. **Rig Overview…** (⇧⌘R) and **Effects…** (the effect designer)
+are here too. A tab that the workspace view hides (**View ▸
+Workspace**) switches the view to **Everything** when you choose it, with
+a line above the tabs to go back; see
 [Views](getting-started.md#views).
 
-**Functions is Build ▸ Scenes ▸ Classic.** In the qlcconsole view the
-Functions window is hidden (the Classic QLC+ and Everything views show
-it): **Window → Functions** (⇧⌘4) brings Build forward with the
+**Functions is Build ▸ Scenes ▸ Classic.** The qlcconsole view doesn't show
+Functions as a tab (the Classic QLC+ and Everything views do). There,
+**Window ▸ Functions** (⇧⌘4) brings Build forward with the
 Scenes outline set to **Classic** — every function by type, as the
-Function Manager listed them — and the list focused. Each function opens
+Function Manager listed them — and the list focused; in a view that shows
+Functions as a tab it opens that. In Build each function opens
 in the Workbench with its own editor (chasers, sequences, EFX, RGB
 matrices, shows, scripts, audio and video). New functions of every type,
 the Function Wizard and the startup function are on **+ Scene ▾** and
@@ -636,13 +640,20 @@ estimates use the readings (and the cap) wherever a fixture has them.
 ## Advanced settings
 
 **Settings** has two tabs. **General** holds what everyone sets: autosave,
-the tab bar, units, the Show Tree's Record choices and the show's
+the tab bar (tab labels, and the show's
+[workspace view](getting-started.md#views)), where the show controls go,
+units, the Show Tree's Record choices and the show's
 [move in black](show-tree.md#move-in-black) (saved with the show), the rig
-network and software updates. **Advanced** holds settings for experienced users and
-the show's output behaviour:
+network and software updates. **Advanced** holds settings for experienced
+users and the show's output behaviour:
 
 - **Output (saved with this show)**: **Auto-open shutters when a light is
-  given a level** (below).
+  given a level** (below), and when **"On when not in use" fixtures come
+  on**: **When you switch to Operate** or **When the show opens** (see
+  [Output rules](fixture-manager.md#output-rules)).
+- **Game controllers**: **Controller test…**, every input a controller
+  sends and what it maps to
+  ([Controller test](lighting-studio.md#controller-test)).
 - **Effects**: which editor opens an effect script (the in-app editor, or
   your computer's editor for .js files). It used to be on the one Settings
   page.
@@ -672,14 +683,14 @@ With **Auto-open shutters** on, qlcconsole works like a lighting console's
   edit that sets the shutter to Closed, Strobe or anything else keeps it
   there.
 - **A Shutter look sends what it says.** *Closed* closes the shutter,
-  *Strobe* strobes it, *Open* opens it -- also on a spot whose shutter has
+  *Strobe* strobes it, *Open* opens it — also on a spot whose shutter has
   an Open capability, which a Closed look used to open anyway. A Shutter
   look with no value (or 0, as every look made before Closed could be
   picked) is an *Open* look. On a mixed group the look's value is read on
   the fixture type it was picked from (a type that tags its capabilities
   comes first); every other type gets its own Open, Closed or a strobe at
-  the same rate. A fixture whose shutter cannot close -- a plain strobe
-  channel, 0 open and the rest strobe -- stays open under a Closed look:
+  the same rate. A fixture whose shutter cannot close — a plain strobe
+  channel, 0 open and the rest strobe — stays open under a Closed look:
   take its level down instead. Its strobe is a **Strobe** look's job.
 - **A light with no level is left alone**, so nothing lights by itself. A
   dimmer that only rests at full because of its definition's default does

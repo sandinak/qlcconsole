@@ -17,7 +17,7 @@
 | ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a look; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
-| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (Build ▸ Scenes ▸ Classic), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)) |
+| ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (its tab in the Classic QLC+ and Everything views; Build ▸ Scenes ▸ Classic in the qlcconsole view), Build, Show Tree, Shows, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)). A tab the [view](getting-started.md#views) hides switches it to Everything |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
 | ⇧⌘M | Lighting Studio |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
@@ -26,11 +26,11 @@
 | ⇧F1 | The stock QLC+ reference (online) |
 
 **Right-click** a **tab** → **Open in Its Own Window**, or **Shift-click**
-it, to break it out into its own window (or **Window → Move … to Its Own
+it, to break it out into its own window (or **Window ▸ Move … to Its Own
 Window**). On a Mac, if the app isn't in front, the first click only brings
 it forward — Shift-click again, or use the right-click menu, which works
-either way; **Window → Put Back in Main Window** returns
-it. **Window → Shift-Click a Tab to Open It in a Window** turns the
+either way; **Window ▸ Put Back in Main Window** returns
+it. **Window ▸ Shift-Click a Tab to Open It in a Window** turns the
 Shift-click off, if it gets in the way.
 
 ## Lighting Studio (the plot)
@@ -92,7 +92,7 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | **⇧⌘N** | New here: a production, a cue list, the next cue after the selected one, a layer on the Library's groups, a look ([New here](show-tree.md#new-here)) |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
-| Drag a cue onto another cue | Move it there; with **⌥**, include it |
+| Drag cues up or down (before / after a row) | Move them there, renumbered for their place; with **⌥**, include it ([Reordering and numbering](show-tree.md#reordering-and-numbering)) |
 | Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
 | **:** (in the tree) | To the command line at the bottom ([The command line](show-tree.md#the-command-line)) |
 | **Esc** (in the command line) | Close the help, then back to the tree |

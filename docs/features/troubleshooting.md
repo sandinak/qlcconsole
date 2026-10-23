@@ -40,7 +40,7 @@ sACN, OSC and WLED output is held — kept, and nothing sent — rather than
 put on whatever network it is on. The footer names the show's networks and
 where this computer is connected. Join the show network and it resumes by
 itself; if it *is* on the show network, click the footer and check the
-show's rig networks in **Settings → Network**. See
+show's rig networks in **Settings ▸ General ▸ Network**. See
 [Only transmit on the rig network](other-improvements.md#only-transmit-on-the-rig-network).
 
 **A new Art-Net node doesn't show up, or shows amber "set its IP".** It's
@@ -54,6 +54,14 @@ the node's network first. See
 **A look stays on the fixtures after its function is removed.** Fixed — a
 function deleted while it runs now lets go of its channels. On an older
 build, stop the function before deleting it.
+
+**A light stays on through Blackout, or the Grand Master doesn't dim
+it.** It has [output rules](fixture-manager.md#output-rules) — a house or
+work light, a power relay (an Eos import sets them on its special
+circuits). Its icon carries a small amber badge; right-click it →
+**Output Rules…** to see or change them. A relay that comes on by itself
+is **On when not in use**: when it does is **Settings ▸ Advanced ▸
+Output**.
 
 **A colour/effect on a group lights fixtures outside it.** A look on a
 fixture group sets only that group's own heads (a group of the colour
@@ -135,7 +143,7 @@ the unsaved work from its autosave.
 
 **A show from another computer is missing fixtures.** Save it there as a
 **.qlcc**: it then carries every definition and script of its own (or use
-**File → Collect for Transfer…** for a folder with them beside it). A .qxw
+**File ▸ Collect for Transfer…** for a folder with them beside it). A .qxw
 doesn't; its definitions come from this computer's library or show cache,
 and the footer offers to find a missing one. See
 [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
@@ -148,13 +156,32 @@ work in its place; pick **Use This Computer's**, **Keep the Show's** or
 
 ## Finding things
 
-**Where did the Functions tab go?** **Build ▸ Scenes ▸ Classic.**
-**Window → Functions** (⇧⌘4) takes you there: Build, the Scenes section,
-the outline set to **Classic**, which lists every function by type as the
-Function Manager did. Click one to edit it in the Workbench. New
-functions of every type, the Function Wizard and the startup function are
-on **+ Scene ▾** and the outline's right-click
+**A tab is missing.** The show's workspace view hides it: **View ▸
+Workspace** picks **Classic QLC+**, **qlcconsole** or **Everything**, and
+the view is saved with the show (an old QLC+ show opens in Classic QLC+,
+without Build, the Show Tree or the Lighting Studio). Choosing a hidden
+tab from **Window** shows it anyway, switching to Everything with a line
+to go back. See [Views](getting-started.md#views).
+
+**Where did the Functions tab go?** The qlcconsole view has none; it is
+**Build ▸ Scenes ▸ Classic**. **Window ▸ Functions** (⇧⌘4) takes you
+there: Build, the Scenes section, the outline set to **Classic**, which
+lists every function by type as the Function Manager did. Click one to
+edit it in the Workbench. New functions of every type, the Function Wizard
+and the startup function are on **+ Scene ▾** and the outline's
+right-click
 ([Coming from the Functions window](build.md#coming-from-the-functions-window)).
+The Classic QLC+ and Everything views still show Functions as a tab.
+
+**A Show Tree cue changed its number.** A cue's number is its place in
+the list: dragging a cue renumbers it for where it lands, and typing a new
+number moves it. Adding a cue never renumbers the others. ⌘Z puts it
+back; see [Reordering and numbering](show-tree.md#reordering-and-numbering).
+
+**Esc didn't stop anything.** Plain Esc backs out of an editor (a palette,
+a group's layout, the effect bench, the Workbench docked in the Show
+Tree) to what was showing before. **Stop all** is **⌘⇧Esc**
+([Keyboard and mouse](shortcuts.md)).
 
 **A shortcut does nothing.** Check [Keyboard and mouse](shortcuts.md):
 some keys only work in one view (the Virtual Console's add-widget keys

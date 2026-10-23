@@ -386,6 +386,13 @@ scenes. A capture still keeps the scene in any cue that would come out
 different. The whole upgrade is **one undo step** (*Undo Upgrade this
 show*). **Restore original…** later puts one chaser back.
 
+### From an Eos show
+
+**File ▸ Import ▸ ETC Eos Show (ASCII .asc)…** brings an Eos-family
+desk's show in: its patch, groups and palettes, and each of its cue lists
+as a tracking cue list here, in Eos's cue numbers. See
+[Importing an Eos show](getting-started.md#importing-an-eos-show).
+
 ### Three cues with the mouse
 
 Use your own group and palette names in place of Towers, USTs, Blue and Red.
@@ -1007,7 +1014,7 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
 ### Text colours
 
 A cue list, and any cue in it, can have a **text colour**: a quick way to
-read a long list at a glance -- songs in their own colour, the cues the
+read a long list at a glance — songs in their own colour, the cues the
 stage manager calls in red. It changes how the cue reads, never what it
 plays.
 
@@ -1029,7 +1036,7 @@ plays.
   **SUB NEXT** lines, the **Cue Runner** widget (with its upcoming
   lines), and a VC **Cue List** playing the list (its rows and *Next:*).
 - **Readable in every theme.** Where a colour would be hard to read on the
-  theme's background -- yellow on white, blue on a dark theme -- a lighter
+  theme's background — yellow on white, blue on a dark theme — a lighter
   or darker shade of the same colour is drawn instead. Done cues in the Run
   tab and skipped cues stay grey.
 - **Saved with the show.** An older build opens the show as it was, without
@@ -1066,7 +1073,7 @@ Record just records it. When they differ, it **asks**. In Design the dialog
 starts on the selected cue; in Operate, on the running cue. Tick **Don't ask
 again** to make your answer the default.
 
-The defaults live in **Settings** (⌘,) → **Show Tree**. There is one for
+The defaults live in **Settings** (⌘,) → **General** → **Show Tree**. There is one for
 Design and one for Perform (Operate), each set to Ask or one of the three.
 A default that names something not on stage (the running cue, with nothing
 running) asks instead. Typing `record selected`, `record running` or
@@ -1089,10 +1096,10 @@ usual.
 Record and Duplicate number the new cue as + Cue does. + Cue goes after the
 selected cue and counts up its last number when that is free (1.0.0 →
 1.0.1). Otherwise it makes a point cue: with 0.0.4 and 0.0.5 taken, you get
-0.0.4.5. **Cues are never renumbered unless you ask** (**Renumber this
-level…**, below), because show control fires them by number. You can type a
-number into a cue's **Number** field yourself; the cue then moves to its
-place, as [Reordering and numbering](#reordering-and-numbering) says.
+0.0.4.5. **Adding a cue never renumbers the others**, because show control
+fires them by number. A cue's number changes only when you change it: type
+a new one, drag the cue to another place, or **Renumber this level…**
+([Reordering and numbering](#reordering-and-numbering)).
 
 ## Reordering and numbering
 
@@ -1424,7 +1431,9 @@ again what it opened.
     several) for **Select all similar**, **Make set…** and **Move to
     folder ▸**: the folders in use, *no folder*, or **New Folder…** (made
     inside the one they are in). They stay selected where they land. The
-    Fixture Manager uses the same folders;
+    Fixture Manager uses the same folders. **Output Rules…** (on groups
+    and fixtures) sets [output rules](fixture-manager.md#output-rules) on
+    every member;
   - **Palettes**, by type with your folders under each, or folders first
     ([Palettes in the Library](#palettes-in-the-library));
   - **Functions (played as they are)**: not chasers, and not what the tree
@@ -1693,7 +1702,7 @@ production has a **Looks** section beside its cue lists.
 
 ## Productions
 
-A show can hold several productions -- a tour's two sets, the dance show
+A show can hold several productions — a tour's two sets, the dance show
 and the corporate gig in the same venue. They share the Library (groups,
 palettes, targets, reusables); each has its own cue lists and its own Looks
 section. **Undo is one history** for all of them.
@@ -1712,7 +1721,7 @@ section. **Undo is one history** for all of them.
   production is current.
 - **Its timecode source.** The production page's **Timecode** picks where its
   timecode comes from while it is current: the show's setting (Connections →
-  Show control & sync), any source, or one universe -- QLab's MTC for one
+  Show control & sync), any source, or one universe — QLab's MTC for one
   production, a desk's for the other. The show's own setting is kept.
 - Switching production never stops a list that runs: the next GO plays the
   new one. Which production is current is saved with the show, and is not a
@@ -1721,7 +1730,7 @@ section. **Undo is one history** for all of them.
 
 ## Sub-cues
 
-A cue can have **sub-cues** -- 4.1, 4.2… -- that **Sub GO** (**⌥⌘↩**)
+A cue can have **sub-cues** — 4.1, 4.2… — that **Sub GO** (**⌥⌘↩**)
 steps through while GO still goes on to cue 5: the hit, the sweep and the
 strobe inside a chorus.
 
@@ -1730,7 +1739,7 @@ strobe inside a chorus.
   sub-cue. They are numbered under their cue (4.1, 4.2), and a new main cue
   never takes one of their numbers.
 - **Each is a cue of its own**: layers, cue looks, groups and palettes
-  dropped on it, its own fade in and out, a name and a note -- everything a
+  dropped on it, its own fade in and out, a name and a note — everything a
   cue has but a mode, base, includes or hold.
 - **Advance** (on its page): **Sub GO** waits for Sub GO; **Auto-follow
   after** a wait goes on by itself that long after the sub-cue before it has
@@ -1745,7 +1754,7 @@ strobe inside a chorus.
   previous sub-cue. Show control fires a sub-cue by its number (`/go 4.2`,
   MSC GO 4.2), and `/subgo` / `/subback` step ([Show control](show-control.md)).
 - Under the hood, cue 4's step plays a hidden chaser of the sub-cues'
-  collections, held on Sub GO -- the same sub-cues a hand-made chaser gets
+  collections, held on Sub GO — the same sub-cues a hand-made chaser gets
   ([sub-cues in the chaser editor](show-control.md#sub-cues)). A scene two
   sub-cues share keeps running through Sub GO, with no re-fade.
 
@@ -1759,12 +1768,12 @@ Console widget is the same runner on a VC page.
   the current production, or any list of any production), the **timecode**
   (*TC 01:02:03:15*, *hold* when it stops arriving) and **LIVE / DESIGN**
   (⌘F12 switches).
-- **The list:** every cue, its sub-cues under it, each with its state --
+- **The list:** every cue, its sub-cues under it, each with its state —
   **▶** running (with its fade's progress), **▷ STANDBY** (loaded), **NEXT**,
-  **SUB NEXT** -- its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and
+  **SUB NEXT** — its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and
   its note. Done cues are grey.
 - **What changes.** NEXT (or STANDBY) and SUB NEXT carry one line: only what
-  differs between the stage now and that cue, from the tracking -- *"Towers
+  differs between the stage now and that cue, from the tracking — *"Towers
   → Red, spread +5, gobo Breakup; BackStage in → Green, Intensity 45%;
   USTs out"*. GO into a cue with sub-cues shows what its first sub-cue
   brings.
@@ -1773,7 +1782,7 @@ Console widget is the same runner on a VC page.
   fade and an auto-follow's wait) and **Stop** (⌘⇧Esc stops everything).
   Back and a jump land on the cue as GO from the top would
   ([Tracking](#tracking)).
-- **Click a cue: LOAD** -- it becomes STANDBY, what the next GO plays.
+- **Click a cue: LOAD** — it becomes STANDBY, what the next GO plays.
   **Double-click: jump** to it now (a sub-cue: its cue first).
 - **One state everywhere.** The Run tab, every Cue Runner widget, the
   footer, the keys and QLab / OSC / MSC all drive the same list: what one
@@ -1781,7 +1790,7 @@ Console widget is the same runner on a VC page.
 
 **The Cue Runner VC widget.** Virtual Console → Add → **New Cue Runner**.
 Its properties (double-click in Design) choose what it **plays** (the
-current production, or one list -- several widgets can each follow a
+current production, or one list — several widgets can each follow a
 different list or production) and its **size**: **Compact** (on now, next,
 GO and Sub GO) or **List** (the whole runner). The old **Cue List**
 widget stays for plain chasers. **Edit → Swap Widget** turns a Cue List
@@ -1863,7 +1872,7 @@ left alone, so nobody sees it move. Each light is let go as its cue lights
 it. A next cue closer than the **lead time** (0.8 s for a new show) is too
 soon to move in black, so nothing new is sent for it.
 
-It is one setting of the show, saved with it. There are three places to
+It is one setting of the show, saved with it. There are four places to
 set it, and they always agree:
 
 - **The Show Tree's header: MIB**, at its right end, just left of Stop
@@ -1871,10 +1880,12 @@ set it, and they always agree:
   it to turn it on (it lights up) or off. Its arrow holds the same switch
   and the **Lead time**. While it is moving lights, it says how many:
   *MIB · 3*.
-- **Build → Move in black ▾**: **Auto move-in-black** and **Lead
-  time**, with marking lights by hand (see
-  [The Build tab](build.md)).
-- **Settings** (⌘,) → **Show Tree** → **Move in black**: the switch and the
+- **Build → Move in black ▾** (the Build tab's top bar): **Auto
+  move-in-black** and **Lead time**, with marking lights by hand. While
+  Auto is on it reads **Move in black · Auto** (see
+  [The Build tab](build.md#layout)).
+- **Control → Auto Move in Black** in the menu bar: the switch alone.
+- **Settings** (⌘,) → **General** → **Show Tree** → **Move in black**: the switch and the
   lead time, applied on OK. The note under them says it: saved with this
   show, not this computer. Another show keeps its own, and a new show
   starts with it off.
