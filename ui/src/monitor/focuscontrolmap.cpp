@@ -211,6 +211,10 @@ QString FocusControlMap::actionText(int role) const
             return tr("Nudge");
         case R::RightX: case R::RightY:
             return tr("Fine nudge");
+        case R::LeftTrigger:
+            return tr("Narrower beam");
+        case R::RightTrigger:
+            return tr("Wider beam");
         default:
             break;
     }
@@ -273,6 +277,8 @@ QString FocusControlMap::keyAction(int key) const
         case Qt::Key_Control:
         case Qt::Key_Z:            return tr("Undo save");
         case Qt::Key_Return:       return tr("Save");
+        case Qt::Key_Comma:        return tr("Narrower beam");
+        case Qt::Key_Period:       return tr("Wider beam");
         case Qt::Key_Up:
         case Qt::Key_Down:
         case Qt::Key_Left:

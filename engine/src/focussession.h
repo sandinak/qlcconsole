@@ -162,6 +162,22 @@ public:
     /** True when @p fid is a fixed light in this session. */
     bool isFixedLight(quint32 fid) const { return m_heads.value(fid).fixed; }
 
+    /** The beam (board Q103). A light zoomed BY HAND (a lens range in its
+     *  definition, no zoom channel) is set once: its FixtureRigProps::lensDeg,
+     *  saved and reverted with the rest. A light with a zoom channel is
+     *  zoomed live through it while focused, to see the size -- not saved
+     *  (cues own the zoom). Either way held to the definition's range. */
+    enum BeamKind { NoBeamControl, LensSetByHand, ZoomChannel };
+    BeamKind beamKind(quint32 fid) const;
+    /** @p fid's beam angle now and the range it may take, degrees. */
+    bool beamAngle(quint32 fid, double &deg, double &lo, double &hi) const;
+    /** Widen (+) or narrow (-) the current head's beam by @p dDeg. */
+    void nudgeBeam(float dDeg);
+    /** The triggers, 0 (released) .. 1: LT narrows, RT widens. */
+    void setTrigger(int side, float norm);
+    /** Degrees a second at a full trigger. */
+    static constexpr float beamRate() { return 10.0f; }
+
     /** @p fixtures front to back (downstage first), then house left to right
      *  within a row -- rows are heads within 0.75 m of the row's first. */
     static QList<quint32> stageOrder(Doc *doc, const QList<quint32> &fixtures);
@@ -317,7 +333,13 @@ private:
         bool savedIsOriginal = true;
         bool origAim = false;
         float origPan = 0.0f, origDown = 90.0f;
-        bool dirty() const { return fixed ? (first != landSaved) : (live != saved); }
+        /* The beam: a lens set by hand (saved), or a zoom channel's angle
+           while focused (live only; 0 = not touched). */
+        int beam = 0;                 ///< BeamKind
+        float lensSaved = 0.0f, lensLive = 0.0f;
+        double zoomDeg = 0.0;
+        bool dirty() const { return (fixed ? (first != landSaved) : (live != saved))
+                                    || (beam == 1 && lensLive != lensSaved); }
     };
     struct UndoEntry
     {
@@ -326,7 +348,10 @@ private:
         bool wasChecked;
         QVector3D landBefore;
         bool wasOriginal = false;
+        float lensBefore = 0.0f;
     };
+    /** Write a lens-set-by-hand angle into the rig. */
+    void applyLens(quint32 fid, float deg);
     /** A fixed light's landing point from its rig, at head height. */
     QVector3D fixedLanding(quint32 fid) const;
     /** Point a fixed light's rig at @p landing (or back to how it was). */
@@ -359,6 +384,8 @@ private:
     QList<UndoEntry> m_undo;
     float m_step = 0.1f;
     InputDevice m_input = ControllerInput;
+    float m_trigger[2] = { 0.0f, 0.0f };
+    float m_carryBeam = 0.0f;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };
     float m_deadzone = 0.05f;

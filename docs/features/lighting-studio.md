@@ -1089,6 +1089,19 @@ Aiming a fixed light, under [Mounting a fixture](#mounting-a-fixture)).
 (⌘Z) undoes a save, as for moving heads. Leaving with unsaved lights asks
 first.
 
+### The beam
+
+Where a light's beam can change, Focus mode changes it too: **RT** widens,
+**LT** narrows (or **.** and **,** on the keyboard, ⇧ for 5°), always within
+the lens range its definition gives, and the panel shows the angle.
+
+- **A lens zoomed by hand** (a fixed spot or wash with a range but no zoom
+  channel) is set once: it is saved with the light, like where it lands,
+  and the beam on the plot and in the 3D view is drawn at it. It is also
+  **Beam (lens set to)** in the light's Fixture Properties.
+- **A zoom channel** (a moving head, or a wash zoomed over DMX) is driven
+  while you focus, to see the size; it isn't saved — the cues set the zoom.
+
 ## Lanterns
 
 A **lantern** — such as the bundled WLED Lantern — is drawn as a lantern,

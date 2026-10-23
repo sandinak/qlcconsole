@@ -29,6 +29,8 @@
 #include "linespread.h"
 #include "qlcchannel.h"
 #include "aimsolver.h"
+#include "righeads.h"
+#include "qlcphysical.h"
 #include "universe.h"
 #include "fadechannel.h"
 #include "fixture.h"
@@ -252,6 +254,13 @@ bool FocusSession::start(const Options &options, QString *why)
             h.origPan = rp.panZeroDir;
             h.origDown = rp.aimDown;
         }
+        double lo = 0.0, hi = 0.0;
+        const Fixture *fxb = m_doc->fixture(fid);
+        if (RigHeads::lensRange(fxb, lo, hi))
+        {
+            h.beam = RigHeads::hasZoomChannel(fxb) ? int(ZoomChannel) : int(LensSetByHand);
+            h.lensSaved = h.lensLive = rp.lensDeg;
+        }
         m_heads.insert(fid, h);
     }
     resolveReferences();
@@ -295,6 +304,7 @@ void FocusSession::stop()
     m_undo.clear();
     for (int s = 0; s < 2; ++s)
         m_stick[s][0] = m_stick[s][1] = 0.5f;
+    m_trigger[0] = m_trigger[1] = 0.0f;
     emit stopped();
 }
 
@@ -592,25 +602,90 @@ void FocusSession::save()
     if (!m_heads.contains(fid))
         return;
     Head &h = m_heads[fid];
-    m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal });
+    m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved });
     if (h.fixed)
     {
-        h.landSaved = h.first;
-        h.savedIsOriginal = false;
-        applyLanding(fid, h, false);
+        if (h.first != h.landSaved || !h.savedIsOriginal)
+        {
+            h.landSaved = h.first;
+            h.savedIsOriginal = false;
+            applyLanding(fid, h, false);
+        }
     }
     else
     {
         h.saved = h.live;
         applyOffset(fid, h.live);
     }
+    h.lensSaved = h.lensLive;
     m_checked.insert(fid);
     markModified();
     emit offsetChanged(fid);
 }
 
+void FocusSession::applyLens(quint32 fid, float deg)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (rp.lensDeg == deg)
+        return;
+    rp.lensDeg = deg;
+    props->setFixtureRigProps(fid, rp);
+}
+
+FocusSession::BeamKind FocusSession::beamKind(quint32 fid) const
+{
+    return BeamKind(m_heads.value(fid).beam);
+}
+
+bool FocusSession::beamAngle(quint32 fid, double &deg, double &lo, double &hi) const
+{
+    const auto it = m_heads.constFind(fid);
+    if (it == m_heads.constEnd() || it->beam == NoBeamControl
+            || !RigHeads::lensRange(m_doc->fixture(fid), lo, hi))
+        return false;
+    if (it->beam == LensSetByHand)
+        deg = it->lensLive > 0.0f ? qBound(lo, double(it->lensLive), hi) : hi;
+    else
+        deg = it->zoomDeg > 0.0 ? it->zoomDeg : hi;
+    return true;
+}
+
+void FocusSession::nudgeBeam(float dDeg)
+{
+    const quint32 fid = currentFixture();
+    double deg = 0.0, lo = 0.0, hi = 0.0;
+    if (!m_heads.contains(fid) || dDeg == 0.0f || !beamAngle(fid, deg, lo, hi))
+        return;
+    Head &h = m_heads[fid];
+    const double to = qBound(lo, double(qRound((deg + double(dDeg)) * 10.0)) / 10.0, hi);
+    if (qFuzzyCompare(to, deg))
+        return;
+    if (h.beam == LensSetByHand)
+    {
+        h.lensLive = float(to);
+        applyLens(fid, h.lensLive);
+    }
+    else
+        h.zoomDeg = to;
+    rebuildWrites();
+    emit offsetChanged(fid);
+}
+
+void FocusSession::setTrigger(int side, float norm)
+{
+    if (m_input == KeyboardInput || side < 0 || side > 1)
+        return;
+    m_trigger[side] = qBound(0.0f, norm, 1.0f);
+}
+
 void FocusSession::backToSaved(quint32 fid, Head &h)
 {
+    if (h.beam == LensSetByHand && h.lensLive != h.lensSaved)
+    {
+        h.lensLive = h.lensSaved;
+        applyLens(fid, h.lensLive);
+    }
     if (h.fixed)
     {
         h.first = h.landSaved;
@@ -672,6 +747,7 @@ bool FocusSession::undoSave()
     h.live = e.before;
     h.landSaved = e.landBefore;
     h.savedIsOriginal = e.wasOriginal;
+    h.lensSaved = e.lensBefore;
     if (!e.wasChecked)
         m_checked.remove(e.fid);
     backToSaved(e.fid, h);
@@ -689,18 +765,22 @@ void FocusSession::saveAll()
         Head &h = m_heads[fid];
         if (!h.dirty())
             continue;
-        m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal });
+        m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved });
         if (h.fixed)
         {
-            h.landSaved = h.first;
-            h.savedIsOriginal = false;
-            applyLanding(fid, h, false);
+            if (h.first != h.landSaved || !h.savedIsOriginal)
+            {
+                h.landSaved = h.first;
+                h.savedIsOriginal = false;
+                applyLanding(fid, h, false);
+            }
         }
         else
         {
             h.saved = h.live;
             applyOffset(fid, h.live);
         }
+        h.lensSaved = h.lensLive;
         m_checked.insert(fid);
         any = true;
         emit offsetChanged(fid);
@@ -812,6 +892,19 @@ void FocusSession::tick(double dt)
 {
     if (!m_active || m_input == KeyboardInput)
         return;
+    // The triggers: RT widens, LT narrows, in tenths carried between ticks.
+    {
+        const float d = (m_trigger[1] - m_trigger[0]) * beamRate() * m_sensitivity * float(dt);
+        if (qAbs(m_trigger[1] - m_trigger[0]) < 0.05f)
+            m_carryBeam = 0.0f;
+        else
+        {
+            m_carryBeam += d;
+            const float step = float(qRound(double(m_carryBeam) * 10.0) / 10.0);
+            m_carryBeam -= step;
+            nudgeBeam(step);
+        }
+    }
     float dPan = 0.0f, dTilt = 0.0f;
     for (int s = 0; s < 2; ++s)
     {
@@ -920,6 +1013,22 @@ void FocusSession::rebuildWrites()
                     put(fx, sv.channel, sv.value);
             }
             lightLevel(fx, m_options.level, true);
+            // A zoom channel, to the beam asked for while focusing.
+            const Head hd = m_heads.value(fid);
+            double lo = 0.0, hi = 0.0;
+            if (hd.beam == ZoomChannel && hd.zoomDeg > 0.0 && RigHeads::lensRange(fx, lo, hi))
+            {
+                const double v = (hd.zoomDeg - lo) / (hi - lo);
+                QLCFixtureMode *mode = fx->fixtureMode();
+                for (quint32 c = 0; c < fx->channels(); ++c)
+                    if (const QLCChannel *ch = mode->channel(c))
+                    {
+                        if (ch->preset() == QLCChannel::BeamZoomSmallBig)
+                            put(fx, c, uchar(qRound(qBound(0.0, v, 1.0) * 255.0)));
+                        else if (ch->preset() == QLCChannel::BeamZoomBigSmall)
+                            put(fx, c, uchar(qRound(qBound(0.0, 1.0 - v, 1.0) * 255.0)));
+                    }
+            }
         }
     }
     QList<OutputLayer::Level> levels;

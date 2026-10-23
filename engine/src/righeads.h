@@ -73,6 +73,14 @@ namespace RigHeads
      *  declared at all. One rule for the views that draw the beam and the
      *  follow spot that aims it. */
     double beamAngle(const Fixture *fx, const QByteArray &values);
+    /** True when the fixture's mode has a zoom channel. */
+    bool hasZoomChannel(const Fixture *fx);
+    /** The definition's lens range, degrees; false when it has none to
+     *  choose in (a fixed cone, or no lens declared). */
+    bool lensRange(const Fixture *fx, double &lo, double &hi);
+    /** What a lens zoomed by hand was set to (FixtureRigProps::lensDeg),
+     *  held to lensRange(); 0 when not set or there is no range. */
+    double setLensAngle(const Fixture *fx);
 }
 
 #endif

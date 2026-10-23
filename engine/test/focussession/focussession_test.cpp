@@ -48,6 +48,7 @@
 #include "universe.h"
 #include "fixture.h"
 #include "truss.h"
+#include "righeads.h"
 #include "doc.h"
 
 namespace
@@ -845,6 +846,74 @@ void FocusSession_Test::aFixedLightIsFocusedByWhereItLands()
     rp = props->fixtureRigProps(par->id());
     QVERIFY(rp.fixedAim);
     QVERIFY2(qAbs(rp.panZeroDir - 270.0f) < 0.05f, qPrintable(QString::number(rp.panZeroDir)));   // stage left
+}
+
+void FocusSession_Test::theBeamIsSetWithinTheLensRange()
+{
+    // A fixed spot with a 15-35° lens zoomed by hand, and a wash with a zoom
+    // channel over 10-40°.
+    auto makeLight = [this](const QString &name, bool zoom, double lo, double hi, quint32 addr) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(name);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        QLCChannel *dim = new QLCChannel();
+        dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+        def->addChannel(dim); mode->insertChannel(dim, 0);
+        if (zoom)
+        {
+            QLCChannel *z = new QLCChannel();
+            z->setName("Zoom"); z->setGroup(QLCChannel::Beam);
+            z->setPreset(QLCChannel::BeamZoomSmallBig);
+            def->addChannel(z); mode->insertChannel(z, 1);
+        }
+        QLCPhysical ph;
+        ph.setLensDegreesMin(lo);
+        ph.setLensDegreesMax(hi);
+        mode->setPhysical(ph);
+        def->addMode(mode);
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(name);
+        fx->setFixtureDefinition(def, mode);
+        fx->setAddress(addr);
+        m_doc->addFixture(fx);
+        m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(4000, 0, 5));
+        return fx;
+    };
+    Fixture *spot = makeLight("Spot", false, 15.0, 35.0, 30);
+    Fixture *wash = makeLight("Wash", true, 10.0, 40.0, 40);
+    MonitorProperties *props = m_doc->monitorProperties();
+    QCOMPARE(RigHeads::beamAngle(spot, QByteArray(1, '\0')), 35.0);   // not set: its widest
+
+    FocusSession::Options o;
+    o.fixtures = { spot->id(), wash->id() };
+    o.order = FocusSession::AsGiven;
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->start(o));
+    QCOMPARE(s->beamKind(spot->id()), FocusSession::LensSetByHand);
+    QCOMPARE(s->beamKind(wash->id()), FocusSession::ZoomChannel);
+
+    // By hand: set, held to its range, and part of what Save keeps.
+    s->nudgeBeam(-5.0f);
+    QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 30.0f);
+    QCOMPARE(RigHeads::beamAngle(spot, QByteArray(1, '\0')), 30.0);
+    s->nudgeBeam(-100.0f);
+    QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 15.0f);
+    QVERIFY(s->isDirty(spot->id()));
+    s->revert();
+    QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 0.0f);
+    s->nudgeBeam(-10.0f);
+    s->save();
+    QVERIFY(!s->isDirty(spot->id()));
+
+    // A zoom channel: sent while focusing, nothing saved.
+    s->next();
+    QCOMPARE(s->currentFixture(), wash->id());
+    s->nudgeBeam(-10.0f);                                    // 40 -> 30
+    QCOMPARE(s->pendingWrites().value(qMakePair(0, 41)), uchar(qRound((30.0 - 10.0) / 30.0 * 255.0)));
+    QVERIFY(!s->isDirty(wash->id()));
+    QCOMPARE(props->fixtureRigProps(wash->id()).lensDeg, 0.0f);
+    s->stop();
+    QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 25.0f);   // the saved one stays
 }
 
 QTEST_MAIN(FocusSession_Test)

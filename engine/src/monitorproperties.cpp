@@ -2835,6 +2835,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             rp.tiltOffsetDeg  = a.value("TiltOfs").toFloat();
             rp.panInvert      = a.value("PanInv").toString() == QStringLiteral("1");
             rp.tiltInvert     = a.value("TiltInv").toString() == QStringLiteral("1");
+            if (a.hasAttribute("Lens"))
+                rp.lensDeg = a.value("Lens").toFloat();
             if (a.hasAttribute("AimDown"))
             {
                 rp.fixedAim = true;
@@ -3642,6 +3644,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeAttribute(QStringLiteral("PanZero"),  QString::number(double(rp.panZeroDir),     'f', 1));
         if (rp.fixedAim)
             doc->writeAttribute(QStringLiteral("AimDown"), QString::number(double(rp.aimDown), 'f', 1));
+        if (rp.lensDeg > 0.0f)
+            doc->writeAttribute(QStringLiteral("Lens"), QString::number(double(rp.lensDeg), 'f', 1));
         if (rp.panOffsetDeg  != 0.0f)
             doc->writeAttribute(QStringLiteral("PanOfs"),  QString::number(double(rp.panOffsetDeg),  'f', 2));
         if (rp.tiltOffsetDeg != 0.0f)

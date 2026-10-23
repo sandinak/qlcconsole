@@ -1251,7 +1251,11 @@ double fixtureBeamAngle(Fixture *fx, const QByteArray &v,
     if (double(traits.beamMaxDeg) <= 0.0)
         return 0.0;                       // no lens declared at all
     if (fx == nullptr || v.isEmpty())
-        return double(traits.beamMaxDeg); // the widest is the safer read
+    {
+        // A lens zoomed by hand is what it was set to; else the widest.
+        const double set = RigHeads::hasZoomChannel(fx) ? 0.0 : RigHeads::setLensAngle(fx);
+        return set > 0.0 ? set : double(traits.beamMaxDeg);
+    }
     /* The engine's rule -- zoom, and an iris -- so the beam drawn is the one
        the follow spot aims (RigHeads::beamAngle()). */
     return RigHeads::beamAngle(fx, v);

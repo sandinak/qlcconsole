@@ -1578,8 +1578,12 @@ void Monitor::showFocusFixture(quint32 fid)
 
 void Monitor::openFocusMode()
 {
+    // What is selected on the plot; else the programmer's selection.
     QList<quint32> selection;
-    if (m_doc->programmer() != NULL)
+    if (m_graphicsView != NULL)
+        foreach (MonitorFixtureItem *it, m_graphicsView->selectedFixtureItems())
+            selection << it->fixtureID();
+    if (selection.isEmpty() && m_doc->programmer() != NULL)
         selection = m_doc->programmer()->programmerSelection();
     FocusModePanel::open(m_doc, window(), m_activeSceneId, selection);
 }
@@ -10114,6 +10118,14 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     aimDownSpin->setToolTip(tr("How far down it points from level: 90 straight down, 45 a typical "
                                "front light, 0 level, below 0 up"));
     rigForm->addRow(tr("Tilt (° down from level):"), aimDownSpin);
+    // A lens zoomed by hand (Q103): what it is set to, within its range.
+    QDoubleSpinBox *lensSpin = new QDoubleSpinBox;
+    lensSpin->setObjectName(QStringLiteral("fixtureLensSetTo"));
+    lensSpin->setSuffix(QString::fromUtf8("°"));
+    lensSpin->setDecimals(1);
+    lensSpin->setToolTip(tr("The beam angle its lens is zoomed to by hand, within what the "
+                            "definition gives. Focus mode sets it too."));
+    rigForm->addRow(tr("Beam (lens set to):"), lensSpin);
 
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;
     panOffsetSpin->setRange(-720, 720);   // 540° pan fixtures need up to ±270°; 720 gives headroom
@@ -10213,6 +10225,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     const FixtureRigProps rp = m_props->fixtureRigProps(fxItem->fixtureID());
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
     panZeroSpin->setValue(double(rp.panZeroDir));
+    double lensLo = 0.0, lensHi = 0.0;
+    const bool lensByHand = RigHeads::lensRange(fxi, lensLo, lensHi) && !RigHeads::hasZoomChannel(fxi);
+    if (lensByHand)
+    {
+        lensSpin->setRange(lensLo, lensHi);
+        lensSpin->setValue(rp.lensDeg > 0.0f ? qBound(lensLo, double(rp.lensDeg), lensHi) : lensHi);
+    }
     // Not aimed yet: it points as its mount says, straight down when hung.
     aimDownSpin->setValue(rp.fixedAim ? double(rp.aimDown)
                                       : (rp.mountingType == Truss::TopHung ? 90.0 : -90.0));
@@ -10257,7 +10276,10 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     }
     else
         hideRow(aimDownSpin);
+    if (!lensByHand)
+        hideRow(lensSpin);
     bool aimTouched = rp.fixedAim;
+    bool lensTouched = false;
 
     vl->addWidget(rigBox);
 
@@ -10416,6 +10438,8 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
             live.fixedAim = true;
             live.aimDown  = float(aimDownSpin->value());
         }
+        if (lensByHand && lensTouched)
+            live.lensDeg = float(lensSpin->value());
         m_props->setFixtureRigProps(fxId_dlg, live);
         // Keep the 2D facing arrow in sync with the spinbox live.
         if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fxId_dlg))
@@ -10432,6 +10456,10 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     });
     connect(aimDownSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){
         aimTouched = true;
+        liveRigUpdate();
+    });
+    connect(lensSpin,     QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){
+        lensTouched = true;
         liveRigUpdate();
     });
     connect(panOffsetSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });

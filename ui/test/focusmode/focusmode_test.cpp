@@ -238,7 +238,7 @@ void FocusMode_Test::theMapShowsTheProfilesBindings()
     QVERIFY(!map->isMapped(R::Y));
     QCOMPARE(map->actionText(R::Y), QString("Second reference"));
     QVERIFY(!map->isMapped(R::LeftTrigger));
-    QVERIFY(map->actionText(R::LeftTrigger).isEmpty());
+    QCOMPARE(map->actionText(R::LeftTrigger), QString("Narrower beam"));   // Q103
 
     // The step the D-pad takes follows + and -.
     QTest::keyClick(panel, Qt::Key_Plus);

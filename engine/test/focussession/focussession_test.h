@@ -39,6 +39,9 @@ private slots:
     /** Q102: a fixed light is focused by where it lands at head height;
      *  that sets its Pan and Tilt, and revert puts it back as it was. */
     void aFixedLightIsFocusedByWhereItLands();
+    /** Q103: a lens zoomed by hand is set within its range and saved; a
+     *  zoom channel is driven while focusing and not saved. */
+    void theBeamIsSetWithinTheLensRange();
     /** A nudge changes the live offset, the rig's calibration and the DMX,
      *  and does not mark the show modified. */
     void aNudgeMovesTheLightNotTheShow();

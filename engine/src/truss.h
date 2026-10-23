@@ -279,6 +279,10 @@ struct FixtureRigProps
      *  face say. */
     bool             fixedAim = false;
     float            aimDown  = 90.0f;
+    /** What a light with a lens range but no zoom channel (a fixed spot or
+     *  wash zoomed by hand) is set to, degrees; 0 = not set (its widest).
+     *  Held to the definition's lens range (RigHeads::beamAngle()). */
+    float            lensDeg  = 0.0f;
     /** The beam of an aimed fixed light, a unit vector (+Y downstage, +Z up).
      *  False when it isn't aimed. */
     bool fixedAimDirection(QVector3D &dir) const

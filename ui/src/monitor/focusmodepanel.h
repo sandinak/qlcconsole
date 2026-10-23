@@ -145,6 +145,7 @@ private:
     QLabel *m_nameLabel;
     QLabel *m_referenceLabel;
     QLabel *m_offsetLabel;
+    QLabel *m_beamLabel = nullptr;   ///< the beam, where it can change (Q103)
     QLabel *m_savedLabel;
     QLabel *m_stepLabel;
     QLabel *m_progressLabel;

@@ -314,6 +314,40 @@ bool RigHeads::clearGlass(Doc *doc, quint32 fid)
     return fx->fixtureMode() != nullptr && fx->fixtureMode()->physical().clearGlass();
 }
 
+bool RigHeads::hasZoomChannel(const Fixture *fx)
+{
+    const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return false;
+    for (const QLCChannel *ch : mode->channels())
+        if (ch != nullptr && (ch->preset() == QLCChannel::BeamZoomSmallBig
+                              || ch->preset() == QLCChannel::BeamZoomBigSmall))
+            return true;
+    return false;
+}
+
+bool RigHeads::lensRange(const Fixture *fx, double &lo, double &hi)
+{
+    const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return false;
+    const QLCPhysical &phys = mode->physical();
+    lo = qMin(phys.lensDegreesMin(), phys.lensDegreesMax());
+    hi = qMax(phys.lensDegreesMin(), phys.lensDegreesMax());
+    return lo > 0.0 && hi - lo >= 0.51;
+}
+
+double RigHeads::setLensAngle(const Fixture *fx)
+{
+    const Doc *doc = (fx != nullptr) ? qobject_cast<const Doc *>(fx->parent()) : nullptr;
+    MonitorProperties *props = (doc != nullptr) ? const_cast<Doc *>(doc)->monitorProperties() : nullptr;
+    double lo = 0.0, hi = 0.0;
+    if (props == nullptr || !lensRange(fx, lo, hi))
+        return 0.0;
+    const float set = props->fixtureRigProps(fx->id()).lensDeg;
+    return set > 0.0f ? qBound(lo, double(set), hi) : 0.0;
+}
+
 double RigHeads::beamAngle(const Fixture *fx, const QByteArray &values)
 {
     const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
@@ -326,6 +360,10 @@ double RigHeads::beamAngle(const Fixture *fx, const QByteArray &values)
         return 0.0;                       // no lens declared at all
 
     double angle = hi;                    // a fixed cone, or no zoom to read
+    // Zoomed by hand (no zoom channel): what its lens was set to (Q103).
+    const double setTo = setLensAngle(fx);
+    if (setTo > 0.0 && !hasZoomChannel(fx))
+        angle = setTo;
     double open = 1.0;                    // the iris, fully open
     const int count = qMin(mode->channels().size(), values.size());
     for (int c = 0; c < count; ++c)

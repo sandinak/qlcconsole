@@ -94,10 +94,18 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
 
     m_whichCombo = new QComboBox(this);
     m_whichCombo->setObjectName(QStringLiteral("focusWhich"));
-    if (!m_selection.isEmpty())
-        m_whichCombo->addItem(tr("The selected heads (%1)").arg(m_selection.size()), 0);
+    // As selected: what is selected on the plot (or in the programmer).
+    m_whichCombo->addItem(tr("As selected (%1)").arg(m_selection.size()), 0);
+    if (m_selection.isEmpty())
+    {
+        if (QStandardItemModel *m = qobject_cast<QStandardItemModel *>(m_whichCombo->model()))
+            m->item(0)->setEnabled(false);
+        m_whichCombo->setItemData(0, tr("Select fixtures on the plot first"), Qt::ToolTipRole);
+    }
     m_whichCombo->addItem(tr("Every moving head on the plot (%1)").arg(allCount), 1);
     m_whichCombo->addItem(tr("Every fixed light on the plot (%1)").arg(fixedCount), 2);
+    if (m_selection.isEmpty())
+        m_whichCombo->setCurrentIndex(1);
     form->addRow(tr("Heads:"), m_whichCombo);
 
     m_orderCombo = new QComboBox(this);
@@ -366,6 +374,9 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     QFont mid = m_offsetLabel->font();
     mid.setPointSizeF(mid.pointSizeF() * 1.3);
     m_offsetLabel->setFont(mid);
+    m_beamLabel = new QLabel(this);
+    m_beamLabel->setObjectName(QStringLiteral("focusBeam"));
+    m_beamLabel->hide();
     m_savedLabel = new QLabel(this);
     m_savedLabel->setObjectName(QStringLiteral("focusSaved"));
     m_stepLabel = new QLabel(this);
@@ -377,6 +388,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     vl->addWidget(m_nameLabel);
     vl->addWidget(m_referenceLabel);
     vl->addWidget(m_offsetLabel);
+    vl->addWidget(m_beamLabel);
     vl->addWidget(m_savedLabel);
     QHBoxLayout *meta = new QHBoxLayout;
     meta->addWidget(m_stepLabel);
@@ -506,6 +518,22 @@ void FocusModePanel::refresh()
         return;
     const quint32 fid = m_session->currentFixture();
     const Fixture *fx = m_doc->fixture(fid);
+    // The beam, where it can change (Q103).
+    {
+        double deg = 0.0, lo = 0.0, hi = 0.0;
+        if (m_session->beamAngle(fid, deg, lo, hi))
+        {
+            m_beamLabel->setText((m_session->beamKind(fid) == FocusSession::LensSetByHand
+                                  ? tr("Beam %1\302\260 (lens %2\342\200\223%3\302\260, set by hand)  "
+                                       "LT/RT or , .")
+                                  : tr("Beam %1\302\260 (zoom %2\342\200\223%3\302\260, while focusing)  "
+                                       "LT/RT or , ."))
+                                 .arg(deg, 0, 'f', 1).arg(lo, 0, 'f', 0).arg(hi, 0, 'f', 0));
+            m_beamLabel->show();
+        }
+        else
+            m_beamLabel->hide();
+    }
     m_titleLabel->setText(tr("Focus \342\200\224 head %1 of %2")
                           .arg(m_session->index() + 1).arg(m_session->count()));
     m_nameLabel->setText(fx != nullptr ? tr("%1  (ID %2)").arg(fx->name()).arg(fid) : QString());
@@ -655,6 +683,11 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Delete:   m_session->revert(); break;
         case Qt::Key_0:        m_session->zero(); break;
         case Qt::Key_R:        m_session->toggleReference(); break;
+        // The beam (Q103): narrower, wider; ⇧ for 5°.
+        case Qt::Key_Comma:
+        case Qt::Key_Less:     m_session->nudgeBeam(shift ? -5.0f : -1.0f); refresh(); break;
+        case Qt::Key_Period:
+        case Qt::Key_Greater:  m_session->nudgeBeam(shift ? 5.0f : 1.0f); refresh(); break;
         case Qt::Key_Plus:
         case Qt::Key_Equal:
             m_session->setStepDegrees(m_session->stepDegrees() * 10.0f);
