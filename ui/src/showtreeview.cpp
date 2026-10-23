@@ -6343,7 +6343,9 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
 {
     QTreeWidgetItem *item = m_tree->itemAt(pos);
     QMenu menu(this);
-    menu.addAction(tr("+ Production…"), this, &ShowTreeView::slotNewProduction);
+    // + Production where it applies: on a production, or on empty space (Q93).
+    if (item == nullptr || item->data(0, KindRole).toInt() == ProductionNode)
+        menu.addAction(tr("+ Production…"), this, &ShowTreeView::slotNewProduction);
     if (item != nullptr)
     {
         // A right-click in a selection keeps it (Merge works on it).
@@ -6422,29 +6424,8 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             const CueList *list = m_st->listOfCue(cueId);
             if (list != nullptr)
             {
-                const bool isBase = list->baseCue == cueId;
-                const quint32 listId = list->id;
-                menu.addAction(isBase ? tr("Not the base cue") : tr("Make the base cue"), this,
-                               [this, listId, cueId, isBase]() {
-                    m_st->setBaseCue(listId, isBase ? invalidId() : cueId);
-                });
-                QMenu *inc = menu.addMenu(tr("Include cue"));
-                includesMenu(inc, cueId);
-                // Mode: List default / Track / Block / Cue-only.
-                QMenu *mode = menu.addMenu(tr("Mode"));
-                const CueMode now = list->cue(cueId)->mode;
-                for (CueMode m : { CueMode::ListDefault, CueMode::Track, CueMode::Block, CueMode::CueOnly })
-                {
-                    QString text = cueModeLabel(m);
-                    if (m == CueMode::ListDefault)
-                        text = tr("List default (%1)").arg(list->mode == ListMode::Tracking ? tr("Track")
-                                                                                            : tr("Block"));
-                    QAction *a = mode->addAction(text, this, [this, cueId, m]() {
-                        m_st->setCueMode(cueId, m);
-                    });
-                    a->setCheckable(true);
-                    a->setChecked(now == m);
-                }
+                /* Base cue, Mode and Includes are set on the cue's page, not
+                   here (Q93): the menu keeps what acts on a selection. */
                 // Skip cue / Unskip cue: the selected cues, when this is one.
                 {
                     QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
@@ -6476,11 +6457,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 menu.addAction(tr("Record as new cue"), this, [this, cueId]() {
                     recordFrom(cueId);
                 });
-                menu.addAction(tr("Duplicate cue"), this, [this, cueId]() {
-                    const quint32 id = m_st->duplicateCue(cueId);
-                    if (id != invalidId())
-                        selectNode(id);
-                });
+                // Duplicate (⌘D) is further down, for any selection (Q93).
                 // P4: a reusable cue, or this use unlinked.
                 if (list->cue(cueId)->reusable == invalidId())
                     menu.addAction(tr("Make cue reusable…"), this, [this]() { reuseLinkActivated(QStringLiteral("make")); })

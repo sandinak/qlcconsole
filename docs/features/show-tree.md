@@ -915,8 +915,7 @@ Select a cue list to set its **Mode**:
 - **Tracking**: a cue starts from the one before and changes only what it
   sets.
 
-Each cue has a **mode** too, set on its page, with right-click → **Mode**, or
-by typing it:
+Each cue has a **mode** too, set on its page or by typing it:
 
 | Mode | Starts from | Passes on |
 |---|---|---|
@@ -928,16 +927,15 @@ by typing it:
 - **Release.** A layer with **Release** ticked (on its page) leaves when its
   cue is left. It goes back to what the **base cue** plays on that layer,
   else dark. Ticking it on a grey layer makes the layer this cue's own first.
-- **Base cue.** Pick it on the list's page, tick *"The list's base cue"* on a
-  cue, or right-click a cue → **Make the base cue**. It is marked ■ base.
+- **Base cue.** Pick it on the list's page, or tick *"The list's base cue"*
+  on a cue. It is marked ■ base.
 - **Includes.** A cue plays the output of the cues it includes, as if you
   stood in them, under its own layers. When the included cue changes, so
   does this one.
   - On the cue page, **+** adds one. A cue that would make a loop (one that
     already plays from this cue) is greyed out with the reason.
   - **−** takes one out; **↑ ↓** reorder them (the later one wins).
-  - You can also drag a cue onto another with **⌥** held, or right-click →
-    **Include cue**.
+  - You can also drag a cue onto another with **⌥** held.
 - **Next cue receives**, on a cue's page, says what the cue after it starts
   from:
   - each layer with its values;
@@ -1085,7 +1083,7 @@ A default that names something not on stage (the running cue, with nothing
 running) asks instead. Typing `record selected`, `record running` or
 `record lit` skips the question.
 
-**Duplicate cue** (right-click a cue, ⌘D, or `dup`) copies the cue's own
+**Duplicate** (right-click a cue, ⌘D, or `dup`) copies the cue's own
 content, not what tracks into it. It is never the base cue.
 
 **Copy and paste.** In the tree, **⌘C** copies the selected cues (several:
@@ -1503,14 +1501,15 @@ layers](#editing-several-layers)), and Merge and Delete take them all.
 
 Right-click in the tree for:
 
-- **+ Production…**, **+ Cue list…**, **+ Hit**, **+ Cue**;
+- **+ Cue list…**, **+ Hit**, **+ Cue** (and **+ Production…** on a
+  production or on empty space);
 - on a cue: **Copy to a hit** (what it puts on stage, as a new hit);
 - on Looks or a look folder: **New folder…**, **Rename folder**, **Delete
   folder**, **Make VC page**; on a look: **Move to folder**, **Make VC
   page**;
-- on a cue: **Make the base cue**, **Include cue**, **Mode**, **Record as new
-  cue**, **Duplicate cue**, **Move up** / **Move down**, **Renumber this
-  level…** ([Reordering and numbering](#reordering-and-numbering));
+- on a cue: **Skip cue**, **Don't move in black into this cue**, **Record
+  as new cue**, **Duplicate**, **Move up** / **Move down**, **Renumber this
+  level…** (its base cue, mode and includes are on its page) ([Reordering and numbering](#reordering-and-numbering));
 - on a cue: **Make cue reusable…** (or, on a use, **Unlink here**);
 - on a layer: **Rename…**, **Detach to plain scene**, **Make reusable…** (or
   **Unlink here**), **Add child layer**, **Split layer**, **Merge layers**,
