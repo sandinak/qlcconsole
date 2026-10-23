@@ -1567,6 +1567,43 @@ static QStringList describeAll(Doc *doc)
     return out;
 }
 
+void CourseShow_Test::aMouseBuiltShowSavesOpensAndPlays()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString saved = dir.filePath(QStringLiteral("my-show.qlcc"));
+
+    QVERIFY(open(kL1Start));
+    QVERIFY(lessonOneByMouse(m_app->doc(), showTree()));
+    QVERIFY(lessonTwoByMouse(m_app->doc(), showTree()));
+    QVERIFY(lessonThreeByMouse(m_app->doc(), showTree()));
+    QVERIFY(lessonFourByMouse(m_app->doc(), showTree()));
+    const QStringList built = describeAll(m_app->doc());
+    QVERIFY(!built.isEmpty());
+
+    QCOMPARE(m_app->saveXML(saved), QFile::NoError);
+    QVERIFY(QFileInfo(saved).size() > 0);
+    QVERIFY(open(saved));
+    QCOMPARE(describeAll(m_app->doc()), built);
+    // And it is the course's own Lesson 1.4 finish.
+    QVERIFY(open(kL4Finish));
+    QCOMPARE(describeAll(m_app->doc()), built);
+
+    // The reopened show plays: GO, and the Pose lights the cyc blue.
+    QVERIFY(open(saved));
+    Doc *doc = m_app->doc();
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    QVERIFY2(run->nextText().contains("1.0.0"), qPrintable(run->nextText()));
+    press(run, "crGo");
+    QTRY_VERIFY2_WITH_TIMEOUT(run->nowText().contains("1.0.0"), qPrintable(run->nowText()), kRigWait);
+    QVERIFY2(waitUntil([doc]() { return sends(doc, "SR Truss Cyc 1") == QByteArray("\x00\x00\xff", 3); }),
+             qPrintable(sends(doc, "SR Truss Cyc 1").toHex(' ')));
+    press(run, "crStop");
+    settle(200);
+    doc->resetModified();
+}
+
 void CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse()
 {
     struct L { QString start, finish; bool (*byMouse)(Doc *, ShowTreeView *); };

@@ -87,6 +87,11 @@ private slots:
      *  over 3 s, the Scream holds 2 s and the Solo follows by itself. */
     void lessonFourPlaysTheFades();
 
+    /** What a student builds is what they keep: Lessons 1.1-1.4 done with
+     *  the mouse, saved as a .qlcc (Save As), opened again: every cue the
+     *  same, and GO in the Run tab still lights the rig as Lesson 1.1 says. */
+    void aMouseBuiltShowSavesOpensAndPlays();
+
     /** Lesson 1.5, running the show: GO, Back, LOAD (a click: STANDBY),
      *  a jump (double-click) and Stop, in the Run tab. */
     void lessonFiveRunsTheShow();
