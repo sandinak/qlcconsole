@@ -359,6 +359,10 @@ circuits and subs.
 ### Fixed
 - **A fixture group's row in Plot layers keeps its fixtures selected** on
   the plot: they lit and went out again a moment later.
+- **Shorter layer names in the Show Tree**: a layer on many fixtures names
+  the fixture groups they make up ("FOH + 1st Elect") and the rest as the
+  first few and a count, instead of every fixture ("Next cue receives",
+  the tree, menus).
 - **Fixture Properties edits every selected fixture**: double-clicking one
   of several selected fixtures, on the plot or in Plot layers, opens the
   editor for all of them (fixtures in a group or on a truss opened alone

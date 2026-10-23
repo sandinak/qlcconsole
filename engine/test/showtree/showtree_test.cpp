@@ -5369,6 +5369,19 @@ void ShowTree_Test::exclusionIsThreadSafeWithLivePreview()
 /* A group set is one target of all its members (one scene, each member a
    group of its own, so it keeps its head layout); the set is the layer's
    identity, so changing its members keeps the layer (and what tracks). */
+void ShowTree_Test::aTargetIsNamedByItsWholeGroups()
+{
+    ShowTreeController *st = m_doc->showTree();
+    group("FOH", { m_fixtures[0], m_fixtures[1] });
+    group("Pair", { m_fixtures[2], m_fixtures[3] });
+    Target t;
+    t.fixtures = { m_fixtures[0], m_fixtures[1], m_fixtures[2] };
+    // FOH whole, then what is left by name; "Pair" isn't all there.
+    QCOMPARE(st->targetLabel(t), QString("FOH + %1").arg(m_doc->fixture(m_fixtures[2])->name()));
+    t.fixtures << m_fixtures[3];
+    QCOMPARE(st->targetLabel(t), QString("FOH + Pair"));
+}
+
 void ShowTree_Test::groupSetsAreOneTargetAndKeepTracking()
 {
     FixtureGroup *sl = group("SL", { m_fixtures[0], m_fixtures[1] });

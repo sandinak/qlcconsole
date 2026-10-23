@@ -158,6 +158,9 @@ private slots:
 
     // P3: group sets, child layers, overlap
     void groupSetsAreOneTargetAndKeepTracking();
+    /** A target's fixtures are named as the fixture groups they make up,
+     *  and a long remainder as a count ("this is a bit messy"). */
+    void aTargetIsNamedByItsWholeGroups();
     void childLayersExcludeTheirFixturesFromTheParent();
     void overlappingLayersLowerWins();
     void childLayerEditsWhileTheDmxThreadRuns();

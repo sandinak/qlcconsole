@@ -3589,11 +3589,41 @@ QString ShowTreeController::targetLabel(const Target &target) const
         const FixtureGroup *grp = m_doc->fixtureGroup(g);
         names << (grp == nullptr ? tr("(missing group)") : grp->name());
     }
-    for (quint32 f : target.fixtures)
+    /* Fixtures named one by one read as a wall ("can we check to see if
+       there are groups that match fixtures vs printing every fixture?"):
+       where they make up whole fixture groups, the groups, largest first;
+       a long remainder as its first few and a count. */
+    QList<quint32> left = target.fixtures;
+    if (left.size() > 1)
     {
-        const Fixture *fxi = m_doc->fixture(f);
+        QList<const FixtureGroup *> groups;
+        for (const FixtureGroup *grp : m_doc->fixtureGroups())
+            if (grp != nullptr && grp->fixtureList().size() > 1)
+                groups << grp;
+        std::stable_sort(groups.begin(), groups.end(), [](const FixtureGroup *a, const FixtureGroup *b) {
+            return a->fixtureList().size() > b->fixtureList().size();
+        });
+        for (const FixtureGroup *grp : groups)
+        {
+            const QList<quint32> members = grp->fixtureList();
+            bool all = true;
+            for (quint32 f : members)
+                all = all && left.contains(f);
+            if (!all)
+                continue;
+            names << grp->name();
+            for (quint32 f : members)
+                left.removeAll(f);
+        }
+    }
+    const int shown = left.size() > 4 ? 3 : left.size();
+    for (int i = 0; i < shown; ++i)
+    {
+        const Fixture *fxi = m_doc->fixture(left.at(i));
         names << (fxi == nullptr ? tr("(missing fixture)") : fxi->name());
     }
+    if (shown < left.size())
+        names << tr("%n more fixture(s)", "", int(left.size() - shown));
     return names.join(QStringLiteral(" + "));
 }
 
