@@ -297,8 +297,9 @@ the tab.
 
 Loading anything else in the Workbench puts the designer away, and an
 unsaved design with it; **Esc** asks first
-([Backing out](#backing-out-esc)). Window ▸ Effects is the same designer in a
-window of its own.
+([Backing out](#backing-out-esc)). Build ▸ Effects is effects' one home:
+**Window ▸ Effects** brings it forward (there is no separate Effects
+window any more).
 
 ![Build ▸ Effects: the right-click menu, and the effect designer in the Workbench](../images/build-effects-menu.png)
 

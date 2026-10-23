@@ -37,14 +37,9 @@ Open it from any of three places:
   designer opens in the Workbench's editor pane, on the **bench**
   described next. Right-click an effect for Duplicate, Rename, Move to
   folder… and Delete. See [Making effects](build.md#making-effects).
-- **Window ▸ Effects.** Every effect in the show in one window. On the
-  left are the effect palettes in their folders, then the **classic
-  effects**: QLC+ EFX and RGB Matrix functions, each marked as one. On the
-  right is the designer on the **bench**. **Try on ▾** picks the groups
-  the bench plays on, and it remembers them. Selecting an effect palette
-  loads a copy of it onto the bench. Selecting an EFX or RGB Matrix opens
-  it in its own editor. **+ New** makes an effect palette, an EFX (on the
-  Try on groups' heads) or an RGB Matrix (on the first Try on group).
+- **Window ▸ Effects** brings Build ▸ Effects forward: effects have one
+  home, and no window of their own any more. **Try on ▾** on the bench
+  picks the groups it plays on, and it remembers them.
 
 The designer works on a copy, so nothing in the show changes until you
 pick one of these:

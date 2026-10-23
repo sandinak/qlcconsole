@@ -395,8 +395,8 @@ tab, or its own window when it has been broken out (right-click a tab →
 Window**),
 which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
-as usual. **Rig Overview…** (⇧⌘R) and **Effects…** (the effect designer)
-are here too. A tab that the workspace view hides (**View ▸
+as usual. **Rig Overview…** (⇧⌘R) is here too, and **Effects**, which
+brings [Build ▸ Effects](build.md#making-effects) forward. A tab that the workspace view hides (**View ▸
 Workspace**) switches the view to **Everything** when you choose it, with
 a line above the tabs to go back; see
 [Views](getting-started.md#views).

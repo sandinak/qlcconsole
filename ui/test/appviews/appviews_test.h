@@ -56,6 +56,8 @@ private slots:
     /** "tab icon could be a construction hat": Build's tab and its
      *  Window-menu jump wear a hard hat, crisp at 1x and 2x. */
     void theBuildTabWearsAHardHat();
+    /** Q68: Window ▸ Effects is Build ▸ Effects; no Effects window. */
+    void windowEffectsIsBuildEffects();
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();

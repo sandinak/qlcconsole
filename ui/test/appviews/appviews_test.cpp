@@ -447,6 +447,24 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
 
 /* F1 opens the guide for what is in front: each view its own, a dialog or
    view inside one its own, and the Help menu lists the guides. */
+void AppViews_Test::windowEffectsIsBuildEffects()
+{
+    QAction *effects = m_app->menuBar()->findChild<QAction *>("windowEffects");
+    QVERIFY(effects != nullptr);
+    QCOMPARE(effects->text(), QString("Effects"));   // no "…": no window of its own
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr);
+    pm->setSection(ProgrammingManager::ScenesSection);
+    const int windowsBefore = QApplication::topLevelWidgets().count();
+    effects->trigger();
+    QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(pm));
+    QCOMPARE(pm->section(), ProgrammingManager::EffectsSection);
+    QCOMPARE(QApplication::topLevelWidgets().count(), windowsBefore);
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        QVERIFY2(QString(w->metaObject()->className()) != "EffectsPage", "an Effects window opened");
+    pm->setSection(ProgrammingManager::ScenesSection);
+}
+
 void AppViews_Test::helpOpensOnWhatIsInFront()
 {
     QTabWidget *tabs = m_app->m_tab;

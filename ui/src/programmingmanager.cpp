@@ -1324,7 +1324,7 @@ bool ProgrammingManager::designEffect(quint32 paletteId)
     if (ed == nullptr)
         return true;
     // Saved as a palette, or the palette updated: listed, selected, and on
-    // the bench again (a fresh copy of it), as Window ▸ Effects does.
+    // the bench again (a fresh copy of it).
     connect(ed, &EffectDesigner::effectChosen, this,
             [this](quint32 pid, const QList<quint32> &, EffectDesigner::Outcome) {
         m_paletteTree->updateTree();

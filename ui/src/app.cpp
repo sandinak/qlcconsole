@@ -39,7 +39,6 @@
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
 #include "functionselection.h"
-#include "effectspage.h"
 #include "effectdesigner.h"
 #include "itemicons.h"
 #include "functionmanager.h"
@@ -2510,12 +2509,13 @@ void App::initMenuBar()
        only under View: the Window menu is where people go looking for one
        ("there's no option in Windows"). The same action, so one shortcut. */
     windowMenu->addAction(m_rigOverviewAction);
-    /* The effect designer on the Try on bench, with every effect palette
-       and EFX / RGB Matrix of the show (W4; Build ▸ Effects in time). */
-    QAction *effectsAct = windowMenu->addAction(tr("Effects…"));
+    /* Effects: Build ▸ Effects, their one home (Q68) -- every effect
+       palette, EFX and RGB Matrix of the show, designed in the Workbench.
+       There is no separate Effects window any more. */
+    QAction *effectsAct = windowMenu->addAction(tr("Effects"));
     effectsAct->setObjectName(QStringLiteral("windowEffects"));
-    connect(effectsAct, &QAction::triggered, this, [this]() { EffectsPage::open(m_doc, this); });
-    // ...and in the Workbench's editor pane (Build ▸ Effects).
+    effectsAct->setToolTip(tr("Every effect in the show, and the effect designer: Build ▸ Effects"));
+    connect(effectsAct, &QAction::triggered, this, &App::showEffects);
     EffectDesigner::plugIntoWorkbench();
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
@@ -3628,6 +3628,13 @@ void App::slotCaptureUndoStackChanged()
         m_captureUndoAction->setText(tr("Undo Last Store"));
         m_captureUndoAction->setToolTip(tr("Revert the most recent capture commit"));
     }
+}
+
+void App::showEffects()
+{
+    showContext(tr("Build"));
+    if (ProgrammingManager *pm = ProgrammingManager::instance())
+        pm->setSection(ProgrammingManager::EffectsSection);
 }
 
 void App::showFunctions()

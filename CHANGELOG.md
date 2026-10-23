@@ -41,8 +41,9 @@ circuits and subs.
   height beside the effect's settings and its own colour and dimmer,
   previewing live on the target heads. Keep it as a one-off, a new
   palette, an update or a preset. Hosted by **Design effect…** on a Show
-  Tree layer, by Build ▸ Effects (**+ New ▾** and a right-click menu) and
-  by **Window ▸ Effects**. **Make a layer** turns the bench's groups and
+  Tree layer and by Build ▸ Effects (**+ New ▾** and a right-click menu),
+  effects' one home: **Window ▸ Effects** brings it forward (there is no
+  separate Effects window). **Make a layer** turns the bench's groups and
   effect into a new layer of the cue or scene it came from, the selected
   cue, a picked scene or a new one.
 - **Show Tree ↔ Workbench (W3).** A cue, look or layer opens in the

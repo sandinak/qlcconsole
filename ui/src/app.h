@@ -519,6 +519,9 @@ public slots:
      *  (setFunctionsWindowShown()); otherwise Build ▸ Scenes ▸ Classic, the
      *  list focused. */
     void showFunctions();
+    /** Window → Effects: Build ▸ Effects, effects' one home (there is no
+     *  Effects window of its own). */
+    void showEffects();
     /** THE switch for the Functions window (Function Manager), board Q32:
      *  shown, it is a tab of its own again and Window → Functions brings it
      *  forward; hidden -- the qlcconsole view -- it has no tab and Window →
