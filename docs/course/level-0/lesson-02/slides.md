@@ -41,7 +41,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 6. Nothing to break
 
-- The footer says **Not ready**: no real lights.
+- The footer says **No outputs: preview only**: no real lights.
 - *Say:* "Try anything. Undo (⌘Z) takes it back."
 
 ## 7. The Rig Overview

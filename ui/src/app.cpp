@@ -5948,6 +5948,25 @@ void App::initStatusBar()
     // the footer at all, for every current AND future source alike.
     connect(ShowStatus::instance(), &ShowStatus::changed,
             this, &App::updateStatusBar);
+    /* And whether anything is patched out at all ("No outputs: preview
+       only"): a universe gaining or losing its outputs, or coming and going. */
+    {
+        InputOutputMap *io = m_doc->inputOutputMap();
+        auto watchUniverse = [this](Universe *u) {
+            if (u != NULL)
+                connect(u, &Universe::outputPatchesCountChanged, this, &App::updateStatusBar,
+                        Qt::UniqueConnection);
+        };
+        foreach (Universe *u, io->universes())
+            watchUniverse(u);
+        connect(io, &InputOutputMap::universeAdded, this, [this, io, watchUniverse](quint32 id) {
+            foreach (Universe *u, io->universes())
+                if (u != NULL && u->id() == id)
+                    watchUniverse(u);
+            updateStatusBar();
+        });
+        connect(io, &InputOutputMap::universeRemoved, this, &App::updateStatusBar);
+    }
 
     updateStatusBar();
 }
@@ -6197,7 +6216,13 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     // reads "Ready" — showStatusDetails() itself checks and returns.
     if (watched == m_statusModeLabel && event->type() == QEvent::MouseButtonPress)
     {
-        showStatusDetails();
+        // "No outputs: preview only" with nothing else listed: the fix is
+        // giving a universe an output.
+        if (m_statusModeLabel->property("previewOnly").toBool()
+            && ShowStatus::instance()->allEntries().isEmpty())
+            showContext(tr("Connections"));
+        else
+            showStatusDetails();
         return true;
     }
     return QMainWindow::eventFilter(watched, event);
@@ -7054,6 +7079,44 @@ void App::updateStatusBar()
         QList<ShowStatus::Entry> entries, notes;
         foreach (const ShowStatus::Entry &e, all)
             (e.severity == ShowStatus::Ok ? notes : entries) << e;
+        /* Nothing patched to any output: nothing reaches a rig, so nothing
+           listed can go wrong on stage. Grey, not red -- red that a class or
+           a laptop session is told to ignore teaches people to ignore red.
+           Universes "with no output" are what this chip already says. */
+        const bool previewOnly = rigHasOutputs() == false;
+        if (previewOnly)
+        {
+            QList<ShowStatus::Entry> toCheck;
+            foreach (const ShowStatus::Entry &e, entries)
+                if (e.key != QLatin1String("universes.nooutput"))
+                    toCheck << e;
+            if (toCheck.isEmpty() && m_statusMessage.isEmpty() == false)
+            {
+                m_statusModeLabel->setText(m_statusMessage);
+                m_statusModeLabel->setStyleSheet(QString());
+            }
+            else
+            {
+                m_statusModeLabel->setText(toCheck.isEmpty()
+                    ? tr("No outputs: preview only")
+                    : tr("No outputs: preview only · %n to check", "", toCheck.count()));
+                m_statusModeLabel->setStyleSheet("QLabel { color: #909090; }");
+            }
+            m_statusModeLabel->setCursor(Qt::PointingHandCursor);
+            QStringList lines;
+            lines << tr("Nothing is patched to an output, so nothing reaches a rig: "
+                        "looks play on screen only. Give a universe an output in "
+                        "Connections to light the rig.");
+            foreach (const ShowStatus::Entry &e, all)
+                if (e.key != QLatin1String("universes.nooutput"))
+                    lines << (e.summary.isEmpty() ? e.key : e.summary);
+            lines << QString() << (toCheck.isEmpty() && notes.isEmpty()
+                                   ? tr("Click to open Connections") : tr("Click for details"));
+            m_statusModeLabel->setToolTip(lines.join("\n"));
+            m_statusModeLabel->setProperty("previewOnly", true);
+            return;
+        }
+        m_statusModeLabel->setProperty("previewOnly", false);
         if (entries.isEmpty() && !notes.isEmpty())
         {
             m_statusModeLabel->setText(m_statusMessage.isEmpty()
@@ -7166,6 +7229,17 @@ void App::showStatusDetails()
         return;
     ShowStatusDialog dlg(this);
     dlg.exec();
+}
+
+bool App::rigHasOutputs() const
+{
+    if (m_doc == NULL || m_doc->inputOutputMap() == NULL)
+        return false;
+    InputOutputMap *io = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < io->universesCount(); u++)
+        if (io->outputPatchesCount(u) > 0)
+            return true;
+    return false;
 }
 
 void App::setStatusMessage(const QString& message)

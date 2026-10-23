@@ -138,7 +138,8 @@ the footer.
 
 ![The footer: readiness, grand master, speed masters, timecode, load, mode](../images/footer.png)
 
-1. **Ready** / **Not ready (N)** — click it for the list.
+1. **Ready** / **Not ready (N)** — click it for the list. With nothing
+   patched to an output it reads **No outputs: preview only**, in grey.
 2. **GM** — the grand master, over everything that's sent.
 3. **Speed masters** — one button per master the show uses, showing its
    tempo; click one to set it

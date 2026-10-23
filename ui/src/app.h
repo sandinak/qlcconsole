@@ -765,6 +765,11 @@ public:
     /** Clear the mode message from the status bar */
     void clearStatusMessage();
 
+    /** True when any universe is patched to an output. Without one nothing
+     *  reaches a rig: the readiness chip reads "No outputs: preview only",
+     *  in grey, instead of a red "Not ready". */
+    bool rigHasOutputs() const;
+
 private:
     /** Initialize the status bar */
     void initStatusBar();

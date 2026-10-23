@@ -90,7 +90,7 @@ the same way: **30%**.
 
 ## The footer
 
-It says **Not ready** in red: "13 universe(s) with fixtures but no
-output". That's on purpose. Clicking it also lists "5 definition(s) came
-with this show": the show carries the descriptions of the lights the app
+It says **No outputs: preview only**, in grey: nothing in the show is
+patched to an output, on purpose. Clicking it lists "13 universe(s) with
+fixtures but no output" and "5 definition(s) came with this show": the show carries the descriptions of the lights the app
 doesn't ship, so it opens complete on any computer.

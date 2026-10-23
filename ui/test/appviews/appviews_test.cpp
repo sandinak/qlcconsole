@@ -85,6 +85,7 @@
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "qlcfile.h"
+#include "showstatus.h"
 #undef protected
 #undef private
 
@@ -1675,6 +1676,67 @@ void AppViews_Test::autoOpenFollowsWhoSavedTheShow()
     QCOMPARE(m_app->loadXML(saved), QFile::NoError);
     QVERIFY(ao->isEnabled());
     QVERIFY(m_app->slotFileNew());
+}
+
+void AppViews_Test::theReadinessChipIsGreyWithNoOutputs()
+{
+    QLabel *chip = m_app->findChild<QLabel *>("footerReadiness");
+    QVERIFY(chip != nullptr);
+    m_app->clearDocument();
+    m_app->clearStatusMessage();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    ShowStatus *status = ShowStatus::instance();
+    QVERIFY(m_app->rigHasOutputs() == false);
+    auto isRed = [chip]() { return chip->styleSheet().contains("#e04030"); };
+
+    // Whatever an earlier test left registered goes first.
+    const QList<ShowStatus::Entry> before = status->allEntries();
+    for (const ShowStatus::Entry &e : before)
+        status->clearStatus(e.key);
+    QCOMPARE(chip->text(), QString("No outputs: preview only"));
+    QCOMPARE(chip->toolTip().contains("Click to open Connections"), true);
+
+    // Universes with fixtures going nowhere: what the chip already says.
+    status->setStatus("universes.nooutput", ShowStatus::Warning,
+                      "1 universe(s) with fixtures but no output");
+    QCOMPARE(chip->text(), QString("No outputs: preview only"));
+    QVERIFY(chip->styleSheet().contains("#909090"));
+    QVERIFY(!isRed());
+    QVERIFY(chip->toolTip().contains("Nothing is patched to an output"));
+
+    // Something else to look at: counted, still grey.
+    status->setStatus("test.problem", ShowStatus::Warning, "A test problem");
+    QCOMPARE(chip->text(), QString("No outputs: preview only · 1 to check"));
+    QVERIFY(!isRed());
+    QVERIFY(chip->toolTip().contains("A test problem"));
+
+    // A universe with an output: a rig. Now a problem is red.
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    if (cache->plugin(QStringLiteral("I/O Plugin Stub")) == nullptr)
+        cache->load(stubDir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(cache->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0));
+    QVERIFY(m_app->rigHasOutputs());
+    QVERIFY2(chip->text().startsWith("Not ready"), qPrintable(chip->text()));
+    QVERIFY(isRed());
+
+    status->clearStatus("test.problem");
+    status->clearStatus("universes.nooutput");
+    QCOMPARE(chip->text(), QString("Ready"));
+    QVERIFY(!isRed());
+
+    // Unpatched again: back to the grey preview line.
+    QVERIFY(iom->setOutputPatch(0, KOutputNone, "", QLCIOPlugin::invalidLine(), false, 0));
+    QCOMPARE(iom->outputPatchesCount(0), 0);
+    QVERIFY(m_app->rigHasOutputs() == false);
+    QCOMPARE(chip->text(), QString("No outputs: preview only"));
+
+    m_app->clearDocument();
+    stub->m_openOutputs.clear();
 }
 
 void AppViews_Test::quittingWithTheShowTreeShowing()

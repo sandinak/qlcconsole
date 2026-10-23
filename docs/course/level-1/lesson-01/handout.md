@@ -65,8 +65,9 @@ Switch roles after each cue.
    you can see it and the Show Tree together.
    - *You should see:* a dark stage with three rows of risers, a white cyc
      at the back and trusses across the back on both sides.
-   - The footer says **Not ready** in red. That's expected in class,
-     because the course show isn't connected to real lights.
+   - The footer says **No outputs: preview only**, in grey. That's
+     expected in class, because the course show isn't connected to real
+     lights.
 
 ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 

@@ -149,6 +149,10 @@ their house lights, relays and subs.
 - **Open what a layer plays.** A ▣ layer (a raw scene, an EFX, an RGB
   Matrix) opens its function in the Workbench; its page says where else it
   plays. See [Adding layers](show-tree.md#adding-layers).
+- **No outputs: preview only.** A show with nothing patched to an output
+  says so in the footer, in grey, instead of a red **Not ready**: nothing
+  reaches a rig, so nothing there is urgent. Red is kept for real problems
+  on a rig with outputs. See [Readiness footer](other-improvements.md#readiness-footer).
 - **Same show, same output.** A show saved by QLC+ 4.x opens with
   **Auto-open shutters** off, so it sends the DMX it sends in QLC+. Shows
   made in qlcconsole keep it on. Turn it on in Settings ▸ Advanced. See

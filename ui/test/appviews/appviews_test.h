@@ -120,6 +120,10 @@ private slots:
      *  for a QLC+ 4.x show, on for one qlcconsole saved, on for a new show. */
     void autoOpenFollowsWhoSavedTheShow();
 
+    /** Q64: nothing patched to any output -- a grey "No outputs: preview
+     *  only", never red; red "Not ready" for a real problem once a universe
+     *  has an output. */
+    void theReadinessChipIsGreyWithNoOutputs();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

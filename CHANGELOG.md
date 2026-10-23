@@ -185,6 +185,11 @@ circuits and subs.
 - **The boot window shows the version**, build and commit.
 - **The Lighting Studio plot draws a pixel fixture's heads where its LED
   layout puts them.**
+- **No outputs: preview only.** With nothing patched to any output, the
+  footer's readiness chip reads *No outputs: preview only* in grey (with
+  *· N to check* when something else is listed; a click opens Connections
+  or the list) instead of a red *Not ready*. Red is kept for real problems
+  on a rig with outputs. The course no longer tells students to ignore red.
 - **Auto-open shutters is off for a QLC+ 4.x show.** A show saved
   without the setting loads with it off unless qlcconsole saved it, so an
   old show sends the same DMX here as in QLC+. New shows keep it on, and a

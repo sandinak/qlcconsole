@@ -416,7 +416,12 @@ the outline's right-click; see
 ## Readiness footer
 
 The status chip at the bottom of the window reads **Ready** when nothing
-needs attention, and **Not ready (N)** in red when something does. Hover it
+needs attention, and **Not ready (N)** in red when something does. A show
+with **nothing patched to any output** reads **No outputs: preview only**
+in grey instead (with **· N to check** when something else is listed):
+nothing reaches a rig, so nothing there is urgent, and red stays for real
+problems on a rig with outputs. Click it then to open Connections, or for
+the list when it has one. Hover it
 for a one-line reason per problem; click it for the full list, where each
 problem can be fixed on the spot. It checks for:
 
