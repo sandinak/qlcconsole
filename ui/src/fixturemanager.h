@@ -52,6 +52,7 @@ class UniverseUsageWidget;
 class FixtureManager final : public QWidget
 {
     Q_OBJECT
+    friend class HelpShots;     // opens a group for the help's pictures
     Q_DISABLE_COPY(FixtureManager)
 
     /********************************************************************

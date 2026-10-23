@@ -57,6 +57,7 @@ class Monitor final : public QWidget
 {
     Q_OBJECT
     friend class FixtureFields;     // the shared fixture rows use the rig helpers
+    friend class HelpShots;         // sets up the plot for the help's pictures
     Q_DISABLE_COPY(Monitor)
 
     /*********************************************************************
