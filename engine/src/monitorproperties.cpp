@@ -655,6 +655,7 @@ void MonitorProperties::reset()
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
+    m_calibrationBase.clear();
     m_goboSwaps.clear();
     {
         QMutexLocker lock(&m_headLayoutMutex);
@@ -3970,7 +3971,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     // Fixture rig props (only write entries that differ from defaults)
     for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
     {
-        const FixtureRigProps &rp = it.value();
+        /* A venue's corrections are not the show's: with a venue applied,
+           the show's own calibration is what goes in the file. */
+        FixtureRigProps rp = it.value();
+        const auto base = m_calibrationBase.constFind(it.key());
+        if (base != m_calibrationBase.constEnd())
+            base->applyTo(rp);
         doc->writeStartElement(QStringLiteral("FixtureRig"));
         doc->writeAttribute(QStringLiteral("FID"),     QString::number(it.key()));
         doc->writeAttribute(QStringLiteral("Truss"),   QString::number(rp.trussId));

@@ -40,6 +40,9 @@
 class ProgrammerFlasher;
 class HighlightEffect;
 class FocusSession;
+class FocusCalls;
+class RefineSession;
+class VenueCorrections;
 class ControllerKeepAlive;
 class ParkEffect;
 class MarkEffect;
@@ -172,6 +175,16 @@ public:
      *  the right stick nudges finely, and the buttons step, save, revert...
      *  by gamepad role. Never null. */
     FocusSession *focusSession() const { return m_focusSession; }
+
+    /** The show's focus calls (saved with it). Never null. */
+    FocusCalls *focusCalls() const { return m_focusCalls; }
+    /** The venue corrections beside the show file (board Q105). Never null. */
+    VenueCorrections *venueCorrections() const { return m_venues; }
+    /** Refine: the controller on a Show Tree cue's own values. Never null. */
+    RefineSession *refineSession() const { return m_refineSession; }
+
+    bool saveFocusCallsXML(QXmlStreamWriter *doc) const;
+    bool loadFocusCallsXML(QXmlStreamReader &root);
 
     /** Keeps the controller read while Focus mode or the follow spot uses
      *  it (no App Nap), and says when it is paused and why. Never null. */
@@ -458,6 +471,9 @@ signals:
     /** View + Menu (Back + Start) held together on the controller while
      *  Focus mode is off: the UI opens it. */
     void focusModeRequested();
+    /** Focus mode, Focus calls or Refine has something to say to the
+     *  operator on stage (the UI's voice reads it). */
+    void operatorAnnounce(const QString &text);
     /** A controller came or went, or its profile changed: ask
      *  focusController() again. */
     void focusControllerChanged();
@@ -609,6 +625,9 @@ private:
     bool m_highlightActive = false;
     /** Focus mode: see focusSession(). */
     FocusSession *m_focusSession = nullptr;
+    FocusCalls *m_focusCalls = nullptr;
+    VenueCorrections *m_venues = nullptr;
+    RefineSession *m_refineSession = nullptr;
     /** See controllerKeepAlive(). */
     ControllerKeepAlive *m_keepAlive = nullptr;
     /** Asks the controller how it is while it is wanted: a plugin does not

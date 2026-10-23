@@ -122,6 +122,10 @@ add_library(${module_name} SHARED
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
     focussession.cpp focussession.h
+    focuscalls.cpp focuscalls.h
+    venuecorrections.cpp venuecorrections.h
+    controllerscheme.cpp controllerscheme.h
+    refinesession.cpp refinesession.h
     controllerkeepalive.cpp controllerkeepalive.h
     gamepadrole.cpp gamepadrole.h
     parkeffect.cpp parkeffect.h

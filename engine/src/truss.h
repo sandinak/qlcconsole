@@ -566,6 +566,53 @@ struct FixtureRigProps
     }
 };
 
+/**
+ * The part of a fixture's rig props that focusing a show in a venue changes
+ * (FOCUS_REFINE_DESIGN.md section 5): a moving head's pan and tilt offsets,
+ * a fixed light's aim, a hand-zoomed lens. What a venue's corrections hold,
+ * and what the show file keeps as its own while a venue is applied.
+ */
+struct RigCalibration
+{
+    float panOffsetDeg = 0.0f;
+    float tiltOffsetDeg = 0.0f;
+    bool  fixedAim = false;
+    float panZeroDir = 0.0f;
+    float aimDown = 90.0f;
+    float lensDeg = 0.0f;
+
+    static RigCalibration of(const FixtureRigProps &rp)
+    {
+        RigCalibration c;
+        c.panOffsetDeg = rp.panOffsetDeg;
+        c.tiltOffsetDeg = rp.tiltOffsetDeg;
+        c.fixedAim = rp.fixedAim;
+        c.panZeroDir = rp.panZeroDir;
+        c.aimDown = rp.aimDown;
+        c.lensDeg = rp.lensDeg;
+        return c;
+    }
+    void applyTo(FixtureRigProps &rp) const
+    {
+        rp.panOffsetDeg = panOffsetDeg;
+        rp.tiltOffsetDeg = tiltOffsetDeg;
+        rp.fixedAim = fixedAim;
+        rp.panZeroDir = panZeroDir;
+        rp.aimDown = aimDown;
+        rp.lensDeg = lensDeg;
+    }
+    bool operator==(const RigCalibration &o) const
+    {
+        return qFuzzyCompare(1.0f + panOffsetDeg, 1.0f + o.panOffsetDeg)
+            && qFuzzyCompare(1.0f + tiltOffsetDeg, 1.0f + o.tiltOffsetDeg)
+            && fixedAim == o.fixedAim
+            && qFuzzyCompare(1.0f + panZeroDir, 1.0f + o.panZeroDir)
+            && qFuzzyCompare(1.0f + aimDown, 1.0f + o.aimDown)
+            && qFuzzyCompare(1.0f + lensDeg, 1.0f + o.lensDeg);
+    }
+    bool operator!=(const RigCalibration &o) const { return !(*this == o); }
+};
+
 /** @} */
 
 #endif // TRUSS_H

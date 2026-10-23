@@ -18,8 +18,10 @@
 */
 
 #include <QtMath>
+#include <QTimer>
 #include <algorithm>
 
+#include "venuecorrections.h"
 #include "focussession.h"
 #include "monitorproperties.h"
 #include "qlcfixturemode.h"
@@ -58,6 +60,10 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
     , m_doc(doc)
     , m_layer(doc, Universe::Focus, FadeChannel::Override, QStringLiteral("Focus"))
 {
+    // The selection's flash: a few frames a blink, then it stops itself.
+    m_flashTimer = new QTimer(this);
+    m_flashTimer->setInterval(30);
+    connect(m_flashTimer, &QTimer::timeout, this, &FocusSession::onFlashTick);
     /* Into Perform, the rig belongs to the show: Focus mode ends, and a head
        still being nudged goes back to what was saved. */
     if (m_doc != nullptr)
@@ -226,13 +232,23 @@ bool FocusSession::start(const Options &options, QString *why)
     /* A Design-mode tool: in Perform the rig belongs to the show. */
     if (m_doc->mode() == Doc::Operate)
         return refuse(tr("Focus mode works in Design mode only: switch out of Operate first."));
-    QList<quint32> heads = focusable(m_doc, options.fixtures);
+    const bool runCalls = !options.calls.isEmpty();
+    QList<quint32> heads;
+    if (runCalls)
+    {
+        for (const Call &c : options.calls)
+            for (quint32 fid : focusable(m_doc, c.fixtures))
+                if (!heads.contains(fid))
+                    heads << fid;
+    }
+    else
+        heads = focusable(m_doc, options.fixtures);
     if (heads.isEmpty())
         return refuse(tr("None of these fixtures can be focused: they need a place on the "
                          "plot, and pan and tilt or a light of their own."));
     const QList<quint32> fixed = fixedLights(m_doc, heads);
     // A fixed light needs no reference: it is moved to where it really lands.
-    if (!options.first.isValid() && fixed.size() < heads.size())
+    if (!runCalls && !options.first.isValid() && fixed.size() < heads.size())
         return refuse(tr("Choose what the heads should aim at."));
 
     if (m_active)
@@ -243,11 +259,18 @@ bool FocusSession::start(const Options &options, QString *why)
     m_heads.clear();
     m_checked.clear();
     m_undo.clear();
+    m_calls.clear();
+    m_callIndex = -1;
     m_useSecond = false;
+    m_scope = FixtureScope;
 
     MonitorProperties *props = m_doc->monitorProperties();
     for (quint32 fid : m_order)
     {
+        /* With a venue applied, the show's calibration is held before any
+           of it moves: nothing this session does reaches the show file. */
+        if (m_venues != nullptr && m_venues->isActive())
+            m_venues->ensureBase(fid);
         const FixtureRigProps rp = props->fixtureRigProps(fid);
         Head h;
         h.saved.pan = rp.panOffsetDeg;
@@ -267,8 +290,64 @@ bool FocusSession::start(const Options &options, QString *why)
             h.beam = RigHeads::hasZoomChannel(fxb) ? int(ZoomChannel) : int(LensSetByHand);
             h.lensSaved = h.lensLive = rp.lensDeg;
         }
+        if (h.fixed)
+        {
+            // Its own point: where it lands now, at head height.
+            h.first = h.landSaved = fixedLanding(fid);
+            h.hasFirst = true;
+        }
         m_heads.insert(fid, h);
     }
+
+    if (runCalls)
+    {
+        /* Each call: its heads, in order, and the point each focuses to.
+           A head with nowhere to go in a call is left out of it; a call
+           with no heads left is left out. */
+        QSet<quint32> used;
+        for (const Call &c : options.calls)
+        {
+            CallState cs;
+            cs.call = c;
+            const QList<quint32> mine = focusable(m_doc, c.fixtures);
+            m_order = (options.order == ByStagePosition) ? stageOrder(m_doc, mine) : mine;
+            const QHash<quint32, QVector3D> pts = resolve(c.target);
+            for (quint32 fid : m_order)
+            {
+                if (m_heads.value(fid).fixed)
+                    cs.points.insert(fid, m_heads.value(fid).first);
+                else if (pts.contains(fid))
+                    cs.points.insert(fid, pts.value(fid));
+                else
+                    continue;
+                cs.order << fid;
+                used.insert(fid);
+            }
+            if (!cs.order.isEmpty())
+                m_calls << cs;
+        }
+        m_all.clear();
+        for (const CallState &cs : m_calls)
+            for (quint32 fid : cs.order)
+                if (!m_all.contains(fid))
+                    m_all << fid;
+        for (quint32 fid : m_heads.keys())
+            if (!used.contains(fid))
+                m_heads.remove(fid);
+        if (m_calls.isEmpty())
+        {
+            m_heads.clear();
+            m_all.clear();
+            m_order.clear();
+            return refuse(tr("None of the focus calls has a fixture with a point to focus to."));
+        }
+        m_active = true;
+        m_callIndex = -1;
+        enterCall(0);
+        emit started();
+        return true;
+    }
+
     resolveReferences();
 
     // Only heads with somewhere to aim.
@@ -279,6 +358,7 @@ bool FocusSession::start(const Options &options, QString *why)
         else
             m_heads.remove(fid);
     m_order = kept;
+    m_all = kept;
     if (m_order.isEmpty())
     {
         m_heads.clear();
@@ -290,7 +370,174 @@ bool FocusSession::start(const Options &options, QString *why)
     rebuildWrites();
     emit started();
     emit currentChanged(currentFixture());
+    flashSelection();
+    emit announce(wherePhrase());
     return true;
+}
+
+void FocusSession::enterCall(int index)
+{
+    if (!m_active || m_calls.isEmpty())
+        return;
+    const int n = m_calls.size();
+    index = ((index % n) + n) % n;
+    m_callIndex = index;
+    const CallState &cs = m_calls.at(index);
+    m_order = cs.order;
+    m_index = 0;
+    for (quint32 fid : m_order)
+    {
+        Head &h = m_heads[fid];
+        if (h.fixed)
+            continue;
+        h.first = cs.points.value(fid);
+        h.hasFirst = true;
+        h.hasSecond = false;
+    }
+    if (m_useSecond)
+    {
+        m_useSecond = false;
+        emit referenceChanged();
+    }
+    rebuildWrites();
+    emit callChanged(m_callIndex);
+    emit currentChanged(currentFixture());
+    flashSelection();
+    emit announce(wherePhrase());
+}
+
+FocusSession::Call FocusSession::currentCall() const
+{
+    if (m_callIndex < 0 || m_callIndex >= m_calls.size())
+        return Call();
+    return m_calls.at(m_callIndex).call;
+}
+
+void FocusSession::setCallIndex(int index)
+{
+    if (!m_active || m_calls.isEmpty())
+        return;
+    enterCall(index);
+}
+
+void FocusSession::nextCall()
+{
+    if (m_calls.isEmpty())
+        return;
+    enterCall(m_callIndex + 1);
+}
+
+void FocusSession::previousCall()
+{
+    if (m_calls.isEmpty())
+        return;
+    enterCall(m_callIndex - 1);
+}
+
+void FocusSession::setScope(Scope scope)
+{
+    if (!m_active || scope == m_scope)
+        return;
+    m_scope = scope;
+    rebuildWrites();
+    emit scopeChanged(m_scope);
+    flashSelection();
+    emit announce(wherePhrase());
+}
+
+void FocusSession::cycleScope()
+{
+    setScope(m_scope == FixtureScope ? GroupScope : FixtureScope);
+}
+
+QList<quint32> FocusSession::scopeFixtures() const
+{
+    if (!m_active)
+        return QList<quint32>();
+    if (m_scope == GroupScope)
+        return m_order;
+    const quint32 fid = currentFixture();
+    return fid == 0xFFFFFFFF ? QList<quint32>() : QList<quint32>{ fid };
+}
+
+QString FocusSession::wherePhrase() const
+{
+    if (!m_active)
+        return QString();
+    QStringList parts;
+    if (isRunningCalls())
+    {
+        const Call c = currentCall();
+        // "Call 2 of 5, AT spots to Soloist DS."
+        parts << tr("Call %1 of %2, %3 to %4.").arg(m_callIndex + 1).arg(m_calls.size())
+                     .arg(c.who.isEmpty() ? c.name : c.who,
+                          c.targetName.isEmpty() ? referenceName() : c.targetName);
+    }
+    if (m_scope == GroupScope)
+        parts << (isRunningCalls() ? tr("All %1, group.").arg(m_order.size())
+                                   : tr("All %1 fixtures.").arg(m_order.size()));
+    else
+        parts << tr("Fixture %1 of %2.").arg(m_index + 1).arg(m_order.size());
+    return parts.join(QLatin1Char(' '));
+}
+
+void FocusSession::whereAmI()
+{
+    if (!m_active)
+        return;
+    flashSelection();
+    emit announce(wherePhrase());
+}
+
+bool FocusSession::flashLit(qint64 ms)
+{
+    if (ms < 0 || ms >= flashDurationMs())
+        return true;
+    return (ms % (flashOnMs() + flashOffMs())) < flashOnMs();
+}
+
+void FocusSession::flashSelection()
+{
+    if (!m_active || !m_flashEnabled)
+        return;
+    m_flashClock.start();
+    if (m_flashTimer != nullptr)
+        m_flashTimer->start();
+    rebuildWrites();
+}
+
+bool FocusSession::isFlashing() const
+{
+    return m_active && m_flashClock.isValid() && m_flashClock.elapsed() < flashDurationMs();
+}
+
+void FocusSession::onFlashTick()
+{
+    if (!isFlashing())
+    {
+        m_flashTimer->stop();
+        m_flashClock.invalidate();
+    }
+    rebuildWrites();
+}
+
+bool FocusSession::savesToVenue() const
+{
+    return m_venues != nullptr && m_venues->isActive();
+}
+
+void FocusSession::savedChanged(const QList<quint32> &fids)
+{
+    if (fids.isEmpty())
+        return;
+    if (savesToVenue())
+    {
+        // Into the venue's corrections, and its file now; the show is untouched.
+        for (quint32 fid : fids)
+            m_venues->record(fid);
+        return;
+    }
+    markModified();
 }
 
 void FocusSession::stop()
@@ -311,10 +558,17 @@ void FocusSession::stop()
     m_layer.clear();
     m_heads.clear();
     m_order.clear();
+    m_all.clear();
+    m_calls.clear();
+    m_callIndex = -1;
     m_undo.clear();
     for (int s = 0; s < 2; ++s)
         m_stick[s][0] = m_stick[s][1] = 0.5f;
-    m_trigger[0] = m_trigger[1] = 0.0f;
+    m_trigger[0].reset();
+    m_trigger[1].reset();
+    if (m_flashTimer != nullptr)
+        m_flashTimer->stop();
+    m_flashClock.invalidate();
     emit stopped();
 }
 
@@ -346,6 +600,8 @@ void FocusSession::setIndex(int index)
     }
     rebuildWrites();
     emit currentChanged(currentFixture());
+    flashSelection();
+    emit announce(wherePhrase());
 }
 
 void FocusSession::next()
@@ -446,8 +702,12 @@ QString FocusSession::referenceName() const
 {
     if (m_heads.value(currentFixture()).fixed)
         return tr("where it lands, at head height");
-    const Reference &ref = (m_useSecond && m_options.second.isValid())
-                           ? m_options.second : m_options.first;
+    const Call call = currentCall();
+    if (isRunningCalls() && !call.targetName.isEmpty())
+        return call.targetName;
+    const Reference ref = isRunningCalls() ? call.target
+                        : (m_useSecond && m_options.second.isValid())
+                          ? m_options.second : m_options.first;
     if (ref.kind == Reference::SceneAim)
     {
         const Function *f = m_doc->function(ref.id);
@@ -543,7 +803,7 @@ bool FocusSession::hasUnsaved() const
 QList<quint32> FocusSession::unsavedFixtures() const
 {
     QList<quint32> out;
-    for (quint32 fid : m_order)
+    for (quint32 fid : m_all)
         if (isDirty(fid))
             out << fid;
     return out;
@@ -562,7 +822,12 @@ void FocusSession::applyOffset(quint32 fid, const Offset &offset)
 
 void FocusSession::nudge(float dPan, float dTilt)
 {
-    const quint32 fid = currentFixture();
+    for (quint32 fid : scopeFixtures())
+        nudgeHead(fid, dPan, dTilt);
+}
+
+void FocusSession::nudgeHead(quint32 fid, float dPan, float dTilt)
+{
     if (!m_heads.contains(fid) || (dPan == 0.0f && dTilt == 0.0f))
         return;
     Head &h = m_heads[fid];
@@ -608,11 +873,22 @@ void FocusSession::markModified()
 
 void FocusSession::save()
 {
-    const quint32 fid = currentFixture();
+    const int batch = ++m_batch;
+    QList<quint32> saved;
+    for (quint32 fid : scopeFixtures())
+        if (saveHead(fid, batch))
+            saved << fid;
+    savedChanged(saved);
+    if (!saved.isEmpty())
+        emit announce(saved.size() == 1 ? tr("Saved.") : tr("Saved %1.").arg(saved.size()));
+}
+
+bool FocusSession::saveHead(quint32 fid, int batch)
+{
     if (!m_heads.contains(fid))
-        return;
+        return false;
     Head &h = m_heads[fid];
-    m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved });
+    m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved, batch });
     if (h.fixed)
     {
         if (h.first != h.landSaved || !h.savedIsOriginal)
@@ -629,7 +905,6 @@ void FocusSession::save()
     }
     h.lensSaved = h.lensLive;
     m_checked.insert(fid);
-    markModified();
     /* Kept: the real light says so, dipping to dark and back twice. */
     if (m_rigFeedback)
     {
@@ -641,6 +916,7 @@ void FocusSession::save()
     }
     emit offsetChanged(fid);
     emit headSaved(fid);
+    return true;
 }
 
 void FocusSession::advanceBlink()
@@ -714,7 +990,12 @@ bool FocusSession::beamAngle(quint32 fid, double &deg, double &lo, double &hi) c
 
 void FocusSession::nudgeBeam(float dDeg)
 {
-    const quint32 fid = currentFixture();
+    for (quint32 fid : scopeFixtures())
+        nudgeBeamOf(fid, dDeg);
+}
+
+void FocusSession::nudgeBeamOf(quint32 fid, float dDeg)
+{
     double deg = 0.0, lo = 0.0, hi = 0.0;
     if (!m_heads.contains(fid) || dDeg == 0.0f || !beamAngle(fid, deg, lo, hi))
         return;
@@ -765,7 +1046,12 @@ bool FocusSession::focusLevel(quint32 fid, double &level) const
 
 void FocusSession::nudgeFocus(float d)
 {
-    const quint32 fid = currentFixture();
+    for (quint32 fid : scopeFixtures())
+        nudgeFocusOf(fid, d);
+}
+
+void FocusSession::nudgeFocusOf(quint32 fid, float d)
+{
     double level = 0.0;
     if (d == 0.0f || !focusLevel(fid, level))
         return;
@@ -779,7 +1065,8 @@ void FocusSession::setTrigger(int side, float norm)
 {
     if (m_input == KeyboardInput || side < 0 || side > 1)
         return;
-    m_trigger[side] = qBound(0.0f, norm, 1.0f);
+    if (m_trigger[side].update(qBound(0.0f, norm, 1.0f)))
+        apply(side == 0 ? PreviousCall : NextCall);
 }
 
 void FocusSession::backToSaved(quint32 fid, Head &h)
@@ -803,98 +1090,104 @@ void FocusSession::backToSaved(quint32 fid, Head &h)
 
 void FocusSession::revert()
 {
-    const quint32 fid = currentFixture();
-    if (!m_heads.contains(fid))
+    bool any = false;
+    for (quint32 fid : scopeFixtures())
+    {
+        if (!m_heads.contains(fid))
+            continue;
+        Head &h = m_heads[fid];
+        if (!h.dirty())
+            continue;
+        backToSaved(fid, h);
+        any = true;
+        emit offsetChanged(fid);
+    }
+    if (!any)
         return;
-    Head &h = m_heads[fid];
-    if (!h.dirty())
-        return;
-    backToSaved(fid, h);
     rebuildWrites();
-    emit offsetChanged(fid);
+    emit announce(tr("Reverted."));
 }
 
 void FocusSession::zero()
 {
-    const quint32 fid = currentFixture();
-    if (!m_heads.contains(fid))
-        return;
-    Head &h = m_heads[fid];
-    if (h.fixed)
+    bool any = false;
+    for (quint32 fid : scopeFixtures())
     {
-        // As it pointed when the session began.
-        if (!h.dirty())
-            return;
-        backToSaved(fid, h);
-        rebuildWrites();
+        if (!m_heads.contains(fid))
+            continue;
+        Head &h = m_heads[fid];
+        if (h.fixed)
+        {
+            // As it pointed when the session began.
+            if (!h.dirty())
+                continue;
+            backToSaved(fid, h);
+        }
+        else
+        {
+            if (h.live == Offset())
+                continue;
+            h.live = Offset();
+            applyOffset(fid, h.live);
+        }
+        any = true;
         emit offsetChanged(fid);
-        return;
     }
-    if (h.live == Offset())
+    if (!any)
         return;
-    h.live = Offset();
-    applyOffset(fid, h.live);
     rebuildWrites();
-    emit offsetChanged(fid);
+    emit announce(tr("Zeroed."));
 }
 
 bool FocusSession::undoSave()
 {
     if (m_undo.isEmpty())
         return false;
-    const UndoEntry e = m_undo.takeLast();
-    if (!m_heads.contains(e.fid))
+    // A save of a whole group is undone as one.
+    const int batch = m_undo.last().batch;
+    QList<quint32> undone;
+    while (!m_undo.isEmpty() && m_undo.last().batch == batch)
+    {
+        const UndoEntry e = m_undo.takeLast();
+        if (!m_heads.contains(e.fid))
+            continue;
+        Head &h = m_heads[e.fid];
+        h.saved = e.before;
+        h.live = e.before;
+        h.landSaved = e.landBefore;
+        h.savedIsOriginal = e.wasOriginal;
+        h.lensSaved = e.lensBefore;
+        if (!e.wasChecked)
+            m_checked.remove(e.fid);
+        backToSaved(e.fid, h);
+        undone << e.fid;
+        emit offsetChanged(e.fid);
+    }
+    if (undone.isEmpty())
         return false;
-    Head &h = m_heads[e.fid];
-    h.saved = e.before;
-    h.live = e.before;
-    h.landSaved = e.landBefore;
-    h.savedIsOriginal = e.wasOriginal;
-    h.lensSaved = e.lensBefore;
-    if (!e.wasChecked)
-        m_checked.remove(e.fid);
-    backToSaved(e.fid, h);
-    markModified();
+    savedChanged(undone);
     rebuildWrites();
-    emit offsetChanged(e.fid);
+    emit announce(tr("Undone."));
     return true;
 }
 
 void FocusSession::saveAll()
 {
-    bool any = false;
-    for (quint32 fid : m_order)
+    QList<quint32> saved;
+    for (quint32 fid : m_all)
     {
-        Head &h = m_heads[fid];
-        if (!h.dirty())
+        if (!m_heads.value(fid).dirty())
             continue;
-        m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved });
-        if (h.fixed)
-        {
-            if (h.first != h.landSaved || !h.savedIsOriginal)
-            {
-                h.landSaved = h.first;
-                h.savedIsOriginal = false;
-                applyLanding(fid, h, false);
-            }
-        }
-        else
-        {
-            h.saved = h.live;
-            applyOffset(fid, h.live);
-        }
-        h.lensSaved = h.lensLive;
-        m_checked.insert(fid);
-        any = true;
-        emit offsetChanged(fid);
+        // One undo step each, as before.
+        if (saveHead(fid, ++m_batch))
+            saved << fid;
     }
-    if (any)
-        markModified();
+    savedChanged(saved);
 }
 
 void FocusSession::discardAll()
 {
-    for (quint32 fid : m_order)
+    for (quint32 fid : m_all)
     {
         Head &h = m_heads[fid];
         if (!h.dirty())
@@ -911,23 +1204,29 @@ void FocusSession::discardAll()
 
 FocusSession::Control FocusSession::controlFor(GamepadRole::Role role)
 {
-    switch (role)
+    // The one layout every on-stage tool shares (ControllerScheme).
+    switch (ControllerScheme::verbFor(role))
     {
-        case GamepadRole::RB:        return Next;
-        case GamepadRole::LB:        return Previous;
-        case GamepadRole::A:         return Save;
-        case GamepadRole::B:         return Revert;
-        case GamepadRole::X:         return Zero;
-        case GamepadRole::Y:         return ToggleReference;
-        case GamepadRole::Back:      return UndoSave;
-        case GamepadRole::Start:     return Exit;
-        // Zoom up and down, focus left and right (Q103); the sticks nudge.
-        case GamepadRole::DpadUp:    return ZoomNarrower;   // up is in
-        case GamepadRole::DpadDown:  return ZoomWider;      // down is out
-        case GamepadRole::DpadLeft:  return FocusNearer;    // looser
-        case GamepadRole::DpadRight: return FocusFarther;   // tighter
-        default:                     return NoControl;
+        case ControllerScheme::NextItem:      return Next;
+        case ControllerScheme::PreviousItem:  return Previous;
+        case ControllerScheme::NextGroup:     return NextCall;
+        case ControllerScheme::PreviousGroup: return PreviousCall;
+        case ControllerScheme::CycleScope:    return CycleScope;
+        case ControllerScheme::Keep:          return Save;
+        case ControllerScheme::Revert:        return Revert;
+        case ControllerScheme::Reset:         return Zero;
+        case ControllerScheme::Undo:          return UndoSave;
+        case ControllerScheme::Exit:          return Exit;
+        // Zoom and focus on the D-pad (Q103; which arm is ControllerScheme's).
+        case ControllerScheme::ZoomWider:     return ZoomWider;
+        case ControllerScheme::ZoomNarrower:  return ZoomNarrower;
+        case ControllerScheme::FocusNearer:   return FocusNearer;
+        case ControllerScheme::FocusFarther:  return FocusFarther;
+        case ControllerScheme::Alternate:     return ToggleReference;
+        case ControllerScheme::WhereAmI:      return WhereAmI;
+        case ControllerScheme::NoVerb:        break;
     }
+    return NoControl;
 }
 
 void FocusSession::apply(Control control)
@@ -936,13 +1235,18 @@ void FocusSession::apply(Control control)
         return;
     switch (control)
     {
-        case Next:            next(); break;
-        case Previous:        previous(); break;
+        // A bumper picks a fixture: from the whole group, that one.
+        case Next:            if (m_scope == GroupScope) setScope(FixtureScope); else next(); break;
+        case Previous:        if (m_scope == GroupScope) setScope(FixtureScope); else previous(); break;
+        case NextCall:        nextCall(); break;
+        case PreviousCall:    previousCall(); break;
+        case CycleScope:      cycleScope(); break;
+        case WhereAmI:        whereAmI(); break;
         case Save:            save(); break;
         case Revert:          revert(); break;
         case Zero:            zero(); break;
         case ToggleReference: toggleReference(); break;
-        case UndoSave:        undoSave(); break;
+        case UndoSave:        if (!undoSave()) emit announce(tr("Nothing to undo.")); break;
         case Exit:            emit exitRequested(); break;
         case StepPanUp:       nudge(m_step, 0.0f); break;
         case StepPanDown:     nudge(-m_step, 0.0f); break;
@@ -1027,19 +1331,6 @@ void FocusSession::tick(double dt)
         {
             apply(m_held);
             m_heldWait += kRepeatInterval;
-        }
-    }
-    // The triggers: RT widens, LT narrows, in tenths carried between ticks.
-    {
-        const float d = (m_trigger[1] - m_trigger[0]) * beamRate() * m_sensitivity * float(dt);
-        if (qAbs(m_trigger[1] - m_trigger[0]) < 0.05f)
-            m_carryBeam = 0.0f;
-        else
-        {
-            m_carryBeam += d;
-            const float step = float(qRound(double(m_carryBeam) * 10.0) / 10.0);
-            m_carryBeam -= step;
-            nudgeBeam(step);
         }
     }
     float dPan = 0.0f, dTilt = 0.0f;
@@ -1133,13 +1424,16 @@ void FocusSession::rebuildWrites()
         };
         const bool blinkDark = m_blinkPhase > 0 && (m_blinkPhase % 2) == 1;
 
-        const quint32 current = currentFixture();
+        /* What is selected is lit (blinking while it flashes); the rest of
+           the call (list) is dark or dim, as chosen. */
+        const QList<quint32> selected = scopeFixtures();
+        const bool dark = m_flashClock.isValid() && !flashLit(m_flashClock.elapsed());
         for (quint32 fid : m_order)
         {
             Fixture *fx = m_doc->fixture(fid);
             if (fx == nullptr || fx->fixtureMode() == nullptr || !fx->isPatched())
                 continue;
-            if (fid != current)
+            if (!selected.contains(fid))
             {
                 if (m_options.others == OthersDark)
                     lightLevel(fx, 0.0f, false);
@@ -1163,7 +1457,7 @@ void FocusSession::rebuildWrites()
                 for (const SceneValue &sv : fx->positionToValues(QLCChannel::Tilt, sol.tiltDeg))
                     put(fx, sv.channel, sv.value);
             }
-            lightLevel(fx, m_options.level, true);
+            lightLevel(fx, dark ? 0.0f : m_options.level, true);
             // A zoom channel, to the beam asked for while focusing.
             const Head hd = m_heads.value(fid);
             bool rev = false;

@@ -34,7 +34,10 @@
 
 #include "programmercontroller.h"
 #include "controllerkeepalive.h"
+#include "venuecorrections.h"
+#include "refinesession.h"
 #include "focussession.h"
+#include "focuscalls.h"
 #include "gamepadrole.h"
 
 #include "doc.h"
@@ -86,10 +89,39 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);
     m_focusSession = new FocusSession(m_doc, this);
+    /* Focus calls and per-venue corrections (FOCUS_REFINE_DESIGN.md): the
+       show's calls, the venue's corrections beside the show file, and
+       Refine -- the same controller on a cue's own values. */
+    m_venues = new VenueCorrections(m_doc, this);
+    m_focusSession->setVenues(m_venues);
+    m_focusCalls = new FocusCalls(m_doc, this);
+    m_refineSession = new RefineSession(m_doc, this);
+    connect(m_focusSession, &FocusSession::announce, this, &ProgrammerController::operatorAnnounce);
+    connect(m_refineSession, &RefineSession::announce, this, &ProgrammerController::operatorAnnounce);
+    connect(m_doc, &Doc::clearing, this, [this]() {
+        m_refineSession->stop();
+        m_venues->reset();
+        m_focusCalls->clear();
+    });
+    connect(m_refineSession, &RefineSession::started, this, [this]() {
+        if (m_focusSession->isActive())
+            m_focusSession->stop();
+        connectControllerInput();
+        m_fineNormX = m_fineNormY = 0.5f;
+        m_refineSession->setStick(RefineSession::Coarse, 0.5f, 0.5f);
+        m_joyTickClock.invalidate();
+        refreshControllerKeepAlive();
+    });
+    connect(m_refineSession, &RefineSession::stopped, this, [this]() {
+        refreshControllerKeepAlive();
+    });
     /* Focus mode takes the stick from the follow spot's data channel while it
        runs (a free-flying follow spot must not fly while its stick is
        aligning the rig), and gives it back as it stands when it stops. */
     connect(m_focusSession, &FocusSession::started, this, [this]() {
+        // One tool owns the controller at a time.
+        if (m_refineSession != nullptr && m_refineSession->isActive())
+            m_refineSession->stop();
         connectControllerInput();    // even with no follow-spot axes bound
         m_fineNormX = m_fineNormY = 0.5f;
         m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
@@ -1349,6 +1381,21 @@ bool ProgrammerController::hasParkedFixtures() const
     return m_parkEffect != nullptr && !m_parkEffect->isEmpty();
 }
 
+bool ProgrammerController::saveFocusCallsXML(QXmlStreamWriter *doc) const
+{
+    return m_focusCalls != nullptr ? m_focusCalls->saveXML(doc) : true;
+}
+
+bool ProgrammerController::loadFocusCallsXML(QXmlStreamReader &root)
+{
+    if (m_focusCalls == nullptr)
+    {
+        root.skipCurrentElement();
+        return false;
+    }
+    return m_focusCalls->loadXML(root);
+}
+
 bool ProgrammerController::saveParkXML(QXmlStreamWriter *doc) const
 {
     return m_parkEffect != nullptr ? m_parkEffect->saveXML(doc) : true;
@@ -1699,7 +1746,8 @@ void ProgrammerController::autoBindFromProfile()
 
 void ProgrammerController::refreshControllerKeepAlive()
 {
-    const bool focus = m_focusSession->isActive();
+    const bool focus = m_focusSession->isActive()
+                       || (m_refineSession != nullptr && m_refineSession->isActive());
     const bool followSpot = hasFollowSpotInput();
     m_keepAlive->setFocusActive(focus);
     m_keepAlive->setFollowSpotActive(followSpot);
@@ -2030,7 +2078,8 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
 bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
 {
     const float norm = value / 255.0f;
-    const bool active = m_focusSession->isActive();
+    const bool refine = m_refineSession->isActive();
+    const bool active = m_focusSession->isActive() || refine;
     const bool isPan = m_panBound && universe == m_panUniverse && channel == m_panChannel;
     const bool isTilt = m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel;
     /* The bound pan/tilt pair is the follow spot's stick: when Focus mode is
@@ -2061,7 +2110,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
 
     /* On the keyboard the controller is ignored -- but still kept from the
        follow spot and the rest -- so a resting stick cannot drift a head. */
-    if (m_focusSession->inputDevice() == FocusSession::KeyboardInput)
+    if (!refine && m_focusSession->inputDevice() == FocusSession::KeyboardInput)
         return true;
 
     // What the panel lights: the stick by its role even when it is only bound.
@@ -2071,8 +2120,33 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
                                                                         : (value > 0 ? 1.0f : 0.0f));
 
+    // Refine: the same controller on the cue's own values (ControllerScheme).
+    if (refine)
+    {
+        if (isPan || role == GamepadRole::LeftX)
+            m_panNorm = norm;
+        else if (isTilt || role == GamepadRole::LeftY)
+            m_tiltNorm = norm;
+        else if (role == GamepadRole::RightX)
+            m_fineNormX = norm;
+        else if (role == GamepadRole::RightY)
+            m_fineNormY = norm;
+        else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
+            m_refineSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
+        else if (value > 0)
+            m_refineSession->apply(ControllerScheme::verbFor(role));
+        m_refineSession->setStick(RefineSession::Coarse, m_panNorm, m_tiltNorm);
+        m_refineSession->setStick(RefineSession::Fine, m_fineNormX, m_fineNormY);
+        return true;
+    }
+
     // Focus mode owns the controller: everything stops here.
-    if (isPan || role == GamepadRole::LeftX)
+    if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
+    {
+        // The triggers step the focus calls.
+        m_focusSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
+    }
+    else if (isPan || role == GamepadRole::LeftX)
     {
         m_panNorm = norm;
         m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
@@ -2115,6 +2189,19 @@ void ProgrammerController::applyDesignJoystick()
         else
             m_joyTickClock.start();
         m_focusSession->tick(dt);
+        return;
+    }
+    if (m_refineSession != nullptr && m_refineSession->isActive())
+    {
+        m_refineSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
+        const double nominal = m_designJoyTimer != nullptr
+                               ? m_designJoyTimer->interval() / 1000.0 : 0.02;
+        double dt = nominal;
+        if (m_joyTickClock.isValid())
+            dt = qBound(nominal, m_joyTickClock.restart() / 1000.0, qMax(nominal, 0.1));
+        else
+            m_joyTickClock.start();
+        m_refineSession->tick(dt);
         return;
     }
 
