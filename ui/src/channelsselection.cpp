@@ -29,6 +29,7 @@
 #include "qlcfixturedef.h"
 #include "universe.h"
 #include "doc.h"
+#include "itemicons.h"
 
 #define KColumnName         0
 #define KColumnType         1
@@ -160,7 +161,7 @@ void ChannelsSelection::updateFixturesTree()
 
         QTreeWidgetItem *fItem = new QTreeWidgetItem(topItem);
         fItem->setText(KColumnName, fxi->name());
-        fItem->setIcon(KColumnName, fxi->getIconFromType());
+        fItem->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
         fItem->setText(KColumnID, QString::number(fxi->id()));
 
         QList<int> forcedHTP = fxi->forcedHTPChannels();

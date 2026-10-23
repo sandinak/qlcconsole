@@ -52,6 +52,7 @@
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
 #include "doc.h"
+#include "itemicons.h"
 
 // A short tag for what THIS ONE head actually emits -- "RGB"/"RGBW"/"W"/
 // "Wheel" -- so a grid cell reads as more than just "some head of this
@@ -505,7 +506,7 @@ void FixtureGroupEditor::updateTable()
         if (fxi == NULL)
             continue;
 
-        QIcon icon = fxi->getIconFromType();
+        QIcon icon = ItemIcons::fixtureIcon(fxi);
         const QString colorTag = headColorTag(fxi, head.head);
         QString str = fxi->isPatched()
             ? QString("%1 H:%2\nA:%3 U:%4").arg(fxi->name())

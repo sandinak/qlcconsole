@@ -633,6 +633,29 @@ fixture lists, and its shape on the plot and in the studio; see
 [Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
 same choice as its **Stage look** row.
 
+### Icons
+
+A fixture has one icon, and it is the same wherever the fixture is listed:
+here, Build's *Groups & fixtures* and Scenes outline, the Show Tree and its
+Library, the plot's Inventory and Layers panels, Fixture Properties, the
+channels-group and remap dialogs and the Virtual Console's fixture lists.
+What decides it, in order:
+
+1. **Its stage look**, when you have given it one (Stage Look ▸ above).
+2. **A curtain** -- a fixture that gives no light and has an *Open*,
+   *Position* or *Fly* channel (the plot draws it as its drape) -- shows a
+   drape on its track.
+3. **Its closest look**, when it is on Auto and the plot's **Show ▸ Show
+   Auto fixtures as their closest stage look** is on.
+4. Otherwise **what it is**: a fixed wash, a moving spot, a moving wash or
+   a moving head, else its definition's type (a hazer, a fan, a strobe...).
+
+A fixture with [output rules](#output-rules) adds the amber badge. A group
+shows the group version of its fixtures' shared icon -- all curtains, one
+look (with the setting on) or one kind -- and the plain group icon when they
+differ. Every list redoes its icons when a look, the rules or the setting
+change.
+
 ### Patching a universe's output
 
 A universe row patches where the universe goes, with the same questions,

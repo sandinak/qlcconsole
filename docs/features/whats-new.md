@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **The same icon for a fixture everywhere, and curtains have one.** A
+  fixture or group now wears one icon in every list -- the Fixture
+  Manager, Build, the Show Tree and its Library, the plot's Inventory and
+  Layers panels, Fixture Properties and the other dialogs that list
+  fixtures -- where some used to show only its definition's type. Curtains
+  get a drape icon of their own, and a group of curtains its group
+  version. See [Icons](fixture-manager.md#icons).
+
 - **Auto fixtures can be shown as their closest look.** The plot's
   **Show** menu has **Show Auto fixtures as their closest stage look**: a
   fixture left on Auto gets the look its type is closest to (an LED PAR, a

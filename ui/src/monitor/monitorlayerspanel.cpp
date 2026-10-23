@@ -87,6 +87,7 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "truss.h"
 #include "fixture.h"
 #include "doc.h"
+#include "itemicons.h"
 
 // Row-widget glyphs. Emoji render fine on the macOS Qt5 build this fork targets.
 static const char *kEyeShown  = "\xF0\x9F\x91\x81";   // 👁
@@ -336,6 +337,19 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
             });
         });
 
+    /* Auto fixtures shown as their closest look, or not: the fixture and
+       group icons. Coalesced like a rename. */
+    if (m_doc != nullptr)
+        connect(m_doc, &Doc::stageLooksChanged, this, [this]() {
+            if (m_reloadQueued)
+                return;
+            m_reloadQueued = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_reloadQueued = false;
+                reload();
+            });
+        });
+
     /* A layer shown or hidden somewhere else -- the Rig Overview's Layers
        menu -- shows here too. Deferred and coalesced like a rename: a toggle
        made HERE also lands here, from inside its own button's signal. */
@@ -568,7 +582,7 @@ QTreeWidgetItem *MonitorLayersPanel::addFixtureGroupNode(QTreeWidgetItem *host, 
 {
     QTreeWidgetItem *fgNode = new QTreeWidgetItem(host);
     setNodeLabel(fgNode, fg->name(), QObject::tr("  \xc2\xb7 fixture group"));
-    fgNode->setIcon(0, QIcon(":/group.png"));   // the app's Fixture Group icon
+    fgNode->setIcon(0, ItemIcons::groupIcon(m_doc, fg));   // as in every other list
     fgNode->setFirstColumnSpanned(true);
     // Draggable too: dropped on a layer or a folder, its fixtures go there.
     // Renamed in place like every other row (select it, Enter).
@@ -636,7 +650,11 @@ void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
         node->setFlags(node->flags() | Qt::ItemIsEditable);
     else
         node->setFlags(node->flags() & ~Qt::ItemIsEditable);
-    node->setIcon(0, kindIcon(d.kind, d.color));
+    // A fixture wears the icon it has in every other list.
+    if (d.kind == QStringLiteral("fixture"))
+        node->setIcon(0, ItemIcons::fixtureIcon(m_doc->fixture(d.id)));
+    else
+        node->setIcon(0, kindIcon(d.kind, d.color));
 }
 
 QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) const
@@ -753,7 +771,16 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
             if (commonKind.isEmpty()) { commonKind = d.kind; commonColor = d.color; }
             else if (commonKind != d.kind) { uniform = false; break; }
         }
-        if (any && uniform && !commonKind.isEmpty())
+        if (any && uniform && commonKind == QStringLiteral("fixture"))
+        {
+            // Fixtures: as a group of them is in every other list.
+            QList<quint32> fids;
+            foreach (const ItemDesc &d, items)
+                if (d.groupId == groupId)
+                    fids << d.id;
+            node->setIcon(0, ItemIcons::targetsIcon(m_doc, QList<quint32>(), fids));
+        }
+        else if (any && uniform && !commonKind.isEmpty())
             node->setIcon(0, kindIcon(commonKind, commonColor));
         else
             node->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));

@@ -89,6 +89,8 @@
 #include "qlcioplugin.h"
 #include "patchundo.h"
 #include "showstatus.h"
+#include "itemicons.h"
+#include "scenery.h"
 
 // Bumped when the power pane was added as a third section: an older 2-section
 // saved state would collapse the new pane to zero width and hide it.
@@ -180,11 +182,8 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         grpItem->setExpanded(true);
 
     /* Connect fixture list change signals from the new document object */
-    // A fixture renamed elsewhere (the Studio, Layers) shows here too.
-    connect(m_doc, &Doc::fixtureChanged, this, [this](quint32 id) {
-        if (m_fixtures_tree != NULL)
-            m_fixtures_tree->refreshFixtureName(id);
-    });
+    // A fixture renamed elsewhere (the Studio, Layers) shows here too: the
+    // tree follows Doc::fixtureChanged itself (refreshFixtureName()).
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
 
@@ -2206,9 +2205,10 @@ void FixtureManager::fillStageLookMenu(QMenu *menu, Doc *doc, const QList<quint3
         });
     };
     const Fixture::StageLook autoLook = first != NULL ? first->autoStageLook() : Fixture::AutoLook;
-    addLook(autoLook != Fixture::AutoLook ? QIcon(Fixture::stageLookIconResource(autoLook))
-                                          : (first != NULL ? QIcon(first->typeIconResource()) : QIcon()),
-            autoLook != Fixture::AutoLook
+    // A curtain on Auto is shown as a curtain (ItemIcons::autoLookIcon()).
+    addLook(ItemIcons::autoLookIcon(first),
+            Scenery::isCurtainFixture(first) ? tr("Auto (Curtain)")
+            : autoLook != Fixture::AutoLook
                 ? tr("Auto (%1)").arg(Fixture::stageLookName(autoLook)) : tr("Auto"),
             int(Fixture::AutoLook));
     int section = -1;

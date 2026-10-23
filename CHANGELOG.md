@@ -13,6 +13,24 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **One icon per fixture, everywhere; a curtain icon.** `ItemIcons::fixtureIcon()`
+  / `groupIcon()` are the only source of a fixture's or group's icon: the
+  Monitor inventory and layers panels (fixture rows, fixture-group rows,
+  plot folders of fixtures), the channels-group dialogs, the fixture remap
+  dialog, the head-layout grid, the function wizard, the VC slider's
+  channel list and the curtain-driver combo no longer use
+  `Fixture::getIconFromType()` or `:/fixture.png` / `:/group.png`; the
+  stage-look pickers' Auto entry uses `ItemIcons::autoLookIcon()`. Order:
+  an explicit stage look, then a curtain (`Scenery::isCurtainFixture()`,
+  on Auto only: a dimmer-type curtain is not drawn as an ellipsoidal),
+  then `drawnStageLook()`, then kind / type; output-rules badge on top.
+  `groupIcon()` and `targetsIcon()` share one set rule (all curtains →
+  `curtainIcon(true)`, one shared look, one kind, else the group icon), so
+  a Show Tree layer on one group wears that group's icon. New
+  `resources/icons/svg/curtain.svg` + `curtain.png` / `curtain@2x.png`.
+  The Show Tree (Library and layers) and the Fixture Manager's group rows
+  now also follow fixture changes (look, output rules); the inventory and
+  layers panels follow `Doc::stageLooksChanged()`.
 - **Show Auto fixtures as their closest stage look.** A per-show setting,
   `MonitorProperties::autoStageLooks()` (the `AutoStageLooks="1"`
   attribute on the Monitor element, written only when on; off by default,

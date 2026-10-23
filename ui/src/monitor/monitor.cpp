@@ -164,6 +164,7 @@
 #include <QTimer>
 #include "qlcfile.h"
 #include "qlceventpos.h"
+#include "itemicons.h"
 
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
@@ -482,11 +483,8 @@ void Monitor::initGraphicsView()
     });
     connect(m_inventoryPanel, &MonitorInventoryPanel::addRequested, this, &Monitor::slotAddToInventory);
     connect(m_graphicsView, &MonitorGraphicsView::fixturesDropped, this, &Monitor::slotFixturesDropped);
-    // Keep the panel true to the show: fixtures come and go, get patched, or
-    // land on the plot from elsewhere.
-    connect(m_doc, &Doc::fixtureAdded, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
-    connect(m_doc, &Doc::fixtureRemoved, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
-    connect(m_doc, &Doc::fixtureChanged, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    // The panel keeps itself true to the show (fixtures come and go, get
+    // patched, change their look): MonitorInventoryPanel's constructor.
     // A repatch changes which port a fixture is on, so the cable runs follow.
     connect(m_doc, &Doc::fixtureChanged, m_graphicsView, [this](quint32) { m_graphicsView->scheduleNetworkRuns(); });
 
@@ -6324,7 +6322,7 @@ void Monitor::slotEditScenery(quint32 sid)
         driveCombo->addItem(tr("Nothing (stays as set)"), uint(Fixture::invalidId()));
         foreach (Fixture *fx, m_doc->fixtures())
             if (fx != nullptr && (Scenery::isCurtainFixture(fx) || fx->id() == select))
-                driveCombo->addItem(fx->name(), uint(fx->id()));
+                driveCombo->addItem(ItemIcons::fixtureIcon(fx), fx->name(), uint(fx->id()));
         driveCombo->setCurrentIndex(qMax(0, driveCombo->findData(uint(select))));
     };
     fillDrivers(s->driverFixture());

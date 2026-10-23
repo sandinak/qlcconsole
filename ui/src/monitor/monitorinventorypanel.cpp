@@ -28,6 +28,7 @@
 #include "qlcfixturedef.h"
 #include "fixture.h"
 #include "doc.h"
+#include "itemicons.h"
 
 #define ROLE_FID   (Qt::UserRole)        // a fixture leaf
 #define ROLE_MODEL (Qt::UserRole + 1)    // a model node
@@ -124,6 +125,16 @@ MonitorInventoryPanel::MonitorInventoryPanel(Doc *doc, MonitorGraphicsView *view
     connect(close, &QToolButton::clicked, this, &MonitorInventoryPanel::closeRequested);
     connect(add, &QPushButton::clicked, this, &MonitorInventoryPanel::addRequested);
     connect(m_filter, &QLineEdit::textChanged, this, [this]() { reload(); });
+    /* Keep the panel true to the show: fixtures come and go, get patched,
+       land on the plot from elsewhere, change their look or output rules;
+       Auto fixtures shown as their closest look, or not: their icons. */
+    if (m_doc != NULL)
+    {
+        connect(m_doc, &Doc::fixtureAdded, this, [this](quint32) { reload(); });
+        connect(m_doc, &Doc::fixtureRemoved, this, [this](quint32) { reload(); });
+        connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { reload(); });
+        connect(m_doc, &Doc::stageLooksChanged, this, [this]() { reload(); });
+    }
 
     reload();
 }
@@ -203,7 +214,7 @@ void MonitorInventoryPanel::reload()
                 QTreeWidgetItem *leaf = new QTreeWidgetItem(dNode);
                 leaf->setText(0, fx->connection() == Fixture::Network
                                      ? tr("%1  [network]").arg(fx->name()) : fx->name());
-                leaf->setIcon(0, fx->getIconFromType());
+                leaf->setIcon(0, ItemIcons::fixtureIcon(fx));
                 leaf->setData(0, ROLE_FID, fx->id());
                 leaf->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
                 leaf->setToolTip(0, tr("Drag onto the plot -- onto a truss, riser or tower to mount it"));

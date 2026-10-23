@@ -38,6 +38,8 @@
 #include "qlcfixturemode.h"
 #include "tower.h"
 #include "doc.h"
+#include "itemicons.h"
+#include "scenery.h"
 
 namespace
 {
@@ -73,13 +75,13 @@ void FixtureFields::fillStageLookCombo(QComboBox *cb, const Fixture *fx)
     const bool was = cb->blockSignals(true);
     cb->clear();
     const Fixture::StageLook autoLook = fx != nullptr ? fx->autoStageLook() : Fixture::AutoLook;
-    const QString autoName = autoLook != Fixture::AutoLook
+    // A curtain on Auto is shown as a curtain (ItemIcons::autoLookIcon()).
+    const QString autoName = Scenery::isCurtainFixture(fx) ? tr("Curtain")
+                             : autoLook != Fixture::AutoLook
                              ? Fixture::stageLookName(autoLook)
                              : (fx != nullptr && fx->fixtureDef() != nullptr
                                 ? QLCFixtureDef::typeToString(fx->fixtureDef()->type()) : QString());
-    const QIcon autoIcon = autoLook != Fixture::AutoLook
-                           ? QIcon(Fixture::stageLookIconResource(autoLook))
-                           : (fx != nullptr ? QIcon(fx->typeIconResource()) : QIcon());
+    const QIcon autoIcon = ItemIcons::autoLookIcon(fx);
     cb->addItem(autoIcon, autoName.isEmpty() ? tr("Auto") : tr("Auto (%1)").arg(autoName),
                 int(Fixture::AutoLook));
     int section = -1;

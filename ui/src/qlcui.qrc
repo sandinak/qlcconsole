@@ -110,6 +110,8 @@
         <file alias="look_movingroundwash@2x.png">../../resources/icons/png/look_movingroundwash@2x.png</file>
         <file alias="look_movingsquarewash.png">../../resources/icons/png/look_movingsquarewash.png</file>
         <file alias="look_movingsquarewash@2x.png">../../resources/icons/png/look_movingsquarewash@2x.png</file>
+        <file alias="curtain.png">../../resources/icons/png/curtain.png</file>
+        <file alias="curtain@2x.png">../../resources/icons/png/curtain@2x.png</file>
         <file alias="look_lantern.png">../../resources/icons/png/look_lantern.png</file>
         <file alias="look_lantern@2x.png">../../resources/icons/png/look_lantern@2x.png</file>
         <file alias="look_staff.png">../../resources/icons/png/look_staff.png</file>

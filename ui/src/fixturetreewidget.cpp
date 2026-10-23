@@ -635,7 +635,13 @@ FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
     connect(this, SIGNAL(itemChanged(QTreeWidgetItem*, int)),
             this, SLOT(slotItemChanged(QTreeWidgetItem*, int)));
     if (m_doc != NULL)
+    {
         connect(m_doc, &Doc::stageLooksChanged, this, &FixtureTreeWidget::refreshStageLookIcons);
+        /* A fixture renamed, given a look or output rules anywhere: its
+           rows' names and icons, and its groups' icons, in place -- in
+           every list built on this tree, not only the Fixture Manager's. */
+        connect(m_doc, &Doc::fixtureChanged, this, &FixtureTreeWidget::refreshFixtureName);
+    }
 }
 
 void FixtureTreeWidget::refreshStageLookIcons()
@@ -767,14 +773,23 @@ void FixtureTreeWidget::refreshFixtureName(quint32 id)
     {
         QTreeWidgetItem *item = *it;
         const QVariant var = item->data(KColumnName, PROP_ID);
+        // A group it is in may now be all one look, or no longer.
+        if (!var.isValid() && item->data(KColumnName, PROP_GROUP).isValid())
+        {
+            if (FixtureGroup *grp = m_doc->fixtureGroup(item->data(KColumnName, PROP_GROUP).toUInt()))
+                if (grp->fixtureList().contains(id))
+                    item->setIcon(KColumnName, ItemIcons::groupIcon(m_doc, grp));
+            continue;
+        }
         if (!var.isValid() || var.toUInt() != id
             || item->data(KColumnName, PROP_HEAD).isValid())
             continue;
         if (item->text(KColumnName) != fxi->name())
             item->setText(KColumnName, fxi->name());
-        // Its stage look changed (Fixture Properties, Stage look ▸): its icon.
-        if (item->data(KColumnName, PROP_LOOK).isValid()
-            && item->data(KColumnName, PROP_LOOK).toInt() != int(drawnStageLook(fxi)))
+        /* Its stage look or its output rules changed (Fixture Properties,
+           Stage look ▸, Output rules): its icon. Redone every time -- the
+           badge is not in PROP_LOOK. */
+        if (item->data(KColumnName, PROP_LOOK).isValid())
         {
             item->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
             item->setData(KColumnName, PROP_LOOK, int(drawnStageLook(fxi)));
