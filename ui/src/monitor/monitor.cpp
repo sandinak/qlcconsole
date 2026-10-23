@@ -4159,9 +4159,24 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // Double-click a tree fixture → edit it; a bar → its own truss editor
     // (face/along-truss/lock live there, not in this one); a GROUP folder →
     // its head-layout grid.
-    connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
+    connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this, tree](QTreeWidgetItem *it, int) {
         const quint32 fid = studioRowFid(it);
-        if (fid != Fixture::invalidId()) { editFixtureProperties(fid); return; }
+        if (fid != Fixture::invalidId())
+        {
+            // Several fixture rows selected, this one among them: edit them all.
+            QList<quint32> fids;
+            for (QTreeWidgetItem *sel : tree->selectedItems())
+            {
+                const quint32 f = studioRowFid(sel);
+                if (f != Fixture::invalidId() && !fids.contains(f))
+                    fids << f;
+            }
+            if (fids.size() > 1 && fids.contains(fid))
+                editFixturesProperties(fids);
+            else
+                editFixtureProperties(fid);
+            return;
+        }
         const quint32 barId = studioRowBarId(it);
         if (barId != Truss::invalidId()) { slotEditTruss(barId); return; }
         const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
