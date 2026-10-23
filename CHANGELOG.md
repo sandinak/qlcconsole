@@ -49,17 +49,15 @@ circuits and subs.
   Programming tab is **Build**: **Palettes | Effects | Scenes** picks what
   the navigator lists, with Groups & fixtures under each, and the
   **Workbench** on the right loads a scene, collection, chaser or any other
-  function as layers. On a collection: **+ Scene**, **+ EFX**, **+ RGB
-  Matrix**, remove (⌫), ▲ ▼, drag scenes in, **▣ Open** / **↩**, **also in
+  function as layers. On a collection: **+ Scene**, **+ Effect ▾** (EFX,
+  RGB Matrix), remove (⌫), ▲ ▼, drag scenes in, **▣ Open** / **↩**, **also in
   N** and **Own copy** for shared members. The editor pane hosts the Look
   Editor, the channel console, timing and the stock editors. Design mode
   previews what is loaded. Every edit is one step on the history the Show
   Tree shares. No file format change; old QLC+ shows open as they are.
-- **Build ▸ Scenes outline and Classic.** Folders → scenes, collections
-  and chasers, each scene opening into its targets and looks; ⊞ / ⊟,
-  badges with details on hover, drag rows between scenes (⌥ copies), F2
-  renames. **Scenes ▸ Classic** lists every function by type as the
-  Function Manager did; a show without a Show Tree opens on it.
+- **Build ▸ Scenes outline.** Folders → scenes, collections and
+  chasers, each scene opening into its targets and looks; ⊞ / ⊟, badges
+  with details on hover, drag rows between scenes (⌥ copies), F2 renames.
 - **Chasers in the Workbench.** A step walker (◀ ▶, the step's fades,
   hold, cue number and note in place), the step table, and the step's
   function as layers. **Chaser from selection**; scenes dropped on a
@@ -67,13 +65,12 @@ circuits and subs.
 - **Effect designer and Build ▸ Effects.** The effect browser at full
   height beside the effect's settings and its own colour and dimmer,
   previewing live on the target heads. Keep it as a one-off, a new
-  palette, an update or a preset. Hosted by **Design effect…** on a Show
+  palette or an update. Hosted by **Design effect…** on a Show
   Tree layer and by Build ▸ Effects (**+ New ▾** and a right-click menu),
-  effects' one home: **Window ▸ Effects** brings it forward (there is no
-  separate Effects window). **Make a layer** turns the bench's groups and
+  effects' one home (there is no separate Effects window). **Make a layer** turns the bench's groups and
   effect into a new layer of the cue or scene it came from, the selected
   cue, a picked scene or a new one.
-- **Show Tree ↔ Workbench (W3).** A cue, look or layer opens in the
+- **Show Tree ↔ Workbench (W3).** A cue, hit or layer opens in the
   Workbench docked in the Show Tree (double-click, **✎ Workbench**, **Open
   in Workbench**, `wb`): its own layers a row per attribute, tracked-in
   values grey and read-only, Solo, **↩ Show Tree**.
@@ -81,9 +78,9 @@ circuits and subs.
   Everything**, saved per show (an optional `View=` attribute older
   builds ignore). Classic shows QLC+'s tabs in its order (Connections reads
   *Inputs/Outputs*); qlcconsole shows Connections, Fixtures, Lighting
-  Studio, Build, Show Tree, Shows, Virtual Console, Simple Desk and Run
-  (Simple Desk, a QLC+ user's channel check, joined after the Virtual
-  Console); Everything all ten. A show with no Show Tree not saved by qlcconsole opens in Classic.
+  Studio, Build, Show Tree, Virtual Console, Simple Desk and Run (Simple
+  Desk, a QLC+ user's channel check, after the Virtual Console);
+  Everything all ten. A show with no Show Tree not saved by qlcconsole opens in Classic.
   A Window-menu jump to a hidden tab switches to Everything with a *Back
   to …* line.
 - **Upgrade This Show…** (File menu and the Show Tree's old-show line;
@@ -93,11 +90,11 @@ circuits and subs.
   chaser, files the originals under `Imported/…` and moves VC widgets,
   timelines and show control to the list; **Restore original…** undoes
   it. Older builds ignore the new XML.
-- **Import chaser… shows a sheet**: plays-the-same check, a row per cue,
-  what plays as it is and why, and an offer (ticked) to move what fires
-  the chaser to the new list. What consecutive steps repeat is set once
-  and tracks. **Send to Show Tree…** in Build does the same for one
-  chaser. A ▣ layer opens its function, with where else it plays.
+- **A chaser made a cue list shows a sheet**: plays-the-same check, a row
+  per cue, what plays as it is and why, and an offer (ticked) to move what
+  fires the chaser to the new list. What consecutive steps repeat is set
+  once and tracks. **Send to Show Tree…** in Build opens Upgrade This
+  Show… with just that chaser ticked. A ▣ layer opens its function, with where else it plays.
 - **Show Tree: cue order is number order.** A typed number (Number field,
   or F2 on the row as "number name") moves the cue to its place; a taken
   number, a sub-cue's number or one that would clash with the cue's own
@@ -113,10 +110,9 @@ circuits and subs.
 - **Move in black per cue list and per cue.** A list's **Move in black**
   On / Off / as the show, a cue's **Don't move in black into this cue**,
   ⊘ MIB / ▸ MIB badges, `mib on|off|show [list]`, `nomib` / `allowmib`.
-  The show's switch is also the Show Tree's **MIB** button (lead time in
-  its menu, *MIB · n* while pre-positioning), Build's **Move in black ▾**
-  (*Move in black · Auto*), **Control ▸ Auto Move in Black** and Settings
-  ▸ General ▸ Show Tree.
+  The show's switch is the Show Tree's **MIB** button (lead time in its
+  menu, *MIB · n* while pre-positioning); Build's **Move in black ▾**
+  (*Move in black · Auto*) shows and changes it.
 - **Cue colours.** A text colour per cue list and cue (**Colour ▸**, the
   page's **Text colour**, `textcolour`), shown in the tree, the Run tab,
   the VC Cue Runner and Cue List and the Workbench header, kept readable
@@ -299,10 +295,6 @@ circuits and subs.
   Look* are **Hold at End** / **Clear Hold at End** (Control menu, a
   Shows track's right-click, the VC button action). Help, the course
   and the help pictures use the new names.
-- **The Functions window lives in Build ▸ Scenes ▸ Classic** in the
-  qlcconsole view: **Window ▸ Functions** opens it, and new
-  functions of every type, the Function Wizard and the startup function
-  are on **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab.
 - **File ▸ Import is a submenu** of source types — *From a show file*:
   QLC+ / qlcconsole Workspace, ETC Eos Show; *Fixtures & patch*: QLC+
   Fixtures List — each with its own file filters, then **Any Supported
@@ -312,8 +304,6 @@ circuits and subs.
   the effect isn't kept), a ▣ opened layer, the docked Workbench, the Show
   Tree's Look Editor. Edits stay; renames keep Esc; plain Esc is no
   playback action (Stop all is ⌘⇧Esc).
-- **The Show Tree shows tracking as badges** (● sets, ○ releases, ⤳
-  tracks in) with the details on hover, in a resizable column.
 - **The Show Tree's command line folds its syntax away.** The line stays;
   the three lines of syntax under it show on the **?** button beside it,
   **?** typed first, or **F1** in the line, and the choice is remembered.
@@ -334,7 +324,7 @@ circuits and subs.
   current workspace view shows, in its order (⇧⌘0 the tenth), and
   renumber when the view changes; the Window menu lists them so, then the
   hidden tabs with no shortcut. In Classic QLC+, Fixtures is ⇧⌘1; in
-  qlcconsole the Show Tree is ⇧⌘5 and Run ⇧⌘9 (they were ⇧⌘6 and ⇧⌘0).
+  qlcconsole the Show Tree is ⇧⌘5 and Run ⇧⌘8 (they were ⇧⌘6 and ⇧⌘0).
 - **Settings ▸ Appearance.** Theme, toolbar style, the four footer chips
   (engine load, power estimate, grand master, speed masters) and the speed
   masters' beat moved out of the View menu into a new Appearance tab in

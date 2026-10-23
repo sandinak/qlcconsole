@@ -18,8 +18,8 @@ their house lights, relays and subs.
   wears a yellow hard hat. See [Build](build.md).
 - **A collection as layers.** Click a collection in Build ▸ Scenes and
   each member is a layer: a scene opens up into its groups and looks, an
-  EFX or an RGB Matrix plays as it is (▣). **+ Scene**, **+ EFX** and **+
-  RGB Matrix** add one; ▲ ▼ reorder, ⌫ takes a layer out (the scene stays
+  EFX or an RGB Matrix plays as it is (▣). **+ Scene** and **+ Effect ▾**
+  (EFX, RGB Matrix) add one; ▲ ▼ reorder, ⌫ takes a layer out (the scene stays
   in the show), and scenes drag in from the left. **▣ Open** loads a layer
   on its own and **↩** comes back. A scene used elsewhere says **also in
   2**; **Own copy** splits it off. What is loaded plays on the rig as you
@@ -162,7 +162,7 @@ their house lights, relays and subs.
   level 1, 2, 3… (or from a start, in steps), point cues and sub-cues
   following. Each is one undo step. See
   [Reordering and numbering](show-tree.md#reordering-and-numbering).
-- **A cue in the Workbench.** Double-click a cue, a layer or a look, press
+- **A cue in the Workbench.** Double-click a cue, a layer or a hit, press
   **✎ Workbench** or type `wb`: the cue opens in the Workbench in place of
   the page, its own layers opened up a row per attribute, what tracks in
   greyed with where it comes from. It plays in context, or **Solo** the
@@ -173,18 +173,14 @@ their house lights, relays and subs.
   plays as if it weren't there. See [Skipping cues](show-tree.md#skipping-cues).
 - **Move in black, per list and per cue.** The show's auto move-in-black
   is the **MIB** button in the Show Tree's header (*MIB · 3* while it
-  pre-positions), Build's **Move in black ▾**, **Control ▸ Auto Move in
-  Black** and Settings ▸ General ▸ Show Tree — one setting, saved with the
-  show; a new show starts with it off. A cue list can say **On** or
+  pre-positions; Build's **Move in black ▾** shows and changes it too) —
+  one setting, saved with the show; a new show starts with it off. A cue list can say **On** or
   **Off** whatever the show says, and a cue can say **Don't move in black
   into this cue**. See [Move in black](show-tree.md#move-in-black).
 - **Cue colours.** Give a cue list or a cue a text colour (right-click →
   **Colour ▸**, or `textcolour red`). It shows in the tree, the Run tab,
   the VC Cue Runner and Cue List and the Workbench header. See
   [Text colours](show-tree.md#text-colours).
-- **Tracking as badges.** A cue row counts what it sets (● 2), releases
-  (○ 1) and what tracks in (⤳ 5); a grey row shows the cue it came from.
-  Hover for the details.
 - **Typed times are kept.** A fade or hold typed on a cue's page is
   applied when you leave the field (Tab, or a click on another cue), not
   only on Return; **Esc** puts it back. See [The tab](show-tree.md#the-tab).
@@ -240,7 +236,7 @@ their house lights, relays and subs.
   **Upgrade This Show…**; its GO is grey until there is something to play.
   See [Upgrade this show](show-tree.md#upgrade-this-show) and
   [An old show: convert it](show-tree.md#an-old-show-convert-it).
-- **Import chaser… shows a sheet**: whether the cue list plays the same
+- **A chaser made a cue list shows a sheet**: whether the cue list plays the same
   (checked channel by channel), a row per cue, and what plays as it is and
   why. It moves the VC buttons, VC Cue Lists and show control that fire
   the chaser over to the new list. What the steps repeat is set once and
