@@ -511,7 +511,7 @@ void EffectDesigner_Test::theEffectsPageListsEveryEffect()
     QVERIFY(rows.contains("  ✦ Loose"));
     QVERIFY(rows.contains("  01-Song"));
     QVERIFY(rows.contains("    ✦ Phaser"));
-    QVERIFY(rows.contains("Classic effects"));
+    QVERIFY(rows.contains("QLC+ effects"));
     QVERIFY(rows.contains("  Circle [EFX]"));
     for (const QString &r : rows)
         QVERIFY2(!r.contains("One-off"), qPrintable(r));

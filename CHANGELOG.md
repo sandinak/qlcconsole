@@ -164,6 +164,13 @@ circuits and subs.
   why.
 
 ### Changed
+
+- **"Classic" means stock QLC+ only.** Build ▸ Scenes has no Classic
+  arrangement any more (the Folders | Classic switch is gone; Scenes lists
+  your scene folders). **Window ▸ Functions** opens the stock Functions tab,
+  switching to Everything (with a way back) from the qlcconsole view; a show
+  saved with Functions in front no longer switches view on open. Build ▸
+  Effects' "Classic effects" heading reads "QLC+ effects (EFX, RGB Matrix)".
 - **One word per idea** (Q70; labels only — saved shows, settings and
   VC buttons are unchanged). *Stage Look* is now **Plot Symbol**
   (Fixtures right-click, Fixture Properties, the plot's **Show ▸ Show

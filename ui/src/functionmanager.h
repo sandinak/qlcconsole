@@ -41,9 +41,9 @@ class Doc;
  */
 
 /** QLC+'s Function Manager: the Functions window. Hidden by default (board
- *  Q32) -- App::setFunctionsWindowShown() is the one switch -- with Window →
- *  Functions opening Build ▸ Scenes ▸ Classic instead, where everything it
- *  does also lives. A Classic QLC+ view mode shows it again. */
+ *  Q32) -- App::setFunctionsWindowShown() is the one switch. The Classic QLC+
+ *  and Everything views show it; Window → Functions switches to one of them
+ *  from the qlcconsole view (Q73: "Classic" means stock QLC+ only). */
 class FunctionManager final : public QWidget
 {
     Q_OBJECT

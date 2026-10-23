@@ -978,11 +978,16 @@ QWidget *ProgrammingManager::buildScenesSection()
                                  "copy; drag a scene onto the Workbench to make it a layer of the collection "
                                  "there. F2 renames, ⌫ removes, ⌘Z undoes."));
     navCol->addLayout(navToolbar);
-    navCol->addLayout(buildArrangementSwitch(page));
     navCol->addWidget(m_outlineHint);
     navCol->addWidget(m_outline, 1);
     connect(funcFilter, &QLineEdit::textChanged, m_outline, &ProgrammingOutline::setFilterText);
-    // The idle line says what the outline is (Folders | Classic, W2).
+    connect(m_outline, &ProgrammingOutline::chaserRequested, this, &ProgrammingManager::makeChaserFrom);
+    connect(m_outline, &ProgrammingOutline::sendToShowTreeRequested, this, &ProgrammingManager::sendToShowTree);
+    // The idle line says what the outline is; a drag hint replaces it.
+    const QString idleText = tr("Your scene folders. Click a scene, collection or chaser to load it "
+                                "in the Workbench; drag rows between scenes.");
+    m_outlineHint->setProperty("idleText", idleText);
+    m_outlineHint->setText(idleText);
     connect(m_outline, &ProgrammingOutline::hintChanged, this, [this](const QString &text) {
         m_outlineHint->setText(text.isEmpty() ? m_outlineHint->property("idleText").toString() : text);
         m_outlineHint->setStyleSheet(text.isEmpty() ? QStringLiteral("QLabel { font-style: italic; }")
@@ -1069,7 +1074,7 @@ QWidget *ProgrammingManager::buildEffectsSection()
     a->setObjectName(QStringLiteral("buildEffectsNewPalette"));
     a->setToolTip(tr("A script effect, designed in the Workbench on the Try on groups: plays in scenes, "
                      "looks and the Show Tree"));
-    newMenu->addSection(tr("Classic effects (QLC+ functions)"));
+    newMenu->addSection(tr("QLC+ effects (EFX, RGB Matrix)"));
     a = newMenu->addAction(QIcon(":/efx.png"), tr("EFX"), this,
                            [this]() { newClassicEffect(Function::EFXType); });
     a->setObjectName(QStringLiteral("buildEffectsNewEfx"));
@@ -1199,7 +1204,7 @@ void ProgrammingManager::rebuildEffectsNow()
     coll.setCaseSensitivity(Qt::CaseInsensitive);
     m_effectsList->clear();
     QTreeWidgetItem *pals = new QTreeWidgetItem(m_effectsList, { tr("Effect palettes") });
-    QTreeWidgetItem *classic = new QTreeWidgetItem(m_effectsList, { tr("Classic effects (EFX, RGB Matrix)") });
+    QTreeWidgetItem *classic = new QTreeWidgetItem(m_effectsList, { tr("QLC+ effects (EFX, RGB Matrix)") });
     for (QTreeWidgetItem *h : { pals, classic })
     {
         h->setFlags(Qt::ItemIsEnabled);
@@ -1671,59 +1676,8 @@ void ProgrammingManager::revealScene(quint32 sceneId)
 }
 
 /****************************************************************************
- * W2: Scenes ▸ Folders | Classic, Chaser from selection
+ * W2: Chaser from selection, Send to Show Tree
  ****************************************************************************/
-
-QLayout *ProgrammingManager::buildArrangementSwitch(QWidget *page)
-{
-    QHBoxLayout *hl = new QHBoxLayout;
-    hl->setContentsMargins(0, 0, 0, 0);
-    hl->setSpacing(0);
-    QButtonGroup *group = new QButtonGroup(page);
-    group->setExclusive(true);
-    auto button = [page, hl, group](const QString &text, const QString &name, const QString &tip, int id) {
-        QToolButton *b = new QToolButton(page);
-        b->setObjectName(name);
-        b->setText(text);
-        b->setToolTip(tip);
-        b->setCheckable(true);
-        b->setAutoRaise(false);
-        hl->addWidget(b);
-        group->addButton(b, id);
-        return b;
-    };
-    button(tr("Folders"), QStringLiteral("arrangeFolders"),
-           tr("Your scene folders: scenes, collections and chasers where you filed them"),
-           ProgrammingOutline::Folders);
-    button(tr("Classic"), QStringLiteral("arrangeClassic"),
-           tr("By type, as QLC+'s Function Manager lists them: every scene, chaser, collection, EFX, "
-              "RGB Matrix, show, script… with its folders"),
-           ProgrammingOutline::Classic);
-    hl->addStretch(1);
-    group->button(m_outline->arrangement())->setChecked(true);
-    connect(group, &QButtonGroup::idClicked, this, [this](int id) {
-        m_outline->setArrangement(ProgrammingOutline::Arrangement(id));
-    });
-    auto idle = [this](int id) {
-        const QString text = id == ProgrammingOutline::Classic
-            ? tr("Every function by type, as QLC+'s Function Manager lists them. Click one to load it "
-                 "in the Workbench; select scenes and right-click for a chaser of them.")
-            : tr("Your scene folders. Click a scene, collection or chaser to load it "
-                 "in the Workbench; drag rows between scenes.");
-        m_outlineHint->setProperty("idleText", text);
-        m_outlineHint->setText(text);
-    };
-    connect(m_outline, &ProgrammingOutline::arrangementChanged, this, [group, idle](int id) {
-        if (QAbstractButton *b = group->button(id))
-            b->setChecked(true);
-        idle(id);
-    });
-    if (m_outline->arrangement() == ProgrammingOutline::Classic)
-        idle(ProgrammingOutline::Classic);
-    connect(m_outline, &ProgrammingOutline::chaserRequested, this, &ProgrammingManager::makeChaserFrom);
-    connect(m_outline, &ProgrammingOutline::sendToShowTreeRequested, this, &ProgrammingManager::sendToShowTree);
-    return hl;
-}
 
 bool ProgrammingManager::sendToShowTree(quint32 chaserId)
 {
@@ -1755,23 +1709,11 @@ void ProgrammingManager::showFunction(quint32 fid)
     ProgrammingOutline::Row r;
     r.kind = qobject_cast<Scene *>(f) != nullptr ? ProgrammingOutline::SceneRow : ProgrammingOutline::FunctionRow;
     r.scene = r.id = fid;
-    // Folders lists scenes, collections and chasers; Classic lists the rest.
-    if (!m_outline->selectRow(r) && m_outline->arrangement() != ProgrammingOutline::Classic)
-    {
-        m_outline->setArrangement(ProgrammingOutline::Classic);
-        m_outline->selectRow(r);
-    }
+    // Folders lists scenes, collections and chasers; anything else (an EFX,
+    // a script...) loads in the Workbench with no row selected.
+    m_outline->selectRow(r);
     if (m_workbench->loadedFunction() != fid)
         m_workbench->load(fid);
-}
-
-void ProgrammingManager::showClassic()
-{
-    setSection(ScenesSection);
-    m_outline->setArrangement(ProgrammingOutline::Classic);
-    if (m_outline->currentItem() == nullptr && m_outline->topLevelItemCount() > 0)
-        m_outline->setCurrentItem(m_outline->topLevelItem(0), 0, QItemSelectionModel::NoUpdate);
-    m_outline->setFocus(Qt::ShortcutFocusReason);
 }
 
 bool ProgrammingManager::openFunction(quint32 fid)

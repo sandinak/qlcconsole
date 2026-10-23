@@ -163,15 +163,12 @@ without Build, the Show Tree or the Lighting Studio). Choosing a hidden
 tab from **Window** shows it anyway, switching to Everything with a line
 to go back. See [Views](getting-started.md#views).
 
-**Where did the Functions tab go?** The qlcconsole view has none; it is
-**Build ▸ Scenes ▸ Classic**. **Window ▸ Functions** takes you
-there: Build, the Scenes section, the outline set to **Classic**, which
-lists every function by type as the Function Manager did. Click one to
-edit it in the Workbench. New functions of every type, the Function Wizard
-and the startup function are on **+ Scene ▾** and the outline's
-right-click
+**Where did the Functions tab go?** The qlcconsole view has none; the
+Classic QLC+ and Everything views show it. **Window ▸ Functions** opens it,
+switching to Everything with a line above the tabs to go back. New
+functions of every type, the Function Wizard and the startup function are
+also on Build's **+ Scene ▾** and the outline's right-click
 ([Coming from the Functions window](build.md#coming-from-the-functions-window)).
-The Classic QLC+ and Everything views still show Functions as a tab.
 
 **A Show Tree cue changed its number.** A cue's number is its place in
 the list: dragging a cue renumbers it for where it lands, and typing a new

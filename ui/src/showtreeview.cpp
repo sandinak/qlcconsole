@@ -1251,7 +1251,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listDetach = new QPushButton(tr("Detach to plain chaser…"), row);
         m_listDetach->setObjectName("stListDetach");
         m_listDetach->setToolTip(tr("The list's chaser and its cues' collections become ordinary functions you "
-                                    "edit in Build (Scenes ▸ Classic); the list leaves the Show Tree. One undo step."));
+                                    "edit in Build ▸ Scenes; the list leaves the Show Tree. One undo step."));
         h->addWidget(m_listConvert);
         h->addWidget(m_listDetach);
         // W5: an import in place, undone.

@@ -70,10 +70,12 @@ their house lights, relays and subs.
   QLC+ show opens in Classic QLC+; everything else, and a new show, in
   qlcconsole. Choosing a hidden tab from the Window menu shows Everything,
   with a way back. See [Views](getting-started.md#views).
-- **Functions.** In the qlcconsole view, **Window ▸ Functions**
-  opens Build ▸ Scenes ▸ Classic, every function by type, each edited in
-  the Workbench; new functions of any type and the Function Wizard are on
-  **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab. See
+- **Functions.** "Classic" means stock QLC+ only: Build ▸ Scenes no longer
+  has a Classic arrangement, and **Window ▸ Functions** opens the stock
+  Functions tab (from the qlcconsole view it switches to Everything, with
+  a way back). Build ▸ Effects' EFX and RGB Matrix heading reads "QLC+
+  effects". New functions of any type and the Function Wizard are on
+  **+ Scene ▾**. See
   [Coming from the Functions window](build.md#coming-from-the-functions-window).
 - **⇧⌘1… follow the tabs on screen.** The Window menu numbers the view's
   tabs in the order you see them, so ⇧⌘1 is always the first tab: in

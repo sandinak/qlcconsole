@@ -683,8 +683,8 @@ void App::init()
     w->setObjectName(QStringLiteral("runTab"));
     addTab(w, QIcon(":/chaser.png"), tr("Run"));
     /* The view (View ▸ Workspace): qlcconsole until a show says otherwise.
-       Functions has no tab in it (board Q32): Window → Functions opens
-       Build ▸ Scenes ▸ Classic, where everything it did lives. */
+       Functions has no tab in it (board Q32): Window → Functions switches
+       to a view that has the stock Functions tab (Q73). */
     setWorkspaceView(ConsoleView, false);
     // Load and apply the tab label mode preference.
     {
@@ -774,10 +774,12 @@ void App::setActiveWindow(const QString& name)
 {
     if (name.isEmpty() == true)
         return;
-    // A show saved with the Functions window in front: its home now.
+    // A show saved with the Functions tab in front: there, when this view
+    // has it; a view without it isn't switched just by opening a show.
     if (name == QLatin1String(FunctionManager::staticMetaObject.className()))
     {
-        showFunctions();
+        if (m_functionsWindowShown)
+            showContext(tr("Functions"));
         return;
     }
 
@@ -2361,8 +2363,8 @@ void App::initMenuBar()
                          "Virtual Console, Simple Desk, Inputs/Outputs") },
             { ConsoleView, "viewWorkspaceConsole",
               QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows, "
-                         "Virtual Console, Simple Desk and Run; Functions lives in Build ▸ "
-                         "Scenes ▸ Classic") },
+                         "Virtual Console, Simple Desk and Run; the stock Functions tab is in "
+                         "Classic QLC+ and Everything") },
             { EverythingView, "viewWorkspaceEverything",
               QT_TR_NOOP("Every tab") } };
         for (const auto &v : views)
@@ -2500,7 +2502,7 @@ void App::initMenuBar()
         if (label == tr("Functions"))
         {
             jump->setObjectName(QStringLiteral("windowFunctions"));
-            jump->setToolTip(tr("Every function by type, as the Function Manager listed them: Build ▸ Scenes ▸ Classic"));
+            jump->setToolTip(tr("Every function by type: the QLC+ Function Manager"));
             connect(jump, &QAction::triggered, this, &App::showFunctions);
         }
         else
@@ -3648,14 +3650,9 @@ void App::showEffects()
 
 void App::showFunctions()
 {
-    if (m_functionsWindowShown)
-    {
-        showContext(tr("Functions"));
-        return;
-    }
-    showContext(tr("Build"));
-    if (ProgrammingManager *pm = ProgrammingManager::instance())
-        pm->showClassic();
+    // The stock QLC+ Function Manager: a tab in Classic QLC+ and Everything;
+    // from the qlcconsole view this switches view, as any hidden tab does.
+    showContext(tr("Functions"));
 }
 
 void App::setFunctionsWindowShown(bool shown)
@@ -3677,7 +3674,7 @@ QStringList App::workspaceViewTabs(WorkspaceView view)
         return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
                  tr("Simple Desk"), tr("Connections") };
     case ConsoleView:
-        // Functions folds into Build ▸ Scenes ▸ Classic (board Q32). Simple
+        // No Functions tab (board Q32; Window ▸ Functions switches view). Simple
         // Desk, a QLC+ user's channel check, sits where Everything has it:
         // after the Virtual Console, before Run (Q71).
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Build"),

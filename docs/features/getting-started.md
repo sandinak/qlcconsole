@@ -83,7 +83,7 @@ The tabs follow the order a show is built in:
 | **Connections** | How the console is wired: protocols, interfaces, the universes they carry, what each universe is sending | [Connections & patch](other-improvements.md#connections--patch) |
 | **Fixtures** | The fixtures in the show, the inventory, groups and their head layouts, patching | [Fixture Manager](fixture-manager.md) |
 | **Lighting Studio** | The physical rig: structures, where every fixture hangs, the network, the 3D Rig Overview | [Lighting Studio](lighting-studio.md) |
-| **Functions** | Every function by type, as in QLC+ (Classic QLC+ and Everything views only) | [Build ▸ Scenes ▸ Classic](build.md#coming-from-the-functions-window) |
+| **Functions** | Every function by type, as in QLC+ (Classic QLC+ and Everything views only) | [Coming from the Functions window](build.md#coming-from-the-functions-window) |
 | **Build** | Scenes built from looks, looks built from palettes and effects | [Build Tab](build.md) |
 | **Show Tree** | A show as one tree: cue lists, cues and the layers in them; the scenes and chaser are made for you | [Show Tree](show-tree.md) |
 | **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
@@ -99,7 +99,7 @@ Which of these you see depends on the view (below).
 
 - **qlcconsole** — Connections, Fixtures, Lighting Studio, Build, Show
   Tree, Shows, Virtual Console, Simple Desk and Run. Functions has no
-  tab: **Window ▸ Functions** opens **Build ▸ Scenes ▸ Classic**.
+  tab: **Window ▸ Functions** switches to Everything to show it.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
   Connections tab).

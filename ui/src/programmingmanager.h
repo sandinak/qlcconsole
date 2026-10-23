@@ -85,12 +85,10 @@ public:
      *  Q32): Window → Functions and every "open this function" from outside
      *  Build land here. */
     static ProgrammingManager *instance();
-    /** Window → Functions: Scenes ▸ Classic, the list focused. */
-    void showClassic();
     /** Open function @a fid in Build's Workbench from anywhere: Build
      *  brought forward (the Workbench taken back from the Show Tree if it
-     *  is docked there), the function selected under Scenes (Classic when
-     *  Folders doesn't list it) and loaded. False: no Build tab or no such
+     *  is docked there), the function selected under Scenes when Folders
+     *  lists it, and loaded. False: no Build tab or no such
      *  function. */
     static bool openFunction(quint32 fid);
 
@@ -306,8 +304,6 @@ private:
     QList<quint32> paletteTreeTargetIds(QTreeWidgetItem *clicked) const;
     /** Open the Bundle editor pre-filled with @p paletteIds and save the result. */
     void saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene = nullptr);
-    /** W2: the Folders | Classic switch over the Scenes navigator. */
-    class QLayout *buildArrangementSwitch(QWidget *page);
     /** Chaser from selection: a new chaser of @a functionIds, loaded. */
     void makeChaserFrom(const QList<quint32> &functionIds, const QString &folder);
 

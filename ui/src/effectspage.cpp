@@ -74,7 +74,7 @@ EffectsPage::EffectsPage(Doc *doc, QWidget *parent)
     newMenu->setToolTipsVisible(true);
     QAction *a = newMenu->addAction(tr("Effect palette"), this, &EffectsPage::newEffect);
     a->setToolTip(tr("A script effect, designed here on the bench: plays in scenes and the Show Tree"));
-    newMenu->addSection(tr("Classic effects (QLC+ functions)"));
+    newMenu->addSection(tr("QLC+ effects (EFX, RGB Matrix)"));
     a = newMenu->addAction(QIcon(QStringLiteral(":/efx.png")), tr("EFX"), this, [this]() { newEfx(); });
     a->setToolTip(tr("A QLC+ EFX function on the Try on groups' heads, opened in its editor"));
     a = newMenu->addAction(QIcon(QStringLiteral(":/rgbmatrix.png")), tr("RGB Matrix"), this, [this]() { newRgbMatrix(); });
@@ -273,7 +273,7 @@ void EffectsPage::rebuild()
     }
 
     // The classic effects: QLC+ functions of their own.
-    QTreeWidgetItem *classic = header(tr("Classic effects"));
+    QTreeWidgetItem *classic = header(tr("QLC+ effects"));
     classic->setToolTip(0, tr("QLC+ EFX and RGB Matrix functions: each is a function of its own, "
                               "with its own editor, and plays as a layer of its own"));
     QList<Function *> funcs;

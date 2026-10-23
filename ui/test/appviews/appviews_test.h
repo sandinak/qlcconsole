@@ -47,12 +47,12 @@ private slots:
     /** "change the tab -> window from double click to shift click and/or
      *  enable/disable that feature via a toggle on window". */
     void shiftClickBreaksATabOutDoubleClickDoesNot();
-    /** Board Q32: the Functions window is hidden (one switch). Window → Functions
-     *  lands on Build ▸ Scenes ▸ Classic with the list focused; no
-     *  Function Manager is built; a show saved with it in front opens
-     *  there; opening a function from outside Build loads it in Build's
-     *  Workbench. */
-    void functionsOpensBuildScenesClassic();
+    /** Board Q32 + Q73: the qlcconsole view has no Functions tab (one
+     *  switch). Window → Functions opens the stock Functions tab, switching
+     *  to Everything with the usual notice; a show saved with it in front
+     *  doesn't switch view on open; opening a function from outside Build
+     *  loads it in Build's Workbench. */
+    void windowFunctionsOpensTheFunctionsTab();
     /** "tab icon could be a construction hat": Build's tab and its
      *  Window-menu jump wear a hard hat, crisp at 1x and 2x. */
     void theBuildTabWearsAHardHat();

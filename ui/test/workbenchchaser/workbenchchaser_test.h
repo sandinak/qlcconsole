@@ -30,7 +30,7 @@ class Collection;
 class FixtureGroup;
 class QTemporaryDir;
 
-/* Chasers in the Workbench and Build ▸ Scenes ▸ Classic
+/* Chasers in the Workbench and Build ▸ Scenes
    (WORKFLOW_DESIGN.md §3.3, §3.4, §3.7; W2). */
 class WorkbenchChaser_Test final : public QObject
 {
@@ -66,14 +66,15 @@ private slots:
     /** A shared layer, and a shared step, split off with Make own copy:
      *  one undo step, the other users untouched. */
     void makeOwnCopySplitsASharedMember();
-    /** Classic lists every function the Function Manager does, by type,
-     *  with its folders; Folders vs Classic per show. */
-    void classicListsWhatTheFunctionManagerDoes();
+    /** Build ▸ Scenes is your folders only: no Classic arrangement (Q73:
+     *  "Classic" means stock QLC+, i.e. the Functions tab). Scenes,
+     *  collections and chasers in their folders; a loose EFX loads in the
+     *  Workbench without a row. */
+    void scenesHasNoClassicArrangement();
     /** DanceHysteria-0.1 (a copy): Full Show walked step by step, a step's
-     *  collection edited and undone, Classic by default; screenshots. */
+     *  collection edited and undone; screenshots. */
     void danceHysteriaFullShow();
-    /** Sample.qxw (a copy): every stock chaser walks; Classic matches the
-     *  Function Manager. */
+    /** Sample.qxw (a copy): every stock chaser walks in the Workbench. */
     void sampleShowsChasers();
     /** The Functions window is retired (board Q32): everything it did is in
      *  Build ▸ Scenes -- New function ▸ every type (⌘1…⌘9), Function

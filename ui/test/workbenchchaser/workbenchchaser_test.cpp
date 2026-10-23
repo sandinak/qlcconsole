@@ -655,7 +655,6 @@ void WorkbenchChaser_Test::chaserFromSelectionAndDropsOnAChaser()
     ProgrammingManager mgr(nullptr, m_doc);
     ProgrammingOutline *nav = mgr.m_outline;
     nav->rebuild();
-    QCOMPARE(nav->arrangement(), ProgrammingOutline::Folders);   // a new show
 
     // Picked C, then A, then B: that is the chaser's order.
     select(nav, nav->sceneItem(c->id()));
@@ -799,46 +798,9 @@ void WorkbenchChaser_Test::makeOwnCopySplitsASharedMember()
     QTRY_VERIFY(m_doc->function(stepCopy) == nullptr);
 }
 
-static QSet<quint32> outlineFunctions(ProgrammingOutline *o, QHash<quint32, QString> *types = nullptr)
-{
-    QSet<quint32> ids;
-    for (QTreeWidgetItemIterator it(o); *it; ++it)
-    {
-        const int kind = (*it)->data(0, ProgrammingOutline::KindRole).toInt();
-        if (kind != ProgrammingOutline::SceneRow && kind != ProgrammingOutline::FunctionRow)
-            continue;
-        const quint32 id = (*it)->data(0, ProgrammingOutline::IdRole).toUInt();
-        ids.insert(id);
-        if (types != nullptr)
-        {
-            QTreeWidgetItem *top = *it;
-            while (top->parent() != nullptr)
-                top = top->parent();
-            types->insert(id, top->text(0));
-        }
-    }
-    return ids;
-}
-
-static QSet<quint32> functionManagerFunctions(Doc *doc)
-{
-    // The Function Manager's own tree, as it fills it.
-    FunctionsTreeWidget tree(doc, nullptr);
-    tree.updateTree();
-    QSet<quint32> ids;
-    for (QTreeWidgetItemIterator it(&tree); *it; ++it)
-    {
-        const quint32 id = tree.itemFunctionId(*it);
-        if (id != Function::invalidId() && doc->function(id) != nullptr)
-            ids.insert(id);
-    }
-    return ids;
-}
-
-void WorkbenchChaser_Test::classicListsWhatTheFunctionManagerDoes()
+void WorkbenchChaser_Test::scenesHasNoClassicArrangement()
 {
     Scene *a = scene("Walk-in", "Act 1");
-    scene("Loose");
     Collection *c = collection("0.0.1-Startup", { a->id() });
     c->setPath("Act 1/Opening");
     Chaser *ch = new Chaser(m_doc);
@@ -847,48 +809,26 @@ void WorkbenchChaser_Test::classicListsWhatTheFunctionManagerDoes()
     EFX *efx = new EFX(m_doc);
     efx->setName("Ballyhoo");
     m_doc->addFunction(efx);
-    efx->setPath("Effects");
-    const int scenes = 2;
 
     ProgrammingManager mgr(nullptr, m_doc);
     ProgrammingOutline *nav = mgr.m_outline;
     nav->rebuild();
-    // Folders: the EFX filed alone in its folder shows; Classic: everything.
-    QToolButton *classicBtn = mgr.findChild<QToolButton *>("arrangeClassic");
-    QVERIFY(classicBtn != nullptr);
-    classicBtn->click();
-    QCOMPARE(nav->arrangement(), ProgrammingOutline::Classic);
-    QVERIFY(mgr.m_outlineHint->text().contains("Function Manager"));
-    QHash<quint32, QString> types;
-    const QSet<quint32> listed = outlineFunctions(nav, &types);
-    QCOMPARE(listed, functionManagerFunctions(m_doc));
-    QCOMPARE(listed.size(), m_doc->functions().size());
-    QCOMPARE(types.value(efx->id()), QString("EFX"));
-    QCOMPARE(types.value(ch->id()), QString("Chaser"));
-    QCOMPARE(types.value(a->id()), QString("Scene"));
-    // Types in the design's order, Scene first; each type's folders under it.
-    QCOMPARE(nav->topLevelItem(0)->text(0), QString("Scene"));
-    QCOMPARE(nav->topLevelItem(0)->text(1), QString::number(scenes));
-    QCOMPARE(nav->topLevelItem(1)->text(0), QString("Chaser"));
-    QCOMPARE(nav->topLevelItem(2)->text(0), QString("Collection"));
+    QVERIFY(mgr.findChild<QToolButton *>("arrangeClassic") == nullptr);
+    QVERIFY(mgr.findChild<QToolButton *>("arrangeFolders") == nullptr);
+    QVERIFY(mgr.m_outlineHint->text().contains("scene folders"));
+
+    // Scenes, collections and chasers, where they were filed.
+    QVERIFY(nav->sceneItem(a->id()) != nullptr);
     QTreeWidgetItem *collRow = nav->itemFor({ ProgrammingOutline::FunctionRow, c->id(), c->id() });
     QVERIFY(collRow != nullptr);
     QCOMPARE(collRow->parent()->text(0), QString("Opening"));
-    QCOMPARE(collRow->parent()->parent()->text(0), QString("Act 1"));
-    QCOMPARE(collRow->parent()->parent()->parent()->text(0), QString("Collection"));
-    // A scene opens up in Classic too; clicking a row loads it.
-    QVERIFY(nav->sceneItem(a->id()) != nullptr);
+    QVERIFY(nav->itemFor({ ProgrammingOutline::FunctionRow, ch->id(), ch->id() }) != nullptr);
     select(nav, collRow);
     QCOMPARE(mgr.m_workbench->loadedFunction(), c->id());
 
-    // A new show remembers nothing; a saved one remembers its switch.
-    QTemporaryDir dir;
-    m_doc->setWorkspacePath(dir.path());
-    QCOMPARE(nav->savedArrangement(), ProgrammingOutline::Classic);   // no Show Tree: Classic
-    mgr.findChild<QToolButton *>("arrangeFolders")->click();
-    QCOMPARE(nav->arrangement(), ProgrammingOutline::Folders);
-    QCOMPARE(nav->savedArrangement(), ProgrammingOutline::Folders);
-    QVERIFY(!outlineFunctions(nav).contains(efx->id()) || efx->path(true) == "Effects");
+    // A loose EFX isn't a folder row; showing it loads it all the same.
+    mgr.showFunction(efx->id());
+    QCOMPARE(mgr.m_workbench->loadedFunction(), efx->id());
 }
 
 void WorkbenchChaser_Test::danceHysteriaFullShow()
@@ -905,10 +845,7 @@ void WorkbenchChaser_Test::danceHysteriaFullShow()
     ProgrammingManager mgr(nullptr, m_doc);
     mgr.resize(1700, 1000);
     mgr.setSection(ProgrammingManager::ScenesSection);
-    // An old show, no Show Tree: Build opens on Classic.
-    QCOMPARE(mgr.m_outline->arrangement(), ProgrammingOutline::Classic);
     mgr.m_outline->rebuild();
-    QCOMPARE(outlineFunctions(mgr.m_outline), functionManagerFunctions(m_doc));
     mgr.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mgr));
     Workbench *wb = mgr.m_workbench;
@@ -982,10 +919,7 @@ void WorkbenchChaser_Test::sampleShowsChasers()
     QVERIFY(loadCopy(QStringLiteral(WB_SAMPLE_SHOW), dir));
     ProgrammingManager mgr(nullptr, m_doc);
     mgr.resize(1700, 1000);
-    QCOMPARE(mgr.m_outline->arrangement(), ProgrammingOutline::Classic);
     mgr.m_outline->rebuild();
-    QHash<quint32, QString> types;
-    QCOMPARE(outlineFunctions(mgr.m_outline, &types), functionManagerFunctions(m_doc));
     Workbench *wb = mgr.m_workbench;
 
     // Every stock chaser walks, step by step, each step its function.
@@ -995,7 +929,6 @@ void WorkbenchChaser_Test::sampleShowsChasers()
         Chaser *ch = qobject_cast<Chaser *>(f);
         if (ch == nullptr || ch->type() != Function::ChaserType)
             continue;
-        QCOMPARE(types.value(ch->id()), QString("Chaser"));
         mgr.showFunction(ch->id());
         FunctionStack *stack = stackOf(*wb);
         QVERIFY(stack != nullptr && walkerOf(*wb) != nullptr);
@@ -1069,9 +1002,8 @@ void WorkbenchChaser_Test::functionsWindowToolsLiveInBuild()
     ProgrammingManager mgr(nullptr, m_doc);
     QCOMPARE(ProgrammingManager::instance(), &mgr);
     ProgrammingOutline *nav = mgr.m_outline;
-    mgr.showClassic();
+    mgr.setSection(ProgrammingManager::ScenesSection);
     QCOMPARE(mgr.section(), ProgrammingManager::ScenesSection);
-    QCOMPARE(nav->arrangement(), ProgrammingOutline::Classic);
 
     // + Scene ▾: New function ▸ every type, the wizard, the startup function.
     QMenu *plus = mgr.m_addFuncBtn->menu();
@@ -1264,14 +1196,13 @@ void WorkbenchChaser_Test::openingAFunctionLandsInTheWorkbench()
     QVERIFY(!ProgrammingManager::openFunction(efx->id()));   // no Build tab
     ProgrammingManager mgr(nullptr, m_doc);
     ProgrammingOutline *nav = mgr.m_outline;
-    nav->setArrangement(ProgrammingOutline::Folders);
     mgr.setSection(ProgrammingManager::PalettesSection);
     QVERIFY(!ProgrammingManager::openFunction(Function::invalidId()));
     QVERIFY(ProgrammingManager::openFunction(efx->id()));
     QCOMPARE(mgr.section(), ProgrammingManager::ScenesSection);
     QCOMPARE(mgr.m_workbench->loadedFunction(), efx->id());
-    QCOMPARE(nav->arrangement(), ProgrammingOutline::Classic);   // Folders doesn't list a loose EFX
-    QVERIFY(nav->itemFor({ ProgrammingOutline::FunctionRow, efx->id(), efx->id() })->isSelected());
+    // Folders doesn't list a loose EFX: loaded, no row selected.
+    QVERIFY(nav->itemFor({ ProgrammingOutline::FunctionRow, efx->id(), efx->id() }) == nullptr);
 
     // Edit Chase… on a step: in this Workbench, ↩ back to the chaser.
     QVERIFY(ProgrammingManager::openFunction(outer->id()));

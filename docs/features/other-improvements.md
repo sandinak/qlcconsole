@@ -405,15 +405,12 @@ Workspace**) switches the view to **Everything** when you choose it, with
 a line above the tabs to go back; see
 [Views](getting-started.md#views).
 
-**Functions is Build ▸ Scenes ▸ Classic.** The qlcconsole view doesn't show
-Functions as a tab (the Classic QLC+ and Everything views do). There,
-**Window ▸ Functions** brings Build forward with the
-Scenes outline set to **Classic** — every function by type, as the
-Function Manager listed them — and the list focused; in a view that shows
-Functions as a tab it opens that. In Build each function opens
-in the Workbench with its own editor (chasers, sequences, EFX, RGB
-matrices, shows, scripts, audio and video). New functions of every type,
-the Function Wizard and the startup function are on **+ Scene ▾** and
+**Functions is the stock QLC+ tab.** The qlcconsole view doesn't show it
+(the Classic QLC+ and Everything views do); there, **Window ▸ Functions**
+switches to Everything to show it, with a line above the tabs to go back.
+"Classic" in qlcconsole only ever means stock QLC+. In Build each function
+opens in the Workbench with its own editor, and new functions of every
+type, the Function Wizard and the startup function are on **+ Scene ▾** and
 the outline's right-click; see
 [Coming from the Functions window](build.md#coming-from-the-functions-window).
 

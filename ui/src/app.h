@@ -515,9 +515,9 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
-    /** Window → Functions: the Functions tab when it is shown
-     *  (setFunctionsWindowShown()); otherwise Build ▸ Scenes ▸ Classic, the
-     *  list focused. */
+    /** Window → Functions: the Functions tab (the QLC+ Function Manager);
+     *  from a view without it, showContext() switches view as it does for
+     *  any hidden tab. */
     void showFunctions();
     /** Window → Effects: Build ▸ Effects, effects' one home (there is no
      *  Effects window of its own). */
@@ -525,7 +525,7 @@ public slots:
     /** THE switch for the Functions window (Function Manager), board Q32:
      *  shown, it is a tab of its own again and Window → Functions brings it
      *  forward; hidden -- the qlcconsole view -- it has no tab and Window →
-     *  Functions opens Build ▸ Scenes ▸ Classic. setWorkspaceView() sets it
+     *  Functions switches to a view that has it. setWorkspaceView() sets it
      *  for the view (shown in Classic QLC+ and Everything). Opening a
      *  function from elsewhere (Show Tree Open, Edit Chase…) loads it in the
      *  Workbench either way. */

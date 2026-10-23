@@ -35,8 +35,7 @@ QLC+ plays it.
 
 1. **Palettes | Effects | Scenes** — the section switch. Only the navigator
    under it changes.
-2. **The navigator** — here Build ▸ Scenes, arranged **Classic** (every
-   function by type); **Folders** shows your scene folders with their
+2. **The navigator** — here Build ▸ Scenes: your scene folders with their
    scenes, collections and chasers ([The outline](#the-outline)).
 3. **The Workbench's header** — ↩ back, where it is, its name and kind,
    where it is used, what fires it, what is on the rig.
@@ -51,7 +50,7 @@ Two panes, left to right:
 - **Left — the navigator, by section.**
   - **Palettes**: the palette list (filterable, foldered; right-click to add
     one, double-click to edit one) and a **Bundles** tab.
-  - **Effects**: the effect palettes, and the classic effects — every EFX and
+  - **Effects**: the effect palettes, and the QLC+ effects — every EFX and
     RGB Matrix in the show. Click an effect palette to open it in the
     effect designer; click an EFX or RGB Matrix to load it in the
     Workbench; drag either onto a layer or a collection. **+ New ▾** and
@@ -329,28 +328,21 @@ EFX, RGB Matrix or show filed in one of these folders shows there too. The
 scenes and collections the Show Tree made for its cues stay hidden, as
 everywhere.
 
-**Folders | Classic.** The two buttons over the outline arrange it:
-
-- **Folders** — your scene folders, as above.
-- **Classic** — by function type, as QLC+'s Function Manager lists them:
-  Scene, Chaser, Collection, EFX, RGB Matrix, Show, Script… (each with its
-  count), the folders of each type under it. Every function the Function
-  Manager lists is here, those the Show Tree made too (greyed, changed in
-  the Show Tree). Scenes still open up into their targets and looks, and a
-  click loads any row in the Workbench.
+**Every function by type** is the stock QLC+ **Functions** tab
+(**Window ▸ Functions**), not a second list here: "Classic" in qlcconsole
+only ever means stock QLC+.
 
 ### Coming from the Functions window
 
 The **qlcconsole** view doesn't show Functions as a tab; the **Classic QLC+** and
-**Everything** views still show it
-([Views](getting-started.md#views)). **Window → Functions** opens
-Functions where the view shows it as a tab, and otherwise **Build ▸ Scenes ▸
-Classic** with the list focused. Everything the Function Manager did is
-here:
+**Everything** views do ([Views](getting-started.md#views)). **Window →
+Functions** opens the stock Functions tab, switching to **Everything** (with
+a line saying so and a button back) when the view doesn't have it. Most of
+what the Function Manager did is also here in Build:
 
-| Functions window | Build |
+| Functions tab | Build |
 |---|---|
-| The function tree | **Scenes ▸ Classic** (by type, with folders) |
+| The function tree, every function by type | **Scenes** lists scenes, collections and chasers in your folders; every type is in the Functions tab |
 | Double-click to edit | Click the row: it loads in the Workbench with its own editor (scene, chaser, sequence, collection, EFX, RGB Matrix, show, script, audio, video) |
 | Add ▸ Scene, Chaser, Sequence, EFX, Collection, RGB Matrix, Script, Audio, Video (⌘1 … ⌘9) | **+ Scene ▾ → New function ▸**, or right-click in the outline → **New function ▸**; ⌘1 … ⌘9 work with the Scenes section focused. **Show** is there too |
 | New folder | **+ Scene ▾ → New scene in a new folder…**; drag rows onto a folder to file them |
@@ -369,10 +361,6 @@ loads it in the Workbench: **Open** on a Show Tree layer (in the
 Workbench docked there when it is, with **↩** back to the cue), a
 chaser step's **Edit Chase…** (↩ back to the chaser), and a show saved
 with the Functions window in front.
-
-A show you open that has no Show Tree (an old QLC+ show) opens on
-**Classic**; one with a Show Tree, and a new show, on **Folders**. The
-switch you make is remembered for that show.
 
 **Click a row** and the Workbench loads it: a scene, collection or chaser
 on its own; a look or target in a scene, its scene with that row selected

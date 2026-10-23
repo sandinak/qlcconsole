@@ -327,7 +327,7 @@ two ways (**Convert by**):
 
 A chaser you are working on in Build goes over from there: load it in the
 Workbench and click **Send to Show Tree…** in its header, or right-click
-its row in **Build ▸ Scenes** (Folders or Classic) → **Send to Show
+its row in **Build ▸ Scenes** → **Send to Show
 Tree…**. It is **Import in place** for that chaser, with the same sheet
 (**Plays the same**, a row per cue, what tracks). The sheet's **Done, show
 it in the Show Tree** keeps it and goes to the new list in the Show Tree
