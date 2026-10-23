@@ -693,8 +693,9 @@ there carry over.
   VS Code Dark) and the **Toolbar style** of the tabs, the top bar and
   every tab's tools: **Icons and text**, **Icons only** (tooltips name
   them) or **Text only**.
-- **Footer**: whether it shows **the engine load**, **the power
-  estimate**, **the grand master** and **the speed masters**, and how the
+- **Footer**: whether it shows **the engine load** (off unless you turn
+  it on), **the power estimate** (only for a show with its power set up in
+  the Lighting Studio), **the grand master** and **the speed masters**, and how the
   speed masters show their beat (**Speed master beat**: Blink, Bar across
   each beat or No beat; **Show the beat**: Always, or Only while something
   on it plays). See [Speed masters](effects.md#speed-masters).

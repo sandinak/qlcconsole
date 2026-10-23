@@ -206,7 +206,6 @@ App::App()
     , m_timelineSuspendAction(NULL)
     , m_followMtcAction(NULL)
     , m_lastLookAction(NULL)
-    , m_autoMibAction(NULL)
     , m_clearLastLookAction(NULL)
     , m_controlPanicAction(NULL)
     , m_dumpDmxAction(NULL)
@@ -613,6 +612,13 @@ void App::init()
             }
             if (m_showFooterPower == false || m_classicChrome)   // chip off, or Classic QLC+ (Q78)
                 return;
+            // Only for a show with its power set up (Q89): an estimate against
+            // no supply is noise.
+            if (m_doc->powerDistribution() == NULL || m_doc->powerDistribution()->sources().isEmpty())
+            {
+                m_statusPowerLabel->hide();
+                return;
+            }
             m_statusPowerLabel->setText(overload
                 ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
                 : tr("%1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
@@ -700,7 +706,8 @@ void App::init()
     // Load the footer load/power/GM chip visibility preferences (View menu).
     {
         QSettings settings;
-        m_showFooterLoad = settings.value(SETTINGS_SHOW_FOOTER_LOAD, true).toBool();
+        // Engine Load is a diagnostic: off unless asked for (Q88).
+        m_showFooterLoad = settings.value(SETTINGS_SHOW_FOOTER_LOAD, false).toBool();
         m_showFooterPower = settings.value(SETTINGS_SHOW_FOOTER_POWER, true).toBool();
         m_showFooterGM = settings.value(SETTINGS_SHOW_FOOTER_GM, true).toBool();
         m_showFooterSpeed = settings.value(SETTINGS_SHOW_FOOTER_SPEED, true).toBool();
@@ -1846,29 +1853,8 @@ void App::initActions()
     connect(m_lastLookAction, SIGNAL(toggled(bool)),
             this, SLOT(slotLastLookToggled(bool)));
 
-    /* Auto move-in-black in the menu bar too, ticked while it is on: the
-       show's one setting, the same switch as Build's "Move in black" and the
-       Show Tree's MIB button (they all follow the controller). */
-    m_autoMibAction = new QAction(tr("Auto &Move in Black"), this);
-    m_autoMibAction->setObjectName(QStringLiteral("autoMoveInBlackAction"));
-    m_autoMibAction->setCheckable(true);
-    m_autoMibAction->setToolTip(tr(
-        "While the show runs, pre-position any dark mover the next cue will "
-        "reveal. Saved with the show; the same switch as Build → Move in black "
-        "and the Show Tree's MIB button."));
-    if (ProgrammerController *pc = m_doc->programmer())
-    {
-        m_autoMibAction->setChecked(pc->isAutoMoveInBlack());
-        connect(m_autoMibAction, &QAction::toggled, pc, [this, pc](bool on) {
-            pc->setAutoMoveInBlack(on);
-            const QSignalBlocker b(m_autoMibAction);
-            m_autoMibAction->setChecked(pc->isAutoMoveInBlack());   // if it said no
-        });
-        connect(pc, &ProgrammerController::autoMoveInBlackChanged, m_autoMibAction, [this](bool on) {
-            const QSignalBlocker b(m_autoMibAction);
-            m_autoMibAction->setChecked(on);
-        });
-    }
+    /* No Control ▸ Auto Move in Black (Q91): the Show Tree's MIB button is
+       the show's one switch (Build's Move in black menu follows it). */
 
     m_clearLastLookAction = new QAction(QIcon(":/fileclose.png"),
                                         tr("&Clear Hold at End"), this);
@@ -2490,8 +2476,6 @@ void App::initMenuBar()
     ctrlMenu->addAction(m_timelineSuspendAction);
     ctrlMenu->addAction(m_lastLookAction);
     ctrlMenu->addAction(m_clearLastLookAction);
-    ctrlMenu->addSeparator();
-    ctrlMenu->addAction(m_autoMibAction);
 
     /* ---- Window: every view, wherever it is ----
        "the menubar needs a windows thing so I can find them .. if I break out
@@ -2535,13 +2519,8 @@ void App::initMenuBar()
        only under View: the Window menu is where people go looking for one
        ("there's no option in Windows"). The same action, so one shortcut. */
     windowMenu->addAction(m_rigOverviewAction);
-    /* Effects: Build ▸ Effects, their one home (Q68) -- every effect
-       palette, EFX and RGB Matrix of the show, designed in the Workbench.
-       There is no separate Effects window any more. */
-    QAction *effectsAct = windowMenu->addAction(tr("Effects"));
-    effectsAct->setObjectName(QStringLiteral("windowEffects"));
-    effectsAct->setToolTip(tr("Every effect in the show, and the effect designer: Build ▸ Effects"));
-    connect(effectsAct, &QAction::triggered, this, &App::showEffects);
+    /* Effects live in Build ▸ Effects (Q68); no Window item for them, which
+       only jumped to that tab (Q97). */
     EffectDesigner::plugIntoWorkbench();
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
@@ -3972,8 +3951,7 @@ void App::applyClassicChrome()
         m_statusLoadLabel->setVisible(m_showFooterLoad && !classic);
     if (m_statusPowerLabel != NULL && classic)
         m_statusPowerLabel->hide();
-    if (m_statusTimecodeLabel != NULL)
-        m_statusTimecodeLabel->setVisible(!classic);
+    slotTimecodeStatusChanged();        // shown only outside Classic, once there's a source
     if (m_statusSpeedMasters != NULL)
         m_statusSpeedMasters->setVisible(m_showFooterSpeed && !classic);
     if (m_statusStandby != NULL && classic)
@@ -6655,6 +6633,20 @@ void App::slotTimecodeStatusChanged()
         return;
 
     TimecodeSource *tc = m_doc->timecodeSource();
+
+    /* Only once a source is picked or code has been heard (Q98): with none,
+       "MTC: no source" was a chip about nothing. A source is picked in
+       Connections ▸ Devices ▸ MIDI timecode. Never in Classic QLC+. */
+    const bool wanted = !m_classicChrome && (tc->sourceUniverse() >= 0 || tc->lastUniverse() >= 0);
+    if (m_statusTimecodeLabel->isHidden() == wanted)
+        m_statusTimecodeLabel->setVisible(wanted);
+    if (!wanted)
+    {
+        if (m_tcDisplayTimer != nullptr)
+            m_tcDisplayTimer->stop();
+        return;
+    }
+
     const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
     const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
     const char *grey  = "QLabel { color:#dddddd; background:#555555; padding:1px 6px; border-radius:3px; }";

@@ -627,7 +627,6 @@ private:
     QAction* m_followMtcAction;
     /** Last-look persistence: toggle (enable) + momentary clear of a held look. */
     QAction* m_lastLookAction;
-    QAction* m_autoMibAction;   // Control → Auto Move in Black
     QAction* m_clearLastLookAction;
     QAction* m_controlPanicAction;
     QAction* m_cueGoAction = nullptr;       ///< the main cue list's GO
@@ -896,7 +895,7 @@ private:
     // (workspace/showFooterLoad, workspace/showFooterPower,
     // workspace/showFooterGM). Independent of whether a chip currently has
     // anything to show (e.g. Power only ever appears once an estimate exists).
-    bool m_showFooterLoad = true;
+    bool m_showFooterLoad = false;
     bool m_showFooterPower = true;
     bool m_showFooterGM = true;
     bool m_showFooterSpeed = true;

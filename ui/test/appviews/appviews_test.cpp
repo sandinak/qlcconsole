@@ -74,6 +74,7 @@
 #include "virtualconsole.h"
 #include "fixturemanager.h"
 #include "inputoutputmanager.h"
+#include "timecodesource.h"
 #undef protected
 #undef private
 #include "helpbrowser.h"
@@ -417,19 +418,13 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
    view inside one its own, and the Help menu lists the guides. */
 void AppViews_Test::windowEffectsIsBuildEffects()
 {
-    QAction *effects = m_app->menuBar()->findChild<QAction *>("windowEffects");
-    QVERIFY(effects != nullptr);
-    QCOMPARE(effects->text(), QString("Effects"));   // no "…": no window of its own
+    // No Window ▸ Effects: Build ▸ Effects is their one home (Q68, Q97).
+    QVERIFY(m_app->menuBar()->findChild<QAction *>("windowEffects") == nullptr);
     ProgrammingManager *pm = ProgrammingManager::instance();
     QVERIFY(pm != nullptr);
-    pm->setSection(ProgrammingManager::ScenesSection);
-    const int windowsBefore = QApplication::topLevelWidgets().count();
-    effects->trigger();
+    m_app->showEffects();
     QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(pm));
     QCOMPARE(pm->section(), ProgrammingManager::EffectsSection);
-    QCOMPARE(QApplication::topLevelWidgets().count(), windowsBefore);
-    foreach (QWidget *w, QApplication::topLevelWidgets())
-        QVERIFY2(QString(w->metaObject()->className()) != "EffectsPage", "an Effects window opened");
     pm->setSection(ProgrammingManager::ScenesSection);
 }
 
@@ -563,7 +558,13 @@ void AppViews_Test::classicLooksLikeQlcPlus()
     for (QAction *a : fm->m_classicToolbarActions)
         QVERIFY(!a->isVisible());
     QVERIFY(fm->m_addFixtureButtonAction->isVisible());
+    // The MTC chip only once a timecode source is picked (Q98).
+    QVERIFY(m_app->m_statusTimecodeLabel->isHidden());
+    TimecodeSource *tc = m_app->m_doc->timecodeSource();
+    tc->setSourceUniverse(0);
     QVERIFY(!m_app->m_statusTimecodeLabel->isHidden());
+    tc->setSourceUniverse(-1);
+    QVERIFY(m_app->m_statusTimecodeLabel->isHidden());
 }
 
 void AppViews_Test::editUndoSaysWhereItWorks()

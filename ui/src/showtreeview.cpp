@@ -6884,6 +6884,11 @@ QWidget *ShowTreeView::bridgeBanner() const
 
 void ShowTreeView::updateBridgeBanner()
 {
+    /* The header's Upgrade This Show… only while there's a chaser to upgrade
+       (Q90): a show made here never needs it. File ▸ Upgrade This Show…
+       stays. */
+    if (m_import != nullptr)
+        m_import->setVisible(!m_st->convertibleChasers().isEmpty());
     if (m_bridgeBanner == nullptr)
         return;
     // Only a show with no tree yet, and only until dismissed: it never
@@ -6899,7 +6904,7 @@ void ShowTreeView::updateBridgeBanner()
     QStringList shown = lists.mid(0, 3);
     if (lists.count() > 3)
         shown << tr("…");
-    m_bridgeText->setText(tr("This show uses chasers: %n look(s) like cue lists (%1). They play as they are; "
+    m_bridgeText->setText(tr("This show has %n chaser(s) that work like cue lists (%1). They play as they are; "
                              "Upgrade this show… makes them Show Tree cue lists, checked, when you want.", "",
                              int(lists.count())).arg(shown.join(QStringLiteral(", "))));
     m_bridgeBanner->show();

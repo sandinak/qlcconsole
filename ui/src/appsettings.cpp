@@ -335,42 +335,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     m_recordPerformCombo = recordCombo(true);
     stLayout->addRow(tr("Record in Design:"), m_recordDesignCombo);
     stLayout->addRow(tr("Record in Operate:"), m_recordPerformCombo);
-    // Auto move-in-black: the show's, saved with it -- the same one setting as
-    // the Show Tree's MIB button and Programming's Move in black menu.
-    {
-        ProgrammerController *pc = m_app->doc()->programmer();
-        QWidget *mibRow = new QWidget(stGroup);
-        QHBoxLayout *mibLayout = new QHBoxLayout(mibRow);
-        mibLayout->setContentsMargins(0, 0, 0, 0);
-        m_mibCheck = new QCheckBox(tr("Auto move-in-black"), mibRow);
-        m_mibCheck->setObjectName(QStringLiteral("settingsMoveInBlack"));
-        m_mibCheck->setChecked(pc != nullptr && pc->isAutoMoveInBlack());
-        m_mibCheck->setToolTip(tr("While the show runs, look ahead to the next cue and pre-position any "
-                                  "dark mover it will reveal (pan/tilt, colour, gobo, beam). Saved with "
-                                  "the show; the same switch as the Show Tree's MIB button and "
-                                  "Build → Move in black."));
-        mibLayout->addWidget(m_mibCheck);
-        mibLayout->addSpacing(12);
-        mibLayout->addWidget(new QLabel(tr("Lead time:"), mibRow));
-        m_mibLeadSpin = new QDoubleSpinBox(mibRow);
-        m_mibLeadSpin->setObjectName(QStringLiteral("settingsMoveInBlackLead"));
-        m_mibLeadSpin->setRange(0.1, 10.0);
-        m_mibLeadSpin->setSingleStep(0.1);
-        m_mibLeadSpin->setDecimals(1);
-        m_mibLeadSpin->setSuffix(tr(" s"));
-        m_mibLeadSpin->setValue((pc != nullptr ? pc->moveInBlackDarkGapMs() : 800) / 1000.0);
-        m_mibLeadSpin->setToolTip(tr("The next cue must be at least this far away for a dark mover to "
-                                     "be pre-set. Below it there's no time to move in black."));
-        mibLayout->addWidget(m_mibLeadSpin);
-        mibLayout->addStretch();
-        stLayout->addRow(tr("Move in black:"), mibRow);
-        QLabel *mibNote = new QLabel(tr("Move in black is saved with this show, not this computer: "
-                                        "another show keeps its own."), stGroup);
-        mibNote->setObjectName(QStringLiteral("settingsMoveInBlackNote"));
-        mibNote->setWordWrap(true);
-        mibNote->setStyleSheet("color: gray; font-size: 10px;");
-        stLayout->addRow(QString(), mibNote);
-    }
+    // Move in black is set on the Show Tree's MIB button, its one switch (Q91).
     mainLayout->addWidget(stGroup);
 
     advLayout->addStretch();
@@ -635,12 +600,6 @@ void AppSettings::accept()
     // Show Tree: what Record records when the choices differ.
     QSettings().setValue(ShowTreeView::recordSettingKey(false), m_recordDesignCombo->currentData().toString());
     QSettings().setValue(ShowTreeView::recordSettingKey(true), m_recordPerformCombo->currentData().toString());
-    // Move in black: the show's (the controller marks it modified on a change)
-    if (ProgrammerController *pc = m_app->doc()->programmer())
-    {
-        pc->setMoveInBlackDarkGapMs(int(m_mibLeadSpin->value() * 1000.0 + 0.5));
-        pc->setAutoMoveInBlack(m_mibCheck->isChecked());
-    }
     const MeasurementUnits::LengthUnit unit =
             MeasurementUnits::LengthUnit(m_unitsCombo->currentData().toInt());
     if (unit != MeasurementUnits::preferredLength())

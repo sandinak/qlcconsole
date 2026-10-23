@@ -37,9 +37,9 @@ Open it from any of three places:
   designer opens in the Workbench's editor pane, on the **bench**
   described next. Right-click an effect for Duplicate, Rename, Move to
   folder… and Delete. See [Making effects](build.md#making-effects).
-- **Window ▸ Effects** brings Build ▸ Effects forward: effects have one
-  home, and no window of their own any more. **Try on ▾** on the bench
-  picks the groups it plays on, and it remembers them.
+- Build ▸ Effects is effects' one home: no window of their own any more.
+  **Try on ▾** on the bench picks the groups it plays on, and it
+  remembers them.
 
 The designer works on a copy, so nothing in the show changes until you
 pick one of these:

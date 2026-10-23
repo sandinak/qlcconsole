@@ -5927,7 +5927,7 @@ void ShowTreeView_Test::anOldShowOpensWithABanner()
     view.updateBridgeBanner();
     QVERIFY(!view.bridgeBanner()->isHidden());
     const QString text = view.bridgeBanner()->findChild<QLabel *>("stBridgeText")->text();
-    QVERIFY2(text.contains("1 look(s) like cue lists (Full Show)"), qPrintable(text));
+    QVERIFY2(text.contains("1 chaser(s) that work like cue lists (Full Show)"), qPrintable(text));
     QVERIFY(!text.contains("Strobe"));
     QVERIFY(m_doc->showTree()->productions().isEmpty());     // nothing converted
 

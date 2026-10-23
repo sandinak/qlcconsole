@@ -78,8 +78,7 @@ Two panes, left to right:
   **Move in black** (mark, unmark, auto move-in-black and its lead time;
   while Auto is on the drop-down is lit and reads **Move in black · Auto**,
   or **MIB · n** while it pre-positions *n* heads — the same switch as the
-  Show Tree's **MIB** button, **Settings ▸ General ▸ Show Tree** and
-  **Control ▸ Auto Move in Black**, which is ticked while it is on; see
+  Show Tree's **MIB** button; see
   [Move in black](show-tree.md#move-in-black) for a cue list or cue that
   says otherwise),
   **Beat** (internal beat on, BPM, speed masters — the button reads the
@@ -299,9 +298,8 @@ the tab.
 
 Loading anything else in the Workbench puts the designer away, and an
 unsaved design with it; **Esc** asks first
-([Backing out](#backing-out-esc)). Build ▸ Effects is effects' one home:
-**Window ▸ Effects** brings it forward (there is no separate Effects
-window any more).
+([Backing out](#backing-out-esc)). Build ▸ Effects is effects' one home
+(there is no separate Effects window, or Window menu item, any more).
 
 ![Build ▸ Effects: the right-click menu, and the effect designer in the Workbench](../images/build-effects-menu.png)
 

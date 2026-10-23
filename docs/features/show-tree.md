@@ -1892,8 +1892,8 @@ left alone, so nobody sees it move. Each light is let go as its cue lights
 it. A next cue closer than the **lead time** (0.8 s for a new show) is too
 soon to move in black, so nothing new is sent for it.
 
-It is one setting of the show, saved with it. There are four places to
-set it, and they always agree:
+It is one setting of the show. Its switch is the Show Tree's **MIB**
+button; Build's **Move in black ▾** shows and changes the same setting:
 
 - **The Show Tree's header: MIB**, at its right end, just left of Stop
   all, Blackout and Blind. Click
@@ -1904,11 +1904,9 @@ set it, and they always agree:
   move-in-black** and **Lead time**, with marking lights by hand. While
   Auto is on it reads **Move in black · Auto** (see
   [The Build tab](build.md#layout)).
-- **Control → Auto Move in Black** in the menu bar: the switch alone.
-- **Settings** (⌘,) → **General** → **Show Tree** → **Move in black**: the switch and the
-  lead time, applied on OK. The note under them says it: saved with this
-  show, not this computer. Another show keeps its own, and a new show
-  starts with it off.
+
+It is saved with this show, not this computer: another show keeps its own,
+and a new show starts with it off.
 
 That switch is the show's **default**. A cue list, or a single cue, can
 say otherwise:

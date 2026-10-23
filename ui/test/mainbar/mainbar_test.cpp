@@ -974,14 +974,12 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     pc->setMoveInBlackDarkGapMs(800);
     QVERIFY(!mib->isChecked());
     QVERIFY(!pm->m_autoMibBtn->isChecked());
-    // Build's drop-down and the menu bar's item say so too
+    // Build's drop-down says so too; the menu bar has no switch of its own (Q91)
     QToolButton *markMenu = pm->findChild<QToolButton *>(QStringLiteral("markMenu"));
     QVERIFY(markMenu != nullptr);
-    QAction *menuMib = m_app->findChild<QAction *>(QStringLiteral("autoMoveInBlackAction"));
-    QVERIFY(menuMib != nullptr && menuMib->isCheckable());
+    QVERIFY(m_app->findChild<QAction *>(QStringLiteral("autoMoveInBlackAction")) == nullptr);
     QCOMPARE(markMenu->text(), QStringLiteral("Move in black"));
     QVERIFY(!markMenu->property("mibAuto").toBool());
-    QVERIFY(!menuMib->isChecked());
 
     // 1. The Show Tree's MIB -> the show, Programming
     mib->click();
@@ -991,7 +989,6 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QVERIFY(pm->m_autoMibBtn->isChecked());
     QCOMPARE(markMenu->text(), QString::fromUtf8("Move in black \u00b7 Auto"));
     QVERIFY(markMenu->property("mibAuto").toBool());
-    QVERIFY(menuMib->isChecked());
     // Lit: painted in the theme's highlight, not the bar's background
     {
         const QImage lit = markMenu->grab().toImage();
@@ -1001,15 +998,6 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
                  + qAbs(px.blue() - hl.blue()) < 40,
                  qPrintable(px.name() + " vs " + hl.name()));
     }
-    // The menu bar's item is the same switch, both ways
-    menuMib->trigger();
-    QVERIFY(!pc->isAutoMoveInBlack());
-    QVERIFY(!mib->isChecked());
-    QCOMPARE(markMenu->text(), QStringLiteral("Move in black"));
-    QVERIFY(!markMenu->property("mibAuto").toBool());
-    menuMib->trigger();
-    QVERIFY(pc->isAutoMoveInBlack());
-    QVERIFY(mib->isChecked() && pm->m_autoMibBtn->isChecked());
     mib->leadSpin()->setValue(1.5);
     QCOMPARE(pc->moveInBlackDarkGapMs(), 1500);
     QCOMPARE(pm->m_mibGapSpin->value(), 1.5);
@@ -1026,33 +1014,17 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QVERIFY(pc->isAutoMoveInBlack());
     QVERIFY(pm->m_autoMibBtn->isChecked());
 
-    // 3. Settings: opens on the show's, applies on OK, Cancel leaves it
+    // 3. Settings has no switch of its own (Q91)
     {
         AppSettings dlg(m_app);
-        QVERIFY(dlg.m_mibCheck->isChecked());
-        QCOMPARE(dlg.m_mibLeadSpin->value(), 2.0);
-        QLabel *note = dlg.findChild<QLabel *>(QStringLiteral("settingsMoveInBlackNote"));
-        QVERIFY(note != nullptr && note->text().contains(QStringLiteral("saved with this show")));
-        dlg.m_mibCheck->setChecked(false);
-        dlg.m_mibLeadSpin->setValue(3.0);
+        QVERIFY(dlg.findChild<QCheckBox *>(QStringLiteral("settingsMoveInBlack")) == nullptr);
+        QVERIFY(dlg.findChild<QWidget *>(QStringLiteral("settingsMoveInBlackLead")) == nullptr);
         dlg.reject();
     }
-    QVERIFY(pc->isAutoMoveInBlack());
-    QCOMPARE(pc->moveInBlackDarkGapMs(), 2000);
-    {
-        AppSettings dlg(m_app);
-        dlg.m_mibCheck->setChecked(false);
-        dlg.m_mibLeadSpin->setValue(3.0);
-        dlg.accept();
-    }
+    mib->click();
     QVERIFY(!pc->isAutoMoveInBlack());
-    QCOMPARE(pc->moveInBlackDarkGapMs(), 3000);
-    QVERIFY(!mib->isChecked());
-    QVERIFY(!menuMib->isChecked());
-    QVERIFY(!markMenu->property("mibAuto").toBool());
-    QCOMPARE(mib->leadSpin()->value(), 3.0);
     QVERIFY(!pm->m_autoMibBtn->isChecked());
-    QCOMPARE(pm->m_mibGapSpin->value(), 3.0);
+    QVERIFY(!markMenu->property("mibAuto").toBool());
 
     // Saved and loaded with the show: every view comes back with it
     mib->click();
@@ -1063,7 +1035,7 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
         QFile f(show);
         QVERIFY(f.open(QIODevice::ReadOnly));
         const QByteArray xml = f.readAll();
-        QVERIFY(xml.contains("<MoveInBlack Auto=\"1\" DarkGapMs=\"3000\""));
+        QVERIFY(xml.contains("<MoveInBlack Auto=\"1\" DarkGapMs=\"2000\""));
     }
     pc->setAutoMoveInBlack(false);
     pc->setMoveInBlackDarkGapMs(800);
@@ -1072,11 +1044,11 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QCOMPARE(m_app->loadXML(show), QFile::NoError);
     QCoreApplication::processEvents();
     QVERIFY(pc->isAutoMoveInBlack());
-    QCOMPARE(pc->moveInBlackDarkGapMs(), 3000);
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 2000);
     QVERIFY(mib->isChecked());
-    QCOMPARE(mib->leadSpin()->value(), 3.0);
+    QCOMPARE(mib->leadSpin()->value(), 2.0);
     QVERIFY(pm->m_autoMibBtn->isChecked());
-    QCOMPARE(pm->m_mibGapSpin->value(), 3.0);
+    QCOMPARE(pm->m_mibGapSpin->value(), 2.0);
 
     const QString dir = QString::fromLocal8Bit(qgetenv("MIB_SHOTS"));
     if (dir.isEmpty() == false)
