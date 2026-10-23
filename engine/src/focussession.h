@@ -20,6 +20,7 @@
 #ifndef FOCUSSESSION_H
 #define FOCUSSESSION_H
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QMutex>
 #include <QSet>
@@ -30,9 +31,12 @@
 #include <QTimer>
 
 #include "qlcengine_export.h"
+#include "controllerscheme.h"
 #include "gamepadrole.h"
 #include "outputlayer.h"
 
+class VenueCorrections;
+class QTimer;
 class Doc;
 struct FixtureRigProps;
 
@@ -84,9 +88,28 @@ public:
     /** Which way round the list is stepped through. */
     enum Order { ByStagePosition, AsGiven };
 
+    /** One focus call, as it is run (FocusCalls makes these from the
+     *  show's): these fixtures, to this target. FOCUS_REFINE_DESIGN.md. */
+    struct Call
+    {
+        QString name;              ///< "DH Tspots -> DSC", for the panel
+        QString who;               ///< "DH Tspots", for the voice
+        QString targetName;        ///< "DSC", for the voice
+        QList<quint32> fixtures;
+        Reference target;
+        QString note;
+    };
+
+    /** What the controller works on: the one fixture, or all of the
+     *  current call (all of the list, without calls). Y switches. */
+    enum Scope { FixtureScope, GroupScope };
+
     struct Options
     {
         QList<quint32> fixtures;
+        /** Focus calls: when not empty, these are run call by call (and
+         *  fixtures, first and second are not used). */
+        QList<Call> calls;
         Order order = ByStagePosition;
         Reference first;
         Reference second;          ///< optional: Y toggles to it
@@ -114,7 +137,10 @@ public:
         UndoSave,
         Exit,
         StepPanUp, StepPanDown, StepTiltUp, StepTiltDown,
-        ZoomWider, ZoomNarrower, FocusNearer, FocusFarther
+        ZoomWider, ZoomNarrower, FocusNearer, FocusFarther,
+        PreviousCall, NextCall,
+        CycleScope,
+        WhereAmI
     };
 
     /** The stick a reading came from. */
@@ -175,10 +201,9 @@ public:
     bool beamAngle(quint32 fid, double &deg, double &lo, double &hi) const;
     /** Widen (+) or narrow (-) the current head's beam by @p dDeg. */
     void nudgeBeam(float dDeg);
-    /** The triggers, 0 (released) .. 1: LT narrows, RT widens. */
+    /** The triggers, 0 (released) .. 1, read as buttons: LT the previous
+     *  focus call, RT the next (ControllerScheme). */
     void setTrigger(int side, float norm);
-    /** Degrees a second at a full trigger. */
-    static constexpr float beamRate() { return 10.0f; }
 
     /** Focus (the beam's edge), where a light has a focus channel: moved
      *  while focusing, to see the edge, not saved (cues own it). */
@@ -205,6 +230,65 @@ public:
     void next();
     void previous();
     void setIndex(int index);
+
+    /*********************************************************************
+     * Focus calls and scope
+     *********************************************************************/
+public:
+    /** Running the show's focus calls (Options::calls), not a list. */
+    bool isRunningCalls() const { return !m_calls.isEmpty(); }
+    int callCount() const { return m_calls.size(); }
+    int callIndex() const { return m_callIndex; }
+    /** The call being focused (an empty one without calls). */
+    Call currentCall() const;
+    void nextCall();
+    void previousCall();
+    void setCallIndex(int index);
+    /** Every head in the session, all calls, each once. */
+    QList<quint32> allFixtures() const { return m_all; }
+
+    Scope scope() const { return m_scope; }
+    void setScope(Scope scope);
+    void cycleScope();
+    /** What the controller works on now: the current fixture, or all of the
+     *  current call (list). */
+    QList<quint32> scopeFixtures() const;
+
+    /*********************************************************************
+     * Telling the operator where they are (FOCUS_REFINE_DESIGN.md s.3)
+     *********************************************************************/
+public:
+    /** What is said on stepping to a call, a fixture or a scope, and for
+     *  Where am I? -- the phrases the design lists. */
+    QString wherePhrase() const;
+    /** Say where it is (announce()) and flash what is selected. */
+    void whereAmI();
+
+    /** The flash that shows what is selected: three blinks, flashOnMs()
+     *  lit and flashOffMs() dark, then steady. */
+    static constexpr int flashOnMs() { return 120; }
+    static constexpr int flashOffMs() { return 120; }
+    static constexpr int flashBlinks() { return 3; }
+    static constexpr int flashDurationMs() { return flashBlinks() * (flashOnMs() + flashOffMs()); }
+    /** Lit @p ms into a flash (steady once it is over). */
+    static bool flashLit(qint64 ms);
+    /** Start the flash on what is selected now. */
+    void flashSelection();
+    bool isFlashing() const;
+    /** Flash the selection on a change (on; a test of steady output turns
+     *  it off). */
+    void setFlashEnabled(bool on) { m_flashEnabled = on; }
+
+    /*********************************************************************
+     * Venue (board Q105)
+     *********************************************************************/
+public:
+    /** Where saves go: with a venue applied, to its corrections (the sidecar
+     *  file), never the show; without one, the show's calibration. */
+    void setVenues(VenueCorrections *venues) { m_venues = venues; }
+    VenueCorrections *venues() const { return m_venues; }
+    /** True when saves go to a venue rather than the show. */
+    bool savesToVenue() const;
 
     /** True while the second reference is the one aimed at. */
     bool usingSecondReference() const { return m_useSecond; }
@@ -361,6 +445,11 @@ signals:
     /** Exit was pressed: the UI asks about unsaved offsets, then stop()s. */
     void exitRequested();
     void inputDeviceChanged(FocusSession::InputDevice device);
+    /** Stepped to another focus call. */
+    void callChanged(int index);
+    void scopeChanged(FocusSession::Scope scope);
+    /** Something to say to the operator on stage (the voice reads it). */
+    void announce(const QString &text);
 
 private:
     struct Head
@@ -395,7 +484,24 @@ private:
         QVector3D landBefore;
         bool wasOriginal = false;
         float lensBefore = 0.0f;
+        int batch = 0;            ///< entries saved together undo together
     };
+    /** A call as it runs: its heads in order and the point each focuses to. */
+    struct CallState
+    {
+        Call call;
+        QList<quint32> order;
+        QHash<quint32, QVector3D> points;
+    };
+    void enterCall(int index);
+    void nudgeHead(quint32 fid, float dPan, float dTilt);
+    void nudgeBeamOf(quint32 fid, float dDeg);
+    void nudgeFocusOf(quint32 fid, float d);
+    /** Make @p fid's live state its saved one (an undo entry in @p batch). */
+    bool saveHead(quint32 fid, int batch);
+    /** A head's saved state has changed: into the venue, or the show. */
+    void savedChanged(const QList<quint32> &fids);
+    void onFlashTick();
     /** Write a lens-set-by-hand angle into the rig. */
     void applyLens(quint32 fid, float deg);
     /** A fixed light's landing point from its rig, at head height. */
@@ -433,11 +539,20 @@ private:
     QList<UndoEntry> m_undo;
     float m_step = 0.1f;
     InputDevice m_input = ControllerInput;
-    float m_trigger[2] = { 0.0f, 0.0f };
-    float m_carryBeam = 0.0f;
+    ControllerScheme::TriggerButton m_trigger[2];
     /** The held D-pad arm that repeats, and how long until it next does. */
     Control m_held = NoControl;
     double m_heldWait = 0.0;
+
+    QList<CallState> m_calls;
+    int m_callIndex = -1;
+    QList<quint32> m_all;
+    Scope m_scope = FixtureScope;
+    int m_batch = 0;
+    VenueCorrections *m_venues = nullptr;
+    QTimer *m_flashTimer = nullptr;
+    bool m_flashEnabled = true;
+    QElapsedTimer m_flashClock;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };
     float m_deadzone = 0.05f;
