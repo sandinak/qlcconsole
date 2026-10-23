@@ -48,8 +48,10 @@ their house lights, relays and subs.
   changes, and a name of your own is left alone. Intensity, strobe and
   shutter names follow the same way. See
   [The name follows the value](build.md#the-name-follows-the-value).
-- **Send a chaser to the Show Tree from Build.** **Send to Show Tree…** on
-  a loaded chaser, or on its row's right-click, imports it in place. See
+- **One way to upgrade.** **Upgrade This Show…** is the one door from
+  chasers to cue lists: File menu, the Show Tree's header (it replaces
+  Import chaser…), the Run tab's empty state, and Build's **Send to Show
+  Tree…**, which opens it with just that chaser ticked. See
   [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
 
 ### Views, menus and keys

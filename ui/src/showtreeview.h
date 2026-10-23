@@ -224,22 +224,23 @@ public:
      *  timelines, show control) fires the list; one undo step. What
      *  happened, a line each. */
     QStringList importInPlace(quint32 chaserId);
-    /** Upgrade this show… (File menu, and the open banner; §3.7): the
-     *  converter over every chaser and collection, with Capture into
-     *  palettes for raw scenes and Restore original; applied as one undo
-     *  step. Never opened on its own. */
-    void openUpgrade();
+    /** Upgrade this show… (File menu, the Show Tree's header and banner,
+     *  the Run tab's empty state, Build's Send to Show Tree…: the one door,
+     *  Q76): the converter over every chaser and collection, with Capture
+     *  into palettes for raw scenes and Restore original; applied as one
+     *  undo step. With @a onlyChaser, only that chaser is ticked and nothing
+     *  is captured. The lists it made. */
+    QList<quint32> openUpgrade(quint32 onlyChaser = 0xFFFFFFFF);
     /** What Upgrade does: convert @a chasers (in place or beside), then
      *  capture @a scenes into palettes, all one undo step ("Upgrade this
      *  show"). What happened, a line each. */
     QStringList upgradeShow(const QList<quint32> &chasers, bool inPlace, const QList<quint32> &scenes);
     /** Import beside the chaser (the converter's other way): a line. */
     QStringList importBeside(quint32 chaserId);
-    /** Send to Show Tree… (Build, on a chaser): Import in place of
-     *  @a chaserId through the import sheet (over @a parent), which also
-     *  offers "Done, show it in the Show Tree" -- this tab, the new list
-     *  selected. False: not sent (ShowTreeController::whyNotSend), or the
-     *  import undone. */
+    /** Send to Show Tree… (Build, on a chaser): Upgrade This Show… with
+     *  just @a chaserId ticked (Q76); made, the Show Tree comes forward
+     *  with the new list selected. False: not sent
+     *  (ShowTreeController::whyNotSend), or nothing was upgraded. */
     bool sendToShowTree(quint32 chaserId, QWidget *parent = nullptr);
     /** W5: Restore original for list @a listId: asks, then the list leaves
      *  the tree, the originals go back to their folders and what fires the
@@ -672,7 +673,6 @@ private slots:
     void slotPreviewChanged();
     void slotTreeContextMenu(const QPoint &pos);
     void slotLibraryContextMenu(const QPoint &pos);
-    void slotImportMenuAboutToShow();
     void slotCueEdited();
     void slotListModeChanged(int index);
     void slotListBaseChanged(int index);
@@ -768,7 +768,6 @@ private:
     QToolButton *m_import;
     QToolButton *m_record;
     QToolButton *m_merge;
-    QMenu *m_importMenu;
     QLabel *m_hint;
     QLabel *m_previewLabel;
 

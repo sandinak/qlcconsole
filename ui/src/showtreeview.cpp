@@ -888,12 +888,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_undo = button(tr("Undo"), tr("Undo the last change to the tree (⌘Z)"), "stUndo");
     m_redo = button(tr("Redo"), tr("Redo (⇧⌘Z)"), "stRedo");
     bar->addSeparator();
-    m_import = button(tr("Import chaser…"), tr("Import a chaser as a cue list in a new production. "
-                                               "The chaser stays as it is."), "stImport");
-    m_importMenu = new QMenu(m_import);
-    m_import->setMenu(m_importMenu);
-    m_import->setPopupMode(QToolButton::InstantPopup);
-    connect(m_importMenu, &QMenu::aboutToShow, this, &ShowTreeView::slotImportMenuAboutToShow);
+    // The one door from old chasers to cue lists (Q76).
+    m_import = button(tr("Upgrade This Show…"), tr("Make the show's cue-list chasers Show Tree cue lists, "
+                                                   "checked channel for channel: tick the ones you want"),
+                      "stUpgradeShow");
+    connect(m_import, &QToolButton::clicked, this, [this]() { openUpgrade(); });
     // P5: the current production -- what GO, the footer, VC and show
     // control play.
     bar->addSeparator();
@@ -1222,8 +1221,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     // Right: the inspector (the page), the Look Editor under it
     m_pages = new QStackedWidget(vsplit);
     m_pages->setObjectName("stInspector");
-    m_emptyPage = new QLabel(tr("Select a cue or a layer.\n\nStart with + Production, or import a "
-                                "chaser you already have (Import chaser…)."), m_pages);
+    m_emptyPage = new QLabel(tr("Select a cue or a layer.\n\nStart with + Production, or turn the "
+                                "chasers you already have into cue lists (Upgrade This Show…)."), m_pages);
     m_emptyPage->setAlignment(Qt::AlignCenter);
     m_emptyPage->setWordWrap(true);
     m_pages->addWidget(m_emptyPage);
@@ -3211,8 +3210,8 @@ void ShowTreeView::updateInspector()
     {
         // An empty show: only the way in, not "select" with nothing to select.
         m_emptyPage->setText(m_st->productions().isEmpty()
-                             ? tr("Start with + Production, or import a chaser you already have "
-                                  "(Import chaser…).")
+                             ? tr("Start with + Production, or turn the chasers you already have "
+                                  "into cue lists (Upgrade This Show…).")
                              : tr("Select a cue or a layer."));
         m_pages->setCurrentWidget(m_emptyPage);
         m_inspectorUpdating = false;
@@ -6807,29 +6806,6 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
     menu.exec(m_tree->viewport()->mapToGlobal(pos));
 }
 
-void ShowTreeView::slotImportMenuAboutToShow()
-{
-    m_importMenu->clear();
-    // W5: the whole show, chaser by chaser, checked first.
-    m_importMenu->addAction(tr("Convert an old show…"), this, [this]() { openConverter(); })
-        ->setObjectName(QStringLiteral("stOpenConverter"));
-    m_importMenu->addSeparator();
-    QList<Function *> chasers;
-    for (Function *f : m_doc->functions())
-        if (f->type() == Function::ChaserType && f->isVisible() && !m_st->isGenerated(f->id()))
-            chasers << f;
-    std::sort(chasers.begin(), chasers.end(), [](const Function *a, const Function *b) {
-        return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
-    });
-    for (Function *f : chasers)
-    {
-        const quint32 id = f->id();
-        m_importMenu->addAction(f->name(), this, [this, id]() { importChaser(id); });
-    }
-    if (chasers.isEmpty())
-        m_importMenu->addAction(tr("(no chasers in this show)"))->setEnabled(false);
-}
-
 void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
 {
     const ShowTreeController::ImportReport rep = m_st->importChaser(chaserId);
@@ -6861,41 +6837,22 @@ void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
 
 bool ShowTreeView::sendToShowTree(quint32 chaserId, QWidget *parent)
 {
-    // Build's Send to Show Tree…: W5's Import in place, through the same
-    // sheet, which also offers to come here.
+    // Build's Send to Show Tree…: the one door (Q76), Upgrade This Show…
+    // with just this chaser ticked.
+    Q_UNUSED(parent)
     const QString why = m_st->whyNotSend(chaserId);
     if (!why.isEmpty())
     {
         m_hint->setText(why);
         return false;
     }
-    const ShowTreeController::ImportReport rep = m_st->importChaser(chaserId);
-    if (rep.list == invalidId())
+    const QList<quint32> made = openUpgrade(chaserId);
+    if (made.isEmpty())
         return false;
-    selectNode(rep.list);
-    ImportSheet sheet(m_doc, rep, chaserId, parent != nullptr ? parent : this);
-    sheet.offerShowTree();
-    if (m_sheetRunner)
-        m_sheetRunner(&sheet);
-    else
-        sheet.exec();
-    if (sheet.undoAsked())
-    {
-        m_st->undo();
-        m_hint->setText(tr("Import undone: the show is as it was"));
-        return false;
-    }
-    if (sheet.fileOriginals())
-        m_st->fileOriginals(rep.list);
-    if (sheet.repoint())
-        repointToList(chaserId, rep.list);
-    const CueList *list = m_st->cueList(rep.list);
+    const CueList *list = m_st->cueList(made.first());
     m_hint->setText(tr("%1 is a Show Tree cue list now").arg(list == nullptr ? QString() : list->name));
-    if (sheet.goToAsked())
-    {
-        selectNode(rep.list);
-        bringForward();
-    }
+    selectNode(made.first());
+    bringForward();
     return true;
 }
 
@@ -6973,17 +6930,40 @@ QStringList ShowTreeView::importBeside(quint32 chaserId)
                                                           : tr("%n channel(s) differ", "", rep.differChannels)));
 }
 
-void ShowTreeView::openUpgrade()
+QList<quint32> ShowTreeView::openUpgrade(quint32 onlyChaser)
 {
+    auto allLists = [this]() {
+        QSet<quint32> ids;
+        for (const Production &p : m_st->productions())
+            for (const CueList &l : p.lists)
+                ids.insert(l.id);
+        return ids;
+    };
+    const QSet<quint32> before = allLists();
     ShowConverter dialog(m_doc, this, ShowConverter::Upgrade);
     dialog.setUpgrader([this](const QList<quint32> &chasers, bool inPlace, const QList<quint32> &scenes) {
         return upgradeShow(chasers, inPlace, scenes);
     });
     dialog.setRestorer([this](quint32 listId) { return restoreOriginal(listId); });
+    if (onlyChaser != invalidId())
+    {
+        // Sent from Build: this chaser, nothing else, no capture.
+        for (const ShowConverter::Row &r : dialog.rows())
+            dialog.setChosen(r.chaser, r.chaser == onlyChaser);
+        for (const ShowConverter::CaptureRow &r : dialog.captureRows())
+            dialog.setCaptureChosen(r.scene, false);
+        dialog.select(onlyChaser);
+    }
     if (m_converterRunner)
         m_converterRunner(&dialog);
     else
         dialog.exec();
+    // The lists this upgrade made (not ones converted before).
+    QList<quint32> made;
+    for (quint32 id : allLists())
+        if (!before.contains(id) && m_st->cueList(id) != nullptr && !m_st->cueList(id)->looks)
+            made << id;
+    return made;
 }
 
 QStringList ShowTreeView::upgradeShow(const QList<quint32> &chasers, bool inPlace, const QList<quint32> &scenes)

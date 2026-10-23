@@ -169,6 +169,11 @@ circuits and subs.
 
 ### Changed
 
+- **One Upgrade door** (board Q76): Upgrade This Show… replaces the Show
+  Tree's Import chaser… menu and Convert an old show…; Build's Send to Show
+  Tree… opens it with just that chaser ticked (the list is filed and shown
+  as before). File menu and the Run tab's empty state open it too.
+
 - **Classic QLC+ looks like QLC+** (board Q78): QLC+'s main toolbar, the
   Fixtures tab's twelve buttons and the Functions tab's new-function
   buttons (icons, as QLC+ draws them), and a footer of the mode, the Grand

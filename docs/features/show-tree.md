@@ -45,7 +45,8 @@ is changed only in the tree: elsewhere it is locked. See
 
 - **Header.** It has + Production, + Cue list, + Cue (**+ Look** in a
   Looks section), + Layer, Record, **+ Sub-cue**, Merge, Delete, Undo, Redo,
-  Import chaser… and the **Production** switcher (the current production).
+  **Upgrade This Show…** and the **Production** switcher (shown once there
+  are two productions).
   At its right end, by the show controls, is **MIB**, the show's auto
   move-in-black (see [Move in black](#move-in-black)); a narrow window
   folds the buttons into **»**, never MIB.
@@ -173,13 +174,12 @@ the tree and the Workbench follows it.
 
 ### From a chaser you already have
 
-1. **Import chaser…** → pick the chaser. A new production named after it
-   holds a cue list that plays exactly as the chaser did. What repeats
-   from step to step is set once and tracks
-   ([below](#what-repeats-is-set-once-and-tracks)). The
-   chaser itself plays as it did; the sheet below offers to file it away
-   (**Import in place**). For a whole show at once, use
-   [Convert an old show…](#an-old-show-convert-it).
+1. **Upgrade This Show…** (the Show Tree's header, the File menu, or the Run
+   tab when there is no cue list) → tick the chasers you want. Each becomes
+   a cue list that plays exactly as the chaser did. What repeats from step
+   to step is set once and tracks
+   ([below](#what-repeats-is-set-once-and-tracks)). See
+   [An old show: upgrade it](#an-old-show-convert-it).
 2. A sheet says what was made:
    - **Plays the same**: each cue's channels checked against its step's.
      *0 channels differ* means every cue puts out what its step did;
@@ -288,11 +288,10 @@ opens as it is: nothing is converted on load, and it plays and saves as
 before. The Show Tree tab says so once, in a line at the top: *This show
 uses chasers: 2 look like cue lists (Full Show, New Chaser 8)…*.
 **Upgrade this show…** opens the upgrade (below); **✕** puts the line
-away for this show. The upgrade is always at **File → Upgrade This
-Show…**, and the converter on its own at **Import chaser… → Convert an
-old show…**.
-One chaser at a time from Build: **Send to Show Tree…**
-([below](#send-to-show-tree-from-build)).
+away for this show. **Upgrade This Show…** is the one way in: in the File
+menu, the Show Tree's header, the Run tab when there is no cue list, and
+Build's **Send to Show Tree…** (the same dialog with just that chaser
+ticked; [below](#send-to-show-tree-from-build)).
 
 **The converter** lists every chaser of the show, told apart by how it
 runs:
@@ -305,8 +304,8 @@ runs:
   anything.
 - **Effect**: it only loops on its own timing (a strobe, a par chase, a
   pan sweep). It is not offered: it stays a function, and plays as a ▣
-  layer wherever you drop it on a cue. **Import chaser…** still takes it
-  if you want it as a list anyway.
+  layer wherever you drop it on a cue. Tick it if you want it as a list
+  anyway.
 
 **Convert** imports each ticked chaser, each its own undo step, in one of
 two ways (**Convert by**):
@@ -327,13 +326,12 @@ two ways (**Convert by**):
 
 A chaser you are working on in Build goes over from there: load it in the
 Workbench and click **Send to Show Tree…** in its header, or right-click
-its row in **Build ▸ Scenes** → **Send to Show
-Tree…**. It is **Import in place** for that chaser, with the same sheet
-(**Plays the same**, a row per cue, what tracks). The sheet's **Done, show
-it in the Show Tree** keeps it and goes to the new list in the Show Tree
-tab; **Done** keeps it and stays in Build; **Undo import** takes it back. A
-chaser the tree made, or one sent already, has the item greyed with the
-reason.
+its row in **Build ▸ Scenes** → **Send to Show Tree…**. It opens **Upgrade
+This Show…** with just that chaser ticked and nothing captured; its plan
+says whether it **Plays the same**. Upgrade it and the Show Tree comes
+forward with the new list selected; close without upgrading and nothing
+changes. ⌘Z undoes the upgrade. A chaser the tree made, or one sent
+already, has the item greyed with the reason.
 
 The list's page says where it came from. **Restore original…** (on the
 list's page or its right-click menu) undoes Import in place: the list

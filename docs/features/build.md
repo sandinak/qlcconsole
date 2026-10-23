@@ -234,9 +234,10 @@ removed, a layer of its collection, an own copy — is one step on the shared
 history.
 
 **Send to Show Tree…** (in the header of a loaded chaser, or right-click a
-chaser's row in the navigator) makes the chaser a Show Tree cue list in
-place: the import sheet says whether it plays the same, what repeats is
-set once and tracks, and **Done, show it in the Show Tree** goes there.
+chaser's row in the navigator) opens **Upgrade This Show…** with just that
+chaser ticked: its plan says whether it plays the same and what repeats is
+set once and tracks; upgrade it and the Show Tree comes forward on the new
+list.
 The chaser is filed under `Imported/…`; **Restore original** on the list
 puts it back. See
 [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).

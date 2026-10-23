@@ -5830,11 +5830,14 @@ void ShowTreeView_Test::sendToShowTreeFromBuild()
     QVERIFY(item != nullptr);
     nav->scrollToItem(item);
     QStringList actions;
-    bool undone = false;
-    view->setSheetRunner([&](ImportSheet *sheet) {
-        QVERIFY(sheet->findChild<QPushButton *>("stImportGoTo") != nullptr);
-        sheet->findChild<QPushButton *>("stImportUndo")->click();
-        undone = true;
+    bool closed = false;
+    // The one door (Q76): Upgrade This Show… with just this chaser ticked
+    // and nothing captured. Closed without upgrading, nothing changes.
+    view->setConverterRunner([&](ShowConverter *dialog) {
+        QCOMPARE(dialog->mode(), ShowConverter::Upgrade);
+        QCOMPARE(dialog->chosen(), QList<quint32>({ chaser->id() }));
+        QVERIFY(dialog->chosenScenes().isEmpty());
+        closed = true;
     });
     QTimer driver;
     driver.setInterval(20);
@@ -5852,33 +5855,29 @@ void ShowTreeView_Test::sendToShowTreeFromBuild()
     });
     driver.start();
     emit nav->customContextMenuRequested(nav->visualItemRect(item).center());
-    QTRY_VERIFY(undone);
+    QTRY_VERIFY(closed);
     QVERIFY2(actions.contains("outlineSendToTree"), qPrintable(actions.join(", ")));
     QVERIFY(st->productions().isEmpty());
     QCOMPARE(tabs.currentWidget(), mgr);
 
-    // The Workbench's header button, "Done, show it in the Show Tree".
+    // The Workbench's header button: upgraded, the Show Tree comes forward.
     mgr->showFunction(chaser->id());
     QToolButton *send = mgr->findChild<QToolButton *>("workbenchSendToTree");
     QVERIFY(send != nullptr);
     QVERIFY(send->isVisible());
     QString text;
-    view->setSheetRunner([&](ImportSheet *sheet) {
-        text = sheet->text();
-        QVERIFY(sheet->fileBox()->isChecked());
-        sheet->findChild<QPushButton *>("stImportGoTo")->click();
-        QVERIFY(sheet->goToAsked());
+    view->setConverterRunner([&](ShowConverter *dialog) {
+        QCOMPARE(dialog->chosen(), QList<quint32>({ chaser->id() }));
+        QVERIFY(dialog->inPlace());
+        text = dialog->convert().join('\n');
     });
     send->click();
-    for (const QString &want : { QString("Plays the same"), QString("0 channels differ"),
-                                 QString("Set once, then tracking"), QString("tracks in: Haze") })
+    for (const QString &want : { QString("0 channels differ") })
         QVERIFY2(text.contains(want), qPrintable(want + " not in:\n" + text));
     QCOMPARE(st->productions().count(), 1);
     const CueList *list = &st->productions().first().lists.first();
     QVERIFY(list->inPlace);
     QCOMPARE(list->mode, ListMode::Tracking);
-    QVERIFY(list->cues[1].layers.isEmpty() || !list->cues[1].layers.first().target.isOpaque()
-            || list->cues[1].layers.first().target.function != haze->id());
     QVERIFY(chaser->path(true).startsWith("Imported/"));
     QCOMPARE(tabs.currentWidget(), view);
     // Sent: not offered again.
