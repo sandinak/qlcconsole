@@ -41,6 +41,7 @@
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
+#include "showtreeview.h"
 #include "showtreecontroller.h"
 #include "lookstackcheck.h"
 #include "speedmasters.h"
@@ -1283,8 +1284,13 @@ bool ProgrammingOutline::addFromSources(const QMimeData *mime, quint32 toScene, 
         return out;
     };
     const QList<quint32> pals = ids(FunctionsTreeWidget::paletteDragMimeType());
-    const QList<quint32> groups = ids(FixtureGroupSource::fixtureGroupMimeType());
-    const QList<quint32> fixtures = ids(FixtureGroupSource::fixtureMimeType());
+    // A Show Tree group set brings its member groups: a scene holds groups.
+    QList<quint32> fixtures = ids(FixtureGroupSource::fixtureMimeType());
+    QList<quint32> setFixtures;
+    const QList<quint32> groups = FixtureGroupSource::droppedGroups(mime, m_doc, &setFixtures);
+    for (quint32 fid : setFixtures)
+        if (!fixtures.contains(fid))
+            fixtures << fid;
 
     QStringList keys;
     bool lookAdded = false;
@@ -1499,7 +1505,8 @@ QStringList ProgrammingOutline::mimeTypes() const
     return { QString::fromLatin1(rowMimeType()),
              QString::fromLatin1(FunctionsTreeWidget::paletteDragMimeType()),
              QString::fromLatin1(FixtureGroupSource::fixtureGroupMimeType()),
-             QString::fromLatin1(FixtureGroupSource::fixtureMimeType()) };
+             QString::fromLatin1(FixtureGroupSource::fixtureMimeType()),
+             QString::fromLatin1(ShowTreeView::setMimeType()) };
 }
 
 QMimeData *ProgrammingOutline::mimeData(const QList<QTreeWidgetItem *> &items) const
@@ -1544,7 +1551,8 @@ static bool fromSources(const QMimeData *mime)
 {
     return mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType())
            || mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType())
-           || mime->hasFormat(FixtureGroupSource::fixtureMimeType());
+           || mime->hasFormat(FixtureGroupSource::fixtureMimeType())
+           || FixtureGroupSource::hasGroupSets(mime);
 }
 
 QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, bool copy,
@@ -1653,6 +1661,18 @@ QString ProgrammingOutline::dropPlan(const QMimeData *mime, const QPoint &pos, b
         if (atP != nullptr && atP->type() == QLCPalette::Effect
             && mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
             return tr("Add to “%1”, as the effect “%2”'s own").arg(dst->name(), paletteName(atP));
+        if (FixtureGroupSource::hasGroupSets(mime))
+        {
+            // Say what a set becomes here: its groups.
+            QStringList sets, names;
+            for (quint32 gid : FixtureGroupSource::droppedGroups(mime, m_doc, nullptr, &sets))
+                if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                    names << g->name();
+            if (names.isEmpty())
+                return QStringLiteral("!") + tr("“%1” has no groups to add.").arg(sets.join(QStringLiteral(", ")));
+            return tr("Add the groups of “%1” (%2) to “%3”")
+                .arg(sets.join(QStringLiteral(", ")), names.join(QStringLiteral(", ")), dst->name());
+        }
         return tr("Add to “%1”").arg(dst->name());
     }
     return QString();

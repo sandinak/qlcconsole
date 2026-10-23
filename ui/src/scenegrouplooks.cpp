@@ -1022,7 +1022,8 @@ static bool hasAcceptedFormat(const QMimeData *mime)
 {
     return mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType())
         || mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType())
-        || mime->hasFormat(FixtureGroupSource::fixtureMimeType());
+        || mime->hasFormat(FixtureGroupSource::fixtureMimeType())
+        || FixtureGroupSource::hasGroupSets(mime);
 }
 
 void SceneGroupLooks::dragEnterEvent(QDragEnterEvent *event)
@@ -1146,18 +1147,17 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
         }
     }
 
-    if (mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType()))
-    {
-        QByteArray data = mime->data(FixtureGroupSource::fixtureGroupMimeType());
-        QDataStream stream(&data, QIODevice::ReadOnly);
-        while (stream.atEnd() == false)
+    // Groups, and a Show Tree group set's member groups (a scene holds groups).
+    QList<quint32> setFixtures;
+    for (quint32 gid : FixtureGroupSource::droppedGroups(mime, m_doc, &setFixtures))
+        if (addGroupTarget(m_doc, m_scene, gid))
+            changed = true;
+    for (quint32 fid : setFixtures)
+        if (m_doc->fixture(fid) != NULL && !m_scene->fixtures().contains(fid))
         {
-            quint32 gid = 0;
-            stream >> gid;
-            if (addGroupTarget(m_doc, m_scene, gid))
-                changed = true;
+            m_scene->addFixture(fid);
+            changed = true;
         }
-    }
 
     if (mime->hasFormat(FixtureGroupSource::fixtureMimeType()))
     {

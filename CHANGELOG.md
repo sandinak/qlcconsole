@@ -172,6 +172,10 @@ circuits and subs.
 - **Connections opens where you'd look for it**: in Classic QLC+ on its
   **Universes** sub-tab (QLC+'s own Inputs/Outputs page, was "Detailed"),
   in the other views on **Devices**.
+- **A group set dropped on a Build scene adds its groups** (board Q86):
+  *Towers* onto a scene adds *SL* and *SR*, and the drag says so ("Add
+  the groups of “Towers” (SL, SR) to “Base”"). It was refused without a
+  word; a scene holds fixture groups, not the Show Tree's sets.
 - **Show Tree and Run have their own tab icons**: a cue tree and a green
   GO button, instead of both using the chaser icon.
 - **Show control and timecode are rows in Connections ▸ Devices** (board

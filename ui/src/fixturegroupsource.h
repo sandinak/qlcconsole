@@ -18,6 +18,7 @@
 #include <QHash>
 
 class QTreeWidgetItem;
+class QMimeData;
 class Fixture;
 class Doc;
 
@@ -37,6 +38,16 @@ public:
 
     /** MIME type carrying a stream of fixture IDs (quint32). */
     static const char* fixtureMimeType();
+
+    /** The fixture groups a drop carries: dragged groups, then the member
+     *  groups of any Show Tree group set dragged in (a scene holds groups,
+     *  not sets -- board Q86). A set's own fixtures go to @p setFixtures,
+     *  the sets' names to @p setNames. */
+    static QList<quint32> droppedGroups(const QMimeData *mime, const Doc *doc,
+                                        QList<quint32> *setFixtures = nullptr,
+                                        QStringList *setNames = nullptr);
+    /** True if the drop carries a Show Tree group set. */
+    static bool hasGroupSets(const QMimeData *mime);
 
     /** Item-data roles / node kinds. */
     enum { IdRole = Qt::UserRole, KindRole = Qt::UserRole + 1,

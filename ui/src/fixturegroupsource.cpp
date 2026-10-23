@@ -27,6 +27,8 @@
 #include "creategroupsdialog.h"
 #include "fixturemanager.h"
 #include "fixturegroupsource.h"
+#include "showtreecontroller.h"
+#include "showtreeview.h"
 #include "inputoutputmap.h"
 #include "universe.h"
 #include "fixturegroup.h"
@@ -90,6 +92,54 @@ const char* FixtureGroupSource::fixtureGroupMimeType()
 const char* FixtureGroupSource::fixtureMimeType()
 {
     return FIXTURE_DRAG_MIME_TYPE;
+}
+
+namespace
+{
+QList<quint32> idsIn(const QMimeData *mime, const char *type)
+{
+    QList<quint32> out;
+    if (mime == nullptr || !mime->hasFormat(QLatin1String(type)))
+        return out;
+    QByteArray data = mime->data(QLatin1String(type));
+    QDataStream in(&data, QIODevice::ReadOnly);
+    while (!in.atEnd())
+    {
+        quint32 id = 0;
+        in >> id;
+        out << id;
+    }
+    return out;
+}
+}
+
+bool FixtureGroupSource::hasGroupSets(const QMimeData *mime)
+{
+    return mime != nullptr && mime->hasFormat(QLatin1String(ShowTreeView::setMimeType()));
+}
+
+QList<quint32> FixtureGroupSource::droppedGroups(const QMimeData *mime, const Doc *doc,
+                                                 QList<quint32> *setFixtures, QStringList *setNames)
+{
+    QList<quint32> groups = idsIn(mime, fixtureGroupMimeType());
+    if (doc == nullptr || doc->showTree() == nullptr)
+        return groups;
+    for (quint32 sid : idsIn(mime, ShowTreeView::setMimeType()))
+    {
+        const ShowTree::GroupSet *set = doc->showTree()->groupSet(sid);
+        if (set == nullptr)
+            continue;
+        if (setNames != nullptr)
+            *setNames << set->name;
+        for (quint32 gid : set->groups)
+            if (!groups.contains(gid))
+                groups << gid;
+        if (setFixtures != nullptr)
+            for (quint32 fid : set->fixtures)
+                if (!setFixtures->contains(fid))
+                    *setFixtures << fid;
+    }
+    return groups;
 }
 
 QTreeWidgetItem *FixtureGroupSource::folderItem(const QString &path)

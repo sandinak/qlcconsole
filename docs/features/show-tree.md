@@ -552,7 +552,9 @@ cue, list or production: *Towers* = *SL* + *SR*.
   their RGB-only groups. **Make set…** is right below it on the same menu.
 - **Use it** as a group: drag it onto a cue for one layer on the whole set,
   or type its name (`Towers dimmer 45`). With **⌥**, you get a layer per
-  member instead. Onto a layer, it joins it.
+  member instead. Onto a layer, it joins it. Onto a **Build** scene, it adds
+  the set's groups (*SL* and *SR*): a scene holds groups, not sets, so it
+  doesn't follow later changes to the set.
 - **Change it:** right-click the set → **Members: the selected groups**
   (select them first), **Rename set…** or **Delete set** (refused while a
   cue uses it, naming the cues). Typing `set "Towers" …` again gives it new

@@ -46,6 +46,7 @@
 
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
+#include "showtreeview.h"
 #include "showtreecontroller.h"
 #include "qlcfixturedefcache.h"
 #include "scenetransition.h"
@@ -485,6 +486,15 @@ void ProgrammingOutline_Test::sourcesDropOntoAScene()
     // One step each on the history.
     QVERIFY(m_doc->showTree()->undoShared());
     QVERIFY(s->fixtureGroups().isEmpty());
+
+    // A Show Tree group set: its member groups, said in the hint (Q86).
+    FixtureGroup *sl = group("SL", 2);
+    FixtureGroup *sr = group("SR", 2);
+    const quint32 towers = m_doc->showTree()->addGroupSet("Towers", { sl->id(), sr->id() });
+    QVERIFY(drop(o, idsMime(ShowTreeView::setMimeType(), { towers }),
+                 o->sceneItem(s->id()), Qt::NoModifier, &plan));
+    QCOMPARE(plan, QString("Add the groups of “Towers” (SL, SR) to “Base”"));
+    QCOMPARE(s->fixtureGroups(), QList<quint32>({ sl->id(), sr->id() }));
 }
 
 void ProgrammingOutline_Test::editsAreStepsOnTheSharedHistory()
