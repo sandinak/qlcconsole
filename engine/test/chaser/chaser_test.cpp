@@ -19,6 +19,7 @@
 */
 
 #include <QtTest>
+#include <QScopeGuard>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
@@ -933,6 +934,52 @@ void Chaser_Test::deletingARunningFunctionLetsGoOfItsChannels()
         timer->timerTick();
     QVERIFY(!step->isRunning());
     QCOMPARE(int(level()), 0);
+}
+
+void Chaser_Test::deletingAChaserWhileTheTimerRunsIsSafe()
+{
+    Fixture* fxi = new Fixture(m_doc);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    fxi->setChannels(1);
+    m_doc->addFixture(fxi);
+
+    Scene* a = new Scene(m_doc);
+    a->setValue(fxi->id(), 0, 200);
+    m_doc->addFunction(a);
+    Scene* b = new Scene(m_doc);
+    b->setValue(fxi->id(), 0, 100);
+    m_doc->addFunction(b);
+
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->start();
+    // Back to hand-ticking for the tests after this one, pass or fail.
+    auto stopTimer = qScopeGuard([timer]() { timer->stop(); });
+    for (int round = 0; round < 40; ++round)
+    {
+        Chaser* c = new Chaser(m_doc);
+        c->setDuration(MasterTimer::tick() * 2);     // steps change every other tick
+        m_doc->addFunction(c);
+        c->addStep(a->id());
+        c->addStep(b->id());
+        c->start(timer, FunctionParent::master());
+        QTRY_VERIFY_WITH_TIMEOUT(c->isRunning(), 5000);
+        QTest::qWait(int(MasterTimer::tick()) * (1 + round % 4));   // land on any part of a step
+        const quint32 id = c->id();
+        QVERIFY(m_doc->deleteFunction(id));
+        QVERIFY(m_doc->function(id) == nullptr);
+    }
+    // Everything the chasers started comes to a stop.
+    QTRY_VERIFY_WITH_TIMEOUT(!a->isRunning() && !b->isRunning(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(timer->runningFunctions(), 0, 5000);
+    stopTimer.dismiss();
+    timer->stop();
+
+    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+    ua.first()->processFaders();
+    const uchar level = uchar(ua.first()->preGMValues().at(0));
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    QCOMPARE(int(level), 0);
 }
 
 void Chaser_Test::writeHTP()
