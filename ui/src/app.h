@@ -826,7 +826,6 @@ private slots:
     /** Refresh the global timecode chip (position/state colour). */
     /** The footer's "Next:" -- the main cue list's standby cue. */
     void slotUpdateStandby();
-    void slotFillStandbyMenu();
     void slotTimecodeStatusChanged();
 
     /** Poll + refresh the global engine-load chip (and timecode chip). */

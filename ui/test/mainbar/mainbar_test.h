@@ -76,10 +76,9 @@ private slots:
     /** GO / Back (Ctrl+Return, Ctrl+Shift+Return) from anywhere, in the
      *  Control menu: they step the main cue list 1, 2, back to 1 */
     void goAndBackStepTheMainCueList();
-    /** The footer's Next: menu holds GO, Back, Stop, Load and Open the Cue
-     *  List; Load lists a Sub GO cue's sub-cues and puts the one chosen on
-     *  standby */
-    void theFootersNextMenuLoadsASubCue();
+    /** Q74: the footer's Next: is status only (no GO menu); it says what GO
+     *  plays, a loaded sub-cue included, and a click brings Run forward */
+    void theFootersNextIsStatusOnly();
     /** With a Show Tree production current, the footer says whose GO it is */
     void theFooterNamesTheCurrentProduction();
     /** The footer's Grand Master: moving it sets the GM and dims the rig */

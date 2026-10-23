@@ -579,7 +579,7 @@ void MainBar_Test::goAndBackStepTheMainCueList()
     QVERIFY(list->isRunning());
 }
 
-void MainBar_Test::theFootersNextMenuLoadsASubCue()
+void MainBar_Test::theFootersNextIsStatusOnly()
 {
     auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
     Doc *doc = m_app->doc();
@@ -604,58 +604,23 @@ void MainBar_Test::theFootersNextMenuLoadsASubCue()
     QVERIFY(!footer->isHidden());
     QVERIFY2(footer->text().startsWith(QString("Next: 1 — Cue 1")), qPrintable(footer->text()));
 
-    QMenu *menu = footer->menu();
-    QVERIFY(menu != nullptr);
-    emit menu->aboutToShow();                       // what opening it does
-    QList<QAction *> acts = menu->actions();
-    QVERIFY(acts.contains(m_app->m_cueGoAction));
-    QVERIFY(acts.contains(m_app->m_cueBackAction));
-    QVERIFY(acts.contains(m_app->m_cueSubGoAction));    // there is a Sub GO step
-    QAction *stop = nullptr, *open = nullptr;
-    QMenu *load = nullptr;
-    for (QAction *a : acts)
-    {
-        if (a->text() == QStringLiteral("Stop Cue list"))
-            stop = a;
-        else if (a->text() == QStringLiteral("Open the Cue List"))
-            open = a;
-        else if (a->menu() != nullptr && a->text() == QStringLiteral("Load"))
-            load = a->menu();
-    }
-    QVERIFY(stop != nullptr);
-    QVERIFY(open != nullptr);
-    QVERIFY(load != nullptr);
+    // Q74: status only -- no GO menu of its own; Run is where GO is.
+    QVERIFY(footer->menu() == nullptr);
 
-    QStringList loadTexts;
-    for (QAction *a : load->actions())
-        loadTexts << a->text();
-    QCOMPARE(loadTexts, (QStringList{ QString("1 — Cue 1"), QString("2 — Inner"),
-                                      QString("    2.1 — Inner 1"), QString("    2.2 — Inner 2"),
-                                      QString("3 — Cue 3") }));
-    QVERIFY(load->actions().at(0)->isChecked());           // on standby now
-
-    // Choose 2.2: on standby, and what the footer says GO plays.
-    load->actions().at(3)->trigger();
+    // LOAD 2.2 (as Run or show control does): the footer says what GO plays.
+    sc->execute({ ShowControl::Load, QStringLiteral("2.2"), QString() });
     QCOMPARE(sc->standbyStep(list), 1);
     QCOMPARE(sc->standbySubCue(list), 1);
     m_app->slotUpdateStandby();
     QVERIFY2(footer->text().startsWith(QString("Next: 2.2 — Inner 2")), qPrintable(footer->text()));
-    emit menu->aboutToShow();
-    for (QAction *a : menu->actions())
-        if (a->menu() != nullptr && a->text() == QStringLiteral("Load"))
-            load = a->menu();
-    QVERIFY(load->actions().at(3)->isChecked());
-    QVERIFY(!load->actions().at(0)->isChecked());
 
-    // GO plays it.
+    // GO (⌘↩) plays it; a click on the footer brings Run forward.
     m_app->m_cueGoAction->trigger();
     QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 1
                              && list->currentSubCueIndex() == 1, 5000);
-    // Stop, from the menu.
-    emit menu->aboutToShow();
-    for (QAction *a : menu->actions())
-        if (a->text() == QStringLiteral("Stop Cue list"))
-            a->trigger();
+    footer->click();
+    QCOMPARE(m_app->m_tab->tabBar()->tabData(m_app->m_tab->currentIndex()).toString(), QString("Run"));
+    sc->execute({ ShowControl::Stop, QString(), QString() });
     QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
 
     // No main cue list: the footer goes.

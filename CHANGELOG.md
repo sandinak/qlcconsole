@@ -169,6 +169,11 @@ circuits and subs.
 
 ### Changed
 
+- **Run is where GO is** (board Q74): the footer's **Next:** is status only
+  (no GO/Back/Stop/Load menu of its own); a click brings the Run tab
+  forward. ⌘↩ / Control ▸ GO and VC widgets work as before. Build ▸ Scenes
+  stays in the qlcconsole view.
+
 - **A smaller qlcconsole view** (board Q79): seven tabs in show order —
   Connections, Fixtures, Build, Show Tree, Virtual Console, Simple Desk,
   Run (⇧⌘1–⇧⌘7). The Lighting Studio, Shows and Functions are in

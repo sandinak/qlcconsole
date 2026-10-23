@@ -36,8 +36,8 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
 ## What's next, and GO from anywhere
 
 - The footer's **Next:** says what the main cue list's GO plays next — its
-  cue number and name. Click it for **GO**, **Back**, **Stop**, **Load ▸**
-  (any cue, onto standby) and **Open the Cue List**.
+  cue number and name. It is status only: click it for the **Run** tab,
+  where GO, Back, Stop and LOAD are.
 - **GO** is ⌘↩ and **Back** ⌘⇧↩, in every window, and in
   **Control** → GO / Back (Main Cue List).
 - A **Virtual Console cue list** shows a **Cue** column beside the step
@@ -102,8 +102,7 @@ One level only: a sub-cue's own chase steps run on their own timing.
   (GO 4.2) instead.
 - **LOAD 4.2** (`/cue/4.2/load`, MSC LOAD) puts the sub-cue on standby:
   **Next:** in the footer and in the cue list shows it — "Next: 4.2 —
-  Wash" — and the next GO plays it. The footer's **Load ▸** menu lists the
-  sub-cues of a cue on Sub GO under it, too.
+  Wash" — and the next GO plays it. The Run tab loads a sub-cue too.
 - **STOP 4.2** stops the list only when 4.2 is the sub-cue playing.
 - When Sub GO can't, **Connections → Show control &amp; sync** says why:
   "cue 1 has no sub-cues on Sub GO", "end of 4", "4 is at its first

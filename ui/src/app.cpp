@@ -5779,15 +5779,13 @@ void App::initStatusBar()
     m_statusStandby = new QToolButton(this);
     m_statusStandby->setObjectName(QStringLiteral("footerStandby"));
     m_statusStandby->setAutoRaise(true);
-    m_statusStandby->setPopupMode(QToolButton::InstantPopup);
     m_statusStandby->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    m_statusStandby->setMenu(new QMenu(m_statusStandby));
-    m_statusStandby->setToolTip(tr("The main cue list: what GO (%1) plays next. Click for "
-                                   "GO, Back, Stop, or to load another cue.")
+    // Status only (Q74): Run is where GO is; a click brings it forward.
+    m_statusStandby->setToolTip(tr("The main cue list: what GO (%1) plays next. Click for the Run tab.")
                                 .arg(m_cueGoAction->shortcut().toString(QKeySequence::NativeText)));
     m_statusStandby->setProperty("helpTopic", QStringLiteral("show-control.md"));
     m_statusStandby->hide();
-    connect(m_statusStandby->menu(), &QMenu::aboutToShow, this, &App::slotFillStandbyMenu);
+    connect(m_statusStandby, &QToolButton::clicked, this, [this]() { showContext(tr("Run")); });
     sb->addWidget(m_statusStandby, 0);
     QTimer *standby = new QTimer(this);
     connect(standby, &QTimer::timeout, this, &App::slotUpdateStandby);
@@ -6642,94 +6640,6 @@ QString App::standbySubCueText(const Chaser *list)
     if (sub < 0)
         return tr("Sub: (end of %1)").arg(list->stepCue(step));
     return tr("Sub: %1").arg(list->subCue(step, sub));
-}
-
-void App::slotFillStandbyMenu()
-{
-    QMenu *menu = m_statusStandby->menu();
-    menu->clear();
-    ShowControl *sc = m_doc->showControl();
-    Chaser *list = sc->cueList(QString());
-    if (list == NULL)
-        return;
-
-    menu->addAction(m_cueGoAction);
-    menu->addAction(m_cueBackAction);
-    if (list->hasSubGoSteps())
-    {
-        menu->addAction(m_cueSubGoAction);
-        menu->addAction(m_cueSubBackAction);
-    }
-    menu->addAction(tr("Stop %1").arg(list->name()), this, [sc]() {
-        sc->execute({ ShowControl::Stop, QString(), QString() });
-    });
-    QMenu *load = menu->addMenu(tr("Load"));
-    const QList<ChaserStep> steps = list->steps();
-    for (int i = 0; i < steps.count(); ++i)
-    {
-        const Function *f = m_doc->function(steps.at(i).fid);
-        QString label = list->stepCue(i);
-        if (f != NULL)
-            label += QStringLiteral(" \u2014 ") + f->name();
-        if (steps.at(i).skip)
-            label += tr(" (skipped)");
-        const QString cue = list->stepCue(i);
-        QAction *a = load->addAction(label, this, [sc, cue]() {
-            sc->execute({ ShowControl::Load, cue, QString() });
-        });
-        a->setCheckable(true);
-        a->setChecked(i == sc->standbyStep(list) && sc->standbySubCue(list) < 0);
-
-        // A cue on Sub GO: its sub-cues, indented under it (LOAD 4.2).
-        if (!list->isSubGoStep(i))
-            continue;
-        const Chaser *inner = list->subCueChase(i);
-        const QList<ChaserStep> subSteps = inner->steps();
-        for (int j = 0; j < subSteps.count(); ++j)
-        {
-            const QString subCue = list->subCue(i, j);
-            QString subLabel = QStringLiteral("    ") + subCue;
-            if (const Function *sf = m_doc->function(subSteps.at(j).fid))
-                subLabel += QStringLiteral(" \u2014 ") + sf->name();
-            if (subSteps.at(j).skip)
-                subLabel += tr(" (skipped)");
-            QAction *sa = load->addAction(subLabel, this, [sc, subCue]() {
-                sc->execute({ ShowControl::Load, subCue, QString() });
-            });
-            sa->setCheckable(true);
-            sa->setChecked(i == sc->standbyStep(list) && j == sc->standbySubCue(list));
-        }
-    }
-    // Which production GO plays (P5): the same choice as the Show Tree's
-    // switcher.
-    ShowTreeController *tree = m_doc->showTree();
-    if (!tree->productions().isEmpty())
-    {
-        QMenu *prods = menu->addMenu(tr("Production"));
-        QActionGroup *group = new QActionGroup(prods);
-        QList<QPair<quint32, QString>> choices { { ShowTree::invalidId(), tr("None (the main cue list)") } };
-        for (const ShowTree::Production &p : tree->productions())
-            choices << qMakePair(p.id, p.name);
-        for (const auto &c : choices)
-        {
-            const quint32 pid = c.first;
-            QAction *a = prods->addAction(c.second, this, [tree, pid]() {
-                tree->setCurrentProduction(pid);
-            });
-            a->setCheckable(true);
-            a->setChecked(pid == tree->currentProduction());
-            group->addAction(a);
-        }
-    }
-    menu->addSeparator();
-    const quint32 id = list->id();
-    menu->addAction(tr("Open the Cue List"), this, [this, id]() {
-        if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
-        {
-            switchToTabContaining(pm);
-            pm->showFunction(id);
-        }
-    });
 }
 
 void App::slotTimecodeStatusChanged()

@@ -1722,8 +1722,8 @@ the rest of this section applies.
 - **The current production** is what plays: the footer GO (**⌘↩**), Back,
   Sub GO, show control (QLab, OSC, MSC) and every Cue Runner set to follow
   "the current production". Pick it in the header's **Production:** switcher,
-  on the production's page (**Make current**), from its right-click menu, or
-  in the footer's GO menu (**Production**). The tree marks it **▶ current**.
+  on the production's page (**Make current**) or from its right-click menu.
+  The tree marks it **▶ current**.
 - **Its main list** is the one GO plays (its first list until you choose):
   the production page's **Main list**, a list's right-click **Make main
   list**, or **Play on GO** (makes the production current too). The tree
