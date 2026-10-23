@@ -271,6 +271,12 @@ for some kinds show only there:
   centred; the piers are the rest of the width and the header the rest of
   the height. Light goes through the opening and lands on the piers, the
   header and its underside.
+- **Door width**, **Door height** and **Door at** (wall, back wall) — a door
+  in the wall, from the floor up: **Door at** is where its middle is, from
+  the middle of the wall. Light goes through it; the wall either side and
+  above it stops light as the rest does. **No door** (0) is the default. For
+  a side wall, add a **Wall**, give it the height and length, and turn its
+  **Facing** to 90°.
 - **Shape** and **Thickness** (wall, back wall; a proscenium has a thickness
   too) — **Straight or bowed**, or
   **U, rounded front**: a half-round front as wide as the wall, straight sides

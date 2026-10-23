@@ -6557,6 +6557,19 @@ void Monitor::slotEditScenery(quint32 sid)
     openWSpin->setToolTip(tr("How wide the opening is, centred: a proscenium's piers, or an open "
                              "curtain's halves gathered at its ends, are the rest of the width"));
     openHSpin->setToolTip(tr("How high the opening is; the header is the rest of the height"));
+    // A door in a wall (Q99): width 0 is none.
+    QDoubleSpinBox *doorWSpin = mkSpin(s->doorWidth(), 0.0, posR * 2);
+    QDoubleSpinBox *doorHSpin = mkSpin(s->doorHeight(), 0.1, isFeet ? 100.0 : 30.0);
+    QDoubleSpinBox *doorAtSpin = mkSpin(s->doorAt(), -posR, posR);
+    doorWSpin->setObjectName("sceneryDoorWidth");
+    doorHSpin->setObjectName("sceneryDoorHeight");
+    doorAtSpin->setObjectName("sceneryDoorAt");
+    doorWSpin->setSpecialValueText(tr("No door"));
+    doorWSpin->setToolTip(tr("A door in the wall, from the floor up: light goes through it. "
+                             "0 is no door"));
+    doorHSpin->setToolTip(tr("How high the door is; the wall above it is the rest"));
+    doorAtSpin->setToolTip(tr("Where the middle of the door is, from the middle of the wall "
+                              "(+ toward its far end)"));
     QComboBox *kindCombo = new QComboBox(&dlg);
     foreach (int k, Scenery::kinds())
         kindCombo->addItem(Scenery::kindName(k), k);
@@ -6632,6 +6645,9 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Driven by:"), driveRow);
     form->addRow(tr("Opening width:"), openWSpin);
     form->addRow(tr("Opening height:"), openHSpin);
+    form->addRow(tr("Door width:"), doorWSpin);
+    form->addRow(tr("Door height:"), doorHSpin);
+    form->addRow(tr("Door at:"), doorAtSpin);
     // Each row only where it means something for the kind.
     auto showRow = [form](QWidget *field, bool on) {
         field->setVisible(on);
@@ -6651,6 +6667,10 @@ void Monitor::slotEditScenery(quint32 sid)
         const bool driven = curtain && driveCombo->currentData().toUInt() != Fixture::invalidId();
         showRow(openWSpin, arch || (curtain && (driven || stateCombo->currentData().toInt() == Scenery::Open)));
         showRow(openHSpin, arch);
+        const bool door = built && !arch && !u;
+        showRow(doorWSpin, door);
+        showRow(doorHSpin, door && doorWSpin->value() > 0.0);
+        showRow(doorAtSpin, door && doorWSpin->value() > 0.0);
         showRow(stateCombo, k == Scenery::MainDrape || k == Scenery::Traveler);
         showRow(driveRow, curtain);
         dlg.adjustSize();
@@ -6678,6 +6698,9 @@ void Monitor::slotEditScenery(quint32 sid)
             s->setBow(0.0f);
         s->setOpeningWidth(float(openWSpin->value() * fromDisp));
         s->setOpeningHeight(float(openHSpin->value() * fromDisp));
+        s->setDoorWidth(float(doorWSpin->value() * fromDisp));
+        s->setDoorHeight(float(doorHSpin->value() * fromDisp));
+        s->setDoorAt(float(doorAtSpin->value() * fromDisp));
         s->setDepth(float(depthSpin->value() * fromDisp));
         s->setThickness(built ? float(thickSpin->value() * fromDisp) : 0.0f);
         s->setState(stateCombo->currentData().toInt());
@@ -6686,8 +6709,9 @@ void Monitor::slotEditScenery(quint32 sid)
         m_graphicsView->updatePlatforms();
     };
     for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin, depthSpin, thickSpin,
-                                openWSpin, openHSpin })
+                                openWSpin, openHSpin, doorWSpin, doorHSpin, doorAtSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
+    connect(doorWSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { showRows(); });
     for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo, driveCombo })
         connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {
             showRows();

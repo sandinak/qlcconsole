@@ -34,6 +34,9 @@
 #define KXMLSceneryState    QStringLiteral("State")
 #define KXMLSceneryOpenWidth  QStringLiteral("OpeningWidth")
 #define KXMLSceneryOpenHeight QStringLiteral("OpeningHeight")
+#define KXMLSceneryDoorWidth  QStringLiteral("DoorWidth")
+#define KXMLSceneryDoorHeight QStringLiteral("DoorHeight")
+#define KXMLSceneryDoorAt     QStringLiteral("DoorAt")
 #define KXMLSceneryColor    QStringLiteral("Color")
 #define KXMLSceneryLocked   QStringLiteral("Locked")
 #define KXMLSceneryLayerId  QStringLiteral("LayerId")
@@ -311,6 +314,25 @@ QList<Scenery::Piece> Scenery::pieces(const Pose &pose) const
         return out;
     }
     typedef QPair<double, double> Span;
+    if (hasDoor() && m_width > 0.0f)
+    {
+        /* The door: the wall either side of it, and above it what is left
+           of the height. Across the width u runs -1..1. */
+        const double half = double(m_width) / 2.0;
+        const double c = double(m_doorAt) / half, hw = double(m_doorWidth) / 2.0 / half;
+        const double a = qBound(-1.0, c - hw, 1.0), b = qBound(-1.0, c + hw, 1.0);
+        const float head = qMin(hi, lo + m_doorHeight);
+        foreach (const Span &sp, spans(pose))
+        {
+            if (sp.first < a)
+                out << Piece{ sp.first, qMin(a, sp.second), lo, hi };
+            if (sp.second > b)
+                out << Piece{ qMax(b, sp.first), sp.second, lo, hi };
+            if (head < hi && sp.second > a && sp.first < b)
+                out << Piece{ qMax(a, sp.first), qMin(b, sp.second), head, hi };
+        }
+        return out;
+    }
     foreach (const Span &sp, spans(pose))
         out << Piece{ sp.first, sp.second, lo, hi };
     return out;
@@ -458,6 +480,9 @@ bool Scenery::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLSceneryThickness)) setThickness(a.value(KXMLSceneryThickness).toFloat());
     if (a.hasAttribute(KXMLSceneryOpenWidth)) setOpeningWidth(a.value(KXMLSceneryOpenWidth).toFloat());
     if (a.hasAttribute(KXMLSceneryOpenHeight)) setOpeningHeight(a.value(KXMLSceneryOpenHeight).toFloat());
+    if (a.hasAttribute(KXMLSceneryDoorWidth))  setDoorWidth(a.value(KXMLSceneryDoorWidth).toFloat());
+    if (a.hasAttribute(KXMLSceneryDoorHeight)) setDoorHeight(a.value(KXMLSceneryDoorHeight).toFloat());
+    if (a.hasAttribute(KXMLSceneryDoorAt))     setDoorAt(a.value(KXMLSceneryDoorAt).toFloat());
     if (a.hasAttribute(KXMLSceneryState))
     {
         const QString st = a.value(KXMLSceneryState).toString();
@@ -505,6 +530,12 @@ bool Scenery::saveXML(QXmlStreamWriter *doc) const
     }
     else if (hasState())
         doc->writeAttribute(KXMLSceneryOpenWidth, QString::number(double(m_openWidth), 'f', 3));
+    if (hasDoor())
+    {
+        doc->writeAttribute(KXMLSceneryDoorWidth, QString::number(double(m_doorWidth), 'f', 3));
+        doc->writeAttribute(KXMLSceneryDoorHeight, QString::number(double(m_doorHeight), 'f', 3));
+        doc->writeAttribute(KXMLSceneryDoorAt, QString::number(double(m_doorAt), 'f', 3));
+    }
     if (m_color.isValid())
         doc->writeAttribute(KXMLSceneryColor, m_color.name());
     if (m_locked)

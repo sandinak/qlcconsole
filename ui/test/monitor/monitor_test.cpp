@@ -14150,7 +14150,7 @@ void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
         foreach (int kind, Scenery::kinds())
         {
             QString title;
-            bool opening = false, curtain = false, thickness = false;
+            bool opening = false, curtain = false, thickness = false, door = false;
             driveDialog([&](QWidget *dlg) {
                 title = dlg->windowTitle();
                 auto shown = [dlg](const char *name) {
@@ -14159,6 +14159,7 @@ void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
                 };
                 opening = shown("sceneryOpeningWidth");
                 curtain = shown("sceneryState");
+                door = shown("sceneryDoorWidth");
                 QDoubleSpinBox *thick = nullptr;
                 foreach (QDoubleSpinBox *sp, dlg->findChildren<QDoubleSpinBox *>())
                     if (sp->toolTip().startsWith("How thick"))
@@ -14171,6 +14172,7 @@ void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
             // Each row only where it means something.
             QCOMPARE(opening, kind == Scenery::Proscenium);
             QCOMPARE(curtain, kind == Scenery::MainDrape || kind == Scenery::Traveler);
+            QCOMPARE(door, kind == Scenery::Wall || kind == Scenery::BackWall);   // Q99
             QCOMPARE(thickness, kind == Scenery::Wall || kind == Scenery::BackWall
                                     || kind == Scenery::Proscenium);
         }

@@ -652,6 +652,7 @@ static quint64 stageSignature(const MonitorProperties *mp, int kinds, float minS
             s.add(sc->bottom()); s.add(sc->rotation()); s.add(sc->bow()); s.add(sc->outline());
             s.add(sc->depth()); s.add(sc->state());
             s.add(sc->openingWidth()); s.add(sc->openingHeight());
+            s.add(sc->doorWidth()); s.add(sc->doorHeight()); s.add(sc->doorAt());
             /* What actually hangs: whatever opens or flies the curtain --
                its state, or where its driving fixture has it now -- shows
                here. */

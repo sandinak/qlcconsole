@@ -204,6 +204,18 @@ public:
     float openingHeight() const { return m_openHeight; }
     void  setOpeningHeight(float h) { m_openHeight = (h > 0.1f) ? h : 0.1f; }
 
+    /** A door in a wall or back wall: an opening from the floor up, light
+     *  goes through it. Width 0 (the default) is no door; @p at is where its
+     *  middle is, in metres from the wall's middle (+ toward its far end). */
+    float doorWidth() const { return m_doorWidth; }
+    void  setDoorWidth(float w) { m_doorWidth = (w > 0.0f) ? w : 0.0f; }
+    float doorHeight() const { return m_doorHeight; }
+    void  setDoorHeight(float h) { m_doorHeight = (h > 0.1f) ? h : 0.1f; }
+    float doorAt() const { return m_doorAt; }
+    void  setDoorAt(float at) { m_doorAt = at; }
+    /** A built wall (not a proscenium) with a door in it. */
+    bool hasDoor() const { return (m_kind == Wall || m_kind == BackWall) && m_doorWidth > 0.0f; }
+
     /** One solid stretch of it: from @p u0 to @p u1 along its line, from
      *  @p z0 to @p z1 high (absolute). */
     struct Piece
@@ -291,6 +303,9 @@ private:
     int     m_state    = Closed;
     float   m_openWidth = 8.0f;
     float   m_openHeight = 5.0f;
+    float   m_doorWidth = 0.0f;     ///< 0: no door
+    float   m_doorHeight = 2.1f;
+    float   m_doorAt = 0.0f;
     QColor  m_color;
     bool    m_locked   = false;
     quint32 m_layerId  = 0;

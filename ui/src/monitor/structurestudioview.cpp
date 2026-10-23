@@ -3614,7 +3614,8 @@ quint64 StructureStudioView::throwScene() const
         f << float(sc->id()) << float(sc->kind()) << sc->originX() << sc->originY()
           << sc->width() << sc->height() << sc->bottom() << sc->rotation() << sc->bow()
           << float(sc->outline()) << sc->depth() << sc->thickness() << float(sc->state())
-          << sc->openingWidth() << sc->openingHeight();
+          << sc->openingWidth() << sc->openingHeight()
+          << sc->doorWidth() << sc->doorHeight() << sc->doorAt();
         if (sc->isDriven())
         {
             const Scenery::Pose pose = drapePose(sc);

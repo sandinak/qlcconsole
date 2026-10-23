@@ -236,6 +236,55 @@ void Scenery_Test::aProsceniumIsTwoPiersAndAHeader()
     QVERIFY(near(back.openingWidth(), 10.0) && near(back.openingHeight(), 5.0));
 }
 
+/* Q99: a door in a wall -- light through it, the wall beside and above it. */
+void Scenery_Test::aDoorIsAnOpeningInAWall()
+{
+    // A side wall 8 m long, 4 m high, along y at x = 0 facing stage left.
+    Scenery s(0);
+    s.setKind(Scenery::Wall);
+    s.setOriginX(7.0f);
+    s.setOriginY(8.0f);
+    s.setWidth(8.0f);
+    s.setHeight(4.0f);
+    s.setThickness(0.2f);
+    QVERIFY(!s.hasDoor());
+    QCOMPARE(s.pieces().size(), 1);
+    // A 1 m x 2.1 m door, its middle 2 m along from the wall's middle.
+    s.setDoorWidth(1.0f);
+    s.setDoorHeight(2.1f);
+    s.setDoorAt(2.0f);
+    QVERIFY(s.hasDoor());
+    QCOMPARE(s.pieces().size(), 3);     // either side, and above it
+    double t = 0.0;
+    // Through the door (x = 7 + 2 = 9), from the house, low.
+    QVERIFY(!s.rayHit(QVector3D(9.0f, 15.0f, 1.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
+    // Above the door: the wall.
+    QVERIFY(s.rayHit(QVector3D(9.0f, 15.0f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
+    // Beside it: the wall.
+    QVERIFY(s.rayHit(QVector3D(7.0f, 15.0f, 1.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
+
+    QByteArray buf;
+    QXmlStreamWriter w(&buf);
+    QVERIFY(s.saveXML(&w));
+    QVERIFY(buf.contains("DoorWidth"));
+    QXmlStreamReader r(buf);
+    r.readNextStartElement();
+    Scenery back(0);
+    QVERIFY(back.loadXML(r));
+    QVERIFY(back.hasDoor() && near(back.doorWidth(), 1.0) && near(back.doorHeight(), 2.1)
+            && near(back.doorAt(), 2.0));
+
+    // No door: nothing saved for it. A proscenium never has one.
+    s.setDoorWidth(0.0f);
+    buf.clear();
+    QXmlStreamWriter w2(&buf);
+    QVERIFY(s.saveXML(&w2));
+    QVERIFY(!buf.contains("DoorWidth"));
+    s.setKind(Scenery::Proscenium);
+    s.setDoorWidth(1.0f);
+    QVERIFY(!s.hasDoor());
+}
+
 void Scenery_Test::xmlRoundTripAndStorage()
 {
     Scenery s(7);

@@ -19,6 +19,10 @@ circuits and subs.
 
 ### Added
 
+- **A door in a wall** (board Q99): a wall or back wall has **Door width**,
+  **Door height** and **Door at** in its editor. Light goes through the
+  door; the wall beside and above it stops it.
+
 - **One Overrides chip** (board Q80) in the footer: "Overrides: Park (3),
   Hold at end · Clear" whenever Park, Highlight, Hold at end, Focus mode or
   Blind holds the rig; one click lets go of all of them.

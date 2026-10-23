@@ -37,6 +37,7 @@ private slots:
     void aWallIsMetOnItsFaceAndOnItsTop();
     void anOpenCurtainHangsOnlyAtItsEnds();
     void aProsceniumIsTwoPiersAndAHeader();
+    void aDoorIsAnOpeningInAWall();
     void xmlRoundTripAndStorage();
     void aDrivenCurtainOpensAsItsChannelMoves();
     void flyingTakesItUpAndOut();
