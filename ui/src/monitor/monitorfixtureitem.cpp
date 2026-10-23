@@ -23,6 +23,7 @@
 #include <QApplication>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRadialGradient>
 #include <QPolygonF>
 #include <qmath.h>
 #include <QCursor>
@@ -114,6 +115,7 @@ public:
         setAcceptedMouseButtons(Qt::NoButton);
     }
     QPainterPath path;
+    int alpha = 90;
     void setPath(const QPainterPath &p) { prepareGeometryChange(); path = p; }
     QRectF boundingRect() const override { return path.boundingRect().adjusted(-1, -1, 1, 1); }
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) override
@@ -121,7 +123,7 @@ public:
         if (path.isEmpty())
             return;
         painter->setPen(QPen(QColor(0, 0, 0, 150), 0));
-        painter->setBrush(QColor(0, 0, 0, 90));
+        painter->setBrush(QColor(0, 0, 0, alpha));
         painter->drawPath(path);
     }
 };
@@ -497,6 +499,7 @@ void MonitorFixtureItem::updateLensHint()
         m_hintItem = new LensHintGraphic(this);
         m_hintItem->setZValue(2.5);             // over the head, under a ring
     }
+    m_hintItem->alpha = stageLookLensHintAlpha(m_traits.look);
     m_hintItem->setPath(hint);
 }
 
@@ -909,6 +912,17 @@ void MonitorFixtureItem::slotUpdateValues()
             needUpdate = true;
         }
     }
+    /* A practical lantern glows all round: its glow follows its first
+       head (colour and level), painted by the item itself. */
+    if (m_traits.look == Fixture::LanternLook && !m_heads.isEmpty())
+    {
+        const QColor glow = m_heads.first()->m_item->brush().color();
+        if (glow != m_lanternGlow)
+        {
+            m_lanternGlow = glow;
+            needUpdate = true;
+        }
+    }
     if (needUpdate)
         update();
 }
@@ -1125,6 +1139,27 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
     drawBody(painter, QRectF(0, 0, m_width, m_height));
+
+    /* A practical lantern lights all round, not in a beam: a soft glow in
+       its colour over its body, centred on its glass, as bright as it is. */
+    if (m_traits.look == Fixture::LanternLook && m_lanternGlow.isValid()
+        && m_lanternGlow.alpha() > 8 && !m_heads.isEmpty())
+    {
+        const QRectF glass = shapeRect(m_heads.first()->m_item);
+        const qreal radius = qMax(m_width, m_height) * 0.6;
+        QRadialGradient g(glass.center(), radius);
+        QColor in = m_lanternGlow;
+        in.setAlpha(qMin(200, m_lanternGlow.alpha()));
+        QColor out = m_lanternGlow;
+        out.setAlpha(0);
+        g.setColorAt(0.0, in);
+        g.setColorAt(1.0, out);
+        const QPen keep = painter->pen();
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(g);
+        drawBody(painter, QRectF(0, 0, m_width, m_height));
+        painter->setPen(keep);
+    }
 
     /* Truss-bind indicator, inner border ring:
          cyan  = bound to a truss and staying that way

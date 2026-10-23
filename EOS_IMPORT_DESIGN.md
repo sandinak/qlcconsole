@@ -277,6 +277,29 @@ Report rendered post-import by the same dialog that renders `QxwImportResult`.
   QLC Scene is the obvious analogue, but a sub also has a handle/bump
   behavior. Scene is fine for the "what levels"; VC fader binding to run it
   is a later tie-in.
+
+  **Update 2026-10-22:** subs now come in as VC faders. Each sub is still a
+  Scene ("Eos/Subs", the sub's up/down times as its fades). After the
+  merge, `EosImportWizard::addSubFaders()` puts a Playback-mode VC Slider
+  on each one, captioned "Sub N label", in a row in a new frame "Eos subs"
+  below what the console holds. `$$LTP`, `$$Exclusive`, `$$InhibSubm`,
+  `$$EffectSub`, `$$Independent` and `$$IntensityMaster` are parsed into
+  `EosSub::options` and reported. Bump buttons and inhibitive behaviour
+  aren't carried. A wizard page, **Special circuits**, classifies each
+  channel from its label (`EosCircuit::classify`, most specific word wins:
+  House > Work > Hall/Blue/Backstage > Relay) and reads `$$Options` X (GM
+  exempt). The user's edits travel in `EosImportBundle::circuitRoles`. The
+  roles make the groups Eos/Power relays, Eos/House & Work and
+  Eos/Backstage ("… (special circuits)" when the show has an Eos group of
+  that name). `EosImporter::applyCircuitRoles()` maps them to
+  `Fixture::OutputRules` on the scratch Doc's fixtures. Relay →
+  Switch | ExemptBlackout | ExemptGrandMaster | OnAtOpen; House / Work /
+  Backstage → ExemptBlackout | ExemptGrandMaster; X adds
+  ExemptGrandMaster. The rules ride the fixture XML through
+  `QxwImporter` into the live Doc (checked end to end on a real show).
+  The report lists the rules per role and points at Settings ▸ Advanced ▸
+  Output for when OnAtOpen fires (Operate, by default). House and relay
+  cue moves stay in the cues (cue 1 still brings the house up).
 - **Multiple cue lists.** Element 2 has a single cue list, so a school show
   is a non-issue; a Ti or Gio show might have >1. v1 handles with a prefix
   on scene names ("CL1 cue 10.5"); not elegant but survives.

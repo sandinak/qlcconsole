@@ -430,7 +430,8 @@ void FixtureUniversePatch_Test::aFixtureRowsMenuIsUnchanged()
     const QStringList texts = rightClick(mgr, fx);
     QVERIFY2(!texts.isEmpty(), "the context menu never appeared");
     foreach (const QString &t, texts)
-        QVERIFY2(!t.contains("output", Qt::CaseInsensitive)
+        QVERIFY2((!t.contains("output", Qt::CaseInsensitive)
+                  || t == "Output Rules…")      // the fixture's own (relays, house lights)
                  && !t.contains("selected universes")
                  && t != "Delete Universe…", qPrintable(texts.join(" | ")));
 }

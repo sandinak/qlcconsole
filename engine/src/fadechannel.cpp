@@ -177,8 +177,10 @@ void FadeChannel::autoDetect(const Doc *doc)
             return;
         }
 
-        // autodetect the channel type
-        if (fixture->channelCanFade(chIndex))
+        // autodetect the channel type. A Switch fixture (a relay) never
+        // fades: it goes, on or off, the moment it is told to.
+        if (fixture->channelCanFade(chIndex)
+            && (fixture->outputRules() & Fixture::Switch) == 0)
             addFlag(FadeChannel::CanFade);
 
         if (m_channelRef != NULL && m_channelRef->group() == QLCChannel::Intensity)

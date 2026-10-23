@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QRegularExpression>
 #include <QFileInfo>
 #include <QColor>
 #include <QtMath>
@@ -205,8 +206,140 @@ int paramByName(const EosShowData &data, const QString &name)
 
 } // namespace
 
+/****************************************************************************
+ * Special circuits
+ ****************************************************************************/
+
+EosCircuit::Role EosCircuit::classify(const QString &label, bool singleChannel)
+{
+    static const QRegularExpression nonLetters(QStringLiteral("[^a-z]+"));
+    const QStringList words = label.toLower().split(nonLetters, Qt::SkipEmptyParts);
+    bool relay = false, house = false, work = false, backstage = false;
+    for (int i = 0; i < words.count(); ++i)
+    {
+        const QString &w = words.at(i);
+        const QString next = words.value(i + 1);
+        if (w.startsWith(QLatin1String("house")))
+        {
+            // "House Left Boom" is a place, not the house lights.
+            if (next != QLatin1String("left") && next != QLatin1String("right")
+                && next != QLatin1String("center") && next != QLatin1String("centre"))
+                house = true;
+        }
+        else if (w.startsWith(QLatin1String("aisle")))
+            house = true;
+        else if (w.startsWith(QLatin1String("work")))
+            work = true;
+        else if (w.startsWith(QLatin1String("hall")) || w.startsWith(QLatin1String("backstage"))
+                 || w.startsWith(QLatin1String("stair")) || w == QLatin1String("exit")
+                 || w == QLatin1String("exits")
+                 || (w == QLatin1String("back") && next == QLatin1String("stage")))
+            backstage = true;
+        else if (singleChannel && (w == QLatin1String("blue") || w == QLatin1String("blues")))
+            backstage = true;
+        else if (w.startsWith(QLatin1String("relay")))
+            relay = true;
+    }
+    if (house)
+        return House;
+    if (work)
+        return Work;
+    if (backstage)
+        return Backstage;
+    return relay ? Relay : Normal;
+}
+
+QString EosCircuit::roleName(Role role)
+{
+    switch (role)
+    {
+        case Relay:     return QObject::tr("Relay (power)");
+        case House:     return QObject::tr("House");
+        case Work:      return QObject::tr("Work");
+        case Backstage: return QObject::tr("Backstage / hall");
+        default:        return QObject::tr("Normal");
+    }
+}
+
+QString EosCircuit::rulesText(Role role, bool gmExempt)
+{
+    switch (role)
+    {
+        case Relay:
+            return QObject::tr("Switch (relay), Ignore Blackout, Ignore the Grand Master, On when not in use");
+        case House:
+        case Work:
+        case Backstage:
+            return QObject::tr("Ignore Blackout, Ignore the Grand Master");
+        default:
+            return gmExempt ? QObject::tr("Ignore the Grand Master") : QString();
+    }
+}
+
+int EosImportResult::circuitCount(EosCircuit::Role role) const
+{
+    int n = 0;
+    for (const EosCircuit &c : circuits)
+        n += c.role == role;
+    return n;
+}
+
+QMap<int, EosCircuit> EosImporter::circuits(const EosShowData &data, const QHash<int, int> &overrides)
+{
+    QMap<int, EosCircuit> out;
+    for (const EosPatch &p : data.patch)
+    {
+        if (p.part > 1 || out.contains(p.channel))
+            continue;
+        const auto pers = data.personalities.constFind(p.personality);
+        const bool single = p.personality == 0 || pers == data.personalities.constEnd()
+                            || pers.value().footprint <= 1;
+        EosCircuit c;
+        c.role = overrides.contains(p.channel)
+                 ? EosCircuit::Role(qBound(int(EosCircuit::Normal), overrides.value(p.channel),
+                                           int(EosCircuit::Backstage)))
+                 : EosCircuit::classify(p.label, single);
+        c.gmExempt = p.gmExempt();
+        if (c.role != EosCircuit::Normal || c.gmExempt)
+            out.insert(p.channel, c);
+    }
+    return out;
+}
+
+bool EosImporter::applyCircuitRoles(Doc *doc, const QMap<int, EosCircuit> &circuits)
+{
+    using Rule = Fixture;
+    bool applied = false;
+    for (auto it = circuits.constBegin(); it != circuits.constEnd(); ++it)
+    {
+        Fixture *fx = doc == nullptr ? nullptr : doc->fixture(quint32(it.key()));
+        if (fx == nullptr)
+            continue;
+        Rule::OutputRules rules;
+        switch (it.value().role)
+        {
+            case EosCircuit::Relay:
+                rules = Rule::OutputRules(Rule::Switch) | Rule::ExemptBlackout | Rule::ExemptGrandMaster
+                        | Rule::OnAtOpen;
+                break;
+            case EosCircuit::House:
+            case EosCircuit::Work:
+            case EosCircuit::Backstage:
+                rules = Rule::OutputRules(Rule::ExemptBlackout) | Rule::ExemptGrandMaster;
+                break;
+            default:
+                break;
+        }
+        if (it.value().gmExempt)
+            rules |= Rule::ExemptGrandMaster;
+        fx->setOutputRules(rules);
+        applied = true;
+    }
+    return applied;
+}
+
 bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMapper &mapper,
-                        EosImportResult &result, const QString &showName)
+                        EosImportResult &result, const QString &showName, const QHash<int, int> &circuitRoles)
 {
     if (doc == nullptr)
         return false;
@@ -321,6 +454,104 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
         result.warnings << QObject::tr("“%1”: no fixture definition chosen; %n channel(s) patched as a "
                                        "generic dimmer of the same size (the import wizard offers close "
                                        "matches).", "", it.value()).arg(it.key());
+
+    /*** Special circuits: relays, house, work, backstage ***/
+    {
+        result.circuits.clear();
+        const QMap<int, EosCircuit> all = circuits(data, circuitRoles);
+        for (auto it = all.constBegin(); it != all.constEnd(); ++it)
+            if (placed.contains(it.key()))
+                result.circuits.insert(it.key(), it.value());
+        result.outputRulesApplied = applyCircuitRoles(doc, result.circuits);
+
+        // Other $$Options: reported, not carried.
+        QMap<QChar, int> otherOptions;
+        for (const EosPatch &p : data.patch)
+            if (placed.contains(p.channel) && p.part <= 1)
+                for (const QChar ch : p.options.toUpper())
+                    if (ch != QLatin1Char('X') && ch.isLetter())
+                        otherOptions[ch]++;
+        if (!otherOptions.isEmpty())
+        {
+            QStringList parts;
+            for (auto it = otherOptions.constBegin(); it != otherOptions.constEnd(); ++it)
+            {
+                const QString what = it.key() == QLatin1Char('P') ? QObject::tr("flip pan")
+                                     : it.key() == QLatin1Char('T') ? QObject::tr("flip tilt")
+                                     : it.key() == QLatin1Char('S') ? QObject::tr("swap pan and tilt")
+                                     : it.key() == QLatin1Char('R') ? QObject::tr("flip rack")
+                                     : it.key() == QLatin1Char('L') ? QObject::tr("LD flags off")
+                                     : QObject::tr("unknown");
+                parts << QObject::tr("%1 (%2) on %n channel(s)", "", it.value()).arg(it.key()).arg(what);
+            }
+            result.warnings << QObject::tr("Patch $$Options not carried: %1.").arg(parts.join(QStringLiteral(", ")));
+        }
+
+        struct RoleGroup { QString name; QList<EosCircuit::Role> roles; };
+        const QList<RoleGroup> roleGroups = {
+            { QObject::tr("Power relays"), { EosCircuit::Relay } },
+            { QObject::tr("House & Work"), { EosCircuit::House, EosCircuit::Work } },
+            { QObject::tr("Backstage"), { EosCircuit::Backstage } },
+        };
+        QStringList made;
+        for (const RoleGroup &rg : roleGroups)
+        {
+            QList<int> chans;
+            for (auto it = result.circuits.constBegin(); it != result.circuits.constEnd(); ++it)
+                if (rg.roles.contains(it.value().role))
+                    chans << it.key();
+            if (chans.isEmpty())
+                continue;
+            // The show may have a group of that name already (an Eos
+            // "Power relays" group of its own): ours steps aside.
+            QString name = rg.name;
+            for (const EosGroup &g : data.groups)
+                if (g.label.compare(name, Qt::CaseInsensitive) == 0)
+                    name = QObject::tr("%1 (special circuits)").arg(rg.name);
+            FixtureGroup *grp = new FixtureGroup(doc);
+            grp->setName(name);
+            grp->setPath(QStringLiteral("Eos"));
+            if (!doc->addFixtureGroup(grp))
+            {
+                delete grp;
+                continue;
+            }
+            for (int c : chans)
+                grp->assignFixture(placed.value(c).fixture);
+            made << QStringLiteral("Eos/%1").arg(name);
+        }
+
+        if (!result.circuits.isEmpty())
+        {
+            QStringList counts;
+            for (EosCircuit::Role r : { EosCircuit::Relay, EosCircuit::House, EosCircuit::Work, EosCircuit::Backstage })
+                if (result.circuitCount(r) > 0)
+                    counts << QStringLiteral("%1 × %2").arg(EosCircuit::roleName(r)).arg(result.circuitCount(r));
+            int gmOnly = 0;
+            for (const EosCircuit &c : result.circuits)
+                gmOnly += c.role == EosCircuit::Normal && c.gmExempt;
+            if (gmOnly > 0)
+                counts << QObject::tr("GM exempt ($$Options X) × %1").arg(gmOnly);
+            result.warnings << QObject::tr("Special circuits: %1%2.")
+                               .arg(counts.join(QStringLiteral(", ")),
+                                    made.isEmpty() ? QString()
+                                                   : QObject::tr(" (groups %1)").arg(made.join(QStringLiteral(", "))));
+            if (result.outputRulesApplied)
+            {
+                // The rules each role got, a line each.
+                for (EosCircuit::Role r : { EosCircuit::Relay, EosCircuit::House, EosCircuit::Work, EosCircuit::Backstage })
+                    if (result.circuitCount(r) > 0)
+                        result.warnings << QObject::tr("Output rules, %1 × %2: %3.").arg(EosCircuit::roleName(r))
+                                           .arg(result.circuitCount(r)).arg(EosCircuit::rulesText(r, false));
+                if (gmOnly > 0)
+                    result.warnings << QObject::tr("Output rules, GM exempt ($$Options X) × %1: %2.").arg(gmOnly)
+                                       .arg(EosCircuit::rulesText(EosCircuit::Normal, true));
+                if (result.circuitCount(EosCircuit::Relay) > 0)
+                    result.warnings << QObject::tr("Relays come on when you switch to Operate; Settings ▸ Advanced ▸ "
+                                                   "Output (saved with the show) can make it when the show opens.");
+            }
+        }
+    }
 
     /*** Groups ***/
     for (const EosGroup &g : data.groups)
@@ -500,6 +731,7 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
         else
             delete s;
     }
+    QStringList subModes;
     for (const EosSub &sb : data.subs)
     {
         QHash<int, ParamState> state;
@@ -511,11 +743,27 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
             s->setFadeInSpeed(uint(sb.up * 1000));
         if (sb.down > 0)
             s->setFadeOutSpeed(uint(sb.down * 1000));
-        if (doc->addFunction(s))
-            result.submastersParsed++;
-        else
+        if (!doc->addFunction(s))
+        {
             delete s;
+            continue;
+        }
+        result.submastersParsed++;
+        EosImportedSub is;
+        is.function = s->id();
+        is.caption = s->name();
+        result.subs << is;
+        if (!sb.options.isEmpty())
+            subModes << QStringLiteral("%1 (%2)").arg(s->name(), sb.options.join(QStringLiteral(", ")));
     }
+    if (!subModes.isEmpty())
+        result.warnings << QObject::tr("%n sub(s) set to a mode other than HTP; each comes in as an ordinary "
+                                       "fader on its scene: %1", "", int(subModes.count()))
+                           .arg(subModes.join(QStringLiteral("; ")));
+    if (!result.subs.isEmpty())
+        result.warnings << QObject::tr("Subs: %n fader(s) on the Virtual Console (frame “Eos subs”), each "
+                                       "playing its scene with the sub's up / down times; bump buttons "
+                                       "aren't carried.", "", int(result.subs.count()));
 
     /*** Cue lists: a Chaser of one Scene per cue, its full tracked state ***/
     int delays = 0, links = 0, earlyFollows = 0;
@@ -652,7 +900,7 @@ Doc *EosImporter::load(const EosImportBundle &bundle, EosImportResult &result, E
     }
 
     build(data, doc, *mapper, result, data.title.isEmpty() ? QFileInfo(bundle.asciiPath).completeBaseName()
-                                                           : data.title);
+                                                           : data.title, bundle.circuitRoles);
 
     if (!bundle.augment3dEsfPath.isEmpty())
         result.warnings << QObject::tr("Augment3d positions (%1) are not read yet.")

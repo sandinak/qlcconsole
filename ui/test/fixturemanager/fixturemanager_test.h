@@ -107,6 +107,9 @@ private slots:
      *  new empty group in that folder, selected, its name ready to type;
      *  a loose fixture -- nothing. */
     void newHereMakesAGroupInTheFolder();
+    /** Output Rules…: a group's members with mixed rules (tri-state), the
+     *  Fixture Manager's and Build's menus, the row's tooltip. */
+    void outputRulesForFixturesAndGroups();
 
 private:
     Doc* m_doc;

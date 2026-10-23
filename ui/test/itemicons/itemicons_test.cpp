@@ -304,6 +304,24 @@ void ItemIcons_Test::aFixtureShowsWhatItIs()
     QVERIFY(yellowPixels(kindIcon(MovingHead)) < yellowPixels(kindIcon(MovingWash)));
 }
 
+void ItemIcons_Test::aStageLookKeepsTheOutputRulesBadge()
+{
+    Fixture *dimmer = makeFixture(QLCFixtureDef::Dimmer, QStringLiteral("Relay"),
+                                  { { QLCChannel::Intensity, QLCChannel::IntensityDimmer } });
+    dimmer->setStageLook(Fixture::FresnelLook);
+    const QImage plain = fixtureIcon(dimmer).pixmap(32, 32).toImage();
+    QVERIFY(!plain.isNull());
+
+    // The look sets the picture; the rules still badge it.
+    dimmer->setOutputRules(Fixture::ExemptBlackout | Fixture::Switch);
+    const QImage badged = fixtureIcon(dimmer).pixmap(32, 32).toImage();
+    QVERIFY(!badged.isNull());
+    QVERIFY(badged != plain);
+
+    dimmer->setOutputRules(Fixture::OutputRules());
+    QCOMPARE(fixtureIcon(dimmer).pixmap(32, 32).toImage(), plain);
+}
+
 void ItemIcons_Test::aGroupOfOneKindShowsIt()
 {
     const int none = -1;

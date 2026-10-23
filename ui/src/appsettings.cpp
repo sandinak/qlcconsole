@@ -43,6 +43,7 @@
 #include "rignetwork.h"
 #include "updatechecker.h"
 #include "shutterautoopen.h"
+#include "outputrulekeeper.h"
 #include "programmercontroller.h"
 #include "doc.h"
 #include "app.h"
@@ -93,6 +94,25 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     outInfo->setWordWrap(true);
     outInfo->setStyleSheet("color: gray; font-size: 10px;");
     outLayout->addWidget(outInfo);
+    // Output rules: when the "On when not in use" relays and lights come on.
+    {
+        QHBoxLayout *row = new QHBoxLayout();
+        QLabel *lbl = new QLabel(tr("\"On when not in use\" fixtures come on:"), outGroup);
+        m_onAtOpenCombo = new QComboBox(outGroup);
+        m_onAtOpenCombo->setObjectName(QStringLiteral("settingsOnAtOpenWhen"));
+        m_onAtOpenCombo->addItem(tr("When you switch to Operate"), int(OutputRuleKeeper::OnAtOperate));
+        m_onAtOpenCombo->addItem(tr("When the show opens"), int(OutputRuleKeeper::OnAtShowOpen));
+        m_onAtOpenCombo->setCurrentIndex(m_onAtOpenCombo->findData(
+            int(m_app->doc()->outputRuleKeeper()->onAtOpenWhen())));
+        m_onAtOpenCombo->setToolTip(tr("Power relays and house or work lights set to \"On when not "
+                                       "in use\" (Output Rules…) go to full whenever nothing in the "
+                                       "show sets them -- from the first switch to Operate (the "
+                                       "safer choice), or as soon as the show is open. Saved with "
+                                       "the show."));
+        row->addWidget(lbl);
+        row->addWidget(m_onAtOpenCombo, 1);
+        outLayout->addLayout(row);
+    }
     advLayout->addWidget(outGroup);
 
     // --- Advanced: Game controllers ---
@@ -554,6 +574,10 @@ void AppSettings::accept()
 
     // Auto-open shutters: the show's (ShutterAutoOpen marks it modified)
     m_app->doc()->shutterAutoOpen()->setEnabled(m_autoOpenCheck->isChecked());
+    // When "On when not in use" fixtures come on: the show's (marks it modified)
+    if (m_onAtOpenCombo != nullptr)
+        m_app->doc()->outputRuleKeeper()->setOnAtOpenWhen(
+            OutputRuleKeeper::OnAtOpenWhen(m_onAtOpenCombo->currentData().toInt()));
 
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());

@@ -66,6 +66,7 @@
 #include "doc.h"
 #include "powerlimiter.h"
 #include "shutterautoopen.h"
+#include "outputrulekeeper.h"
 #include "bus.h"
 #include "qlcpalette.h"
 #include "qlcphysical.h"
@@ -149,6 +150,8 @@ Doc::Doc(QObject* parent, int universes)
     m_powerLimiter = new PowerLimiter(this);
     // Shutters opened for a lit head that nothing else opens.
     m_shutterAutoOpen = new ShutterAutoOpen(this);
+    // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
+    m_outputRuleKeeper = new OutputRuleKeeper(this);
 
     // Track running Scenes for programmer edit-routing (LTP).
     // DirectConnection: the signal is emitted from MasterTimer's worker
@@ -245,6 +248,8 @@ Doc::~Doc()
     m_powerLimiter = nullptr;
     delete m_shutterAutoOpen;
     m_shutterAutoOpen = nullptr;
+    delete m_outputRuleKeeper;
+    m_outputRuleKeeper = nullptr;
 
     delete m_masterTimer;
     m_masterTimer = NULL;
@@ -1515,6 +1520,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setTransport(fixture->transport());
         newFixture->setStageLook(fixture->stageLook());
         newFixture->setPowerProfile(fixture->powerProfile());
+        newFixture->setOutputRules(fixture->outputRules());
 
         if (fixture->fixtureDef() == NULL ||
             (fixture->fixtureDef()->manufacturer() == KXMLFixtureGeneric &&
@@ -2392,6 +2398,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             else
                 doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLQLCOutputRuleSettings)
+        {
+            m_outputRuleKeeper->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCShutterAutoOpen)
         {
             m_shutterAutoOpen->loadXML(doc);
@@ -2502,6 +2512,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     m_speedMasters->saveXML(doc);
     m_shutterAutoOpen->saveXML(doc);
+    m_outputRuleKeeper->saveXML(doc);
     m_showControl->saveXML(doc);
     m_showTree->saveXML(doc);
     if (m_timecodeSource != NULL)

@@ -389,6 +389,9 @@ private:
      *  a gobo, LEDs, rings, cells. Null when the look has none. */
     class LensHintGraphic *m_hintItem = nullptr;
     void updateLensHint();
+    /** A practical lantern's glow (its first head's live colour, alpha its
+     *  level), drawn over its body by paint(). */
+    QColor m_lanternGlow;
     /** Dense (pixel tape) heads: tiled squares whatever the look. */
     bool m_denseHeads = false;
     QTimer *m_ringTimer = nullptr;

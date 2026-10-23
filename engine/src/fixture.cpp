@@ -871,10 +871,12 @@ QList<Fixture::StageLook> Fixture::stageLooks()
              // Moving
              MovingSpotLook, MovingRoundWashLook, MovingSquareWashLook,
              // Fixed conventional
-             LanternLook, ParCanLook, EllipsoidalLook, FresnelLook, FollowspotLook,
+             ParCanLook, EllipsoidalLook, FresnelLook, FollowspotLook,
              // Fixed LED
              LedParLook, SquareWashLook, BarWashLook, UplightWashLook, CycStripLook,
-             StrobeLook, StaffLook };
+             StrobeLook,
+             // Practicals: lights that are part of the set
+             LanternLook, StaffLook };
 }
 
 int Fixture::stageLookSection(StageLook look)
@@ -883,12 +885,13 @@ int Fixture::stageLookSection(StageLook look)
     {
         case MovingSpotLook: case MovingRoundWashLook: case MovingSquareWashLook:
             return MovingSection;
-        case LanternLook: case ParCanLook: case EllipsoidalLook: case FresnelLook:
-        case FollowspotLook:
+        case ParCanLook: case EllipsoidalLook: case FresnelLook: case FollowspotLook:
             return ConventionalSection;
         case LedParLook: case SquareWashLook: case BarWashLook: case UplightWashLook:
-        case CycStripLook: case StrobeLook: case StaffLook:
+        case CycStripLook: case StrobeLook:
             return LedSection;
+        case LanternLook: case StaffLook:
+            return PracticalSection;
         case AutoLook:
         default:
             return -1;
@@ -901,22 +904,26 @@ QString Fixture::stageLookSectionName(StageLookSection section)
     {
         case MovingSection:       return tr("Moving");
         case ConventionalSection: return tr("Fixed conventional");
-        case LedSection:
-        default:                  return tr("Fixed LED");
+        case LedSection:          return tr("Fixed LED");
+        case PracticalSection:
+        default:                  return tr("Practicals");
     }
 }
 
 Fixture::StageLook Fixture::autoStageLook() const
 {
     if (m_fixtureDef == NULL)
-        return LanternLook;                     // a generic dimmer: a conventional
+        return EllipsoidalLook;                 // a generic dimmer: a conventional
     switch (m_fixtureDef->type())
     {
         case QLCFixtureDef::ColorChanger: return LedParLook;
         case QLCFixtureDef::LEDBarBeams:
         case QLCFixtureDef::LEDBarPixels: return BarWashLook;
         case QLCFixtureDef::Strobe:       return StrobeLook;
-        case QLCFixtureDef::Dimmer:       return LanternLook;
+        /* A dimmer channel: a conventional, and the one on most rigs is
+           an ellipsoidal (a lantern is a practical now, not a theatre
+           lantern). */
+        case QLCFixtureDef::Dimmer:       return EllipsoidalLook;
         case QLCFixtureDef::Scanner:      return MovingSpotLook;
         case QLCFixtureDef::MovingHead:   break;
         default:                          return AutoLook;
@@ -1413,6 +1420,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     QList<int> excludeList;
     QList<int> forcedHTP;
     QList<int> forcedLTP;
+    OutputRules outputRules;
     QList<quint32>modifierIndices;
     QList<ChannelModifier *>modifierPointers;
 
@@ -1518,6 +1526,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
 
             for (int i = 0; i < values.count(); i++)
                 forcedLTP.append(values.at(i).toInt());
+        }
+        else if (xmlDoc.name() == KXMLFixtureOutputRules)
+        {
+            outputRules = stringToOutputRules(xmlDoc.readElementText());
         }
         else if (xmlDoc.name() == KXMLFixtureChannelModifier)
         {
@@ -1659,6 +1671,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setExcludeFadeChannels(excludeList);
     setForcedHTPChannels(forcedHTP);
     setForcedLTPChannels(forcedLTP);
+    m_outputRules.storeRelaxed(int(outputRules));
     for (int i = 0; i < modifierIndices.count(); i++)
         setChannelModifier(modifierIndices.at(i), modifierPointers.at(i));
     setID(id);
@@ -1795,6 +1808,11 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
     /* What it draws, and the most it may */
     m_powerProfile.saveXML(doc);
 
+    /* Only when it has any: a show without them is byte-identical, and a
+       reader that does not know the tag skips it (it did before this). */
+    if (outputRules() != OutputRules())
+        doc->writeTextElement(KXMLFixtureOutputRules, outputRulesToString(outputRules()));
+
     /* End the <Fixture> tag */
     doc->writeEndElement();
 
@@ -1807,4 +1825,46 @@ void Fixture::setPowerProfile(const PowerProfile &profile)
         return;
     m_powerProfile = profile;
     emit changed(m_id);
+}
+
+void Fixture::setOutputRules(OutputRules rules)
+{
+    if (rules == outputRules())
+        return;
+    m_outputRules.storeRelaxed(int(rules));
+    emit changed(m_id);
+}
+
+QString Fixture::outputRulesToString(OutputRules rules)
+{
+    QStringList out;
+    if (rules & ExemptBlackout)
+        out << QStringLiteral("Blackout");
+    if (rules & ExemptGrandMaster)
+        out << QStringLiteral("GrandMaster");
+    if (rules & Switch)
+        out << QStringLiteral("Switch");
+    if (rules & OnAtOpen)
+        out << QStringLiteral("OnAtOpen");
+    return out.join(QLatin1Char(','));
+}
+
+Fixture::OutputRules Fixture::stringToOutputRules(const QString &str)
+{
+    OutputRules rules;
+    foreach (const QString &word, str.split(QLatin1Char(','), Qt::SkipEmptyParts))
+    {
+        const QString w = word.trimmed();
+        if (w == QLatin1String("Blackout"))
+            rules |= ExemptBlackout;
+        else if (w == QLatin1String("GrandMaster"))
+            rules |= ExemptGrandMaster;
+        else if (w == QLatin1String("Switch"))
+            rules |= Switch;
+        else if (w == QLatin1String("OnAtOpen"))
+            rules |= OnAtOpen;
+        else
+            qWarning() << Q_FUNC_INFO << "Unknown output rule:" << w;
+    }
+    return rules;
 }

@@ -100,6 +100,12 @@ public:
     int address = 0;        //!< 1-based absolute DMX address (513 = universe 2, 1); 0 unpatched
     int part = 1;
     QString label;
+    /** $$Options letters as written: X = GM exempt, P / T flip pan / tilt,
+     *  S swap pan and tilt, R flip rack, L disable LD flags. */
+    QString options;
+
+    /** $$Options X: the channel ignores the Grand Master. */
+    bool gmExempt() const { return options.contains(QLatin1Char('X'), Qt::CaseInsensitive); }
 };
 
 /** $Group / Group: a channel list. */
@@ -158,6 +164,10 @@ public:
     QString label;
     double up = -1;
     double down = -1;
+    /** Modes other than the default (HTP, proportional master), as the
+     *  file names them without the $$: "LTP", "Exclusive", "InhibSubm",
+     *  "EffectSub", "Independent", "IntensityMaster". */
+    QStringList options;
     EosLevels levels;
 };
 
@@ -200,11 +210,12 @@ public:
  * Records read (case-insensitive; an Eos export's own comments list them):
  * Ident, Manufacturer, Console, $$Format, $$Software, $$Title, Clear, Set,
  * EndData; $ParamType, $Personality ($$Manuf $$Model $$Dcid $$Footprint
- * $$PersChan), $Patch ($$Pers, Text), Patch (conventional), $Group / Group,
+ * $$PersChan), $Patch ($$Pers, Text, $$Options), Patch (conventional), $Group / Group,
  * $CueList, Cue / $Cue (Text, Up, Down, $$TimeUp, $$TimeDown, FollowOn,
  * $$Follow, $$Hang, Link, $$Link, Part, $$Block, $$ChanMove, Chan, $$Param),
  * $IntensPalette / $FocusPalette / $ColorPalette / $BeamPalette, $Preset,
- * Sub / $Sub.
+ * Sub / $Sub (Text, Up, Down, $$LTP, $$Exclusive, $$InhibSubm, $$EffectSub,
+ * $$Independent, $$IntensityMaster).
  *
  * Anything else -- $Effect, $Curve, $FaderDef, $MagicSheet, $Macro, unknown
  * $-records -- is skipped and counted, never fatal: the format is 34 years

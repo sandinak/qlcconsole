@@ -375,6 +375,7 @@ void Universe::processFaders()
     }
 
     applyAutoOpen();
+    applyOnAtOpen();
     // Writes from here on (the DMX sources, before the next frame) belong
     // to the next frame.
     m_frame.fetch_add(1, std::memory_order_relaxed);
@@ -428,13 +429,127 @@ bool Universe::applyPowerLimits(QByteArray &out)
         foreach (const PowerModel::Emitter &e, lim.model.emitters)
         {
             const int a = lim.base + e.offset;
-            if (a >= 0 && a < out.size())
+            // A relay is on or off: scaled, it would be switched off (or
+            // chatter), not dimmed. It is left as it is.
+            if (a >= 0 && a < out.size() && (m_channelsMask->at(a) & SwitchOutput) == 0)
                 out[a] = char(int(uchar(out.at(a)) * k));
         }
         held.insert(lim.fixtureId, qMakePair(asks, lim.model.amps(value)));
     }
     m_powerHeldBack = held;
     return true;
+}
+
+/************************************************************************
+ * Output rules
+ ************************************************************************/
+
+void Universe::setOutputRules(const QByteArray &bits)
+{
+    QMutexLocker locker(&m_outputRulesMutex);
+    QVector<int> onAtOpen;
+    for (int c = 0; c < UNIVERSE_SIZE; c++)
+    {
+        const char want = c < bits.size() ? char(bits.at(c) & OutputRuleBits) : char(0);
+        const char now = m_channelsMask->at(c);
+        if (want & OnAtOpenOutput)
+            onAtOpen << c;
+        if ((now & OutputRuleBits) == want)
+            continue;
+        // One byte write: the role bits (HTP/LTP/Intensity) never vanish.
+        (*m_channelsMask)[c] = char((now & ~OutputRuleBits) | want);
+        if ((now & OnAtOpenOutput) && (want & OnAtOpenOutput) == 0)
+            m_onAtOpenRestore << c;
+        if (want & (GMExempt | SwitchOutput | OnAtOpenOutput))
+        {
+            if (c >= m_totalChannels)
+            {
+                m_totalChannels = c + 1;
+                m_totalChannelsChanged = true;
+            }
+            if (c >= m_usedChannels)
+                m_usedChannels = c + 1;
+        }
+        updatePostGMValue(c);
+    }
+    m_onAtOpenChannels = onAtOpen;
+}
+
+void Universe::setOnAtOpenArmed(bool armed)
+{
+    QMutexLocker locker(&m_outputRulesMutex);
+    if (m_onAtOpenArmed.load(std::memory_order_relaxed) == armed)
+        return;
+    m_onAtOpenArmed.store(armed, std::memory_order_relaxed);
+    if (armed == false)
+    {
+        foreach (int c, m_onAtOpenChannels)
+        {
+            if (m_onAtOpenRestore.contains(c) == false)
+                m_onAtOpenRestore << c;
+        }
+    }
+}
+
+void Universe::setBlindHoldsExempt(bool hold)
+{
+    m_blindHoldsExempt.store(hold, std::memory_order_relaxed);
+}
+
+void Universe::applyOnAtOpen()
+{
+    QMutexLocker locker(&m_outputRulesMutex);
+    if (m_onAtOpenRestore.isEmpty() == false)
+    {
+        foreach (int c, m_onAtOpenRestore)
+            if (c >= 0 && c < UNIVERSE_SIZE)
+                updatePostGMValue(c);
+        m_onAtOpenRestore.clear();
+    }
+    if (m_onAtOpenChannels.isEmpty() || onAtOpenArmed() == false)
+        return;
+
+    foreach (int c, m_onAtOpenChannels)
+    {
+        // Anything in the show that sets it -- even to zero -- wins.
+        if (isChannelSet(c))
+            continue;
+
+        const uchar mask = uchar(m_channelsMask->at(c));
+        uchar value = UCHAR_MAX;
+        if ((mask & (GMExempt | SwitchOutput)) == 0)
+            value = applyGM(c, value);
+        value = applyModifiers(c, value);
+        if (mask & SwitchOutput)
+            value = value >= 128 ? UCHAR_MAX : 0;
+        if (c >= m_usedChannels)
+            m_usedChannels = c + 1;
+        (*m_postGMValues)[c] = char(value);
+    }
+}
+
+bool Universe::hasBlackoutExempt(int count) const
+{
+    const char *mask = m_channelsMask->constData();
+    count = qMin(count, int(m_channelsMask->size()));
+    for (int c = 0; c < count; c++)
+        if (mask[c] & BlackoutExempt)
+            return true;
+    return false;
+}
+
+QByteArray Universe::blackoutFrame(const QByteArray &live) const
+{
+    if (hasBlackoutExempt(live.size()) == false)
+        return *m_blackoutValues;
+
+    QByteArray out = *m_blackoutValues;
+    const char *mask = m_channelsMask->constData();
+    const int count = qMin(live.size(), out.size());
+    for (int c = 0; c < count; c++)
+        if (mask[c] & BlackoutExempt)
+            out[c] = live.at(c);
+    return out;
 }
 
 /************************************************************************
@@ -737,12 +852,20 @@ uchar Universe::applyPassthrough(int channel, uchar value)
 void Universe::updatePostGMValue(int channel)
 {
     uchar value = preGMValue(channel);
+    const uchar mask = uchar(m_channelsMask->at(channel));
 
-    if (value != 0)
+    /* Output rules: a GM-exempt channel is never scaled, and neither is a
+       relay -- the Grand Master pulled to 30% would otherwise switch it off.
+       The relay's snap comes last, so nothing after it (a modifier, the
+       input passthrough) can hand it a level between off and on. */
+    if (value != 0 && (mask & (GMExempt | SwitchOutput)) == 0)
         value = applyGM(channel, value);
 
     value = applyModifiers(channel, value);
     value = applyPassthrough(channel, value);
+
+    if (mask & SwitchOutput)
+        value = value >= 128 ? UCHAR_MAX : 0;
 
     (*m_postGMValues)[channel] = static_cast<char>(value);
 }
@@ -924,8 +1047,26 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
     // Fork Blind: hold the physical rig dark while the preview keeps running.
     // processFaders() still emits universeWritten() (the 2D monitor source),
     // so the look is visible on screen but never reaches the output plugins.
+    //
+    // Output rules: the Blackout-exempt channels (house, work and hall
+    // lights, power relays) keep their live value through Blackout and, when
+    // blindHoldsExempt(), through Blind -- which then sends what Blackout
+    // would rather than nothing, so those circuits are not left to a node's
+    // hold-last-look. A universe with none behaves exactly as before.
     if (m_inhibitOutput)
+    {
+        if (blindHoldsExempt() == false || hasBlackoutExempt(data.size()) == false)
+            return;
+        const QByteArray frame = blackoutFrame(data);
+        foreach (OutputPatch *op, m_outputPatchList)
+        {
+            if (m_totalChannelsChanged == true)
+                op->setPluginParameter(PLUGIN_UNIVERSECHANNELS, m_totalChannels);
+            op->dump(m_id, frame, dataChanged);
+        }
+        m_totalChannelsChanged = false;
         return;
+    }
 
     if (m_outputPatchList.count() == 0)
         return;
@@ -936,7 +1077,7 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
             op->setPluginParameter(PLUGIN_UNIVERSECHANNELS, m_totalChannels);
 
         if (op->blackout())
-            op->dump(m_id, *m_blackoutValues, dataChanged);
+            op->dump(m_id, blackoutFrame(data), dataChanged);
         else
             op->dump(m_id, data, dataChanged);
     }
@@ -1013,9 +1154,14 @@ void Universe::setChannelCapability(ushort channel, QLCChannel::Group group, Cha
         m_intensityChannelsChanged = true;
     Utils::vectorRemove(m_nonIntensityChannels, channel);
 
+    /* The output rules are the fixture's, kept by OutputRuleKeeper (which
+       clears them when the fixture moves or goes): re-applying a channel's
+       role must not drop them for a frame. */
+    const char rules = char(m_channelsMask->at(channel) & OutputRuleBits);
+
     if (forcedType != Undefined)
     {
-        (*m_channelsMask)[channel] = char(forcedType);
+        (*m_channelsMask)[channel] = char(forcedType | rules);
         if ((forcedType & HTP) == HTP)
         {
             //qDebug() << "--- Channel" << channel << "forced type HTP";
@@ -1024,7 +1170,7 @@ void Universe::setChannelCapability(ushort channel, QLCChannel::Group group, Cha
             if (group == QLCChannel::Intensity)
             {
                 //qDebug() << "--- Channel" << channel << "Intensity + HTP";
-                (*m_channelsMask)[channel] = char(HTP | Intensity);
+                (*m_channelsMask)[channel] = char(HTP | Intensity | rules);
             }
         }
         else if ((forcedType & LTP) == LTP)
@@ -1038,14 +1184,14 @@ void Universe::setChannelCapability(ushort channel, QLCChannel::Group group, Cha
         if (group == QLCChannel::Intensity)
         {
             //qDebug() << "--- Channel" << channel << "Intensity + HTP";
-            (*m_channelsMask)[channel] = char(HTP | Intensity);
+            (*m_channelsMask)[channel] = char(HTP | Intensity | rules);
             Utils::vectorSortedAddUnique(m_intensityChannels, channel);
             m_intensityChannelsChanged = true;
         }
         else
         {
             //qDebug() << "--- Channel" << channel << "LTP";
-            (*m_channelsMask)[channel] = char(LTP);
+            (*m_channelsMask)[channel] = char(LTP | rules);
             Utils::vectorSortedAddUnique(m_nonIntensityChannels, channel);
         }
     }

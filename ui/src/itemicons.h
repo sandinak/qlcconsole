@@ -88,8 +88,11 @@ namespace ItemIcons
      *  type's stock icon. @p doc may be nullptr (no shutter/aim lookup). */
     QIcon paletteIcon(Doc *doc, const QLCPalette *palette);
     /** A fixture's icon: its stage look's when one is set, else its
-     *  kind's, or its definition type's. */
+     *  kind's, or its definition type's -- with the output-rules badge
+     *  when it has any (Fixture::OutputRules). */
     QIcon fixtureIcon(const Fixture *fixture);
+    /** @p base with the output-rules badge (an amber power dot) */
+    QIcon outputRulesBadged(const QIcon &base);
     /** A group's icon: its one kind's (stacked), else the group icon. */
     QIcon groupIcon(Doc *doc, const FixtureGroup *group);
     /** The icon for fixtures/groups together (a Show Tree layer). */

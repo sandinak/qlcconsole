@@ -24,6 +24,7 @@
 #include <QObject>
 #include <atomic>
 #include <QMutex>
+#include <QAtomicInt>
 #include <QList>
 #include <QIcon>
 #include <QMap>
@@ -64,6 +65,7 @@ class Doc;
 #define KXMLFixtureForcedHTP        QStringLiteral("ForcedHTP")
 #define KXMLFixtureForcedLTP        QStringLiteral("ForcedLTP")
 #define KXMLFixtureStageLook        QStringLiteral("StageLook")
+#define KXMLFixtureOutputRules      QStringLiteral("OutputRules")
 
 #define KXMLFixtureChannelModifier  QStringLiteral("Modifier")
 #define KXMLFixtureChannelIndex     QStringLiteral("Channel")
@@ -217,6 +219,35 @@ public:
     /** What it draws, as measured, and the most it may (FixturePower). */
     PowerProfile powerProfile() const { return m_powerProfile; }
     void setPowerProfile(const PowerProfile &profile);
+
+    /**
+     * How this fixture's output is treated, beyond what its channels say --
+     * for the circuits an Eos show patches as plain dimmers: power relays,
+     * house, work, hall and backstage-blue lights (OutputRuleKeeper).
+     *
+     * ExemptBlackout:    Blackout (and, by default, Blind) leaves it as it is.
+     * ExemptGrandMaster: the Grand Master does not scale it.
+     * Switch:            a relay: on at 50% and over, off below; never fades.
+     *                    The Grand Master cannot switch it off.
+     * OnAtOpen:          full whenever nothing in the show sets it (when that
+     *                    applies is the OutputRuleKeeper's setting).
+     */
+    enum OutputRule
+    {
+        ExemptBlackout    = 1 << 0,
+        ExemptGrandMaster = 1 << 1,
+        Switch            = 1 << 2,
+        OnAtOpen          = 1 << 3
+    };
+    Q_DECLARE_FLAGS(OutputRules, OutputRule)
+
+    /** Set the rules; emits changed() when they differ (the output follows) */
+    void setOutputRules(OutputRules rules);
+    OutputRules outputRules() const { return OutputRules(m_outputRules.loadRelaxed()); }
+
+    /** "Blackout,GrandMaster,Switch,OnAtOpen" (as saved) and back */
+    static QString outputRulesToString(OutputRules rules);
+    static OutputRules stringToOutputRules(const QString &str);
 
     /**
      * Set the fixture instance's DMX universe
@@ -401,6 +432,8 @@ protected:
     QString m_ipAddress;
     int m_transport = ArtNetTransport;
     PowerProfile m_powerProfile;
+    /** OutputRules; read by the fader thread (FadeChannel), set on the UI's */
+    QAtomicInt m_outputRules { 0 };
 
     /** Flag that indicates if this fixture crosses a DMX Universe */
     bool m_crossUniverse;
@@ -536,8 +569,8 @@ public:
         MovingSpotLook,
         MovingRoundWashLook,
         MovingSquareWashLook,
-        LanternLook,            ///< a conventional: ellipsoidal, profile, PAR can
-        StaffLook,              ///< a tall LED staff / pole / stick
+        LanternLook,            ///< a practical: a hurricane or porch lantern, glowing all round
+        StaffLook,              ///< a practical: a pole with LED strip wound round it
         SquareWashLook,
         BarWashLook,            ///< a linear LED bar or batten
         UplightWashLook,
@@ -551,7 +584,7 @@ public:
            stageLookToString()'s key), but tests and pickers walk the enum. */
     };
     /** The picker's sections. */
-    enum StageLookSection { MovingSection, ConventionalSection, LedSection };
+    enum StageLookSection { MovingSection, ConventionalSection, LedSection, PracticalSection };
     Q_ENUM(StageLook)
 
     /** Read without a lock: the rig views classify fixtures on worker
@@ -561,7 +594,8 @@ public:
     void setStageLook(StageLook look);
 
     /** Every look, Auto first, then section by section (Moving, Fixed
-     *  conventional, Fixed LED) in the order a picker lists them. */
+     *  conventional, Fixed LED, Practicals) in the order a picker lists
+     *  them. */
     static QList<StageLook> stageLooks();
     /** The picker section @p look is listed under (Auto: none, -1). */
     static int stageLookSection(StageLook look);
@@ -570,7 +604,7 @@ public:
     /** The look closest to what the definition says this is: a Color
      *  Changer is an LED PAR, an LED bar a bar wash, a Strobe a strobe, a
      *  moving head a spot or a wash by its gobo / zoom channels or its name,
-     *  a dimmer a lantern. AutoLook when nothing is close (a hazer, a fan).
+     *  a dimmer (or a generic dimmer channel) an ellipsoidal. AutoLook when nothing is close (a hazer, a fan).
      *  What "Auto (...)" names in a picker; Auto itself still draws as the
      *  definition's type always has. */
     StageLook autoStageLook() const;
@@ -680,6 +714,8 @@ public:
      */
     bool saveXML(QXmlStreamWriter *doc) const;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(Fixture::OutputRules)
 
 /** @} */
 

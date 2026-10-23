@@ -1298,15 +1298,20 @@ QByteArray Monitor::rigSnapshot() const
         else if (fx->fixtureMode() != nullptr)
             modes.insert(fx->id(), fx->fixtureMode()->name());
     }
-    // And each one's stage look (Fixture Properties sets it).
+    // And each one's stage look (Fixture Properties sets it), then each
+    // fixture's output rules (Output Rules…).
     QHash<quint32, int> looks;
+    QHash<quint32, int> rules;
     foreach (Fixture *fx, m_doc->fixtures())
+    {
         if (fx->stageLook() != Fixture::AutoLook)
             looks.insert(fx->id(), int(fx->stageLook()));
+        rules.insert(fx->id(), int(fx->outputRules()));
+    }
     QByteArray out;
     QDataStream ds(&out, QIODevice::WriteOnly);
     ds << m_props->snapshot(m_doc) << names << power << network << patch << modes << dimmerChannels
-       << looks;
+       << looks << rules;
     return out;
 }
 
@@ -1333,6 +1338,10 @@ void Monitor::restoreRig(const QByteArray &snap)
     const bool hasLooks = !ds.atEnd();
     if (hasLooks)
         ds >> looks;
+    QHash<quint32, int> rules;
+    const bool haveRules = !ds.atEnd();
+    if (haveRules)
+        ds >> rules;
     if (props.isEmpty())
         return;
     if (hasLooks)
@@ -1402,6 +1411,11 @@ void Monitor::restoreRig(const QByteArray &snap)
         if (r.readNextStartElement())
             pp.loadXML(r);
         fx->setPowerProfile(pp);
+    }
+    if (haveRules)
+    {
+        foreach (Fixture *fx, m_doc->fixtures())
+            fx->setOutputRules(Fixture::OutputRules(rules.value(fx->id(), 0)));
     }
 
     m_props->restoreSnapshot(props, m_doc);
