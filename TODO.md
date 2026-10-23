@@ -20,6 +20,13 @@ Two jobs, being designed on the board (Q105-Q108), built after the freeze:
   (layer / group / fixture), with feedback to the operator on stage (the
   selection flashing, spoken status from the laptop, rumble).
 
+**Status (2026-10-23):** designed and built as a first version on branch
+`feat/focus-calls-refine` (not merged) -- see
+[FOCUS_REFINE_DESIGN.md](FOCUS_REFINE_DESIGN.md) for the controller map,
+the venue sidecar, how Refine stores edits, the open questions (section
+11) and what is still to do (section 12: the focus-call cue, a Workbench
+Refine button, Operate, a venue manager, help shots, a real-rig check).
+
 ## Focus mode: shutters on profiles (future, asked 2026-10-23)
 
 Framing shutters on a profile/ellipsoidal (and a par with barn doors): how
