@@ -610,5 +610,7 @@ An effect is a JavaScript file in your **EffectScripts** folder
 `~/.qlcconsole/EffectScripts` on Linux); it
 appears in the browser next time the app starts. The script is handed every
 fixture (each head of a pixel fixture), the look's colours and its own
-settings each tick, and returns what each should do. See the
+settings each tick, and returns what each should do. In the Look Editor,
+an Effect look's **Script ▾** has **New script…** (a new one from a
+template) and **Edit script…** (the one behind the picked effect). See the
 [Effect script API](../../EFFECTSCRIPT_API.md) for the full reference.

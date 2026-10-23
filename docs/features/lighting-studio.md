@@ -402,7 +402,10 @@ selected fixture (select a folder row — a group or "Ungrouped" — to take
 everything in it; ⌘-click or ⇧-click on the canvas to add or remove). A row
 they differ on reads **mixed** and changes nothing until you set it — then
 it is set on all of them. **Fixture Properties…** with several selected
-opens the same rows (plus aim and icon rotation) for all of them. Dragging
+opens the same rows (plus aim and icon rotation) for all of them, and so
+does **double-clicking** one of the selected fixtures — on the plot, in Plot
+layers, or in a structure editor's fixture list (a group's or a truss's
+worth too; click one first to edit it alone). Dragging
 any selected fixture moves them all, as one undo. **Distribute** spaces a
 few selected fixtures between the outermost two and lines them up.
 
@@ -426,6 +429,10 @@ editor and it gets a ring with a knob: drag it round to turn the bar (Angle
 when its length lies flat in the view, Tilt when you're looking down its
 length). Shift snaps to 15°; one Ctrl/⌘+Z undoes the whole drag. Movers and
 pars don't get handles.
+
+**Mount on acts on the selection.** Right-click one of several selected
+fixtures → **Mount on → Truss**, **Boom**, **Hanger**, **Tower** or **Deck**
+and every selected fixture goes there.
 
 **Hanging a fixture.** Right-click a fixture on the plot → **Mount on →
 Hanger** and pick the hanger (listed with what it hangs off), or choose the
@@ -655,7 +662,8 @@ of, and doesn't override, the real locks above.
 - **Select All Similar** — on a fixture (plot or list), every fixture of the
   same model and mode; on a fixture group's Plot layers row, the groups of the
   same fixtures laid out the same way.
-- Selecting on the plot selects the same objects in Plot layers, and vice versa.
+- Selecting on the plot selects the same objects in Plot layers, and vice
+  versa; clicking a fixture group's row selects its fixtures on the plot.
 - Count badges follow their structure through drags and undo, and keep one
   screen size at any zoom, so zooming in uncovers what's under them.
 
@@ -876,8 +884,9 @@ controller or the keyboard.
 Rig Overview's bar, **View → Focus Mode…** (⌘⌥F), or by holding **View +
 Menu** on the controller. Choose:
 
-- **Heads** — the ones selected in the programmer, every moving head on
-  the plot, or every **fixed light** on the plot (pars, fixed spots: see
+- **Heads** — **As selected** (what is selected on the plot, or in the
+  programmer; greyed until something is), every moving head on the plot,
+  or every **fixed light** on the plot (pars, fixed spots: see
   [Fixed lights](#fixed-lights-pars-and-fixed-spots) below).
 - **Order** — by stage position (front to back, then house left to right)
   or as selected (a group's own order).
@@ -890,7 +899,7 @@ Menu** on the controller. Choose:
 - **Use** — **Controller** or **Keyboard**: which device nudges the heads
   (see [Controller or keyboard](#controller-or-keyboard) below).
 
-It is a Design-mode tool: in Perform it refuses, and switching to Perform
+It is a Design-mode tool: in Operate it refuses, and switching to Operate
 ends it (unsaved nudges go back). If functions are running it says so — it
 takes over only the heads it is focusing: over whatever is running on them
 (only a parked fixture stays parked), with the Grand Master and Blackout

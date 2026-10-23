@@ -64,7 +64,7 @@ not opened — and saving then can write an empty workspace over it.
    are on.
 2. **The open tab** — here Build, with a scene open.
 3. **The tabs**, along the bottom.
-4. **The footer** — is the show ready to run, how busy the output is, Design
+4. **The footer** — is the show ready to run, what GO plays next, Design
    or Operate (below).
 
 **Settings ▸ General ▸ Show Controls** can put the show controls in the status bar
@@ -129,7 +129,7 @@ offers the **qlcconsole** view, once.
 **Window** lists the view's tabs in their order, numbered as you see them:
 ⇧⌘1 is the first tab on screen, ⇧⌘2 the next, and so on (⇧⌘0 the tenth).
 Change the view and the numbers follow it; in the qlcconsole view
-Connections is ⇧⌘1, the Show Tree ⇧⌘5 and Run ⇧⌘9, in Classic QLC+
+Connections is ⇧⌘1, the Show Tree ⇧⌘5 and Run ⇧⌘8, in Classic QLC+
 Fixtures is ⇧⌘1. The tabs the view hides are listed after them, with no
 shortcut. Shift-click
 a tab to break it out into its own window; Window brings it back.
@@ -369,9 +369,10 @@ says, whatever this is set to.
   times slower, and the screen lags behind.
 - In the Rig Overview, **Quality: Fast** draws a frame in about half the
   time of **Smooth**, and hiding layers you don't need leaves less to draw.
-- The footer's **Load** shows how much of each 20 ms DMX tick the show
-  uses; as it nears the whole tick, the output can't keep time and starts
-  to stutter.
+- The footer's **Load** (turn it on in Settings ▸ Appearance ▸ **Show the
+  engine load**) shows how much of each 20 ms DMX tick the show uses; as
+  it nears the whole tick, the output can't keep time and starts to
+  stutter.
 
 ## Where next
 

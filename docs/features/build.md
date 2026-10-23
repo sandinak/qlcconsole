@@ -103,8 +103,8 @@ with the focus in the navigator or in the Workbench:
 - **A group's layout** goes back to the scene it was opened from
   (**← Back to …**), or to the page the rows show if no scene was open.
 - **The effect bench** goes back to the scene it was opened from. If you
-  have changed the effect and not kept it (saved it as a palette or a
-  preset, updated the palette, or made it a layer), Esc asks first:
+  have changed the effect and not kept it (saved it as a palette,
+  updated the palette, or made it a layer), Esc asks first:
   *Leave the effect designer? This effect hasn't been kept.* **Keep
   designing** is the default, and Esc picks it too; **Leave** drops the
   effect. With nothing unsaved, Esc leaves at once. Clicking something
@@ -394,6 +394,7 @@ layers) says what a drop will do before you let go.
 | a colour or dimmer row | an effect row | makes it that effect's own |
 | a palette (Build ▸ Palettes) | a scene, or a row in it | adds it: a base look, or above the look it was dropped on, or the effect's own if dropped on an effect |
 | a group or fixture | a scene | a dynamic or fixed target |
+| a group set (the Show Tree's, e.g. *Towers*) | a scene | adds its groups (*SL*, *SR*) as targets; the scene holds the groups, not the set |
 | a scene, collection or chaser | a folder; empty space | files it there; takes it out of its folder |
 | a scene, collection or chaser | the Workbench's layers | adds it to the collection loaded, as a layer |
 | scenes (or any function) | a chaser's row | appends them as its steps, in the order dragged |

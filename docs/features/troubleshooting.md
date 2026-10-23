@@ -71,8 +71,8 @@ heads of a bar with white heads leaves the white ones alone).
 pixel chase). The strips count from the other end: use the effect's
 **mirror** (and **flip**) setting, or reorder the group's head layout.
 
-**The output stutters.** The footer's **Load** shows how much of each
-20 ms tick the show uses. Heavy pixel effects on many universes, or a
+**The output stutters.** The footer's **Load** (turn it on in Settings ▸
+Appearance) shows how much of each 20 ms tick the show uses. Heavy pixel effects on many universes, or a
 debug build, can fill it — run a release build, and see
 [Keeping it quick](getting-started.md#keeping-it-quick).
 
@@ -169,7 +169,8 @@ share the rig's history: patching, properties, renames, plot symbols,
 output rules); adding or deleting fixtures and editing groups aren't undone
 yet; on other tabs **Edit ▸ Undo** reads *Nothing
 to undo on this tab* and is greyed. The menu always undoes the tab in
-front, never another tab's step.
+front, never another tab's step. (Connections keeps its own ⌘Z, **Undo
+Patch Change**, for patching there; the Edit menu doesn't reach it.)
 
 **Where did the Functions tab go?** The qlcconsole view has none; the
 Classic QLC+ and Everything views show it. **Window ▸ Functions** opens it,

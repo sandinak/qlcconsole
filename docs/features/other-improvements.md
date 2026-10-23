@@ -401,8 +401,8 @@ tab, or its own window when it has been broken out (right-click a tab →
 Window**),
 which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
-as usual. **Rig Overview…** (⇧⌘R) is here too, and **Effects**, which
-brings [Build ▸ Effects](build.md#making-effects) forward. A tab that the workspace view hides (**View ▸
+as usual. **Rig Overview…** (⇧⌘R) is here too. Effects have no item of
+their own: they live in [Build ▸ Effects](build.md#making-effects). A tab that the workspace view hides (**View ▸
 Workspace**) switches the view to **Everything** when you choose it, with
 a line above the tabs to go back; see
 [Views](getting-started.md#views).
@@ -603,6 +603,10 @@ Build tab's tools:
 is running, except fixtures set to **Ignore Blackout**, which keep their
 live level.
 
+While Park, Highlight or Blind holds the rig, the footer's
+[Overrides chip](#overrides-chip) says so; one click on it lets go of
+them all.
+
 ## Power distribution
 
 A model of real electrical circuits sitting underneath the rig: a
@@ -666,9 +670,9 @@ estimates use the readings (and the cap) wherever a fixture has them.
 
 **Settings** has three tabs. **General** holds what everyone sets: autosave,
 where the show controls go,
-units, the Show Tree's Record choices and the show's
-[move in black](show-tree.md#move-in-black) (saved with the show), the rig
-network and software updates. **Appearance** holds how the window looks
+units, the Show Tree's Record choices, the rig network and software
+updates. (The show's [move in black](show-tree.md#move-in-black) is the
+Show Tree's **MIB** button, not a setting here.) **Appearance** holds how the window looks
 ([below](#appearance-settings)). **Advanced** holds settings for experienced
 users and the show's output behaviour:
 

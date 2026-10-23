@@ -54,6 +54,18 @@ their house lights, relays and subs.
   Tree…**, which opens it with just that chaser ticked. See
   [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
 
+- **+ Effect ▾ and Script ▾.** The Workbench's **+ Effect ▾** adds an
+  **EFX** or an **RGB Matrix** (it was two buttons), and the Look Editor's
+  **Script ▾** holds **New script…** and **Edit script…**. The effect
+  designer has no **Save as preset…** any more: keep an effect as a
+  palette, or **Export…** it to another show. Build ▸ Effects is effects'
+  only home: there is no **Window ▸ Effects**. See
+  [The Workbench](build.md#the-workbench) and
+  [The effect designer](effects.md#the-effect-designer).
+- **A group set dropped on a scene adds its groups.** *Towers* onto a
+  Build scene adds *SL* and *SR*; it used to be refused without a word.
+  See [The outline](build.md#the-outline).
+
 ### Views, menus and keys
 
 - **One word per idea.** **Plot Symbol** is what *Stage Look* was
@@ -108,6 +120,38 @@ their house lights, relays and subs.
 - **The boot window shows the version** that is starting, and the build
   and commit below it.
 
+- **A smaller qlcconsole view.** Eight tabs, ⇧⌘1–⇧⌘8; Shows and
+  Functions are in Everything. The **Rig Overview** opens in its own
+  window, kept in front of the main one. **Classic QLC+** has QLC+'s own
+  toolbars and a footer of just the mode, the Grand Master and Ready. See
+  [Views](getting-started.md#views).
+- **A quieter footer.** One amber **Overrides** chip ("Overrides: Park (3),
+  Hold at end · Clear") lists what holds the rig and clears it in one
+  click. **Load** is off unless you turn it on (Settings ▸ Appearance), the
+  power estimate shows only for a show with its power set up, and **MTC**
+  only once a timecode source is picked or code is heard. **Next:** is
+  status only: click it for the Run tab, where GO is. See
+  [Overrides chip](other-improvements.md#overrides-chip) and
+  [What's next](show-control.md#whats-next-and-go-from-anywhere).
+- **Operate is the lock.** Show-mode Lock (and its ⌘L) is gone: Operate
+  locks the Virtual Console's programmer faders and the Shows timeline,
+  and a console Grand Master fader works in Operate. GO pressed in Design
+  offers **Switch to Operate**, once a session. See
+  [Running the show](getting-started.md#running-the-show).
+- **Edit ▸ Undo undoes the tab in front** — Build, the Show Tree, Fixtures
+  or the Lighting Studio — and elsewhere reads *Nothing to undo on this
+  tab*. It no longer undoes a Show Tree step from another tab. See
+  [Finding things](troubleshooting.md#finding-things).
+- **Connections opens where you'd look**: on **Universes** (it was
+  *Detailed*) in Classic QLC+, on **Devices** otherwise. Show control and
+  timecode are rows at the bottom of Devices: **OSC in**, **MIDI Show
+  Control in** and **MIDI timecode**, each with its state; the separate
+  sub-tab is gone. See [Checking the hookup](show-control.md#checking-the-hookup).
+- **Pages squash with the window.** A row of buttons too wide for a narrow
+  window scrolls sideways instead of holding the window wide.
+- **The Show Tree and Run have their own tab icons**: a cue tree and a
+  green GO button.
+
 ### Show Tree
 
 - **Cue order is number order.** Type a new number (the cue's **Number**
@@ -156,6 +200,32 @@ their house lights, relays and subs.
 - **The Cue Runner widget** takes a controller input and a key for each
   action in a new **External Input** tab, and gives the cue information
   the room as it grows. See [The cue runner](show-tree.md#the-cue-runner).
+
+- **Hits.** The busking states beside the cue lists are **Hits** now
+  (**+ Hit**, the **Hits** section, **Adopt as a hit**, **Copy to a hit**,
+  `hit "name"`; `look` still works). A layer's looks are still looks. See
+  [Hits (busking)](show-tree.md#hits-busking).
+- **A column per flag.** **S**, **T**, **R** (sets, tracks in, releases),
+  **M** (Block, Cue-only) and **F** (base, skip, no MIB, includes,
+  reusable, mix, VC) replace the one column of symbols; hover a header for
+  its name, right-click the header to hide one. See [The tab](show-tree.md#the-tab).
+- **One Move in black switch**: the Show Tree's **MIB** button. Control ▸
+  Auto Move in Black and its Settings row are gone; Build's **Move in
+  black ▾** still shows and changes it. See
+  [Move in black](show-tree.md#move-in-black).
+- **One production, nothing to choose.** With a single production there
+  is no Production switcher or *current* marker: GO plays its list. A
+  second production brings them back. See [Productions](show-tree.md#productions).
+- **A shorter header and right-click.** **More ▾** holds **+ Production**,
+  **+ Sub-cue** and **Merge**; **Upgrade This Show…** shows only while
+  there are chasers to upgrade. A cue's right-click keeps what acts on a selection
+  (**Duplicate**, ⌘D, stays); its base cue, mode and includes are on its
+  page.
+- **Layers named by their groups.** Fixtures picked one by one are named
+  by the fixture groups they make up (*FOH + 1st Elect*), not fixture by
+  fixture.
+- **Level… and Colour… are docked** in a strip above the command line,
+  not a window that could fall behind.
 
 ### Old shows
 
@@ -246,6 +316,22 @@ their house lights, relays and subs.
   modes (Direct, 1-Channel, RGB).
 - **No false warning for a curtain**, fan, hazer or smoke machine in the
   footer's Not ready list.
+
+- **The Lighting Studio, smoother.** Several fixtures Shift-dropped on a
+  truss all hang; **Mount on** and a double-click act on the whole
+  selection; a truss pastes without its fixtures (**Truss only**);
+  scenery, towers, booms and stands copy and paste; a wall reads
+  **Length**, **Width** and **Height** and can have a **door**; the stage
+  stays centred; a sock's or tower face's pattern picture is copied into
+  an **images** folder next to the show when it is saved. See
+  [Mounting a fixture](lighting-studio.md#mounting-a-fixture) and
+  [Scenery](lighting-studio.md#scenery-cyc-walls-and-drapes).
+- **Fixed lights aimed and focused.** A par or profile has **Pan** and
+  **Tilt** in Aim &amp; Mount, and Focus mode steps through fixed lights
+  too, with a person standing where each lands. Where the beam can
+  change, D-pad up / down (. and ,) zooms and left / right (' and ;)
+  focuses. See [Fixed lights](lighting-studio.md#fixed-lights-pars-and-fixed-spots)
+  and [The beam](lighting-studio.md#the-beam).
 
 ### Importing an Eos show
 

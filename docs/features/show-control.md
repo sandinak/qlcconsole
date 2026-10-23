@@ -86,8 +86,8 @@ One level only: a sub-cue's own chase steps run on their own timing.
 - **In the Show Tree,** sub-cues are made in the tree (+ Sub-cue) and can
   **auto-follow**: see [Sub-cues](show-tree.md#sub-cues).
 - **The current production.** With Show Tree productions, a command with no
-  list goes to the **current production's** main list — the same list the
-  footer GO, ⌘↩ and the Run tab play. See
+  list goes to the **current production's** main list — the same list
+  GO (⌘↩) and the Run tab play. See
   [Productions](show-tree.md#productions) and
   [The cue runner](show-tree.md#the-cue-runner).
 

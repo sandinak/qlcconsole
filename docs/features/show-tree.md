@@ -37,7 +37,7 @@ undo.
 a **scene**. The tree makes these for you, files them under `Productions/`,
 and rewrites them after every change. The scenes and collections are hidden.
 The chaser is visible, so it plays anywhere a chaser does: a Virtual Console
-Cue List, the footer GO, or show control by cue number. What the tree makes
+Cue List, GO (⌘↩) and the Run tab, or show control by cue number. What the tree makes
 is changed only in the tree: elsewhere it is locked. See
 [Playing it](#playing-it).
 
@@ -84,8 +84,9 @@ from the Library lands in the tree right beside it.
   what the next cue receives, and whether the last edit changed it. The
   cue page has the same list in full under **Tracked in**.
 - **Sizing the tree.** Drag the lines between the Library, the tree and
-  the page to share the room; drag the line between the tree's two columns
-  to make the badge column wider or narrower. The names get the rest, and
+  the page to share the room; drag the line after the names to make the
+  column beside them (a list's mode, where a grey row came from) wider or
+  narrower; the letter columns keep their width. The names get the rest, and
   text too long for its column ends in "…". Both are remembered. A layer
   that plays a function as it is shows **▣**. A use
   of a [reusable](#reusable-layers-and-cues) layer or cue shows **⟲** and
@@ -107,9 +108,9 @@ from the Library lands in the tree right beside it.
     leave the field (Return, Tab, or a click on another cue or anywhere
     else); **Esc** in the field puts the old time back.
   - **A layer** shows what it contains, then one row per attribute.
-  - **A look** shows its name, note, *Fired by* (the VC buttons, **Make VC
-    page**, **Move to folder…**), its looks and layers; **Looks** or a
-    look folder lists its looks and has **Make VC page**.
+  - **A hit** shows its name, note, *Fired by* (the VC buttons, **Make VC
+    page**, **Move to folder…**), its looks and layers; **Hits** or a
+    hit folder lists its hits and has **Make VC page**.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
   palette is used (*"Used by: 6 cue(s), 2 look(s) · 1 VC button"*); click
@@ -124,7 +125,7 @@ The dividers between them can be dragged; their places are kept.
 
 To work on a cue's layers in detail, open it in the **Workbench** — the
 same editor Build has ([The Workbench](build.md#the-workbench)), here in
-place of the page. **Double-click** a cue, a look or a layer, press
+place of the page. **Double-click** a cue, a hit or a layer, press
 **✎ Workbench** in the header, choose **Open in Workbench** from its
 right-click menu, or type **`wb`** (`wb 0.0.3` for another cue of the
 list). The Library and the tree stay where they are: click another cue in
@@ -509,7 +510,7 @@ it is set, the change carries on to the cues it tracks into.
 - **Merge layers** makes one layer from several layers of one cue:
   1. In the tree, click one layer, then **⌘-click** the others (or
      **⇧-click** to take the rows between).
-  2. Click **Merge** in the header, or right-click one of them → **Merge N
+  2. Click **More ▾ → Merge** in the header, or right-click one of them → **Merge N
      layers**.
 
   Both are greyed until two or more layers of **one** cue are selected (a
@@ -715,13 +716,13 @@ layer's level. (The layer whose Dimmer wins plays that colour on those
 fixtures itself.)
 
 **The one place it doesn't apply: a cue that mixes.** A cue made by
-**Import chaser** whose scenes overlap plays them both at once, as the
+**Upgrade This Show…** from a chaser whose scenes overlap plays them both at once, as the
 chaser did (the highest intensity wins). So does a cue that includes
 another at a level above its own on the same fixtures: in a cue that
 mixes, an included cue's layers play beside the cue's own instead of
 giving way to them (what it passes on to a tracking cue is the rule's).
 Its page has **Overlapping layers
-mix (as a chaser)** ticked and the tree's Flags column says **mix**, with a tooltip.
+mix (as a chaser)** ticked and the tree's **F** (Flags) column says **mix**, with a tooltip.
 **Convert to tracking** puts every such cue on the rule where that plays
 exactly the same, and lists the ones where it would not, which keep mixing.
 Untick the box to put one on the rule anyway.
@@ -894,7 +895,10 @@ of its own.
 ## Renaming
 
 A layer's **name** is its own, separate from its groups (until you name it,
-it is called after them). The tree shows just the name (what it holds is
+it is called after them). Fixtures picked one by one are named by the
+whole fixture groups they make up, largest first (*FOH + 1st Elect*), then
+any left over (the first three and a count, past four), here and in
+*Next cue receives*. The tree shows just the name (what it holds is
 in the row's tooltip). The main window shows what it holds: on the cue
 page a compact line under its name, and on its page **Contains:**
 *"TrussC-RGB (8) · TrussW-RGB (8) — 16 fixtures"*.
@@ -988,12 +992,12 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
   the menu and ⌘/ act on them all. ⌘/ skips them, or puts them back when
   every one is skipped already. Each change is **one undo step**, and it is
   saved with the show.
-- **How it looks.** A skipped cue is grey and struck through, with **⦸
-  skip** in the badge column, and everything under it (its layers, what
+- **How it looks.** A skipped cue is grey and struck through, with **skip**
+  in the **F** column, and everything under it (its layers, what
   tracks in, its sub-cues) is grey too. Its tooltip says *Skipped: GO
   passes over it*.
 - **Playing.** **GO**, **auto-follow** and **Back** pass over a skipped
-  cue. **NEXT** (in the Run tab, the footer's menu and the Cue Runner)
+  cue. **NEXT** (in the Run tab, the footer's **Next:** and the Cue Runner)
   names the next cue that plays.
 - **A jump still plays it.** Double-click it in the Run tab or a Cue
   Runner, fire it by number from show control (`GO 3`), or select it in
@@ -1005,7 +1009,7 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
   passes on: the cue after it starts from the cue before it, so its
   changes don't track forward and its releases don't happen. A skipped
   **Block** cue blocks nothing. Every other cue plays exactly what it
-  would with the skipped cues deleted. The **⤳** badges, the tooltips and
+  would with the skipped cues deleted. The **T** counts, the tooltips and
   **Next cue receives** all read it so. A jump to a skipped cue plays it
   as from the cue before it that plays.
 - **The edges.**
@@ -1018,7 +1022,7 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
     be skipped on its own: Sub GO passes over it.
   - A cue that **includes** a skipped cue still plays its output.
   - A skipped **base cue** is still what Release goes back to.
-  - Looks (busking) can't be skipped; they are fired, not GOne through.
+  - Hits (busking) can't be skipped; they are fired, not GOne through.
 - **Import and Convert.** Importing a chaser keeps each step's skip flag,
   and **Convert to tracking** keeps it.
 
@@ -1073,8 +1077,8 @@ can mean three things:
 
 - **The selected cue**: what it puts on stage, including its own layers,
   what tracked in and what it includes. This is what Design previews.
-- **The running cue**: the cue its cue list is playing for real (footer GO,
-  a Virtual Console Cue List).
+- **The running cue**: the cue its cue list is playing for real (GO, the Run
+  tab, a Virtual Console Cue List).
 - **Everything lit**: every cue list running, the Design preview on top, and
   any other scene, EFX or RGB Matrix that is on (each as a layer that plays
   it as it is). Programmer and Simple Desk values are not recorded.
@@ -1190,7 +1194,7 @@ the list. A cue that moves therefore starts from its new neighbour's state,
 and the cue after its old place now starts from the cue that was before it.
 What a moved cue sets itself is unchanged. What it receives by tracking, and
 what it passes on, are now those of its new place. This is expected; check
-the tracked values (**Tracked in**, the ⤳ counts) after a move.
+the tracked values (**Tracked in**, the **T** counts) after a move.
 
 **Undo.** Every move, typed number and renumber is one step on the tab's
 shared undo history, whatever it changed.
@@ -1230,7 +1234,7 @@ under you.
 - When the preview stops, the stage is what really runs again. Nothing a
   chaser or the Virtual Console started is stopped.
 
-**Operate (Perform) mode: the running cue list owns the stage.** Selecting a
+**Operate mode: the running cue list owns the stage.** Selecting a
 cue doesn't touch the rig. Your changes reach the stage when the cue next
 plays, on GO. The top right says *"Live: editing is blind, changes reach the
 stage on GO"*.
@@ -1314,7 +1318,7 @@ is always there and calls the same operations as the mouse.
 | `vcpage` | **Make VC page** for the selected hit's folder (else every hit) |
 | `adopt "Old Busk"` | **Adopt as a hit**: a scene becomes a hit |
 | `wb` · `wb 0.0.3` | The selected cue (or layer), or that cue, in the **Workbench** ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)) |
-| `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo (one history with the palettes, [Undo](#undo)) |
+| `dup` · `undo` · `redo` | As Duplicate (⌘D), Undo and Redo (one history with the palettes, [Undo](#undo)) |
 | `help` · `help spread` · `?` | The language, with examples (see below) |
 
 **Names** are the Library's (groups, fixtures, palettes, functions), matched
@@ -1333,7 +1337,7 @@ with another name or holds a `,` or `+`.
 ### Help
 
 **`help`** (or **`?`**) lists every word, grouped: navigate, build, looks,
-tracking, record and copy, reuse (with detach and convert), palettes, looks
+tracking, record and copy, reuse (with detach and convert), palettes, hits
 (busking), sub-cues, undo. **`help <word>`** (`help record`, `help
 spread`) shows its syntax (optional parts in [ ], alternatives with |),
 what it does, examples and related words. The help shows in a small pane
@@ -1372,7 +1376,7 @@ command line reads, so it is always right. The table above is a summary.
 | `palette` | the palette types, the palettes, `folder` |
 | `palette` and a palette | `rename`, `move`, `dup`, `delete`, `edit`; after `move`, the folders and `none` |
 | `palette folder` | the palette folders, then `rename`, `delete` |
-| `look` | the production's looks; after a name, `in` and the look folders |
+| `hit` (or `look`) | the production's hits; after a name, `in` and the hit folders |
 | `adopt` | the functions |
 | `help` | every word |
 
@@ -1511,11 +1515,11 @@ Right-click in the tree for:
 - **+ Cue list…**, **+ Hit**, **+ Cue** (and **+ Production…** on a
   production or on empty space);
 - on a cue: **Copy to a hit** (what it puts on stage, as a new hit);
-- on Looks or a look folder: **New folder…**, **Rename folder**, **Delete
-  folder**, **Make VC page**; on a look: **Move to folder**, **Make VC
+- on Hits or a hit folder: **New folder…**, **Rename folder**, **Delete
+  folder**, **Make VC page**; on a hit: **Move to folder**, **Make VC
   page**;
 - on a cue: **Skip cue**, **Don't move in black into this cue**, **Record
-  as new cue**, **Duplicate**, **Move up** / **Move down**, **Renumber this
+  as new cue**, **Colour ▸**, **Move up** / **Move down**, **Renumber this
   level…** (its base cue, mode and includes are on its page) ([Reordering and numbering](#reordering-and-numbering));
 - on a cue: **Make cue reusable…** (or, on a use, **Unlink here**);
 - on a layer: **Rename…**, **Detach to plain scene**, **Make reusable…** (or
@@ -1541,7 +1545,7 @@ that is before you press it, for example *New Cue After 0.0.3 (⇧⌘N)*.
 | A sub-cue | The next main cue after its cue, as **+ Cue** does (**+ Sub-cue** makes another sub-cue) |
 | Groups, fixtures or sets in the Library, with the Library focused | A layer on them in the selected cue |
 | A layer | A new layer in its cue, on what the Library has selected. With nothing picked there, ⇧⌘N selects the cue and goes to the Library's filter: find the groups, then **Return** makes the layer |
-| A look, or Looks | The next look |
+| A hit, or Hits | The next hit |
 
 The new row is selected with its name open to type, as **F2** opens it.
 **Return** keeps the name, **Esc** keeps the default. Making it is one undo
@@ -1728,7 +1732,7 @@ plays, and there is no Current button, switcher or **· main** mark (a main
 list is offered only once it has two lists). Add a second production and
 the rest of this section applies.
 
-- **The current production** is what plays: the footer GO (**⌘↩**), Back,
+- **The current production** is what plays: GO (**⌘↩**, the Run tab), Back,
   Sub GO, show control (QLab, OSC, MSC) and every Cue Runner set to follow
   "the current production". Pick it in the header's **Production:** switcher,
   on the production's page (**Make current**) or from its right-click menu.
@@ -1742,7 +1746,7 @@ the rest of this section applies.
   production is current.
 - **Its timecode source.** The production page's **Timecode** picks where its
   timecode comes from while it is current: the show's setting (Connections →
-  Devices → Show control & sync), any source, or one universe — QLab's MTC for one
+  Devices → MIDI timecode), any source, or one universe — QLab's MTC for one
   production, a desk's for the other. The show's own setting is kept.
 - Switching production never stops a list that runs: the next GO plays the
   new one. Which production is current is saved with the show, and is not a
@@ -1958,7 +1962,7 @@ and *MIB · n* counts the lights a list set **On** is moving.
 | **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
 | Double-click a cue, look or layer · **✎ Workbench** · `wb` | Open it in the Workbench, in place of the page ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)); **↩ Show Tree** comes back |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
-| **⇧⌘N** | New here: a production, cue list, the next cue, a layer or a look, by what is selected ([New here](#new-here)) |
+| **⇧⌘N** | New here: a production, cue list, the next cue, a layer or a hit, by what is selected ([New here](#new-here)) |
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
@@ -1968,7 +1972,7 @@ and *MIB · n* counts the lights a list set **On** is moving.
 | **F2** (in the Library) | Rename the palette or palette folder in place |
 | Delete / Backspace (in the Library) | Delete the selected palettes (asks, saying where each is used) or folder |
 | Drag palettes onto a Library folder | File them there (onto *Palettes*: no folder) |
-| Drag looks onto a look folder | File them there (onto *Looks*: no folder) |
+| Drag hits onto a hit folder | File them there (onto *Hits*: no folder) |
 | **:** (in the tree) | To the command line |
 | **Esc** (in the command line) | Close the help, then back to the tree |
 | **?** first, or **F1** (in the command line) | Show the syntax lines (F1 again, or the **?** button: hide them) |
@@ -1980,9 +1984,9 @@ and *MIB · n* counts the lights a list set **On** is moving.
 
 ## Limits and not yet
 
-- **A look has no fade, transition or speed master of its own** yet; a VC
-  button's Flash and the look's scenes' own settings are what there is. A
-  look's MIDI trigger is set on its VC button.
+- **A hit has no fade, transition or speed master of its own** yet; a VC
+  button's Flash and the hit's scenes' own settings are what there is. A
+  hit's MIDI trigger is set on its VC button.
 - **The Look Editor's value changes** (a colour dragged) are not on Undo, in
   either tab. **Make VC page** isn't on Undo either (the console has its
   own Delete).
