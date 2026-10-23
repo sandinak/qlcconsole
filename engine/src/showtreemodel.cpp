@@ -1024,17 +1024,6 @@ static QString numberAt(const CueList &list, int index)
     return n.isEmpty() ? QString::number(index + 1) : n;
 }
 
-static bool numberUsed(const CueList &list, const QString &number, const QStringList &taken = QStringList())
-{
-    for (int i = 0; i < list.cues.count(); ++i)
-        if (compareNumbers(numberAt(list, i), number) == 0)
-            return true;
-    for (const QString &t : taken)
-        if (compareNumbers(t, number) == 0)
-            return true;
-    return false;
-}
-
 QString cueNumberAt(const CueList &list, int index, const QString &parentNumber)
 {
     if (index < 0 || index >= list.cues.count())
