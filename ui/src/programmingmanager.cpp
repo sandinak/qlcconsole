@@ -3093,8 +3093,13 @@ void ProgrammingManager::slotTapBeat()
     if (!ioMap || !m_bpmBtn->isChecked())
         return;
     const double bpm = ioMap->tapBeat();
-    const QSignalBlocker block(m_bpmSpin);
+    // Show the tapped tempo (the Beat button follows the spin box) without
+    // setting it again: slotBpmChanged() would restart the beat the tap set.
+    disconnect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+               this, &ProgrammingManager::slotBpmChanged);
     m_bpmSpin->setValue(qRound(bpm));
+    connect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ProgrammingManager::slotBpmChanged);
 }
 
 /* True exactly once, ever: the first time anybody asks. Consuming the flag as
