@@ -10,8 +10,8 @@ under `~/.claude/.../memory/`.
 
 ## Eos import (EOS_IMPORT_DESIGN.md)
 
-- **Phases 1–4 + magic-sheet placement built on feat/eos-import-design
-  (2026-10-22), not merged.** File ▸ Import takes an Eos USITT ASCII
+- **Phases 1–4 + magic-sheet placement, special circuits and subs as VC
+  faders: in the 0.2.2 release candidate (trial/batch7, 2026-10-22).** File ▸ Import takes an Eos USITT ASCII
   export (.asc): the wizard (files, fixture types), the usual picker and
   merge, the cue lists into the Show Tree as tracking lists (one undo
   step). Tried on Branson's Element 2 show (01-30-23 .asc + Magic Sheet
@@ -22,16 +22,21 @@ under `~/.claude/.../memory/`.
   - BP values, effects, curves, subs' fader/bump behaviour, cue delays and
     links, per-part timing, multi-part fixtures' extra parts: reported,
     not carried.
-  - Library gaps seen in his show: ColorSource Spot / Spot Jr / Cyc in
-    their 3-channel RGB modes (the wizard suggests ColorSource PAR RGB,
-    same DMX layout).
+  - ~~Library gaps: ColorSource Spot / Spot Jr / Cyc RGB modes~~ — done
+    (ETC ColorSource Spot jr + CYC definitions, all Spot modes; they match
+    Exact now).
   - Augment3d (.esf3d `working.a3d`): his file's is the empty default
     scene; nothing to read until a show has a model.
 
 ## Build + Workbench (WORKFLOW_DESIGN.md, phases W0–W7)
 
-- **W1 Build tab + Workbench — built on feat/w1-build-workbench
-  (2026-10-22), not merged.** Branson to try it in the dev app first. It
+- **W0–W5 are in the 0.2.2 release candidate (trial/batch7,
+  2026-10-22)**: W1 Build tab + Workbench, W2 chasers + Classic, W3 Show
+  Tree ↔ Workbench, W4 effect designer (hosted in Build ▸ Effects and the
+  docked Workbench), W5 bridge + Upgrade This Show…, view modes. The help
+  and the course describe them (docs/rc-022-sweep). Leftovers below; then
+  W6 → W7.
+- **W1 Build tab + Workbench — leftovers.** It
   carries the P1 outline (feat/programming-outline, never merged) as
   Build ▸ Scenes. Left over / open from W1:
   - A lone scene takes no + Scene / + EFX / + RGB Matrix (a scene is one
@@ -46,8 +51,7 @@ under `~/.claude/.../memory/`.
   - Several look rows of one type selected don't edit together yet.
   - The Workbench's expansion is remembered per show folder and loaded
     function id.
-- **W3 Show Tree ↔ Workbench — built on feat/w3-showtree-workbench
-  (2026-10-22, from W1), not merged.** `TreeCueStack` (the engine's
+- **W3 Show Tree ↔ Workbench — leftovers.** `TreeCueStack` (the engine's
   Simple Desk owns the name `CueStack`), docked in place of the tree's
   page; the tree's cue / layer pages lent to the editor pane. Left over:
   - Rows of a cue don't drag (reorder with ▲ ▼; layers between cues: in
@@ -58,14 +62,9 @@ under `~/.claude/.../memory/`.
     the selected one.
   - Cue looks (D6) show in the header count, not as rows of their own;
     edit them on the cue's page in the pane.
-  - W4: `Workbench::setEffectPaneFactory()` is the plug for the effect
-    designer on an Effect row / Design effect (EffectLayerDialog's
-    designer can be hosted there); until then an effect row opens its
-    palette in the Look Editor.
   - The dock is one per tree; a detached Show Tree window docks the
     Workbench there too (untested on a second monitor).
-- **W2 Chasers in the Workbench + Classic — built on feat/w2-chasers-classic
-  (2026-10-22, cut from W1), not merged.** Step walker (`ChaserWalker`,
+- **W2 Chasers in the Workbench + Classic — leftovers.** Step walker (`ChaserWalker`,
   `FunctionStack` chaser step), step header + step table, Chaser from
   selection, drops on a chaser, Make own copy (layer / step), Scenes ▸
   Folders | Classic. Left over / open from W2:
@@ -93,10 +92,31 @@ under `~/.claude/.../memory/`.
     (`View=` on `<Workspace>`); old QLC+ shows open in Classic, the rest
     and new shows in qlcconsole; a hidden tab's jump shows Everything
     with a note; Upgrade This Show… offers qlcconsole once.
-- W2 and W3 merged together on feat/w3-showtree-workbench (2026-10-22).
-- Then W4 → W5 → W6 → W7.
+- Then W6 → W7.
 
 ## Small fixes and leftovers
+
+- **Found in the 0.2.2 docs sweep (2026-10-22, docs/rc-022-sweep):**
+  - A Grand Master move rewrites an "On when not in use" channel that
+    nothing sets from its unset 0 (`Universe::slotGMValueChanged()` →
+    `updatePostGMValue()`), and `applyOnAtOpen()` puts it back only on the
+    next frame. A relay can drop for one frame; the course test
+    (`lessonHouseLights`) waits for the next frame and says so.
+  - helpbrowser_test's `noGuideSendsYouToTheFunctionsTab` still says
+    "Functions is a window now"; Classic QLC+ and Everything show a
+    Functions tab, so the guides avoid the words "Functions tab". Relax
+    the check or its comment.
+  - The help shots show Build ▸ Scenes as **Classic**: help-demo.qxw has
+    no Show Tree, so it opens on Classic. Give the demo a Show Tree, or
+    switch the outline to Folders in `HelpShots`. The Workbench bar's
+    **Own copy** button has no number on the Build picture.
+  - File ▸ Import's section header is `tr("Fixtures && patch")`: check
+    how a section title shows `&&` (and whether macOS menus show section
+    titles at all).
+  - Course Level 3 lessons 3.3, 3.7, 3.10 have no pictures yet (the
+    `<!-- PICTURE -->` notes say what goes where).
+  - Not checked: whether the stock Functions tab keeps its own ⌘1–9 keys
+    in the Classic and Everything views.
 
 - **Rename a group in place in the Fixtures tree (2026-10-22,
   feat/group-rename-enter): done.** Return/F2 on a group row edits its
@@ -115,11 +135,9 @@ under `~/.claude/.../memory/`.
 
 - **W4 effect designer: follow-ons (2026-10-22)** (feat/w4-effect-designer,
   WORKFLOW_DESIGN.md §3.3/§3.4):
-  - Host it in the Workbench's editor pane (W1/W3) and in Build ▸ Effects
-    once the Build tab exists. The widget is `EffectDesigner`: hosts call
-    `setTargets()`, `setEffect()`, `setOneOffAllowed()` and
-    `setContextChoice()`, and listen to `effectChosen()`. Then retire
-    Window ▸ Effects or keep it as a shortcut.
+  - ~~Host it in the Workbench's editor pane and Build ▸ Effects~~ — done
+    (Build ▸ Effects, the docked Workbench's Effect row). Window ▸ Effects
+    stays as a shortcut.
   - In context, the layer's old effect keeps playing under the draft. On
     intensity, highest-takes-precedence (HTP) can let it show through;
     Solo shows the draft alone. Muting just that layer's scene while
