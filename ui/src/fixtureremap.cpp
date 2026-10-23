@@ -50,6 +50,7 @@
 #include "efx.h"
 #include "doc.h"
 #include "app.h"
+#include "itemicons.h"
 
 #define KColumnName         0
 #define KColumnAddress      1
@@ -196,7 +197,7 @@ void FixtureRemap::fillFixturesTree(Doc *doc, QTreeWidget *tree)
         quint32 baseAddr = fxi->address();
         QTreeWidgetItem *fItem = new QTreeWidgetItem(topItem);
         fItem->setText(KColumnName, fxi->name());
-        fItem->setIcon(KColumnName, fxi->getIconFromType());
+        fItem->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
         fItem->setText(KColumnAddress, QString("%1 - %2").arg(baseAddr + 1).arg(baseAddr + fxi->channels()));
         fItem->setText(KColumnUniverse, QString::number(uni));
         fItem->setText(KColumnID, QString::number(fxi->id()));
@@ -429,7 +430,7 @@ void FixtureRemap::slotAddTargetFixture()
         quint32 baseAddr = fxi->address();
         QTreeWidgetItem *fItem = new QTreeWidgetItem(topItem);
         fItem->setText(KColumnName, fxi->name());
-        fItem->setIcon(KColumnName, fxi->getIconFromType());
+        fItem->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
         fItem->setText(KColumnAddress, QString("%1 - %2").arg(baseAddr + 1).arg(baseAddr + fxi->channels()));
         fItem->setText(KColumnUniverse, QString::number(universe));
         fItem->setText(KColumnID, QString::number(fxi->id()));
@@ -548,7 +549,7 @@ void FixtureRemap::slotCloneSourceFixture()
     quint32 baseAddr = tgtFix->address();
     QTreeWidgetItem *fItem = new QTreeWidgetItem(topItem);
     fItem->setText(KColumnName, tgtFix->name());
-    fItem->setIcon(KColumnName, tgtFix->getIconFromType());
+    fItem->setIcon(KColumnName, ItemIcons::fixtureIcon(tgtFix));
     fItem->setText(KColumnAddress, QString("%1 - %2").arg(baseAddr + 1).arg(baseAddr + tgtFix->channels()));
     fItem->setText(KColumnUniverse, QString::number(tgtFix->universe()));
     fItem->setText(KColumnID, QString::number(tgtFix->id()));

@@ -40,6 +40,7 @@
 #include "stagetarget.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
+#include "scenery.h"
 #include "itemicons.h"
 #include "monitor/fixturevisualtraits.h"
 #include "fixture.h"
@@ -270,6 +271,86 @@ void drawGroupBadge(QPainter &p, const QColor &ink)
 }
 
 QColor shutterRing(const QColor &ink) { return alpha(ink, 210); }
+
+/** A curtain the LD has given no look of its own: drawn as a curtain,
+ *  whatever its definition's type is closest to. */
+bool isAutoCurtain(const Fixture *fx)
+{
+    return fx != nullptr && fx->stageLook() == Fixture::AutoLook && Scenery::isCurtainFixture(fx);
+}
+
+/** A resource icon as a group's: a little smaller, with the badge -- as a
+ *  kind's group. */
+QIcon resourceGroupIcon(const QString &key, const QString &res)
+{
+    return cached(key, [res](QPainter &p, const QColor &ink) {
+        const QPixmap pm = QIcon(res).pixmap(64, 64);
+        p.drawPixmap(QRectF(0, 0, 27, 27), pm, QRectF(pm.rect()));
+        drawGroupBadge(p, ink);
+    });
+}
+
+using namespace ItemIcons;
+
+/** What a fixture is when no look decides: a curtain, its kind, its type. */
+QIcon unlookedIcon(const Fixture *fx)
+{
+    if (Scenery::isCurtainFixture(fx))
+        return curtainIcon();
+    const FixtureKind kind = fixtureKind(fx);
+    return kind == OtherKind ? QIcon(fx->typeIconResource()) : kindIcon(kind);
+}
+
+/** The one look @p fids are all shown as, while the show shows Auto
+ *  fixtures as their closest look (a curtain on Auto has none). */
+Fixture::StageLook sharedStageLook(Doc *doc, const QList<quint32> &fids)
+{
+    if (doc == nullptr || doc->monitorProperties() == nullptr
+        || !doc->monitorProperties()->autoStageLooks())
+        return Fixture::AutoLook;
+    Fixture::StageLook shared = Fixture::AutoLook;
+    bool first = true;
+    for (quint32 fid : fids)
+    {
+        const Fixture *fx = doc->fixture(fid);
+        const Fixture::StageLook look = isAutoCurtain(fx) ? Fixture::AutoLook : drawnStageLook(fx);
+        if (look == Fixture::AutoLook || (!first && look != shared))
+            return Fixture::AutoLook;
+        shared = look;
+        first = false;
+    }
+    return shared;
+}
+
+/** @p fids as a group: all curtains, the curtain group; all one look (the
+ *  show says so), that look's; all one kind, that kind's; else the group
+ *  icon. */
+QIcon fixturesIcon(Doc *doc, const QList<quint32> &fids)
+{
+    bool curtains = !fids.isEmpty();
+    for (quint32 fid : fids)
+        if (!isAutoCurtain(doc->fixture(fid)))
+        {
+            curtains = false;
+            break;
+        }
+    if (curtains)
+        return curtainIcon(true);
+    const Fixture::StageLook look = sharedStageLook(doc, fids);
+    if (look != Fixture::AutoLook)
+        return lookGroupIcon(look);
+    bool first = true;
+    FixtureKind kind = OtherKind;
+    for (quint32 fid : fids)
+    {
+        const FixtureKind k = fixtureKind(doc->fixture(fid));
+        if (!first && k != kind)
+            return kindIcon(OtherKind, true);
+        kind = k;
+        first = false;
+    }
+    return kindIcon(kind, true);
+}
 
 } // namespace
 
@@ -609,21 +690,35 @@ QIcon fixtureIcon(const Fixture *fixture)
 {
     if (fixture == nullptr)
         return QIcon(QStringLiteral(":/fixture.png"));
-    /* The LD's own word for what it looks like wins over what is guessed --
-       and on Auto, its closest look when the show shows Auto fixtures so.
-       One decision with the plot and the studio: drawnStageLook(). */
+    /* The LD's own word for what it looks like wins over what is guessed;
+       a curtain is a curtain (the plot draws it as its drape); on Auto, its
+       closest look when the show shows Auto fixtures so -- one decision
+       with the plot and the studio: drawnStageLook(). */
     QIcon icon;
-    const Fixture::StageLook look = drawnStageLook(fixture);
+    const Fixture::StageLook look = isAutoCurtain(fixture) ? Fixture::AutoLook
+                                                           : drawnStageLook(fixture);
     if (look != Fixture::AutoLook)
         icon = QIcon(Fixture::stageLookIconResource(look));
     else
-    {
-        const FixtureKind kind = fixtureKind(fixture);
-        icon = kind == OtherKind ? QIcon(fixture->iconResource()) : kindIcon(kind);
-    }
+        icon = unlookedIcon(fixture);
     if (fixture->outputRules() == Fixture::OutputRules())
         return icon;
     return outputRulesBadged(icon);
+}
+
+QIcon autoLookIcon(const Fixture *fixture)
+{
+    if (fixture == nullptr)
+        return QIcon();
+    if (!Scenery::isCurtainFixture(fixture) && fixture->autoStageLook() != Fixture::AutoLook)
+        return QIcon(Fixture::stageLookIconResource(fixture->autoStageLook()));
+    return unlookedIcon(fixture);
+}
+
+QIcon curtainIcon(bool group)
+{
+    const QString res = QStringLiteral(":/curtain.png");
+    return group ? resourceGroupIcon(QStringLiteral("curtaingroup"), res) : QIcon(res);
 }
 
 QIcon outputRulesBadged(const QIcon &base)
@@ -633,30 +728,16 @@ QIcon outputRulesBadged(const QIcon &base)
 
 QIcon groupIcon(Doc *doc, const FixtureGroup *group)
 {
-    /* Showing Auto fixtures as their closest look: a group whose fixtures
-       all come out as one look shows it, with the group badge. */
-    const Fixture::StageLook look = groupStageLook(doc, group);
-    if (look != Fixture::AutoLook)
-        return lookGroupIcon(look);
-    return kindIcon(groupKind(doc, group), true);
+    if (doc == nullptr || group == nullptr)
+        return kindIcon(OtherKind, true);
+    return fixturesIcon(doc, group->fixtureList());
 }
 
 Fixture::StageLook groupStageLook(Doc *doc, const FixtureGroup *group)
 {
-    if (doc == nullptr || group == nullptr || doc->monitorProperties() == nullptr
-        || !doc->monitorProperties()->autoStageLooks())
+    if (doc == nullptr || group == nullptr)
         return Fixture::AutoLook;
-    Fixture::StageLook shared = Fixture::AutoLook;
-    bool first = true;
-    for (quint32 fid : group->fixtureList())
-    {
-        const Fixture::StageLook look = drawnStageLook(doc->fixture(fid));
-        if (look == Fixture::AutoLook || (!first && look != shared))
-            return Fixture::AutoLook;
-        shared = look;
-        first = false;
-    }
-    return shared;
+    return sharedStageLook(doc, group->fixtureList());
 }
 
 QIcon lookGroupIcon(Fixture::StageLook look)
@@ -664,12 +745,7 @@ QIcon lookGroupIcon(Fixture::StageLook look)
     const QString res = Fixture::stageLookIconResource(look);
     if (res.isEmpty())
         return kindIcon(OtherKind, true);
-    return cached(QStringLiteral("lookgroup:%1").arg(int(look)), [res](QPainter &p, const QColor &ink) {
-        // The look, a little smaller, with the badge -- as a kind's group.
-        const QPixmap pm = QIcon(res).pixmap(64, 64);
-        p.drawPixmap(QRectF(0, 0, 27, 27), pm, QRectF(pm.rect()));
-        drawGroupBadge(p, ink);
-    });
+    return resourceGroupIcon(QStringLiteral("lookgroup:%1").arg(int(look)), res);
 }
 
 QIcon targetsIcon(Doc *doc, const QList<quint32> &groups, const QList<quint32> &fixtures)
@@ -678,22 +754,24 @@ QIcon targetsIcon(Doc *doc, const QList<quint32> &groups, const QList<quint32> &
         return QIcon(QStringLiteral(":/group.png"));
     if (groups.isEmpty() && fixtures.size() == 1)
         return fixtureIcon(doc->fixture(fixtures.first()));
-    QSet<quint32> all(fixtures.begin(), fixtures.end());
+    QList<quint32> all;
+    QSet<quint32> seen;
+    auto add = [&all, &seen](quint32 fid) {
+        if (!seen.contains(fid))
+        {
+            seen.insert(fid);
+            all << fid;
+        }
+    };
+    for (quint32 fid : fixtures)
+        add(fid);
     for (quint32 gid : groups)
         if (const FixtureGroup *g = doc->fixtureGroup(gid))
             for (quint32 fid : g->fixtureList())
-                all.insert(fid);
-    bool first = true;
-    FixtureKind kind = OtherKind;
-    for (quint32 fid : all)
-    {
-        const FixtureKind k = fixtureKind(doc->fixture(fid));
-        if (!first && k != kind)
-            return kindIcon(OtherKind);
-        kind = k;
-        first = false;
-    }
-    return kindIcon(kind, true);
+                add(fid);
+    /* One group (or what comes to the same fixtures): exactly its icon in
+       every other list. Several things: as a group of all of them. */
+    return fixturesIcon(doc, all);
 }
 
 QIcon signatureIcon(Doc *doc, const QString &signature)

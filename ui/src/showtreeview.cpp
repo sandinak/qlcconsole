@@ -1831,6 +1831,18 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     for (auto signal : { &Doc::fixtureGroupAdded, &Doc::fixtureGroupRemoved, &Doc::fixtureGroupChanged,
                          &Doc::paletteAdded, &Doc::paletteRemoved })
         connect(m_doc, signal, m_libraryTimer, QOverload<>::of(&QTimer::start));
+    /* A fixture's look or output rules changed (or one came or went): the
+       Library's fixture and group icons, and the layers' -- the same icon as
+       in every other list. Once per burst. */
+    QTimer *fixtureTimer = new QTimer(this);
+    fixtureTimer->setSingleShot(true);
+    fixtureTimer->setInterval(0);
+    connect(fixtureTimer, &QTimer::timeout, this, [this]() {
+        buildTree();
+        reloadLibrary();
+    });
+    for (auto signal : { &Doc::fixtureAdded, &Doc::fixtureRemoved, &Doc::fixtureChanged })
+        connect(m_doc, signal, fixtureTimer, QOverload<>::of(&QTimer::start));
     connect(m_doc, &Doc::loaded, this, &ShowTreeView::reload);
     // Auto fixtures shown as their closest look, or not: the Library's and
     // the layers' icons.

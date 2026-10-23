@@ -88,16 +88,25 @@ namespace ItemIcons
     /** A palette's icon: a swatch, a pie, a shutter, a target, or the
      *  type's stock icon. @p doc may be nullptr (no shutter/aim lookup). */
     QIcon paletteIcon(Doc *doc, const QLCPalette *palette);
-    /** A fixture's icon: the look it is shown as (drawnStageLook(): its
-     *  own, or on Auto its closest when the show says so), else its
-     *  kind's, or its definition type's -- with the output-rules badge
-     *  when it has any (Fixture::OutputRules). */
+    /** A curtain (Scenery::isCurtainFixture()): a drape on its track; with
+     *  @p group, a little smaller with the group badge. */
+    QIcon curtainIcon(bool group = false);
+    /** A fixture's icon -- THE one, wherever a fixture is listed: its own
+     *  stage look's when it has one; else a curtain's when it is one; else
+     *  the look it is shown as (drawnStageLook(): on Auto, its closest when
+     *  the show says so); else its kind's, or its definition type's -- with
+     *  the output-rules badge when it has any (Fixture::OutputRules). */
     QIcon fixtureIcon(const Fixture *fixture);
+    /** What a stage-look picker's "Auto" entry shows for @p fixture: its
+     *  closest look's icon when it has one, else what it is (a curtain, its
+     *  kind, its type) -- no badge: the entry is a look, not the fixture. */
+    QIcon autoLookIcon(const Fixture *fixture);
     /** @p base with the output-rules badge (an amber power dot) */
     QIcon outputRulesBadged(const QIcon &base);
-    /** A group's icon: when the show shows Auto fixtures as their closest
-     *  look and its fixtures all come out as one look, that look's, with the
-     *  group badge; else its one kind's (stacked), else the group icon. */
+    /** A group's icon: all curtains, the curtain's with the group badge;
+     *  when the show shows Auto fixtures as their closest look and its
+     *  fixtures all come out as one look, that look's, with the badge; else
+     *  its one kind's (stacked), else the group icon. */
     QIcon groupIcon(Doc *doc, const FixtureGroup *group);
     /** The one look @p group's fixtures are all shown as (drawnStageLook()),
      *  while the show shows Auto fixtures as their closest look; AutoLook
@@ -105,7 +114,9 @@ namespace ItemIcons
     Fixture::StageLook groupStageLook(Doc *doc, const FixtureGroup *group);
     /** @p look's icon as a group's: a little smaller, with the badge. */
     QIcon lookGroupIcon(Fixture::StageLook look);
-    /** The icon for fixtures/groups together (a Show Tree layer). */
+    /** The icon for fixtures/groups together (a Show Tree layer): one
+     *  fixture, fixtureIcon(); one group, groupIcon(); more, as a group of
+     *  all of them would be. */
     QIcon targetsIcon(Doc *doc, const QList<quint32> &groups,
                       const QList<quint32> &fixtures);
     /** The same for a Show Tree target by its signature ("g:1,2|f:3|s:4",

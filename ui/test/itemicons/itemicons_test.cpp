@@ -33,6 +33,10 @@
 #include "programmingoutline.h"
 #include "functionstreewidget.h"
 #include "showtreeview.h"
+#include "fixturetreewidget.h"
+#include "fixturegroupsource.h"
+#include "monitor/monitorlayerspanel.h"
+#include "monitor/monitorinventorypanel.h"
 #undef private
 #undef protected
 
@@ -49,6 +53,8 @@
 #include "stagetarget.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
+#include "qlcphysical.h"
+#include "scenery.h"
 #include "itemicons.h"
 #include "fixture.h"
 #include "scene.h"
@@ -125,6 +131,33 @@ Fixture *ItemIcons_Test::makeFixture(int type, const QString &model,
 
     Fixture *f = new Fixture(m_doc);
     f->setName(model);
+    f->setFixtureDefinition(def, mode);
+    f->setAddress(m_doc->fixtures().size() * 32);
+    m_doc->addFixture(f);
+    return f;
+}
+
+Fixture *ItemIcons_Test::makeCurtain(int type, const QString &name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(name);
+    def->setType(QLCFixtureDef::FixtureType(type));
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("Open"));
+    QLCChannel *open = new QLCChannel();
+    open->setName(QStringLiteral("Open"));
+    open->setGroup(QLCChannel::Intensity);
+    def->addChannel(open);
+    mode->insertChannel(open, 0);
+    QLCPhysical phys;
+    phys.setEmission(QLCPhysical::NoEmission);
+    mode->setPhysical(phys);
+    def->addMode(mode);
+    m_doc->fixtureDefCache()->addFixtureDef(def);
+
+    Fixture *f = new Fixture(m_doc);
+    f->setName(name);
     f->setFixtureDefinition(def, mode);
     f->setAddress(m_doc->fixtures().size() * 32);
     m_doc->addFixture(f);
@@ -437,6 +470,232 @@ void ItemIcons_Test::aGroupOfOneKindShowsIt()
     FixtureGroup *empty = new FixtureGroup(m_doc);
     m_doc->addFixtureGroup(empty);
     QCOMPARE(groupKind(m_doc, empty), OtherKind);
+}
+
+void ItemIcons_Test::aCurtainShowsAsACurtain()
+{
+    Fixture *curtain = makeCurtain(QLCFixtureDef::Other, QStringLiteral("Main tabs"));
+    // A dimmer-type definition whose Auto would be an ellipsoidal.
+    Fixture *relay = makeCurtain(QLCFixtureDef::Dimmer, QStringLiteral("Traveller"));
+    QVERIFY(Scenery::isCurtainFixture(curtain));
+    QVERIFY(Scenery::isCurtainFixture(relay));
+    QCOMPARE(relay->autoStageLook(), Fixture::EllipsoidalLook);
+
+    const QImage drape = iconImage(curtainIcon());
+    QVERIFY(!drape.isNull());
+    QCOMPARE(drape, iconImage(QIcon(QStringLiteral(":/curtain.png"))));
+    QVERIFY(!QIcon(QStringLiteral(":/curtain.png")).isNull());
+    QVERIFY(QFile::exists(QStringLiteral(":/curtain@2x.png")));
+    // Not any other icon: not the type's, not a look's.
+    QVERIFY(drape != iconImage(QIcon(curtain->typeIconResource())));
+    for (Fixture::StageLook look : Fixture::stageLooks())
+        if (look != Fixture::AutoLook)
+            QVERIFY(drape != iconImage(QIcon(Fixture::stageLookIconResource(look))));
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (bool on : { false, true })
+    {
+        props->setAutoStageLooks(on);
+        QCOMPARE(iconImage(fixtureIcon(curtain)), drape);
+        QCOMPARE(iconImage(fixtureIcon(relay)), drape);      // not an ellipsoidal
+        QCOMPARE(iconImage(autoLookIcon(relay)), drape);     // the picker's Auto entry
+    }
+
+    // A group of curtains: the group variant; with anything else, not.
+    FixtureGroup *tabs = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(tabs);
+    QVERIFY(tabs->assignFixture(curtain->id()));
+    QVERIFY(tabs->assignFixture(relay->id()));
+    QCOMPARE(groupIcon(m_doc, tabs).name(), curtainIcon(true).name());
+    QCOMPARE(targetsIcon(m_doc, { tabs->id() }, {}).name(), curtainIcon(true).name());
+    QCOMPARE(groupStageLook(m_doc, tabs), Fixture::AutoLook);
+    const QImage drapes = iconImage(curtainIcon(true));
+    QVERIFY(!drapes.isNull());
+    QVERIFY(drapes != drape);
+    props->setAutoStageLooks(false);
+    QCOMPARE(groupIcon(m_doc, tabs).name(), curtainIcon(true).name());
+
+    // The output-rules badge, as on anything else.
+    curtain->setOutputRules(Fixture::ExemptBlackout);
+    QVERIFY(iconImage(fixtureIcon(curtain)) != drape);
+    curtain->setOutputRules(Fixture::OutputRules());
+
+    // The LD's own look still wins -- and the group is no longer all curtains.
+    relay->setStageLook(Fixture::FresnelLook);
+    QCOMPARE(iconImage(fixtureIcon(relay)), iconImage(QIcon(":/look_fresnel.png")));
+    QVERIFY(groupIcon(m_doc, tabs).name() != curtainIcon(true).name());
+    relay->setStageLook(Fixture::AutoLook);
+
+    Fixture *par = makeFixture(QLCFixtureDef::ColorChanger, QStringLiteral("Par"),
+                               { { QLCChannel::Intensity, QLCChannel::IntensityRed } });
+    QVERIFY(tabs->assignFixture(par->id()));
+    QVERIFY(groupIcon(m_doc, tabs).name().isEmpty());       // mixed: the stock group icon
+
+    // A hazer is no curtain: its own hazer icon, setting on or off.
+    Fixture *hazer = makeFixture(QLCFixtureDef::Hazer, QStringLiteral("Hazer"),
+                                 { { QLCChannel::Maintenance, -1 } });
+    QVERIFY(!Scenery::isCurtainFixture(hazer));
+    QCOMPARE(hazer->autoStageLook(), Fixture::AutoLook);
+    for (bool on : { false, true })
+    {
+        props->setAutoStageLooks(on);
+        QCOMPARE(iconImage(fixtureIcon(hazer)), iconImage(QIcon(":/hazer.png")));
+    }
+    props->setAutoStageLooks(false);
+}
+
+/* The icon in @p item's column 0 as an image (none: a null image). */
+static QImage rowImage(const QTreeWidgetItem *item)
+{
+    return item == nullptr ? QImage() : iconImage(item->icon(0));
+}
+
+/* The first row of @p tree whose @p kindRole is @p kind and @p idRole @p id
+   (@p kindRole -1: any row with that id that has no @p skipRole). */
+static QTreeWidgetItem *findRow(QTreeWidget *tree, int idRole, quint32 id,
+                                int kindRole = -1, const QVariant &kind = QVariant(),
+                                int skipRole = -1)
+{
+    for (QTreeWidgetItemIterator it(tree); *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        if (!item->data(0, idRole).isValid() || item->data(0, idRole).toUInt() != id)
+            continue;
+        if (kindRole >= 0 && item->data(0, kindRole) != kind)
+            continue;
+        if (skipRole >= 0 && item->data(0, skipRole).isValid())
+            continue;
+        return item;
+    }
+    return nullptr;
+}
+
+void ItemIcons_Test::theSameIconEverywhere()
+{
+    // An explicit look, an Auto PAR (its closest look only when the show
+    // says so), a curtain and a fixture with output rules.
+    Fixture *fresnel = makeFixture(QLCFixtureDef::Dimmer, QStringLiteral("Fresnel"),
+                                   { { QLCChannel::Intensity, QLCChannel::IntensityDimmer } });
+    fresnel->setStageLook(Fixture::FresnelLook);
+    const QList<QPair<int, int>> rgb = { { QLCChannel::Intensity, QLCChannel::IntensityRed },
+                                         { QLCChannel::Intensity, QLCChannel::IntensityGreen },
+                                         { QLCChannel::Intensity, QLCChannel::IntensityBlue } };
+    Fixture *par = makeFixture(QLCFixtureDef::ColorChanger, QStringLiteral("Par 1"), rgb);
+    Fixture *par2 = makeFixture(QLCFixtureDef::ColorChanger, QStringLiteral("Par 2"), rgb);
+    Fixture *curtain = makeCurtain(QLCFixtureDef::Other, QStringLiteral("Main tabs"));
+    Fixture *house = makeFixture(QLCFixtureDef::Dimmer, QStringLiteral("House"),
+                                 { { QLCChannel::Intensity, QLCChannel::IntensityDimmer } });
+    house->setOutputRules(Fixture::ExemptBlackout | Fixture::Switch);
+    const QList<Fixture *> fixtures = { fresnel, par, par2, curtain, house };
+
+    auto group = [this](const QString &name, const QList<Fixture *> &members) {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        m_doc->addFixtureGroup(g);
+        for (Fixture *f : members)
+            g->assignFixture(f->id());
+        return g;
+    };
+    const QList<FixtureGroup *> groups = { group(QStringLiteral("Pars"), { par, par2 }),
+                                           group(QStringLiteral("Tabs"), { curtain }),
+                                           group(QStringLiteral("Mixed"), { fresnel, house }) };
+
+    /* The plot: every fixture placed (the layers panel), and unpatched --
+       the inventory lists what is still to be hung. A curtain is on the plot
+       as its drape, so the inventory leaves it out (by design). */
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (Fixture *f : fixtures)
+    {
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(100.0f * f->id(), 100, 0));
+        QVERIFY(m_doc->unpatchFixture(f->id()));
+    }
+
+    FixtureTreeWidget manager(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::ShowGroups);
+    manager.updateTree();
+    FixtureGroupSource build(m_doc);
+    ShowTreeView showTree(nullptr, m_doc);
+    for (Fixture *f : fixtures)
+        showTree.m_pinned << qMakePair(int(ShowTreeView::LibFixture), f->id());
+    for (FixtureGroup *g : groups)
+        showTree.m_pinned << qMakePair(int(ShowTreeView::LibGroup), g->id());
+    showTree.reloadLibrary();
+    MonitorInventoryPanel inventory(m_doc, nullptr);
+    MonitorLayersPanel layers(m_doc, nullptr);
+    layers.reload();
+
+    const int kLayersId = Qt::UserRole + 1, kLayersKind = Qt::UserRole + 2, kLayersType = Qt::UserRole;
+    auto check = [&](const char *when) {
+        QCoreApplication::processEvents();          // the deferred reloads
+        for (Fixture *f : fixtures)
+        {
+            const QImage want = iconImage(fixtureIcon(f));
+            QVERIFY(!want.isNull());
+            const QString what = QStringLiteral("%1, %2").arg(f->name(), QLatin1String(when));
+            QTreeWidgetItem *mgr = findRow(&manager, PROP_ID, f->id(), -1, QVariant(), PROP_HEAD);
+            QVERIFY2(mgr != nullptr, qPrintable(what));
+            QVERIFY2(iconImage(mgr->icon(0)) == want, qPrintable("Fixture Manager: " + what));
+            QTreeWidgetItem *b = findRow(&build, FixtureGroupSource::IdRole, f->id(),
+                                         FixtureGroupSource::KindRole, int(FixtureGroupSource::FixtureNode));
+            QVERIFY2(b != nullptr, qPrintable(what));
+            QVERIFY2(rowImage(b) == want, qPrintable("Build: " + what));
+            QTreeWidgetItem *lib = findRow(showTree.library(), ShowTreeView::IdRole, f->id(),
+                                           ShowTreeView::KindRole, int(ShowTreeView::LibFixture));
+            QVERIFY2(lib != nullptr, qPrintable(what));
+            QVERIFY2(rowImage(lib) == want, qPrintable("Show Tree Library: " + what));
+            QTreeWidgetItem *lay = findRow(layers.m_tree, kLayersId, f->id(), kLayersKind,
+                                           QStringLiteral("fixture"));
+            QVERIFY2(lay != nullptr, qPrintable(what));
+            QVERIFY2(rowImage(lay) == want, qPrintable("Layers: " + what));
+            QTreeWidgetItem *inv = findRow(inventory.tree(), Qt::UserRole, f->id());
+            if (f == curtain)
+                QVERIFY(inv == nullptr);
+            else
+            {
+                QVERIFY2(inv != nullptr, qPrintable(what));
+                QVERIFY2(rowImage(inv) == want, qPrintable("Inventory: " + what));
+            }
+        }
+        for (FixtureGroup *g : groups)
+        {
+            const QImage want = iconImage(groupIcon(m_doc, g));
+            const QString what = QStringLiteral("group %1, %2").arg(g->name(), QLatin1String(when));
+            QTreeWidgetItem *mgr = nullptr;
+            for (QTreeWidgetItemIterator it(&manager); *it != nullptr && mgr == nullptr; ++it)
+                if (!(*it)->data(0, PROP_ID).isValid() && (*it)->data(0, PROP_GROUP).isValid()
+                    && (*it)->data(0, PROP_GROUP).toUInt() == g->id())
+                    mgr = *it;
+            QVERIFY2(mgr != nullptr, qPrintable(what));
+            QVERIFY2(rowImage(mgr) == want, qPrintable("Fixture Manager: " + what));
+            QTreeWidgetItem *b = findRow(&build, FixtureGroupSource::IdRole, g->id(),
+                                         FixtureGroupSource::KindRole, int(FixtureGroupSource::GroupNode));
+            QVERIFY2(b != nullptr, qPrintable(what));
+            QVERIFY2(rowImage(b) == want, qPrintable("Build: " + what));
+            QTreeWidgetItem *lib = findRow(showTree.library(), ShowTreeView::IdRole, g->id(),
+                                           ShowTreeView::KindRole, int(ShowTreeView::LibGroup));
+            QVERIFY2(lib != nullptr, qPrintable(what));
+            QVERIFY2(rowImage(lib) == want, qPrintable("Show Tree Library: " + what));
+            QTreeWidgetItem *lay = findRow(layers.m_tree, kLayersId, g->id(), kLayersType,
+                                           int(MonitorLayersPanel::NodeFixtureGroup));
+            QVERIFY2(lay != nullptr, qPrintable(what));
+            QVERIFY2(rowImage(lay) == want, qPrintable("Layers: " + what));
+        }
+    };
+
+    check("setting off");
+    QVERIFY(QTest::currentTestFailed() == false);
+    // The Auto PAR is a kind icon now; on, its closest look.
+    const QImage parOff = iconImage(fixtureIcon(par));
+    props->setAutoStageLooks(true);
+    QVERIFY(iconImage(fixtureIcon(par)) != parOff);
+    check("setting on");
+    QVERIFY(QTest::currentTestFailed() == false);
+    // A look and output rules changed after the lists were built.
+    par->setStageLook(Fixture::StrobeLook);
+    fresnel->setOutputRules(Fixture::ExemptGrandMaster);
+    check("look and rules changed");
+    QVERIFY(QTest::currentTestFailed() == false);
+    props->setAutoStageLooks(false);
+    check("setting off again");
 }
 
 void ItemIcons_Test::iconsAreCrispAtTwoX()
