@@ -108,6 +108,11 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
        visible change. */
     // Fixture names are drawn beside them: a rename shows at once.
     connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { update(); });
+    // Auto fixtures drawn as their closest look, or not: classified per
+    // frame already, so a repaint is all it takes.
+    if (m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::autoStageLooksChanged,
+                this, [this](bool) { reload(); });
     // An LED map edited: its heads move at once.
     if (m_doc->monitorProperties() != nullptr)
         connect(m_doc->monitorProperties(), &MonitorProperties::headLayoutChanged, this,

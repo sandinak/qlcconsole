@@ -120,7 +120,7 @@ public:
     /** Re-read the fixture's name (label and tooltip) after a rename. */
     void refreshName();
 
-    /** Re-read the fixture's stage look (Fixture::stageLook()) after it
+    /** Re-read the look the fixture is drawn with (drawnStageLook()) after it
      *  changed: its shape, its heads' shape (round or square lens) and their
      *  layout. Nothing happens when it did not change -- cheap enough to call
      *  on every fixture change. */

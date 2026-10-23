@@ -522,6 +522,16 @@ moving head that is used as a followspot *Moving head spot*, not
 *Followspot*, to keep its aim on the plot. Setting a look is one Ctrl+Z on
 the plot.
 
+**Drawing Auto fixtures as their closest look.** On the plot's **Show**
+menu, **Draw Auto fixtures as their closest stage look** draws every
+fixture left on Auto as the look its picker names -- a colour changer as an
+LED PAR, a moving head with a gobo as a moving head spot, a dimmer channel
+as an ellipsoidal -- on the plot and in the studio, exactly as if that look
+were set: its shape, its proportions, its lens marks. A look you set still
+wins. Turning it off draws them as before. It belongs to the show and is
+saved with it (only when on), so the plot looks the same on every computer;
+a new show starts with it off. Turning it on or off is one Ctrl+Z.
+
 The look is saved in the show only when it is not Auto, so a show without
 looks saves exactly as before, and QLC+ opens a show with looks (it skips
 them).

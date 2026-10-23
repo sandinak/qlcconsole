@@ -2468,3 +2468,56 @@ void MonitorProperties_Test::aPersonIsAsTallAsTheirHeight()
     QVERIFY(back.loadXML(r));
     QCOMPARE(back.personHeight(), 1.626f);
 }
+
+static QByteArray autoLooksSaved(const MonitorProperties &mp)
+{
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    return buf;
+}
+
+void MonitorProperties_Test::autoStageLooksIsSavedWithTheShow()
+{
+    MonitorProperties mp;
+    QVERIFY(!mp.autoStageLooks());
+    // Off: nothing written, a show saves as it always has.
+    QVERIFY(!autoLooksSaved(mp).contains("AutoStageLooks"));
+
+    QSignalSpy spy(&mp, &MonitorProperties::autoStageLooksChanged);
+    mp.setAutoStageLooks(true);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toBool(), true);
+    mp.setAutoStageLooks(true);                 // the same again: quiet
+    QCOMPARE(spy.count(), 1);
+
+    const QByteArray on = autoLooksSaved(mp);
+    QVERIFY(on.contains("AutoStageLooks=\"1\""));
+    {
+        MonitorProperties back;
+        QXmlStreamReader reader(on);
+        while (reader.readNextStartElement())
+            if (reader.name() == QStringLiteral("Monitor"))
+                QVERIFY(back.loadXML(reader, nullptr));
+        QVERIFY(back.autoStageLooks());
+        QCOMPARE(autoLooksSaved(back), on);
+    }
+
+    // A snapshot from before it was turned on turns it off, and says so.
+    MonitorProperties other;
+    const QByteArray offSnap = other.snapshot(nullptr);
+    QVERIFY(mp.restoreSnapshot(offSnap, nullptr));
+    QVERIFY(!mp.autoStageLooks());
+    QCOMPARE(spy.last().at(0).toBool(), false);
+    // ...and one with it on turns it back on.
+    QVERIFY(mp.restoreSnapshot(on, nullptr));
+    QVERIFY(mp.autoStageLooks());
+    QCOMPARE(spy.last().at(0).toBool(), true);
+
+    // A new show starts with it off.
+    mp.reset();
+    QVERIFY(!mp.autoStageLooks());
+}
+

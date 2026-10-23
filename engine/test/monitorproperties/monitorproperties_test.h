@@ -137,6 +137,11 @@ private slots:
     /** "that target height is 5'4 .. there should be 2'6" of truss above the
      *  person" -- a person is as tall as they are, aimed at their chest. */
     void aPersonIsAsTallAsTheirHeight();
+
+    /** "Draw Auto fixtures as their closest stage look": per show, off by
+     *  default and then not written; on survives save, load and a snapshot,
+     *  and says when it changes. */
+    void autoStageLooksIsSavedWithTheShow();
 };
 
 #endif

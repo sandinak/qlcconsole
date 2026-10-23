@@ -13,6 +13,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Draw Auto fixtures as their closest stage look.** A per-show setting,
+  `MonitorProperties::autoStageLooks()` (the `AutoStageLooks="1"`
+  attribute on the Monitor element, written only when on; off by default,
+  in rig undo snapshots, `autoStageLooksChanged()` on change), toggled from
+  the plot's Show menu. `drawnStageLook()` resolves a fixture's drawn look
+  (its own; on Auto, `Fixture::autoStageLook()` when the setting is on) and
+  `classifyFixture()` uses it, so the 2D plot and the studio draw the
+  mapped look exactly as an explicit one. `autoStageLook()` is now cached
+  by `setFixtureDefinition()`; the plot re-classifies only on toggle.
 - **Stage looks: Practicals.** A new `Fixture::PracticalSection`
   ("Practicals") holds Lantern and Staff. `LanternLook` is a practical (a
   hurricane / porch lantern): `stageLookSilhouette()` maps it to

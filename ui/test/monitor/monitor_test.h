@@ -752,6 +752,10 @@ private slots:
     /** A staff is a pole wound with LED strip: a helix from the side, a
      *  dot from above. */
     void aStaffIsAPoleWoundWithLedStrip();
+    /** The show's "draw Auto fixtures as their closest stage look": off
+     *  draws exactly as before; on draws each Auto fixture as if its
+     *  closest look were set; on the plot, in the studio, and one undo. */
+    void autoFixturesCanBeDrawnAsTheirClosestLook();
 
 private:
     Doc* m_doc;

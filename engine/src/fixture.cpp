@@ -792,6 +792,7 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
         m_fixtureMode = NULL;
     }
 
+    m_autoStageLook.store(int(computeAutoStageLook()), std::memory_order_relaxed);
     emit changed(m_id);
 }
 
@@ -910,7 +911,7 @@ QString Fixture::stageLookSectionName(StageLookSection section)
     }
 }
 
-Fixture::StageLook Fixture::autoStageLook() const
+Fixture::StageLook Fixture::computeAutoStageLook() const
 {
     if (m_fixtureDef == NULL)
         return EllipsoidalLook;                 // a generic dimmer: a conventional

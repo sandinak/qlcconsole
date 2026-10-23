@@ -3521,7 +3521,8 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         height = mode->physical().height();
     }
 
-    if (fxi->stageLook() != Fixture::AutoLook && stageLookIgnoresPhysical(fxi))
+    const Fixture::StageLook drawnLook = drawnStageLook(fxi);
+    if (drawnLook != Fixture::AutoLook && stageLookIgnoresPhysical(fxi))
         width = height = 0;     // made up: the look's proportions, below
     if (width <= 0 || height <= 0)
     {
@@ -3534,9 +3535,9 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         height = (n > 1) ? 300.0 / n : 300.0;
         /* A stage look knows its proportions better: a followspot long, a
            staff thin (one with several heads keeps the strip above). */
-        if (fxi->stageLook() != Fixture::AutoLook && n == 1)
+        if (drawnLook != Fixture::AutoLook && n == 1)
         {
-            const QSizeF look = stageLookDefaultSize(fxi->stageLook(), 300.0, isElevation());
+            const QSizeF look = stageLookDefaultSize(drawnLook, 300.0, isElevation());
             width = look.width();
             height = look.height();
         }

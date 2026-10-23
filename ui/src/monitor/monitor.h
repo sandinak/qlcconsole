@@ -69,6 +69,9 @@ public:
      *  a double-click on a fixture wherever it is (plot, studio, Layers,
      *  Fixture Manager). */
     void editFixtureProperties(quint32 fid);
+    /** Every fixture on the plot re-reads the look it is drawn with (the
+     *  show's "draw Auto fixtures as their closest stage look" changed). */
+    void refreshStageLooks();
     /** Fixture Properties for several at once: the rows they share, "mixed"
      *  where they differ. */
     void editFixturesProperties(const QList<quint32> &fids);
