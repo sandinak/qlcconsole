@@ -1022,15 +1022,29 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_command->setFont(mono);
         m_command->installEventFilter(this);
         h->addWidget(m_command, 1);
+        // Q59: the syntax lines, folded away until asked for: this button,
+        // ? typed first in the line, or F1 there. Remembered.
+        m_commandSyntaxButton = new QToolButton(m_commandBar);
+        m_commandSyntaxButton->setObjectName("stCommandSyntaxButton");
+        m_commandSyntaxButton->setText(QStringLiteral("?"));
+        m_commandSyntaxButton->setCheckable(true);
+        m_commandSyntaxButton->setAutoRaise(true);
+        m_commandSyntaxButton->setToolTip(tr("Show or hide the command line's syntax (also ? typed first, "
+                                             "or F1 in the line). Type help for every word, with examples."));
+        h->addWidget(m_commandSyntaxButton);
         m_commandMsg = new QLabel(m_commandBar);
         m_commandMsg->setObjectName("stCommandMessage");
         h->addWidget(m_commandMsg);
         v->addLayout(h);
-        QLabel *hint = new QLabel(ShowTreeCommand::grammar(), m_commandBar);
-        hint->setObjectName("stCommandHint");
-        hint->setWordWrap(true);
-        hint->setEnabled(false);
-        v->addWidget(hint);
+        m_commandSyntax = new QLabel(ShowTreeCommand::grammar(), m_commandBar);
+        m_commandSyntax->setObjectName("stCommandHint");
+        m_commandSyntax->setWordWrap(true);
+        m_commandSyntax->setEnabled(false);
+        v->addWidget(m_commandSyntax);
+        const bool syntax = QSettings().value(QStringLiteral("showtree/commandSyntax"), false).toBool();
+        m_commandSyntax->setVisible(syntax);
+        m_commandSyntaxButton->setChecked(syntax);
+        connect(m_commandSyntaxButton, &QToolButton::toggled, this, &ShowTreeView::setCommandSyntaxShown);
     }
     connect(m_command, &QLineEdit::returnPressed, this, &ShowTreeView::slotCommandEntered);
 
@@ -1357,6 +1371,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueFadeIn = seconds();
         m_cueFadeOut = seconds();
         m_cueHold = seconds();
+        m_cueFadeIn->setObjectName("stCueFadeIn");
+        m_cueFadeOut->setObjectName("stCueFadeOut");
+        m_cueHold->setObjectName("stCueHold");
         m_cueHold->setRange(-1, 36000);
         m_cueHold->setSpecialValueText(tr("∞ — waits for GO"));
         f->addRow(tr("Number"), m_cueNumber);
@@ -1508,7 +1525,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 m_st->setSubCueFollow(m_pageCue, follow, uint(qRound(m_cueWait->value() * 1000)));
             };
             connect(m_cueAdvance, QOverload<int>::of(&QComboBox::activated), this, commit);
-            connect(m_cueWait, &QDoubleSpinBox::editingFinished, this, commit);
+            // Q60: typed, then Return, focus out or a click elsewhere.
+            connect(m_cueWait, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) {
+                if (!m_inspectorUpdating && m_pageCue != invalidId())
+                    m_cueWaitDirty = true;
+            });
+            connect(m_cueWait, &QDoubleSpinBox::editingFinished, this, [this]() { commitPendingCueEdits(); });
+            m_cueWait->installEventFilter(this);
             // A cue's sub-cues: which, and + Sub-cue.
             m_cueSubCues = new QLabel(inner);
             m_cueSubCues->setObjectName("stCueSubCues");
@@ -1602,8 +1625,18 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         for (QWidget *w : inner->findChildren<QWidget *>())
             if (w != m_cueLayers && w->acceptDrops() && w->parentWidget() != m_cueLayers)
                 w->setAcceptDrops(false);
+        // Q60: a time typed (or stepped) is applied on Return, on focus out
+        // and before the page shows anything else (a click on another cue:
+        // commitPendingCueEdits()); Esc in the field puts it back.
         for (QDoubleSpinBox *s : { m_cueFadeIn, m_cueFadeOut, m_cueHold })
-            connect(s, &QDoubleSpinBox::editingFinished, this, &ShowTreeView::slotCueEdited);
+        {
+            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) {
+                if (!m_inspectorUpdating && m_pageCue != invalidId())
+                    m_cueTimesDirty = true;
+            });
+            connect(s, &QDoubleSpinBox::editingFinished, this, [this]() { commitPendingCueEdits(); });
+            s->installEventFilter(this);
+        }
         connect(m_cueMode, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotCueEdited);
     }
     m_pages->addWidget(m_cuePage);
@@ -2992,8 +3025,69 @@ static bool mayConvert(const CueList *list)
     return false;
 }
 
+bool ShowTreeView::commitPendingCueEdits()
+{
+    if (m_committingTimes || m_inspectorUpdating || m_pageCue == invalidId())
+        return false;
+    // What is typed and not yet read as a value counts too.
+    for (QDoubleSpinBox *s : { m_cueFadeIn, m_cueFadeOut, m_cueHold, m_cueWait })
+        if (s != nullptr && s->hasFocus())
+            s->interpretText();
+    if (!m_cueTimesDirty && !m_cueWaitDirty)
+        return false;
+    const Cue *c = m_st->cue(m_pageCue);
+    if (c == nullptr)
+    {
+        m_cueTimesDirty = m_cueWaitDirty = false;
+        return false;
+    }
+    m_committingTimes = true;
+    bool applied = false;
+    const quint32 id = m_pageCue;
+    const bool times = m_cueTimesDirty, wait = m_cueWaitDirty;
+    m_cueTimesDirty = m_cueWaitDirty = false;
+    if (times)
+    {
+        Cue cue = *c;
+        cue.fadeIn = uint(qRound(m_cueFadeIn->value() * 1000));
+        cue.fadeOut = uint(qRound(m_cueFadeOut->value() * 1000));
+        cue.hold = m_cueHold->value() < 0 ? Function::infiniteSpeed() : uint(qRound(m_cueHold->value() * 1000));
+        if (cue.fadeIn != c->fadeIn || cue.fadeOut != c->fadeOut || cue.hold != c->hold)
+            applied = m_st->setCue(cue);
+    }
+    if (wait)
+        if (const Cue *sc = m_st->cue(id))
+        {
+            const uint ms = uint(qRound(m_cueWait->value() * 1000));
+            const bool follow = m_cueAdvance->currentData().toInt() == 1;
+            if (sc->wait != ms || sc->follow != follow)
+                applied |= m_st->setSubCueFollow(id, follow, ms);
+        }
+    m_committingTimes = false;
+    return applied;
+}
+
+void ShowTreeView::revertCueTimes()
+{
+    m_cueTimesDirty = m_cueWaitDirty = false;
+    const Cue *c = m_st->cue(m_pageCue);
+    if (c == nullptr)
+        return;
+    const bool was = m_inspectorUpdating;
+    m_inspectorUpdating = true;
+    m_cueFadeIn->setValue(c->fadeIn / 1000.0);
+    m_cueFadeOut->setValue(c->fadeOut / 1000.0);
+    m_cueHold->setValue(int(c->hold) < 0 ? -1 : c->hold / 1000.0);
+    if (m_cueWait != nullptr)
+        m_cueWait->setValue(c->wait / 1000.0);
+    m_inspectorUpdating = was;
+}
+
 void ShowTreeView::updateInspector()
 {
+    // Q60: a time typed on the page goes to the cue it was typed for, not
+    // lost to the page showing another.
+    commitPendingCueEdits();
     m_inspectorUpdating = true;
     m_pageCue = invalidId();
     m_multi.clear();
@@ -3069,6 +3163,11 @@ void ShowTreeView::updateInspector()
     const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
     if (list == nullptr)
     {
+        // An empty show: only the way in, not "select" with nothing to select.
+        m_emptyPage->setText(m_st->productions().isEmpty()
+                             ? tr("Start with + Production, or import a chaser you already have "
+                                  "(Import chaser…).")
+                             : tr("Select a cue or a layer."));
         m_pages->setCurrentWidget(m_emptyPage);
         m_inspectorUpdating = false;
         return;
@@ -8725,6 +8824,21 @@ bool ShowTreeView::isHelpShown() const
     return !m_commandHelp->isHidden();
 }
 
+bool ShowTreeView::isCommandSyntaxShown() const
+{
+    return !m_commandSyntax->isHidden();
+}
+
+void ShowTreeView::setCommandSyntaxShown(bool shown)
+{
+    m_commandSyntax->setVisible(shown);
+    {
+        QSignalBlocker block(m_commandSyntaxButton);
+        m_commandSyntaxButton->setChecked(shown);
+    }
+    QSettings().setValue(QStringLiteral("showtree/commandSyntax"), shown);
+}
+
 void ShowTreeView::focusLibraryFilter()
 {
     m_filter->setFocus(Qt::ShortcutFocusReason);
@@ -8933,9 +9047,37 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
 {
     if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::Resize)
         fitTreeColumns();
+    // Q60: a click in the tree applies a time typed on the cue page first,
+    // to the cue it was typed for -- before the click selects another.
+    if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::MouseButtonPress)
+        commitPendingCueEdits();
+    // Esc in a time field: the cue's own value back, nothing applied.
+    if (ev->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(ev)->key() == Qt::Key_Escape
+        && (obj == m_cueFadeIn || obj == m_cueFadeOut || obj == m_cueHold || obj == m_cueWait)
+        && (m_cueTimesDirty || m_cueWaitDirty || !static_cast<QDoubleSpinBox *>(obj)->hasAcceptableInput()))
+    {
+        revertCueTimes();
+        static_cast<QDoubleSpinBox *>(obj)->selectAll();
+        return true;
+    }
+    // F1 in the command line: its syntax, not the help window.
+    if (obj == m_command && ev->type() == QEvent::ShortcutOverride
+        && static_cast<QKeyEvent *>(ev)->key() == Qt::Key_F1)
+    {
+        ev->accept();
+        return true;
+    }
     if (obj == m_command && ev->type() == QEvent::KeyPress)
     {
         QKeyEvent *ke = static_cast<QKeyEvent *>(ev);
+        if (ke->key() == Qt::Key_F1 && ke->modifiers() == Qt::NoModifier)
+        {
+            setCommandSyntaxShown(!isCommandSyntaxShown());
+            return true;
+        }
+        // ? typed first: the syntax shows (the ? stays: Return runs help).
+        if (ke->text() == QLatin1String("?") && m_command->text().trimmed().isEmpty())
+            setCommandSyntaxShown(true);
         if (ke->key() == Qt::Key_Tab)
         {
             // Tab completes the word instead of moving focus; again, the

@@ -27,6 +27,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QDropEvent>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QMimeData>
 #include <QLabel>
@@ -63,6 +64,7 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     m_prev->setObjectName(QStringLiteral("walkerPrev"));
     m_prev->setToolButtonStyle(Qt::ToolButtonTextOnly);
     connect(m_prev, &QToolButton::clicked, this, [this]() {
+        commitPending();
         if (m_stack != nullptr)
             m_stack->setStep(m_stack->step() - 1);
     });
@@ -76,6 +78,7 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     m_next->setObjectName(QStringLiteral("walkerNext"));
     m_next->setToolButtonStyle(Qt::ToolButtonTextOnly);
     connect(m_next, &QToolButton::clicked, this, [this]() {
+        commitPending();
         if (m_stack != nullptr)
             m_stack->setStep(m_stack->step() + 1);
     });
@@ -118,10 +121,26 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     m_cue->setToolTip(tr("The step's cue number for show control (empty: its place)"));
     m_note->setHelpTip(tr("The step's note, as in the Chaser editor and a VC Cue List. It opens up while "
                           "you type: Return applies it, Shift+Return starts a new line, Esc puts it back."));
-    connect(m_fadeIn, &QLineEdit::editingFinished, this, [this]() { commitTime(FadeInField, m_fadeIn->text()); });
-    connect(m_hold, &QLineEdit::editingFinished, this, [this]() { commitTime(HoldField, m_hold->text()); });
-    connect(m_fadeOut, &QLineEdit::editingFinished, this, [this]() { commitTime(FadeOutField, m_fadeOut->text()); });
-    connect(m_cue, &QLineEdit::editingFinished, this, [this]() { commitText(CueField, m_cue->text()); });
+    // Return or focus out applies a field, to the step it shows; walking to
+    // another step applies it first (Q60). Esc puts it back.
+    connect(m_fadeIn, &QLineEdit::editingFinished, this, [this]() {
+        m_fadeIn->setModified(false);
+        commitTime(FadeInField, m_fadeIn->text());
+    });
+    connect(m_hold, &QLineEdit::editingFinished, this, [this]() {
+        m_hold->setModified(false);
+        commitTime(HoldField, m_hold->text());
+    });
+    connect(m_fadeOut, &QLineEdit::editingFinished, this, [this]() {
+        m_fadeOut->setModified(false);
+        commitTime(FadeOutField, m_fadeOut->text());
+    });
+    connect(m_cue, &QLineEdit::editingFinished, this, [this]() {
+        m_cue->setModified(false);
+        commitText(CueField, m_cue->text(), m_shownStep);
+    });
+    for (QLineEdit *e : { m_fadeIn, m_hold, m_fadeOut, m_cue })
+        e->installEventFilter(this);
     connect(m_note, &NoteEdit::editingFinished, this, [this]() { commitText(NoteField, m_note->text()); });
     col->addLayout(fields);
 
@@ -228,6 +247,7 @@ void ChaserWalker::buildTable()
     connect(m_table, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *it) {
         if (m_refreshing || m_stack == nullptr || it == nullptr)
             return;
+        commitPending();
         m_stack->setStep(m_table->indexOfTopLevelItem(it));
     });
     connect(m_table, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *it, int column) {
@@ -270,11 +290,27 @@ void ChaserWalker::refresh()
     Chaser *ch = m_stack != nullptr ? m_stack->chaser() : nullptr;
     if (ch == nullptr)
         return;
+    // Another step (or chaser) to show: what was typed for the one shown
+    // goes to it first (Q60) -- a different chaser's, dropped.
+    {
+        const int to = qBound(0, m_stack->step(), qMax(0, ch->stepsCount() - 1));
+        if (ch->id() != m_shownChaser)
+            for (QLineEdit *e : { m_fadeIn, m_hold, m_fadeOut, m_cue })
+                e->setModified(false);
+        else if (to != m_shownStep)
+            commitPending();
+    }
+    ch = m_stack->chaser();
+    if (ch == nullptr)
+        return;
     m_refreshing = true;
     Doc *doc = m_stack->doc();
     const QList<ChaserStep> steps = ch->steps();
     const int n = steps.size();
     const int cur = qBound(0, m_stack->step(), qMax(0, n - 1));
+    const bool otherStep = cur != m_shownStep || ch->id() != m_shownChaser;
+    m_shownStep = cur;
+    m_shownChaser = ch->id();
     const bool readOnly = !m_stack->readOnlyReason().isEmpty();
 
     // The step table, as the Chaser editor fills it.
@@ -335,8 +371,9 @@ void ChaserWalker::refresh()
 
     // The step's header fields, with the chaser's timing modes.
     const ChaserStep st = n > 0 ? steps.at(cur) : ChaserStep();
-    auto setField = [readOnly, n](QLineEdit *e, const QString &text, bool editable, const QString &why) {
-        if (!e->hasFocus())
+    auto setField = [readOnly, n, otherStep](QLineEdit *e, const QString &text, bool editable, const QString &why) {
+        // Typing in it is left alone -- unless it now shows another step.
+        if (otherStep || !e->hasFocus() || !e->isModified())
             e->setText(text);
         e->setEnabled(n > 0 && editable && !readOnly);
         if (!why.isEmpty())
@@ -391,12 +428,35 @@ void ChaserWalker::refresh()
     m_refreshing = false;
 }
 
-void ChaserWalker::commitTime(int which, const QString &text)
+void ChaserWalker::commitPending()
+{
+    if (m_refreshing || m_stack == nullptr || m_stack->chaser() == nullptr
+        || m_stack->chaser()->id() != m_shownChaser || m_shownStep < 0)
+        return;
+    const int step = m_shownStep;
+    const struct { QLineEdit *edit; int which; } times[] = {
+        { m_fadeIn, FadeInField }, { m_hold, HoldField }, { m_fadeOut, FadeOutField } };
+    for (const auto &t : times)
+        if (t.edit->isModified())
+        {
+            t.edit->setModified(false);
+            commitTime(t.which, t.edit->text(), step);
+        }
+    if (m_cue->isModified())
+    {
+        m_cue->setModified(false);
+        commitText(CueField, m_cue->text(), step);
+    }
+}
+
+void ChaserWalker::commitTime(int which, const QString &text, int step)
 {
     Chaser *ch = m_stack != nullptr ? m_stack->chaser() : nullptr;
     if (ch == nullptr || m_refreshing || ch->stepsCount() == 0)
         return;
-    const int index = m_stack->step();
+    const int index = step >= 0 ? step : (m_shownStep >= 0 ? m_shownStep : m_stack->step());
+    if (index >= ch->stepsCount())
+        return;
     const ChaserStep was = ch->steps().at(index);
     const uint ms = Function::stringToSpeed(text.trimmed());
     QString label;
@@ -489,6 +549,16 @@ static QList<quint32> draggedFunctions(const QMimeData *mime)
 
 bool ChaserWalker::eventFilter(QObject *watched, QEvent *event)
 {
+    // Esc in a header field: what the step has, nothing applied.
+    if (event->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key() == Qt::Key_Escape)
+        for (QLineEdit *e : { m_fadeIn, m_hold, m_fadeOut, m_cue })
+            if (watched == e && e->isModified())
+            {
+                e->setModified(false);
+                refresh();
+                e->selectAll();
+                return true;
+            }
     if (watched != m_table->viewport() || m_stack == nullptr || m_stack->chaser() == nullptr)
         return QWidget::eventFilter(watched, event);
     const QEvent::Type t = event->type();

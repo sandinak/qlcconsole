@@ -197,7 +197,9 @@ editor lists it, one step at a time, each step opened up. Under the header:
 
 - **◀ · Step 3 of 7 · 0.0.3-Announcer · ▶** — the step before and after.
 - **The step's header**: **Fade in**, **Hold**, **Fade out**, **Cue** and
-  **Note**, edited in place (Return applies; times as the Chaser editor
+  **Note**, edited in place (Return, Tab or a click elsewhere applies, to
+  the step you typed it for, also when you walk on; Esc puts it back; times
+  as the Chaser editor
   writes them — `1s.50`, `2m`, `∞` to hold until GO). A time the chaser
   sets for every step (*Common*) or leaves to the function (*Default*) is
   shown greyed: change that in the Chaser editor on the right. A step's

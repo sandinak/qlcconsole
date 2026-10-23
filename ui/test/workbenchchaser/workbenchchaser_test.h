@@ -48,6 +48,9 @@ private slots:
      *  step, one step each on the shared history, as the Chaser editor's
      *  timing modes allow. Steps added, moved, removed: the same. */
     void theStepHeaderEditsTheStep();
+    /** Q60: a time typed in the header goes to the step it was typed for
+     *  when the walker moves on (◀ ▶, the table); Esc puts it back. */
+    void typedStepTimesGoToTheirStep();
     /** A step's note opens up while it is typed in -- the walker's header,
      *  its step table, the Chaser editor's Notes column: it grows to fit,
      *  Return commits (one step on the history), Shift+Return starts a new

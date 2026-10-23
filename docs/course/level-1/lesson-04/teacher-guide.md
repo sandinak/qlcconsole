@@ -83,7 +83,7 @@ music, then choose.
 
 | You see | Likely cause | Say |
 |---|---|---|
-| The number went back to 0.00 | They didn't press Return (or clicked away first) | "Type it, then **Return**." |
+| The number went back to its old time | They pressed **Esc**, which puts it back | "Type it again; **Return**, Tab or clicking the next cue keeps it." |
 | "My fade doesn't fade!" | They are clicking cues in the tree | "Fades play with **GO** in the Run tab." |
 | The time went on the wrong cue | Another cue was selected | "Check the **Name** box at the top of the page." |
 | The Solo came without GO | Expected: the Scream's **Hold** is 2 s | "That's the hold: it follows on by itself." |

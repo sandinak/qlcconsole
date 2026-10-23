@@ -527,6 +527,11 @@ public:
      *  asked for; Esc closes it. Its text, plain (tests). */
     QString helpOutput() const;
     bool isHelpShown() const;
+    /** Q59: the command line's syntax lines, folded away by default. ?
+     *  typed first in the line, the ? button beside it or F1 there shows
+     *  them; the choice is remembered (QSettings showtree/commandSyntax). */
+    bool isCommandSyntaxShown() const;
+    void setCommandSyntaxShown(bool shown);
 
     /** ⌘C / ⌘V / ⌘D in the tree (Copy / Paste / Duplicate in its menu):
      *  the selected cues (in list order) or own layers; paste puts cues as
@@ -815,6 +820,20 @@ private:
      *  sub-cues line (+ Sub-cue). */
     QComboBox *m_cueAdvance = nullptr;
     QDoubleSpinBox *m_cueWait = nullptr;
+    /** Q60: a time typed (or stepped) on the cue page and not yet applied
+     *  -- for m_pageCue. Applied before the page shows anything else, so a
+     *  click on another cue keeps it; Esc in the field puts it back. */
+    bool m_cueTimesDirty = false;
+    bool m_cueWaitDirty = false;
+    bool m_committingTimes = false;
+public:
+    /** Q60: apply the cue page's typed times to the cue it shows (true:
+     *  something was applied). Done before a click in the tree, before the
+     *  page changes, and on Return / focus out. */
+    bool commitPendingCueEdits();
+private:
+    /** Esc in a time field: back to the cue's own value, nothing applied. */
+    void revertCueTimes();
     QWidget *m_cueAdvanceRow = nullptr;
     QLabel *m_cueSubCues = nullptr;
     QToolButton *m_newSubCue = nullptr;
@@ -862,6 +881,8 @@ private:
     QLineEdit *m_command = nullptr;
     QLabel *m_commandMsg = nullptr;
     QTextBrowser *m_commandHelp = nullptr;
+    QLabel *m_commandSyntax = nullptr;
+    QToolButton *m_commandSyntaxButton = nullptr;
     ShowTreeCommand *m_commander = nullptr;
     QStringList m_commandHistory;
     RecordAsker m_recordAsker;

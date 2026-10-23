@@ -6680,4 +6680,168 @@ void ShowTreeView_Test::textColoursInTheTreePagesAndWorkbench()
     }
 }
 
+/* Q59 (UX review problem 3): the command line stays, its three lines of
+   syntax don't -- not even on an empty show. ? typed first in the line, the
+   ? button beside it, or F1 in the line shows them; the choice is kept. */
+void ShowTreeView_Test::commandSyntaxFoldsAwayAndIsRemembered()
+{
+    QSettings().remove(QStringLiteral("showtree/commandSyntax"));
+    {
+        ShowTreeView view(nullptr, m_doc);       // an empty show
+        view.resize(1200, 800);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        view.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&view));
+        QLineEdit *line = view.commandLine();
+        QLabel *syntax = view.findChild<QLabel *>("stCommandHint");
+        QToolButton *button = view.findChild<QToolButton *>("stCommandSyntaxButton");
+        QVERIFY(line != nullptr && syntax != nullptr && button != nullptr);
+        QVERIFY(line->isVisible());
+        QVERIFY(button->isVisible());
+        QVERIFY(!view.isCommandSyntaxShown());
+        QVERIFY(!syntax->isVisible());
+        QVERIFY(!button->isChecked());
+        // The empty show's page: the way in, not "select".
+        QVERIFY(view.findChild<QStackedWidget *>("stInspector") != nullptr);
+        QLabel *empty = qobject_cast<QLabel *>(view.findChild<QStackedWidget *>("stInspector")->currentWidget());
+        QVERIFY(empty != nullptr);
+        QVERIFY2(empty->text().startsWith("Start with + Production"), qPrintable(empty->text()));
+        // A picture of the empty show: QLC_COMMANDLINE_SHOT (a .png).
+        if (qEnvironmentVariableIsSet("QLC_COMMANDLINE_SHOT"))
+            view.grab().save(qEnvironmentVariable("QLC_COMMANDLINE_SHOT"));
+        // The button: shown, and remembered.
+        QTest::mouseClick(button, Qt::LeftButton);
+        QVERIFY(view.isCommandSyntaxShown());
+        QVERIFY(syntax->isVisible());
+        QVERIFY(syntax->text().contains("cueonly"));
+        QVERIFY(QSettings().value("showtree/commandSyntax").toBool());
+        QTest::mouseClick(button, Qt::LeftButton);
+        QVERIFY(!view.isCommandSyntaxShown());
+        QVERIFY(!QSettings().value("showtree/commandSyntax").toBool());
+        // F1 in the line: shown, again: hidden. The line keeps its text.
+        line->setFocus();
+        QTRY_VERIFY(line->hasFocus());
+        line->setText("Towers");
+        QTest::keyClick(line, Qt::Key_F1);
+        QVERIFY(view.isCommandSyntaxShown());
+        QVERIFY(button->isChecked());
+        QCOMPARE(line->text(), QString("Towers"));
+        QTest::keyClick(line, Qt::Key_F1);
+        QVERIFY(!view.isCommandSyntaxShown());
+        // ? typed later in a command: just a character.
+        QTest::keyClicks(line, "?");
+        QVERIFY(!view.isCommandSyntaxShown());
+        // ? typed first: the syntax; Return still runs help.
+        line->clear();
+        QTest::keyClicks(line, "?");
+        QVERIFY(view.isCommandSyntaxShown());
+        QCOMPARE(line->text(), QString("?"));
+        QTest::keyClick(line, Qt::Key_Return);
+        QVERIFY(view.isHelpShown());
+    }
+    // Remembered for the next Show Tree (the next run).
+    {
+        ShowTreeView view(nullptr, m_doc);
+        QVERIFY(view.isCommandSyntaxShown());
+        view.setCommandSyntaxShown(false);
+    }
+    {
+        ShowTreeView view(nullptr, m_doc);
+        QVERIFY(!view.isCommandSyntaxShown());
+    }
+    QSettings().remove(QStringLiteral("showtree/commandSyntax"));
+}
+
+/* Q60 (UX review problem 8): a time typed on the cue page is kept when the
+   focus leaves the field -- not only on Return. Clicking another cue in the
+   tree, Tab, or the page moving on applies it to the cue it was typed for;
+   Esc in the field puts it back. */
+void ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    const quint32 c2 = st->addCueNumbered(list, "2", "Two");
+    const quint32 c3 = st->addCueNumbered(list, "3", "Three");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QTreeWidget *tree = view.tree();
+    QDoubleSpinBox *fadeIn = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
+    QDoubleSpinBox *fadeOut = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
+    QDoubleSpinBox *hold = view.findChild<QDoubleSpinBox *>("stCueHold");
+    QVERIFY(fadeIn != nullptr && fadeOut != nullptr && hold != nullptr);
+    auto clickCue = [&](quint32 cue) {
+        QTreeWidgetItem *it = nullptr;
+        for (QTreeWidgetItemIterator i(tree); *i && it == nullptr; ++i)
+            if ((*i)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*i)->data(0, ShowTreeView::IdRole).toUInt() == cue)
+                it = *i;
+        QVERIFY(it != nullptr);
+        const QRect r = tree->visualItemRect(it);
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+    };
+    auto typeIn = [&](QDoubleSpinBox *box, const QString &text) {
+        box->setFocus();
+        QTRY_VERIFY(box->hasFocus());
+        box->selectAll();
+        QTest::keyClicks(box, text);
+    };
+
+    // Fade in typed, no Return, then a click on another cue: kept, on the
+    // cue it was typed for; the page shows the new cue with its own.
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(view.currentCueId(), c1);
+    typeIn(fadeIn, "3");
+    clickCue(c2);
+    QCOMPARE(st->cue(c1)->fadeIn, 3000u);
+    QCOMPARE(st->cue(c2)->fadeIn, 0u);
+    QCOMPARE(view.currentCueId(), c2);
+    QCOMPARE(fadeIn->value(), 0.0);
+    // Hold then Fade out, Tab between: both kept.
+    typeIn(hold, "2");
+    QTest::keyClick(hold, Qt::Key_Tab);
+    QCOMPARE(st->cue(c2)->hold, 2000u);
+    typeIn(fadeOut, "4");
+    clickCue(c3);
+    QCOMPARE(st->cue(c2)->fadeOut, 4000u);
+    QCOMPARE(st->cue(c3)->fadeOut, 0u);
+    // The page moving on with no click (the keyboard, a command, the
+    // Workbench): kept too.
+    typeIn(fadeIn, "1.5");
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(st->cue(c3)->fadeIn, 1500u);
+    QCOMPARE(st->cue(c1)->fadeIn, 3000u);
+    // Stepped with the arrow keys, then a click away: kept.
+    fadeOut->setFocus();
+    QTRY_VERIFY(fadeOut->hasFocus());
+    QTest::keyClick(fadeOut, Qt::Key_Up);
+    clickCue(c2);
+    QCOMPARE(st->cue(c1)->fadeOut, 1000u);
+    // Each one undo step, as on Return.
+    QVERIFY(st->canUndo());
+    // Return still applies at once.
+    typeIn(fadeIn, "5");
+    QTest::keyClick(fadeIn, Qt::Key_Return);
+    QCOMPARE(st->cue(c2)->fadeIn, 5000u);
+    // Esc puts it back: nothing applied, not even when the focus goes.
+    typeIn(fadeIn, "9");
+    QTest::keyClick(fadeIn, Qt::Key_Escape);
+    QCOMPARE(fadeIn->value(), 5.0);
+    QCOMPARE(st->cue(c2)->fadeIn, 5000u);
+    clickCue(c3);
+    QCOMPARE(st->cue(c2)->fadeIn, 5000u);
+    QCOMPARE(st->cue(c3)->fadeIn, 1500u);
+    // Esc with nothing typed: the tab's own Esc, as before (no revert).
+    QCOMPARE(view.currentCueId(), c3);
+    hold->setFocus();
+    QTest::keyClick(hold, Qt::Key_Escape);
+    QCOMPARE(st->cue(c3)->hold, Function::infiniteSpeed());
+}
+
 QTEST_MAIN(ShowTreeView_Test)

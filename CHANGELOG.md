@@ -177,6 +177,14 @@ circuits and subs.
   playback action (Stop all is ⌘⇧Esc).
 - **The Show Tree shows tracking as badges** (● sets, ○ releases, ⤳
   tracks in) with the details on hover, in a resizable column.
+- **The Show Tree's command line folds its syntax away.** The line stays;
+  the three lines of syntax under it show on the **?** button beside it,
+  **?** typed first, or **F1** in the line, and the choice is remembered.
+  An empty show's page just says how to start.
+- **The Run tab with no main cue list** (a QLC+ 4 show) says *This show
+  has no cue list yet. Upgrade turns its chasers into one.* with an
+  **Upgrade This Show…** button, and GO and the other buttons are grey
+  instead of a live-looking green.
 - **The Build tab wears a hard-hat icon.**
 - **Fixtures tab:** Stage Look ▸ is offered in Operate; the toolbar's
   Properties opens Fixture Properties for several fixtures.
@@ -190,6 +198,12 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+- **A fade or hold typed on a Show Tree cue is kept when you click away.**
+  It was applied only on Return: clicking another cue lost it. Tab, a click
+  on another cue or anywhere else, and the page moving on now apply it to
+  the cue it was typed for; Esc in the field puts it back. A chaser step's
+  times in the Workbench go to the step they were typed for when you walk
+  to another.
 - **A Closed shutter look closes** (it sent Open on spots with an Open
   capability, e.g. the AT-Spots); *Strobe* strobes, and auto-open defers to
   both.

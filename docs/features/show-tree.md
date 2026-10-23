@@ -95,7 +95,9 @@ from the Library lands in the tree right beside it.
     **sub-cue** shows **Advance** (Sub GO, or Auto-follow after a wait) in
     place of the mode, base, includes and hold. The **note** opens up
     while you type in it: Return applies it, Shift+Return starts a new
-    line, Esc puts it back.
+    line, Esc puts it back. A **fade** or **hold** typed is kept when you
+    leave the field (Return, Tab, or a click on another cue or anywhere
+    else); **Esc** in the field puts the old time back.
   - **A layer** shows what it contains, then one row per attribute.
   - **A look** shows its name, note, *Fired by* (the VC buttons, **Make VC
     page**, **Move to folder…**), its looks and layers; **Looks** or a
@@ -357,7 +359,8 @@ a layer would play it differently.
 ### Upgrade this show
 
 **File → Upgrade This Show…** (or **Upgrade this show…** on the old-show
-line) is the converter with everything around it, in one place. Nothing
+line, or the **Upgrade This Show…** button the Run tab shows while there is
+no main cue list) is the converter with everything around it, in one place. Nothing
 happens until you press **Upgrade**, and none of it is needed: a show
 built the old way keeps playing as it always has.
 
@@ -1239,7 +1242,10 @@ is always there and calls the same operations as the mouse.
 - **Getting to it.** It never takes the keyboard by itself: click it, or
   press **:** in the tree. **Esc** goes back to the tree.
 - **Running a command.** **Enter** runs it. **↑ ↓** recall earlier commands.
-  The hint under the line lists the words.
+- **The syntax, when you want it.** The lines that sum up the words are
+  folded away. Show them with the **?** button beside the line, with **?**
+  typed first in the line, or with **F1** while the line has the
+  keyboard; the button or F1 hides them again. The choice is remembered.
 - **One undo step each.** Every command is one undo step. A command that
   fails part way changes nothing: the line stays, and the reason shows in
   red beside it.
@@ -1777,6 +1783,11 @@ Console widget is the same runner on a VC page.
   → Red, spread +5, gobo Breakup; BackStage in → Green, Intensity 45%;
   USTs out"*. GO into a cue with sub-cues shows what its first sub-cue
   brings.
+- **No main cue list** (a show from QLC+ 4, say): the Run tab says *This
+  show has no cue list yet. Upgrade turns its chasers into one.* and has an
+  **Upgrade This Show…** button (the File menu's, see
+  [Upgrade this show](#upgrade-this-show)). GO and the other buttons are
+  grey: there is nothing for them to play.
 - **Buttons:** **GO** (⌘↩; **Space** in the Run tab), **Sub GO** (⌥⌘↩),
   **Sub Back** (⌥⌘⇧↩), **Back** (⌘⇧↩), **Pause** / **Resume** (holds the
   fade and an auto-follow's wait) and **Stop** (⌘⇧Esc stops everything).
@@ -1947,6 +1958,7 @@ and *MIB · n* counts the lights a list set **On** is moving.
 | Drag looks onto a look folder | File them there (onto *Looks*: no folder) |
 | **:** (in the tree) | To the command line |
 | **Esc** (in the command line) | Close the help, then back to the tree |
+| **?** first, or **F1** (in the command line) | Show the syntax lines (F1 again, or the **?** button: hide them) |
 | **Tab** (in the command line) | Complete the word; again, the next match |
 | ↑ / ↓ (in the command line) | Earlier / later commands |
 | Enter (in the command line) | Run it |

@@ -146,6 +146,13 @@ private slots:
     void restoreOriginalPointsVcBack();
     void captureFromTheOpaqueRow();
     void upgradeThisShow();
+    // UX review (2026-10-23)
+    /** Q59: the command line's syntax folded away, shown on ? / F1 / the
+     *  button, remembered. */
+    void commandSyntaxFoldsAwayAndIsRemembered();
+    /** Q60: a typed time is kept when focus leaves its field -- a click on
+     *  another cue, Tab, the page changing; Esc puts it back. */
+    void typedTimesAreKeptWhenFocusLeaves();
 
 private:
     quint32 dimmer(int level, const QString &name);

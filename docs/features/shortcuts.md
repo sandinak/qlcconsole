@@ -6,7 +6,7 @@
 
 | Keys | Does |
 |---|---|
-| **F1** | Help on what you're looking at (the tab, window or editor in front) |
+| **F1** | Help on what you're looking at (the tab, window or editor in front); in the Show Tree's command line, its syntax lines |
 | ⌘N / ⌘O / ⌘S | New / Open / Save workspace |
 | ⌘, | Settings (autosave, appearance, …) |
 | ⌘F12 | Switch between **Design** and **Operate** |

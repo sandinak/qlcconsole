@@ -21,6 +21,10 @@
 #include <QXmlStreamWriter>
 #include <QTreeWidget>
 #include <QToolButton>
+#include <QPushButton>
+#include <QSignalSpy>
+#include <QAction>
+#include <QLabel>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QSpinBox>
@@ -238,6 +242,71 @@ void CueRunner_Test::theRunnerShowsTheListAndItsSubCues()
     QVERIFY(!compact.findChild<QToolButton *>("crPause")->isVisibleTo(&compact));
     compact.setShowSecondary(false);
     QVERIFY(!compact.findChild<QToolButton *>("crBack")->isVisibleTo(&compact));
+}
+
+/* Q62 (UX review problem 4): a 4.x show has no main cue list. The Run tab
+   says why in a line, offers Upgrade This Show… (the File menu's action),
+   and GO and the rest are disabled -- grey, not a live-looking green. With
+   a main list, Run is as it was. */
+void CueRunner_Test::noMainListGreysGoAndOffersUpgrade()
+{
+    QAction upgrade(QStringLiteral("Upgrade This Show…"), nullptr);
+    QSignalSpy upgraded(&upgrade, &QAction::triggered);
+    CueRunner::setUpgradeAction(&upgrade);
+    {
+        CueRunner runner(m_doc, CueRunner::Full);
+        runner.resize(900, 600);
+        runner.show();
+        runner.refresh();
+        QCOMPARE(runner.headerText(), QString("No main cue list"));
+        QVERIFY(runner.isEmptyStateShown());
+        QLabel *why = runner.findChild<QLabel *>("crEmptyText");
+        QVERIFY(why != nullptr && why->isVisible());
+        QCOMPARE(why->text(), QString("This show has no cue list yet. Upgrade turns its chasers into one."));
+        QVERIFY(!runner.cueTree()->isVisible());
+        for (const char *name : { "crGo", "crSubGo", "crBack", "crSubBack", "crPause", "crStop" })
+            QVERIFY2(!runner.findChild<QToolButton *>(name)->isEnabled(), name);
+        QVERIFY(!runner.canGo());
+        // Disabled reads grey: the green is GO's enabled look only.
+        QToolButton *go = runner.goButton();
+        QVERIFY(go->styleSheet().contains("QToolButton:disabled"));
+        const QImage shot = go->grab().toImage();
+        const QColor mid = shot.pixelColor(4, shot.height() / 2);
+        QVERIFY2(!(mid.green() > mid.red() + 40 && mid.green() > mid.blue() + 40),
+                 qPrintable(mid.name()));
+        // Space does nothing either.
+        runner.go();
+        QVERIFY(!runner.canGo());
+        // The button runs the File menu's action.
+        QPushButton *button = runner.upgradeButton();
+        QVERIFY(button != nullptr && button->isVisible());
+        QCOMPARE(button->text(), QString("Upgrade This Show…"));
+        QTest::mouseClick(button, Qt::LeftButton);
+        QCOMPARE(upgraded.count(), 1);
+    }
+    // No action (no App): no button, the line stays.
+    CueRunner::setUpgradeAction(nullptr);
+    {
+        CueRunner runner(m_doc, CueRunner::Full);
+        runner.show();
+        runner.refresh();
+        QVERIFY(runner.isEmptyStateShown());
+        QVERIFY(!runner.upgradeButton()->isVisible());
+    }
+    // With a main list: as before -- the list, GO green and live.
+    CueRunner::setUpgradeAction(&upgrade);
+    show();
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(900, 600);
+    runner.show();
+    runner.refresh();
+    QVERIFY(!runner.isEmptyStateShown());
+    QVERIFY(runner.cueTree()->isVisible());
+    QVERIFY(runner.goButton()->isEnabled());
+    const QImage shot = runner.goButton()->grab().toImage();
+    const QColor green = shot.pixelColor(4, shot.height() / 2);
+    QVERIFY2(green.green() > green.red() + 40, qPrintable(green.name()));
+    CueRunner::setUpgradeAction(nullptr);
 }
 
 void CueRunner_Test::goSubGoBackAndWhatChanges()
