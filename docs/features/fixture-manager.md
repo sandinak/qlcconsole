@@ -55,6 +55,14 @@ universe's address-usage grid. A fixture's info includes its **Connection**
 (DMX, or Network with its IP), its **Definition** source (Included or Local,
 below), and, for an unpatched one, "Unpatched -- in the inventory".
 
+**Renaming in the tree.** Select a fixture, a group, a group folder or a
+universe and press **Return** (or **F2**), type the new name, and press
+Return again; **Esc** keeps the old name. An empty name is ignored, and a
+fixture name another fixture already has is refused (group names may
+repeat). Double-clicking a group still opens its grid editor, and
+double-clicking a fixture its properties; the group editor's Name field
+follows a rename made in the tree.
+
 ## Inventory: design the rig before patching
 
 Stock QLC+ won't let a fixture exist until it has a universe and an address.
@@ -549,7 +557,7 @@ selected, and only offers what applies:
 1. **The fixture itself** — Fixture Properties…, Definition & Mode…,
    Edit Fixture Definition… and [LED Layout…](#led-layout) (one fixture),
    Change Definition… (fixtures of one definition, when another is a
-   drop-in for it).
+   drop-in for it), and **Stage Look ▸** (below).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….
@@ -569,6 +577,17 @@ inventory — and Expand All / Collapse All last.
 
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.
+
+### Stage Look
+
+**Stage Look ▸** sets what the fixtures selected -- and every fixture of a
+group selected -- look like: **Auto** (named for what their type is closest
+to, as *Auto (Moving head spot)*), then the looks under **Moving**, **Fixed
+conventional** and **Fixed LED**, with icons. The one they all share is
+ticked. A fixture with a look shows its icon in this list and the other
+fixture lists, and its shape on the plot and in the studio; see
+[Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
+same choice as its **Stage look** row.
 
 ### Patching a universe's output
 

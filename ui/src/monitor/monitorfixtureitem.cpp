@@ -103,6 +103,29 @@ static QRectF shapeRect(QAbstractGraphicsShapeItem *s)
     return QRectF();
 }
 
+/* A stage look's lens hint (stageLookLensHint()): translucent dark marks
+   over the head, so a lens of one colour still reads as a gobo, a grid of
+   LEDs or two strobe cells. The head's colour and level show through. */
+class LensHintGraphic final : public QGraphicsItem
+{
+public:
+    explicit LensHintGraphic(QGraphicsItem *parent) : QGraphicsItem(parent)
+    {
+        setAcceptedMouseButtons(Qt::NoButton);
+    }
+    QPainterPath path;
+    void setPath(const QPainterPath &p) { prepareGeometryChange(); path = p; }
+    QRectF boundingRect() const override { return path.boundingRect().adjusted(-1, -1, 1, 1); }
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) override
+    {
+        if (path.isEmpty())
+            return;
+        painter->setPen(QPen(QColor(0, 0, 0, 150), 0));
+        painter->setBrush(QColor(0, 0, 0, 90));
+        painter->drawPath(path);
+    }
+};
+
 /* A mover's colour ring: a band of segments just inside its head's
    outline, over the head (the lens shows through the middle). */
 class ColourRingGraphic final : public QGraphicsItem
@@ -166,6 +189,9 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     // Dense fixtures (RGB tape / pixel arrays) draw heads as tiled rectangles
     // so the colour packs with no gaps; sparse fixtures keep round heads.
     const bool denseHeads = fxi->heads() > DENSE_HEAD_THRESHOLD;
+    m_denseHeads = denseHeads;
+    // A square lens (a square wash, a staff, a bar...) draws square heads.
+    const bool rectHeads = denseHeads || stageLookSquareLens(m_traits.look);
 
     for (int i = 0; i < fxi->heads(); i++)
     {
@@ -175,7 +201,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
             continue;
         FixtureHead *fxiItem = new FixtureHead;
         fxiItem->m_index = i;
-        fxiItem->m_item = denseHeads
+        fxiItem->m_item = rectHeads
             ? static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsRectItem(this))
             : static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsEllipseItem(this));
         // Width 0 = cosmetic: the outline stays 1px at any zoom so it doesn't
@@ -237,7 +263,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
 
         if ((fxiItem->m_dimmer != QLCChannel::invalid()) || (fxiItem->m_masterDimmer != QLCChannel::invalid()))
         {
-            fxiItem->m_back = denseHeads
+            fxiItem->m_back = rectHeads
                 ? static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsRectItem(this))
                 : static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsEllipseItem(this));
             fxiItem->m_back->setPen(QPen(Qt::white, 0)); // cosmetic (1px at any zoom)
@@ -414,6 +440,71 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     connect(fxi, SIGNAL(valuesChanged()), this, SLOT(slotUpdateValues()));
 }
 
+/* A head shape of the other kind (round <-> square), with everything the
+   old one had; the old one is deleted. */
+static QAbstractGraphicsShapeItem *reshapeHead(QAbstractGraphicsShapeItem *old, bool rect,
+                                               QGraphicsItem *parent)
+{
+    if (old == nullptr)
+        return nullptr;
+    const bool isRect = qgraphicsitem_cast<QGraphicsRectItem *>(old) != nullptr;
+    if (isRect == rect)
+        return old;
+    QAbstractGraphicsShapeItem *now = rect
+        ? static_cast<QAbstractGraphicsShapeItem *>(new QGraphicsRectItem(parent))
+        : static_cast<QAbstractGraphicsShapeItem *>(new QGraphicsEllipseItem(parent));
+    now->setPen(old->pen());
+    now->setBrush(old->brush());
+    now->setZValue(old->zValue());
+    now->setVisible(old->isVisible());
+    now->setOpacity(old->opacity());
+    setShapeRect(now, shapeRect(old));
+    delete old;
+    return now;
+}
+
+void MonitorFixtureItem::refreshStageLook()
+{
+    Fixture *fxi = m_doc->fixture(m_fid);
+    if (fxi == NULL || fxi->stageLook() == m_traits.look)
+        return;
+    m_traits = classifyFixture(fxi);
+    const bool rectHeads = m_denseHeads || stageLookSquareLens(m_traits.look);
+    foreach (FixtureHead *h, m_heads)
+    {
+        h->m_item = reshapeHead(h->m_item, rectHeads, this);
+        h->m_back = reshapeHead(h->m_back, rectHeads, this);
+    }
+    if (m_width > 0 && m_height > 0)
+        setSize(QSize(m_width, m_height));       // re-lays the heads in its lens
+    slotUpdateValues();
+    update();
+}
+
+void MonitorFixtureItem::updateLensHint()
+{
+    QPainterPath hint;
+    if (!m_heads.isEmpty() && !m_denseHeads && m_traits.look != Fixture::AutoLook)
+        hint = stageLookLensHint(m_traits.look, shapeRect(m_heads.first()->m_item));
+    if (hint.isEmpty())
+    {
+        delete m_hintItem;
+        m_hintItem = nullptr;
+        return;
+    }
+    if (m_hintItem == nullptr)
+    {
+        m_hintItem = new LensHintGraphic(this);
+        m_hintItem->setZValue(2.5);             // over the head, under a ring
+    }
+    m_hintItem->setPath(hint);
+}
+
+QPainterPath MonitorFixtureItem::lensHintPath() const
+{
+    return m_hintItem != nullptr ? m_hintItem->path : QPainterPath();
+}
+
 QVector<QColor> MonitorFixtureItem::ringSegments() const
 {
     return m_ringItem != nullptr ? m_ringItem->segments : QVector<QColor>();
@@ -449,8 +540,14 @@ void MonitorFixtureItem::setSize(QSize size)
     if (m_width <= 0 || m_height <= 0 || m_heads.isEmpty())
         return;
 
-    int headsWidth = m_width;
-    int headsHeight = m_height;
+    /* A stage look says where its light comes out -- the front of a
+       followspot's barrel, the length of a staff: its heads go there. */
+    const QRectF lens = stageLookLensRect(m_traits.look, QRectF(0, 0, m_width, m_height),
+                                          m_elevationView);
+    const QRectF area = lens.isValid() && lens.width() >= 1.0 && lens.height() >= 1.0
+                        ? lens : QRectF(0, 0, m_width, m_height);
+    int headsWidth = qMax(1, qRound(area.width()));
+    int headsHeight = qMax(1, qRound(area.height()));
 
     const int n = m_heads.count();
     int columns = 0, rows = 0;
@@ -525,8 +622,8 @@ void MonitorFixtureItem::setSize(QSize size)
 
     // Floating-point division: when columns/rows exceed the pixel size (dense
     // strip), integer division would give 0-size cells (invisible at any zoom).
-    double cellWidth = double(headsWidth) / columns;
-    double cellHeight = double(headsHeight) / rows;
+    double cellWidth = area.width() / columns;
+    double cellHeight = area.height() / rows;
     double headDiam = (cellWidth < cellHeight) ? cellWidth : cellHeight;
 
     // Dense fixtures (many heads, or tiny cells — e.g. RGB tape/pixel strips)
@@ -548,14 +645,15 @@ void MonitorFixtureItem::setSize(QSize size)
         if (i < rows)
         {
             {
-                const double cellLeft = j * cellWidth;
-                const double cellTop  = i * cellHeight;
+                const double cellLeft = area.left() + j * cellWidth;
+                const double cellTop  = area.top() + i * cellHeight;
 
                 FixtureHead * h = m_heads.at(index);
                 QAbstractGraphicsShapeItem *head = h->m_item;
-                if (dense)
+                if (dense || (n == 1 && area != QRectF(0, 0, m_width, m_height)))
                 {
-                    // Fill the whole cell (no centring gap) so heads tile.
+                    // Fill the whole cell (no centring gap) so heads tile --
+                    // or, one head, the look's whole lens.
                     setShapeRect(head, QRectF(cellLeft, cellTop, cellWidth, cellHeight));
                 }
                 else
@@ -584,6 +682,8 @@ void MonitorFixtureItem::setSize(QSize size)
             }
         }
     }
+
+    updateLensHint();
 
     QFontMetrics fm(m_font);
     m_labelRect = fm.boundingRect(QRect(-10, m_height + 2, m_width + 20, 30),
@@ -909,6 +1009,17 @@ QPainterPath MonitorFixtureItem::shape() const
 
 void MonitorFixtureItem::drawBody(QPainter *painter, const QRectF &r) const
 {
+    if (m_traits.look != Fixture::AutoLook)
+    {
+        /* The LD's look: the same shape the studio draws. A staff or bar wash
+           that is already a bar keeps the plain strip its pixels tile. */
+        if (m_traits.kind != FixtureSilhouette::Bar || m_traits.headCount <= 1)
+        {
+            painter->drawPath(stageLookBodyPath(m_traits.look, r, m_elevationView,
+                                                qMax(1, m_traits.headCount)));
+            return;
+        }
+    }
     if (m_traits.kind == FixtureSilhouette::Mover)
     {
         // Shared with the Structure Studio elevation editor (fixturevisualtraits.h)

@@ -607,6 +607,10 @@ private:
     QColor pixelColor(Fixture *fx, const QByteArray &values, int head,
                       const QColor &fallback, const QColor &unlit,
                       double visibility, int masterLevel = -2) const;
+    /** A Par-kind fixture's body, centred on @p c: its declared footprint,
+     *  else a default in its stage look's proportions. Drawing and hit-testing
+     *  both use it. */
+    QRectF parBodyRect(const struct FixtureVisualTraits &traits, const QPointF &c) const;
     void drawOneFixture(QPainter &p, quint32 fid, bool nameEveryone) const;
     /** The whole rig in one back-to-front pass, structures and fixtures
      *  interleaved, so nearer objects cover further ones whatever order they

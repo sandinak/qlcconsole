@@ -1513,6 +1513,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setConnection(fixture->connection());
         newFixture->setIPAddress(fixture->ipAddress());
         newFixture->setTransport(fixture->transport());
+        newFixture->setStageLook(fixture->stageLook());
         newFixture->setPowerProfile(fixture->powerProfile());
 
         if (fixture->fixtureDef() == NULL ||

@@ -20,6 +20,7 @@
 #include <QComboBox>
 #include <QSpinBox>
 #include <QLabel>
+#include <QStandardItemModel>
 
 #include "structurestudioview.h"
 #include "monitorgraphicsview.h"
@@ -67,6 +68,46 @@ bool comboIsMixed(const QComboBox *cb)
 }
 }
 
+void FixtureFields::fillStageLookCombo(QComboBox *cb, const Fixture *fx)
+{
+    const bool was = cb->blockSignals(true);
+    cb->clear();
+    const Fixture::StageLook autoLook = fx != nullptr ? fx->autoStageLook() : Fixture::AutoLook;
+    const QString autoName = autoLook != Fixture::AutoLook
+                             ? Fixture::stageLookName(autoLook)
+                             : (fx != nullptr && fx->fixtureDef() != nullptr
+                                ? QLCFixtureDef::typeToString(fx->fixtureDef()->type()) : QString());
+    const QIcon autoIcon = autoLook != Fixture::AutoLook
+                           ? QIcon(Fixture::stageLookIconResource(autoLook))
+                           : (fx != nullptr ? QIcon(fx->typeIconResource()) : QIcon());
+    cb->addItem(autoIcon, autoName.isEmpty() ? tr("Auto") : tr("Auto (%1)").arg(autoName),
+                int(Fixture::AutoLook));
+    int section = -1;
+    foreach (Fixture::StageLook look, Fixture::stageLooks())
+    {
+        if (look == Fixture::AutoLook)
+            continue;
+        const int sec = Fixture::stageLookSection(look);
+        if (sec != section)
+        {
+            section = sec;
+            cb->insertSeparator(cb->count());
+            cb->addItem(Fixture::stageLookSectionName(Fixture::StageLookSection(sec)));
+            if (QStandardItemModel *m = qobject_cast<QStandardItemModel *>(cb->model()))
+            {
+                QStandardItem *heading = m->item(cb->count() - 1);
+                heading->setFlags(heading->flags() & ~(Qt::ItemIsSelectable | Qt::ItemIsEnabled));
+                QFont f = heading->font();
+                f.setBold(true);
+                heading->setFont(f);
+            }
+        }
+        cb->addItem(QIcon(Fixture::stageLookIconResource(look)),
+                    QStringLiteral("   ") + Fixture::stageLookName(look), int(look));
+    }
+    cb->blockSignals(was);
+}
+
 /* "mixed" on a spin box: its lowest value, one step below its real range. */
 void FixtureFields::spinMixed(QDoubleSpinBox *sp, bool mixed, double lowest)
 {
@@ -97,6 +138,29 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     , m_view(view)
     , m_shown(Fixture::invalidId())
 {
+    /* What it looks like on stage: its icon in the lists, its shape on the
+       plot and in the studio. */
+    m_look = new QComboBox(parent);
+    m_look->setObjectName(QStringLiteral("fixtureStageLook"));
+    m_look->setIconSize(QSize(24, 24));
+    m_look->setToolTip(tr("What it looks like on stage: its icon in the fixture lists and how "
+                          "the plot and the studio draw it. Auto follows its definition's type. "
+                          "Only the picture changes -- not how it is driven."));
+    form->addRow(tr("Stage look:"), m_look);
+    connect(m_look, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (m_loading || m_fids.isEmpty() || comboIsMixed(m_look))
+            return;
+        const QVariant v = m_look->currentData(Qt::UserRole);
+        if (!v.isValid())
+            return;                         // a section heading
+        const Fixture::StageLook look = Fixture::StageLook(v.toInt());
+        emit aboutToEdit(QStringLiteral("stageLook"));
+        foreach (quint32 fid, m_fids)
+            if (Fixture *fx = m_monitor->m_doc->fixture(fid))
+                fx->setStageLook(look);     // changed() -> the plot, the lists
+        finishEdit();
+    });
+
     /* WHAT it is mounted on: how it sits ("Top", "Inside") says nothing about
        what it sits on. */
     m_mountOn = new QLabel(parent);
@@ -465,7 +529,7 @@ void FixtureFields::row(QWidget *w, bool visible)
 
 void FixtureFields::hideAll()
 {
-    for (QWidget *w : { static_cast<QWidget *>(m_mountOn), static_cast<QWidget *>(m_towerPos),
+    for (QWidget *w : { static_cast<QWidget *>(m_look), static_cast<QWidget *>(m_mountOn), static_cast<QWidget *>(m_towerPos),
                         static_cast<QWidget *>(m_colour), static_cast<QWidget *>(m_orientation),
                         static_cast<QWidget *>(m_face), static_cast<QWidget *>(m_placement),
                         static_cast<QWidget *>(m_angle), static_cast<QWidget *>(m_tilt),
@@ -576,6 +640,16 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     const bool pansOrTilts = fx != nullptr
         && (fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) != QLCChannel::invalid()
             || fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid());
+
+    // Stage look: what it looks like, Auto naming what its type suggests.
+    fillStageLookCombo(m_look, fx);
+    m_look->blockSignals(true);
+    m_look->setCurrentIndex(qMax(0, m_look->findData(int(fx->stageLook()), Qt::UserRole)));
+    comboMixed(m_look, differs([doc, fx](quint32 f) {
+        const Fixture *o = doc->fixture(f);
+        return o != nullptr && o->stageLook() == fx->stageLook(); }));
+    m_look->blockSignals(false);
+    row(m_look, true);
 
     m_mountOn->setText(many ? tr("%1 (and %n more)", "", m_fids.size() - 1)
                                   .arg(m_monitor->mountDescription(rp, m_shown))

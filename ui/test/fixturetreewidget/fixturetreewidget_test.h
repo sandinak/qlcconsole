@@ -58,6 +58,14 @@ private slots:
     /** Fixtures or a group dropped on a universe, or on a fixture in one. */
     void aDropOnAUniverseNamesItAndItsFixtures();
 
+    /** Return on a group row opens an inline editor on its name; Return in
+     *  the editor renames the group, and the row is no longer editable. */
+    void enterOnAGroupRowRenamesItInPlace();
+    /** Esc in that editor keeps the old name and disarms the row. */
+    void escCancelsAGroupRename();
+    /** F2 does the same; an empty name keeps the old one. */
+    void f2OnAGroupAndAnEmptyNameIsRejected();
+
 private:
     Doc* m_doc;
 };

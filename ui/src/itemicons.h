@@ -87,7 +87,8 @@ namespace ItemIcons
     /** A palette's icon: a swatch, a pie, a shutter, a target, or the
      *  type's stock icon. @p doc may be nullptr (no shutter/aim lookup). */
     QIcon paletteIcon(Doc *doc, const QLCPalette *palette);
-    /** A fixture's icon: its kind's, or its definition type's. */
+    /** A fixture's icon: its stage look's when one is set, else its
+     *  kind's, or its definition type's. */
     QIcon fixtureIcon(const Fixture *fixture);
     /** A group's icon: its one kind's (stacked), else the group icon. */
     QIcon groupIcon(Doc *doc, const FixtureGroup *group);

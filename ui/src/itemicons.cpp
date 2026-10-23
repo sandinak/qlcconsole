@@ -547,6 +547,9 @@ QIcon fixtureIcon(const Fixture *fixture)
 {
     if (fixture == nullptr)
         return QIcon(QStringLiteral(":/fixture.png"));
+    // The LD's own word for what it looks like wins over what is guessed.
+    if (fixture->stageLook() != Fixture::AutoLook)
+        return QIcon(fixture->iconResource());
     const FixtureKind kind = fixtureKind(fixture);
     return kind == OtherKind ? QIcon(fixture->iconResource()) : kindIcon(kind);
 }

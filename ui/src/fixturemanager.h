@@ -370,6 +370,15 @@ public:
      *  address, name and groups. Returns how many changed. */
     static int changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFixtureDef *def);
 
+    /** Give @p fids the stage look @p look (Fixture::StageLook). Returns how
+     *  many changed; marks the show modified when any did. */
+    static int setStageLook(Doc *doc, const QList<quint32> &fids, int look);
+    /** Add the "Stage look" choices for @p fids to @p menu: Auto (named for
+     *  the first one's type), then the looks in their sections, the one they
+     *  all share checked. Choosing one sets it on all of them (one Ctrl+Z
+     *  step on the plot when the Monitor is open). */
+    static void fillStageLookMenu(QMenu *menu, Doc *doc, const QList<quint32> &fids);
+
 private:
 
     /** Edit properties for the selected channels group */

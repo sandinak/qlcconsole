@@ -69,6 +69,8 @@
 #include "measurementunits.h"
 #include <QShortcut>
 #include "fixtureremap.h"
+#include "monitor/rigeditsession.h"
+#include <QActionGroup>
 #include "addrgbpanel.h"
 #include "addfixture.h"
 #include "patchinventorydialog.h"
@@ -2151,6 +2153,78 @@ int FixtureManager::changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFi
     return n;
 }
 
+int FixtureManager::setStageLook(Doc *doc, const QList<quint32> &fids, int look)
+{
+    if (doc == NULL)
+        return 0;
+    int n = 0;
+    foreach (quint32 fid, fids)
+    {
+        Fixture *fxi = doc->fixture(fid);
+        if (fxi == NULL || int(fxi->stageLook()) == look)
+            continue;
+        fxi->setStageLook(Fixture::StageLook(look));    // changed(): plot, lists
+        ++n;
+    }
+    if (n > 0)
+        doc->setModified();
+    return n;
+}
+
+void FixtureManager::fillStageLookMenu(QMenu *menu, Doc *doc, const QList<quint32> &fids)
+{
+    if (menu == NULL || doc == NULL || fids.isEmpty())
+        return;
+    const Fixture *first = doc->fixture(fids.first());
+    int shared = first != NULL ? int(first->stageLook()) : -1;
+    foreach (quint32 fid, fids)
+    {
+        const Fixture *fxi = doc->fixture(fid);
+        if (fxi == NULL || int(fxi->stageLook()) != shared)
+            shared = -1;                        // mixed: nothing checked
+    }
+    QActionGroup *group = new QActionGroup(menu);
+    group->setExclusive(true);
+    auto addLook = [menu, doc, fids, group, shared](const QIcon &icon, const QString &text, int look) {
+        QAction *a = menu->addAction(icon, text);
+        a->setCheckable(true);
+        a->setChecked(look == shared);
+        a->setData(look);
+        a->setObjectName(QStringLiteral("stageLook_%1")
+                             .arg(Fixture::stageLookToString(Fixture::StageLook(look))));
+        group->addAction(a);
+        QObject::connect(a, &QAction::triggered, menu, [doc, fids, look]() {
+            Monitor *mon = Monitor::instance();
+            if (mon == NULL)
+            {
+                setStageLook(doc, fids, look);
+                return;
+            }
+            RigEditSession edit(mon);           // one Ctrl+Z step on the plot
+            setStageLook(doc, fids, look);
+        });
+    };
+    const Fixture::StageLook autoLook = first != NULL ? first->autoStageLook() : Fixture::AutoLook;
+    addLook(autoLook != Fixture::AutoLook ? QIcon(Fixture::stageLookIconResource(autoLook))
+                                          : (first != NULL ? QIcon(first->typeIconResource()) : QIcon()),
+            autoLook != Fixture::AutoLook
+                ? tr("Auto (%1)").arg(Fixture::stageLookName(autoLook)) : tr("Auto"),
+            int(Fixture::AutoLook));
+    int section = -1;
+    foreach (Fixture::StageLook look, Fixture::stageLooks())
+    {
+        if (look == Fixture::AutoLook)
+            continue;
+        const int sec = Fixture::stageLookSection(look);
+        if (sec != section)
+        {
+            section = sec;
+            menu->addSection(Fixture::stageLookSectionName(Fixture::StageLookSection(sec)));
+        }
+        addLook(QIcon(Fixture::stageLookIconResource(look)), Fixture::stageLookName(look), int(look));
+    }
+}
+
 bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid)
 {
     Fixture* fxi = (doc != NULL) ? doc->fixture(fid) : NULL;
@@ -2799,6 +2873,29 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             if (fxi != NULL && fxi->fixtureDef() != NULL &&
                 fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
                 editDefinition = menu.addAction(tr("Edit Fixture Definition…"));
+        }
+        /* What they look like on stage -- icon, plot and studio shape -- for
+           every fixture selected and every fixture of a selected group. */
+        if (m_doc->mode() != Doc::Operate)
+        {
+            QList<quint32> lookFids = selFixtures;
+            foreach (quint32 gid, selGroups)
+            {
+                FixtureGroup *grp = m_doc->fixtureGroup(gid);
+                if (grp == NULL)
+                    continue;
+                foreach (quint32 fid, grp->fixtureList())
+                {
+                    if (!lookFids.contains(fid))
+                        lookFids << fid;
+                }
+            }
+            if (!lookFids.isEmpty())
+            {
+                QMenu *lookMenu = menu.addMenu(tr("Stage Look"));
+                lookMenu->setObjectName(QStringLiteral("stageLookMenu"));
+                fillStageLookMenu(lookMenu, m_doc, lookFids);
+            }
         }
         /* Where each head of its model really is (an XL-450's rows of RGB
            and white): the LED Layout editor, for one fixture of more than
