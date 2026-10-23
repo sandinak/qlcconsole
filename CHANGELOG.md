@@ -20,7 +20,9 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   rows' page (new **↩ Back** on the Look Editor, `LookEditor::setBackText()`
   / `backRequested()`); a group's layout to its scene (its **← Back** now
   also shows with no scene to go back to); the effect bench is left as
-  clicking away leaves it, back to the scene it was opened from; else ↩
+  clicking away leaves it, back to the scene it was opened from -- asking
+  first (*Keep designing* default / *Leave*, `Workbench::setConfirm()` for
+  tests) when `EffectDesigner::hasUnkeptChanges()`; else ↩
   (`goBack()`, including the docked Show Tree's ↩ Show Tree). The Show
   Tree's own Look Editor closes on Esc / **↩ Back**. Edits stay; inline
   renames keep Esc to themselves; plain Esc is bound to no playback action

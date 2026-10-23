@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QTimer>
 #include <QMenu>
+#include <QMessageBox>
 #include <QDebug>
 
 #include "workbench.h"
@@ -48,6 +49,7 @@
 #include "fixtureconsole.h"
 #include "functionparent.h"
 #include "showtreeview.h"
+#include "effectdesigner.h"
 #include "treecuestack.h"
 #include "chasereditor.h"
 #include "sceneeditor.h"
@@ -733,9 +735,31 @@ bool Workbench::backOut()
         return true;
     }
     // The effect bench: left as clicking away leaves it (its draft goes with
-    // the designer, as its Cancel), back to the scene it was opened from.
+    // the designer, as its Cancel), back to the scene it was opened from --
+    // asked first when what is designed hasn't been kept.
     if (m_benchPane && effectPane() != nullptr)
     {
+        EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane());
+        if (ed != nullptr && ed->hasUnkeptChanges())
+        {
+            const QString title = tr("Effect designer");
+            const QString text = tr("Leave the effect designer? This effect hasn't been kept.");
+            bool leave = false;
+            if (m_confirm)
+                leave = m_confirm(title, text);
+            else
+            {
+                QMessageBox box(QMessageBox::Question, title, text, QMessageBox::NoButton, this);
+                QPushButton *keep = box.addButton(tr("Keep designing"), QMessageBox::RejectRole);
+                QPushButton *go = box.addButton(tr("Leave"), QMessageBox::DestructiveRole);
+                box.setDefaultButton(keep);
+                box.setEscapeButton(keep);
+                box.exec();
+                leave = box.clickedButton() == go;
+            }
+            if (!leave)
+                return true;        // Esc was answered: still designing
+        }
         const quint32 scene = m_benchFromScene;
         clear();
         if (m_doc->function(scene) != nullptr)

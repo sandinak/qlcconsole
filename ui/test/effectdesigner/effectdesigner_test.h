@@ -69,8 +69,9 @@ private slots:
      *  Effects has + New and a right-click menu, and designs an effect
      *  palette in the Workbench. */
     void buildEffectsMakesAndDesignsEffects();
-    /** Esc on the bench leaves it as clicking away does (the draft goes,
-     *  as its Cancel), back to the scene it was opened from. */
+    /** Esc on the bench: nothing unkept, it leaves at once, back to the
+     *  scene it was opened from; an effect designed and not kept, it asks
+     *  first (Keep designing / Leave). Clicking away doesn't ask. */
     void escLeavesTheBench();
 
     /** Make a layer (board Q37), into a Show Tree cue: a saved, unchanged

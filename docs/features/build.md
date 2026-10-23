@@ -68,9 +68,13 @@ with the focus in the navigator or in the Workbench:
   that page, with the same row selected.
 - **A group's layout** goes back to the scene it was opened from
   (**← Back to …**), or to the page the rows show if no scene was open.
-- **The effect bench** goes back to the scene it was opened from. Leaving
-  the bench works as it always has: an effect you have not saved or made
-  into a layer is dropped, as **Cancel** would drop it.
+- **The effect bench** goes back to the scene it was opened from. If you
+  have changed the effect and not kept it (saved it as a palette or a
+  preset, updated the palette, or made it a layer), Esc asks first:
+  *Leave the effect designer? This effect hasn't been kept.* **Keep
+  designing** is the default, and Esc picks it too; **Leave** drops the
+  effect. With nothing unsaved, Esc leaves at once. Clicking something
+  else in the navigator leaves without asking, as it always has.
 - **A ▣ opened layer** goes back to its collection or chaser (**↩**).
 
 What you changed stays changed. Palette and scene edits are made as you go,

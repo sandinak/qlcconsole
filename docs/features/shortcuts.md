@@ -72,7 +72,7 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | Drag a scene onto the Workbench's layers | Add it to the collection loaded |
 | ⌫ on a Workbench layer | Take it out of the collection (the function stays) |
 | Double-click a ▣ layer | Open it in the Workbench (↩ comes back) |
-| **Esc** | Back out one level: a palette double-clicked open goes back to the page it covered (as its **↩ Back**), a group's layout to its scene (**← Back**), the effect bench to the scene it was opened from (its draft goes, as Cancel), a ▣ layer to its collection (**↩**) ([Backing out](build.md#backing-out-esc)) |
+| **Esc** | Back out one level: a palette double-clicked open goes back to the page it covered (as its **↩ Back**), a group's layout to its scene (**← Back**), the effect bench to the scene it was opened from (asking first if the effect hasn't been kept), a ▣ layer to its collection (**↩**) ([Backing out](build.md#backing-out-esc)) |
 | ⌘→ / ⌘← | Expand / collapse every row |
 | ⌘Z / ⇧⌘Z | Undo / redo the last change, here or in the Show Tree (one history) |
 | ⇧⌘N | New here: a scene in the selected folder; in the Workbench a scene layer (collection) or the next step (chaser); in Effects a new effect ([New here](build.md#new-here)) |

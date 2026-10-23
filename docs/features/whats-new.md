@@ -10,7 +10,8 @@ The latest changes, newest first. Each links to the guide with the detail.
   takes you back one level from the other editors that cover a page too:
   a group's layout, the effect bench, a ▣ opened layer, the Workbench
   docked in the Show Tree (to the cue page), and the Show Tree's Look
-  Editor. Edits stay. Esc in a rename still only cancels the rename, and
+  Editor. Edits stay. On the effect bench, Esc asks before it drops an
+  effect you haven't kept. Esc in a rename still only cancels the rename, and
   Esc inside the colour picker no longer makes the picker disappear. See
   [Backing out](build.md#backing-out-esc) and
   [Keyboard and mouse](shortcuts.md).

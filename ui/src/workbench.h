@@ -112,6 +112,10 @@ public:
      *  opened from; else ↩ (goBack()). Edits stay. False: nowhere to go
      *  (Esc goes on). */
     bool backOut();
+    /** In place of backOut()'s question (tests): @a title, @a text; true
+     *  leaves. Unset: a message box, Keep designing the default. */
+    typedef std::function<bool(const QString &title, const QString &text)> Confirm;
+    void setConfirm(const Confirm &confirm) { m_confirm = confirm; }
     /** Where ↩ goes when there is nothing to go back to here ("Show Tree"),
      *  and how; an empty @a label clears it. W3 docks the Workbench in the
      *  Show Tree with this. */
@@ -345,6 +349,7 @@ private:
     /** editPalette() put the Look Editor over the page that was showing
      *  (its ↩ Back, Esc: the rows' page again). */
     bool m_paletteDetour = false;
+    Confirm m_confirm;
     QWidget *m_targetPage = nullptr;
     QLabel *m_targetHeading = nullptr;
     QPushButton *m_targetLayoutBtn = nullptr;
