@@ -39,6 +39,7 @@
 #include "fixture.h"
 #include "inputoutputmap.h"
 #include "functionparent.h"
+#include "outputlayer.h"
 #undef protected
 #undef private
 
@@ -601,6 +602,106 @@ void MasterTimer_Test::aStopReachesTheUniversesWithTheGuiThreadBusy()
     QVERIFY(scene->isRunning() == false);
 
     mt->stop();
+}
+
+/* A tick called by hand (as most engine tests do) leaves the universe
+   threads asleep: the caller computes the frames itself. When the hand
+   tick woke them too, the universe thread and the test computed the same
+   universe's frame at once and corrupted the heap (the 0.2.2 RC gate:
+   trackback_test, showtree_test), and every fade ran twice as fast. */
+void MasterTimer_Test::aTickByHandLeavesTheFramesToItsCaller()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    QVERIFY(mt->m_functionList.isEmpty());
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setChannels(1);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    m_doc->inputOutputMap()->startUniverses();
+
+    Universe *uni = m_doc->inputOutputMap()->universe(0);
+    QVERIFY(uni != NULL);
+    QTRY_VERIFY(uni->isRunning());
+    const quint32 before = uni->m_frame.load();
+    for (int i = 0; i < 10; i++)
+        mt->timerTick();
+    QTest::qWait(5 * int(MasterTimer::tick()));
+    QCOMPARE(uni->m_frame.load(), before);
+
+    uni->processFaders();
+    QCOMPARE(uni->m_frame.load(), before + 1);
+}
+
+/* Everything that touches a universe, from every thread it comes from, on a
+   Doc built and torn down while its timer runs: the universe threads compute
+   the frames, the test thread computes some by hand, changes the channel
+   roles and copies the values, a running scene and an OutputLayer (Park,
+   Highlight, Flash, Focus, the held look) write through their faders. Run
+   under ASan / TSan this is the 0.2.2 RC heap corruption's reproducer. */
+void MasterTimer_Test::framesRolesAndTeardownFromEveryThread()
+{
+    for (int round = 0; round < 8; round++)
+    {
+        Doc *doc = new Doc(this);
+        QList<Fixture *> fixtures;
+        for (int u = 0; u < 2; u++)
+        {
+            for (int f = 0; f < 4; f++)
+            {
+                Fixture *fxi = new Fixture(doc);
+                fxi->setChannels(4);
+                fxi->setAddress(quint32(f * 4));
+                fxi->setUniverse(quint32(u));
+                QVERIFY(doc->addFixture(fxi));
+                fixtures << fxi;
+            }
+        }
+
+        Scene *scene = new Scene(doc);
+        for (Fixture *fxi : fixtures)
+            for (quint32 c = 0; c < fxi->channels(); c++)
+                scene->setValue(fxi->id(), c, 200);
+        QVERIFY(doc->addFunction(scene));
+
+        OutputLayer *layer = new OutputLayer(doc, Universe::Park, 0, QStringLiteral("test"));
+        QList<OutputLayer::Level> levels;
+        for (Fixture *fxi : fixtures)
+            levels << OutputLayer::Level { fxi->id(), 0, 255 };
+
+        MasterTimer *mt = doc->masterTimer();
+        doc->inputOutputMap()->startUniverses();
+        mt->start();
+        scene->start(mt, FunctionParent::master());
+
+        QElapsedTimer t;
+        t.start();
+        int n = 0;
+        while (t.elapsed() < 150)
+        {
+            layer->set(n % 2 ? levels : levels.mid(0, 3));
+            QList<Universe *> us = doc->inputOutputMap()->universes();
+            for (Universe *uni : us)
+            {
+                uni->processFaders();
+                (void)uni->preGMValues();
+                uni->setChannelCapability(ushort(100 + n % 50), n % 3 ? QLCChannel::Intensity
+                                                                     : QLCChannel::Colour);
+                uni->setChannelDefaultValue(ushort(200 + n % 50), uchar(n));
+            }
+            n++;
+        }
+        QVERIFY(n > 0);
+
+        /* Torn down running: the timer, the scene and the layer still live.
+           The layer goes first, or as the effects' does: with its owner, a
+           child of the Doc, once the Doc has let go of its universes. */
+        if (round % 2)
+            delete layer;
+        else
+            connect(doc, &QObject::destroyed, [layer]() { delete layer; });
+        delete doc;
+    }
 }
 
 /* The beat clock (SPEED_SPREAD_DESIGN.md, S1): one running beat count every

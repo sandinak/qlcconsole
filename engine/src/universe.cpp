@@ -211,6 +211,7 @@ bool Universe::inhibitOutput() const
 
 void Universe::slotGMValueChanged()
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     {
         for (int i = 0; i < m_intensityChannels.size(); ++i)
         {
@@ -342,6 +343,11 @@ void Universe::tick()
 
 void Universe::processFaders()
 {
+    /* One frame at a time, and never while the roles or the value arrays
+       are being reallocated (see m_frameMutex). Released before the
+       signal: its receivers are free to call back in. */
+    QMutexLocker frameLocker(&m_frameMutex);
+
     flushInput();
     zeroIntensityChannels();
     if (m_overrideWritten.size() != UNIVERSE_SIZE)
@@ -393,6 +399,7 @@ void Universe::processFaders()
         dataChanged = true;
     }
     dumpOutput(postGM, dataChanged);
+    frameLocker.unlock();
 
     if (dataChanged)
         emit universeWritten(id(), postGM);
@@ -689,6 +696,7 @@ void Universe::run()
 
 void Universe::reset()
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     for (int i = 0; i < UNIVERSE_SIZE; i++)
         m_held[i].store(0, std::memory_order_relaxed);
     m_preGMValues->fill(0);
@@ -805,6 +813,9 @@ QString Universe::blendModeToString(Universe::BlendMode mode)
 
 const QByteArray Universe::preGMValues() const
 {
+    /* A shallow copy shares the array: copied while a frame detaches it
+       (reset() on the universe thread), the two raced on its header. */
+    QMutexLocker frameLocker(&m_frameMutex);
     return *m_preGMValues;
 }
 
@@ -1165,6 +1176,7 @@ void Universe::disconnectInputPatch()
 
 void Universe::setChannelCapability(ushort channel, QLCChannel::Group group, ChannelType forcedType)
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     if (channel >= (ushort)m_channelsMask->length())
         return;
 
@@ -1232,6 +1244,7 @@ uchar Universe::channelCapabilities(ushort channel)
 
 void Universe::setChannelDefaultValue(ushort channel, uchar value)
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     if (channel >= m_totalChannels)
     {
         m_totalChannels = channel + 1;
@@ -1247,6 +1260,7 @@ void Universe::setChannelDefaultValue(ushort channel, uchar value)
 
 void Universe::setChannelModifier(ushort channel, ChannelModifier *modifier)
 {
+    QMutexLocker frameLocker(&m_frameMutex);
     if (channel >= (ushort)m_modifiers.count())
         return;
 

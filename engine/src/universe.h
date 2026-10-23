@@ -606,8 +606,9 @@ signals:
 protected:
     QSemaphore m_semaphore;
 
-    /** Indicated if the DMX writer worker thread is running */
-    bool m_running;
+    /** Indicated if the DMX writer worker thread is running. Atomic: set
+     *  by the thread, cleared by the destructor on another one. */
+    std::atomic<bool> m_running;
 
     /** IMPORTANT: this is the list of faders that will compose
      *  the Universe values. The order is very important ! */
@@ -615,6 +616,16 @@ protected:
 
     /** Mutex used to protect the access to the m_faders array */
     QRecursiveMutex m_fadersMutex;
+
+    /** Held for a whole frame (processFaders()) and by everything that
+     *  reallocates what a frame reads: the channel roles and the intensity
+     *  lists, the value arrays (reset(), a copy of preGMValues()). The
+     *  universe thread computes the frames; a test may compute one by hand,
+     *  and the patch and its roles change from the UI while the timer runs.
+     *  Two of those at once corrupted the heap (a QList or QByteArray
+     *  reallocated under the other thread). Recursive: a fader's write
+     *  reads preGMValues() inside the frame. Taken before m_fadersMutex. */
+    mutable QRecursiveMutex m_frameMutex;
 
     /************************************************************************
      * Values

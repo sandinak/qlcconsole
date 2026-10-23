@@ -237,7 +237,7 @@ bool MasterTimerPrivate::isRunning() const
 
 void MasterTimerPrivate::timerTick()
 {
-    m_masterTimer->timerTick();
+    m_masterTimer->timerTick(true);
 }
 
 void MasterTimerPrivate::run()
@@ -278,7 +278,7 @@ void MasterTimerPrivate::run()
                      << "wall_us:" << long(m_masterTimer->tickComputeMs() * 1000.0)
                      << "cpu_us:" << long(m_masterTimer->tickCpuMs() * 1000.0)
                      << "budget_us:" << budgetUs;
-            m_masterTimer->timerTick();
+            m_masterTimer->timerTick(true);
             deadline = now();
             continue;
         }
@@ -309,7 +309,7 @@ void MasterTimerPrivate::run()
         if (m_run.loadAcquire() == 0)
             break;
 
-        m_masterTimer->timerTick();
+        m_masterTimer->timerTick(true);
     }
 
     /* Also on an error exit, so isRunning() stops claiming a dead timer and

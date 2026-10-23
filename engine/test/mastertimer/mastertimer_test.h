@@ -47,6 +47,8 @@ private slots:
     void stopWaitsForATickInProgress();
     void stopRightAfterStartReturns();
     void aStopReachesTheUniversesWithTheGuiThreadBusy();
+    void aTickByHandLeavesTheFramesToItsCaller();
+    void framesRolesAndTeardownFromEveryThread();
 
     void theBeatClockRunsAtTheTempo();
     void aTempoChangeKeepsTheBeatsPlace();

@@ -106,8 +106,13 @@ signals:
     void tickReady();
 
 private:
-    /** Execute one timer tick (called by MasterTimerPrivate) */
-    void timerTick();
+    /** Execute one timer tick. MasterTimerPrivate's thread passes
+     *  @a wakeUniverses: each universe computes its frame on its own
+     *  thread, woken from here. A tick called by hand (the tests) leaves
+     *  them asleep: its caller computes the frames itself
+     *  (Universe::processFaders()), and two frames per tick would run
+     *  every fade twice as fast. */
+    void timerTick(bool wakeUniverses = false);
 
 private:
     /** The timer tick frequency in Hertz */

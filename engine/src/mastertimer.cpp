@@ -155,7 +155,7 @@ void MasterTimer::stop()
     d_ptr->stop();
 }
 
-void MasterTimer::timerTick()
+void MasterTimer::timerTick(bool wakeUniverses)
 {
     Doc *doc = qobject_cast<Doc*> (parent());
     Q_ASSERT(doc != NULL);
@@ -258,10 +258,14 @@ void MasterTimer::timerTick()
        not scheduled) the rig froze on its last frame: a function stopped
        on time, yet its light stayed up for as long as the GUI was away.
        Ticked while the universes are still claimed, so none can be
-       removed under the call. */
-    foreach (Universe *universe, universes)
-        if (universe != NULL)
-            universe->tick();
+       removed under the call. Only from the timer's own thread: see
+       timerTick() in the header. */
+    if (wakeUniverses)
+    {
+        foreach (Universe *universe, universes)
+            if (universe != NULL)
+                universe->tick();
+    }
 
     doc->inputOutputMap()->releaseUniverses();
 
