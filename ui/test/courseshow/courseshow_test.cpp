@@ -993,10 +993,21 @@ void CourseShow_Test::lessonOneTyped()
         // Wait for the probe's blue to reach the rig, then read it all.
         Doc *doc = m_app->doc();
         const bool blue = waitUntil([doc, fx, name]() {
+            /* All of blue: its Blue at full AND its Red and Green out. Blue
+               alone at 255 was true already mid-fade from the magenta
+               before, and the read below then caught red still up. */
             const QByteArray now = sends(doc, name, int(fx->channels()));
+            bool sawBlue = false, others = true;
             for (quint32 c = 0; c < fx->channels(); ++c)
-                if (fx->channel(c)->name().contains(QLatin1String("Blue")) && uchar(now.at(int(c))) == 255)
-                    return true;
+            {
+                const QString n = fx->channel(c)->name();
+                if (n.contains(QLatin1String("Blue")))
+                    sawBlue = sawBlue || uchar(now.at(int(c))) == 255;
+                else if (n.contains(QLatin1String("Red")) || n.contains(QLatin1String("Green")))
+                    others = others && uchar(now.at(int(c))) == 0;
+            }
+            if (sawBlue)
+                return others;
             return now.left(3) == QByteArray("\x00\x00\xff", 3);
         });
         const QByteArray v = sends(doc, name, int(fx->channels()));
