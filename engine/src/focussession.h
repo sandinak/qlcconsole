@@ -112,7 +112,8 @@ public:
         ToggleReference,
         UndoSave,
         Exit,
-        StepPanUp, StepPanDown, StepTiltUp, StepTiltDown
+        StepPanUp, StepPanDown, StepTiltUp, StepTiltDown,
+        ZoomWider, ZoomNarrower, FocusNearer, FocusFarther
     };
 
     /** The stick a reading came from. */
@@ -177,6 +178,14 @@ public:
     void setTrigger(int side, float norm);
     /** Degrees a second at a full trigger. */
     static constexpr float beamRate() { return 10.0f; }
+
+    /** Focus (the beam's edge), where a light has a focus channel: moved
+     *  while focusing, to see the edge, not saved (cues own it). */
+    bool hasFocusControl(quint32 fid) const;
+    /** The current head's focus, 0..1 (as its channel runs); false if none. */
+    bool focusLevel(quint32 fid, double &level) const;
+    /** Move the current head's focus by @p d (0..1 scale). */
+    void nudgeFocus(float d);
 
     /** @p fixtures front to back (downstage first), then house left to right
      *  within a row -- rows are heads within 0.75 m of the row's first. */
@@ -338,6 +347,7 @@ private:
         int beam = 0;                 ///< BeamKind
         float lensSaved = 0.0f, lensLive = 0.0f;
         double zoomDeg = 0.0;
+        double focus = -1.0;          ///< a focus channel's level while focused; -1 = not touched
         bool dirty() const { return (fixed ? (first != landSaved) : (live != saved))
                                     || (beam == 1 && lensLive != lensSaved); }
     };

@@ -228,7 +228,7 @@ void FocusMode_Test::theMapShowsTheProfilesBindings()
     QCOMPARE(map->actionText(R::Start), QString("Exit"));
     QCOMPARE(map->actionText(R::LeftX), QString("Nudge"));
     QCOMPARE(map->actionText(R::RightX), QString("Fine nudge"));
-    QVERIFY2(map->actionText(R::DpadUp).contains("0.1"), qPrintable(map->actionText(R::DpadUp)));
+    QVERIFY2(map->actionText(R::DpadUp).startsWith("Zoom"), qPrintable(map->actionText(R::DpadUp)));   // Q103
     // Named by role only: the usual name.
     QCOMPARE(map->controlName(R::DpadLeft), QString("D-pad left"));
 
@@ -238,11 +238,11 @@ void FocusMode_Test::theMapShowsTheProfilesBindings()
     QVERIFY(!map->isMapped(R::Y));
     QCOMPARE(map->actionText(R::Y), QString("Second reference"));
     QVERIFY(!map->isMapped(R::LeftTrigger));
-    QCOMPARE(map->actionText(R::LeftTrigger), QString("Narrower beam"));   // Q103
+    QVERIFY(map->actionText(R::LeftTrigger).isEmpty());
 
-    // The step the D-pad takes follows + and -.
+    // The step the arrow keys take follows + and -.
     QTest::keyClick(panel, Qt::Key_Plus);
-    QVERIFY2(map->actionText(R::DpadUp).startsWith("1"), qPrintable(map->actionText(R::DpadUp)));
+    QVERIFY2(map->keyAction(Qt::Key_Up).contains("1\302\260"), qPrintable(map->keyAction(Qt::Key_Up)));
     QVERIFY(map->grab().width() > 0);   // and it paints
 }
 
@@ -339,12 +339,15 @@ void FocusMode_Test::theKeyboardIgnoresTheController()
     QTest::keyClick(panel, Qt::Key_Right);
     QCOMPARE(s->liveOffset(first).pan, 0.1f);
 
-    // On the controller, the same press moves it.
+    // On the controller, the stick moves it (the D-pad is zoom and focus).
     emit iom->inputValueChanged(0, LX, 128, QString());
     emit iom->inputValueChanged(0, RY, 128, QString());
     panel->setInputDevice(FocusSession::ControllerInput);
-    press(Right);
-    QCOMPARE(s->liveOffset(first).pan, 0.2f);
+    emit iom->inputValueChanged(0, LX, 255, QString());
+    for (int i = 0; i < 5; ++i)
+        pc->applyDesignJoystick();
+    emit iom->inputValueChanged(0, LX, 128, QString());
+    QVERIFY(s->liveOffset(first).pan > 0.1f);
 }
 
 void FocusMode_Test::pressingLightsTheControl()

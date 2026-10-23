@@ -914,7 +914,9 @@ and jump as you nudged.)
 | Next / previous head | RB / LB | ] / [ (or Tab / ⇧Tab) |
 | Nudge (coarse) | Left stick | ⇧ + arrows (1°) |
 | Nudge (fine) | Right stick | — |
-| One step (0.1°) | D-pad | Arrows |
+| One step (0.1°) | — | Arrows |
+| Zoom: wider / narrower | D-pad up / down | . / , |
+| Focus (the edge) | D-pad right / left | ' / ; |
 | Step size ×10 / ÷10 | — | + / − |
 | Save this head | A | Return |
 | Back to what was saved | B | Backspace |
@@ -927,7 +929,7 @@ and jump as you nudged.)
 
 The panel draws the device it is using, with each control labelled by what
 it does in Focus mode — **Next head** on RB, **Save** on A, **Nudge** on the
-left stick, **Fine nudge** on the right, the step size on the D-pad — and,
+left stick, **Fine nudge** on the right, zoom and focus on the D-pad — and,
 under each, the controller's own name for it. Here RB is held and the left
 stick pushed up and to the right:
 
@@ -1079,9 +1081,8 @@ fixed light on the plot** (or select some), and it needs no **Aim at**.
 Each in turn is lit, and a **person** stands where it lands, at head height
 (1.6 m above whatever is there), so you see what the light gives. Move
 where it lands until it matches the real one: **right** is toward stage
-left, **up** is upstage — the left stick (fast), the right stick (fine), the
-D-pad or the arrow keys (⇧ for bigger steps; **+** / **−** change the
-step). The panel shows the light's **Pan** (° from downstage) and **Tilt**
+left, **up** is upstage — the left stick (fast), the right stick (fine) or
+the arrow keys (⇧ for bigger steps; **+** / **−** change the step). The panel shows the light's **Pan** (° from downstage) and **Tilt**
 (° down from level) as you go: they are set from where it lands (see
 Aiming a fixed light, under [Mounting a fixture](#mounting-a-fixture)).
 
@@ -1091,9 +1092,12 @@ first.
 
 ### The beam
 
-Where a light's beam can change, Focus mode changes it too: **RT** widens,
-**LT** narrows (or **.** and **,** on the keyboard, ⇧ for 5°), always within
-the lens range its definition gives, and the panel shows the angle.
+Where a light's beam can change, Focus mode changes it too: **D-pad up**
+widens, **down** narrows (or **.** and **,** on the keyboard, ⇧ for 5°),
+always within the lens range its definition gives, and the panel shows the
+angle. Where it has a focus channel, **D-pad right / left** (or **'** and
+**;**) moves its focus — the edge — while you focus, to see it; that isn't
+saved either, the cues set it.
 
 - **A lens zoomed by hand** (a fixed spot or wash with a range but no zoom
   channel) is set once: it is saved with the light, like where it lands,

@@ -672,6 +672,48 @@ void FocusSession::nudgeBeam(float dDeg)
     emit offsetChanged(fid);
 }
 
+static int focusChannelOf(const Fixture *fx, bool *reversed = nullptr)
+{
+    const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return -1;
+    for (quint32 c = 0; c < quint32(mode->channels().size()); ++c)
+        if (const QLCChannel *ch = mode->channel(c))
+            if (ch->preset() == QLCChannel::BeamFocusNearFar || ch->preset() == QLCChannel::BeamFocusFarNear)
+            {
+                if (reversed != nullptr)
+                    *reversed = ch->preset() == QLCChannel::BeamFocusFarNear;
+                return int(c);
+            }
+    return -1;
+}
+
+bool FocusSession::hasFocusControl(quint32 fid) const
+{
+    return m_heads.contains(fid) && focusChannelOf(m_doc->fixture(fid)) >= 0;
+}
+
+bool FocusSession::focusLevel(quint32 fid, double &level) const
+{
+    if (!hasFocusControl(fid))
+        return false;
+    const double f = m_heads.value(fid).focus;
+    level = f < 0.0 ? 0.5 : f;
+    return true;
+}
+
+void FocusSession::nudgeFocus(float d)
+{
+    const quint32 fid = currentFixture();
+    double level = 0.0;
+    if (d == 0.0f || !focusLevel(fid, level))
+        return;
+    const double to = qBound(0.0, double(qRound((level + double(d)) * 100.0)) / 100.0, 1.0);
+    m_heads[fid].focus = to;
+    rebuildWrites();
+    emit offsetChanged(fid);
+}
+
 void FocusSession::setTrigger(int side, float norm)
 {
     if (m_input == KeyboardInput || side < 0 || side > 1)
@@ -818,10 +860,11 @@ FocusSession::Control FocusSession::controlFor(GamepadRole::Role role)
         case GamepadRole::Y:         return ToggleReference;
         case GamepadRole::Back:      return UndoSave;
         case GamepadRole::Start:     return Exit;
-        case GamepadRole::DpadUp:    return StepTiltUp;
-        case GamepadRole::DpadDown:  return StepTiltDown;
-        case GamepadRole::DpadLeft:  return StepPanDown;
-        case GamepadRole::DpadRight: return StepPanUp;
+        // Zoom up and down, focus left and right (Q103); the sticks nudge.
+        case GamepadRole::DpadUp:    return ZoomWider;
+        case GamepadRole::DpadDown:  return ZoomNarrower;
+        case GamepadRole::DpadLeft:  return FocusNearer;
+        case GamepadRole::DpadRight: return FocusFarther;
         default:                     return NoControl;
     }
 }
@@ -844,6 +887,10 @@ void FocusSession::apply(Control control)
         case StepPanDown:     nudge(-m_step, 0.0f); break;
         case StepTiltUp:      nudge(0.0f, m_step); break;
         case StepTiltDown:    nudge(0.0f, -m_step); break;
+        case ZoomWider:       nudgeBeam(1.0f); break;
+        case ZoomNarrower:    nudgeBeam(-1.0f); break;
+        case FocusNearer:     nudgeFocus(-0.02f); break;
+        case FocusFarther:    nudgeFocus(0.02f); break;
         case NoControl:       break;
     }
 }
@@ -1015,6 +1062,10 @@ void FocusSession::rebuildWrites()
             lightLevel(fx, m_options.level, true);
             // A zoom channel, to the beam asked for while focusing.
             const Head hd = m_heads.value(fid);
+            bool rev = false;
+            const int fc = focusChannelOf(fx, &rev);
+            if (fc >= 0 && hd.focus >= 0.0)
+                put(fx, quint32(fc), uchar(qRound((rev ? 1.0 - hd.focus : hd.focus) * 255.0)));
             double lo = 0.0, hi = 0.0;
             if (hd.beam == ZoomChannel && hd.zoomDeg > 0.0 && RigHeads::lensRange(fx, lo, hi))
             {

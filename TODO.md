@@ -8,6 +8,15 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Focus mode: shutters on profiles (future, asked 2026-10-23)
+
+Framing shutters on a profile/ellipsoidal (and a par with barn doors): how
+to define and set them in Focus mode is open. An idea to start from: the
+triggers pick a side (top, bottom, left, right), then a stick moves that
+shutter in and out and turns its angle. Needs: a model for four cuts per
+light (in/out, angle), drawing them on the beam's footprint and in 3D, and
+what a definition can tell us. Hard; after the freeze.
+
 ## Lighting Studio: handles on the plot (future, asked 2026-10-23)
 
 With the plot unlocked, objects get handles instead of only the editor:

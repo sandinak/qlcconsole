@@ -2084,11 +2084,6 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = norm;
         m_focusSession->setStick(FocusSession::Fine, m_fineNormX, m_fineNormY);
     }
-    else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
-    {
-        // The beam (Q103): LT narrows, RT widens.
-        m_focusSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
-    }
     else if (value > 0)
     {
         m_focusSession->apply(FocusSession::controlFor(role));

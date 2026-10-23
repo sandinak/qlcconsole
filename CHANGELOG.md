@@ -19,8 +19,9 @@ circuits and subs.
 
 ### Added
 
-- **The beam in Focus mode** (Q103): LT/RT (or , and .) narrow and widen
-  the beam within the definition's lens range. A lens zoomed by hand is set
+- **The beam in Focus mode** (Q103): D-pad up/down (or . and ,) widen and narrow
+  the beam within the definition's lens range, D-pad right/left (or ' and ;)
+  a focus channel's edge while focusing. A lens zoomed by hand is set
   and saved with the light (also **Beam (lens set to)** in Fixture
   Properties) and the beam is drawn at it; a zoom channel is driven while
   focusing only. **As selected** is always offered, from what is selected

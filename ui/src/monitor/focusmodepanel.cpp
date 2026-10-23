@@ -525,14 +525,21 @@ void FocusModePanel::refresh()
         {
             m_beamLabel->setText((m_session->beamKind(fid) == FocusSession::LensSetByHand
                                   ? tr("Beam %1\302\260 (lens %2\342\200\223%3\302\260, set by hand)  "
-                                       "LT/RT or , .")
+                                       "D-pad \342\206\225 or , .")
                                   : tr("Beam %1\302\260 (zoom %2\342\200\223%3\302\260, while focusing)  "
-                                       "LT/RT or , ."))
+                                       "D-pad \342\206\225 or , ."))
                                  .arg(deg, 0, 'f', 1).arg(lo, 0, 'f', 0).arg(hi, 0, 'f', 0));
             m_beamLabel->show();
         }
         else
             m_beamLabel->hide();
+        double focus = 0.0;
+        if (m_session->focusLevel(fid, focus))
+        {
+            m_beamLabel->setText((m_beamLabel->isHidden() ? QString() : m_beamLabel->text() + QStringLiteral("\n"))
+                                 + tr("Focus %1%  D-pad \342\206\224 or ; '").arg(qRound(focus * 100.0)));
+            m_beamLabel->show();
+        }
     }
     m_titleLabel->setText(tr("Focus \342\200\224 head %1 of %2")
                           .arg(m_session->index() + 1).arg(m_session->count()));
@@ -688,6 +695,11 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Less:     m_session->nudgeBeam(shift ? -5.0f : -1.0f); refresh(); break;
         case Qt::Key_Period:
         case Qt::Key_Greater:  m_session->nudgeBeam(shift ? 5.0f : 1.0f); refresh(); break;
+        // Focus, where it has a focus channel: ; and '.
+        case Qt::Key_Semicolon:
+        case Qt::Key_Colon:    m_session->nudgeFocus(shift ? -0.1f : -0.02f); refresh(); break;
+        case Qt::Key_Apostrophe:
+        case Qt::Key_QuoteDbl: m_session->nudgeFocus(shift ? 0.1f : 0.02f); refresh(); break;
         case Qt::Key_Plus:
         case Qt::Key_Equal:
             m_session->setStepDegrees(m_session->stepDegrees() * 10.0f);

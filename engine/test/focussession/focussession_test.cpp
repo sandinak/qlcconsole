@@ -522,8 +522,10 @@ void FocusSession_Test::buttonsByRole()
     QCOMPARE(FocusSession::controlFor(GamepadRole::Y), FocusSession::ToggleReference);
     QCOMPARE(FocusSession::controlFor(GamepadRole::Back), FocusSession::UndoSave);
     QCOMPARE(FocusSession::controlFor(GamepadRole::Start), FocusSession::Exit);
-    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadUp), FocusSession::StepTiltUp);
-    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadRight), FocusSession::StepPanUp);
+    // The D-pad is zoom (up, down) and focus (left, right): Q103.
+    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadUp), FocusSession::ZoomWider);
+    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadDown), FocusSession::ZoomNarrower);
+    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadRight), FocusSession::FocusFarther);
     QCOMPARE(FocusSession::controlFor(GamepadRole::LeftX), FocusSession::NoControl);
 
     Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
@@ -531,9 +533,11 @@ void FocusSession_Test::buttonsByRole()
     StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(5.0f, 6.0f, 0.0f));
     FocusSession *s = m_doc->programmer()->focusSession();
     QVERIFY(s->start(optionsFor({ a->id(), b->id() }, mark->id())));
-    s->apply(FocusSession::controlFor(GamepadRole::DpadRight));
-    s->apply(FocusSession::controlFor(GamepadRole::DpadUp));
-    s->apply(FocusSession::controlFor(GamepadRole::DpadUp));
+    // The step controls still nudge (the keys use them); the D-pad doesn't.
+    s->apply(FocusSession::StepPanUp);
+    s->apply(FocusSession::StepTiltUp);
+    s->apply(FocusSession::StepTiltUp);
+    s->apply(FocusSession::controlFor(GamepadRole::DpadUp));   // zoom: this spot has none
     QCOMPARE(s->liveOffset(a->id()).pan, 0.1f);
     QCOMPARE(s->liveOffset(a->id()).tilt, 0.2f);
     s->apply(FocusSession::controlFor(GamepadRole::A));
@@ -646,7 +650,7 @@ void FocusSession_Test::theControllerReachesItThroughTheProgrammer()
     QSignalSpy actions(pc, &ProgrammerController::buttonActionTriggered);
     QSignalSpy joystick(pc, &ProgrammerController::joystickUpdated);
 
-    press(21);                                 // D-pad right: +step pan
+    s->nudge(0.1f, 0.0f);                      // (the D-pad is zoom and focus now)
     QCOMPARE(s->liveOffset(a->id()).pan, 0.1f);
     press(10);                                 // A: save
     QVERIFY(s->isChecked(a->id()));
@@ -865,6 +869,10 @@ void FocusSession_Test::theBeamIsSetWithinTheLensRange()
             z->setName("Zoom"); z->setGroup(QLCChannel::Beam);
             z->setPreset(QLCChannel::BeamZoomSmallBig);
             def->addChannel(z); mode->insertChannel(z, 1);
+            QLCChannel *f = new QLCChannel();
+            f->setName("Focus"); f->setGroup(QLCChannel::Beam);
+            f->setPreset(QLCChannel::BeamFocusNearFar);
+            def->addChannel(f); mode->insertChannel(f, 2);
         }
         QLCPhysical ph;
         ph.setLensDegreesMin(lo);
@@ -912,6 +920,15 @@ void FocusSession_Test::theBeamIsSetWithinTheLensRange()
     QCOMPARE(s->pendingWrites().value(qMakePair(0, 41)), uchar(qRound((30.0 - 10.0) / 30.0 * 255.0)));
     QVERIFY(!s->isDirty(wash->id()));
     QCOMPARE(props->fixtureRigProps(wash->id()).lensDeg, 0.0f);
+    // Focus on the D-pad's left/right: its channel, from the middle.
+    QVERIFY(!s->hasFocusControl(spot->id()));
+    QVERIFY(s->hasFocusControl(wash->id()));
+    s->apply(FocusSession::controlFor(GamepadRole::DpadRight));
+    s->apply(FocusSession::controlFor(GamepadRole::DpadRight));
+    double focus = 0.0;
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.54);
+    QCOMPARE(s->pendingWrites().value(qMakePair(0, 42)), uchar(qRound(0.54 * 255.0)));
     s->stop();
     QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 25.0f);   // the saved one stays
 }

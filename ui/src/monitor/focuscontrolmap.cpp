@@ -211,10 +211,6 @@ QString FocusControlMap::actionText(int role) const
             return tr("Nudge");
         case R::RightX: case R::RightY:
             return tr("Fine nudge");
-        case R::LeftTrigger:
-            return tr("Narrower beam");
-        case R::RightTrigger:
-            return tr("Wider beam");
         default:
             break;
     }
@@ -233,6 +229,14 @@ QString FocusControlMap::actionText(int role) const
         case FocusSession::StepTiltUp:
         case FocusSession::StepTiltDown:
             return tr("%1\302\260 step").arg(double(m_step), 0, 'g', 3);
+        case FocusSession::ZoomWider:
+            // The D-pad's one callout reads its up arm: say all four.
+            return tr("Zoom \342\206\225  Focus \342\206\224");
+        case FocusSession::ZoomNarrower:
+            return tr("Narrower beam");
+        case FocusSession::FocusNearer:
+        case FocusSession::FocusFarther:
+            return tr("Focus");
         case FocusSession::NoControl:
             break;
     }
@@ -279,6 +283,8 @@ QString FocusControlMap::keyAction(int key) const
         case Qt::Key_Return:       return tr("Save");
         case Qt::Key_Comma:        return tr("Narrower beam");
         case Qt::Key_Period:       return tr("Wider beam");
+        case Qt::Key_Semicolon:
+        case Qt::Key_Apostrophe:   return tr("Focus");
         case Qt::Key_Up:
         case Qt::Key_Down:
         case Qt::Key_Left:
