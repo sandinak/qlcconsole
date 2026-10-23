@@ -1877,8 +1877,8 @@ void VCSlider::setSliderValue(uchar value, bool scale, bool external)
 
         case GrandMaster:
         {
-            if (m_doc->isShowLocked())
-                break;
+            // The Grand Master is a show control: it works in Operate, where
+            // the show lock now always is (Q80).
             InputOutputMap *iom = m_doc->inputOutputMap();
             if (iom != NULL && iom->grandMasterValue() != uchar(val))
                 iom->setGrandMasterValue(uchar(val));

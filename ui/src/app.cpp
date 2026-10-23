@@ -235,7 +235,6 @@ App::App()
     , m_statusProgrammerLabel(NULL)
     , m_statusSelectionLabel(NULL)
     , m_statusPadModeLabel(NULL)
-    , m_statusShowLockLabel(NULL)
     , m_statusBlackoutLabel(NULL)
     , m_statusTimecodeLabel(NULL)
     , m_statusLoadLabel(NULL)
@@ -1820,21 +1819,6 @@ void App::initActions()
     connect(m_controlBlindAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlind(bool)));
     m_controlBlindAction->setChecked(m_doc->inputOutputMap()->outputInhibited());
 
-    // Show-mode lock — when on, programmer parameter writes drop
-    // silently. Selection nav, save, revert, pad-mode all still work.
-    // Designed to prevent accidental edits during a live show.
-    // (Uses a padlock icon, NOT the blackout icon, so it isn't mistaken for a
-    // second Blackout button.)
-    m_showLockAction = new QAction(QIcon(":/unlock.png"),
-                                   tr("Show-mode &Lock"), this);
-    m_showLockAction->setShortcut(QKeySequence("CTRL+L"));
-    m_showLockAction->setCheckable(true);
-    m_showLockAction->setToolTip(tr(
-        "When locked, slider/knob writes are dropped — protects "
-        "against accidental edits during a live show. Selection, "
-        "Save, Revert, and pad-mode toggles still work."));
-    connect(m_showLockAction, SIGNAL(triggered(bool)),
-            this, SLOT(slotShowModeLock(bool)));
 
     // Follow MIDI Time Code — global toggle (moved out of the Show Manager
     // toolbar so it is reachable from anywhere and MIDI-mappable via a VC
@@ -2482,7 +2466,6 @@ void App::initMenuBar()
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_controlBlackoutAction);
     ctrlMenu->addAction(m_controlBlindAction);
-    ctrlMenu->addAction(m_showLockAction);
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_controlPanicAction);      // fade-and-stop options as submenu
     ctrlMenu->addAction(m_dumpDmxAction);
@@ -3452,35 +3435,6 @@ void App::slotFooterGrandMasterValueChanged(uchar value)
     if (m_statusGrandMasterValueLabel != NULL)
         m_statusGrandMasterValueLabel->setText(
             QString("%1%").arg(qRound(double(value) * 100.0 / 255.0)));
-}
-
-void App::slotShowModeLock(bool checked)
-{
-    if (m_doc != NULL)
-        m_doc->setShowLocked(checked);
-}
-
-void App::slotShowLockedChanged(bool locked)
-{
-    if (m_showLockAction != NULL)
-    {
-        m_showLockAction->setChecked(locked);
-        // Closed padlock when locked, open when not — reads as a lock, not a
-        // second Blackout button.
-        m_showLockAction->setIcon(QIcon(locked ? ":/lock.png" : ":/unlock.png"));
-    }
-    if (m_statusShowLockLabel != NULL)
-    {
-        if (locked)
-        {
-            m_statusShowLockLabel->setText(tr("SHOW LOCKED"));
-            m_statusShowLockLabel->show();
-        }
-        else
-        {
-            m_statusShowLockLabel->hide();
-        }
-    }
 }
 
 void App::slotControlPanic()
@@ -5859,21 +5813,6 @@ void App::initStatusBar()
     m_statusPadModeLabel->hide();
     sb->addPermanentWidget(m_statusPadModeLabel);
 
-    // Show-mode lock indicator. Hidden when unlocked; bold text when on
-    // (plain text + color, no icon — matches the other passive-readout
-    // chips: Mode, Timecode, Power. Blackout/Blind are deliberately the
-    // exception, kept visually distinct since they're meant to interrupt).
-    // #a06000 (amber/caution), not Blackout's #e60000 red — Show Lock is a
-    // deliberate, safe "don't let go move" toggle, not a hazard state, and
-    // reusing Blackout's exact red made them read as the same alarm tier.
-    // Reuses the app's existing amber convention (connectionstree.cpp,
-    // universepatchgrid.cpp both already use #a06000 for "pending/caution")
-    // rather than inventing a new color.
-    m_statusShowLockLabel = new QLabel(this);
-    m_statusShowLockLabel->setAlignment(Qt::AlignRight);
-    m_statusShowLockLabel->setStyleSheet("QLabel { color: #a06000; font-weight: bold; }");
-    m_statusShowLockLabel->hide();
-    sb->addPermanentWidget(m_statusShowLockLabel);
 
     // Persistent Design/Operate indicator — see app.h for why this is
     // separate from the mode-toggle button (which shows the destination
@@ -5939,12 +5878,9 @@ void App::initStatusBar()
                 this, SLOT(slotProgrammerSelectionChanged()));
         connect(m_doc, &Doc::padModeChanged,
                 this, &App::slotPadModeChanged);
-        connect(m_doc, SIGNAL(showLockedChanged(bool)),
-                this, SLOT(slotShowLockedChanged(bool)));
         slotProgrammerDirtyChanged(m_doc->isProgrammerDirty());
         slotProgrammerSelectionChanged();
         slotPadModeChanged(m_doc->padMode());
-        slotShowLockedChanged(m_doc->isShowLocked());
     }
 
     // A source registers into ShowStatus, not into this widget directly

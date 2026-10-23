@@ -450,23 +450,19 @@ void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
     QTRY_VERIFY(!sc->stopAllButton()->isEnabled());         // nothing left running
 }
 
-void MainBar_Test::showModeLockLocksAndUnlocks()
+void MainBar_Test::operateLocksProgrammingNotTheGrandMaster()
 {
     Doc *doc = m_app->doc();
     InputOutputMap *io = doc->inputOutputMap();
-    QAction *lock = m_app->m_showLockAction;
-    QVERIFY(lock != nullptr);
-    QCOMPARE(lock->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_L));
-    QCOMPARE(lock->shortcut().toString(QKeySequence::PortableText), QString("Ctrl+L"));
-    QVERIFY(lock->isCheckable());
+    // No Show-mode Lock of its own any more.
+    for (QAction *a : m_app->findChildren<QAction *>())
+        QVERIFY2(!a->text().contains("Show-mode", Qt::CaseInsensitive), qPrintable(a->text()));
+    QCOMPARE(doc->mode(), Doc::Design);
     QVERIFY(!doc->isShowLocked());
-    QVERIFY(!lock->isChecked());
 
     ShowManager *shows = ShowManager::instance();
     QVERIFY(shows != nullptr);
     QVERIFY(shows->m_showview->isEditable());
-    QVERIFY(m_app->m_statusShowLockLabel != nullptr);
-    QVERIFY(m_app->m_statusShowLockLabel->isHidden());
 
     // A Virtual Console fader on the Grand Master.
     VirtualConsole *vc = VirtualConsole::instance();
@@ -474,29 +470,22 @@ void MainBar_Test::showModeLockLocksAndUnlocks()
     VCSlider *gm = new VCSlider(vc->contents(), doc);
     auto tidy = qScopeGuard([gm, io, doc]() {
         delete gm;
-        doc->setShowLocked(false);
+        doc->setMode(Doc::Design);
         io->setGrandMasterValue(255);
     });
     gm->setSliderMode(VCSlider::GrandMaster);
     io->setGrandMasterValue(255);
 
-    lock->trigger();
+    doc->setMode(Doc::Operate);
     QVERIFY(doc->isShowLocked());
     QVERIFY(doc->programmer()->isShowLocked());
-    QVERIFY(lock->isChecked());
-    QVERIFY(!m_app->m_statusShowLockLabel->isHidden());
-    QCOMPARE(m_app->m_statusShowLockLabel->text(), QString("SHOW LOCKED"));
-    QVERIFY2(!shows->m_showview->isEditable(), "the Shows timeline is read-only while locked");
+    QVERIFY2(!shows->m_showview->isEditable(), "the Shows timeline is read-only in Operate");
     gm->setSliderValue(100, false);
-    QCOMPARE(int(io->grandMasterValue()), 255);             // the move is dropped
+    QCOMPARE(int(io->grandMasterValue()), 100);             // the GM still works
 
-    lock->trigger();
+    doc->setMode(Doc::Design);
     QVERIFY(!doc->isShowLocked());
-    QVERIFY(!lock->isChecked());
-    QVERIFY(m_app->m_statusShowLockLabel->isHidden());
     QVERIFY(shows->m_showview->isEditable());
-    gm->setSliderValue(100, false);
-    QCOMPARE(int(io->grandMasterValue()), 100);             // and heard again
 }
 
 /* A cue list of two scenes, infinite hold, as the show's main cue list. */

@@ -64,10 +64,11 @@ private slots:
     /** Stop all's menu, Fade 1 second and stop: the scene stops and its
      *  light fades out over the second rather than snapping off */
     void fadeOneSecondAndStopFadesTheLightOut();
-    /** Show-mode Lock (Ctrl+L): the footer says SHOW LOCKED, the Shows
-     *  timeline turns read-only and a console GM fader's moves are dropped;
-     *  a second press gives it all back */
-    void showModeLockLocksAndUnlocks();
+    /** Q80: Show-mode Lock is part of Operate (no menu item, no ⌘L):
+     *  Operate makes the Shows timeline read-only and drops programmer
+     *  parameter faders, while a console GM fader still works; Design
+     *  gives it all back */
+    void operateLocksProgrammingNotTheGrandMaster();
     /** GO / Back (Ctrl+Return, Ctrl+Shift+Return) from anywhere, in the
      *  Control menu: they step the main cue list 1, 2, back to 1 */
     void goAndBackStepTheMainCueList();

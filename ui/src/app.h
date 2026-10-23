@@ -489,8 +489,6 @@ public slots:
     /** Engine-side Grand Master value changed (VC's own GM fader, MIDI/DMX
      *  input, etc.) — keep the footer fader in sync. */
     void slotFooterGrandMasterValueChanged(uchar value);
-    void slotShowModeLock(bool checked);
-    void slotShowLockedChanged(bool locked);
     /** Toggle the running show's timeline suspend (Operate-mode VC takeover). */
     void slotControlTimelineSuspend(bool checked);
     /** Refresh the footer "under timeline control" chip + exit button state. */
@@ -609,7 +607,6 @@ private:
     QAction *m_windowShiftClick = nullptr;  ///< Window > Shift-Click a Tab ... (toggle)
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
-    QAction* m_showLockAction;
     /** Exit/resume timeline control (Operate-mode VC takeover). */
     QAction* m_timelineSuspendAction;
     /** Global Follow-MTC toggle (moved out of the Show Manager toolbar). */
@@ -848,7 +845,6 @@ private:
     QLabel* m_statusProgrammerLabel;
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
-    QLabel* m_statusShowLockLabel;
     QLabel* m_statusBlackoutLabel;
     /** Rig network transmit gate: red while network output is held because
      *  this machine is not on the show's rig network, amber when the show

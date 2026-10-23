@@ -165,6 +165,11 @@ circuits and subs.
 
 ### Changed
 
+- **Show-mode Lock is part of Operate** (board Q80): no separate Control ▸
+  Show-mode Lock or ⌘L. Operate locks programmer faders on the Virtual
+  Console and the Shows timeline; a console Grand Master fader now works
+  in Operate (the lock used to drop it).
+
 - **Edit ▸ Undo says where it works** (board Q81): it undoes the tab in
   front (Build, the Show Tree, the Lighting Studio's rig) and elsewhere
   reads "Nothing to undo on this tab", greyed. It no longer undoes a Show

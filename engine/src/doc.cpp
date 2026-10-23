@@ -923,6 +923,11 @@ void Doc::setMode(Doc::Mode mode)
     if (mode == Design && m_lastLook != NULL)
         m_lastLook->clear();
 
+    // Show-mode Lock is part of Operate (board Q80): programmer parameter
+    // writes and timeline edits are locked while the show runs.
+    if (m_programmer != NULL)
+        m_programmer->setShowLocked(mode == Operate);
+
     if (mode == Operate)
         m_autosaveTimer.stop();
     else if (m_modified)

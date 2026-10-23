@@ -112,7 +112,7 @@ here.*
 | 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC / MIDI Show Control; timecode. |
 | 3.6 | **Focus and calibration** | Test orientation, Locate, the Step Test Pattern; aiming the real movers at the real targets. |
 | 3.7 | **House lights, work lights and power** *(written)* | Three generic dimmers (House Lights, Work Lights, Stage Power); **Output Rules…**: Ignore Blackout, Ignore the Grand Master, Switch (relay), On when not in use; Settings ▸ Advanced ▸ Output; a preshow list typed; Blackout, the GM slider and Blind. Part 3 on the theatre's own house and work lights. |
-| 3.8 | **Running a real show** | Operate mode, Show-mode Lock, the panic button, the preshow checklist, power. |
+| 3.8 | **Running a real show** | Operate mode (it locks editing), the panic button, the preshow checklist, power. |
 | 3.9 | **Troubleshooting** | The Not ready list, a light that won't come on, a cue that looks wrong, Undo and backups. **Capstone** (below). |
 | 3.10 | **Coming from Eos** *(written, optional)* | For students from an Eos programme, any time after 3.7: **File ▸ Import ▸ ETC Eos Show** with `shows/classroom-eos.asc`; the **Special circuits** page (one wrong guess to fix); where channels, groups, cue lists and subs land. |
 

@@ -10,7 +10,6 @@
 | ⌘N / ⌘O / ⌘S | New / Open / Save workspace |
 | ⌘, | Settings (autosave, appearance, …) |
 | ⌘F12 | Switch between **Design** and **Operate** |
-| ⌘L | Show-mode lock |
 | **Esc** | **Back out** of an editor to what was showing before: a palette opened from a list, a group's layout, the effect bench, a ▣ layer, the Workbench docked in the Show Tree, the Show Tree's Look Editor. What you changed stays changed. In a rename or another inline edit, Esc cancels just that edit; in a dialog it closes the dialog. Plain Esc stops nothing |
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |

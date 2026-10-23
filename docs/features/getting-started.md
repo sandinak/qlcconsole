@@ -327,8 +327,8 @@ Steps, towers and booms usually come in sets that should all be the same:
 ## Running the show
 
 - **Operate** (⌘F12, or the top bar's **Design | Operate** switch) — the show runs; editing that would disturb it is
-  locked. **Show-mode Lock** (⌘L) locks the interface down further for an
-  operator.
+  locked, including programmer faders on the Virtual Console and the Shows
+  timeline. The Grand Master still works.
 - **Stop all** (⌘⇧Esc), or its menu's **Fade and stop** (hold the button),
   is the panic button.
 - **From QLab**: QLab (or anything that speaks MIDI Show Control or OSC)
