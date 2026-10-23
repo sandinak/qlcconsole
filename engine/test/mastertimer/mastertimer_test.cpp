@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <functional>
 #include <future>
 #include <chrono>
 
@@ -27,6 +28,9 @@
 #include "function_stub.h"
 #include "mastertimer.h"
 #include "qlcchannel.h"
+#include "inputoutputmap.h"
+#include "fixture.h"
+#include "scene.h"
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -540,6 +544,57 @@ void MasterTimer_Test::stopRightAfterStartReturns()
     });
     QVERIFY2(done.wait_for(std::chrono::seconds(20)) == std::future_status::ready,
              "stop() right after start() did not return");
+}
+
+/* A universe's frame (its faders, the fades, the zeroed intensities) runs
+   on its own thread, woken once per tick. It used to be woken through a
+   queued call on the GUI thread: while that thread was busy -- or, on a
+   loaded machine, simply not scheduled -- the engine stopped a function on
+   time but the rig kept showing it, a Stop leaving a light at full for as
+   long as the GUI was away (the Lesson 1.5 Stop under a loaded gate). The
+   frames must come with the master timer, not with the event loop. */
+void MasterTimer_Test::aStopReachesTheUniversesWithTheGuiThreadBusy()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setChannels(1);                        // one dimmer: HTP intensity
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(fxi->id());
+    scene->setValue(fxi->id(), 0, 255);
+    QVERIFY(m_doc->addFunction(scene));
+
+    auto level = [this]() {
+        QList<Universe *> us = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(us.at(0)->preGMValues().at(0));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    /* This thread is the GUI thread, busy: no events handled until the
+       wait is over (or @a ok holds). */
+    auto busyUntil = [](std::function<bool()> ok, int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (!ok() && t.elapsed() < ms)
+            QThread::msleep(5);
+        return ok();
+    };
+
+    m_doc->inputOutputMap()->startUniverses();
+    mt->start();
+    scene->start(mt, FunctionParent::master());
+    QTRY_COMPARE_WITH_TIMEOUT(level(), 255, 2000 * clockSlack());
+
+    // Busy from here: the stop and the dark stage come without the GUI.
+    QVERIFY2(busyUntil([level]() { return level() == 255; }, 200), "lit before the stop");
+    scene->stop(FunctionParent::master());
+    QVERIFY2(busyUntil([level]() { return level() == 0; }, 1000 * clockSlack()),
+             "a stopped scene still lit while the GUI thread was busy");
+    QVERIFY(scene->isRunning() == false);
+
+    mt->stop();
 }
 
 /* The beat clock (SPEED_SPREAD_DESIGN.md, S1): one running beat count every

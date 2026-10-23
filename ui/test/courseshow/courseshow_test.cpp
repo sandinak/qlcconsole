@@ -1551,9 +1551,39 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 255, 6000);
     qInfo().noquote() << "[L5] after the jump:" << run->nowText() << "| next:" << run->nextText();
 
-    // Stop: the stage goes dark.
+    // Stop: the stage goes dark -- within kRigWait, and it takes two ticks
+    // (~45 ms), also at a load of 80. It once stayed at full under a loaded
+    // gate: the universes then got their frames through this (GUI) thread,
+    // so the engine stopped the cue but the rig held its last frame for as
+    // long as this thread was away (MasterTimer_Test::
+    // aStopReachesTheUniversesWithTheGuiThreadBusy). If it ever comes back,
+    // say what still plays, what Stop said and whether the engine ticked.
+    QStringList said;
+    const QMetaObject::Connection sc = connect(doc->showControl(), &ShowControl::commandHandled, this,
+                                               [&said](const QString &w, bool done) {
+                                                   said << QStringLiteral("%1 (%2)").arg(w, done ? QStringLiteral("done") : QStringLiteral("refused"));
+                                               });
+    static QAtomicInt ticks;
+    ticks.storeRelaxed(0);
+    const QMetaObject::Connection tc = connect(doc->masterTimer(), &MasterTimer::tickReady, doc->masterTimer(),
+                                               []() { ticks.ref(); }, Qt::DirectConnection);
     press(run, "crStop");
-    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 0, kRigWait);
+    QElapsedTimer sinceStop;
+    sinceStop.start();
+    while (sinceStop.elapsed() < kRigWait && channelValue(doc, "SR AT Spot", "Master Dimmer") != 0)
+        QTest::qWait(20);
+    disconnect(sc);
+    disconnect(tc);
+    QStringList running;
+    for (Function *f : doc->functions())
+        if (f != nullptr && f->isRunning())
+            running << f->name();
+    QVERIFY2(channelValue(doc, "SR AT Spot", "Master Dimmer") == 0,
+             qPrintable(QStringLiteral("spot dimmer %1, %2 ms and %3 ticks after Stop; Stop said: %4; still running: %5")
+                            .arg(channelValue(doc, "SR AT Spot", "Master Dimmer"))
+                            .arg(sinceStop.elapsed()).arg(ticks.loadRelaxed())
+                            .arg(said.isEmpty() ? QStringLiteral("nothing") : said.join(QStringLiteral("; ")))
+                            .arg(running.isEmpty() ? QStringLiteral("nothing") : running.join(QStringLiteral(", ")))));
     QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
     QTRY_VERIFY_WITH_TIMEOUT(run->nextText().contains("1.0.0"), kRigWait);
     qInfo().noquote() << "[L5] after Stop:" << run->nowText() << "| next:" << run->nextText();

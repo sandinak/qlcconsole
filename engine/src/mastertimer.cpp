@@ -251,6 +251,18 @@ void MasterTimer::timerTick()
         }
     }
 
+    /* The universes' frame -- their faders, the fades, the zeroed
+       intensities -- runs on each universe's own thread: wake it now, from
+       here. It used to be woken by tickReady() queued through the GUI
+       thread, so whenever that thread was busy (or, on a loaded machine,
+       not scheduled) the rig froze on its last frame: a function stopped
+       on time, yet its light stayed up for as long as the GUI was away.
+       Ticked while the universes are still claimed, so none can be
+       removed under the call. */
+    foreach (Universe *universe, universes)
+        if (universe != NULL)
+            universe->tick();
+
     doc->inputOutputMap()->releaseUniverses();
 
     m_beatRequested = false;
