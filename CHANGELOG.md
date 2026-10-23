@@ -165,6 +165,11 @@ circuits and subs.
 
 ### Changed
 
+- **One production, nothing to choose** (board Q75). A show with a single
+  production doesn't show Current, the Production switcher or "· main"
+  (unless it has two lists): GO plays its list. A second production brings
+  them back. Lesson 1.1 no longer warns students off the Current button.
+
 - **Level… and Colour… are docked** in the Show Tree (board Q61): they open
   in a strip above the command line, inside the window, instead of a
   separate window that could fall behind the main one. Apply / Return sets

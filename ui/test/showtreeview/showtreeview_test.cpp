@@ -60,6 +60,7 @@
 #include "chasereditor.h"
 #include "noteedit.h"
 #include <QInputDialog>
+#include <QWidgetAction>
 #include <QPointer>
 #include <QSpinBox>
 #include <QMessageBox>
@@ -213,10 +214,28 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
 
     ShowTreeView view(nullptr, m_doc);
     const QStringList text = treeText(view.tree());
-    // The only production: current as it was made, its list GO's.
-    QCOMPARE(text, QStringList({ QString::fromUtf8("DanceHysteria [\u25B6 current]"),
-                                 QString::fromUtf8("  01-Everybody Scream [Non-tracking \u00B7 main]"),
+    // The only production (Q75): current as it was made, GO plays its one
+    // list, and neither "current" nor "main" is shown -- nothing to choose.
+    QCOMPARE(st->currentProduction(), prod);
+    QCOMPARE(text, QStringList({ QString::fromUtf8("DanceHysteria"),
+                                 QString::fromUtf8("  01-Everybody Scream [Non-tracking]"),
                                  "    1.0.0 PreCurtain", "      Towers" }));
+    auto switcherShown = [&view]() {
+        QComboBox *combo = view.findChild<QComboBox *>("stProduction");
+        for (QWidgetAction *a : view.findChildren<QWidgetAction *>())
+            if (a->defaultWidget() == combo)
+                return a->isVisible();
+        return false;
+    };
+    QVERIFY(!switcherShown());
+    // A second production brings current, main and the switcher back.
+    const quint32 prod2 = st->addProduction("Spring");
+    st->addCueList(prod2, "Opener", ListMode::Tracking);
+    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("DanceHysteria [\u25B6 current]")));
+    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  01-Everybody Scream [Non-tracking \u00B7 main]")));
+    QVERIFY(switcherShown());
+    QVERIFY(st->removeProduction(prod2));
+    QVERIFY(!switcherShown());
 
     // An edit elsewhere shows at once.
     st->addCue(list, 0, "Verse");
@@ -1444,7 +1463,7 @@ void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
     emit mode->activated(1);
     QCOMPARE(st->cueList(list)->mode, ListMode::Tracking);
     QVERIFY(trackedRow(view.tree(), c2, "Towers") != nullptr);
-    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  L [Tracking \u00B7 main]")));
+    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  L [Tracking]")));   // one production (Q75)
 
     // The base from the list page...
     base->setCurrentIndex(1);

@@ -789,6 +789,13 @@ private:
     QComboBox *m_prodTimecode = nullptr;
     QLabel *m_prodInfo = nullptr;
     QComboBox *m_production = nullptr;
+    /** The header's "Production:" label and switcher, hidden with one
+     *  production (Q75). */
+    class QAction *m_productionLabelAction = nullptr;
+    class QAction *m_productionAction = nullptr;
+    /** One production (Q75): it plays on GO; no Current / Main list /
+     *  switcher until a second one is added. */
+    bool singleProduction() const;
     class MoveInBlackButton *m_moveInBlack = nullptr;
     void showProductionPage(quint32 productionId);
     void updateProductionSwitcher();

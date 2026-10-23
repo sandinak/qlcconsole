@@ -897,7 +897,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     // P5: the current production -- what GO, the footer, VC and show
     // control play.
     bar->addSeparator();
-    bar->addWidget(new QLabel(tr("Production:"), this));
+    m_productionLabelAction = bar->addWidget(new QLabel(tr("Production:"), this));
     m_production = new QComboBox(this);
     m_production->setObjectName("stProduction");
     m_production->setToolTip(tr("The current production: what the footer GO (⌘↩), show control (QLab, OSC, "
@@ -905,7 +905,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                 "list becomes the show's main cue list; its timecode source is followed. "
                                 "A list already running keeps running."));
     m_production->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    bar->addWidget(m_production);
+    m_productionAction = bar->addWidget(m_production);
     connect(m_production, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
         m_st->setCurrentProduction(m_production->itemData(index).toUInt());
     });
@@ -2355,6 +2355,8 @@ static QColor readableGrey(const QPalette &pal)
 
 void ShowTreeView::buildTree()
 {
+    // A production added or removed shows or hides the switcher (Q75).
+    updateProductionSwitcher();
     m_reloading = true;
     const quint32 selId = currentId();
     const quint32 selCue = currentCueId();
@@ -2388,7 +2390,7 @@ void ShowTreeView::buildTree()
         pi->setData(0, IdRole, prod.id);
         const bool currentProd = m_st->currentProduction() == prod.id;
         const quint32 mainListId = m_st->mainList(prod.id);
-        if (currentProd)
+        if (currentProd && !singleProduction())
         {
             pi->setText(1, tr("▶ current"));
             pi->setToolTip(0, tr("The current production: GO, the footer and show control play its main list"));
@@ -2411,7 +2413,10 @@ void ShowTreeView::buildTree()
             li->setData(0, IdRole, list.id);
             if (!list.colour.isEmpty())
                 li->setForeground(0, treeTextColour(list.colour));
-            if (!list.looks && list.id == mainListId && (currentProd || m_st->playableLists(prod.id).count() > 1))
+            // One production (Q75): "main" only says something with two lists.
+            if (!list.looks && list.id == mainListId
+                && (singleProduction() ? m_st->playableLists(prod.id).count() > 1
+                                       : (currentProd || m_st->playableLists(prod.id).count() > 1)))
             {
                 li->setText(1, li->text(1) + tr(" · main"));
                 li->setToolTip(1, currentProd ? tr("GO plays this list (the current production's main list)")
@@ -3262,6 +3267,13 @@ void ShowTreeView::showProductionPage(quint32 productionId)
     const bool current = m_st->currentProduction() == productionId;
     m_prodTitle->setText(p->name);
     m_prodCurrent->setText(current ? tr("▶ Current — click to unset") : tr("Make current"));
+    // One production (Q75): it plays on GO; nothing to make current, and a
+    // main list only to pick with two lists.
+    const bool single = singleProduction();
+    m_prodCurrent->setVisible(!single);
+    if (QFormLayout *form = qobject_cast<QFormLayout *>(m_prodPage->layout()))
+        if (QWidget *l = form->labelForField(m_prodCurrent))
+            l->setVisible(!single);
     {
         QSignalBlocker block(m_prodMainList);
         m_prodMainList->clear();
@@ -3269,6 +3281,11 @@ void ShowTreeView::showProductionPage(quint32 productionId)
             m_prodMainList->addItem(m_st->cueList(lid)->name, lid);
         m_prodMainList->setCurrentIndex(qMax(0, m_prodMainList->findData(m_st->mainList(productionId))));
         m_prodMainList->setEnabled(m_prodMainList->count() > 0);
+        const bool pick = !single || m_prodMainList->count() > 1;
+        m_prodMainList->setVisible(pick);
+        if (QFormLayout *form = qobject_cast<QFormLayout *>(m_prodPage->layout()))
+            if (QWidget *l = form->labelForField(m_prodMainList))
+                l->setVisible(pick);
     }
     {
         QSignalBlocker block(m_prodTimecode);
@@ -3288,7 +3305,9 @@ void ShowTreeView::showProductionPage(quint32 productionId)
                         + (looks == invalidId() ? QString()
                            : tr(", %n look(s)", "", int(m_st->looksIn(looks, QString()).count())))
                         + QStringLiteral(".\n\n")
-                        + (current ? tr("Current: GO, the footer, show control and every Cue Runner following "
+                        + (single ? tr("GO, the footer, show control and the Cue Runner play its main list. "
+                                       "With a second production you choose which one plays.")
+                           : current ? tr("Current: GO, the footer, show control and every Cue Runner following "
                                         "the current production play its main list.")
                                    : tr("Not current: its lists play only when picked (a VC Cue List, a Cue "
                                         "Runner set to one of them) or when it is made current. Undo is one "
@@ -3296,8 +3315,19 @@ void ShowTreeView::showProductionPage(quint32 productionId)
     m_pages->setCurrentWidget(m_prodPage);
 }
 
+bool ShowTreeView::singleProduction() const
+{
+    return m_st->productions().count() == 1;
+}
+
 void ShowTreeView::updateProductionSwitcher()
 {
+    // One production (Q75): nothing to switch between.
+    const bool show = m_st->productions().count() > 1;
+    if (m_productionAction != nullptr)
+        m_productionAction->setVisible(show);
+    if (m_productionLabelAction != nullptr)
+        m_productionLabelAction->setVisible(show);
     QSignalBlocker block(m_production);
     m_production->clear();
     m_production->addItem(tr("None (the main cue list)"), invalidId());
@@ -6694,7 +6724,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 menu.addAction(tr("Restore original…"), this, [this, id]() { restoreOriginal(id); })
                     ->setObjectName("stRestoreOriginal");
         }
-        if (kind == ProductionNode)
+        if (kind == ProductionNode && !singleProduction())
         {
             const quint32 id = item->data(0, IdRole).toUInt();
             const bool cur = m_st->currentProduction() == id;
@@ -6710,7 +6740,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             if (m_st->mainList(pid) != id)
                 menu.addAction(tr("Make main list"), this, [this, id]() { m_st->setMainList(id); })
                     ->setObjectName("stMakeMainList");
-            if (m_st->currentProduction() != pid || m_st->mainList(pid) != id)
+            if ((m_st->currentProduction() != pid && !singleProduction()) || m_st->mainList(pid) != id)
                 menu.addAction(tr("Play on GO (make current, main list)"), this, [this, id, pid]() {
                     m_st->setMainList(id);
                     m_st->setCurrentProduction(pid);

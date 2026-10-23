@@ -153,9 +153,8 @@ later), and **(6)** the tabs.
 
 ### Play it
 
-Your production is already the one GO plays: the tree marks it
-**▶ current**. Leave its **Current** button alone, because clicking it
-would turn that off.
+Your production is the one GO plays. It's the only production in the
+show, so there's nothing to choose.
 
 13. Click the **Run** tab (⇧⌘9) and press **GO** (or **Space**) three
     times.
@@ -182,7 +181,7 @@ would turn that off.
 |---|---|
 | A dialog asked something unexpected | Cancel it, select the right row in the tree first (the production, for + Cue list), and try again. |
 | The group landed in the wrong cue | **Undo** (⌘Z), click the right cue, and drag again. |
-| GO does nothing | Check that **Spring Show** is marked **▶ current** in the tree. If it isn't, click it and click its **Current** button once. |
+| GO does nothing | Check that the cue list has cues, then click the **Run** tab again. |
 | Nothing lights in the Rig Overview | The stage shows the selected cue, so make sure a **cue** is selected in the tree, and that **Live** is on in the Rig Overview. |
 | You can't find a palette | Type its name in **Filter the Library** at the top left. |
 

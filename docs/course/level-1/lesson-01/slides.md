@@ -75,7 +75,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 11. GO
 
 - Picture: `run-tab.png`
-- The new production is already current (▶ current): Run tab, GO ×3.
+- The only production is the one GO plays: Run tab, GO ×3.
 
 ## 12. Your turn
 

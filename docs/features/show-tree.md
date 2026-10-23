@@ -1716,6 +1716,11 @@ and the corporate gig in the same venue. They share the Library (groups,
 palettes, targets, reusables); each has its own cue lists and its own Looks
 section. **Undo is one history** for all of them.
 
+**With one production** (most shows) none of this shows: it is the one GO
+plays, and there is no Current button, switcher or **· main** mark (a main
+list is offered only once it has two lists). Add a second production and
+the rest of this section applies.
+
 - **The current production** is what plays: the footer GO (**⌘↩**), Back,
   Sub GO, show control (QLab, OSC, MSC) and every Cue Runner set to follow
   "the current production". Pick it in the header's **Production:** switcher,
