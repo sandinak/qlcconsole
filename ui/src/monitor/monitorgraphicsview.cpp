@@ -9504,7 +9504,8 @@ void MonitorGraphicsView::captureMoveUndo()
 void MonitorGraphicsView::recordFeaturePaste(const QList<quint32> &trussIds,
                                              const QList<quint32> &platformIds,
                                              const QList<quint32> &targetIds,
-                                             const QList<quint32> &paletteIds)
+                                             const QList<quint32> &paletteIds,
+                                             const QList<quint32> &fixtureIds)
 {
     if (trussIds.isEmpty() && platformIds.isEmpty() && targetIds.isEmpty())
         return;
@@ -9515,6 +9516,7 @@ void MonitorGraphicsView::recordFeaturePaste(const QList<quint32> &trussIds,
     e.pastedPlatformIds = platformIds;
     e.pastedTargetIds   = targetIds;
     e.pastedPaletteIds  = paletteIds;
+    e.pastedFixtureIds  = fixtureIds;
     pushUndo(e);
 }
 
@@ -9601,7 +9603,17 @@ void MonitorGraphicsView::undoOne(const UndoEntry &entry)
 
     if (entry.type == UndoEntry::FeaturePaste)
     {
+        // The fixtures pasted with a truss first: nothing hangs on a truss
+        // as it goes.
         MonitorProperties *props = m_doc->monitorProperties();
+        foreach (quint32 id, entry.pastedFixtureIds)
+        {
+            if (m_doc->fixture(id) != nullptr)
+                m_doc->deleteFixture(id);
+            // deleteFixture() leaves the mount; a reused id must not inherit it.
+            if (props != nullptr)
+                props->removeFixtureRigProps(id);
+        }
         if (props != nullptr)
         {
             foreach (quint32 id, entry.pastedTrussIds)

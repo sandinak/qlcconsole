@@ -559,6 +559,14 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Lighting Studio: a pasted truss brings its fixtures.** ⌘C / ⌘V (and
+  Duplicate selected, Paste features here) copied the truss alone, though the
+  shortcuts help said structures copy with their fixtures. Each fixture on a
+  copied truss now comes too: a new fixture with the same definition, mode
+  and settings, a name of its own ("LX1-1 #2"), hung at the same place on
+  the copy. They arrive **unpatched** -- which addresses copies take is a
+  patching choice (Patch Others Like This) -- and the plot's status line
+  says so. One ⌘Z takes the truss and its fixtures away.
 - **Hiding the Workbench stops only what it started.** It started and
   stopped what is loaded (the Design preview, the Operate run) with the
   Master parent, and a Master stop clears every source -- so a function a

@@ -605,6 +605,11 @@ protected:
     class MonitorRuler *m_vRuler = nullptr;  ///< left ruler
     QWidget   *m_rulerCorner = nullptr;      ///< top-left corner filler
     QLabel    *m_readoutLabel = nullptr;     ///< live X/Y coordinate readout
+    /** The footer's status line: what an edit did that the plot can't show
+     *  (fixtures pasted unpatched). Clears itself after a while. */
+    QLabel    *m_noticeLabel = nullptr;
+    QTimer    *m_noticeTimer = nullptr;
+    void showNotice(const QString &text);
     class QToolButton *m_offStageBtn = nullptr;  ///< footer "N off stage" warning
     QLabel    *m_modeLabel = nullptr;        ///< prominent current-mode chip
     /** Refresh the footer mode chip from the POV / overlay / Build state. */
@@ -686,7 +691,18 @@ private:
         QVector<QVector3D> linePoints;   ///< a line's points, relative
     };
 
+    /** A fixture hung on a copied truss: pasted as a new fixture on the
+     *  truss's copy (unpatched -- the copy's address is a patching choice). */
+    struct FixtureClip
+    {
+        int                truss;      ///< index into m_trussClipboard
+        QByteArray         xml;        ///< the fixture (definition, mode, rules…)
+        FixturePreviewItem item;       ///< plot position, rotation, gel, layer
+        FixtureRigProps    rig;        ///< its mount on the truss
+    };
+
     QList<TrussClip>    m_trussClipboard;
+    QList<FixtureClip>  m_fixtureClipboard;
     QList<PlatformClip> m_platformClipboard;
     QList<TargetClip>   m_targetClipboard;
     /** How many times the current clipboard has been pasted; each paste

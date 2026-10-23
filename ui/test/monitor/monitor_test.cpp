@@ -22493,6 +22493,7 @@ void Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures()
 
         copy->trigger();
         QVERIFY(paste->isEnabled());
+        const int fixturesBefore = doc->fixtures().size();
         paste->trigger();
 
         QCOMPARE(props->trusses().size(), 2);
@@ -22508,20 +22509,45 @@ void Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures()
                  qPrintable(QString("pasted %1, %2, %3 off").arg(off.x()).arg(off.y()).arg(off.z())));
         const quint32 dupId = dup->id();
         QVERIFY(gv->m_trussItems.contains(dupId));
-        QEXPECT_FAIL("", "BUG: Monitor::slotCopySelected/pasteClipboard copy only the truss itself "
-                         "(TrussClip has no fixtures), so a pasted truss comes back bare, though "
-                         "shortcuts.md says ⌘C / ⌘V copy structures with their fixtures", Continue);
         QCOMPARE(onTruss(dup->id()), 2);
         QCOMPARE(onTruss(bar->id()), 2);                // the original keeps its own
+        QCOMPARE(doc->fixtures().size(), fixturesBefore + 2);
 
-        // ⌘Z: the copy goes, everything else as it was.
-        const int fixturesNow = doc->fixtures().size();
+        // The copies: new fixtures, same definition, names of their own,
+        // unpatched (the status line says so), at the same offsets on the copy.
+        QList<float> offsets;
+        QStringList names;
+        for (Fixture *f : doc->fixtures())
+        {
+            const FixtureRigProps rp = props->fixtureRigProps(f->id());
+            if (rp.trussId != dupId)
+                continue;
+            QVERIFY(!f->isPatched());
+            QCOMPARE(f->channels(), quint32(1));
+            QVERIFY(gv->m_fixtures.contains(f->id()));
+            offsets << rp.trussOffset;
+            names << f->name();
+        }
+        std::sort(offsets.begin(), offsets.end());
+        QCOMPARE(offsets, QList<float>({ 1.0f, 4.0f }));
+        names.sort();
+        QCOMPARE(names, QStringList({ "LX1-1 #2", "LX1-2 #2" }));
+        QLabel *notice = mon.findChild<QLabel *>("plotNotice");
+        QVERIFY(notice != nullptr);
+        QVERIFY2(notice->text().contains("2 fixtures unpatched"), qPrintable(notice->text()));
+        // The originals are untouched, still patched where they were.
+        for (Fixture *f : doc->fixtures())
+            if (props->fixtureRigProps(f->id()).trussId == bar->id())
+                QVERIFY(f->isPatched());
+
+        // One ⌘Z: the copy goes with its fixtures, everything else as it was.
         mon.undo();
         QCOMPARE(props->trusses().size(), 1);
         QCOMPARE(props->trusses().first(), bar);
         QVERIFY(!gv->m_trussItems.contains(dupId));
         QCOMPARE(onTruss(bar->id()), 2);
-        QCOMPARE(doc->fixtures().size(), fixturesNow);     // the original's fixtures stay
+        QCOMPARE(onTruss(dupId), 0);
+        QCOMPARE(doc->fixtures().size(), fixturesBefore);  // the original's fixtures stay
     }
     delete doc;
 }
