@@ -559,6 +559,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Build: deleting and duplicating a function can be undone.** Delete,
+  Duplicate, ⌘C ⌘V and Build ▸ Effects' Duplicate / Delete of an EFX or RGB
+  Matrix went straight to the show with no step on the shared history, so ⌘Z
+  couldn't take them back. Each is now one `PaletteOps::functionStep`: Undo
+  brings a deleted function back with its id, in its place in each
+  collection, chaser and show track (they ride in the step whole), and hands
+  it back to the VC buttons, cue lists and main cue list that let go of it;
+  Redo deletes it again. A duplicate's Undo takes the copy away, its Redo
+  brings it back with the same id.
 - **Shows timeline: Undo keeps each track's settings.** The timeline's undo
   snapshot (`ShowManager::captureSnapshot`) held a track's name, mute,
   colour and items only, and Undo rebuilds every track from it -- so any

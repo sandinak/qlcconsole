@@ -327,6 +327,10 @@ private:
     /** Delete each function after confirmation. Collects by id first, since the
      *  first deletion rebuilds the outline and invalidates every item pointer. */
     void deleteFunctions(const QList<quint32> &fids);
+    /** Delete $fids (no question) as one step on the shared history: Undo
+     *  brings them back with their ids, in every collection, chaser, show,
+     *  VC button and cue list that had them. */
+    void deleteFunctionsUndoably(const QList<quint32> &fids);
 
     /** Delete the user folder $item of $tree. Its functions/palettes and
      *  sub-folders move up into the parent folder — nothing is deleted. A

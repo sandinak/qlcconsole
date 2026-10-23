@@ -37,6 +37,7 @@
 #include <QSettings>
 #include <QToolButton>
 #include <QIcon>
+#include <QPointer>
 #include <algorithm>
 #include <functional>
 
@@ -47,6 +48,11 @@
 #include "workbenchstack.h"
 #include "paletteops.h"
 #include "usedby.h"
+#include "virtualconsole.h"
+#include "vccuelist.h"
+#include "vcbutton.h"
+#include "vcframe.h"
+#include "showcontrol.h"
 #include "helpbrowser.h"
 #include "programmercontroller.h"
 #include "functionstreewidget.h"
@@ -1403,14 +1409,24 @@ QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget 
             }
             else
             {
-                Function *src = m_doc->function(id);
-                Function *copy = src == nullptr ? nullptr : src->createCopy(m_doc);
-                if (copy == nullptr)
+                // One step on the shared history, as the outline's Duplicate.
+                quint32 copyId = Function::invalidId();
+                m_doc->paletteOps()->functionStep(tr("Duplicate"), QList<quint32>(),
+                                                  [&](QList<quint32> &made) {
+                    Function *src = m_doc->function(id);
+                    Function *copy = src == nullptr ? nullptr : src->createCopy(m_doc);
+                    if (copy == nullptr)
+                        return false;
+                    copy->setName(m_doc->nextDuplicateName(src));
+                    made << copy->id();
+                    copyId = copy->id();
+                    return true;
+                });
+                if (m_doc->function(copyId) == nullptr)
                     return;
-                copy->setName(m_doc->nextDuplicateName(src));
                 m_outline->scheduleRebuild();
-                selectEffectRow(false, copy->id());
-                m_workbench->load(copy->id());
+                selectEffectRow(false, copyId);
+                m_workbench->load(copyId);
             }
         });
         a->setObjectName(QStringLiteral("effectsDuplicate"));
@@ -2357,29 +2373,37 @@ void ProgrammingManager::addNewFunction(Function::Type type, const QString &fold
 
 void ProgrammingManager::duplicateFunctions(const QList<quint32> &fids)
 {
-    Function *last = NULL;
-    for (quint32 fid : fids)
-    {
-        Function *src = m_doc->function(fid);
-        if (src == NULL)
-            continue;
+    // One step on the shared history: ⌘Z takes the copies away, ⌘⇧Z brings
+    // them back with their ids.
+    quint32 last = Function::invalidId();
+    m_doc->paletteOps()->functionStep(fids.size() > 1 ? tr("Duplicate %1 functions").arg(fids.size())
+                                                      : tr("Duplicate"),
+                                      QList<quint32>(), [&](QList<quint32> &made) {
+        for (quint32 fid : fids)
+        {
+            Function *src = m_doc->function(fid);
+            if (src == NULL)
+                continue;
 
-        Function *copy = src->createCopy(m_doc);
-        if (copy == NULL)
-            continue;
+            Function *copy = src->createCopy(m_doc);
+            if (copy == NULL)
+                continue;
 
-        // Smart-increment the source name ("Verse 1" -> "Verse 2",
-        // "01-01.02-Reville" -> "01-01.03-Reville"), same as the Function
-        // Manager, rather than a generic "(Copy)" suffix.
-        copy->setName(m_doc->nextDuplicateName(src));
-        last = copy;
-    }
+            // Smart-increment the source name ("Verse 1" -> "Verse 2",
+            // "01-01.02-Reville" -> "01-01.03-Reville"), same as the Function
+            // Manager, rather than a generic "(Copy)" suffix.
+            copy->setName(m_doc->nextDuplicateName(src));
+            made << copy->id();
+            last = copy->id();
+        }
+        return !made.isEmpty();
+    });
 
-    if (last == NULL)
+    if (m_doc->function(last) == NULL)
         return;
 
     m_outline->rebuild();
-    showFunction(last->id());
+    showFunction(last);
 }
 
 void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
@@ -2399,11 +2423,81 @@ void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
             != QMessageBox::Yes)
         return;
 
+    deleteFunctionsUndoably(fids);
+}
+
+void ProgrammingManager::deleteFunctionsUndoably(const QList<quint32> &fids)
+{
+    /* One step on the shared history. The functions using them (collections,
+       chasers, shows) ride in it whole, so Undo brings each deleted function
+       back with its id and puts it back where it was in each of them. Cues
+       name a function by id: they find it again by themselves. VC buttons and
+       cue lists let go of a deleted function; Undo hands it back to them. */
+    QList<quint32> gone, keep;
+    QStringList names;
+    ProgrammerController *pc = m_doc->programmer();
+    for (quint32 fid : fids)
+    {
+        Function *f = m_doc->function(fid);
+        if (f == NULL || gone.contains(fid))
+            continue;
+        gone << fid;
+        names << f->name();
+        if (pc != NULL)
+            for (const ProgrammerController::Usage &u : pc->functionUsage(fid))
+                if (!keep.contains(u.ownerId))
+                    keep << u.ownerId;
+    }
+    if (gone.isEmpty())
+        return;
+
+    QList<QPair<QPointer<VCButton>, quint32>> buttons;
+    QList<QPair<QPointer<VCCueList>, quint32>> cueLists;
+    if (VirtualConsole *vc = VirtualConsole::instance())
+        if (vc->contents() != NULL)
+        {
+            for (VCButton *b : vc->contents()->findChildren<VCButton *>())
+                if (gone.contains(b->function()))
+                    buttons << qMakePair(QPointer<VCButton>(b), b->function());
+            for (VCCueList *cl : vc->contents()->findChildren<VCCueList *>())
+                if (gone.contains(cl->chaserID()))
+                    cueLists << qMakePair(QPointer<VCCueList>(cl), cl->chaserID());
+        }
+    ShowControl *sc = m_doc->showControl();
+    const quint32 mainCueList = sc != NULL && gone.contains(sc->mainCueList())
+                                    ? sc->mainCueList() : Function::invalidId();
+
+    const QString label = gone.size() > 1 ? tr("Delete %1 functions").arg(gone.size())
+                                          : tr("Delete %1").arg(names.first());
     // Delete by id, never by tree item: the first deletion emits functionRemoved,
     // which rebuilds the outline (and tears down the canvas if it held one of
     // these) — so any QTreeWidgetItem* captured before the loop would dangle.
-    for (quint32 fid : fids)
-        m_doc->deleteFunction(fid);
+    const bool stepped = m_doc->paletteOps()->functionStep(label, gone + keep, [&](QList<quint32> &) {
+        for (quint32 fid : gone)
+            m_doc->deleteFunction(fid);
+        return true;
+    });
+    if (!stepped || (buttons.isEmpty() && cueLists.isEmpty() && mainCueList == Function::invalidId()))
+        return;
+
+    Doc *doc = m_doc;
+    m_doc->paletteOps()->attachToLastStep([doc, buttons, cueLists, mainCueList](bool undone) {
+        // Redone: the functions go again, and the widgets let go as before.
+        if (!undone)
+            return;
+        for (const QPair<QPointer<VCButton>, quint32> &b : buttons)
+            if (!b.first.isNull() && doc->function(b.second) != NULL
+                && b.first->function() == Function::invalidId())
+                b.first->setFunction(b.second);
+        for (const QPair<QPointer<VCCueList>, quint32> &cl : cueLists)
+            if (!cl.first.isNull() && doc->function(cl.second) != NULL
+                && cl.first->chaserID() == Function::invalidId())
+                cl.first->setChaser(cl.second);
+        ShowControl *sc = doc->showControl();
+        if (mainCueList != Function::invalidId() && sc != NULL && doc->function(mainCueList) != NULL
+            && sc->mainCueList() == UINT_MAX)
+            sc->setMainCueList(mainCueList);
+    });
 }
 
 // "Where is this used" lines for a delete question, capped so the dialog

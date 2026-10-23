@@ -1364,18 +1364,15 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     const quint32 copyId = pm.workbench()->loadedFunction();
     QVERIFY(copyId != efxId && qobject_cast<EFX *>(m_doc->function(copyId)) != nullptr);
     QVERIFY(m_doc->function(copyId)->name() != "Circle");
-    bool undoable = pm.undoText() != undoBefore;
-    QEXPECT_FAIL("", "BUG: Build ▸ Effects' Duplicate on an EFX / RGB Matrix "
-                     "(ProgrammingManager::effectsContextMenu) adds the copy with createCopy and no "
-                     "PaletteOps::functionStep: not on the shared history, ⌘Z can't take it away", Continue);
-    QVERIFY(undoable);
-    if (undoable)
-    {
-        QVERIFY(st->undoShared());
-        QVERIFY(m_doc->function(copyId) == nullptr);
-    }
-    else
-        m_doc->deleteFunction(copyId);              // as if undone
+    // One step: ⌘Z takes the copy away, ⌘⇧Z brings it back with its id.
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->function(copyId) == nullptr);
+    QCOMPARE(pm.undoText(), undoBefore);
+    QVERIFY(st->redoShared());
+    QVERIFY(qobject_cast<EFX *>(m_doc->function(copyId)) != nullptr);
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->function(copyId) == nullptr);
     undoBefore = pm.undoText();
 
     // Delete: the question names the collection using it.
@@ -1387,16 +1384,15 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     }
     QVERIFY(m_doc->function(efxId) == nullptr);
     QVERIFY(shout->functions().isEmpty());
-    undoable = pm.undoText() != undoBefore;
-    QEXPECT_FAIL("", "BUG: deleting an EFX from Build ▸ Effects goes through "
-                     "ProgrammingManager::deleteFunctions (Doc::deleteFunction, no "
-                     "PaletteOps::functionStep): not undoable, unlike deleting an effect palette", Continue);
-    QVERIFY(undoable);
-    if (undoable)
-    {
-        QVERIFY(st->undoShared());
-        QVERIFY(m_doc->function(efxId) != nullptr);
-        QCOMPARE(shout->functions(), QList<quint32>({ efxId }));
-    }
+    // One step: ⌘Z brings it back, with its id, in the collection.
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QVERIFY(qobject_cast<EFX *>(m_doc->function(efxId)) != nullptr);
+    QCOMPARE(m_doc->function(efxId)->name(), QString("Circle"));
+    QCOMPARE(shout->functions(), QList<quint32>({ efxId }));
+    QCOMPARE(pm.undoText(), undoBefore);
+    QVERIFY(st->redoShared());
+    QVERIFY(m_doc->function(efxId) == nullptr);
+    QVERIFY(shout->functions().isEmpty());
     pm.hide();
 }

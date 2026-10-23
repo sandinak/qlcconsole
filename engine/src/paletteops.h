@@ -233,6 +233,11 @@ public:
      *  its id. Nothing changed: no step (false). */
     bool functionStep(const QString &label, const QList<quint32> &functionIds,
                       const std::function<bool(QList<quint32> &made)> &change);
+    /** What the last step changed outside the functions it keeps (a VC
+     *  button's or cue list's function, the main cue list): @a outside runs
+     *  after that step is undone (true) or redone (false), so a delete's
+     *  Undo puts back what pointed at the functions it brings back. */
+    void attachToLastStep(const std::function<void(bool undone)> &outside);
 
 signals:
     /** Palettes, folders or the undo stack changed. */
@@ -282,6 +287,9 @@ private:
         bool functions = false;
         QList<QPair<quint32, QSharedPointer<Function>>> functionsBefore;
         QList<QPair<quint32, QSharedPointer<Function>>> functionsAfter;
+        /** attachToLastStep(): run after the step is undone (true) or
+         *  redone (false). */
+        std::function<void(bool undone)> outside;
     };
     /** Function @a id as it is now, detached; null if there is none. */
     QSharedPointer<Function> functionSnapshot(quint32 id) const;

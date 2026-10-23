@@ -677,6 +677,8 @@ bool PaletteOps::undo()
     if (st.functions)
     {
         applyFunctions(st.functionsBefore);
+        if (st.outside)
+            st.outside(true);
         m_redo << st;
         emit changed();
         return true;
@@ -707,6 +709,8 @@ bool PaletteOps::redo()
     if (st.functions)
     {
         applyFunctions(st.functionsAfter);
+        if (st.outside)
+            st.outside(false);
         m_undo << st;
         emit changed();
         return true;
@@ -1018,6 +1022,12 @@ bool PaletteOps::functionStep(const QString &label, const QList<quint32> &functi
     m_doc->setModified();
     emit changed();
     return true;
+}
+
+void PaletteOps::attachToLastStep(const std::function<void(bool undone)> &outside)
+{
+    if (!m_undo.isEmpty())
+        m_undo.last().outside = outside;
 }
 
 void PaletteOps::applyFunctions(const QList<QPair<quint32, QSharedPointer<Function>>> &states)

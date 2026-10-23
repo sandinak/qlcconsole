@@ -157,6 +157,7 @@ private slots:
     /** Delete of a scene in Build, answered Yes: gone, and out of the
      *  collection and the chaser step using it; answered No: kept. */
     void deletingAFunctionTakesItOutOfWhatUsesIt();
+    void undoingADeleteHandsItBackToItsVcWidgets();
     /** ⌘C ⌘V and Duplicate: a copy beside the original, its values and
      *  looks, the next name in the pattern; one ⌘Z takes it away. */
     void duplicateAndCopyPasteFileACopyBesideIt();

@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <algorithm>
 #include <QXmlStreamReader>
 #include "qlcfile.h"
 #include <QShortcut>
@@ -85,6 +86,11 @@
 #include "collection.h"
 #include "programmercontroller.h"
 #include "chaser.h"
+#include "virtualconsole/virtualconsole.h"
+#include "virtualconsole/vcbutton.h"
+#include "virtualconsole/vccuelist.h"
+#include "virtualconsole/vcframe.h"
+#include "showcontrol.h"
 #include "chaserstep.h"
 #include "show.h"
 #include "track.h"
@@ -2911,19 +2917,76 @@ void ProgrammingManager_Test::deletingAFunctionTakesItOutOfWhatUsesIt()
     QCOMPARE(chaser->steps().first().fid, hold->id());
     QVERIFY(mgr.m_outline->sceneItem(walkId) == nullptr);
 
-    // ⌘Z (palette deletes are one step on the shared history).
-    const bool undoable = mgr.undoText() != undoBefore;
-    QEXPECT_FAIL("", "BUG: ProgrammingManager::deleteFunctions deletes with Doc::deleteFunction "
-                     "directly -- no PaletteOps::functionStep -- so deleting a scene in Build is not "
-                     "on the shared history and ⌘Z can't bring it back (deleting a palette can)", Continue);
-    QVERIFY(undoable);
-    if (undoable)
+    // ⌘Z: one step on the shared history brings it back with its id, in
+    // its place in the collection and the chaser.
+    QVERIFY(mgr.undoText() != undoBefore);
+    mgr.slotUndo();
+    QVERIFY(m_doc->function(walkId) != nullptr);
+    QCOMPARE(m_doc->function(walkId)->name(), QString("0.0.3-Walk"));
+    QCOMPARE(m_doc->function(walkId)->path(true), QString("Preshow"));
+    QCOMPARE(coll->functions(), QList<quint32>({ walkId, hold->id() }));
+    QCOMPARE(chaser->stepsCount(), 2);
+    QCOMPARE(chaser->steps().at(1).fid, walkId);
+    QCOMPARE(mgr.undoText(), undoBefore);
+
+    // ⌘⇧Z: gone again, everywhere.
+    mgr.slotRedo();
+    QVERIFY(m_doc->function(walkId) == nullptr);
+    QCOMPARE(coll->functions(), QList<quint32>({ hold->id() }));
+    QCOMPARE(chaser->stepsCount(), 1);
+    mgr.slotUndo();
+    QCOMPARE(coll->functions(), QList<quint32>({ walkId, hold->id() }));
+}
+
+void ProgrammingManager_Test::undoingADeleteHandsItBackToItsVcWidgets()
+{
+    struct ScopedVc
     {
-        mgr.slotUndo();
-        QVERIFY(m_doc->function(walkId) != nullptr);
-        QCOMPARE(coll->functions(), QList<quint32>({ walkId, hold->id() }));
-        QCOMPARE(chaser->stepsCount(), 2);
-    }
+        explicit ScopedVc(Doc *doc) { new VirtualConsole(nullptr, doc); }
+        ~ScopedVc() { delete VirtualConsole::instance(); }
+    } vc(m_doc);
+    Scene *walk = new Scene(m_doc);
+    walk->setName("Walk");
+    QVERIFY(m_doc->addFunction(walk));
+    Chaser *cues = new Chaser(m_doc);
+    cues->setName("Cues");
+    QVERIFY(m_doc->addFunction(cues));
+    cues->addStep(ChaserStep(walk->id()));
+    const quint32 walkId = walk->id(), cuesId = cues->id();
+    VCButton *btn = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    btn->setFunction(walkId);
+    VCCueList *list = new VCCueList(VirtualConsole::instance()->contents(), m_doc);
+    list->setChaser(cuesId);
+    m_doc->showControl()->setMainCueList(cuesId);
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    const QString undoBefore = mgr.undoText();
+
+    // Both in one step: the widgets let go.
+    mgr.deleteFunctionsUndoably({ walkId, cuesId });
+    QVERIFY(m_doc->function(walkId) == nullptr && m_doc->function(cuesId) == nullptr);
+    QCOMPARE(btn->function(), Function::invalidId());
+    QCOMPARE(list->chaserID(), Function::invalidId());
+    QVERIFY(m_doc->showControl()->mainCueList() != cuesId);
+
+    // One ⌘Z: both back with their ids, the chaser's step, the button, the
+    // cue list and the main cue list.
+    mgr.slotUndo();
+    QCOMPARE(mgr.undoText(), undoBefore);
+    QVERIFY(m_doc->function(walkId) != nullptr);
+    Chaser *back = qobject_cast<Chaser *>(m_doc->function(cuesId));
+    QVERIFY(back != nullptr);
+    QCOMPARE(back->stepsCount(), 1);
+    QCOMPARE(back->steps().first().fid, walkId);
+    QCOMPARE(btn->function(), walkId);
+    QCOMPARE(list->chaserID(), cuesId);
+    QCOMPARE(m_doc->showControl()->mainCueList(), cuesId);
+
+    // ⌘⇧Z: gone again; the widgets let go again.
+    mgr.slotRedo();
+    QVERIFY(m_doc->function(walkId) == nullptr);
+    QCOMPARE(btn->function(), Function::invalidId());
+    QCOMPARE(list->chaserID(), Function::invalidId());
 }
 
 void ProgrammingManager_Test::duplicateAndCopyPasteFileACopyBesideIt()
@@ -2987,17 +3050,25 @@ void ProgrammingManager_Test::duplicateAndCopyPasteFileACopyBesideIt()
         names << f->name();
     QCOMPARE(names.removeDuplicates(), 0);
 
-    // One ⌘Z takes the last copy away.
-    const bool undoable = mgr.undoText() != undoBefore;
-    QEXPECT_FAIL("", "BUG: ProgrammingManager::duplicateFunctions (Duplicate, ⌘C ⌘V) adds the copy "
-                     "with Function::createCopy and no PaletteOps::functionStep, so it is not on the "
-                     "shared history: ⌘Z can't take a duplicate away (a duplicated palette can)", Continue);
-    QVERIFY(undoable);
-    if (undoable)
-    {
-        mgr.slotUndo();
-        QCOMPARE(m_doc->functions().count(), before.count() + 1);
-    }
+    // One ⌘Z takes the last copy away; ⌘⇧Z brings it back with its id.
+    QList<quint32> copies;
+    for (Function *f : m_doc->functions())
+        if (!before.contains(f->id()))
+            copies << f->id();
+    std::sort(copies.begin(), copies.end());
+    QCOMPARE(copies.count(), 2);
+    const QString lastName = m_doc->function(copies.last())->name();
+    mgr.slotUndo();
+    QCOMPARE(m_doc->functions().count(), before.count() + 1);
+    QVERIFY(m_doc->function(copies.last()) == nullptr);
+    mgr.slotRedo();
+    QVERIFY(m_doc->function(copies.last()) != nullptr);
+    QCOMPARE(m_doc->function(copies.last())->name(), lastName);
+    // ...and a second ⌘Z the pasted one: back where it started.
+    mgr.slotUndo();
+    mgr.slotUndo();
+    QCOMPARE(m_doc->functions().count(), before.count());
+    QCOMPARE(mgr.undoText(), undoBefore);
 }
 
 void ProgrammingManager_Test::fourTapsHalfASecondApartShow120Bpm()
