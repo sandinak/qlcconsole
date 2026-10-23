@@ -32,6 +32,7 @@ class WorkbenchStack;
 class SceneGroupLooks;
 class FixtureConsole;
 class QStackedWidget;
+class QKeyEvent;
 class QScrollArea;
 class QToolButton;
 class QPushButton;
@@ -105,6 +106,12 @@ public:
     /** ↩: back to what was loaded before (or to setReturnTo()'s place). */
     bool goBack();
     bool canGoBack() const;
+    /** Esc: back out one level. A palette opened from a list or a group's
+     *  layout, over what was showing: back to that (its ↩ / ← Back); the
+     *  effect bench: left as clicking away leaves it, to what it was
+     *  opened from; else ↩ (goBack()). Edits stay. False: nowhere to go
+     *  (Esc goes on). */
+    bool backOut();
     /** Where ↩ goes when there is nothing to go back to here ("Show Tree"),
      *  and how; an empty @a label clears it. W3 docks the Workbench in the
      *  Show Tree with this. */
@@ -218,6 +225,8 @@ signals:
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
+    /** Esc: backOut(). */
+    void keyPressEvent(QKeyEvent *ev) override;
 
 private slots:
     void slotRowsSelectionChanged();
@@ -333,6 +342,9 @@ private:
     class QVBoxLayout *m_sceneCanvasLayout = nullptr;
     QWidget *m_lookPage = nullptr;
     LookEditor *m_lookEditor = nullptr;
+    /** editPalette() put the Look Editor over the page that was showing
+     *  (its ↩ Back, Esc: the rows' page again). */
+    bool m_paletteDetour = false;
     QWidget *m_targetPage = nullptr;
     QLabel *m_targetHeading = nullptr;
     QPushButton *m_targetLayoutBtn = nullptr;

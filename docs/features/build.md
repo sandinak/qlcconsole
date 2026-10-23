@@ -58,6 +58,25 @@ Two panes, left to right:
   - **Scenes**: [the outline](#the-outline) of your scene folders. Click a
     scene, a collection or a chaser and it loads in the Workbench.
 
+### Backing out (Esc)
+
+**Esc** takes you back one level, to what was showing before. It works
+with the focus in the navigator or in the Workbench:
+
+- **A palette double-clicked open** in Palettes covers the page that was
+  showing. **↩ Back** at the top of the Look Editor, or Esc, goes back to
+  that page, with the same row selected.
+- **A group's layout** goes back to the scene it was opened from
+  (**← Back to …**), or to the page the rows show if no scene was open.
+- **The effect bench** goes back to the scene it was opened from. Leaving
+  the bench works as it always has: an effect you have not saved or made
+  into a layer is dropped, as **Cancel** would drop it.
+- **A ▣ opened layer** goes back to its collection or chaser (**↩**).
+
+What you changed stays changed. Palette and scene edits are made as you go,
+and **⌘Z** undoes them. Esc in a rename only cancels the rename. Esc never
+stops playback: that is **⌘⇧Esc**, Stop all.
+
   Under every section, **Groups &amp; fixtures**, with a **Search fixtures &
   groups…** box: a row stays when it or anything under it matches, the
   folders on the way down open, and a matching group keeps all its

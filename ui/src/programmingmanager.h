@@ -30,6 +30,7 @@
 #include "powerdistribution.h"
 
 class QTreeWidgetItem;
+class QKeyEvent;
 class QTreeWidget;
 class Scene;
 class FunctionsTreeWidget;
@@ -185,6 +186,9 @@ public:
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
+    /** Esc with the focus in the navigator: the Workbench backs out (a
+     *  palette opened from the list goes back to what was showing). */
+    void keyPressEvent(QKeyEvent *ev) override;
 
 private slots:
     /** The navigator's selection changed: load what is selected. */

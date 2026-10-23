@@ -11,6 +11,7 @@
 | ⌘, | Settings (autosave, appearance, …) |
 | ⌘F12 | Switch between **Design** and **Operate** |
 | ⌘L | Show-mode lock |
+| **Esc** | **Back out** of an editor to what was showing before: a palette opened from a list, a group's layout, the effect bench, a ▣ layer, the Workbench docked in the Show Tree, the Show Tree's Look Editor. What you changed stays changed. In a rename or another inline edit, Esc cancels just that edit; in a dialog it closes the dialog. Plain Esc stops nothing |
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |
 | ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a look; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
@@ -71,6 +72,7 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | Drag a scene onto the Workbench's layers | Add it to the collection loaded |
 | ⌫ on a Workbench layer | Take it out of the collection (the function stays) |
 | Double-click a ▣ layer | Open it in the Workbench (↩ comes back) |
+| **Esc** | Back out one level: a palette double-clicked open goes back to the page it covered (as its **↩ Back**), a group's layout to its scene (**← Back**), the effect bench to the scene it was opened from (its draft goes, as Cancel), a ▣ layer to its collection (**↩**) ([Backing out](build.md#backing-out-esc)) |
 | ⌘→ / ⌘← | Expand / collapse every row |
 | ⌘Z / ⇧⌘Z | Undo / redo the last change, here or in the Show Tree (one history) |
 | ⇧⌘N | New here: a scene in the selected folder; in the Workbench a scene layer (collection) or the next step (chaser); in Effects a new effect ([New here](build.md#new-here)) |
@@ -94,6 +96,7 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 | Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
 | **:** (in the tree) | To the command line at the bottom ([The command line](show-tree.md#the-command-line)) |
 | **Esc** (in the command line) | Close the help, then back to the tree |
+| **Esc** (anywhere else in the tab) | The Workbench docked: back out a level, then **↩ Show Tree**. Otherwise the Look Editor under the page closes (**↩ Back** on it does the same) |
 | **Tab** (in the command line) | Complete the word; again, the next match |
 | `help` / `?` (in the command line) | Every word, or `help <word>` with examples |
 | ↑ / ↓ (in the command line) | Earlier / later commands |

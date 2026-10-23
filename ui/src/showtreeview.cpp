@@ -1049,6 +1049,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         paletteEdited(pid, false);
     });
     connect(m_lookEditor, &LookEditor::usedByLinkActivated, this, &ShowTreeView::usedByLinkActivated);
+    // ↩ Back (Esc): the Look Editor closes, the page has the column again.
+    m_lookEditor->setBackText(tr("↩ Back"));
+    connect(m_lookEditor, &LookEditor::backRequested, this, [this]() {
+        editPalette(QLCPalette::invalidId());
+        m_tree->setFocus(Qt::OtherFocusReason);
+    });
 
     // Middle: the tree
     ShowTreeWidget *tree = new ShowTreeWidget(this, split);
@@ -5506,6 +5512,32 @@ void ShowTreeView::editPalette(quint32 paletteId)
                                : tr("A shared palette: changing it changes every cue and scene that uses it"));
     updateUsedBy(paletteId);
     m_lookEditor->show();
+}
+
+void ShowTreeView::keyPressEvent(QKeyEvent *ev)
+{
+    /* Esc that nothing took (a rename, the command line and the filter take
+       their own): back out one level. The docked Workbench first -- a
+       palette opened over its page, then ↩ Show Tree -- else the Look
+       Editor under the page closes. Edits stay: they are made already. */
+    if (ev->key() == Qt::Key_Escape && ev->modifiers() == Qt::NoModifier)
+    {
+        bool done = false;
+        if (Workbench *bench = dockedWorkbench())
+            done = bench->backOut();
+        else if (m_lookEditor->isVisible())
+        {
+            editPalette(QLCPalette::invalidId());
+            m_tree->setFocus(Qt::OtherFocusReason);
+            done = true;
+        }
+        if (done)
+        {
+            ev->accept();
+            return;
+        }
+    }
+    QWidget::keyPressEvent(ev);
 }
 
 quint32 ShowTreeView::editedPalette() const

@@ -33,6 +33,7 @@
 #include "qlcpalette.h"
 
 class QStackedWidget;
+class QKeyEvent;
 class QListWidget;
 class ShowTreeCommand;
 class QDoubleSpinBox;
@@ -686,6 +687,9 @@ private:
     /** The cue list the selection is in (invalid: none). */
     quint32 currentListId() const;
     bool eventFilter(QObject *obj, QEvent *ev) override;
+    /** Esc that nothing took: the docked Workbench backs out (to the page:
+     *  ↩ Show Tree), else the Look Editor under the page closes. */
+    void keyPressEvent(QKeyEvent *ev) override;
     /** Set @a look on the layer, on the carried-in @a target, or the cue. */
     bool applyLook(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
                    const ShowTree::Look &look);

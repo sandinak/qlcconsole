@@ -574,6 +574,44 @@ static QAction *menuAction(QMenu *menu, const QString &objectName)
     return nullptr;
 }
 
+void EffectDesigner_Test::escLeavesTheBench()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Opened From");
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(towers->id());
+
+    EffectDesigner::plugIntoWorkbench();
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    pm.showFunction(scene->id());
+    Workbench *bench = pm.workbench();
+    QCOMPARE(bench->loadedFunction(), scene->id());
+
+    // The bench, opened with the scene loaded: it is where Esc goes back to.
+    QVERIFY(pm.designEffect(QLCPalette::invalidId()));
+    QPointer<EffectDesigner> ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
+    const quint32 draft = ed->draftId();
+    QVERIFY(m_doc->palette(draft) != nullptr);
+    QVERIFY(!bench->findChild<QWidget *>("workbenchColumn")->isVisible());
+    QTreeWidget *list = pm.findChild<QTreeWidget *>("buildEffects");
+    QVERIFY(list != nullptr);
+
+    ed->setFocus(Qt::OtherFocusReason);
+    QTest::keyClick(ed, Qt::Key_Escape);
+    QTRY_VERIFY(ed.isNull());
+    QVERIFY(pm.effectDesigner() == nullptr);
+    QTRY_VERIFY(m_doc->palette(draft) == nullptr);      // as Cancel leaves it
+    QCOMPARE(bench->loadedFunction(), scene->id());
+    QCOMPARE(bench->currentPage(), Workbench::ScenePage);
+    QVERIFY(bench->findChild<QWidget *>("workbenchColumn")->isVisible());
+    QVERIFY(list->isVisible());                         // Build ▸ Effects as it was
+}
+
 void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
 {
     FixtureGroup *towers = group("Towers", 0, 3);

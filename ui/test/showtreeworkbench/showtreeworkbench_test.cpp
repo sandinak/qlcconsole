@@ -50,6 +50,8 @@
 #include "fixturegroup.h"
 #include "mastertimer.h"
 #include "lookeditor.h"
+#include <QColorDialog>
+#include <QApplication>
 #include "qlcpalette.h"
 #include "universe.h"
 #include "fixture.h"
@@ -822,6 +824,286 @@ void ShowTreeWorkbench_Test::opaqueLayersAndAddNew()
 /****************************************************************************
  * Pictures on real cues (not part of the run unless asked for)
  ****************************************************************************/
+
+namespace
+{
+/* Esc as the user presses it: to whatever has the focus (the window's
+   own focus widget when that's what it is). */
+void pressEsc(QWidget *where)
+{
+    QWidget *w = where;
+    if (w->focusProxy() != nullptr)
+        w = w->focusProxy();
+    QTest::keyClick(w, Qt::Key_Escape);
+}
+
+QString currentKey(QTreeWidget *rows)
+{
+    QTreeWidgetItem *it = rows->currentItem();
+    return it == nullptr ? QString() : it->data(0, ProgrammingOutline::KeyRole).toString();
+}
+}
+
+void ShowTreeWorkbench_Test::escBacksOutOfAPaletteInBuild()
+{
+    const Show s = SHOW();
+    Scene *mine = new Scene(m_doc);
+    mine->setName("Mine");
+    m_doc->addFunction(mine);
+    mine->addFixtureGroup(s.towers->id());
+    mine->addPalette(s.half);
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QColor(Qt::red).name());
+    m_doc->addPalette(red);
+
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    pm.showFunction(mine->id());
+    Workbench *bench = pm.workbench();
+    QCOMPARE(bench->currentPage(), Workbench::ScenePage);
+    // A target row selected: the page that shows, and the row, come back.
+    QVERIFY(bench->selectRow(row(ProgrammingOutline::GroupRow, mine->id(), s.towers->id())));
+    QCOMPARE(bench->currentPage(), Workbench::TargetPage);
+    const QString selected = currentKey(bench->rows());
+    QVERIFY(!selected.isEmpty());
+
+    // Build ▸ Palettes ▸ Color: double-click Red -- the Look Editor over
+    // the page, ↩ Back on it.
+    pm.setSection(ProgrammingManager::PalettesSection);
+    QTreeWidgetItem *redItem = pm.m_paletteTree->paletteItem(red);
+    QVERIFY(redItem != nullptr);
+    pm.revealPalette(red->id());
+    pm.m_paletteTree->setFocus(Qt::OtherFocusReason);
+    QCoreApplication::processEvents();
+    emit pm.m_paletteTree->itemDoubleClicked(pm.m_paletteTree->paletteItem(red), 0);
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    QCOMPARE(bench->currentPaletteId(), red->id());
+    LookEditor *look = bench->lookEditor();
+    QToolButton *back = look->findChild<QToolButton *>("lookBack");
+    QVERIFY(back != nullptr && back->isVisible());
+    QCOMPARE(look->backText(), QString("↩ Back"));
+
+    // An edit, made live.
+    QColorDialog *picker = look->findChild<QColorDialog *>("lookColor");
+    QVERIFY(picker != nullptr && picker->isVisible());
+    const QString before = red->value().toString();
+    picker->setCurrentColor(QColor(Qt::green));
+    const QString edited = red->value().toString();
+    QVERIFY(edited != before);
+    QColor rgb, wauv;
+    QVERIFY(QLCPalette::stringToColor(edited, rgb, wauv));
+    QCOMPARE(rgb, QColor(Qt::green));
+    const QString editedName = red->name();
+
+    // Esc from the list (where the focus stays after the double-click):
+    // the page that was showing, the row still selected, the edit kept.
+    pm.m_paletteTree->setFocus(Qt::OtherFocusReason);
+    pressEsc(pm.m_paletteTree);
+    QCOMPARE(bench->currentPage(), Workbench::TargetPage);
+    QCOMPARE(currentKey(bench->rows()), selected);
+    QVERIFY(bench->rows()->currentItem()->isSelected());
+    QCOMPARE(red->value().toString(), edited);
+    QVERIFY(!back->isVisible());
+    // Nothing more to back out of in Build: Esc goes on, nothing changes.
+    pressEsc(bench->rows());
+    QCOMPARE(bench->currentPage(), Workbench::TargetPage);
+    QCOMPARE(bench->loadedFunction(), mine->id());
+
+    // Esc inside the colour picker: the picker (a QColorDialog) used to
+    // take it and hide itself -- as any embedded QColorDialog does:
+    {
+        QWidget host;
+        QColorDialog *bare = new QColorDialog(&host);
+        bare->setOptions(QColorDialog::NoButtons | QColorDialog::DontUseNativeDialog);
+        bare->setWindowFlags(Qt::Widget);
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        QTest::keyClick(bare, Qt::Key_Escape);
+        QVERIFY(bare->isHidden());
+    }
+    // Now it backs out, the picker still there.
+    QCoreApplication::processEvents();
+    emit pm.m_paletteTree->itemDoubleClicked(pm.m_paletteTree->paletteItem(red), 0);
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    QLineEdit *hex = nullptr;
+    for (QLineEdit *e : picker->findChildren<QLineEdit *>())
+        if (e->isVisible())
+            hex = e;
+    QVERIFY(hex != nullptr);
+    hex->setFocus(Qt::OtherFocusReason);
+    QTest::keyClick(hex, Qt::Key_Escape);
+    QCOMPARE(bench->currentPage(), Workbench::TargetPage);
+    QVERIFY(!picker->isHidden());
+    QCOMPARE(currentKey(bench->rows()), selected);
+
+    // ↩ Back, clicked, does the same.
+    QCoreApplication::processEvents();
+    emit pm.m_paletteTree->itemDoubleClicked(pm.m_paletteTree->paletteItem(red), 0);
+    QVERIFY(back->isVisible());
+    back->click();
+    QCOMPARE(bench->currentPage(), Workbench::TargetPage);
+
+    // A look row of the scene's own is the rows' page: no ↩ Back, and Esc
+    // there goes nowhere.
+    QVERIFY(bench->selectRow(row(ProgrammingOutline::PaletteRow, mine->id(), s.half)));
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    QVERIFY(!back->isVisible());
+    pressEsc(bench->rows());
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+
+    // A rename in the palette list: Esc cancels only the rename.
+    QCoreApplication::processEvents();
+    emit pm.m_paletteTree->itemDoubleClicked(pm.m_paletteTree->paletteItem(red), 0);
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    pm.revealPalette(red->id());
+    QCOMPARE(pm.m_paletteTree->currentItem(), pm.m_paletteTree->paletteItem(red));
+    pm.m_paletteTree->setFocus(Qt::OtherFocusReason);
+    QTest::keyClick(pm.m_paletteTree, Qt::Key_F2);       // rename in place
+    auto renameEditor = [&pm]() -> QLineEdit * {
+        for (QLineEdit *e : pm.m_paletteTree->viewport()->findChildren<QLineEdit *>())
+            if (e->isVisible())
+                return e;
+        return nullptr;
+    };
+    QLineEdit *rename = renameEditor();
+    QVERIFY(rename != nullptr);
+    rename->setText("Not Red");
+    QTest::keyClick(rename, Qt::Key_Escape);
+    QTRY_VERIFY(renameEditor() == nullptr);
+    QCOMPARE(red->name(), editedName);
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    QVERIFY(back->isVisible());
+    pressEsc(pm.m_paletteTree);
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);     // back to the look row's own
+    QCOMPARE(bench->currentPaletteId(), s.half);
+}
+
+void ShowTreeWorkbench_Test::escBacksOutOfALayoutAndAnOpenedLayer()
+{
+    const Show s = SHOW();
+    Scene *mine = new Scene(m_doc);
+    mine->setName("Mine");
+    m_doc->addFunction(mine);
+    mine->addFixtureGroup(s.towers->id());
+    mine->addPalette(s.half);
+    Scene *other = new Scene(m_doc);
+    other->setName("Other");
+    m_doc->addFunction(other);
+    Collection *coll = new Collection(m_doc);
+    coll->setName("Both");
+    m_doc->addFunction(coll);
+    coll->addFunction(mine->id());
+    coll->addFunction(other->id());
+
+    Workbench bench(m_doc);
+    bench.resize(1200, 800);
+    bench.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&bench));
+
+    // A group's layout from a scene: ← Back to it; Esc too.
+    bench.load(mine->id());
+    QCOMPARE(bench.currentPage(), Workbench::ScenePage);
+    bench.showGroupLayout(s.towers->id());
+    QCOMPARE(bench.currentPage(), Workbench::FunctionPage);
+    QPushButton *groupBack = bench.findChild<QPushButton *>("workbenchGroupBack");
+    QVERIFY(groupBack != nullptr && groupBack->isVisible());
+    QCOMPARE(groupBack->text(), QString("← Back to Mine"));
+    pressEsc(bench.m_funcEditor);
+    QCOMPARE(bench.currentPage(), Workbench::ScenePage);
+    QCOMPARE(bench.currentSceneId(), mine->id());
+
+    // With no scene open before: ← Back, to the empty page.
+    {
+        Workbench fresh(m_doc);
+        fresh.resize(1200, 800);
+        fresh.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&fresh));
+        fresh.showGroupLayout(s.towers->id());
+        QPushButton *freshBack = fresh.findChild<QPushButton *>("workbenchGroupBack");
+        QVERIFY(freshBack != nullptr && freshBack->isVisible());
+        QCOMPARE(freshBack->text(), QString("← Back"));
+        pressEsc(fresh.m_funcEditor);
+        QCOMPARE(fresh.currentPage(), Workbench::EmptyPage);
+        QVERIFY(freshBack->isHidden());
+    }
+
+    // ▣ Open a layer of the collection, Esc: ↩ to the collection, the row
+    // selected again.
+    bench.load(coll->id());
+    const int otherLayer = layerNamed(bench.stack(), "Other");
+    QVERIFY(otherLayer >= 0);
+    QVERIFY(bench.selectRow(row(ProgrammingOutline::SceneRow, other->id(), other->id())));
+    const QString selected = currentKey(bench.rows());
+    bench.openSelected();
+    QCOMPARE(bench.loadedFunction(), other->id());
+    QVERIFY(bench.canGoBack());
+    bench.rows()->setFocus(Qt::OtherFocusReason);
+    pressEsc(bench.rows());
+    QCOMPARE(bench.loadedFunction(), coll->id());
+    QCOMPARE(currentKey(bench.rows()), selected);
+    QVERIFY(!bench.canGoBack());
+    // Nowhere left: Esc goes on, nothing changes.
+    pressEsc(bench.rows());
+    QCOMPARE(bench.loadedFunction(), coll->id());
+}
+
+void ShowTreeWorkbench_Test::escBacksOutInTheShowTree()
+{
+    const Show s = SHOW();
+    {
+        // Undocked: the Look Editor under the page; ↩ Back and Esc close it.
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(1400, 800);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        view.selectNode(s.towersLayer2, s.c2);
+        view.editPalette(s.low);
+        LookEditor *look = view.m_lookEditor;
+        QVERIFY(look->isVisible());
+        QCOMPARE(look->backText(), QString("↩ Back"));
+        view.m_tree->setFocus(Qt::OtherFocusReason);
+        pressEsc(view.m_tree);
+        QVERIFY(!look->isVisible());
+        QCOMPARE(view.currentId(), s.towersLayer2);
+        QCOMPARE(view.currentCueId(), s.c2);
+        view.editPalette(s.low);
+        QVERIFY(look->isVisible());
+        look->findChild<QToolButton *>("lookBack")->click();
+        QVERIFY(!look->isVisible());
+        // Esc with nothing open: nothing happens (no Look Editor, no undock).
+        pressEsc(view.m_tree);
+        QCOMPARE(view.currentId(), s.towersLayer2);
+    }
+
+    // Docked: a palette over the layer's page, then ↩ Show Tree.
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c2, s.towersLayer2));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    const Workbench::Page page = bench->currentPage();
+    const QString selected = currentKey(bench->rows());
+    view.editPalette(s.half);
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    QCOMPARE(bench->currentPaletteId(), s.half);
+    view.m_tree->setFocus(Qt::OtherFocusReason);
+    pressEsc(view.m_tree);
+    QCOMPARE(bench->currentPage(), page);
+    QCOMPARE(currentKey(bench->rows()), selected);
+    QVERIFY(view.isWorkbenchDocked());
+    // Esc again, from the Workbench's rows: the page back, the layer selected.
+    bench->rows()->setFocus(Qt::OtherFocusReason);
+    pressEsc(bench->rows());
+    QTRY_VERIFY(!view.isWorkbenchDocked());
+    QVERIFY(pageSplitter(&view)->isVisible());
+    QCOMPARE(view.currentId(), s.towersLayer2);
+    QCOMPARE(view.currentCueId(), s.c2);
+}
 
 void ShowTreeWorkbench_Test::shots()
 {

@@ -64,6 +64,20 @@ private slots:
      *  tree's next cue (the Workbench follows to it); a collection opened
      *  there gets a new scene layer -- each one undo step. */
     void newHereInTheDockedWorkbench();
+    /** Esc backs out (shortcuts.md): a colour palette double-clicked open
+     *  in Build ▸ Palettes goes back to the page that was showing, the
+     *  rows' selection and the edit kept -- from the list, from the Look
+     *  Editor, from inside its colour picker (which no longer hides
+     *  itself); ↩ Back does the same. A rename in the list: Esc cancels
+     *  only the rename. */
+    void escBacksOutOfAPaletteInBuild();
+    /** Esc on a group's layout: ← Back to the scene (or to the rows'
+     *  page); on a ▣ opened layer: ↩ to the collection, the row selected. */
+    void escBacksOutOfALayoutAndAnOpenedLayer();
+    /** The Show Tree: Esc in the docked Workbench backs out a level at a
+     *  time (a palette, then ↩ Show Tree, the layer selected); undocked,
+     *  the Look Editor under the page closes (↩ Back too). */
+    void escBacksOutInTheShowTree();
 
     /** W3_SHOTS=<dir> W3_SHOW_06=<copy of DanceHysteria-0.6.qlcc>
      *  W3_SHOW_01=<copy of DanceHysteria-0.1.qlcc>: real-cue pictures. */

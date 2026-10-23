@@ -78,6 +78,13 @@ public:
     /** The line as plain text (tests). */
     QString usedByText() const;
 
+    /** A back button at the head of the editor ("↩ Back"), for a host
+     *  that opened it over something else: clicked, backRequested().
+     *  Empty hides it. Esc is the host's (it reaches it: the colour
+     *  picker, a QColorDialog in here, doesn't take it). */
+    void setBackText(const QString &text);
+    QString backText() const;
+
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
@@ -105,6 +112,9 @@ signals:
      *  external listener (e.g. a control-surface overlay) recompute what's
      *  "in use right now" without polling. */
     void lookFocusChanged(quint32 paletteId);
+
+    /** The back button (setBackText()) was clicked. */
+    void backRequested();
 
 private slots:
     void slotColorChanged(const QColor &c);
@@ -320,6 +330,7 @@ private:
 protected:
     bool eventFilter(QObject *obj, QEvent *ev) override;
 private:
+    QToolButton *m_backButton = nullptr;
     QComboBox   *m_effectScriptCombo;
     QLabel      *m_effectDescLabel;   //!< one-line description below combo
     QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel

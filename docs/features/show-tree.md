@@ -103,7 +103,8 @@ from the Library lands in the tree right beside it.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
   palette is used (*"Used by: 6 cue(s), 2 look(s) · 1 VC button"*); click
-  *which* for the list, and a cue or look to go there. At the
+  *which* for the list, and a cue or look to go there. **↩ Back** at its
+  top, or **Esc**, closes it; what you changed stays. At the
   bottom, full width, is **[the command line](#the-command-line)**, which
   is always there.
 
@@ -162,6 +163,9 @@ the tree and the Workbench follows it.
   Workbench had selected — selected in the tree. The Workbench goes back to
   Build, loaded as it was there. Leaving the tab does the same; coming back
   opens the cue again.
+- **Esc** backs out one level at a time. A palette opened over the page
+  goes back to the page first, then the next Esc is **↩ Show Tree**. Your
+  edits stay ([Backing out](build.md#backing-out-esc)).
 
 ## Quick start
 
