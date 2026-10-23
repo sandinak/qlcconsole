@@ -40,7 +40,7 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   floor after the faders (full when nothing set the channel this frame),
   armed per the show setting *When you switch to Operate* (default, board
   Q45) / *When the show opens*, saved as `OutputRuleSettings OnAtOpen=`
-  only when not the default; Settings ▸ Output. UI: `OutputRulesDialog`
+  only when not the default; Settings ▸ Advanced ▸ Output. UI: `OutputRulesDialog`
   (tri-state for mixed selections, one rig undo step — the rig snapshot
   now carries rules) from the Fixture Manager, Build's Groups & fixtures
   and the Show Tree Library; an amber badge on fixture icons

@@ -48,6 +48,7 @@ private slots:
     /** From the definition: fixed wash, moving spot, moving wash, a plain
      *  moving head, and anything else its own type's icon. */
     void aFixtureShowsWhatItIs();
+    void aStageLookKeepsTheOutputRulesBadge();
     /** A group of one kind wears that kind (stacked); a mixed one the group
      *  icon; a layer on a group the same. */
     void aGroupOfOneKindShowsIt();

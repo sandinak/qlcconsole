@@ -20,7 +20,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   Blind), **Ignore the Grand Master**, **Switch (relay)** — on at 50%,
   off below, never faded, and the Grand Master cannot switch it off — and
   **On when not in use**: full whenever nothing in the show sets it. When
-  those come on is the show's setting in Settings ▸ Output: *When you
+  those come on is the show's setting in Settings ▸ Advanced ▸ Output: *When you
   switch to Operate* (the default) or *When the show opens*. Fixtures
   with rules carry an amber badge. See
   [Output rules](fixture-manager.md#output-rules).
