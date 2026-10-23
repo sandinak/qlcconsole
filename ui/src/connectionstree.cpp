@@ -41,6 +41,7 @@
 #include <QStyledItemDelegate>
 #include <QScrollArea>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QTreeWidgetItemIterator>
 
 #include "connectionstree.h"
@@ -93,6 +94,11 @@
    it. Right-clicking it is the one place "add a protocol" belongs: unlike
    a specific protocol's own row, this one always exists. */
 #define KIND_HOST 8
+/* Show control & sync: the branch, and a row per link (OSC in, MIDI Show
+   Control in, MIDI timecode) with its key in ROLE_PLUGIN. Picking one shows
+   its settings on the right (ShowControlSyncPage). */
+#define KIND_SHOWCONTROL_BRANCH 9
+#define KIND_SHOWCONTROL 10
 
 #define COL_NAME    0
 #define COL_DETAIL  1
@@ -310,9 +316,12 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     outScroll->setWidgetResizable(false);
     outScroll->setMinimumWidth(320);         // narrower, it scrolls
     m_output->resize(m_output->sizeHint());
+    m_side = new QStackedWidget(this);
+    m_side->addWidget(outScroll);
+    m_outputPage = outScroll;
     QSplitter *split = new QSplitter(Qt::Horizontal, this);
     split->addWidget(m_tree);
-    split->addWidget(outScroll);
+    split->addWidget(m_side);
     split->setStretchFactor(0, 3);
     split->setStretchFactor(1, 2);
     lay->addWidget(split, 1);           // every spare pixel goes to the list
@@ -328,6 +337,16 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
         QTreeWidgetItem *it = m_tree->currentItem();
         if (it == nullptr || !it->isSelected())
             return;
+        const int kind = it->data(COL_NAME, ROLE_KIND).toInt();
+        if (m_showControlPanel != nullptr
+                && (kind == KIND_SHOWCONTROL || kind == KIND_SHOWCONTROL_BRANCH))
+        {
+            m_side->setCurrentWidget(m_showControlPanel);
+            emit showControlRowSelected(kind == KIND_SHOWCONTROL
+                                        ? it->data(COL_NAME, ROLE_PLUGIN).toString() : QString());
+            return;
+        }
+        m_side->setCurrentWidget(m_outputPage);
         const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
         if (uv.isValid() && uv.toUInt() != Universe::invalid())
             m_output->setUniverse(uv.toUInt());
@@ -1905,6 +1924,8 @@ void ConnectionsTree::refresh()
        Rows that did not exist on the previous pass are not in m_expanded and
        therefore arrive closed, which is the right default for a node that has
        just appeared. */
+    addShowControlRows();
+
     QList<QTreeWidgetItem *> stack;
     QList<int> depths;
     for (int i = 0; i < m_tree->topLevelItemCount(); i++)
@@ -2111,6 +2132,9 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     }
 
     const int kind = item->data(COL_NAME, ROLE_KIND).toInt();
+    // Show control is set up on the right, not by menu.
+    if (kind == KIND_SHOWCONTROL || kind == KIND_SHOWCONTROL_BRANCH)
+        return;
     const QString plugin = item->data(COL_NAME, ROLE_PLUGIN).toString();
     const quint32 line = item->data(COL_NAME, ROLE_LINE).toUInt();
 
@@ -4519,6 +4543,15 @@ void ConnectionsTree::buildUniverseList()
         selected.insert(it->data(COL_NAME, ROLE_UNIVERSE).toUInt());
     const quint32 current = m_tree->currentItem() != NULL
         ? m_tree->currentItem()->data(COL_NAME, ROLE_UNIVERSE).toUInt() : Universe::invalid();
+    QString currentShowControl;
+    if (m_tree->currentItem() != NULL && m_tree->currentItem()->isSelected())
+    {
+        const int ck = m_tree->currentItem()->data(COL_NAME, ROLE_KIND).toInt();
+        if (ck == KIND_SHOWCONTROL)
+            currentShowControl = m_tree->currentItem()->data(COL_NAME, ROLE_PLUGIN).toString();
+        else if (ck == KIND_SHOWCONTROL_BRANCH)
+            currentShowControl = QStringLiteral("*");
+    }
 
     m_rebuilding = true;
     m_tree->clear();
@@ -4615,6 +4648,26 @@ void ConnectionsTree::buildUniverseList()
         note->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
     }
 
+    addShowControlRows();
+    if (QTreeWidgetItem *branch = showControlBranch())
+    {
+        branch->setExpanded(true);          // no expander in this view
+        if (currentShowControl == QLatin1String("*"))
+        {
+            branch->setSelected(true);
+            m_tree->setCurrentItem(branch, 0, QItemSelectionModel::NoUpdate);
+        }
+        for (int c = 0; c < branch->childCount(); c++)
+        {
+            QTreeWidgetItem *row = branch->child(c);
+            if (row->data(COL_NAME, ROLE_PLUGIN).toString() == currentShowControl)
+            {
+                row->setSelected(true);
+                m_tree->setCurrentItem(row, 0, QItemSelectionModel::NoUpdate);
+            }
+        }
+    }
+
     if (current != Universe::invalid())
     {
         foreach (QTreeWidgetItem *it, m_tree->selectedItems())
@@ -4629,4 +4682,96 @@ void ConnectionsTree::buildUniverseList()
     restoreScroll(scroll);
     if (m_status != NULL)
         m_status->hide();
+}
+
+/*****************************************************************************
+ * Show control & sync
+ *****************************************************************************/
+
+void ConnectionsTree::setShowControlPanel(QWidget *panel)
+{
+    if (m_showControlPanel != nullptr || panel == nullptr)
+        return;
+    m_showControlPanel = panel;
+    m_side->addWidget(panel);
+    refresh();
+}
+
+void ConnectionsTree::setShowControlRows(const QList<QStringList> &rows)
+{
+    m_showControlRows = rows;
+    QTreeWidgetItem *branch = showControlBranch();
+    if (branch == nullptr || branch->childCount() != rows.count())
+    {
+        refresh();
+        return;
+    }
+    const bool was = m_rebuilding;
+    m_rebuilding = true;                // not an alias edit
+    for (int c = 0; c < branch->childCount(); c++)
+        if (rows.at(c).count() >= 3)
+            branch->child(c)->setText(COL_DETAIL, rows.at(c).at(2));
+    m_rebuilding = was;
+}
+
+void ConnectionsTree::selectShowControlRow(const QString &key)
+{
+    if (showControlBranch() == nullptr)
+        refresh();
+    QTreeWidgetItem *branch = showControlBranch();
+    if (branch == nullptr)
+        return;
+    QTreeWidgetItem *pick = branch;
+    for (int c = 0; c < branch->childCount(); c++)
+        if (branch->child(c)->data(COL_NAME, ROLE_PLUGIN).toString() == key)
+            pick = branch->child(c);
+    branch->setExpanded(true);
+    m_tree->clearSelection();
+    m_tree->setCurrentItem(pick);
+    pick->setSelected(true);
+    m_tree->scrollToItem(pick);
+}
+
+void ConnectionsTree::clearShowControlSelection()
+{
+    m_tree->clearSelection();
+    m_side->setCurrentWidget(m_outputPage);
+    m_tree->setFocus();
+}
+
+QTreeWidgetItem *ConnectionsTree::showControlBranch() const
+{
+    for (int i = m_tree->topLevelItemCount() - 1; i >= 0; i--)
+        if (m_tree->topLevelItem(i)->data(COL_NAME, ROLE_KIND).toInt() == KIND_SHOWCONTROL_BRANCH)
+            return m_tree->topLevelItem(i);
+    return nullptr;
+}
+
+void ConnectionsTree::addShowControlRows()
+{
+    if (m_showControlPanel == nullptr || m_showControlRows.isEmpty())
+        return;
+
+    /* Its own branch after the wiring: these links arrive over the inputs
+       above (OSC over the network, MSC and timecode on a patched MIDI
+       input), but they are settings of this show, not a plugin's line. */
+    QTreeWidgetItem *branch = new QTreeWidgetItem(m_tree);
+    branch->setText(COL_NAME, tr("Show control & sync"));
+    branch->setText(COL_DETAIL, tr("cue commands and timecode from outside (QLab, a sound desk)"));
+    branch->setData(COL_NAME, ROLE_KIND, KIND_SHOWCONTROL_BRANCH);
+    branch->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+    branch->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    branch->setIcon(COL_NAME, QIcon(":/input.png"));
+    for (const QStringList &r : m_showControlRows)
+    {
+        if (r.count() < 3)
+            continue;
+        QTreeWidgetItem *row = new QTreeWidgetItem(branch);
+        row->setText(COL_NAME, r.at(1));
+        row->setText(COL_DETAIL, r.at(2));
+        row->setData(COL_NAME, ROLE_KIND, KIND_SHOWCONTROL);
+        row->setData(COL_NAME, ROLE_PLUGIN, r.at(0));
+        row->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+        row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    }
 }

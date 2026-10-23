@@ -119,12 +119,21 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_ioTabs->addTab(detailed, tr("Universes"));
 
     /* Everything outside that controls or clocks the show -- OSC and MSC
-       cue commands, MIDI timecode -- next to the patch they arrive on.
-       Patch a MIDI input takes you to Devices, where inputs are patched. */
+       cue commands, MIDI timecode -- as rows in Devices, next to the inputs
+       they arrive on; picking one shows its settings on the right (Q84:
+       one place, no tab of its own). Patch a MIDI input goes back to the
+       wiring, where inputs are patched. */
     m_showControlPage = new ShowControlSyncPage(m_doc, this);
-    m_ioTabs->addTab(m_showControlPage, tr("Show control && sync"));
+    m_devicesTree->setShowControlPanel(m_showControlPage);
+    m_devicesTree->setShowControlRows(m_showControlPage->summary());
+    connect(m_showControlPage, &ShowControlSyncPage::summaryChanged, this, [this]() {
+        m_devicesTree->setShowControlRows(m_showControlPage->summary());
+    });
+    connect(m_devicesTree, &ConnectionsTree::showControlRowSelected,
+            m_showControlPage, &ShowControlSyncPage::showSection);
     connect(m_showControlPage, &ShowControlSyncPage::patchMidiInputRequested, this, [this]() {
         m_ioTabs->setCurrentWidget(m_devicesTree);
+        m_devicesTree->clearShowControlSelection();
     });
 
     /* Parented to the Detailed page, not to the manager. Both actions live on
@@ -328,7 +337,8 @@ InputOutputManager* InputOutputManager::instance()
 
 void InputOutputManager::showShowControlPage()
 {
-    m_ioTabs->setCurrentWidget(m_showControlPage);
+    m_ioTabs->setCurrentWidget(m_devicesTree);
+    m_devicesTree->selectShowControlRow(QString());
 }
 
 void InputOutputManager::setShowControlListener(ShowControlListener *listener)

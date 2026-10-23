@@ -5,10 +5,11 @@ QLab — or anything else that speaks **MIDI Show Control** (MSC) or **OSC**
 its cues GO the lights.
 
 Everything that controls or clocks the show from outside is set up in one
-place: **Connections → Show control &amp; sync** — OSC in, MIDI Show Control
-in, and MIDI timecode, each with what it last heard. (It used to be a group
-in the Settings dialog; that group, now on **Settings → Advanced**, just
-has an **Open** button that takes you there. Your settings carried over
+place: the **Show control &amp; sync** rows at the bottom of **Connections →
+Devices** — **OSC in**, **MIDI Show Control in** and **MIDI timecode**, each
+with its state beside it ("Port 8000 · listening", "Off"). Click a row to
+set it up on the right, with what it last heard. (It used to be in the
+Settings dialog, then a sub-tab of its own; your settings carried over
 unchanged.)
 
 ## Cues and cue lists
@@ -104,7 +105,7 @@ One level only: a sub-cue's own chase steps run on their own timing.
   **Next:** in the footer and in the cue list shows it — "Next: 4.2 —
   Wash" — and the next GO plays it. The Run tab loads a sub-cue too.
 - **STOP 4.2** stops the list only when 4.2 is the sub-cue playing.
-- When Sub GO can't, **Connections → Show control &amp; sync** says why:
+- When Sub GO can't, **Connections → Devices → Show control &amp; sync** says why:
   "cue 1 has no sub-cues on Sub GO", "end of 4", "4 is at its first
   sub-cue".
 
@@ -123,7 +124,7 @@ One level only: a sub-cue's own chase steps run on their own timing.
 
 ## OSC — QLab's Network cue
 
-1. **Connections → Show control &amp; sync → OSC in**: tick **Listen for OSC
+1. **Connections → Devices → OSC in**: tick **Listen for OSC
    cue commands** and pick a port (53100 by default). It's off until you
    turn it on, because anyone on the network could fire a cue. It takes
    effect at once, and the page shows this computer's address to send to.
@@ -155,7 +156,7 @@ digits it holds (4.2, not 4.199999809).
 
 1. **Connections**: patch the MIDI port QLab sends on as an **input** of any
    universe (the same as for MIDI timecode).
-2. **Connections → Show control &amp; sync → MIDI Show Control in**: **Answer
+2. **Connections → Devices → MIDI Show Control in**: **Answer
    MIDI Show Control** is on; set the **device** number QLab sends to (1 by
    default). A message to the all-call device (127) is always answered.
    **Listen on** is **All MIDI inputs** (the default) or the one port QLab
@@ -175,7 +176,7 @@ ALL_OFF, RESET and TIMED_GO (as GO) are answered too.
 
 ## Checking the hookup
 
-**Connections → Show control &amp; sync** says whether OSC is listening —
+**Connections → Devices → Show control &amp; sync** says whether OSC is listening —
 green, or in red why it can't, such as "Can't listen for OSC on port 53100"
 when another program has the port (pick another) — and, for OSC and MSC
 each, the **last command** that arrived, when, and what came of it: "GO
@@ -192,9 +193,6 @@ show that names a universe it doesn't have follows any), and shows the
 code as it arrives with its **sync health**: healthy, usable or
 unstable, from how fast it runs against real time, its jitter and how
 often it updates.
-
-**QLab out** — firing QLab's cues from here — isn't built yet; the page
-keeps a place for it.
 
 ## See also
 

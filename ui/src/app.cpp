@@ -1986,7 +1986,7 @@ void App::initActions()
     m_cueSubGoAction->setShortcut(cueSubGoShortcut());
     m_cueSubGoAction->setShortcutContext(Qt::ApplicationShortcut);
     // Through show control, as GO is: what came of it is reported the
-    // same way (Connections → Show control & sync, last command).
+    // same way (Connections → Devices → Show control & sync, last command).
     connect(m_cueSubGoAction, &QAction::triggered, this, [this]() {
         m_doc->showControl()->execute({ ShowControl::SubGo, QString(), QString() });
     });
@@ -5879,7 +5879,7 @@ void App::initStatusBar()
             slotTimecodeStatusChanged();
         });
         connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
-        // The source is picked here or in Connections' Show control & sync page.
+        // The source is picked here or in Connections → Devices → MIDI timecode.
         connect(tc, &TimecodeSource::sourceUniverseChanged,
                 this, &App::slotTimecodeStatusChanged);
     }

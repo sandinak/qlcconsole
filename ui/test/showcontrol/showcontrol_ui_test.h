@@ -46,6 +46,7 @@ private slots:
     void aPortInUseShowsAnError();
     void theTimecodeSourceAndHealth();
     void mscOnOneChosenInput();
+    void theRowsInConnectionsDevices();
 
 private:
     Chaser *makeList(int steps);

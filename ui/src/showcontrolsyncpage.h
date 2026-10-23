@@ -21,7 +21,9 @@
 #define SHOWCONTROLSYNCPAGE_H
 
 #include <QElapsedTimer>
+#include <QHash>
 #include <QPointer>
+#include <QStringList>
 #include <QWidget>
 #include "qlcui_export.h"
 
@@ -41,7 +43,8 @@ class Doc;
 /**
  * Connections' "Show control & sync" page: every link that controls or
  * clocks the show from outside, in one place -- OSC in, MIDI Show Control
- * in, MIDI timecode, and (later) QLab out.
+ * in and MIDI timecode. Shown beside Connections ▸ Devices when one of
+ * the show-control rows there is picked (no tab of its own).
  *
  * It edits the same settings the Settings dialog used to (QSettings
  * "showcontrol/...", through ShowControlListener) and the same timecode
@@ -59,9 +62,19 @@ public:
      *  there is one, OSC and MSC can't be edited. */
     void setListener(ShowControlListener *listener);
 
+    /** Show only one link's settings: "osc", "msc" or "mtc"; empty for all
+     *  of them. Connections ▸ Devices calls it for the row picked. */
+    void showSection(const QString &key);
+
+    /** One line per link for the Devices rows: {key, name, state}, e.g.
+     *  {"osc", "OSC in", "Port 8000 · listening"}. */
+    QList<QStringList> summary() const;
+
 signals:
     /** "Patch a MIDI input…": take the user to where inputs are patched. */
     void patchMidiInputRequested();
+    /** What summary() returns has changed. */
+    void summaryChanged();
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -81,7 +94,9 @@ private:
     QGroupBox *buildOscGroup();
     QGroupBox *buildMscGroup();
     QGroupBox *buildMtcGroup();
-    QGroupBox *buildQLabOutGroup();
+
+    /** Emit summaryChanged() if the summary text is different. */
+    void checkSummary();
 
 private:
     Doc *m_doc;
@@ -107,6 +122,10 @@ private:
     QLabel *m_mtcStatus;
     QLabel *m_mtcHealth;
     QElapsedTimer m_mtcThrottle;
+
+    /** The settings box for each link, by summary() key. */
+    QHash<QString, QGroupBox *> m_groups;
+    QList<QStringList> m_lastSummary;
 };
 
 /** @} */

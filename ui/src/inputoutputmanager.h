@@ -65,7 +65,7 @@ public:
     /** Select @p universe in the list, showing its patch. */
     void selectUniverse(quint32 universe);
 
-    /** Bring the Show control & sync page to the front. */
+    /** Devices, with the Show control & sync branch picked. */
     void showShowControlPage();
 
     /** Hand the page the App's show-control listener (created after this). */

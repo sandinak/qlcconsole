@@ -58,6 +58,23 @@ public:
     ConnectionsTree(Doc *doc, QWidget *parent = 0);
     ~ConnectionsTree();
 
+    /** The show-control settings (OSC, MSC, timecode), shown on the right
+     *  in place of the universe output view while one of the show-control
+     *  rows is picked. */
+    void setShowControlPanel(QWidget *panel);
+    /** The show-control rows: {key, name, state} each (see
+     *  ShowControlSyncPage::summary()). Updated in place, no rebuild. */
+    void setShowControlRows(const QList<QStringList> &rows);
+    /** Pick the show-control row for @p key ("osc", "msc", "mtc"), or the
+     *  branch itself when empty. */
+    void selectShowControlRow(const QString &key);
+    /** Back to the wiring: nothing picked, the output view on the right. */
+    void clearShowControlSelection();
+
+signals:
+    /** A show-control row was picked: @p key, empty for the branch. */
+    void showControlRowSelected(const QString &key);
+
 public slots:
     /** Rebuild from the current plugin/patch state. */
     void refresh();
@@ -307,6 +324,10 @@ private:
     QCheckBox *m_byUniverse = nullptr;
     /** Build the "By universe" list (refresh() does, when it is on). */
     void buildUniverseList();
+    /** The "Show control & sync" branch and its rows, after the rest. */
+    void addShowControlRows();
+    /** The show-control branch, or nullptr. */
+    class QTreeWidgetItem *showControlBranch() const;
     /** Mark every output row whose plugin reports trouble with where it goes
      *  (QLCIOPlugin::outputProblems()): the problem appended to Detail, in
      *  red, every problem in the tooltip. Both views end with it. */
@@ -348,6 +369,11 @@ private:
     UniversePatcher *m_patcher = nullptr;
     /** On the right: what the selected universe is sending. */
     class UniverseOutputView *m_output;
+    /** The right side: the output view, or the show-control panel. */
+    class QStackedWidget *m_side = nullptr;
+    QWidget *m_outputPage = nullptr;
+    QWidget *m_showControlPanel = nullptr;
+    QList<QStringList> m_showControlRows;
     /* Nodes announce themselves about once a second, so a periodic rebuild
        keeps the view honest without a manual rescan. */
     QTimer *m_refreshTimer;

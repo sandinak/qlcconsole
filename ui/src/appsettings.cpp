@@ -373,27 +373,6 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     }
     mainLayout->addWidget(stGroup);
 
-    // --- Show control (QLab) ---
-    // Edited in one place: Connections' Show control & sync page, next to
-    // the MIDI inputs MSC and timecode arrive on. This just points there.
-    QGroupBox *scGroup = new QGroupBox(tr("Show control (QLab)"), advancedPage);
-    scGroup->setObjectName(QStringLiteral("settingsShowControl"));
-    scGroup->setProperty("helpTopic", QStringLiteral("show-control.md"));
-    QHBoxLayout *scLayout = new QHBoxLayout(scGroup);
-    QLabel *scWhere = new QLabel(tr("OSC and MIDI Show Control in, and MIDI timecode, are set "
-                                    "up in Connections → Show control & sync."), scGroup);
-    scWhere->setWordWrap(true);
-    scLayout->addWidget(scWhere, 1);
-    QPushButton *scOpen = new QPushButton(tr("Open"), scGroup);
-    scOpen->setObjectName(QStringLiteral("settingsOpenShowControl"));
-    scOpen->setToolTip(tr("Keeps the changes made here and opens Connections at "
-                          "Show control & sync."));
-    connect(scOpen, &QPushButton::clicked, this, [this]() {
-        accept();
-        m_app->showShowControlSettings();
-    });
-    scLayout->addWidget(scOpen, 0, Qt::AlignTop);
-    advLayout->addWidget(scGroup);
     advLayout->addStretch();
 
     // --- Network: rig networks and the transmit gate ---

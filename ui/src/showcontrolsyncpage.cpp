@@ -95,10 +95,11 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
                                 "commands from QLab (or anything that sends OSC or MIDI Show "
                                 "Control) and MIDI timecode. Changes take effect at once."),
                              content));
-    lay->addWidget(buildOscGroup());
-    lay->addWidget(buildMscGroup());
-    lay->addWidget(buildMtcGroup());
-    lay->addWidget(buildQLabOutGroup());
+    m_groups.insert(QStringLiteral("osc"), buildOscGroup());
+    m_groups.insert(QStringLiteral("msc"), buildMscGroup());
+    m_groups.insert(QStringLiteral("mtc"), buildMtcGroup());
+    for (const QString &key : { QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("mtc") })
+        lay->addWidget(m_groups.value(key));
     lay->addStretch();
     scroll->setWidget(content);
 
@@ -268,16 +269,6 @@ QGroupBox *ShowControlSyncPage::buildMtcGroup()
     return box;
 }
 
-QGroupBox *ShowControlSyncPage::buildQLabOutGroup()
-{
-    QGroupBox *box = new QGroupBox(tr("QLab out"), this);
-    box->setObjectName(QStringLiteral("scQLabOutGroup"));
-    QVBoxLayout *lay = new QVBoxLayout(box);
-    lay->addWidget(noteLabel(tr("Sending to QLab (firing its cues from here) isn't built yet. "
-                                "When it is, it will be set up on this page."), box));
-    return box;
-}
-
 void ShowControlSyncPage::setListener(ShowControlListener *listener)
 {
     if (m_listener)
@@ -328,6 +319,7 @@ void ShowControlSyncPage::slotOscStatusChanged()
     {
         m_oscStatus->setText(tr("Not started"));
         m_oscStatus->setStyleSheet(kGrey);
+        checkSummary();
         return;
     }
     m_oscStatus->setText(m_listener->status());
@@ -338,6 +330,7 @@ void ShowControlSyncPage::slotOscStatusChanged()
         default:                                m_oscStatus->setStyleSheet(kGrey); break;
     }
     m_oscStatus->setProperty("oscState", int(m_listener->oscState()));
+    checkSummary();
 }
 
 void ShowControlSyncPage::slotLastOscChanged(const QString &what)
@@ -498,6 +491,7 @@ void ShowControlSyncPage::refreshTimecode()
         m_mtcStatus->setStyleSheet(kGrey);
         m_mtcHealth->setText(tr("—"));
         m_mtcHealth->setStyleSheet(kGrey);
+        checkSummary();
         return;
     }
 
@@ -535,6 +529,44 @@ void ShowControlSyncPage::refreshTimecode()
                        .arg(qRound(tc->avgIntervalMs()));
     m_mtcHealth->setText(verdict);
     m_mtcHealth->setStyleSheet(style);
+    checkSummary();
+}
+
+void ShowControlSyncPage::showSection(const QString &key)
+{
+    for (auto it = m_groups.cbegin(); it != m_groups.cend(); ++it)
+        it.value()->setVisible(key.isEmpty() || it.key() == key);
+}
+
+QList<QStringList> ShowControlSyncPage::summary() const
+{
+    QString osc = tr("Off");
+    if (ShowControlListener::oscEnabled())
+        osc = m_listener ? tr("Port %1 · %2").arg(ShowControlListener::oscPort()).arg(m_listener->status())
+                         : tr("Port %1").arg(ShowControlListener::oscPort());
+
+    QString msc = tr("Off");
+    if (ShowControlListener::mscEnabled())
+    {
+        const QString want = ShowControlListener::mscInputName();
+        msc = tr("Device %1 · %2").arg(ShowControlListener::mscDeviceId())
+                  .arg(want.isEmpty() ? tr("all MIDI inputs") : want);
+        if (!m_mscInputs->property("mscInputPatched").toBool())
+            msc += tr(" (not patched)");
+    }
+
+    return { { QStringLiteral("osc"), tr("OSC in"), osc },
+             { QStringLiteral("msc"), tr("MIDI Show Control in"), msc },
+             { QStringLiteral("mtc"), tr("MIDI timecode"), m_mtcStatus->text() } };
+}
+
+void ShowControlSyncPage::checkSummary()
+{
+    const QList<QStringList> now = summary();
+    if (now == m_lastSummary)
+        return;
+    m_lastSummary = now;
+    emit summaryChanged();
 }
 
 void ShowControlSyncPage::showEvent(QShowEvent *ev)

@@ -328,7 +328,7 @@ public:
     Doc *doc();
     /** Show control's OSC listener and settings (QLab). */
     class ShowControlListener *showControlListener() const { return m_showControlListener; }
-    /** Open Connections at its Show control & sync page. */
+    /** Open Connections ▸ Devices at its Show control & sync rows. */
     void showShowControlSettings();
 
     /** Open Settings at the show's rig networks (the rig network footer

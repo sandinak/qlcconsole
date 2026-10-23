@@ -33,6 +33,7 @@
 
 #define private public
 #include "chasereditor.h"
+#include "connectionstree.h"
 #include "mastertimer.h"
 #undef private
 #include "showcontrollistener.h"
@@ -273,11 +274,15 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
     patch->click();
     QCOMPARE(wantsPatch.count(), 1);
 
-    // QLab out: a place for it, nothing to press yet.
-    QWidget *out = page.findChild<QWidget *>("scQLabOutGroup");
-    QVERIFY(out != nullptr);
-    QVERIFY(out->findChildren<QAbstractButton *>().isEmpty());
-    QVERIFY(out->findChildren<QSpinBox *>().isEmpty());
+    // One line per link for Connections ▸ Devices; both off here.
+    const QList<QStringList> rows = page.summary();
+    QCOMPARE(rows.count(), 3);
+    QCOMPARE(rows.at(0).at(0), QString("osc"));
+    QCOMPARE(rows.at(0).at(2), QString("Off"));
+    QCOMPARE(rows.at(1).at(1), QString("MIDI Show Control in"));
+    QCOMPARE(rows.at(1).at(2), QString("Off"));
+    QCOMPARE(rows.at(2).at(0), QString("mtc"));
+    QVERIFY(page.findChild<QWidget *>("scQLabOutGroup") == nullptr);
 
     // With no listener yet (the page is built before it), nothing to edit.
     ShowControlSyncPage early(m_doc);
@@ -472,6 +477,50 @@ void ShowControlUi_Test::mscOnOneChosenInput()
     QVERIFY(m_doc->showControl()->mscInput().isEmpty());
     QVERIFY(inputs->property("mscInputPatched").toBool());
     QCOMPARE(on2->currentIndex(), 0);
+}
+
+/* Q84: OSC, MSC and timecode are rows in Connections ▸ Devices; picking
+   one shows only its settings beside the tree, and their state follows. */
+void ShowControlUi_Test::theRowsInConnectionsDevices()
+{
+    const int port = freePort();
+    ShowControlListener::setSettings(false, port, false, 3);
+    ShowControlListener listener(m_doc);
+    ConnectionsTree tree(m_doc);
+    // The tree's right side takes the page over, as in Connections.
+    ShowControlSyncPage &page = *new ShowControlSyncPage(m_doc);
+    page.setListener(&listener);
+    tree.setShowControlPanel(&page);
+    tree.setShowControlRows(page.summary());
+    connect(&page, &ShowControlSyncPage::summaryChanged, &tree, [&]() {
+        tree.setShowControlRows(page.summary());
+    });
+    connect(&tree, &ConnectionsTree::showControlRowSelected, &page, &ShowControlSyncPage::showSection);
+    tree.refresh();
+
+    QTreeWidget *view = tree.findChild<QTreeWidget *>();
+    QVERIFY(view != nullptr);
+    QList<QTreeWidgetItem *> found = view->findItems("Show control & sync", Qt::MatchExactly, 0);
+    QCOMPARE(found.count(), 1);
+    QTreeWidgetItem *branch = found.first();
+    QCOMPARE(branch->childCount(), 3);
+    QCOMPARE(branch->child(0)->text(0), QString("OSC in"));
+    QCOMPARE(branch->child(0)->text(1), QString("Off"));
+    QCOMPARE(branch->child(2)->text(0), QString("MIDI timecode"));
+
+    // Pick MSC: only its box on the right.
+    tree.selectShowControlRow("msc");
+    QVERIFY(!page.findChild<QWidget *>("scMscGroup")->isHidden());
+    QVERIFY(page.findChild<QWidget *>("scOscGroup")->isHidden());
+    QVERIFY(page.findChild<QWidget *>("scMtcGroup")->isHidden());
+    // The branch itself: all of them.
+    tree.selectShowControlRow(QString());
+    QVERIFY(!page.findChild<QWidget *>("scOscGroup")->isHidden());
+
+    // Turning OSC on updates its row, without waiting for a rebuild.
+    page.findChild<QCheckBox *>("scOscEnabled")->setChecked(true);
+    QTRY_VERIFY(branch->child(0)->text(1).startsWith(QString("Port %1").arg(port)));
+    listener.setOscEnabled(false);
 }
 
 QTEST_MAIN(ShowControlUi_Test)

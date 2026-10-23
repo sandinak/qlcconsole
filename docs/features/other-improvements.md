@@ -12,10 +12,10 @@ answers "how is this console actually wired," following the signal outward:
 Three sub-tabs — **Devices** (shown above), **Overview**, and **Universes**
 (QLC+'s own Inputs/Outputs page) — give the same information at different
 levels of depth. Classic QLC+ opens on **Universes**; the other views on
-**Devices**. A fourth, **Show
-control &amp; sync**, holds what controls or clocks the show from outside:
-OSC and MIDI Show Control cue commands in, MIDI timecode with its sync
-health, and a place for QLab out — see
+**Devices**. At the bottom of Devices, **Show control &amp; sync** lists
+what controls or clocks the show from outside — OSC and MIDI Show Control
+cue commands in, MIDI timecode with its sync health — each row with its
+state; click one to set it up on the right. See
 [Show control (QLab)](show-control.md#checking-the-hookup).
 
 Because Devices follows the wiring, a patched universe appears only under
@@ -682,9 +682,6 @@ users and the show's output behaviour:
 - **Effects**: which editor opens an effect script (the in-app editor, or
   your computer's editor for .js files). It used to be on the one Settings
   page.
-- **Show control (QLab)**: the **Open** button that takes you to
-  Connections → Show control &amp; sync. It used to be on the one Settings
-  page too.
 
 ### Appearance settings
 

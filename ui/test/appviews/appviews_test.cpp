@@ -842,7 +842,8 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
         QVERIFY(box != nullptr);
         QVERIFY(box->isChecked());
         // The expert settings moved there; everyday ones stay on General.
-        QVERIFY(adv->findChild<QPushButton *>(QStringLiteral("settingsOpenShowControl")) != nullptr);
+        // Show control is set up in Connections ▸ Devices only (Q84).
+        QVERIFY(adv->findChild<QPushButton *>(QStringLiteral("settingsOpenShowControl")) == nullptr);
         QVERIFY(adv->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) == nullptr);
         QVERIFY(tabs->widget(0)->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) != nullptr);
         dlg.showAdvanced();

@@ -1734,7 +1734,7 @@ the rest of this section applies.
   production is current.
 - **Its timecode source.** The production page's **Timecode** picks where its
   timecode comes from while it is current: the show's setting (Connections →
-  Show control & sync), any source, or one universe — QLab's MTC for one
+  Devices → Show control & sync), any source, or one universe — QLab's MTC for one
   production, a desk's for the other. The show's own setting is kept.
 - Switching production never stops a list that runs: the next GO plays the
   new one. Which production is current is saved with the show, and is not a
