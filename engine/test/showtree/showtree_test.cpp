@@ -714,6 +714,61 @@ void ShowTree_Test::aBlockCueKeepsItsOwnLayerWhenAGroupIsAdded()
     QVERIFY(st->cue(c1)->layers.first().continues.isEmpty());
 }
 
+void ShowTree_Test::removingAFixtureFromALayerIsOneStepAndKeepsTracking()
+{
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");          // tracks One's layer
+    Target two;
+    two.fixtures << m_fixtures[0] << m_fixtures[1];
+    const quint32 l1 = st->addLayer(c1, two);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d50)));
+    QList<ResolvedCue> r = resolve(*st->cueList(listId));
+    QVERIFY(r[1].layer(two) != nullptr);
+    QCOMPARE(int(r[1].layer(two)->origin), int(Origin::Tracked));
+    st->previewCue(c2);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[1]), 127);
+
+    const QString before = st->undoText();
+    QVERIFY(st->removeFixtureFromLayer(c1, l1, m_fixtures[1]));
+    QCOMPARE(st->undoText(), QString("Remove Dim 2 from layer"));
+    QCOMPARE(st->cue(c1)->layer(l1)->target.fixtures, QList<quint32>({ m_fixtures[0] }));
+
+    // Two still tracks the layer, now without it -- and plays that way.
+    Target one;
+    one.fixtures << m_fixtures[0];
+    r = resolve(*st->cueList(listId));
+    QCOMPARE(r[1].layers.count(), 1);
+    const ResolvedLayer *tracked = r[1].layer(one);
+    QVERIFY(tracked != nullptr);
+    QCOMPARE(int(tracked->origin), int(Origin::Tracked));
+    QCOMPARE(tracked->values.value(KeyDimmer).look.palettes.value(0), d50);
+    v = settle();
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[1]), 0);
+
+    // Not in the layer, or its last fixture: refused, and nothing recorded.
+    QVERIFY(!st->removeFixtureFromLayer(c1, l1, m_fixtures[1]));
+    QVERIFY(!st->removeFixtureFromLayer(c1, l1, m_fixtures[0]));
+    QCOMPARE(st->cue(c1)->layer(l1)->target.fixtures, QList<quint32>({ m_fixtures[0] }));
+    QCOMPARE(st->undoText(), QString("Remove Dim 2 from layer"));
+
+    // One undo step puts it back, in both cues.
+    QVERIFY(st->undo());
+    QCOMPARE(st->undoText(), before);
+    QCOMPARE(st->cue(c1)->layer(l1)->target.fixtures, QList<quint32>({ m_fixtures[0], m_fixtures[1] }));
+    QVERIFY(resolve(*st->cueList(listId))[1].layer(two) != nullptr);
+    v = settle();
+    QCOMPARE(int(v[1]), 127);
+    QVERIFY(st->redo());
+    QCOMPARE(st->cue(c1)->layer(l1)->target.fixtures, QList<quint32>({ m_fixtures[0] }));
+    st->stopPreview();
+}
+
 /****************************************************************************
  * Baking
  ****************************************************************************/
@@ -917,6 +972,32 @@ void ShowTree_Test::undoAndRedo()
     QCOMPARE(st->cue(c1)->name, QString("First"));
 }
 
+void ShowTree_Test::undoKeepsTheLastTwoHundredSteps()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    for (int i = 0; i < 205; ++i)
+        QVERIFY(st->renameNode(c1, QString("R%1").arg(i)));
+    QCOMPARE(st->cue(c1)->name, QString("R204"));
+
+    int undone = 0;
+    while (st->undo())
+        ++undone;
+    QCOMPARE(undone, 200);
+    QVERIFY(!st->canUndo());
+    QVERIFY(!st->undo());
+    // The 200 kept are the newest: back to just after the fifth rename; the
+    // list and cue (and the first renames) are past undoing.
+    QCOMPARE(st->cue(c1)->name, QString("R4"));
+    QVERIFY(st->cueList(listId) != nullptr);
+    int redone = 0;
+    while (st->redo())
+        ++redone;
+    QCOMPARE(redone, 200);
+    QCOMPARE(st->cue(c1)->name, QString("R204"));
+}
+
 void ShowTree_Test::inlinePalettesComeBackWithUndo()
 {
     FixtureGroup *a = group("Towers", { m_fixtures[0] });
@@ -1024,6 +1105,108 @@ void ShowTree_Test::theTreeSavesAndLoadsWithTheShow()
 void ShowTree_Test::aShowWithoutATreeSavesAsBefore()
 {
     QVERIFY(!engineXml(m_doc).contains("ShowTree"));
+}
+
+void ShowTree_Test::anOlderReaderPlaysTheBakedFunctions()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *b = group("USTs", { m_fixtures[2] });
+    const quint32 d50 = dimmer(127, "Half");
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d100));
+    const CueList *list = st->cueList(listId);
+    const quint32 chaserId = list->chaser;
+    QList<quint32> collections;
+    QSet<quint32> scenes;
+    for (const Cue &c : list->cues)
+    {
+        collections << c.collection;
+        for (quint32 f : qobject_cast<Collection *>(m_doc->function(c.collection))->functions())
+            scenes.insert(f);
+    }
+    QCOMPARE(collections.count(), 2);
+    QVERIFY(scenes.count() >= 2);
+
+    // What an older build reads: the show with <ShowTree> left out.
+    QByteArray xml = engineXml(m_doc);
+    const int from = xml.indexOf("<ShowTree");
+    QVERIFY(from >= 0);
+    int to = xml.indexOf("</ShowTree>", from);
+    to = to < 0 ? xml.indexOf("/>", from) + 2 : to + 11;
+    xml.remove(from, to - from);
+    QVERIFY(!xml.contains("ShowTree"));
+
+    Doc *other = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    QVERIFY(other->showTree()->productions().isEmpty());
+
+    // Every baked function is there, as an ordinary one.
+    Chaser *oldChaser = qobject_cast<Chaser *>(other->function(chaserId));
+    QVERIFY(oldChaser != nullptr);
+    QVERIFY(!other->showTree()->isGenerated(chaserId));
+    QCOMPARE(oldChaser->stepsCount(), 2);
+    for (int i = 0; i < 2; ++i)
+    {
+        QCOMPARE(oldChaser->steps().at(i).fid, collections.at(i));
+        Collection *coll = qobject_cast<Collection *>(other->function(collections.at(i)));
+        QVERIFY(coll != nullptr);
+        QVERIFY(!other->showTree()->isGenerated(coll->id()));
+        QCOMPARE(coll->functions(),
+                 qobject_cast<Collection *>(m_doc->function(collections.at(i)))->functions());
+    }
+    for (quint32 sid : scenes)
+    {
+        Scene *sc = qobject_cast<Scene *>(other->function(sid));
+        QVERIFY(sc != nullptr);
+        QVERIFY(!other->showTree()->isGenerated(sid));
+    }
+
+    // And it plays the same: GO by GO, the same levels on both.
+    auto play = [this](Doc *doc, Chaser *chaser) {
+        ChaserAction action;
+        action.m_action = ChaserNextStep;
+        action.m_stepIndex = -1;
+        action.m_masterIntensity = 1.0;
+        action.m_stepIntensity = 1.0;
+        action.m_fadeMode = Chaser::FromFunction;
+        chaser->setAction(action);
+        if (!chaser->isRunning())
+            chaser->start(doc->masterTimer(), FunctionParent::master());
+        QList<int> out;
+        for (int t = 0; t < 10; ++t)
+        {
+            doc->masterTimer()->timerTick();
+            QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+            ua.first()->processFaders();
+            doc->inputOutputMap()->releaseUniverses(false);
+        }
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        for (int i = 0; i < m_fixtures.count(); ++i)
+            out << int(uchar(ua.first()->preGMValues().at(i)));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return out;
+    };
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    const QList<int> newOne = play(m_doc, chaser);
+    const QList<int> oldOne = play(other, oldChaser);
+    QCOMPARE(newOne.mid(0, 3), QList<int>({ 127, 127, 0 }));
+    QCOMPARE(oldOne, newOne);
+    const QList<int> newTwo = play(m_doc, chaser);
+    const QList<int> oldTwo = play(other, oldChaser);
+    QCOMPARE(newTwo.mid(0, 3), QList<int>({ 127, 127, 255 }));       // Towers tracks
+    QCOMPARE(oldTwo, newTwo);
+
+    oldChaser->stop(FunctionParent::master());
+    for (int t = 0; t < 5; ++t)
+        other->masterTimer()->timerTick();
+    delete other;
 }
 
 void ShowTree_Test::lookReachCountsFixturesThatHaveIt()

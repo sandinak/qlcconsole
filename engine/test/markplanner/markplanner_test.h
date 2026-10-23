@@ -44,6 +44,10 @@ private slots:
      *  off; a list set Off, or a cue flagged "Don't move in black into this
      *  cue", never does (and releases what was pre-set). */
     void perListAndPerCueMoveInBlack();
+    /** The lead time: a cue firing sooner than it is not moved into in
+     *  black, one firing at least that far off is, and a pre-set already
+     *  made is left be when the cue draws nearer. */
+    void aCueTooSoonIsNotMovedInBlack();
 
 private:
     Doc *m_doc = nullptr;

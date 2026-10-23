@@ -542,6 +542,66 @@ void LookStack_Test::theSameOnAFixtureGroup()
     IS(dimmerOf(d, m_par), 128);
 }
 
+/* "dynamic (a group, membership tracked live)" (docs/features/build.md):
+   the scene names the group, never its fixtures. */
+void LookStack_Test::aLookOnAGroupFollowsItsMembersLive()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(grp);
+    grp->assignFixture(m_par->id());
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(colour(kBlue)->id());
+    scene->addPalette(dimmer(200)->id());
+    m_playing = scene;
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    QByteArray d = tickAndRead();
+    IS(dimmerOf(d, m_par), 200);
+    RGB_IS(rgbOf(d, m_par), kBlue);
+    IS(dimmerOf(d, m_mover), 0);                // not in the group yet
+
+    // Into the group while it plays: the look reaches it, the scene as it was.
+    const QList<SceneValue> before = scene->values();
+    grp->assignFixture(m_mover->id());
+    d = tickAndRead();
+    QCOMPARE(scene->values(), before);
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ grp->id() }));
+    IS(dimmerOf(d, m_par), 200);                // the one already there unchanged
+    QEXPECT_FAIL("", "BUG: a playing scene does not follow its group's membership -- the "
+                     "group's fixtures are resolved into faders when the scene starts and "
+                     "nothing in the engine re-resolves them on FixtureGroup::changed, so a "
+                     "fixture put in the group stays dark until the scene is restarted", Continue);
+    QVERIFY2(dimmerOf(d, m_mover) == 200 && rgbOf(d, m_mover) == kBlue,
+             qPrintable(QString("the new member: dimmer %1, colour %2")
+                        .arg(dimmerOf(d, m_mover)).arg(rgb(rgbOf(d, m_mover)))));
+
+    // The group is the target, not a copy of it: started again, the new
+    // member has the look.
+    auto restart = [&]() {
+        scene->stop(FunctionParent::master());
+        tickAndRead();
+        scene->start(m_doc->masterTimer(), FunctionParent::master());
+        return tickAndRead();
+    };
+    d = restart();
+    IS(dimmerOf(d, m_mover), 200);
+    RGB_IS(rgbOf(d, m_mover), kBlue);
+
+    // Out again while it plays: it lets go.
+    grp->resignFixture(m_mover->id());
+    d = tickAndRead();
+    IS(dimmerOf(d, m_par), 200);
+    QEXPECT_FAIL("", "BUG: as above -- a fixture taken out of the group keeps the look until "
+                     "the scene is restarted", Continue);
+    QVERIFY2(dimmerOf(d, m_mover) == 0 && rgbOf(d, m_mover) == QColor(0, 0, 0),
+             qPrintable(QString("the old member: dimmer %1, colour %2")
+                        .arg(dimmerOf(d, m_mover)).arg(rgb(rgbOf(d, m_mover)))));
+    d = restart();
+    IS(dimmerOf(d, m_mover), 0);
+    IS(dimmerOf(d, m_par), 200);
+}
+
 /* A look edited while it plays is re-painted by the same rules. */
 void LookStack_Test::editingALookWhileItPlaysKeepsTheOrder()
 {

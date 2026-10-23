@@ -52,6 +52,9 @@ private slots:
     void aLayerWithTwoGroupsTracksAcrossCues();
     void addingAGroupToATrackedLayer();
     void aBlockCueKeepsItsOwnLayerWhenAGroupIsAdded();
+    /** Taking a fixture out of a layer: the target loses it in one undo
+     *  step, the cues tracking the layer follow, and the last one stays. */
+    void removingAFixtureFromALayerIsOneStepAndKeepsTracking();
 
     // Baking (§4)
     void bakeMakesAChaserCollectionsAndScenes();
@@ -59,10 +62,16 @@ private slots:
     void bakeIsDeterministic();
     void anEditRebakesAndDropsWhatIsUnused();
     void undoAndRedo();
+    /** Undo keeps the last 200 steps (kUndoLimit): the oldest beyond go. */
+    void undoKeepsTheLastTwoHundredSteps();
     void inlinePalettesComeBackWithUndo();
     void aRunningSceneIsNotDeletedUnderTheShow();
     void theTreeSavesAndLoadsWithTheShow();
     void aShowWithoutATreeSavesAsBefore();
+    /** A reader that skips <ShowTree> still loads the baked chaser, cue
+     *  collections and scenes as ordinary functions, and the chaser plays
+     *  the same DMX. */
+    void anOlderReaderPlaysTheBakedFunctions();
     void lookReachCountsFixturesThatHaveIt();
     /** Branson's mover with a colour ring as two heads: layers on its
      *  Movers and Ring groups set the wheel and the ring apart, track,
