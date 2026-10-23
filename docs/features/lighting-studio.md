@@ -843,7 +843,9 @@ Menu** on the controller. Choose:
 
 It is a Design-mode tool: in Perform it refuses, and switching to Perform
 ends it (unsaved nudges go back). If functions are running it says so — it
-takes over only the heads it is focusing.
+takes over only the heads it is focusing: over whatever is running on them
+(only a parked fixture stays parked), with the Grand Master and Blackout
+still applying.
 
 Each head in turn is aimed at its reference, lit white with its shutter
 open, and ringed on the plot and in the Rig Overview (also when you open the

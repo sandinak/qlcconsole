@@ -383,6 +383,10 @@ public:
          Highlight   the highlighted fixtures (HighlightEffect), Override:
                      their highlight look over anything running. The Grand
                      Master and Blackout still apply.
+         Flash       a flash to identify a fixture (ProgrammerFlasher),
+                     Override, for its length; GM and Blackout apply.
+         Focus       Focus mode's heads (FocusSession), Override: it takes
+                     over the heads it focuses; GM and Blackout apply.
          Park        parked fixtures (ParkEffect), Override and past the
                      Grand Master (writePastGM): a parked channel sends
                      its parked value whatever runs and wherever the Grand
@@ -414,7 +418,9 @@ public:
         Flashing, /** Priority to override slider values and running chasers by flash scene */
         SimpleDesk,
         Highlight,  /** Over everything that runs: the highlighted fixtures */
-        Park        /** Over everything, Highlight too: the parked fixtures */
+        Flash,      /** Over Highlight: a fixture flashed to identify it */
+        Focus,      /** Over Flash: the heads Focus mode is using */
+        Park        /** Over everything: the parked fixtures */
     };
 
     /** Request a new GenericFader used to compose the final values of
