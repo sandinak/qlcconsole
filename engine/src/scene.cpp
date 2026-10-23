@@ -69,6 +69,9 @@ Scene::Scene(Doc* doc)
 {
     setName(tr("New Scene"));
     registerAttribute(tr("ParentIntensity"), Multiply | Single);
+    // A group the scene plays on is followed live (build.md "dynamic").
+    if (doc != NULL)
+        connect(doc, &Doc::fixtureGroupChanged, this, &Scene::slotFixtureGroupChanged);
 }
 
 Scene::~Scene()
@@ -1286,6 +1289,9 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
 
     GenericFader::ChannelRef fc = fader->getChannelFader(doc(), universe, scv.fxi, scv.channel);
     int chIndex = fc->channelIndex(scv.channel);
+    // Being let go of (its fixture left the group) and back again: kept.
+    if (fc->flags() & FadeChannel::Release)
+        fc->removeFlag(FadeChannel::Release | FadeChannel::SetTarget | FadeChannel::AutoRemove);
 
     /** If a blend Function has been set, check if this channel needs to
      *  be blended from a previous value. If so, mark it for crossfade
@@ -1347,6 +1353,112 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
         m_transitionIn.timing(m_transitionMapIn.placeForChannel(fixture, scv.channel), delay, fade);
         fc->setFadeTime(fc->canFade() ? fade : 0);
         fc->setDelay(delay);
+    }
+}
+
+void Scene::slotFixtureGroupChanged(quint32 id)
+{
+    Q_UNUSED(id)
+    if (!isRunning())
+        return;
+    QMutexLocker locker(&m_valueListMutex);
+    m_regroupRequested = true;
+}
+
+QSet<quint32> Scene::groupMembers() const
+{
+    QSet<quint32> ids;
+    foreach (quint32 gid, fixtureGroups())
+    {
+        FixtureGroup *grp = doc()->fixtureGroup(gid);
+        if (grp == NULL)
+            continue;
+        foreach (quint32 fid, grp->fixtureList())
+            ids.insert(fid);
+    }
+    return ids;
+}
+
+void Scene::followGroupMembers(MasterTimer *timer, QList<Universe *> ua)
+{
+    m_regroupRequested = false;
+    const QSet<quint32> now = groupMembers();
+    if (now == m_groupMembers)
+        return;
+    // A fixture the scene names itself is played either way.
+    QSet<quint32> direct;
+    foreach (quint32 fid, fixtures())
+        direct.insert(fid);
+    const QSet<quint32> left = m_groupMembers - now - direct;
+    const QSet<quint32> joined = now - m_groupMembers - direct;
+    m_groupMembers = now;
+
+    /* Who left: let go as the scene stopping would -- over its fade-out,
+       or at once. A value the scene holds for the fixture itself stays. */
+    if (!left.isEmpty())
+    {
+        uint fadeOut = overrideFadeOutSpeed() == defaultSpeed() ? fadeOutSpeed() : overrideFadeOutSpeed();
+        if (tempoType() == Beats)
+            fadeOut = beatsToTime(fadeOut, timer->beatTimeDuration());
+        QSet<quint64> baked;
+        for (auto it = m_values.constBegin(); it != m_values.constEnd(); ++it)
+            baked.insert((quint64(it.key().fxi) << 32) | it.key().channel);
+        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        {
+            if (fader.isNull())
+                continue;
+            fader->release([&left, &baked](const FadeChannel &fc) {
+                return left.contains(fc.fixture())
+                       && !baked.contains((quint64(fc.fixture()) << 32) | fc.channel());
+            }, fadeOut);
+        }
+        foreach (quint32 fid, left)
+            m_sightDimmed.remove(fid);
+    }
+
+    /* Who joined: the looks, by the build's rules (each channel the last
+       look's), fading in over each look's fade-in. */
+    if (joined.isEmpty())
+        return;
+    const uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
+    QList<QPair<SceneValue, uint> > stack;
+    QHash<quint64, int> stackAt;
+    const QHash<quint32, PaletteFade> paletteFadeMap = paletteFades();
+    const QList<quint32> pals = runtimePalettes();
+    const QHash<quint32, QList<quint32> > excluded = excludedFixtures();
+    foreach (quint32 paletteID, pals)
+    {
+        QLCPalette *palette = doc()->palette(paletteID);
+        if (palette == NULL || palette->type() == QLCPalette::Effect)
+            continue;
+        if (QLCPalette::isEffectScoped(doc(), pals, paletteID))
+            continue;
+        const int inOverride = paletteFadeMap.value(paletteID).fadeInMs;
+        const uint pFade = inOverride >= 0 ? uint(inOverride) : fadeIn;
+        const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
+        const QList<quint32> outList = excluded.value(paletteID);
+        foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
+        {
+            if (!joined.contains(scv.fxi) || outList.contains(scv.fxi))
+                continue;
+            const quint64 k = (quint64(scv.fxi) << 32) | scv.channel;
+            auto at = stackAt.constFind(k);
+            if (at == stackAt.constEnd())
+            {
+                stackAt.insert(k, stack.size());
+                stack << qMakePair(scv, pFade);
+            }
+            else
+                stack[at.value()] = qMakePair(scv, pFade);
+        }
+    }
+    const int lookDim = QLCPalette::lookDimmerValue(doc(), pals);
+    for (int i = 0; i < stack.size(); ++i)
+    {
+        SceneValue &scv = stack[i].first;
+        scv.value = QLCPalette::dimScaleWithoutDimmer(doc()->fixture(scv.fxi), scv.channel,
+                                                      scv.value, lookDim);
+        processValue(timer, ua, stack.at(i).second, scv);
     }
 }
 
@@ -1608,6 +1720,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             // full build already resolves positions and palette values
             m_reaimRequested = false;
             m_repaletteRequested = false;
+            m_regroupRequested = false;
+            m_groupMembers = groupMembers();
             uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
             // Arriving by a transition: where each head falls in it.
             m_applyTransitionIn = m_transitionIn.isActive() && tempoType() != Beats;
@@ -1710,6 +1824,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         else
         {
             applyEditOverride(ua);
+            if (m_regroupRequested)
+                followGroupMembers(timer, ua);
         }
 
         if (m_reaimRequested || m_repaletteRequested)

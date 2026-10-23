@@ -568,10 +568,6 @@ void LookStack_Test::aLookOnAGroupFollowsItsMembersLive()
     QCOMPARE(scene->values(), before);
     QCOMPARE(scene->fixtureGroups(), QList<quint32>({ grp->id() }));
     IS(dimmerOf(d, m_par), 200);                // the one already there unchanged
-    QEXPECT_FAIL("", "BUG: a playing scene does not follow its group's membership -- the "
-                     "group's fixtures are resolved into faders when the scene starts and "
-                     "nothing in the engine re-resolves them on FixtureGroup::changed, so a "
-                     "fixture put in the group stays dark until the scene is restarted", Continue);
     QVERIFY2(dimmerOf(d, m_mover) == 200 && rgbOf(d, m_mover) == kBlue,
              qPrintable(QString("the new member: dimmer %1, colour %2")
                         .arg(dimmerOf(d, m_mover)).arg(rgb(rgbOf(d, m_mover)))));
@@ -592,14 +588,69 @@ void LookStack_Test::aLookOnAGroupFollowsItsMembersLive()
     grp->resignFixture(m_mover->id());
     d = tickAndRead();
     IS(dimmerOf(d, m_par), 200);
-    QEXPECT_FAIL("", "BUG: as above -- a fixture taken out of the group keeps the look until "
-                     "the scene is restarted", Continue);
     QVERIFY2(dimmerOf(d, m_mover) == 0 && rgbOf(d, m_mover) == QColor(0, 0, 0),
              qPrintable(QString("the old member: dimmer %1, colour %2")
                         .arg(dimmerOf(d, m_mover)).arg(rgb(rgbOf(d, m_mover)))));
     d = restart();
     IS(dimmerOf(d, m_mover), 0);
     IS(dimmerOf(d, m_par), 200);
+}
+
+/* Joining or leaving a playing scene's group is a fade by the scene's own
+   times: in over its fade-in, out over its fade-out (as it stopping would),
+   the members that stay untouched. */
+void LookStack_Test::aGroupMemberFadesByTheScenesFades()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(grp);
+    grp->assignFixture(m_par->id());
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(dimmer(200)->id());
+    scene->setFadeInSpeed(1000);
+    scene->setFadeOutSpeed(1000);
+    m_playing = scene;
+    // Frame by frame: the faders step once a universe frame.
+    auto frames = [this](int n) {
+        QByteArray out;
+        for (int i = 0; i < n; ++i)
+        {
+            m_doc->masterTimer()->timerTick();
+            QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+            for (Universe *u : unis)
+                u->processFaders();
+            out = unis.first()->preGMValues().left(64);
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+        return out;
+    };
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    QByteArray d = frames(70);
+    IS(dimmerOf(d, m_par), 200);
+    IS(dimmerOf(d, m_mover), 0);
+
+    grp->assignFixture(m_mover->id());
+    d = frames(15);
+    QVERIFY2(dimmerOf(d, m_mover) > 0 && dimmerOf(d, m_mover) < 200,
+             qPrintable(QString("fading in: %1").arg(dimmerOf(d, m_mover))));
+    IS(dimmerOf(d, m_par), 200);
+    d = frames(60);
+    IS(dimmerOf(d, m_mover), 200);
+
+    grp->resignFixture(m_mover->id());
+    d = frames(15);
+    QVERIFY2(dimmerOf(d, m_mover) > 0 && dimmerOf(d, m_mover) < 200,
+             qPrintable(QString("fading out: %1").arg(dimmerOf(d, m_mover))));
+    IS(dimmerOf(d, m_par), 200);
+    d = frames(60);
+    IS(dimmerOf(d, m_mover), 0);
+    IS(dimmerOf(d, m_par), 200);
+
+    // Back in while it plays: it fades in again (the let-go channel is kept).
+    grp->assignFixture(m_mover->id());
+    d = frames(75);
+    IS(dimmerOf(d, m_mover), 200);
 }
 
 /* A look edited while it plays is re-painted by the same rules. */

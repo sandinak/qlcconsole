@@ -49,6 +49,7 @@ private slots:
      *  the look plays takes the look on the next tick, without the scene
      *  being touched, and one taken out lets go of it. */
     void aLookOnAGroupFollowsItsMembersLive();
+    void aGroupMemberFadesByTheScenesFades();
     void editingALookWhileItPlaysKeepsTheOrder();
     void aPaletteTriedOnShowsByTheSameRules();
     void theCheckerSaysWhatWontWork();

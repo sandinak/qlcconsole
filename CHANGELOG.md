@@ -559,6 +559,13 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **A playing scene follows its group's members live**, as Build's help
+  says. Its group's fixtures were resolved when it started, so a fixture
+  put in the group stayed dark (and one taken out kept the look) until the
+  scene restarted. A running scene now picks the change up on the next
+  frame: a fixture that joins fades in over the look's fade-in, one that
+  leaves is let go of over the scene's fade-out (or at once with none), as
+  the scene stopping would, and the rest play on untouched.
 - **Lighting Studio: a pasted truss brings its fixtures.** ⌘C / ⌘V (and
   Duplicate selected, Paste features here) copied the truss alone, though the
   shortcuts help said structures copy with their fixtures. Each fixture on a
