@@ -887,13 +887,42 @@ void Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn()
     wb.hide();
     for (int i = 0; i < 5; ++i)
         tickAndRead(m_doc, 3);
-    QEXPECT_FAIL("", "BUG: Workbench::stopOperate() stops with FunctionParent::master(), and "
-                     "Function::stop(master) clears every source -- so a function a VC button "
-                     "(or a chaser) was already running when it was loaded in Operate stops when "
-                     "the Workbench hides", Continue);
     QVERIFY(elsewhere->isRunning());
     elsewhere->stop(vcButton);
     tickAndRead(m_doc, 0);
+}
+
+void Workbench_Test::designPreviewLeavesAnotherRunAlone()
+{
+    FixtureGroup *g = group("Washes", 1);
+    const quint32 f1 = g->fixtureList().at(0);
+    Scene *a = scene("A", QString());
+    a->setValue(f1, 0, 150);
+    const FunctionParent runTab(FunctionParent::AutoVCWidget, 42);
+    QVERIFY(m_doc->mode() == Doc::Design);
+
+    // Already playing (the Run tab) when the Workbench loads it to preview.
+    a->start(m_doc->masterTimer(), runTab);
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 150);
+
+    Workbench wb(m_doc);
+    wb.resize(1000, 700);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    wb.load(a->id());
+    QCOMPARE(wb.m_previewFunction, a->id());
+
+    // Hidden: the preview lets go; the Run tab's run carries on.
+    wb.hide();
+    QCOMPARE(wb.m_previewFunction, Function::invalidId());
+    for (int i = 0; i < 5; ++i)
+        tickAndRead(m_doc, 0);
+    QVERIFY(a->isRunning());
+    QCOMPARE(tickAndRead(m_doc, 0), 150);
+
+    // ...and stopping it there still stops it.
+    a->stop(runTab);
+    QTRY_VERIFY(tickAndRead(m_doc, 0) == 0 && !a->isRunning());
 }
 
 void Workbench_Test::theLowerLayerWinsAndFollowsAReorder()

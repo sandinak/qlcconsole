@@ -68,6 +68,7 @@ private slots:
      *  a function started elsewhere keeps running; hidden, the Workbench
      *  stops only what it started. */
     void operateRunsWhatIsLoadedAndStopsOnlyItsOwn();
+    void designPreviewLeavesAnotherRunAlone();
     /** Two layers set one channel: the lower layer wins on the DMX; ▲
      *  swaps them and the output follows; ⌘Z puts it back. */
     void theLowerLayerWinsAndFollowsAReorder();

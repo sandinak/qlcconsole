@@ -559,6 +559,12 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- **Hiding the Workbench stops only what it started.** It started and
+  stopped what is loaded (the Design preview, the Operate run) with the
+  Master parent, and a Master stop clears every source -- so a function a
+  VC button, the Run tab or a cue was already running stopped when the
+  Workbench hid or let go of it. It now plays under its own parent and
+  takes only that away.
 - **Build: deleting and duplicating a function can be undone.** Delete,
   Duplicate, ⌘C ⌘V and Build ▸ Effects' Duplicate / Delete of an EFX or RGB
   Matrix went straight to the show with no step on the shared history, so ⌘Z
