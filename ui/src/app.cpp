@@ -1788,7 +1788,9 @@ void App::initActions()
     m_controlBlackoutAction = new QAction(QIcon(":/blackout.png"), tr("Toggle &Blackout"), this);
     m_controlBlackoutAction->setCheckable(true);
     m_controlBlackoutAction->setIconText(tr("Blackout"));
-    m_controlBlackoutAction->setToolTip(tr("Blackout: every output to zero, whatever is running. "
+    m_controlBlackoutAction->setToolTip(tr("Blackout: every light to zero, whatever is running. "
+                                           "Fixtures set to ignore Blackout (house and work lights, "
+                                           "power relays -- Output Rules…) stay as they are. "
                                            "Lit red while on."));
     connect(m_controlBlackoutAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlackout()));
     m_controlBlackoutAction->setChecked(m_doc->inputOutputMap()->blackout());
@@ -1802,6 +1804,7 @@ void App::initActions()
     m_controlBlindAction->setToolTip(tr(
         "Blind: mute the physical rig but keep the 2D preview live, so you can "
         "build a look without hitting the stage. Turn off to take it live. "
+        "Fixtures set to ignore Blackout stay as they are. "
         "Design mode only. Lit blue while on."));
     connect(m_controlBlindAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlind(bool)));
     m_controlBlindAction->setChecked(m_doc->inputOutputMap()->outputInhibited());
@@ -3133,6 +3136,15 @@ void App::importEosShow(const QString &asciiPath)
                 chasers << result.functionMap.value(id);
         EosImporter::toShowTree(m_doc, chasers, &treeLines);
     }
+    // Subs: a Playback fader each on the Virtual Console.
+    QList<EosImportedSub> subs;
+    for (EosImportedSub s : eos.subs)
+        if (result.functionMap.contains(s.function))
+        {
+            s.function = result.functionMap.value(s.function);
+            subs << s;
+        }
+    EosImportWizard::addSubFaders(m_doc, subs, &treeLines);
     QApplication::restoreOverrideCursor();
 
     QStringList read;

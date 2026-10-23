@@ -30,6 +30,9 @@ private slots:
     void cueLists();
     void presetsAndSubs();
     void warnings();
+    void circuitClassifier();
+    void specialCircuits();
+    void subsForTheConsole();
     void realExportIntoShowTree();
     void magicSheet();
     void showFromSampleDir();

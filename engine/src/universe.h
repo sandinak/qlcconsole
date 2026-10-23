@@ -104,7 +104,16 @@ public:
         Undefined  = 0,
         LTP        = 1 << 0,
         HTP        = 1 << 1,
-        Intensity  = 1 << 2
+        Intensity  = 1 << 2,
+        /* Output rules (Fixture::OutputRules), set by OutputRuleKeeper
+           through setOutputRules(). setChannelCapability() keeps them:
+           they belong to the fixture's rules, not its channel's role, and
+           the keeper clears them when the fixture leaves the address. */
+        GMExempt        = 1 << 3,   //!< the Grand Master leaves it be
+        BlackoutExempt  = 1 << 4,   //!< Blackout (and Blind) sends its live value
+        SwitchOutput    = 1 << 5,   //!< a relay: 0 or 255, never GM-scaled
+        OnAtOpenOutput  = 1 << 6,   //!< full when nothing sets it (when armed)
+        OutputRuleBits  = GMExempt | BlackoutExempt | SwitchOutput | OnAtOpenOutput
     };
 
     static quint32 invalid() { return UINT_MAX; }
@@ -433,6 +442,44 @@ private:
     QVector<PowerLimit> m_powerLimits;
     QHash<quint32, QPair<double, double> > m_powerHeldBack;
     QByteArray m_lastLimited;
+
+    /*********************************************************************
+     * Output rules
+     *********************************************************************/
+public:
+    /** The output-rule bits (GMExempt, BlackoutExempt, SwitchOutput,
+     *  OnAtOpenOutput) of every channel, UNIVERSE_SIZE bytes; channels
+     *  past the end have none. Only the rule bits of the channel mask
+     *  change, one byte write each, so the universe thread never sees a
+     *  channel without its HTP/LTP role. Safe from any thread. */
+    void setOutputRules(const QByteArray &bits);
+
+    /** OnAtOpen channels floor at full only while armed (OutputRuleKeeper
+     *  decides when: on Operate, at open, or never). */
+    void setOnAtOpenArmed(bool armed);
+    bool onAtOpenArmed() const { return m_onAtOpenArmed.load(std::memory_order_relaxed); }
+
+    /** While Blind is on, still send the Blackout-exempt channels' live
+     *  values (with the rest as Blackout sends them). Off: Blind sends
+     *  nothing at all, as it always did. */
+    void setBlindHoldsExempt(bool hold);
+    bool blindHoldsExempt() const { return m_blindHoldsExempt.load(std::memory_order_relaxed); }
+
+private:
+    /** True when any channel up to @p count is Blackout-exempt */
+    bool hasBlackoutExempt(int count) const;
+    /** What Blackout sends: m_blackoutValues (intensity zero, the rest
+     *  kept) with the Blackout-exempt channels' live values from @p live */
+    QByteArray blackoutFrame(const QByteArray &live) const;
+    /** After the faders: the OnAtOpen channels nothing sets go to full;
+     *  the ones that no longer should, back to what is stored. */
+    void applyOnAtOpen();
+
+    QMutex m_outputRulesMutex;
+    QVector<int> m_onAtOpenChannels;
+    QVector<int> m_onAtOpenRestore;
+    std::atomic<bool> m_onAtOpenArmed { false };
+    std::atomic<bool> m_blindHoldsExempt { true };
 
     /*********************************************************************
      * Auto-open shutters

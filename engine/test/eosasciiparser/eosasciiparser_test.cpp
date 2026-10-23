@@ -317,6 +317,31 @@ void EosAsciiParser_Test::subs()
     QCOMPARE(d.subs.at(0).levels.value(1).value(1).value, 255);
 }
 
+void EosAsciiParser_Test::patchOptionsAndSubModes()
+{
+    const EosShowData d = parse("Ident 3:0\n"
+                                "$Patch 5 0 5 0 1\n Text House Lights\n $$Options X P\n"
+                                "$Patch 6 0 6 0 1\n Text Relay FOH\n $$Options T\n"
+                                "$Patch 7 0 7 0 1\n Text Cyc\n"
+                                "Sub 7 1\n Text Bumps\n Up 1\n $$LTP\n $$Exclusive\n $$Dwell 0 1\n"
+                                " $$InhibSubm 0\n Chan 5@FL\n"
+                                "Sub 8 1\n Up 0\n Down 2\n");
+    QCOMPARE(d.patch.count(), 3);
+    QCOMPARE(d.findPatch(5)->options, QString("XP"));
+    QVERIFY(d.findPatch(5)->gmExempt());
+    QCOMPARE(d.findPatch(6)->options, QString("T"));
+    QVERIFY(!d.findPatch(6)->gmExempt());
+    QVERIFY(d.findPatch(7)->options.isEmpty());
+    QCOMPARE(d.findPatch(5)->label, QString("House Lights"));
+
+    QCOMPARE(d.subs.count(), 2);
+    QCOMPARE(d.subs.at(0).label, QString("Bumps"));
+    QCOMPARE(d.subs.at(0).options, QStringList() << "LTP" << "Exclusive");   // InhibSubm 0: off
+    QCOMPARE(d.subs.at(0).levels.value(5).value(1).value, 255);
+    QVERIFY(d.subs.at(1).options.isEmpty());
+    QCOMPARE(d.subs.at(1).down, 2.0);
+}
+
 void EosAsciiParser_Test::unknownRecordsSkipped()
 {
     const EosShowData d = parse("Ident 3:0\n$Effect 901\n Text Circle\n $$Type 1\n"

@@ -23,6 +23,9 @@ private slots:
     void readsTheExport();
     void choicesGoToTheMapper();
     void loadsWithTheChoices();
+    void specialCircuitsPage();
+    void subFaders();
+    void showFromSampleDir();
 
 private:
     Doc *m_doc = nullptr;

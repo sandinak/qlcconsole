@@ -24,6 +24,7 @@
 #include <QObject>
 #include <atomic>
 #include <QMutex>
+#include <QAtomicInt>
 #include <QList>
 #include <QIcon>
 #include <QMap>
@@ -64,6 +65,7 @@ class Doc;
 #define KXMLFixtureForcedHTP        QStringLiteral("ForcedHTP")
 #define KXMLFixtureForcedLTP        QStringLiteral("ForcedLTP")
 #define KXMLFixtureStageLook        QStringLiteral("StageLook")
+#define KXMLFixtureOutputRules      QStringLiteral("OutputRules")
 
 #define KXMLFixtureChannelModifier  QStringLiteral("Modifier")
 #define KXMLFixtureChannelIndex     QStringLiteral("Channel")
@@ -217,6 +219,35 @@ public:
     /** What it draws, as measured, and the most it may (FixturePower). */
     PowerProfile powerProfile() const { return m_powerProfile; }
     void setPowerProfile(const PowerProfile &profile);
+
+    /**
+     * How this fixture's output is treated, beyond what its channels say --
+     * for the circuits an Eos show patches as plain dimmers: power relays,
+     * house, work, hall and backstage-blue lights (OutputRuleKeeper).
+     *
+     * ExemptBlackout:    Blackout (and, by default, Blind) leaves it as it is.
+     * ExemptGrandMaster: the Grand Master does not scale it.
+     * Switch:            a relay: on at 50% and over, off below; never fades.
+     *                    The Grand Master cannot switch it off.
+     * OnAtOpen:          full whenever nothing in the show sets it (when that
+     *                    applies is the OutputRuleKeeper's setting).
+     */
+    enum OutputRule
+    {
+        ExemptBlackout    = 1 << 0,
+        ExemptGrandMaster = 1 << 1,
+        Switch            = 1 << 2,
+        OnAtOpen          = 1 << 3
+    };
+    Q_DECLARE_FLAGS(OutputRules, OutputRule)
+
+    /** Set the rules; emits changed() when they differ (the output follows) */
+    void setOutputRules(OutputRules rules);
+    OutputRules outputRules() const { return OutputRules(m_outputRules.loadRelaxed()); }
+
+    /** "Blackout,GrandMaster,Switch,OnAtOpen" (as saved) and back */
+    static QString outputRulesToString(OutputRules rules);
+    static OutputRules stringToOutputRules(const QString &str);
 
     /**
      * Set the fixture instance's DMX universe
@@ -401,6 +432,8 @@ protected:
     QString m_ipAddress;
     int m_transport = ArtNetTransport;
     PowerProfile m_powerProfile;
+    /** OutputRules; read by the fader thread (FadeChannel), set on the UI's */
+    QAtomicInt m_outputRules { 0 };
 
     /** Flag that indicates if this fixture crosses a DMX Universe */
     bool m_crossUniverse;
@@ -681,6 +714,8 @@ public:
      */
     bool saveXML(QXmlStreamWriter *doc) const;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(Fixture::OutputRules)
 
 /** @} */
 

@@ -664,6 +664,9 @@ void FixtureRemap::connectFixtures(QTreeWidgetItem *sourceItem, QTreeWidgetItem 
                  srcFxiMode == NULL && tgtFxiMode == NULL)
                     oneToOneRemap = true;
 
+        // A relay stays a relay, a house light stays on through Blackout.
+        tgtFxi->setOutputRules(srcFxi->outputRules());
+
         if (oneToOneRemap == true)
         {
             // copy forced LTP/HTP channels right away

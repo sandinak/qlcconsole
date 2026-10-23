@@ -12,7 +12,9 @@ target_compile_definitions(${module_name} PRIVATE
 
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src
+    ../../../plugins/interfaces
     ../../src
+    ../../src/virtualconsole
 )
 
 include_ui_header(${module_name})

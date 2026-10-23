@@ -337,6 +337,178 @@ void EosImporter_Test::warnings()
     QVERIFY(w.contains("multi-part"));
 }
 
+void EosImporter_Test::circuitClassifier()
+{
+    // The most specific word wins: House > Work > Hall / Blue / Backstage > Relay.
+    QCOMPARE(EosCircuit::classify("Relay 3rd Elect"), EosCircuit::Relay);
+    QCOMPARE(EosCircuit::classify("Relay Spare"), EosCircuit::Relay);
+    QCOMPARE(EosCircuit::classify("Relay Linear House Lights"), EosCircuit::House);
+    QCOMPARE(EosCircuit::classify("Relay Down House Lights"), EosCircuit::House);
+    QCOMPARE(EosCircuit::classify("Relay Stage Work Lights"), EosCircuit::Work);
+    QCOMPARE(EosCircuit::classify("Relay Hall Lights"), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("Blue SR Hall"), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("BLUE running"), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("Worklights"), EosCircuit::Work);
+    QCOMPARE(EosCircuit::classify("Aisle L"), EosCircuit::House);
+    QCOMPARE(EosCircuit::classify("Stairs SL"), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("Exit corridor"), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("Back stage cue lights"), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("Backstage"), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("House_Work"), EosCircuit::House);
+    // Not special
+    QCOMPARE(EosCircuit::classify("FOH"), EosCircuit::Normal);
+    QCOMPARE(EosCircuit::classify(""), EosCircuit::Normal);
+    QCOMPARE(EosCircuit::classify("House Left Boom"), EosCircuit::Normal);   // a place
+    QCOMPARE(EosCircuit::classify("Cyc Blue", false), EosCircuit::Normal);    // an LED's colour
+    QCOMPARE(EosCircuit::classify("Cyc Blue", true), EosCircuit::Backstage);
+    QCOMPARE(EosCircuit::classify("Halogen"), EosCircuit::Normal);
+
+    QVERIFY(EosCircuit::rulesText(EosCircuit::Relay, false).contains("On when not in use"));
+    QVERIFY(EosCircuit::rulesText(EosCircuit::Work, false).contains("Blackout"));
+    QVERIFY(EosCircuit::rulesText(EosCircuit::Normal, false).isEmpty());
+    QVERIFY(EosCircuit::rulesText(EosCircuit::Normal, true).contains("Grand Master"));
+}
+
+void EosImporter_Test::specialCircuits()
+{
+    EosShowData d;
+    EosAsciiParser p;
+    QVERIFY(p.parseText("Ident 3:0\n"
+                        "$Personality 9001\n $$Manuf ETC_Fixtures\n $$Model ColorSource_PAR_RGB\n $$Footprint 3\n"
+                        " $$PersChan 12 1 1 0 255\n $$PersChan 13 1 2 0 255\n $$PersChan 14 1 3 0 255\n"
+                        "$Patch 1 0 1 0 1\n Text Relay FOH\n"
+                        "$Patch 2 0 2 0 1\n Text Relay Linear House Lights\n"
+                        "$Patch 3 0 3 0 1\n Text Relay Stage Work Lights\n"
+                        "$Patch 4 0 4 0 1\n Text Blue SR Hall\n"
+                        "$Patch 5 0 5 0 1\n Text Specials\n $$Options X\n"
+                        "$Patch 6 0 6 0 1\n Text Movers\n $$Options PT\n"
+                        "$Patch 7 9001 7 0 1\n Text Cyc Blue\n"
+                        "$Patch 8 0 10 0 1\n Text Relay Spare\n"
+                        "$CueList 1\nCue 1 1\n Up 3\n $$ChanMove 2@FL\n"
+                        "Sub 4\n Text Pod SR\n Up 2\n Down 5\n $$LTP\n Chan 1@FL\n", d));
+
+    QMap<int, EosCircuit> c = EosImporter::circuits(d);
+    QCOMPARE(c.count(), 6);
+    QCOMPARE(c.value(1).role, EosCircuit::Relay);
+    QCOMPARE(c.value(2).role, EosCircuit::House);
+    QCOMPARE(c.value(3).role, EosCircuit::Work);
+    QCOMPARE(c.value(4).role, EosCircuit::Backstage);
+    QCOMPARE(c.value(5).role, EosCircuit::Normal);
+    QVERIFY(c.value(5).gmExempt);
+    QVERIFY(!c.contains(6));
+    QVERIFY(!c.contains(7));                    // a 3-channel LED: "Blue" is its colour
+    QCOMPARE(c.value(8).role, EosCircuit::Relay);
+
+    // The wizard's edits win: 8 is no relay after all, 6 is a work light.
+    QHash<int, int> edits;
+    edits.insert(8, EosCircuit::Normal);
+    edits.insert(6, EosCircuit::Work);
+    EosImportResult r;
+    EosFixtureMapper mapper(m_doc->fixtureDefCache());
+    QVERIFY(EosImporter::build(d, m_doc, mapper, r, QString(), edits));
+    QCOMPARE(r.circuits.count(), 6);
+    QVERIFY(!r.circuits.contains(8));
+    QCOMPARE(r.circuits.value(6).role, EosCircuit::Work);
+    QCOMPARE(r.circuitCount(EosCircuit::Relay), 1);
+    QCOMPARE(r.circuitCount(EosCircuit::House), 1);
+    QCOMPARE(r.circuitCount(EosCircuit::Work), 2);
+    QCOMPARE(r.circuitCount(EosCircuit::Backstage), 1);
+    QCOMPARE(r.fixtureGroupsParsed, 0);         // role groups aren't Eos groups
+
+    QHash<QString, FixtureGroup *> groups;
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+        groups.insert(g->name(), g);
+    QCOMPARE(groups.count(), 3);
+    QCOMPARE(groups.value("Power relays")->path(), QString("Eos"));
+    QCOMPARE(groups.value("Power relays")->fixtureList(), QList<quint32>() << 1);
+    QCOMPARE(groups.value("House & Work")->fixtureList(), QList<quint32>() << 2 << 3 << 6);
+    QCOMPARE(groups.value("Backstage")->fixtureList(), QList<quint32>() << 4);
+
+    const QString w = r.warnings.join("\n");
+    QVERIFY2(w.contains("Special circuits: Relay (power) × 1, House × 1, Work × 2, Backstage / hall × 1, "
+                        "GM exempt ($$Options X) × 1 (groups Eos/Power relays, Eos/House & Work, Eos/Backstage)"),
+             qPrintable(w));
+    QVERIFY2(w.contains("Patch $$Options not carried: P (flip pan) on 1 channel(s), T (flip tilt) on 1 channel(s)."),
+             qPrintable(w));
+    QVERIFY(r.outputRulesApplied);
+    QVERIFY2(w.contains("Output rules, Relay (power) × 1: Switch (relay), Ignore Blackout, Ignore the Grand "
+                        "Master, On when not in use."), qPrintable(w));
+    QVERIFY2(w.contains("Output rules, Work × 2: Ignore Blackout, Ignore the Grand Master."), qPrintable(w));
+    QVERIFY2(w.contains("Output rules, GM exempt ($$Options X) × 1: Ignore the Grand Master."), qPrintable(w));
+    QVERIFY2(w.contains("Settings ▸ Advanced ▸ Output"), qPrintable(w));
+    QVERIFY(!w.contains("aren't in this build"));
+
+    // Each fixture's rules.
+    const Fixture::OutputRules relay = Fixture::Switch | Fixture::ExemptBlackout | Fixture::ExemptGrandMaster
+                                       | Fixture::OnAtOpen;
+    const Fixture::OutputRules exempt = Fixture::ExemptBlackout | Fixture::ExemptGrandMaster;
+    QCOMPARE(m_doc->fixture(1)->outputRules(), relay);                    // Relay FOH
+    QCOMPARE(m_doc->fixture(2)->outputRules(), exempt);                   // House
+    QCOMPARE(m_doc->fixture(3)->outputRules(), exempt);                   // Work
+    QCOMPARE(m_doc->fixture(4)->outputRules(), exempt);                   // Blue SR Hall
+    QCOMPARE(m_doc->fixture(5)->outputRules(), Fixture::OutputRules(Fixture::ExemptGrandMaster));   // X
+    QCOMPARE(m_doc->fixture(6)->outputRules(), exempt);                   // edited to Work
+    QCOMPARE(m_doc->fixture(7)->outputRules(), Fixture::OutputRules());   // Cyc Blue: an LED
+    QCOMPARE(m_doc->fixture(8)->outputRules(), Fixture::OutputRules());   // edited to Normal
+
+    // A relay that is also X: X adds nothing it doesn't have; a house
+    // circuit with X the same. Applying again is idempotent.
+    QMap<int, EosCircuit> again = r.circuits;
+    again[2].gmExempt = true;
+    QVERIFY(EosImporter::applyCircuitRoles(m_doc, again));
+    QCOMPARE(m_doc->fixture(2)->outputRules(), exempt);
+    QCOMPARE(m_doc->fixture(1)->outputRules(), relay);
+
+    // The show's own Eos "Relays" group doesn't clash; one named "Power
+    // relays" does, and ours steps aside.
+    {
+        Doc *doc = new Doc(this);
+        EosShowData d2;
+        QVERIFY(p.parseText("Ident 3:0\n$Patch 1 0 1 0 1\n Text Relay FOH\n$Patch 2 0 2 0 1\n Text FOH\n"
+                            "$Group 7\n Text Relays\n $$ChanList 2\n$Group 8\n Text Power Relays\n $$ChanList 1\n", d2));
+        EosImportResult r2;
+        EosFixtureMapper m2(doc->fixtureDefCache());
+        QVERIFY(EosImporter::build(d2, doc, m2, r2));
+        QStringList names;
+        for (FixtureGroup *g : doc->fixtureGroups())
+            names << g->name();
+        names.sort();
+        QCOMPARE(names, QStringList() << "Power Relays" << "Power relays (special circuits)" << "Relays");
+        delete doc;
+    }
+
+    // The house cue move stays in the cue: cue 1 brings the house up.
+    Scene *cue1 = nullptr;
+    for (Function *f : m_doc->functions())
+        if (f->name() == "1")
+            cue1 = qobject_cast<Scene *>(f);
+    QVERIFY(cue1 != nullptr);
+    QCOMPARE(cue1->value(2, 0), uchar(255));
+}
+
+void EosImporter_Test::subsForTheConsole()
+{
+    EosShowData d;
+    EosAsciiParser p;
+    QVERIFY(p.parseText("Ident 3:0\n$Patch 1 0 1 0 1\n"
+                        "Sub 4\n Text Pod SR\n Up 2\n Down 5\n $$LTP\n $$Exclusive\n Chan 1@FL\n"
+                        "Sub 9\n Up 0\n Chan 1@50\n", d));
+    EosImportResult r;
+    EosFixtureMapper mapper(m_doc->fixtureDefCache());
+    QVERIFY(EosImporter::build(d, m_doc, mapper, r));
+    QCOMPARE(r.subs.count(), 2);
+    QCOMPARE(r.subs.at(0).caption, QString("Sub 4 Pod SR"));
+    QCOMPARE(r.subs.at(1).caption, QString("Sub 9"));
+    Scene *s = qobject_cast<Scene *>(m_doc->function(r.subs.at(0).function));
+    QVERIFY(s != nullptr);
+    QCOMPARE(s->fadeInSpeed(), 2000u);
+    QCOMPARE(s->fadeOutSpeed(), 5000u);
+    QCOMPARE(s->path(true), QString("Eos/Subs"));
+    const QString w = r.warnings.join("\n");
+    QVERIFY2(w.contains("Sub 4 Pod SR (LTP, Exclusive)"), qPrintable(w));
+    QVERIFY2(w.contains("Subs: 2 fader(s) on the Virtual Console"), qPrintable(w));
+}
+
 void EosImporter_Test::realExportIntoShowTree()
 {
     // The whole path on a real export: parse, build the scratch Doc, merge
@@ -508,6 +680,15 @@ void EosImporter_Test::showFromSampleDir()
                              .arg(r.fixtureGroupsParsed).arg(r.palettesParsed).arg(r.cuesParsed)
                              .arg(r.submastersParsed).arg(r.magicSheetsParsed).arg(r.channelObjectsPlaced);
         qInfo().noquote() << "warnings:\n  " + r.warnings.join("\n  ");
+        QStringList roles;
+        for (auto it = r.circuits.constBegin(); it != r.circuits.constEnd(); ++it)
+            roles << QString("%1=%2%3").arg(it.key()).arg(EosCircuit::roleName(it.value().role))
+                     .arg(it.value().gmExempt ? "+GM" : "");
+        qInfo().noquote() << "circuits:" << roles.join(", ");
+        QStringList subs;
+        for (const EosImportedSub &sb : r.subs)
+            subs << sb.caption;
+        qInfo().noquote() << "subs:" << subs.join(" | ");
 
         Doc *target = new Doc(this);
         target->fixtureDefCache()->loadMap(fx);
@@ -522,6 +703,35 @@ void EosImporter_Test::showFromSampleDir()
             palettes << pl->id();
         const QxwImportResult m = QxwImporter::import(scratch, target, fixtures, groups, functions, palettes);
         QCOMPARE(m.fixturesImported, r.fixturesParsed);
+        // The output rules survive the copy into the real Doc. On a show
+        // where channel 1 is a relay and 15 the house (Poquoson's 9.asc),
+        // spot-check them by name.
+        {
+            QHash<int, Fixture *> byChannel;
+            for (Fixture *f : target->fixtures())
+            {
+                const QString n = f->name();
+                for (int ch : { 1, 15 })
+                    if (n == QString("Ch %1").arg(ch) || n.startsWith(QString("Ch %1 ").arg(ch)))
+                        byChannel.insert(ch, f);
+            }
+            int carried = 0;
+            for (Fixture *f : target->fixtures())
+                carried += f->outputRules() != Fixture::OutputRules();
+            QCOMPARE(carried, int(r.circuits.count()));
+            for (int ch : { 1, 15 })
+            {
+                if (!r.circuits.contains(ch) || !byChannel.contains(ch))
+                    continue;
+                const Fixture::OutputRules want = r.circuits.value(ch).role == EosCircuit::Relay
+                    ? Fixture::Switch | Fixture::ExemptBlackout | Fixture::ExemptGrandMaster | Fixture::OnAtOpen
+                    : Fixture::ExemptBlackout | Fixture::ExemptGrandMaster;
+                QCOMPARE(byChannel.value(ch)->outputRules(), want);
+                qInfo().noquote() << asc << QString("ch %1 (%2) in the real Doc: %3").arg(ch)
+                                     .arg(byChannel.value(ch)->name(),
+                                          Fixture::outputRulesToString(byChannel.value(ch)->outputRules()));
+            }
+        }
         QList<quint32> chasers;
         for (quint32 id : r.chasers)
             chasers << m.functionMap.value(id);
