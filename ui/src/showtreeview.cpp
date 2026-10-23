@@ -79,6 +79,7 @@
 #include "stagetarget.h"
 #include "linespread.h"
 #include "effectdesigner.h"
+#include "refinepanel.h"
 #include "showtreeview.h"
 #include "itemicons.h"
 #include "workbench.h"
@@ -1567,6 +1568,17 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                   "closely to move them unseen. Right-click a cue, or nomib 0.0.3, does the "
                                   "same."));
         f->addRow(QString(), m_cueNoMib);
+        /* Refine (FOCUS_REFINE_DESIGN.md): this cue's own values from the
+           stage, with the controller. */
+        QPushButton *refine = new QPushButton(tr("Refine on the controller\342\200\246"), inner);
+        refine->setObjectName("stCueRefine");
+        refine->setToolTip(tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
+                              "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+        connect(refine, &QPushButton::clicked, this, [this]() {
+            if (currentCueId() != invalidId())
+                RefinePanel::open(m_doc, window(), currentCueId());
+        });
+        f->addRow(QString(), refine);
         connect(m_cueNoMib, &QCheckBox::toggled, this, &ShowTreeView::slotCueNoMibToggled);
         {
             // Includes (D8): this cue plays their output under its own,
@@ -6783,6 +6795,15 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 split->setEnabled(l != nullptr && l->pieces().count() > 1);
                 split->setToolTip(tr("One layer per group (and one on its fixtures), each with these looks; "
                                      "it keeps tracking as before"));
+                /* Refine (FOCUS_REFINE_DESIGN.md): this cue's own values from
+                   the stage, on the controller, starting on this layer. */
+                QAction *refine = menu.addAction(tr("Refine on the controller\342\200\246"), this,
+                                                 [this, cueId, layerId]() {
+                    RefinePanel::open(m_doc, window(), cueId, layerId);
+                });
+                refine->setObjectName("stRefineLayer");
+                refine->setToolTip(tr("Move, zoom, focus and recolour this cue from the stage with the "
+                                      "controller: the layer as a whole, or one fixture as an exception"));
                 quint32 selCue = invalidId();
                 const QList<quint32> sel = selectedLayers(&selCue);
                 QAction *merge = menu.addAction(sel.count() > 1 ? tr("Merge %1 layers").arg(sel.count())

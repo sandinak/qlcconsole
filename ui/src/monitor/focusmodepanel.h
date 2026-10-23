@@ -190,6 +190,10 @@ private:
     bool m_finishing = false;
 
     QLabel *m_titleLabel;
+    /** The focus call being run, and its note (Focus calls only). */
+    QLabel *m_callLabel = nullptr;
+    /** Group or fixture (Y), and where saves go (the venue, or the show). */
+    QLabel *m_scopeLabel = nullptr;
     QLabel *m_nameLabel;
     QLabel *m_referenceLabel;
     QLabel *m_offsetLabel;

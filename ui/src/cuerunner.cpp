@@ -42,6 +42,7 @@
 #include "showtreecontroller.h"
 #include "timecodesource.h"
 #include "chaserrunner.h"
+#include "focuscallsdialog.h"
 #include "cuerunner.h"
 #include "chaser.h"
 #include "doc.h"
@@ -454,6 +455,17 @@ void CueRunner::buildFullLayout()
     m_timecode->setFont(big);
     m_timecode->setToolTip(tr("The timecode the current production follows (its source, else the show's)"));
     head->addWidget(m_timecode);
+    /* Pre-show: the show's focus calls on the controller, corrections
+       saved for this venue (FOCUS_REFINE_DESIGN.md). */
+    QToolButton *calls = new QToolButton(this);
+    calls->setObjectName(QStringLiteral("crFocusCalls"));
+    calls->setText(tr("Focus calls\342\200\246"));
+    calls->setToolTip(tr("Pre-show: focus the rig for this venue, call by call, on the controller "
+                         "(Design mode)"));
+    connect(calls, &QToolButton::clicked, this, [this]() {
+        FocusCallsDialog::run(m_doc, window());
+    });
+    head->addWidget(calls);
     m_mode = new QLabel(this);
     m_mode->setObjectName(QStringLiteral("crMode"));
     m_mode->setFont(hf);

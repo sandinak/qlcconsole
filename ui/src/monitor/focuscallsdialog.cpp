@@ -1,0 +1,351 @@
+/*
+  Q Light Controller Plus
+  focuscallsdialog.cpp
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#include <QDialogButtonBox>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QFileInfo>
+#include <QLabel>
+
+#include "programmercontroller.h"
+#include "monitorproperties.h"
+#include "venuecorrections.h"
+#include "focuscallsdialog.h"
+#include "focusmodepanel.h"
+#include "fixturegroup.h"
+#include "stagetarget.h"
+#include "doc.h"
+
+namespace
+{
+const int kNewVenue = -2;
+const int kNoVenue = -1;
+}
+
+FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
+    : QDialog(parent)
+    , m_doc(doc)
+{
+    setObjectName(QStringLiteral("focusCallsDialog"));
+    setWindowTitle(tr("Focus Calls"));
+    setProperty("helpTopic", QStringLiteral("focus-calls.md"));
+
+    QVBoxLayout *vl = new QVBoxLayout(this);
+    QLabel *intro = new QLabel(tr("The order the rig is focused in when the show moves into a "
+                                  "new room. Each call is some groups and the point they focus "
+                                  "to. On the controller the triggers step calls, the bumpers "
+                                  "fixtures, A saves."), this);
+    intro->setWordWrap(true);
+    vl->addWidget(intro);
+
+    QHBoxLayout *main = new QHBoxLayout;
+    QVBoxLayout *left = new QVBoxLayout;
+    m_list = new QListWidget(this);
+    m_list->setObjectName(QStringLiteral("fcCalls"));
+    left->addWidget(m_list, 1);
+    QHBoxLayout *listButtons = new QHBoxLayout;
+    QPushButton *add = new QPushButton(tr("+ Call"), this);
+    add->setObjectName(QStringLiteral("fcAdd"));
+    QPushButton *remove = new QPushButton(tr("Remove"), this);
+    remove->setObjectName(QStringLiteral("fcRemove"));
+    QPushButton *up = new QPushButton(tr("Up"), this);
+    QPushButton *down = new QPushButton(tr("Down"), this);
+    for (QPushButton *b : { add, remove, up, down })
+        listButtons->addWidget(b);
+    left->addLayout(listButtons);
+    main->addLayout(left, 1);
+
+    QFormLayout *form = new QFormLayout;
+    m_name = new QLineEdit(this);
+    m_name->setObjectName(QStringLiteral("fcName"));
+    m_name->setPlaceholderText(tr("Named from the groups and target"));
+    form->addRow(tr("Name"), m_name);
+    m_groups = new QListWidget(this);
+    m_groups->setObjectName(QStringLiteral("fcGroups"));
+    for (const FixtureGroup *g : m_doc->fixtureGroups())
+    {
+        QListWidgetItem *it = new QListWidgetItem(g->name(), m_groups);
+        it->setData(Qt::UserRole, g->id());
+        it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
+        it->setCheckState(Qt::Unchecked);
+    }
+    form->addRow(tr("Groups"), m_groups);
+    m_target = new QComboBox(this);
+    m_target->setObjectName(QStringLiteral("fcTarget"));
+    m_target->addItem(tr("Where they land (fixed lights)"), QVariant(0xFFFFFFFFu));
+    if (MonitorProperties *props = m_doc->monitorProperties())
+        for (const StageTarget *t : props->stageTargets())
+            m_target->addItem(t->name(), QVariant(t->id()));
+    form->addRow(tr("Focus to"), m_target);
+    m_note = new QLineEdit(this);
+    m_note->setObjectName(QStringLiteral("fcNote"));
+    m_note->setPlaceholderText(tr("A word for the crew: \"cut off the proscenium\""));
+    form->addRow(tr("Note"), m_note);
+    main->addLayout(form, 2);
+    vl->addLayout(main, 1);
+
+    // The venue the corrections are kept for (board Q105).
+    QHBoxLayout *venueRow = new QHBoxLayout;
+    venueRow->addWidget(new QLabel(tr("Venue:"), this));
+    m_venue = new QComboBox(this);
+    m_venue->setObjectName(QStringLiteral("fcVenue"));
+    venueRow->addWidget(m_venue, 1);
+    m_newVenue = new QLineEdit(this);
+    m_newVenue->setObjectName(QStringLiteral("fcNewVenue"));
+    m_newVenue->setPlaceholderText(VenueCorrections::defaultVenueName());
+    venueRow->addWidget(m_newVenue, 1);
+    vl->addLayout(venueRow);
+    m_venueNote = new QLabel(this);
+    m_venueNote->setObjectName(QStringLiteral("fcVenueNote"));
+    m_venueNote->setWordWrap(true);
+    m_venueNote->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    vl->addWidget(m_venueNote);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(this);
+    m_start = bb->addButton(tr("Start focus calls"), QDialogButtonBox::AcceptRole);
+    m_start->setObjectName(QStringLiteral("fcStart"));
+    QPushButton *save = bb->addButton(tr("Save calls"), QDialogButtonBox::ApplyRole);
+    save->setObjectName(QStringLiteral("fcSave"));
+    bb->addButton(QDialogButtonBox::Cancel);
+    vl->addWidget(bb);
+
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    m_venue->addItem(tr("None: the show's own calibration"), kNoVenue);
+    for (const QString &v : venues->venueNames())
+        m_venue->addItem(v, 0);
+    m_venue->addItem(tr("New venue\342\200\246"), kNewVenue);
+    m_venue->setCurrentIndex(venues->isActive() ? m_venue->findText(venues->activeVenue())
+                                                : m_venue->count() - 1);
+
+    connect(m_list, &QListWidget::currentRowChanged, this, [this](int row) {
+        storeCall();
+        loadCall(row);
+    });
+    connect(add, &QPushButton::clicked, this, &FocusCallsDialog::addCall);
+    connect(remove, &QPushButton::clicked, this, &FocusCallsDialog::removeCall);
+    connect(up, &QPushButton::clicked, this, [this]() { moveCall(-1); });
+    connect(down, &QPushButton::clicked, this, [this]() { moveCall(1); });
+    for (QLineEdit *e : { m_name, m_note })
+        connect(e, &QLineEdit::textEdited, this, [this]() { storeCall(); fillCallList(); });
+    connect(m_groups, &QListWidget::itemChanged, this, [this]() { storeCall(); fillCallList(); });
+    connect(m_target, &QComboBox::currentIndexChanged, this, [this]() { storeCall(); fillCallList(); });
+    connect(m_venue, &QComboBox::currentIndexChanged, this, &FocusCallsDialog::refreshVenue);
+    connect(save, &QPushButton::clicked, this, [this]() {
+        storeCall();
+        m_doc->programmer()->focusCalls()->setCalls(m_calls);
+    });
+    connect(bb, &QDialogButtonBox::accepted, this, [this]() {
+        QString why;
+        if (!apply(&why))
+        {
+            QMessageBox::information(this, windowTitle(), why);
+            return;
+        }
+        accept();
+    });
+    connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    setCalls(m_doc->programmer()->focusCalls()->calls());
+    refreshVenue();
+    resize(760, 480);
+}
+
+void FocusCallsDialog::run(Doc *doc, QWidget *parent)
+{
+    FocusCallsDialog d(doc, parent);
+    if (d.exec() != QDialog::Accepted)
+        return;
+    FocusSession::Options o;
+    o.calls = doc->programmer()->focusCalls()->sessionCalls();
+    o.order = FocusSession::ByStagePosition;
+    // Only the head being worked at full: the rest of the call dim, so it
+    // can be told apart on the stage.
+    o.others = FocusSession::OthersDim;
+    QString why;
+    if (FocusModePanel::startWith(doc, parent, o, &why) == nullptr)
+        QMessageBox::warning(parent, tr("Focus Calls"), why);
+}
+
+void FocusCallsDialog::setCalls(const QList<FocusCall> &calls)
+{
+    m_calls = calls;
+    m_current = -1;
+    fillCallList();
+    m_list->setCurrentRow(m_calls.isEmpty() ? -1 : 0);
+    loadCall(m_list->currentRow());
+}
+
+void FocusCallsDialog::fillCallList()
+{
+    const bool was = m_list->blockSignals(true);
+    const int row = m_list->currentRow();
+    m_list->clear();
+    for (int i = 0; i < m_calls.size(); ++i)
+        m_list->addItem(QStringLiteral("%1. %2").arg(i + 1).arg(FocusCalls::displayName(m_doc, m_calls.at(i))));
+    m_list->setCurrentRow(qMin(row, m_list->count() - 1));
+    m_list->blockSignals(was);
+    m_start->setEnabled(!m_calls.isEmpty());
+}
+
+void FocusCallsDialog::loadCall(int index)
+{
+    m_current = index;
+    const bool on = index >= 0 && index < m_calls.size();
+    for (QWidget *w : { static_cast<QWidget *>(m_name), static_cast<QWidget *>(m_groups),
+                        static_cast<QWidget *>(m_target), static_cast<QWidget *>(m_note) })
+        w->setEnabled(on);
+    m_loading = true;
+    const FocusCall c = on ? m_calls.at(index) : FocusCall();
+    m_name->setText(c.name);
+    m_note->setText(c.note);
+    for (int i = 0; i < m_groups->count(); ++i)
+        m_groups->item(i)->setCheckState(c.groups.contains(m_groups->item(i)->data(Qt::UserRole).toUInt())
+                                         ? Qt::Checked : Qt::Unchecked);
+    const int t = c.target.kind == FocusSession::Reference::Target
+                  ? m_target->findData(QVariant(c.target.id)) : 0;
+    m_target->setCurrentIndex(qMax(0, t));
+    m_loading = false;
+}
+
+void FocusCallsDialog::storeCall()
+{
+    if (m_loading || m_current < 0 || m_current >= m_calls.size())
+        return;
+    FocusCall &c = m_calls[m_current];
+    c.name = m_name->text().trimmed();
+    c.note = m_note->text().trimmed();
+    c.groups.clear();
+    for (int i = 0; i < m_groups->count(); ++i)
+        if (m_groups->item(i)->checkState() == Qt::Checked)
+            c.groups << m_groups->item(i)->data(Qt::UserRole).toUInt();
+    const quint32 tid = m_target->currentData().toUInt();
+    c.target = FocusSession::Reference();
+    if (tid != 0xFFFFFFFFu)
+    {
+        c.target.kind = FocusSession::Reference::Target;
+        c.target.id = tid;
+    }
+}
+
+void FocusCallsDialog::addCall()
+{
+    storeCall();
+    FocusCall c;
+    // The next point along by default: most calls follow the one before.
+    if (!m_calls.isEmpty())
+        c.target = m_calls.last().target;
+    m_calls << c;
+    fillCallList();
+    m_list->setCurrentRow(m_calls.size() - 1);
+    loadCall(m_calls.size() - 1);
+}
+
+void FocusCallsDialog::removeCall()
+{
+    if (m_current < 0 || m_current >= m_calls.size())
+        return;
+    m_calls.removeAt(m_current);
+    const int next = qMin(m_current, int(m_calls.size()) - 1);
+    m_current = -1;
+    fillCallList();
+    m_list->setCurrentRow(next);
+    loadCall(next);
+}
+
+void FocusCallsDialog::moveCall(int by)
+{
+    storeCall();
+    const int to = m_current + by;
+    if (m_current < 0 || to < 0 || to >= m_calls.size())
+        return;
+    m_calls.move(m_current, to);
+    m_current = -1;
+    fillCallList();
+    m_list->setCurrentRow(to);
+    loadCall(to);
+}
+
+QString FocusCallsDialog::venueChoice() const
+{
+    const int kind = m_venue->currentData().toInt();
+    if (kind == kNoVenue)
+        return QString();
+    if (kind == kNewVenue)
+    {
+        const QString typed = m_newVenue->text().trimmed();
+        return typed.isEmpty() ? m_newVenue->placeholderText() : typed;
+    }
+    return m_venue->currentText();
+}
+
+void FocusCallsDialog::setVenueChoice(const QString &name)
+{
+    if (name.isEmpty())
+    {
+        m_venue->setCurrentIndex(m_venue->findData(kNoVenue));
+        return;
+    }
+    const int at = m_venue->findText(name);
+    if (at >= 0)
+    {
+        m_venue->setCurrentIndex(at);
+        return;
+    }
+    m_venue->setCurrentIndex(m_venue->findData(kNewVenue));
+    m_newVenue->setText(name);
+}
+
+void FocusCallsDialog::refreshVenue()
+{
+    const int kind = m_venue->currentData().toInt();
+    m_newVenue->setVisible(kind == kNewVenue);
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    const QString file = venues->filePath();
+    if (kind == kNoVenue)
+        m_venueNote->setText(tr("Saves go into the show's own calibration, as Focus mode does."));
+    else if (file.isEmpty())
+        m_venueNote->setText(tr("Save the show first: a venue's corrections are kept in a file beside it."));
+    else
+        m_venueNote->setText(tr("Corrections are saved for this venue in %1, next to the show, the "
+                                "moment A is pressed. The show file is never changed by them.")
+                             .arg(QFileInfo(file).fileName()));
+}
+
+bool FocusCallsDialog::apply(QString *why)
+{
+    storeCall();
+    m_doc->programmer()->focusCalls()->setCalls(m_calls);
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    const QString venue = venueChoice();
+    if (venue.isEmpty())
+        return venues->setActiveVenue(QString());
+    if (venues->filePath().isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("Save the show first: a venue's corrections are kept in a file beside it.");
+        return false;
+    }
+    return venues->setActiveVenue(venues->addVenue(venue));
+}
