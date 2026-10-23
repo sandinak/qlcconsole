@@ -1952,12 +1952,12 @@ void App::initActions()
     connect(fade5, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade5);
 
-    QAction *fade10 = new QAction(tr("Fade 10 second and stop"), this);
+    QAction *fade10 = new QAction(tr("Fade 10 seconds and stop"), this);
     fade10->setData(QVariant(10000));
     connect(fade10, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade10);
 
-    QAction *fade30 = new QAction(tr("Fade 30 second and stop"), this);
+    QAction *fade30 = new QAction(tr("Fade 30 seconds and stop"), this);
     fade30->setData(QVariant(30000));
     connect(fade30, SIGNAL(triggered()), this, SLOT(slotFadeAndStopAll()));
     m_fadeAndStopMenu->addAction(fade30);

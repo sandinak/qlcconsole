@@ -300,7 +300,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
         m_mibCheck->setToolTip(tr("While the show runs, look ahead to the next cue and pre-position any "
                                   "dark mover it will reveal (pan/tilt, colour, gobo, beam). Saved with "
                                   "the show; the same switch as the Show Tree's MIB button and "
-                                  "Programming → Move in black."));
+                                  "Build → Move in black."));
         mibLayout->addWidget(m_mibCheck);
         mibLayout->addSpacing(12);
         mibLayout->addWidget(new QLabel(tr("Lead time:"), mibRow));
