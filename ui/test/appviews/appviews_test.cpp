@@ -1427,15 +1427,14 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     tabs->setCurrentIndex(0);
     viewShot(m_app, "view-classic.png");
 
-    // The Settings dialog shows (and sets) the show's view.
+    // One switch: View ▸ Workspace. Settings has none (Q67).
     {
         AppSettings dlg(m_app, m_app);
-        QComboBox *combo = dlg.findChild<QComboBox *>("settingsWorkspaceView");
-        QVERIFY(combo != nullptr);
-        QCOMPARE(combo->currentText(), QString("Classic QLC+"));
-        combo->setCurrentIndex(combo->findData(int(App::EverythingView)));
+        QVERIFY(dlg.findChild<QComboBox *>("settingsWorkspaceView") == nullptr);
         dlg.accept();
     }
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);   // OK left it alone
+    toAll->trigger();
     QCOMPARE(m_app->workspaceView(), App::EverythingView);
     QVERIFY(toAll->isChecked());
     QCOMPARE(tabLabels(tabs), everything);
@@ -1445,11 +1444,6 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     toConsole->trigger();
     QCOMPARE(tabLabels(tabs), console);
     QVERIFY(!m_app->functionsWindowShown());
-    {
-        AppSettings dlg(m_app, m_app);
-        QComboBox *combo = dlg.findChild<QComboBox *>("settingsWorkspaceView");
-        QCOMPARE(combo->currentText(), QString("qlcconsole"));
-    }
     m_app->doc()->resetModified();
 }
 

@@ -653,8 +653,7 @@ estimates use the readings (and the cap) wherever a fixture has them.
 ## Advanced settings
 
 **Settings** has three tabs. **General** holds what everyone sets: autosave,
-the tab bar (the show's
-[workspace view](getting-started.md#views)), where the show controls go,
+where the show controls go,
 units, the Show Tree's Record choices and the show's
 [move in black](show-tree.md#move-in-black) (saved with the show), the rig
 network and software updates. **Appearance** holds how the window looks

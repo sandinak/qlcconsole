@@ -110,8 +110,8 @@ nothing on a hidden tab stops working. The view is saved with the show: it
 marks the show changed, but it isn't an undo step. QLC+ ignores it when it
 opens the file. A show saved without a view opens in **Classic QLC+** if
 it is an old QLC+ show with no Show Tree, and in **qlcconsole** otherwise.
-A new show, and the first launch, start in **qlcconsole**. **Settings ▸
-General ▸ Tab Bar** shows the open show's view and can change it.
+A new show, and the first launch, start in **qlcconsole**. **View ▸
+Workspace** is the one place to change it.
 
 Choosing a tab the view hides (from **Window** or a link such as *Open in
 Build*) switches to **Everything**. A line above the tabs says so and has

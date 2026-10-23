@@ -56,7 +56,7 @@ circuits and subs.
   Studio, Build, Show Tree, Shows, Virtual Console and Run; Everything all
   ten. A show with no Show Tree not saved by qlcconsole opens in Classic.
   A Window-menu jump to a hidden tab switches to Everything with a *Back
-  to …* line. Settings ▸ General ▸ Tab Bar shows the view.
+  to …* line.
 - **Upgrade This Show…** (File menu and the Show Tree's old-show line;
   W5): every chaser (cue list with its same-output check, effect kept as a
   function, or left alone) and collection, then Capture into palettes for
@@ -191,6 +191,9 @@ circuits and subs.
   Settings, applied on OK. The same settings, so earlier choices carry
   over. View now holds Workspace, Address Tool, Rig Overview and Focus
   Mode.
+- **One switch each.** The workspace view is set only in View ▸ Workspace
+  (Settings ▸ General no longer has a copy), and the toolbar style only in
+  Settings ▸ Appearance.
 - **No outputs: preview only.** With nothing patched to any output, the
   footer's readiness chip reads *No outputs: preview only* in grey (with
   *· N to check* when something else is listed; a click opens Connections
