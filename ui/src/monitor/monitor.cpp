@@ -1581,8 +1581,10 @@ void Monitor::openFocusMode()
     // What is selected on the plot; else the programmer's selection.
     QList<quint32> selection;
     if (m_graphicsView != NULL)
+    {
         foreach (MonitorFixtureItem *it, m_graphicsView->selectedFixtureItems())
             selection << it->fixtureID();
+    }
     if (selection.isEmpty() && m_doc->programmer() != NULL)
         selection = m_doc->programmer()->programmerSelection();
     FocusModePanel::open(m_doc, window(), m_activeSceneId, selection);
