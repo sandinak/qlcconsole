@@ -100,6 +100,11 @@ private slots:
      *  Tree doesn't change the stage; Stop, then Design again. */
     void lessonFiveOperate();
 
+    /** Lesson 1.5's "Stuck?": Design while cues run asks "Really stop
+     *  them...?" -- No stays LIVE with the stage lit; Yes stops everything
+     *  and goes to Design with the stage dark. */
+    void lessonFiveDesignWhileRunningAsksFirst();
+
     /** COURSE_BUILD=1: makes Lessons 1.2-1.5's start and finish files, each
      *  lesson done with the mouse from the one before's finish. Skipped
      *  otherwise. */

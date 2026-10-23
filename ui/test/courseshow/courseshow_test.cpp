@@ -20,6 +20,7 @@
 #include <QTreeWidgetItemIterator>
 #include <QApplication>
 #include <QTemporaryDir>
+#include <QMessageBox>
 #include <QInputDialog>
 #include <QDataStream>
 #include <QListWidget>
@@ -1287,6 +1288,22 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
         qInfo().noquote() << "[L3] mode items" << mode->itemText(0) << mode->itemText(1) << mode->itemText(2)
                           << "| after Block:" << hint->text() << "| rows:" << view->cueLayerItems().join(" | ");
         LESSON_STEP(st->cue(view->currentCueId())->mode == CueMode::Block, "not Block");
+        // The tree says so (⊘ block) and the stage is dark until the spots come.
+        bool badged = false;
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            for (int col = 0; col < (*it)->columnCount(); ++col)
+                if ((*it)->text(0).contains(QStringLiteral("Solo"))
+                    && (*it)->text(col).contains(QStringLiteral("⊘ block")))
+                    badged = true;
+        LESSON_STEP(badged, "no ⊘ block badge on the Solo");
+        const auto dark = [doc]() {
+            for (const char *name : { "SR Truss Wash 1", "SR Truss Cyc 1" })
+                if (sends(doc, name).count(char(0)) != sends(doc, name).size())
+                    return false;
+            return true;
+        };
+        LESSON_STEP(waitUntil(dark), "the Block cue's stage is not dark: wash "
+                    + QString::fromLatin1(sends(doc, "SR Truss Wash 1").toHex(' ')));
         LESSON_STEP(view->cueLayerItems().isEmpty(), view->cueLayerItems().join(" | "));
     }
     {
@@ -1812,6 +1829,63 @@ void CourseShow_Test::lessonFiveOperate()
     settle(100);
     QCOMPARE(doc->mode(), Doc::Design);
     QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("DESIGN"), kRigWait);
+    doc->resetModified();
+}
+
+/* Answers the next modal question box with @a answer, and keeps its text. */
+static void answerNextQuestion(QMessageBox::StandardButton answer, QString *text)
+{
+    QTimer::singleShot(0, [answer, text]() {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 5000)
+        {
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            {
+                if (text != nullptr)
+                    *text = box->text();
+                box->button(answer)->click();
+                return;
+            }
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
+    });
+}
+
+void CourseShow_Test::lessonFiveDesignWhileRunningAsksFirst()
+{
+    QVERIFY(open(kL5Start));
+    Doc *doc = m_app->doc();
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), kRigWait);
+    QVERIFY(doc->masterTimer()->runningFunctions() > 0);
+
+    // No: still LIVE, the cue still on stage.
+    QString asked;
+    answerNextQuestion(QMessageBox::No, &asked);
+    m_app->m_modeToggleAction->trigger();
+    settle(200);
+    QVERIFY2(asked.contains(QStringLiteral("Really stop them")), qPrintable(asked));
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QCOMPARE(run->modeText(), QStringLiteral("LIVE"));
+    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
+
+    // Yes: everything stops, Design, a dark stage.
+    asked.clear();
+    answerNextQuestion(QMessageBox::Yes, &asked);
+    m_app->m_modeToggleAction->trigger();
+    settle(200);
+    QVERIFY2(asked.contains(QStringLiteral("Really stop them")), qPrintable(asked));
+    QCOMPARE(doc->mode(), Doc::Design);
+    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("DESIGN"), kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
     doc->resetModified();
 }
 
