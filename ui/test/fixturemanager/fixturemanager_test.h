@@ -110,6 +110,8 @@ private slots:
     /** Output Rules…: a group's members with mixed rules (tri-state), the
      *  Fixture Manager's and Build's menus, the row's tooltip. */
     void outputRulesForFixturesAndGroups();
+    void editDefinitionForFixturesSharingOne();
+    void stageLookIsOfferedInOperate();
 
 private:
     Doc* m_doc;

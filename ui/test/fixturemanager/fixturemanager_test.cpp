@@ -36,6 +36,8 @@
 #include <QTemporaryDir>
 #include <QXmlStreamReader>
 #include "qlcfixturedefcache.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 #include "showembedding.h"
 
 #include <QShortcut>
@@ -1678,3 +1680,96 @@ void FixtureManager_Test::outputRulesForFixturesAndGroups()
 }
 
 QTEST_MAIN(FixtureManager_Test)
+
+namespace
+{
+/* A definition of its own with a .qxf, in @p doc's cache (which owns it), and
+ * @p count fixtures on it. */
+QList<quint32> addFixturesOfDef(Doc *doc, const QString &model, int count)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(model);
+    def->setType(QLCFixtureDef::MovingHead);
+    def->setDefinitionSourceFile(QStringLiteral("/nonexistent/Test-%1.qxf").arg(model));
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("1ch"));
+    QLCChannel *ch = new QLCChannel();
+    ch->setName(QStringLiteral("Dimmer"));
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    doc->fixtureDefCache()->addFixtureDef(def);
+
+    QList<quint32> ids;
+    for (int i = 0; i < count; i++)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QStringLiteral("%1 %2").arg(model).arg(i + 1));
+        f->setFixtureDefinition(def, mode);
+        f->setAddress(quint32(400 + doc->fixtures().size()));
+        if (!doc->addFixture(f))
+            return QList<quint32>();
+        ids << f->id();
+    }
+    return ids;
+}
+} // namespace
+
+void FixtureManager_Test::editDefinitionForFixturesSharingOne()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> spots = addFixturesOfDef(m_doc, "Spot", 2);
+    const QList<quint32> washes = addFixturesOfDef(m_doc, "Wash", 1);
+    QCOMPARE(spots.size(), 2);
+    QCOMPARE(washes.size(), 1);
+    FixtureGroup *spotGroup = addGroup(m_doc, "Spots", QString(), spots);
+    FixtureGroup *mixedGroup = addGroup(m_doc, "Mixed", QString(), { spots[0], washes[0] });
+
+    QCOMPARE(FixtureManager::sharedDefinitionSourceFile(m_doc, spots),
+             QStringLiteral("/nonexistent/Test-Spot.qxf"));
+    int defs = 0;
+    QVERIFY(FixtureManager::sharedDefinitionSourceFile(m_doc, { spots[0], washes[0] }, &defs).isEmpty());
+    QCOMPARE(defs, 2);
+
+    FixtureManager mgr(nullptr, m_doc);
+    const QString edit = QStringLiteral("Edit Fixture Definition…");
+    const QString several = QStringLiteral("Edit Fixture Definition… (several definitions)");
+
+    // One fixture, as before.
+    selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, spots[0]) });
+    QVERIFY(contextMenuTree(mgr).contains(edit));
+
+    // Two of the same definition: offered.
+    selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, spots[0]), fixtureRow(mgr, spots[1]) });
+    QStringList texts = contextMenuTree(mgr);
+    QVERIFY2(texts.contains(edit), qPrintable(texts.join(" | ")));
+
+    // Two definitions: only the disabled note.
+    selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, spots[0]), fixtureRow(mgr, washes[0]) });
+    texts = contextMenuTree(mgr);
+    QVERIFY2(!texts.contains(edit), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains(several), qPrintable(texts.join(" | ")));
+
+    // A group whose members share one: offered; a mixed group: not.
+    selectOnly(mgr.m_fixtures_tree, { groupRow(mgr, spotGroup->id()) });
+    texts = contextMenuTree(mgr);
+    QVERIFY2(texts.contains(edit), qPrintable(texts.join(" | ")));
+    selectOnly(mgr.m_fixtures_tree, { groupRow(mgr, mixedGroup->id()) });
+    texts = contextMenuTree(mgr);
+    QVERIFY2(!texts.contains(edit), qPrintable(texts.join(" | ")));
+}
+
+void FixtureManager_Test::stageLookIsOfferedInOperate()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> two = addDimmers(m_doc, 2, 1, "Look");
+    QCOMPARE(two.size(), 2);
+    FixtureManager mgr(nullptr, m_doc);
+    m_doc->setMode(Doc::Operate);
+    selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, two[0]), fixtureRow(mgr, two[1]) });
+    const QStringList texts = contextMenuTree(mgr);
+    m_doc->setMode(Doc::Design);
+    QVERIFY2(texts.contains("Stage Look"), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.filter(QStringLiteral("Stage Look ▸ ")).isEmpty(), qPrintable(texts.join(" | ")));
+}

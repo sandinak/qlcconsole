@@ -370,6 +370,12 @@ public:
      *  address, name and groups. Returns how many changed. */
     static int changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFixtureDef *def);
 
+    /** The .qxf every fixture of @p fids is defined by, when they all share
+     *  one definition that has a file; empty otherwise. @p definitions, when
+     *  given, gets how many distinct definitions they have. */
+    static QString sharedDefinitionSourceFile(Doc *doc, const QList<quint32> &fids,
+                                              int *definitions = NULL);
+
     /** Give @p fids the stage look @p look (Fixture::StageLook). Returns how
      *  many changed; marks the show modified when any did. */
     static int setStageLook(Doc *doc, const QList<quint32> &fids, int look);

@@ -596,11 +596,13 @@ without them is unchanged; QLC+ and older qlcconsole builds skip them.
 Right-click is laid out by what it is about, in the same order whatever is
 selected, and only offers what applies:
 
-1. **The fixture itself** — Fixture Properties…, Definition & Mode…,
-   Edit Fixture Definition… and [LED Layout…](#led-layout) (one fixture),
-   Change Definition… (fixtures of one definition, when another is a
-   drop-in for it), **Stage Look ▸** (below) and
-   [Output Rules…](#output-rules).
+1. **The fixture itself** — Fixture Properties… (several fixtures at once
+   too), Definition & Mode… and [LED Layout…](#led-layout) (one fixture),
+   **Edit Fixture Definition…** (one fixture, several fixtures or one group,
+   when they all share one definition; several definitions show it greyed
+   out as *(several definitions)*), Change Definition… (fixtures of one
+   definition, when another is a drop-in for it), **Stage Look ▸** (below)
+   and [Output Rules…](#output-rules).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….
@@ -631,7 +633,9 @@ icons. The one they all share is
 ticked. A fixture with a look shows its icon in this list and the other
 fixture lists, and its shape on the plot and in the studio; see
 [Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
-same choice as its **Stage look** row.
+same choice as its **Stage look** row. A look changes only the icon and the
+drawing, never the DMX, so Stage Look ▸ is offered in Operate mode too, and
+Ctrl+Z undoes it.
 
 ### Patching a universe's output
 
@@ -687,8 +691,9 @@ there are any. See [Definition Updates](definition-updates.md).
 
 ### The fixture editor
 
-**"Edit Fixture Definition..."** (right-click a fixture) opens the fixture
-editor on its definition. On top of stock QLC+'s editor:
+**"Edit Fixture Definition..."** (right-click a fixture, several fixtures
+of one definition, or a group of them) opens the fixture editor on its
+definition. On top of stock QLC+'s editor:
 
 - **Repair view.** A definition that won't load opens in a Repair view
   instead of "unable to load": it says where it breaks (line, column, why),

@@ -13,6 +13,12 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Fixture Manager: Edit Fixture Definition… for several fixtures.** The
+  context menu offers it for several fixtures, or one group, whose members
+  all share one definition with a .qxf
+  (`FixtureManager::sharedDefinitionSourceFile()`); a selection spanning
+  several definitions shows a disabled "Edit Fixture Definition… (several
+  definitions)". The single-fixture path is unchanged.
 - **Stage looks: Practicals.** A new `Fixture::PracticalSection`
   ("Practicals") holds Lantern and Staff. `LanternLook` is a practical (a
   hurricane / porch lantern): `stageLookSilhouette()` maps it to
@@ -515,6 +521,10 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   (`ControllerKeepAlive`, `ProgrammerController::controllerKeepAlive()`).
 
 ### Changed
+- **Stage Look ▸ in Operate.** The Fixture Manager's context menu offers
+  Stage Look in Operate mode too (icon and drawing only, no DMX); still one
+  undo step. The Properties toolbar button is enabled for a multi-fixture
+  selection in Design and opens the multi-fixture Fixture Properties.
 - **Icons that say what a row is.** Dimmer looks show a pie of their
   level; Shutter looks open / closed / strobe (from the capability their
   value falls in); Strobe looks a flash with their rate (they had no icon);

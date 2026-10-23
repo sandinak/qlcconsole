@@ -4,6 +4,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Edit one definition from several fixtures.** Select several fixtures
+  -- or a group -- that share a definition and right-click → **Edit
+  Fixture Definition…** opens it in the Fixture Editor, to fix their icons
+  in one go. A selection of several definitions shows the item greyed out.
+  **Stage Look ▸** is now offered in Operate mode too (it changes only the
+  icon and drawing, not the DMX), and the toolbar's **Properties** button
+  opens Fixture Properties for several selected fixtures at once. See
+  [Context menu](fixture-manager.md#context-menu).
+
 - **Lanterns and staffs are practicals.** In the stage-look picker they
   have their own **Practicals** section. A **Lantern** is now a hurricane
   or porch lantern -- hook, cap, glass and base -- that glows all round

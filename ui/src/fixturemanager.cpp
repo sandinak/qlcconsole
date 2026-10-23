@@ -373,7 +373,9 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             }
             else
             {
-                m_propertiesAction->setEnabled(false);
+                /* Several fixtures: Fixture Properties edits them together
+                   (the rows they share, "mixed" where they differ). */
+                m_propertiesAction->setEnabled(Monitor::instance() != NULL);
                 m_testAction->setEnabled(false);
                 m_resetAction->setEnabled(false);
             }
@@ -2154,6 +2156,32 @@ int FixtureManager::changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFi
     return n;
 }
 
+QString FixtureManager::sharedDefinitionSourceFile(Doc *doc, const QList<quint32> &fids,
+                                                  int *definitions)
+{
+    QSet<QLCFixtureDef *> defs;
+    bool allHaveFile = true;
+    if (doc != NULL)
+    {
+        foreach (quint32 fid, fids)
+        {
+            Fixture *fxi = doc->fixture(fid);
+            if (fxi == NULL)
+                continue;
+            QLCFixtureDef *def = fxi->fixtureDef();
+            if (def == NULL || def->definitionSourceFile().isEmpty())
+                allHaveFile = false;
+            if (def != NULL)
+                defs.insert(def);
+        }
+    }
+    if (definitions != NULL)
+        *definitions = defs.size();
+    if (defs.size() != 1 || !allHaveFile)
+        return QString();
+    return (*defs.begin())->definitionSourceFile();
+}
+
 int FixtureManager::setStageLook(Doc *doc, const QList<quint32> &fids, int look)
 {
     if (doc == NULL)
@@ -2361,6 +2389,20 @@ void FixtureManager::slotProperties()
     if (m_currentTabIndex == 1)
     {
         editChannelGroupProperties();
+        return;
+    }
+    // Several fixtures selected: Fixture Properties for all of them at once.
+    QList<quint32> fids;
+    foreach (QTreeWidgetItem *sel, m_fixtures_tree->selectedItems())
+    {
+        const QVariant fv = sel->data(KColumnName, PROP_ID);
+        if (fv.isValid() && sel->data(KColumnName, PROP_HEAD).isValid() == false
+            && fids.contains(fv.toUInt()) == false)
+            fids << fv.toUInt();
+    }
+    if (fids.size() > 1 && Monitor::instance() != NULL)
+    {
+        Monitor::instance()->editFixturesProperties(fids);
         return;
     }
     // A fixture: Fixture Properties, the one dialog for a fixture everywhere.
@@ -2829,6 +2871,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     // ---- The fixture itself ----
     QAction *editDefinition = NULL;
+    QString editDefinitionPath;
     if (haveFixtureOrGroupSelection)
     {
         menu.addAction(m_propertiesAction);
@@ -2866,18 +2909,34 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 });
             }
         }
-        /* The definition file itself, in the Fixture Editor -- one real
-           fixture with a .qxf; a generic dimmer has none. */
-        if (selFixtures.size() == 1 && selGroups.isEmpty())
+        /* The definition file itself, in the Fixture Editor -- for one real
+           fixture with a .qxf (a generic dimmer has none), or for several
+           fixtures, or one group, that all share one: fixing the icons of
+           twelve movers is one file. Several definitions: said, not offered. */
+        if (selGroups.size() <= 1 && (selGroups.isEmpty() || selFixtures.isEmpty()))
         {
-            Fixture *fxi = m_doc->fixture(selFixtures.first());
-            if (fxi != NULL && fxi->fixtureDef() != NULL &&
-                fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
+            QList<quint32> defFids = selFixtures;
+            if (selGroups.size() == 1)
+            {
+                if (FixtureGroup *grp = m_doc->fixtureGroup(selGroups.first()))
+                    defFids = grp->fixtureList();
+            }
+            int defCount = 0;
+            editDefinitionPath = sharedDefinitionSourceFile(m_doc, defFids, &defCount);
+            if (editDefinitionPath.isEmpty() == false)
+            {
                 editDefinition = menu.addAction(tr("Edit Fixture Definition…"));
+                editDefinition->setObjectName(QStringLiteral("editFixtureDefinitionAction"));
+            }
+            else if (defCount > 1)
+            {
+                menu.addAction(tr("Edit Fixture Definition… (several definitions)"))
+                    ->setEnabled(false);
+            }
         }
         /* What they look like on stage -- icon, plot and studio shape -- for
-           every fixture selected and every fixture of a selected group. */
-        if (m_doc->mode() != Doc::Operate)
+           every fixture selected and every fixture of a selected group. No
+           DMX changes, so it is offered in Operate too. */
         {
             QList<quint32> lookFids = selFixtures;
             foreach (quint32 gid, selGroups)
@@ -3401,9 +3460,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     if (editDefinition != NULL && chosen == editDefinition)
     {
-        Fixture *fxi = m_doc->fixture(selFixtures.first());
-        if (fxi != NULL && fxi->fixtureDef() != NULL)
-            AppUtil::launchFixtureEditor(fxi->fixtureDef()->definitionSourceFile(), this);
+        AppUtil::launchFixtureEditor(editDefinitionPath, this);
         return;
     }
 
