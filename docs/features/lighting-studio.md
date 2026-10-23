@@ -479,17 +479,21 @@ Manager → **Stage Look ▸**.
 
 **Auto**, the default, draws the fixture as its definition's type always
 has; the picker names the look that type is closest to, as *Auto (LED PAR /
-round multi-LED wash)*. The other looks, in three sections:
+round multi-LED wash)*; a dimmer channel's is *Ellipsoidal / profile spot*.
+The other looks, in four sections:
 
 - **Moving** — Moving head spot, Moving head round wash, Moving head square
   wash.
-- **Fixed conventional** — Lantern, PAR can, Ellipsoidal / profile spot,
-  Fresnel, Followspot.
+- **Fixed conventional** — PAR can, Ellipsoidal / profile spot, Fresnel,
+  Followspot.
 - **Fixed LED** — LED PAR / round multi-LED wash, Square wash, Bar wash,
-  Uplight wash, Cyc / strip light, Strobe / blinder, Staff.
+  Uplight wash, Cyc / strip light, Strobe / blinder.
+- **Practicals** — lights that are part of the set: **Lantern** (a
+  hurricane lantern, or the one by a door) and **Staff** (a pole with LED
+  strip wound round it from top to bottom).
 
 On the plot each look has its own outline -- a followspot is a long barrel
-with its lens at the front, a staff a thin rod, a bar wash a wide strip, a
+with its lens at the front, a bar wash a wide strip, a
 square wash a square with a square lens, a round wash a round base, a spot
 a chamfered one -- and its heads sit where its light comes out, square or
 round to match. Marks over the lens say the rest: a spot's gobo, an LED
@@ -497,12 +501,23 @@ PAR's ring of LEDs, a Fresnel's rings, a strobe's two cells. The lens still
 shows the fixture's live colour and level. A definition with no dimensions
 gets the look's proportions (a followspot long, a staff tall).
 
+The practicals are drawn as what they are. A **lantern** has its hook, cap,
+glass and base from the front or side (its base, from above). It throws no
+beam: its glass glows in its colour and level and the glow spreads round
+it, and in the studio it lights what is near it, as the LED lanterns do
+([Lanterns](#lanterns)). A **staff** is a pole on a foot from the front or
+side, its strip in diagonal turns down its length -- the turns show the
+staff's live colour, the pole between them is dark. From above it is a
+small round dot.
+
 Top, Front and Side draw the same shapes in the studio. The Angled view
-still draws every fixture by its type.
+draws a lantern as a lantern; every other fixture it still draws by its
+type.
 
 A look changes only the picture: how the fixture is driven, its beam and
 its pool are its definition's. A moving-head look draws its yoke and aims
-by pan and tilt as a moving head does; the fixed looks do not -- give a
+by pan and tilt as a moving head does; the fixed looks and the practicals
+do not -- give a
 moving head that is used as a followspot *Moving head spot*, not
 *Followspot*, to keep its aim on the plot. Setting a look is one Ctrl+Z on
 the plot.

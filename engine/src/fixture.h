@@ -536,8 +536,8 @@ public:
         MovingSpotLook,
         MovingRoundWashLook,
         MovingSquareWashLook,
-        LanternLook,            ///< a conventional: ellipsoidal, profile, PAR can
-        StaffLook,              ///< a tall LED staff / pole / stick
+        LanternLook,            ///< a practical: a hurricane or porch lantern, glowing all round
+        StaffLook,              ///< a practical: a pole with LED strip wound round it
         SquareWashLook,
         BarWashLook,            ///< a linear LED bar or batten
         UplightWashLook,
@@ -551,7 +551,7 @@ public:
            stageLookToString()'s key), but tests and pickers walk the enum. */
     };
     /** The picker's sections. */
-    enum StageLookSection { MovingSection, ConventionalSection, LedSection };
+    enum StageLookSection { MovingSection, ConventionalSection, LedSection, PracticalSection };
     Q_ENUM(StageLook)
 
     /** Read without a lock: the rig views classify fixtures on worker
@@ -561,7 +561,8 @@ public:
     void setStageLook(StageLook look);
 
     /** Every look, Auto first, then section by section (Moving, Fixed
-     *  conventional, Fixed LED) in the order a picker lists them. */
+     *  conventional, Fixed LED, Practicals) in the order a picker lists
+     *  them. */
     static QList<StageLook> stageLooks();
     /** The picker section @p look is listed under (Auto: none, -1). */
     static int stageLookSection(StageLook look);
@@ -570,7 +571,7 @@ public:
     /** The look closest to what the definition says this is: a Color
      *  Changer is an LED PAR, an LED bar a bar wash, a Strobe a strobe, a
      *  moving head a spot or a wash by its gobo / zoom channels or its name,
-     *  a dimmer a lantern. AutoLook when nothing is close (a hazer, a fan).
+     *  a dimmer (or a generic dimmer channel) an ellipsoidal. AutoLook when nothing is close (a hazer, a fan).
      *  What "Auto (...)" names in a picker; Auto itself still draws as the
      *  definition's type always has. */
     StageLook autoStageLook() const;

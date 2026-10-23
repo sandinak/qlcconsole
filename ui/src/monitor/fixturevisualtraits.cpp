@@ -57,6 +57,12 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
            is long, not a 300 mm cube). */
         if (t.look != Fixture::AutoLook && stageLookIgnoresPhysical(fx))
             t.physW = t.physH = t.physD = 0.0f;
+        // A lantern lights all round, whatever its definition's lens says.
+        if (t.look == Fixture::LanternLook)
+        {
+            t.omni = true;
+            t.laser = t.stars = false;
+        }
     }
     return t;
 }
@@ -335,8 +341,11 @@ FixtureSilhouette stageLookSilhouette(Fixture::StageLook look, FixtureSilhouette
             // Already a bar: keep its real footprint and its pixels.
             return autoKind == FixtureSilhouette::Bar ? FixtureSilhouette::Bar
                                                       : FixtureSilhouette::Par;
-        case Fixture::FollowspotLook:
         case Fixture::LanternLook:
+            /* A practical lantern glows all round: the same body-and-glow
+               the LED lanterns have, and what it lights near it. */
+            return FixtureSilhouette::Lantern;
+        case Fixture::FollowspotLook:
         case Fixture::SquareWashLook:
         case Fixture::UplightWashLook:
         case Fixture::ParCanLook:
@@ -475,18 +484,38 @@ QPainterPath stageLookBodyPath(Fixture::StageLook look, const QRectF &r, bool el
         }
         case Fixture::LanternLook:
         {
-            // A can, with its yoke's two ears on either side.
-            const QRectF can = r.adjusted(r.width() * 0.14, r.height() * 0.06,
-                                          -r.width() * 0.14, -r.height() * 0.06);
-            path.addRoundedRect(can, s * 0.22, s * 0.22);
-            const qreal earH = r.height() * 0.36, earW = r.width() * 0.16;
-            path.addRect(QRectF(r.left(), r.center().y() - earH / 2.0, earW, earH));
-            path.addRect(QRectF(r.right() - earW, r.center().y() - earH / 2.0, earW, earH));
+            const qreal w = r.width(), h = r.height(), cx = r.center().x();
+            if (!elevation)
+            {
+                // From above: its base, the round cap over the glass.
+                path.addRoundedRect(centredSquare(r, 0.92), s * 0.16, s * 0.16);
+                return path;
+            }
+            /* A hurricane / porch lantern: the hook it hangs by, a cap
+               narrowing to the top, the glass, and its base. */
+            path.addRect(QRectF(cx - w * 0.1, r.top(), w * 0.2, h * 0.08));
+            QPolygonF cap;
+            cap << QPointF(cx - w * 0.2, r.top() + h * 0.07)
+                << QPointF(cx + w * 0.2, r.top() + h * 0.07)
+                << QPointF(cx + w * 0.46, r.top() + h * 0.25)
+                << QPointF(cx - w * 0.46, r.top() + h * 0.25);
+            path.addPolygon(cap);
+            path.closeSubpath();
+            path.addRoundedRect(QRectF(cx - w * 0.36, r.top() + h * 0.24, w * 0.72, h * 0.57),
+                                w * 0.12, w * 0.12);
+            path.addRect(QRectF(cx - w * 0.45, r.top() + h * 0.8, w * 0.9, h * 0.16));
+            path.addRect(QRectF(cx - w * 0.4, r.top() + h * 0.95, w * 0.8, h * 0.05));
             return path;
         }
         case Fixture::StaffLook:
         {
-            // A thin rod, standing on a small foot where it is seen standing.
+            // From above, a pole is a dot.
+            if (!elevation)
+            {
+                path.addEllipse(centredSquare(r, 0.6));
+                return path;
+            }
+            // A thin pole, standing on a small foot.
             const AxisFrame f = axisFrame(r, true);
             const qreal T = qMax(2.0, qMin(f.thick(), f.len() * 0.22));
             const QRectF rod = f.bandPx(0.0, elevation ? 0.92 : 1.0, T);
@@ -589,9 +618,15 @@ QRectF stageLookLensRect(Fixture::StageLook look, const QRectF &r, bool elevatio
         case Fixture::FollowspotLook:
             return axisFrame(r, false).band(0.84, 0.98, 0.8);
         case Fixture::LanternLook:
-            return centredSquare(r, 0.6);
+            if (!elevation)
+                return centredSquare(r, 0.66);
+            // Its glass.
+            return QRectF(r.center().x() - r.width() * 0.28, r.top() + r.height() * 0.29,
+                          r.width() * 0.56, r.height() * 0.47);
         case Fixture::StaffLook:
         {
+            if (!elevation)
+                return centredSquare(r, 0.42);      // inside the dot
             const AxisFrame f = axisFrame(r, true);
             const qreal T = qMax(2.0, qMin(f.thick(), f.len() * 0.22));
             return f.bandPx(0.03, elevation ? 0.89 : 0.97, qMax(1.0, T - 2.0));
@@ -638,8 +673,10 @@ QRectF stageLookLensRect(Fixture::StageLook look, const QRectF &r, bool elevatio
 QPainterPath stageLookLensHint(Fixture::StageLook look, const QRectF &lens)
 {
     QPainterPath hint;
-    if (lens.width() < 6.0 || lens.height() < 6.0)
-        return hint;                            // too small to say anything
+    // Too small to say anything -- but a staff's pole is thin by nature.
+    if (look == Fixture::StaffLook ? (lens.width() < 1.0 || lens.height() < 1.0)
+                                   : (lens.width() < 6.0 || lens.height() < 6.0))
+        return hint;
     const QPointF c = lens.center();
     const qreal s = qMin(lens.width(), lens.height());
     switch (look)
@@ -669,6 +706,43 @@ QPainterPath stageLookLensHint(Fixture::StageLook look, const QRectF &lens)
             hint.addEllipse(lens.adjusted(s * 0.18, s * 0.18, -s * 0.18, -s * 0.18));
             hint.addEllipse(lens.adjusted(s * 0.34, s * 0.34, -s * 0.34, -s * 0.34));
             break;
+        case Fixture::StaffLook:
+        {
+            /* The LED strip wound round the pole from top to bottom, seen
+               from the side: diagonal turns of light with the pole between
+               them. Drawn as the gaps, so the light is the head's own. */
+            const bool upright = lens.height() >= lens.width();
+            const qreal L = upright ? lens.height() : lens.width();
+            const qreal T = upright ? lens.width() : lens.height();
+            if (L < T * 2.0)
+                break;                              // seen end on: no helix
+            const qreal pitch = qMax(4.0, T * 1.6);
+            const qreal slant = T * 0.7;
+            const qreal lit = pitch * 0.45;
+            QPainterPath gaps;
+            gaps.setFillRule(Qt::WindingFill);
+            for (int k = -2; k * pitch < L + pitch * 2; ++k)
+            {
+                const qreal a0 = k * pitch + lit, a1 = (k + 1) * pitch;
+                QPolygonF g;
+                if (upright)
+                    g << QPointF(lens.left(), lens.top() + a0)
+                      << QPointF(lens.right(), lens.top() + a0 - slant)
+                      << QPointF(lens.right(), lens.top() + a1 - slant)
+                      << QPointF(lens.left(), lens.top() + a1);
+                else
+                    g << QPointF(lens.left() + a0, lens.bottom())
+                      << QPointF(lens.left() + a0 - slant, lens.top())
+                      << QPointF(lens.left() + a1 - slant, lens.top())
+                      << QPointF(lens.left() + a1, lens.bottom());
+                gaps.addPolygon(g);
+                gaps.closeSubpath();
+            }
+            QPainterPath clip;
+            clip.addRect(lens);
+            hint = gaps.intersected(clip);
+            break;
+        }
         case Fixture::CycStripLook:
         case Fixture::StrobeLook:
         {
@@ -693,13 +767,21 @@ QPainterPath stageLookLensHint(Fixture::StageLook look, const QRectF &lens)
     return hint;
 }
 
-QSizeF stageLookDefaultSize(Fixture::StageLook look, double base)
+int stageLookLensHintAlpha(Fixture::StageLook look)
+{
+    // A staff's gaps are pole, not a mark on a lens: nearly opaque.
+    return look == Fixture::StaffLook ? 200 : 90;
+}
+
+QSizeF stageLookDefaultSize(Fixture::StageLook look, double base, bool elevation)
 {
     switch (look)
     {
         case Fixture::FollowspotLook:  return QSizeF(base * 2.6, base * 1.0);
-        case Fixture::LanternLook:     return QSizeF(base * 1.2, base * 1.0);
-        case Fixture::StaffLook:       return QSizeF(base * 0.45, base * 2.4);
+        case Fixture::LanternLook:     return elevation ? QSizeF(base * 0.8, base * 1.4)
+                                                        : QSizeF(base * 0.8, base * 0.8);
+        case Fixture::StaffLook:       return elevation ? QSizeF(base * 0.45, base * 2.4)
+                                                        : QSizeF(base * 0.5, base * 0.5);
         case Fixture::BarWashLook:     return QSizeF(base * 2.8, base * 0.7);
         case Fixture::SquareWashLook:  return QSizeF(base * 1.2, base * 1.2);
         case Fixture::UplightWashLook: return QSizeF(base * 1.4, base * 0.9);

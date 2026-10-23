@@ -871,10 +871,12 @@ QList<Fixture::StageLook> Fixture::stageLooks()
              // Moving
              MovingSpotLook, MovingRoundWashLook, MovingSquareWashLook,
              // Fixed conventional
-             LanternLook, ParCanLook, EllipsoidalLook, FresnelLook, FollowspotLook,
+             ParCanLook, EllipsoidalLook, FresnelLook, FollowspotLook,
              // Fixed LED
              LedParLook, SquareWashLook, BarWashLook, UplightWashLook, CycStripLook,
-             StrobeLook, StaffLook };
+             StrobeLook,
+             // Practicals: lights that are part of the set
+             LanternLook, StaffLook };
 }
 
 int Fixture::stageLookSection(StageLook look)
@@ -883,12 +885,13 @@ int Fixture::stageLookSection(StageLook look)
     {
         case MovingSpotLook: case MovingRoundWashLook: case MovingSquareWashLook:
             return MovingSection;
-        case LanternLook: case ParCanLook: case EllipsoidalLook: case FresnelLook:
-        case FollowspotLook:
+        case ParCanLook: case EllipsoidalLook: case FresnelLook: case FollowspotLook:
             return ConventionalSection;
         case LedParLook: case SquareWashLook: case BarWashLook: case UplightWashLook:
-        case CycStripLook: case StrobeLook: case StaffLook:
+        case CycStripLook: case StrobeLook:
             return LedSection;
+        case LanternLook: case StaffLook:
+            return PracticalSection;
         case AutoLook:
         default:
             return -1;
@@ -901,22 +904,26 @@ QString Fixture::stageLookSectionName(StageLookSection section)
     {
         case MovingSection:       return tr("Moving");
         case ConventionalSection: return tr("Fixed conventional");
-        case LedSection:
-        default:                  return tr("Fixed LED");
+        case LedSection:          return tr("Fixed LED");
+        case PracticalSection:
+        default:                  return tr("Practicals");
     }
 }
 
 Fixture::StageLook Fixture::autoStageLook() const
 {
     if (m_fixtureDef == NULL)
-        return LanternLook;                     // a generic dimmer: a conventional
+        return EllipsoidalLook;                 // a generic dimmer: a conventional
     switch (m_fixtureDef->type())
     {
         case QLCFixtureDef::ColorChanger: return LedParLook;
         case QLCFixtureDef::LEDBarBeams:
         case QLCFixtureDef::LEDBarPixels: return BarWashLook;
         case QLCFixtureDef::Strobe:       return StrobeLook;
-        case QLCFixtureDef::Dimmer:       return LanternLook;
+        /* A dimmer channel: a conventional, and the one on most rigs is
+           an ellipsoidal (a lantern is a practical now, not a theatre
+           lantern). */
+        case QLCFixtureDef::Dimmer:       return EllipsoidalLook;
         case QLCFixtureDef::Scanner:      return MovingSpotLook;
         case QLCFixtureDef::MovingHead:   break;
         default:                          return AutoLook;
