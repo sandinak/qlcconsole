@@ -65,6 +65,7 @@
 #define KXMLQLCMonitorOriginY       QStringLiteral("OriginY")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
+#define KXMLQLCMonitorAutoStageLooks QStringLiteral("AutoStageLooks")
 
 #define KXMLQLCMonitorCommonBackground  QStringLiteral("Background")
 #define KXMLQLCMonitorBgColor           QStringLiteral("BackgroundColor")
@@ -143,6 +144,13 @@ MonitorProperties::~MonitorProperties()
     freeRetired(true);
 }
 
+void MonitorProperties::setAutoStageLooks(bool on)
+{
+    if (m_autoStageLooks.exchange(on, std::memory_order_relaxed) == on)
+        return;
+    emit autoStageLooksChanged(on);
+}
+
 QByteArray MonitorProperties::snapshot(const Doc *mainDocument) const
 {
     QByteArray out;
@@ -200,8 +208,13 @@ bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainD
     auto oldTargets = m_stageTargets;    m_stageTargets.clear();
 
     const QList<quint32> before = m_rigProps.keys();
+    const bool autoLooksWere = autoStageLooks();
     reset();
     const bool ok = loadXML(r, mainDocument);
+    /* reset() clears it quietly and loadXML() only says so when it sets it
+       on: an undo back to "off" has to be said too. */
+    if (autoStageLooks() != autoLooksWere)
+        emit autoStageLooksChanged(autoStageLooks());
 
     /* ... then keep every one the snapshot has just as it is: the same
        object, so whatever holds it -- an editor still open around the one
@@ -284,6 +297,9 @@ void MonitorProperties::reset()
     m_occlusion.clear();
     m_stageOrigin = QPointF(0, 0);
     m_showLabels = true;
+    /* Quietly: a load or an undo snapshot sets it again straight after, and
+       its setter says so then if it differs. */
+    m_autoStageLooks.store(false, std::memory_order_relaxed);
     m_fixtureItems.clear();
     m_genericItems.clear();
     m_commonBackgroundImage = QString();
@@ -2328,6 +2344,9 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             setLabelsVisible(false);
     }
 
+    if (attrs.hasAttribute(KXMLQLCMonitorAutoStageLooks))
+        setAutoStageLooks(attrs.value(KXMLQLCMonitorAutoStageLooks).toString() == "1");
+
     if (attrs.hasAttribute(KXMLQLCMonitorLayoutLocked))
         setLayoutLocked(attrs.value(KXMLQLCMonitorLayoutLocked).toString() == "1");
 
@@ -3203,6 +3222,9 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     doc->writeStartElement(KXMLQLCMonitorProperties);
     doc->writeAttribute(KXMLQLCMonitorDisplay, QString::number(displayMode()));
     doc->writeAttribute(KXMLQLCMonitorShowLabels, QString::number(labelsVisible()));
+    // Only when on: a show that never turned it on saves as it always has.
+    if (autoStageLooks())
+        doc->writeAttribute(KXMLQLCMonitorAutoStageLooks, QString::number(1));
     if (layoutLocked())
         doc->writeAttribute(KXMLQLCMonitorLayoutLocked, QString::number(1));
     if (snapDivisions() > 0)

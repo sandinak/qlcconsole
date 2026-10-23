@@ -4,6 +4,14 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Auto fixtures can be shown as their closest look.** The plot's
+  **Show** menu has **Show Auto fixtures as their closest stage look**: a
+  fixture left on Auto gets the look its type is closest to (an LED PAR, a
+  moving head spot, an ellipsoidal...) -- its icon in the fixture lists and
+  the Show Tree, its shape on the plot and in the studio; a group of one
+  look shows it too. Off by default; saved with the show, so its plot is the same on
+  any computer. See [Stage looks](lighting-studio.md#stage-looks).
+
 - **Lanterns and staffs are practicals.** In the stage-look picker they
   have their own **Practicals** section. A **Lantern** is now a hurricane
   or porch lantern -- hook, cap, glass and base -- that glows all round

@@ -22186,3 +22186,183 @@ void Monitor_Test::aStaffIsAPoleWoundWithLedStrip()
     rig.fxi->setStageLook(Fixture::AutoLook);
 }
 
+namespace
+{
+/* What a fixture is drawn as, as far as the plot and studio go. */
+struct DrawnAs
+{
+    int kind, look;
+    float physW, physH;
+    bool omni;
+    QSize size;
+    bool roundHeads;
+    bool hint;
+    bool operator==(const DrawnAs &o) const
+    {
+        return kind == o.kind && look == o.look && physW == o.physW && physH == o.physH
+               && omni == o.omni && size == o.size && roundHeads == o.roundHeads && hint == o.hint;
+    }
+};
+
+DrawnAs drawnAs(MonitorGraphicsView *gv, Fixture *fx)
+{
+    const FixtureVisualTraits t = classifyFixture(fx);
+    MonitorFixtureItem *item = gv->m_fixtures.value(fx->id());
+    return DrawnAs{ int(t.kind), int(t.look), t.physW, t.physH, t.omni,
+                    item != nullptr ? QSize(item->m_width, item->m_height) : QSize(),
+                    item != nullptr && qgraphicsitem_cast<QGraphicsEllipseItem *>(
+                                           item->m_heads.first()->m_item) != nullptr,
+                    item != nullptr && !item->lensHintPath().isEmpty() };
+}
+
+Fixture *addDefFixture(Doc *doc, QLCFixtureDef::FixtureType type, const QList<QLCChannel::Group> &groups,
+                       const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(name);
+    def->setType(type);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Mode");
+    for (int k = 0; k < groups.size(); ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(k));
+        ch->setGroup(groups.at(k));
+        if (groups.at(k) == QLCChannel::Intensity && k > 0)
+            ch->setColour(k == 1 ? QLCChannel::Red : k == 2 ? QLCChannel::Green : QLCChannel::Blue);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+    }
+    def->addMode(mode);
+    Fixture *fx = new Fixture(doc);
+    fx->setName(name);
+    fx->setFixtureDefinition(def, mode);
+    fx->setAddress(address);
+    return doc->addFixture(fx) ? fx : nullptr;
+}
+}
+
+void Monitor_Test::autoFixturesCanBeDrawnAsTheirClosestLook()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(3000, 3000, 0)));            // a generic dimmer
+    MonitorProperties *props = m_doc->monitorProperties();
+    QVERIFY(!props->autoStageLooks());
+
+    Fixture *par = addDefFixture(m_doc, QLCFixtureDef::ColorChanger,
+                                 { QLCChannel::Intensity, QLCChannel::Intensity,
+                                   QLCChannel::Intensity, QLCChannel::Intensity }, "AutoPar", 300);
+    Fixture *spot = addDefFixture(m_doc, QLCFixtureDef::MovingHead,
+                                  { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Gobo,
+                                    QLCChannel::Intensity }, "AutoSpot", 320);
+    QVERIFY(par != nullptr && spot != nullptr);
+    auto cleanup = qScopeGuard([this, par, spot]() {
+        QLCFixtureDef *a = par->fixtureDef(), *b = spot->fixtureDef();
+        m_doc->deleteFixture(par->id());
+        m_doc->deleteFixture(spot->id());
+        delete a;
+        delete b;
+    });
+    // On the plot, and kept there (a rebuild of the plot re-adds them).
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(5000, 3000, 0));
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(7000, 3000, 0));
+    rig.gv->addFixture(par->id(), QPointF(5000, 3000));
+    rig.gv->addFixture(spot->id(), QPointF(7000, 3000));
+    QCOMPARE(int(rig.fxi->autoStageLook()), int(Fixture::EllipsoidalLook));
+    QCOMPARE(int(par->autoStageLook()), int(Fixture::LedParLook));
+    QCOMPARE(int(spot->autoStageLook()), int(Fixture::MovingSpotLook));
+
+    const QList<Fixture *> fixtures { rig.fxi, par, spot };
+    QList<DrawnAs> today, asLook;
+    foreach (Fixture *fx, fixtures)
+        today << drawnAs(rig.gv, fx);
+    // Each set to its closest look explicitly: what "on" must match.
+    foreach (Fixture *fx, fixtures)
+    {
+        fx->setStageLook(fx->autoStageLook());
+        asLook << drawnAs(rig.gv, fx);
+        fx->setStageLook(Fixture::AutoLook);
+    }
+    for (int i = 0; i < fixtures.size(); ++i)
+        QVERIFY2(drawnAs(rig.gv, fixtures.at(i)) == today.at(i), qPrintable(fixtures.at(i)->name()));
+    QCOMPARE(today.at(0).look, int(Fixture::AutoLook));
+
+    // On, from the plot's Show menu: drawn as the look, and one undo.
+    QAction *toggle = rig.mon->findChild<QAction *>("autoStageLooksAction");
+    QVERIFY(toggle != nullptr);
+    QVERIFY(!toggle->isChecked());
+    const QByteArray before = rig.mon->rigSnapshot();
+    toggle->trigger();
+    QVERIFY(props->autoStageLooks());
+    QVERIFY(m_doc->isModified());
+    for (int i = 0; i < fixtures.size(); ++i)
+    {
+        QVERIFY2(drawnAs(rig.gv, fixtures.at(i)) == asLook.at(i), qPrintable(fixtures.at(i)->name()));
+        QCOMPARE(int(fixtures.at(i)->stageLook()), int(Fixture::AutoLook));   // still Auto
+    }
+    // An explicit look still wins.
+    par->setStageLook(Fixture::StrobeLook);
+    QCOMPARE(int(classifyFixture(par).look), int(Fixture::StrobeLook));
+    par->setStageLook(Fixture::AutoLook);
+    QCOMPARE(int(classifyFixture(par).look), int(Fixture::LedParLook));
+
+    // Drawn in every view without complaint.
+    QImage img(600, 300, QImage::Format_ARGB32_Premultiplied);
+    for (MonitorGraphicsView::ViewPOV pov : { MonitorGraphicsView::PovTop, MonitorGraphicsView::PovFront,
+                                              MonitorGraphicsView::PovSide })
+    {
+        rig.gv->setViewPOV(pov);
+        img.fill(Qt::black);
+        QPainter p(&img);
+        rig.gv->scene()->render(&p);
+    }
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    // Undo: off again, and exactly today's drawing.
+    rig.mon->restoreRig(before);
+    QVERIFY(!props->autoStageLooks());
+    QVERIFY(!toggle->isChecked());
+    /* restoreRig() lays the plot out afresh (its own cell size), so the
+       sizes are the plot's, not the look's: everything else is today's. */
+    for (int i = 0; i < fixtures.size(); ++i)
+    {
+        DrawnAs now = drawnAs(rig.gv, fixtures.at(i));
+        now.size = today.at(i).size;
+        QVERIFY2(now == today.at(i), qPrintable(fixtures.at(i)->name()));
+    }
+    // From here, today's sizes are this layout's.
+    for (int i = 0; i < fixtures.size(); ++i)
+        today[i].size = drawnAs(rig.gv, fixtures.at(i)).size;
+
+    // The toggle off by hand restores it too.
+    toggle->trigger();
+    QVERIFY(props->autoStageLooks());
+    toggle->trigger();
+    QVERIFY(!props->autoStageLooks());
+    for (int i = 0; i < fixtures.size(); ++i)
+        QVERIFY2(drawnAs(rig.gv, fixtures.at(i)) == today.at(i), qPrintable(fixtures.at(i)->name()));
+
+    // The studio: an Auto dimmer on a truss drawn as an ellipsoidal, in
+    // every plane, and as before when off.
+    StudioRig studio;
+    QVERIFY(studio.build(m_doc));
+    studio.view->setPlane(StructureStudioView::Front);
+    const QPointF c(100, 100);
+    const QRectF offRect = studio.view->parBodyRect(classifyFixture(studio.fxi), c);
+    studio.fxi->setStageLook(Fixture::EllipsoidalLook);
+    const QRectF setRect = studio.view->parBodyRect(classifyFixture(studio.fxi), c);
+    studio.fxi->setStageLook(Fixture::AutoLook);
+    props->setAutoStageLooks(true);
+    QCOMPARE(studio.view->parBodyRect(classifyFixture(studio.fxi), c), setRect);
+    for (StructureStudioView::Plane plane : { StructureStudioView::Top, StructureStudioView::Front,
+                                              StructureStudioView::Side, StructureStudioView::Angled })
+    {
+        studio.view->setPlane(plane);
+        QVERIFY(!studio.view->grab().toImage().isNull());
+    }
+    studio.view->setPlane(StructureStudioView::Front);
+    props->setAutoStageLooks(false);
+    QCOMPARE(studio.view->parBodyRect(classifyFixture(studio.fxi), c), offRect);
+}
+

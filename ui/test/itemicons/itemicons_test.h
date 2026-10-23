@@ -49,6 +49,10 @@ private slots:
      *  moving head, and anything else its own type's icon. */
     void aFixtureShowsWhatItIs();
     void aStageLookKeepsTheOutputRulesBadge();
+    /** The show's "Auto fixtures as their closest stage look": on, an Auto
+     *  fixture wears its closest look's icon (badge and all); off, exactly
+     *  today's; a group of one look wears it too. */
+    void anAutoFixtureWearsItsClosestLookWhenTheShowSaysSo();
     /** A group of one kind wears that kind (stacked); a mixed one the group
      *  icon; a layer on a group the same. */
     void aGroupOfOneKindShowsIt();

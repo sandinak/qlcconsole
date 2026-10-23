@@ -605,9 +605,11 @@ public:
      *  Changer is an LED PAR, an LED bar a bar wash, a Strobe a strobe, a
      *  moving head a spot or a wash by its gobo / zoom channels or its name,
      *  a dimmer (or a generic dimmer channel) an ellipsoidal. AutoLook when nothing is close (a hazer, a fan).
-     *  What "Auto (...)" names in a picker; Auto itself still draws as the
-     *  definition's type always has. */
-    StageLook autoStageLook() const;
+     *  What "Auto (...)" names in a picker, and what an Auto fixture is
+     *  drawn as when the show says so (MonitorProperties::autoStageLooks()).
+     *  Worked out when the definition is set, so reading it is free -- the
+     *  rig views read it per fixture per frame, on worker threads too. */
+    StageLook autoStageLook() const { return StageLook(m_autoStageLook.load(std::memory_order_relaxed)); }
     /** The XML / stable key of @p look ("Auto", "Followspot", ...). */
     static QString stageLookToString(StageLook look);
     /** The look for @p key; AutoLook for anything unknown (a newer file). */
@@ -622,6 +624,10 @@ public:
 
 protected:
     std::atomic<int> m_stageLook { AutoLook };
+    /** autoStageLook(), cached by setFixtureDefinition(). No definition: a
+     *  generic dimmer channel, an ellipsoidal. */
+    std::atomic<int> m_autoStageLook { EllipsoidalLook };
+    StageLook computeAutoStageLook() const;
 
 public:
     QRectF degreesRange(int head) const;

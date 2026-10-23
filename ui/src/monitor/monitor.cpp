@@ -243,6 +243,18 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     });
 }
 
+void Monitor::refreshStageLooks()
+{
+    /* Classified again only here, on the toggle: each item re-reads its
+       look (a no-op where it did not change), its size and its heads. */
+    if (m_graphicsView == nullptr)
+        return;
+    foreach (Fixture *fx, m_doc->fixtures())
+        m_graphicsView->updateFixture(fx->id());
+    if (m_graphicsView->scene() != nullptr)
+        m_graphicsView->scene()->update();
+}
+
 void Monitor::slotFunctionStarted(quint32 id)
 {
     if (m_props->displayMode() == MonitorProperties::Graphics)
@@ -825,6 +837,29 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     labelsBtn->setCheckable(true);
     labelsBtn->setChecked(m_props->labelsVisible());
     connect(labelsBtn, &QAction::toggled, this, [this](bool on) { slotShowLabels(on); });
+
+    /* Fixtures left on Auto drawn as their closest stage look (an LED PAR,
+       a moving head spot...) instead of by their definition's type. Per
+       show, saved with it; one Ctrl+Z, like any change to the plot. */
+    QAction *autoLooksBtn = showMenu->addAction(tr("Show Auto fixtures as their closest stage look"));
+    autoLooksBtn->setObjectName(QStringLiteral("autoStageLooksAction"));
+    autoLooksBtn->setCheckable(true);
+    autoLooksBtn->setChecked(m_props->autoStageLooks());
+    autoLooksBtn->setToolTip(tr("Show every fixture whose Stage look is Auto as the look its type is "
+                                "closest to -- its icon in the lists, and its shape on the plot and in the studio. Saved with the show."));
+    connect(autoLooksBtn, &QAction::toggled, this, [this](bool on) {
+        if (on == m_props->autoStageLooks())
+            return;
+        RigEditSession edit(this);
+        m_props->setAutoStageLooks(on);     // autoStageLooksChanged(): redrawn below
+        m_doc->setModified();
+    });
+    connect(m_props, &MonitorProperties::autoStageLooksChanged, this, [this, autoLooksBtn](bool on) {
+        autoLooksBtn->blockSignals(true);
+        autoLooksBtn->setChecked(on);
+        autoLooksBtn->blockSignals(false);
+        refreshStageLooks();
+    });
 
     /* Fixtures-on-structures. A truss or riser covered by its own fixtures is
        hard to click in the top view; hiding them clears the plot while

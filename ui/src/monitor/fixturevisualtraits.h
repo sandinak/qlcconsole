@@ -112,6 +112,12 @@ FixtureVisualTraits classifyFixture(Fixture *fx);
  *  and classifyFixture() marks it omni. */
 FixtureSilhouette stageLookSilhouette(Fixture::StageLook look, FixtureSilhouette autoKind);
 
+/** The look @p fx is DRAWN with: its own stage look; on Auto, its closest
+ *  look (Fixture::autoStageLook()) when its show draws Auto fixtures so
+ *  (MonitorProperties::autoStageLooks()), else AutoLook. classifyFixture()
+ *  puts this in FixtureVisualTraits::look. */
+Fixture::StageLook drawnStageLook(const Fixture *fx);
+
 /** True when @p fx's declared size is made up (a generic dimmer's 300 mm a
  *  channel), so a stage look's own proportions are used instead. */
 bool stageLookIgnoresPhysical(const Fixture *fx);

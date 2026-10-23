@@ -92,6 +92,10 @@ public:
      *  (a fixture can be listed under its universe and in groups). */
     void refreshFixtureName(quint32 id);
 
+    /** Every fixture and group row's icon again: what Auto fixtures are
+     *  shown as changed (Doc::stageLooksChanged()). */
+    void refreshStageLookIcons();
+
     /** Show only rows whose text (any column: name, manufacturer, model...)
      *  contains @p text, ignoring case; a folder stays shown -- and opens --
      *  while anything inside it matches. Empty shows everything. Returns how

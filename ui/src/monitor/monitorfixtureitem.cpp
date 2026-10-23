@@ -468,7 +468,7 @@ static QAbstractGraphicsShapeItem *reshapeHead(QAbstractGraphicsShapeItem *old, 
 void MonitorFixtureItem::refreshStageLook()
 {
     Fixture *fxi = m_doc->fixture(m_fid);
-    if (fxi == NULL || fxi->stageLook() == m_traits.look)
+    if (fxi == NULL || drawnStageLook(fxi) == m_traits.look)
         return;
     m_traits = classifyFixture(fxi);
     const bool rectHeads = m_denseHeads || stageLookSquareLens(m_traits.look);

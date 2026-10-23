@@ -2241,7 +2241,11 @@ void Doc::slotFunctionNameChanged(quint32 fid)
 MonitorProperties *Doc::monitorProperties()
 {
     if (m_monitorProps == NULL)
+    {
         m_monitorProps = new MonitorProperties();
+        connect(m_monitorProps, &MonitorProperties::autoStageLooksChanged,
+                this, [this](bool) { emit stageLooksChanged(); });
+    }
 
     return m_monitorProps;
 }

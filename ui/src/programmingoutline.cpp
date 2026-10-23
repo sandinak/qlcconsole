@@ -149,6 +149,8 @@ ProgrammingOutline::ProgrammingOutline(Doc *doc, QWidget *parent)
                           &Doc::fixtureGroupChanged, &Doc::fixtureChanged,
                           &Doc::fixtureRemoved, &Doc::paletteAdded, &Doc::paletteRemoved })
             connect(m_doc, sig, this, [this](quint32) { scheduleRebuild(); });
+        // Auto fixtures shown as their closest look, or not: their icons.
+        connect(m_doc, &Doc::stageLooksChanged, this, [this]() { scheduleRebuild(); });
         connect(m_doc, &Doc::loaded, this, [this]() {
             // Folders | Classic, as this show was left (W2).
             if (m_mode == Navigator && savedArrangement() != m_arrangement)

@@ -65,6 +65,9 @@ private slots:
     void escCancelsAGroupRename();
     /** F2 does the same; an empty name keeps the old one. */
     void f2OnAGroupAndAnEmptyNameIsRejected();
+    /** The show's "Auto fixtures as their closest stage look" turned on,
+     *  off, or back by an undo snapshot: the rows' icons follow. */
+    void iconsFollowTheAutoLookSetting();
 
 private:
     Doc* m_doc;

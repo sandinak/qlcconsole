@@ -24,6 +24,7 @@
 #include <QMutex>
 #include "qlcengine_export.h"
 #include <functional>
+#include <atomic>
 #include <QVector3D>
 #include <QPointF>
 #include <QColor>
@@ -256,6 +257,15 @@ public:
     inline void setLabelsVisible(bool visible) { m_showLabels = visible; }
     inline bool labelsVisible() const { return m_showLabels; }
 
+    /** Draw fixtures left on Auto as their closest stage look
+     *  (Fixture::autoStageLook()) in the plot and the studio, rather than by
+     *  their definition's type as always. Per show, saved with it (only when
+     *  on), so a plot looks the same on every computer; off by default.
+     *  Read lock-free: the rig views classify fixtures on worker threads.
+     *  Emits autoStageLooksChanged() when it changes. */
+    bool autoStageLooks() const { return m_autoStageLooks.load(std::memory_order_relaxed); }
+    void setAutoStageLooks(bool on);
+
     /** Remove a Fixture entry from the Monitor map by Fixture ID */
     void removeFixture(quint32 fid);
 
@@ -320,6 +330,7 @@ public:
 
 private:
     bool m_showLabels;
+    std::atomic<bool> m_autoStageLooks { false };
     QMap <quint32, FixturePreviewItem> m_fixtureItems;
 
     /********************************************************************
@@ -859,6 +870,11 @@ public:
     QString mountDescription(const FixtureRigProps &rp, quint32 fid) const;
 
 signals:
+    /** The show's "draw Auto fixtures as their closest stage look" changed
+     *  (setAutoStageLooks(), or a show / undo snapshot loaded with it): every
+     *  view that draws fixtures classifies them again. */
+    void autoStageLooksChanged(bool on);
+
     /** Emitted when a fixture's rig assignment changes (mounting, pan-zero
      *  facing, truss, offset) so live Aim looks can re-resolve immediately
      *  instead of only after the scene is restarted. */

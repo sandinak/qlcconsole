@@ -54,6 +54,10 @@
 #include "scene.h"
 #include "app.h"
 #include "doc.h"
+#include "monitorproperties.h"
+#include "fixturegroup.h"
+#include "monitor/fixturevisualtraits.h"
+#include <QSignalSpy>
 
 #include "itemicons_test.h"
 
@@ -320,6 +324,85 @@ void ItemIcons_Test::aStageLookKeepsTheOutputRulesBadge()
 
     dimmer->setOutputRules(Fixture::OutputRules());
     QCOMPARE(fixtureIcon(dimmer).pixmap(32, 32).toImage(), plain);
+}
+
+static QImage iconImage(const QIcon &icon)
+{
+    return icon.pixmap(32, 32).toImage();
+}
+
+void ItemIcons_Test::anAutoFixtureWearsItsClosestLookWhenTheShowSaysSo()
+{
+    const int none = -1;
+    Fixture *par = makeFixture(QLCFixtureDef::ColorChanger, QStringLiteral("Par"),
+                               { { QLCChannel::Intensity, QLCChannel::IntensityRed },
+                                 { QLCChannel::Intensity, QLCChannel::IntensityGreen },
+                                 { QLCChannel::Intensity, QLCChannel::IntensityBlue } });
+    Fixture *spot = makeFixture(QLCFixtureDef::MovingHead, QStringLiteral("Spot"),
+                                { { QLCChannel::Pan, none }, { QLCChannel::Tilt, none },
+                                  { QLCChannel::Gobo, none } });
+    QCOMPARE(par->autoStageLook(), Fixture::LedParLook);
+    QCOMPARE(spot->autoStageLook(), Fixture::MovingSpotLook);
+    MonitorProperties *props = m_doc->monitorProperties();
+    QVERIFY(!props->autoStageLooks());
+
+    // Off: today's icons, exactly -- the kind icons.
+    QCOMPARE(fixtureIcon(par).name(), QString("kind:%1:0").arg(int(FixedWash)));
+    QCOMPARE(fixtureIcon(spot).name(), QString("kind:%1:0").arg(int(MovingSpot)));
+    const QImage parToday = iconImage(fixtureIcon(par));
+
+    // What the closest look's icon is, set explicitly.
+    par->setStageLook(Fixture::LedParLook);
+    const QImage parLook = iconImage(fixtureIcon(par));
+    QVERIFY(!parLook.isNull());
+    QVERIFY(parLook != parToday);
+    par->setStageLook(Fixture::AutoLook);
+
+    // On: the Auto fixture wears it, and stays Auto.
+    QSignalSpy relay(m_doc, &Doc::stageLooksChanged);
+    props->setAutoStageLooks(true);
+    QCOMPARE(relay.count(), 1);
+    QCOMPARE(iconImage(fixtureIcon(par)), parLook);
+    QCOMPARE(par->stageLook(), Fixture::AutoLook);
+    // A set look still wins.
+    par->setStageLook(Fixture::StrobeLook);
+    QCOMPARE(iconImage(fixtureIcon(par)), iconImage(QIcon(":/look_strobe.png")));
+    par->setStageLook(Fixture::AutoLook);
+    // The output-rules badge still applies.
+    par->setOutputRules(Fixture::ExemptBlackout);
+    const QImage badged = iconImage(fixtureIcon(par));
+    QVERIFY(!badged.isNull());
+    QVERIFY(badged != parLook);
+    par->setOutputRules(Fixture::OutputRules());
+
+    // A group of one look wears it, badged as a group; a mixed one as before.
+    FixtureGroup *pars = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(pars);
+    Fixture *par2 = makeFixture(QLCFixtureDef::ColorChanger, QStringLiteral("Par 2"),
+                                { { QLCChannel::Intensity, QLCChannel::IntensityRed },
+                                  { QLCChannel::Intensity, QLCChannel::IntensityGreen },
+                                  { QLCChannel::Intensity, QLCChannel::IntensityBlue } });
+    QVERIFY(pars->assignFixture(par->id()));
+    QVERIFY(pars->assignFixture(par2->id()));
+    QCOMPARE(groupStageLook(m_doc, pars), Fixture::LedParLook);
+    QCOMPARE(groupIcon(m_doc, pars).name(), lookGroupIcon(Fixture::LedParLook).name());
+    QVERIFY(!iconImage(groupIcon(m_doc, pars)).isNull());
+    QVERIFY(pars->assignFixture(spot->id()));
+    QCOMPARE(groupStageLook(m_doc, pars), Fixture::AutoLook);
+    QVERIFY(groupIcon(m_doc, pars).name().isEmpty());          // mixed: the stock group icon
+
+    // Off again: exactly today's, fixtures and groups.
+    props->setAutoStageLooks(false);
+    QCOMPARE(relay.count(), 2);
+    QCOMPARE(fixtureIcon(par).name(), QString("kind:%1:0").arg(int(FixedWash)));
+    QCOMPARE(iconImage(fixtureIcon(par)), parToday);
+    pars->resignFixture(spot->id());
+    QCOMPARE(groupIcon(m_doc, pars).name(), QString("kind:%1:1").arg(int(FixedWash)));
+
+    // No show to ask: its own look, nothing else.
+    Fixture loose;
+    QCOMPARE(drawnStageLook(&loose), Fixture::AutoLook);
+    QVERIFY(!fixtureIcon(&loose).isNull());
 }
 
 void ItemIcons_Test::aGroupOfOneKindShowsIt()

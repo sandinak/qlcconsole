@@ -50,7 +50,7 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
         /* The LD's own word for what it looks like, over the type's. One
            relaxed atomic read: this runs per fixture per frame, on the
            studio's worker threads too. */
-        t.look = fx->stageLook();
+        t.look = drawnStageLook(fx);
         t.kind = stageLookSilhouette(t.look, t.kind);
         /* A generic dimmer's 300 mm a channel is made up: with a look, the
            look's own proportions say more (a followspot on a dimmer channel
@@ -358,6 +358,23 @@ FixtureSilhouette stageLookSilhouette(Fixture::StageLook look, FixtureSilhouette
         default:
             return autoKind;
     }
+}
+
+Fixture::StageLook drawnStageLook(const Fixture *fx)
+{
+    if (fx == nullptr)
+        return Fixture::AutoLook;
+    const Fixture::StageLook own = fx->stageLook();
+    if (own != Fixture::AutoLook)
+        return own;
+    /* Auto: its closest look when the show says to draw it so. Both reads
+       are relaxed atomics and the look is cached on the fixture, so this
+       costs nothing per frame. */
+    Doc *doc = qobject_cast<Doc *>(fx->parent());
+    MonitorProperties *props = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (props != nullptr && props->autoStageLooks())
+        return fx->autoStageLook();
+    return Fixture::AutoLook;
 }
 
 bool stageLookIgnoresPhysical(const Fixture *fx)

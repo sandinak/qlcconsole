@@ -70,6 +70,8 @@ FixtureGroupSource::FixtureGroupSource(Doc *doc, QWidget *parent)
     // loop ends — iterating it here would touch freed memory (shutdown crash).
     connect(m_doc, &Doc::clearing, this, [this]() { m_clearing = true; });
     connect(m_doc, &Doc::loaded,   this, [this]() { m_clearing = false; reload(); });
+    // Auto fixtures shown as their closest look, or not: their icons.
+    connect(m_doc, &Doc::stageLooksChanged, this, &FixtureGroupSource::reload);
 
     // Mirror the Fixture Manager: refresh whenever fixtures or groups change.
     connect(m_doc, SIGNAL(fixtureAdded(quint32)), this, SLOT(reload()));

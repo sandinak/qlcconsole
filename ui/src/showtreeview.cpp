@@ -1832,6 +1832,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                          &Doc::paletteAdded, &Doc::paletteRemoved })
         connect(m_doc, signal, m_libraryTimer, QOverload<>::of(&QTimer::start));
     connect(m_doc, &Doc::loaded, this, &ShowTreeView::reload);
+    // Auto fixtures shown as their closest look, or not: the Library's and
+    // the layers' icons.
+    connect(m_doc, &Doc::stageLooksChanged, this, &ShowTreeView::reload);
     connect(m_doc, &Doc::loaded, this, [this]() {
         m_bridgeDismissed = false;
         updateBridgeBanner();
