@@ -28,6 +28,7 @@
 #include <QContextMenuEvent>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QListWidget>
 
 #define protected public
 #define private public
@@ -47,6 +48,7 @@
 #include "apputil.h"
 #include "showstatus.h"
 #include "networkroute.h"
+#include "inputoutputmanager.h"
 
 #undef private
 #undef protected
@@ -2115,4 +2117,78 @@ void ConnectionsTree_Test::offlinePatchesShowKeptNotUnpatched()
     QVERIFY(rowsWithText(tree.m_tree, "kept, will reconnect").isEmpty());
 
     NetworkRoute::setResolverForTest(nullptr, nullptr);
+}
+
+/* Answer the next modal message box with @p button. */
+static void answerNextMessageBox(QMessageBox::StandardButton button)
+{
+    QTimer::singleShot(0, [button]() {
+        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QVERIFY2(box != nullptr, "no message box came up");
+        if (box != nullptr)
+            box->button(button)->click();
+    });
+}
+
+void ConnectionsTree_Test::ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack()
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+    InputOutputManager mgr(nullptr, m_doc);
+    QAction *add = mgr.m_addUniverseAction;
+    QAction *del = mgr.m_deleteUniverseAction;
+    QAction *undo = mgr.m_undoPatchAction;
+    QVERIFY(add != nullptr && del != nullptr && undo != nullptr);
+    QCOMPARE(add->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_N));
+    QCOMPARE(del->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_D));
+    QCOMPARE(undo->shortcut(), QKeySequence(QKeySequence::Undo));
+    // Connections' own: not the window's New / Dump DMX.
+    QCOMPARE(add->shortcutContext(), Qt::WidgetWithChildrenShortcut);
+    QCOMPARE(del->shortcutContext(), Qt::WidgetWithChildrenShortcut);
+    QCOMPARE(undo->shortcutContext(), Qt::WidgetWithChildrenShortcut);
+
+    const quint32 before = io->universesCount();
+    QVERIFY(before > 0);
+    QCOMPARE(quint32(mgr.m_list->count()), before);
+    QVERIFY(!undo->isEnabled());
+
+    // Ctrl+N: one more, listed.
+    add->trigger();
+    QCOMPARE(io->universesCount(), before + 1);
+    QCOMPARE(quint32(mgr.m_list->count()), before + 1);
+    QVERIFY(m_doc->isModified());
+    QVERIFY(undo->isEnabled());
+
+    // Undo: gone again.
+    answerNextMessageBox(QMessageBox::Yes);
+    undo->trigger();
+    QCOMPARE(io->universesCount(), before);
+    QCOMPARE(quint32(mgr.m_list->count()), before);
+
+    // Ctrl+D deletes only the last universe: offered there, not elsewhere.
+    add->trigger();
+    QCOMPARE(io->universesCount(), before + 1);
+    mgr.m_list->setCurrentRow(0);
+    QVERIFY(!del->isEnabled());
+    mgr.m_list->setCurrentRow(int(before));
+    QVERIFY(del->isEnabled());
+    const quint32 lastId = io->getUniverseID(int(before));
+    del->trigger();
+    QCOMPARE(io->universesCount(), before);
+    QCOMPARE(quint32(mgr.m_list->count()), before);
+
+    // Undo: back, with the same id.
+    QVERIFY(undo->isEnabled());
+    answerNextMessageBox(QMessageBox::Yes);
+    undo->trigger();
+    QCOMPARE(io->universesCount(), before + 1);
+    QCOMPARE(quint32(mgr.m_list->count()), before + 1);
+    QCOMPARE(io->getUniverseID(int(before)), lastId);
+
+    // Undo asked and declined: nothing changes.
+    mgr.m_list->setCurrentRow(int(before));
+    del->trigger();
+    QCOMPARE(io->universesCount(), before);
+    answerNextMessageBox(QMessageBox::No);
+    undo->trigger();
+    QCOMPARE(io->universesCount(), before);
 }

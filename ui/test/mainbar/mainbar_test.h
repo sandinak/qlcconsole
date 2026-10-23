@@ -61,6 +61,24 @@ private slots:
     /** Blind never survives into a show: Operate turns it off and greys it;
      *  Design gives the button back. */
     void operateClearsBlindAndGreysIt();
+    /** Stop all's menu, Fade 1 second and stop: the scene stops and its
+     *  light fades out over the second rather than snapping off */
+    void fadeOneSecondAndStopFadesTheLightOut();
+    /** Show-mode Lock (Ctrl+L): the footer says SHOW LOCKED, the Shows
+     *  timeline turns read-only and a console GM fader's moves are dropped;
+     *  a second press gives it all back */
+    void showModeLockLocksAndUnlocks();
+    /** GO / Back (Ctrl+Return, Ctrl+Shift+Return) from anywhere, in the
+     *  Control menu: they step the main cue list 1, 2, back to 1 */
+    void goAndBackStepTheMainCueList();
+    /** The footer's Next: menu holds GO, Back, Stop, Load and Open the Cue
+     *  List; Load lists a Sub GO cue's sub-cues and puts the one chosen on
+     *  standby */
+    void theFootersNextMenuLoadsASubCue();
+    /** With a Show Tree production current, the footer says whose GO it is */
+    void theFooterNamesTheCurrentProduction();
+    /** The footer's Grand Master: moving it sets the GM and dims the rig */
+    void theFooterGrandMasterDimsTheRig();
     /** Auto move-in-black: one setting of the show, three views (Show
      *  Tree MIB, Programming's Move in black menu, Settings → Show Tree),
      *  each following the others, saved and loaded with the show */
@@ -73,10 +91,14 @@ private slots:
 
 private:
     int topChrome();
+    quint32 addDimmerScene(quint32 *fixtureId);
+    void removeAddedFunctionsAndFixtures();
     void showTab(const QString &label);
 
     App *m_app = nullptr;
     QTemporaryDir m_dir;
+    QList<quint32> m_addedFunctions;
+    QList<quint32> m_addedFixtures;
 };
 
 #endif

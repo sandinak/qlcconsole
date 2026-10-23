@@ -78,6 +78,11 @@
 #include "patchinventorydialog.h"
 #include "fixturemanager.h"
 #include "itemicons.h"
+#include "outputrulesdialog.h"
+#include "outputrulekeeper.h"
+#include "universe.h"
+#include "genericfader.h"
+#include "fadechannel.h"
 #include <QActionGroup>
 #include <QTableWidget>
 #include <QHeaderView>
@@ -22366,3 +22371,414 @@ void Monitor_Test::autoFixturesCanBeDrawnAsTheirClosestLook()
     QCOMPARE(studio.view->parBodyRect(classifyFixture(studio.fxi), c), offRect);
 }
 
+/* Output Rules… (OutputRulesDialog::edit) with the Lighting Studio open: its
+   Apply is pushed as one rig undo step. */
+void Monitor_Test::outputRulesAreOneRigUndoStep()
+{
+    Doc *doc = new Doc(this);
+    QList<Fixture *> fx;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Circuit %1").arg(i + 1));
+        f->setChannels(1);
+        f->setUniverse(0);
+        f->setAddress(quint32(i));
+        QVERIFY(doc->addFixture(f));
+        fx << f;
+    }
+    fx[0]->setOutputRules(Fixture::Switch);      // the pair is mixed on Switch
+    Universe *uni = doc->inputOutputMap()->universes().at(0);
+    OutputRuleKeeper *keeper = doc->outputRuleKeeper();
+    QVERIFY(keeper != nullptr);
+    auto bits = [uni](int ch) { return int(uni->channelCapabilities(ushort(ch)) & Universe::OutputRuleBits); };
+    keeper->rebuild();
+    QCOMPARE(bits(0), int(Universe::SwitchOutput));
+    QCOMPARE(bits(1), 0);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QCOMPARE(Monitor::instance(), &mon);
+        const int undoBefore = mon.m_graphicsView->m_moveUndo.size();
+
+        Qt::CheckState switchShown = Qt::Unchecked;
+        driveDialog([&switchShown](QWidget *dlg) {
+            QCheckBox *bo = dlg->findChild<QCheckBox *>("outputRuleBlackout");
+            QCheckBox *sw = dlg->findChild<QCheckBox *>("outputRuleSwitch");
+            if (bo == nullptr || sw == nullptr)
+                return false;
+            switchShown = sw->checkState();
+            bo->setChecked(true);
+            return true;
+        });
+        QVERIFY(OutputRulesDialog::edit(nullptr, doc, {}, { fx[0]->id(), fx[1]->id() }));
+        QCOMPARE(switchShown, Qt::PartiallyChecked);
+        QCOMPARE(fx[0]->outputRules(), Fixture::Switch | Fixture::ExemptBlackout);
+        QCOMPARE(fx[1]->outputRules(), Fixture::OutputRules(Fixture::ExemptBlackout));
+        keeper->rebuild();
+        QCOMPARE(bits(0), int(Universe::SwitchOutput | Universe::BlackoutExempt));
+        QCOMPARE(bits(1), int(Universe::BlackoutExempt));
+        QCOMPARE(mon.m_graphicsView->m_moveUndo.size(), undoBefore + 1);   // one step
+
+        mon.undo();
+        QCOMPARE(fx[0]->outputRules(), Fixture::OutputRules(Fixture::Switch));
+        QCOMPARE(fx[1]->outputRules(), Fixture::OutputRules());
+        keeper->rebuild();
+        QCOMPARE(bits(0), int(Universe::SwitchOutput));
+        QCOMPARE(bits(1), 0);
+        QCOMPARE(mon.m_graphicsView->m_moveUndo.size(), undoBefore);
+
+        // Nothing changed in the dialog: no undo step at all.
+        driveDialog([](QWidget *dlg) { return dlg->findChild<QCheckBox *>("outputRuleBlackout") != nullptr; });
+        QVERIFY(!OutputRulesDialog::edit(nullptr, doc, {}, { fx[0]->id(), fx[1]->id() }));
+        QCOMPARE(mon.m_graphicsView->m_moveUndo.size(), undoBefore);
+        /* No redo to test: the Lighting Studio's rig undo is a one-way
+           stack (MonitorGraphicsView::undoLastMove), nothing redoes it. */
+    }
+    delete doc;
+}
+
+/* ⌘C / ⌘V on the plot (Monitor::slotCopySelected / slotPasteFeatures), by
+   their actions: what docs/features/shortcuts.md calls "Copy / paste
+   structures with their fixtures". */
+void Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("LX1");
+    bar->setOrigin(QVector3D(1.0f, 3.0f, 5.0f));
+    bar->setLength(6.0f);
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("LX1-%1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = bar->id();
+        rp.trussOffset = 1.0f + 3.0f * i;
+        props->setFixtureRigProps(f->id(), rp);
+    }
+    auto onTruss = [doc, props](quint32 tid) {
+        int n = 0;
+        for (Fixture *f : doc->fixtures())
+            if (props->fixtureRigProps(f->id()).trussId == tid)
+                ++n;
+        return n;
+    };
+    QCOMPARE(onTruss(bar->id()), 2);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setLayoutLocked(false);
+        gv->updateTrusses();
+        TrussItem *ti = gv->m_trussItems.value(bar->id());
+        QVERIFY(ti != nullptr);
+        gv->scene()->clearSelection();
+        ti->setSelected(true);
+
+        QAction *copy = nullptr;
+        for (QAction *a : mon.actions())
+            if (a->shortcut() == QKeySequence(QKeySequence::Copy))
+                copy = a;
+        QVERIFY(copy != nullptr);
+        QAction *paste = mon.m_pasteAction;
+        QVERIFY(paste != nullptr);
+        QCOMPARE(paste->shortcut(), QKeySequence(QKeySequence::Paste));
+        QVERIFY(!paste->isEnabled());                   // nothing copied yet
+
+        copy->trigger();
+        QVERIFY(paste->isEnabled());
+        paste->trigger();
+
+        QCOMPARE(props->trusses().size(), 2);
+        Truss *dup = nullptr;
+        for (Truss *t : props->trusses())
+            if (t != bar)
+                dup = t;
+        QVERIFY(dup != nullptr);
+        QCOMPARE(dup->name(), QString("LX1 copy"));
+        QCOMPARE(dup->length(), bar->length());
+        const QVector3D off = dup->origin() - bar->origin();
+        QVERIFY2(qAbs(off.x() - 0.5f) < 1e-4f && qAbs(off.y() - 0.5f) < 1e-4f && qAbs(off.z()) < 1e-4f,
+                 qPrintable(QString("pasted %1, %2, %3 off").arg(off.x()).arg(off.y()).arg(off.z())));
+        const quint32 dupId = dup->id();
+        QVERIFY(gv->m_trussItems.contains(dupId));
+        QEXPECT_FAIL("", "BUG: Monitor::slotCopySelected/pasteClipboard copy only the truss itself "
+                         "(TrussClip has no fixtures), so a pasted truss comes back bare, though "
+                         "shortcuts.md says ⌘C / ⌘V copy structures with their fixtures", Continue);
+        QCOMPARE(onTruss(dup->id()), 2);
+        QCOMPARE(onTruss(bar->id()), 2);                // the original keeps its own
+
+        // ⌘Z: the copy goes, everything else as it was.
+        const int fixturesNow = doc->fixtures().size();
+        mon.undo();
+        QCOMPARE(props->trusses().size(), 1);
+        QCOMPARE(props->trusses().first(), bar);
+        QVERIFY(!gv->m_trussItems.contains(dupId));
+        QCOMPARE(onTruss(bar->id()), 2);
+        QCOMPARE(doc->fixtures().size(), fixturesNow);     // the original's fixtures stay
+    }
+    delete doc;
+}
+
+/* Fixture Properties → Test orientation → Aim at target: what the dialog's
+   test fader sends is AimSolver's answer for that target (CHANGELOG 0.2.0:
+   it once had a solver of its own, 180 degrees out). */
+void Monitor_Test::testOrientationAimsWhereTheSolverSays()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *fx = makeMover(doc, 14.0, 0, "Test Head", QVector3D(2.0f, 3.0f, 3.0f));
+    QVERIFY(fx != nullptr);
+    Truss *bar = props->addTruss();
+    bar->setName("Rig");
+    bar->setOrigin(QVector3D(0.0f, 3.0f, 3.0f));
+    bar->setLength(6.0f);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 2.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fx->id(), rp);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("DSL mark");
+    mark->setX(4.0f); mark->setY(1.0f); mark->setZ(0.0f);
+
+    AimSolver::Solution sol;
+    QVERIFY(AimSolver::reach(doc, fx->id(), AimSolver::aimPointFor(doc, fx->id(), mark, false), sol));
+    QVERIFY(sol.reachable());
+    QLCFixtureMode *mode = fx->fixtureMode();
+    const quint32 panCh = mode->heads().first().channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    const quint32 tiltCh = mode->heads().first().channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+    auto valueOf = [](const QList<SceneValue> &svs, quint32 ch) {
+        for (const SceneValue &sv : svs)
+            if (sv.channel == ch)
+                return int(sv.value);
+        return -1;
+    };
+    const int wantPan = valueOf(fx->positionToValues(QLCChannel::Pan, sol.panDeg), panCh);
+    const int wantTilt = valueOf(fx->positionToValues(QLCChannel::Tilt, sol.tiltDeg), tiltCh);
+    QVERIFY(wantPan >= 0 && wantTilt >= 0);
+    /* 180 degrees out lands the pan far from here: the check below would
+       catch it, not just a rounding difference. */
+    const int wrongPan = valueOf(fx->positionToValues(QLCChannel::Pan,
+                                     std::fmod(sol.panDeg + 180.0f, 360.0f)), panCh);
+    QVERIFY(qAbs(wrongPan - wantPan) > 20);
+
+    Universe *uni = doc->inputOutputMap()->universes().at(int(fx->universe()));
+    auto testFader = [uni]() -> QSharedPointer<GenericFader> {
+        for (const QSharedPointer<GenericFader> &f : uni->faders())
+            if (!f.isNull() && f->name() == QStringLiteral("FixtureTest"))
+                return f;
+        return QSharedPointer<GenericFader>();
+    };
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        int sentPan = -1, sentTilt = -1;
+        bool hadFader = false;
+        driveDialog([&](QWidget *dlg) {
+            QComboBox *modeCb = dlg->findChild<QComboBox *>("testOrientation");
+            if (modeCb == nullptr)
+                return false;
+            QComboBox *targetCb = nullptr;
+            for (QComboBox *cb : dlg->findChildren<QComboBox *>())
+                if (cb != modeCb && cb->findText("DSL mark") >= 0)
+                    targetCb = cb;
+            QPushButton *test = findButtonByText(dlg, "Test");
+            if (targetCb == nullptr || test == nullptr || !test->isCheckable())
+                return false;
+            modeCb->setCurrentIndex(modeCb->findData(2));
+            targetCb->setCurrentIndex(targetCb->findText("DSL mark"));
+            test->setChecked(true);
+            QSharedPointer<GenericFader> f = testFader();
+            hadFader = !f.isNull();
+            if (hadFader)
+            {
+                for (const FadeChannel &fc : f->channels())
+                {
+                    if (fc.fixture() != fx->id())
+                        continue;
+                    if (fc.channel() == panCh)
+                        sentPan = int(fc.target());
+                    else if (fc.channel() == tiltCh)
+                        sentTilt = int(fc.target());
+                }
+            }
+            test->setChecked(false);
+            return true;
+        }, false);
+        mon.showFixtureItemEditor(fx->id());
+        QVERIFY2(hadFader, "Test did not take over the fixture's output");
+        QCOMPARE(sentPan, wantPan);
+        QCOMPARE(sentTilt, wantTilt);
+        QVERIFY(testFader().isNull());          // and lets go once off
+    }
+    delete doc;
+}
+
+/* A real drag on the plot's viewport, from the middle of @p item by
+   @p delta pixels. */
+static void dragOnPlot(MonitorGraphicsView *gv, QGraphicsItem *item, const QPoint &delta)
+{
+    const QPoint from = gv->mapFromScene(item->sceneBoundingRect().center());
+    QWidget *vp = gv->viewport();
+    QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, from);
+    QTest::mouseMove(vp, from + delta / 2);
+    QTest::mouseMove(vp, from + delta);
+    QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, from + delta);
+    QCoreApplication::processEvents();
+}
+
+void Monitor_Test::aLockedPlotRefusesADrag()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("Boom");
+    bar->setOrigin(QVector3D(2.0f, 8.0f, 4.0f));
+    bar->setLength(3.0f);
+    Fixture *f = new Fixture(doc);
+    f->setName("Free Par");
+    f->setChannels(1);
+    QVERIFY(doc->addFixture(f));
+    {
+        QWidget parent;
+        parent.resize(1400, 900);
+        Monitor *mon = new Monitor(&parent, doc);
+        auto gone = qScopeGuard([mon]() { delete mon; });
+        mon->resize(1400, 900);
+        mon->showGraphicsView();
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        gv->setSnapDivisions(0);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(20, 12));
+        gv->updateTrusses();
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(10000.0f, 6000.0f, 0.0f));
+        if (gv->fixtureItemForId(f->id()) == nullptr)
+            gv->addFixture(f->id(), QPointF(10000.0, 6000.0));
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        MonitorFixtureItem *fi = gv->fixtureItemForId(f->id());
+        TrussItem *ti = gv->m_trussItems.value(bar->id());
+        QVERIFY(fi != nullptr && ti != nullptr);
+
+        // Edit Plot, toggled to locked: neither moves, here or in the show.
+        QVERIFY(!mon->m_lockAction->isChecked());
+        mon->m_lockAction->setChecked(true);
+        QVERIFY(props->layoutLocked());
+        QVERIFY(gv->layoutLocked());
+        QCOMPARE(mon->m_lockAction->text(), QString("Plot Locked"));
+        QVERIFY(!(fi->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY(!(ti->flags() & QGraphicsItem::ItemIsMovable));
+        const QPointF fiAt = fi->pos();
+        const QVector3D fxAt = props->fixtureRigPosition(f->id());
+        dragOnPlot(gv, fi, QPoint(80, 40));
+        QCOMPARE(fi->pos(), fiAt);
+        QCOMPARE(props->fixtureRigPosition(f->id()), fxAt);
+        const QPointF tiAt = ti->pos();
+        const QVector3D barAt = bar->origin();
+        gv->scene()->clearSelection();
+        dragOnPlot(gv, ti, QPoint(60, 60));
+        QCOMPARE(ti->pos(), tiAt);
+        QCOMPARE(bar->origin(), barAt);
+
+        // Unlocked: the same drags move them, and it is stored.
+        mon->m_lockAction->setChecked(false);
+        QVERIFY(!props->layoutLocked());
+        QVERIFY(fi->flags() & QGraphicsItem::ItemIsMovable);
+        QVERIFY(ti->flags() & QGraphicsItem::ItemIsMovable);
+        gv->scene()->clearSelection();
+        dragOnPlot(gv, fi, QPoint(80, 40));
+        QVERIFY2(props->fixtureRigPosition(f->id()) != fxAt, "an unlocked fixture did not move: the drag is not reaching it");
+        gv->scene()->clearSelection();
+        dragOnPlot(gv, ti, QPoint(60, 60));
+        QVERIFY2(bar->origin() != barAt, "an unlocked truss did not move: the drag is not reaching it");
+    }
+    delete doc;
+}
+
+void Monitor_Test::aLockedFolderHoldsItsMembersAndItsSubFolders()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    QList<Fixture *> fx;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Floor %1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        QVERIFY(doc->addFixture(f));
+        fx << f;
+    }
+    {
+        QWidget parent;
+        parent.resize(1400, 900);
+        Monitor *mon = new Monitor(&parent, doc);
+        auto gone = qScopeGuard([mon]() { delete mon; });
+        mon->resize(1400, 900);
+        mon->showGraphicsView();
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        gv->setSnapDivisions(0);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(20, 12));
+        gv->setLayoutLocked(false);
+        for (int i = 0; i < 2; ++i)
+        {
+            const QPointF at(6000.0 + 8000.0 * i, 6000.0);
+            props->setFixturePosition(fx[i]->id(), 0, 0, QVector3D(float(at.x()), float(at.y()), 0.0f));
+            if (gv->fixtureItemForId(fx[i]->id()) == nullptr)
+                gv->addFixture(fx[i]->id(), at);
+        }
+        // "Floor" holds Floor 1, and the folder "Floor SL", which holds Floor 2.
+        const quint32 layer = props->activeLayerId();
+        const quint32 outer = 90001, inner = 90002;
+        props->createGroup(outer, "Floor", layer);
+        props->createGroup(inner, "Floor SL", layer, outer);
+        props->setFixtureGroup(fx[0]->id(), outer);
+        props->setFixtureGroup(fx[1]->id(), inner);
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        gv->refreshItemLayerState();
+        MonitorFixtureItem *a = gv->fixtureItemForId(fx[0]->id());
+        MonitorFixtureItem *b = gv->fixtureItemForId(fx[1]->id());
+        QVERIFY(a != nullptr && b != nullptr);
+        QVERIFY(a->flags() & QGraphicsItem::ItemIsMovable);
+        QVERIFY(b->flags() & QGraphicsItem::ItemIsMovable);
+
+        props->setGroupLocked(outer, true);
+        QVERIFY(props->groupChainLocked(outer));
+        QVERIFY2(props->groupChainLocked(inner), "a folder inside a locked one is held too");
+        QVERIFY(!props->group(inner).locked);       // by inheritance, not its own flag
+        gv->refreshItemLayerState();
+        QVERIFY(!(a->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY(!(b->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY2(a->flags() & QGraphicsItem::ItemIsSelectable, "held, not hidden: still selectable");
+        for (MonitorFixtureItem *it : { a, b })
+        {
+            const quint32 fid = it->fixtureID();
+            const QPointF at = it->pos();
+            const QVector3D stored = props->fixtureRigPosition(fid);
+            gv->scene()->clearSelection();
+            dragOnPlot(gv, it, QPoint(70, 50));
+            QCOMPARE(it->pos(), at);
+            QCOMPARE(props->fixtureRigPosition(fid), stored);
+        }
+
+        // Unlocked: both move again.
+        props->setGroupLocked(outer, false);
+        QVERIFY(!props->groupChainLocked(inner));
+        gv->refreshItemLayerState();
+        const QVector3D bWas = props->fixtureRigPosition(fx[1]->id());
+        gv->scene()->clearSelection();
+        dragOnPlot(gv, b, QPoint(70, 50));
+        QVERIFY2(props->fixtureRigPosition(fx[1]->id()) != bWas,
+                 "an unlocked member did not move: the drag is not reaching it");
+    }
+    delete doc;
+}

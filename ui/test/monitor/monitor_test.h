@@ -757,6 +757,22 @@ private slots:
      *  closest look were set; on the plot, in the studio, and one undo. */
     void autoFixturesCanBeDrawnAsTheirClosestLook();
 
+    /** Output Rules… on two fixtures (one of them mixed) is one rig undo:
+     *  ⌘Z puts every fixture's rules and the universe's rule bits back */
+    void outputRulesAreOneRigUndoStep();
+    /** ⌘C / ⌘V on the plot: a truss comes back as a copy, offset, with the
+     *  fixtures it carries; ⌘Z takes the copy away */
+    void copyAndPasteDuplicatesATrussWithItsFixtures();
+    /** Fixture Properties → Test orientation → Aim at target sends the pan
+     *  and tilt AimSolver gives a hung mover for that target */
+    void testOrientationAimsWhereTheSolverSays();
+    /** Edit Plot's lock refuses a drag of a placed fixture or truss; off,
+     *  the same drag moves them */
+    void aLockedPlotRefusesADrag();
+    /** A folder's position lock refuses moving a member, and a folder
+     *  inside it is held by it too */
+    void aLockedFolderHoldsItsMembersAndItsSubFolders();
+
 private:
     Doc* m_doc;
 };
