@@ -71,6 +71,13 @@ void ProgrammerController_Test::cleanup()
     // separate concern the real Save gesture only clears explicitly at the
     // very end (see programmercontroller.h's own doc comment on
     // clearProgrammerValues()). Reset both so each test starts clean.
+    // A test that fails part-way leaves its functions running; stop them
+    // before clearContents() deletes them under the next test's ticks.
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->m_stopAllFunctions = true;
+    timer->timerTick();
+    timer->timerTick();
+    timer->m_stopAllFunctions = false;
     m_doc->clearContents();
     m_doc->clearProgrammerValues();
 }
