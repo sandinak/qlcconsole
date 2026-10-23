@@ -183,9 +183,8 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QVERIFY(windowMenu != nullptr);
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
-    // And Functions, Lighting Studio and Shows, which have no tab in the
-    // qlcconsole view (Q79).
-    QCOMPARE(m_app->m_windowJumps.size(), views + 3);
+    // And Functions and Shows, which have no tab in the qlcconsole view.
+    QCOMPARE(m_app->m_windowJumps.size(), views + 2);
     // The Rig Overview is a window too: offered here as well as under View.
     QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
     QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
@@ -363,7 +362,7 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     const int views = tabs->count();
 
     // Still in the Window menu, at its old place; no shortcut, as it has no
-    // tab here (Q69, Q79: ⇧⌘3 is the view's third tab, Build).
+    // tab here (Q69: ⇧⌘4 is the view's fourth tab, Build).
     QAction *jump = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == functions)
@@ -373,7 +372,7 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     QVERIFY(jump->shortcut().isEmpty());
     QCOMPARE(m_app->m_windowJumps.indexOf(jump), 3);
     QCOMPARE(m_app->m_windowJumps.at(4)->data().toString(), QString("Build"));
-    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_3));
+    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
 
     // A show saved with the Functions tab in front doesn't switch view.
     m_app->showContext("Virtual Console");
@@ -401,7 +400,7 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     QVERIFY(!m_app->m_viewNotice->isHidden());
     QVERIFY2(m_app->m_viewNoticeText->text().contains("Functions isn't in the qlcconsole view"),
              qPrintable(m_app->m_viewNoticeText->text()));
-    QCOMPARE(tabs->count(), views + 3);   // Everything: + Lighting Studio, Functions, Shows
+    QCOMPARE(tabs->count(), views + 2);   // Everything: + Functions, Shows
     m_app->setTabLabelMode(App::TabTextOnly);
     for (int i = 0; i < tabs->count(); ++i)
         QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
@@ -615,8 +614,8 @@ void AppViews_Test::theRunTabIsTheCueRunner()
         if (a->data().toString() == QLatin1String("Run"))
             jump = a;
     QVERIFY(jump != nullptr);
-    // The qlcconsole view's seventh tab (Q69, Q79).
-    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+7"));
+    // The qlcconsole view's eighth tab (Q69, Q79).
+    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+8"));
     jump->trigger();
     QWidget *page = m_app->m_tab->currentWidget();
     CueRunner *runner = qobject_cast<CueRunner *>(page);
@@ -624,10 +623,10 @@ void AppViews_Test::theRunTabIsTheCueRunner()
     QCOMPARE(runner->runnerSize(), CueRunner::Full);
     QCOMPARE(runner->follow(), ShowTree::invalidId());    // the current production
     QCOMPARE(page->property("helpTopic").toString(), QString("show-tree.md#the-cue-runner"));
-    // The others are numbered by the view too (⇧⌘6 is Simple Desk).
+    // The others are numbered by the view too (⇧⌘7 is Simple Desk).
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == QLatin1String("Simple Desk"))
-            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+6"));
+            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+7"));
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
@@ -646,12 +645,14 @@ void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
     QCOMPARE(tabs->tabBar()->tabData(tabs->currentIndex()).toString(), was);
     Monitor *mon = Monitor::instance();
     QVERIFY(mon != nullptr && mon->m_overviewDlg != nullptr);
-    // Q79: a dock in the main window, not a window that falls behind it.
+    // Its own window, kept above the main window (a floating panel of it),
+    // never docked -- so the main window keeps its own minimum width.
     QVERIFY(!mon->m_overviewDlg->isHidden());
     QCOMPARE(mon->m_overviewDlg->parentWidget(), static_cast<QWidget *>(m_app));
-    QCOMPARE(m_app->dockWidgetArea(mon->m_overviewDlg), Qt::RightDockWidgetArea);
-    QVERIFY(!mon->m_overviewDlg->isFloating());
-    QVERIFY(mon->m_overviewDlg->features() & QDockWidget::DockWidgetFloatable);
+    QVERIFY(mon->m_overviewDlg->isFloating());
+    QCOMPARE(mon->m_overviewDlg->allowedAreas(), Qt::NoDockWidgetArea);
+    QVERIFY2(m_app->minimumSizeHint().width() < 1000,
+             qPrintable(QString::number(m_app->minimumSizeHint().width())));
     QPointer<QDockWidget> dock = mon->m_overviewDlg;
     mon->m_overviewDlg->close();
     QTRY_VERIFY(dock.isNull());
@@ -1467,8 +1468,8 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);     // a new show
     const QStringList classic = { "Fixtures", "Functions", "Shows", "Virtual Console",
                                   "Simple Desk", "Connections" };
-    const QStringList console = { "Connections", "Fixtures", "Build", "Show Tree",
-                                  "Virtual Console", "Simple Desk", "Run" };
+    const QStringList console = { "Connections", "Fixtures", "Lighting Studio", "Build",
+                                  "Show Tree", "Virtual Console", "Simple Desk", "Run" };
     const QStringList everything = { "Connections", "Fixtures", "Lighting Studio", "Functions",
                                      "Build", "Show Tree", "Shows", "Virtual Console",
                                      "Simple Desk", "Run" };
@@ -1631,9 +1632,9 @@ void AppViews_Test::windowShortcutsFollowTheView()
 {
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(windowJumpsAsShown(m_app),
-             QStringList({ "Connections 1", "Fixtures 2", "Build 3", "Show Tree 4",
-                           "Virtual Console 5", "Simple Desk 6", "Run 7",
-                           "|", "Lighting Studio", "Functions", "Shows" }));
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Build 4",
+                           "Show Tree 5", "Virtual Console 6", "Simple Desk 7", "Run 8",
+                           "|", "Functions", "Shows" }));
 
     m_app->setWorkspaceView(App::ClassicView);
     QCOMPARE(windowJumpsAsShown(m_app),
@@ -1661,10 +1662,10 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QTabWidget *tabs = m_app->m_tab;
     m_app->slotDetachContext(tabs->indexOf(VirtualConsole::instance()));
     QStringList shown = windowJumpsAsShown(m_app);
-    QCOMPARE(shown.value(4), QString("Virtual Console — in its own window 5"));
-    QCOMPARE(shown.value(5), QString("Simple Desk 6"));
+    QCOMPARE(shown.value(5), QString("Virtual Console — in its own window 6"));
+    QCOMPARE(shown.value(6), QString("Simple Desk 7"));
     reattach(m_app, "Virtual Console");
-    QCOMPARE(windowJumpsAsShown(m_app).value(4), QString("Virtual Console 5"));
+    QCOMPARE(windowJumpsAsShown(m_app).value(5), QString("Virtual Console 6"));
     m_app->doc()->resetModified();
 }
 
@@ -1711,10 +1712,10 @@ void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
     vcWin = windowOf(vc);
     m_app->setWorkspaceView(App::ConsoleView);
     QCOMPARE(windowOf(vc), vcWin);
-    QCOMPARE(tabs->indexOf(build), 2);
+    QCOMPARE(tabs->indexOf(build), 3);
     vcWin->close();
-    QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Build", "Show Tree",
-                                            "Virtual Console", "Simple Desk", "Run" }));
+    QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Lighting Studio", "Build",
+                                            "Show Tree", "Virtual Console", "Simple Desk", "Run" }));
     m_app->doc()->resetModified();
 }
 

@@ -56,7 +56,7 @@ Switch roles after each part.
 
 1. Open qlcconsole, choose **File → Open** and open
    `lesson-1-3-start.qlcc` (where Lesson 1.2 finished).
-2. Click the **Show Tree** tab (⇧⌘4) and open **View → Rig Overview**
+2. Click the **Show Tree** tab (⇧⌘5) and open **View → Rig Overview**
    (⇧⌘R) beside it.
 
 ### Faces in the verse

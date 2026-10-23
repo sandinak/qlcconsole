@@ -97,11 +97,11 @@ Which of these you see depends on the view (below).
 
 **View ▸ Workspace** picks which tabs the main window shows:
 
-- **qlcconsole** — seven tabs, in show order: Connections, Fixtures,
-  Build, Show Tree, Virtual Console, Simple Desk and Run. The Lighting
-  Studio, Shows and Functions are in Everything (**Window** switches there
-  for them, with a line to come back), and the **Rig Overview** (⇧⌘R) is a
-  panel docked beside the tabs; drag its title bar out to float it on top.
+- **qlcconsole** — eight tabs, in show order: Connections, Fixtures,
+  Lighting Studio, Build, Show Tree, Virtual Console, Simple Desk and Run.
+  Shows and Functions are in Everything (**Window** switches there for
+  them, with a line to come back). The **Rig Overview** (⇧⌘R) opens in its
+  own window, kept in front of the main window.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
   Connections tab), with QLC+'s toolbars: the main one (New, Open, Save,

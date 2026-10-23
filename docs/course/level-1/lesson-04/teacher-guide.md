@@ -66,7 +66,7 @@ music, then choose.
    there, type **3**, press **Return**.
 2. "Clicking cues in the tree shows each one at once. Fades play when you
    press **GO**." Click the production, so nothing is previewed.
-3. **Run** tab (⇧⌘7), **GO**: the cyc fades up over three seconds. Point
+3. **Run** tab (⇧⌘8), **GO**: the cyc fades up over three seconds. Point
    at the line above NEXT: *▶ 1.0.0 Pose 42%* — how far through the fade
    it is. Point at the **Timing** column: *fade 3s*.
 4. **Stop**.

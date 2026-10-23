@@ -120,7 +120,7 @@ In Lesson 1.1 you'll program these three cues yourself.
 
 | Problem | Try |
 |---|---|
-| The Rig Overview disappeared | It was closed: **View → Rig Overview** (⇧⌘R) opens it again, docked beside the tabs. |
+| The Rig Overview disappeared | It was closed: **View → Rig Overview** (⇧⌘R) opens it again, in front of the main window. |
 | Everything is dark | Set **Room** to **Work light**, and check that **Live** is blue. |
 | The stage is upside down or tiny | Pick **View: 45°** again. |
 | GO does nothing | Check that the **Run** tab is showing and `lesson-1-1-finish.qlcc` is open. |

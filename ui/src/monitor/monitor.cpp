@@ -2490,10 +2490,11 @@ void Monitor::showStageOverview()
         return;
     }
 
-    /* A dock on the main window (Q79): docked beside the tabs by default, or
-       dragged out to float on top of the window -- it can't fall behind it
-       ("the Rig Overview is behind the main window", lesson 0.2). Without a
-       main window (a test) it floats on its own. */
+    /* Its own window, always (Q79 as revised): a floating panel that can't
+       dock -- docked, its toolbar made the main window 1700px wide at least,
+       so shrinking the window clipped the tabs -- and that stays above the
+       main window, so it can't fall behind it ("the Rig Overview is behind
+       the main window", lesson 0.2). */
     QMainWindow *main = nullptr;
     foreach (QWidget *w, QApplication::topLevelWidgets())
         if (w->inherits("App"))
@@ -2508,6 +2509,7 @@ void Monitor::showStageOverview()
     dock->setAttribute(Qt::WA_DeleteOnClose);
     dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable
                       | QDockWidget::DockWidgetFloatable);
+    dock->setAllowedAreas(Qt::NoDockWidgetArea);
     dock->setProperty("helpTopic", QStringLiteral("lighting-studio.md#angled--the-free-3d-view"));
     QWidget *dlgPtr = new QWidget(dock);
     QWidget &dlg = *dlgPtr;
@@ -2516,16 +2518,10 @@ void Monitor::showStageOverview()
     QShortcut *closeKey = new QShortcut(QKeySequence::Close, dlgPtr);
     closeKey->setContext(Qt::WidgetWithChildrenShortcut);
     connect(closeKey, &QShortcut::activated, dock, &QDockWidget::close);
+    dock->setFloating(true);
+    dock->resize(1100, 760);
     if (main != nullptr)
-    {
-        main->addDockWidget(Qt::RightDockWidgetArea, dock);
-        main->resizeDocks({ dock }, { qMax(420, main->width() * 2 / 5) }, Qt::Horizontal);
-    }
-    else
-    {
-        dock->setFloating(true);
-        dock->resize(1100, 760);
-    }
+        dock->move(main->geometry().center() - QPoint(550, 380));
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
 
     StructureStudioView *view =

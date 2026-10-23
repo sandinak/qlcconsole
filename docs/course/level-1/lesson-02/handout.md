@@ -62,7 +62,7 @@ Switch roles after each part.
 1. Open qlcconsole, choose **File → Open** and open
    `lesson-1-2-start.qlcc`, which picks up where Lesson 1.1 finished, with
    Pose, Verse and Chorus.
-2. Click the **Show Tree** tab (⇧⌘4), open **View → Rig Overview**
+2. Click the **Show Tree** tab (⇧⌘5), open **View → Rig Overview**
    (⇧⌘R) and put it beside the main window.
 
 ### Make the verse colder

@@ -80,7 +80,7 @@ Switch roles at each page of the wizard.
      **Front**, **House &amp; Work**, **Power relays** and **Backstage**.
      The house, work, relay and backstage fixtures carry the amber
      output-rules badge.
-8. **Show Tree** tab (⇧⌘4).
+8. **Show Tree** tab (⇧⌘5).
    - *You should see:* the cue list with the Eos cue numbers: **1
      Preshow**, **2 House to half**, **3 House out**, **4 Opening**. It is
      a tracking list, as on Eos.

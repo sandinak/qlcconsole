@@ -182,12 +182,12 @@ circuits and subs.
   forward. ⌘↩ / Control ▸ GO and VC widgets work as before. Build ▸ Scenes
   stays in the qlcconsole view.
 
-- **A smaller qlcconsole view** (board Q79): seven tabs in show order —
-  Connections, Fixtures, Build, Show Tree, Virtual Console, Simple Desk,
-  Run (⇧⌘1–⇧⌘7). The Lighting Studio, Shows and Functions are in
-  Everything. The **Rig Overview** is a dock panel beside the tabs (drag it
-  out to float on top) instead of a window that could fall behind.
-
+- **A smaller qlcconsole view** (board Q79): eight tabs in show order —
+  Connections, Fixtures, Lighting Studio, Build, Show Tree, Virtual
+  Console, Simple Desk, Run (⇧⌘1–⇧⌘8). Shows and Functions are in
+  Everything. The **Rig Overview** opens in its own window, kept in front
+  of the main window (it no longer docks: docked, it stopped the main
+  window from getting narrower than about 1700 px).
 - **One Upgrade door** (board Q76): Upgrade This Show… replaces the Show
   Tree's Import chaser… menu and Convert an old show…; Build's Send to Show
   Tree… opens it with just that chaser ticked (the list is filed and shown
