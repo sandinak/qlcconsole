@@ -2632,8 +2632,8 @@ void ShowTreeView::buildTree()
                     }
                 }
                 // Tracking at a glance (Branson, 2026-10-21): how many
-                // layers it sets (●), releases (○) and how many track in
-                // (⤳); what they
+                // layers it sets (S), releases (R) and how many track in
+                // (T); what they
                 // are is in the tooltip and on the cue page.
                 if (list.mode == ListMode::Tracking && !list.looks && i < resolved.count())
                 {
@@ -2705,8 +2705,6 @@ void ShowTreeView::buildTree()
                     QStringList looks;
                     for (const Look &l : layer.looks)
                         looks << lookText(l);
-                    // ● sets values here (a tracking list: the rest track
-                    // in); ○ lets them go.
                     // Sets or Releases (Q104): a dot in its column.
                     if (layer.release)
                         yi->setText(ReleasesCol, dot);
@@ -2796,8 +2794,8 @@ void ShowTreeView::buildTree()
                                            cue.note).trimmed());
                 }
                 // Skip (a cue of a list, or a sub-cue): the tick, unticked
-                // when skipped -- then greyed and struck through, ⦸ in the
-                // badges, and everything under it greyed (its layers, what
+                // when skipped -- then greyed and struck through, "skip" in
+                // the F column, and everything under it greyed (its layers, what
                 // tracks in, its sub-cues: none of it plays from GO).
                 if (!list.looks)
                 {
@@ -2813,7 +2811,7 @@ void ShowTreeView::buildTree()
                         ci->setToolTip(c, (why + QStringLiteral("\n\n") + ci->toolTip(c)).trimmed());
                         if (c == 0)
                         {
-                            // The name struck through; the ⦸ badge plain.
+                            // The name struck through; the flags plain.
                             QFont f = ci->font(c);
                             f.setStrikeOut(true);
                             ci->setFont(c, f);
@@ -3763,17 +3761,17 @@ QString ShowTreeView::cueTrackingTip(quint32 cueId) const
     const Cue &cue = list->cues.at(index);
     QStringList out;
     if (effectiveMode(*list, cue) == CueMode::Block && list->mode == ListMode::Tracking)
-        out << tr("⊘ Block: it starts from nothing; nothing tracks in.");
+        out << tr("Mode B (Block): it starts from nothing; nothing tracks in.");
     if (cue.skip)
-        out << tr("⦸ Skipped: below is what a jump to it plays; nothing of it passes on.");
+        out << tr("Skipped: below is what a jump to it plays; nothing of it passes on.");
 
     // What tracks in, at most a dozen layers (the cue page has them all).
-    QStringList carried, own;
+    QStringList carried, sets, releases;
     for (const ResolvedLayer &rl : resolved.at(index).layers)
     {
         const QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
         if (rl.own)
-            own << (rl.release ? tr("○ %1 (released)").arg(name) : tr("● %1").arg(name));
+            (rl.release ? releases : sets) << name;
         else
             carried << carriedDetail(rl);
     }
@@ -3785,8 +3783,11 @@ QString ShowTreeView::cueTrackingTip(quint32 cueId) const
         if (carried.count() > kShown)
             out << tr("    … and %1 more: see the cue page").arg(carried.count() - kShown);
     }
-    if (!own.isEmpty() && list->mode == ListMode::Tracking)
-        out << tr("Set here (%1): %2").arg(own.count()).arg(own.join(QStringLiteral(", ")));
+    // Named as the S and R columns are (Q104).
+    if (!sets.isEmpty() && list->mode == ListMode::Tracking)
+        out << tr("Sets (%1): %2").arg(sets.count()).arg(sets.join(QStringLiteral(", ")));
+    if (!releases.isEmpty() && list->mode == ListMode::Tracking)
+        out << tr("Releases (%1): %2").arg(releases.count()).arg(releases.join(QStringLiteral(", ")));
     if (!list->isSubCues())
     {
         // One layer a line: a tooltip doesn't wrap.
@@ -6518,7 +6519,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             if (kind == LookFolderNode)
             {
                 menu.addAction(tr("Rename folder"), this, [this]() { startRename(); });
-                menu.addAction(tr("Delete folder (its looks move up)"), this, [this, listId, folder]() {
+                menu.addAction(tr("Delete folder (its hits move up)"), this, [this, listId, folder]() {
                     m_st->removeLookFolder(listId, folder);
                 });
             }

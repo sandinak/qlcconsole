@@ -6612,13 +6612,22 @@ QString App::standbyNextText(const ShowControl *sc, const Chaser *list)
     const int sub = sc->standbySubCue(list);
     const Chaser *named = sub < 0 ? list : list->subCueChase(next);
     const int index = sub < 0 ? next : sub;
-    QString text = tr("Next: %1").arg(ShowControl::cueName(list, next, sub));
+    const QString cue = ShowControl::cueName(list, next, sub);
+    QString text = tr("Next: %1").arg(cue);
     const QList<ChaserStep> steps = named != NULL ? named->steps() : QList<ChaserStep>();
     const Doc *doc = list->doc();
     if (doc != NULL && index < steps.count())
     {
         if (const Function *f = doc->function(steps.at(index).fid))
-            text += QStringLiteral(" \u2014 ") + f->name();
+        {
+            // A Show Tree cue's function is named "1.0.2-Chorus": the number
+            // is said already, so just "Chorus".
+            QString name = f->name();
+            if (!cue.isEmpty() && name.length() > cue.length() + 1 && name.startsWith(cue)
+                    && (name.at(cue.length()) == QLatin1Char('-') || name.at(cue.length()) == QLatin1Char(' ')))
+                name = name.mid(cue.length() + 1).trimmed();
+            text += QStringLiteral(" \u2014 ") + name;
+        }
     }
     return text;
 }

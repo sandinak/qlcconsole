@@ -396,7 +396,7 @@ QList<PaletteOps::Use> PaletteOps::usage(quint32 paletteId) const
                 for (int i = 0; i < l.cues.count(); ++i)
                 {
                     const Cue &c = l.cues.at(i);
-                    const QString where = l.looks ? tr("Look %1").arg(st->cueLabel(l, i))
+                    const QString where = l.looks ? tr("Hit %1").arg(st->cueLabel(l, i))
                                                   : tr("Cue %1 in %2").arg(st->cueLabel(l, i), l.name);
                     auto use = [&](quint32 layer, const QString &what) {
                         Use u;
@@ -493,7 +493,7 @@ QString PaletteOps::usageSummary(const QList<Use> &uses)
     if (!cues.isEmpty())
         parts << tr("%n cue(s)", "", int(cues.count()));
     if (!looks.isEmpty())
-        parts << tr("%n look(s)", "", int(looks.count()));
+        parts << tr("%n hit(s)", "", int(looks.count()));
     if (!reusables.isEmpty())
         parts << tr("%n reusable(s)", "", int(reusables.count()));
     if (!scenes.isEmpty())

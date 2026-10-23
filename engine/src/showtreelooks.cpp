@@ -91,7 +91,7 @@ quint32 ShowTreeController::addLooksSection(quint32 productionId)
     if (have != invalidId())
         return have;
     const quint32 id = newId();
-    const bool ok = edit(tr("New Looks section"), [&](QList<Production> &ps) {
+    const bool ok = edit(tr("New Hits section"), [&](QList<Production> &ps) {
         for (Production &p : ps)
         {
             if (p.id != productionId || p.looks() != nullptr)
@@ -117,7 +117,7 @@ quint32 ShowTreeController::addLook(quint32 productionId, const QString &name, c
     const quint32 sectionId = looksSection(productionId) == invalidId() ? newId() : invalidId();
     const quint32 id = newId();
     const QString f = cleanFolder(folder);
-    const bool ok = edit(tr("New look"), [&](QList<Production> &ps) {
+    const bool ok = edit(tr("New hit"), [&](QList<Production> &ps) {
         for (Production &p : ps)
         {
             if (p.id != productionId)
@@ -350,7 +350,7 @@ quint32 ShowTreeController::adoptAsLook(quint32 productionId, quint32 functionId
     const quint32 sectionId = looksSection(productionId) == invalidId() ? newId() : invalidId();
     const quint32 lookId = newId();
     layer.id = newId();
-    const bool ok = edit(tr("Adopt %1 as look").arg(f->name()), [&](QList<Production> &ps) {
+    const bool ok = edit(tr("Adopt %1 as a hit").arg(f->name()), [&](QList<Production> &ps) {
         for (Production &p : ps)
         {
             if (p.id != productionId)
@@ -396,7 +396,7 @@ quint32 ShowTreeController::copyCueToLook(quint32 cueId)
     const quint32 sectionId = looksSection(prodId) == invalidId() ? newId() : invalidId();
     const quint32 lookId = newId();
     const QString name = src->name.isEmpty() ? cueLabel(*list, list->indexOf(cueId)) : src->name;
-    const bool ok = edit(tr("Copy %1 to look").arg(cueLabel(*list, list->indexOf(cueId))),
+    const bool ok = edit(tr("Copy %1 to a hit").arg(cueLabel(*list, list->indexOf(cueId))),
                          [&](QList<Production> &ps) {
         for (Production &p : ps)
         {

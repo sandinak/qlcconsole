@@ -41,6 +41,8 @@ private slots:
     void clickLoadsDoubleClickJumps();
     void runnersAndShowControlMirrorOneState();
     void aRunnerFollowsOneListOfAnyProduction();
+    /** Q75: one list, no Current production drop-down */
+    void oneListHasNothingToChoose();
     void liveDesignAndTimecode();
     void spaceIsGoInTheRunTab();
     void theVcWidgetSavesLoadsAndCopies();

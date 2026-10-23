@@ -411,7 +411,7 @@ void ShowTreeView_Test::newHereMakesTheNextThing()
     // A look: the next look.
     const quint32 look = st->addLook(prod, "Hit");
     QVERIFY(view.selectNode(look));
-    QCOMPARE(view.newHereLabel(), QString("New Look"));
+    QCOMPARE(view.newHereLabel(), QString("New Hit"));
     const quint32 look2 = view.newHere();
     QVERIFY(st->isLook(look2));
 }
@@ -4597,7 +4597,7 @@ void ShowTreeView_Test::looksSectionInTheTree()
     QVERIFY(!fired->isVisibleTo(&view));
 
     // Folders: new one on the section, a look dragged (dropped) onto it,
-    // renamed in place, deleted (its looks move up).
+    // renamed in place, deleted (its hits move up).
     const quint32 section = st->looksSection(prod);
     QVERIFY(view.selectNode(section));
     QVERIFY(st->addLookFolder(section, "Hits"));
@@ -5076,7 +5076,7 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     view.tree()->expandAll();
     QTest::qWait(20);
 
-    // The kinds: ● set here, ○ released, ⤳ tracked in, ⊘ a Block cue.
+    // The kinds: set here (S), released (R), tracked in (T), a Block cue (M: B).
     // Q104: a column each, headed by what it is.
     QCOMPARE(cueRow(view.tree(), c1)->text(ShowTreeView::SetsCol), QString("2"));
     QCOMPARE(cueRow(view.tree(), c2)->text(ShowTreeView::SetsCol), QString("1"));
@@ -5085,7 +5085,7 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     QCOMPARE(cueRow(view.tree(), c3)->text(ShowTreeView::ModeCol), QString("B"));
     QVERIFY(cueRow(view.tree(), c3)->text(ShowTreeView::TracksCol).isEmpty());
     QCOMPARE(view.tree()->headerItem()->text(ShowTreeView::TracksCol), QString("T"));
-    QVERIFY(cueRow(view.tree(), c3)->toolTip(1).contains("⊘ Block"));
+    QVERIFY(cueRow(view.tree(), c3)->toolTip(1).contains("Mode B (Block)"));
     QTreeWidgetItem *carried = trackedRow(view.tree(), c2, "Towers");
     QVERIFY(carried != nullptr);
     QCOMPARE(carried->text(0), QString("⤳ Towers"));
@@ -5102,7 +5102,9 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     QVERIFY2(rowTip.contains("    Dimmer: Half"), qPrintable(rowTip));
     const QString cueTip = cueRow(view.tree(), c2)->toolTip(1);
     QVERIFY2(cueTip.contains("Tracked in (1):\n⤳ Towers — tracked from 1 "), qPrintable(cueTip));
-    QVERIFY2(cueTip.contains("Set here (2): ● USTs, ○ Spots (released)"), qPrintable(cueTip));
+    QVERIFY2(cueTip.contains("Sets (1): USTs\nReleases (1): Spots"), qPrintable(cueTip));
+    for (const QString &old : { QString("●"), QString("○"), QString("⊘") })
+        QVERIFY2(!cueTip.contains(old), qPrintable(cueTip));
     QVERIFY2(cueTip.contains("Next cue receives:\n    nothing: 3 Three is a Block cue"), qPrintable(cueTip));
     QCOMPARE(cueRow(view.tree(), c2)->toolTip(0), cueTip);      // the row's name too
     QCOMPARE(view.cueTrackingTip(c2), cueTip);
@@ -5264,7 +5266,7 @@ void ShowTreeView_Test::skipCuesInTheTree()
     QVERIFY2(view.nextCueText(c[0]).startsWith("(3 C3, past the skipped) "), qPrintable(view.nextCueText(c[0])));
     QVERIFY2(view.nextCueText(c[1]).contains("nothing of this cue (skipped): what 1 C1 passes on"),
              qPrintable(view.nextCueText(c[1])));
-    QVERIFY(view.cueTrackingTip(c[1]).contains("⦸ Skipped"));
+    QVERIFY(view.cueTrackingTip(c[1]).contains("Skipped: below is what a jump to it plays"));
     // 3 tracks from 1, not from 2: the USTs never come in.
     QVERIFY(trackedRow(tree, c[2], "USTs") == nullptr);
     QVERIFY(st->undo());

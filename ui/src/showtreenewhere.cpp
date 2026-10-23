@@ -129,7 +129,7 @@ ShowTreeView::NewHerePlan ShowTreeView::planNewHere() const
         if (currentProductionId() != invalidId())
         {
             plan.what = NewHerePlan::Look;
-            plan.label = tr("New Look");
+            plan.label = tr("New Hit");
         }
         return plan;
     }

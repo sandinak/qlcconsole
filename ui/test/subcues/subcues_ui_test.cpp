@@ -382,6 +382,13 @@ void SubCuesUi_Test::aLoadedSubCueIsWhatNextSays()
     QCOMPARE(App::standbyNextText(sc, list), QString("Next: 3 \u2014 Cue 3"));
     cl.updateStandby();
     QVERIFY(cl.m_standbyLabel->text().startsWith(QString("Next: 3 \u2014 Cue 3")));
+    // A function named as a Show Tree cue's is ("3-Finale"): the number once.
+    Function *third = m_doc->function(list->steps().at(2).fid);
+    QVERIFY(third != nullptr);
+    const QString wasName = third->name();
+    third->setName("3-Finale");
+    QCOMPARE(App::standbyNextText(sc, list), QString("Next: 3 \u2014 Finale"));
+    third->setName(wasName);
 
     // GO 2.2 over OSC's way in (show control): cue 2 at 2.2, and the
     // footer's Sub GO part follows on from there.

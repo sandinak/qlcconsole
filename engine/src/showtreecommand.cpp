@@ -306,7 +306,7 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             { "adopt Haze" }, { "hit" });
         // W3: the Workbench
         add("wb", "navigate", "wb [<cue number>]",
-            "Opens the selected cue (or its layer, or a busking look) in the Workbench, docked in place of the "
+            "Opens the selected cue (or its layer, or a hit) in the Workbench, docked in place of the "
             "page: its layers and what tracks in, each value's editor at full height. With a number, that cue "
             "of the list. ↩ Show Tree comes back. Double-click and ✎ Workbench do the same.",
             { "wb", "wb 1.0.1" }, { "cue" }, { "workbench" });

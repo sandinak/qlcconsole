@@ -98,7 +98,10 @@ CueRunner::CueRunner(Doc *doc, Size size, QWidget *parent)
     m_timer->setInterval(100);
     connect(m_timer, &QTimer::timeout, this, &CueRunner::refresh);
     ShowTreeController *st = m_doc->showTree();
-    connect(st, &ShowTreeController::changed, this, [this]() { m_treeDirty = true; });
+    connect(st, &ShowTreeController::changed, this, [this]() {
+        m_treeDirty = true;
+        fillFollowBox();     // a production or list added, renamed or removed
+    });
     connect(st, &ShowTreeController::currentProductionChanged, this, [this]() {
         m_treeDirty = true;
         fillFollowBox();
@@ -894,15 +897,32 @@ void CueRunner::fillFollowBox()
     if (m_followBox == nullptr)
         return;
     ShowTreeController *st = m_doc->showTree();
-    QSignalBlocker block(m_followBox);
-    m_followBox->clear();
     const Production *cur = st->production(st->currentProduction());
-    m_followBox->addItem(cur == nullptr ? tr("The main cue list") : tr("Current production (%1)").arg(cur->name),
-                         invalidId());
+    QList<QPair<QString, quint32>> items;
+    items << qMakePair(cur == nullptr ? tr("The main cue list") : tr("Current production (%1)").arg(cur->name),
+                       invalidId());
     for (const Production &p : st->productions())
         for (quint32 lid : st->playableLists(p.id))
-            m_followBox->addItem(QStringLiteral("%1 · %2").arg(p.name, st->cueList(lid)->name), lid);
-    m_followBox->setCurrentIndex(qMax(0, m_followBox->findData(m_follow)));
+            items << qMakePair(QStringLiteral("%1 · %2").arg(p.name, st->cueList(lid)->name), lid);
+    // Called on every tree change: rebuilt only when the lists differ, so an
+    // open drop-down isn't pulled from under the mouse.
+    bool same = m_followBox->count() == items.count();
+    for (int i = 0; same && i < items.count(); ++i)
+        same = m_followBox->itemText(i) == items.at(i).first
+               && m_followBox->itemData(i).toUInt() == items.at(i).second;
+    if (!same)
+    {
+        QSignalBlocker block(m_followBox);
+        m_followBox->clear();
+        for (const auto &item : items)
+            m_followBox->addItem(item.first, item.second);
+    }
+    {
+        QSignalBlocker block(m_followBox);
+        m_followBox->setCurrentIndex(qMax(0, m_followBox->findData(m_follow)));
+    }
+    // One list to play and it is the one played: nothing to choose (Q75).
+    m_followBox->setHidden(m_followBox->count() <= 2 && m_follow == invalidId());
 }
 
 Chaser *CueRunner::chaser() const
@@ -1171,13 +1191,11 @@ void CueRunner::updateStates()
         }
         const QString tc = timecodeText();
         m_timecode->setText(tc);
-        // The VC sizes show the timecode only when there is one (and asked).
-        if (m_size != Full)
-        {
-            TimecodeSource *src = m_doc->timecodeSource();
-            const bool show = m_showTimecode && src != nullptr && src->health() != TimecodeSource::NoSource;
-            m_timecode->setVisible(show);
-        }
+        // The timecode only when there is one, as the footer's MTC chip (Q98);
+        // the VC sizes only when asked as well.
+        TimecodeSource *src = m_doc->timecodeSource();
+        const bool hasSource = src != nullptr && src->health() != TimecodeSource::NoSource;
+        m_timecode->setHidden(!hasSource || (m_size != Full && !m_showTimecode));
     }
 
     const bool running = ch != nullptr && ch->isRunning();

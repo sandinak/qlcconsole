@@ -460,6 +460,7 @@ void CueRunner_Test::aRunnerFollowsOneListOfAnyProduction()
     QVERIFY(follow != nullptr);
     QCOMPARE(follow->itemText(0), QString("Current production (Dance)"));
     QCOMPARE(follow->count(), 3);       // current + Song + Keynote
+    QVERIFY(!follow->isHidden());       // two to choose from
     QSignalSpy changed(&runner, &CueRunner::followChanged);
     const int at = follow->findData(ids[6]);
     follow->setCurrentIndex(at);
@@ -485,6 +486,25 @@ void CueRunner_Test::aRunnerFollowsOneListOfAnyProduction()
     QCOMPARE(follow->itemText(0), QString("Current production (Corporate)"));
 }
 
+/* Q75: one production with one list: GO plays it, nothing to choose -- no
+   Current production drop-down. A second production brings it back. */
+void CueRunner_Test::oneListHasNothingToChoose()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Spring Show");
+    const quint32 list = st->addCueList(prod, "01-Everybody Scream");
+    st->addCue(list, -1, "Pose");
+    st->setCurrentProduction(prod);
+    CueRunner runner(m_doc, CueRunner::Full);
+    QComboBox *follow = runner.findChild<QComboBox *>("crFollow");
+    QVERIFY(follow != nullptr);
+    QVERIFY(follow->isHidden());
+    const quint32 corp = st->addProduction("Corporate");
+    st->addCueList(corp, "Keynote");
+    QVERIFY(!follow->isHidden());
+    QCOMPARE(follow->count(), 3);
+}
+
 void CueRunner_Test::liveDesignAndTimecode()
 {
     show();
@@ -496,9 +516,13 @@ void CueRunner_Test::liveDesignAndTimecode()
     runner.refresh();
     QCOMPARE(runner.modeText(), QString("DESIGN"));
     QCOMPARE(runner.timecodeText(), QString("TC —"));
+    // No source: no readout, as the footer's MTC chip (Q98).
+    QLabel *tcLabel = runner.findChild<QLabel *>("crTimecode");
+    QVERIFY(tcLabel != nullptr && tcLabel->isHidden());
     m_doc->timecodeSource()->updateTimeCode(0, 3723500, 30);   // 01:02:03, half a second
     runner.refresh();
     QCOMPARE(runner.timecodeText(), QString("TC 01:02:03:15"));
+    QVERIFY(!tcLabel->isHidden());
     // A production with a source of its own: the runner reads what is
     // followed (the source filters, the readout stays).
     QVERIFY(m_doc->showTree()->setProductionTimecode(m_doc->currentProduction(), 2));

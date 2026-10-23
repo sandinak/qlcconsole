@@ -7039,7 +7039,7 @@ void ShowTree_Test::deletingAPaletteClearsEveryUse()
 
     const QList<PaletteOps::Use> uses = ops->usage(hot);
     QCOMPARE(PaletteOps::usageSummary(uses),
-             QString("4 cue(s), 1 look(s), 1 reusable(s), 1 scene(s), 1 effect slot(s)"));
+             QString("4 cue(s), 1 hit(s), 1 reusable(s), 1 scene(s), 1 effect slot(s)"));
 
     const CueList *list = st->cueList(listId);
     QVERIFY(list != nullptr);
@@ -7136,7 +7136,7 @@ void ShowTree_Test::paletteUsageNamesCuesLooksAndScenes()
     st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(blue));
     const quint32 c2 = st->addCueNumbered(list, "1.0.1", "Chorus");
     st->setCueLook(c2, st->lookForPalette(blue));
-    const quint32 hit = st->addLook(prod, "Hit 1");
+    const quint32 hit = st->addLook(prod, "Strobe");
     st->setLayerLook(hit, st->addLayer(hit, groupTarget(towers->id())), st->lookForPalette(blue));
 
     const QList<PaletteOps::Use> uses = m_doc->paletteOps()->usage(blue);
@@ -7144,10 +7144,10 @@ void ShowTree_Test::paletteUsageNamesCuesLooksAndScenes()
     for (const PaletteOps::Use &u : uses)
         labels << u.label;
     QCOMPARE(labels, QStringList({ "Cue 1.0.0 Verse in Full Show — Towers", "Cue 1.0.1 Chorus in Full Show — cue look",
-                                   "Look Hit 1 — Towers" }));
+                                   "Hit Strobe — Towers" }));
     QCOMPARE(uses.at(2).kind, PaletteOps::Use::Look);
     QCOMPARE(uses.at(2).function, st->lookFunction(hit));
-    QCOMPARE(PaletteOps::usageSummary(uses), QString("2 cue(s), 1 look(s)"));
+    QCOMPARE(PaletteOps::usageSummary(uses), QString("2 cue(s), 1 hit(s)"));
     // The generated scenes play it, but are never listed: their cues are.
     for (const PaletteOps::Use &u : uses)
         QVERIFY(u.kind != PaletteOps::Use::Scene);
@@ -7300,7 +7300,7 @@ void ShowTree_Test::aLookBakesToACollectionOfItsOwn()
     QVERIFY(st->isLooks(section));
     QVERIFY(st->isLook(hit));
     QCOMPARE(st->cueList(section)->name, QString("Hits"));
-    QCOMPARE(st->undoText(), QString("New look"));                 // section and look: one step
+    QCOMPARE(st->undoText(), QString("New hit"));                  // section and hit: one step
     QCOMPARE(st->cueList(section)->chaser, invalidId());
 
     const quint32 l1 = st->addLayer(hit, groupTarget(towers->id()));
@@ -7459,7 +7459,7 @@ void ShowTree_Test::lookFoldersSaveLoadAndUndo()
     QVERIFY(st->undo());
     QCOMPARE(st->cue(a)->folder, QString("Hits/Big"));
     QVERIFY(st->redo());
-    // Delete one: its looks move up.
+    // Delete one: its hits move up.
     QVERIFY(st->removeLookFolder(section, "Stabs"));
     QCOMPARE(st->cue(a)->folder, QString("Big"));
     QCOMPARE(st->cue(b)->folder, QString());
@@ -7522,7 +7522,7 @@ void ShowTree_Test::adoptASceneAsALook()
     QCOMPARE(st->cue(a)->layers.count(), 1);
     QCOMPARE(st->cue(a)->layers.first().target.groups, QList<quint32>({ towers->id() }));
     QCOMPARE(st->cue(a)->layers.first().looks.first().palettes, QList<quint32>({ full }));
-    QCOMPARE(st->undoText(), QString("Adopt Busk Hit as look"));
+    QCOMPARE(st->undoText(), QString("Adopt Busk Hit as a hit"));
     QVERIFY(m_doc->function(busk->id()) != nullptr);
 
     const quint32 h = st->adoptAsLook(prod, raw->id(), &why);

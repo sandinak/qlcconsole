@@ -113,7 +113,7 @@ from the Library lands in the tree right beside it.
     hit folder lists its hits and has **Make VC page**.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
-  palette is used (*"Used by: 6 cue(s), 2 look(s) · 1 VC button"*); click
+  palette is used (*"Used by: 6 cue(s), 2 hit(s) · 1 VC button"*); click
   *which* for the list, and a cue or look to go there. **↩ Back** at its
   top, or **Esc**, closes it; what you changed stays. At the
   bottom, full width, is **[the command line](#the-command-line)**, which
@@ -1790,9 +1790,10 @@ targets, keyboard GO, nothing else to bump. The **Cue Runner** Virtual
 Console widget is the same runner on a VC page.
 
 - **Header:** the production and cue list it plays (switch with the box:
-  the current production, or any list of any production), the **timecode**
-  (*TC 01:02:03:15*, *hold* when it stops arriving) and **LIVE / DESIGN**
-  (⌘F12 switches).
+  the current production, or any list of any production; with only one
+  list there is nothing to choose and no box), the **timecode** once
+  there is a source (*TC 01:02:03:15*, *hold* when it stops arriving) and
+  **LIVE / DESIGN** (⌘F12 switches).
 - **The list:** every cue, its sub-cues under it, each with its state —
   **▶** running (with its fade's progress), **▷ STANDBY** (loaded), **NEXT**,
   **SUB NEXT** — its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and
