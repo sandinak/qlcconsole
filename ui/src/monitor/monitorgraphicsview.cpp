@@ -669,6 +669,11 @@ void MonitorGraphicsView::paintEvent(QPaintEvent *event)
         updateGrid();
         refreshAllItems();
         emit rulersChanged();
+        /* Refitted: the stage back in the middle ("STILL not centered ..
+           see the scroll bars?") -- the refit that matters most happens here
+           (the tab first shown, the show's grid supplied), not in a resize.
+           After this paint, as scrolling repaints. */
+        QTimer::singleShot(0, this, [this]() { centerOnGrid(); });
         /* The scale is derived from three inputs and a wrong result is only
            visible as "it looks wrong", which cost a long time to pin down
            once. QLC_GRIDFIT_DEBUG prints all three and the answer, so the next

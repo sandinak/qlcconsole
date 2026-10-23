@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QScrollBar>
 #include <QShortcut>
 #include <memory>
 #include <QGraphicsItem>
@@ -1084,6 +1085,16 @@ void Monitor_Test::theStageStaysCentredWithFixturesOffIt()
     QVERIFY2((centre - grid).manhattanLength() < 4.0,
              qPrintable(QString("view centre %1,%2 vs grid %3,%4").arg(centre.x()).arg(centre.y())
                             .arg(grid.x()).arg(grid.y())));
+
+    // Scrolled away, then refitted at paint time (a new grid, the tab shown):
+    // back in the middle, without any resize.
+    rig.gv->horizontalScrollBar()->setValue(rig.gv->horizontalScrollBar()->maximum());
+    rig.gv->setGridSize(QSize(30, 20));
+    rig.gv->viewport()->repaint();
+    QTRY_VERIFY2((rig.gv->mapToScene(rig.gv->viewport()->rect().center())
+                  - QPointF(rig.gv->m_xOffset + rig.gv->m_cellPixels * rig.gv->m_gridSize.width() / 2.0,
+                            rig.gv->m_yOffset + rig.gv->m_cellPixels * rig.gv->m_gridSize.height() / 2.0))
+                     .manhattanLength() < 4.0, "not centred after a refit");
 }
 
 void Monitor_Test::stageFeaturesCopyAndPaste()
