@@ -23,6 +23,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   cues and sub-cues following. Each is one undo step. See [Reordering and
   numbering](show-tree.md#reordering-and-numbering).
 
+- **File ▸ Import is a menu of file types.** Pick what you're bringing
+  in -- **QLC+ / qlcconsole Workspace**, **ETC Eos Show (ASCII .asc)** or
+  **QLC+ Fixtures List (.qxfl)** -- and its file dialog shows only that
+  kind. **Any Supported File…** at the bottom is the old Import: one
+  dialog, the importer picked by the file's extension. See
+  [Importing into a show](getting-started.md#importing-into-a-show).
+
 - **Auto fixtures can be shown as their closest look.** The plot's
   **Show** menu has **Show Auto fixtures as their closest stage look**: a
   fixture left on Auto gets the look its type is closest to (an LED PAR, a

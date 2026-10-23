@@ -42,6 +42,7 @@ class QProgressDialog;
 class VideoProvider;
 class QMessageBox;
 class QToolButton;
+class QMenu;
 class QFileDialog;
 class QTabWidget;
 class QStatusBar;
@@ -396,12 +397,62 @@ private:
      *  (what an Eos file held) and @p after appended (the Show Tree). */
     void showImportSummary(const class QxwImportResult &result, const QStringList &before = QStringList(),
                            const QStringList &after = QStringList());
+    /** File ▸ Import ▸ Workspace: a .qxw/.qlcc's fixtures, groups,
+     *  functions and palettes, picked in ImportSelectionDialog and merged
+     *  into the current show (QxwImporter). */
+    void importWorkspaceFile(const QString &path);
+    /** File ▸ Import ▸ Fixtures List: a Fixture Manager export (.qxfl),
+     *  its fixtures and groups added to the current show. */
+    void importFixtureListFile(const QString &path);
+
+public:
+    /** One entry of File ▸ Import: a kind of file the app can bring into
+     *  the open show. importSources() is the whole table -- the submenu,
+     *  its sections, each entry's file dialog filters and "Any Supported
+     *  File…"'s dispatch by extension all come from it, so a new source
+     *  (QLab is the next one expected, see EOS_IMPORT_DESIGN.md) is one
+     *  more row there and one handler. List only importers that work. */
+    struct ImportSource
+    {
+        QString key;            ///< the action's objectName is "fileImport_<key>"
+        QString section;        ///< the submenu section it sits under
+        QString label;          ///< the menu item
+        QString title;          ///< its file dialog's title
+        QString tip;
+        QString icon;           ///< resource path; empty for none
+        QStringList filters;    ///< the file dialog's name filters, its own first
+        QStringList extensions; ///< ".qxw"...: what "Any Supported File…" matches
+        void (App::*handler)(const QString &path);
+    };
+    QList<ImportSource> importSources() const;
+    /** "Any Supported File…": the source whose extension @p path has (a
+     *  workspace when none does, as the one Import did), then its handler. */
+    void importFile(const QString &path);
+    /** File ▸ Import ▸ (submenu). */
+    QMenu *fileImportMenu() const { return m_fileImportMenu; }
+
+    /** Test seams. A picker replaces the import file dialog (returns the
+     *  path, or empty for Cancel); a run hook replaces calling the source's
+     *  handler (it gets the source's key and the path). */
+    typedef std::function<QString(const QString &title, const QStringList &filters)> ImportFilePicker;
+    typedef std::function<void(const QString &key, const QString &path)> ImportRunHook;
+    void setImportFilePicker(ImportFilePicker picker) { m_importFilePicker = picker; }
+    void setImportRunHook(ImportRunHook hook) { m_importRunHook = hook; }
+
+private:
+    void populateImportMenu(QMenu *menu);
+    QString pickImportFile(const QString &title, const QStringList &filters);
+    void runImport(const ImportSource &source, const QString &path);
+    QMenu *m_fileImportMenu = nullptr;
+    ImportFilePicker m_importFilePicker;
+    ImportRunHook m_importRunHook;
 
 public slots:
     bool slotFileNew();
     QFile::FileError slotFileOpen();
-    /** File > Import: merge fixtures/groups/functions from a second .qxw
-     *  into the CURRENT document (unlike Open, does not replace it). */
+    /** File ▸ Import ▸ Any Supported File…: one dialog for every source,
+     *  dispatched by extension (importFile()). Imports merge into the
+     *  CURRENT document (unlike Open, which replaces it). */
     void slotFileImport();
     QFile::FileError slotFileSave();
     QFile::FileError slotFileSaveAs();

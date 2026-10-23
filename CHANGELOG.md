@@ -588,6 +588,17 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   Stage Look in Operate mode too (icon and drawing only, no DMX); still one
   undo step. The Properties toolbar button is enabled for a multi-fixture
   selection in Design and opens the multi-fixture Fixture Properties.
+- **File ▸ Import is a submenu of source types.** One entry per importer,
+  under section headers (*From a show file*: QLC+ / qlcconsole Workspace,
+  ETC Eos Show; *Fixtures & patch*: QLC+ Fixtures List), each with its own
+  file dialog filters, then **Any Supported File…** (the old by-extension
+  Import, `m_fileImportAction`). Table-driven: `App::importSources()` rows
+  (key, section, label, filters, extensions, handler) build the menu and
+  the by-extension dispatch (`App::importFile()`), so the expected QLab
+  importer is one row. The Fixtures List reader is now
+  `FixtureManager::importFixtureList()`, shared with Fixtures ▸ Import
+  fixtures. Test seams `setImportFilePicker()` / `setImportRunHook()`;
+  `importmenu_test` covers the entries, filters and routing.
 - **Icons that say what a row is.** Dimmer looks show a pie of their
   level; Shutter looks open / closed / strobe (from the capability their
   value falls in); Strobe looks a flash with their rate (they had no icon);

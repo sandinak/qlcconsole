@@ -114,8 +114,21 @@ and tested. This is the whole point of the architecture: an importer is a
 
 ### UI entry point
 
-File → Import gets a format-dispatching open: existing `.qxw` behavior is
-preserved; a user who picks an `.asc` goes into a two-step wizard —
+File ▸ Import is a submenu of source types (2026-10-22): **ETC Eos Show
+(ASCII .asc)…** opens the file dialog filtered to `.asc` and goes straight
+into the wizard; **Any Supported File…** at the bottom keeps the original
+format-dispatching open (`.qxw`/`.qlcc` to the workspace import, `.asc` to
+this wizard, `.qxfl` to the fixtures list). The entries come from one table,
+`App::importSources()` (key, section, label, filters, extensions, handler).
+
+**Next source: QLab.** A QLab workspace's cue lists into the Show Tree
+would follow this wizard's pattern -- a reader into a scratch Doc plus
+the cue-list mapping, a wizard for what needs a decision, then
+`ImportSelectionDialog` and the merge -- and appear as one more
+`importSources()` row under *From a show file*. No disabled placeholder is
+shown until it works.
+
+The Eos wizard itself is a two-step flow (as first designed) —
 
 1. Pick companion files (magic sheet XMLs, optional Augment3D).
 2. Reconcile Eos personalities → QLC fixture defs (saved to a mapping file
