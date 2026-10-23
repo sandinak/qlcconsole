@@ -43,10 +43,11 @@ is changed only in the tree: elsewhere it is locked. See
 
 ## The tab
 
-- **Header.** It has + Production, + Cue list, + Cue (**+ Hit** in a
-  Hits section), + Layer, Record, **+ Sub-cue**, Merge, Delete, Undo, Redo,
-  **Upgrade This Show…** and the **Production** switcher (shown once there
-  are two productions).
+- **Header.** It has + Cue list, + Cue (**+ Hit** in a Hits section),
+  + Layer, Record, ✎ Workbench, **More ▾** (**+ Production**, **+ Sub-cue**
+  and **Merge**), Delete, Undo and Redo; **Upgrade This Show…** while the
+  show has chasers to upgrade; and the **Production** switcher once there
+  are two productions.
   At its right end, by the show controls, is **MIB**, the show's auto
   move-in-black (see [Move in black](#move-in-black)); a narrow window
   folds the buttons into **»**, never MIB.
@@ -1748,7 +1749,7 @@ A cue can have **sub-cues** — 4.1, 4.2… — that **Sub GO** (**⌥⌘↩**)
 steps through while GO still goes on to cue 5: the hit, the sweep and the
 strobe inside a chorus.
 
-- **+ Sub-cue** (the header, a cue's right-click menu, or the cue page's
+- **+ Sub-cue** (the header's **More ▾**, a cue's right-click menu, or the cue page's
   *Sub-cues* line) adds one under the selected cue, after the selected
   sub-cue. They are numbered under their cue (4.1, 4.2), and a new main cue
   never takes one of their numbers.

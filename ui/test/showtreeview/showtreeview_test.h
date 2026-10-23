@@ -157,6 +157,9 @@ private slots:
     /** Q60: a typed time is kept when focus leaves its field -- a click on
      *  another cue, Tab, the page changing; Esc puts it back. */
     void typedTimesAreKeptWhenFocusLeaves();
+    /** Q96: + Production, + Sub-cue and Merge under More ▾; + Production
+     *  on the bar too while the show has none. */
+    void theHeaderFoldsUnderMore();
 
 private:
     quint32 dimmer(int level, const QString &name);

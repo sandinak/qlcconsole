@@ -6864,6 +6864,31 @@ void ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves()
     QCOMPARE(st->cue(c3)->hold, Function::infiniteSpeed());
 }
 
+void ShowTreeView_Test::theHeaderFoldsUnderMore()
+{
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1600, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QToolButton *more = view.findChild<QToolButton *>("stMore");
+    QVERIFY(more != nullptr && more->menu() != nullptr);
+    QStringList names;
+    for (QAction *a : more->menu()->actions())
+        names << a->text();
+    QCOMPARE(names, QStringList({ "+ Production", "+ Sub-cue", "Merge" }));
+    QVERIFY(!view.findChild<QToolButton *>("stNewSubCue")->isVisible());
+    QVERIFY(!view.findChild<QToolButton *>("stMerge")->isVisible());
+
+    // An empty show: + Production on the bar as well.
+    QToolButton *prod = view.findChild<QToolButton *>("stNewProduction");
+    QVERIFY(m_doc->showTree()->productions().isEmpty());
+    QVERIFY(prod->isVisible());
+    m_doc->showTree()->addProduction("Spring Show");
+    QTRY_VERIFY(!prod->isVisible());     // the tree follows the controller
+    // The menu still offers it.
+    QVERIFY(more->menu()->actions().first()->isEnabled());
+}
+
 QTEST_MAIN(ShowTreeView_Test)
 
 void ShowTreeView_Test::pickersDockInTheWindow()

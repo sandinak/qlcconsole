@@ -919,9 +919,13 @@ void MainBar_Test::theShowTreesHintIsNeverFolded()
         QToolButton *more = tools->findChild<QToolButton *>(QStringLiteral("qt_toolbar_ext_button"));
         QVERIFY(more != nullptr && more->isVisible());
     }
-    // ...and it doesn't hold the window wide.
-    QVERIFY2(m_app->m_toolbar->minimumSizeHint().width() < 700,
-             qPrintable(QString::number(m_app->m_toolbar->minimumSizeHint().width())));
+    /* ...and they don't hold the window wide: the Show Tree's tools ask for
+       no more than the hint, MIB and » plus a button or two. Measured on the
+       tools themselves: the toolbar's own figure was a cached layout's, and
+       read 598 while the real minimum was ~870. */
+    QVERIFY2(tools->minimumSizeHint().width() < hint->sizeHint().width() + 240,
+             qPrintable(QString("%1 vs hint %2").arg(tools->minimumSizeHint().width())
+                            .arg(hint->sizeHint().width())));
     hint->clear();
     m_app->resize(was);
     QCoreApplication::processEvents();

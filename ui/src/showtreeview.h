@@ -759,6 +759,7 @@ private:
     QPointer<ShowTreeController> m_st;
 
     QToolButton *m_newProduction;
+    QAction *m_newProductionAction = nullptr;   ///< on the bar while there's no production (Q96)
     QToolButton *m_newList;
     QToolButton *m_newCue;
     QToolButton *m_addLayer;

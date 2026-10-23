@@ -172,6 +172,25 @@ circuits and subs.
 - **Connections opens where you'd look for it**: in Classic QLC+ on its
   **Universes** sub-tab (QLC+'s own Inputs/Outputs page, was "Detailed"),
   in the other views on **Devices**.
+- **A quieter footer** (board Q88, Q89, Q98): the Engine Load chip is off
+  unless you turn it on (Settings ▸ Appearance); the power estimate shows
+  only for a show with its power set up; the MTC chip only once a timecode
+  source is picked (Connections ▸ Devices ▸ MIDI timecode) or code is heard.
+- **Move in Black has one switch** (Q91): the Show Tree's **MIB** button.
+  Control ▸ Auto Move in Black and its Settings row are gone; Build's
+  **Move in black ▾** still shows and changes it.
+- **The Show Tree header** (Q90, Q96): **+ Production**, **+ Sub-cue** and
+  **Merge** are under **More ▾** (+ Production is on the bar too while the
+  show has none); **Upgrade This Show…** shows only while there are chasers
+  to upgrade.
+- **A cue's right-click is shorter** (Q93): no Duplicate cue (Duplicate ⌘D
+  is on the same menu), and Make the base cue, Mode and Include cue are on
+  the cue's page only. + Production shows on a production or empty space.
+- **One + Effect ▾ in the Workbench** (Q94) for an EFX or RGB Matrix, and
+  one **Script ▾** in the Look Editor (Q95) for New script… / Edit script….
+- **GO in Design offers Operate** (Q92), once a session, in the line at the
+  top: GO still plays.
+- **No Window ▸ Effects** (Q97): Build ▸ Effects is their home.
 - **A group set dropped on a Build scene adds its groups** (board Q86):
   *Towers* onto a scene adds *SL* and *SR*, and the drag says so ("Add
   the groups of “Towers” (SL, SR) to “Base”"). It was refused without a

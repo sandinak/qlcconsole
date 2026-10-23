@@ -840,16 +840,31 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     bar->setObjectName(QStringLiteral("stToolBar"));
     bar->setMovable(false);
     bar->setFloatable(false);
-    auto button = [this, bar](const QString &text, const QString &tip, const char *name) {
+    auto make = [this](const QString &text, const QString &tip, const char *name) {
         QToolButton *b = new QToolButton(this);
         b->setText(text);
         b->setToolTip(tip);
         b->setObjectName(QLatin1String(name));
         b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        return b;
+    };
+    auto button = [bar, &make](const QString &text, const QString &tip, const char *name) {
+        QToolButton *b = make(text, tip, name);
         bar->addWidget(b);
         return b;
     };
-    m_newProduction = button(tr("+ Production"), tr("A new production: the top of a show's tree"), "stNewProduction");
+    /* Q96: + Production, + Sub-cue and Merge live under More ▾. Each keeps
+       its button, never shown, so its enabled state and action stay in one
+       place; the menu entry clicks it. */
+    auto offBar = [bar, &make](const QString &text, const QString &tip, const char *name) {
+        QToolButton *b = make(text, tip, name);
+        bar->addWidget(b)->setVisible(false);   // in the bar, never shown
+        return b;
+    };
+    // On the bar only while the show has none: it's the first thing an empty
+    // show needs (lesson 1.1). After that, under More ▾.
+    m_newProduction = make(tr("+ Production"), tr("A new production: the top of a show's tree"), "stNewProduction");
+    m_newProductionAction = bar->addWidget(m_newProduction);
     m_newList = button(tr("+ Cue list"), tr("A new Tracking cue list in the selected production (an imported chaser starts "
                                          "Non-tracking)"), "stNewList");
     m_newCue = button(tr("+ Cue"), tr("A new cue after the selected one, numbered for you (never renumbers)"), "stNewCue");
@@ -868,7 +883,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                        "after the selected one — the selected cue, the list's running cue "
                                        "or everything lit. When they differ it asks, or does what "
                                        "Settings → Show Tree says."), "stRecord");
-    m_newSubCue = button(tr("+ Sub-cue"), tr("A sub-cue of the selected cue (4.1, 4.2…): Sub GO (⌥⌘↩) steps "
+    m_newSubCue = offBar(tr("+ Sub-cue"), tr("A sub-cue of the selected cue (4.1, 4.2…): Sub GO (⌥⌘↩) steps "
                                              "through them while GO goes on to the next cue. It starts from what "
                                              "is on stage before it; its changes are cue-only."), "stNewSubCue");
     connect(m_newSubCue, &QToolButton::clicked, this, [this]() { newSubCue(); });
@@ -880,8 +895,27 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                                       "height. ↩ Show Tree comes back."), "stOpenWorkbench");
         connect(wb, &QToolButton::clicked, this, [this]() { openSelectionInWorkbench(); });
     }
-    m_merge = button(tr("Merge"), tr("Merge the layers selected in the tree (⌘- or ⇧-click two or more "
+    m_merge = offBar(tr("Merge"), tr("Merge the layers selected in the tree (⌘- or ⇧-click two or more "
                                      "layers of one cue) into one layer on all their groups"), "stMerge");
+    {
+        QToolButton *more = button(tr("More"), tr("+ Production, + Sub-cue and Merge"), "stMore");
+        more->setPopupMode(QToolButton::InstantPopup);
+        QMenu *m = new QMenu(more);
+        m->setToolTipsVisible(true);
+        for (QToolButton *b : { m_newProduction, m_newSubCue, m_merge })
+        {
+            QAction *a = m->addAction(b->text(), b, &QToolButton::click);
+            a->setToolTip(b->toolTip());
+            a->setObjectName(b->objectName() + QStringLiteral("Action"));
+        }
+        connect(m, &QMenu::aboutToShow, this, [m, this]() {
+            const QList<QAction *> acts = m->actions();
+            const QList<QToolButton *> btns = { m_newProduction, m_newSubCue, m_merge };
+            for (int i = 0; i < acts.size() && i < btns.size(); i++)
+                acts.at(i)->setEnabled(btns.at(i)->isEnabled());
+        });
+        more->setMenu(m);
+    }
     m_delete = button(tr("Delete"), tr("Delete the selected cues and layers, or a cue list or production"),
                       "stDelete");
     bar->addSeparator();
@@ -2992,6 +3026,7 @@ void ShowTreeView::updateButtons()
                          || kind == TrackedLayerNode || kind == LookFolderNode);
     m_addLayer->setEnabled(currentCueId() != invalidId());
     m_newSubCue->setEnabled(currentCueId() != invalidId() && !looks);
+    m_newProductionAction->setVisible(m_st->productions().isEmpty());
     m_record->setEnabled(currentCueId() != invalidId() && !looks);
     m_delete->setEnabled(kind != NoNode && kind != TrackedLayerNode);
     m_merge->setEnabled(selectedLayers().count() > 1);
