@@ -626,6 +626,40 @@ QIcon buildIcon()
     });
 }
 
+QIcon showTreeIcon()
+{
+    return cached(QStringLiteral("tab:showtree"), [](QPainter &p, const QColor &ink) {
+        // A show branching into its cues: one node on the left, a spine and
+        // three cue nodes, the middle one lit (the cue that's live).
+        p.setPen(QPen(ink, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.drawLine(QPointF(8, 9.5), QPointF(8, 25));
+        p.drawLine(QPointF(8, 17), QPointF(15, 17));
+        p.drawLine(QPointF(8, 25), QPointF(15, 25));
+        p.setBrush(alpha(ink, 60));
+        p.drawRoundedRect(QRectF(3, 4, 11, 8), 2, 2);              // the show
+        p.drawRoundedRect(QRectF(15.5, 21, 14, 8), 2, 2);          // a cue
+        p.setPen(QPen(kAmber, 1.6));
+        p.setBrush(kLight);
+        p.drawRoundedRect(QRectF(15.5, 13, 14, 8), 2, 2);          // the live cue
+    });
+}
+
+QIcon runIcon()
+{
+    return cached(QStringLiteral("tab:run"), [](QPainter &p, const QColor &) {
+        // The GO button: green, edged darker so it reads on any theme, with
+        // a white play triangle.
+        p.setPen(QPen(QColor(24, 110, 52), 1.6));
+        p.setBrush(QColor(46, 174, 82));
+        p.drawEllipse(QRectF(2.5, 2.5, 27, 27));
+        QPolygonF play;
+        play << QPointF(12.5, 9) << QPointF(23, 16) << QPointF(12.5, 23);
+        p.setPen(QPen(Qt::white, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setBrush(Qt::white);
+        p.drawPolygon(play);
+    });
+}
+
 QIcon swatchIcon(const QColor &color)
 {
     return cached(QStringLiteral("swatch:%1").arg(color.name(QColor::HexArgb)),

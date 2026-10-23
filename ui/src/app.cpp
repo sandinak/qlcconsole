@@ -668,7 +668,7 @@ void App::init()
             });
         w = tree;
     }
-    addTab(w, QIcon(":/chaser.png"), tr("Show Tree"));
+    addTab(w, ItemIcons::showTreeIcon(), tr("Show Tree"));
     w = new ShowManager(m_tab, m_doc);
     addTab(w, QIcon(":/show.png"), tr("Shows"));
     w = new VirtualConsole(m_tab, m_doc);
@@ -681,7 +681,7 @@ void App::init()
        other home. */
     w = new CueRunner(m_doc, CueRunner::Full, m_tab);
     w->setObjectName(QStringLiteral("runTab"));
-    addTab(w, QIcon(":/chaser.png"), tr("Run"));
+    addTab(w, ItemIcons::runIcon(), tr("Run"));
     /* The view (View ▸ Workspace): qlcconsole until a show says otherwise.
        Functions has no tab in it (board Q32): Window → Functions switches
        to a view that has the stock Functions tab (Q73). */

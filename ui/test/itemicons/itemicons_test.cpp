@@ -810,7 +810,8 @@ void ItemIcons_Test::pictures()
             for (int pct : { 0, 25, 45, 75, 100 })
                 icons << intensityIcon(pct);
             icons << shutterIcon(ShutterOpen) << shutterIcon(ShutterClosed) << shutterIcon(ShutterStrobe, 30)
-                  << shutterIcon(ShutterStrobe, 90) << pointTargetIcon() << lineTargetIcon();
+                  << shutterIcon(ShutterStrobe, 90) << pointTargetIcon() << lineTargetIcon()
+                  << buildIcon() << showTreeIcon() << runIcon();
             for (FixtureKind k : { FixedWash, MovingSpot, MovingWash, MovingHead })
                 icons << kindIcon(k) << kindIcon(k, true);
             // A column each: 16 px at 1x and at 2x, then 32 px; all shown 64 wide.

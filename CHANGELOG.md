@@ -172,6 +172,8 @@ circuits and subs.
 - **Connections opens where you'd look for it**: in Classic QLC+ on its
   **Universes** sub-tab (QLC+'s own Inputs/Outputs page, was "Detailed"),
   in the other views on **Devices**.
+- **Show Tree and Run have their own tab icons**: a cue tree and a green
+  GO button, instead of both using the chaser icon.
 - **Show control and timecode are rows in Connections ▸ Devices** (board
   Q84): **OSC in**, **MIDI Show Control in** and **MIDI timecode**, each
   with its state ("Port 8000 · listening", "Off"); click one to set it up

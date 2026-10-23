@@ -80,6 +80,10 @@ namespace ItemIcons
     QIcon lineTargetIcon();
     /** A hard hat: the Build tab (and wherever Build is named). */
     QIcon buildIcon();
+    /** A cue tree: the Show Tree tab. */
+    QIcon showTreeIcon();
+    /** A green GO button: the Run tab. */
+    QIcon runIcon();
     QIcon swatchIcon(const QColor &color);
     QIcon kindIcon(FixtureKind kind, bool group = false);
 
