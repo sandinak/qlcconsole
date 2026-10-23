@@ -106,7 +106,7 @@ private slots:
     void lessonFiveLateCue();
 
     /** Lesson 3.3, stage looks: the plot's Show menu draws Auto fixtures as
-     *  their closest look, and Stage Look ▸ Practicals ▸ Lantern on the
+     *  their closest look, and Plot Symbol ▸ Practicals ▸ Lantern on the
      *  Lanterns group, as the handout says. */
     void lessonStageLooks();
 

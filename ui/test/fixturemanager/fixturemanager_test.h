@@ -112,7 +112,7 @@ private slots:
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();
     void stageLookIsOfferedInOperate();
-    /** Q51: Stage Look ▸ ends with a Scenery section holding Curtain */
+    /** Q51: Plot Symbol ▸ ends with a Scenery section holding Curtain */
     void stageLookMenuHasAScenerySectionWithCurtain();
 
 private:

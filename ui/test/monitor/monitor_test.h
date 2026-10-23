@@ -421,7 +421,7 @@ private slots:
     void aSilkFlameRisesOnlyWhenItsRelayIsOn();
     void aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves();
     void cancellingTheDrapeDialogTakesItsNewCurtainAway();
-    /** Q51: a dimmer marked Curtain (Stage Look ▸ Scenery ▸ Curtain) is
+    /** Q51: a dimmer marked Curtain (Plot Symbol ▸ Scenery ▸ Curtain) is
      *  hidden on the plot (its drape stands for it) and out of the
      *  inventory, listed as a drape's driver, opened by its intensity;
      *  one ⌘Z puts it back */
@@ -743,10 +743,10 @@ private slots:
     /** The plot redraws a fixture whose look changed: shape, square or round
      *  heads in its lens, the lens hint. */
     void thePlotRedrawsAFixtureWhenItsLookChanges();
-    /** Fixture Properties' Stage look row sets it on every fixture shown,
+    /** Fixture Properties' Plot symbol row sets it on every fixture shown,
      *  reads "mixed" where they differ, and is one undo with the rig. */
     void fixturePropertiesSetsTheStageLook();
-    /** The Fixture Manager's Stage Look menu: Auto named for its type, every
+    /** The Fixture Manager's Plot Symbol menu: Auto named for its type, every
      *  look, the shared one checked, a choice set on all of them. */
     void theStageLookMenuSetsEveryFixtureSelected();
     /** The studio's flat views draw a look in its proportions. */

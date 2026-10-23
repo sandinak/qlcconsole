@@ -488,7 +488,7 @@ out of reach, that wait used to hang the whole startup.
   and **Fetch Definitions** in the footer restores each one once its
   definition is back.
 
-## Layers panel
+## Plot layers panel
 
 A docked, tree-based organizer for everything on the 2D map — fixtures,
 trusses, platforms, targets, power sources, images — each layer with its own
@@ -504,7 +504,7 @@ reliably opens the right editor instead of guessing between four
 visually-similar folder kinds.
 
 - **One lock: the layer's.** Locking anything — from its right-click menu
-  ("Lock Layer “Rig”"), the Layers panel, or a power source's or network
+  ("Lock Layer “Rig”"), the Plot layers panel, or a power source's or network
   node's own toggle — locks its whole layer, and everything locked is
   outlined in red. (Older shows' per-object locks move onto a locked layer
   called "Locked" when opened, so nothing that was held comes loose.) A
@@ -541,7 +541,7 @@ a top, composed into "all step fronts" / "all step tops" sub-groupings.
 - **Save an arrangement as a template**, browsable in a component library,
   and "stamp" it onto a new selection elsewhere.
 
-Reachable from the Layers tree (double-click a group node) or the plot
+Reachable from the Plot layers tree (double-click a group node) or the plot
 (right-click a set of fixtures → "Create Studio Group").
 
 ## DMX &amp; power overlay lenses

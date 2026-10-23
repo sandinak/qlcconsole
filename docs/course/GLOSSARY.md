@@ -100,7 +100,7 @@ brackets.
 | **Patch** | Which address each light is at. [3.1] |
 | **Art-Net / sACN** | DMX sent over a network cable. [3.1] |
 | **Fixture definition** | The file that tells the app what each channel of a light does. [3.2] |
-| **Stage look** | What a fixture looks like on the plot and in the studio: a moving head, a PAR can, an LED bar, a lantern… Set per fixture; **Auto** draws it from its type. [3.3] |
+| **Plot symbol** | What a fixture looks like on the plot and in the studio: a moving head, a PAR can, an LED bar, a lantern… Set per fixture; **Auto** draws it from its type. [3.3] |
 | **Relay** | A switch the console controls, for power: it is either on or off, never dimmed. Used for a circuit that powers LED fixtures, or for house lights on a relay panel. [3.7] |
 | **Grand Master (GM)** | The one fader over everything: at 50 % every light is at half its level. [3.7] |
 | **Blackout** | A switch that takes every light to zero at once, whatever is running; press it again to bring them back. [3.7] |

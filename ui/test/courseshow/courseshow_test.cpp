@@ -1928,7 +1928,7 @@ static QList<quint32> fixturesOf(Doc *doc, const QString &group)
 void CourseShow_Test::lessonStageLooks()
 {
     // Lesson 3.3: what each kind of light is drawn as, on Auto; the plot's
-    // Show menu; Stage Look ▸ Lantern for the Lanterns.
+    // Show menu; Plot Symbol ▸ Lantern for the Lanterns.
     QVERIFY(open(kClassroom));
     Doc *doc = m_app->doc();
     QStringList seen;
@@ -1946,14 +1946,14 @@ void CourseShow_Test::lessonStageLooks()
 
     QAction *autoLooks = nullptr;
     for (QAction *a : Monitor::instance()->findChildren<QAction *>())
-        if (a->text() == QLatin1String("Show Auto fixtures as their closest stage look"))
+        if (a->text() == QLatin1String("Show Auto fixtures as their closest plot symbol"))
             autoLooks = a;
     QVERIFY(autoLooks != nullptr);
     autoLooks->trigger();
     settle(50);
     QVERIFY(doc->monitorProperties()->autoStageLooks());
 
-    // Fixtures tab: right-click the Lanterns → Stage Look ▸.
+    // Fixtures tab: right-click the Lanterns → Plot Symbol ▸.
     const QList<quint32> lanterns = fixturesOf(doc, "Lanterns");
     QCOMPARE(lanterns.count(), 6);
     QMenu menu;
@@ -1963,7 +1963,7 @@ void CourseShow_Test::lessonStageLooks()
         (a->isSeparator() ? sections : items) << a->text();
     QCOMPARE(sections, QStringList({ "Moving", "Fixed conventional", "Fixed LED", "Practicals",
                                      "Scenery" }));
-    qInfo().noquote() << "[3.3] Lanterns' Stage Look menu:" << items.join(" | ");
+    qInfo().noquote() << "[3.3] Lanterns' Plot Symbol menu:" << items.join(" | ");
     QVERIFY(items.first().startsWith("Auto"));
     QAction *lantern = menu.findChild<QAction *>(
         QStringLiteral("stageLook_%1").arg(Fixture::stageLookToString(Fixture::LanternLook)));

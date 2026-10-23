@@ -14,7 +14,7 @@ show.
 |---|---|---|
 | 3.1 | DMX, universes and patching | outline |
 | 3.2 | Fixtures and definitions | outline |
-| 3.3 | [Reading the plot: stage looks](lesson-03/index.md) | written |
+| 3.3 | [Reading the plot: symbols](lesson-03/index.md) | written |
 | 3.4 | Building the rig | outline |
 | 3.5 | Show control | outline |
 | 3.6 | Focus and calibration | outline |

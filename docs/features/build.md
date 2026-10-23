@@ -602,7 +602,7 @@ Things to know:
 
 ## The inline Look Editor
 
-![The Color look editor: basic-color swatches, a wheel picker, and R/G/B/W sliders](../images/programming-tab-look-editor-color.png)
+![The Colour look editor: a colour picker, hue/saturation/value and RGB fields, and the R/G/B/W faders](../images/programming-tab-look-editor-color.png)
 
 The editor shown depends on the selected look's palette type:
 

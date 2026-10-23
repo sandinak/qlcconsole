@@ -1,6 +1,6 @@
 ---
 title: "3.3 At home"
-parent: "Lesson 3.3 — Reading the plot: stage looks"
+parent: "Lesson 3.3 — Reading the plot: symbols"
 grand_parent: "Level 3 — Advanced"
 nav_order: 5
 ---
@@ -14,9 +14,9 @@ Do **one** of these.
 1. Install qlcconsole: [Install](../../install.md).
 2. Download [`ShowChoir-Classroom.qlcc`](../../shows/ShowChoir-Classroom.qlcc)
    (on GitHub: open it, then **Download raw file**).
-3. Do the lesson's corrections again, then give every group a look you
+3. Do the lesson's corrections again, then give every group a symbol you
    can defend: the step strips, the step tops, the truss boxes, the
-   upstage beams. Write one line per group: the look and why.
+   upstage beams. Write one line per group: the symbol and why.
 4. Save it as `Lesson3-3-Home-yourname.qlcc` and bring it (USB stick or the
    class folder), or hand in a screenshot of the plot.
 

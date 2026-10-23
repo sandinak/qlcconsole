@@ -13,8 +13,8 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [0.2.2] - Unreleased
 
 The 0.2.2 release candidate: the Build tab and its Workbench, the
-Classic QLC+ / qlcconsole / Everything views, Upgrade This Show, stage
-looks and output rules on fixtures, and Eos shows with their special
+Classic QLC+ / qlcconsole / Everything views, Upgrade This Show, plot
+symbols and output rules on fixtures, and Eos shows with their special
 circuits and subs.
 
 ### Added
@@ -101,16 +101,16 @@ circuits and subs.
   selection's folder, in the Fixtures tab, Build's Groups & fixtures and
   the Show Tree's Library (with *Make set…*). **Return** / **F2** renames a
   group in the Fixtures tree.
-- **Stage looks.** Per fixture: Auto, or sixteen looks in five sections
+- **Plot symbols.** Per fixture: Auto, or sixteen symbols in five sections
   (Moving; Fixed conventional; Fixed LED; Practicals: Lantern and Staff;
-  Scenery: Curtain), from Fixture Properties or the Fixtures tab's **Stage Look ▸** (also in
+  Scenery: Curtain), from Fixture Properties or the Fixtures tab's **Plot Symbol ▸** (also in
   Operate: it changes only the picture). The 2D plot and the studio's
-  Top/Front/Side views draw the look; a lantern glows all round, a staff
+  Top/Front/Side views draw the symbol; a lantern glows all round, a staff
   is a pole wound with LED strip. Saved as `<StageLook>` only when not
   Auto. The plot's **Show** menu adds **Show Auto fixtures as their
-  closest stage look**, saved with the show (off by default).
-- **Curtain stage look** (Q51). A **Scenery** section in the stage-look
-  picker (Fixture Properties, Stage Look ▸) with **Curtain**, saved as
+  closest plot symbol**, saved with the show (off by default).
+- **Curtain plot symbol** (Q51). A **Scenery** section in the plot-symbol
+  picker (Fixture Properties, Plot Symbol ▸) with **Curtain**, saved as
   `<StageLook>Curtain</StageLook>`. A fixture marked Curtain — a relay on
   a dimmer channel that runs a traveler — is a curtain fixture: listed as
   a drape's driver, drawn on the plot as the drape (its fixture item
@@ -119,7 +119,7 @@ circuits and subs.
   first channel) opens it, 0 closed, 255 open. Back to Auto restores it;
   ⌘Z undoes it.
 - **One icon per fixture, everywhere, and a curtain icon.** Every fixture
-  and group list uses the same icon (its stage look, a curtain's drape,
+  and group list uses the same icon (its plot symbol, a curtain's drape,
   its kind), with the output-rules badge on top. Rows say what they are:
   a Dimmer look's pie, a Shutter look's state, a Strobe look's rate, a
   target's bullseye or line, a fixture's kind.
@@ -162,6 +162,15 @@ circuits and subs.
   why.
 
 ### Changed
+- **One word per idea** (Q70; labels only — saved shows, settings and
+  VC buttons are unchanged). *Stage Look* is now **Plot Symbol**
+  (Fixtures right-click, Fixture Properties, the plot's **Show ▸ Show
+  Auto fixtures as their closest plot symbol**); the Lighting Studio's
+  *Layers* panel is **Plot layers**; *Perform (Operate)* is **Operate**
+  everywhere (Settings ▸ Show Tree); *Hold Last Look* / *Clear Held Last
+  Look* are **Hold at End** / **Clear Hold at End** (Control menu, a
+  Shows track's right-click, the VC button action). Help, the course
+  and the help pictures use the new names.
 - **The Functions window lives in Build ▸ Scenes ▸ Classic** in the
   qlcconsole view: **Window ▸ Functions** (⇧⌘4) opens it, and new
   functions of every type, the Function Wizard and the startup function
@@ -178,9 +187,9 @@ circuits and subs.
 - **The Show Tree shows tracking as badges** (● sets, ○ releases, ⤳
   tracks in) with the details on hover, in a resizable column.
 - **The Build tab wears a hard-hat icon.**
-- **Fixtures tab:** Stage Look ▸ is offered in Operate; the toolbar's
+- **Fixtures tab:** Plot Symbol ▸ is offered in Operate; the toolbar's
   Properties opens Fixture Properties for several fixtures.
-- **A dimmer's Auto stage look is Ellipsoidal / profile spot** (a lantern
+- **A dimmer's Auto plot symbol is Ellipsoidal / profile spot** (a lantern
   is a practical now).
 - **The boot window shows the version**, build and commit.
 - **The Lighting Studio plot draws a pixel fixture's heads where its LED
@@ -236,7 +245,7 @@ circuits and subs.
   universe thread's `processFaders()` -- which zeroes every intensity
   channel and then lays the running faders on top. So a parked or
   highlighted fixture went dark or showed the running cue, and a timeline
-  track's *Hold last look* and the look a show parks on at its end both went
+  track's *Hold at end* and the look a show parks on at its end both went
   dark (pan/tilt held; B1, in the fork since each feature came in). They now
   go out through faders of their own (`OutputLayer`), at new
   `Universe::FaderPriority` levels: **Park** on top, Override and past the
@@ -264,7 +273,7 @@ circuits and subs.
 - **Shows timeline: Undo keeps each track's settings.** The timeline's undo
   snapshot (`ShowManager::captureSnapshot`) held a track's name, mute,
   colour and items only, and Undo rebuilds every track from it -- so any
-  Undo reset Hold last look, Solo / Solo-safe, priority, intensity and the
+  Undo reset Hold at end, Solo / Solo-safe, priority, intensity and the
   track lock on every track, unlocked locked items, and dropped a marker's
   cue-list link. They are now in the snapshot and put back.
 - **Build: the Beat button shows the tempo a Tap set.** It kept the old

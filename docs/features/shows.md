@@ -24,7 +24,7 @@ for the scene you're building.
 
 Right-click a track's header:
 
-- **Hold last look (stays up between cues)** — a gap between items keeps
+- **Hold at end (stays up between cues)** — a gap between items keeps
   the last look on, rather than going dark. The held look is a base under
   everything else: anything that plays on top of it mixes with it as two
   cues would (the higher level of a dimmer shows; a position or colour

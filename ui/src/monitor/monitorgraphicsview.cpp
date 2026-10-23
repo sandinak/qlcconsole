@@ -7084,7 +7084,7 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
             selectMapItem(kind, id);
         });
     else
-        menu->addAction(tr("Show in Layers"), this, [this, kind, id]() {
+        menu->addAction(tr("Show in Plot Layers"), this, [this, kind, id]() {
             emit revealInLayersRequested(kind, id);
         });
     if (design)

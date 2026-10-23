@@ -181,7 +181,7 @@
       <item>
        <widget class="QRadioButton" name="m_clearLastLook">
         <property name="text">
-         <string>Timeline: Clear held last look</string>
+         <string>Timeline: Clear hold at end</string>
         </property>
        </widget>
       </item>

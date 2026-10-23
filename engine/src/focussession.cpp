@@ -135,7 +135,7 @@ bool FocusSession::start(const Options &options, QString *why)
         return refuse(tr("There is no rig to focus."));
     /* A Design-mode tool: in Perform the rig belongs to the show. */
     if (m_doc->mode() == Doc::Operate)
-        return refuse(tr("Focus mode works in Design mode only: switch out of Perform first."));
+        return refuse(tr("Focus mode works in Design mode only: switch out of Operate first."));
     if (!options.first.isValid())
         return refuse(tr("Choose what the heads should aim at."));
 

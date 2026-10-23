@@ -4695,7 +4695,7 @@ bool ShowTreeView::askRecordSource(quint32 cueId, const QList<RecordSource> &cho
     for (const auto &r : radios)
         r.first->setChecked(r.second == pre);
     QCheckBox *remember = new QCheckBox(tr("Don't ask again in %1 mode (Settings → Show Tree changes it)")
-                                        .arg(perform ? tr("Perform (Operate)") : tr("Design")), &dlg);
+                                        .arg(perform ? tr("Operate") : tr("Design")), &dlg);
     remember->setObjectName("stRecordDontAsk");
     v->addWidget(remember);
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);

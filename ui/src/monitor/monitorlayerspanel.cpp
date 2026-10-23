@@ -171,7 +171,7 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
 
     // Title row with an in-panel hide button.
     QHBoxLayout *titleRow = new QHBoxLayout();
-    QLabel *title = new QLabel(tr("Layers"), this);
+    QLabel *title = new QLabel(tr("Plot layers"), this);
     QFont tf = title->font();
     tf.setBold(true);
     title->setFont(tf);
@@ -196,7 +196,7 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     m_hideBtn = new QToolButton(this);
     m_hideBtn->setText("\xC3\x97"); // ×
     m_hideBtn->setAutoRaise(true);
-    m_hideBtn->setToolTip(tr("Hide the Layers panel"));
+    m_hideBtn->setToolTip(tr("Hide the Plot layers panel"));
     titleRow->addWidget(m_hideBtn);
     vbox->addLayout(titleRow);
 

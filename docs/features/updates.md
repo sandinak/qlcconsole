@@ -30,7 +30,7 @@ After the update, the chip says *Updated to 0.2.0* for a couple of minutes.
 An update is only put in place when **you** quit qlcconsole, or click
 **Restart and Install**. Even then, it waits if:
 
-- qlcconsole is in **Perform (Operate)** mode,
+- qlcconsole is in **Operate** mode,
 - any function (a scene, a chase, a cue) is running, or
 - qlcconsole is running as a kiosk.
 

@@ -2311,7 +2311,7 @@ void ShowTreeView_Test::recordAsksWhenTheChoicesDiffer()
     QCOMPARE(st->cue(view.currentCueId())->name, QString("Two (recorded)"));
     QVERIFY(view.runCommand("undo"));
 
-    // Perform (Operate): its own setting -- still Ask.
+    // Operate: its own setting -- still Ask.
     chaser->stop(FunctionParent::master());
     settleDmx(m_doc, 3);
     m_doc->setMode(Doc::Operate);
