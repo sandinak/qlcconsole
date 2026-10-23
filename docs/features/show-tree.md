@@ -1077,7 +1077,7 @@ starts on the selected cue; in Operate, on the running cue. Tick **Don't ask
 again** to make your answer the default.
 
 The defaults live in **Settings** (⌘,) → **General** → **Show Tree**. There is one for
-Design and one for Perform (Operate), each set to Ask or one of the three.
+Design and one for Operate, each set to Ask or one of the three.
 A default that names something not on stage (the running cue, with nothing
 running) asks instead. Typing `record selected`, `record running` or
 `record lit` skips the question.

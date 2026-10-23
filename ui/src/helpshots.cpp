@@ -28,10 +28,13 @@
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSplitter>
 #include <QAction>
 #include <QToolBar>
 #include <QTabBar>
+#include <QComboBox>
+#include <QDialog>
 #include <QPainterPath>
 #include <QPainter>
 #include <QSettings>
@@ -41,6 +44,11 @@
 #include <QDir>
 
 #include "programmingmanager.h"
+#include "fixturemanager.h"
+#include "fixturetreewidget.h"
+#include "monitor.h"
+#include "monitorgraphicsview.h"
+#include "truss.h"
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "patchinventorydialog.h"
@@ -186,34 +194,42 @@ void HelpShots::take(const Shot &shot)
 {
     Frame frame = shot.setup();
     settle();
-    if (frame.grab.isNull())
-    {
-        fprintf(stderr, "[HELPSHOT] %s: nothing to grab\n", qPrintable(shot.name));
-        ++m_failed;
-    }
-    else
-    {
-        for (const Callout &c : frame.callouts)
-            if (c.widget.isNull() ? c.rect.isEmpty() : seenRect(c.widget, frame.grab).isEmpty())
-            {
-                fprintf(stderr, "[HELPSHOT] %s: callout %d has no control on show\n",
-                        qPrintable(shot.name), c.number);
-                ++m_failed;
-            }
-
-        const QImage img = annotate(frame.grab->grab().toImage(), frame);
-        const QString path = m_outDir + QLatin1Char('/') + shot.name + QStringLiteral(".png");
-        if (img.save(path))
-            fprintf(stderr, "[HELPSHOT] %s\n", qPrintable(path));
-        else
-        {
-            fprintf(stderr, "[HELPSHOT] %s: can't write\n", qPrintable(path));
-            ++m_failed;
-        }
-    }
+    if (!frame.saved)
+        save(shot.name, frame);
     if (shot.cleanup)
         shot.cleanup();
     settle();
+}
+
+bool HelpShots::save(const QString &name, const Frame &frame)
+{
+    if (frame.grab.isNull())
+    {
+        fprintf(stderr, "[HELPSHOT] %s: nothing to grab\n", qPrintable(name));
+        ++m_failed;
+        return false;
+    }
+    bool ok = true;
+    for (const Callout &c : frame.callouts)
+        if (c.widget.isNull() ? c.rect.isEmpty() : seenRect(c.widget, frame.grab).isEmpty())
+        {
+            fprintf(stderr, "[HELPSHOT] %s: callout %d has no control on show\n",
+                    qPrintable(name), c.number);
+            ++m_failed;
+            ok = false;
+        }
+
+    const QImage img = annotate(frame.grab->grab().toImage(), frame);
+    const QString path = m_outDir + QLatin1Char('/') + name + QStringLiteral(".png");
+    if (img.save(path))
+        fprintf(stderr, "[HELPSHOT] %s\n", qPrintable(path));
+    else
+    {
+        fprintf(stderr, "[HELPSHOT] %s: can't write\n", qPrintable(path));
+        ++m_failed;
+        ok = false;
+    }
+    return ok;
 }
 
 QImage HelpShots::annotate(const QImage &image, const Frame &frame)
@@ -403,6 +419,9 @@ QList<HelpShots::Shot> HelpShots::shots()
     // The look editor on an Effect look: what's picked, its Spread, its master.
     list << Shot{ QStringLiteral("programming-tab-look-editor-effect"), [=]() {
         window();
+        // Wider than the other pictures: the effect's rows want the room, and
+        // at 1280 its Spread row and labels were cut off at the pane's edges.
+        app->resize(kWidth + 500, kHeight);
         openScene(QStringLiteral("05 Stage Shape"), QStringLiteral("Line"));
         editorHeight(600);
         // Scrolled down to the Spread row and the speed master under it.
@@ -413,6 +432,7 @@ QList<HelpShots::Shot> HelpShots::shots()
                 if (QScrollArea *sa = qobject_cast<QScrollArea *>(w))
                 {
                     sa->ensureWidgetVisible(row, 0, 8);
+                    sa->horizontalScrollBar()->setValue(0);   // its labels, on the left
                     break;
                 }
         }
@@ -529,6 +549,191 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (QWidget *dlg = app->findChild<QWidget *>(QStringLiteral("helpShotPatch")))
             dlg->close();
     } };
+
+    // The Fixtures tab: its group folders open, @a group selected (its
+    // head-layout grid on the right), or nothing selected when empty.
+    auto fixturesTab = [=](const QString &group) -> FixtureManager * {
+        FixtureManager *fm = app->findChild<FixtureManager *>();
+        if (fm == NULL)
+        {
+            fprintf(stderr, "[HELPSHOT] no Fixtures tab\n");
+            return NULL;
+        }
+        showTab(fm);
+        QTreeWidget *tree = fm->m_fixtures_tree;
+        tree->clearSelection();
+        QTreeWidgetItem *hit = NULL;
+        for (QTreeWidgetItemIterator it(tree); *it != NULL; ++it)
+            if ((*it)->data(0, PROP_GROUP).isValid())
+            {
+                for (QTreeWidgetItem *up = (*it)->parent(); up != NULL; up = up->parent())
+                    up->setExpanded(true);
+                if (!group.isEmpty() && (*it)->text(0) == group)
+                    hit = *it;
+            }
+        if (hit != NULL)
+            tree->setCurrentItem(hit);
+        else if (!group.isEmpty())
+            fprintf(stderr, "[HELPSHOT] no group %s\n", qPrintable(group));
+        fm->slotSelectionChanged();
+        settle();
+        return fm;
+    };
+    // The Lighting Studio tab in @a pov, its Plot layers panel open.
+    auto studio = [=](MonitorGraphicsView::ViewPOV pov) -> Monitor * {
+        Monitor *mon = Monitor::instance();
+        if (mon == NULL || mon->m_povCombo == NULL)
+        {
+            fprintf(stderr, "[HELPSHOT] no Lighting Studio\n");
+            return NULL;
+        }
+        showTab(mon);
+        if (mon->m_layersAction != NULL)
+            mon->m_layersAction->setChecked(true);
+        const int idx = mon->m_povCombo->findData(int(pov));
+        if (idx >= 0)
+            mon->m_povCombo->setCurrentIndex(idx);
+        mon->slotPOVChanged(mon->m_povCombo->currentIndex());
+        settle();
+        return mon;
+    };
+
+    // The Fixtures tab: the group folders.
+    list << Shot{ QStringLiteral("fixture-manager-groups"), [=]() {
+        window();
+        Frame f;
+        if (fixturesTab(QString()) != NULL)
+            f.grab = app;
+        return f;
+    }, nullptr };
+
+    // A group selected: its head-layout grid.
+    list << Shot{ QStringLiteral("fixture-manager-grid-editor"), [=]() {
+        window();
+        Frame f;
+        if (fixturesTab(QStringLiteral("Pars")) != NULL)
+            f.grab = app;
+        return f;
+    }, [=]() { fixturesTab(QString()); } };
+
+    // Connections: the Devices view, the signal followed outward.
+    list << Shot{ QStringLiteral("connections-devices-tab"), [=]() {
+        window();
+        Frame f;
+        QCheckBox *byUni = qobject_cast<QCheckBox *>(named(app, "connectionsByUniverse"));
+        QTreeWidget *tree = qobject_cast<QTreeWidget *>(named(app, "connectionsTree"));
+        if (byUni == NULL || tree == NULL)
+            return f;
+        showTab(tree);
+        byUni->setChecked(false);
+        settle();
+        tree->expandAll();
+        settle();
+        f.grab = app;
+        return f;
+    }, nullptr };
+
+    // The Lighting Studio from above, and from the front.
+    list << Shot{ QStringLiteral("lighting-studio-top-view"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QString());   // the rig lit
+        Frame f;
+        if (studio(MonitorGraphicsView::PovTop) != NULL)
+            f.grab = app;
+        return f;
+    }, nullptr };
+
+    list << Shot{ QStringLiteral("lighting-studio-front-view-badges"), [=]() {
+        window();
+        Frame f;
+        if (studio(MonitorGraphicsView::PovFront) != NULL)
+            f.grab = app;
+        return f;
+    }, [=]() { studio(MonitorGraphicsView::PovTop); } };
+
+    // The Rig Overview, over the studio.
+    list << Shot{ QStringLiteral("lighting-studio-rig-overview-3d"), [=]() {
+        window();
+        Frame f;
+        Monitor *mon = studio(MonitorGraphicsView::PovTop);
+        if (mon == NULL)
+            return f;
+        mon->showStageOverview();
+        settle();
+        if (mon->m_overviewDlg == NULL)
+            return f;
+        // The software renderer: offscreen there is no graphics card to ask.
+        if (QCheckBox *gpu = mon->m_overviewDlg->findChild<QCheckBox *>(QStringLiteral("rigGpu")))
+            gpu->setChecked(false);
+        mon->m_overviewDlg->resize(1100, 760);
+        settle();
+        f.grab = mon->m_overviewDlg;
+        return f;
+    }, [=]() {
+        Monitor *mon = Monitor::instance();
+        if (mon != NULL && mon->m_overviewDlg != NULL)
+            mon->m_overviewDlg->close();
+    } };
+
+    /* A truss's own editor, then with one of its fixtures picked. The editor
+       is modal: each picture is taken from inside its event loop. */
+    auto trussEditor = [=](const QString &name, bool pickFixture) {
+        Frame done;
+        done.saved = true;
+        Monitor *mon = studio(MonitorGraphicsView::PovTop);
+        const QList<Truss *> trusses = mon != NULL ? mon->m_props->trusses() : QList<Truss *>();
+        if (trusses.isEmpty())
+        {
+            fprintf(stderr, "[HELPSHOT] %s: no truss\n", qPrintable(name));
+            ++m_failed;
+            return done;
+        }
+        QTimer::singleShot(0, this, [=]() {
+            QWidget *dlg = QApplication::activeModalWidget();
+            Frame f;
+            if (dlg != NULL)
+            {
+                dlg->resize(1500, 780);
+                settle();
+                if (pickFixture)
+                    for (QTreeWidget *tree : dlg->findChildren<QTreeWidget *>())
+                        for (QTreeWidgetItemIterator it(tree); *it != NULL; ++it)
+                            if ((*it)->text(0).startsWith(QStringLiteral("Mover 1")))
+                            {
+                                tree->setCurrentItem(*it);
+                                break;
+                            }
+                settle();
+                f.grab = dlg;
+            }
+            save(name, f);
+            if (QDialog *d = qobject_cast<QDialog *>(dlg))
+                d->reject();
+        });
+        Truss *truss = trusses.first();
+        for (Truss *t : trusses)
+            if (t->name() == QLatin1String("US Truss"))
+                truss = t;
+        mon->slotEditTruss(truss->id());
+        return done;
+    };
+    list << Shot{ QStringLiteral("lighting-studio-truss-editor"), [=]() {
+        window();
+        return trussEditor(QStringLiteral("lighting-studio-truss-editor"), false);
+    }, nullptr };
+    list << Shot{ QStringLiteral("lighting-studio-fixture-mount-properties"), [=]() {
+        window();
+        return trussEditor(QStringLiteral("lighting-studio-fixture-mount-properties"), true);
+    }, nullptr };
+
+    // The look editor on a Colour look.
+    list << Shot{ QStringLiteral("programming-tab-look-editor-color"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QStringLiteral("White"));
+        Frame f;
+        f.grab = app;
+        return f;
+    }, nullptr };
 
     // The stack checker: a second movement effect covers the first. Last,
     // as it changes the show (and puts it back).

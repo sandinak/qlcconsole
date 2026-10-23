@@ -1,6 +1,6 @@
 ---
 title: "3.3 Exit ticket"
-parent: "Lesson 3.3 — Reading the plot: stage looks"
+parent: "Lesson 3.3 — Reading the plot: symbols"
 grand_parent: "Level 3 — Advanced"
 nav_order: 4
 ---
@@ -18,7 +18,7 @@ Name: ______________________
 
    ____________________________________________________________
 
-3. What does **Auto** mean for a light's stage look?
+3. What does **Auto** mean for a light's plot symbol?
 
    ____________________________________________________________
 

@@ -275,7 +275,7 @@ page" shrinks it and the labels no longer line up with the sheet.
 
 ## The head-layout grid editor
 
-![The head-layout grid: a 16×5 block of fixtures with per-head labels](../images/fixture-manager-grid-editor.png)
+![The head-layout grid: the Pars group, eight fixtures in a row with per-head labels](../images/fixture-manager-grid-editor.png)
 
 Select a group to open it: a name field, an "Add group as block…" button,
 and a grid of cells. Each occupied cell shows the fixture's icon, name, head
@@ -448,7 +448,7 @@ RGB**, a row of 15 each. The **LED layout** says where each head really is,
 once per model and mode, and everything that draws or groups heads uses it.
 
 **Where to find it.** Right-click a fixture — in the Fixture Manager, on the
-Lighting Studio plot or its Layers tree, or in the Rig Overview — and choose
+Lighting Studio plot or its Plot layers tree, or in the Rig Overview — and choose
 **LED Layout…**; or press **LED Layout…** at the top of **Fixture
 Properties**. It is offered for fixtures with more than one head (greyed
 for a single-head one), and it makes no group: it is the fixture's map, and
@@ -512,14 +512,14 @@ to start with — as your default for the model.
 
 It's offered when making a group from mixed fixtures on the Lighting
 Studio plot's fixture menu, and on a fixture group's row in the Studio's
-Layers list. (In the Fixture Manager, option 2 of
+Plot layers list. (In the Fixture Manager, option 2 of
 [Create Group(s) from Selection](#create-groups-from-selection) does the
 same job.)
 
 ### Lay Out from the Stage
 
 A group filled in head order — poured into a square, say — can be put
-right in place: on a fixture group's row in the Lighting Studio's Layers
+right in place: on a fixture group's row in the Lighting Studio's Plot layers
 list, **Lay Out from the Stage…** opens the same dialog on *that* group,
 keeping its name, and **Apply** re-lays it from where its fixtures stand.
 
@@ -601,7 +601,7 @@ selected, and only offers what applies:
    **Edit Fixture Definition…** (one fixture, several fixtures or one group,
    when they all share one definition; several definitions show it greyed
    out as *(several definitions)*), Change Definition… (fixtures of one
-   definition, when another is a drop-in for it), **Stage Look ▸** (below)
+   definition, when another is a drop-in for it), **Plot Symbol ▸** (below)
    and [Output Rules…](#output-rules).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
@@ -623,43 +623,43 @@ inventory — and Expand All / Collapse All last.
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.
 
-### Stage Look
+### Plot Symbol
 
-**Stage Look ▸** sets what the fixtures selected — and every fixture of a
+**Plot Symbol ▸** sets what the fixtures selected — and every fixture of a
 group selected — look like: **Auto** (named for what their type is closest
-to, as *Auto (Moving head spot)*), then the looks under **Moving**, **Fixed
+to, as *Auto (Moving head spot)*), then the symbols under **Moving**, **Fixed
 conventional**, **Fixed LED**, **Practicals** (Lantern, Staff) and
 **Scenery** (Curtain: the fixture drives a curtain and is drawn as its drape
-— see [Stage looks](lighting-studio.md#stage-looks)), with icons. The one they all share is
-ticked. A fixture with a look shows its icon in this list and the other
+— see [Plot symbols](lighting-studio.md#plot-symbols)), with icons. The one they all share is
+ticked. A fixture with a symbol shows its icon in this list and the other
 fixture lists, and its shape on the plot and in the studio; see
-[Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
-same choice as its **Stage look** row. A look changes only the icon and the
-drawing, never the DMX, so Stage Look ▸ is offered in Operate mode too, and
+[Plot symbols](lighting-studio.md#plot-symbols). Fixture Properties has the
+same choice as its **Plot symbol** row. A symbol changes only the icon and the
+drawing, never the DMX, so Plot Symbol ▸ is offered in Operate mode too, and
 ⌘Z undoes it.
 
 ### Icons
 
 A fixture has one icon, and it is the same wherever the fixture is listed:
 here, Build's *Groups & fixtures* and Scenes outline, the Show Tree and its
-Library, the plot's Inventory and Layers panels, Fixture Properties, the
+Library, the plot's Inventory and Plot layers panels, Fixture Properties, the
 channels-group and remap dialogs and the Virtual Console's fixture lists.
 What decides it, in order:
 
-1. **Its stage look**, when you have given it one (Stage Look ▸ above).
+1. **Its plot symbol**, when you have given it one (Plot Symbol ▸ above).
 2. **A curtain** — a fixture that gives no light and has an *Open*,
    *Position* or *Fly* channel (the plot draws it as its drape) — shows a
-   drape on its track. (One you mark with the **Curtain** look shows it by
+   drape on its track. (One you mark with the **Curtain** symbol shows it by
    rule 1.)
-3. **Its closest look**, when it is on Auto and the plot's **Show ▸ Show
-   Auto fixtures as their closest stage look** is on.
+3. **Its closest symbol**, when it is on Auto and the plot's **Show ▸ Show
+   Auto fixtures as their closest plot symbol** is on.
 4. Otherwise **what it is**: a fixed wash, a moving spot, a moving wash or
    a moving head, else its definition's type (a hazer, a fan, a strobe...).
 
 A fixture with [output rules](#output-rules) adds the amber badge. A group
 shows the group version of its fixtures' shared icon — all curtains, one
-look (with the setting on) or one kind — and the plain group icon when they
-differ. Every list redoes its icons when a look, the rules or the setting
+symbol (with the setting on) or one kind — and the plain group icon when they
+differ. Every list redoes its icons when a symbol, the rules or the setting
 change.
 
 ### Patching a universe's output

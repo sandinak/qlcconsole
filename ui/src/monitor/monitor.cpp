@@ -639,7 +639,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         layersHandle->setDefaultAction(m_layersAction);
         layersHandle->setAutoRaise(true);
         layersHandle->setIconSize(QSize(14, 14));
-        layersHandle->setToolTip(tr("Show or hide the Layers sidebar"));
+        layersHandle->setToolTip(tr("Show or hide the Plot layers sidebar"));
         QVBoxLayout *cl = new QVBoxLayout(m_rulerCorner);
         cl->setContentsMargins(1, 1, 1, 1);
         cl->addWidget(layersHandle);
@@ -840,11 +840,11 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     /* Fixtures left on Auto drawn as their closest stage look (an LED PAR,
        a moving head spot...) instead of by their definition's type. Per
        show, saved with it; one Ctrl+Z, like any change to the plot. */
-    QAction *autoLooksBtn = showMenu->addAction(tr("Show Auto fixtures as their closest stage look"));
+    QAction *autoLooksBtn = showMenu->addAction(tr("Show Auto fixtures as their closest plot symbol"));
     autoLooksBtn->setObjectName(QStringLiteral("autoStageLooksAction"));
     autoLooksBtn->setCheckable(true);
     autoLooksBtn->setChecked(m_props->autoStageLooks());
-    autoLooksBtn->setToolTip(tr("Show every fixture whose Stage look is Auto as the look its type is "
+    autoLooksBtn->setToolTip(tr("Show every fixture whose Plot symbol is Auto as the symbol its type is "
                                 "closest to -- its icon in the lists, and its shape on the plot and in the studio. Saved with the show."));
     connect(autoLooksBtn, &QAction::toggled, this, [this](bool on) {
         if (on == m_props->autoStageLooks())
@@ -1977,9 +1977,9 @@ void Monitor::initGraphicsToolbar()
 
     // The Layers toggle is NOT on the toolbar — it lives as a small popout
     // handle at the top-left of the canvas (added in initGraphicsFooter).
-    m_layersAction = new QAction(QIcon(":/frame.png"), tr("Layers"), this);
+    m_layersAction = new QAction(QIcon(":/frame.png"), tr("Plot layers"), this);
     m_layersAction->setCheckable(true);
-    m_layersAction->setToolTip(tr("Show or hide the Layers sidebar"));
+    m_layersAction->setToolTip(tr("Show or hide the Plot layers sidebar"));
     connect(m_layersAction, SIGNAL(toggled(bool)), this, SLOT(slotToggleLayersPanel(bool)));
 
     if (QLCFile::hasWindowManager() == false)
@@ -2653,8 +2653,8 @@ void Monitor::showStageOverview()
        it. Rebuilt each time it opens, so it is the show's layers as they are. */
     QToolButton *layersBtn = new QToolButton(&dlg);
     layersBtn->setObjectName(QStringLiteral("rigLayers"));
-    layersBtn->setText(tr("Layers"));
-    layersBtn->setToolTip(tr("Show or hide a layer (the same as its eye in the Studio)"));
+    layersBtn->setText(tr("Plot layers"));
+    layersBtn->setToolTip(tr("Show or hide a plot layer (the same as its eye in the Studio)"));
     layersBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *layersMenu = new QMenu(layersBtn);
     layersBtn->setMenu(layersMenu);

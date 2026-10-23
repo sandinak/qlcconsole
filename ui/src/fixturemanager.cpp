@@ -2965,7 +2965,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             }
             if (!lookFids.isEmpty())
             {
-                QMenu *lookMenu = menu.addMenu(tr("Stage Look"));
+                QMenu *lookMenu = menu.addMenu(tr("Plot Symbol"));
                 lookMenu->setObjectName(QStringLiteral("stageLookMenu"));
                 fillStageLookMenu(lookMenu, m_doc, lookFids);
             }

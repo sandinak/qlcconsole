@@ -272,7 +272,7 @@ void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
         aSoloSafe->setCheckable(true);
         aSoloSafe->setChecked(m_track->isSoloSafe());
 
-        aHoldLast = menu.addAction(tr("Hold last look (stays up between cues)"));
+        aHoldLast = menu.addAction(tr("Hold at end (stays up between cues)"));
         aHoldLast->setCheckable(true);
         aHoldLast->setChecked(m_track->isHoldLast());
 

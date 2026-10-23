@@ -1770,8 +1770,8 @@ void FixtureManager_Test::stageLookIsOfferedInOperate()
     selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, two[0]), fixtureRow(mgr, two[1]) });
     const QStringList texts = contextMenuTree(mgr);
     m_doc->setMode(Doc::Design);
-    QVERIFY2(texts.contains("Stage Look"), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.filter(QStringLiteral("Stage Look ▸ ")).isEmpty(), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Plot Symbol"), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.filter(QStringLiteral("Plot Symbol ▸ ")).isEmpty(), qPrintable(texts.join(" | ")));
 }
 
 void FixtureManager_Test::stageLookMenuHasAScenerySectionWithCurtain()

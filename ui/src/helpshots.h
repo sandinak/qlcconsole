@@ -64,6 +64,7 @@ public:
         QList<Callout> callouts;
         QRect crop;             // part of the grab to keep; empty = all of it
         QMargins pad;           // room added round the grab, for numbers outside it
+        bool saved = false;     // the setup took the picture itself (a modal dialog)
     };
 
     struct Shot
@@ -89,6 +90,8 @@ private:
     QList<Shot> shots();
     void next();
     void take(const Shot &shot);
+    /** Grabs @a frame, marks it and writes "<name>.png"; false on a failure. */
+    bool save(const QString &name, const Frame &frame);
 
 private:
     App *m_app;

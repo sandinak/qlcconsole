@@ -1845,12 +1845,12 @@ void App::initActions()
     // Last-look persistence: a stopped/finished show holds its final look instead
     // of blacking out (Operate). The toggle enables/disables the behaviour; the
     // clear action drops a currently-held look (also a MIDI-mappable VCButton).
-    m_lastLookAction = new QAction(QIcon(":/star.png"), tr("Hold &Last Look"), this);
+    m_lastLookAction = new QAction(QIcon(":/star.png"), tr("Hold at &End"), this);
     m_lastLookAction->setCheckable(true);
     m_lastLookAction->setChecked(m_doc->lastLookEnabled());
     m_lastLookAction->setToolTip(tr(
-        "When a show stops or ends (Operate), hold its final look on the rig "
-        "instead of blacking out, until the next cue takes over."));
+        "Hold at end: when a show stops or ends (Operate), keep its final look "
+        "on the rig instead of blacking out, until the next cue takes over."));
     connect(m_lastLookAction, SIGNAL(toggled(bool)),
             this, SLOT(slotLastLookToggled(bool)));
 
@@ -1879,9 +1879,9 @@ void App::initActions()
     }
 
     m_clearLastLookAction = new QAction(QIcon(":/fileclose.png"),
-                                        tr("&Clear Held Last Look"), this);
+                                        tr("&Clear Hold at End"), this);
     m_clearLastLookAction->setToolTip(tr(
-        "Drop a stopped show's held last look now (the held channels go dark)."));
+        "Drop what a stopped show is holding at its end now (the held channels go dark)."));
     connect(m_clearLastLookAction, SIGNAL(triggered()),
             this, SLOT(slotClearLastLook()));
 

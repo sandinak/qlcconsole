@@ -63,7 +63,7 @@ bool UpdateInstaller::safeToInstall(const Doc *doc, QString *why)
         if (doc->isKiosk())
             reason = tr("qlcconsole is running as a kiosk.");
         else if (doc->mode() == Doc::Operate)
-            reason = tr("qlcconsole is in Perform (Operate) mode.");
+            reason = tr("qlcconsole is in Operate mode.");
         else if (running > 0)
             reason = tr("%n function(s) running.", "", running);
     }

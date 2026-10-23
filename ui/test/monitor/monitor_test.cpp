@@ -4299,7 +4299,7 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
             /* Not a subset: the SAME menu, in the same order, with the one
                action that says where you are swapped. */
             QStringList plotPaths = menuPaths(&plot);
-            plotPaths.replaceInStrings(QStringLiteral("Show in Layers"), QStringLiteral("Show on Map"));
+            plotPaths.replaceInStrings(QStringLiteral("Show in Plot Layers"), QStringLiteral("Show on Map"));
             QVERIFY2(!plotPaths.isEmpty(), qPrintable(kind + " has no menu at all"));
             QVERIFY2(plotPaths == menuPaths(&list),
                      qPrintable(QString("%1 %2: the plot offers\n  %3\nbut the Layers list offers\n  %4")
@@ -4334,7 +4334,7 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
         {
             QMenu m;
             view.buildItemMenu(&m, QStringLiteral("fixture"), spot->id(), MonitorGraphicsView::MenuPlace());
-            QAction *a = menuAction(&m, QStringLiteral("Show in Layers"));
+            QAction *a = menuAction(&m, QStringLiteral("Show in Plot Layers"));
             QVERIFY(a != nullptr);
             a->trigger();
             QVERIFY(panel.m_tree->currentItem() == rowFor(QStringLiteral("fixture"), spot->id()));
@@ -14701,7 +14701,7 @@ void Monitor_Test::aFixtureMarkedCurtainIsDrawnAsItsDrape()
         inventoryLeaves(panel, &names);
         QVERIFY2(names.contains("Spare relay"), qPrintable(names.join(", ")));
 
-        // Marked Curtain, from the Stage Look menu: one undo step.
+        // Marked Curtain, from the Plot Symbol menu: one undo step.
         QMenu menu;
         FixtureManager::fillStageLookMenu(&menu, doc, { relay->id(), spare->id() });
         QAction *mark = menu.findChild<QAction *>("stageLook_Curtain");

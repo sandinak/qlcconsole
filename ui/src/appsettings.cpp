@@ -334,7 +334,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     m_recordDesignCombo = recordCombo(false);
     m_recordPerformCombo = recordCombo(true);
     stLayout->addRow(tr("Record in Design:"), m_recordDesignCombo);
-    stLayout->addRow(tr("Record in Perform (Operate):"), m_recordPerformCombo);
+    stLayout->addRow(tr("Record in Operate:"), m_recordPerformCombo);
     // Auto move-in-black: the show's, saved with it -- the same one setting as
     // the Show Tree's MIB button and Programming's Move in black menu.
     {

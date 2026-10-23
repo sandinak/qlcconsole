@@ -7,7 +7,7 @@ The latest changes, newest first. Each links to the guide with the detail.
 The Programming tab is now **Build**, with a Workbench that edits scenes,
 collections and chasers as layers; the Show Tree and Build share it. Old
 QLC+ shows open in a **Classic QLC+** view and can be upgraded in one
-step. Fixtures get stage looks and output rules, and Eos shows import with
+step. Fixtures get plot symbols and output rules, and Eos shows import with
 their house lights, relays and subs.
 
 ### Build and the Workbench
@@ -55,6 +55,14 @@ their house lights, relays and subs.
 
 ### Views, menus and keys
 
+- **One word per idea.** **Plot Symbol** is what *Stage Look* was
+  (what a fixture is drawn as: Fixtures right-click, Fixture Properties,
+  the plot's **Show** menu); the Lighting Studio's *Layers* panel is
+  **Plot layers**; **Operate** replaces *Perform (Operate)*; and the
+  Control menu's *Hold Last Look* is **Hold at End**, with **Clear Hold
+  at End** (and a Shows track's **Hold at end**). Only the names changed:
+  shows and settings are as they were. See
+  [Plot symbols](lighting-studio.md#plot-symbols).
 - **Three views.** **View ▸ Workspace** picks the tabs: **qlcconsole**
   (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
   Virtual Console, Simple Desk, Run), **Classic QLC+** (QLC+'s own tabs, in its order
@@ -183,25 +191,25 @@ their house lights, relays and subs.
 
 ### Fixtures and the plot
 
-- **Stage looks.** Fixture Properties and the Fixtures tab's right-click
-  **Stage Look ▸** say what a fixture looks like: Auto, or one of sixteen
-  looks in five sections — moving heads, fixed conventionals (PAR can,
+- **Plot symbols.** Fixture Properties and the Fixtures tab's right-click
+  **Plot Symbol ▸** say what a fixture looks like: Auto, or one of sixteen
+  symbols in five sections — moving heads, fixed conventionals (PAR can,
   ellipsoidal, Fresnel, followspot), fixed LEDs, **Practicals**
   (Lantern, Staff) and **Scenery** (Curtain). The plot and the studio draw that shape in the live
   colour, and the fixture lists show its icon. It changes only the
   picture, so it is offered in Operate too. See
-  [Stage looks](lighting-studio.md#stage-looks).
-- **Mark a fixture as a curtain.** Stage look ▸ **Scenery ▸ Curtain**
+  [Plot symbols](lighting-studio.md#plot-symbols).
+- **Mark a fixture as a curtain.** Plot Symbol ▸ **Scenery ▸ Curtain**
   makes any fixture — a relay on a dimmer channel — a curtain fixture: a
   drape can be driven by it, the plot draws the drape instead of the
   fixture, and its intensity opens the curtain (0 closed, 255 open). See
-  [Stage looks](lighting-studio.md#stage-looks).
+  [Plot symbols](lighting-studio.md#plot-symbols).
 - **Pasting a truss asks about its fixtures**: patch the copies at the
   next free addresses after the originals, leave them unpatched, or
   cancel. See [Selecting and undo on the
   plot](lighting-studio.md#selecting-and-undo-on-the-plot).
-- **Auto fixtures as their closest look.** The plot's **Show** menu has
-  **Show Auto fixtures as their closest stage look**, saved with the show.
+- **Auto fixtures as their closest symbol.** The plot's **Show** menu has
+  **Show Auto fixtures as their closest plot symbol**, saved with the show.
 - **One icon per fixture, everywhere**, and curtains have a drape. Icons
   say what a row is: a Dimmer look is a pie of its level, a Shutter look
   open, closed or strobing, an aim a bullseye, a fixture a fixed wash,
@@ -752,7 +760,7 @@ their house lights, relays and subs.
   to 15 (from a stutter to smooth). The **GPU** box in its toolbar turns it off
   if a driver draws it wrongly. See
   [Angled — the free 3D view](lighting-studio.md#angled--the-free-3d-view).
-- **Show or hide layers from the Rig Overview** — its **Layers** menu, the
+- **Show or hide layers from the Rig Overview** — its **Plot layers** menu, the
   same switch as the Studio's eye. The eye and the labels toggle now work in
   Operate mode as well.
 - **Pools show on decks and steps.** A beam landing on a platform was drawn

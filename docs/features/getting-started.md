@@ -184,7 +184,7 @@ needs an address until the end.
    (upright / hung) for anything that pans or tilts.
    ([Mounting a fixture](lighting-studio.md#mounting-a-fixture))
 4. **Check it in 3D.** **⇧⌘R** — the Rig Overview. Hide layers in the
-   Layers panel to see past things; the overview follows.
+   Plot layers panel to see past things; the overview follows.
 5. **Draw the network** (optional). **Add → Add Network Node** for each
    Art-Net/sACN node or wireless transmitter, where it'll really be rigged.
    ([Network nodes](lighting-studio.md#network-nodes-and-cable-runs))

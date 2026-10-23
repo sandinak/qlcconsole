@@ -18,7 +18,7 @@ isn't really implemented until the model derives from it, the UI can set it,
 
 ## Opening it
 
-- **Window → Lighting Studio** (⇧⌘3) opens the 2D plot with the Layers panel,
+- **Window → Lighting Studio** (⇧⌘3) opens the 2D plot with the Plot layers panel,
   where you build the rig and place structures/fixtures.
 - **Double-click any structure** (truss, tower, pipe, stand, platform) opens
   its own dedicated editor — geometry fields, a live elevation preview, and
@@ -45,7 +45,7 @@ isn't really implemented until the model derives from it, the UI can set it,
 
 ### Top view — the plot you already know
 
-![Lighting Studio Top view: platforms, trusses, targets, and aim lines](../images/lighting-studio-top-view.png)
+![Lighting Studio Top view: two trusses, a stage target and the aim lines to it, with the Plot layers panel](../images/lighting-studio-top-view.png)
 
 Structures and fixtures on the familiar flat plot, plus (fork-specific) the
 dashed and solid lines you can see radiating from fixtures to **Stage
@@ -66,7 +66,7 @@ So dragging a drape reads its centre line on the ruler.
 
 ### Front / Side — elevation, and count badges
 
-![Lighting Studio Front view showing numbered count badges on crowded risers](../images/lighting-studio-front-view-badges.png)
+![Lighting Studio Front view: the two trusses at their hung heights](../images/lighting-studio-front-view-badges.png)
 
 An elevation view is where a rig's vertical assembly actually becomes
 readable — towers standing up, trusses at their hung height, risers stacked.
@@ -74,7 +74,7 @@ It's also where a structure's own fixtures can visually bury it: a wall of
 fixture icons on a truss makes the truss itself unclickable. When a
 structure's mounted fixtures cover more than 40% of its on-screen footprint
 *in the current view*, they collapse into a numbered blue **count badge**
-(seen above on several risers) instead — click it to reveal them again. It's
+instead — click it to reveal them again. It's
 computed per structure, per view: the same rig can show individual fixtures
 from the Top but a badge from the Front.
 
@@ -95,7 +95,7 @@ to shade fixtures by their actual current output, and **Beams** to draw
 light cones from anything currently emitting. This is the same rendering a
 per-structure editor's own Angled tab uses, just showing everything at once.
 
-**It follows the Studio's layers.** Hide a layer in the Layers panel and
+**It follows the Studio's layers.** Hide a layer in the Plot layers panel and
 everything on it — structures, scenery, stage figures and fixtures — leaves
 the Rig Overview too: not drawn, not counted when the view frames the rig,
 and not catching or blocking the light of what is still shown (a hidden
@@ -103,7 +103,7 @@ deck no longer stops a beam). Toggling a layer redraws the open overview
 where it is, keeping your angle and zoom. A structure's own editor always
 shows that structure, whatever layer it is on.
 
-**Or hide it from the overview itself.** The overview's **Layers** menu lists
+**Or hide it from the overview itself.** The overview's **Plot layers** menu lists
 the show's layers with a tick each: untick one to hide it, **Show all** to
 bring everything back. It is the same switch as the layer's eye in the
 Studio (and saved with the show), so the two always agree. Showing, hiding
@@ -111,7 +111,7 @@ and labels work in Operate mode too; locking a layer stays a Design-mode
 change.
 
 **A fixture's LED layout.** Right-click a fixture in the Rig Overview (or
-on the plot, or in the Layers tree) for **Fixture Properties…** and **LED
+on the plot, or in the Plot layers tree) for **Fixture Properties…** and **LED
 Layout…**: where each head of a pixel fixture really is — an XL-450's rows
 of RGB and white. The plot, the Rig Overview and the Angled views draw its
 pixels in those cells, and redraw as soon as it is saved. See
@@ -178,7 +178,7 @@ drapes):
 - **Network node** — an Art-Net/sACN node or wireless DMX transmitter,
   placed where it's rigged (see [Network nodes and cable runs](#network-nodes-and-cable-runs)).
 
-Add one from the **Add** menu on the toolbar or the Layers panel; each
+Add one from the **Add** menu on the toolbar or the Plot layers panel; each
 type's own editor exposes width/depth/height, position, and (for
 pipes/booms) run angle.
 
@@ -225,7 +225,7 @@ dropping to one hook. One fixture hangs below the hook.
 - **Remove it:** right-click → **Remove Hanger**. What hung on it stays in
   the show, just unmounted. Removing the truss or tower removes its hangers
   too.
-- **Layers** lists each hanger with its tower (rename, edit, delete there).
+- **Plot layers** lists each hanger with its tower (rename, edit, delete there).
 
 Hangers show in the structure editors, the 3D views and on the **2D plot**:
 there, the arm out from its truss or tower and a ring at the hook (with the
@@ -275,7 +275,7 @@ for some kinds show only there:
 On the plot it's a band from the Top (a built wall its footprint, an open
 curtain its two gathered ends) and the sheet in the elevations; drag, lock,
 rename, layer, hide and delete it like any structure, and it's listed in
-Layers. From above it is picked before the deck it stands on or over, so
+Plot layers. From above it is picked before the deck it stands on or over, so
 double-clicking a drape across the steps opens the drape. In the 3D views
 drapes hang in folds, a scrim is seen through, and a wall has its faces, top
 and ends. Everything but a flown curtain stops the
@@ -289,8 +289,8 @@ moves it. In its editor, **Driven by → Add curtain fixture** adds a
 **Generic → Stage Curtain** fixture named after it (*Main drape curtain*) and links
 the two; or pick a curtain fixture you already have. It's saved with the
 show. A fixture you already have — a relay on a dimmer channel — becomes a curtain
-fixture when you give it the **Curtain** stage look ([Stage
-looks](#stage-looks)); its intensity opens the curtain. The bundled curtain
+fixture when you give it the **Curtain** plot symbol ([Plot
+symbols](#plot-symbols)); its intensity opens the curtain. The bundled curtain
 fixture is an ordinary fixture with no light and no power draw: it isn't counted in power estimates and isn't listed in Inventory as
 something to place, and colour, dimmer and position palettes don't touch it.
 
@@ -346,16 +346,16 @@ its face.
 ![A truss's own editor, with a mounted fixture's properties panel open](../images/lighting-studio-truss-editor.png)
 
 Double-clicking a structure opens its own **Lighting Studio Editor** — the
-truss shown above has one fixture on it (`LED Movinghead+Circle`). Geometry
+truss shown above has eight movers on it. Geometry
 fields on the left, a live elevation preview in the middle (drag a fixture
 in it to reposition), and a **Fixtures on this object** list.
 
 Click a fixture in that list (or in the preview) to see its own mount panel:
 
-![A mounted fixture's rig properties: mount, colour, orientation, face, placement, angle, tilt](../images/lighting-studio-fixture-mount-properties.png)
+![A mounted fixture's rig properties: plot symbol, mount, colour, orientation, placement, tilt, DMX](../images/lighting-studio-fixture-mount-properties.png)
 
-- **Stage look** — what it looks like: its icon and its shape on the plot
-  and in the studio ([Stage looks](#stage-looks)).
+- **Plot symbol** — what it looks like: its icon and its shape on the plot
+  and in the studio ([Plot symbols](#plot-symbols)).
 - **Mounted on** — which structure and where along/on it.
 - **Orientation** — which way up the body is: **Upright** (base down),
   **Hung** (base on top) or **Sideways** — worded for what it is on (on top /
@@ -471,20 +471,20 @@ somewhere else.
 > loads; a Face you've chosen deliberately in this panel (Front or Back
 > included) is remembered and left alone.
 
-## Stage looks
+## Plot symbols
 
 A definition's type says too little about what a fixture looks like: a
-*Color Changer* can be a PAR, a staff or a cyc. **Stage look** says it. Set
+*Color Changer* can be a PAR, a staff or a cyc. **Plot symbol** says it. Set
 it in Fixture Properties (one fixture, or several at once — a row they
 differ on reads "mixed"), or right-click fixtures or groups in the Fixture
-Manager → **Stage Look ▸** (offered in Operate too: a look changes only the
-picture). The fixture's icon follows its look in every fixture list
+Manager → **Plot Symbol ▸** (offered in Operate too: a symbol changes only the
+picture). The fixture's icon follows its symbol in every fixture list
 ([Icons](fixture-manager.md#icons)).
 
 **Auto**, the default, draws the fixture as its definition's type always
-has; the picker names the look that type is closest to, as *Auto (LED PAR /
+has; the picker names the symbol that type is closest to, as *Auto (LED PAR /
 round multi-LED wash)*; a dimmer channel's is *Ellipsoidal / profile spot*.
-The other looks, in five sections:
+The other symbols, in five sections:
 
 - **Moving** — Moving head spot, Moving head round wash, Moving head square
   wash.
@@ -506,14 +506,14 @@ The other looks, in five sections:
   first channel if it has none: **0 closed, 255 open**. Back to **Auto**,
   it is an ordinary fixture again.
 
-On the plot each look has its own outline — a followspot is a long barrel
+On the plot each symbol has its own outline — a followspot is a long barrel
 with its lens at the front, a bar wash a wide strip, a
 square wash a square with a square lens, a round wash a round base, a spot
 a chamfered one — and its heads sit where its light comes out, square or
 round to match. Marks over the lens say the rest: a spot's gobo, an LED
 PAR's ring of LEDs, a Fresnel's rings, a strobe's two cells. The lens still
 shows the fixture's live colour and level. A definition with no dimensions
-gets the look's proportions (a followspot long, a staff tall).
+gets the symbol's proportions (a followspot long, a staff tall).
 
 The practicals are drawn as what they are. A **lantern** has its hook, cap,
 glass and base from the front or side (its base, from above). It throws no
@@ -528,29 +528,29 @@ Top, Front and Side draw the same shapes in the studio. The Angled view
 draws a lantern as a lantern; every other fixture it still draws by its
 type.
 
-A look changes only the picture: how the fixture is driven, its beam and
-its pool are its definition's. A moving-head look draws its yoke and aims
-by pan and tilt as a moving head does; the fixed looks and the practicals
+A symbol changes only the picture: how the fixture is driven, its beam and
+its pool are its definition's. A moving-head symbol draws its yoke and aims
+by pan and tilt as a moving head does; the fixed symbols and the practicals
 do not — give a
 moving head that is used as a followspot *Moving head spot*, not
-*Followspot*, to keep its aim on the plot. Setting a look is one ⌘Z on
+*Followspot*, to keep its aim on the plot. Setting a symbol is one ⌘Z on
 the plot.
 
-**Showing Auto fixtures as their closest look.** On the plot's **Show**
-menu, **Show Auto fixtures as their closest stage look** shows every
-fixture left on Auto as the look its picker names — a colour changer as an
+**Showing Auto fixtures as their closest symbol.** On the plot's **Show**
+menu, **Show Auto fixtures as their closest plot symbol** shows every
+fixture left on Auto as the symbol its picker names — a colour changer as an
 LED PAR, a moving head with a gobo as a moving head spot, a dimmer channel
-as an ellipsoidal — exactly as if that look were set: its icon in the
+as an ellipsoidal — exactly as if that symbol were set: its icon in the
 fixture lists (the Fixture Manager, Build's groups and fixtures, the Show
 Tree's Library and layers), and its shape, proportions and lens marks on
-the plot and in the studio. A group whose fixtures all come out as one look
-shows that look's icon with the group badge. A look you set still wins, and
+the plot and in the studio. A group whose fixtures all come out as one symbol
+shows that symbol's icon with the group badge. A symbol you set still wins, and
 the output-rules badge still shows. Turning it off draws them as before. It belongs to the show and is
 saved with it (only when on), so the plot looks the same on every computer;
 a new show starts with it off. Turning it on or off is one ⌘Z.
 
-The look is saved in the show only when it is not Auto, so a show without
-looks saves exactly as before, and QLC+ opens a show with looks (it skips
+The symbol is saved in the show only when it is not Auto, so a show without
+symbols saves exactly as before, and QLC+ opens a show with symbols (it skips
 them).
 
 ## Locks
@@ -560,8 +560,8 @@ its whole layer, and everything on it:
 
 | Lock | Set from | Freezes |
 |---|---|---|
-| **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), the Layers panel, or a power/network node's own toggle | Everything on that layer |
-| **Folder ("group") position lock** | The Layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
+| **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), the Plot layers panel, or a power/network node's own toggle | Everything on that layer |
+| **Folder ("group") position lock** | The Plot layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
 | **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, still selectable |
 
 **Locked draws red**, always: every locked object, and every fixture on a
@@ -628,9 +628,9 @@ of, and doesn't override, the real locks above.
   them). The first show you ever open decides for you, once, if you had
   never chosen: one saved in feet sets **Settings → General → Units** to feet.
 - **Select All Similar** — on a fixture (plot or list), every fixture of the
-  same model and mode; on a fixture group's Layers row, the groups of the
+  same model and mode; on a fixture group's Plot layers row, the groups of the
   same fixtures laid out the same way.
-- Selecting on the plot selects the same objects in Layers, and vice versa.
+- Selecting on the plot selects the same objects in Plot layers, and vice versa.
 - Count badges follow their structure through drags and undo, and keep one
   screen size at any zoom, so zooming in uncovers what's under them.
 

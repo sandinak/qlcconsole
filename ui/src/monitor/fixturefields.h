@@ -73,7 +73,7 @@ public:
      *  conventional, Fixed LED) under "Auto (<what its type is>)" for
      *  @p fx (nullptr: plain "Auto"). Each item's UserRole data is its
      *  Fixture::StageLook; the section headings are disabled. Shared with
-     *  the Fixture Manager's Stage look menu's wording. */
+     *  the Fixture Manager's Plot Symbol menu's wording. */
     static void fillStageLookCombo(QComboBox *cb, const class Fixture *fx);
 
 signals:

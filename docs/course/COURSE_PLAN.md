@@ -9,7 +9,7 @@ nav_order: 2
 and the Level 1 check — each with teacher guide, handout, slides outline,
 exit ticket and at-home page, every app step checked by the course test,
 now on the 0.2.2 release candidate. Level 2 is an outline. Level 3 has
-three short lessons written for 0.2.2's features — 3.3 stage looks, 3.7
+three short lessons written for 0.2.2's features — 3.3 plot symbols, 3.7
 house lights, work lights and power, 3.10 coming from Eos — checked by the
 course test without pictures yet; the rest of Level 3 is an outline. Volunteers start at
 [For volunteers](VOLUNTEER.md); new lessons start from `_template/`.*
@@ -107,7 +107,7 @@ here.*
 |---|---|---|
 | 3.1 | **DMX, universes and patching** | Addresses and channels; universes; Art-Net and sACN; the Patch dialog; Connections. *(First lesson on the real network, with Branson.)* |
 | 3.2 | **Fixtures and definitions** | The Fixture Manager; definitions and modes; the Fixture Editor; groups by head type (a pixel box's RGB and white heads; colour rings). Shows that carry their own definitions. |
-| 3.3 | **Reading the plot: stage looks** *(written)* | A plot and its symbol key. The Lighting Studio plot's **Show ▸ Show Auto fixtures as their closest stage look**; **Stage Look ▸** to correct the guesses (AT-W-ALL: *Moving head round wash*); the Lanterns as **practicals**. A look is only the picture. |
+| 3.3 | **Reading the plot: symbols** *(written)* | A plot and its symbol key. The Lighting Studio plot's **Show ▸ Show Auto fixtures as their closest plot symbol**; **Plot Symbol ▸** to correct the guesses (AT-W-ALL: *Moving head round wash*); the Lanterns as **practicals**. A symbol is only the picture. |
 | 3.4 | **Building the rig** | Lighting Studio: structures, mounting fixtures, layers, stage targets and lines; why the rig must match the room for aims to work. |
 | 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC / MIDI Show Control; timecode. |
 | 3.6 | **Focus and calibration** | Test orientation, Locate, the Step Test Pattern; aiming the real movers at the real targets. |

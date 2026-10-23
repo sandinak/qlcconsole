@@ -145,10 +145,10 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     m_look = new QComboBox(parent);
     m_look->setObjectName(QStringLiteral("fixtureStageLook"));
     m_look->setIconSize(QSize(24, 24));
-    m_look->setToolTip(tr("What it looks like on stage: its icon in the fixture lists and how "
+    m_look->setToolTip(tr("Its plot symbol, what it looks like on stage: its icon in the fixture lists and how "
                           "the plot and the studio draw it. Auto follows its definition's type. "
                           "Only the picture changes -- not how it is driven."));
-    form->addRow(tr("Stage look:"), m_look);
+    form->addRow(tr("Plot symbol:"), m_look);
     connect(m_look, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         if (m_loading || m_fids.isEmpty() || comboIsMixed(m_look))
             return;
