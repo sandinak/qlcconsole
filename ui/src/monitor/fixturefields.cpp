@@ -76,7 +76,7 @@ void FixtureFields::fillStageLookCombo(QComboBox *cb, const Fixture *fx)
     cb->clear();
     const Fixture::StageLook autoLook = fx != nullptr ? fx->autoStageLook() : Fixture::AutoLook;
     // A curtain on Auto is shown as a curtain (ItemIcons::autoLookIcon()).
-    const QString autoName = Scenery::isCurtainFixture(fx) ? tr("Curtain")
+    const QString autoName = Scenery::isCurtainByDefinition(fx) ? tr("Curtain")
                              : autoLook != Fixture::AutoLook
                              ? Fixture::stageLookName(autoLook)
                              : (fx != nullptr && fx->fixtureDef() != nullptr

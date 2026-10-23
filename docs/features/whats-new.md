@@ -156,13 +156,22 @@ their house lights, relays and subs.
 ### Fixtures and the plot
 
 - **Stage looks.** Fixture Properties and the Fixtures tab's right-click
-  **Stage Look ▸** say what a fixture looks like: Auto, or one of fifteen
-  looks in four sections — moving heads, fixed conventionals (PAR can,
-  ellipsoidal, Fresnel, followspot), fixed LEDs and **Practicals**
-  (Lantern, Staff). The plot and the studio draw that shape in the live
+  **Stage Look ▸** say what a fixture looks like: Auto, or one of sixteen
+  looks in five sections — moving heads, fixed conventionals (PAR can,
+  ellipsoidal, Fresnel, followspot), fixed LEDs, **Practicals**
+  (Lantern, Staff) and **Scenery** (Curtain). The plot and the studio draw that shape in the live
   colour, and the fixture lists show its icon. It changes only the
   picture, so it is offered in Operate too. See
   [Stage looks](lighting-studio.md#stage-looks).
+- **Mark a fixture as a curtain.** Stage look ▸ **Scenery ▸ Curtain**
+  makes any fixture — a relay on a dimmer channel — a curtain fixture: a
+  drape can be driven by it, the plot draws the drape instead of the
+  fixture, and its intensity opens the curtain (0 closed, 255 open). See
+  [Stage looks](lighting-studio.md#stage-looks).
+- **Pasting a truss asks about its fixtures**: patch the copies at the
+  next free addresses after the originals, leave them unpatched, or
+  cancel. See [Selecting and undo on the
+  plot](lighting-studio.md#selecting-and-undo-on-the-plot).
 - **Auto fixtures as their closest look.** The plot's **Show** menu has
   **Show Auto fixtures as their closest stage look**, saved with the show.
 - **One icon per fixture, everywhere**, and curtains have a drape. Icons

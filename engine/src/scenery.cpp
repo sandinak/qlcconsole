@@ -201,9 +201,22 @@ int Scenery::curtainChannel(const QLCFixtureMode *mode, CurtainChannel which)
             || (which == FlyChannel && fly && !fine))
             return i;
     }
-    // Something not made for it (a relay, a dimmer channel): its first channel opens it.
-    if (which == OpenChannel && !chans.isEmpty() && curtainChannel(mode, FlyChannel) != 0)
-        return 0;
+    /* Something not made for it (a relay, a dimmer channel, a fixture marked
+       Curtain): its master intensity opens it -- 0 closed, 255 open -- or,
+       with none, its first channel. */
+    if (which == OpenChannel && !chans.isEmpty())
+    {
+        const int fly = curtainChannel(mode, FlyChannel);
+        for (int i = 0; i < chans.size(); ++i)
+        {
+            const QLCChannel *ch = chans.at(i);
+            if (i != fly && ch != nullptr && ch->group() == QLCChannel::Intensity
+                && ch->colour() == QLCChannel::NoColour)
+                return i;
+        }
+        if (fly != 0)
+            return 0;
+    }
     return -1;
 }
 
@@ -222,6 +235,14 @@ Scenery::Pose Scenery::poseFromValues(const QLCFixtureMode *mode, const QByteArr
 }
 
 bool Scenery::isCurtainFixture(const Fixture *fx)
+{
+    // The LD's word for it: whatever its definition says it is.
+    if (fx != nullptr && fx->stageLook() == Fixture::CurtainLook)
+        return true;
+    return isCurtainByDefinition(fx);
+}
+
+bool Scenery::isCurtainByDefinition(const Fixture *fx)
 {
     if (fx == nullptr || fx->fixtureMode() == nullptr)
         return false;

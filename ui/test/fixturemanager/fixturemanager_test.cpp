@@ -1773,3 +1773,45 @@ void FixtureManager_Test::stageLookIsOfferedInOperate()
     QVERIFY2(texts.contains("Stage Look"), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.filter(QStringLiteral("Stage Look ▸ ")).isEmpty(), qPrintable(texts.join(" | ")));
 }
+
+void FixtureManager_Test::stageLookMenuHasAScenerySectionWithCurtain()
+{
+    const QList<quint32> one = addDimmers(m_doc, 1, 1, "Relay");
+    QCOMPARE(one.size(), 1);
+    Fixture *fx = m_doc->fixture(one.first());
+    QVERIFY(fx != nullptr);
+
+    QMenu menu;
+    FixtureManager::fillStageLookMenu(&menu, m_doc, one);
+    // Its own section, last, after the practicals.
+    const QList<QAction *> acts = menu.actions();
+    int scenery = -1, curtain = -1, practicals = -1;
+    for (int i = 0; i < acts.size(); ++i)
+    {
+        if (acts.at(i)->isSeparator() && acts.at(i)->text() == "Scenery")
+            scenery = i;
+        if (acts.at(i)->isSeparator() && acts.at(i)->text() == "Practicals")
+            practicals = i;
+        if (acts.at(i)->objectName() == "stageLook_Curtain")
+            curtain = i;
+    }
+    QVERIFY(practicals >= 0);
+    QVERIFY(scenery > practicals);
+    QCOMPARE(curtain, scenery + 1);
+    QCOMPARE(curtain, int(acts.size()) - 1);
+    QCOMPARE(acts.at(curtain)->text(), QString("Curtain"));
+    QVERIFY(!acts.at(curtain)->icon().isNull());
+    // A dimmer's Auto is not a curtain.
+    QVERIFY2(!acts.first()->text().contains("Curtain"), qPrintable(acts.first()->text()));
+
+    acts.at(curtain)->trigger();
+    QCOMPARE(fx->stageLook(), Fixture::CurtainLook);
+    QMenu again;
+    FixtureManager::fillStageLookMenu(&again, m_doc, one);
+    QAction *checked = again.findChild<QAction *>("stageLook_Curtain");
+    QVERIFY(checked != nullptr && checked->isChecked());
+    // Still "Auto (...)" what it would be unmarked.
+    QVERIFY2(!again.actions().first()->text().contains("Curtain"),
+             qPrintable(again.actions().first()->text()));
+    fx->setStageLook(Fixture::AutoLook);
+}

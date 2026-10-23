@@ -101,14 +101,23 @@ circuits and subs.
   selection's folder, in the Fixtures tab, Build's Groups & fixtures and
   the Show Tree's Library (with *Make set…*). **Return** / **F2** renames a
   group in the Fixtures tree.
-- **Stage looks.** Per fixture: Auto, or fifteen looks in four sections
-  (Moving; Fixed conventional; Fixed LED; Practicals: Lantern and Staff),
-  from Fixture Properties or the Fixtures tab's **Stage Look ▸** (also in
+- **Stage looks.** Per fixture: Auto, or sixteen looks in five sections
+  (Moving; Fixed conventional; Fixed LED; Practicals: Lantern and Staff;
+  Scenery: Curtain), from Fixture Properties or the Fixtures tab's **Stage Look ▸** (also in
   Operate: it changes only the picture). The 2D plot and the studio's
   Top/Front/Side views draw the look; a lantern glows all round, a staff
   is a pole wound with LED strip. Saved as `<StageLook>` only when not
   Auto. The plot's **Show** menu adds **Show Auto fixtures as their
   closest stage look**, saved with the show (off by default).
+- **Curtain stage look** (Q51). A **Scenery** section in the stage-look
+  picker (Fixture Properties, Stage Look ▸) with **Curtain**, saved as
+  `<StageLook>Curtain</StageLook>`. A fixture marked Curtain — a relay on
+  a dimmer channel that runs a traveler — is a curtain fixture: listed as
+  a drape's driver, drawn on the plot as the drape (its fixture item
+  hidden, its place kept), kept out of Inventory, shown with the curtain
+  icon. With no *Open* / *Fly* channel its master intensity (else its
+  first channel) opens it, 0 closed, 255 open. Back to Auto restores it;
+  ⌘Z undoes it.
 - **One icon per fixture, everywhere, and a curtain icon.** Every fixture
   and group list uses the same icon (its stage look, a curtain's drape,
   its kind), with the output-rules badge on top. Rows say what they are:
@@ -201,6 +210,12 @@ circuits and subs.
   the copy. They arrive **unpatched** -- which addresses copies take is a
   patching choice (Patch Others Like This) -- and the plot's status line
   says so. One ⌘Z takes the truss and its fixtures away.
+- **Pasting a truss with fixtures asks** (Q55): *Paste N fixtures with
+  the truss* → **Patch at next free addresses** (after the originals in
+  their universe, the Patch dialog's first-fit, spilling into the next
+  universe when it is full), **Leave unpatched**, or **Cancel** (nothing
+  pasted). Still one ⌘Z for the whole paste; the status line says where
+  they went.
 - **Hiding the Workbench stops only what it started.** It started and
   stopped what is loaded (the Design preview, the Operate run) with the
   Master parent, and a Master stop clears every source -- so a function a

@@ -859,7 +859,7 @@ QString Fixture::typeIconResource(bool svg) const
 
 void Fixture::setStageLook(StageLook look)
 {
-    if (int(look) < int(AutoLook) || int(look) > int(StrobeLook))
+    if (int(look) < int(AutoLook) || int(look) > int(CurtainLook))
         look = AutoLook;
     if (m_stageLook.exchange(int(look), std::memory_order_relaxed) == int(look))
         return;
@@ -877,7 +877,9 @@ QList<Fixture::StageLook> Fixture::stageLooks()
              LedParLook, SquareWashLook, BarWashLook, UplightWashLook, CycStripLook,
              StrobeLook,
              // Practicals: lights that are part of the set
-             LanternLook, StaffLook };
+             LanternLook, StaffLook,
+             // Scenery: not a light, something on stage a channel moves
+             CurtainLook };
 }
 
 int Fixture::stageLookSection(StageLook look)
@@ -893,6 +895,8 @@ int Fixture::stageLookSection(StageLook look)
             return LedSection;
         case LanternLook: case StaffLook:
             return PracticalSection;
+        case CurtainLook:
+            return ScenerySection;
         case AutoLook:
         default:
             return -1;
@@ -906,6 +910,7 @@ QString Fixture::stageLookSectionName(StageLookSection section)
         case MovingSection:       return tr("Moving");
         case ConventionalSection: return tr("Fixed conventional");
         case LedSection:          return tr("Fixed LED");
+        case ScenerySection:      return tr("Scenery");
         case PracticalSection:
         default:                  return tr("Practicals");
     }
@@ -977,6 +982,7 @@ QString Fixture::stageLookToString(StageLook look)
         case LedParLook:           return QStringLiteral("LedPar");
         case CycStripLook:         return QStringLiteral("CycStrip");
         case StrobeLook:           return QStringLiteral("Strobe");
+        case CurtainLook:          return QStringLiteral("Curtain");
         case AutoLook:
         default:                   return QStringLiteral("Auto");
     }
@@ -1009,6 +1015,7 @@ QString Fixture::stageLookName(StageLook look)
         case LedParLook:           return tr("LED PAR / round multi-LED wash");
         case CycStripLook:         return tr("Cyc / strip light");
         case StrobeLook:           return tr("Strobe / blinder");
+        case CurtainLook:          return tr("Curtain");
         case AutoLook:
         default:                   return tr("Auto");
     }
@@ -1018,6 +1025,9 @@ QString Fixture::stageLookIconResource(StageLook look, bool svg)
 {
     if (look == AutoLook)
         return QString();
+    // A curtain is the curtain icon the auto-detected ones already show.
+    if (look == CurtainLook)
+        return svg ? QStringLiteral("qrc:/curtain.svg") : QStringLiteral(":/curtain.png");
     return QStringLiteral("%1:/look_%2.%3").arg(svg ? QStringLiteral("qrc") : QString())
                                           .arg(stageLookToString(look).toLower())
                                           .arg(svg ? QStringLiteral("svg") : QStringLiteral("png"));

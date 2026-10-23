@@ -169,14 +169,24 @@ public:
     /** Which channel of a curtain fixture does what: Open (and its fine
      *  byte) and Fly, by name -- "Open", "Open fine", "Fly"; "Position" is
      *  taken for Open too. -1 when it has none. A fixture with no channel
-     *  named for opening opens on its first one. */
+     *  named for opening opens on its master intensity channel, else on its
+     *  first one. */
     enum CurtainChannel { OpenChannel = 0, OpenFineChannel, FlyChannel };
     static int curtainChannel(const QLCFixtureMode *mode, CurtainChannel which);
     /** Where @p values (a fixture's channel values) put a curtain. */
     static Pose poseFromValues(const QLCFixtureMode *mode, const QByteArray &values);
-    /** A curtain fixture: one that lights nothing and has a channel to open
-     *  a curtain by (the bundled Generic > Stage Curtain). */
+    /** A curtain fixture: one marked with the Curtain stage look
+     *  (Fixture::CurtainLook), or one whose definition says so
+     *  (isCurtainByDefinition()). It drives a drape, is drawn as that drape
+     *  rather than as a fixture, and is not inventory to place. A marked
+     *  one with no Open / Fly channels opens on curtainChannel()'s
+     *  fallback: its master intensity (else its first channel), 0 closed,
+     *  255 open. */
     static bool isCurtainFixture(const Fixture *fx);
+    /** A curtain by its definition alone, whatever its stage look: one that
+     *  lights nothing and has a channel named to open or fly a curtain by
+     *  (the bundled Generic > Stage Curtain). What "Auto" means for it. */
+    static bool isCurtainByDefinition(const Fixture *fx);
 
     /** Cloth: soft goods, drawn as fabric. */
     bool isCloth() const { return !isBuilt(); }

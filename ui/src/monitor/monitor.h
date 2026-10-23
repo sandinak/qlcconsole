@@ -21,6 +21,7 @@
 #define MONITOR_H
 
 #include <QWidget>
+#include <functional>
 #include <QHash>
 #include <QList>
 #include <QVector3D>
@@ -216,6 +217,19 @@ public:
      *  drape opens and flies, a traveler opens. Null if it is not a curtain
      *  or the definition is missing. */
     Fixture *addCurtainFixture(quint32 sid);
+
+    /** What a paste does with the fixtures a copied truss brings. */
+    enum PasteFixtures
+    {
+        PastePatched,       ///< patched at the next free addresses after the originals
+        PasteUnpatched,     ///< left unpatched (Patch Others Like This later)
+        PasteCancelled      ///< nothing is pasted
+    };
+    /** In place of the paste's question (tests): asked with how many
+     *  fixtures come with the truss. Unset: a message box, Patch the
+     *  default. */
+    typedef std::function<PasteFixtures(int count)> PasteFixturesAsk;
+    void setPasteFixturesAsk(const PasteFixturesAsk &ask) { m_pasteFixturesAsk = ask; }
 
 protected:
     /** Create a new MonitorFixture* and append it to the layout */
@@ -699,6 +713,10 @@ private:
         QByteArray         xml;        ///< the fixture (definition, mode, rules…)
         FixturePreviewItem item;       ///< plot position, rotation, gel, layer
         FixtureRigProps    rig;        ///< its mount on the truss
+        bool               patched = false;    ///< the original's patch, when copied:
+        quint32            universe = 0;       ///< where the copies' addresses follow on
+        quint32            address = 0;
+        quint32            channels = 0;
     };
 
     QList<TrussClip>    m_trussClipboard;
@@ -714,8 +732,14 @@ private:
 
     /** Re-create the clipboard features, translating each by (dxM, dyM) metres.
      *  Shared by the keyboard/toolbar (cascading offset) and "Paste here"
-     *  (cursor-anchored) paths. */
-    void pasteClipboard(float dxM, float dyM);
+     *  (cursor-anchored) paths. When a copied truss brings fixtures, asks
+     *  first (PasteFixtures); false when that was cancelled, or there was
+     *  nothing to paste. */
+    bool pasteClipboard(float dxM, float dyM);
+    PasteFixturesAsk m_pasteFixturesAsk;
+    /** Patch the fixtures just pasted at the next free addresses after
+     *  their originals; returns the status line that says where. */
+    QString patchPastedFixtures(const QList<quint32> &fids, const QList<int> &clips);
 };
 
 /** @} */

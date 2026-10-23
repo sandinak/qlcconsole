@@ -1202,7 +1202,7 @@ void Fixture_Test::stageLookKeys()
     const QList<Fixture::StageLook> looks = Fixture::stageLooks();
     // Every value of the enum, once, Auto first.
     QCOMPARE(looks.first(), Fixture::AutoLook);
-    QCOMPARE(looks.size(), int(Fixture::StrobeLook) + 1);
+    QCOMPARE(looks.size(), int(Fixture::CurtainLook) + 1);
     QSet<int> seen;
     QSet<QString> keys;
     int section = -1;
@@ -1238,7 +1238,17 @@ void Fixture_Test::stageLookKeys()
     QCOMPARE(Fixture::stageLookSection(Fixture::LanternLook), int(Fixture::PracticalSection));
     QCOMPARE(Fixture::stageLookSection(Fixture::StaffLook), int(Fixture::PracticalSection));
     QCOMPARE(Fixture::stageLookSection(Fixture::StrobeLook), int(Fixture::LedSection));
-    QCOMPARE(looks.last(), Fixture::StaffLook);
+    // Scenery, last: a curtain marked as one (Q51).
+    QCOMPARE(looks.last(), Fixture::CurtainLook);
+    QCOMPARE(looks.at(looks.size() - 2), Fixture::StaffLook);
+    QCOMPARE(Fixture::stageLookToString(Fixture::CurtainLook), QString("Curtain"));
+    QCOMPARE(Fixture::stringToStageLook("curtain"), Fixture::CurtainLook);
+    QCOMPARE(Fixture::stageLookSection(Fixture::CurtainLook), int(Fixture::ScenerySection));
+    QCOMPARE(Fixture::stageLookSectionName(Fixture::ScenerySection), QString("Scenery"));
+    QCOMPARE(Fixture::stageLookName(Fixture::CurtainLook), QString("Curtain"));
+    // Appended: the looks before it kept their values.
+    QCOMPARE(int(Fixture::StrobeLook), 15);
+    QCOMPARE(int(Fixture::CurtainLook), 16);
     // The key a saved show holds did not change with what a lantern is.
     QCOMPARE(Fixture::stageLookToString(Fixture::LanternLook), QString("Lantern"));
     QCOMPARE(Fixture::stageLookSectionName(Fixture::PracticalSection), QString("Practicals"));
@@ -1291,6 +1301,31 @@ void Fixture_Test::stageLookSaveLoad()
         // And saved again, byte for byte.
         QCOMPARE(stageLookSaved(loaded), xml);
     }
+}
+
+void Fixture_Test::stageLookCurtainSaveLoad()
+{
+    // A dimmer marked Curtain: saved by its key, read back as one.
+    Fixture fxi(this);
+    fxi.setID(6);
+    fxi.setName("Traveller");
+    fxi.setChannels(1);
+    QLCFixtureDef *def = fxi.genericDimmerDef(1);
+    fxi.setFixtureDefinition(def, fxi.genericDimmerMode(def, 1));
+    fxi.setStageLook(Fixture::CurtainLook);
+    QCOMPARE(fxi.stageLook(), Fixture::CurtainLook);
+    const QByteArray xml = stageLookSaved(fxi);
+    QVERIFY(xml.contains("<StageLook>Curtain</StageLook>"));
+    QXmlStreamReader xmlReader(xml);
+    xmlReader.readNextStartElement();       // TestRoot
+    xmlReader.readNextStartElement();       // Fixture
+    Fixture loaded(this);
+    QVERIFY(loaded.loadXML(xmlReader, m_doc, m_doc->fixtureDefCache()) == true);
+    QCOMPARE(loaded.stageLook(), Fixture::CurtainLook);
+    QCOMPARE(stageLookSaved(loaded), xml);
+    // Back to Auto: nothing saved, as before it was marked.
+    loaded.setStageLook(Fixture::AutoLook);
+    QVERIFY(!stageLookSaved(loaded).contains("StageLook"));
 }
 
 void Fixture_Test::stageLookUnknownKey()
@@ -1393,6 +1428,9 @@ void Fixture_Test::stageLookIcon()
 
     fxi.setStageLook(Fixture::FollowspotLook);
     QCOMPARE(fxi.iconResource(), QString(":/look_followspot.png"));
+    // A curtain wears the curtain icon the auto-detected ones do.
+    QCOMPARE(Fixture::stageLookIconResource(Fixture::CurtainLook), QString(":/curtain.png"));
+    QCOMPARE(Fixture::stageLookIconResource(Fixture::CurtainLook, true), QString("qrc:/curtain.svg"));
     QCOMPARE(fxi.iconResource(true), QString("qrc:/look_followspot.svg"));
     // Its type's icon is still there, for "Auto (...)".
     QCOMPARE(fxi.typeIconResource(), QString(":/movinghead.png"));

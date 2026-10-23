@@ -421,6 +421,11 @@ private slots:
     void aSilkFlameRisesOnlyWhenItsRelayIsOn();
     void aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves();
     void cancellingTheDrapeDialogTakesItsNewCurtainAway();
+    /** Q51: a dimmer marked Curtain (Stage Look ▸ Scenery ▸ Curtain) is
+     *  hidden on the plot (its drape stands for it) and out of the
+     *  inventory, listed as a drape's driver, opened by its intensity;
+     *  one ⌘Z puts it back */
+    void aFixtureMarkedCurtainIsDrawnAsItsDrape();
     void addFountainBuildsItAsOneGroup();
     void beamsLandOnTheCycloramaInTheRigView();
     /** "set a gobo and projected on the cyc .. and it's not visible" /
@@ -763,6 +768,10 @@ private slots:
     /** ⌘C / ⌘V on the plot: a truss comes back as a copy, offset, with the
      *  fixtures it carries; ⌘Z takes the copy away */
     void copyAndPasteDuplicatesATrussWithItsFixtures();
+    /** Q55: a pasted truss's fixtures -- Patch at next free addresses
+     *  (after the originals; spilling on when the universe is full), Leave
+     *  unpatched, or Cancel; one ⌘Z each, the status line says which */
+    void pastingATrussAsksWhatItsFixturesGet();
     /** Fixture Properties → Test orientation → Aim at target sends the pan
      *  and tilt AimSolver gives a hung mover for that target */
     void testOrientationAimsWhereTheSolverSays();
