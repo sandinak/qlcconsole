@@ -58,6 +58,9 @@ private slots:
     void theShowTreesHintIsNeverFolded();
     /** Operate hides the Virtual Console's tools, in the top bar as at home */
     void operateModeStillHidesTheConsolesTools();
+    /** Blind never survives into a show: Operate turns it off and greys it;
+     *  Design gives the button back. */
+    void operateClearsBlindAndGreysIt();
     /** Auto move-in-black: one setting of the show, three views (Show
      *  Tree MIB, Programming's Move in black menu, Settings → Show Tree),
      *  each following the others, saved and loaded with the show */

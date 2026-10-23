@@ -323,6 +323,30 @@ void MainBar_Test::theShowControlsWorkInBothPlacements()
     }
 }
 
+void MainBar_Test::operateClearsBlindAndGreysIt()
+{
+    InputOutputMap *io = m_app->doc()->inputOutputMap();
+    ShowControls *sc = m_app->m_showControls;
+    QVERIFY(sc != nullptr);
+    QCOMPARE(m_app->doc()->mode(), Doc::Design);
+
+    sc->blindButton()->click();
+    QVERIFY(io->outputInhibited());
+    QVERIFY(m_app->m_controlBlindAction->isEnabled());
+
+    sc->operateButton()->click();
+    QCOMPARE(m_app->doc()->mode(), Doc::Operate);
+    QVERIFY(!io->outputInhibited());                    // the rig speaks again
+    QVERIFY(!m_app->m_controlBlindAction->isEnabled()); // and can't be muted mid-show
+    QVERIFY(!sc->blindButton()->isEnabled());
+    QVERIFY(!sc->blindButton()->isChecked());
+
+    sc->designButton()->click();
+    QCOMPARE(m_app->doc()->mode(), Doc::Design);
+    QVERIFY(m_app->m_controlBlindAction->isEnabled());
+    QVERIFY(!io->outputInhibited());                    // not switched back on by itself
+}
+
 void MainBar_Test::thePlacementRoundTripsAndSwitchesLive()
 {
     QCOMPARE(m_app->showControlsPlacement(), int(App::ShowControlsInTopBar));
