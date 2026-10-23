@@ -58,6 +58,10 @@ private slots:
     void switchingVenues();
     /** A venue nobody named gets the date; names stay unique. */
     void venueNames();
+    /** Q111: a calibration changed elsewhere (the fixture dialog) while a
+     *  venue is applied goes into the venue and its file, not the show; a
+     *  Focus mode nudge only when saved. */
+    void anEditElsewhereGoesToTheVenue();
 
 private:
     Doc *m_doc = nullptr;

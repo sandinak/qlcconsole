@@ -342,6 +342,8 @@ bool FocusSession::start(const Options &options, QString *why)
             return refuse(tr("None of the focus calls has a fixture with a point to focus to."));
         }
         m_active = true;
+        if (m_venues != nullptr)
+            m_venues->setHeld(m_all);
         m_callIndex = -1;
         enterCall(0);
         emit started();
@@ -367,6 +369,8 @@ bool FocusSession::start(const Options &options, QString *why)
 
     m_index = 0;
     m_active = true;
+    if (m_venues != nullptr)
+        m_venues->setHeld(m_all);
     rebuildWrites();
     emit started();
     emit currentChanged(currentFixture());
@@ -545,6 +549,9 @@ void FocusSession::stop()
     if (!m_active)
         return;
     discardAll();
+    // Back as saved: from here on a change to them is anyone's edit again.
+    if (m_venues != nullptr)
+        m_venues->setHeld(QList<quint32>());
     m_active = false;
     m_index = -1;
     m_held = NoControl;

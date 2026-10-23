@@ -559,4 +559,61 @@ void FocusCalls_Test::venueNames()
     QVERIFY(!why.isEmpty());
 }
 
+void FocusCalls_Test::anEditElsewhereGoesToTheVenue()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    MonitorProperties *props = m_doc->monitorProperties();
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Show.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    m_doc->resetModified();
+
+    // A tilt offset typed in the fixture dialog: the dialog sets the rig.
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.tiltOffsetDeg = 2.5f;
+    props->setFixtureRigProps(a->id(), rp);
+    QVERIFY(v->hasCorrection(a->id()));
+    QCOMPARE(v->correction(a->id()).tiltOffsetDeg, 2.5f);
+    QFile f(v->filePath());
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(f.readAll().contains("TiltOfs=\"2.50\""));
+    f.close();
+    // The show keeps its own.
+    QVERIFY(!saveDoc(m_doc).contains("TiltOfs"));
+
+    // Moving the fixture is not a calibration: nothing recorded.
+    rp = props->fixtureRigProps(b->id());
+    rp.trussOffset = 1.5f;
+    props->setFixtureRigProps(b->id(), rp);
+    QVERIFY(!v->hasCorrection(b->id()));
+
+    // A Focus mode nudge is not recorded until it is saved...
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.fixtures = { b->id() };
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    s->nudge(1.0f, 0.0f);
+    QVERIFY(!v->hasCorrection(b->id()));
+    // ...and a discarded one never is.
+    s->stop();
+    QVERIFY(!v->hasCorrection(b->id()));
+    QCOMPARE(props->fixtureRigProps(b->id()).panOffsetDeg, 0.0f);
+
+    // Typed back to the show's own value: the correction goes.
+    rp = props->fixtureRigProps(a->id());
+    rp.tiltOffsetDeg = 0.0f;
+    props->setFixtureRigProps(a->id(), rp);
+    QVERIFY(!v->hasCorrection(a->id()));
+
+    // With no venue applied, the dialog edits the show, as always.
+    QVERIFY(v->setActiveVenue(QString()));
+    rp = props->fixtureRigProps(a->id());
+    rp.tiltOffsetDeg = 1.0f;
+    props->setFixtureRigProps(a->id(), rp);
+    QVERIFY(saveDoc(m_doc).contains("TiltOfs=\"1.00\""));
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)
