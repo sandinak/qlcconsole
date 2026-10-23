@@ -628,8 +628,9 @@ patched ones is Design mode's — the same rule everywhere.
 **Stage Look ▸** sets what the fixtures selected — and every fixture of a
 group selected — look like: **Auto** (named for what their type is closest
 to, as *Auto (Moving head spot)*), then the looks under **Moving**, **Fixed
-conventional**, **Fixed LED** and **Practicals** (Lantern, Staff), with
-icons. The one they all share is
+conventional**, **Fixed LED**, **Practicals** (Lantern, Staff) and
+**Scenery** (Curtain: the fixture drives a curtain and is drawn as its drape
+— see [Stage looks](lighting-studio.md#stage-looks)), with icons. The one they all share is
 ticked. A fixture with a look shows its icon in this list and the other
 fixture lists, and its shape on the plot and in the studio; see
 [Stage looks](lighting-studio.md#stage-looks). Fixture Properties has the
@@ -648,7 +649,8 @@ What decides it, in order:
 1. **Its stage look**, when you have given it one (Stage Look ▸ above).
 2. **A curtain** — a fixture that gives no light and has an *Open*,
    *Position* or *Fly* channel (the plot draws it as its drape) — shows a
-   drape on its track.
+   drape on its track. (One you mark with the **Curtain** look shows it by
+   rule 1.)
 3. **Its closest look**, when it is on Auto and the plot's **Show ▸ Show
    Auto fixtures as their closest stage look** is on.
 4. Otherwise **what it is**: a fixed wash, a moving spot, a moving wash or

@@ -14668,6 +14668,107 @@ void Monitor_Test::aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves()
     delete doc;
 }
 
+void Monitor_Test::aFixtureMarkedCurtainIsDrawnAsItsDrape()
+{
+    Doc *doc = new Doc(this);
+    Scenery *sc = frontDrape(doc);
+    MonitorProperties *props = doc->monitorProperties();
+    // A relay on a dimmer channel, on the plot; another, in the inventory.
+    Fixture *relay = new Fixture(doc);
+    relay->setName("Traveller relay");
+    relay->setChannels(1);
+    relay->setAddress(10);
+    QVERIFY(doc->addFixture(relay));
+    props->setFixturePosition(relay->id(), 0, 0, QVector3D(3000, 3000, 0));
+    Fixture *spare = new Fixture(doc);
+    spare->setName("Spare relay");
+    spare->setChannels(1);
+    spare->setPatched(false);
+    QVERIFY(doc->addFixture(spare));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->addFixture(relay->id(), QPointF(3000, 3000));
+        gv->updatePlatforms();
+        MonitorFixtureItem *item = gv->m_fixtures.value(relay->id());
+        QVERIFY(item != nullptr);
+        QVERIFY(item->isVisible());
+        MonitorInventoryPanel *panel = mon.m_inventoryPanel;
+        QVERIFY(panel != nullptr);
+        panel->reload();
+        QStringList names;
+        inventoryLeaves(panel, &names);
+        QVERIFY2(names.contains("Spare relay"), qPrintable(names.join(", ")));
+
+        // Marked Curtain, from the Stage Look menu: one undo step.
+        QMenu menu;
+        FixtureManager::fillStageLookMenu(&menu, doc, { relay->id(), spare->id() });
+        QAction *mark = menu.findChild<QAction *>("stageLook_Curtain");
+        QVERIFY(mark != nullptr);
+        mark->trigger();
+        QCOMPARE(relay->stageLook(), Fixture::CurtainLook);
+        QCOMPARE(spare->stageLook(), Fixture::CurtainLook);
+        QVERIFY(Scenery::isCurtainFixture(relay));
+
+        // The plot draws it as its drape, not as a fixture -- its place kept.
+        QVERIFY(!gv->m_fixtures.value(relay->id())->isVisible());
+        QVERIFY(props->containsFixture(relay->id()));
+        // Not inventory to place either.
+        panel->reload();
+        names.clear();
+        inventoryLeaves(panel, &names);
+        QVERIFY2(!names.contains("Spare relay"), qPrintable(names.join(", ")));
+
+        // ⌘Z: back to Auto, a fixture on the plot and in the inventory again.
+        mon.undo();
+        QCOMPARE(relay->stageLook(), Fixture::AutoLook);
+        QCOMPARE(spare->stageLook(), Fixture::AutoLook);
+        QVERIFY(!Scenery::isCurtainFixture(relay));
+        QVERIFY(gv->m_fixtures.value(relay->id()) != nullptr);
+        QVERIFY(gv->m_fixtures.value(relay->id())->isVisible());
+        panel->reload();
+        names.clear();
+        inventoryLeaves(panel, &names);
+        QVERIFY2(names.contains("Spare relay"), qPrintable(names.join(", ")));
+        // Marked by hand works the same way.
+        relay->setStageLook(Fixture::CurtainLook);
+        spare->setStageLook(Fixture::CurtainLook);
+        QVERIFY(!gv->m_fixtures.value(relay->id())->isVisible());
+
+        /* The drape's dialog lists both as curtain drivers; drive it by the
+           spare (unpatched, so its preview values are what it has). */
+        bool listed = false;
+        driveDialog([&](QWidget *dlg) {
+            QComboBox *drv = dlg->findChild<QComboBox *>("sceneryDriver");
+            if (drv == nullptr)
+                return false;
+            listed = drv->findData(relay->id()) >= 0 && drv->findData(spare->id()) >= 0;
+            drv->setCurrentIndex(drv->findData(spare->id()));
+            return true;
+        });
+        mon.slotEditScenery(sc->id());
+        QVERIFY(listed);
+        QCOMPARE(sc->driverFixture(), spare->id());
+        // Its intensity opens it: 0 closed, 255 open.
+        SceneryItem *sci = gv->m_sceneryItems.value(sc->id());
+        QVERIFY(sci != nullptr);
+        QCOMPARE(sci->parts().size(), 1);
+        spare->setPreviewValue(0, 255);
+        QApplication::processEvents();
+        QCOMPARE(gv->m_sceneryItems.value(sc->id())->parts().size(), 2);
+        spare->setPreviewValue(0, 0);
+        QApplication::processEvents();
+        QCOMPARE(gv->m_sceneryItems.value(sc->id())->parts().size(), 1);
+
+        // Unmarked: a fixture on the plot again.
+        relay->setStageLook(Fixture::AutoLook);
+        QVERIFY(gv->m_fixtures.value(relay->id())->isVisible());
+        QVERIFY(!Scenery::isCurtainFixture(relay));
+    }
+    delete doc;
+}
+
 void Monitor_Test::cancellingTheDrapeDialogTakesItsNewCurtainAway()
 {
     Doc *doc = new Doc(this);
@@ -21989,7 +22090,13 @@ void Monitor_Test::fixturePropertiesSetsTheStageLook()
     for (int i = 0; i < look->count(); ++i)
         if (!look->itemData(i, Qt::UserRole).isValid() && !look->itemText(i).isEmpty())
             ++headings;
-    QCOMPARE(headings, 4);          // Moving, Fixed conventional, Fixed LED, Practicals
+    QCOMPARE(headings, 5);          // Moving, Fixed conventional, Fixed LED, Practicals, Scenery
+    // Scenery, last: Curtain under it (Q51).
+    const int curtainAt = look->findData(int(Fixture::CurtainLook), Qt::UserRole);
+    QVERIFY(curtainAt > 0);
+    QCOMPARE(curtainAt, look->count() - 1);
+    QCOMPARE(look->itemText(curtainAt - 1), QString("Scenery"));
+    QVERIFY(!look->itemIcon(curtainAt).isNull());
 
     const QByteArray before = rig.mon->rigSnapshot();
     look->setCurrentIndex(look->findData(int(Fixture::SquareWashLook), Qt::UserRole));
@@ -22490,11 +22597,14 @@ void Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures()
         QVERIFY(paste != nullptr);
         QCOMPARE(paste->shortcut(), QKeySequence(QKeySequence::Paste));
         QVERIFY(!paste->isEnabled());                   // nothing copied yet
+        int asked = -1;
+        mon.setPasteFixturesAsk([&asked](int n) { asked = n; return Monitor::PasteUnpatched; });
 
         copy->trigger();
         QVERIFY(paste->isEnabled());
         const int fixturesBefore = doc->fixtures().size();
         paste->trigger();
+        QCOMPARE(asked, 2);                             // "Paste 2 fixtures with the truss"
 
         QCOMPARE(props->trusses().size(), 2);
         Truss *dup = nullptr;
@@ -22550,6 +22660,138 @@ void Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures()
         QCOMPARE(doc->fixtures().size(), fixturesBefore);  // the original's fixtures stay
     }
     delete doc;
+}
+
+/* LX1 with two 1-channel fixtures patched at 1 and 2 in universe 1, a third
+   fixture off the truss at 3 (@p blocker channels): what a pasted truss's
+   fixtures are addressed around. */
+static Truss *pasteRig(Doc *doc, quint32 blocker)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("LX1");
+    bar->setOrigin(QVector3D(1.0f, 3.0f, 5.0f));
+    bar->setLength(6.0f);
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("LX1-%1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        if (!doc->addFixture(f))
+            return nullptr;
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = bar->id();
+        rp.trussOffset = 1.0f + 3.0f * i;
+        props->setFixtureRigProps(f->id(), rp);
+    }
+    Fixture *other = new Fixture(doc);
+    other->setName("Floor");
+    other->setChannels(blocker);
+    other->setAddress(2);
+    if (!doc->addFixture(other))
+        return nullptr;
+    return bar;
+}
+
+/* Q55: pasting a truss that brings fixtures asks -- Patch at next free
+   addresses (after the originals, in their universe, spilling on when it is
+   full), Leave unpatched, or Cancel (nothing pasted). Each paste is one
+   ⌘Z, and the footer's status line says what happened. */
+void Monitor_Test::pastingATrussAsksWhatItsFixturesGet()
+{
+    auto copies = [](Doc *doc, quint32 tid) {
+        QList<Fixture *> out;
+        for (Fixture *f : doc->fixtures())
+            if (doc->monitorProperties()->fixtureRigProps(f->id()).trussId == tid)
+                out << f;
+        std::sort(out.begin(), out.end(), [](Fixture *a, Fixture *b) { return a->name() < b->name(); });
+        return out;
+    };
+    for (int round = 0; round < 3; ++round)
+    {
+        // 0: room after the originals; 1: universe 1 full after them; 2: cancel.
+        Doc *doc = new Doc(this);
+        MonitorProperties *props = doc->monitorProperties();
+        Truss *bar = pasteRig(doc, round == 1 ? 510 : 1);
+        QVERIFY(bar != nullptr);
+        {
+            QWidget parent;
+            Monitor mon(&parent, doc);
+            MonitorGraphicsView *gv = mon.m_graphicsView;
+            gv->setLayoutLocked(false);
+            gv->updateTrusses();
+            gv->scene()->clearSelection();
+            gv->m_trussItems.value(bar->id())->setSelected(true);
+            mon.slotCopySelected();
+            int asked = 0;
+            const Monitor::PasteFixtures answer = round == 2 ? Monitor::PasteCancelled
+                                                             : Monitor::PastePatched;
+            mon.setPasteFixturesAsk([&asked, answer](int n) { asked = n; return answer; });
+            const int fixturesBefore = doc->fixtures().size();
+            mon.slotPasteFeatures();
+            QCOMPARE(asked, 2);
+            QLabel *notice = mon.findChild<QLabel *>("plotNotice");
+            QVERIFY(notice != nullptr);
+
+            if (round == 2)
+            {
+                // Cancel: nothing pasted, nothing to undo, no cascade step taken.
+                QCOMPARE(props->trusses().size(), 1);
+                QCOMPARE(doc->fixtures().size(), fixturesBefore);
+                QCOMPARE(mon.m_pasteCount, 0);
+                QVERIFY(notice->text().isEmpty());
+                // Asked again, Leave unpatched: pasted where the first one goes.
+                mon.setPasteFixturesAsk([](int) { return Monitor::PasteUnpatched; });
+                mon.slotPasteFeatures();
+                QCOMPARE(props->trusses().size(), 2);
+                QCOMPARE(mon.m_pasteCount, 1);
+                QVERIFY2(notice->text().contains("2 fixtures unpatched"), qPrintable(notice->text()));
+                continue;
+            }
+
+            QCOMPARE(props->trusses().size(), 2);
+            Truss *dup = props->trusses().last();
+            QVERIFY(dup != bar);
+            const quint32 dupId = dup->id();       // dup is gone after the undo
+            const QList<Fixture *> made = copies(doc, dupId);
+            QCOMPARE(made.size(), 2);
+            QCOMPARE(made.at(0)->name(), QString("LX1-1 #2"));
+            for (Fixture *f : made)
+                QVERIFY(f->isPatched());
+            if (round == 0)
+            {
+                // After the originals (1, 2) and around Floor (3): 4 and 5, in their order.
+                QCOMPARE(made.at(0)->universe(), quint32(0));
+                QCOMPARE(made.at(0)->address(), quint32(3));
+                QCOMPARE(made.at(1)->universe(), quint32(0));
+                QCOMPARE(made.at(1)->address(), quint32(4));
+                QVERIFY2(notice->text().contains("patched in universe 1 after the originals"),
+                         qPrintable(notice->text()));
+            }
+            else
+            {
+                // Universe 1 is full after them: on into universe 2, from its start.
+                QCOMPARE(made.at(0)->universe(), quint32(1));
+                QCOMPARE(made.at(0)->address(), quint32(0));
+                QCOMPARE(made.at(1)->universe(), quint32(1));
+                QCOMPARE(made.at(1)->address(), quint32(1));
+                QVERIFY2(notice->text().contains("No room in universe 1"), qPrintable(notice->text()));
+                QVERIFY2(notice->text().contains("universe 2"), qPrintable(notice->text()));
+            }
+            // The originals stay where they were.
+            for (Fixture *f : copies(doc, bar->id()))
+                QVERIFY(f->isPatched() && f->universe() == 0 && f->address() < 2);
+
+            // One ⌘Z: the truss and its patched copies go together.
+            mon.undo();
+            QCOMPARE(props->trusses().size(), 1);
+            QCOMPARE(doc->fixtures().size(), fixturesBefore);
+            QVERIFY(copies(doc, dupId).isEmpty());
+        }
+        delete doc;
+    }
 }
 
 /* Fixture Properties → Test orientation → Aim at target: what the dialog's

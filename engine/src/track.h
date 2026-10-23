@@ -188,7 +188,7 @@ public:
     /** How this track's output arbitrates vs other tracks and the VC:
      *  Background = low (a base wash yields to everything);
      *  Normal = Auto (last-writer-wins, the default);
-     *  Override = high (an accent track wins LTP). */
+     *  Override = high (an accent track wins every channel, intensity too). */
     enum Priority { Background = 0, Normal = 1, Override = 2 };
     void setPriority(Priority p);
     Priority priority() const;

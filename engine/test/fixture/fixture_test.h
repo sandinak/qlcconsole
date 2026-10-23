@@ -62,6 +62,7 @@ private slots:
     void stageLookDefaultAndSet();
     void stageLookKeys();
     void stageLookSaveLoad();
+    void stageLookCurtainSaveLoad();
     void stageLookUnknownKey();
     void stageLookAuto();
     void stageLookIcon();

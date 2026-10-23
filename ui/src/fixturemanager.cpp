@@ -2235,7 +2235,7 @@ void FixtureManager::fillStageLookMenu(QMenu *menu, Doc *doc, const QList<quint3
     const Fixture::StageLook autoLook = first != NULL ? first->autoStageLook() : Fixture::AutoLook;
     // A curtain on Auto is shown as a curtain (ItemIcons::autoLookIcon()).
     addLook(ItemIcons::autoLookIcon(first),
-            Scenery::isCurtainFixture(first) ? tr("Auto (Curtain)")
+            Scenery::isCurtainByDefinition(first) ? tr("Auto (Curtain)")
             : autoLook != Fixture::AutoLook
                 ? tr("Auto (%1)").arg(Fixture::stageLookName(autoLook)) : tr("Auto"),
             int(Fixture::AutoLook));

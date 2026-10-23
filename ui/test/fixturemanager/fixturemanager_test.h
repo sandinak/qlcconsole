@@ -112,6 +112,8 @@ private slots:
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();
     void stageLookIsOfferedInOperate();
+    /** Q51: Stage Look ▸ ends with a Scenery section holding Curtain */
+    void stageLookMenuHasAScenerySectionWithCurtain();
 
 private:
     Doc* m_doc;

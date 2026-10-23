@@ -276,7 +276,13 @@ QColor shutterRing(const QColor &ink) { return alpha(ink, 210); }
  *  whatever its definition's type is closest to. */
 bool isAutoCurtain(const Fixture *fx)
 {
-    return fx != nullptr && fx->stageLook() == Fixture::AutoLook && Scenery::isCurtainFixture(fx);
+    return fx != nullptr && fx->stageLook() == Fixture::AutoLook && Scenery::isCurtainByDefinition(fx);
+}
+
+/** Shown as a curtain: one on Auto that is one, or one marked Curtain. */
+bool isShownAsCurtain(const Fixture *fx)
+{
+    return isAutoCurtain(fx) || (fx != nullptr && fx->stageLook() == Fixture::CurtainLook);
 }
 
 /** A resource icon as a group's: a little smaller, with the badge -- as a
@@ -295,7 +301,7 @@ using namespace ItemIcons;
 /** What a fixture is when no look decides: a curtain, its kind, its type. */
 QIcon unlookedIcon(const Fixture *fx)
 {
-    if (Scenery::isCurtainFixture(fx))
+    if (Scenery::isCurtainByDefinition(fx))
         return curtainIcon();
     const FixtureKind kind = fixtureKind(fx);
     return kind == OtherKind ? QIcon(fx->typeIconResource()) : kindIcon(kind);
@@ -329,7 +335,7 @@ QIcon fixturesIcon(Doc *doc, const QList<quint32> &fids)
 {
     bool curtains = !fids.isEmpty();
     for (quint32 fid : fids)
-        if (!isAutoCurtain(doc->fixture(fid)))
+        if (!isShownAsCurtain(doc->fixture(fid)))
         {
             curtains = false;
             break;
@@ -710,7 +716,7 @@ QIcon autoLookIcon(const Fixture *fixture)
 {
     if (fixture == nullptr)
         return QIcon();
-    if (!Scenery::isCurtainFixture(fixture) && fixture->autoStageLook() != Fixture::AutoLook)
+    if (!Scenery::isCurtainByDefinition(fixture) && fixture->autoStageLook() != Fixture::AutoLook)
         return QIcon(Fixture::stageLookIconResource(fixture->autoStageLook()));
     return unlookedIcon(fixture);
 }

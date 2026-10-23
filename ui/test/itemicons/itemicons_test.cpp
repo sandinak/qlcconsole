@@ -488,9 +488,11 @@ void ItemIcons_Test::aCurtainShowsAsACurtain()
     QVERIFY(QFile::exists(QStringLiteral(":/curtain@2x.png")));
     // Not any other icon: not the type's, not a look's.
     QVERIFY(drape != iconImage(QIcon(curtain->typeIconResource())));
+    // (The Curtain look is this very icon: a fixture marked as a curtain.)
     for (Fixture::StageLook look : Fixture::stageLooks())
-        if (look != Fixture::AutoLook)
+        if (look != Fixture::AutoLook && look != Fixture::CurtainLook)
             QVERIFY(drape != iconImage(QIcon(Fixture::stageLookIconResource(look))));
+    QCOMPARE(iconImage(QIcon(Fixture::stageLookIconResource(Fixture::CurtainLook))), drape);
 
     MonitorProperties *props = m_doc->monitorProperties();
     for (bool on : { false, true })
@@ -542,6 +544,39 @@ void ItemIcons_Test::aCurtainShowsAsACurtain()
         QCOMPARE(iconImage(fixtureIcon(hazer)), iconImage(QIcon(":/hazer.png")));
     }
     props->setAutoStageLooks(false);
+}
+
+void ItemIcons_Test::aFixtureMarkedCurtainShowsAsACurtain()
+{
+    // A dimmer whose Auto is an ellipsoidal, and a real curtain.
+    Fixture *dim = makeFixture(QLCFixtureDef::Dimmer, QStringLiteral("Relay"),
+                               { { QLCChannel::Intensity, QLCChannel::IntensityDimmer } });
+    Fixture *curtain = makeCurtain(QLCFixtureDef::Other, QStringLiteral("Main tabs"));
+    const QImage drape = iconImage(curtainIcon());
+    MonitorProperties *props = m_doc->monitorProperties();
+    QVERIFY(iconImage(fixtureIcon(dim)) != drape);
+
+    dim->setStageLook(Fixture::CurtainLook);
+    for (bool on : { false, true })
+    {
+        props->setAutoStageLooks(on);
+        QCOMPARE(iconImage(fixtureIcon(dim)), drape);
+        // The picker's Auto entry still says what Auto would be: not a curtain.
+        QVERIFY(iconImage(autoLookIcon(dim)) != drape);
+    }
+    props->setAutoStageLooks(false);
+
+    // With a real curtain: a group of curtains.
+    FixtureGroup *tabs = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(tabs);
+    QVERIFY(tabs->assignFixture(curtain->id()));
+    QVERIFY(tabs->assignFixture(dim->id()));
+    QCOMPARE(groupIcon(m_doc, tabs).name(), curtainIcon(true).name());
+
+    // Unmarked: its own icon again, and the group is no longer all curtains.
+    dim->setStageLook(Fixture::AutoLook);
+    QVERIFY(iconImage(fixtureIcon(dim)) != drape);
+    QVERIFY(groupIcon(m_doc, tabs).name() != curtainIcon(true).name());
 }
 
 /* The icon in @p item's column 0 as an image (none: a null image). */

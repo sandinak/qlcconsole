@@ -42,6 +42,10 @@ private slots:
     void flyingTakesItUpAndOut();
     void theChannelsAreFoundByName();
     void theBundledCurtainIsNotALight();
+    /** Q51: a fixture marked with the Curtain stage look is a curtain
+     *  fixture; with no Open / Fly channels its intensity opens it; back
+     *  to Auto, it is not one */
+    void aFixtureMarkedCurtainIsACurtain();
     void theDriverIsSavedAndOldShowsAreUndriven();
 };
 

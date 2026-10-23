@@ -288,8 +288,10 @@ A main drape or a traveler can open and close in the show, because a fixture
 moves it. In its editor, **Driven by → Add curtain fixture** adds a
 **Generic → Stage Curtain** fixture named after it (*Main drape curtain*) and links
 the two; or pick a curtain fixture you already have. It's saved with the
-show. The curtain fixture is an ordinary fixture with no light and no power
-draw: it isn't counted in power estimates and isn't listed in Inventory as
+show. A fixture you already have — a relay on a dimmer channel — becomes a curtain
+fixture when you give it the **Curtain** stage look ([Stage
+looks](#stage-looks)); its intensity opens the curtain. The bundled curtain
+fixture is an ordinary fixture with no light and no power draw: it isn't counted in power estimates and isn't listed in Inventory as
 something to place, and colour, dimmer and position palettes don't touch it.
 
 | Channel | 0 | 255 |
@@ -482,7 +484,7 @@ picture). The fixture's icon follows its look in every fixture list
 **Auto**, the default, draws the fixture as its definition's type always
 has; the picker names the look that type is closest to, as *Auto (LED PAR /
 round multi-LED wash)*; a dimmer channel's is *Ellipsoidal / profile spot*.
-The other looks, in four sections:
+The other looks, in five sections:
 
 - **Moving** — Moving head spot, Moving head round wash, Moving head square
   wash.
@@ -493,6 +495,16 @@ The other looks, in four sections:
 - **Practicals** — lights that are part of the set: **Lantern** (a
   hurricane lantern, or the one by a door) and **Staff** (a pole with LED
   strip wound round it from top to bottom).
+- **Scenery** — **Curtain**: a fixture that moves a curtain rather than
+  lighting anything, such as a relay on a dimmer channel that runs a
+  traveler's motor. It is then a curtain fixture, like a **Generic → Stage
+  Curtain** ([Curtains that move](#curtains-that-move)): listed under a
+  drape's **Driven by**, drawn on the plot as that drape rather than as a
+  fixture (its place on the plot is kept, hidden), kept out of Inventory,
+  and shown with the curtain icon. A fixture marked Curtain that has no
+  *Open* or *Fly* channel opens on its master intensity channel, or on its
+  first channel if it has none: **0 closed, 255 open**. Back to **Auto**,
+  it is an ordinary fixture again.
 
 On the plot each look has its own outline — a followspot is a long barrel
 with its lens at the front, a bar wash a wide strip, a
@@ -578,6 +590,15 @@ of, and doesn't override, the real locks above.
   paste or edit: a whole drag at once (everything it moved — structures,
   scenery, targets, nodes, fixtures — and a deck brings its fixtures back
   with it), or everything one dialog did when you pressed OK.
+- **Copy and paste** (Ctrl/⌘+C, Ctrl/⌘+V; **Duplicate selected**, **Paste
+  features here**) — trusses, decks and targets. A truss brings the
+  fixtures hung on it as new copies, and the paste asks what they get:
+  **Patch at next free addresses** (after the originals, in their universe;
+  when that universe has no room the rest go on into the next, and any
+  that still don't fit stay unpatched), **Leave unpatched** (address them
+  later with **Patch Others Like This**), or **Cancel** (nothing is
+  pasted). The plot's status line says what happened, and one Undo takes
+  the truss and its fixtures away.
 - **Rotate** — right-click → **Rotate…** (an angle, clockwise seen from
   above; less than 0 the other way), or **]** / **[** for 15° clockwise /
   anticlockwise and **}** / **{** for 1°. The selection — a group, or

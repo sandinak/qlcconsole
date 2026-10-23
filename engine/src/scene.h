@@ -527,6 +527,9 @@ private:
      *  m_valueListMutex. */
     void applyEditOverride(QList<Universe *> ua);
     int editFaderPriority() const;
+    /** setEditOverride() is on, or the scene plays on an Override track of
+     *  a Show (its fadePriority() is Universe::Override). */
+    bool overrideWanted() const;
 
     std::atomic<bool> m_editOverride { false };
     bool m_editOverrideApplied = false;   //!< what the faders were built with

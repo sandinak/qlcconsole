@@ -1716,7 +1716,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         QMutexLocker locker(&m_valueListMutex);
         if (m_fadersMap.isEmpty())
         {
-            m_editOverrideApplied = m_editOverride;
+            m_editOverrideApplied = overrideWanted();
             // full build already resolves positions and palette values
             m_reaimRequested = false;
             m_repaletteRequested = false;
@@ -1921,9 +1921,18 @@ int Scene::editFaderPriority() const
     return m_editOverrideApplied ? qMax(own, int(Universe::Override)) : own;
 }
 
+bool Scene::overrideWanted() const
+{
+    // An edit preview, or a Show timeline track set to Override
+    // (ShowRunner::startChild lends it Universe::Override; it goes back to
+    // Auto when the scene stops): either way the scene wins every channel it
+    // touches, intensity too.
+    return m_editOverride || fadePriority() == int(Universe::Override);
+}
+
 void Scene::applyEditOverride(QList<Universe *> ua)
 {
-    const bool want = m_editOverride;
+    const bool want = overrideWanted();
     if (want == m_editOverrideApplied)
         return;
     m_editOverrideApplied = want;

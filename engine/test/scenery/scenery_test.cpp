@@ -472,6 +472,57 @@ void Scenery_Test::theBundledCurtainIsNotALight()
     QVERIFY(!Scenery::isCurtainFixture(dim));
 }
 
+void Scenery_Test::aFixtureMarkedCurtainIsACurtain()
+{
+    Doc doc(this);
+    Fixture *dim = new Fixture(&doc);
+    dim->setName("Traveller relay");
+    dim->setChannels(1);
+    QVERIFY(doc.addFixture(dim));
+    QVERIFY(!Scenery::isCurtainFixture(dim));
+    QVERIFY(!Scenery::isCurtainByDefinition(dim));
+
+    dim->setStageLook(Fixture::CurtainLook);
+    QVERIFY(Scenery::isCurtainFixture(dim));
+    QVERIFY(!Scenery::isCurtainByDefinition(dim));      // what Auto would be
+    // No Open / Fly channel: its intensity opens it, 0 closed, 255 open.
+    const QLCFixtureMode *mode = dim->fixtureMode();
+    QVERIFY(mode != nullptr);
+    QCOMPARE(Scenery::curtainChannel(mode, Scenery::OpenChannel), 0);
+    QCOMPARE(Scenery::curtainChannel(mode, Scenery::FlyChannel), -1);
+    QByteArray v(1, char(0));
+    QCOMPARE(Scenery::poseFromValues(mode, v).open, 0.0);
+    v[0] = char(255);
+    QCOMPARE(Scenery::poseFromValues(mode, v).open, 1.0);
+    QCOMPARE(Scenery::poseFromValues(mode, v).fly, 0.0);
+
+    // An RGB fixture marked Curtain opens on its master dimmer, not its red.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("RGBD");
+    QLCFixtureMode *rgbd = new QLCFixtureMode(def);
+    rgbd->setName("4ch");
+    const QList<QPair<QString, int> > chans = {
+        { "Red", int(QLCChannel::Red) }, { "Green", int(QLCChannel::Green) },
+        { "Blue", int(QLCChannel::Blue) }, { "Dimmer", int(QLCChannel::NoColour) } };
+    for (const QPair<QString, int> &c : chans)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(c.first);
+        ch->setGroup(QLCChannel::Intensity);
+        ch->setColour(QLCChannel::PrimaryColour(c.second));
+        def->addChannel(ch);
+        rgbd->insertChannel(ch, rgbd->channels().size());
+    }
+    def->addMode(rgbd);
+    QCOMPARE(Scenery::curtainChannel(rgbd, Scenery::OpenChannel), 3);
+    delete def;
+
+    // Back to Auto: a dimmer again.
+    dim->setStageLook(Fixture::AutoLook);
+    QVERIFY(!Scenery::isCurtainFixture(dim));
+}
+
 void Scenery_Test::theDriverIsSavedAndOldShowsAreUndriven()
 {
     // A drape from a show saved before curtains could be driven.
