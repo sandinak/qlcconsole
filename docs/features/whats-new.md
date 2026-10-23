@@ -4,6 +4,17 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Drag cues to reorder them; a new number moves the cue.** In the Show
+  Tree a cue list's order is now always its number order. Type a new
+  number (in the cue's **Number** field, or **F2** on its row) and the cue
+  moves to its place; a number already taken, a sub-cue's included, is
+  refused. Drag one cue or several up and down: the dropped cue is numbered
+  between its new neighbours as **+ Cue** numbers (between 2 and 3 → 2.5),
+  and nothing else is renumbered. Right-click a cue → **Renumber this
+  level…** numbers its level 1, 2, 3… (or from a start, in steps), point
+  cues and sub-cues following. Each is one undo step. See [Reordering and
+  numbering](show-tree.md#reordering-and-numbering).
+
 - **Auto fixtures can be shown as their closest look.** The plot's
   **Show** menu has **Show Auto fixtures as their closest stage look**: a
   fixture left on Auto gets the look its type is closest to (an LED PAR, a

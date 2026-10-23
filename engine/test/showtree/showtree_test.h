@@ -48,6 +48,12 @@ private slots:
     void anIncludeThatWouldLoopIsLeftOut();
     void numbering();
     void numberedNames();
+    void numberBetweenRule();
+    void aRenumberedCueMovesToItsPlace();
+    void aDraggedCueIsNumberedBetweenItsNeighbours();
+    void renumberThisLevel();
+    void aMoveKeepsShowControlsStandby();
+    void pointCuesRoundTripInXml();
     void xmlRoundTrip();
     void aLayerWithTwoGroupsTracksAcrossCues();
     void addingAGroupToATrackedLayer();

@@ -25,6 +25,7 @@
 #include <QRadioButton>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QSpinBox>
 #include <QDragEnterEvent>
 #include <QShowEvent>
 #include <QHideEvent>
@@ -66,6 +67,7 @@
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
+#include "showcontrollistener.h"
 #include "fixturegroupsource.h"
 #include "fixturemanager.h"
 #include "functionstreewidget.h"
@@ -256,17 +258,20 @@ protected:
                     m_hint->setText(hint);
                 return;
             }
-            if (cues.count() > 1)
+            if (cues.count() > 1 && include)
             {
-                // Several cues have no one place to go: refused, and said.
+                // Several cues have no one cue to include them: refused, and said.
                 e->ignore();
                 if (m_hint != nullptr)
-                    m_hint->setText(ShowTreeView::tr("Drag one cue at a time to move or include it"));
+                    m_hint->setText(ShowTreeView::tr("Alt-drag one cue at a time to include it"));
                 return;
             }
+            // Moved: before the cue in its upper half, after it in its lower.
+            bool refused = false;
             const QString hint = cues.isEmpty() || layer != ShowTree::invalidId() ? QString()
-                                 : m_view->cueDropHint(cues.first(), cue, include);
-            if (!hint.isEmpty())
+                                 : include ? m_view->cueDropHint(cues.first(), cue, include)
+                                 : m_view->cuesDropHint(cues, cue, dropsAfter(e->position().toPoint()), &refused);
+            if (!hint.isEmpty() && !refused)
             {
                 e->setDropAction(Qt::MoveAction);
                 e->accept();
@@ -341,8 +346,9 @@ protected:
             }
             const bool include = e->modifiers() & Qt::AltModifier;
             // Handled here: never let the base class move the rows itself.
-            if (cues.count() == 1 && layer == ShowTree::invalidId() && carried.isEmpty()
-                && m_view->dropCue(cues.first(), cue, include))
+            const bool onCue = !cues.isEmpty() && layer == ShowTree::invalidId() && carried.isEmpty();
+            if (onCue && (include ? cues.count() == 1 && m_view->dropCue(cues.first(), cue, true)
+                                  : m_view->dropCues(cues, cue, dropsAfter(e->position().toPoint()))))
             {
                 e->setDropAction(Qt::CopyAction);
                 e->accept();
@@ -362,6 +368,16 @@ protected:
     }
 
 private:
+    /** A cue dropped at @a pos goes after the row there (its lower half). */
+    bool dropsAfter(const QPoint &pos) const
+    {
+        QTreeWidgetItem *item = itemAt(pos);
+        if (item == nullptr)
+            return true;
+        const QRect r = visualItemRect(item);
+        return pos.y() >= r.center().y();
+    }
+
     /** A Looks section's row or one of its folders at @a pos. */
     bool lookFolderAt(const QPoint &pos, quint32 *listId, QString *folder) const
     {
@@ -2035,8 +2051,19 @@ bool ShowTreeView::startRename()
     }
     else if (kind == CueNode)
     {
+        // Its number and name, as the row reads ("2.5 Fog"): a new number
+        // moves the cue to its place. A look's number is only the tree's.
         const Cue *c = m_st->cue(id);
-        text = c == nullptr ? QString() : c->name;     // its name; the number stays
+        const CueList *l = m_st->listOfCue(id);
+        if (c == nullptr || l == nullptr)
+            text = QString();
+        else if (l->looks)
+            text = c->name;
+        else
+        {
+            const QString number = c->number.isEmpty() ? QString::number(l->indexOf(id) + 1) : c->number;
+            text = c->name.isEmpty() ? number : QStringLiteral("%1 %2").arg(number, c->name);
+        }
     }
     else if (kind == LayerNode)
     {
@@ -2084,6 +2111,21 @@ void ShowTreeView::slotTreeItemRenamed(QTreeWidgetItem *item, int column)
         });
         return;
     }
+    if (kind == CueNode)
+    {
+        const CueList *l = m_st->listOfCue(id);
+        QString number;
+        QString rest;
+        if (l != nullptr && !l->looks && splitNumberedName(name, &number, &rest))
+        {
+            // "2.5 Fog": number and name in one step; a number taken is
+            // refused and said.
+            QTimer::singleShot(0, this, [this, id, number, rest]() {
+                renameCue(id, number, rest);
+            });
+            return;
+        }
+    }
     // After the editor is done with the row: the rename rebuilds the tree.
     const quint32 cueId = item->data(0, CueRole).toUInt();
     QTimer::singleShot(0, this, [this, id, name, cueId, kind]() {
@@ -2093,6 +2135,31 @@ void ShowTreeView::slotTreeItemRenamed(QTreeWidgetItem *item, int column)
             selectNode(id, cueId);
         m_tree->setFocus(Qt::OtherFocusReason);
     });
+}
+
+bool ShowTreeView::renameCue(quint32 cueId, const QString &number, const QString &name)
+{
+    const Cue *c = m_st->cue(cueId);
+    const CueList *l = m_st->listOfCue(cueId);
+    if (c == nullptr || l == nullptr)
+        return false;
+    Cue cue = *c;
+    // An unnumbered cue left at its position's number stays unnumbered.
+    if (!(c->number.isEmpty() && number == QString::number(l->indexOf(cueId) + 1)))
+        cue.number = number;
+    cue.name = name;
+    QString why;
+    const bool same = cue.number == c->number && cue.name == c->name;
+    const bool ok = same || m_st->setCue(cue, &why);
+    if (!ok)
+    {
+        buildTree();                    // as it was
+        if (!why.isEmpty())
+            QMessageBox::information(this, tr("Cue number"), why);
+    }
+    selectNode(cueId);
+    m_tree->setFocus(Qt::OtherFocusReason);
+    return ok;
 }
 
 void ShowTreeView::slotTreeChanged()
@@ -4255,7 +4322,23 @@ void ShowTreeView::slotCueEdited()
     if (cue.number == c->number && cue.name == c->name && cue.note == c->note && cue.mode == c->mode
         && cue.fadeIn == c->fadeIn && cue.fadeOut == c->fadeOut && cue.hold == c->hold)
         return;
-    m_st->setCue(cue);
+    // A new number moves the cue to its place in the list; one taken is
+    // refused, and the field shows the number it has.
+    const quint32 id = m_pageCue;
+    const bool renumber = cue.number != c->number;
+    QString why;
+    if (!m_st->setCue(cue, &why))
+    {
+        if (!why.isEmpty())
+        {
+            QSignalBlocker block(m_cueNumber);
+            m_cueNumber->setText(c->number);
+            QMessageBox::information(this, tr("Cue number"), why);
+        }
+        return;
+    }
+    if (renumber)
+        selectNode(id);
 }
 
 void ShowTreeView::slotListModeChanged(int index)
@@ -5569,7 +5652,8 @@ QString ShowTreeView::cueDropHint(quint32 cueId, quint32 onCueId, bool include) 
             return QString();
         return tr("%1 includes %2").arg(onto, what);
     }
-    return tr("Move %1 to %2's place").arg(what, onto);
+    // Onto a cue: its place -- after it moving down, before it moving up.
+    return cuesDropHint({ cueId }, onCueId, list->indexOf(cueId) < list->indexOf(onCueId));
 }
 
 bool ShowTreeView::dropCue(quint32 cueId, quint32 onCueId, bool include)
@@ -5579,9 +5663,134 @@ bool ShowTreeView::dropCue(quint32 cueId, quint32 onCueId, bool include)
     if (include)
         return m_st->addInclude(onCueId, cueId);
     const CueList *list = m_st->listOfCue(cueId);
-    const bool ok = m_st->moveCue(cueId, list->indexOf(onCueId));
+    return dropCues({ cueId }, onCueId, list->indexOf(cueId) < list->indexOf(onCueId));
+}
+
+QString ShowTreeView::cuesDropHint(const QList<quint32> &cueIds, quint32 onCueId, bool after, bool *refused) const
+{
+    if (refused != nullptr)
+        *refused = false;
+    const CueList *list = m_st->listOfCue(onCueId);
+    if (list == nullptr || cueIds.isEmpty() || cueIds.contains(onCueId))
+        return QString();
+    QString why;
+    const QStringList numbers = m_st->moveNumbers(cueIds, onCueId, after, &why);
+    if (numbers.isEmpty())
+    {
+        if (refused != nullptr)
+            *refused = !why.isEmpty();
+        return why;
+    }
+    const QString what = cueIds.count() == 1 ? m_st->cueLabel(*list, list->indexOf(cueIds.first()))
+                                             : tr("%1 cues").arg(cueIds.count());
+    const QString onto = m_st->cueLabel(*list, list->indexOf(onCueId));
+    const QString where = after ? tr("Move %1 after %2").arg(what, onto) : tr("Move %1 before %2").arg(what, onto);
+    if (list->looks)
+        return where;
+    return tr("%1, as %2").arg(where, numbers.join(QStringLiteral(", ")));
+}
+
+bool ShowTreeView::dropCues(const QList<quint32> &cueIds, quint32 onCueId, bool after, QString *why)
+{
+    QString err;
+    const bool ok = m_st->moveCues(cueIds, onCueId, after, &err);
+    if (ok)
+    {
+        // The moved cues stay selected, the first one current.
+        selectNode(cueIds.first());
+        for (quint32 id : cueIds)
+            for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+                if ((*it)->data(0, KindRole).toInt() == CueNode && (*it)->data(0, IdRole).toUInt() == id)
+                    (*it)->setSelected(true);
+    }
+    else if (!err.isEmpty())
+        m_hint->setText(err);
+    if (why != nullptr)
+        *why = err;
+    return ok;
+}
+
+bool ShowTreeView::renumberLevel(quint32 cueId, int start, int step, bool ask)
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    if (list == nullptr || list->looks)
+        return false;
+    if (ask)
+    {
+        QDialog dlg(this);
+        dlg.setWindowTitle(tr("Renumber this level"));
+        QFormLayout *f = new QFormLayout(&dlg);
+        QLabel *intro = new QLabel(tr("Numbers the cues at %1's level 1, 2, 3… in list order (or from Start, "
+                                      "in steps of Step). A point cue keeps its point under its cue's new "
+                                      "number; sub-cues follow their cue.")
+                                   .arg(m_st->cueLabel(*list, list->indexOf(cueId))), &dlg);
+        intro->setWordWrap(true);
+        f->addRow(intro);
+        QSpinBox *from = new QSpinBox(&dlg);
+        from->setObjectName("stRenumberStart");
+        from->setRange(0, 99999);
+        from->setValue(start);
+        QSpinBox *by = new QSpinBox(&dlg);
+        by->setObjectName("stRenumberStep");
+        by->setRange(1, 1000);
+        by->setValue(step);
+        f->addRow(tr("Start"), from);
+        f->addRow(tr("Step"), by);
+        QLabel *preview = new QLabel(&dlg);
+        preview->setWordWrap(true);
+        preview->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        f->addRow(preview);
+        QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+        f->addRow(box);
+        connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+        connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        auto update = [this, cueId, from, by, preview, box]() {
+            QString why;
+            const QList<ShowTreeController::Renumbered> plan = m_st->renumberLevelPlan(cueId, from->value(),
+                                                                                       by->value(), &why);
+            QStringList lines;
+            for (const ShowTreeController::Renumbered &r : plan.mid(0, 12))
+                lines << tr("%1 → %2").arg(r.from, r.to);
+            if (plan.count() > 12)
+                lines << tr("… and %1 more").arg(plan.count() - 12);
+            preview->setText(plan.isEmpty() ? why : lines.join(QStringLiteral("\n")));
+            box->button(QDialogButtonBox::Ok)->setEnabled(!plan.isEmpty());
+        };
+        connect(from, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, update);
+        connect(by, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, update);
+        update();
+        if (dlg.exec() != QDialog::Accepted)
+            return false;
+        start = from->value();
+        step = by->value();
+
+        // QLab, a desk or a VC page elsewhere fires these cues by number:
+        // what it knows by the old numbers now plays other cues.
+        if (ShowControlListener::oscEnabled() || ShowControlListener::mscEnabled())
+        {
+            const QList<ShowTreeController::Renumbered> plan = m_st->renumberLevelPlan(cueId, start, step);
+            QStringList lines;
+            for (const ShowTreeController::Renumbered &r : plan.mid(0, 20))
+                lines << tr("%1 → %2").arg(r.from, r.to);
+            if (plan.count() > 20)
+                lines << tr("… and %1 more").arg(plan.count() - 20);
+            if (QMessageBox::question(this, tr("Renumber this level"),
+                                      tr("Show control (OSC / MSC) is listening, and fires cues by number. "
+                                         "Anything sending these numbers -- QLab, a desk, a MIDI or OSC "
+                                         "trigger -- will fire other cues until it is changed too:\n\n%1\n\n"
+                                         "Renumber?").arg(lines.join(QStringLiteral("\n"))))
+                != QMessageBox::Yes)
+                return false;
+        }
+    }
+    QString why;
+    const bool ok = m_st->renumberLevel(cueId, start, step, &why);
     if (ok)
         selectNode(cueId);
+    else if (ask && !why.isEmpty())
+        QMessageBox::information(this, tr("Renumber this level"), why);
+    else if (!why.isEmpty())
+        m_hint->setText(why);
     return ok;
 }
 
@@ -6019,16 +6228,18 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             const quint32 cueId = item->data(0, IdRole).toUInt();
             const CueList *list = m_st->listOfCue(cueId);
             const int at = list == nullptr ? -1 : list->indexOf(cueId);
-            QAction *up = menu.addAction(tr("Move up"), this, [this, cueId, at]() {
-                m_st->moveCue(cueId, at - 1);
-                selectNode(cueId);
+            // Up / down: renumbered for the new place, as a drag is.
+            QAction *up = menu.addAction(tr("Move up"), this, [this, list, cueId, at]() {
+                dropCues({ cueId }, list->cues.at(at - 1).id, false);
             });
             up->setEnabled(at > 0);
-            QAction *down = menu.addAction(tr("Move down"), this, [this, cueId, at]() {
-                m_st->moveCue(cueId, at + 1);
-                selectNode(cueId);
+            QAction *down = menu.addAction(tr("Move down"), this, [this, list, cueId, at]() {
+                dropCues({ cueId }, list->cues.at(at + 1).id, true);
             });
             down->setEnabled(list != nullptr && at + 1 < list->cues.count());
+            if (list != nullptr && !list->looks)
+                menu.addAction(tr("Renumber this level…"), this, [this, cueId]() { renumberLevel(cueId); })
+                    ->setObjectName("stRenumberLevel");
         }
         const QList<QPair<quint32, quint32>> sel = selectedLayerRefs();
         if (kind == LayerNode && sel.count() > 1 && item->isSelected())

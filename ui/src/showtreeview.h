@@ -310,6 +310,23 @@ public:
         @a include, Alt held) included by it. */
     bool dropCue(quint32 cueId, quint32 onCueId, bool include);
     QString cueDropHint(quint32 cueId, quint32 onCueId, bool include) const;
+    /** Cues @a cueIds (one list) dropped before (@a after: after) cue
+     *  @a onCueId: moved there as a block and numbered between their new
+     *  neighbours (ShowTreeController::moveCues). @a why: the refusal. */
+    bool dropCues(const QList<quint32> &cueIds, quint32 onCueId, bool after, QString *why = nullptr);
+    /** What that drop does ("Move 4 Fog between 2 and 3, as 2.5"), or why
+     *  it can't (@a refused true). */
+    QString cuesDropHint(const QList<quint32> &cueIds, quint32 onCueId, bool after,
+                         bool *refused = nullptr) const;
+    /** Renumber this level… of cue @a cueId from @a start in steps of
+     *  @a step (ShowTreeController::renumberLevel). With @a ask, a dialog
+     *  asks for start and step first, and lists the numbers show control
+     *  fires that change when OSC or MSC is listening. */
+    bool renumberLevel(quint32 cueId, int start = 1, int step = 1, bool ask = true);
+    /** Inline rename of a cue row ("2.5 Fog"): number and name in one
+     *  step; a new number moves the cue to its place, one taken is refused
+     *  and said. */
+    bool renameCue(quint32 cueId, const QString &number, const QString &name);
 
     /** A value picked (D21 as changed 2026-10-17): the palette that plays
      *  exactly it (In this cue list, then Recent, then any), else a one-off

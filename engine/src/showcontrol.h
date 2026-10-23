@@ -107,6 +107,17 @@ public:
     /** The sub-cue LOADed in loadedStep() (LOAD 4.2); -1 for a main cue,
      *  or none. */
     int loadedSubCue(quint32 chaserId) const { return m_loaded.value(chaserId).subCue; }
+    /** The LOADed cue of @a chaserId is now step @a step (its cue moved
+     *  when the Show Tree reordered the list); -1 lets go of it. */
+    void moveLoaded(quint32 chaserId, int step)
+    {
+        if (!m_loaded.contains(chaserId))
+            return;
+        if (step < 0)
+            m_loaded.remove(chaserId);
+        else
+            m_loaded[chaserId].step = step;
+    }
 
     /** The step a GO with no cue plays next on @a chaser -- what's on
      *  standby: the loaded cue; else, playing, the next not skipped; else

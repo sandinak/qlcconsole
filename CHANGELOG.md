@@ -13,6 +13,23 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Show Tree: cue order is number order.** `ShowTreeController::setCue()`
+  (now with `why`) refuses a number that is taken, a sub-cue's derived
+  number, or one that puts the cue's own sub-cues on a cue's number
+  (`checkCueNumber()`), and moves a renumbered cue to its sorted place.
+  `moveCues()` / `moveNumbers()` move cues as a block before or after a
+  cue and number each in turn with `ShowTree::numberBetween()`, the D23
+  rule `numberForInsert()` now shares (last place + 1; else a point cue
+  .5–.9, .1–.4; else up to three levels below; at the top, one less /
+  cut short / a point under it). No room: refused, suggesting Renumber.
+  `renumberLevel()` / `renumberLevelPlan()` renumber a cue's level from a
+  start in steps; deeper point cues keep their places under their cue's
+  new number, sub-cues follow. Every one is one undo step; a cue LOADed by
+  show control stays loaded (`ShowControl::moveLoaded()`). The tree drags
+  several cues as a block (before/after by row half, the new numbers in
+  the hint), F2 on a cue edits "number name", Move up/down renumber, and a
+  cue's menu has **Renumber this level…** (asks first when OSC/MSC is
+  listening). Numbers save as typed; nothing is re-sorted on load.
 - **Show Auto fixtures as their closest stage look.** A per-show setting,
   `MonitorProperties::autoStageLooks()` (the `AutoStageLooks="1"`
   attribute on the Monitor element, written only when on; off by default,

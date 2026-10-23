@@ -270,8 +270,54 @@ public:
     /** A new cue after @a afterIndex (-1: at the top), numbered per D23. */
     quint32 addCue(quint32 listId, int afterIndex, const QString &name);
     bool removeCue(quint32 cueId);
+    /** Cue @a cueId to @a toIndex: moveCues() onto the cue there (after it
+     *  when moving down), so it is renumbered for its new place. */
     bool moveCue(quint32 cueId, int toIndex);
-    bool setCue(const ShowTree::Cue &cue);   //!< its own fields; layers and looks kept as given
+    /** Its own fields; layers and looks kept as given. A new number must be
+     *  free (checkCueNumber()) and moves the cue to its place in number
+     *  order: a list's order is always its numbers' order. */
+    bool setCue(const ShowTree::Cue &cue, QString *why = nullptr);
+
+    /**********************************************************************
+     * Order and numbers (docs/features/show-tree.md "Reordering and
+     * numbering"): a list's order is its cues' number order.
+     **********************************************************************/
+    /** Whether cue @a cueId may be numbered @a number: digits and dots, not
+     *  another cue's in its list, and not a sub-cue's ("4.1" is sub-cue 1
+     *  of cue 4) -- nor may its own sub-cues land on a cue's number. */
+    bool checkCueNumber(quint32 cueId, const QString &number, QString *why = nullptr) const;
+    /** The numbers cues @a cueIds (one list) get when dragged, as a block in
+     *  their order, before (or @a after) cue @a anchorCueId: each in turn
+     *  numbered between its new neighbours by numberBetween(). Empty when
+     *  refused (@a why: no number fits -- Renumber this level -- or the
+     *  drop changes nothing). */
+    QStringList moveNumbers(const QList<quint32> &cueIds, quint32 anchorCueId, bool after,
+                            QString *why = nullptr) const;
+    /** Move and renumber them so (one undo step, "Move cue"). A Looks
+     *  section's looks just move: they have no numbers to keep in order. */
+    bool moveCues(const QList<quint32> &cueIds, quint32 anchorCueId, bool after, QString *why = nullptr);
+
+    struct Renumbered
+    {
+        quint32 cue;
+        QString from;           //!< as show control knows it ("4", "4.1")
+        QString to;
+    };
+    /** Renumber this level: the cues at cue @a cueId's level (its number's
+     *  part count and everything before the last part the same) become
+     *  @a start, @a start + @a step... in list order, in the last place;
+     *  a deeper (point) cue under one of them keeps its own places under
+     *  its new number (1.0.2.5 -> 1.0.3.5 when 1.0.2 becomes 1.0.3), and
+     *  sub-cues follow their cue. Lists every number that changes, sub-cues
+     *  too (what show control fires); empty with @a why when refused. */
+    QList<Renumbered> renumberLevelPlan(quint32 cueId, int start = 1, int step = 1,
+                                        QString *why = nullptr) const;
+    bool renumberLevel(quint32 cueId, int start = 1, int step = 1, QString *why = nullptr);
+private:
+    /** Run @a op (a move or renumber in cue @a cueId's list) keeping what
+     *  show control has LOADed on the list's chaser on the same cue. */
+    bool keepingStandby(quint32 cueId, const std::function<bool()> &op);
+public:
     quint32 addLayer(quint32 cueId, const ShowTree::Target &target, const QString &name = QString());
     bool removeLayer(quint32 cueId, quint32 layerId);
     bool setLayerLook(quint32 cueId, quint32 layerId, const ShowTree::Look &look);

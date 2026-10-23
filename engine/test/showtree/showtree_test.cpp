@@ -523,6 +523,368 @@ void ShowTree_Test::numberedNames()
     QVERIFY(!splitNumberedName("Base 2", &n, &name));
 }
 
+static QByteArray productionXml(const Production &p);
+static QByteArray engineXml(Doc *doc);
+
+/* The rule a dragged cue (and + Cue) is numbered by: D23 between its
+   neighbours. */
+void ShowTree_Test::numberBetweenRule()
+{
+    QCOMPARE(numberBetween("2", "3"), QString("2.5"));
+    QCOMPARE(numberBetween("2", "2.5"), QString("2.1"));
+    QCOMPARE(numberBetween("2", "2.1"), QString("2.0.5"));      // a level down
+    QCOMPARE(numberBetween("2.5", "3"), QString("2.6"));
+    QCOMPARE(numberBetween("2", "5"), QString("3"));
+    QCOMPARE(numberBetween("1.0.2", "1.0.3"), QString("1.0.2.5"));
+    QCOMPARE(numberBetween("2", "3", { "2.5" }), QString("2.6"));
+    // The end: the last place + 1.
+    QCOMPARE(numberBetween("4", ""), QString("5"));
+    QCOMPARE(numberBetween("4.5", ""), QString("4.6"));
+    QCOMPARE(numberBetween("0.0.9", ""), QString("0.0.10"));
+    // The top.
+    QCOMPARE(numberBetween("", "5"), QString("4"));
+    QCOMPARE(numberBetween("", "0.0.3"), QString("0.0.2"));
+    QCOMPARE(numberBetween("", "2.1"), QString("2"));
+    QCOMPARE(numberBetween("", "1"), QString("0.5"));
+    QCOMPARE(numberBetween("", "0.0.1"), QString("0.0.0.5"));
+    QCOMPARE(numberBetween("", "1.0.0"), QString("0.0.1"));
+    QCOMPARE(numberBetween("", "0"), QString());
+    // No room three levels below prev.
+    QCOMPARE(numberBetween("2", "2.0.0.1"), QString());
+    QVERIFY(isCueNumber("0.0.4"));
+    QVERIFY(isCueNumber("12"));
+    QVERIFY(!isCueNumber("2."));
+    QVERIFY(!isCueNumber("2,5"));
+    QVERIFY(!isCueNumber(""));
+}
+
+static QStringList numbersIn(ShowTreeController *st, quint32 listId)
+{
+    QStringList out;
+    const CueList *l = st->cueList(listId);
+    for (int i = 0; i < l->cues.count(); ++i)
+        out << st->cueNumber(*l, i);
+    return out;
+}
+
+static QList<quint32> idsIn(ShowTreeController *st, quint32 listId)
+{
+    QList<quint32> out;
+    for (const Cue &c : st->cueList(listId)->cues)
+        out << c.id;
+    return out;
+}
+
+void ShowTree_Test::aRenumberedCueMovesToItsPlace()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1", "2", "3", "4" }));
+
+    // 1 -> 3.5: it moves between 3 and 4, and the chaser follows.
+    Cue one = *st->cue(c1);
+    one.number = "3.5";
+    QVERIFY(st->setCue(one));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "2", "3", "3.5", "4" }));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c2, c3, c1, c4 }));
+    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QCOMPARE(chaser->stepCue(2), QString("3.5"));
+    QCOMPARE(chaser->steps().at(2).fid, st->cue(c1)->collection);
+    QCOMPARE(m_doc->function(st->cue(c1)->collection)->name(), QString("3.5-One"));
+
+    // A number taken is refused, and said; nothing changes.
+    one = *st->cue(c1);
+    one.number = "4";
+    QString why;
+    QVERIFY(!st->setCue(one, &why));
+    QCOMPARE(why, QString("4 is taken: cue 4 Four has it."));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "2", "3", "3.5", "4" }));
+    QVERIFY(!st->checkCueNumber(c1, "2.x", &why));
+    QVERIFY(why.contains("isn't a cue number"));
+    QVERIFY(!st->checkCueNumber(c1, "", &why));
+    QVERIFY(st->checkCueNumber(c1, "3.5"));                 // its own
+
+    // A sub-cue's derived number is taken too: 4.1 is sub-cue 1 of cue 4.
+    const quint32 sub = st->addSubCue(c4, "Hit");
+    QVERIFY(sub != ShowTree::invalidId());
+    QVERIFY(!st->checkCueNumber(c1, "4.1", &why));
+    QVERIFY(why.contains("sub-cue of cue 4 Four"));
+    // ... and its own sub-cue (4.1) can't land on a cue's number: as 3,
+    // its sub-cue would be 3.1 -- with a cue 3.1 there, refused.
+    Cue three = *st->cue(c3);
+    three.number = "3.1";
+    QVERIFY(st->setCue(three));
+    QVERIFY(!st->checkCueNumber(c4, "3", &why));
+    QCOMPARE(why, QString("Its sub-cue would be 3.1, cue 3.1 Three's number."));
+    QVERIFY(st->undo());
+
+    // One undo step each way.
+    QVERIFY(st->undo());                                    // the sub-cue
+    QVERIFY(st->undo());
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1", "2", "3", "4" }));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c1, c2, c3, c4 }));
+    QVERIFY(st->redo());
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c2, c3, c1, c4 }));
+    QVERIFY(st->undo());
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c1, c2, c3, c4 }));
+
+    // Renumbering only the name still is one plain edit, in place.
+    Cue two = *st->cue(c2);
+    two.name = "Deux";
+    QVERIFY(st->setCue(two));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c1, c2, c3, c4 }));
+
+    // Includes and the base go by id: they follow a renumber.
+    QVERIFY(st->addInclude(c4, c1));
+    QVERIFY(st->setBaseCue(listId, c1));
+    one = *st->cue(c1);
+    one.number = "3.5";
+    QVERIFY(st->setCue(one));
+    QCOMPARE(st->cue(c4)->includes, QList<quint32>({ c1 }));
+    QCOMPARE(st->cueList(listId)->baseCue, c1);
+}
+
+void ShowTree_Test::aDraggedCueIsNumberedBetweenItsNeighbours()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    const quint32 c5 = st->addCue(listId, 3, "Five");
+
+    // Four between 2 and 3: 2.5. Nothing else renumbered.
+    QCOMPARE(st->moveNumbers({ c4 }, c2, true), QStringList({ "2.5" }));
+    QVERIFY(st->moveCues({ c4 }, c2, true));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1", "2", "2.5", "3", "5" }));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c1, c2, c4, c3, c5 }));
+    QCOMPARE(st->undoText(), QString("Move cue"));
+
+    // Five between 2 and 2.5: 2.1.
+    QVERIFY(st->moveCues({ c5 }, c4, false));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1", "2", "2.1", "2.5", "3" }));
+
+    // To the end: the last + 1. To the top: one less than the first.
+    QVERIFY(st->moveCues({ c1 }, c3, true));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "2", "2.1", "2.5", "3", "4" }));
+    QCOMPARE(st->cue(c1)->number, QString("4"));
+    QVERIFY(st->moveCues({ c3 }, c2, false));
+    QCOMPARE(st->cue(c3)->number, QString("1"));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c3, c2, c5, c4, c1 }));
+    // Above 1: 0.5.
+    QVERIFY(st->moveCues({ c2 }, c3, false));
+    QCOMPARE(st->cue(c2)->number, QString("0.5"));
+
+    // Undo / redo: one step each.
+    QVERIFY(st->undo());
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c3, c2, c5, c4, c1 }));
+    QCOMPARE(st->cue(c2)->number, QString("2"));
+    QVERIFY(st->redo());
+    QCOMPARE(st->cue(c2)->number, QString("0.5"));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c2, c3, c5, c4, c1 }));
+
+    // Dropped where it is: nothing to do.
+    QString why;
+    QVERIFY(!st->moveCues({ c2 }, c3, false, &why));
+    QVERIFY(why.isEmpty());
+
+    // A block: in their order, each in turn numbered after the one before
+    // (0.5, 2.5 and 4 dropped after 1, before 2.1: 2, then 2.0.5, 2.0.6 --
+    // 2.5 is past 2.1, so a level down).
+    QCOMPARE(numbersIn(st, listId), QStringList({ "0.5", "1", "2.1", "2.5", "4" }));
+    QCOMPARE(st->moveNumbers({ c1, c2, c4 }, c3, true), QStringList({ "2", "2.0.5", "2.0.6" }));
+    QVERIFY(st->moveCues({ c1, c2, c4 }, c3, true));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c3, c2, c4, c1, c5 }));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1", "2", "2.0.5", "2.0.6", "2.1" }));
+    QCOMPARE(st->undoText(), QString("Move cues"));
+    QVERIFY(st->undo());
+    QCOMPARE(numbersIn(st, listId), QStringList({ "0.5", "1", "2.1", "2.5", "4" }));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c2, c3, c5, c4, c1 }));
+    QVERIFY(st->redo());
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c3, c2, c4, c1, c5 }));
+
+    // No room: nothing fits between 2.0.6 and 2.0.6.0.0.1 three levels
+    // down; refused, with Renumber this level offered.
+    Cue five = *st->cue(c5);
+    five.number = "2.0.6.0.0.1";
+    QVERIFY(st->setCue(five));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1", "2", "2.0.5", "2.0.6", "2.0.6.0.0.1" }));
+    QVERIFY(st->moveNumbers({ c3 }, c1, true, &why).isEmpty());
+    QVERIFY(why.contains("Renumber this level"));
+    QVERIFY(!st->moveCues({ c3 }, c1, true, &why));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1", "2", "2.0.5", "2.0.6", "2.0.6.0.0.1" }));
+
+    // moveCue (Move up / down) renumbers the same way.
+    QVERIFY(st->moveCue(c2, 0));
+    QCOMPARE(st->cue(c2)->number, QString("0.5"));
+
+    // Never onto a sub-cue's number: with cue 1's sub-cues 1.1 to 1.5, a
+    // cue dropped between 1 and 1.6 skips them all.
+    const quint32 other = st->addCueList(st->productions().first().id, "Other", ListMode::Tracking);
+    const quint32 o1 = st->addCue(other, -1, "One");
+    const quint32 o2 = st->addCue(other, 0, "Two");
+    const quint32 o3 = st->addCue(other, 1, "Three");
+    for (int i = 0; i < 5; ++i)
+        QVERIFY(st->addSubCue(o1, "Hit") != ShowTree::invalidId());
+    Cue two = *st->cue(o2);
+    two.number = "1.6";
+    QVERIFY(st->setCue(two));
+    QCOMPARE(numbersIn(st, other), QStringList({ "1", "1.6", "3" }));
+    QCOMPARE(st->moveNumbers({ o3 }, o1, true), QStringList({ "1.0.5" }));
+}
+
+void ShowTree_Test::renumberThisLevel()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "01-Song", ListMode::Tracking);
+    // 1.0.0, 1.0.1, 1.0.1.5, 1.0.4 and a sub-cue under 1.0.4.
+    const quint32 a = st->addCue(listId, -1, "A");
+    const quint32 b = st->addCue(listId, 0, "B");
+    const quint32 p = st->addCue(listId, 1, "Point");
+    const quint32 d = st->addCue(listId, 2, "D");
+    Cue c = *st->cue(p);
+    c.number = "1.0.1.5";
+    QVERIFY(st->setCue(c));
+    c = *st->cue(d);
+    c.number = "1.0.4";
+    QVERIFY(st->setCue(c));
+    const quint32 sub = st->addSubCue(d, "Hit");
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1.0.0", "1.0.1", "1.0.1.5", "1.0.4" }));
+
+    // From 1, step 1: the level 1, 2, 3; the point cue keeps its .5 under
+    // its cue's new number; the sub-cue follows its cue.
+    QString why;
+    const QList<ShowTreeController::Renumbered> plan = st->renumberLevelPlan(b, 1, 1, &why);
+    QCOMPARE(plan.count(), 5);
+    QCOMPARE(plan.at(2).from, QString("1.0.1.5"));
+    QCOMPARE(plan.at(2).to, QString("1.0.2.5"));
+    QCOMPARE(plan.at(0).from, QString("1.0.0"));
+    QCOMPARE(plan.at(0).to, QString("1.0.1"));
+    QCOMPARE(plan.last().from, QString("1.0.4.1"));
+    QCOMPARE(plan.last().to, QString("1.0.3.1"));
+    QCOMPARE(plan.last().cue, sub);
+    QVERIFY(st->renumberLevel(b, 1, 1));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1.0.1", "1.0.2", "1.0.2.5", "1.0.3" }));
+    QCOMPARE(st->cueNumber(*st->cueList(st->subCueList(d)), 0), QString("1.0.3.1"));
+    const Chaser *chaser = qobject_cast<const Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QCOMPARE(chaser->stepCue(3), QString("1.0.3"));
+    QCOMPARE(st->undoText(), QString("Renumber this level"));
+
+    // From 10 in tens.
+    QVERIFY(st->renumberLevel(a, 10, 10));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1.0.10", "1.0.20", "1.0.20.5", "1.0.30" }));
+    // Again the same: nothing to do, said.
+    QVERIFY(!st->renumberLevel(a, 10, 10, &why));
+    QCOMPARE(why, QString("This level is numbered so already."));
+    QVERIFY(!st->renumberLevel(a, 1, 0, &why));
+
+    // Undo: one step each.
+    QVERIFY(st->undo());
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1.0.1", "1.0.2", "1.0.2.5", "1.0.3" }));
+    QVERIFY(st->undo());
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1.0.0", "1.0.1", "1.0.1.5", "1.0.4" }));
+    QVERIFY(st->redo());
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1.0.1", "1.0.2", "1.0.2.5", "1.0.3" }));
+
+    // Only that level: the point cue's own level is just itself.
+    QVERIFY(st->renumberLevel(p, 7, 1));
+    QCOMPARE(numbersIn(st, listId), QStringList({ "1.0.1", "1.0.2", "1.0.2.7", "1.0.3" }));
+
+    // Show control fires the new numbers.
+    ShowControl::Request go;
+    go.command = ShowControl::Load;
+    go.cue = "1.0.3";
+    go.chaser = chaser->id();
+    QVERIFY(m_doc->showControl()->execute(go));
+    QCOMPARE(m_doc->showControl()->loadedStep(chaser->id()), 3);
+    go.cue = "1.0.4";
+    QVERIFY(!m_doc->showControl()->execute(go));
+}
+
+void ShowTree_Test::aMoveKeepsShowControlsStandby()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 chaser = st->cueList(listId)->chaser;
+    ShowControl::Request load;
+    load.command = ShowControl::Load;
+    load.cue = "3";
+    load.chaser = chaser;
+    QVERIFY(m_doc->showControl()->execute(load));
+    QCOMPARE(m_doc->showControl()->loadedStep(chaser), 2);
+    // Three to the top: still the cue on standby, at its new step.
+    QVERIFY(st->moveCues({ c3 }, c1, false));
+    QCOMPARE(m_doc->showControl()->loadedStep(chaser), 0);
+    // One renumbered past Two: Three stays where it is.
+    Cue one = *st->cue(c1);
+    one.number = "2.5";
+    QVERIFY(st->setCue(one));
+    QCOMPARE(idsIn(st, listId), QList<quint32>({ c3, c2, c1 }));
+    QCOMPARE(m_doc->showControl()->loadedStep(chaser), 0);
+}
+
+/* Point cues are the Number attribute as written: they come back as they
+   went, and an older show (numbers out of order, none at all) loads as it
+   was -- nothing is re-sorted or renumbered on load. */
+void ShowTree_Test::pointCuesRoundTripInXml()
+{
+    Production p;
+    p.id = 1;
+    p.name = "P";
+    CueList list;
+    list.id = 2;
+    list.name = "L";
+    for (const QString &n : { QString("1"), QString("1.5"), QString("1.0.5"), QString("2.25"), QString("0.0.4.5") })
+    {
+        Cue c;
+        c.id = list.cues.count() + 10;
+        c.number = n;
+        list.cues << c;
+    }
+    Cue none;
+    none.id = 20;
+    list.cues << none;
+    p.lists << list;
+    const QByteArray xml = productionXml(p);
+    QVERIFY(xml.contains("Number=\"2.25\""));
+    QVERIFY(xml.contains("Number=\"0.0.4.5\""));
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    Production back;
+    QVERIFY(ShowTree::loadXML(r, back));
+    QCOMPARE(productionXml(back), xml);
+    QStringList numbers;
+    for (const Cue &c : back.lists.first().cues)
+        numbers << c.number;
+    QCOMPARE(numbers, QStringList({ "1", "1.5", "1.0.5", "2.25", "0.0.4.5", "" }));
+
+    // Through a whole show: the same.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(st->moveCues({ c1 }, c2, true));
+    QVERIFY(st->addCue(listId, 0, "Point") != ShowTree::invalidId());
+    QCOMPARE(numbersIn(st, listId), QStringList({ "2", "2.5", "3" }));
+    const QByteArray show = engineXml(m_doc);
+    Doc *other = new Doc(this);
+    QXmlStreamReader sr(show);
+    sr.readNextStartElement();
+    QVERIFY(other->loadXML(sr, false));
+    QCOMPARE(numbersIn(other->showTree(), listId), QStringList({ "2", "2.5", "3" }));
+    QCOMPARE(productionXml(other->showTree()->productions().first()),
+             productionXml(st->productions().first()));
+    delete other;
+}
+
 static QByteArray productionXml(const Production &p)
 {
     QByteArray xml;
