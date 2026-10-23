@@ -151,6 +151,10 @@ private slots:
      *  folder (~/Downloads) is copied into its images/ folder on save and
      *  saved relative; loading resolves it against the show's folder. */
     void patternPicturesAreKeptWithTheShow();
+
+    /** Q100: a fixed light aimed by pan and tilt points there, and keeps it
+     *  through save and load; one never aimed is left as it was. */
+    void aFixedLightIsAimedByPanAndTilt();
 };
 
 #endif

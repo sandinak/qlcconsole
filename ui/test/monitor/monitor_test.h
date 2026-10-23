@@ -76,6 +76,8 @@ private slots:
      *  where it landed along it, not only the one over it. */
     void aGroupDroppedOnATrussAllHang();
     void aDoubleClickEditsTheWholeSelection();
+    /** Q100: a fixed light's editor aims it by Pan and Tilt. */
+    void aFixedLightsEditorAimsItByPanAndTilt();
     void theStageStaysCentredWithFixturesOffIt();
     /** "can't c/p stage features": scenery, towers, booms and stands copy
      *  and paste, one undo step. */

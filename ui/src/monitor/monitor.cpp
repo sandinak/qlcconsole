@@ -9820,6 +9820,54 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         rotSpin->setDecimals(0);
         rotSpin->setSuffix(QString::fromUtf8("°"));
         form->addRow(tr("Icon rotation (visual):"), rotSpin);
+        /* Fixed lights (no pan or tilt channel) are aimed by Pan (the Aim
+           row) and this elevation (Q100); a moving head ignores it. */
+        auto isFixedLight = [this](quint32 fid) {
+            Fixture *f = m_doc->fixture(fid);
+            return f != nullptr && f->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) == QLCChannel::invalid()
+                && f->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) == QLCChannel::invalid()
+                && !isLinearFixture(f);
+        };
+        QDoubleSpinBox *aimDownSpin = new QDoubleSpinBox(box);
+        aimDownSpin->setObjectName(QStringLiteral("fixtureAimDown"));
+        aimDownSpin->setRange(-90, 90);
+        aimDownSpin->setDecimals(1);
+        aimDownSpin->setSuffix(QString::fromUtf8("°"));
+        aimDownSpin->setToolTip(tr("For the fixed lights among them: how far down they point from "
+                                   "level (90 straight down, 0 level)"));
+        form->addRow(tr("Tilt (° down from level):"), aimDownSpin);
+        bool anyFixed = false;
+        float down0 = 0.0f;
+        bool downDiffers = false, haveDown = false;
+        foreach (quint32 fid, fids)
+            if (isFixedLight(fid))
+            {
+                anyFixed = true;
+                const FixtureRigProps r = m_props->fixtureRigProps(fid);
+                const float d = r.fixedAim ? r.aimDown : (r.mountingType == Truss::TopHung ? 90.0f : -90.0f);
+                if (!haveDown) { down0 = d; haveDown = true; }
+                else if (!qFuzzyCompare(1.0f + d, 1.0f + down0)) downDiffers = true;
+            }
+        FixtureFields::spinMixed(aimDownSpin, downDiffers, 0.0);
+        if (!downDiffers)
+            aimDownSpin->setValue(double(down0));
+        aimDownSpin->setVisible(anyFixed);
+        if (QWidget *l = form->labelForField(aimDownSpin))
+            l->setVisible(anyFixed);
+        connect(aimDownSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [this, fids, aimDownSpin, isFixedLight](double v) {
+            if (FixtureFields::spinIsMixed(aimDownSpin))
+                return;
+            foreach (quint32 fid, fids)
+                if (isFixedLight(fid))
+                {
+                    FixtureRigProps rp = m_props->fixtureRigProps(fid);
+                    rp.fixedAim = true;
+                    rp.aimDown = float(v);
+                    m_props->setFixtureRigProps(fid, rp);
+                    m_graphicsView->updateFixture(fid);
+                }
+        });
         vl->addWidget(box);
 
         auto loadExtras = [this, fids, panZeroSpin, rotSpin]() {
@@ -9844,13 +9892,19 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         };
         loadExtras();
         connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
-                [this, fids, panZeroSpin, loadExtras](double v) {
+                [this, fids, panZeroSpin, loadExtras, isFixedLight](double v) {
             if (FixtureFields::spinIsMixed(panZeroSpin))
                 return;
             foreach (quint32 fid, fids)
             {
                 FixtureRigProps rp = m_props->fixtureRigProps(fid);
                 rp.panZeroDir = float(v);
+                if (isFixedLight(fid) && !rp.fixedAim)
+                {
+                    // Aimed from now on: pointing as it did, turned to this bearing.
+                    rp.fixedAim = true;
+                    rp.aimDown = (rp.mountingType == Truss::TopHung) ? 90.0f : -90.0f;
+                }
                 m_props->setFixtureRigProps(fid, rp);
                 if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid))
                     fi->setFacing(rp.panZeroDir);
@@ -10051,6 +10105,15 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     panZeroSpin->setSuffix(QString::fromUtf8("°"));
     panZeroSpin->setDecimals(1);
     rigForm->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
+    // A fixed light's elevation (Q100): shown with Pan for one, below.
+    QDoubleSpinBox *aimDownSpin = new QDoubleSpinBox;
+    aimDownSpin->setObjectName(QStringLiteral("fixtureAimDown"));
+    aimDownSpin->setRange(-90, 90);
+    aimDownSpin->setSuffix(QString::fromUtf8("°"));
+    aimDownSpin->setDecimals(1);
+    aimDownSpin->setToolTip(tr("How far down it points from level: 90 straight down, 45 a typical "
+                               "front light, 0 level, below 0 up"));
+    rigForm->addRow(tr("Tilt (° down from level):"), aimDownSpin);
 
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;
     panOffsetSpin->setRange(-720, 720);   // 540° pan fixtures need up to ±270°; 720 gives headroom
@@ -10150,6 +10213,9 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     const FixtureRigProps rp = m_props->fixtureRigProps(fxItem->fixtureID());
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
     panZeroSpin->setValue(double(rp.panZeroDir));
+    // Not aimed yet: it points as its mount says, straight down when hung.
+    aimDownSpin->setValue(rp.fixedAim ? double(rp.aimDown)
+                                      : (rp.mountingType == Truss::TopHung ? 90.0 : -90.0));
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
     tiltOffsetSpin->setValue(double(rp.tiltOffsetDeg));
     panInvertCb->setChecked(rp.panInvert);
@@ -10179,6 +10245,19 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     if (!isMover)
     { hideRow(panOffsetSpin); hideRow(tiltOffsetSpin);
       hideRow(invertRow); hideRow(testRowWidget); }
+    /* A fixed light (a par on its yoke) is aimed by a bearing and an
+       elevation (Q100); a moving head's Aim is its pan home instead. */
+    const bool fixedLight = !isMover && !isStrip;
+    if (fixedLight)
+    {
+        if (QLabel *l = qobject_cast<QLabel *>(rigForm->labelForField(panZeroSpin)))
+            l->setText(tr("Pan (° from downstage):"));
+        panZeroSpin->setToolTip(tr("Which way it points, seen from above: 0 downstage, 90 stage right, "
+                                   "180 upstage, 270 stage left"));
+    }
+    else
+        hideRow(aimDownSpin);
+    bool aimTouched = rp.fixedAim;
 
     vl->addWidget(rigBox);
 
@@ -10332,6 +10411,11 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         live.tiltOffsetDeg = float(tiltOffsetSpin->value());
         live.panInvert     = panInvertCb->isChecked();
         live.tiltInvert    = tiltInvertCb->isChecked();
+        if (fixedLight && aimTouched)
+        {
+            live.fixedAim = true;
+            live.aimDown  = float(aimDownSpin->value());
+        }
         m_props->setFixtureRigProps(fxId_dlg, live);
         // Keep the 2D facing arrow in sync with the spinbox live.
         if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fxId_dlg))
@@ -10342,7 +10426,14 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     };
     connect(testModeCb,   QOverload<int>::of(&QComboBox::currentIndexChanged),  [&](int)   { refreshTest(); });
     connect(testTargetCb, QOverload<int>::of(&QComboBox::currentIndexChanged),  [&](int)   { refreshTest(); });
-    connect(panZeroSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
+    connect(panZeroSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){
+        aimTouched = true;
+        liveRigUpdate();
+    });
+    connect(aimDownSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){
+        aimTouched = true;
+        liveRigUpdate();
+    });
     connect(panOffsetSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(tiltOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(panInvertCb,    &QCheckBox::toggled, [&](bool) { liveRigUpdate(); });

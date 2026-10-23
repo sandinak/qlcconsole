@@ -406,6 +406,16 @@ opens the same rows (plus aim and icon rotation) for all of them. Dragging
 any selected fixture moves them all, as one undo. **Distribute** spaces a
 few selected fixtures between the outermost two and lines them up.
 
+**Aiming a fixed light.** A par, a profile or anything else with no pan or
+tilt channel is aimed as it is on its yoke, in **Aim & Mount**: **Pan** is
+which way it points seen from above (0 downstage, 90 stage right, 180
+upstage, 270 stage left) and **Tilt** how far down from level (90 straight
+down, 45 a typical front light, 0 level, below 0 up). The beam in the 3D
+view, where its light lands on the plot and what blocks it all follow. Until
+you set either, it points as its mount says (straight down when hung). With
+several selected, the same two rows act on the fixed lights among them. A
+moving head's **Aim — front of device** is its pan home instead.
+
 **Undo in an editor.** Ctrl/⌘+Z in a structure's editor undoes its last
 change — a drag, a layout action, or a panel field (a run of steps on one
 field is one undo). The editor as a whole is then one step on the plot's

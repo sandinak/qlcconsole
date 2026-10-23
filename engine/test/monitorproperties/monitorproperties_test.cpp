@@ -1470,6 +1470,53 @@ void MonitorProperties_Test::patternPicturesAreKeptWithTheShow()
              QFileInfo(show.filePath("images/stones-2.jpg")).canonicalFilePath());
 }
 
+void MonitorProperties_Test::aFixedLightIsAimedByPanAndTilt()
+{
+    FixtureRigProps rp;
+    QVector3D dir;
+    QVERIFY(!rp.fixedAimDirection(dir));            // not aimed: as its mount says
+
+    rp.fixedAim = true;
+    rp.panZeroDir = 0.0f;                            // downstage
+    rp.aimDown = 40.0f;
+    QVERIFY(rp.fixedAimDirection(dir));
+    QVERIFY(qAbs(dir.x()) < 1e-4f);
+    QVERIFY(qAbs(dir.y() - float(qCos(qDegreesToRadians(40.0)))) < 1e-4f);   // toward the house
+    QVERIFY(qAbs(dir.z() + float(qSin(qDegreesToRadians(40.0)))) < 1e-4f);   // and down
+    rp.panZeroDir = 90.0f;                           // stage right is -X
+    rp.aimDown = 0.0f;
+    QVERIFY(rp.fixedAimDirection(dir));
+    QVERIFY(qAbs(dir.x() + 1.0f) < 1e-4f && qAbs(dir.z()) < 1e-4f);
+    rp.aimDown = 90.0f;                              // straight down
+    QVERIFY(rp.fixedAimDirection(dir));
+    QVERIFY(qAbs(dir.z() + 1.0f) < 1e-4f);
+
+    // Saved and loaded; an unaimed fixture writes nothing new.
+    MonitorProperties mp;
+    FixtureRigProps aimed;
+    aimed.fixedAim = true;
+    aimed.panZeroDir = 30.0f;
+    aimed.aimDown = 45.0f;
+    mp.setFixtureRigProps(1, aimed);
+    mp.setFixtureRigProps(2, FixtureRigProps());
+    QByteArray out;
+    {
+        QXmlStreamWriter w(&out);
+        QVERIFY(mp.saveXML(&w, nullptr));
+    }
+    QVERIFY(out.contains("AimDown=\"45.0\""));
+    QCOMPARE(out.count("AimDown"), 1);
+    MonitorProperties back;
+    QXmlStreamReader r(out);
+    while (r.readNextStartElement())
+        if (r.name() == QStringLiteral("Monitor"))
+            QVERIFY(back.loadXML(r, nullptr));
+    QVERIFY(back.fixtureRigProps(1).fixedAim);
+    QCOMPARE(back.fixtureRigProps(1).aimDown, 45.0f);
+    QCOMPARE(back.fixtureRigProps(1).panZeroDir, 30.0f);
+    QVERIFY(!back.fixtureRigProps(2).fixedAim);
+}
+
 QTEST_GUILESS_MAIN(MonitorProperties_Test)
 
 /* A hanger is rigging, like a bar: put on a tower truss part way up, its

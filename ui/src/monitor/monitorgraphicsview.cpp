@@ -8772,7 +8772,8 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
             break;
         }
     }
-    if (!aimed && (!fixtureAimDirection(fx, rp, dir) || dir.isNull()))
+    if (!aimed && (!fixtureAimDirection(fx, rp, dir) || dir.isNull())
+            && !rp.fixedAimDirection(dir))          // a fixed light aimed by pan/tilt (Q100)
         dir = QVector3D(0.0f, 0.0f, -1.0f);
     if (dir.z() > -0.02f)
         return out;                       // level or upward: nothing lands

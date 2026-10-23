@@ -6695,6 +6695,9 @@ bool StructureStudioView::emitDirection(Fixture *fx, const FixtureRigProps &rp,
         return true;
     if (rp.placement == FixtureRigProps::Inside)
         return false;
+    // A fixed light aimed by pan and tilt (Q100): where it was pointed.
+    if (traits.kind != FixtureSilhouette::Mover && rp.fixedAimDirection(dir))
+        return true;
 
     /* Out of its FACE. A bar's light leaves the face its pixels are on -- the
        FART bars hang vertically off their truss facing the audience, and

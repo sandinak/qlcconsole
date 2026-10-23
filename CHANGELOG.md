@@ -19,6 +19,13 @@ circuits and subs.
 
 ### Added
 
+- **Aim a fixed light by Pan and Tilt** (board Q100): a par or profile's
+  **Aim & Mount** has **Pan** (° from downstage, seen from above) and
+  **Tilt** (° down from level); the 3D beam, where the light lands and what
+  blocks it follow. Before, a single-head fixed light on a truss always
+  pointed straight down and "Aim — front of device" (a moving head's pan
+  home) did nothing for it.
+
 - **A door in a wall** (board Q99): a wall or back wall has **Door width**,
   **Door height** and **Door at** in its editor. Light goes through the
   door; the wall beside and above it stops it.

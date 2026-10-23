@@ -1039,6 +1039,33 @@ void Monitor_Test::aDoubleClickEditsTheWholeSelection()
     QCOMPARE(selectedThen, 2);
 }
 
+void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    QVERIFY(!props->fixtureRigProps(rig.fxi->id()).fixedAim);
+    QString panLabel;
+    bool tiltShown = false;
+    driveDialog([&](QWidget *dlg) {
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        if (down == nullptr)
+            return false;
+        tiltShown = down->isVisibleTo(dlg);
+        for (QLabel *l : dlg->findChildren<QLabel *>())
+            if (l->text().startsWith("Pan ("))
+                panLabel = l->text();
+        down->setValue(40.0);
+        return true;
+    });
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY(tiltShown);
+    QCOMPARE(panLabel, QString::fromUtf8("Pan (° from downstage):"));
+    const FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    QVERIFY(rp.fixedAim);
+    QCOMPARE(rp.aimDown, 40.0f);
+}
+
 void Monitor_Test::theStageStaysCentredWithFixturesOffIt()
 {
     DropRig rig;

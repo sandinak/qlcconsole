@@ -271,6 +271,26 @@ struct FixtureRigProps
     bool             panInvert  = false;
     bool             tiltInvert = false;
 
+    /** A FIXED light (no pan or tilt channels) aimed like a par on its yoke
+     *  (board Q100): panZeroDir is its bearing seen from above, degrees
+     *  clockwise from downstage (90 = stage right), and aimDown how far it
+     *  points down from level (90 straight down, 0 level, -90 straight up).
+     *  Off (the default, and every older show): it points as its mount and
+     *  face say. */
+    bool             fixedAim = false;
+    float            aimDown  = 90.0f;
+    /** The beam of an aimed fixed light, a unit vector (+Y downstage, +Z up).
+     *  False when it isn't aimed. */
+    bool fixedAimDirection(QVector3D &dir) const
+    {
+        if (!fixedAim)
+            return false;
+        const double b = qDegreesToRadians(double(panZeroDir));
+        const double d = qDegreesToRadians(double(qBound(-90.0f, aimDown, 90.0f)));
+        dir = QVector3D(float(-qSin(b) * qCos(d)), float(qCos(b) * qCos(d)), float(-qSin(d)));
+        return true;
+    }
+
     /** Riser (stage-platform) face mount. When riserPlatformId is not invalid,
      *  the fixture is mounted on a platform's face and its world position is
      *  DERIVED from the platform geometry (so it follows the riser). Mutually
