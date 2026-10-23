@@ -37,6 +37,7 @@
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "workbenchstack.h"
+#include "mastertimer.h"            // timerTick(): the engine ticked by hand
 #undef private
 #undef protected
 
@@ -45,7 +46,6 @@
 #include "rgbmatrixeditor.h"
 #include "showembedding.h"
 #include "fixturegroup.h"
-#include "mastertimer.h"
 #include "chaserstep.h"
 #include "efxeditor.h"
 #include "paletteops.h"
@@ -57,6 +57,11 @@
 #include "scene.h"
 #include "efx.h"
 #include "inputoutputmap.h"
+#include "functionparent.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
+#include "qlcchannel.h"
+#include "universe.h"
 #include "doc.h"
 
 #include "workbench_test.h"
@@ -790,3 +795,144 @@ void Workbench_Test::aRealShowsCollectionsLoadAsLayers()
 }
 
 QTEST_MAIN(Workbench_Test)
+
+/* A pan-only head at @a address: pan is LTP, so which layer wins shows. */
+static Fixture *panHead(Doc *doc, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Pan Head");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCChannel *pan = new QLCChannel();
+    pan->setName("Pan");
+    pan->setGroup(QLCChannel::Pan);
+    pan->setControlByte(QLCChannel::MSB);
+    def->addChannel(pan);
+    mode->insertChannel(pan, 0);
+    def->addMode(mode);
+    if (!doc->fixtureDefCache()->addFixtureDef(def))
+        return nullptr;
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("Pan Head");
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* One engine tick (what the master timer's thread does), then universe 1's
+   value at @a address. */
+static int tickAndRead(Doc *doc, int address)
+{
+    doc->masterTimer()->timerTick();
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    ua.first()->processFaders();
+    const int v = uchar(ua.first()->preGMValues().at(address));
+    doc->inputOutputMap()->releaseUniverses(false);
+    return v;
+}
+
+void Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn()
+{
+    FixtureGroup *g = group("Washes", 2);
+    const quint32 f1 = g->fixtureList().at(0), f2 = g->fixtureList().at(1);
+    Scene *a = scene("A", QString());
+    a->setValue(f1, 0, 180);
+    Scene *elsewhere = scene("Elsewhere", QString());
+    elsewhere->setValue(f2, 0, 90);
+    const FunctionParent vcButton(FunctionParent::ManualVCWidget, 7);
+
+    m_doc->setMode(Doc::Operate);
+    Workbench wb(m_doc);
+    wb.resize(1000, 700);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+
+    // Operate: what is loaded runs, as the show's output.
+    wb.load(a->id());
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 180);
+    QVERIFY(a->isRunning());
+    QCOMPARE(wb.m_operateFunction, a->id());
+    QVERIFY(wb.m_onRig->text().contains("Live: A"));
+
+    // Something started elsewhere (a VC button) plays alongside.
+    elsewhere->start(m_doc->masterTimer(), vcButton);
+    QTRY_COMPARE(tickAndRead(m_doc, 3), 90);
+
+    // To Design: the Workbench leaves what it didn't start running; what
+    // is loaded carries on as its preview.
+    m_doc->setMode(Doc::Design);
+    for (int i = 0; i < 5; ++i)
+        tickAndRead(m_doc, 0);
+    QVERIFY(elsewhere->isRunning());
+    QCOMPARE(tickAndRead(m_doc, 3), 90);
+    QVERIFY(a->isRunning());
+    QCOMPARE(wb.m_previewFunction, a->id());
+
+    // Back to Operate: the preview is the live run; hidden, only that stops.
+    m_doc->setMode(Doc::Operate);
+    QCOMPARE(wb.m_operateFunction, a->id());
+    wb.hide();
+    QTRY_VERIFY(tickAndRead(m_doc, 0) == 0 && !a->isRunning());
+    QVERIFY(elsewhere->isRunning());
+    QCOMPARE(tickAndRead(m_doc, 3), 90);
+
+    // Loaded while already running from elsewhere: hiding the Workbench
+    // must leave it to the VC button that started it.
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    wb.load(elsewhere->id());
+    QCOMPARE(wb.m_operateFunction, elsewhere->id());
+    wb.hide();
+    for (int i = 0; i < 5; ++i)
+        tickAndRead(m_doc, 3);
+    QEXPECT_FAIL("", "BUG: Workbench::stopOperate() stops with FunctionParent::master(), and "
+                     "Function::stop(master) clears every source -- so a function a VC button "
+                     "(or a chaser) was already running when it was loaded in Operate stops when "
+                     "the Workbench hides", Continue);
+    QVERIFY(elsewhere->isRunning());
+    elsewhere->stop(vcButton);
+    tickAndRead(m_doc, 0);
+}
+
+void Workbench_Test::theLowerLayerWinsAndFollowsAReorder()
+{
+    Fixture *head = panHead(m_doc, 100);
+    QVERIFY(head != nullptr);
+    Scene *upper = scene("Upper", QString());
+    upper->setValue(head->id(), 0, 40);
+    Scene *lower = scene("Lower", QString());
+    lower->setValue(head->id(), 0, 220);
+    Collection *c = collection("Stack", { upper->id(), lower->id() });
+    QVERIFY(m_doc->mode() == Doc::Design);
+
+    Workbench wb(m_doc);
+    wb.resize(1000, 700);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    wb.load(c->id());
+    ProgrammingOutline *rows = wb.rows();
+    QCOMPARE(rows->topLevelItemCount(), 2);
+
+    // Both set the pan: the lower layer (added last) wins.
+    QTRY_COMPARE(tickAndRead(m_doc, 100), 220);
+    QVERIFY(upper->isRunning() && lower->isRunning());
+
+    // ▲ on the lower layer: Upper is now the lower one, and the DMX follows.
+    selectItem(rows, rows->layerItem(1));
+    QVERIFY(wb.m_upBtn->isEnabled());
+    wb.m_upBtn->click();
+    QCOMPARE(c->functions(), QList<quint32>({ lower->id(), upper->id() }));
+    QTRY_COMPARE(tickAndRead(m_doc, 100), 40);
+
+    // ⌘Z: the order back, and its output.
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(c->functions(), QList<quint32>({ upper->id(), lower->id() }));
+    QTRY_COMPARE(tickAndRead(m_doc, 100), 220);
+
+    // Hidden: it stops (pan is LTP: the head holds where it was).
+    wb.hide();
+    auto stopped = [&]() { tickAndRead(m_doc, 100); return !c->isRunning() && !lower->isRunning(); };
+    QTRY_VERIFY(stopped());
+}

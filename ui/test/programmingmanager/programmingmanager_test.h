@@ -145,6 +145,24 @@ private slots:
      *  -- a new effect; the Palettes section -- nothing. */
     void newHereMakesASceneInTheFolder();
 
+    /** More ▸ Snapshot live output: with something on the rig, each lit
+     *  fixture's live bytes baked into the scene being edited; one step. */
+    void snapshotBakesTheLiveOutputIntoTheScene();
+    /** Save Positions asks twice: the first click only arms (a nudge or
+     *  three seconds take it back); the second saves, once. */
+    void savePositionsSavesOnlyOnTheSecondClick();
+    /** A Bundle saved from a look's stack, stamped on another look: its
+     *  stack becomes the bundle's, in order; one ⌘Z puts the old back. */
+    void aBundleSavedFromALookStampsInOneStep();
+    /** Delete of a scene in Build, answered Yes: gone, and out of the
+     *  collection and the chaser step using it; answered No: kept. */
+    void deletingAFunctionTakesItOutOfWhatUsesIt();
+    /** ⌘C ⌘V and Duplicate: a copy beside the original, its values and
+     *  looks, the next name in the pattern; one ⌘Z takes it away. */
+    void duplicateAndCopyPasteFileACopyBesideIt();
+    /** Beat ▸ Tap: four taps 500 ms apart -- 120 BPM, on the Beat button. */
+    void fourTapsHalfASecondApartShow120Bpm();
+
 private:
     Doc* m_doc;
 };

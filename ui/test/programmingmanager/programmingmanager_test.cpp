@@ -75,6 +75,10 @@
 #include "spreadlayer.h"
 #include "monitorproperties.h"
 #include "mastertimer.h"
+#include "bundlecache.h"
+#include "bundlebrowser.h"
+#include "bundleeditor.h"
+#include "qlcbundle.h"
 #undef private
 #undef protected
 
@@ -88,6 +92,10 @@
 #include <QBuffer>
 #include <QDrag>
 #include <QXmlStreamWriter>
+#include <QMessageBox>
+#include <QScopeGuard>
+#include "inputoutputmap.h"
+#include "universe.h"
 
 #include "programmingmanager_test.h"
 
@@ -2573,4 +2581,445 @@ void ProgrammingManager_Test::deletingHereClearsTheShowTreesUses()
     mgr.slotRedo();
     QVERIFY(m_doc->palette(redId) == nullptr);
     QVERIFY(st->cue(c1)->looks.isEmpty());
+}
+
+/****************************************************************************
+ * The toolbar's More ▸ / Save Positions / Beat ▸ Tap, Bundles, and Build's
+ * own Duplicate / ⌘C ⌘V / Delete of functions
+ ****************************************************************************/
+
+/* Answers every modal box that opens while it lives, noting each one's text:
+   the tests never wait on a dialog. @a answer handles one (true: handled);
+   otherwise a QMessageBox gets Yes and anything else is rejected. */
+class ModalCloser final : public QObject
+{
+public:
+    explicit ModalCloser(std::function<bool(QWidget *)> answer = nullptr)
+        : m_answer(answer)
+    {
+        connect(&m_timer, &QTimer::timeout, this, [this]() {
+            QWidget *w = QApplication::activeModalWidget();
+            if (w == nullptr)
+                return;
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+                seen << QStringLiteral("%1|%2").arg(mb->windowTitle(), mb->text());
+            else
+                seen << QString::fromLatin1(w->metaObject()->className());
+            if (m_answer && m_answer(w))
+                return;
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+            {
+                if (QAbstractButton *yes = mb->button(QMessageBox::Yes))
+                    yes->click();
+                else
+                    mb->accept();
+            }
+            else if (QDialog *d = qobject_cast<QDialog *>(w))
+                d->reject();
+            else
+                w->close();
+        });
+        m_timer.start(20);
+    }
+    QStringList seen;
+
+private:
+    QTimer m_timer;
+    std::function<bool(QWidget *)> m_answer;
+};
+
+/* @a ticks of the engine; then universe 1's first @a channels values. */
+static QList<int> settleOutput(Doc *doc, int ticks, int channels)
+{
+    for (int i = 0; i < ticks; ++i)
+    {
+        doc->masterTimer()->timerTick();
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        doc->inputOutputMap()->releaseUniverses(false);
+    }
+    QList<int> out;
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    for (int i = 0; i < channels; ++i)
+        out << uchar(ua.first()->preGMValues().at(i));
+    doc->inputOutputMap()->releaseUniverses(false);
+    return out;
+}
+
+void ProgrammingManager_Test::snapshotBakesTheLiveOutputIntoTheScene()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    QList<Fixture *> pars;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QString("Par %1").arg(i + 1));
+        f->setChannels(3);
+        f->setAddress(quint32(i * 3));
+        QVERIFY(m_doc->addFixture(f));
+        pars << f;
+    }
+    // Something else is on the rig: Par 1 and Par 2 lit, Par 3 dark.
+    Scene *console = new Scene(m_doc);
+    console->setName("From the other desk");
+    console->setValue(pars[0]->id(), 0, 200);
+    console->setValue(pars[0]->id(), 2, 17);
+    console->setValue(pars[1]->id(), 1, 90);
+    QVERIFY(m_doc->addFunction(console));
+    // The scene being edited, with a value the snapshot overwrites.
+    Scene *target = new Scene(m_doc);
+    target->setName("01-01.01-Captured");
+    target->setValue(pars[0]->id(), 1, 5);
+    QVERIFY(m_doc->addFunction(target));
+    const QList<SceneValue> was = target->values();
+
+    console->start(m_doc->masterTimer(), FunctionParent::master());
+    const QList<int> live = settleOutput(m_doc, 5, 9);
+    QCOMPARE(live, QList<int>({ 200, 0, 17, 0, 90, 0, 0, 0, 0 }));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.m_workbench->load(target->id());
+    QCOMPARE(mgr.m_workbench->currentSceneId(), target->id());
+    const QString undoBefore = mgr.undoText();
+
+    {
+        ModalCloser yes;
+        mgr.slotSnapshotLive();
+        QCOMPARE(yes.seen.count(), 1);
+        QVERIFY2(yes.seen.first().contains("2 fixture(s) (6 channel values)"), qPrintable(yes.seen.first()));
+    }
+
+    // Every channel of each lit fixture holds the live byte; the dark one
+    // isn't taken.
+    for (int f = 0; f < 2; ++f)
+        for (quint32 ch = 0; ch < 3; ++ch)
+            QVERIFY2(target->checkValue(SceneValue(pars[f]->id(), ch, uchar(live[f * 3 + int(ch)]))),
+                     qPrintable(QString("Par %1 ch %2").arg(f + 1).arg(ch)));
+    QCOMPARE(target->values().count(), 6);
+    QCOMPARE(target->value(pars[0]->id(), 1), uchar(0));         // 5 overwritten
+    QVERIFY(!target->fixtures().contains(pars[2]->id()));
+
+    // One step on the history: one ⌘Z puts the scene back as it was.
+    QVERIFY(mgr.undoText() != undoBefore);
+    mgr.slotUndo();
+    QCOMPARE(target->values(), was);
+    QCOMPARE(mgr.undoText(), undoBefore);
+
+    console->stop(FunctionParent::master());
+    settleOutput(m_doc, 3, 1);
+}
+
+void ProgrammingManager_Test::savePositionsSavesOnlyOnTheSecondClick()
+{
+    QLCPalette *pos = new QLCPalette(QLCPalette::PanTilt, m_doc);
+    pos->setName("Downstage");
+    pos->setValue(90, 45);
+    QVERIFY(m_doc->addPalette(pos));
+    Scene *look = new Scene(m_doc);
+    look->setName("01-01.01-Spots");
+    look->addPalette(pos->id());
+    QVERIFY(m_doc->addFunction(look));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    QSignalSpy saves(&mgr, &ProgrammingManager::requestSave);
+    QPushButton *save = mgr.m_saveBtn;
+    QVERIFY(save != nullptr);
+    QVERIFY(!save->isEnabled());                     // nothing nudged yet
+    ProgrammerController *pc = m_doc->programmer();
+
+    // A nudge (a control surface's encoder): the palette moves live and
+    // the button lights.
+    pc->nudgeDesignPanTilt(pos->id(), 10, -5);
+    QCOMPARE(pos->intValue1(), 100);
+    QCOMPARE(pos->intValue2(), 40);
+    QVERIFY(save->isEnabled());
+    QCOMPARE(save->text(), QString("Save Positions"));
+
+    // First click: armed, asks -- nothing saved.
+    save->click();
+    QVERIFY(save->text().contains("Confirm"));
+    QCOMPARE(saves.count(), 0);
+    QVERIFY(save->isEnabled());
+
+    // A new nudge while armed takes the question back.
+    pc->nudgeDesignPanTilt(pos->id(), 10, 0);
+    QCOMPARE(save->text(), QString("Save Positions"));
+    save->click();                                   // armed again, not a save
+    QCOMPARE(saves.count(), 0);
+
+    // Left alone, it disarms by itself: still nothing saved.
+    QTRY_COMPARE_WITH_TIMEOUT(save->text(), QString("Save Positions"), 6000);
+    QCOMPARE(saves.count(), 0);
+
+    // Two clicks: the save, once; the button off until the next nudge.
+    save->click();
+    QCOMPARE(saves.count(), 0);
+    save->click();
+    QCOMPARE(saves.count(), 1);
+    QVERIFY(!save->isEnabled());
+    QCOMPARE(save->text(), QString("Save Positions"));
+    QCOMPARE(pos->intValue1(), 110);                 // both nudges, in the palette
+    QCOMPARE(pos->intValue2(), 40);
+    QVERIFY(look->palettes().contains(pos->id()));
+}
+
+void ProgrammingManager_Test::aBundleSavedFromALookStampsInOneStep()
+{
+    // Bundles are written under the user's folder: a throwaway one here.
+    QTemporaryDir home;
+    QVERIFY(home.isValid());
+    const QByteArray realHome = qgetenv("HOME");
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("HOME", home.path().toUtf8());
+    qputenv("USERPROFILE", home.path().toUtf8());
+    auto restore = qScopeGuard([&]() {
+        qputenv("HOME", realHome);
+        if (realProfile.isEmpty())
+            qunsetenv("USERPROFILE");
+        else
+            qputenv("USERPROFILE", realProfile);
+    });
+    QVERIFY(BundleCache::userBundlesDirectory().absolutePath().startsWith(QDir(home.path()).absolutePath()));
+
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName("Full");
+    full->setValue(255);
+    QVERIFY(m_doc->addPalette(full));
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QColor(Qt::blue).name());
+    QVERIFY(m_doc->addPalette(blue));
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QColor(Qt::red).name());
+    QVERIFY(m_doc->addPalette(red));
+
+    Scene *source = new Scene(m_doc);
+    source->setName("01-01.01-Blue Wash");
+    source->addPalette(full->id());
+    source->addPalette(blue->id());
+    QVERIFY(m_doc->addFunction(source));
+    Scene *other = new Scene(m_doc);
+    other->setName("01-01.02-Red");
+    other->addPalette(red->id());
+    QVERIFY(m_doc->addFunction(other));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    const QString name = QStringLiteral("Audit Blue Wash");
+    QVERIFY(!mgr.m_bundleCache->contains(name));
+
+    // Save as Bundle from the loaded look: the editor named and accepted.
+    mgr.m_workbench->load(source->id());
+    {
+        ModalCloser editor([&](QWidget *w) {
+            BundleEditor *dlg = qobject_cast<BundleEditor *>(w);
+            if (dlg == nullptr)
+                return false;
+            dlg->m_nameEdit->setText(name);
+            if (!dlg->m_okBtn->isEnabled())
+                return false;
+            dlg->m_okBtn->click();
+            return true;
+        });
+        mgr.slotSaveAsBundle();
+        QVERIFY2(editor.seen.contains("BundleEditor"), qPrintable(editor.seen.join(';')));
+    }
+    QVERIFY(mgr.m_bundleCache->contains(name));
+    const QLCBundle bundle = mgr.m_bundleCache->bundle(name);
+    QCOMPARE(bundle.palettes.count(), 2);
+    QCOMPARE(bundle.palettes[0].type, QString("Dimmer"));        // the stack's order
+    QCOMPARE(bundle.palettes[1].type, QString("Color"));
+    QVERIFY(bundle.path.startsWith(BundleCache::userBundlesDirectory().absolutePath()));
+    QVERIFY(QFile::exists(bundle.path));
+
+    // Listed in the Bundles tab; stamped from there on the other look.
+    QTreeWidgetItem *listed = nullptr;           // a bundle row: its name in Qt::UserRole
+    for (QTreeWidgetItemIterator it(mgr.m_bundleBrowser->m_tree); *it; ++it)
+        if ((*it)->data(0, Qt::UserRole).toString() == name)
+            listed = *it;
+    QVERIFY(listed != nullptr);
+    mgr.m_workbench->load(other->id());
+    const int palettes = m_doc->palettes().count();
+    const QString undoBefore = mgr.undoText();
+    mgr.m_bundleBrowser->m_tree->setCurrentItem(listed);
+    mgr.m_bundleBrowser->slotStamp();
+
+    // The stack replaced by the bundle's, in its order, on the show's own
+    // palettes (nothing new made for them).
+    QCOMPARE(other->palettes(), QList<quint32>({ full->id(), blue->id() }));
+    QCOMPARE(m_doc->palettes().count(), palettes);
+    QCOMPARE(source->palettes(), QList<quint32>({ full->id(), blue->id() }));
+
+    // One step: one ⌘Z, the previous stack.
+    QVERIFY(mgr.undoText() != undoBefore);
+    mgr.slotUndo();
+    QCOMPARE(other->palettes(), QList<quint32>({ red->id() }));
+    QCOMPARE(mgr.undoText(), undoBefore);
+}
+
+void ProgrammingManager_Test::deletingAFunctionTakesItOutOfWhatUsesIt()
+{
+    Scene *walk = new Scene(m_doc);
+    walk->setName("0.0.3-Walk");
+    walk->setPath("Preshow");
+    QVERIFY(m_doc->addFunction(walk));
+    Scene *hold = new Scene(m_doc);
+    hold->setName("0.0.5-Hold");
+    QVERIFY(m_doc->addFunction(hold));
+    Collection *coll = new Collection(m_doc);
+    coll->setName("0.0.4-SHOUT");
+    QVERIFY(m_doc->addFunction(coll));
+    coll->addFunction(walk->id());
+    coll->addFunction(hold->id());
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Cues");
+    QVERIFY(m_doc->addFunction(chaser));
+    chaser->addStep(ChaserStep(hold->id()));
+    chaser->addStep(ChaserStep(walk->id()));
+    const quint32 walkId = walk->id();
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    const QString undoBefore = mgr.undoText();
+
+    // Answered No: nothing goes.
+    {
+        ModalCloser no([](QWidget *w) {
+            QMessageBox *mb = qobject_cast<QMessageBox *>(w);
+            if (mb == nullptr)
+                return false;
+            mb->button(QMessageBox::No)->click();
+            return true;
+        });
+        mgr.deleteFunctions({ walkId });
+        QCOMPARE(no.seen.count(), 1);
+    }
+    QVERIFY(m_doc->function(walkId) != nullptr);
+    QCOMPARE(coll->functions().count(), 2);
+
+    // Yes: the question names the collection and the chaser using it.
+    {
+        ModalCloser yes;
+        mgr.deleteFunctions({ walkId });
+        QCOMPARE(yes.seen.count(), 1);
+        const QString q = yes.seen.first();
+        QVERIFY2(q.contains("0.0.3-Walk") && q.contains("0.0.4-SHOUT") && q.contains("Cues")
+                 && q.contains("everywhere"), qPrintable(q));
+    }
+    QVERIFY(m_doc->function(walkId) == nullptr);
+    QCOMPARE(coll->functions(), QList<quint32>({ hold->id() }));
+    QCOMPARE(chaser->stepsCount(), 1);
+    QCOMPARE(chaser->steps().first().fid, hold->id());
+    QVERIFY(mgr.m_outline->sceneItem(walkId) == nullptr);
+
+    // ⌘Z (palette deletes are one step on the shared history).
+    const bool undoable = mgr.undoText() != undoBefore;
+    QEXPECT_FAIL("", "BUG: ProgrammingManager::deleteFunctions deletes with Doc::deleteFunction "
+                     "directly -- no PaletteOps::functionStep -- so deleting a scene in Build is not "
+                     "on the shared history and ⌘Z can't bring it back (deleting a palette can)", Continue);
+    QVERIFY(undoable);
+    if (undoable)
+    {
+        mgr.slotUndo();
+        QVERIFY(m_doc->function(walkId) != nullptr);
+        QCOMPARE(coll->functions(), QList<quint32>({ walkId, hold->id() }));
+        QCOMPARE(chaser->stepsCount(), 2);
+    }
+}
+
+void ProgrammingManager_Test::duplicateAndCopyPasteFileACopyBesideIt()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *par = new Fixture(m_doc);
+    par->setName("Par");
+    par->setChannels(3);
+    QVERIFY(m_doc->addFixture(par));
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QColor(Qt::blue).name());
+    QVERIFY(m_doc->addPalette(blue));
+    Scene *orig = new Scene(m_doc);
+    orig->setName("01-01.02-Reville");
+    orig->setValue(par->id(), 0, 120);
+    orig->setValue(par->id(), 2, 33);
+    orig->addPalette(blue->id());
+    QVERIFY(m_doc->addFunction(orig));
+    orig->setPath("Act 1");
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    ProgrammingOutline *o = mgr.m_outline;
+    o->rebuild();
+    QTreeWidgetItem *item = o->sceneItem(orig->id());
+    QVERIFY(item != nullptr);
+    o->clearSelection();
+    o->setCurrentItem(item);
+    item->setSelected(true);
+    const QString undoBefore = mgr.undoText();
+    const QList<quint32> before = [this]() {
+        QList<quint32> ids;
+        for (Function *f : m_doc->functions())
+            ids << f->id();
+        return ids;
+    }();
+
+    // ⌘C ⌘V on the outline (the palette list hasn't focus).
+    mgr.slotCopy();
+    QCOMPARE(mgr.m_clipboardFunction, orig->id());
+    mgr.slotPaste();
+    QCOMPARE(m_doc->functions().count(), before.count() + 1);
+    Scene *copy = nullptr;
+    for (Function *f : m_doc->functions())
+        if (!before.contains(f->id()))
+            copy = qobject_cast<Scene *>(f);
+    QVERIFY(copy != nullptr);
+    QCOMPARE(copy->name(), QString("01-01.03-Reville"));         // learnt from the name
+    QCOMPARE(copy->path(true), orig->path(true));                // filed beside it
+    QCOMPARE(copy->values(), orig->values());
+    QCOMPARE(copy->palettes(), orig->palettes());
+    QCOMPARE(mgr.m_workbench->loadedFunction(), copy->id());     // loaded, selected
+    QVERIFY(o->sceneItem(copy->id()) != nullptr);
+    QCOMPARE(o->sceneItem(copy->id())->parent(), o->sceneItem(orig->id())->parent());
+
+    // Duplicate (the outline's right-click): another, its own name.
+    emit o->duplicateRequested({ orig->id() });
+    QCOMPARE(m_doc->functions().count(), before.count() + 2);
+    QStringList names;
+    for (Function *f : m_doc->functions())
+        names << f->name();
+    QCOMPARE(names.removeDuplicates(), 0);
+
+    // One ⌘Z takes the last copy away.
+    const bool undoable = mgr.undoText() != undoBefore;
+    QEXPECT_FAIL("", "BUG: ProgrammingManager::duplicateFunctions (Duplicate, ⌘C ⌘V) adds the copy "
+                     "with Function::createCopy and no PaletteOps::functionStep, so it is not on the "
+                     "shared history: ⌘Z can't take a duplicate away (a duplicated palette can)", Continue);
+    QVERIFY(undoable);
+    if (undoable)
+    {
+        mgr.slotUndo();
+        QCOMPARE(m_doc->functions().count(), before.count() + 1);
+    }
+}
+
+void ProgrammingManager_Test::fourTapsHalfASecondApartShow120Bpm()
+{
+    ProgrammingManager mgr(nullptr, m_doc);
+    QToolButton *beat = mgr.findChild<QToolButton *>("beatMenu");
+    QVERIFY(beat != nullptr);
+    mgr.m_bpmBtn->setChecked(true);                  // Internal beat on
+    QVERIFY(mgr.m_tapBtn->isEnabled());
+    mgr.m_bpmSpin->setValue(90);
+    QCOMPARE(beat->text(), QString("Beat 90"));
+    QCOMPARE(m_doc->inputOutputMap()->bpmNumber(), 90);
+
+    /* MasterTimer::tap() reads only its own clock (no seam), so three taps
+       500 ms apart are put on that clock just behind now; the fourth is a
+       real click. The few µs to the click are far inside a whole BPM. */
+    MasterTimer *mt = m_doc->masterTimer();
+    const qint64 now = mt->m_clock.nsecsElapsed();
+    mt->m_taps = { now - 1500000000LL, now - 1000000000LL, now - 500000000LL };
+    mgr.m_tapBtn->click();
+
+    QCOMPARE(mgr.m_bpmSpin->value(), 120);
+    QCOMPARE(m_doc->inputOutputMap()->bpmNumber(), 120);
+    QCOMPARE(beat->text(), QString("Beat 120"));
 }
