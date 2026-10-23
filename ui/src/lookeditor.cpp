@@ -821,15 +821,20 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(browseBtn, &QPushButton::clicked, this, &LookEditor::slotBrowseEffects);
     efScriptRow->addWidget(browseBtn);
 
-    m_newScriptButton = new QPushButton(tr("New script…"), effectPage);
+    // The scripts behind effects, for the few who write them: one Script ▾ (Q95).
+    QToolButton *scriptBtn = new QToolButton(effectPage);
+    scriptBtn->setObjectName(QStringLiteral("lookEditorScript"));
+    scriptBtn->setText(tr("Script"));
+    scriptBtn->setPopupMode(QToolButton::InstantPopup);
+    scriptBtn->setToolTip(tr("The .js script behind an effect: a new one from a template, or this one's"));
+    QMenu *scriptMenu = new QMenu(scriptBtn);
+    scriptMenu->setToolTipsVisible(true);
+    m_newScriptButton = scriptMenu->addAction(tr("New script…"), this, &LookEditor::slotNewEffectScript);
     m_newScriptButton->setToolTip(tr("Create a new effect script from a template and open it in the editor"));
-    connect(m_newScriptButton, &QPushButton::clicked, this, &LookEditor::slotNewEffectScript);
-    efScriptRow->addWidget(m_newScriptButton);
-
-    m_editScriptButton = new QPushButton(tr("Edit script…"), effectPage);
+    m_editScriptButton = scriptMenu->addAction(tr("Edit script…"), this, &LookEditor::slotEditEffectScript);
     m_editScriptButton->setToolTip(tr("Edit this Generator's underlying .js script"));
-    connect(m_editScriptButton, &QPushButton::clicked, this, &LookEditor::slotEditEffectScript);
-    efScriptRow->addWidget(m_editScriptButton);
+    scriptBtn->setMenu(scriptMenu);
+    efScriptRow->addWidget(scriptBtn);
 
     efv->addLayout(efScriptRow);
 

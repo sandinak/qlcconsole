@@ -340,8 +340,9 @@ private:
     QPushButton *m_saveAsEffectButton = nullptr;
     QPushButton *m_exportEffectButton = nullptr;
     QPushButton *m_importEffectButton = nullptr;
-    QPushButton *m_newScriptButton = nullptr;
-    QPushButton *m_editScriptButton = nullptr;
+    /** Script ▾ (Q95): New script… and Edit script… in one button. */
+    QAction *m_newScriptButton = nullptr;
+    QAction *m_editScriptButton = nullptr;
 
     // "Learn range" — capture a MIDI controller's lowest/highest played note and
     // write them into this effect's noteLow/noteHigh params (persisted in the
