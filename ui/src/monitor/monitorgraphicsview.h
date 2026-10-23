@@ -805,6 +805,11 @@ protected:
 
     /** Event caught when the GraphicsView is resized */
     void resizeEvent(QResizeEvent *event) override;
+    /** The edge labels are painted on the viewport, not in the scene: a
+     *  scroll moves their pixels with the plot, so repaint them in place. */
+    void scrollContentsBy(int dx, int dy) override;
+    /** Scroll so the stage grid is in the middle of the view. */
+    void centerOnGrid();
     /** Re-fit once the widget actually has its laid-out size.
      *
      *  updateGrid() derives m_cellPixels from this->width()/height(), and

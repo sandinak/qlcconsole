@@ -925,6 +925,12 @@ void Monitor_Test::aGroupDroppedOnATrussAllHang()
     MonitorProperties *props = m_doc->monitorProperties();
     Truss *t = props->addTruss();
     t->setName("GroupBar");
+    const quint32 groupBarId = t->id();
+    QList<quint32> madeTrusses { groupBarId };
+    auto dropTrusses = qScopeGuard([&]() {
+        for (quint32 id : madeTrusses)
+            props->removeTruss(id);
+    });
     t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));
     t->setDirection(QPointF(1.0, 0.0));
     t->setLength(6.0f);
@@ -962,6 +968,50 @@ void Monitor_Test::aGroupDroppedOnATrussAllHang()
     // Each where it landed along the run: 2 m and 3.5 m.
     QVERIFY(qAbs(props->fixtureRigProps(rig.fxi->id()).trussOffset - 2.0f) < 0.1f);
     QVERIFY(qAbs(props->fixtureRigProps(other->id()).trussOffset - 3.5f) < 0.1f);
+
+    // Right-click ▸ Mount on ▸ Truss with both selected: both go (the same
+    // as the drop), not only the one right-clicked.
+    Truss *t2 = props->addTruss();
+    t2->setName("SecondBar");
+    madeTrusses << t2->id();
+    t2->setOrigin(QVector3D(10.0f, 4.0f, 4.0f));
+    t2->setDirection(QPointF(1.0, 0.0));
+    t2->setLength(6.0f);
+    rig.gv->updateTrusses();
+    rig.item->setSelected(true);
+    second->setSelected(true);
+    QMenu menu;
+    rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), QPointF(), false);
+    QAction *mountOnSecond = nullptr;
+    for (QAction *a : menu.findChildren<QAction *>())
+        if (a->text() == QLatin1String("SecondBar"))
+            mountOnSecond = a;
+    QVERIFY(mountOnSecond != nullptr);
+    mountOnSecond->trigger();
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).trussId, t2->id());
+    QCOMPARE(props->fixtureRigProps(other->id()).trussId, t2->id());
+}
+
+/* "why is the grid not centered?": a fixture far off the stage grows the
+   scene; a resize still puts the stage in the middle of the view. */
+void Monitor_Test::theStageStaysCentredWithFixturesOffIt()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(-30000, -20000, 0)));   // far up and to the left
+    rig.parent.resize(1230, 760);
+    rig.parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.gv->resize(1000, 700);
+    QResizeEvent ev(QSize(1000, 700), QSize(1230, 760));
+    rig.gv->resizeEvent(&ev);
+    const QPointF centre = rig.gv->mapToScene(rig.gv->viewport()->rect().center());
+    const QPointF grid(rig.gv->m_xOffset + rig.gv->m_cellPixels * rig.gv->m_gridSize.width() / 2.0,
+                       rig.gv->m_yOffset + rig.gv->m_cellPixels * rig.gv->m_gridSize.height() / 2.0);
+    QVERIFY2((centre - grid).manhattanLength() < 4.0,
+             qPrintable(QString("view centre %1,%2 vs grid %3,%4").arg(centre.x()).arg(centre.y())
+                            .arg(grid.x()).arg(grid.y())));
 }
 
 void Monitor_Test::dropOnTrussAttachesAndStays()

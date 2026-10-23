@@ -6566,7 +6566,27 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
     m_fittedUnit = m_unitValue;
     updateGrid();
     refreshAllItems();
+    centerOnGrid();
     emit rulersChanged();
+}
+
+void MonitorGraphicsView::centerOnGrid()
+{
+    /* The grid is fitted to the view, but anything placed off it (a house
+       light, a fixture never placed) grows the scene beyond it, and the
+       view then kept whatever scroll it had: the stage sat off to one side
+       ("why is the grid not centered?"). Centre on the stage. */
+    if (m_cellPixels <= 0 || !m_gridEnabled)
+        return;
+    centerOn(QPointF(m_xOffset + m_cellPixels * m_gridSize.width() / 2.0,
+                     m_yOffset + m_cellPixels * m_gridSize.height() / 2.0));
+}
+
+void MonitorGraphicsView::scrollContentsBy(int dx, int dy)
+{
+    QGraphicsView::scrollContentsBy(dx, dy);
+    if (m_showOrientationLabels)
+        viewport()->update();
 }
 
 void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
@@ -7829,7 +7849,18 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
     menu->addSeparator();
     QMenu *mountMenu = menu->addMenu(tr("Mount on"));
     {
-        QMenu *trussMenu = mountMenu->addMenu(tr("Truss"));
+        /* Every selected fixture when this one is among them ("selecting
+           multiple fixtures and using attach to truss still only moves 1"),
+           as the Deck entry always did; each keeps its place along. */
+        QList<quint32> mountIds;
+        foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+                mountIds << mfi->fixtureID();
+        if (!mountIds.contains(fid))
+            mountIds = { fid };
+        const QString many = mountIds.size() > 1 ? tr(" (%1 fixtures)").arg(mountIds.size()) : QString();
+
+        QMenu *trussMenu = mountMenu->addMenu(tr("Truss") + many);
         const QList<Truss *> trusses = props->trusses();
         trussMenu->setEnabled(!trusses.isEmpty());
         for (Truss *t : trusses)
@@ -7838,14 +7869,15 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                 continue;
             const quint32 tid = t->id();
             QAction *a = trussMenu->addAction(t->name().isEmpty() ? tr("Truss %1").arg(tid) : t->name(),
-                                              this, [this, fid, tid]() {
-                attachFixtureToTruss(fid, tid);
+                                              this, [this, mountIds, tid]() {
+                for (quint32 id : mountIds)
+                    attachFixtureToTruss(id, tid);
             });
             a->setCheckable(true);
             a->setChecked(rp.trussId == tid);
         }
 
-        QMenu *boomMenu = mountMenu->addMenu(tr("Boom"));
+        QMenu *boomMenu = mountMenu->addMenu(tr("Boom") + many);
         const QList<Pipe *> pipes = props->pipes();
         boomMenu->setEnabled(!pipes.isEmpty());
         for (Pipe *b : pipes)
@@ -7854,8 +7886,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                 continue;
             const quint32 bid = b->id();
             QAction *a = boomMenu->addAction(b->name().isEmpty() ? tr("Boom %1").arg(bid) : b->name(),
-                                             this, [this, fid, bid]() {
-                attachFixtureToPipe(fid, bid);
+                                             this, [this, mountIds, bid]() {
+                for (quint32 id : mountIds)
+                    attachFixtureToPipe(id, bid);
             });
             a->setCheckable(true);
             a->setChecked(rp.pipeId == bid);
@@ -7863,7 +7896,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
 
         /* A hanger: a bracket and chain on a tower or truss -- named with what
            it hangs off, since "Hanger 3" alone says nothing. */
-        QMenu *hangerMenu = mountMenu->addMenu(tr("Hanger"));
+        QMenu *hangerMenu = mountMenu->addMenu(tr("Hanger") + many);
         const QList<Hanger *> hangers = props->hangers();
         hangerMenu->setEnabled(!hangers.isEmpty());
         for (Hanger *hg : hangers)
@@ -7879,12 +7912,15 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                 on = tw->name();
             const quint32 hid = hg->id();
             QAction *a = hangerMenu->addAction(on.isEmpty() ? hg->name() : tr("%1 (on %2)").arg(hg->name(), on),
-                                               this, [this, fid, hid]() { attachFixtureToHanger(fid, hid); });
+                                               this, [this, mountIds, hid]() {
+                for (quint32 id : mountIds)
+                    attachFixtureToHanger(id, hid);
+            });
             a->setCheckable(true);
             a->setChecked(rp.hangerId == hid);
         }
 
-        QMenu *towerMenu = mountMenu->addMenu(tr("Tower"));
+        QMenu *towerMenu = mountMenu->addMenu(tr("Tower") + many);
         const QList<Tower *> towers = props->towers();
         towerMenu->setEnabled(!towers.isEmpty());
         for (Tower *tw : towers)
@@ -7893,13 +7929,15 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                 continue;
             const quint32 twid = tw->id();
             QMenu *spots = towerMenu->addMenu(tw->name().isEmpty() ? tr("Tower %1").arg(twid) : tw->name());
-            QAction *top = spots->addAction(tr("Top of tower"), this, [this, fid, twid]() {
-                mountFixtureOnTower(fid, twid, FixtureRigProps::TowerTop);
+            QAction *top = spots->addAction(tr("Top of tower"), this, [this, mountIds, twid]() {
+                for (quint32 id : mountIds)
+                    mountFixtureOnTower(id, twid, FixtureRigProps::TowerTop);
             });
             top->setCheckable(true);
             top->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerTop);
-            QAction *bottom = spots->addAction(tr("Bottom of tower"), this, [this, fid, twid]() {
-                mountFixtureOnTower(fid, twid, FixtureRigProps::TowerBottom);
+            QAction *bottom = spots->addAction(tr("Bottom of tower"), this, [this, mountIds, twid]() {
+                for (quint32 id : mountIds)
+                    mountFixtureOnTower(id, twid, FixtureRigProps::TowerBottom);
             });
             bottom->setCheckable(true);
             bottom->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerBottom);
@@ -7908,8 +7946,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                 spots->addAction(tr("(no shelves — add in the tower editor)"))->setEnabled(false);
             for (int si = 0; si < tw->shelfCount(); ++si)
             {
-                QAction *a = spots->addAction(tr("Shelf %1").arg(si + 1), this, [this, fid, twid, si]() {
-                    mountFixtureOnTower(fid, twid, FixtureRigProps::TowerShelf, si);
+                QAction *a = spots->addAction(tr("Shelf %1").arg(si + 1), this, [this, mountIds, twid, si]() {
+                    for (quint32 id : mountIds)
+                        mountFixtureOnTower(id, twid, FixtureRigProps::TowerShelf, si);
                 });
                 a->setCheckable(true);
                 a->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerShelf
@@ -7920,12 +7959,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         /* Stood on a deck -- every selected fixture at once ("how to place
            UST1-8 cleanly on the top of the platforms .. they shouldn't hang
            in space"): the deck under each, or one by name. */
-        QList<quint32> deckIds;
-        foreach (QGraphicsItem *gi, m_scene->selectedItems())
-            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
-                deckIds << mfi->fixtureID();
-        if (!deckIds.contains(fid))
-            deckIds = { fid };
+        const QList<quint32> deckIds = mountIds;
         QMenu *deckMenu = mountMenu->addMenu(deckIds.size() > 1 ? tr("Deck (%1 fixtures)").arg(deckIds.size())
                                                                  : tr("Deck"));
         const QList<StagePlatform *> decks = props->platforms();

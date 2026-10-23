@@ -336,6 +336,13 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+- **Mount on ▸ Truss / Boom / Hanger / Tower acts on every selected
+  fixture** when the one right-clicked is among them (it says how many),
+  as Deck already did; each keeps its place along.
+- **The Lighting Studio keeps the stage in the middle**: a fixture far off
+  the grid no longer leaves the view scrolled to one side after a resize,
+  and the "stage left / downstage" edge labels no longer smear when the
+  plot scrolls.
 - **Fixtures dragged together onto a truss all hang on it** (Shift-drop),
   each where it landed along it, not only the one over the truss; in Front
   and Side every free fixture of the selection keeps its drop instead of
