@@ -867,6 +867,9 @@ bool StructureStudioView::layerShown(quint32 layerId) const
 
 bool StructureStudioView::fixtureShown(quint32 fid) const
 {
+    // A curtain is drawn as its drape, not as a fixture.
+    if (Scenery::isCurtainFixture(m_doc->fixture(fid)))
+        return false;
     return layerShown(m_doc->monitorProperties()->fixtureLayer(fid));
 }
 

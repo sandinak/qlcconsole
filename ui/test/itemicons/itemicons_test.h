@@ -60,6 +60,10 @@ private slots:
      *  whatever its type is closest to; a group of curtains the group
      *  variant; a set look still wins; a hazer keeps its hazer icon. */
     void aCurtainShowsAsACurtain();
+    /** Q51: a dimmer marked with the Curtain stage look wears the curtain
+     *  (its picker's Auto entry does not); it makes a group of curtains;
+     *  unmarked, its own icon again. */
+    void aFixtureMarkedCurtainShowsAsACurtain();
     /** The same fixture or group wears the same icon in every list: the
      *  Fixture Manager tree, Build's groups list, the Show Tree Library and
      *  the plot's inventory and layers panels -- pixel for pixel

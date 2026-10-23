@@ -619,6 +619,19 @@ QPainterPath stageLookBodyPath(Fixture::StageLook look, const QRectF &r, bool el
             path.addRoundedRect(face, s * 0.06, s * 0.06);
             return path;
         }
+        case Fixture::CurtainLook:
+        {
+            /* A drape: its track along the top and the cloth's folds hanging
+               from it. (The plot draws a curtain as its drape, not this; it is
+               the shape for anything that asks for the look by itself.) */
+            path.addRect(QRectF(r.left(), r.top(), r.width(), r.height() * 0.12));
+            const int folds = 4;
+            const qreal w = r.width() / folds;
+            for (int i = 0; i < folds; ++i)
+                path.addRect(QRectF(r.left() + w * i + w * 0.1, r.top() + r.height() * 0.12,
+                                    w * 0.8, r.height() * 0.88));
+            return path;
+        }
         case Fixture::AutoLook:
         default:
             return path;

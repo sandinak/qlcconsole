@@ -119,6 +119,6 @@ Set a look for the **TrussC-RGB** boxes that says they light the cyc
 
 The course test (`ui/test/courseshow`, `lessonStageLooks`) runs it
 offscreen on the real app: the Show menu's item by its name, the Stage
-Look menu's four sections, **Auto (Moving head spot)** on AT-W-ALL and
+Look menu's five sections, **Auto (Moving head spot)** on AT-W-ALL and
 **Moving head round wash**, and **Lantern** under Practicals on the
 Lanterns group. It does not take pictures for this lesson yet.

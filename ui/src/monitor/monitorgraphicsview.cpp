@@ -3294,6 +3294,11 @@ bool MonitorGraphicsView::fixtureItemShouldBeVisible(quint32 fid) const
         return false;
     if (m_stageOnly)
         return false;
+    /* A curtain is on the plot as its drape, not as a fixture: one marked
+       Curtain keeps its place, hidden, and is back where it was when it is
+       unmarked. */
+    if (Scenery::isCurtainFixture(m_doc->fixture(fid)))
+        return false;
 
     /* "Fixtures on the rig", unchecked: a structure covered by its own fixtures
        cannot be clicked, so they are hidden while it is being placed. Only
@@ -3510,6 +3515,8 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         return;
     m_fixtures.value(id)->refreshName();
     m_fixtures.value(id)->refreshStageLook();
+    // Marked Curtain (or back to a light): drawn as its drape, or again as itself.
+    m_fixtures.value(id)->setVisible(fixtureItemShouldBeVisible(id));
 
     const QLCFixtureMode *mode = fxi->fixtureMode();
     double width = 0;

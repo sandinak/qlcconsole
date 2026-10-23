@@ -149,6 +149,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "patchplanner.h"
 #include "ledlayouteditor.h"
 #include "beamocclusion.h"
 #include "fountaindiagram.h"
@@ -3065,6 +3066,10 @@ void Monitor::slotCopySelected()
             w.writeEndDocument();
             c.item = m_props->fixtureProperties(fx->id());
             c.rig = rp;
+            c.patched = fx->isPatched();
+            c.universe = fx->universe();
+            c.address = fx->address();
+            c.channels = fx->channels();
             fixtures.append(c);
         }
 
@@ -3078,10 +3083,44 @@ void Monitor::slotCopySelected()
         m_pasteAction->setEnabled(true);
 }
 
-void Monitor::pasteClipboard(float dxM, float dyM)
+bool Monitor::pasteClipboard(float dxM, float dyM)
 {
     if (!clipboardHasFeatures())
-        return;
+        return false;
+
+    /* A truss that brings fixtures: ask what their copies get before
+       anything is made -- Cancel pastes nothing. */
+    PasteFixtures withFixtures = PasteUnpatched;
+    int bringing = 0;
+    foreach (const FixtureClip &c, m_fixtureClipboard)
+        if (c.truss >= 0 && c.truss < m_trussClipboard.size())
+            ++bringing;
+    if (bringing > 0)
+    {
+        if (m_pasteFixturesAsk)
+            withFixtures = m_pasteFixturesAsk(bringing);
+        else
+        {
+            QMessageBox box(QMessageBox::Question, tr("Paste truss"),
+                            bringing == 1 ? tr("Paste 1 fixture with the truss")
+                                          : tr("Paste %1 fixtures with the truss").arg(bringing),
+                            QMessageBox::NoButton, this);
+            box.setInformativeText(tr("Patch the copies at the next free addresses after the "
+                                      "originals, or leave them unpatched to address later "
+                                      "(Patch Others Like This)."));
+            QPushButton *patchBtn = box.addButton(tr("Patch at next free addresses"),
+                                                  QMessageBox::AcceptRole);
+            QPushButton *leaveBtn = box.addButton(tr("Leave unpatched"), QMessageBox::AcceptRole);
+            box.addButton(QMessageBox::Cancel);
+            box.setDefaultButton(patchBtn);
+            box.exec();
+            withFixtures = box.clickedButton() == patchBtn ? PastePatched
+                         : box.clickedButton() == leaveBtn ? PasteUnpatched
+                                                           : PasteCancelled;
+        }
+        if (withFixtures == PasteCancelled)
+            return false;
+    }
 
     QList<quint32> newTrussIds, newPlatformIds, newTargetIds, newPaletteIds, newFixtureIds;
 
@@ -3102,11 +3141,13 @@ void Monitor::pasteClipboard(float dxM, float dyM)
 
     /* The fixtures on the copied trusses: new fixtures, same definition, mode
        and settings, a name of their own, hung at the same place on the copy.
-       Unpatched: which addresses a copy should take is a patching decision
-       (Patch Others Like This, the Patch dialog), and taking any free one
-       here could land them on channels meant for something else. */
-    foreach (const FixtureClip &c, m_fixtureClipboard)
+       Made unpatched; the LD's answer above decides whether they are then
+       patched after their originals (patchPastedFixtures()) or left for
+       Patch Others Like This / the Patch dialog. */
+    QList<int> newFixtureClips;                 // parallel to newFixtureIds
+    for (int ci = 0; ci < m_fixtureClipboard.size(); ++ci)
     {
+        const FixtureClip &c = m_fixtureClipboard.at(ci);
         if (c.truss < 0 || c.truss >= newTrussIds.size())
             continue;
         QXmlStreamReader r(c.xml);
@@ -3138,6 +3179,7 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         const QVector3D at = item.m_baseItem.m_position;
         m_graphicsView->addFixture(fid, QPointF(at.x(), at.y()));
         newFixtureIds.append(fid);
+        newFixtureClips.append(ci);
     }
 
     foreach (const PlatformClip &c, m_platformClipboard)
@@ -3188,6 +3230,12 @@ void Monitor::pasteClipboard(float dxM, float dyM)
     if (m_layersPanel) m_layersPanel->reload();   // show the copies in the tree
     m_doc->setModified();
 
+    /* Patched before the undo entry is made: the entry deletes the pasted
+       fixtures, patch and all, so one Ctrl+Z still takes the whole paste. */
+    QString patchedNotice;
+    if (withFixtures == PastePatched && !newFixtureIds.isEmpty())
+        patchedNotice = patchPastedFixtures(newFixtureIds, newFixtureClips);
+
     // Register the paste on the canvas undo stack so Ctrl+Z removes the copies.
     m_graphicsView->recordFeaturePaste(newTrussIds, newPlatformIds,
                                        newTargetIds, newPaletteIds, newFixtureIds);
@@ -3195,11 +3243,101 @@ void Monitor::pasteClipboard(float dxM, float dyM)
     {
         m_graphicsView->refreshFixtureLabels();
         const int n = int(newFixtureIds.size());
-        showNotice(n == 1 ? tr("Pasted 1 fixture unpatched: Patch Others Like This (or Patch…) "
-                               "gives it an address.")
-                          : tr("Pasted %1 fixtures unpatched: Patch Others Like This (or Patch…) "
-                               "gives them addresses.").arg(n));
+        if (!patchedNotice.isEmpty())
+            showNotice(patchedNotice);
+        else
+            showNotice(n == 1 ? tr("Pasted 1 fixture unpatched: Patch Others Like This (or Patch…) "
+                                   "gives it an address.")
+                              : tr("Pasted %1 fixtures unpatched: Patch Others Like This (or Patch…) "
+                                   "gives them addresses.").arg(n));
     }
+    return true;
+}
+
+QString Monitor::patchPastedFixtures(const QList<quint32> &fids, const QList<int> &clips)
+{
+    /* Where the originals are: the copies follow on after the last of them,
+       in the universe the first of them is in (in address order). Nothing
+       patched among them: the first free addresses from universe 1. */
+    QList<int> order;
+    for (int i = 0; i < fids.size() && i < clips.size(); ++i)
+        order << i;
+    auto clipAt = [this, &clips](int i) -> const FixtureClip & {
+        return m_fixtureClipboard.at(clips.at(i));
+    };
+    std::stable_sort(order.begin(), order.end(), [&clipAt](int a, int b) {
+        const FixtureClip &ca = clipAt(a), &cb = clipAt(b);
+        if (ca.patched != cb.patched)
+            return ca.patched;
+        if (ca.universe != cb.universe)
+            return ca.universe < cb.universe;
+        return ca.address < cb.address;
+    });
+    quint32 universe = 0, from = 0;
+    const bool afterOriginals = !order.isEmpty() && clipAt(order.first()).patched;
+    if (afterOriginals)
+    {
+        universe = clipAt(order.first()).universe;
+        foreach (int i, order)
+        {
+            const FixtureClip &c = clipAt(i);
+            if (c.patched && c.universe == universe)
+                from = qMax(from, c.address + c.channels);
+        }
+    }
+    QList<quint32> ids;
+    foreach (int i, order)
+        ids << fids.at(i);
+
+    // The same first-fit the Patch dialog uses: in order, spilling on.
+    PatchPlanner planner(m_doc);
+    const QList<PatchPlanner::Assignment> plan = planner.fit(ids, universe, from, true);
+    QList<PatchPlanner::Assignment> fitted;
+    int spilled = 0;
+    quint32 lastUni = universe;
+    foreach (const PatchPlanner::Assignment &a, plan)
+    {
+        if (a.unfitted)
+            continue;
+        fitted << a;
+        if (a.universe != universe)
+        {
+            ++spilled;
+            lastUni = qMax(lastUni, a.universe);
+        }
+    }
+    QStringList problems;
+    const int done = fitted.isEmpty() ? 0 : planner.apply(fitted, &problems);
+    foreach (quint32 fid, ids)
+        m_graphicsView->updateFixture(fid);
+
+    const int n = int(ids.size());
+    if (done == 0)
+        return n == 1 ? tr("Pasted 1 fixture unpatched: no free addresses for it. "
+                           "Patch Others Like This (or Patch…) gives it one.")
+                      : tr("Pasted %1 fixtures unpatched: no free addresses for them. "
+                           "Patch Others Like This (or Patch…) gives them addresses.").arg(n);
+    QString text;
+    if (spilled == 0 && !afterOriginals)
+        text = done == 1 ? tr("Pasted 1 fixture, patched at the first free address in universe %1.")
+                               .arg(universe + 1)
+                         : tr("Pasted %1 fixtures, patched at the first free addresses in universe %2.")
+                               .arg(done).arg(universe + 1);
+    else if (spilled == 0)
+        text = done == 1 ? tr("Pasted 1 fixture, patched in universe %1 after the originals.")
+                               .arg(universe + 1)
+                         : tr("Pasted %1 fixtures, patched in universe %2 after the originals.")
+                               .arg(done).arg(universe + 1);
+    else if (spilled == done)
+        text = tr("No room in universe %1 after the originals: pasted %2 patched in universe %3.")
+                   .arg(universe + 1).arg(done).arg(lastUni + 1);
+    else
+        text = tr("Pasted %1 fixtures patched: no room for %2 of them in universe %3, "
+                  "they went on into universe %4.")
+                   .arg(done).arg(spilled).arg(universe + 1).arg(lastUni + 1);
+    if (done < n)
+        text += QLatin1Char(' ') + tr("%1 left unpatched.").arg(n - done);
+    return text;
 }
 
 void Monitor::showNotice(const QString &text)
@@ -3220,7 +3358,8 @@ void Monitor::slotPasteFeatures()
     // exactly on top of one another.
     ++m_pasteCount;
     const float step = 0.5f * float(m_pasteCount);   // metres
-    pasteClipboard(step, step);
+    if (!pasteClipboard(step, step))
+        --m_pasteCount;                              // cancelled: no cascade step taken
 }
 
 void Monitor::slotFixtureDoubleClicked(quint32 fid)
