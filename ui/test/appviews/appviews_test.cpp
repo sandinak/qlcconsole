@@ -1639,6 +1639,44 @@ void AppViews_Test::upgradingAClassicShowOffersTheConsoleView()
     m_app->clearDocument();
 }
 
+void AppViews_Test::autoOpenFollowsWhoSavedTheShow()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath("stock.qxw");
+    ShutterAutoOpen *ao = m_app->doc()->shutterAutoOpen();
+
+    // A QLC+ 4.x show never had it: off, the DMX QLC+ sends.
+    writeStockShow(path, "Q Light Controller Plus", false);
+    m_app->clearDocument();
+    QVERIFY(ao->isEnabled());
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(ao->isEnabled() == false);
+    QVERIFY(!m_app->doc()->isModified());
+
+    // Saved by qlcconsole before the setting was always written: on.
+    writeStockShow(path, "qlcconsole", false);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(ao->isEnabled());
+
+    // A new show: on, and saved so, so it reloads on.
+    writeStockShow(path, "Q Light Controller Plus", false);
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(ao->isEnabled() == false);
+    QVERIFY(m_app->slotFileNew());
+    QVERIFY(ao->isEnabled());
+    const QString saved = dir.filePath("new.qxw");
+    QCOMPARE(m_app->saveXML(saved), QFile::NoError);
+    QFile f(saved);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(f.readAll().contains("<ShutterAutoOpen Enabled=\"1\"/>"));
+    f.close();
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(saved), QFile::NoError);
+    QVERIFY(ao->isEnabled());
+    QVERIFY(m_app->slotFileNew());
+}
+
 void AppViews_Test::quittingWithTheShowTreeShowing()
 {
     QTabWidget *tabs = m_app->m_tab;

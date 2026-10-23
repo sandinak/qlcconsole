@@ -116,6 +116,10 @@ private slots:
     /** File ▸ Upgrade This Show… on a Classic show: offered (once) the
      *  qlcconsole view, as a quiet line with a button. */
     void upgradingAClassicShowOffersTheConsoleView();
+    /** Q63: auto-open shutters for a show saved without the setting: off
+     *  for a QLC+ 4.x show, on for one qlcconsole saved, on for a new show. */
+    void autoOpenFollowsWhoSavedTheShow();
+
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

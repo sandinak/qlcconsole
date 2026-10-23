@@ -149,6 +149,10 @@ their house lights, relays and subs.
 - **Open what a layer plays.** A ▣ layer (a raw scene, an EFX, an RGB
   Matrix) opens its function in the Workbench; its page says where else it
   plays. See [Adding layers](show-tree.md#adding-layers).
+- **Same show, same output.** A show saved by QLC+ 4.x opens with
+  **Auto-open shutters** off, so it sends the DMX it sends in QLC+. Shows
+  made in qlcconsole keep it on. Turn it on in Settings ▸ Advanced. See
+  [Auto-open shutters](other-improvements.md#auto-open-shutters).
 - **The stock sample imports the same.** A chase of scenes with their own
   fades now plays in the cue list as in the chaser (it used to run at
   about half the level).
@@ -264,8 +268,8 @@ their house lights, relays and subs.
 - **Auto-open shutters.** A spot whose shutter rests closed now lights
   from a level alone: give it White at Full and it opens its shutter, as a
   lighting console does. A shutter look (Closed, Strobe...) still wins, and
-  a light with no level stays as it is. It is on for every show, saved
-  with the show, and turned off in the new **Settings → Advanced** tab,
+  a light with no level stays as it is. It is on for new shows (0.2.2:
+  off for a show saved by QLC+), saved with the show, and turned off in the new **Settings → Advanced** tab,
   which also now holds the effect script editor choice and the Show control
   (QLab) button. See [Auto-open shutters](other-improvements.md#auto-open-shutters).
 

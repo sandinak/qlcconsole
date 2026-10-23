@@ -44,7 +44,8 @@ class Doc;
  * (closed, strobe, open) always wins, and a head with no level is left as
  * it is.
  *
- * The show's setting (saved with it, on by default). This keeps each
+ * The show's setting (saved with it; on for a new show, off for a QLC+
+ * show that never had it -- see beginLoad()). This keeps each
  * universe's rules (Universe::setAutoOpenRules()) in step with the
  * fixtures; the universes apply them after their faders, on their own
  * thread, so every source -- scenes, the Show Tree, the programmer,
@@ -84,6 +85,20 @@ public:
     /** Back to a new show's setting (on). */
     void reset();
 
+    /** Who saved the show about to be loaded: its <Creator><Name>, read
+     *  before its engine (App::loadXML()). Consumed by the next beginLoad(). */
+    void setLoadingCreator(const QString &name);
+
+    /** True when @p creatorName is qlcconsole's own (APPNAME). */
+    static bool savedByQlcconsole(const QString &creatorName);
+
+    /** Called by Doc::loadXML() before a show's elements: the setting a show
+     *  saved without one gets. A QLC+ 4.x show (or one with no creator)
+     *  loads with it off, so it sends the DMX QLC+ sends. A qlcconsole show
+     *  loads with it on: qlcconsole once saved it only when off. Every show
+     *  saved now carries it either way (saveXML()). */
+    void beginLoad();
+
     void saveXML(QXmlStreamWriter *doc) const;
     void loadXML(QXmlStreamReader &root);
 
@@ -96,6 +111,7 @@ private:
     Doc *m_doc;
     bool m_enabled = true;
     bool m_pending = false;
+    bool m_loadingFromHere = false;
     int m_ruleCount = 0;
 };
 

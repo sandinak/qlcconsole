@@ -1122,6 +1122,7 @@ void Doc_Test::save()
     QVERIFY(xmlReader.name().toString() == "Engine");
 
     uint fixtures = 0, groups = 0, functions = 0, ioMap = 0, monitor = 0, moveInBlack = 0;
+    uint autoOpen = 0;
 
     // Merely tests that the start of each hierarchy is found from the XML document.
     // Their contents are tested individually in their own separate tests.
@@ -1141,6 +1142,10 @@ void Doc_Test::save()
             // Programmer-mode Auto-MIB settings; always written since
             // ProgrammerController's MarkPlanner exists from construction.
             moveInBlack++;
+        else if (xmlReader.name().toString() == "ShutterAutoOpen")
+            // Always written, on or off: a show without it loads by who
+            // saved it (ShutterAutoOpen::beginLoad()).
+            autoOpen++;
         else if (xmlReader.name().toString() == "Bus")
             QFAIL("Bus tags should not be saved anymore!");
         else
@@ -1156,6 +1161,7 @@ void Doc_Test::save()
     QVERIFY(ioMap == 1);
     QVERIFY(monitor == 1);
     QVERIFY(moveInBlack == 1);
+    QVERIFY(autoOpen == 1);
 
     /* Saving doesn't implicitly reset modified status */
     QVERIFY(m_doc->isModified() == true);

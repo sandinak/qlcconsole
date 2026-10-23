@@ -708,9 +708,12 @@ With **Auto-open shutters** on, qlcconsole works like a lighting console's
   the values your looks store are unchanged, and turning it off puts every
   shutter back to what the show sets.
 
-It is **on** for new shows and for shows saved before it existed. It is
-**saved with the show**, not with this computer, because it changes what
-the rig does: a show programmed with it on looks the same on any computer.
+It is **on** for new shows and for shows qlcconsole saved before it
+existed. It is **off** for a show saved by QLC+ 4.x, so an old show opened
+here sends the same DMX it sends in QLC+; turn it on in Settings ▸ Advanced
+if you want it. It is **saved with the show**, not with this computer,
+because it changes what the rig does: a show programmed with it on looks
+the same on any computer.
 Turn it off when a show wants every shutter to be programmed by hand, as
 in QLC+. While it is on, the Build tab no longer warns "no look for:
 shutter".

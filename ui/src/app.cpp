@@ -86,6 +86,7 @@
 #include <atomic>
 #include <QProgressDialog>
 #include "doc.h"
+#include "shutterautoopen.h"
 #include "fixture.h"
 #include "programmercontroller.h"
 #include "qxwimporter.h"
@@ -4759,6 +4760,9 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
                 else
                     doc.skipCurrentElement();
             }
+            /* And auto-open shutters for a show saved without it: on when
+               qlcconsole saved it, off (as QLC+) otherwise. */
+            m_doc->shutterAutoOpen()->setLoadingCreator(m_loadedCreator);
         }
         else if (doc.name() == KXMLShowEmbedded)
         {

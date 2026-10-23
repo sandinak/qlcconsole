@@ -185,6 +185,10 @@ circuits and subs.
 - **The boot window shows the version**, build and commit.
 - **The Lighting Studio plot draws a pixel fixture's heads where its LED
   layout puts them.**
+- **Auto-open shutters is off for a QLC+ 4.x show.** A show saved
+  without the setting loads with it off unless qlcconsole saved it, so an
+  old show sends the same DMX here as in QLC+. New shows keep it on, and a
+  show now always saves the setting, on or off.
 - **Settings, tooltip and menu text** name the paths the help uses:
   Settings ▸ Advanced ▸ Output in the Output Rules dialog, Build → Move in
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.

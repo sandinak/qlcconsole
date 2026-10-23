@@ -86,7 +86,8 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                    "shutter nothing sets, has its shutter opened -- so a spot "
                                    "whose shutter rests closed lights from a dimmer look alone. "
                                    "A shutter look (Closed, Strobe...) always wins, and a light "
-                                   "with no level is left alone. Saved with the show."));
+                                   "with no level is left alone. Saved with the show; a show "
+                                   "saved by QLC+ opens with it off, sending what QLC+ sends."));
     outLayout->addWidget(m_autoOpenCheck);
     QLabel *outInfo = new QLabel(
         tr("Like a lighting console's auto-open. Off: a closed shutter stays closed until a "
