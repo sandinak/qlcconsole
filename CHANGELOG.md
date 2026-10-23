@@ -294,13 +294,18 @@ circuits and subs.
   the targets.
 - The show's LED layouts are guarded against a running matrix effect while
   they are edited.
+- **A timeline Override track wins its dimmers too**, as the help says: a
+  lower level on it pulls a light below a Normal track or a cue at full
+  (intensity used to mix highest-wins). Park, Focus, a flash and a
+  highlight still beat it, the Grand Master and Blackout still apply, and
+  when its item ends what plays underneath comes back.
+- **A track's intensity set before Start plays**: the track's fader and the
+  show's attribute for it are one value, so the level set last (and saved
+  with the show) is the one that plays. A track saved at 50% used to start
+  at full.
 
 ### Known issues
 
-- A timeline **Override** track doesn't win an intensity channel (intensity
-  still mixes highest-wins); the help says it does. Waiting on a decision.
-- A track's intensity set before **Start** is replaced by the show's saved
-  value when the show starts. Waiting on a decision.
 - Under very heavy machine load a fade can finish late (seen in the course
   test's 3 s fade taking ~8 s with dozens of builds running); the universe
   threads run at normal priority.
