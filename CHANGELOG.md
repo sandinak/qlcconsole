@@ -54,8 +54,9 @@ circuits and subs.
   Everything**, saved per show (an optional `View=` attribute older
   builds ignore). Classic shows QLC+'s tabs in its order (Connections reads
   *Inputs/Outputs*); qlcconsole shows Connections, Fixtures, Lighting
-  Studio, Build, Show Tree, Shows, Virtual Console and Run; Everything all
-  ten. A show with no Show Tree not saved by qlcconsole opens in Classic.
+  Studio, Build, Show Tree, Shows, Virtual Console, Simple Desk and Run
+  (Simple Desk, a QLC+ user's channel check, joined after the Virtual
+  Console); Everything all ten. A show with no Show Tree not saved by qlcconsole opens in Classic.
   A Window-menu jump to a hidden tab switches to Everything with a *Back
   to …* line.
 - **Upgrade This Show…** (File menu and the Show Tree's old-show line;

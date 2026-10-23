@@ -98,8 +98,8 @@ Which of these you see depends on the view (below).
 **View ▸ Workspace** picks which tabs the main window shows:
 
 - **qlcconsole** — Connections, Fixtures, Lighting Studio, Build, Show
-  Tree, Shows, Virtual Console and Run. Functions has no tab: **Window ▸
-  Functions** opens **Build ▸ Scenes ▸ Classic**.
+  Tree, Shows, Virtual Console, Simple Desk and Run. Functions has no
+  tab: **Window ▸ Functions** opens **Build ▸ Scenes ▸ Classic**.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
   Connections tab).

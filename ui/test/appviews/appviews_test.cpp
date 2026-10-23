@@ -181,8 +181,8 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QVERIFY(windowMenu != nullptr);
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
-    // And Functions and Simple Desk, which have no tab in the qlcconsole view.
-    QCOMPARE(m_app->m_windowJumps.size(), views + 2);
+    // And Functions, which has no tab in the qlcconsole view.
+    QCOMPARE(m_app->m_windowJumps.size(), views + 1);
     // The Rig Overview is a window too: offered here as well as under View.
     QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
     QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
@@ -1394,7 +1394,7 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     const QStringList classic = { "Fixtures", "Functions", "Shows", "Virtual Console",
                                   "Simple Desk", "Connections" };
     const QStringList console = { "Connections", "Fixtures", "Lighting Studio", "Build",
-                                  "Show Tree", "Shows", "Virtual Console", "Run" };
+                                  "Show Tree", "Shows", "Virtual Console", "Simple Desk", "Run" };
     const QStringList everything = { "Connections", "Fixtures", "Lighting Studio", "Functions",
                                      "Build", "Show Tree", "Shows", "Virtual Console",
                                      "Simple Desk", "Run" };
@@ -1472,35 +1472,46 @@ void AppViews_Test::aJumpToAHiddenTabShowsEverything()
     QVERIFY(!m_app->m_viewNotice->isVisible());
     QAction *desk = nullptr;
     QAction *functions = nullptr;
+    QAction *tree = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
     {
         if (a->data().toString() == "Simple Desk")
             desk = a;
         if (a->data().toString() == "Functions")
             functions = a;
+        if (a->data().toString() == "Show Tree")
+            tree = a;
     }
-    QVERIFY(desk && functions);
+    QVERIFY(desk && functions && tree);
 
     // Window → Functions in qlcconsole: Build ▸ Scenes ▸ Classic, view kept.
     functions->trigger();
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(ProgrammingManager::instance()));
 
-    // Window → Simple Desk: not in qlcconsole, so Everything, with a note.
+    // Window → Simple Desk: a tab in qlcconsole (Q71), so no view change.
+    desk->trigger();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(SimpleDesk::instance()));
+    QVERIFY(!m_app->m_viewNotice->isVisible());
+
+    // Window → Show Tree from Classic QLC+: not there, so Everything, with
+    // a note and a way back.
     m_app->resize(1400, 860);
     m_app->show();
-    desk->trigger();
+    m_app->setWorkspaceView(App::ClassicView);
+    tree->trigger();
     QCOMPARE(m_app->workspaceView(), App::EverythingView);
-    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(SimpleDesk::instance()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(ShowTreeView::instance()));
     QVERIFY(m_app->m_viewNotice->isVisible());
-    QVERIFY2(m_app->m_viewNoticeText->text().contains("Simple Desk isn't in the qlcconsole view"),
+    QVERIFY2(m_app->m_viewNoticeText->text().contains("Show Tree isn't in the Classic QLC+ view"),
              qPrintable(m_app->m_viewNoticeText->text()));
-    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Back to qlcconsole"));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Back to Classic QLC+"));
     viewShot(m_app, "view-hidden-jump-note.png");
     m_app->m_viewNoticeButton->click();
-    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
     QVERIFY(!m_app->m_viewNotice->isVisible());
-    QCOMPARE(tabs->indexOf(SimpleDesk::instance()), -1);
+    QCOMPARE(tabs->indexOf(ShowTreeView::instance()), -1);
 
     // The same from Classic: Window → Build shows Everything.
     m_app->setWorkspaceView(App::ClassicView);
@@ -1561,7 +1572,8 @@ void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
     QCOMPARE(tabs->indexOf(build), 3);
     showsWin->close();
     QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Lighting Studio", "Build",
-                                            "Show Tree", "Shows", "Virtual Console", "Run" }));
+                                            "Show Tree", "Shows", "Virtual Console", "Simple Desk",
+                                            "Run" }));
     m_app->doc()->resetModified();
 }
 

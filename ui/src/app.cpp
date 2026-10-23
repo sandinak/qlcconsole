@@ -2358,7 +2358,8 @@ void App::initMenuBar()
                          "Virtual Console, Simple Desk, Inputs/Outputs") },
             { ConsoleView, "viewWorkspaceConsole",
               QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows, "
-                         "Virtual Console and Run; Functions lives in Build ▸ Scenes ▸ Classic") },
+                         "Virtual Console, Simple Desk and Run; Functions lives in Build ▸ "
+                         "Scenes ▸ Classic") },
             { EverythingView, "viewWorkspaceEverything",
               QT_TR_NOOP("Every tab") } };
         for (const auto &v : views)
@@ -3668,9 +3669,12 @@ QStringList App::workspaceViewTabs(WorkspaceView view)
         return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
                  tr("Simple Desk"), tr("Connections") };
     case ConsoleView:
-        // Functions folds into Build ▸ Scenes ▸ Classic (board Q32).
+        // Functions folds into Build ▸ Scenes ▸ Classic (board Q32). Simple
+        // Desk, a QLC+ user's channel check, sits where Everything has it:
+        // after the Virtual Console, before Run (Q71).
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Build"),
-                 tr("Show Tree"), tr("Shows"), tr("Virtual Console"), tr("Run") };
+                 tr("Show Tree"), tr("Shows"), tr("Virtual Console"), tr("Simple Desk"),
+                 tr("Run") };
     case EverythingView:
     default:
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Functions"),

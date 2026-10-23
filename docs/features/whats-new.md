@@ -57,7 +57,7 @@ their house lights, relays and subs.
 
 - **Three views.** **View ▸ Workspace** picks the tabs: **qlcconsole**
   (Connections, Fixtures, Lighting Studio, Build, Show Tree, Shows,
-  Virtual Console, Run), **Classic QLC+** (QLC+'s own tabs, in its order
+  Virtual Console, Simple Desk, Run), **Classic QLC+** (QLC+'s own tabs, in its order
   and names) or **Everything**. The view is saved with the show. An old
   QLC+ show opens in Classic QLC+; everything else, and a new show, in
   qlcconsole. Choosing a hidden tab from the Window menu shows Everything,
