@@ -121,11 +121,15 @@ puts it away instead of back on the tab bar. After **File ▸ Upgrade This
 Show…** gives a Classic QLC+ show a Show Tree, a line above the tabs
 offers the **qlcconsole** view, once.
 
-**Window** lists every tab with its shortcut (⇧⌘1 … ⇧⌘0). Shift-click
+**Window** lists the view's tabs in their order, numbered as you see them:
+⇧⌘1 is the first tab on screen, ⇧⌘2 the next, and so on (⇧⌘0 the tenth).
+Change the view and the numbers follow it; in the qlcconsole view
+Connections is ⇧⌘1, the Show Tree ⇧⌘5 and Run ⇧⌘9, in Classic QLC+
+Fixtures is ⇧⌘1. The tabs the view hides are listed after them, with no
+shortcut. Shift-click
 a tab to break it out into its own window; Window brings it back.
 **Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
-scripts, audio, video) is in Build too: **Window ▸ Functions** (⇧⌘4)
-opens Functions in a view that shows it as a tab, and **Build ▸ Scenes ▸
+scripts, audio, video) is in Build too: **Window ▸ Functions** opens Functions in a view that shows it as a tab, and **Build ▸ Scenes ▸
 Classic** in the qlcconsole view — every function by type, each one
 edited in the Workbench. **View ▸ Rig Overview** (⇧⌘R) opens the whole rig
 in 3D.

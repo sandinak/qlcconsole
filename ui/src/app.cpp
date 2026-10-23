@@ -2480,14 +2480,14 @@ void App::initMenuBar()
        all of them. */
     QMenu* windowMenu = mb->addMenu(tr("&Window"));
     windowMenu->setObjectName("windowMenu");
+    m_windowMenu = windowMenu;
     for (int i = 0; i < m_tabOriginals.size(); i++)
     {
         QAction* jump = windowMenu->addAction(m_tabOriginals.at(i).second,
                                               m_tabOriginals.at(i).first);
-        // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
-        // Build ▸ Scenes' "new function" shortcuts.
-        // The tenth (Run) is ⇧⌘0.
-        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10)));
+        // Ctrl+Shift+<n> (⇧⌘n on macOS), numbered by the view's tabs
+        // (updateWindowJumps()): the plain Ctrl+<n> row is taken by Build ▸
+        // Scenes' "new function" shortcuts.
         /* Resolve by LABEL, not by construction order. Detaching a view calls
            removeTab(), so every index after it shifts and a raw
            setCurrentIndex(i) lands on the wrong page -- or on nothing at all
@@ -2506,6 +2506,10 @@ void App::initMenuBar()
             });
         m_windowJumps << jump;
     }
+    // Then the tabs the view hides (no shortcut), after this line.
+    m_windowHiddenSeparator = windowMenu->addSeparator();
+    m_windowHiddenSeparator->setObjectName(QStringLiteral("windowHiddenTabs"));
+    m_windowJumpsEnd = windowMenu->addSeparator();
     /* The Rig Overview is a window of its own, so it is offered here too, not
        only under View: the Window menu is where people go looking for one
        ("there's no option in Windows"). The same action, so one shortcut. */
@@ -2541,6 +2545,7 @@ void App::initMenuBar()
             w->showMinimized();
     });
     connect(windowMenu, &QMenu::aboutToShow, this, &App::updateWindowMenu);
+    updateWindowJumps();
     updateWindowMenu();
 
     /* ---- Help ---- */
@@ -3882,6 +3887,7 @@ void App::applyWorkspaceTabs()
     m_tab->blockSignals(blocked);
     applyTabLabelMode();
     updateWorkspaceViewActions();
+    updateWindowJumps();
     slotTabChanged(m_tab->currentIndex());
 }
 
@@ -4016,6 +4022,40 @@ QStringList App::detachedContexts() const
             && !dw->centralWidget()->property("parked").toBool())   // no tab to go back to
             out << dw->centralWidget()->property("tabLabel").toString();
     return out;
+}
+
+void App::updateWindowJumps()
+{
+    if (m_windowMenu == NULL || m_windowHiddenSeparator == NULL || m_windowJumpsEnd == NULL
+        || m_windowJumps.isEmpty())
+        return;
+    /* Numbered by what is on screen (Q69): in Classic QLC+, Fixtures is the
+       first tab and ⇧⌘1. A tab in a window of its own keeps its number. */
+    const QStringList order = effectiveViewTabs();
+    QList<QAction *> shown, hidden;
+    foreach (const QString &label, order)
+        foreach (QAction *jump, m_windowJumps)
+            if (jump->data().toString() == label)
+                shown << jump;
+    foreach (QAction *jump, m_windowJumps)
+        if (shown.contains(jump) == false)
+            hidden << jump;
+
+    for (int i = 0; i < shown.size(); i++)
+    {
+        QAction *jump = shown.at(i);
+        m_windowMenu->removeAction(jump);
+        m_windowMenu->insertAction(m_windowHiddenSeparator, jump);
+        jump->setShortcut(i < 10 ? QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10))
+                                 : QKeySequence());
+    }
+    foreach (QAction *jump, hidden)
+    {
+        m_windowMenu->removeAction(jump);
+        m_windowMenu->insertAction(m_windowJumpsEnd, jump);
+        jump->setShortcut(QKeySequence());
+    }
+    m_windowHiddenSeparator->setVisible(hidden.isEmpty() == false);
 }
 
 void App::updateWindowMenu()

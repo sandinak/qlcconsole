@@ -48,7 +48,7 @@ private slots:
      *  enable/disable that feature via a toggle on window". */
     void shiftClickBreaksATabOutDoubleClickDoesNot();
     /** Board Q32: the Functions window is hidden (one switch). Window → Functions
-     *  (⇧⌘4) lands on Build ▸ Scenes ▸ Classic with the list focused; no
+     *  lands on Build ▸ Scenes ▸ Classic with the list focused; no
      *  Function Manager is built; a show saved with it in front opens
      *  there; opening a function from outside Build loads it in Build's
      *  Workbench. */
@@ -61,7 +61,7 @@ private slots:
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
-    /* P7: the Run tab -- the full-screen cue runner, ⇧⌘0. */
+    /* P7: the Run tab -- the full-screen cue runner (⇧⌘9 in qlcconsole). */
     void theRunTabIsTheCueRunner();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
@@ -111,6 +111,10 @@ private slots:
     /** A Window-menu jump to a tab the view hides shows Everything, with a
      *  note and a way back; Window → Functions in qlcconsole is Build. */
     void aJumpToAHiddenTabShowsEverything();
+    /** Q69: ⇧⌘1… number the tabs the view shows, in its order, and are
+     *  renumbered when the view changes; the Window menu lists them so,
+     *  then the hidden tabs with no shortcut. */
+    void windowShortcutsFollowTheView();
     /** A view in a window of its own stays there through view switches,
      *  and goes back to its place (or is put away) when closed. */
     void aBrokenOutViewSurvivesAViewSwitch();

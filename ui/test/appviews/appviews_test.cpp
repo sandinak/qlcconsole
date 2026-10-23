@@ -356,17 +356,18 @@ void AppViews_Test::functionsOpensBuildScenesClassic()
     QVERIFY(build != nullptr);
     const int views = tabs->count();
 
-    // Still in the Window menu, at its old place and shortcut (⇧⌘4).
+    // Still in the Window menu, at its old place; no shortcut, as it has no
+    // tab here (Q69: ⇧⌘4 is the view's fourth tab, Build).
     QAction *jump = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == functions)
             jump = a;
     QVERIFY2(jump != nullptr, "Functions should be in the Window menu");
     QCOMPARE(jump->objectName(), QString("windowFunctions"));
-    QCOMPARE(jump->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
+    QVERIFY(jump->shortcut().isEmpty());
     QCOMPARE(m_app->m_windowJumps.indexOf(jump), 3);
     QCOMPARE(m_app->m_windowJumps.at(4)->data().toString(), QString("Build"));
-    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_5));
+    QCOMPARE(m_app->m_windowJumps.at(4)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_4));
 
     // Away from Build, Folders, Palettes: the menu lands on Scenes ▸ Classic.
     m_app->showContext("Virtual Console");
@@ -549,7 +550,8 @@ void AppViews_Test::theRunTabIsTheCueRunner()
         if (a->data().toString() == QLatin1String("Run"))
             jump = a;
     QVERIFY(jump != nullptr);
-    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+0"));
+    // The qlcconsole view's ninth tab (Q69).
+    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+9"));
     jump->trigger();
     QWidget *page = m_app->m_tab->currentWidget();
     CueRunner *runner = qobject_cast<CueRunner *>(page);
@@ -557,10 +559,10 @@ void AppViews_Test::theRunTabIsTheCueRunner()
     QCOMPARE(runner->runnerSize(), CueRunner::Full);
     QCOMPARE(runner->follow(), ShowTree::invalidId());    // the current production
     QCOMPARE(page->property("helpTopic").toString(), QString("show-tree.md#the-cue-runner"));
-    // The others keep their keys (⇧⌘9 is still Simple Desk).
+    // The others are numbered by the view too (⇧⌘8 is Simple Desk).
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == QLatin1String("Simple Desk"))
-            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+9"));
+            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+8"));
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
@@ -1524,6 +1526,72 @@ void AppViews_Test::aJumpToAHiddenTabShowsEverything()
     QCOMPARE(m_app->workspaceView(), App::EverythingView);
     m_app->setWorkspaceView(App::ConsoleView);
     m_app->hide();
+    m_app->doc()->resetModified();
+}
+
+/* The Window menu's tab jumps as shown: label and shortcut, in menu order,
+   up to the Rig Overview; "|" marks the line before the hidden tabs. */
+static QStringList windowJumpsAsShown(App *app)
+{
+    app->updateWindowMenu();
+    QMenu *menu = app->menuBar()->findChild<QMenu *>("windowMenu");
+    QStringList out;
+    if (menu == nullptr)
+        return out;
+    foreach (QAction *a, menu->actions())
+    {
+        if (a == app->m_rigOverviewAction)
+            break;
+        if (a->isSeparator())
+        {
+            if (a->objectName() == "windowHiddenTabs" && a->isVisible())
+                out << "|";
+            continue;
+        }
+        const QString key = a->shortcut().toString(QKeySequence::PortableText);
+        out << (key.isEmpty() ? a->text() : a->text() + " " + key.right(1));
+    }
+    return out;
+}
+
+void AppViews_Test::windowShortcutsFollowTheView()
+{
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(windowJumpsAsShown(m_app),
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Build 4",
+                           "Show Tree 5", "Shows 6", "Virtual Console 7", "Simple Desk 8", "Run 9",
+                           "|", "Functions" }));
+
+    m_app->setWorkspaceView(App::ClassicView);
+    QCOMPARE(windowJumpsAsShown(m_app),
+             QStringList({ "Fixtures 1", "Functions 2", "Shows 3", "Virtual Console 4",
+                           "Simple Desk 5", "Inputs/Outputs 6",
+                           "|", "Lighting Studio", "Build", "Show Tree", "Run" }));
+    // ⇧⌘1 is the first tab on screen, and it goes there.
+    QAction *first = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_1))
+            first = a;
+    QVERIFY(first != nullptr);
+    first->trigger();
+    QCOMPARE(m_app->m_tab->currentWidget(), static_cast<QWidget *>(FixtureManager::instance()));
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+
+    m_app->setWorkspaceView(App::EverythingView);
+    QCOMPARE(windowJumpsAsShown(m_app),
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Functions 4",
+                           "Build 5", "Show Tree 6", "Shows 7", "Virtual Console 8",
+                           "Simple Desk 9", "Run 0" }));
+
+    // A tab in a window of its own keeps its number.
+    m_app->setWorkspaceView(App::ConsoleView);
+    QTabWidget *tabs = m_app->m_tab;
+    m_app->slotDetachContext(tabs->indexOf(ShowManager::instance()));
+    QStringList shown = windowJumpsAsShown(m_app);
+    QCOMPARE(shown.value(5), QString("Shows — in its own window 6"));
+    QCOMPARE(shown.value(6), QString("Virtual Console 7"));
+    reattach(m_app, "Shows");
+    QCOMPARE(windowJumpsAsShown(m_app).value(5), QString("Shows 6"));
     m_app->doc()->resetModified();
 }
 

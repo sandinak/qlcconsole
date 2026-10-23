@@ -515,7 +515,7 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
-    /** Window → Functions (⇧⌘4): the Functions tab when it is shown
+    /** Window → Functions: the Functions tab when it is shown
      *  (setFunctionsWindowShown()); otherwise Build ▸ Scenes ▸ Classic, the
      *  list focused. */
     void showFunctions();
@@ -548,6 +548,10 @@ public slots:
     void reattachAllContexts();
     /** The Window menu, as things are: which views are in their own windows. */
     void updateWindowMenu();
+    /** The Window menu's tab jumps in the view's order, numbered by it:
+     *  ⇧⌘1 is the first tab the view shows, ⇧⌘0 the tenth. Tabs the view
+     *  hides follow, with no shortcut. Run on every view change (Q69). */
+    void updateWindowJumps();
 
     void slotDetachContext(int index);
 
@@ -595,7 +599,10 @@ private:
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
     QAction* m_rigOverviewAction;
-    QList<QAction *> m_windowJumps;         ///< Window menu: a view each
+    QList<QAction *> m_windowJumps;         ///< Window menu: a view each (Everything's order)
+    QMenu *m_windowMenu = nullptr;
+    QAction *m_windowHiddenSeparator = nullptr;  ///< Window menu: before the view's hidden tabs
+    QAction *m_windowJumpsEnd = nullptr;         ///< Window menu: after the last tab jump
     QMenu *m_windowDockMenu = nullptr;      ///< Window > Put Back in Main Window
     QAction *m_windowDockAll = nullptr;
     QAction *m_windowBreakOut = nullptr;    ///< Window > Move <view> to Its Own Window

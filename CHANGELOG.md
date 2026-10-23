@@ -165,7 +165,7 @@ circuits and subs.
 
 ### Changed
 - **The Functions window lives in Build ▸ Scenes ▸ Classic** in the
-  qlcconsole view: **Window ▸ Functions** (⇧⌘4) opens it, and new
+  qlcconsole view: **Window ▸ Functions** opens it, and new
   functions of every type, the Function Wizard and the startup function
   are on **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab.
 - **File ▸ Import is a submenu** of source types — *From a show file*:
@@ -187,6 +187,11 @@ circuits and subs.
 - **The boot window shows the version**, build and commit.
 - **The Lighting Studio plot draws a pixel fixture's heads where its LED
   layout puts them.**
+- **Tab shortcuts follow the view.** ⇧⌘1, ⇧⌘2… number the tabs the
+  current workspace view shows, in its order (⇧⌘0 the tenth), and
+  renumber when the view changes; the Window menu lists them so, then the
+  hidden tabs with no shortcut. In Classic QLC+, Fixtures is ⇧⌘1; in
+  qlcconsole the Show Tree is ⇧⌘5 and Run ⇧⌘9 (they were ⇧⌘6 and ⇧⌘0).
 - **Settings ▸ Appearance.** Theme, toolbar style, the four footer chips
   (engine load, power estimate, grand master, speed masters) and the speed
   masters' beat moved out of the View menu into a new Appearance tab in

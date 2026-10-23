@@ -103,7 +103,7 @@ much light there is in the room.
 
 7. Set **Room** back to **House**, and arrange the Rig Overview so you can
    see it beside the main window.
-8. In the main window, click the **Run** tab at the bottom (⇧⌘0).
+8. In the main window, click the **Run** tab at the bottom (⇧⌘9).
 9. Press **GO** (or **Space**) and watch the stage. Press it twice more,
    for three cues in all.
    - *You should see:* first the cyc turns **blue**, then the risers are

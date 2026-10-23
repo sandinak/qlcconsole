@@ -1,6 +1,6 @@
 # Show Tree
 
-The Show Tree tab (beside Build, **⇧⌘6**) is where you write a show
+The Show Tree tab (beside Build; **⇧⌘5** in the qlcconsole view) is where you write a show
 as cues. Everything is in one tree:
 
 **Production → Cue list → Cue → Layer**
@@ -1760,7 +1760,7 @@ strobe inside a chorus.
 
 ## The cue runner
 
-The **Run** tab (**⇧⌘0**) is the operator's view of a production: big
+The **Run** tab (**⇧⌘9** in the qlcconsole view) is the operator's view of a production: big
 targets, keyboard GO, nothing else to bump. The **Cue Runner** Virtual
 Console widget is the same runner on a VC page.
 
@@ -1923,8 +1923,8 @@ and *MIB · n* counts the lights a list set **On** is moving.
 
 | Keys / mouse | Does |
 |---|---|
-| ⇧⌘6 | Bring the Show Tree forward |
-| ⇧⌘0 | Bring the **Run** tab forward |
+| ⇧⌘5 | Bring the Show Tree forward (the qlcconsole view; ⇧⌘6 in Everything) |
+| ⇧⌘9 | Bring the **Run** tab forward (the qlcconsole view; ⇧⌘0 in Everything) |
 | ⌘↩ / ⌘⇧↩ | GO / Back: the current production's main list |
 | ⌥⌘↩ / ⌥⌘⇧↩ | Sub GO / Sub Back |
 | **Space** (in the Run tab) | GO, for the list the Run tab plays |

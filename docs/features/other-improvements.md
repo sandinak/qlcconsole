@@ -386,10 +386,14 @@ try it on your own devices before relying on it for a show.
 
 ## Window menu
 
-Every tab is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
-Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Build, ⇧⌘6 Show
-Tree, ⇧⌘7 Shows, ⇧⌘8 Virtual Console, ⇧⌘9 Simple Desk, ⇧⌘0 Run):
-choosing one brings it forward — its
+Every tab is in **Window**. The tabs the [workspace view](getting-started.md#views)
+shows come first, in its order, numbered as they are on screen: ⇧⌘1 is
+the first tab, ⇧⌘0 the tenth. In the qlcconsole view that is ⇧⌘1
+Connections, ⇧⌘2 Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Build, ⇧⌘5 Show
+Tree, ⇧⌘6 Shows, ⇧⌘7 Virtual Console, ⇧⌘8 Simple Desk, ⇧⌘9 Run; in
+Classic QLC+, ⇧⌘1 Fixtures … ⇧⌘6 Inputs/Outputs. They renumber when the
+view changes. The tabs the view hides follow, with no shortcut.
+Choosing one brings it forward — its
 tab, or its own window when it has been broken out (right-click a tab →
 **Open in Its Own Window**, Shift-click it, or **Move … to Its Own
 Window**),
@@ -403,7 +407,7 @@ a line above the tabs to go back; see
 
 **Functions is Build ▸ Scenes ▸ Classic.** The qlcconsole view doesn't show
 Functions as a tab (the Classic QLC+ and Everything views do). There,
-**Window ▸ Functions** (⇧⌘4) brings Build forward with the
+**Window ▸ Functions** brings Build forward with the
 Scenes outline set to **Classic** — every function by type, as the
 Function Manager listed them — and the list focused; in a view that shows
 Functions as a tab it opens that. In Build each function opens

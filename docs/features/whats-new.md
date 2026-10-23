@@ -62,11 +62,17 @@ their house lights, relays and subs.
   QLC+ show opens in Classic QLC+; everything else, and a new show, in
   qlcconsole. Choosing a hidden tab from the Window menu shows Everything,
   with a way back. See [Views](getting-started.md#views).
-- **Functions.** In the qlcconsole view, **Window ▸ Functions** (⇧⌘4)
+- **Functions.** In the qlcconsole view, **Window ▸ Functions**
   opens Build ▸ Scenes ▸ Classic, every function by type, each edited in
   the Workbench; new functions of any type and the Function Wizard are on
   **+ Scene ▾**. Classic QLC+ and Everything keep Functions as a tab. See
   [Coming from the Functions window](build.md#coming-from-the-functions-window).
+- **⇧⌘1… follow the tabs on screen.** The Window menu numbers the view's
+  tabs in the order you see them, so ⇧⌘1 is always the first tab: in
+  Classic QLC+ that is Fixtures, in qlcconsole Connections (the Show Tree
+  is ⇧⌘5 and Run ⇧⌘9 there). Change the view and they renumber. Tabs the
+  view hides come after, with no shortcut. See
+  [Keyboard and mouse](shortcuts.md).
 - **Settings ▸ Appearance.** The theme, the toolbar style, which chips
   the footer shows and how the speed masters show their beat are in a new
   **Appearance** tab in Settings, out of the View menu; your choices carry

@@ -82,7 +82,7 @@ On the projector:
 5. **View: Top**: "This is the plan, seen from above. Stage right is on the
    left of the picture, downstage at the bottom." **View: Front**, then
    back to **45°**.
-6. **Room: House**. Click the **Run** tab (⇧⌘0) and press **GO** once:
+6. **Room: House**. Click the **Run** tab (⇧⌘9) and press **GO** once:
    the cyc turns blue. "That's a **cue**. You'll make this in Lesson 1.1."
 
 ## 3. Hands-on (20 min)
