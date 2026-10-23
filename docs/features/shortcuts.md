@@ -105,8 +105,8 @@ leave. See [Focus mode](lighting-studio.md#focus-mode).
 
 | Keys | Does |
 |---|---|
-| ⌘N | Add a universe (Detailed tab) |
-| ⌘D | Delete the selected universe (Detailed tab) |
+| ⌘N | Add a universe (Universes tab) |
+| ⌘D | Delete the selected universe (Universes tab) |
 | ⌘Z | Undo the last patch change (any of the three tabs) |
 
 ## Fixtures

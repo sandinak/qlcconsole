@@ -94,7 +94,8 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     layout()->setSpacing(0);
 
     // Two views: a spreadsheet "Overview" of the whole patch (inline-editable),
-    // and the classic per-universe "Detailed" editor (list + patch editor).
+    // and the classic per-universe "Universes" editor (list + patch editor,
+    // QLC+'s own Inputs/Outputs page; was "Detailed").
     m_ioTabs = new QTabWidget(this);
     layout()->addWidget(m_ioTabs);
 
@@ -114,7 +115,8 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     detailedLay->setContentsMargins(0, 0, 0, 0);
     m_splitter = new QSplitter(Qt::Horizontal, detailed);
     detailedLay->addWidget(m_splitter);
-    m_ioTabs->addTab(detailed, tr("Detailed"));
+    detailed->setObjectName(QStringLiteral("ioUniversesPage"));
+    m_ioTabs->addTab(detailed, tr("Universes"));
 
     /* Everything outside that controls or clocks the show -- OSC and MSC
        cue commands, MIDI timecode -- next to the patch they arrive on.
@@ -555,6 +557,17 @@ void InputOutputManager::slotMappingChanged()
     }
     // A universe given an output (or losing one) changes the footer.
     AppUtil::updateFixtureReadiness(m_doc);
+}
+
+void InputOutputManager::showStartPage(bool classic)
+{
+    if (classic)
+    {
+        if (QWidget *w = m_ioTabs->findChild<QWidget *>(QStringLiteral("ioUniversesPage")))
+            m_ioTabs->setCurrentWidget(w);
+    }
+    else
+        m_ioTabs->setCurrentWidget(m_devicesTree);
 }
 
 void InputOutputManager::selectUniverse(quint32 universe)

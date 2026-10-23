@@ -73,12 +73,12 @@
 #define protected public
 #include "virtualconsole.h"
 #include "fixturemanager.h"
+#include "inputoutputmanager.h"
 #undef protected
 #undef private
 #include "helpbrowser.h"
 #include "simpledesk.h"
 #include "showmanager.h"
-#include "inputoutputmanager.h"
 #include "showconverter.h"
 #include <QToolButton>
 #include "inputoutputmap.h"
@@ -551,8 +551,14 @@ void AppViews_Test::classicLooksLikeQlcPlus()
         QVERIFY(m_app->grab().save(shots + "/classic-functions.png"));
     }
 
-    // Back in qlcconsole: none of it.
+    // Connections opens on QLC+'s own Universes page in Classic...
+    InputOutputManager *io = InputOutputManager::instance();
+    QVERIFY(io != nullptr);
+    QCOMPARE(io->m_ioTabs->tabText(io->m_ioTabs->currentIndex()), QString("Universes"));
+
+    // Back in qlcconsole: none of it, and Connections opens on Devices.
     m_app->setWorkspaceView(App::ConsoleView);
+    QCOMPARE(io->m_ioTabs->tabText(io->m_ioTabs->currentIndex()), QString("Devices"));
     QVERIFY(main->isHidden());
     for (QAction *a : fm->m_classicToolbarActions)
         QVERIFY(!a->isVisible());

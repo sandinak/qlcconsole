@@ -3963,6 +3963,9 @@ void App::applyClassicChrome()
         fm->setClassicToolbar(classic);
     if (FunctionManager *fn = FunctionManager::instance())
         fn->setClassicToolbar(classic);
+    // Connections opens on QLC+'s own page in Classic, Devices otherwise.
+    if (InputOutputManager *io = InputOutputManager::instance())
+        io->showStartPage(classic);
 
     // The footer: the mode, the Grand Master and Ready only.
     if (m_statusLoadLabel != NULL)

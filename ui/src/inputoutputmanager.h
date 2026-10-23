@@ -58,6 +58,10 @@ public:
     /** Get the singleton instance */
     static InputOutputManager* instance();
 
+    /** Which sub-tab opens with the view: Classic QLC+ the stock QLC+ page
+     *  (Universes), the others Devices. */
+    void showStartPage(bool classic);
+
     /** Select @p universe in the list, showing its patch. */
     void selectUniverse(quint32 universe);
 

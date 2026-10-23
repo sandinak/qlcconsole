@@ -9,8 +9,10 @@ Smaller fork-specific features that don't need a full guide of their own.
 The Connections tab reworks stock QLC+'s I/O patching into one place that
 answers "how is this console actually wired," following the signal outward:
 **protocol → interface → devices heard on it → the universes they carry.**
-Three sub-tabs — **Devices** (shown above), **Overview**, and **Detailed** —
-give the same information at different levels of depth. A fourth, **Show
+Three sub-tabs — **Devices** (shown above), **Overview**, and **Universes**
+(QLC+'s own Inputs/Outputs page) — give the same information at different
+levels of depth. Classic QLC+ opens on **Universes**; the other views on
+**Devices**. A fourth, **Show
 control &amp; sync**, holds what controls or clocks the show from outside:
 OSC and MIDI Show Control cue commands in, MIDI timecode with its sync
 health, and a place for QLab out — see

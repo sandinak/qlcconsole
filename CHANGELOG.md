@@ -169,6 +169,10 @@ circuits and subs.
 
 ### Changed
 
+- **Connections opens where you'd look for it**: in Classic QLC+ on its
+  **Universes** sub-tab (QLC+'s own Inputs/Outputs page, was "Detailed"),
+  in the other views on **Devices**.
+
 - **One word per idea, part 2** (board Q77): the Show Tree's busking
   **Looks** are now **Hits** (+ Hit, the Hits section, Adopt as a hit, Copy
   to a hit, `hit "name"` — `look` still works); a layer's looks are
