@@ -1108,16 +1108,93 @@ void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()
 
     // Move a cue (dragged onto another): the list's order and its chaser follow.
     const quint32 c2 = st->addCue(list, 0, "Two");
-    QCOMPARE(view.cueDropHint(c2, c1, false), QString("Move 2 Two to 1 One's place"));
+    QCOMPARE(view.cueDropHint(c2, c1, false), QString("Move 2 Two before 1 One, as 0.5"));
     QVERIFY(view.dropCue(c2, c1, false));
     QCOMPARE(st->cueList(list)->cues.first().id, c2);
     const Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
     QCOMPARE(chaser->steps().first().fid, st->cue(c2)->collection);
     // With Alt: an include.
-    QCOMPARE(view.cueDropHint(c2, c1, true), QString("1 One includes 2 Two"));
+    QCOMPARE(view.cueDropHint(c2, c1, true), QString("1 One includes 0.5 Two"));
     QVERIFY(view.dropCue(c2, c1, true));
     QCOMPARE(st->cue(c1)->includes, QList<quint32>({ c2 }));
     QVERIFY(!view.dropCue(c2, c2, false));
+}
+
+/* Reordering and numbering (docs/features/show-tree.md): a list's order is
+   its numbers' order. */
+void ShowTreeView_Test::cuesReorderAndRenumber()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    const quint32 c4 = st->addCue(list, 2, "Four");
+    auto numbers = [st, list]() {
+        QStringList out;
+        const CueList *l = st->cueList(list);
+        for (int i = 0; i < l->cues.count(); ++i)
+            out << st->cueNumber(*l, i);
+        return out;
+    };
+    ShowTreeView view(nullptr, m_doc);
+
+    // Typed in the cue's Number: it moves to its place, still selected.
+    QVERIFY(view.selectNode(c1));
+    QLineEdit *number = view.findChild<QLineEdit *>("stCueNumber");
+    number->setText("3.5");
+    emit number->editingFinished();
+    QCOMPARE(numbers(), QStringList({ "2", "3", "3.5", "4" }));
+    QCOMPARE(view.currentCueId(), c1);
+    QCOMPARE(number->text(), QString("3.5"));
+    QVERIFY(st->undo());
+    QCOMPARE(numbers(), QStringList({ "1", "2", "3", "4" }));
+
+    // Inline, as the row reads: "2.5 Fog" -- number and name, one step.
+    QVERIFY(view.renameCue(c4, "2.5", "Fog"));
+    QCOMPARE(st->cueList(list)->cues.at(2).id, c4);
+    QCOMPARE(st->cue(c4)->name, QString("Fog"));
+    QCOMPARE(view.currentCueId(), c4);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c4)->name, QString("Four"));
+    QCOMPARE(st->cue(c4)->number, QString("4"));
+
+    // Dragged: before or after a row, numbered for its new place; the
+    // hint says the number first.
+    bool refused = true;
+    QCOMPARE(view.cuesDropHint({ c4 }, c2, true, &refused), QString("Move 4 Four after 2 Two, as 2.5"));
+    QVERIFY(!refused);
+    QVERIFY(view.dropCues({ c4 }, c2, true));
+    QCOMPARE(numbers(), QStringList({ "1", "2", "2.5", "3" }));
+    QCOMPARE(view.currentCueId(), c4);
+    // A block keeps its order and stays selected.
+    QCOMPARE(view.cuesDropHint({ c1, c2 }, c3, true), QString("Move 2 cues after 3 Three, as 4, 5"));
+    QVERIFY(view.dropCues({ c2, c1 }, c3, true));
+    QCOMPARE(numbers(), QStringList({ "2.5", "3", "4", "5" }));
+    QCOMPARE(st->cueList(list)->cues.at(2).id, c1);
+    QCOMPARE(view.selectedCues().count(), 2);
+    QVERIFY(st->undo());
+    QCOMPARE(numbers(), QStringList({ "1", "2", "2.5", "3" }));
+
+    // No room: refused, and the hint says so.
+    Cue three = *st->cue(c3);
+    three.number = "2.5.0.0.1";
+    QVERIFY(st->setCue(three));
+    QString why;
+    const QString hint = view.cuesDropHint({ c1 }, c4, true, &refused);
+    QVERIFY(refused);
+    QVERIFY(hint.contains("Renumber this level"));
+    QVERIFY(!view.dropCues({ c1 }, c4, true, &why));
+    QCOMPARE(why, hint);
+
+    // Renumber this level (no dialog here), from 1 in twos: 1, 3; the point
+    // cues under 2 follow it (2.5 -> 3.5).
+    QVERIFY(!view.renumberLevel(c2, 1, 1, false));          // so already
+    QVERIFY(view.renumberLevel(c2, 1, 2, false));
+    QCOMPARE(numbers(), QStringList({ "1", "3", "3.5", "3.5.0.0.1" }));
+    QCOMPARE(st->undoText(), QString("Renumber this level"));
+    QVERIFY(st->undo());
+    QCOMPARE(numbers(), QStringList({ "1", "2", "2.5", "2.5.0.0.1" }));
 }
 
 void ShowTreeView_Test::theLookEditorEditsARowsPalette()
@@ -2595,7 +2672,8 @@ void ShowTreeView_Test::severalRowsSelectedDeleteAndDrag()
     }
     QVERIFY(st->cueList(list) != nullptr && st->cue(c2) != nullptr);
 
-    // Two cues dragged onto a third: refused, and the hint says why.
+    // Two cues dragged with Alt (include) onto a third: refused, and the
+    // hint says why.
     QMimeData *mime = new QMimeData();
     QByteArray data;
     {
@@ -2605,18 +2683,43 @@ void ShowTreeView_Test::severalRowsSelectedDeleteAndDrag()
     mime->setData(ShowTreeView::cueMimeType(), data);
     QTreeWidgetItem *onto = rowOf(tree, ShowTreeView::CueNode, c3);
     tree->scrollToItem(onto);
-    const QPoint at = tree->visualItemRect(onto).center();
+    const QRect rect = tree->visualItemRect(onto);
+    const QPoint at(rect.center().x(), rect.top() + rect.height() * 3 / 4);     // its lower half: after it
+    {
+        QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::AltModifier);
+        QCoreApplication::sendEvent(tree->viewport(), &enter);
+        QDragMoveEvent move(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::AltModifier);
+        QCoreApplication::sendEvent(tree->viewport(), &move);
+        QVERIFY(!move.isAccepted());
+        QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("one cue at a time"));
+        QDropEvent drop(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::AltModifier);
+        QCoreApplication::sendEvent(tree->viewport(), &drop);
+        QCOMPARE(st->cueList(list)->indexOf(c1), 0);
+        QCOMPARE(st->cueList(list)->indexOf(c2), 1);
+        QCOMPARE(st->cueList(list)->indexOf(c3), 2);
+        QVERIFY(st->cue(c3)->includes.isEmpty());
+    }
+
+    // Without Alt they move as a block after it, renumbered; the hint says
+    // where and as what first.
+    const QString c3Number = st->cue(c3)->number;
     QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &enter);
     QDragMoveEvent move(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &move);
-    QVERIFY(!move.isAccepted());
-    QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("one cue at a time"));
+    QVERIFY(move.isAccepted());
+    QVERIFY(view.findChild<QLabel *>("stDropHint")->text().startsWith("Move 2 cues after"));
     QDropEvent drop(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &drop);
-    QCOMPARE(st->cueList(list)->indexOf(c1), 0);
-    QCOMPARE(st->cueList(list)->indexOf(c2), 1);
-    QCOMPARE(st->cueList(list)->indexOf(c3), 2);
+    QCOMPARE(st->cueList(list)->indexOf(c3), 0);
+    QCOMPARE(st->cueList(list)->indexOf(c1), 1);
+    QCOMPARE(st->cueList(list)->indexOf(c2), 2);
+    QCOMPARE(st->cue(c3)->number, c3Number);
+    QVERIFY(compareCueNumbers(st->cue(c1)->number, c3Number) > 0);
+    QVERIFY(compareCueNumbers(st->cue(c2)->number, st->cue(c1)->number) > 0);
+    QVERIFY(st->undo());
+    // Onto a cue (dropCue): before it moving up, as the drag's upper half.
+    QCOMPARE(view.cueDropHint(c3, c1, false), view.cuesDropHint({ c3 }, c1, false));
     delete mime;
 }
 

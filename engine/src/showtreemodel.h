@@ -522,9 +522,24 @@ namespace ShowTree
 
     /** The number for a cue inserted after @a afterIndex (-1: at the top):
      *  the next whole number in the last place if free, else a point cue
-     *  between its neighbours. Never renumbers. */
+     *  between its neighbours (numberBetween()). Never renumbers. */
     QLC_ENGINE_EXPORT QString numberForInsert(const CueList &list, int afterIndex,
                                               const QStringList &taken = QStringList());
+    /** D23's rule for a number between @a prev and @a next (either empty: the
+     *  top or the end of the list), none of @a used: prev with its last
+     *  place + 1 if that fits ("2" -> "3"); else a point cue one level down,
+     *  trying 5, 6, 7, 8, 9, 1, 2, 3, 4 ("2" .. "3" -> "2.5", "2" .. "2.5"
+     *  -> "2.1"); else the same below prev.0, at most three levels below
+     *  prev ("2" .. "2.1" -> "2.0.5"). At the top: one less in the first's
+     *  last place while that stays 1 or more ("5" -> "4", "0.0.3" ->
+     *  "0.0.2"); else the first cut short, ending 1 or more ("2.1" -> "2");
+     *  else the rule above after the first with its last place that isn't
+     *  0 one less ("1" -> "0.5", "0.0.1" -> "0.0.0.5"). Empty: none fits.
+     *  + Cue and a dragged cue both number with it. */
+    QLC_ENGINE_EXPORT QString numberBetween(const QString &prev, const QString &next,
+                                            const QStringList &used = QStringList());
+    /** Digits and dots: "4", "0.0.4", "2.5". */
+    QLC_ENGINE_EXPORT bool isCueNumber(const QString &number);
     /** A cue's number as a person (and show control) reads it: its own, else
      *  its position; a sub-cue's is its cue's and its own, "4.1" (P6). */
     QLC_ENGINE_EXPORT QString cueNumberAt(const CueList &list, int index, const QString &parentNumber = QString());

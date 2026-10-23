@@ -1089,8 +1089,105 @@ usual.
 Record and Duplicate number the new cue as + Cue does. + Cue goes after the
 selected cue and counts up its last number when that is free (1.0.0 →
 1.0.1). Otherwise it makes a point cue: with 0.0.4 and 0.0.5 taken, you get
-0.0.4.5. **Cues are never renumbered**, because show control fires them by
-number. You can type a number into a cue's **Number** field yourself.
+0.0.4.5. **Cues are never renumbered unless you ask** (**Renumber this
+level…**, below), because show control fires them by number. You can type a
+number into a cue's **Number** field yourself; the cue then moves to its
+place, as [Reordering and numbering](#reordering-and-numbering) says.
+
+## Reordering and numbering
+
+A cue list's order is always its cue numbers' order, compared level by
+level as numbers (0.0.4 < 0.0.4.5 < 0.0.5 < 0.0.10). So a number and a place
+are one thing: change one and the other follows.
+
+**Typing a number moves the cue.** Change a cue's number in its **Number**
+field, or rename its row in place (**F2**: the row opens as it reads, *2.5
+Fog*, so you can change the number, the name or both). The cue moves to its
+place in the list at once and stays selected. Number and name together are
+one undo step. A number another cue of the list has is refused, with a
+message naming that cue. So is a sub-cue's number: 4.1 is sub-cue 1 of cue
+4, and a main cue numbered 4.1 would hide it from show control. So is a
+number that would put the cue's own sub-cues on another cue's number.
+Numbers are digits and dots only.
+
+**Dragging a cue renumbers it.** Drag cues up or down within their list.
+Drop on the upper half of a row to go before it, on the lower half to go
+after it. The hint at the top right says where they go and the number they
+will get, for example *Move 4 Fog after 2 Bump, as 2.5*. The dropped cue is
+numbered between its new neighbours by the same rule **+ Cue** uses, and no
+other cue is renumbered:
+
+1. The cue before it with its last place counted up, if that is still below
+   the cue after it and free: dropped after 2, before 5 → **3**. Dropped
+   after the last cue → its last place + 1 (after 4.5 → **4.6**).
+2. Otherwise a point cue one level down from the cue before, trying .5,
+   .6, .7, .8, .9, then .1, .2, .3, .4: between 2 and 3 → **2.5**; between
+   2 and 2.5 → **2.1**; between 1.0.2 and 1.0.3 → **1.0.2.5**.
+3. Otherwise the same from one more level down, up to three levels below
+   the cue before: between 2 and 2.1 → **2.0.5**.
+4. Dropped above the first cue: one less in its last place while that stays
+   1 or more (above 5 → **4**, above 0.0.3 → **0.0.2**); else the first
+   number cut short (above 2.1 → **2**); else a point cue just under it
+   (above 1 → **0.5**, above 0.0.1 → **0.0.0.5**).
+
+A number a sub-cue already answers to is skipped (with sub-cues 4.1 to 4.5,
+a cue dropped between 4 and 4.6 becomes 4.0.5). If nothing fits three levels
+down, the drop is refused and the hint says to use **Renumber this level…**
+first. **Move up** and **Move down** on a cue's right-click menu renumber in
+the same way.
+
+Several selected cues dragged together move as a block. They keep their
+order, and each is numbered in turn after the one before it (three cues
+after 3, at the end: 4, 5, 6). They stay selected. Holding **⌥** still
+makes the cue you drop on include the dragged one; that takes one cue at a
+time.
+
+**Renumber this level…** (right-click a cue) renumbers the cues at that
+cue's level: the ones with the same number of places and everything before
+the last place the same. With 1.0.0, 1.0.1, 1.0.1.5 and 1.0.4, the level of
+1.0.1 is 1.0.0, 1.0.1 and 1.0.4. They become 1, 2, 3… in the last place, in
+list order, or from **Start** in steps of **Step** (from 10 in tens: 1.0.10,
+1.0.20…). A point cue under one of them keeps its own places under its
+cue's new number (1.0.1.5 → 1.0.2.5 when 1.0.1 becomes 1.0.2), and sub-cues
+follow their cue (1.0.4.1 → 1.0.3.1). Right-click the point cue itself to
+renumber the points at its level. The dialog lists every number that
+changes before you press OK. A renumber that would make two cues share a
+number or put the level out of order with the cues around it is refused.
+
+**What follows a new number.** Inside the tree, cues refer to each other by
+the cue itself, not its number: includes, the base cue, sub-cues and
+reusable cues all follow. The cue list's chaser, its steps' cue numbers and
+the collections' names (*2.5-Fog*) are made again straight away. So the Run
+tab, the VC Cue Runner and Cue List, the **Cue** menu's Load, the command
+line's `goto` and show control (OSC, MSC, QLab) see the new number at once.
+A cue LOADed on standby by show control stays loaded when it moves. The show
+itself stores no cue number anywhere else. Anything **outside** the show
+that fires cues by number will fire whatever now has that number: a QLab
+cue, a desk's macros, a MIDI or OSC controller. If OSC or MSC is listening
+(Show control settings), **Renumber this level…** lists the numbers that
+change and asks before it renumbers.
+
+**Tracking follows the new order.** A cue tracks from the cue before it in
+the list. A cue that moves therefore starts from its new neighbour's state,
+and the cue after its old place now starts from the cue that was before it.
+What a moved cue sets itself is unchanged. What it receives by tracking, and
+what it passes on, are now those of its new place. This is expected; check
+the tracked values (**Tracked in**, the ⤳ counts) after a move.
+
+**Undo.** Every move, typed number and renumber is one step on the tab's
+shared undo history, whatever it changed.
+
+**Operate.** These edits work in Operate as other tree edits do: they are
+blind. The running list picks up the new order and numbers at the next
+GO.
+
+**Older shows.** Numbers are saved as typed (`Number="2.5"`,
+`Number="0.0.4.5"`), so point cues round-trip, and a show saved before this
+loads as it was. Nothing is re-sorted or renumbered on load. A list whose
+cues are out of number order stays so until you move or renumber a cue in
+it. A cue with no number answers to its position. The first move or
+renumber in its list gives it that number to keep, so it doesn't change
+under you.
 
 ## Seeing it on the rig
 
@@ -1394,7 +1491,8 @@ Right-click in the tree for:
   folder**, **Make VC page**; on a look: **Move to folder**, **Make VC
   page**;
 - on a cue: **Make the base cue**, **Include cue**, **Mode**, **Record as new
-  cue**, **Duplicate cue**, **Move up** / **Move down**;
+  cue**, **Duplicate cue**, **Move up** / **Move down**, **Renumber this
+  level…** ([Reordering and numbering](#reordering-and-numbering));
 - on a cue: **Make cue reusable…** (or, on a use, **Unlink here**);
 - on a layer: **Rename…**, **Detach to plain scene**, **Make reusable…** (or
   **Unlink here**), **Add child layer**, **Split layer**, **Merge layers**,
@@ -1430,10 +1528,11 @@ focus in it, a cue there follows the same rules. A collection or chaser you
 opened there with **▣ Open** gets the Workbench's own ⇧⌘N, as in
 [Build](build.md#new-here).
 
-**Moving cues.** Drag a cue onto another cue of its list to move it there;
-its number stays. With **⌥** held, the drop makes the other cue include it
-instead. One cue at a time: several selected cues dragged together are
-refused, and the top right says so.
+**Moving cues.** Drag cues up or down in their list: before a row (its upper
+half) or after it (its lower half). Each dropped cue is renumbered for its
+new place, and several move as a block ([Reordering and
+numbering](#reordering-and-numbering)). With **⌥** held, the drop makes the
+other cue include it instead (one cue at a time).
 
 **Deleting.** **Delete** (or Backspace) in the tree deletes the selected cue
 or layer at once. With several cues and layers selected, they all go, in one
@@ -1828,7 +1927,7 @@ and *MIB · n* counts the lights a list set **On** is moving.
 | **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
-| Drag a cue onto another cue | Move it there; with **⌥**, include it |
+| Drag cues up or down (before / after a row) | Move them there, renumbered for their place ([Reordering and numbering](#reordering-and-numbering)); with **⌥**, include it |
 | Click / **⌘-click** / **⇧-click** (in the tree) | Select a row / add or remove one / take the rows between |
 | Delete / Backspace (in the tree) | Delete the selected cues and layers, one undo step (a list or production asks) |
 | **F2** (in the Library) | Rename the palette or palette folder in place |

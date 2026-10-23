@@ -520,42 +520,6 @@ bool ShowTreeController::removeCue(quint32 cueId)
     });
 }
 
-bool ShowTreeController::moveCue(quint32 cueId, int toIndex)
-{
-    return edit(tr("Move cue"), [&](QList<Production> &ps) {
-        CueList *l = nullptr;
-        if (cueIn(ps, cueId, &l) == nullptr)
-            return false;
-        const int from = l->indexOf(cueId);
-        toIndex = qBound(0, toIndex, int(l->cues.count()) - 1);
-        if (from == toIndex)
-            return false;
-        l->cues.move(from, toIndex);
-        return true;
-    });
-}
-
-bool ShowTreeController::setCue(const Cue &cue)
-{
-    return edit(tr("Edit cue"), [&](QList<Production> &ps) {
-        Cue *c = cueIn(ps, cue.id);
-        if (c == nullptr)
-            return false;
-        const quint32 coll = c->collection;
-        *c = cue;
-        c->collection = coll;
-        // Includes as given, less any that are gone or would loop (D8).
-        const QList<quint32> wanted = c->includes;
-        c->includes.clear();
-        CueList *l = nullptr;
-        cueIn(ps, cue.id, &l);
-        for (quint32 inc : wanted)
-            if (canInclude(*l, cue.id, inc))
-                c->includes << inc;
-        return true;
-    });
-}
-
 quint32 ShowTreeController::addLayer(quint32 cueId, const Target &target, const QString &name)
 {
     if (target.isEmpty())
