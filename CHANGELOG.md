@@ -51,6 +51,20 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   (`FixtureManager::sharedDefinitionSourceFile()`); a selection spanning
   several definitions shows a disabled "Edit Fixture Definition… (several
   definitions)". The single-fixture path is unchanged.
+- **Esc backs out of in-place editors.** `Workbench::backOut()` (Esc in
+  the Workbench, in Build's navigator via `ProgrammingManager::keyPressEvent`,
+  in the Show Tree via `ShowTreeView::keyPressEvent`) goes back one level:
+  a palette opened by `editPalette()` over another page returns to the
+  rows' page (new **↩ Back** on the Look Editor, `LookEditor::setBackText()`
+  / `backRequested()`); a group's layout to its scene (its **← Back** now
+  also shows with no scene to go back to); the effect bench is left as
+  clicking away leaves it, back to the scene it was opened from -- asking
+  first (*Keep designing* default / *Leave*, `Workbench::setConfirm()` for
+  tests) when `EffectDesigner::hasUnkeptChanges()`; else ↩
+  (`goBack()`, including the docked Show Tree's ↩ Show Tree). The Show
+  Tree's own Look Editor closes on Esc / **↩ Back**. Edits stay; inline
+  renames keep Esc to themselves; plain Esc is bound to no playback action
+  (Stop all is ⌘⇧Esc).
 - **Stage looks: Practicals.** A new `Fixture::PracticalSection`
   ("Practicals") holds Lantern and Staff. `LanternLook` is a practical (a
   hurricane / porch lantern): `stageLookSilhouette()` maps it to
@@ -587,6 +601,9 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   redraw as soon as a layout is saved.
 
 ### Fixed
+- The Look Editor's embedded colour picker (a `QColorDialog`) took Esc as
+  `reject()` and hid itself, leaving an empty colour page with no way to
+  get it back. Esc now goes on to the editor's host (back out).
 - **A Closed shutter look closes.** A Shutter palette resolved to the
   fixture's Open capability whenever it had one (and to 0, open, on a
   strobe-preset channel), whatever the look's value -- so *Closed* (and

@@ -574,6 +574,103 @@ static QAction *menuAction(QMenu *menu, const QString &objectName)
     return nullptr;
 }
 
+void EffectDesigner_Test::escLeavesTheBench()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Opened From");
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(towers->id());
+
+    EffectDesigner::plugIntoWorkbench();
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    pm.showFunction(scene->id());
+    Workbench *bench = pm.workbench();
+    QCOMPARE(bench->loadedFunction(), scene->id());
+
+    // The bench, opened with the scene loaded: it is where Esc goes back to.
+    QVERIFY(pm.designEffect(QLCPalette::invalidId()));
+    QPointer<EffectDesigner> ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
+    const quint32 draft = ed->draftId();
+    QVERIFY(m_doc->palette(draft) != nullptr);
+    QVERIFY(!bench->findChild<QWidget *>("workbenchColumn")->isVisible());
+    QTreeWidget *list = pm.findChild<QTreeWidget *>("buildEffects");
+    QVERIFY(list != nullptr);
+
+    QStringList asked;
+    bool answer = false;
+    bench->setConfirm([&asked, &answer](const QString &, const QString &text) {
+        asked << text;
+        return answer;
+    });
+
+    // Nothing designed yet: Esc leaves at once, nothing asked.
+    QVERIFY(!ed->hasUnkeptChanges());
+    ed->setFocus(Qt::OtherFocusReason);
+    QTest::keyClick(ed, Qt::Key_Escape);
+    QVERIFY(asked.isEmpty());
+    QTRY_VERIFY(ed.isNull());
+    QVERIFY(pm.effectDesigner() == nullptr);
+    QTRY_VERIFY(m_doc->palette(draft) == nullptr);      // as Cancel leaves it
+    QCOMPARE(bench->loadedFunction(), scene->id());
+    QCOMPARE(bench->currentPage(), Workbench::ScenePage);
+    QVERIFY(bench->findChild<QWidget *>("workbenchColumn")->isVisible());
+    QVERIFY(list->isVisible());                         // Build ▸ Effects as it was
+
+    // An effect designed and not kept: Esc asks first. Keep designing (the
+    // default, Esc's too) stays on the bench with the draft.
+    QVERIFY(pm.designEffect(QLCPalette::invalidId()));
+    ed = pm.effectDesigner();
+    QVERIFY(ed != nullptr);
+    QVERIFY(ed->pickEffect("Color Chase"));
+    QVERIFY(ed->hasUnkeptChanges());
+    const quint32 designed = ed->draftId();
+    answer = false;
+    QTest::keyClick(ed, Qt::Key_Escape);
+    QCOMPARE(asked, QStringList({ "Leave the effect designer? This effect hasn't been kept." }));
+    QCoreApplication::processEvents();
+    QVERIFY(!ed.isNull());
+    QCOMPARE(pm.effectDesigner(), ed.data());
+    QVERIFY(m_doc->palette(designed) != nullptr);
+    QCOMPARE(bench->currentPage(), Workbench::FunctionPage);
+    // Leave: gone, back to the scene.
+    answer = true;
+    QTest::keyClick(ed, Qt::Key_Escape);
+    QCOMPARE(asked.size(), 2);
+    QTRY_VERIFY(ed.isNull());
+    QTRY_VERIFY(m_doc->palette(designed) == nullptr);
+    QCOMPARE(bench->loadedFunction(), scene->id());
+
+    // Saved: kept, so Esc leaves without asking.
+    QVERIFY(pm.designEffect(QLCPalette::invalidId()));
+    ed = pm.effectDesigner();
+    QVERIFY(ed->pickEffect("Color Chase"));
+    QVERIFY(ed->saveAsPalette("Kept Chase") != QLCPalette::invalidId());
+    QTRY_VERIFY(pm.effectDesigner() != nullptr);
+    ed = pm.effectDesigner();
+    QVERIFY(!ed->hasUnkeptChanges());
+    asked.clear();
+    QTest::keyClick(ed, Qt::Key_Escape);
+    QVERIFY(asked.isEmpty());
+    QTRY_VERIFY(pm.effectDesigner() == nullptr);
+
+    // Clicking away is as it was: no question, the draft goes.
+    QVERIFY(pm.designEffect(QLCPalette::invalidId()));
+    ed = pm.effectDesigner();
+    QVERIFY(ed->pickEffect("Color Chase"));
+    QVERIFY(ed->hasUnkeptChanges());
+    const quint32 dropped = ed->draftId();
+    pm.showFunction(scene->id());
+    QVERIFY(asked.isEmpty());
+    QTRY_VERIFY(ed.isNull());
+    QTRY_VERIFY(m_doc->palette(dropped) == nullptr);
+    QCOMPARE(bench->loadedFunction(), scene->id());
+}
+
 void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
 {
     FixtureGroup *towers = group("Towers", 0, 3);

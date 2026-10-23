@@ -25,6 +25,7 @@
 #include <QIcon>
 #include <QSet>
 #include <QToolButton>
+#include <QKeyEvent>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDropEvent>
@@ -266,6 +267,14 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Name row: "Name:" label + editable QLineEdit
     QHBoxLayout *nameRow = new QHBoxLayout();
     nameRow->setContentsMargins(0, 0, 0, 0);
+    // ↩ Back: shown by a host that opened this over something (Esc too).
+    m_backButton = new QToolButton(this);
+    m_backButton->setObjectName(QStringLiteral("lookBack"));
+    m_backButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_backButton->setStyleSheet(QStringLiteral("QToolButton { color: #e0b44a; }"));
+    m_backButton->hide();
+    connect(m_backButton, &QToolButton::clicked, this, &LookEditor::backRequested);
+    nameRow->addWidget(m_backButton);
     QLabel *nameLbl = new QLabel(tr("Name:"), this);
     nameLbl->setObjectName("lookNameLabel");
     nameLbl->setMinimumWidth(44);
@@ -391,6 +400,9 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_colorDialog->setOptions(QColorDialog::NoButtons
                               | QColorDialog::DontUseNativeDialog);
     m_colorDialog->setWindowFlags(Qt::Widget);
+    // Embedded, a QDialog would take Esc to hide itself (reject()): the
+    // picker gone, nothing to bring it back. Esc goes on to the host.
+    m_colorDialog->installEventFilter(this);
     // Keep the picker compact so the look panel doesn't force the tab (and the
     // window) taller than short screens; it scrolls if the panel is short.
     m_colorDialog->setMinimumHeight(0);
@@ -1184,6 +1196,14 @@ void LookEditor::showEffectDetails()
 
 bool LookEditor::eventFilter(QObject *obj, QEvent *ev)
 {
+    // Esc in the embedded colour picker: not its reject(); on up, ignored,
+    // to whoever backs out (the Workbench, the Show Tree).
+    if (obj == m_colorDialog && ev->type() == QEvent::KeyPress
+        && static_cast<QKeyEvent *>(ev)->key() == Qt::Key_Escape)
+    {
+        ev->ignore();
+        return true;
+    }
     // The picker's own close button: keep what is picked, as Done does.
     if (obj == m_effectPicker && ev->type() == QEvent::Close)
     {
@@ -1191,6 +1211,18 @@ bool LookEditor::eventFilter(QObject *obj, QEvent *ev)
         return false;
     }
     return QWidget::eventFilter(obj, ev);
+}
+
+void LookEditor::setBackText(const QString &text)
+{
+    m_backButton->setText(text);
+    m_backButton->setToolTip(text.isEmpty() ? QString() : tr("Back to what was showing before (Esc)"));
+    m_backButton->setVisible(!text.isEmpty());
+}
+
+QString LookEditor::backText() const
+{
+    return m_backButton->isHidden() ? QString() : m_backButton->text();
 }
 
 void LookEditor::updateEffectHeader()

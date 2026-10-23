@@ -6,6 +6,7 @@
 */
 
 #include <QGuiApplication>
+#include <QKeyEvent>
 #include <QStyle>
 #include <QApplication>
 #include <QWidgetAction>
@@ -718,6 +719,21 @@ ProgrammingManager::~ProgrammingManager()
 {
     if (s_buildTab == this)
         s_buildTab = nullptr;
+}
+
+void ProgrammingManager::keyPressEvent(QKeyEvent *ev)
+{
+    /* Esc that nothing took (an inline rename takes its own): the Workbench
+       backs out one level -- from the navigator too, where the focus stays
+       after a palette is double-clicked open. Lent to the Show Tree, it is
+       the tree's. */
+    if (ev->key() == Qt::Key_Escape && ev->modifiers() == Qt::NoModifier
+        && !isWorkbenchLent() && m_workbench->backOut())
+    {
+        ev->accept();
+        return;
+    }
+    QWidget::keyPressEvent(ev);
 }
 
 /****************************************************************************

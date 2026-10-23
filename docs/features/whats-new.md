@@ -29,6 +29,18 @@ The latest changes, newest first. Each links to the guide with the detail.
   opens Fixture Properties for several selected fixtures at once. See
   [Context menu](fixture-manager.md#context-menu).
 
+- **Esc backs out.** Double-clicking a colour (or any palette) in Build ▸
+  Palettes opened the Look Editor over the page, with no way back but
+  clicking a row. It now has **↩ Back**, and **Esc** does the same. Esc
+  takes you back one level from the other editors that cover a page too:
+  a group's layout, the effect bench, a ▣ opened layer, the Workbench
+  docked in the Show Tree (to the cue page), and the Show Tree's Look
+  Editor. Edits stay. On the effect bench, Esc asks before it drops an
+  effect you haven't kept. Esc in a rename still only cancels the rename, and
+  Esc inside the colour picker no longer makes the picker disappear. See
+  [Backing out](build.md#backing-out-esc) and
+  [Keyboard and mouse](shortcuts.md).
+
 - **Lanterns and staffs are practicals.** In the stage-look picker they
   have their own **Practicals** section. A **Lantern** is now a hurricane
   or porch lantern -- hook, cap, glass and base -- that glows all round
