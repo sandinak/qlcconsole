@@ -103,12 +103,15 @@ much light there is in the room.
 
 7. Set **Room** back to **House**, and arrange the Rig Overview so you can
    see it beside the main window.
-8. In the main window, click the **Run** tab at the bottom (⇧⌘9).
+8. In the main window, click the **Run** tab at the bottom (⇧⌘8).
 9. Press **GO** (or **Space**) and watch the stage. Press it twice more,
    for three cues in all.
    - *You should see:* first the cyc turns **blue**, then the risers are
      lit warm from the tops of the steps, then **magenta** lines run along
      the front of every riser.
+   - The first GO also puts a line across the top of the window: *GO
+     played in Design…* with **Switch to Operate**. Close it with **×**:
+     we're only looking today.
 
 ![The third cue](../../images/lesson-0-2/stage-chorus.png)
 

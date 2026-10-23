@@ -161,6 +161,9 @@ show, so there's nothing to choose.
     times.
     - *You should see:* NEXT steps down the list as the stage goes from
       Pose to Verse to Chorus.
+    - The first GO also puts a line across the top of the window: *GO
+      played in Design…* with **Switch to Operate**. Close it with **×**
+      for now; Operate is for running the show, in Lesson 1.5.
 
 ![The Run tab](../../images/lesson-1-1/run-tab.png)
 

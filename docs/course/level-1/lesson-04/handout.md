@@ -87,7 +87,8 @@ only play when you run the cues with **GO**.
 9. Press **GO** and watch the cyc.
    - *You should see:* the cyc fades up to blue over three seconds, while
      the line above NEXT shows the fade's progress, such as *▶ 1.0.0 Pose
-     42%*.
+     42%*. If a line across the top offers **Switch to Operate**, close it
+     with **×**: today we stay in Design.
 
 ![The Run tab during a fade](../../images/lesson-1-4/run-fading.png)
 

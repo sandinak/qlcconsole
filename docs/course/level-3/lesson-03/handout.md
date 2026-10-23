@@ -94,7 +94,7 @@ before; their definitions don't change.
 
 | Problem | Try |
 |---|---|
-| A symbol went on the wrong lights | In the **Lighting Studio**, **Undo** (⌘Z) takes it back. |
+| A symbol went on the wrong lights | **Undo** (⌘Z) in the **Fixtures** tab or the **Lighting Studio** takes it back: both use the rig's history. |
 | Only one lantern changed | Right-click the **Lanterns** group, not one lantern. |
 | There is no **Show** button | Click the **Lighting Studio** tab; the Show button is on the plot's own bar. |
 

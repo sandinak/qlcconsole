@@ -94,3 +94,10 @@ It says **No outputs: preview only**, in grey: nothing in the show is
 patched to an output, on purpose. Clicking it lists "13 universe(s) with
 fixtures but no output" and "5 definition(s) came with this show": the show carries the descriptions of the lights the app
 doesn't ship, so it opens complete on any computer.
+
+Beside it is the **GM** (Grand Master) slider. In the middle, the footer
+names the production and the next cue: that is status only. GO is on the
+**Run** tab (or **Control → GO (Main Cue List)**, ⌘↩, from any tab). An amber
+**Overrides** chip shows up only while something holds the rig over the
+show (Blind, Park, Highlight, Focus mode, Hold at end); clicking it lets
+go of all of them.

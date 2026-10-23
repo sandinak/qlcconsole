@@ -2313,9 +2313,12 @@ bool shoot(const HelpShots::Frame &f, const QString &dir, const QString &name)
         if (QSplitter *split = stFind<QSplitter>(v, "stSplitter"))
         {
             const int w = split->width();
-            split->setSizes(QList<int>() << 300 << 420 << w - 720);
+            split->setSizes(QList<int>() << 260 << 520 << w - 780);
         }
-        v->tree()->setColumnWidth(0, 250);
+        // The name, then room for where a grey row comes from (1.0.0)
+        // beside the S T R M F columns.
+        v->tree()->setColumnWidth(0, 260);
+        v->tree()->setColumnWidth(ShowTreeView::InfoCol, 90);
     }
     settle();
     // A widget outside the grab would be left out without a word: the

@@ -78,7 +78,7 @@ handout up so they can read ahead):
    out "Tracking" beside it and that the `01` numbers the cues 1.0.0, 1.0.1…
 2. **+ Cue** → type `Pose`, Return.
 3. Library → **All → Groups → Trusses → TrussC-RGB**: drag it onto the
-   dashed box under **Layers**. Read the top-right hint aloud while dragging
+   dashed box under **Layers**. Read the note in the top bar (just left of **Stop all**) aloud while dragging
    (*"a new layer on TrussC-RGB in 1.0.0 Pose"*). "A **layer** is one group
    doing one thing in this cue."
 4. **Blue** then **Full** onto the row. Watch the cyc turn blue.
@@ -112,6 +112,7 @@ Stop there; the students build the rest.
 | A layer in the wrong cue | Dropped while another cue was selected | "Undo, click the right cue, drop again." |
 | Stage stays dark | No cue selected (the stage shows the selected cue in Design), or the Rig Overview's **Live** is off | "Click your cue in the tree." |
 | Cue numbers 1.0.0.5 or similar | + Cue pressed with an earlier cue selected: the new cue goes in after it, as a **point cue** | "Drag it below the last cue: it takes the next number." (Lesson 1.5's extension covers point cues and renumbering.) |
+| A line at the top: *GO played in Design…* **Switch to Operate** | The first GO in Design, once a session | "Close it with ×. Operate comes in Lesson 1.5; today we build." |
 | GO does nothing in the Run tab | The list has no cues yet, or the Run tab shows "No main cue list" | "Add a cue (+ Cue) and go back to Run." |
 | Footer says **No outputs: preview only** | Expected: the show has no outputs | "That's because it isn't plugged into real lights — on purpose. Red down there would mean a real problem." |
 

@@ -126,13 +126,15 @@ Switch roles after each fixture.
 | **Add ▾** is greyed out | You're in Operate. Click **Design** at the top right. |
 | The command line says it can't find *House* | Put names with spaces in quotes: `"House Lights"`. |
 | The cyc stays dark | **Blackout** is still on (it's lit red), or the **GM** slider is down. |
-| Something went wrong | **Undo** (⌘Z) takes back the last step. |
+| Something went wrong | **Undo** (⌘Z) takes back the last step on the tab in front: the output rules on the Fixtures tab, the typed cues on the Show Tree. A fixture you added can't be undone yet: select it and delete it. |
 
 ## Done early? (Extension)
 
 1. Turn on **Blind** (top right) in Design and click the cues of the
    preshow. What does the screen show, and what would the real lights do?
-   Which of our three fixtures stay as they are in Blind?
+   Which of our three fixtures stay as they are in Blind? While it's on,
+   the footer reads **Overrides: Blind · Clear**; a click there (or on
+   **Blind** again) turns it off.
 2. A work light that the show also uses in a scene (a "work light look"
    for a song set in a garage): should it ignore Blackout? Argue both
    sides.

@@ -79,7 +79,7 @@ meetings, so each symbol has to say what the light *is*.
 | Nothing changed on the plot | They set the symbol in the Fixtures tab but are still looking at it | "Click the **Lighting Studio** tab." |
 | Only one lantern changed | One fixture right-clicked, not the group | "Right-click the **Lanterns** group." |
 | "Did that change the light?" | | "No: a symbol is the picture. The DMX is the same." |
-| A symbol went on the wrong group | | "⌘Z in the Lighting Studio takes it back." |
+| A symbol went on the wrong group | | "⌘Z takes it back, in the Fixtures tab or the Lighting Studio." |
 
 ## 4. Check for understanding (while circulating)
 

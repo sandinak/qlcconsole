@@ -96,11 +96,12 @@ On the projector:
 
 | You see | Likely cause | Say |
 |---|---|---|
-| The Rig Overview is gone | It was closed (it docks beside the tabs) | "**View → Rig Overview** (⇧⌘R) opens it again." |
+| The Rig Overview is gone | It was closed, or is behind the main window (it is a window of its own) | "**View → Rig Overview** (⇧⌘R) opens it again." |
 | Everything looks dark | **Room** is on Blackout or Dim | "Set **Room: Work light**." |
 | The view is upside down or far away | They dragged or zoomed a lot | "Pick **View: 45°** again." |
 | GO does nothing | The Run tab isn't the one showing, or the show isn't open | "Click the **Run** tab. Is the show open?" |
 | "It says No outputs" | Expected | "Not connected to real lights, on purpose: it's a preview." |
+| A line at the top: *GO played in Design…* **Switch to Operate** | The first GO in Design, once a session | "Close it with ×. Operate is for running a show; we'll use it in Lesson 1.5." |
 
 ## 4. Check for understanding (while circulating)
 

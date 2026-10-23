@@ -58,7 +58,7 @@ N. **File → Save As** → `LessonN-N-yourname.qlcc` in **Documents →
 
 | Problem | Try |
 |---|---|
-| Something went wrong | **Undo** (⌘Z) takes back the last step. |
+| Something went wrong | **Undo** (⌘Z) takes back the last step on the tab in front. |
 | | |
 
 ## Done early? (Extension)

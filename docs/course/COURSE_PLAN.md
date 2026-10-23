@@ -89,7 +89,7 @@ on lines, and busking hits for the unexpected.*
 
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
-| 2.1 | **Tracking and Block** | What stays on unless you change it. A "hard start" for each song. | Grey ⤳ rows ("tracked from"), **Release**, cue modes Track / Block / Cue-only, the **base cue**, *Next cue receives*. |
+| 2.1 | **Tracking and Block** | What stays on unless you change it. A "hard start" for each song. | Grey ⤳ rows ("tracked from"), the tree's **S / T / R** counts (Sets, Tracks in, Releases) and **M** / **F** columns, **Release**, cue modes Track / Block / Cue-only, the **base cue**, *Next cue receives*. |
 | 2.2 | **Palettes: change once, change everywhere** | A designer's colours for a song. The director says "less pink" an hour before the show. | Edit a palette in the Look Editor and watch every cue change. Make your own palette; a folder per song. *Used by*. |
 | 2.3 | **Parts of a group** | Highlight one row of singers. Symmetry. | Child layers (`US in Steps`), group sets (a set of Trusses SR + Trusses SL), Split / Merge. |
 | 2.4 | **Effects: sparkle, chase, matrix** | Energy and rhythm. Eye candy vs. light on people. | Effects on the Steps and the truss pixel boxes (Sinelon, chase, sparkle); an effect on the cue across the whole stage; its own colour; speed masters. |
@@ -108,9 +108,9 @@ here.*
 | 3.1 | **DMX, universes and patching** | Addresses and channels; universes; Art-Net and sACN; the Patch dialog; Connections. *(First lesson on the real network, with Branson.)* |
 | 3.2 | **Fixtures and definitions** | The Fixture Manager; definitions and modes; the Fixture Editor; groups by head type (a pixel box's RGB and white heads; colour rings). Shows that carry their own definitions. |
 | 3.3 | **Reading the plot: symbols** *(written)* | A plot and its symbol key. The Lighting Studio plot's **Show ▸ Show Auto fixtures as their closest plot symbol**; **Plot Symbol ▸** to correct the guesses (AT-W-ALL: *Moving head round wash*); the Lanterns as **practicals**. A symbol is only the picture. |
-| 3.4 | **Building the rig** | Lighting Studio: structures, mounting fixtures, layers, stage targets and lines; why the rig must match the room for aims to work. |
-| 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC / MIDI Show Control; timecode. |
-| 3.6 | **Focus and calibration** | Test orientation, Locate, the Step Test Pattern; aiming the real movers at the real targets. |
+| 3.4 | **Building the rig** | Lighting Studio: structures (walls with a door, towers, booms, stands; copy and paste them), mounting fixtures (a group Shift-dropped on a truss all hangs; **Mount on** for the selection), a fixed light's **Pan** / **Tilt** in **Aim & Mount**, layers, stage targets and lines; why the rig must match the room for aims to work. |
+| 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC in, MIDI Show Control in and MIDI timecode, each a row in **Connections ▸ Devices**. |
+| 3.6 | **Focus and calibration** | Test orientation, Locate, the Step Test Pattern; **Focus mode**: the real movers on the real targets, and fixed lights too (a figure stands where each one lands at head height; move it with the sticks, D-pad or arrows to where the real beam lands); a beam's zoom (D-pad up/down, **.** **,**) and edge (D-pad left/right, **'** **;**). |
 | 3.7 | **House lights, work lights and power** *(written)* | Three generic dimmers (House Lights, Work Lights, Stage Power); **Output Rules…**: Ignore Blackout, Ignore the Grand Master, Switch (relay), On when not in use; Settings ▸ Advanced ▸ Output; a preshow list typed; Blackout, the GM slider and Blind. Part 3 on the theatre's own house and work lights. |
 | 3.8 | **Running a real show** | Operate mode (it locks editing), the panic button, the preshow checklist, power. |
 | 3.9 | **Troubleshooting** | The Not ready list, a light that won't come on, a cue that looks wrong, Undo and backups. **Capstone** (below). |
@@ -265,7 +265,7 @@ and its test change in the same commit, and the course test
     cue list built, and run live with GO while the clip plays.
   - Level 2: *Design and program one song* — cue sheet, tracking used on
     purpose, at least one palette of their own, one effect, one busking
-    look.
+    hit.
   - Level 3: run the real rig through a preshow check and a song.
 - **Final project (capstone):** a team designs, programs and runs one song
   of the show. Graded on: the cue sheet (does every cue have a reason?),
@@ -285,8 +285,10 @@ and into this branch), and the course updated to match:
 
 1. ~~**A new production isn't the one GO plays.**~~ **Done.** A new
    production becomes current by itself when nothing else has GO. The
-   handout's "Make current" step and its picture are gone; the handout now
-   warns that clicking the **▶ Current** button would *unset* it.
+   handout's "Make current" step and its picture are gone. Since 0.2.2
+   (board Q75) a show with one production has no **Current** button or
+   production switcher at all: GO plays its list, and Lesson 1.1 just
+   says so.
 2. ~~**The drop area's text is hard to read.**~~ **Done.** Readable in every
    theme (`images/lesson-1-1/new-cue.png` retaken).
 3. ~~**Moving lights have no home.**~~ **Done.** The "Branson 36LED
@@ -450,7 +452,7 @@ drape, proscenium). Run it again whenever the teaching show changes.
 | 1.3 | Already has aim, Targets and the AT-Spots' shutter (auto-open, as the app); add **Block** cues (the Solo is one), and check the beams against the app's pictures. |
 | 1.4 | Fade out and **Hold** (auto-follow), shown in the Run tab's Timing column. |
 | 1.5 | Operate (LIVE) vs Design, **LOAD**/STANDBY and jump, which the runner mostly has; a "call the cues" mode for pairs. |
-| Level 2 | Cue modes (Track / Block / Cue-only), Release and the base cue (2.1); editing a palette everywhere (2.2); child layers and group sets (2.3); a simple pixel effect on the steps and truss boxes (2.4); lines, spread and cross for the movers (2.5); Looks fired from buttons (2.6); sub-cues (2.7). Past 2.4 the stage drawing needs per-pixel heads, which the exporter already counts. |
+| Level 2 | Cue modes (Track / Block / Cue-only), Release and the base cue (2.1); editing a palette everywhere (2.2); child layers and group sets (2.3); a simple pixel effect on the steps and truss boxes (2.4); lines, spread and cross for the movers (2.5); hits fired from buttons (2.6); sub-cues (2.7). Past 2.4 the stage drawing needs per-pixel heads, which the exporter already counts. |
 
 Level 3 (patching, DMX, the real rig) stays in the app.
 

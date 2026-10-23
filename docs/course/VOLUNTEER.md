@@ -57,9 +57,9 @@ about 20 minutes and is the best way to learn the app.
 
 ## 3. How the course is laid out
 
-Everything is in the `docs/course/` folder of the repo, on the branch
-**`docs/show-tree-course`**:
-[browse it on GitHub](https://github.com/sandinak/qlcconsole/tree/docs/show-tree-course/docs/course).
+Everything is in the `docs/course/` folder of the repo, on the **`main`**
+branch:
+[browse it on GitHub](https://github.com/sandinak/qlcconsole/tree/main/docs/course).
 
 | Where | What |
 |---|---|
@@ -70,12 +70,12 @@ Everything is in the `docs/course/` folder of the repo, on the branch
 | `level-0/` … `level-3/` | One folder per level. Each lesson has its own folder, like `level-1/lesson-01/` |
 | `shows/` | The teaching show and each lesson's start and finish files |
 | `images/` | The pictures, one folder per lesson (`images/lesson-1-1/`) |
-| [`_template/`](https://github.com/sandinak/qlcconsole/tree/docs/show-tree-course/docs/course/_template) | Blank lesson files to copy for a new lesson |
+| [`_template/`](https://github.com/sandinak/qlcconsole/tree/main/docs/course/_template) | Blank lesson files to copy for a new lesson |
 | `tools/` | The script that makes the teaching show (you won't need it) |
 | `_config.yml` | Settings for the course website (you won't need it) |
 
 The app's own help, which explains every button, is in
-[`docs/features/show-tree.md`](https://github.com/sandinak/qlcconsole/blob/docs/show-tree-course/docs/features/show-tree.md)
+[`docs/features/show-tree.md`](https://github.com/sandinak/qlcconsole/blob/main/docs/features/show-tree.md)
 (and in the app: press **F1**).
 
 ## 4. Read and preview the pages
@@ -103,7 +103,7 @@ per lesson, with five pages and a small index:
 | `exit-ticket.md` | students | 3–4 short questions on paper |
 | `at-home.md` | students | **A.** the same task on a home computer, **B.** a paper version (no computer, or a Chromebook) |
 
-Copy the [`_template/`](https://github.com/sandinak/qlcconsole/tree/docs/show-tree-course/docs/course/_template) folder to start a new lesson.
+Copy the [`_template/`](https://github.com/sandinak/qlcconsole/tree/main/docs/course/_template) folder to start a new lesson.
 
 ### Style rules
 
@@ -178,15 +178,15 @@ You don't need git or Terminal. Everything works on the GitHub website:
 1. Make a free [GitHub](https://github.com) account and send Branson your
    user name. He'll add you to the project.
 2. Open the page you want to change on the
-   [`docs/show-tree-course` branch](https://github.com/sandinak/qlcconsole/tree/docs/show-tree-course/docs/course)
-   (check the branch name at the top left says **docs/show-tree-course**).
+   [`main` branch](https://github.com/sandinak/qlcconsole/tree/main/docs/course)
+   (check the branch name at the top left says **main**).
 3. Click the **pencil** (Edit this file). Make your change. **Preview**
    shows it formatted.
 4. Click **Commit changes…**. Write one line saying what you changed.
    Choose **Create a new branch … and start a pull request**, and click
    **Propose changes**.
-5. On the next page, check that **base** is **docs/show-tree-course** (not
-   *main*), then click **Create pull request**.
+5. On the next page, check that **base** is **main**, then click **Create
+   pull request**.
 
 Branson reviews it, checks the steps on the app, and merges it.
 

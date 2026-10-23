@@ -62,7 +62,7 @@ brackets.
 
 | Word | Means |
 |---|---|
-| **Production** | The whole show: every cue list in it. The **current** production is the one GO plays. [1.1] |
+| **Production** | The whole show: every cue list in it. With one production, GO plays it; with more than one, the **current** production is the one GO plays. [1.1] |
 | **Cue list** | One song's cues, in order. [1.1] |
 | **Cue** | A planned lighting change, tied to a moment in the song. Numbered 1.0.0, 1.0.1…; a list plays its cues in number order. [1.1] |
 | **Point cue** | A cue numbered between two others, such as 1.0.2.5 between 1.0.2 and 1.0.3. It is how a cue is added late without changing any other cue's number. [1.5] |
@@ -74,10 +74,11 @@ brackets.
 | **⋯ (more)** | The button at the end of each row of a layer's page: **Set to**, **Level…**, **Colour…** and more. [1.2] |
 | **One-off value** | A level or colour you picked (Level…, Colour…) that isn't a palette: kept just for one layer. **Make reusable** turns it into a palette. [1.2] |
 | **Cue look** | A palette dropped on the cue itself (its dashed box): it reaches every layer of the cue that doesn't set that attribute itself. [1.2] |
-| **Undo / Redo** | ⌘Z reverses the last change; ⇧⌘Z reapplies it. [1.2] |
+| **Undo / Redo** | ⌘Z reverses the last change on the tab in front; ⇧⌘Z reapplies it. On a tab with nothing to undo, **Edit → Undo** reads *Nothing to undo on this tab*. [1.2] |
 | **Library** | The panel on the left: groups, targets and palettes to drag. [1.1] |
 | **Rig Overview** | qlcconsole's 3D view of the stage, showing what the lights are doing. It's our stage in class. [0.2] |
 | **Tracking** | A light holds its state into the following cues until a cue changes it. A **tracked** value shows in grey: *tracked from 1.0.0*. [1.1] |
+| **S / T / R / M / F** | The Show Tree's columns, each named when you hover its header. On a cue, **S** (Sets) counts the layers it sets, **T** (Tracks in) the layers tracking in, **R** (Releases) the layers it lets go; on a layer, a dot marks which. **M** (Mode): **B** Block, **C** Cue-only. **F** (Flags): base, skip, no MIB and the like. [1.1] |
 | **GO** | Plays the next cue. In the **Run** tab: the green button or Space. [1.1] |
 | **Run tab** | The operator's screen: the cue list, NEXT, and big GO / Back / Stop buttons. [1.1] |
 | **Design / Operate** | Design: you build, and the selected cue shows on the stage. Operate (the Run tab says **LIVE**): you run the show; only GO changes the stage. The button is at the top right. [1.5] |
@@ -90,6 +91,7 @@ brackets.
 | **Hold / follow** | How long a cue waits before the next one plays by itself (∞: waits for GO). A cue that plays by itself **follows**. [1.4] |
 | **Release** | A layer that leaves when its cue ends. [2.1] |
 | **Effect** | A pattern that moves through the lights: a chase, a sparkle, a rainbow. [2.4] |
+| **Hit** | A look kept ready to fire by hand over the running list, for busking: the Show Tree's **Hits** section, built with **+ Hit**. A hit never tracks. [2.6] |
 
 ## Hardware (Level 3)
 
