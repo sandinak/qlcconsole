@@ -983,7 +983,7 @@ their house lights, relays and subs.
   the same for the view in front, and the Window menu can turn the
   Shift-click off. ([Window menu](other-improvements.md#window-menu))
 - **Functions has no tab** — **Window → Functions** (⇧⌘4) opens it
-  (now Build ▸ Scenes ▸ Classic). ([Window menu](other-improvements.md#window-menu))
+  (since 0.2.2, the stock Functions tab). ([Window menu](other-improvements.md#window-menu))
 - The **Window** menu lists every view, wherever it is, and puts
   broken-out ones back.
 - **Connections**' Devices header is one row; the list gets the height.

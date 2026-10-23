@@ -243,16 +243,15 @@ void HelpBrowser_Test::aPictureFitsThePageAndOpensFullSize()
     QVERIFY(shown->isVisible());
 }
 
-/* Functions is a window now (Window → Functions), not a tab: no guide
-   sends anyone to "the Functions tab" -- bar the one question that asks
-   where it went. */
-void HelpBrowser_Test::noGuideSendsYouToTheFunctionsTab()
+/* "Classic" means stock QLC+ only (Q73): Build ▸ Scenes has no Classic
+   arrangement, so no guide sends anyone to "Scenes ▸ Classic" or the old
+   Folders | Classic switch. */
+void HelpBrowser_Test::noGuideSendsYouToScenesClassic()
 {
-    const QRegularExpression stale(QStringLiteral("Functions\\**\\s+tab"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression stale(QStringLiteral("Scenes\\s*▸\\s*Classic|Folders\\s*\\|\\s*Classic"));
     for (const auto &t : HelpBrowser::topics())
     {
-        QString text = guideText(t.first);
-        text.remove(QStringLiteral("Where did the Functions tab go?"));
+        const QString text = guideText(t.first);
         const QRegularExpressionMatch m = stale.match(text);
         QVERIFY2(!m.hasMatch(), qPrintable(QString("%1 still says \"%2\"").arg(t.first, m.captured(0))));
     }
