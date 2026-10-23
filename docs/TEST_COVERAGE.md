@@ -378,7 +378,9 @@ is the behaviour itself.
 
 Each bug below has a test that asserts what the help says, marked
 `QEXPECT_FAIL` with a `BUG:` message. Bugs B4 and B6 were small and safe, so
-they are fixed here and their tests pass.
+they are fixed here and their tests pass. B2, B3, B5 and B8 are fixed on
+`fix/audit-bugs`, their markers removed; B1 is being fixed separately, and
+B7 and B9 wait on a decision.
 
 | # | Bug | Where | Test(s) | State |
 |---|---|---|---|---|
