@@ -81,6 +81,7 @@
 #include "doc.h"
 #include "programmercontroller.h"
 #include "monitor/monitor.h"
+#include "outputrulesdialog.h"
 #include "universepatcher.h"
 #include "outputpatch.h"
 #include "qlcioplugin.h"
@@ -2815,6 +2816,15 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             if (!led->isEnabled())
                 led->setToolTip(tr("Only for a fixture with more than one head"));
         }
+        // Relays, house and work lights: Blackout / Grand Master exempt,
+        // switch, on when not in use -- for the fixtures, or groups' members.
+        QAction *rules = menu.addAction(OutputRulesDialog::actionText(), this, [this, selGroups, selFixtures]() {
+            if (OutputRulesDialog::edit(this, m_doc, selGroups, selFixtures))
+                slotSelectionChanged();
+        });
+        rules->setObjectName(QStringLiteral("outputRulesAction"));
+        rules->setToolTip(tr("Power relays, house and work lights: ignore Blackout or the Grand "
+                             "Master, switch instead of fade, on when not in use"));
     }
 
     // Inventory: staged fixtures (no universe/address yet). The root offers

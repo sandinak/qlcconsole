@@ -112,6 +112,67 @@ private:
     Draw m_draw;
 };
 
+/** @p base with a small amber power badge in its lower right corner: a
+ *  fixture with output rules (a relay, a house light Blackout leaves on). */
+class BadgedIconEngine : public QIconEngine
+{
+public:
+    explicit BadgedIconEngine(const QIcon &base) : m_base(base) {}
+
+    void paint(QPainter *p, const QRect &rect, QIcon::Mode mode, QIcon::State state) override
+    {
+        m_base.paint(p, rect, Qt::AlignCenter, mode, state);
+        const qreal side = qMin(rect.width(), rect.height());
+        if (side <= 0)
+            return;
+        const qreal d = side * 0.5;
+        const QRectF dot(rect.right() + 1 - d, rect.bottom() + 1 - d, d, d);
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing);
+        if (mode == QIcon::Disabled)
+            p->setOpacity(p->opacity() * 0.4);
+        p->setPen(QPen(QColor(60, 40, 0), qMax(1.0, d / 10.0)));
+        p->setBrush(QColor(255, 176, 0));
+        p->drawEllipse(dot.adjusted(0.5, 0.5, -0.5, -0.5));
+        // A lightning bolt: on the power side of things.
+        QPainterPath bolt;
+        const qreal x = dot.x(), y = dot.y();
+        bolt.moveTo(x + d * 0.58, y + d * 0.14);
+        bolt.lineTo(x + d * 0.30, y + d * 0.56);
+        bolt.lineTo(x + d * 0.50, y + d * 0.56);
+        bolt.lineTo(x + d * 0.40, y + d * 0.88);
+        bolt.lineTo(x + d * 0.72, y + d * 0.42);
+        bolt.lineTo(x + d * 0.52, y + d * 0.42);
+        bolt.closeSubpath();
+        p->setPen(Qt::NoPen);
+        p->setBrush(QColor(60, 40, 0));
+        p->drawPath(bolt);
+        p->restore();
+    }
+
+    QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) override
+    {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+
+    QPixmap scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::State state, qreal scale) override
+    {
+        QPixmap pm(size * scale);
+        pm.setDevicePixelRatio(scale);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        paint(&p, QRect(QPoint(0, 0), size), mode, state);
+        return pm;
+    }
+
+    QSize actualSize(const QSize &size, QIcon::Mode, QIcon::State) override { return size; }
+    QIconEngine *clone() const override { return new BadgedIconEngine(m_base); }
+    QString key() const override { return QStringLiteral("ItemIconsBadged"); }
+
+private:
+    QIcon m_base;
+};
+
 /** The one icon for @p key, drawn by @p draw the first time it is asked for. */
 QIcon cached(const QString &key, const Draw &draw)
 {
@@ -548,7 +609,15 @@ QIcon fixtureIcon(const Fixture *fixture)
     if (fixture == nullptr)
         return QIcon(QStringLiteral(":/fixture.png"));
     const FixtureKind kind = fixtureKind(fixture);
-    return kind == OtherKind ? QIcon(fixture->iconResource()) : kindIcon(kind);
+    const QIcon icon = kind == OtherKind ? QIcon(fixture->iconResource()) : kindIcon(kind);
+    if (fixture->outputRules() == Fixture::OutputRules())
+        return icon;
+    return outputRulesBadged(icon);
+}
+
+QIcon outputRulesBadged(const QIcon &base)
+{
+    return QIcon(new BadgedIconEngine(base));
 }
 
 QIcon groupIcon(Doc *doc, const FixtureGroup *group)

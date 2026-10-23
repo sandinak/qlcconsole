@@ -204,38 +204,6 @@ int paramByName(const EosShowData &data, const QString &name)
     return -1;
 }
 
-/* TODO(output-rules): remove when feat/output-rules lands. A stand-in for
-   Fixture::OutputRules so the circuit mapping compiles before that API is
-   on this branch. The wiring, once it is, is one line in
-   EosImporter::applyCircuitRoles(): `using Rule = OutputRulesShim;`
-   becomes `using Rule = Fixture;` (the template setRules() below then
-   calls Fixture::setOutputRules()); this block can go after. */
-struct OutputRulesShim
-{
-    enum OutputRule
-    {
-        ExemptBlackout = 0x1,
-        ExemptGrandMaster = 0x2,
-        Switch = 0x4,
-        OnAtOpen = 0x8
-    };
-    Q_DECLARE_FLAGS(OutputRules, OutputRule)
-};
-
-/** The shim's: nothing to set yet. */
-[[maybe_unused]] bool setRules(Fixture *, OutputRulesShim::OutputRules)
-{
-    return false;
-}
-
-/** The real one, Fixture::OutputRules. */
-template <typename F, typename R>
-[[maybe_unused]] bool setRules(F *fixture, R rules)
-{
-    fixture->setOutputRules(rules);
-    return true;
-}
-
 } // namespace
 
 /****************************************************************************
@@ -298,13 +266,13 @@ QString EosCircuit::rulesText(Role role, bool gmExempt)
     switch (role)
     {
         case Relay:
-            return QObject::tr("switch, exempt from blackout and Grand Master, on at open");
+            return QObject::tr("Switch (relay), Ignore Blackout, Ignore the Grand Master, On when not in use");
         case House:
         case Work:
         case Backstage:
-            return QObject::tr("exempt from blackout and Grand Master");
+            return QObject::tr("Ignore Blackout, Ignore the Grand Master");
         default:
-            return gmExempt ? QObject::tr("exempt from Grand Master") : QString();
+            return gmExempt ? QObject::tr("Ignore the Grand Master") : QString();
     }
 }
 
@@ -340,7 +308,7 @@ QMap<int, EosCircuit> EosImporter::circuits(const EosShowData &data, const QHash
 
 bool EosImporter::applyCircuitRoles(Doc *doc, const QMap<int, EosCircuit> &circuits)
 {
-    using Rule = OutputRulesShim;   // TODO(output-rules): `using Rule = Fixture;` when feat/output-rules lands
+    using Rule = Fixture;
     bool applied = false;
     for (auto it = circuits.constBegin(); it != circuits.constEnd(); ++it)
     {
@@ -364,7 +332,8 @@ bool EosImporter::applyCircuitRoles(Doc *doc, const QMap<int, EosCircuit> &circu
         }
         if (it.value().gmExempt)
             rules |= Rule::ExemptGrandMaster;
-        applied = setRules(fx, rules) || applied;
+        fx->setOutputRules(rules);
+        applied = true;
     }
     return applied;
 }
@@ -563,15 +532,24 @@ bool EosImporter::build(const EosShowData &data, Doc *doc, const EosFixtureMappe
                 gmOnly += c.role == EosCircuit::Normal && c.gmExempt;
             if (gmOnly > 0)
                 counts << QObject::tr("GM exempt ($$Options X) × %1").arg(gmOnly);
-            result.warnings << QObject::tr("Special circuits: %1%2. %3")
+            result.warnings << QObject::tr("Special circuits: %1%2.")
                                .arg(counts.join(QStringLiteral(", ")),
                                     made.isEmpty() ? QString()
-                                                   : QObject::tr(" (groups %1)").arg(made.join(QStringLiteral(", "))),
-                                    result.outputRulesApplied
-                                    ? QObject::tr("Their output rules are set (relays switch and come on at open; "
-                                                  "house, work and backstage ignore blackout and the Grand Master).")
-                                    : QObject::tr("Output rules aren't in this build yet: the roles are kept as "
-                                                  "groups only."));
+                                                   : QObject::tr(" (groups %1)").arg(made.join(QStringLiteral(", "))));
+            if (result.outputRulesApplied)
+            {
+                // The rules each role got, a line each.
+                for (EosCircuit::Role r : { EosCircuit::Relay, EosCircuit::House, EosCircuit::Work, EosCircuit::Backstage })
+                    if (result.circuitCount(r) > 0)
+                        result.warnings << QObject::tr("Output rules, %1 × %2: %3.").arg(EosCircuit::roleName(r))
+                                           .arg(result.circuitCount(r)).arg(EosCircuit::rulesText(r, false));
+                if (gmOnly > 0)
+                    result.warnings << QObject::tr("Output rules, GM exempt ($$Options X) × %1: %2.").arg(gmOnly)
+                                       .arg(EosCircuit::rulesText(EosCircuit::Normal, true));
+                if (result.circuitCount(EosCircuit::Relay) > 0)
+                    result.warnings << QObject::tr("Relays come on when you switch to Operate; Settings ▸ Advanced ▸ "
+                                                   "Output (saved with the show) can make it when the show opens.");
+            }
         }
     }
 

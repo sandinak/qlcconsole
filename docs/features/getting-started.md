@@ -262,12 +262,22 @@ wizard goes through three pages:
 
 What comes in: the patch, groups, palettes, presets, and each cue list as
 a tracking cue list in the Show Tree. House and relay moves stay in the
-cues, so the cue that brings the house up still does. Relays become
-switches that come on at open. House, work and backstage circuits ignore
-blackout and the Grand Master. Each kind gets a group under **Eos**
-(**Power relays**, **House &amp; Work**, **Backstage**). Each **sub** becomes a
-Playback fader on its scene, labelled *Sub N label*, in a new Virtual
-Console frame **Eos subs**, using the sub's up and down times. Bump
+cues, so the cue that brings the house up still does. The special
+circuits come in with their
+[output rules](fixture-manager.md#output-rules) set:
+
+- **Relays**: Switch (relay), Ignore Blackout, Ignore the Grand Master,
+  On when not in use. They come on when you switch to Operate; **Settings
+  ▸ Advanced ▸ Output** (saved with the show) can make it when the show
+  opens instead.
+- **House, work and backstage**: Ignore Blackout, Ignore the Grand Master.
+- **GM exempt** (`$$Options X`): Ignore the Grand Master.
+
+The import report lists the rules each kind got. Each kind also gets a
+group under **Eos** (**Power relays**, **House &amp; Work**,
+**Backstage**). Each **sub** becomes a Playback fader on its scene,
+labelled *Sub N label*, in a new Virtual Console frame **Eos subs**,
+using the sub's up and down times. Bump
 buttons, LTP and exclusive subs, effects and links aren't carried; the
 import report lists everything that didn't come across.
 

@@ -299,9 +299,10 @@ QWizardPage *EosImportWizard::createCircuitsPage()
     QWizardPage *page = new QWizardPage(this);
     page->setTitle(tr("Special circuits"));
     page->setSubTitle(tr("Channels that aren't stage lights: relays (power), house, work and backstage / hall "
-                         "lights, read from their Eos labels. Relays become switches that come on at open; "
-                         "house, work and backstage circuits ignore blackout and the Grand Master. Their cue "
-                         "moves stay in the cues."));
+                         "lights, read from their Eos labels. Relays become switches that ignore blackout and the "
+                         "Grand Master and are on when not in use (from Operate, by default); house, work and "
+                         "backstage circuits ignore blackout and the Grand Master. Their cue moves stay in the "
+                         "cues."));
     QVBoxLayout *lay = new QVBoxLayout(page);
     m_circuitSummary = new QLabel(page);
     m_circuitSummary->setWordWrap(true);

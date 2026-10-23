@@ -4,14 +4,28 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.2 (next update)
 
+- **Output rules for relays, house and work lights.** Right-click
+  fixtures or a group → **Output Rules…** (Fixture Manager, Build, the
+  Show Tree's Library): **Ignore Blackout** (it also holds through
+  Blind), **Ignore the Grand Master**, **Switch (relay)** — on at 50%,
+  off below, never faded, and the Grand Master cannot switch it off — and
+  **On when not in use**: full whenever nothing in the show sets it. When
+  those come on is the show's setting in Settings ▸ Output: *When you
+  switch to Operate* (the default) or *When the show opens*. Fixtures
+  with rules carry an amber badge. See
+  [Output rules](fixture-manager.md#output-rules).
+
 - **Eos import: special circuits and subs.** Importing an Eos show now
   has a **Special circuits** page. It sorts relay, house, work and
   backstage / hall circuits by their labels, and you can change any of
-  them. Relays come in as switches that are on at open; house, work and
-  backstage circuits ignore blackout and the Grand Master. Each kind gets
-  an **Eos** group (**Power relays**, **House &amp; Work**,
-  **Backstage**). Each Eos sub becomes a Playback fader in a new Virtual
-  Console frame, **Eos subs**. See
+  them. They come in with [output rules](fixture-manager.md#output-rules):
+  relays are switches that ignore blackout and the Grand Master and are
+  on when not in use; house, work and backstage circuits ignore blackout
+  and the Grand Master. Relays come on at Operate unless Settings ▸
+  Advanced ▸ Output says otherwise. Each kind gets an **Eos** group
+  (**Power relays**, **House &amp; Work**, **Backstage**). Each Eos sub
+  becomes a Playback fader in a new Virtual Console frame, **Eos subs**.
+  See
   [Importing an Eos show](getting-started.md#importing-an-eos-show).
 
 - **Three views.** **View → Workspace** picks the tabs: **qlcconsole**

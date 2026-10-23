@@ -13,6 +13,28 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Output rules** (`Fixture::OutputRules`: `ExemptBlackout`,
+  `ExemptGrandMaster`, `Switch`, `OnAtOpen`; saved as an optional
+  `OutputRules` child of the fixture, "Blackout,GrandMaster,Switch,OnAtOpen",
+  skipped by older readers). `OutputRuleKeeper` (engine, owned by `Doc`)
+  keeps rule bits (`Universe::GMExempt`, `BlackoutExempt`, `SwitchOutput`,
+  `OnAtOpenOutput`) in each universe's channel mask in step with the
+  fixtures, clearing them when a fixture moves, unpatches or goes;
+  `setChannelCapability()` preserves them. `updatePostGMValue()` skips the
+  GM for exempt and Switch channels and snaps Switch channels to 0/255 last;
+  `dumpOutput()` overlays Blackout-exempt channels' live values on the
+  Blackout frame, and under Blind sends that frame when the universe has
+  any (`kDefaultBlindHoldsExempt`, board Q44); power limits leave Switch
+  channels alone; a Switch fixture's channels never fade. OnAtOpen is a
+  floor after the faders (full when nothing set the channel this frame),
+  armed per the show setting *When you switch to Operate* (default, board
+  Q45) / *When the show opens*, saved as `OutputRuleSettings OnAtOpen=`
+  only when not the default; Settings ▸ Output. UI: `OutputRulesDialog`
+  (tri-state for mixed selections, one rig undo step — the rig snapshot
+  now carries rules) from the Fixture Manager, Build's Groups & fixtures
+  and the Show Tree Library; an amber badge on fixture icons
+  (`ItemIcons::fixtureIcon`) with a tooltip; Blackout/Blind tooltips say
+  exempt fixtures stay on.
 - **Eos import: special circuits and subs.** A **Special circuits** page
   in the Eos import wizard (after Fixture types) gives each channel a role
   read from its Eos label (`EosCircuit::classify()`): Relay (power),
@@ -24,10 +46,12 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   reported. The roles make groups Eos/Power relays, Eos/House & Work
   and Eos/Backstage ("… (special circuits)" if the show already has an
   Eos group of that name), and map to fixture output rules in one place
-  (`EosImporter::applyCircuitRoles()`). Relay → switch + exempt from
-  blackout and GM + on at open; house/work/backstage → exempt from
-  blackout and GM. These are applied once `feat/output-rules` lands (a
-  marked shim until then). House and relay moves stay in the cues. Each
+  (`EosImporter::applyCircuitRoles()`, applied to the fixtures and carried
+  through the merge). Relay → Switch | ExemptBlackout | ExemptGrandMaster
+  | OnAtOpen; house/work/backstage → ExemptBlackout | ExemptGrandMaster;
+  `$$Options` X adds ExemptGrandMaster. The import report lists the rules
+  per role and points at Settings ▸ Advanced ▸ Output for when relays come
+  on (Operate by default). House and relay moves stay in the cues. Each
   Eos sub becomes a VC Slider in Playback mode on its scene, "Sub N
   label", in a row in a new frame **Eos subs**. Sub up/down times are the
   scene's fades; `$$LTP` / `$$Exclusive` / inhibitive / effect subs are

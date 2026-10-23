@@ -39,6 +39,7 @@
 #include "showembedding.h"
 
 #include <QShortcut>
+#include <QCheckBox>
 #define KColumnName 0
 
 #define protected public
@@ -54,6 +55,7 @@
 #include "addfixture.h"
 #include "creategroupsdialog.h"
 #include "fixturegroupsource.h"
+#include "outputrulesdialog.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -1598,6 +1600,81 @@ void FixtureManager_Test::newHereMakesAGroupInTheFolder()
     mgr.m_fixtures_tree->setCurrentItem(loose);
     QCOMPARE(mgr.newHereLabel(), QString());
     QCOMPARE(mgr.newHere(), FixtureGroup::invalidId());
+}
+
+void FixtureManager_Test::outputRulesForFixturesAndGroups()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> three = addDimmers(m_doc, 3, 1, "Circuit");
+    QCOMPARE(three.size(), 3);
+    FixtureGroup *house = addGroup(m_doc, "House", QString(), { three[0], three[1] });
+    m_doc->fixture(three[0])->setOutputRules(Fixture::Switch);
+
+    // A group's members, mixed: Switch partly checked and left as each has
+    // it; Blackout ticked for all.
+    {
+        OutputRulesDialog dlg(m_doc, OutputRulesDialog::collect(m_doc, { house->id() }, {}));
+        QCheckBox *sw = dlg.box(Fixture::Switch);
+        QCheckBox *bo = dlg.box(Fixture::ExemptBlackout);
+        QVERIFY(sw != nullptr && bo != nullptr);
+        QCOMPARE(sw->checkState(), Qt::PartiallyChecked);
+        QCOMPARE(bo->checkState(), Qt::Unchecked);
+        bo->setChecked(true);
+        QVERIFY(dlg.apply());
+        QCOMPARE(m_doc->fixture(three[0])->outputRules(), Fixture::Switch | Fixture::ExemptBlackout);
+        QCOMPARE(m_doc->fixture(three[1])->outputRules(), Fixture::OutputRules(Fixture::ExemptBlackout));
+        QCOMPARE(m_doc->fixture(three[2])->outputRules(), Fixture::OutputRules());
+    }
+    {
+        OutputRulesDialog dlg(m_doc, OutputRulesDialog::collect(m_doc, { house->id() }, {}));
+        QCOMPARE(dlg.box(Fixture::ExemptBlackout)->checkState(), Qt::Checked);
+        dlg.box(Fixture::Switch)->setCheckState(Qt::Checked);
+        QVERIFY(dlg.apply());
+        QVERIFY(m_doc->fixture(three[1])->outputRules() & Fixture::Switch);
+        QVERIFY(dlg.apply() == false);      // nothing more to change
+    }
+
+    // The Fixture Manager offers it for a fixture and for a group, and the
+    // fixture's row says what it has.
+    FixtureManager mgr(nullptr, m_doc);
+    selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, three[2]) });
+    QVERIFY2(contextMenuTree(mgr).contains("Output Rules…"), "offered for a fixture");
+    selectOnly(mgr.m_fixtures_tree, { groupRow(mgr, house->id()) });
+    QVERIFY2(contextMenuTree(mgr).contains("Output Rules…"), "offered for a group");
+
+    driveDialog([](QWidget *w) {
+        QCheckBox *gm = w->findChild<QCheckBox *>("outputRuleGrandMaster");
+        if (gm == nullptr)
+            return false;
+        gm->setChecked(true);
+        return true;
+    });
+    QVERIFY(OutputRulesDialog::edit(nullptr, m_doc, {}, { three[2] }));
+    QCOMPARE(m_doc->fixture(three[2])->outputRules(), Fixture::OutputRules(Fixture::ExemptGrandMaster));
+    mgr.updateView();
+    QTreeWidgetItem *row = fixtureRow(mgr, three[2]);
+    QVERIFY(row != nullptr);
+    QVERIFY2(row->toolTip(KColumnName).contains("Grand Master"), qPrintable(row->toolTip(KColumnName)));
+    QVERIFY(fixtureRow(mgr, three[0])->toolTip(KColumnName).contains("Blackout"));
+
+    // Build's Groups & fixtures offers it too.
+    FixtureGroupSource src(m_doc);
+    src.reload();
+    QTreeWidgetItem *grp = src.groupItemById(house->id());
+    QVERIFY(grp != nullptr);
+    src.clearSelection();
+    grp->setSelected(true);
+    QStringList texts;
+    QTimer::singleShot(0, [&texts]() {
+        if (QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget()))
+        {
+            foreach (QAction *a, m->actions())
+                texts << a->text();
+            m->close();
+        }
+    });
+    src.slotContextMenu(src.visualItemRect(grp).center());
+    QVERIFY2(texts.contains("Output Rules…"), qPrintable(texts.join(" | ")));
 }
 
 QTEST_MAIN(FixtureManager_Test)

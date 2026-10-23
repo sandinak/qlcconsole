@@ -62,8 +62,8 @@ public:
      *  coloured. */
     static Role classify(const QString &label, bool singleChannel = true);
     static QString roleName(Role role);
-    /** The output rules a @a role gets, in words ("switch, exempt from
-     *  blackout and Grand Master, on at open"). */
+    /** The output rules a @a role gets, in the Output Rules dialog's
+     *  words ("Ignore Blackout, Ignore the Grand Master"). */
     static QString rulesText(Role role, bool gmExempt);
 };
 
@@ -99,8 +99,7 @@ public:
     /** Channel -> its special role, for channels that have one (or are
      *  GM exempt). */
     QMap<int, EosCircuit> circuits;
-    /** False while this build has no fixture output rules: the roles are
-     *  read and grouped, not applied. */
+    /** True when applyCircuitRoles() gave at least one fixture rules. */
     bool outputRulesApplied = false;
     int circuitCount(EosCircuit::Role role) const;
     QStringList warnings;            //!< per-record skipped/flattened notes
@@ -177,8 +176,7 @@ public:
      *  makes them) the output rules of their @a circuits: Relay -> switch,
      *  exempt from blackout and Grand Master, on at open; House / Work /
      *  Backstage -> exempt from blackout and Grand Master; $$Options X ->
-     *  exempt from Grand Master. False when this build has no fixture
-     *  output rules yet (feat/output-rules). */
+     *  exempt from Grand Master. True when any fixture got rules. */
     static bool applyCircuitRoles(Doc *doc, const QMap<int, EosCircuit> &circuits);
 
     /** After the merge: bring the imported cue lists' @a chasers (ids in

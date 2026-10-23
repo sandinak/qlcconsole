@@ -560,11 +560,19 @@ Build tab's tools:
 
 - **Blind** mutes physical DMX output while the 2D preview keeps updating —
   build and check a look with the room dark. Design-mode only; force-cleared
-  the moment you switch to Operate.
+  the moment you switch to Operate. Fixtures set to **Ignore Blackout**
+  (house and work lights, power relays —
+  [Output rules](fixture-manager.md#output-rules)) stay as they are through
+  Blind, as through Blackout: a universe with any sends them live and
+  everything else as Blackout would.
 - **Park** holds selected fixtures' output frozen, out of cue control, and
   persists that with the workspace.
 - **Highlight** / **Flash** briefly drive selected fixtures to full white,
   for identifying which physical fixture is which.
+
+**Blackout** (top bar, Control menu) takes every light to zero whatever
+is running, except fixtures set to **Ignore Blackout**, which keep their
+live level.
 
 ## Power distribution
 

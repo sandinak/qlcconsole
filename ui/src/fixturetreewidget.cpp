@@ -40,6 +40,7 @@
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "powerdistribution.h"
+#include "outputrulekeeper.h"
 
 // Short output-destination description for a universe (by ID), e.g.
 // "ArtNet: 172.18.2.221 U:0", or the plugin name for non-network outputs.
@@ -733,6 +734,10 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
 
     item->setText(KColumnName, fixture->name());
     item->setIcon(KColumnName, ItemIcons::fixtureIcon(fixture));
+    // The badge's meaning, in words (Output rules…).
+    item->setToolTip(KColumnName, fixture->outputRules() == Fixture::OutputRules()
+                         ? QString()
+                         : tr("Output rules: %1").arg(OutputRuleKeeper::describe(fixture->outputRules())));
     item->setData(KColumnName, PROP_ID, QString::number(fixture->id()));
     if (m_channelSelection)
     {

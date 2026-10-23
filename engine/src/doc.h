@@ -197,6 +197,7 @@ private:
     class PaletteOps *m_paletteOps = nullptr;
     class PowerLimiter *m_powerLimiter = nullptr;
     class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
+    class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
 
@@ -1156,6 +1157,10 @@ public:
 
     /** Opens a lit head's shutter when nothing sets it (the show's setting) */
     class ShutterAutoOpen *shutterAutoOpen() const { return m_shutterAutoOpen; }
+
+    /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
+     *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */
+    class OutputRuleKeeper *outputRuleKeeper() const { return m_outputRuleKeeper; }
 
     /*********************************************************************
      * Network Topology

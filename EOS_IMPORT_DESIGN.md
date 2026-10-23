@@ -289,13 +289,17 @@ Report rendered post-import by the same dialog that renders `QxwImportResult`.
   channel from its label (`EosCircuit::classify`, most specific word wins:
   House > Work > Hall/Blue/Backstage > Relay) and reads `$$Options` X (GM
   exempt). The user's edits travel in `EosImportBundle::circuitRoles`. The
-  roles make the groups Eos/Power relays, Eos/House & Work and Eos/Backstage ("…
-  (special circuits)" when the show has an Eos group of that name), and
-  map to fixture output rules in `EosImporter::applyCircuitRoles()`.
-  Until `feat/output-rules` merges, that function runs on a marked shim.
-  The wiring is one line, `using Rule = OutputRulesShim;` →
-  `using Rule = Fixture;`. House and relay cue moves stay in the cues
-  (cue 1 still brings the house up).
+  roles make the groups Eos/Power relays, Eos/House & Work and
+  Eos/Backstage ("… (special circuits)" when the show has an Eos group of
+  that name). `EosImporter::applyCircuitRoles()` maps them to
+  `Fixture::OutputRules` on the scratch Doc's fixtures. Relay →
+  Switch | ExemptBlackout | ExemptGrandMaster | OnAtOpen; House / Work /
+  Backstage → ExemptBlackout | ExemptGrandMaster; X adds
+  ExemptGrandMaster. The rules ride the fixture XML through
+  `QxwImporter` into the live Doc (checked end to end on a real show).
+  The report lists the rules per role and points at Settings ▸ Advanced ▸
+  Output for when OnAtOpen fires (Operate, by default). House and relay
+  cue moves stay in the cues (cue 1 still brings the house up).
 - **Multiple cue lists.** Element 2 has a single cue list, so a school show
   is a non-issue; a Ti or Gio show might have >1. v1 handles with a prefix
   on scene names ("CL1 cue 10.5"); not elegant but survives.
