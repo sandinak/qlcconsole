@@ -63,6 +63,10 @@ private slots:
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
     /* P7: the Run tab -- the full-screen cue runner (⇧⌘9 in qlcconsole). */
     void theRunTabIsTheCueRunner();
+    /** Q81: Edit ▸ Undo acts on the tab in front -- Build, the Show Tree,
+     *  the Lighting Studio -- and elsewhere says "Nothing to undo on this
+     *  tab" (greyed) instead of undoing another tab's step. */
+    void editUndoSaysWhereItWorks();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
      *  production run": a show's definitions come from this computer. */

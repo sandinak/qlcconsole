@@ -508,6 +508,35 @@ void AppViews_Test::virtualConsoleKeysDontClashWithTheApp()
     vc->disableEdit();
 }
 
+void AppViews_Test::editUndoSaysWhereItWorks()
+{
+    QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
+    QVERIFY(undo != nullptr);
+    QMenu *edit = nullptr;
+    for (QAction *a : m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->menu()->actions().contains(undo))
+            edit = a->menu();
+    QVERIFY(edit != nullptr);
+    ShowTreeController *st = m_app->m_doc->showTree();
+    QVERIFY(st != nullptr);
+    const quint32 prod = st->addProduction(QStringLiteral("Undo test"));   // a Show Tree step
+
+    // Fixtures: no undo of its own, and it doesn't reach into the Show Tree's.
+    m_app->showContext("Fixtures");
+    emit edit->aboutToShow();
+    QCOMPARE(undo->text(), QString("Nothing to undo on this tab"));
+    QVERIFY(!undo->isEnabled());
+    undo->trigger();
+    QVERIFY(st->production(prod) != nullptr);
+
+    // The Show Tree: its step, named, and undone.
+    m_app->showContext("Show Tree");
+    emit edit->aboutToShow();
+    QVERIFY2(undo->isEnabled() && undo->text().startsWith("Undo "), qPrintable(undo->text()));
+    undo->trigger();
+    QTRY_VERIFY(st->production(prod) == nullptr);
+}
+
 void AppViews_Test::theRunTabIsTheCueRunner()
 {
     QAction *jump = nullptr;

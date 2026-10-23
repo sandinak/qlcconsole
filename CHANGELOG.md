@@ -165,6 +165,11 @@ circuits and subs.
 
 ### Changed
 
+- **Edit ▸ Undo says where it works** (board Q81): it undoes the tab in
+  front (Build, the Show Tree, the Lighting Studio's rig) and elsewhere
+  reads "Nothing to undo on this tab", greyed. It no longer undoes a Show
+  Tree step from another tab.
+
 - **One production, nothing to choose** (board Q75). A show with a single
   production doesn't show Current, the Production switcher or "· main"
   (unless it has two lists): GO plays its list. A second production brings

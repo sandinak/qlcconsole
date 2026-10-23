@@ -205,6 +205,8 @@ public:
     void pushRigUndo(const QByteArray &before);
     /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
     void undo();
+    /** Something to undo on the rig (Edit ▸ Undo, Q81). */
+    bool canUndo() const;
 
     /** Focus mode's current head: ring it on the plot and in the Rig
      *  Overview. UINT_MAX clears it. */

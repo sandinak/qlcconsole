@@ -2247,10 +2247,12 @@ void App::initMenuBar()
 
     /* ---- Edit: Undo / Redo, named (open 24) ---- */
     {
-        // One history for the Show Tree's steps and the palette operations
-        // (either tab), plus Programming's own canvas edits. The menu names
-        // the step; ⌘Z / ⇧⌘Z stay each tab's own shortcuts (a second
-        // binding here would make them ambiguous), shown beside the text.
+        // Each tab's own history (Q81): Build's, the Show Tree's (one shared
+        // history with the palette operations) and the Lighting Studio's rig
+        // undo. Other tabs have none yet, and the menu says so instead of
+        // reaching into another tab's history. The menu names the step; ⌘Z /
+        // ⇧⌘Z stay each tab's own shortcuts (a second binding here would
+        // make them ambiguous), shown beside the text.
         QMenu *editMenu = mb->addMenu(tr("&Edit"));
         QAction *undo = editMenu->addAction(tr("Undo"));
         undo->setObjectName(QStringLiteral("editUndo"));
@@ -2269,38 +2271,60 @@ void App::initMenuBar()
             ShowTreeView *v = qobject_cast<ShowTreeView *>(w);
             return v != nullptr ? v : (w != nullptr ? w->findChild<ShowTreeView *>() : nullptr);
         };
-        connect(editMenu, &QMenu::aboutToShow, this, [this, undo, redo, programming]() {
+        auto studio = [current]() -> Monitor * {
+            QWidget *w = current();
+            Monitor *m = qobject_cast<Monitor *>(w);
+            return m != nullptr ? m : (w != nullptr ? w->findChild<Monitor *>() : nullptr);
+        };
+        connect(editMenu, &QMenu::aboutToShow, this, [this, undo, redo, programming, treeView, studio]() {
             QString u, r;
+            bool known = true;
             if (ProgrammingManager *pm = programming())
             {
                 u = pm->undoText();
                 r = pm->redoText();
             }
-            else if (ShowTreeController *st = m_doc->showTree())
+            else if (treeView() != nullptr && m_doc->showTree() != nullptr)
             {
+                ShowTreeController *st = m_doc->showTree();
                 u = st->canUndoShared() ? st->sharedUndoText() : QString();
                 r = st->canRedoShared() ? st->sharedRedoText() : QString();
             }
+            else if (Monitor *m = studio())
+            {
+                // The rig's undo has no names and no redo.
+                u = m->canUndo() ? tr("rig change") : QString();
+            }
+            else
+                known = false;
+            if (!known)
+            {
+                undo->setText(tr("Nothing to undo on this tab"));
+                undo->setToolTip(tr("Undo works in Build, the Show Tree and the Lighting Studio so far"));
+                undo->setEnabled(false);
+                redo->setText(tr("Redo"));
+                redo->setEnabled(false);
+                return;
+            }
+            undo->setToolTip(QString());
             undo->setText(u.isEmpty() ? tr("Undo") : tr("Undo %1").arg(u));
             undo->setEnabled(!u.isEmpty());
             redo->setText(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r));
             redo->setEnabled(!r.isEmpty());
         });
-        connect(undo, &QAction::triggered, this, [this, programming, treeView]() {
+        connect(undo, &QAction::triggered, this, [programming, treeView, studio]() {
             if (ProgrammingManager *pm = programming())
                 QMetaObject::invokeMethod(pm, "slotUndo");
             else if (ShowTreeView *v = treeView())
                 QMetaObject::invokeMethod(v, "slotUndo");
-            else if (m_doc->showTree() != nullptr)
-                m_doc->showTree()->undoShared();
+            else if (Monitor *m = studio())
+                m->undo();
         });
-        connect(redo, &QAction::triggered, this, [this, programming, treeView]() {
+        connect(redo, &QAction::triggered, this, [programming, treeView]() {
             if (ProgrammingManager *pm = programming())
                 QMetaObject::invokeMethod(pm, "slotRedo");
             else if (ShowTreeView *v = treeView())
                 QMetaObject::invokeMethod(v, "slotRedo");
-            else if (m_doc->showTree() != nullptr)
-                m_doc->showTree()->redoShared();
         });
 
         /* ⇧⌘N, New (here): named for what it would make where you are

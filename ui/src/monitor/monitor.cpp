@@ -1491,6 +1491,11 @@ void Monitor::undo()
         m_graphicsView->undoLastMove();
 }
 
+bool Monitor::canUndo() const
+{
+    return m_graphicsView != nullptr && m_graphicsView->canUndo();
+}
+
 void Monitor::pushRigUndo(const QByteArray &before)
 {
     if (m_graphicsView != nullptr && !before.isEmpty() && rigSnapshot() != before)

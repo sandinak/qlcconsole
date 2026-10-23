@@ -163,6 +163,11 @@ without Build, the Show Tree or the Lighting Studio). Choosing a hidden
 tab from **Window** shows it anyway, switching to Everything with a line
 to go back. See [Views](getting-started.md#views).
 
+**⌘Z did nothing.** Undo works in **Build**, the **Show Tree** and the
+**Lighting Studio** so far; on other tabs **Edit ▸ Undo** reads *Nothing
+to undo on this tab* and is greyed. The menu always undoes the tab in
+front, never another tab's step.
+
 **Where did the Functions tab go?** The qlcconsole view has none; the
 Classic QLC+ and Everything views show it. **Window ▸ Functions** opens it,
 switching to Everything with a line above the tabs to go back. New
