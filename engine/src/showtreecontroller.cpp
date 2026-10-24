@@ -379,7 +379,11 @@ bool ShowTreeController::edit(const QString &label,
 
 void ShowTreeController::pushUndo(const QString &label, const QByteArray &before)
 {
-    m_undo.append(Snapshot { label, before, PaletteOps::nextUndoStamp() });
+    Snapshot step;
+    step.label = label;
+    step.xml = before;
+    step.stamp = PaletteOps::nextUndoStamp();
+    m_undo.append(step);
     while (m_undo.count() > kUndoLimit)
         m_undo.removeFirst();
     m_redo.clear();
