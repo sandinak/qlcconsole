@@ -567,4 +567,38 @@ void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
     delete voice;
 }
 
+void FocusCallsUi_Test::theVoiceNeverDropsAConfirmation()
+{
+    SilentVoice voice;
+    voice.setSlow(true);
+    voice.say("Fixture 1 of 4.");                                        // being said
+    voice.say("Fixture 2 of 4.");                                        // where: stale soon
+    voice.say("Spot 2 kept.", ControllerScheme::ConfirmPriority);
+    voice.say("Fixture 3 of 4.");                                        // replaces 2 of 4
+    voice.say("Controller lost. Lights held.", ControllerScheme::ImportantPriority);
+    voice.say("Fixture 4 of 4.");                                        // replaces 3 of 4
+    QCOMPARE(voice.queued(), QStringList({ "Spot 2 kept.", "Controller lost. Lights held.",
+                                           "Fixture 4 of 4." }));
+    for (int i = 0; i < 4; ++i)
+        voice.finishLine();
+    QCOMPARE(voice.said(), QStringList({ "Fixture 1 of 4.", "Spot 2 kept.",
+                                         "Controller lost. Lights held.", "Fixture 4 of 4." }));
+    QVERIFY(!voice.isSpeaking());
+
+    // Through the announcer, with the priority the engine gave it.
+    const bool was = OperatorVoice::isEnabled();
+    OperatorVoice::setEnabled(true);
+    SilentVoice heard;
+    heard.setSlow(true);
+    OperatorAnnouncer announcer(m_doc->programmer(), &heard);
+    emit m_doc->programmer()->operatorAnnounce("Call 1 of 2.", ControllerScheme::WherePriority);
+    emit m_doc->programmer()->operatorAnnounce("Saved.", ControllerScheme::ConfirmPriority);
+    emit m_doc->programmer()->operatorAnnounce("Call 2 of 2.", ControllerScheme::WherePriority);
+    QCOMPARE(heard.queued(), QStringList({ "Saved.", "Call 2 of 2." }));
+    heard.finishLine();
+    heard.finishLine();
+    heard.finishLine();
+    OperatorVoice::setEnabled(was);
+}
+
 QTEST_MAIN(FocusCallsUi_Test)

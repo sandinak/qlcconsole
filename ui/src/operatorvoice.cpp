@@ -93,23 +93,36 @@ OperatorVoice *OperatorVoice::create(QObject *parent)
     return new SilentVoice(parent);
 }
 
-void OperatorVoice::say(const QString &text)
+void OperatorVoice::say(const QString &text, int priority)
 {
     if (text.trimmed().isEmpty())
         return;
     if (m_speaking)
     {
-        // Never over the line being said; the newest waits, stale ones go.
-        m_waiting = text;
+        /* Never over the line being said. A where line still waiting is
+           stale once a newer one comes; nothing else is ever dropped. */
+        if (priority == ControllerScheme::WherePriority)
+            for (int i = m_queue.size() - 1; i >= 0; --i)
+                if (m_queue.at(i).second == ControllerScheme::WherePriority)
+                    m_queue.removeAt(i);
+        m_queue.append(qMakePair(text, priority));
         return;
     }
     m_speaking = true;
     speakNow(text);
 }
 
+QStringList OperatorVoice::queued() const
+{
+    QStringList out;
+    for (const QPair<QString, int> &line : m_queue)
+        out << line.first;
+    return out;
+}
+
 void OperatorVoice::stop()
 {
-    m_waiting.clear();
+    m_queue.clear();
     if (m_speaking)
         stopNow();
     m_speaking = false;
@@ -118,10 +131,9 @@ void OperatorVoice::stop()
 void OperatorVoice::finished()
 {
     m_speaking = false;
-    if (m_waiting.isEmpty())
+    if (m_queue.isEmpty())
         return;
-    const QString next = m_waiting;
-    m_waiting.clear();
+    const QString next = m_queue.takeFirst().first;
     m_speaking = true;
     speakNow(next);
 }
@@ -257,10 +269,9 @@ OperatorAnnouncer::OperatorAnnouncer(QObject *source, OperatorVoice *voice, QObj
 
 void OperatorAnnouncer::announce(const QString &text, int priority)
 {
-    Q_UNUSED(priority)
     m_last = text;
     if (m_voice != nullptr && OperatorVoice::isEnabled())
-        m_voice->say(text);
+        m_voice->say(text, priority);
 }
 
 /*****************************************************************************

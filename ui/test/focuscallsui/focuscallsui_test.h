@@ -63,6 +63,9 @@ private slots:
     /** The voice: silent under a test, and what is announced reaches it
      *  while it is on. */
     void theVoiceHearsTheAnnouncements();
+    /** Gap 9: confirmations, warnings and safety lines are queued and never
+     *  dropped; only "where am I" lines go stale. */
+    void theVoiceNeverDropsAConfirmation();
 
 private:
     Doc *m_doc = nullptr;

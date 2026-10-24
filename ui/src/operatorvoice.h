@@ -22,6 +22,8 @@
 
 #include <QComboBox>
 #include <QPointer>
+#include <QList>
+#include <QPair>
 #include <QObject>
 #include <QString>
 
@@ -42,9 +44,14 @@ class QProcess;
  *
  * The laptop feeds the crew's headsets, so the voice is their cue and must
  * land with the blink: a line is never cut off mid-word, and never spoken
- * over. A line that comes while one is being said waits; a newer one takes
- * its place (stepping quickly through fixtures says where you stopped,
- * not every fixture on the way).
+ * over. A line that comes while one is being said waits its turn.
+ *
+ * Two kinds of waiting (gap 9, ControllerScheme::Priority):
+ * - a "where am I" line goes stale: only the newest waits, so stepping
+ *   quickly through fixtures says where you stopped, not every fixture on
+ *   the way;
+ * - a confirmation ("Spot 3 kept.") or anything important (a warning, the
+ *   controller lost) is queued and never dropped.
  */
 class OperatorVoice : public QObject
 {
@@ -58,14 +65,18 @@ public:
     virtual QString backend() const = 0;
     virtual bool isAvailable() const = 0;
 
-    /** Say @p text: now, or after the line being said (a newer line takes
-     *  the place of one still waiting). */
-    void say(const QString &text);
+    /** Say @p text: now, or after what is being said and queued.
+     *  @p priority: ControllerScheme::Priority -- a where line (0) replaces
+     *  a where line still waiting; a confirmation or important line is
+     *  never dropped. */
+    void say(const QString &text, int priority = 0);
     /** Stop now, and drop what is waiting. */
     void stop();
     bool isSpeaking() const { return m_speaking; }
-    /** The line waiting for the one being said; empty for none. */
-    QString waiting() const { return m_waiting; }
+    /** The last line waiting for the one being said; empty for none. */
+    QString waiting() const { return m_queue.isEmpty() ? QString() : m_queue.last().first; }
+    /** Every line waiting, in the order they will be said. */
+    QStringList queued() const;
 
     /** The audio outputs this computer's voice can be sent to (macOS
      *  `say -a`), by name; empty where it cannot choose. */
@@ -91,7 +102,7 @@ protected:
 
 private:
     bool m_speaking = false;
-    QString m_waiting;
+    QList<QPair<QString, int>> m_queue;
 };
 
 /** Says nothing; records what it was asked to (tests). */
