@@ -31,6 +31,7 @@
 namespace
 {
 const QString kEnabledSetting = QStringLiteral("operatorVoice/enabled");
+const QString kDeviceSetting = QStringLiteral("operatorVoice/device");
 
 #ifdef QLC_HAVE_TEXTTOSPEECH
 /** Qt's own: whatever engine this platform's Qt TextToSpeech has. */
@@ -41,15 +42,16 @@ public:
         : OperatorVoice(parent)
         , m_tts(new QTextToSpeech(this))
     {
+        QObject::connect(m_tts, &QTextToSpeech::stateChanged, this, [this](QTextToSpeech::State s) {
+            if (s == QTextToSpeech::Ready || s == QTextToSpeech::Error)
+                finished();
+        });
     }
     QString backend() const override { return QStringLiteral("Qt TextToSpeech"); }
     bool isAvailable() const override { return m_tts->state() != QTextToSpeech::Error; }
-    void say(const QString &text) override
-    {
-        m_tts->stop();
-        m_tts->say(text);
-    }
-    void stop() override { m_tts->stop(); }
+protected:
+    void speakNow(const QString &text) override { m_tts->say(text); }
+    void stopNow() override { m_tts->stop(); }
 
 private:
     QTextToSpeech *m_tts;
@@ -88,6 +90,75 @@ OperatorVoice *OperatorVoice::create(QObject *parent)
     return new SilentVoice(parent);
 }
 
+void OperatorVoice::say(const QString &text)
+{
+    if (text.trimmed().isEmpty())
+        return;
+    if (m_speaking)
+    {
+        // Never over the line being said; the newest waits, stale ones go.
+        m_waiting = text;
+        return;
+    }
+    m_speaking = true;
+    speakNow(text);
+}
+
+void OperatorVoice::stop()
+{
+    m_waiting.clear();
+    if (m_speaking)
+        stopNow();
+    m_speaking = false;
+}
+
+void OperatorVoice::finished()
+{
+    m_speaking = false;
+    if (m_waiting.isEmpty())
+        return;
+    const QString next = m_waiting;
+    m_waiting.clear();
+    m_speaking = true;
+    speakNow(next);
+}
+
+QStringList OperatorVoice::outputDevices()
+{
+    QStringList out;
+#if defined(Q_OS_MACOS)
+    const QString say = QStandardPaths::findExecutable(QStringLiteral("say"));
+    if (say.isEmpty())
+        return out;
+    QProcess p;
+    p.start(say, { QStringLiteral("-a"), QStringLiteral("?") });
+    if (!p.waitForFinished(3000))
+        return out;
+    // "   74 MacBook Pro Speakers"
+    for (const QString &line : QString::fromUtf8(p.readAllStandardOutput()).split(QLatin1Char('\n')))
+    {
+        const QString t = line.trimmed();
+        const int sp = t.indexOf(QLatin1Char(' '));
+        if (sp > 0)
+            out << t.mid(sp + 1).trimmed();
+    }
+#endif
+    return out;
+}
+
+QString OperatorVoice::outputDevice()
+{
+    return QSettings().value(kDeviceSetting).toString();
+}
+
+void OperatorVoice::setOutputDevice(const QString &name)
+{
+    if (name.isEmpty())
+        QSettings().remove(kDeviceSetting);
+    else
+        QSettings().setValue(kDeviceSetting, name);
+}
+
 bool OperatorVoice::isEnabled()
 {
     return QSettings().value(kEnabledSetting, true).toBool();
@@ -111,7 +182,7 @@ CommandVoice::CommandVoice(const QString &program, const QStringList &leadingArg
 
 CommandVoice::~CommandVoice()
 {
-    stop();
+    stopNow();
 }
 
 QString CommandVoice::backend() const
@@ -124,19 +195,38 @@ bool CommandVoice::isAvailable() const
     return !m_program.isEmpty();
 }
 
-void CommandVoice::say(const QString &text)
+void CommandVoice::speakNow(const QString &text)
 {
-    stop();
-    if (text.trimmed().isEmpty())
-        return;
     QProcess *p = new QProcess(this);
-    connect(p, &QProcess::finished, p, &QObject::deleteLater);
-    connect(p, &QProcess::errorOccurred, p, &QObject::deleteLater);
+    // Done (or failed): the next line, if one is waiting.
+    connect(p, &QProcess::finished, this, [this, p]() {
+        p->deleteLater();
+        if (m_process == p)
+        {
+            m_process.clear();
+            finished();
+        }
+    });
+    connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError) {
+        p->deleteLater();
+        if (m_process == p)
+        {
+            m_process.clear();
+            finished();
+        }
+    });
     m_process = p;
-    p->start(m_program, QStringList(m_args) << text);
+    QStringList args = m_args;
+#if defined(Q_OS_MACOS)
+    // To the output chosen: the headsets' feed, say.
+    const QString device = outputDevice();
+    if (!device.isEmpty() && m_program.endsWith(QLatin1String("/say")))
+        args << QStringLiteral("-a") << device;
+#endif
+    p->start(m_program, args << text);
 }
 
-void CommandVoice::stop()
+void CommandVoice::stopNow()
 {
     if (m_process.isNull())
         return;

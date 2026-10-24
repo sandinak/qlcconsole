@@ -99,6 +99,7 @@
 #include "focusmodepanel.h"
 #include "venuecorrections.h"
 #include "operatorvoice.h"
+#include "focuscallcue.h"
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -645,6 +646,20 @@ void App::init()
         /* Focus calls and Refine say where the controller is, from the
            laptop, to whoever holds it on stage (board Q107). */
         new OperatorAnnouncer(pc, OperatorVoice::create(this), this);
+        /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): the panel when
+           its calls begin; Cmd+Return begins them, as Start does; the
+           footer says it waits. */
+        connect(pc->focusCallCue(), &FocusCallCue::stateChanged, this, [this](FocusCallCue::State s) {
+            if (s == FocusCallCue::Running)
+                FocusModePanel::attach(m_doc, this);
+            slotUpdateStandby();
+        });
+        QShortcut *startCalls = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
+        startCalls->setContext(Qt::ApplicationShortcut);
+        connect(startCalls, &QShortcut::activated, this, [this]() {
+            if (m_doc->programmer()->focusCallCue()->isArmed())
+                m_doc->programmer()->focusCallCue()->start();
+        });
         connect(pc, &ProgrammerController::dangleFixturesChanged, this,
                 [this](const QList<quint32> &fixtureIds) {
             if (m_statusDangleLabel == NULL)
@@ -6650,6 +6665,15 @@ void App::slotUpdateStandby()
         m_statusStandby->hide();
         return;
     }
+    // A focus-call cue armed: the footer says what it waits for.
+    if (const FocusCallCue *fcc = m_doc->programmer() != NULL ? m_doc->programmer()->focusCallCue() : NULL)
+        if (fcc->state() != FocusCallCue::Idle)
+        {
+            m_statusStandby->setText(fcc->isArmed() ? tr("Focus calls: waiting for the controller (Start)")
+                                                    : tr("Focus calls running (Menu ends them)"));
+            m_statusStandby->show();
+            return;
+        }
     ShowControl *sc = m_doc->showControl();
     Chaser *list = sc->cueList(QString());
     if (list == NULL)

@@ -145,6 +145,9 @@ public:
     static void rememberInput(FocusSession::InputDevice device);
     /** The running panel, if any. */
     static FocusModePanel *instance();
+    /** The panel for a session something else started (a focus-call cue):
+     *  shown, or raised if it is up. Null when no session runs. */
+    static FocusModePanel *attach(Doc *doc, QWidget *parent);
 
     ~FocusModePanel() override;
 

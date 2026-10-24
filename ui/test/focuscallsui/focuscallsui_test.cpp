@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QSignalSpy>
 #include <QToolButton>
 #include <QListWidget>
 #include <QPushButton>
@@ -49,6 +50,8 @@
 #include "focuscalls.h"
 #include "programmingoutline.h"
 #include "workbench.h"
+#include "focuscallcue.h"
+#include "cuerunner.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -348,6 +351,44 @@ void FocusCallsUi_Test::refineFromTheWorkbench()
     QTRY_VERIFY(panel.isNull());
 }
 
+void FocusCallsUi_Test::aFocusCallCueWaitsForTheController()
+{
+    FocusCall c;
+    c.groups << m_group;
+    c.target.kind = FocusSession::Reference::Target;
+    c.target.id = m_target;
+    m_doc->programmer()->focusCalls()->setCalls({ c });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Spring");
+    const quint32 list = st->addCueList(prod, "Pre-show");
+    const quint32 cue = st->addCue(list, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ cue }, true));
+
+    CueRunner runner(m_doc, CueRunner::Full);
+    QVERIFY(runner.focusArmedText().isEmpty());
+    FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    m_doc->setMode(Doc::Operate);
+    fcc->cueCurrent(list, cue);
+    QCOMPARE(runner.focusArmedText(), QString("Focus calls: waiting for the controller \u2014 press Start"));
+    QToolButton *start = runner.findChild<QToolButton *>("crFocusStart");
+    QVERIFY(start != nullptr && !start->isHidden());
+
+    // The Run tab's button does what Start does; the panel comes up on it.
+    start->click();
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QVERIFY(runner.focusArmedText().startsWith("Focus calls running"));
+    QPointer<FocusModePanel> panel = FocusModePanel::attach(m_doc, nullptr);
+    QVERIFY(panel != nullptr);
+    QVERIFY(panel->findChild<QLabel *>("focusCall")->text().startsWith("Call 1 of 1"));
+    // Menu (Esc): leave, and on with the list.
+    QSignalSpy goOn(fcc, &FocusCallCue::continueRequested);
+    QTest::keyClick(panel, Qt::Key_Escape);
+    QTRY_COMPARE(fcc->state(), FocusCallCue::Idle);
+    QCOMPARE(goOn.count(), 1);
+    QVERIFY(runner.focusArmedText().isEmpty());
+    m_doc->setMode(Doc::Design);
+}
+
 void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
 {
     OperatorVoice *voice = OperatorVoice::create(this);
@@ -367,6 +408,22 @@ void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
     m_doc->programmer()->focusSession()->next();
     QCOMPARE(silent->said().last(), QString("Fixture 2 of 3."));
     QCOMPARE(announcer.lastSaid(), QString("Fixture 2 of 3."));
+
+    // Never over a line being said: the newest waits, stale ones go.
+    silent->setSlow(true);
+    const int before = silent->said().size();
+    voice->say("Call 1 of 3.");
+    voice->say("Fixture 2 of 4.");
+    voice->say("Fixture 3 of 4.");
+    QCOMPARE(silent->said().size(), before + 1);
+    QVERIFY(voice->isSpeaking());
+    QCOMPARE(voice->waiting(), QString("Fixture 3 of 4."));
+    silent->finishLine();
+    QCOMPARE(silent->said().last(), QString("Fixture 3 of 4."));
+    silent->finishLine();
+    QVERIFY(!voice->isSpeaking());
+    QCOMPARE(silent->said().size(), before + 2);
+    silent->setSlow(false);
 
     // Off: nothing is said (but the last phrase is still known).
     OperatorVoice::setEnabled(false);

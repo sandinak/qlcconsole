@@ -464,6 +464,29 @@ FocusModePanel *FocusModePanel::startWith(Doc *doc, QWidget *parent,
     return panel;
 }
 
+FocusModePanel *FocusModePanel::attach(Doc *doc, QWidget *parent)
+{
+    FocusSession *s = doc->programmer()->focusSession();
+    if (!s->isActive())
+        return nullptr;
+    if (s_instance != nullptr)
+    {
+        s_instance->refresh();
+        s_instance->show();
+        s_instance->raise();
+        return s_instance.data();
+    }
+    FocusModePanel *panel = new FocusModePanel(doc, parent);
+    s_instance = panel;
+    panel->setInputDevice(defaultInput(doc), false);
+    panel->refreshController();
+    panel->refresh();
+    panel->showHighlight(s->currentFixture());
+    panel->show();
+    panel->raise();
+    return panel;
+}
+
 FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     : QWidget(parent, Qt::Tool)
     , m_doc(doc)

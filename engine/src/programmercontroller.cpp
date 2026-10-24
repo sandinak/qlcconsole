@@ -38,6 +38,7 @@
 #include "refinesession.h"
 #include "focussession.h"
 #include "focuscalls.h"
+#include "focuscallcue.h"
 #include "gamepadrole.h"
 
 #include "doc.h"
@@ -96,6 +97,13 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_focusSession->setVenues(m_venues);
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
+    m_focusCallCue = new FocusCallCue(m_doc, m_focusSession, m_focusCalls, this);
+    connect(m_focusCallCue, &FocusCallCue::announce, this, &ProgrammerController::operatorAnnounce);
+    connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
+        // Armed: the controller is read for Start, even with nothing else on.
+        if (m_focusCallCue->isArmed())
+            connectControllerInput();
+    });
     connect(m_focusSession, &FocusSession::announce, this, &ProgrammerController::operatorAnnounce);
     connect(m_refineSession, &RefineSession::announce, this, &ProgrammerController::operatorAnnounce);
     connect(m_doc, &Doc::clearing, this, [this]() {
@@ -2097,6 +2105,13 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_heldRoles.insert(role);
         else
             m_heldRoles.remove(role);
+        // A focus-call cue armed: Start (Menu) begins the calls.
+        if (!active && value > 0 && role == FocusCallCue::startRole() && m_focusCallCue->isArmed()
+            && !m_heldRoles.contains(GamepadRole::Back))
+        {
+            m_focusCallCue->start();
+            return true;
+        }
         // View + Menu together: ask for Focus mode.
         if (!active && value > 0 && m_heldRoles.contains(GamepadRole::Back)
             && m_heldRoles.contains(GamepadRole::Start))

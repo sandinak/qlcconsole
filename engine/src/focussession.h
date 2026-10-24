@@ -116,6 +116,13 @@ public:
         Others others = OthersDark;
         float level = 0.8f;        ///< the focused head's intensity, 0..1
         float dimLevel = 0.15f;    ///< the others', with OthersDim
+        /** Run in Operate too (a focus-call cue in a running list), and
+         *  going into Operate does not end it. */
+        bool allowOperate = false;
+        /** RT on the last call asks to leave (exitRequested()) instead of
+         *  going round to the first: a focus-call cue goes on to the next
+         *  cue when the calls are done. */
+        bool endAfterLastCall = false;
     };
 
     /** A head's calibration offsets, degrees. */

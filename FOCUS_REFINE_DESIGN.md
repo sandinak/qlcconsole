@@ -75,7 +75,7 @@ does the same **kind** of thing in every tool:
 | **B** | Revert | Back to saved | Back to saved | **Back to the cue** (drops pending) |
 | **X** | Reset | Zero the offsets | Zero the offsets | **Clear the exception** (Group/Fixture). At Layer scope it is the same as B. |
 | **View / Back** | Undo | Undo last save (a group save is one step) | same | Show Tree undo |
-| **Menu / Start** | Exit | Ask about unsaved, leave | same | Ask "Keep what is pending?", leave |
+| **Menu / Start** | Exit | Ask about unsaved, leave | same. **On an armed focus-call cue (no session yet): begins the calls** (§7) | Ask "Keep what is pending?", leave |
 | **LS click** | Alternate | Second reference | Second reference (rarely needed: each call has its own point) | **D-pad page**: beam → colour → gobo |
 | **RS click** | Where am I? | Say it, flash it | Say it, flash it | Say it, flash it |
 | View + Menu held | — | Opens Focus mode (as before) | — | — |
@@ -148,11 +148,26 @@ the show is touched.
 
 ### Voice
 
-The laptop says where the controller is: briefly, and only the latest phrase
-(a new phrase cuts off the old one, so stepping quickly through eight
-fixtures says only where you stopped). The engine emits text
-(`ProgrammerController::operatorAnnounce`). The UI speaks it
-(`ui/src/operatorvoice.{h,cpp}`).
+The laptop says where the controller is, briefly. The laptop's output feeds
+the crew's **headsets** on stage, so the voice is the crew's cue and works
+together with the blink (owner, 2026-10-23):
+
+- **A line is never cut off or spoken over.** A line that arrives while
+  another is being said waits.
+- **Stale lines are dropped.** Only the newest line waits, so stepping
+  quickly through eight fixtures says the one you stopped on, not every
+  fixture on the way.
+- **The voice is in step with the blink.** A line is spoken at the same
+  moment as the blink it describes (`OperatorVoice::say`, `waiting()`).
+
+The engine emits text (`ProgrammerController::operatorAnnounce`). The UI
+speaks it (`ui/src/operatorvoice.{h,cpp}`).
+
+**Output device.** The Focus calls dialog's **Voice to:** picks the audio
+output, so the voice can go to the interface that feeds the headsets. On a
+Mac this is `say -a <device>`, and the device is kept in the setting
+`operatorVoice/device`. Linux and Windows: follow-up (spd-say has no
+device choice; Qt TextToSpeech uses the system output).
 
 **Exact phrases:**
 
@@ -414,20 +429,72 @@ Entry points:
 | Show Tree layer right-click → **Refine on the controller…** | Refine starting on that layer | ✅ |
 | Build Workbench header → **Refine…** (a scene, or a cue on loan) | Refine what is loaded (§6B) | ✅ |
 | Build Workbench right-click on a scene, group, fixture or cue-layer row | Refine starting there | ✅ |
-| A **focus-call cue** in a cue list | See below | ✗ (designed) |
+| A **focus-call cue** in a cue list (cue page: **Focus call**; F column: **focus**) | Armed on GO; the controller's **Start** begins (below) | ✅ |
 
-**A focus-call cue (designed, not built).** This is a cue flag
-`focusCall="all"` or `focusCall="2-4"` on an ordinary Show Tree cue. GO on
-that cue would:
+### A focus-call cue
 
-1. leave the list's lights as they are;
-2. open the Focus calls panel on those calls, with the venue applied (or
-   ask for one);
-3. let **Menu** end the focus and continue: the next GO plays the next cue.
+The owner's direction: "it should wait for input from the joystick before it
+actually starts so that light can be preset in a certain condition and then
+when ready somebody can just hit the button", with the voice through the
+headsets "in concert with the lights".
 
-It belongs at the top of a "Pre-show" list, so the stage manager's checklist
-and the focus are one list. It needs Operate-mode Focus, because the list
-runs in Operate (Refine already works there, Q112a).
+**The flag.** A focus-call cue is an ordinary Show Tree cue with
+`Cue::focusCall` set:
+
+- set on the cue page with the **Focus call** checkbox;
+- saved in the show as `FocusCall="1"`, which an older build ignores, so the
+  cue plays there as an ordinary cue;
+- shown as **focus** in the F column, with a sentence in the tooltip;
+- one undo step (`setCuesFocusCall`).
+
+It belongs at the top of a "Pre-show" list.
+
+**GO arms it; it does not start.** `FocusCallCue` (engine) watches the tree's
+lists as they play: their chasers' current step, through `runningCue()`. GO
+onto a focus-call cue:
+
+- plays the **cue's own looks as a preset**: the work light, or the first
+  call's fixtures parked at their point;
+- **arms** the focus calls. Nothing steps.
+
+The voice says once: **"Focus calls ready. Press Start to begin."** The cue
+page, the Run tab and the footer all say **"Focus calls: waiting for the
+controller"**. The Run tab also has a **Start focus calls** button.
+
+**Start begins them.**
+
+- **Controller:** **Start (Menu)**. While armed, Start is free: no session
+  is running, so it doesn't mean Exit yet. Once running, Menu means Exit
+  again. The same button starts and ends, which is easy to say on headset.
+  A was rejected because it is Save in the session, so a double-press could
+  save the first fixture by accident.
+- **Keyboard:** **⌘↩** (Ctrl+Return), application-wide while armed.
+
+Starting:
+
+- runs Focus mode on the show's calls **in Operate** (`Options::allowOperate`),
+  dimming the others;
+- uses a venue: the one applied, else a dated one when the show has a file
+  (Q110);
+- speaks the first call ("Call 1 of 5, DH Tspots to DSC. Fixture 1 of 4.")
+  as its blink begins.
+
+**Leaving continues the list.** Either of these asks about unsaved work, as
+Focus mode always does, then stops the session:
+
+- **Menu**;
+- **RT on the last call**, which says "Last call done." first
+  (`Options::endAfterLastCall`).
+
+`FocusCallCue` then sends **GO** to that list's chaser, which plays the next
+cue. A list that moves off the cue before Start disarms it.
+
+Tests:
+
+- `focuscalls_test aFocusCallCueArmsThenStartsOnTheController` (armed → start
+  → step → exit → GO);
+- `focuscallsui_test aFocusCallCueWaitsForTheController` (the Run tab, its
+  button, the panel, Menu).
 
 ---
 
@@ -620,7 +687,6 @@ step").
 
 **Stubbed or not built:**
 
-- A focus-call cue in a list (designed in §7).
 - Refine of tracked-in layers.
 - A venue manager UI (rename and delete exist in the engine only).
 - Help screenshots for the new panels (`./help-shots.sh` entries).
@@ -629,7 +695,6 @@ step").
 **Next, in order:**
 
 1. Branson tries it; then voice, rumble and shutters (Q113).
-3. The focus-call cue (needs Focus mode in Operate, as Refine now is).
 4. A venue manager (rename/delete) in the dialog.
 5. Help shots.
 6. A real-rig check on `ender`/the show VLAN: flash timing visible at

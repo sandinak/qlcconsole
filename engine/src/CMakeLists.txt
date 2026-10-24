@@ -123,6 +123,7 @@ add_library(${module_name} SHARED
     highlighteffect.cpp highlighteffect.h
     focussession.cpp focussession.h
     focuscalls.cpp focuscalls.h
+    focuscallcue.cpp focuscallcue.h
     venuecorrections.cpp venuecorrections.h
     controllerscheme.cpp controllerscheme.h
     refinesession.cpp refinesession.h
