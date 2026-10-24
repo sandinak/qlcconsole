@@ -81,6 +81,11 @@ RefineSession::RefineSession(Doc *doc, QObject *parent)
                 m_kept.clear();
                 m_doc->showTree()->previewCue(m_cue);
             }
+            // Into Operate on a cue that is not running: blind (Q130), said.
+            m_wasRunning = cueIsRunning();
+            if (!m_wasRunning)
+                warn(tr("In Operate only the cue running is refined: cue %1 is not running, "
+                        "so nothing is sent.").arg(cueNumber()));
             rebuildWrites();
         });
 }
@@ -103,10 +108,26 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
     if (st == nullptr || st->cue(cueId) == nullptr)
         return refuse(tr("Choose a cue to refine."));
+    /* Q130: in Operate the show is running -- only the cue on stage, so a
+       nudge never lights a cue that is not playing. */
+    if (m_doc->mode() == Doc::Operate)
+    {
+        const ShowTree::CueList *list = st->listOfCue(cueId);
+        const quint32 running = list != nullptr
+            ? (m_runningProbe ? m_runningProbe(list->id) : st->runningCue(list->id)) : kInvalid;
+        if (running != cueId)
+        {
+            const ShowTree::Cue *c = st->cue(cueId);
+            return refuse(tr("In Operate only the cue running can be refined: cue %1 is not running. "
+                             "GO to it, or refine it in Design.")
+                          .arg(c->number.isEmpty() ? c->name : c->number));
+        }
+    }
     if (m_active)
         stop();
     m_sceneMode = false;
     m_cue = cueId;
+    m_wasRunning = true;
     const QList<quint32> layers = findLayers(why);
     if (layers.isEmpty())
     {
@@ -1053,9 +1074,16 @@ bool RefineSession::keep(QString *why)
     if (wasTracked)
         confirm(toSource ? tr("Kept in the cue it tracks from.") : tr("Kept in this cue."));
     else
-        confirm(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the next GO.").arg(light)
-                                          : tr("%1 kept.").arg(light));
+        confirm(m_doc->mode() == Doc::Operate
+                ? tr("%1 kept. It plays next time cue %2 runs.").arg(light, cueNumber())
+                : tr("%1 kept.").arg(light));
     return true;
+}
+
+QString RefineSession::cueNumber() const
+{
+    const ShowTree::Cue *c = cue();
+    return c == nullptr ? QString() : (c->number.isEmpty() ? c->name : c->number);
 }
 
 bool RefineSession::nextPending()
@@ -1323,7 +1351,8 @@ void RefineSession::setLightsFeedback(bool on)
 
 void RefineSession::flashSelection()
 {
-    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
+    // Q130: in Operate, quiet -- the audience sees the show, not a blink.
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback || isQuiet())
         return;
     m_warnFlash = false;
     m_flashClock.start();
@@ -1331,9 +1360,49 @@ void RefineSession::flashSelection()
     rebuildWrites();
 }
 
+bool RefineSession::cueIsRunning() const
+{
+    if (!m_active || m_sceneMode || m_doc->mode() != Doc::Operate)
+        return true;
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTree::CueList *list = st->listOfCue(m_cue);
+    if (list == nullptr)
+        return false;
+    return (m_runningProbe ? m_runningProbe(list->id) : st->runningCue(list->id)) == m_cue;
+}
+
+bool RefineSession::isBlind() const
+{
+    return m_active && !cueIsRunning();
+}
+
+bool RefineSession::isQuiet() const
+{
+    return m_doc != nullptr && m_doc->mode() == Doc::Operate;
+}
+
+void RefineSession::checkRunning()
+{
+    const bool running = cueIsRunning();
+    if (running == m_wasRunning)
+        return;
+    m_wasRunning = running;
+    if (!running)
+    {
+        // GO: the list plays on; nothing is held over it.
+        m_kept.clear();
+        const ShowTree::Cue *c = cue();
+        warn(tr("Cue %1 has moved on: nothing is sent until it runs again.")
+             .arg(c != nullptr ? (c->number.isEmpty() ? c->name : c->number) : QString()));
+    }
+    m_levelCache.clear();
+    rebuildWrites();
+    emit changed();
+}
+
 void RefineSession::flashWarning()
 {
-    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback || isQuiet())
         return;
     m_warnFlash = true;
     m_flashClock.start();
@@ -1459,6 +1528,7 @@ void RefineSession::tick(double dt)
 {
     if (!m_active)
         return;
+    checkRunning();
     // A held D-pad arm repeats (press()); a page change stops it.
     if (m_hold.held() >= 0 && !repeats(ControllerScheme::Verb(m_hold.held())))
         m_hold.reset();
@@ -1566,7 +1636,8 @@ int RefineSession::cueLevel(quint32 fid, quint32 channel)
 void RefineSession::rebuildWrites()
 {
     QHash<QPair<int, int>, uchar> writes;
-    if (m_active)
+    // Blind (Operate, its cue not running): nothing at all.
+    if (m_active && !isBlind())
     {
         auto put = [&](Fixture *fx, quint32 ch, uchar value) {
             const int addr = int(fx->address()) + int(ch);
@@ -1601,7 +1672,7 @@ void RefineSession::rebuildWrites()
             const bool picked = selected.contains(fid);
             if (picked && !dark)
                 continue;   // as the cue has it
-            if (!picked && (m_scope == LayerScope || !m_lightsFeedback))
+            if (!picked && (m_scope == LayerScope || !m_lightsFeedback || isQuiet()))
                 continue;
             const uchar dim = uchar(qRound(dimLevel() * 255.0f));
             for (quint32 c = 0; c < fx->channels(); ++c)

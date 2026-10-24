@@ -156,9 +156,20 @@ The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
 ## Refine during the show
 
 Refine works in Operate too, and switching between Design and Operate
-does not end it. In Operate the cue list runs on as it is: what you move
-is shown on the rig at once, and **A** keeps it in the cue as in Design.
-The running cue plays it from its **next GO**; until then Refine holds what
-was kept on the rig, and the voice says "Kept. It plays from the next GO."
-Leaving Refine lets go of that hold. Back in Design, the cue is previewed
-with everything kept.
+does not end it. In Operate the show is running, so Refine is quiet:
+
+- **Only the cue running.** Refine starts only on the cue its list is
+  playing now. Any other cue is refused: GO to it, or refine it in
+  Design.
+- **No blink, no dim.** What is picked does not blink, and the rest of
+  the layer is not dimmed: the audience sees the show. The voice still
+  says where you are.
+- **Kept, and held.** What you move shows on the rig at once, and **A**
+  keeps it in the cue as in Design. The voice says "AT spots kept. It
+  plays next time cue 4 runs." Until then Refine holds what was kept on
+  the rig.
+- **GO lets go.** When the list moves off the cue, the hold is released
+  and Refine sends nothing until that cue runs again. The voice says so.
+
+Leaving Refine lets go of the hold too. Back in Design, the cue is
+previewed with everything kept.

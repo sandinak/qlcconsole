@@ -528,14 +528,29 @@ void RefineSession_Test::operateHoldsWhatIsKept()
     ShowTreeController *st = m_doc->showTree();
     m_doc->setMode(Doc::Operate);
     RefineSession *r = m_doc->programmer()->refineSession();
+    r->setFlashEnabled(true);
     QSignalSpy said(r, &RefineSession::announce);
+    // Q130: only the cue running. Nothing is: refused.
+    quint32 running = invalidId();
+    r->setRunningCueProbe([&running](quint32) { return running; });
     QString why;
+    QVERIFY(!r->start(m_cue, invalidId(), &why));
+    QVERIFY2(why.startsWith("In Operate only the cue running can be refined"), qPrintable(why));
+    running = m_cue;
     QVERIFY2(r->start(m_cue, invalidId(), &why), qPrintable(why));
-    // The show runs on: Refine does not preview the cue in Operate.
+    // The show runs on: Refine does not preview the cue in Operate...
     QVERIFY(st->previewedCue() != m_cue);
+    // ...and is quiet: no blink, no dim, a fixture picked or not.
+    QVERIFY(!r->isFlashing());
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(!r->isFlashing());
+    const int dimmer2 = int(m_doc->fixture(m_spots.at(2))->address()) + 4;
+    QVERIFY(!r->pendingWrites().contains(qMakePair(0, dimmer2)));
+    r->setScope(RefineSession::LayerScope);
     QVERIFY(r->nudgePosition(4.0f, 0.0f));
     QVERIFY(r->keep());
-    QCOMPARE(said.last().at(0).toString(), QString("AT spots kept. It plays from the next GO."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT spots kept. It plays next time cue 1 runs."));
     QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
              QVariantList({ 274, 135 }));
     // Held on the rig until the next GO plays it.
@@ -543,12 +558,25 @@ void RefineSession_Test::operateHoldsWhatIsKept()
     QVERIFY(!r->hasPending());
     QVERIFY(sentDegrees(m_doc, r->pendingWrites(), m_spots.at(2), pan, tilt));
     QVERIFY(qAbs(pan - 274.0f) < 0.05f);
+    // GO: the list moves on -- the hold is let go, and Refine sends nothing.
+    running = invalidId() - 1;
+    r->tick(0.02);
+    QVERIFY(r->isBlind());
+    QVERIFY(r->pendingWrites().isEmpty());
+    QVERIFY(said.last().at(0).toString().startsWith("Cue 1 has moved on"));
+    QVERIFY(r->nudgePosition(2.0f, 0.0f));          // blind: pending, not sent
+    QVERIFY(r->pendingWrites().isEmpty());
+    r->revert();
+    running = m_cue;                                // back on it
+    r->tick(0.02);
+    QVERIFY(!r->isBlind());
     // Back in Design the cue is previewed with it, and nothing is held.
     m_doc->setMode(Doc::Design);
     QVERIFY(r->isActive());
     QCOMPARE(st->previewedCue(), m_cue);
     QVERIFY(r->pendingWrites().isEmpty());
     r->stop();
+    r->setRunningCueProbe({});
 }
 
 void RefineSession_Test::dimsOnlyWhatIsBrighter()

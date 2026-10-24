@@ -25,6 +25,7 @@
 #include <QMutex>
 #include <QHash>
 #include <QList>
+#include <functional>
 
 #include "qlcengine_export.h"
 #include "controllerscheme.h"
@@ -107,6 +108,18 @@ public:
     void stop();
     bool isActive() const { return m_active; }
     quint32 cueId() const { return m_cue; }
+
+    /** Board Q130, quiet Refine in Operate: only the cue its list is
+     *  running can be refined there (start() refuses any other), and it
+     *  is refined quietly -- no blink, no dim. When the list moves off it
+     *  (GO), what was kept stops being held and Refine goes blind (no
+     *  DMX) until the cue runs again. True in Design, and for a scene. */
+    bool cueIsRunning() const;
+    /** True while Refine sends nothing: Operate, and its cue not running. */
+    bool isBlind() const;
+    /** The cue a list is running (ShowTreeController::runningCue()); a
+     *  test stands in for playing lists with @p probe (empty: the tree). */
+    void setRunningCueProbe(const std::function<quint32(quint32)> &probe) { m_runningProbe = probe; }
 
     /*********************************************************************
      * Where it is
@@ -306,6 +319,8 @@ private:
     QStringList paletteUsers(quint32 paletteId, quint32 exceptScene) const;
     /** What a keep is said for: the light picked, or the layer. */
     QString keptLight() const;
+    /** "4" (its number, else its name). */
+    QString cueNumber() const;
     bool sceneClearException();
     const ShowTree::Layer *layer(quint32 layerId) const;
     /** The child layer of @p layerId exactly on @p target, if any. */
@@ -370,6 +385,12 @@ private:
     QElapsedTimer m_flashClock;
     bool m_flashEnabled = true;
     bool m_warnFlash = false;
+    std::function<quint32(quint32)> m_runningProbe;
+    bool m_wasRunning = true;
+    /** Operate: Refine is quiet (no blink, no dim). */
+    bool isQuiet() const;
+    /** The list moved on (or back): release the hold, go blind. */
+    void checkRunning();
     bool m_lightsFeedback = true;
 
     mutable QMutex m_writesMutex;
