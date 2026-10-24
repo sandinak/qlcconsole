@@ -1232,11 +1232,25 @@ Workbench::Page Workbench::currentPage() const
          : w == m_overviewPage ? OverviewPage : EmptyPage;
 }
 
+/* An editor going away later (deleteLater) still holds its Function*, and
+   the Doc's signals still reach it until then. Doc::clearContents() deletes
+   the functions and then removes the fixtures in one go: an EFX editor
+   answered fixtureRemoved by reading its deleted EFX (heap corruption, seen
+   on Linux). Cut it, and everything in it, off from the Doc now. */
+static void retireEditor(QWidget *editor, Doc *doc)
+{
+    QObject::disconnect(doc, nullptr, editor, nullptr);
+    for (QObject *child : editor->findChildren<QObject *>())
+        QObject::disconnect(doc, nullptr, child, nullptr);
+    editor->hide();
+    editor->deleteLater();
+}
+
 void Workbench::updateOverview()
 {
     if (m_overviewEditor != nullptr)
     {
-        m_overviewEditor->deleteLater();
+        retireEditor(m_overviewEditor, m_doc);
         m_overviewEditor = nullptr;
     }
     if (m_stack == nullptr)
@@ -1465,13 +1479,12 @@ void Workbench::clearEditors()
     releaseLentPane();
     if (m_canvas != nullptr)
     {
-        m_canvas->deleteLater();
+        retireEditor(m_canvas, m_doc);
         m_canvas = nullptr;
     }
     if (m_funcEditor != nullptr)
     {
-        m_funcEditor->hide();
-        m_funcEditor->deleteLater();
+        retireEditor(m_funcEditor, m_doc);
         m_funcEditor = nullptr;
     }
     // The look editor outlives the canvas: drop its Scene* too.
@@ -1485,8 +1498,7 @@ void Workbench::loadFunctionEditor(quint32 fid)
     Function *f = m_doc->function(fid);
     if (m_funcEditor != nullptr)
     {
-        m_funcEditor->hide();
-        m_funcEditor->deleteLater();
+        retireEditor(m_funcEditor, m_doc);
         m_funcEditor = nullptr;
     }
     m_editorFunction = fid;
