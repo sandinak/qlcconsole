@@ -284,6 +284,15 @@ public:
      *  unsaved offsets needs an answer. */
     void apply(Control control);
 
+    /** A controller button went down (@p down) or up. The beam and focus
+     *  arms of the D-pad repeat while held: once on the press, again after
+     *  kRepeatDelay, then every kRepeatInterval (tick() does the repeats).
+     *  Anything else is apply()ed once on the press. */
+    void press(Control control, bool down);
+    static bool repeats(Control control);
+    static constexpr double kRepeatDelay = 0.4;
+    static constexpr double kRepeatInterval = 0.08;
+
     /** The follow spot's stick response (followspot.js axisVelocity()): a
      *  normalised axis reading @p norm (0..1, 0.5 centred) as a velocity,
      *  -1..1, nothing inside @p deadzone and linear past it. */
@@ -396,6 +405,9 @@ private:
     InputDevice m_input = ControllerInput;
     float m_trigger[2] = { 0.0f, 0.0f };
     float m_carryBeam = 0.0f;
+    /** The held D-pad arm that repeats, and how long until it next does. */
+    Control m_held = NoControl;
+    double m_heldWait = 0.0;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };
     float m_deadzone = 0.05f;

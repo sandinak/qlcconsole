@@ -929,6 +929,26 @@ void FocusSession_Test::theBeamIsSetWithinTheLensRange()
     QVERIFY(s->focusLevel(wash->id(), focus));
     QCOMPARE(focus, 0.54);
     QCOMPARE(s->pendingWrites().value(qMakePair(0, 42)), uchar(qRound(0.54 * 255.0)));
+    // Held, a D-pad arm repeats: once on the press, after a pause, then steadily.
+    const FocusSession::Control tighter = FocusSession::controlFor(GamepadRole::DpadRight);
+    s->press(tighter, true);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.56);
+    s->tick(FocusSession::kRepeatDelay - 0.1);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.56);                                   // not yet
+    s->tick(0.1);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.58);
+    s->tick(FocusSession::kRepeatInterval * 2);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.62);
+    s->press(tighter, false);                                // let go: it stops
+    s->tick(1.0);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.62);
+    // A button that isn't on the D-pad doesn't repeat.
+    QVERIFY(!FocusSession::repeats(FocusSession::controlFor(GamepadRole::RB)));
     s->stop();
     QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 25.0f);   // the saved one stays
 }

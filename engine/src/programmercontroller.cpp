@@ -2084,9 +2084,10 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = norm;
         m_focusSession->setStick(FocusSession::Fine, m_fineNormX, m_fineNormY);
     }
-    else if (value > 0)
+    else if (FocusSession::controlFor(role) != FocusSession::NoControl)
     {
-        m_focusSession->apply(FocusSession::controlFor(role));
+        // Down applies (and a D-pad arm starts repeating); up stops it.
+        m_focusSession->press(FocusSession::controlFor(role), value > 0);
     }
     return true;
 }

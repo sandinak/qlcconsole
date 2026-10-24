@@ -1157,7 +1157,7 @@ Where a light's beam can change, Focus mode changes it too: **D-pad up**
 zooms in (narrower), **down** zooms out (wider) (or **,** and **.** on the keyboard, ⇧ for 5°),
 always within the lens range its definition gives, and the panel shows the
 angle. Where it has a focus channel, **D-pad right**
-tightens its focus — the edge — and **left** loosens it (or **'** and **;**), while you focus, to see it; that isn't
+tightens its focus — the edge — and **left** loosens it (or **'** and **;**); hold a D-pad arm and it repeats. That is while you focus, to see it; it isn't
 saved either, the cues set it.
 
 - **A lens zoomed by hand** (a fixed spot or wash with a range but no zoom

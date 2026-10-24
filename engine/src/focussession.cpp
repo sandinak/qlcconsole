@@ -294,6 +294,7 @@ void FocusSession::stop()
     discardAll();
     m_active = false;
     m_index = -1;
+    m_held = NoControl;
     {
         QMutexLocker locker(&m_writesMutex);
         m_writes.clear();
@@ -895,6 +896,25 @@ void FocusSession::apply(Control control)
     }
 }
 
+bool FocusSession::repeats(Control control)
+{
+    return control == ZoomWider || control == ZoomNarrower
+           || control == FocusNearer || control == FocusFarther;
+}
+
+void FocusSession::press(Control control, bool down)
+{
+    if (!down)
+    {
+        if (control == m_held)
+            m_held = NoControl;
+        return;
+    }
+    m_held = repeats(control) ? control : NoControl;
+    m_heldWait = kRepeatDelay;
+    apply(control);
+}
+
 float FocusSession::stickVelocity(float norm, float deadzone)
 {
     // followspot.js axisVelocity(), so a stick feels the same in both.
@@ -939,6 +959,16 @@ void FocusSession::tick(double dt)
 {
     if (!m_active || m_input == KeyboardInput)
         return;
+    // A held D-pad arm repeats (press()).
+    if (m_held != NoControl)
+    {
+        m_heldWait -= dt;
+        while (m_heldWait <= 0.0 && m_held != NoControl)
+        {
+            apply(m_held);
+            m_heldWait += kRepeatInterval;
+        }
+    }
     // The triggers: RT widens, LT narrows, in tenths carried between ticks.
     {
         const float d = (m_trigger[1] - m_trigger[0]) * beamRate() * m_sensitivity * float(dt);
