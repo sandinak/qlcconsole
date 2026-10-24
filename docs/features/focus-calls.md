@@ -91,8 +91,8 @@ fixture, the scope, and where saves go.
 | Next / previous fixture | RB / LB | ] / [ |
 | One fixture / the whole call (scope) | Y | G |
 | Nudge (coarse, fine) | Left stick, right stick | Arrows (⇧: 1°) |
-| Zoom wider / narrower | D-pad up / down | . / , |
-| Focus nearer / farther | D-pad left / right | ; / ' |
+| Zoom in / out | D-pad up / down | , / . |
+| Focus tighter / looser | D-pad right / left | ' / ; |
 | Save for this venue | A | Return |
 | Back to what was saved | B | Backspace |
 | Zero | X | 0 |

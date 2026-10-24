@@ -152,6 +152,14 @@ void FocusCalls_Test::theControllerSchemeIsOneMap()
     QCOMPARE(verbFor(GamepadRole::Start), Exit);
     QCOMPARE(verbFor(GamepadRole::LS), Alternate);
     QCOMPARE(verbFor(GamepadRole::RS), WhereAmI);
+    // The D-pad: up is in, down is out; right tightens the focus (its value
+    // up), left loosens it -- in every tool.
+    QCOMPARE(verbFor(GamepadRole::DpadUp), ZoomNarrower);
+    QCOMPARE(verbFor(GamepadRole::DpadDown), ZoomWider);
+    QCOMPARE(verbFor(GamepadRole::DpadRight), FocusFarther);
+    QCOMPARE(verbFor(GamepadRole::DpadLeft), FocusNearer);
+    QCOMPARE(label(RefineTool, FocusFarther), QString("Focus tighter"));
+    QCOMPARE(label(FocusCallsTool, ZoomNarrower), QString("Zoom in (narrower beam)"));
     QCOMPARE(verbFor(GamepadRole::LeftX), NoVerb);
     // Every verb has its control, and back again.
     for (Verb v : verbs())

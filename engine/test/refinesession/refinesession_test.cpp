@@ -362,8 +362,9 @@ void RefineSession_Test::zoomAndFocus()
     RefineSession *r = m_doc->programmer()->refineSession();
     QVERIFY(r->start(m_cue));
 
-    r->apply(ControllerScheme::ZoomWider);
-    r->apply(ControllerScheme::ZoomWider);
+    // D-pad down twice: out, wider (up is in).
+    r->apply(ControllerScheme::verbFor(GamepadRole::DpadDown));
+    r->apply(ControllerScheme::verbFor(GamepadRole::DpadDown));
     float deg = 0.0f;
     QVERIFY(r->pendingZoom(m_spots.first(), deg));
     QCOMPARE(deg, 22.0f);
@@ -372,8 +373,8 @@ void RefineSession_Test::zoomAndFocus()
     QVERIFY(r->pendingZoom(m_spots.first(), deg));
     QCOMPARE(deg, 40.0f);
     QVERIFY(r->nudgeZoom(-15.0f));
-    // Focus from the middle (no Beam look yet).
-    r->apply(ControllerScheme::FocusFarther);
+    // Focus from the middle (no Beam look yet): right tightens, value up.
+    r->apply(ControllerScheme::verbFor(GamepadRole::DpadRight));
     int focus = 0;
     QVERIFY(r->pendingFocus(m_spots.first(), focus));
     QCOMPARE(focus, 133);

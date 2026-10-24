@@ -66,8 +66,8 @@ scope picks the first fixture.
 | Next / previous fixture (or group) | RB / LB | ] / [ |
 | Scope: layer → group → fixture | Y | G |
 | Move (coarse, fine) | Left stick, right stick | Arrows (⇧: 5°) |
-| Zoom wider / narrower | D-pad up / down | . / , |
-| Focus nearer / farther | D-pad left / right | ; / ' |
+| Zoom in / out | D-pad up / down | , / . |
+| Focus tighter / looser | D-pad right / left | ' / ; |
 | D-pad page: beam / colour / gobo | LS (left stick click) | P |
 | Keep in the cue | A | Return |
 | Back to the cue | B | Backspace |
@@ -76,8 +76,9 @@ scope picks the first fixture.
 | Where am I? | RS (right stick click) | W |
 | Leave | Menu | Esc |
 
-On the **colour** and **gobo** pages, D-pad left and right step through
-the show's colour or gobo palettes and say the name of each.
+Up is in, down is out; right tightens the focus and left loosens it,
+here as in Focus mode. On the **colour** and **gobo** pages, D-pad right
+and left step forward and back through the show's colour or gobo palettes and say the name of each.
 
 What you change is **pending**: the rig shows it at once, but the cue is
 not changed until **A**. Then everything pending is kept as **one** Show

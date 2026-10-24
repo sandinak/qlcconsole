@@ -221,13 +221,16 @@ QString FocusControlMap::actionText(int role) const
             return ControllerScheme::stickLabel(m_tool, true);
         case R::DpadUp:
             // The D-pad's one callout reads its up arm: say all four.
-            return m_tool == ControllerScheme::RefineTool
-                   ? tr("Zoom \342\206\225  Focus \342\206\224 (or colour, gobo)")
-                   : tr("Zoom \342\206\225  Focus \342\206\224");
+            /* Up is in, down is out; right tightens the focus, left loosens
+               (in Refine, LS's own label says the D-pad also pages through
+               colour and gobo: here it would crowd the pad off the map). */
+            return tr("Zoom \342\226\262in \342\226\274out  Focus \342\227\200looser tighter\342\226\266");
         case R::DpadDown:
-            return tr("Narrower beam");
-        case R::DpadLeft: case R::DpadRight:
-            return tr("Focus");
+            return tr("Wider beam");
+        case R::DpadLeft:
+            return tr("Focus looser");
+        case R::DpadRight:
+            return tr("Focus tighter");
         default:
             break;
     }

@@ -26,6 +26,8 @@ pad if you have one.
    - **RB / LB** (] / [): step fixtures. The picked fixture blinks three
      times and the laptop says "Fixture 2 of 8."
    - **Left stick** (arrows): nudge.
+   - **D-pad**: up zooms in, down out (, and .); right tightens the focus,
+     left loosens it (' and ;).
    - **A** (Return): save.
    - **Y** (G): the whole call. Nudge once, and every head moves.
    - **RS click** (W): "Where am I?"
@@ -41,7 +43,9 @@ pad if you have one.
    - Move with the stick (arrows) and the lights follow. **A** (Return)
      keeps the change: one undo step. **Y** (G) goes to one fixture; a move
      there is an exception, a child layer in the tree. **X** (0) clears it.
-   - **LS click** (P) changes the D-pad to colour and then gobo palettes.
+   - **D-pad**: up zooms in, down out; right tightens the focus, left
+     loosens it. **LS click** (P) changes the D-pad to colour and then gobo
+     palettes (right: the next, left: the one before).
 5. **A tracked layer.** Add a cue after it that sets nothing and Refine
    that. The voice says "Movers, tracked from 1. Keeps go into this cue."
    **S** on the panel switches to keeping in cue 1.
@@ -130,8 +134,8 @@ does the same **kind** of thing in every tool:
 | **Y** | Cycle scope | One head ↔ all heads | **Fixture ↔ whole call** | **Layer → Group → Fixture** (Group only when the layer has more than one group) |
 | **Left stick** | Move / nudge (coarse) | Calibration pan/tilt, 8°/s | Calibration pan/tilt, 8°/s. A fixed light moves where it lands. | The cue's **position**, 8°/s |
 | **Right stick** | Fine | 1°/s | 1°/s | 1°/s |
-| **D-pad ↑ / ↓** | Zoom wider / narrower | Lens (hand zoom: saved) or zoom channel (live only) | same | The cue's **zoom** (on the colour/gobo pages: nothing) |
-| **D-pad ← / →** | Focus nearer / farther | Focus channel, live only | same | The cue's **focus**. On the colour/gobo pages: previous / next palette. |
+| **D-pad ↑ / ↓** | Zoom **in** (narrower) / **out** (wider): up is in, like a camera | Lens (hand zoom: saved) or zoom channel (live only) | same | The cue's **zoom** (on the colour/gobo pages: nothing) |
+| **D-pad → / ←** | Focus **tighter** (value up) / **looser** (value down): right is always the value up | Focus channel, live only | same | The cue's **focus**. On the colour/gobo pages: next / previous palette. |
 | **A** | Keep | Save the head's offsets | **Save for this venue** (sidecar, at once) | **Keep in the cue** (one Show Tree step) |
 | **B** | Revert | Back to saved | Back to saved | **Back to the cue** (drops pending) |
 | **X** | Reset | Zero the offsets | Zero the offsets | **Clear the exception** (Group/Fixture). At Layer scope it is the same as B. |
@@ -614,7 +618,7 @@ Tests:
 │ Undo save ───────────┤  [LB]     [RB]  ├── Exit                     │
 │ Nudge ───────────────┤ ( L )   ○ Y  ───┼── Scope: group ↔ fixture   │
 │ Second reference ────┤  (LS)  ○X ○B ───┼── Revert                   │
-│ Zoom ↕ Focus ↔ ──────┤  ✚       ○A ───┼── Save for this venue      │
+│ Zoom ▲in▼out Focus ◀▶┤  ✚       ○A ───┼── Save for this venue      │
 │                      └──────( R )──────┼── Fine nudge               │
 │                                 (RS) ──┴── Where am I?              │
 │                                                            [ Exit ] │
@@ -638,7 +642,7 @@ Tests:
 │ Undo ────────────────┤  [LB]     [RB]  ├── Exit                     │
 │ Move ────────────────┤ ( L )   ○ Y  ───┼── Scope: layer→group→fix.  │
 │ D-pad page ──────────┤  (LS)  ○X ○B ───┼── Back to the cue          │
-│ Zoom ↕ Focus ↔ (or   ┤  ✚       ○A ───┼── Keep in the cue          │
+│ Zoom ▲in▼out Focus ◀▶┤  ✚       ○A ───┼── Keep in the cue          │
 │  colour, gobo) ──────┘  ────( R )──────┼── Fine move                │
 │                                 (RS) ──┴── Where am I?              │
 │ [Keep (A)]  [Back to the cue (B)]                          [ Exit ] │
@@ -653,7 +657,7 @@ Tests:
      ┌──────────────────────────────────────────────────────────┐
      │  (L) nudge / move         Y  scope                       │
      │  click: 2nd ref / page  X  reset      B  back            │
-     │   ✚ zoom ↕ focus ↔          A  KEEP                      │
+     │   ✚ ▲in▼out, ◀looser tighter▶  A  KEEP                   │
      │            (R) fine; click: WHERE AM I?                  │
      │      View: undo                Menu: exit                │
      └──────────────────────────────────────────────────────────┘

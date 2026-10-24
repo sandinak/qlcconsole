@@ -56,8 +56,8 @@ namespace ControllerScheme
         Reset,                        ///< X: zero the correction, drop the exception
         Undo,                         ///< View/Back: undo the last keep
         Exit,                         ///< Menu/Start
-        ZoomWider, ZoomNarrower,      ///< D-pad up / down
-        FocusNearer, FocusFarther,    ///< D-pad left / right
+        ZoomWider, ZoomNarrower,      ///< D-pad down (out) / up (in)
+        FocusNearer, FocusFarther,    ///< D-pad left (looser) / right (tighter)
         Alternate,                    ///< LS click: second reference / D-pad page
         WhereAmI                      ///< RS click: say and flash where you are
     };
