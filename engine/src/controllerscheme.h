@@ -79,6 +79,37 @@ namespace ControllerScheme
     /** Every verb in map order, for a table. */
     QLC_ENGINE_EXPORT QList<Verb> verbs();
 
+    /** Whether @p verb repeats while its control is held: the D-pad's zoom
+     *  and focus arms. Bumpers, triggers and the rest step once a press. */
+    QLC_ENGINE_EXPORT bool repeats(Verb verb);
+
+    /**
+     * A held control repeating (Branson: "when I hold a button on the
+     * D-pad it doesn't repeat"): once on the press, again after delay(),
+     * then every interval() until it is let go. The tool's controller tick
+     * asks due() how many repeats have come round.
+     */
+    class QLC_ENGINE_EXPORT HoldRepeat
+    {
+    public:
+        static constexpr double delay() { return 0.4; }
+        static constexpr double interval() { return 0.08; }
+
+        /** @p key went down: it repeats (when @p repeats) from now. */
+        void press(int key, bool repeats);
+        /** @p key went up: it stops, if it was the one held. */
+        void release(int key);
+        /** The key repeating (-1: none). */
+        int held() const { return m_held; }
+        /** The repeats due after @p dt more seconds held. */
+        int due(double dt);
+        void reset() { m_held = -1; m_wait = 0.0; }
+
+    private:
+        int m_held = -1;
+        double m_wait = 0.0;
+    };
+
     /**
      * A trigger read as a button: an axis 0 (released) .. 1, pressed past
      * pressAt() and released again below releaseAt(), so a trigger resting

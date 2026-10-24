@@ -35,6 +35,8 @@ private slots:
 
     /** One layout for every tool: the map by role, and back again. */
     void theControllerSchemeIsOneMap();
+    /** A held D-pad arm repeats after a delay; nothing else does. */
+    void aHeldArmRepeats();
     /** A trigger is a button with hysteresis. */
     void aTriggerPressesOnce();
     /** The show's calls survive a save and load, in order. */

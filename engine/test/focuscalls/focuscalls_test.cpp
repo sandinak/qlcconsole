@@ -183,6 +183,24 @@ void FocusCalls_Test::theControllerSchemeIsOneMap()
     QCOMPARE(FocusSession::controlFor(GamepadRole::RS), FocusSession::WhereAmI);
 }
 
+void FocusCalls_Test::aHeldArmRepeats()
+{
+    using namespace ControllerScheme;
+    QVERIFY(repeats(ZoomWider) && repeats(ZoomNarrower) && repeats(FocusNearer) && repeats(FocusFarther));
+    QVERIFY(!repeats(NextItem) && !repeats(NextGroup) && !repeats(Keep) && !repeats(CycleScope));
+    HoldRepeat h;
+    h.press(int(ZoomNarrower), true);
+    QCOMPARE(h.due(0.3), 0);                          // not before the delay
+    QCOMPARE(h.due(0.1), 1);                          // 0.4 s: the first repeat
+    QCOMPARE(h.due(HoldRepeat::interval() * 3), 3);   // then every interval
+    h.release(int(ZoomWider));                        // another key's release: no
+    QCOMPARE(h.held(), int(ZoomNarrower));
+    h.release(int(ZoomNarrower));
+    QCOMPARE(h.due(1.0), 0);
+    h.press(int(NextItem), false);                    // a bumper: once only
+    QCOMPARE(h.due(1.0), 0);
+}
+
 void FocusCalls_Test::aTriggerPressesOnce()
 {
     ControllerScheme::TriggerButton t;

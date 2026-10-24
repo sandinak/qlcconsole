@@ -156,6 +156,7 @@ void RefineSession::stop()
         m_stick[s][0] = m_stick[s][1] = 0.5f;
     m_trigger[0].reset();
     m_trigger[1].reset();
+    m_hold.reset();
     m_flashTimer->stop();
     m_flashClock.invalidate();
     {
@@ -1296,6 +1297,23 @@ void RefineSession::apply(ControllerScheme::Verb verb)
     }
 }
 
+bool RefineSession::repeats(ControllerScheme::Verb verb) const
+{
+    // On the colour and gobo pages left and right step palettes: once each.
+    return ControllerScheme::repeats(verb) && m_page == BeamPage;
+}
+
+void RefineSession::press(ControllerScheme::Verb verb, bool down)
+{
+    if (!down)
+    {
+        m_hold.release(int(verb));
+        return;
+    }
+    m_hold.press(int(verb), repeats(verb));
+    apply(verb);
+}
+
 void RefineSession::setStick(Stick stick, float xNorm, float yNorm)
 {
     m_stick[stick][0] = qBound(0.0f, xNorm, 1.0f);
@@ -1320,6 +1338,11 @@ void RefineSession::tick(double dt)
 {
     if (!m_active)
         return;
+    // A held D-pad arm repeats (press()); a page change stops it.
+    if (m_hold.held() >= 0 && !repeats(ControllerScheme::Verb(m_hold.held())))
+        m_hold.reset();
+    for (int n = m_hold.due(dt); n > 0 && m_hold.held() >= 0; --n)
+        apply(ControllerScheme::Verb(m_hold.held()));
     float dPan = 0.0f, dTilt = 0.0f;
     for (int s = 0; s < 2; ++s)
     {

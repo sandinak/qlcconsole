@@ -146,6 +146,18 @@ does the same **kind** of thing in every tool:
 | View + Menu held | — | Opens Focus mode (as before) | — | — |
 | Guide | — | unused | unused | unused |
 
+**A held D-pad arm repeats** (Branson: "when I hold a button on the dpad
+it doesn't repeat"):
+
+- The zoom and focus arms step once on the press, again after 0.4 s, and
+  then every 80 ms until released. This is `ControllerScheme::HoldRepeat`,
+  driven by each tool's controller tick (`press(verb, down)` + `tick()`),
+  so Focus mode, Focus calls and Refine (Show Tree and Build) all behave
+  the same.
+- The bumpers, triggers and buttons step once a press.
+- On Refine's colour and gobo pages, left/right step palettes, so they do
+  not repeat either.
+
 **Triggers are read as buttons.** They press past 0.6 and release below
 0.35, so a trigger resting slightly in does not repeat
 (`ControllerScheme::TriggerButton`). On the Xbox profile the triggers are
