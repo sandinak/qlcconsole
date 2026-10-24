@@ -114,7 +114,7 @@ QString ControllerScheme::label(Tool tool, Verb verb)
         case Reset:
             return tool == RefineTool ? tr("Clear the exception") : tr("Zero");
         case Undo:
-            return tool == RefineTool ? tr("Undo") : tr("Undo save");
+            return tool == RefineTool ? tr("Undo (+A: keep at the source)") : tr("Undo save");
         case Exit:
             return tr("Exit");
         case ZoomWider:

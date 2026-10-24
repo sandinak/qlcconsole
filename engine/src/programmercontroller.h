@@ -645,6 +645,8 @@ private:
     ControllerScheme::Feedback m_feedback = ControllerScheme::BothFeedback;
     /** RS: a tap says the light, a hold changes the feedback. */
     ControllerScheme::LongPress m_sayHold;
+    /** Refine: A went down while View was held (View + A, Q118). */
+    bool m_viewChord = false;
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
     /** See controllerKeepAlive(). */

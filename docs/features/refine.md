@@ -72,7 +72,8 @@ scope picks the first fixture.
 | Keep in the cue | A | Return |
 | Back to the cue | B | Backspace |
 | Clear the exception | X | 0 |
-| Undo | View | ⌘Z |
+| Undo (on its release) | View | ⌘Z |
+| Keep at the cue it tracks from | View + A | ⇧Return |
 | Say the light | RS (right stick click) | W |
 | Feedback: lights / voice / both | RS held | ⇧W |
 | Leave | Menu | Esc |
@@ -109,9 +110,10 @@ and the voice says so: "AT spots, tracked from 2. Keeps go into this cue."
 
 - **By default A keeps the change in this cue.** The layer becomes the
   cue's own here, and the cue the value came from is not touched.
-- **Or keep it where it comes from:** tick *Keep in the cue it tracks
-  from* on the panel, or press **S**. The change is then made in that cue,
-  and every cue that tracks it plays it too. The voice says which.
+- **Or keep it where it comes from:** hold **View** and press **A**
+  (⇧Return), once. Or tick *Keep in the cue it tracks from* on the panel
+  (**S**) to make that the rule. The change is then made in that cue, and
+  every cue that tracks it plays it too. The voice says which.
 - A tracked layer is edited as a whole (Layer scope). Keep it in this
   cue first, and then Y picks a group or a fixture for an exception.
 
@@ -125,14 +127,18 @@ thing to each part of a cue:
 - **The groups are the scene's group rows** (and its loose fixtures, as
   one).
 - **Layer scope edits the scene's looks: its palettes.** A position, zoom
-  or focus palette has its value moved in place, as the Look Editor does —
-  a palette other scenes use changes there too. With no palette for it,
+  or focus palette has its value moved in place, as the Look Editor does.
+  If other scenes or cues use that palette, the first **A** only says who
+  ("Centre is also used by 1-Ballad. Press A again to change it there
+  too.") and the panel lists them with **Change them all**; **A** again
+  applies it everywhere, **B** drops it. With no palette for it,
   the scene's own values on every fixture. On the colour or gobo page, the
   palette picked takes the place of the scene's.
 - **An exception** (Group or Fixture scope) leaves those fixtures out of
   the attribute's palettes and gives them the scene's own values — the
   fixture row's ▣ count shows them. **X** puts them back in the palette.
-- Each keep is one step of Build's undo (⌘Z, or View on the controller).
+- Each keep — palettes and the scene's own values together — is one step
+  of Build's undo (⌘Z, or View on the controller).
 
 ## Telling you where you are
 
