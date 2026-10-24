@@ -38,6 +38,9 @@ private slots:
     /** The dialog edits the show's calls; with no venue, nothing is beside
      *  the show; with a new one, it is made and applied. */
     void theDialogEditsCallsAndPicksTheVenue();
+    /** The venue manager: switch, rename and delete, the rig and the file
+     *  following. */
+    void theVenueManager();
     /** A venue needs the show saved first. */
     void aVenueNeedsASavedShow();
     /** Running calls, the panel says the call, the scope and where saves go,

@@ -70,6 +70,13 @@ public:
 
     QListWidget *callList() const { return m_list; }
 
+    /* The venue manager (the buttons beside the venue). */
+    /** Apply @p name now (made if new; empty: none). */
+    bool switchVenue(const QString &name, QString *why = nullptr);
+    bool renameVenue(const QString &from, const QString &to);
+    /** Forget a venue and its corrections (refused while Focus mode runs). */
+    bool deleteVenue(const QString &name);
+
 private:
     void fillCallList();
     void loadCall(int index);
@@ -78,6 +85,8 @@ private:
     void removeCall();
     void moveCall(int by);
     void refreshVenue();
+    void fillVenues(const QString &select);
+    QString venueAt(int index) const;
 
 private:
     Doc *m_doc;
@@ -94,6 +103,9 @@ private:
     QLineEdit *m_newVenue;
     QLabel *m_venueNote;
     QPushButton *m_start;
+    QPushButton *m_applyVenue = nullptr;
+    QPushButton *m_renameVenue = nullptr;
+    QPushButton *m_deleteVenue = nullptr;
 };
 
 /** @} */
