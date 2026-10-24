@@ -44,8 +44,10 @@ ControllerScheme::Verb ControllerScheme::verbFor(GamepadRole::Role role)
         case GamepadRole::X:            return Reset;
         case GamepadRole::Back:         return Undo;
         case GamepadRole::Start:        return Exit;
-        case GamepadRole::DpadUp:       return ZoomWider;
-        case GamepadRole::DpadDown:     return ZoomNarrower;
+        // Branson: zoom reads like a camera (up is in); right tightens the
+        // focus (its value up), left loosens it (its value down).
+        case GamepadRole::DpadUp:       return ZoomNarrower;
+        case GamepadRole::DpadDown:     return ZoomWider;
         case GamepadRole::DpadLeft:     return FocusNearer;
         case GamepadRole::DpadRight:    return FocusFarther;
         case GamepadRole::LS:           return Alternate;
@@ -68,8 +70,8 @@ GamepadRole::Role ControllerScheme::roleFor(Verb verb)
         case Reset:         return GamepadRole::X;
         case Undo:          return GamepadRole::Back;
         case Exit:          return GamepadRole::Start;
-        case ZoomWider:     return GamepadRole::DpadUp;
-        case ZoomNarrower:  return GamepadRole::DpadDown;
+        case ZoomNarrower:  return GamepadRole::DpadUp;
+        case ZoomWider:     return GamepadRole::DpadDown;
         case FocusNearer:   return GamepadRole::DpadLeft;
         case FocusFarther:  return GamepadRole::DpadRight;
         case Alternate:     return GamepadRole::LS;
@@ -83,7 +85,7 @@ QList<ControllerScheme::Verb> ControllerScheme::verbs()
 {
     return { PreviousGroup, NextGroup, PreviousItem, NextItem, CycleScope,
              Keep, Revert, Reset, Undo, Exit,
-             ZoomWider, ZoomNarrower, FocusNearer, FocusFarther,
+             ZoomNarrower, ZoomWider, FocusNearer, FocusFarther,
              Alternate, WhereAmI };
 }
 
@@ -116,13 +118,13 @@ QString ControllerScheme::label(Tool tool, Verb verb)
         case Exit:
             return tr("Exit");
         case ZoomWider:
-            return tr("Zoom wider");
+            return tr("Zoom out (wider beam)");
         case ZoomNarrower:
-            return tr("Zoom narrower");
+            return tr("Zoom in (narrower beam)");
         case FocusNearer:
-            return tr("Focus nearer");
+            return tr("Focus looser");
         case FocusFarther:
-            return tr("Focus farther");
+            return tr("Focus tighter");
         case Alternate:
             return tool == RefineTool ? tr("D-pad page: beam / colour / gobo")
                                       : tr("Second reference");
