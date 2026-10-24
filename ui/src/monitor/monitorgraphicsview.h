@@ -758,6 +758,8 @@ public:
 
     /** Highlight (orange border) a set of fixtures by ID; clears previous highlights. */
     void highlightFixtures(const QList<quint32> &ids);
+    /** Focus mode: mark the lights with unsaved changes (the rest unmarked). */
+    void markUnsavedFixtures(const QList<quint32> &ids);
 
     /** Set the active scene whose target palette links are shown as aim lines.
      *  Pass Function::invalidId() to hide all aim lines. */

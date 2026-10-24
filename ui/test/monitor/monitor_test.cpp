@@ -11576,8 +11576,12 @@ void Monitor_Test::focusModeRunsFromTheKeyboard()
     QCOMPARE(s->liveOffset(a->id()).tilt, 1.0f);
     QVERIFY2(offsets->text().contains("+0.10") && offsets->text().contains("+1.00"),
              qPrintable(offsets->text()));
+    // Unsaved: marked on the plot.
+    QVERIFY(ringed->isUnsaved());
+    QVERIFY(!gv->fixtureItemForId(b->id())->isUnsaved());
     QTest::keyClick(panel, Qt::Key_Return);                     // save
     QVERIFY(s->isChecked(a->id()));
+    QVERIFY(!ringed->isUnsaved());
     QVERIFY2(progress->text().startsWith("1 of 2"), qPrintable(progress->text()));
     QTest::keyClick(panel, Qt::Key_BracketRight);               // next
     QCOMPARE(s->currentFixture(), b->id());
@@ -11591,6 +11595,7 @@ void Monitor_Test::focusModeRunsFromTheKeyboard()
     QTest::keyClick(panel, Qt::Key_0);                          // zero
     QCOMPARE(s->liveOffset(b->id()).pan, 0.0f);
     QTest::keyClick(panel, Qt::Key_Down);
+    QVERIFY(gv->fixtureItemForId(b->id())->isUnsaved());
 
     // Esc with a head unsaved asks; Discard puts it back and ends it.
     QTimer::singleShot(0, this, []() {
@@ -11605,6 +11610,7 @@ void Monitor_Test::focusModeRunsFromTheKeyboard()
     QCOMPARE(props->fixtureRigProps(b->id()).tiltOffsetDeg, 0.0f);
     QCOMPARE(props->fixtureRigProps(a->id()).tiltOffsetDeg, 1.0f);   // saved stays
     QVERIFY(!gv->fixtureItemForId(a->id())->m_highlighted);
+    QVERIFY(!gv->fixtureItemForId(b->id())->isUnsaved());   // the marks go with it
 
     // The whole session is one step on the Studio's undo.
     mon->undo();

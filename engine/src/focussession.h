@@ -27,6 +27,7 @@
 #include <QList>
 #include <QPair>
 #include <QVector3D>
+#include <QTimer>
 
 #include "qlcengine_export.h"
 #include "gamepadrole.h"
@@ -268,6 +269,28 @@ public:
     bool undoSave();
     bool canUndo() const { return !m_undo.isEmpty(); }
 
+    /** The save confirmation on the rig: after save() keeps a head, that
+     *  real fixture dips to dark and back twice (kBlinkPhases phases of
+     *  kBlinkPhaseMs each: dark, lit, dark, lit), so whoever is on stage
+     *  sees it was kept. Revert, Zero and Undo do not blink. Off (no
+     *  blink) with setRigFeedback(false). */
+    static constexpr int kBlinkPhaseMs = 150;
+    static constexpr int kBlinkPhases = 4;
+    /** True while a save's blink is running; the phase is 1..kBlinkPhases
+     *  (odd phases are dark), 0 when none is. */
+    bool isBlinking() const { return m_blinkPhase > 0; }
+    int blinkPhase() const { return m_blinkPhase; }
+    quint32 blinkFixture() const { return m_blinkFid; }
+    /** The blink's next phase. Its own timer calls this every kBlinkPhaseMs;
+     *  a test calls it itself, after setBlinkTimed(false). */
+    void advanceBlink();
+    void setBlinkTimed(bool timed) { m_blinkTimed = timed; if (!timed) m_blinkTimer.stop(); }
+
+    /** Whether the rig itself says a head was saved (the blink). On by
+     *  default; a feedback setting may turn it off. */
+    bool rigFeedback() const { return m_rigFeedback; }
+    void setRigFeedback(bool on);
+
     /** Save every head with unsaved offsets (one undo step each). */
     void saveAll();
     /** Put every head back to its saved offsets. */
@@ -331,6 +354,10 @@ signals:
     /** A head's live or saved offsets changed. */
     void offsetChanged(quint32 fid);
     void referenceChanged();
+    /** Which heads have unsaved changes changed (unsavedFixtures()). */
+    void unsavedChanged();
+    /** save() kept head @p fid (not saveAll()). */
+    void headSaved(quint32 fid);
     /** Exit was pressed: the UI asks about unsaved offsets, then stop()s. */
     void exitRequested();
     void inputDeviceChanged(FocusSession::InputDevice device);
@@ -390,6 +417,9 @@ private:
     void applyOffset(quint32 fid, const Offset &offset);
     void rebuildWrites();
     void markModified();
+    /** emit unsavedChanged() when unsavedFixtures() is not what it was. */
+    void checkUnsaved();
+    void stopBlink();
 
 private:
     Doc *m_doc;
@@ -414,6 +444,15 @@ private:
     float m_sensitivity = 1.0f;
     float m_carryPan = 0.0f;    ///< stick travel below a hundredth, kept
     float m_carryTilt = 0.0f;
+
+    /** The unsaved heads, as last told (unsavedChanged()). */
+    QList<quint32> m_lastUnsaved;
+    /** The save's blink (advanceBlink()). */
+    bool m_rigFeedback = true;
+    bool m_blinkTimed = true;
+    int m_blinkPhase = 0;
+    quint32 m_blinkFid = 0xFFFFFFFF;
+    QTimer m_blinkTimer;
 
     mutable QMutex m_writesMutex;
     QHash<QPair<int, int>, uchar> m_writes;

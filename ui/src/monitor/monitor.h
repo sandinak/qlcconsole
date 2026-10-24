@@ -211,6 +211,9 @@ public:
     /** Focus mode's current head: ring it on the plot and in the Rig
      *  Overview. UINT_MAX clears it. */
     void showFocusFixture(quint32 fid);
+    /** Focus mode's lights with unsaved changes: marked on the plot and in
+     *  the Rig Overview. Empty clears them. */
+    void showFocusUnsaved(const QList<quint32> &ids);
     /** Open Focus mode (FocusModePanel) on the selected scene and the heads
      *  selected on the plot or in the programmer. */
     void openFocusMode();

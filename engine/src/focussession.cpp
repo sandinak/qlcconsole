@@ -65,6 +65,12 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
             if (mode == Doc::Operate)
                 stop();
         });
+    /* Which heads are unsaved can change with any of these; tell it once. */
+    connect(this, &FocusSession::offsetChanged, this, &FocusSession::checkUnsaved);
+    connect(this, &FocusSession::started, this, &FocusSession::checkUnsaved);
+    connect(this, &FocusSession::stopped, this, &FocusSession::checkUnsaved);
+    m_blinkTimer.setInterval(kBlinkPhaseMs);
+    connect(&m_blinkTimer, &QTimer::timeout, this, &FocusSession::advanceBlink);
 }
 
 FocusSession::~FocusSession()
@@ -295,6 +301,9 @@ void FocusSession::stop()
     m_active = false;
     m_index = -1;
     m_held = NoControl;
+    m_blinkTimer.stop();
+    m_blinkPhase = 0;
+    m_blinkFid = 0xFFFFFFFF;
     {
         QMutexLocker locker(&m_writesMutex);
         m_writes.clear();
@@ -621,7 +630,58 @@ void FocusSession::save()
     h.lensSaved = h.lensLive;
     m_checked.insert(fid);
     markModified();
+    /* Kept: the real light says so, dipping to dark and back twice. */
+    if (m_rigFeedback)
+    {
+        m_blinkFid = fid;
+        m_blinkPhase = 1;
+        if (m_blinkTimed)
+            m_blinkTimer.start();
+        rebuildWrites();
+    }
     emit offsetChanged(fid);
+    emit headSaved(fid);
+}
+
+void FocusSession::advanceBlink()
+{
+    if (m_blinkPhase <= 0)
+    {
+        m_blinkTimer.stop();
+        return;
+    }
+    if (++m_blinkPhase > kBlinkPhases)
+    {
+        stopBlink();
+        return;
+    }
+    rebuildWrites();
+}
+
+void FocusSession::stopBlink()
+{
+    m_blinkTimer.stop();
+    if (m_blinkPhase == 0)
+        return;
+    m_blinkPhase = 0;
+    m_blinkFid = 0xFFFFFFFF;
+    rebuildWrites();
+}
+
+void FocusSession::setRigFeedback(bool on)
+{
+    m_rigFeedback = on;
+    if (!on)
+        stopBlink();
+}
+
+void FocusSession::checkUnsaved()
+{
+    const QList<quint32> now = unsavedFixtures();
+    if (now == m_lastUnsaved)
+        return;
+    m_lastUnsaved = now;
+    emit unsavedChanged();
 }
 
 void FocusSession::applyLens(quint32 fid, float deg)
@@ -1062,6 +1122,17 @@ void FocusSession::rebuildWrites()
             }
         };
 
+        /* A save's blink, in its dark phase: every intensity the light
+           has, colour mixing too, to zero (advanceBlink()). */
+        auto blackout = [&](Fixture *fx) {
+            QLCFixtureMode *mode = fx->fixtureMode();
+            for (quint32 c = 0; c < fx->channels(); ++c)
+                if (const QLCChannel *ch = mode->channel(c))
+                    if (ch->group() == QLCChannel::Intensity)
+                        put(fx, c, 0);
+        };
+        const bool blinkDark = m_blinkPhase > 0 && (m_blinkPhase % 2) == 1;
+
         const quint32 current = currentFixture();
         for (quint32 fid : m_order)
         {
@@ -1074,6 +1145,9 @@ void FocusSession::rebuildWrites()
                     lightLevel(fx, 0.0f, false);
                 else if (m_options.others == OthersDim)
                     lightLevel(fx, m_options.dimLevel, false);
+                // Moved on mid-blink: it still finishes its blink.
+                if (blinkDark && fid == m_blinkFid)
+                    blackout(fx);
                 continue;
             }
 
@@ -1110,6 +1184,8 @@ void FocusSession::rebuildWrites()
                             put(fx, c, uchar(qRound(qBound(0.0, 1.0 - v, 1.0) * 255.0)));
                     }
             }
+            if (blinkDark && fid == m_blinkFid)
+                blackout(fx);
         }
     }
     QList<OutputLayer::Level> levels;

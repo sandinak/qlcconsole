@@ -345,6 +345,125 @@ void FocusSession_Test::exitKeepsOrDiscards()
     QVERIFY(s->pendingWrites().isEmpty());
 }
 
+void FocusSession_Test::theUnsavedHeadsAreTold()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->start(optionsFor({ a->id(), b->id() }, mark->id())));
+    QSignalSpy told(s, &FocusSession::unsavedChanged);
+
+    s->nudge(1.0f, 0.0f);
+    QCOMPARE(told.count(), 1);
+    QCOMPARE(s->unsavedFixtures(), QList<quint32>({ a->id() }));
+    s->nudge(1.0f, 0.0f);                       // still just A
+    QCOMPARE(told.count(), 1);
+    s->next();
+    s->nudge(0.0f, 1.0f);
+    QCOMPARE(told.count(), 2);
+    QCOMPARE(s->unsavedFixtures(), QList<quint32>({ a->id(), b->id() }));
+    s->save();                                   // B kept
+    QCOMPARE(told.count(), 3);
+    QCOMPARE(s->unsavedFixtures(), QList<quint32>({ a->id() }));
+    s->zero();                                   // B to zero: unsaved again
+    QCOMPARE(told.count(), 4);
+    s->revert();
+    QCOMPARE(told.count(), 5);
+    s->previous();
+    s->revert();                                 // A back
+    QCOMPARE(told.count(), 6);
+    QVERIFY(!s->hasUnsaved());
+    s->nudge(0.5f, 0.0f);
+    QCOMPARE(told.count(), 7);
+    s->saveAll();
+    QCOMPARE(told.count(), 8);
+    QVERIFY(s->undoSave());                      // as it was before: still none unsaved
+    s->nudge(0.5f, 0.0f);
+    const int before = told.count();
+    s->discardAll();
+    QCOMPARE(told.count(), before + 1);
+    s->nudge(0.5f, 0.0f);
+    s->stop();                                   // discards
+    QVERIFY(!s->hasUnsaved());
+    QCOMPARE(told.count(), before + 3);
+}
+
+void FocusSession_Test::aSaveBlinksTheLightTwice()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    s->setBlinkTimed(false);                     // stepped here, not by time
+    FocusSession::Options o = optionsFor({ a->id(), b->id() }, mark->id());
+    o.level = 0.6f;
+    QVERIFY(s->start(o));
+    const QPair<int, int> dimmer = qMakePair(0, int(a->address()) + 2);
+    const int lit = qRound(0.6 * 255);
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), lit);
+    QSignalSpy saved(s, &FocusSession::headSaved);
+
+    // A revert does not blink.
+    s->nudge(1.0f, 0.0f);
+    s->revert();
+    QVERIFY(!s->isBlinking());
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), lit);
+    QCOMPARE(saved.count(), 0);
+
+    // A save: dark, lit, dark, lit -- then done.
+    s->nudge(1.0f, 0.0f);
+    s->save();
+    QCOMPARE(saved.count(), 1);
+    QCOMPARE(saved.at(0).at(0).toUInt(), a->id());
+    QVERIFY(s->isBlinking());
+    QCOMPARE(s->blinkFixture(), a->id());
+    QList<int> seen;
+    seen << s->pendingWrites().value(dimmer);
+    for (int i = 1; i < FocusSession::kBlinkPhases; ++i)
+    {
+        s->advanceBlink();
+        seen << s->pendingWrites().value(dimmer);
+    }
+    QCOMPARE(seen, QList<int>({ 0, lit, 0, lit }));
+    // Its pan and tilt are still sent through the dark: it is not moved.
+    QVERIFY(s->pendingWrites().contains(qMakePair(0, int(a->address()))));
+    s->advanceBlink();
+    QVERIFY(!s->isBlinking());
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), lit);
+    s->advanceBlink();                           // nothing to step
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), lit);
+
+    // Moved on mid-blink: the saved light still finishes, the next is lit.
+    s->save();
+    s->next();
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), 0);
+    QCOMPARE(int(s->pendingWrites().value(qMakePair(0, int(b->address()) + 2))), lit);
+    s->advanceBlink();
+    s->advanceBlink();
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), 0);     // the others: dark anyway
+    s->advanceBlink();
+    s->advanceBlink();
+    QVERIFY(!s->isBlinking());
+
+    // Off: a save keeps the head, and the rig does not blink.
+    s->previous();
+    s->setRigFeedback(false);
+    s->nudge(1.0f, 0.0f);
+    s->save();
+    QCOMPARE(saved.count(), 3);
+    QVERIFY(!s->isBlinking());
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), lit);
+    s->setRigFeedback(true);
+
+    // On its own timer, the blink ends by itself.
+    s->setBlinkTimed(true);
+    s->save();
+    QVERIFY(s->isBlinking());
+    QTRY_VERIFY_WITH_TIMEOUT(!s->isBlinking(), 3000);
+    QCOMPARE(int(s->pendingWrites().value(dimmer)), lit);
+}
+
 void FocusSession_Test::theFocusedHeadIsAimedAndLit()
 {
     Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);

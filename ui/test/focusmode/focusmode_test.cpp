@@ -28,6 +28,7 @@
 #include <QSettings>
 #include <QClipboard>
 #include <QTreeWidget>
+#include <QMessageBox>
 
 #include "focusmode_test.h"
 #include "iopluginstub.h"
@@ -555,6 +556,86 @@ void FocusMode_Test::theControllerTestListsEachInput()
     m_stub->m_connectionInfo.clear();
 }
 
+void FocusMode_Test::theLampSaysWhatIsUnsaved()
+{
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why, int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusStatusLamp *lamp = panel->findChild<FocusStatusLamp *>(QStringLiteral("focusStatusLamp"));
+    QLabel *words = panel->findChild<QLabel *>(QStringLiteral("focusSaveStatus"));
+    QVERIFY(lamp != nullptr && lamp == panel->statusLamp() && words != nullptr);
+    const QString first = m_doc->fixture(s->currentFixture())->name();
+
+    // Green: all saved.
+    QCOMPARE(lamp->state(), FocusStatusLamp::AllSaved);
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::greenColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::greenColor());
+    QCOMPARE(words->text(), QStringLiteral("All saved"));
+
+    // Yellow: the light being focused.
+    QTest::keyClick(panel, Qt::Key_Right);
+    QCOMPARE(lamp->state(), FocusStatusLamp::ThisUnsaved);
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::yellowColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::yellowColor());
+    QCOMPARE(words->text(), QStringLiteral("Unsaved: this light"));
+
+    // Red: another light, by name.
+    QTest::keyClick(panel, Qt::Key_BracketRight);
+    QCOMPARE(lamp->state(), FocusStatusLamp::OthersUnsaved);
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::redColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::redColor());
+    QCOMPARE(words->text(), QStringLiteral("Unsaved: 1 other light (%1)").arg(first));
+
+    // Both: red outside, yellow in the middle.
+    QTest::keyClick(panel, Qt::Key_Up);
+    QCOMPARE(lamp->state(), FocusStatusLamp::BothUnsaved);
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::redColor());
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::yellowColor());
+    QCOMPARE(words->text(), QStringLiteral("Unsaved: this light and 1 other (%1)").arg(first));
+
+    // Save this one: a green flash, then red for the other.
+    QTest::keyClick(panel, Qt::Key_Return);
+    QVERIFY(lamp->isFlashing());
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::greenColor());
+    QCOMPARE(lamp->state(), FocusStatusLamp::OthersUnsaved);
+    QTRY_VERIFY(!lamp->isFlashing());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::redColor());
+
+    // Back to it, revert: all saved, and a revert does not flash.
+    QTest::keyClick(panel, Qt::Key_BracketLeft);
+    QCOMPARE(lamp->state(), FocusStatusLamp::ThisUnsaved);
+    QTest::keyClick(panel, Qt::Key_Backspace);
+    QVERIFY(!lamp->isFlashing());
+    QCOMPARE(lamp->state(), FocusStatusLamp::AllSaved);
+    QCOMPARE(words->text(), QStringLiteral("All saved"));
+}
+
+void FocusMode_Test::exitNamesTheUnsavedLights()
+{
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why, int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    s->nudge(1.0f, 0.0f);
+    s->next();
+    s->nudge(1.0f, 0.0f);
+
+    QString asked;
+    QTimer::singleShot(0, this, [&asked]() {
+        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        if (box == nullptr)
+            return;
+        asked = box->text();
+        box->button(QMessageBox::Cancel)->click();
+    });
+    QVERIFY(!panel->requestExit());
+    QCOMPARE(asked, QStringLiteral("2 lights have changes you have not saved: A, B."));
+    QVERIFY(s->isActive());
+}
+
 void FocusMode_Test::shots()
 {
     const QString out = qEnvironmentVariable("FOCUSUI_SHOTS");
@@ -583,10 +664,28 @@ void FocusMode_Test::shots()
         w->render(&img);
         QVERIFY2(img.save(file), qPrintable(file));
     };
+    // Both unsaved: the other head nudged, then this one.
+    FocusSession *fs = m_doc->programmer()->focusSession();
+    fs->nudge(0.5f, 0.0f);
+    fs->next();
+    fs->nudge(0.0f, 0.3f);
+    auto saveStatus = [&](const QString &file) {
+        // The lamp and its words, as a strip across the panel.
+        const QRect lamp = panel->statusLamp()->geometry();
+        const QLabel *words = panel->findChild<QLabel *>(QStringLiteral("focusSaveStatus"));
+        const int right = lamp.right() + 12 + words->fontMetrics().horizontalAdvance(words->text()) + 16;
+        const QRect strip(0, lamp.top() - 6, qMin(panel->width(), right), lamp.height() + 12);
+        QImage img(strip.size() * 2, QImage::Format_ARGB32_Premultiplied);
+        img.setDevicePixelRatio(2.0);
+        img.fill(panel->palette().color(QPalette::Window));
+        panel->render(&img, QPoint(), QRegion(strip));
+        QVERIFY2(img.save(file), qPrintable(file));
+    };
     for (const auto &t : themes)
     {
         qApp->setPalette(App::themePalette(t.theme, native));
         QCoreApplication::processEvents();
+        saveStatus(QStringLiteral("%1/save-status-%2.png").arg(out, t.name));
 
         // The controller, the right bumper held and the left stick pushed.
         panel->setInputDevice(FocusSession::ControllerInput, false);

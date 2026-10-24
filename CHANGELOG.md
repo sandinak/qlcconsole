@@ -37,6 +37,16 @@ circuits and subs.
   is shown), live while dragged or nudged. One formatter,
   `MonitorProperties::formatStageOffset()`, with a compact and a spoken
   form ("SL 2, US 1") for calls and voice.
+- **Focus mode save status**: a status lamp in the panel (`FocusStatusLamp`)
+  -- green all saved, yellow the current light unsaved, red another light
+  unsaved, a red ring round a yellow centre for both -- with the unsaved
+  lights named beside it, live through the new `FocusSession::unsavedChanged()`.
+  A save (A / Return) flashes it green and blinks the real fixture twice
+  (dark and back, 150 ms a phase, in `FocusSession`'s own writes; stepped by
+  `advanceBlink()`, so tests need no sleeps; `setRigFeedback(false)` turns the
+  blink off); a revert does not blink. Lights with unsaved changes get a
+  dashed yellow ring and a badge on the plot and in the Rig Overview
+  (`Monitor::showFocusUnsaved()`), and the Exit question names them.
 - **The beam in Focus mode** (Q103): D-pad up/down (or . and ,) widen and narrow
   the beam within the definition's lens range, D-pad right/left (or ' and ;)
   a focus channel's edge while focusing. A lens zoomed by hand is set

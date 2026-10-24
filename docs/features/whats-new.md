@@ -340,6 +340,15 @@ their house lights, relays and subs.
   change, D-pad up zooms in and down zooms out (, and .), and right
   tightens the focus and left loosens it (' and ;). See [Fixed lights](lighting-studio.md#fixed-lights-pars-and-fixed-spots)
   and [The beam](lighting-studio.md#the-beam).
+- **Focus mode shows what is saved.** A big lamp in the panel, to read
+  from the stage: **green** all saved, **yellow** the light you're on has
+  unsaved changes, **red** another light has, and a red ring round a
+  yellow centre for both, with the names beside it ("Unsaved: 2 other
+  lights (Spot 3, Spot 7)"). A save flashes it green, and the real light
+  dips to dark and back twice so whoever is on stage sees it was kept.
+  Every light with unsaved changes is marked in yellow on the plot and in
+  the Rig Overview, and leaving names them. See
+  [Saving](lighting-studio.md#saving-and-the-save-status-lamp).
 
 ### Importing an Eos show
 

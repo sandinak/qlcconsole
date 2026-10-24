@@ -49,6 +49,14 @@ private slots:
     void saveRevertZeroUndo();
     /** Exit with unsaved heads: saveAll keeps them, stop discards them. */
     void exitKeepsOrDiscards();
+    /** unsavedChanged() fires when the set of unsaved heads changes, on a
+     *  nudge, save, revert, zero, undo, saveAll and a discard -- not on a
+     *  second nudge of a head already unsaved. */
+    void theUnsavedHeadsAreTold();
+    /** A save blinks the real light twice (dark, lit, dark, lit), stepped
+     *  by advanceBlink(); a revert does not; setRigFeedback(false) stops
+     *  it. */
+    void aSaveBlinksTheLightTwice();
     /** The focused head is aimed (the solver's DMX) and lit; the others are
      *  dark, and writeDMX puts it in the universes. */
     void theFocusedHeadIsAimedAndLit();

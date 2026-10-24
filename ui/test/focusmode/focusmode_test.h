@@ -57,6 +57,12 @@ private slots:
     /** The setup's Controller test lists each raw input once, with what it
      *  maps to, and the log has it all. */
     void theControllerTestListsEachInput();
+    /** The save-status lamp and its words: green all saved, yellow this
+     *  light, red another, a red ring round yellow for both; a save flashes
+     *  it green. */
+    void theLampSaysWhatIsUnsaved();
+    /** Leaving with unsaved lights names them. */
+    void exitNamesTheUnsavedLights();
     /** With FOCUSUI_SHOTS set: the panel, both maps, in each theme, saved
      *  there (for the docs and a look). */
     void shots();

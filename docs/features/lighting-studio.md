@@ -1030,21 +1030,49 @@ picks which device drives the nudges and which map is shown.
 
 ![Focus mode's keyboard map, with Shift and Up held](../images/focus-mode-keyboard-map.png)
 
-### Sticks, saving and profiles
+### Saving and the save status lamp
+
+A nudge changes the head live but is not an edit until you save it (A or
+Return): then it is the head's offset, marks the show changed, and **File →
+Save** keeps it. The panel says **Unsaved** while a head differs from what
+was saved, and counts the heads you have checked.
+
+**The status lamp**, at the top of the panel, is big enough to read from
+the stage:
+
+| Lamp | Means |
+|---|---|
+| Green | Everything is saved. |
+| Yellow | The light you're on has unsaved changes. |
+| Red | Some *other* light has unsaved changes. |
+| Red ring, yellow centre | Both: this light and another. |
+
+Beside it the panel says which: **All saved**, **Unsaved: this light**, or
+**Unsaved: 2 other lights (Spot 3, Spot 7)**. It changes as you nudge,
+save, revert, zero and undo.
+
+![The status lamp: a red ring round a yellow centre, this light and another unsaved](../images/focus-mode-save-status.png)
+
+**A save shows on the rig.** When A keeps a light, the lamp flashes green
+and the real fixture dips to dark and back twice, quickly, so whoever is
+standing on stage sees it was kept. A revert (B) doesn't blink.
+
+**On the plot and in the Rig Overview** every light with unsaved changes
+has a dashed yellow ring and a yellow badge; the light you're on keeps its
+own ring and gets the badge.
+
+Leaving with unsaved lights names them ("2 lights have changes you have
+not saved: Spot 3, Spot 7.") and asks: **Save All**, **Discard** (back as
+they were saved), or **Cancel**. Afterwards the whole session is one step
+of the Lighting Studio's undo (⌘Z).
+
+### Sticks and profiles
 
 The sticks feel like the follow spot's — they are the same stick, with the
 controller profile's deadzone and sensitivity — scaled for alignment: full
 left stick is 8° a second, full right stick 1°. Stick right is more pan
 offset, stick up more tilt offset; on an inverted or standing head that
 can look mirrored on stage, and the numbers say which way it went.
-
-**Saving.** A nudge changes the head live but is not an edit until you save
-it (A): then it is the head's offset, marks the show changed, and **File →
-Save** keeps it. The panel says **Unsaved** while a head differs from what
-was saved, and counts the heads you have checked. Leaving with unsaved
-heads asks: **Save All**, **Discard** (back as they were saved), or
-**Cancel**. Afterwards the whole session is one step of the Lighting
-Studio's undo (⌘Z).
 
 **Controllers.** Buttons are matched by what they are — A, LB, View… — not
 by number: a controller profile (`.qxhid`) can say so with `role="…"` on each

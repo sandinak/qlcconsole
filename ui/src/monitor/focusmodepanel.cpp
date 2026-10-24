@@ -31,6 +31,8 @@
 #include <QComboBox>
 #include <QKeyEvent>
 #include <QSettings>
+#include <QPainter>
+#include <QTimer>
 #include <QLabel>
 
 #include "controllertestdialog.h"
@@ -48,6 +50,125 @@
 #include "doc.h"
 
 QPointer<FocusModePanel> FocusModePanel::s_instance;
+
+namespace
+{
+/* The names of @p ids, at most @p max, then how many more. */
+QString lightNames(const Doc *doc, const QList<quint32> &ids, int max)
+{
+    QStringList names;
+    for (quint32 fid : ids)
+    {
+        if (names.size() == max)
+        {
+            names << FocusModePanel::tr("%1 more").arg(ids.size() - max);
+            break;
+        }
+        const Fixture *fx = doc->fixture(fid);
+        names << (fx != nullptr ? fx->name() : FocusModePanel::tr("ID %1").arg(fid));
+    }
+    return names.join(QStringLiteral(", "));
+}
+
+QString lightCount(int n)
+{
+    return n == 1 ? FocusModePanel::tr("1 light") : FocusModePanel::tr("%1 lights").arg(n);
+}
+}
+
+/*****************************************************************************
+ * FocusStatusLamp
+ *****************************************************************************/
+
+FocusStatusLamp::FocusStatusLamp(QWidget *parent)
+    : QWidget(parent)
+{
+    setObjectName(QStringLiteral("focusStatusLamp"));
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+}
+
+void FocusStatusLamp::setState(State state)
+{
+    if (state == m_state)
+        return;
+    m_state = state;
+    update();
+}
+
+void FocusStatusLamp::flash()
+{
+    m_flashing = true;
+    const int serial = ++m_flashSerial;
+    update();
+    QTimer::singleShot(kFlashMs, this, [this, serial]() {
+        // Only the last flash ends it.
+        if (serial != m_flashSerial)
+            return;
+        m_flashing = false;
+        update();
+    });
+}
+
+QColor FocusStatusLamp::ringColor() const
+{
+    if (m_flashing)
+        return greenColor();
+    switch (m_state)
+    {
+        case ThisUnsaved:   return yellowColor();
+        case OthersUnsaved:
+        case BothUnsaved:   return redColor();
+        case AllSaved:      break;
+    }
+    return greenColor();
+}
+
+QColor FocusStatusLamp::centreColor() const
+{
+    if (m_flashing)
+        return greenColor();
+    switch (m_state)
+    {
+        case ThisUnsaved:
+        case BothUnsaved:   return yellowColor();
+        case OthersUnsaved: return redColor();
+        case AllSaved:      break;
+    }
+    return greenColor();
+}
+
+void FocusStatusLamp::paintEvent(QPaintEvent *)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const qreal d = qMin(width(), height()) - 4.0;
+    const QRectF outer((width() - d) / 2.0, (height() - d) / 2.0, d, d);
+    const QPointF c = outer.center();
+
+    // A dark bezel, so it reads as a lamp on any theme.
+    p.setPen(QPen(QColor(20, 20, 22), 2.0));
+    p.setBrush(ringColor());
+    p.drawEllipse(outer);
+    // Two things at once: a red ring round the yellow centre.
+    if (ringColor() != centreColor())
+    {
+        const qreal inner = d * 0.30;
+        p.setPen(QPen(QColor(20, 20, 22), 1.5));
+        p.setBrush(centreColor());
+        p.drawEllipse(c, inner, inner);
+    }
+    // The glass: a soft highlight up and to the left.
+    QRadialGradient gloss(c - QPointF(d * 0.18, d * 0.2), d * 0.45);
+    gloss.setColorAt(0.0, QColor(255, 255, 255, m_flashing ? 170 : 110));
+    gloss.setColorAt(1.0, QColor(255, 255, 255, 0));
+    p.setPen(Qt::NoPen);
+    p.setBrush(gloss);
+    p.drawEllipse(outer.adjusted(2, 2, -2, -2));
+}
+
+/*****************************************************************************
+ * FocusModePanel
+ *****************************************************************************/
 
 namespace
 {
@@ -379,6 +500,15 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_beamLabel->hide();
     m_savedLabel = new QLabel(this);
     m_savedLabel->setObjectName(QStringLiteral("focusSaved"));
+    /* The save status, to be read from the stage: the lamp and a few words. */
+    m_lamp = new FocusStatusLamp(this);
+    m_statusLabel = new QLabel(this);
+    m_statusLabel->setObjectName(QStringLiteral("focusSaveStatus"));
+    m_statusLabel->setWordWrap(true);
+    QFont status = m_statusLabel->font();
+    status.setPointSizeF(status.pointSizeF() * 1.3);
+    status.setBold(true);
+    m_statusLabel->setFont(status);
     m_stepLabel = new QLabel(this);
     m_stepLabel->setObjectName(QStringLiteral("focusStep"));
     m_progressLabel = new QLabel(this);
@@ -386,6 +516,10 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
 
     vl->addWidget(m_titleLabel);
     vl->addWidget(m_nameLabel);
+    QHBoxLayout *lampRow = new QHBoxLayout;
+    lampRow->addWidget(m_lamp);
+    lampRow->addWidget(m_statusLabel, 1);
+    vl->addLayout(lampRow);
     vl->addWidget(m_referenceLabel);
     vl->addWidget(m_offsetLabel);
     vl->addWidget(m_beamLabel);
@@ -489,6 +623,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
         refresh();
     });
     connect(m_session, &FocusSession::offsetChanged, this, &FocusModePanel::refresh);
+    connect(m_session, &FocusSession::unsavedChanged, this, &FocusModePanel::refreshSaveStatus);
+    connect(m_session, &FocusSession::headSaved, m_lamp, &FocusStatusLamp::flash);
     connect(m_session, &FocusSession::referenceChanged, this, &FocusModePanel::refresh);
     connect(m_session, &FocusSession::exitRequested, this, [this]() { requestExit(); });
     // Ended under it -- into Perform, say: close without asking.
@@ -541,6 +677,7 @@ void FocusModePanel::refresh()
             m_beamLabel->show();
         }
     }
+    refreshSaveStatus();
     m_titleLabel->setText(tr("Focus \342\200\224 head %1 of %2")
                           .arg(m_session->index() + 1).arg(m_session->count()));
     m_nameLabel->setText(fx != nullptr ? tr("%1  (ID %2)").arg(fx->name()).arg(fid) : QString());
@@ -579,6 +716,44 @@ void FocusModePanel::refresh()
     m_stepLabel->setText(tr("Step %1\302\260").arg(double(m_session->stepDegrees()), 0, 'g', 3));
     m_progressLabel->setText(tr("%1 of %2 checked").arg(m_session->checkedCount()).arg(m_session->count()));
     m_map->setStepDegrees(m_session->stepDegrees());
+}
+
+QString FocusModePanel::saveStatusText() const
+{
+    const quint32 cur = m_session->currentFixture();
+    QList<quint32> others = m_session->unsavedFixtures();
+    const bool here = others.removeAll(cur) > 0;
+    if (others.isEmpty())
+        return here ? tr("Unsaved: this light") : tr("All saved");
+    const QString names = lightNames(m_doc, others, 3);
+    if (here)
+        return others.size() == 1 ? tr("Unsaved: this light and 1 other (%1)").arg(names)
+                                  : tr("Unsaved: this light and %1 others (%2)")
+                                    .arg(others.size()).arg(names);
+    return others.size() == 1 ? tr("Unsaved: 1 other light (%1)").arg(names)
+                              : tr("Unsaved: %1 other lights (%2)").arg(others.size()).arg(names);
+}
+
+void FocusModePanel::refreshSaveStatus()
+{
+    if (!m_session->isActive())
+        return;
+    const quint32 cur = m_session->currentFixture();
+    const QList<quint32> unsaved = m_session->unsavedFixtures();
+    const bool here = unsaved.contains(cur);
+    const bool elsewhere = unsaved.size() > (here ? 1 : 0);
+    const FocusStatusLamp::State state = elsewhere ? (here ? FocusStatusLamp::BothUnsaved
+                                                           : FocusStatusLamp::OthersUnsaved)
+                                       : here ? FocusStatusLamp::ThisUnsaved
+                                              : FocusStatusLamp::AllSaved;
+    m_lamp->setState(state);
+    m_statusLabel->setText(saveStatusText());
+    // The words in the lamp's colour -- the darker yellow reads on a light theme.
+    m_statusLabel->setStyleSheet(elsewhere ? QStringLiteral("color: #d03a30;")
+                                 : here ? QStringLiteral("color: #d08a1c;")
+                                        : QStringLiteral("color: #3a9a4a;"));
+    if (Monitor *mon = Monitor::instance())
+        mon->showFocusUnsaved(unsaved);
 }
 
 void FocusModePanel::setInputDevice(FocusSession::InputDevice device, bool remember)
@@ -759,12 +934,16 @@ bool FocusModePanel::requestExit()
         return true;
     if (m_session->isActive() && m_session->hasUnsaved())
     {
+        const QList<quint32> unsaved = m_session->unsavedFixtures();
+        const QString names = lightNames(m_doc, unsaved, 8);
         QMessageBox box(QMessageBox::Question, tr("Focus Mode"),
-                        tr("%n head(s) have offsets you have not saved.", "",
-                           m_session->unsavedFixtures().size()),
+                        unsaved.size() == 1
+                            ? tr("%1 has changes you have not saved.").arg(names)
+                            : tr("%1 have changes you have not saved: %2.")
+                              .arg(lightCount(unsaved.size()), names),
                         QMessageBox::SaveAll | QMessageBox::Discard | QMessageBox::Cancel, this);
         box.setObjectName(QStringLiteral("focusExitQuestion"));
-        box.setInformativeText(tr("Save them, or put those heads back as they were saved?"));
+        box.setInformativeText(tr("Save All keeps them; Discard puts them back as they were saved."));
         box.setDefaultButton(QMessageBox::SaveAll);
         const int answer = box.exec();
         if (answer == QMessageBox::Cancel)
@@ -782,6 +961,8 @@ bool FocusModePanel::requestExit()
 void FocusModePanel::finish()
 {
     showHighlight(0xFFFFFFFF);
+    if (Monitor *mon = Monitor::instance())
+        mon->showFocusUnsaved(QList<quint32>());
     /* Everything this session saved is one step on the Lighting Studio's
        undo (pushRigUndo() adds nothing if the rig is as it was). */
     if (Monitor *mon = Monitor::instance())

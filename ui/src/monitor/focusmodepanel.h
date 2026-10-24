@@ -75,6 +75,48 @@ private:
 };
 
 /**
+ * Focus mode's save status, as a lamp big enough to read from the stage:
+ * green, all saved; yellow, the light being focused is unsaved; red, some
+ * OTHER light is. With both, a red ring round a yellow centre -- red is
+ * what cannot be missed. flash() shows green for a moment (a save).
+ */
+class FocusStatusLamp final : public QWidget
+{
+    Q_OBJECT
+
+public:
+    enum State { AllSaved, ThisUnsaved, OthersUnsaved, BothUnsaved };
+
+    explicit FocusStatusLamp(QWidget *parent = nullptr);
+
+    State state() const { return m_state; }
+    void setState(State state);
+    /** Green for kFlashMs, whatever the state. */
+    void flash();
+    bool isFlashing() const { return m_flashing; }
+    static constexpr int kFlashMs = 600;
+
+    /** The colours it lights in: a state's centre and ring. */
+    static QColor greenColor() { return QColor(60, 190, 85); }
+    static QColor yellowColor() { return QColor(245, 200, 40); }
+    static QColor redColor() { return QColor(225, 50, 45); }
+    /** What it shows now: the ring, and the centre. */
+    QColor ringColor() const;
+    QColor centreColor() const;
+
+    QSize sizeHint() const override { return QSize(64, 64); }
+    QSize minimumSizeHint() const override { return QSize(48, 48); }
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    State m_state = AllSaved;
+    bool m_flashing = false;
+    int m_flashSerial = 0;
+};
+
+/**
  * The Focus mode HUD: which head, where it is aimed, its offsets live and
  * saved, the step, progress, the controls -- and the keyboard way to do all
  * of it, so it works without a controller. One at a time; open() raises it.
@@ -114,6 +156,10 @@ public:
      *  was the user's choice, kept for next time. */
     void setInputDevice(FocusSession::InputDevice device, bool remember = true);
     FocusControlMap *controlMap() const { return m_map; }
+    FocusStatusLamp *statusLamp() const { return m_lamp; }
+    /** "All saved", "Unsaved: this light", "Unsaved: 2 other lights
+     *  (Spot 3, Spot 7)"... as the panel shows it. */
+    QString saveStatusText() const;
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -124,6 +170,8 @@ protected:
 private:
     FocusModePanel(Doc *doc, QWidget *parent);
     void refresh();
+    /** The lamp and its words, and the plot's unsaved marks. */
+    void refreshSaveStatus();
     void showHighlight(quint32 fid);
     void finish();
     /** The controller came, went or changed: the map, the choice, and the
@@ -147,6 +195,8 @@ private:
     QLabel *m_offsetLabel;
     QLabel *m_beamLabel = nullptr;   ///< the beam, where it can change (Q103)
     QLabel *m_savedLabel;
+    FocusStatusLamp *m_lamp;
+    QLabel *m_statusLabel;
     QLabel *m_stepLabel;
     QLabel *m_progressLabel;
     QToolButton *m_useController;

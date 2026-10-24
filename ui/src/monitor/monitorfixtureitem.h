@@ -249,6 +249,10 @@ public:
 
     /** Highlight from an external source (e.g. Programming tab selection). */
     void setHighlighted(bool h) { m_highlighted = h; update(); }
+    /** Focus mode: this light has changes not yet saved -- a yellow dashed
+     *  ring (not on the highlighted head, drawn as it is) and a badge. */
+    void setUnsaved(bool u) { if (u != m_unsaved) { m_unsaved = u; update(); } }
+    bool isUnsaved() const { return m_unsaved; }
 
     /** Set the fixture's pan-zero facing (degrees clockwise from downstage),
      *  i.e. FixtureRigProps::panZeroDir. Drives the facing arrow on the icon.
@@ -371,6 +375,7 @@ private:
     bool m_isolated      = false;   ///< drilled-in single selection within a group
     bool m_ghosted       = false;   ///< locked-layer indicator: red + click-through
     bool m_highlighted   = false;
+    bool m_unsaved       = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these
      *  show a facing arrow and accept Alt-drag rotation. */

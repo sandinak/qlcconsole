@@ -162,6 +162,44 @@ void StructureStudioView::setHighlight(const QList<quint32> &ids)
     update();
 }
 
+void StructureStudioView::setUnsavedMarks(const QList<quint32> &ids)
+{
+    const QSet<quint32> marks(ids.begin(), ids.end());
+    if (marks == m_unsaved)
+        return;
+    m_unsaved = marks;
+    update();
+}
+
+void StructureStudioView::drawUnsavedMarks(QPainter &p) const
+{
+    if (m_unsaved.isEmpty())
+        return;
+    /* Over the rig, like the stage marks: a light being focused that has
+       changes not saved yet. The one being focused keeps its own ring and
+       gets only the badge. */
+    const QColor pending(240, 200, 40);
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    for (quint32 fid : m_unsaved)
+    {
+        if (m_doc->fixture(fid) == nullptr)
+            continue;
+        const QPointF c = w2s(fixtureCentre(fid));
+        const double r = 14.0;
+        if (!m_highlight.contains(fid))
+        {
+            p.setPen(QPen(pending, 2.5, Qt::DashLine));
+            p.setBrush(Qt::NoBrush);
+            p.drawEllipse(c, r, r);
+        }
+        p.setPen(QPen(QColor(40, 30, 0), 1.0));
+        p.setBrush(pending);
+        p.drawEllipse(c + QPointF(r * 0.72, -r * 0.72), 4.5, 4.5);
+    }
+    p.restore();
+}
+
 void StructureStudioView::setBarHighlight(quint32 barId)
 {
     m_selectedBarId = barId;
@@ -9469,6 +9507,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     }
     drawStageMarks(p);   // on top: a reference is read through the rig
     drawTargetPositions(p);
+    drawUnsavedMarks(p);
     drawCursorReadout(p);
     drawDimensions(p);   // selected fixture's own W/H, or the structure's
 

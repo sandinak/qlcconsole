@@ -212,6 +212,10 @@ public:
 
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
+    /** Focus mode: mark the lights with unsaved changes (a yellow ring and
+     *  badge; the ring-highlighted one keeps its own ring). */
+    void setUnsavedMarks(const QList<quint32> &ids);
+    QList<quint32> unsavedMarks() const { return m_unsaved.values(); }
     /** Ring-highlight a single bar (or clear it with UINT_MAX == Truss::invalidId()). */
     void setBarHighlight(quint32 barId);
     /** Same idea as setBarHighlight(), for a Pipe crossbar. */
@@ -361,6 +365,7 @@ private:
      *  mode's figure where a fixed light lands -- where it is against the
      *  stage marks (MonitorProperties::stagePositionText()). */
     void drawTargetPositions(QPainter &p) const;
+    void drawUnsavedMarks(QPainter &p) const;
     void drawStructure(QPainter &p) const;
     void drawOneStructure(QPainter &p, Kind kind, quint32 id) const;
     /** The hangers on truss/tower @p id: clamp, arm, chain. */
@@ -1194,6 +1199,7 @@ private:
     bool     m_hasCursor = false;
     bool     m_locked = true;   ///< movement prevented until unlocked
     QSet<quint32> m_highlight;  ///< ring-highlighted fixtures (tree selection)
+    QSet<quint32> m_unsaved;    ///< Focus mode: lights with unsaved changes
     quint32  m_selectedBarId = UINT_MAX;  ///< highlighted bar (canvas/tree selection)
     quint32  m_selectedPipeBarId = UINT_MAX;  ///< highlighted crossbar (canvas/tree selection)
 };

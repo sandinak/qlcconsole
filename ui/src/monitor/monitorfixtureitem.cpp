@@ -1136,6 +1136,29 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setPen(keep);
     }
 
+    /* Focus mode: changes on this light not yet saved. A dashed yellow ring
+       where the halo goes (the head being focused keeps its own), and a
+       badge on its corner that shows on that one too. */
+    if (m_unsaved)
+    {
+        const QPen keep = painter->pen();
+        const QColor pending(240, 200, 40);
+        if (!m_highlighted)
+        {
+            QPen ring(pending, 3.0, Qt::DashLine);
+            ring.setCosmetic(true);
+            painter->setPen(ring);
+            painter->setBrush(Qt::NoBrush);
+            drawBody(painter, QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
+        }
+        QPen edge(QColor(40, 30, 0), 1.0);
+        edge.setCosmetic(true);
+        painter->setPen(edge);
+        painter->setBrush(pending);
+        painter->drawEllipse(QPointF(m_width, 0.0), 4.0, 4.0);
+        painter->setPen(keep);
+    }
+
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
     drawBody(painter, QRectF(0, 0, m_width, m_height));

@@ -1689,6 +1689,14 @@ void Monitor::showFocusFixture(quint32 fid)
         m_overviewView->setHighlight(ids);
 }
 
+void Monitor::showFocusUnsaved(const QList<quint32> &ids)
+{
+    if (m_graphicsView != NULL)
+        m_graphicsView->markUnsavedFixtures(ids);
+    if (m_overviewView != NULL)
+        m_overviewView->setUnsavedMarks(ids);
+}
+
 void Monitor::openFocusMode()
 {
     // What is selected on the plot; else the programmer's selection.
@@ -2671,7 +2679,10 @@ void Monitor::showStageOverview()
        Studio already does -- it was only ever told when the head CHANGED. */
     if (m_doc->programmer() != NULL && m_doc->programmer()->focusSession() != NULL
         && m_doc->programmer()->focusSession()->isActive())
+    {
         view->setHighlight({ m_doc->programmer()->focusSession()->currentFixture() });
+        view->setUnsavedMarks(m_doc->programmer()->focusSession()->unsavedFixtures());
+    }
 
     /* Read-only, but a fixture can still be looked into: its properties,
        and where each of its heads is (the LED layout). */
