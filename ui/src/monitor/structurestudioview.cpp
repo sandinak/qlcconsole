@@ -1712,6 +1712,7 @@ void StructureStudioView::drawGrid(QPainter &p) const
 void StructureStudioView::drawStageMarks(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
+    m_stageMarkLabels.clear();
     if (m_kind != StageKind || (m_plane != Top && m_plane != Angled) || props == nullptr
         || props->stageMarks() == MonitorProperties::NoStageMarks)
         return;
@@ -1733,6 +1734,7 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
         const QFontMetricsF fm(f);
         QRectF r(0, 0, fm.horizontalAdvance(text) + 6.0, fm.height() + 2.0);
         r.moveCenter(at);
+        m_stageMarkLabels << text;
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(0, 0, 0, 150));
         p.drawRoundedRect(r, 3.0, 3.0);
@@ -1779,6 +1781,86 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
         const QFontMetricsF fm(f);
         label(tr("Curtain line"), at + QPointF(fm.horizontalAdvance(tr("Curtain line")) / 2.0 + 6, -10),
               curtainColour);
+
+        /* The plot's apron and overhangs (MonitorGraphicsView::
+           updateStageMarks()), on the floor: the deck downstage of the
+           curtain line tinted, its depth dimensioned beside centre, and what
+           hangs downstage of the curtain line saying how far. The words
+           only while there's room for them: a small overview (under 480 x
+           360, or under 18 px a metre) keeps the tint and the lines. */
+        const double pxPerMetre = QLineF(w2s(floorAt(cx, y)), w2s(floorAt(cx + 1.0, y))).length();
+        const bool roomy = pxPerMetre >= 18.0 && width() >= 480 && height() >= 360;
+        const double apron = props->apronDepth();
+        if (apron > 0.005)
+        {
+            QPainterPath deck;
+            foreach (const StagePlatform *sp, props->stageDecks())
+            {
+                deck.addPolygon(QPolygonF(sp->footprint()));
+                deck.closeSubpath();
+            }
+            if (deck.isEmpty())                 // a bare floor: the grid's front edge
+                deck.addRect(QRectF(QPointF(x0, y), QPointF(x1, dsY)));
+            deck.setFillRule(Qt::WindingFill);
+            QPainterPath downstage;
+            downstage.addRect(QRectF(QPointF(x0 - 1.0, y), QPointF(x1 + 1.0, dsY + 0.01)));
+            QColor wash(curtainColour);
+            wash.setAlpha(40);
+            p.setPen(Qt::NoPen);
+            p.setBrush(wash);
+            foreach (const QPolygonF &poly, deck.intersected(downstage).toFillPolygons())
+            {
+                QPolygonF onScreen;
+                foreach (const QPointF &pt, poly)
+                    onScreen << w2s(floorAt(pt.x(), pt.y()));
+                p.drawPolygon(onScreen);
+            }
+            p.setBrush(Qt::NoBrush);
+
+            const QPointF top = w2s(floorAt(cx, y)), front = w2s(floorAt(cx, dsY));
+            if (roomy && QLineF(top, front).length() >= 16.0)
+            {
+                const double ax = cx + 34.0 / pxPerMetre;
+                const double tick = 5.0 / pxPerMetre;
+                p.setPen(QPen(curtainColour, 1.0));
+                floorLine(ax, y, ax, dsY);
+                floorLine(ax - tick, y, ax + tick, y);
+                floorLine(ax - tick, dsY, ax + tick, dsY);
+                const QString text = tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron),
+                                                                                             props->gridUnits()));
+                const QPointF mid = (w2s(floorAt(ax, y)) + w2s(floorAt(ax, dsY))) / 2.0;
+                label(text, mid + QPointF(fm.horizontalAdvance(text) / 2.0 + 8.0, 0), curtainColour);
+            }
+        }
+
+        // The FOH electric out over the audience: how far, just above its
+        // stage-left end. One that would sit on another's words is left out.
+        QList<QRectF> placed;
+        auto overhang = [&](const QString &name, const QVector3D &a, const QVector3D &b) {
+            const float midY = (a.y() + b.y()) / 2.0f;
+            if (!roomy || props->curtainLineOffset(midY) <= 0.005f)
+                return;
+            const QVector3D end = (a.x() >= b.x()) ? a : b;
+            const QString where = props->curtainLineOffsetText(midY);
+            const QString text = name.isEmpty() ? where : QStringLiteral("%1 \u00B7 %2").arg(name, where);
+            const QSizeF size(fm.horizontalAdvance(text) + 6.0, fm.height() + 2.0);
+            const QPointF at = w2s(end) + QPointF(-size.width() / 2.0, -12.0);
+            QRectF r(QPointF(0, 0), size);
+            r.moveCenter(at);
+            if (!QRectF(rect()).contains(r))
+                return;
+            foreach (const QRectF &other, placed)
+                if (other.intersects(r))
+                    return;
+            placed << r;
+            label(text, at, curtainColour);
+        };
+        foreach (const Truss *t, props->trusses())
+            if (t != nullptr && t->type() == Truss::Horizontal)
+                overhang(t->name(), t->positionAt(0.0f), t->positionAt(t->length()));
+        foreach (const Pipe *pp, props->pipes())
+            if (pp != nullptr && !pp->isVertical())
+                overhang(pp->name(), pp->positionAt(0.0f), pp->positionAt(pp->length()));
     }
     if (props->stageMarkVisible(MonitorProperties::NumberLineFlag))
     {

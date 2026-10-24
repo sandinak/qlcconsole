@@ -291,7 +291,7 @@ their house lights, relays and subs.
   resizes an apron platform, and trusses and pipes over the audience say how
   far out they hang (**FOH · 4.2 m DS of curtain line**). The full centre
   line replaces the teal centre cross's line along it. The Rig Overview
-  draws them on its floor, and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+  draws them on its floor, the apron tint and the FOH labels included, and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Where a target is, in crew terms.** Each stage target on the plot,
   each figure in the Rig Overview, and the person Focus mode stands where a
   fixed light lands has a small readout of where it is against the stage

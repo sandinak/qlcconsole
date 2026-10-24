@@ -359,8 +359,11 @@ private:
     void drawGrid(QPainter &p) const;
     /** The show's stage reference marks on the floor (the whole-stage view's
      *  Top and 45° planes): centre mark and line, curtain line, number line,
-     *  lying on the deck where there is one. */
+     *  lying on the deck where there is one; with the curtain line, the
+     *  apron tinted and dimensioned and what hangs over the audience
+     *  labelled, as the plot does. */
     void drawStageMarks(QPainter &p) const;
+    mutable QStringList m_stageMarkLabels;  ///< the words drawStageMarks() drew last (tests)
     /** Beside each stage figure and target the overview draws -- and Focus
      *  mode's figure where a fixed light lands -- where it is against the
      *  stage marks (MonitorProperties::stagePositionText()). */

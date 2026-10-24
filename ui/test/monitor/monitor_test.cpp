@@ -1144,6 +1144,63 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
             QVERIFY2(changed > 300, qPrintable(QString("plane %1: %2 pixels changed").arg(int(plane)).arg(changed)));
             QVERIFY2(yellow > 30, qPrintable(QString("plane %1: %2 yellow pixels").arg(int(plane)).arg(yellow)));
         }
+
+        /* With the curtain line, as on the plot: the apron (the deck from the
+           drape at y 5 to its front at 6.5) tinted and dimensioned, and the
+           FOH truss out over the audience labelled. A small overview (its
+           smallest, 360 x 320) keeps the tint and drops the words. */
+        Truss *fohOver = props->addTruss();
+        fohOver->setName("FOH");
+        fohOver->setType(Truss::Horizontal);
+        fohOver->setOrigin(QVector3D(2.0f, 8.0f, 6.0f));
+        fohOver->setLength(6.0f);
+        const QString fohLabel = QString::fromUtf8("FOH \u00B7 3.0 m DS of curtain line");
+        foreach (StructureStudioView::Plane plane,
+                 QList<StructureStudioView::Plane>() << StructureStudioView::Top
+                                                     << StructureStudioView::Angled)
+        {
+            foreach (const QSize &size, QList<QSize>() << QSize(640, 480) << QSize(360, 320))
+            {
+                StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+                view.resize(size);
+                view.setPlane(plane);
+                auto shot = [&view]() {
+                    QImage img(view.size(), QImage::Format_ARGB32);
+                    img.fill(Qt::black);
+                    view.render(&img);
+                    return img;
+                };
+                const QString where = QString("plane %1, %2 px").arg(int(plane)).arg(size.width());
+                props->setStageMarks(MonitorProperties::CurtainLineFlag);
+                props->setCurtainLineUpstage(0.0f);             // at the front: no apron
+                QCOMPARE(props->apronDepth(), 0.0f);
+                const QImage flush = shot();
+                QVERIFY2(!view.m_stageMarkLabels.join("|").contains("Apron"), qPrintable(where));
+                props->setCurtainLineAuto();                    // the drape at y 5
+                QCOMPARE(props->apronDepth(), 1.5f);
+                const QImage apron = shot();
+                const QStringList words = view.m_stageMarkLabels;
+                if (size.width() >= 640)
+                {
+                    QVERIFY2(words.contains("Apron 1.5 m"), qPrintable(where + ": " + words.join("|")));
+                    QVERIFY2(words.contains(fohLabel), qPrintable(where + ": " + words.join("|")));
+                }
+                else
+                {
+                    QVERIFY2(words == QStringList() << "Curtain line",
+                             qPrintable(where + ": " + words.join("|") + QString(" %1 px/m").arg(
+                                 QLineF(view.w2s(QVector3D(4, 5, 1)), view.w2s(QVector3D(5, 5, 1))).length())));
+                }
+                // The tint: the deck stage right of centre, on the apron, reads redder.
+                const QPoint at = view.w2s(QVector3D(3.5f, 5.75f, 1.005f)).toPoint();
+                QVERIFY2(QRect(QPoint(0, 0), size).contains(at), qPrintable(where));
+                const QRgb was = flush.pixel(at), is = apron.pixel(at);
+                QVERIFY2(qRed(is) - qBlue(is) > qRed(was) - qBlue(was) + 6,
+                         qPrintable(QString("%1: %2 -> %3").arg(where, QColor(was).name(), QColor(is).name())));
+            }
+        }
+        props->setStageMarks(MonitorProperties::NoStageMarks);
+        props->removeTruss(fohOver->id());
     }
     delete doc;
 }

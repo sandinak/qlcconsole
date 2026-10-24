@@ -151,7 +151,11 @@ saved with the show.
 They're drawn in the **Top** view, over the rig so they're never hidden
 and never in the way of a click. The **Rig Overview** draws them on its
 floor, from above and at 45°, at the height of the deck at the front of the
-stage. They're saved with the show; an older show opens with them off.
+stage, with the same apron tint and **Apron** dimension and the same
+**FOH · … DS of curtain line** labels by the trusses and pipes over the
+audience. In a small Rig Overview window it keeps the tint and the lines and
+leaves out those words, so they don't crowd the rig. They're saved with the
+show; an older show opens with them off.
 
 ### Front / Side — elevation, and count badges
 

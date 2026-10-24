@@ -51,7 +51,9 @@ circuits and subs.
   the apron platform in front of the main deck (one undo step;
   `MonitorProperties::setApronDepth()`), and horizontal trusses and pipes
   downstage of it are labelled "FOH · 4.2 m DS of curtain line"
-  (`curtainLineOffsetText()`). The number line labels centre **CL** (not 0),
+  (`curtainLineOffsetText()`); the Rig Overview draws the apron and these
+  labels on its floor too, Top and 45°, the words left out while it's small.
+  The number line labels centre **CL** (not 0),
   each number centred on its tick, long ticks only on numbered places, the
   same rule on the plot and the Rig Overview (`numberLineStride()`,
   `numberLineMajorTick()`, `numberLineLabel()`); the centre mark's own CL
