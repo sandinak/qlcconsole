@@ -467,6 +467,10 @@ public:
      *  keyboard centres the sticks. Kept across sessions. */
     InputDevice inputDevice() const { return m_input; }
     void setInputDevice(InputDevice device);
+    /** The controller went away (a pad asleep, unplugged): whatever it
+     *  held is let go -- both sticks centred, a held D-pad arm and the
+     *  triggers released -- so nothing moves until it is touched again. */
+    void releaseControls();
 
     static constexpr float coarseRate() { return 8.0f; }
     static constexpr float fineRate() { return 1.0f; }

@@ -201,10 +201,13 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
         const ProgrammerController::FocusController pad = pc->focusController();
         m_map->setControls(pad.controls);
         m_device->setText(pad.present ? tr("Controller: %1").arg(pad.name)
-                                      : tr("No controller connected: the keys work (see Help)."));
+                          : pc->isControllerLost()
+                            ? tr("Controller lost: the lights are held. The keys work (see Help).")
+                            : tr("No controller connected: the keys work (see Help)."));
     };
     controls();
     connect(pc, &ProgrammerController::focusControllerChanged, this, controls);
+    connect(pc, &ProgrammerController::controllerLost, this, controls);
     connect(pc, &ProgrammerController::focusControllerInput, this, [this](int role, float value) {
         m_map->setControlValue(role, value);
     });

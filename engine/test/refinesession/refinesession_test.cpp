@@ -908,7 +908,7 @@ void RefineSession_Test::aHeldANeverAnswersAWarning()
     QVERIFY(!r->hasPending());
     up(10);
     r->stop();
-    iom->setInputPatch(0, QString(), QString(), 0);
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
 QTEST_GUILESS_MAIN(RefineSession_Test)

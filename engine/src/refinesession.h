@@ -252,6 +252,9 @@ public:
     void setStick(Stick stick, float xNorm, float yNorm);
     void setStickResponse(float deadzone, float sensitivity);
     void setTrigger(int side, float norm);
+    /** The controller went away: both sticks centred, a held D-pad arm
+     *  and the triggers released, so nothing moves. */
+    void releaseControls();
     void tick(double dt);
     static constexpr float coarseRate() { return 8.0f; }
     static constexpr float fineRate() { return 1.0f; }

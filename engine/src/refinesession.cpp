@@ -1446,6 +1446,15 @@ void RefineSession::setTrigger(int side, float norm)
         apply(side == 0 ? ControllerScheme::PreviousGroup : ControllerScheme::NextGroup);
 }
 
+void RefineSession::releaseControls()
+{
+    for (int s = 0; s < 2; ++s)
+        m_stick[s][0] = m_stick[s][1] = 0.5f;
+    m_hold.reset();
+    m_trigger[0].reset();
+    m_trigger[1].reset();
+}
+
 void RefineSession::tick(double dt)
 {
     if (!m_active)

@@ -1511,6 +1511,16 @@ void FocusSession::setInputDevice(InputDevice device)
     emit inputDeviceChanged(device);
 }
 
+void FocusSession::releaseControls()
+{
+    for (int s = 0; s < 2; ++s)
+        m_stick[s][0] = m_stick[s][1] = 0.5f;
+    m_carryPan = m_carryTilt = 0.0f;
+    m_hold.reset();
+    m_trigger[0].reset();
+    m_trigger[1].reset();
+}
+
 void FocusSession::tick(double dt)
 {
     if (!m_active || m_input == KeyboardInput)

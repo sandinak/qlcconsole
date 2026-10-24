@@ -40,6 +40,8 @@
 #include "qlcphysical.h"
 #include "focuscalls.h"
 #include "focuscallcue.h"
+#include "refinesession.h"
+#include "qlcpalette.h"
 #include "showtreecontroller.h"
 #include "qlcchannel.h"
 #include "fixture.h"
@@ -1100,6 +1102,114 @@ void FocusCalls_Test::importantLinesAlwaysSpeak()
     QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
     pc->setOperatorFeedback(ControllerScheme::BothFeedback);
     m_doc->setMode(Doc::Design);
+}
+
+void FocusCalls_Test::theControllerLostFreezesEverything()
+{
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
+                             { 10, "a" }, { 11, "b" }, { 14, "lb" }, { 15, "rb" },
+                             { 16, "back" }, { 17, "start" }, { 18, "rs" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto value = [iom](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    auto held = [pc](int ticks) {
+        for (int i = 0; i < ticks; ++i)
+            pc->applyDesignJoystick();
+    };
+    auto drop = [iom, stub]() {
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        emit iom->inputDeviceDisconnected(0, stub->name(), QString("Stub pad"));
+    };
+    auto back = [iom, stub]() {
+        iom->setInputPatch(0, stub->name(), QString(), 0);
+        emit iom->inputDeviceConnected(0, stub->name(), QString("Stub pad"));
+    };
+
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy lost(pc, &ProgrammerController::controllerLost);
+    s->next();
+    s->nudge(1.0f, 0.0f);                      // Spot 7 unsaved: what a keep-all would save
+    s->previous();
+
+    // The left stick full over, and A down: the light moves, A's hold runs.
+    value(0, 255);
+    held(10);
+    QVERIFY(s->liveOffset(a->id()).pan > 0.5f);
+    value(10, 255);
+    held(10);
+    // The pad drops mid-move, mid-hold.
+    drop();
+    QCOMPARE(lost.count(), 1);
+    QCOMPARE(said.last().at(0).toString(), QString("Controller lost. Lights held."));
+    QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
+    const FocusSession::Offset frozen = s->liveOffset(a->id());
+    held(80);                                  // well past the keep-all hold
+    QCOMPARE(s->liveOffset(a->id()), frozen);  // nothing moves
+    QVERIFY(s->isDirty(b->id()));              // no keep-all fired
+    for (const QList<QVariant> &l : said)
+        QVERIFY(!l.at(0).toString().contains("lights kept"));
+    // Back: said; it moves only when touched again.
+    back();
+    QCOMPARE(said.last().at(0).toString(), QString("Controller back."));
+    QCOMPARE(lost.last().at(0).toBool(), false);
+    held(20);
+    QCOMPARE(s->liveOffset(a->id()), frozen);
+    s->discardAll();
+    s->stop();
+
+    // Refine: the same.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Main");
+    const quint32 cue = st->addCue(list, -1, "Ballad");
+    FixtureGroup *g = makeGroup(m_doc, "Spots", { a, b });
+    ShowTree::Target t;
+    t.groups << g->id();
+    const quint32 layer = st->addLayer(cue, t);
+    ShowTree::Look look;
+    look.key = ShowTree::KeyPosition;
+    look.palettes << st->createInlinePalette(QLCPalette::PanTilt, { 270, 135 }, "Centre");
+    QVERIFY(st->setLayerLook(cue, layer, look));
+    RefineSession *r = pc->refineSession();
+    r->setFlashEnabled(false);
+    QVERIFY(r->start(cue));
+    value(0, 255);
+    held(10);
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(r->pendingPosition(a->id(), pan, tilt));
+    QVERIFY(pan > 270.5f);
+    value(10, 255);                            // A: kept; its hold runs
+    held(5);
+    drop();
+    QCOMPARE(said.last().at(0).toString(), QString("Controller lost. Lights held."));
+    float p0 = 0.0f, t0 = 0.0f;
+    const bool had = r->pendingPosition(a->id(), p0, t0);
+    held(80);
+    float p1 = 0.0f, t1 = 0.0f;
+    QCOMPARE(r->pendingPosition(a->id(), p1, t1), had);
+    QCOMPARE(p1, p0);
+    back();
+    QCOMPARE(said.last().at(0).toString(), QString("Controller back."));
+    r->revert();
+    r->stop();
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
 QTEST_GUILESS_MAIN(FocusCalls_Test)

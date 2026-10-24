@@ -85,6 +85,10 @@ private slots:
     /** Q131: warnings and refusals speak even in Lights only, with a slow
      *  long blink and one long buzz -- not a save's double blink. */
     void importantLinesAlwaysSpeak();
+    /** Safety: the pad dropping with a stick and A held -- everything is
+     *  let go, nothing moves, no keep-all fires; said, and said when back.
+     *  In Focus mode (and focus calls) and in Refine. */
+    void theControllerLostFreezesEverything();
 
 private:
     Doc *m_doc = nullptr;

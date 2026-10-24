@@ -141,6 +141,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
         m_refineSession->setStick(RefineSession::Coarse, 0.5f, 0.5f);
         m_joyTickClock.invalidate();
         refreshControllerKeepAlive();
+        m_padPresent = focusController().present;
+        m_padLost = false;
     });
     connect(m_refineSession, &RefineSession::stopped, this, [this]() {
         refreshControllerKeepAlive();
@@ -158,6 +160,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
         emit joystickUpdated(0.5f, 0.5f);
         m_joyTickClock.invalidate();
         refreshControllerKeepAlive();
+        m_padPresent = focusController().present;
+        m_padLost = false;
     });
     connect(m_focusSession, &FocusSession::stopped, this, [this]() {
         emit joystickUpdated(m_panNorm, m_tiltNorm);
@@ -172,6 +176,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
             this, &ProgrammerController::refreshControllerKeepAlive);
     connect(this, &ProgrammerController::focusControllerChanged,
             this, &ProgrammerController::refreshControllerKeepAlive);
+    connect(this, &ProgrammerController::focusControllerChanged,
+            this, &ProgrammerController::checkControllerPresence);
     connect(this, &ProgrammerController::axisBindingChanged,
             this, &ProgrammerController::refreshControllerKeepAlive);
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
@@ -1529,6 +1535,49 @@ void ProgrammerController::heldTick(double dt)
     }
 }
 
+void ProgrammerController::freezeController()
+{
+    m_panNorm = m_tiltNorm = 0.5f;
+    m_fineNormX = m_fineNormY = 0.5f;
+    m_holdA.reset();
+    m_holdB.reset();
+    m_sayHold.reset();
+    m_heldRoles.clear();
+    m_viewChord = false;
+    m_bumperFrom = 0xFFFFFFFF;
+    m_focusSession->releaseControls();
+    m_refineSession->releaseControls();
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
+}
+
+void ProgrammerController::checkControllerPresence()
+{
+    const bool present = focusController().present;
+    const bool tool = m_focusSession->isActive() || m_refineSession->isActive();
+    if (m_padPresent && !present)
+    {
+        /* Mid-move or mid-hold, the pad sends no "let go": everything it
+           held is let go here, so no light drifts and no hold fires. */
+        freezeController();
+        if (tool)
+        {
+            m_padLost = true;
+            warnOperator(tr("Controller lost. Lights held."));
+            emit controllerLost(true);
+        }
+    }
+    else if (!m_padPresent && present && m_padLost)
+    {
+        m_padLost = false;
+        if (tool)
+        {
+            warnOperator(tr("Controller back."));
+            emit controllerLost(false);
+        }
+    }
+    m_padPresent = present;
+}
+
 void ProgrammerController::cycleOperatorFeedback()
 {
     setOperatorFeedback(ControllerScheme::nextFeedback(m_feedback));
@@ -1936,6 +1985,11 @@ void ProgrammerController::connectControllerInput()
             this, &ProgrammerController::focusControllerChanged);
     /* A pad kept offline coming back (or going) on the retry tick. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
+            this, &ProgrammerController::focusControllerChanged);
+    // A device gone or back (main 88409a2a7): at once, not at the next tick.
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceDisconnected,
+            this, &ProgrammerController::focusControllerChanged);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceConnected,
             this, &ProgrammerController::focusControllerChanged);
     m_controllerInputConnected = true;
 }

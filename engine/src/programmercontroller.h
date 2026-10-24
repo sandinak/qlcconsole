@@ -240,6 +240,8 @@ public:
         QMap<int, QString> controls;
     };
     FocusController focusController() const;
+    /** The controller went away while a tool used it, and is not back. */
+    bool isControllerLost() const { return m_padLost; }
 
     /*********************************************************************
      * Park (hold fixtures out of cue output)
@@ -513,6 +515,9 @@ signals:
     /** A controller came or went, or its profile changed: ask
      *  focusController() again. */
     void focusControllerChanged();
+    /** The controller the tools read went away mid-tool (true) or came
+     *  back (false). */
+    void controllerLost(bool lost);
     /** While Focus mode runs on the controller: a control by gamepad role
      *  moved -- 0 or 1 for a button, 0..1 (0.5 centred) for a stick axis --
      *  so the panel can show it. */
@@ -679,6 +684,15 @@ private:
     void refreshPadLight();
     /** A hold came round on the controller tick. */
     void heldTick(double dt);
+    /** Safety (the gaps review): the controller the tools read is gone or
+     *  back. Gone: freezeController(), and "Controller lost. Lights held.";
+     *  back: "Controller back." -- both important (always said). */
+    void checkControllerPresence();
+    /** Let go of everything the controller held: the sticks centred, the
+     *  A/B/RS holds and a D-pad repeat reset, no button held. */
+    void freezeController();
+    bool m_padPresent = false;
+    bool m_padLost = false;
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
     /** See controllerKeepAlive(). */
