@@ -254,8 +254,18 @@ void FocusCalls_Test::feedbackIsLightsVoiceOrBoth()
     QTRY_VERIFY_WITH_TIMEOUT(!s->isFlashing(), 2000);
     s->whereAmI();
     QVERIFY(!s->isFlashing());
+    // ...nor the save's blink (the panel's lamp still shows it).
+    QVERIFY(!s->rigFeedback());
+    s->setBlinkTimed(false);
+    s->nudge(0.5f, 0.0f);
+    s->save();
+    QVERIFY(!s->isBlinking());
     pc->cycleOperatorFeedback();
     QCOMPARE(pc->operatorFeedback(), BothFeedback);
+    QVERIFY(s->rigFeedback());
+    s->nudge(0.5f, 0.0f);
+    s->save();
+    QVERIFY(s->isBlinking());
     s->stop();
 }
 

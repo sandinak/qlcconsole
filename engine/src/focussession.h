@@ -410,8 +410,8 @@ public:
      *  Anything else is apply()ed once on the press. */
     void press(Control control, bool down);
     static bool repeats(Control control);
-    static constexpr double kRepeatDelay = 0.4;
-    static constexpr double kRepeatInterval = 0.08;
+    static constexpr double kRepeatDelay = ControllerScheme::HoldRepeat::delay();
+    static constexpr double kRepeatInterval = ControllerScheme::HoldRepeat::interval();
 
     /** The follow spot's stick response (followspot.js axisVelocity()): a
      *  normalised axis reading @p norm (0..1, 0.5 centred) as a velocity,
@@ -555,9 +555,9 @@ private:
     float m_step = 0.1f;
     InputDevice m_input = ControllerInput;
     ControllerScheme::TriggerButton m_trigger[2];
-    /** The held D-pad arm that repeats, and how long until it next does. */
-    Control m_held = NoControl;
-    double m_heldWait = 0.0;
+    /** The held D-pad arm that repeats (ControllerScheme::HoldRepeat, as
+     *  Refine's): its key is the Control. */
+    ControllerScheme::HoldRepeat m_hold;
 
     QList<CallState> m_calls;
     int m_callIndex = -1;

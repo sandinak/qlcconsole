@@ -1401,6 +1401,7 @@ void ProgrammerController::setOperatorFeedback(ControllerScheme::Feedback feedba
 {
     const bool lights = feedback != ControllerScheme::VoiceFeedback;
     m_focusSession->setLightsFeedback(lights);
+    m_focusSession->setRigFeedback(lights);     // the save blink; the lamp stays
     m_refineSession->setLightsFeedback(lights);
     if (feedback == m_feedback)
         return;

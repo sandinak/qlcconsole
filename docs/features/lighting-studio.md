@@ -1111,7 +1111,10 @@ save, revert, zero and undo.
 
 **A save shows on the rig.** When A keeps a light, the lamp flashes green
 and the real fixture dips to dark and back twice, quickly, so whoever is
-standing on stage sees it was kept. A revert (B) doesn't blink.
+standing on stage sees it was kept. A revert (B) doesn't blink. With
+**Feedback: Voice only** (see
+[Focus calls](focus-calls.md#telling-the-operator-where-they-are)) the
+fixture doesn't blink; the lamp still shows it.
 
 **On the plot and in the Rig Overview** every light with unsaved changes
 has a dashed yellow ring and a yellow badge; the light you're on keeps its
