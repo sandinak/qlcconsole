@@ -32,6 +32,7 @@ class QTreeWidgetItem;
 class QTabWidget;
 class QPushButton;
 class QComboBox;
+class QLabel;
 class Doc;
 
 /** @addtogroup ui UI
@@ -50,8 +51,10 @@ class Doc;
  *
  * Upgrade mode (File ▸ Upgrade this show…, §3.7) is the same table as a
  * front end over all of W5: the show's collections listed too, each with
- * what becomes of it; chasers already imported in place, with Restore
- * original; a second page that offers Capture into palettes for the raw
+ * what becomes of it; chasers already upgraded in place, greyed with the
+ * reason (ShowTreeController::whyNotSend) and Restore original… on their
+ * row; a line saying when nothing is left to upgrade, and how many chasers
+ * are the Show Tree's own (not listed); a second page that offers Capture into palettes for the raw
  * scenes the lists will play. Upgrade applies the lot as one undo step.
  */
 class ShowConverter final : public QDialog
@@ -124,6 +127,11 @@ public:
     QList<quint32> convertedLists() const;
     /** Press Restore original… on in-place list @a listId's row. */
     bool restore(quint32 listId);
+    /** Upgrade: the Restore original… button on list @a listId's row. */
+    QPushButton *restoreButton(quint32 listId) const;
+    /** Upgrade: the line under the table (nothing left to upgrade, the
+     *  Show Tree's own chasers); empty when there's nothing to say. */
+    QString note() const;
     QTabWidget *pages() const { return m_pages; }
 
     /** A capture plan as lines: each layer with its looks, what stays raw. */
@@ -155,7 +163,7 @@ private:
     QStringList m_results;
     QTabWidget *m_pages = nullptr;
     QTreeWidget *m_captureTable = nullptr;
-    QPushButton *m_restoreButton = nullptr;
+    QLabel *m_note = nullptr;
     QList<CaptureRow> m_captureRows;
     Upgrader m_upgrader;
     Restorer m_restorer;

@@ -146,6 +146,17 @@ ShowConverter::ShowConverter(Doc *doc, QWidget *parent, Mode mode)
         root->addWidget(m_table, 1);
     }
 
+    if (upgrade)
+    {
+        // Nothing left to upgrade, the Show Tree's own chasers: said, not
+        // left for the empty table to imply.
+        m_note = new QLabel(this);
+        m_note->setObjectName(QStringLiteral("stUpgradeNote"));
+        m_note->setWordWrap(true);
+        m_note->hide();
+        root->addWidget(m_note);
+    }
+
     m_details = new QTextBrowser(this);
     m_details->setObjectName(QStringLiteral("stConverterDetails"));
     m_details->setOpenLinks(false);
@@ -164,18 +175,6 @@ ShowConverter::ShowConverter(Doc *doc, QWidget *parent, Mode mode)
     root->addLayout(row);
 
     QDialogButtonBox *buttons = new QDialogButtonBox(this);
-    if (upgrade)
-    {
-        m_restoreButton = buttons->addButton(tr("Restore original…"), QDialogButtonBox::ActionRole);
-        m_restoreButton->setObjectName(QStringLiteral("stUpgradeRestore"));
-        m_restoreButton->setToolTip(tr("Put the chaser back as it was before it was imported in place: the list "
-                                       "leaves the tree, what fired it fires the chaser again. One undo step."));
-        connect(m_restoreButton, &QPushButton::clicked, this, [this]() {
-            const QTreeWidgetItem *item = m_table->currentItem();
-            if (item != nullptr && item->data(0, kKindRole).toInt() == ConvertedRow)
-                restore(item->data(0, kChaserRole).toUInt());
-        });
-    }
     m_convertButton = buttons->addButton(upgrade ? tr("Upgrade") : tr("Convert"), QDialogButtonBox::AcceptRole);
     m_convertButton->setObjectName(QStringLiteral("stConverterConvert"));
     if (upgrade)
@@ -254,6 +253,30 @@ void ShowConverter::build()
         buildUpgradeRows();
         buildCaptureRows();
         updatePlanTexts();
+
+        int left = 0, upgraded = 0, generated = 0;
+        for (int i = 0; i < m_table->topLevelItemCount(); ++i)
+        {
+            const QTreeWidgetItem *item = m_table->topLevelItem(i);
+            const int kind = item->data(0, kKindRole).toInt();
+            if (kind == ChaserRow && (item->flags() & Qt::ItemIsUserCheckable))
+                ++left;
+            else if (kind == ConvertedRow)
+                ++upgraded;
+        }
+        for (const Function *f : m_doc->functions())
+            if (f->type() == Function::ChaserType && f->isVisible() && st->isGenerated(f->id()))
+                ++generated;
+        QStringList note;
+        if (left == 0)
+            note << (upgraded > 0
+                     ? tr("Nothing left to upgrade: every cue-list chaser of this show is a Show Tree cue list "
+                          "already. Restore original… on its row puts one back.")
+                     : tr("Nothing to upgrade: no chaser of this show works as a cue list."));
+        if (generated > 0)
+            note << tr("%n chaser(s) belong to the Show Tree's own cue lists, and aren't listed.", "", generated);
+        m_note->setText(note.join(QLatin1Char(' ')));
+        m_note->setVisible(!note.isEmpty());
     }
     for (int c = 0; c < m_table->columnCount(); ++c)
         if (c != 1)
@@ -283,12 +306,35 @@ void ShowConverter::build()
 void ShowConverter::updateButtons()
 {
     m_convertButton->setEnabled(!chosen().isEmpty() || !chosenScenes().isEmpty());
-    if (m_restoreButton != nullptr)
+    for (quint32 listId : convertedLists())
     {
-        const QTreeWidgetItem *item = m_table->currentItem();
-        m_restoreButton->setEnabled(m_restorer && item != nullptr
-                                    && item->data(0, kKindRole).toInt() == ConvertedRow);
+        QPushButton *b = restoreButton(listId);
+        if (b == nullptr)
+            continue;
+        QString why;
+        const bool can = m_doc->showTree()->canRestoreOriginal(listId, &why);
+        b->setEnabled(m_restorer && can);
+        b->setToolTip(can ? tr("Put the chaser back as it was before it was imported in place: the list "
+                               "leaves the tree, what fired it fires the chaser again. It asks first; one "
+                               "undo step.")
+                          : why);
     }
+}
+
+QPushButton *ShowConverter::restoreButton(quint32 listId) const
+{
+    for (int i = 0; i < m_table->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *item = m_table->topLevelItem(i);
+        if (item->data(0, kKindRole).toInt() == ConvertedRow && item->data(0, kChaserRole).toUInt() == listId)
+            return qobject_cast<QPushButton *>(m_table->itemWidget(item, 2));
+    }
+    return nullptr;
+}
+
+QString ShowConverter::note() const
+{
+    return m_note == nullptr ? QString() : m_note->text();
 }
 
 QList<quint32> ShowConverter::chosen() const
@@ -387,9 +433,15 @@ QString ShowConverter::text() const
                        : QStringLiteral("    ");
         QStringList cols;
         for (int c = 0; c < m_table->columnCount(); ++c)
-            cols << item->text(c);
+        {
+            const QPushButton *b = qobject_cast<const QPushButton *>(m_table->itemWidget(
+                                       const_cast<QTreeWidgetItem *>(item), c));
+            cols << (b != nullptr ? QStringLiteral("[%1]").arg(b->text()) : item->text(c));
+        }
         out << mark + cols.join(QStringLiteral(" | "));
     }
+    if (m_note != nullptr && !m_note->text().isEmpty())
+        out << m_note->text();
     if (m_captureTable != nullptr)
     {
         out << QStringLiteral("--- %1").arg(m_pages->tabText(1));
@@ -433,7 +485,9 @@ void ShowConverter::buildUpgradeRows()
 {
     ShowTreeController *st = m_doc->showTree();
 
-    // Chasers imported in place already: Restore original.
+    // Chasers upgraded in place already: greyed, why, and Restore
+    // original… on the row.
+    const QBrush grey = palette().brush(QPalette::Disabled, QPalette::Text);
     for (const Production &p : st->productions())
         for (const CueList &l : p.lists)
         {
@@ -445,8 +499,20 @@ void ShowConverter::buildUpgradeRows()
             item->setData(0, kKindRole, ConvertedRow);
             noTick(item);
             item->setText(0, src == nullptr ? l.name : src->name());
-            item->setText(1, tr("Converted — the cue list %1, in place").arg(l.name));
-            item->setText(2, tr("Restore original… puts the chaser back"));
+            const QString why = st->whyNotSend(l.source);
+            item->setText(1, why.isEmpty() ? tr("Upgraded already: cue list %1").arg(l.name) : why);
+            item->setToolTip(1, item->text(1));
+            for (int c = 0; c < m_table->columnCount(); ++c)
+                item->setForeground(c, grey);
+
+            QPushButton *restoreRow = new QPushButton(tr("Restore original…"));
+            restoreRow->setObjectName(QStringLiteral("stUpgradeRestore"));
+            const quint32 listId = l.id;
+            // Queued: restoring rebuilds the table, and this button with it.
+            connect(restoreRow, &QPushButton::clicked, this, [this, listId]() { restore(listId); },
+                    Qt::QueuedConnection);
+            m_table->setItemWidget(item, 2, restoreRow);
+            item->setSizeHint(2, restoreRow->sizeHint());
         }
 
     // Collections: read into the cues of the lists that play them, or left
@@ -698,9 +764,9 @@ void ShowConverter::showItem(QTreeWidgetItem *item)
     {
         const CueList *l = st->cueList(id);
         h += QStringLiteral("<p>%1</p>").arg(
-                 tr("Imported in place: the cue list %1 took over from this chaser, which is filed with its "
-                    "originals. Restore original… puts the chaser back and points what fires the list at it "
-                    "again (it asks first; one undo step).").arg(l == nullptr ? QString() : l->name).toHtmlEscaped());
+                 tr("Upgraded in place: the cue list %1 took over from this chaser, which is filed with its "
+                    "originals. Restore original… on its row puts the chaser back and points what fires the "
+                    "list at it again (it asks first; one undo step).").arg(l == nullptr ? QString() : l->name).toHtmlEscaped());
     }
     else if (kind == CollectionRow)
     {

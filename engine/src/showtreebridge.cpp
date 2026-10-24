@@ -172,12 +172,18 @@ QString ShowTreeController::whyNotSend(quint32 chaserId) const
     if (f == nullptr || f->type() != Function::ChaserType)
         return tr("Not a chaser.");
     if (isGenerated(chaserId))
-        return tr("The Show Tree made this chaser: it is a cue list there already.");
+    {
+        for (const Production &p : m_productions)
+            for (const CueList &l : p.lists)
+                if (l.chaser == chaserId)
+                    return tr("Made by the Show Tree: it plays the cue list %1.").arg(l.name);
+        return tr("Made by the Show Tree: it is part of a cue list there already.");
+    }
     const quint32 listId = importedInto(chaserId);
     if (listId != invalidId())
     {
         const CueList *list = cueList(listId);
-        return tr("Sent already: it is the cue list %1 in the Show Tree (Restore original there puts it back).")
+        return tr("Upgraded already: cue list %1 (Restore original puts the chaser back).")
                .arg(list == nullptr ? f->name() : list->name);
     }
     return QString();

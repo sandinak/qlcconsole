@@ -146,6 +146,7 @@ private slots:
     void restoreOriginalPointsVcBack();
     void captureFromTheOpaqueRow();
     void upgradeThisShow();
+    void upgradeListsWhatIsUpgradedAlready();
     // UX review (2026-10-23)
     /** Q59: the command line's syntax folded away, shown on ? / F1 / the
      *  button, remembered. */

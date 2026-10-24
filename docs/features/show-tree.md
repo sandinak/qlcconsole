@@ -380,8 +380,15 @@ what would become of it:
 - a **collection**: *read into the cues of* the ticked lists that play
   it, or *leave alone* (it plays as it is; drop it on a cue for a ▣
   layer). One already filed by an import says so;
-- a chaser already **imported in place**: *Converted*, with **Restore
-  original…** at the bottom of the dialog.
+- a chaser already **upgraded in place**: greyed, with why (*Upgraded
+  already: cue list Haunted Variety Show*) and **Restore original…** on its
+  row, which asks first and is one undo step.
+
+The chasers the Show Tree makes for its own cue lists aren't listed; a line
+under the table counts them. When nothing is left to upgrade, the dialog
+still opens and says so (*Nothing left to upgrade*), so you can see why and
+put a chaser back. The Show Tree's header shows **Upgrade This Show…** only
+while there is a chaser to upgrade; the File menu always has it.
 
 **2. Raw scenes into palettes** lists the raw scenes the tree plays on ▣
 rows, and the ones a ticked list would. Tick one to **Capture it into

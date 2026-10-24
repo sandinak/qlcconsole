@@ -6219,7 +6219,8 @@ void ShowTreeView_Test::upgradeThisShow()
     // Haze is set in 0.0.1 and tracks into 0.0.2 (the import's tracking
     // reading): captured where it is set, the capture tracks in with it.
     QVERIFY2(all.contains("Haze: captured into palettes in 1 cue(s), 0 channels differ."), qPrintable(all));
-    QVERIFY2(afterText.contains("Full Show | Converted — the cue list Full Show, in place"), qPrintable(afterText));
+    QVERIFY2(afterText.contains("Full Show | Upgraded already: cue list Full Show (Restore original puts the "
+                                "chaser back). | [Restore original…]"), qPrintable(afterText));
     QVERIFY2(afterText.contains("takes the whole upgrade back as one step"), qPrintable(afterText));
 
     const CueList *list = st->cueList(listId);
@@ -6261,6 +6262,107 @@ void ShowTreeView_Test::upgradeThisShow()
     QVERIFY(st->undo());                                       // the upgrade
     QVERIFY(st->productions().isEmpty());
     QCOMPARE(go->function(), chaser->id());
+}
+
+/* Upgrade This Show… on a show upgraded already (PMS Stage, 2026-10-24):
+   File ▸ Upgrade This Show… still opens, the upgraded chaser greyed with
+   why and Restore original… on its row, the Show Tree's own chaser counted,
+   not listed, and "nothing left to upgrade" said. The header's button stays
+   hidden (Q90). */
+void ShowTreeView_Test::upgradeListsWhatIsUpgradedAlready()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeView view(nullptr, m_doc);
+    int asked = 0;
+    view.setConfirm([&asked](const QString &, const QString &, const QString &) {
+        ++asked;
+        return true;
+    });
+
+    // A show with no chaser at all: it opens and says so.
+    QString emptyNote;
+    int opened = 0;
+    view.setConverterRunner([&](ShowConverter *c) {
+        ++opened;
+        emptyNote = c->note();
+        QVERIFY(!c->convertButton()->isEnabled());
+    });
+    view.openUpgrade();
+    QCOMPARE(opened, 1);
+    QCOMPARE(emptyNote, QString("Nothing to upgrade: no chaser of this show works as a cue list."));
+
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    view.setConverterRunner([&](ShowConverter *c) {
+        QCOMPARE(c->chosen(), QList<quint32>({ chaser->id() }));
+        QVERIFY(c->note().isEmpty());              // something to upgrade: nothing to say
+        c->convert();
+    });
+    view.openUpgrade();
+    const quint32 listId = st->importedInto(chaser->id());
+    QVERIFY(listId != ShowTree::invalidId());
+    const quint32 listChaser = st->cueList(listId)->chaser;
+    QVERIFY(st->isGenerated(listChaser));
+    QVERIFY(st->convertibleChasers().isEmpty());
+    QCOMPARE(st->whyNotSend(listChaser),
+             QString("Made by the Show Tree: it plays the cue list %1.").arg(chaser->name()));
+
+    // The header's button: hidden, nothing to convert (Q90).
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.updateBridgeBanner();
+    QToolButton *header = view.findChild<QToolButton *>("stUpgradeShow");
+    QVERIFY(header != nullptr);
+    QTRY_VERIFY(!header->isVisible());
+
+    // The dialog (as File ▸ Upgrade This Show… opens it): greyed, why, the
+    // row's Restore original…
+    QString text;
+    bool restoredInDialog = false;
+    view.setConverterRunner([&](ShowConverter *c) {
+        ++opened;
+        text = c->text();
+        QVERIFY(c->chosen().isEmpty());
+        QVERIFY(!c->convertButton()->isEnabled());
+        QCOMPARE(c->convertedLists(), QList<quint32>({ listId }));
+        QPushButton *restore = c->restoreButton(listId);
+        QVERIFY(restore != nullptr);
+        QVERIFY(restore->isEnabled());
+        QCOMPARE(restore->text(), QString("Restore original…"));
+        c->resize(900, 600);
+        c->show();
+        QVERIFY(QTest::qWaitForWindowExposed(c));
+        if (!w0Shot("upgrade-nothing-left.png").isEmpty())
+            QVERIFY(c->grab().save(w0Shot("upgrade-nothing-left.png")));
+        restore->click();                           // queued: the table is rebuilt
+        QTRY_VERIFY(c->convertedLists().isEmpty());
+        restoredInDialog = true;
+        QCOMPARE(c->chosen(), QList<quint32>({ chaser->id() }));   // offered again
+        QVERIFY(c->note().isEmpty());
+        QVERIFY(c->convertButton()->isEnabled());
+        c->hide();
+    });
+    view.openUpgrade();
+    QCOMPARE(opened, 2);
+    const QString name = chaser->name();
+    for (const QString &want : { QString("    %1 | Upgraded already: cue list %1 (Restore original puts the chaser "
+                                         "back). | [Restore original…]").arg(name),
+                                 QString("Nothing left to upgrade: every cue-list chaser of this show is a Show "
+                                         "Tree cue list already. Restore original… on its row puts one back."),
+                                 QString("1 chaser(s) belong to the Show Tree's own cue lists, and aren't listed.") })
+        QVERIFY2(text.contains(want), qPrintable(want + " not in:\n" + text));
+    // The Show Tree's own chaser (the same name) isn't a row.
+    QVERIFY2(text.count("    " + name + " | ") == 1 && !text.contains("] " + name + " | "), qPrintable(text));
+
+    // Restore original, as it always does: asked, done, one undo step.
+    QVERIFY(restoredInDialog);
+    QCOMPARE(asked, 1);
+    QVERIFY(st->productions().isEmpty());
+    QCOMPARE(chaser->path(true), QString());
+    QVERIFY(st->undo());
+    QCOMPARE(st->importedInto(chaser->id()), listId);
 }
 
 /* Library group rows, right-click (2026-10-22): Select all similar -- the

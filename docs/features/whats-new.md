@@ -51,8 +51,11 @@ their house lights, relays and subs.
 - **One way to upgrade.** **Upgrade This Show…** is the one door from
   chasers to cue lists: File menu, the Show Tree's header (it replaces
   Import chaser…), the Run tab's empty state, and Build's **Send to Show
-  Tree…**, which opens it with just that chaser ticked. See
-  [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build).
+  Tree…**, which opens it with just that chaser ticked. A chaser upgraded
+  already shows greyed, with why and **Restore original…** on its row, and
+  with nothing left to upgrade the File menu's entry still opens and says
+  so. See [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build)
+  and [Upgrade this show](show-tree.md#upgrade-this-show).
 
 - **+ Effect ▾ and Script ▾.** The Workbench's **+ Effect ▾** adds an
   **EFX** or an **RGB Matrix** (it was two buttons), and the Look Editor's

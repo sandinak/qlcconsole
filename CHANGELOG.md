@@ -269,6 +269,12 @@ circuits and subs.
   **Merge** are under **More ▾** (+ Production is on the bar too while the
   show has none); **Upgrade This Show…** shows only while there are chasers
   to upgrade.
+- **Upgrade This Show… says what's upgraded already**: a chaser upgraded
+  in place is a greyed row with why (*Upgraded already: cue list …*, the
+  same text as Build's Send to Show Tree…) and its own **Restore
+  original…**; the Show Tree's own chasers are counted under the table, not
+  listed; with nothing left it opens and says *Nothing left to upgrade*
+  (File menu; the header button stays hidden).
 - **A cue's right-click is shorter** (Q93): no Duplicate cue (Duplicate ⌘D
   is on the same menu), and Make the base cue, Mode and Include cue are on
   the cue's page only. + Production shows on a production or empty space.
