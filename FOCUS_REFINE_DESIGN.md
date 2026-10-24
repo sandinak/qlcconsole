@@ -68,6 +68,11 @@ pad if you have one.
    voice to the output that feeds them. Step quickly through the fixtures:
    the voice never talks over itself, and only the fixture you stop on is
    read out. Hold a D-pad arm: zoom or focus keeps going until you let go.
+   Nudge a light: the panel says "Since the save: +2.5° pan" and the plot
+   shows a dashed ghost where the saved one lands. Press both bumpers to
+   jump to the next light not saved; hold A to save them all, hold B to put
+   this light back. A Bluetooth Xbox pad buzzes on a save, twice if another
+   light is still unsaved.
    Set **Feedback** on the panel (or hold RS / ⇧W) to *Lights only* (no
    voice), *Voice only* (no blinks) or both. **Say the light** (RS / W)
    speaks either way.
@@ -142,8 +147,11 @@ does the same **kind** of thing in every tool:
 | **Right stick** | Fine | 1°/s | 1°/s | 1°/s |
 | **D-pad ↑ / ↓** | Zoom **in** (narrower) / **out** (wider): up is in, like a camera | Lens (hand zoom: saved) or zoom channel (live only) | same | The cue's **zoom** (on the colour/gobo pages: nothing) |
 | **D-pad → / ←** | Focus **tighter** (value up) / **looser** (value down): right is always the value up | Focus channel, live only | same | The cue's **focus**. On the colour/gobo pages: next / previous palette. |
-| **A** | Keep | Save the head's offsets | **Save for this venue** (sidecar, at once) | **Keep in the cue** (one Show Tree step) |
+| **A** | Keep | Save the head's offsets ("Spot 3 kept."; the pad buzzes, twice if another light is still unsaved) | **Save for this venue** (sidecar, at once) | **Keep in the cue** (one Show Tree step; in Build, a shared palette asks first, Q116) |
+| **A held (0.6 s)** | Keep all | Every unsaved head saved ("3 lights kept.") | same | All pending kept ("All kept.") |
 | **B** | Revert | Back to saved | Back to saved | **Back to the cue** (drops pending) |
+| **B held (0.6 s)** | Back to the last save | This light back to its last save, whatever the scope | same | Back to the cue |
+| **LB + RB** | Next unsaved | The next light not saved ("Spot 7, not saved."; "All saved.") | same, in any call | The next change not kept ("All kept.") |
 | **X** | Reset | Zero the offsets | Zero the offsets | **Clear the exception** (Group/Fixture). At Layer scope it is the same as B. |
 | **View / Back** | Undo | Undo last save (a group save is one step) | same | Show Tree (or Build) undo, on View's release |
 | **View + A** | Keep at the source | — | — | A tracked layer's change kept in the cue it tracks from (Q118); ⇧Return |
@@ -187,6 +195,10 @@ truss trims a little low. A bumper goes back to one head.
 | Scope | G |
 | Say the light | W |
 | Feedback (cycle) | ⇧W |
+| Save all (A held) | ⇧Return (Focus mode) |
+| This light back to its last save (B held) | ⇧Backspace |
+| Next unsaved (both bumpers) | U |
+| Keep at the source (View + A, Refine) | ⇧Return (Refine) |
 | Page (Refine) | P |
 | Keep | Return |
 | Back | Backspace |
@@ -801,20 +813,76 @@ rumble; and which control picks a shutter side (suggestion: a D-pad
 "shutter page" on the left stick click, so the triggers keep meaning "big
 step").
 
-### New questions (2026-10-23 night build)
+### Decisions Q116–Q127 (2026-10-24)
+
+| Q | Decision | Built |
+|---|---|---|
+| Q116 | Refine in Build, Layer scope, a shared palette: edit in place, but **warn first**, naming the other scenes or cues by voice and on the panel; a second A (or the panel's **Change them all**) applies it. | `RefineSession::paletteUsers()`, `sharedWarning()`, `confirmShared()`; B drops it. |
+| Q117 | A Build Layer-scope keep that changes a palette and raw values is **one** undo step. | `PaletteOps::sceneValueStep()`: scenes and palette values in one step; a whole Build keep is that one step. |
+| Q118 | Tracked layer: default stays "this cue"; **View + A** keeps at the source. | Refine's View undoes on release unless A came while held; ⇧Return. |
+| Q119 | Start/Menu begins an armed focus-call cue. | As built. |
+| Q120 | No venue applied: **ask** on the laptop; 8 s without an answer, the dated name; said. | `FocusCallCue` state `NamingVenue`, `FocusCallsDialog::askVenue()`; typing holds the clock. |
+| Q121 | Finishing the calls GOes on automatically. | As built. |
+| Q122 | "Voice to:" on Mac only. | As built. |
+| Q126 | All six, in every controller tool: the pad's light bar, rumble, "Spot 3 kept" / "2 lights not saved", the saved position's ghost and the change in degrees, A held = save all / B held = back to the last save, both bumpers = next unsaved. | See §2's table; the pad's output is below. |
+| Q127 | The console's Feedback setting is the authority throughout, the armed cue included; RS held / ⇧W changes that same setting. | As built (tested). |
+
+**The pad's light bar and rumble (Q126.1, Q126.2): what works, what is missing.**
+
+- **The engine side is complete and tested.**
+  - `ProgrammerController::setPadLight()` sends the lamp's colour (green /
+    yellow / red; none to give the pad back its own) and `padRumble()` sends
+    1 or 2 buzzes. Both go to the controller's own input plugin as
+    `QLCIOPlugin::sendFeedBack(... params {"gamepad": "light", "rgb":
+    "#rrggbb"} / {"gamepad": "rumble", "pulses": n})`.
+  - A plugin that does nothing with it is a no-op. The stub plugin records
+    what it is sent, for the tests.
+- **macOS, the HID plugin (`HIDPlugin::sendFeedBack`).**
+  - It hands these to pads read through Apple's GameController framework
+    (`HIDGameController::setLight()`, `rumble()`):
+    - rumble through `GCController.haptics` and Core Haptics (macOS 11+);
+    - the light through `GCController.light` (macOS 11+).
+  - Built, but **not tried on a real pad.**
+- **What is missing for the light bar.** Our plugin claims only **Xbox** pads
+  through GameController, and an Xbox pad has no coloured light, so the
+  light bar is a no-op today. A DualShock 4 / DualSense is read through raw
+  HID (IOKit), not GameController. Two ways to reach its light bar:
+  1. **Claim PS pads through GameController as well.** Their element
+     names map onto `GamepadLayout` as the Xbox ones do. `GCDeviceLight`
+     then works as written. This is the smaller job.
+  2. **Write the pad's output report over IOKit**
+     (`IOHIDDeviceSetReport`).
+     - DualShock 4: USB report 0x05, rumble bytes 4–5, RGB bytes 6–8;
+       Bluetooth report 0x11 with a CRC-32.
+     - DualSense: USB 0x02, Bluetooth 0x31 with a CRC-32.
+- **What is missing for rumble on other pads.** A pad read through raw HID
+  (not claimed) does not buzz: that is the same IOKit output report as
+  above.
+- **Linux / Windows.** No-op.
+  - Linux: evdev `FF_RUMBLE`, or hidraw output reports.
+  - Windows: XInput `XInputSetState` for Xbox, or HID output reports for
+    PS pads.
+
+**Smaller choices made on the way:**
+
+- **Hold B** in Focus mode reverts the light being worked even at group
+  scope, where B's press reverts the whole call. In fixture scope the hold
+  only adds the spoken confirmation.
+- **Both bumpers** jump from where the *first* bumper of the pair stepped
+  from, so pressing LB then RB is not "previous, then next unsaved".
+- **The ghost** is drawn where the head would land with its *saved*
+  calibration, given that the live calibration lands it on the reference.
+  For a mover that is the saved−live difference applied to the intended
+  angles, met at the reference's height. For a fixed light it is the saved
+  landing point. The label reads "saved (+2.5° pan)".
+
+### Open questions (after Q116–Q127)
 
 | # | Question | What is built now |
 |---|---|---|
-| Q-B1 | In Build, Refine at Layer scope moves the scene's **palette in place**, as the Look Editor does, so a palette other scenes use changes there too. The Show Tree makes a one-off instead. Should Build make a copy for this scene (Own copy) and warn? | In place; no warning. |
-| Q-B2 | A Build Layer-scope keep that changes a palette **and** raw values is two undo steps. Is that acceptable? | Two steps. |
-| Q-C1 | Where should a keep on a layer the cue only tracks go by default: this cue or the cue it comes from? | **This cue** (said by voice; S switches). |
-| Q-C2 | Should there be a controller button for "keep at the source"? Every button is in use. Holding View with A is one option. | Panel checkbox and the S key only. |
-| Q-D1 | Which control starts a focus-call cue: Start/Menu or A? | **Start/Menu**: the same button begins and ends; A is Save inside. Keyboard ⌘↩. |
-| Q-D2 | When a focus-call cue starts and no venue is applied, it makes a **dated venue** by itself (Q110). Should it ask instead? | Dated venue. |
-| Q-D3 | Should finishing the calls GO on automatically, or wait for the stage manager's GO? | GOes on automatically (as asked). |
-| Q-D4 | Voice output device on Linux and Windows. | Mac only (`say -a`); the others use the system output. |
-| Q-E1 | Is holding RS the right way to change the feedback from the controller? Every other control is taken. | RS held 0.6 s; ⇧W on the keyboard; the panel's Feedback choice. |
-| Q-E2 | In Lights only, should the armed focus-call cue still say "Focus calls ready"? Today it does not; the cue page, Run tab and footer still show it. | Silent in Lights only. |
+| Q-F1 | Hold B: is "this light back to its last save" what was meant? In fixture scope it is the same as B. Or should hold B revert **all** unsaved lights, mirroring hold A? | This light only. |
+| Q-F2 | Light bar on PS pads: claim them through GameController (option 1 above)? | Not done; light bar is a no-op on the pads we read today. |
+| Q-F3 | Rumble strength and length (0.12 s at full, 0.22 s apart). | As stated; untested on a real pad. |
 
 ---
 

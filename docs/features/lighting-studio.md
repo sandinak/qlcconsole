@@ -1023,6 +1023,9 @@ and jump as you nudged.)
 | The other reference | LS (left stick click) | R |
 | Say the light (its name, then where you are) | RS (right stick click) | W |
 | Feedback: lights / voice / both | RS held | ⇧W |
+| Save every light not saved | A held | ⇧Return |
+| This light back to its last save | B held | ⇧Backspace |
+| The next light not saved | LB + RB together | U |
 | Next / previous focus call | RT / LT | PgDn / PgUp |
 | Undo the last save | View | ⌘Z |
 | Leave | Menu | Esc |

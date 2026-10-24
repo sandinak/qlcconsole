@@ -75,6 +75,7 @@ scope picks the first fixture.
 | Undo (on its release) | View | ⌘Z |
 | Keep at the cue it tracks from | View + A | ⇧Return |
 | Say the light | RS (right stick click) | W |
+| The next change not kept | LB + RB together | U |
 | Feedback: lights / voice / both | RS held | ⇧W |
 | Leave | Menu | Esc |
 
