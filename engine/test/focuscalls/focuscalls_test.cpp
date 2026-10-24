@@ -791,6 +791,21 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     fcc->cueCurrent(list, house);
     QCOMPARE(fcc->state(), FocusCallCue::Idle);
 
+    /* Q127: the console's Feedback holds throughout -- Lights only, the armed
+       cue says nothing (the cue page, Run tab and footer still show it). */
+    fcc->cueCurrent(list, house);
+    m_doc->programmer()->setOperatorFeedback(ControllerScheme::LightsFeedback);
+    const int quiet = said.count();
+    fcc->cueCurrent(list, focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(said.count(), quiet);
+    fcc->cueCurrent(list, house);
+    m_doc->programmer()->setOperatorFeedback(ControllerScheme::VoiceFeedback);
+    fcc->cueCurrent(list, focus);
+    QCOMPARE(said.last().at(0).toString(), QString("Focus calls ready. Press Start to begin."));
+    m_doc->programmer()->setOperatorFeedback(ControllerScheme::BothFeedback);
+    fcc->cueCurrent(list, house);
+
     // No calls in the show: Start says so and stays armed.
     m_doc->programmer()->focusCalls()->clear();
     fcc->cueCurrent(list, focus);

@@ -248,6 +248,13 @@ by Focus mode, Focus calls and Refine. It lives in
   lamp stays on screen, since it is harmless.
 - **Both:** lights and voice.
 
+**The console's setting is the authority** (Q127: "default to what's set
+on the console and follow that thru the entire operation"). It applies
+everywhere, the armed focus-call cue included: in Lights only that cue is
+silent, and in Voice or Both it says "Focus calls ready". Hold RS (or ⇧W)
+is a deliberate override that changes that same setting, so there is
+always one current value.
+
 **Say the light** (RS tap, or W) speaks in every mode, because the operator
 asked for it. It gives the light's name first and briefly, then where it is.
 Holding RS for 0.6 s (or pressing ⇧W) cycles the setting and says the new one
