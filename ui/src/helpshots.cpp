@@ -58,6 +58,18 @@
 #include "scenegrouplooks.h"
 #include "effectbrowser.h"
 #include "lookeditor.h"
+#include "programmercontroller.h"
+#include "showtreecontroller.h"
+#include "monitorproperties.h"
+#include "focuscallsdialog.h"
+#include "focuscontrolmap.h"
+#include "focusmodepanel.h"
+#include "refinesession.h"
+#include "fixturegroup.h"
+#include "refinepanel.h"
+#include "stagetarget.h"
+#include "focuscalls.h"
+#include "gamepadrole.h"
 #include "helpshots.h"
 #include "qlcpalette.h"
 #include "fixture.h"
@@ -813,6 +825,121 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (scene != NULL && line != NULL)
             scene->removePalette(line->id());
         doc->resetModified();
+    } };
+
+    /* Focus calls and Refine (FOCUS_REFINE_DESIGN.md): the demo's Movers and
+       Pars, to the Centre target, and a cue of Movers to refine. */
+    auto demoCalls = [doc]() {
+        QList<FocusCall> calls;
+        quint32 centre = 0xFFFFFFFF;
+        if (MonitorProperties *props = doc->monitorProperties())
+            for (const StageTarget *t : props->stageTargets())
+                centre = t->id();
+        for (const FixtureGroup *g : doc->fixtureGroups())
+        {
+            FocusCall c;
+            c.groups << g->id();
+            if (g->name() == QLatin1String("Movers"))
+            {
+                c.target.kind = FocusSession::Reference::Target;
+                c.target.id = centre;
+                c.note = QStringLiteral("Cut off the proscenium");
+            }
+            calls << c;
+        }
+        doc->programmer()->focusCalls()->setCalls(calls);
+    };
+    // An Xbox pad's every control, as a connected one's profile names them.
+    auto xboxMap = [](FocusControlMap *map) {
+        QMap<int, QString> all;
+        for (int r = GamepadRole::A; r <= GamepadRole::RightTrigger; ++r)
+            if (r != GamepadRole::Guide)
+                all.insert(r, QString());
+        map->setControls(all);
+    };
+    list << Shot{ QStringLiteral("focus-calls-dialog"), [=]() {
+        demoCalls();
+        Frame f;
+        FocusCallsDialog *d = new FocusCallsDialog(doc, app);
+        d->setObjectName(QStringLiteral("helpShotFocusCalls"));
+        d->resize(820, 520);
+        d->show();
+        settle();
+        f.grab = d;
+        Callout target = mark(named(d, "fcTarget"), 3);
+        target.place = Right;
+        Callout venue = mark(named(d, "fcVenue"), 4);
+        venue.place = Right;
+        f.callouts << mark(named(d, "fcCalls"), 1) << mark(named(d, "fcGroups"), 2)
+                   << target << venue << mark(named(d, "fcStart"), 5);
+        return f;
+    }, [=]() {
+        if (QWidget *d = app->findChild<QWidget *>(QStringLiteral("helpShotFocusCalls")))
+            d->deleteLater();
+        settle();
+    } };
+
+    list << Shot{ QStringLiteral("focus-calls-panel"), [=]() {
+        demoCalls();
+        Frame f;
+        FocusSession::Options o;
+        o.calls = doc->programmer()->focusCalls()->sessionCalls();
+        o.others = FocusSession::OthersDim;
+        QString why;
+        FocusModePanel *panel = FocusModePanel::startWith(doc, app, o, &why,
+                                                          int(FocusSession::KeyboardInput));
+        if (panel == NULL)
+        {
+            fprintf(stderr, "[HELPSHOT] focus calls did not start: %s\n", qPrintable(why));
+            return f;
+        }
+        panel->controlMap()->setMode(FocusControlMap::ControllerMap);
+        xboxMap(panel->controlMap());
+        panel->resize(700, 720);
+        settle();
+        f.grab = panel;
+        f.callouts << mark(named(panel, "focusCall"), 1) << mark(named(panel, "focusScope"), 2)
+                   << mark(panel->controlMap(), 3);
+        return f;
+    }, [=]() {
+        doc->programmer()->focusSession()->stop();
+        settle();
+    } };
+
+    list << Shot{ QStringLiteral("refine-panel"), [=]() {
+        Frame f;
+        ShowTreeController *st = doc->showTree();
+        quint32 movers = 0xFFFFFFFF;
+        for (const FixtureGroup *g : doc->fixtureGroups())
+            if (g->name() == QLatin1String("Movers"))
+                movers = g->id();
+        const quint32 prod = st->addProduction(QStringLiteral("Spring Show"));
+        const quint32 cueList = st->addCueList(prod, QStringLiteral("Main"));
+        const quint32 cue = st->addCue(cueList, -1, QStringLiteral("Ballad"));
+        ShowTree::Target t;
+        t.groups << movers;
+        const quint32 layer = st->addLayer(cue, t);
+        ShowTree::Look pos;
+        pos.key = ShowTree::KeyPosition;
+        pos.palettes << st->createInlinePalette(QLCPalette::PanTilt, { 270, 135 }, QStringLiteral("Centre"));
+        st->setLayerLook(cue, layer, pos);
+        RefinePanel *panel = RefinePanel::open(doc, app, cue, layer);
+        if (panel == NULL)
+            return f;
+        RefineSession *r = doc->programmer()->refineSession();
+        r->setFlashEnabled(false);
+        r->pickFixture(r->layerFixtures().value(2));
+        r->nudgePosition(3.0f, -2.0f);
+        xboxMap(panel->controlMap());
+        panel->resize(700, 720);
+        settle();
+        f.grab = panel;
+        f.callouts << mark(named(panel, "refineLayer"), 1) << mark(named(panel, "refineScope"), 2)
+                   << mark(named(panel, "refinePending"), 3) << mark(panel->controlMap(), 4);
+        return f;
+    }, [=]() {
+        doc->programmer()->refineSession()->stop();
+        settle();
     } };
 
     return list;

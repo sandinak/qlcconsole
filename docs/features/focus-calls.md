@@ -31,6 +31,14 @@ list.
 
 **Save calls** keeps them in the show (they are saved with it).
 
+![The Focus calls dialog: the calls in order, a call's groups and point, the venue](../images/focus-calls-dialog.png)
+
+1. The calls, in the order they are run.
+2. The groups the selected call focuses.
+3. The point they focus to.
+4. The venue the corrections are saved for (see below).
+5. Start runs them.
+
 ## Venues: corrections that stay with the room
 
 What you correct in a venue belongs to that room, not to the show. Choose
@@ -70,6 +78,12 @@ another computer.
 their point, the first one lit and the rest of the call dimmed. The panel
 says the call ("Call 2 of 5: AT spots → Soloist DS") and its note, which
 fixture, the scope, and where saves go.
+
+![Focus calls running: the call and its note, the scope, the controller](../images/focus-calls-panel.png)
+
+1. The call being focused, and its note for the crew.
+2. One fixture or the whole call (Y), and where saves go.
+3. The controller, labelled with what each control does here.
 
 | Do | Controller | Keyboard |
 |---|---|---|

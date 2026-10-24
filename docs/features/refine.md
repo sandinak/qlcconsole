@@ -32,6 +32,13 @@ In Build's [Workbench](build.md#the-workbench):
 The controller works exactly the same on a Build scene; see
 [On a Build scene](#on-a-build-scene).
 
+![Refine on a cue: one fixture picked, a move pending, the controller](../images/refine-panel.png)
+
+1. Where you are: the layer, the group or the fixture (the voice says it too).
+2. The scope, and what the D-pad sets.
+3. What is pending: A keeps it in the cue, B goes back.
+4. The controller, labelled with what each control does in Refine.
+
 ## Scope: layer, group, fixture
 
 **Y** goes Layer → Group → Fixture → Layer.

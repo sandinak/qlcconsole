@@ -158,7 +158,6 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_venueNote = new QLabel(this);
     m_venueNote->setObjectName(QStringLiteral("fcVenueNote"));
     m_venueNote->setWordWrap(true);
-    m_venueNote->setStyleSheet(QStringLiteral("color: palette(mid);"));
     vl->addWidget(m_venueNote);
 
     QDialogButtonBox *bb = new QDialogButtonBox(this);
