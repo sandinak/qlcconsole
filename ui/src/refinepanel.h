@@ -67,6 +67,8 @@ public:
     /** Where A keeps a tracked layer's change, as the panel offers it; null
      *  text when the layer is the cue's own. */
     QString keepToLine() const;
+    /** Q116: a shared palette waiting for a second A, and who uses it. */
+    QString sharedLine() const;
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -88,6 +90,8 @@ private:
     QLabel *m_pending;
     QLabel *m_device;
     class QCheckBox *m_toSource = nullptr;
+    QWidget *m_shared = nullptr;
+    QLabel *m_sharedLabel = nullptr;
     FocusControlMap *m_map;
 
     static QPointer<RefinePanel> s_instance;

@@ -176,6 +176,13 @@ public:
     bool stepPalette(int dir);
 
     bool hasPending() const { return !m_edits.isEmpty(); }
+    /** Board Q116 (Build): a keep that would change a palette other scenes
+     *  use is held until A is pressed again; this says which, empty when
+     *  nothing waits. confirmShared() is that second A (or the panel's
+     *  button). */
+    QString sharedWarning() const { return m_sharedWarning; }
+    QStringList sharedUsers() const { return m_sharedUsers; }
+    bool confirmShared(QString *why = nullptr);
     /** Keep everything pending in the cue: one Show Tree step. */
     bool keep(QString *why = nullptr);
     /** Drop what is pending. */
@@ -248,6 +255,8 @@ signals:
     /** Said because the operator asked (Say the light): always spoken. */
     void sayLight(const QString &text);
     void exitRequested();
+    /** A keep went in (the pad buzzes). */
+    void kept();
 
 private:
     struct Edit
@@ -277,6 +286,11 @@ private:
     bool sceneHasOwn(quint32 fid, const QString &key) const;
     QHash<quint32, uchar> sceneRawValues(quint32 fid) const;
     bool sceneKeep(QString *why);
+    /** The scenes besides @p exceptScene that use palette @p paletteId, by
+     *  name (the Show Tree's cues bake to scenes named for them). */
+    QStringList paletteUsers(quint32 paletteId, quint32 exceptScene) const;
+    /** What a keep is said for: the light picked, or the layer. */
+    QString keptLight() const;
     bool sceneClearException();
     const ShowTree::Layer *layer(quint32 layerId) const;
     /** The child layer of @p layerId exactly on @p target, if any. */
@@ -300,6 +314,9 @@ private:
     Doc *m_doc;
     bool m_active = false;
     bool m_sceneMode = false;
+    bool m_sharedConfirmed = false;
+    QString m_sharedWarning;
+    QStringList m_sharedUsers;
     mutable ShowTree::Look m_sceneLook;
     quint32 m_cue = 0xFFFFFFFF;
     QList<quint32> m_layers;

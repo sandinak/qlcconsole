@@ -222,6 +222,17 @@ QHash<quint32, uchar> RefineSession::sceneRawValues(quint32 fid) const
     return out;
 }
 
+QStringList RefineSession::paletteUsers(quint32 paletteId, quint32 exceptScene) const
+{
+    QStringList out;
+    for (const Function *f : m_doc->functions())
+        if (const Scene *sc = qobject_cast<const Scene *>(f))
+            if (sc->id() != exceptScene && sc->palettes().contains(paletteId))
+                out << sc->name();
+    out.sort();
+    return out;
+}
+
 bool RefineSession::sceneKeep(QString *why)
 {
     Scene *s = sceneAt(currentLayer());
@@ -232,6 +243,68 @@ bool RefineSession::sceneKeep(QString *why)
     std::stable_sort(order.begin(), order.end(), [this](const QString &a, const QString &b) {
         return int(m_edits[a].scope) < int(m_edits[b].scope);
     });
+    const quint32 sid = s->id();
+
+    /* The palettes a Layer-scope edit moves in place (as Build's Look
+       Editor does), each with how it moves. */
+    struct InPlace { quint32 pid; QString key; Edit edit; };
+    QList<InPlace> inPlace;
+    QHash<QString, QStringList> rawKeys;     // edit key -> attributes as raw values
+    for (const QString &k : order)
+    {
+        const Edit &e = m_edits[k];
+        if (e.scope != LayerScope)
+            continue;
+        for (const QPair<bool, QString> &a : { qMakePair(e.hasPos, ShowTree::KeyPosition),
+                                               qMakePair(e.hasZoom, ShowTree::KeyZoom),
+                                               qMakePair(e.hasFocus, ShowTree::KeyBeam) })
+        {
+            if (!a.first)
+                continue;
+            const ShowTree::Look *look = sceneLookFor(e.fixtures.value(0, kInvalid), a.second);
+            if (look == nullptr)
+                rawKeys[k] << a.second;
+            else
+                for (quint32 pid : look->palettes)
+                    inPlace << InPlace{ pid, a.second, e };
+        }
+    }
+
+    /* Board Q116: a palette other scenes (or cues) use changes there too --
+       say which, and only go on when A is pressed again. */
+    if (!m_sharedConfirmed)
+    {
+        QStringList users;
+        QStringList names;
+        for (const InPlace &ip : inPlace)
+        {
+            const QStringList u = paletteUsers(ip.pid, sid);
+            if (u.isEmpty())
+                continue;
+            if (const QLCPalette *p = m_doc->palette(ip.pid))
+                if (!names.contains(p->name()))
+                    names << p->name();
+            for (const QString &n : u)
+                if (!users.contains(n))
+                    users << n;
+        }
+        if (!users.isEmpty())
+        {
+            m_sharedWarning = users.size() == 1
+                ? tr("%1 is also used by %2. Press A again to change it there too.")
+                  .arg(names.join(QStringLiteral(", ")), users.first())
+                : tr("%1 is also used by %2 and %3 more. Press A again to change them all.")
+                  .arg(names.join(QStringLiteral(", ")), users.first()).arg(users.size() - 1);
+            m_sharedUsers = users;
+            m_sharedConfirmed = true;           // the next A goes on
+            emit changed();
+            say(m_sharedWarning);
+            if (why != nullptr)
+                *why = m_sharedWarning;
+            return false;
+        }
+    }
+
     // What each edit sends, read before anything in the scene changes.
     QHash<QString, QList<SceneValue>> values;
     for (const QString &k : order)
@@ -240,97 +313,77 @@ bool RefineSession::sceneKeep(QString *why)
         for (const QString &k : order)
             m_kept << values.value(k);
 
-    bool ok = true;
-    const quint32 sid = s->id();
-    for (const QString &k : order)
-    {
-        const Edit e = m_edits.value(k);
-        if (e.scope == LayerScope)
-        {
-            /* The scene's own look: its palette for the attribute, its value
-               moved (as Build's Look Editor does: a shared palette changes
-               everywhere it is used), else its raw values. */
-            auto inPlace = [&](const QString &key,
-                               const std::function<void(QVariantList &, const QLCPalette *)> &edit) {
-                const ShowTree::Look *look = sceneLookFor(e.fixtures.value(0, kInvalid), key);
-                if (look == nullptr)
-                    return false;
-                for (quint32 pid : look->palettes)
-                {
-                    QLCPalette *p = m_doc->palette(pid);
-                    if (p == nullptr)
-                        continue;
-                    ops->valueStep(tr("Refine %1").arg(p->name()), pid, [p, &edit]() {
-                        QVariantList v = p->values();
-                        edit(v, p);
-                        p->setValues(v);
-                    });
-                }
-                return true;
-            };
-            QStringList rawKeys;
-            if (e.hasPos && !inPlace(ShowTree::KeyPosition, [&](QVariantList &v, const QLCPalette *p) {
-                    // Degrees moved by the nudge (an Aim was refused): the fan kept.
-                    if (p->type() == QLCPalette::PanTilt && v.size() >= 2)
-                    {
-                        v[0] = qRound(v.at(0).toFloat() + e.pan);
-                        v[1] = qRound(v.at(1).toFloat() + e.tilt);
-                    }
-                    else if (!v.isEmpty() && (p->type() == QLCPalette::Pan || p->type() == QLCPalette::Tilt))
-                        v[0] = qRound(v.at(0).toFloat() + (p->type() == QLCPalette::Pan ? e.pan : e.tilt));
-                }))
-                rawKeys << ShowTree::KeyPosition;
-            if (e.hasZoom && !inPlace(ShowTree::KeyZoom, [&](QVariantList &v, const QLCPalette *) {
-                    v = QVariantList{ double(e.zoom) };
-                }))
-                rawKeys << ShowTree::KeyZoom;
-            if (e.hasFocus && !inPlace(ShowTree::KeyBeam, [&](QVariantList &v, const QLCPalette *) {
-                    if (v.isEmpty())
-                        v << e.focus;
-                    else
-                        v[0] = e.focus;
-                }))
-                rawKeys << ShowTree::KeyBeam;
-            const bool swap = e.colour != kInvalid || e.gobo != kInvalid;
-            if (!rawKeys.isEmpty() || swap)
-                ok = ops->sceneStep(tr("Refine %1").arg(s->name()), { sid }, [&]() {
-                    // A colour or gobo: that palette in place of the scene's.
-                    for (const QPair<quint32, int> &sw : { qMakePair(e.colour, int(QLCPalette::Color)),
-                                                           qMakePair(e.gobo, int(QLCPalette::Gobo)) })
-                    {
-                        if (sw.first == kInvalid)
-                            continue;
-                        for (quint32 pid : s->palettes())
-                            if (const QLCPalette *p = m_doc->palette(pid))
-                                if (int(p->type()) == sw.second)
-                                    s->removePalette(pid);
-                        s->addPalette(sw.first);
-                    }
-                    // No palette for it: the scene's raw values.
-                    for (const SceneValue &sv : values.value(k))
-                        if (Fixture *fx = m_doc->fixture(sv.fxi))
-                            for (const QString &key : rawKeys)
-                                if (channelOf(fx->channel(sv.channel), key))
-                                    s->setValue(sv);
-                    return true;
-                }) && ok;
-            continue;
-        }
+    QList<quint32> pids;
+    for (const InPlace &ip : inPlace)
+        if (!pids.contains(ip.pid))
+            pids << ip.pid;
 
-        /* A group or a fixture: the exception -- left out of that
-           attribute's palettes, with the value as the scene's own. */
-        QStringList keys;
-        if (e.hasPos)
-            keys << ShowTree::KeyPosition;
-        if (e.hasZoom)
-            keys << ShowTree::KeyZoom;
-        if (e.hasFocus)
-            keys << ShowTree::KeyBeam;
-        if (e.colour != kInvalid)
-            keys << ShowTree::KeyColour;
-        if (e.gobo != kInvalid)
-            keys << ShowTree::KeyGobo;
-        ok = ops->sceneStep(tr("Refine %1: exception").arg(s->name()), { sid }, [&]() {
+    // Board Q117: everything A keeps -- palettes and the scene -- one step.
+    const bool ok = ops->sceneValueStep(tr("Refine %1").arg(s->name()), { sid }, pids, [&]() {
+        for (const InPlace &ip : inPlace)
+        {
+            QLCPalette *p = m_doc->palette(ip.pid);
+            if (p == nullptr)
+                continue;
+            const Edit &e = ip.edit;
+            QVariantList v = p->values();
+            if (ip.key == ShowTree::KeyPosition)
+            {
+                // Degrees moved by the nudge (an Aim was refused): the fan kept.
+                if (p->type() == QLCPalette::PanTilt && v.size() >= 2)
+                {
+                    v[0] = qRound(v.at(0).toFloat() + e.pan);
+                    v[1] = qRound(v.at(1).toFloat() + e.tilt);
+                }
+                else if (!v.isEmpty() && (p->type() == QLCPalette::Pan || p->type() == QLCPalette::Tilt))
+                    v[0] = qRound(v.at(0).toFloat() + (p->type() == QLCPalette::Pan ? e.pan : e.tilt));
+            }
+            else if (ip.key == ShowTree::KeyZoom)
+                v = QVariantList{ double(e.zoom) };
+            else if (v.isEmpty())
+                v << e.focus;
+            else
+                v[0] = e.focus;
+            p->setValues(v);
+        }
+        for (const QString &k : order)
+        {
+            const Edit &e = m_edits[k];
+            if (e.scope == LayerScope)
+            {
+                // A colour or gobo: that palette in place of the scene's.
+                for (const QPair<quint32, int> &sw : { qMakePair(e.colour, int(QLCPalette::Color)),
+                                                       qMakePair(e.gobo, int(QLCPalette::Gobo)) })
+                {
+                    if (sw.first == kInvalid)
+                        continue;
+                    for (quint32 pid : s->palettes())
+                        if (const QLCPalette *p = m_doc->palette(pid))
+                            if (int(p->type()) == sw.second)
+                                s->removePalette(pid);
+                    s->addPalette(sw.first);
+                }
+                // No palette for it: the scene's raw values.
+                for (const SceneValue &sv : values.value(k))
+                    if (Fixture *fx = m_doc->fixture(sv.fxi))
+                        for (const QString &key : rawKeys.value(k))
+                            if (channelOf(fx->channel(sv.channel), key))
+                                s->setValue(sv);
+                continue;
+            }
+            /* A group or a fixture: the exception -- left out of that
+               attribute's palettes, with the value as the scene's own. */
+            QStringList keys;
+            if (e.hasPos)
+                keys << ShowTree::KeyPosition;
+            if (e.hasZoom)
+                keys << ShowTree::KeyZoom;
+            if (e.hasFocus)
+                keys << ShowTree::KeyBeam;
+            if (e.colour != kInvalid)
+                keys << ShowTree::KeyColour;
+            if (e.gobo != kInvalid)
+                keys << ShowTree::KeyGobo;
             for (const QString &key : keys)
             {
                 const QList<int> types = typesFor(key);
@@ -354,11 +407,16 @@ bool RefineSession::sceneKeep(QString *why)
                     for (const QString &key : keys)
                         if (channelOf(fx->channel(sv.channel), key))
                             s->setValue(sv);
-            return true;
-        }) && ok;
-    }
-    if (s->isRunning())
-        s->requestPaletteRefresh();
+        }
+        return true;
+    });
+    m_sharedConfirmed = false;
+    m_sharedWarning.clear();
+    m_sharedUsers.clear();
+    for (const Function *f : m_doc->functions())
+        if (Scene *sc = const_cast<Scene *>(qobject_cast<const Scene *>(f)))
+            if (sc->isRunning())
+                sc->requestPaletteRefresh();
     if (!ok)
     {
         if (why != nullptr && why->isEmpty())
@@ -367,12 +425,15 @@ bool RefineSession::sceneKeep(QString *why)
         say(tr("Not kept."));
         return false;
     }
+    const QString light = keptLight();
     m_edits.clear();
     m_editOrder.clear();
     m_levelCache.clear();
     rebuildWrites();
     emit changed();
-    say(m_doc->mode() == Doc::Operate ? tr("Kept. It plays from the scene's next start.") : tr("Kept."));
+    emit kept();
+    say(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the scene's next start.").arg(light)
+                                      : tr("%1 kept.").arg(light));
     return true;
 }
 
