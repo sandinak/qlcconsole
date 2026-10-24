@@ -159,6 +159,8 @@ public:
      *  was the user's choice, kept for next time. */
     void setInputDevice(FocusSession::InputDevice device, bool remember = true);
     FocusControlMap *controlMap() const { return m_map; }
+    /** "Since the save: ..." as shown; empty when nothing changed. */
+    QString deltaLine() const;
     FocusStatusLamp *statusLamp() const { return m_lamp; }
     /** "All saved", "Unsaved: this light", "Unsaved: 2 other lights
      *  (Spot 3, Spot 7)"... as the panel shows it. */
@@ -175,6 +177,8 @@ private:
     void refresh();
     /** The lamp and its words, and the plot's unsaved marks. */
     void refreshSaveStatus();
+    /** The change since the save, here and as a ghost on the plot. */
+    void refreshDelta();
     void showHighlight(quint32 fid);
     void finish();
     /** The controller came, went or changed: the map, the choice, and the
@@ -200,7 +204,9 @@ private:
     QLabel *m_nameLabel;
     QLabel *m_referenceLabel;
     QLabel *m_offsetLabel;
-    QLabel *m_beamLabel = nullptr;   ///< the beam, where it can change (Q103)
+    QLabel *m_beamLabel = nullptr;
+    /** "Since the save: +2.5° pan, −1.0° tilt" (Q126). */
+    QLabel *m_deltaLabel = nullptr;   ///< the beam, where it can change (Q103)
     QLabel *m_savedLabel;
     FocusStatusLamp *m_lamp;
     QLabel *m_statusLabel;

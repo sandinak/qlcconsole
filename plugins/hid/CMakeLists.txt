@@ -75,6 +75,7 @@ if(APPLE)
         "-framework Foundation"
         "-framework AppKit"
         "-framework GameController"
+        "-framework CoreHaptics"
     )
 endif()
 

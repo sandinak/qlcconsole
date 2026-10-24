@@ -561,6 +561,11 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     vl->addLayout(lampRow);
     vl->addWidget(m_referenceLabel);
     vl->addWidget(m_offsetLabel);
+    // What changed since the save, in degrees (Q126), and a ghost on the plot.
+    m_deltaLabel = new QLabel(this);
+    m_deltaLabel->setObjectName(QStringLiteral("focusDelta"));
+    m_deltaLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+    vl->addWidget(m_deltaLabel);
     vl->addWidget(m_beamLabel);
     vl->addWidget(m_savedLabel);
     vl->addWidget(m_scopeLabel);
@@ -812,6 +817,29 @@ QString FocusModePanel::saveStatusText() const
                               : tr("Unsaved: %1 other lights (%2)").arg(others.size()).arg(names);
 }
 
+void FocusModePanel::refreshDelta()
+{
+    if (!m_session->isActive())
+        return;
+    const quint32 fid = m_session->currentFixture();
+    const QString delta = m_session->deltaText(fid);
+    m_deltaLabel->setText(delta.isEmpty() ? QString() : tr("Since the save: %1").arg(delta));
+    m_deltaLabel->setVisible(!delta.isEmpty());
+    QVector3D ghost;
+    Monitor *mon = Monitor::instance();
+    if (mon == nullptr)
+        return;
+    if (m_session->savedGhost(fid, ghost))
+        mon->showFocusGhost(fid, ghost, delta);
+    else
+        mon->showFocusGhost(fid, QVector3D(), QString(), false);
+}
+
+QString FocusModePanel::deltaLine() const
+{
+    return m_deltaLabel->isHidden() ? QString() : m_deltaLabel->text();
+}
+
 void FocusModePanel::refreshSaveStatus()
 {
     if (!m_session->isActive())
@@ -832,6 +860,7 @@ void FocusModePanel::refreshSaveStatus()
                                         : QStringLiteral("color: #3a9a4a;"));
     if (Monitor *mon = Monitor::instance())
         mon->showFocusUnsaved(unsaved);
+    refreshDelta();
 }
 
 void FocusModePanel::setInputDevice(FocusSession::InputDevice device, bool remember)
@@ -937,10 +966,23 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Tab:      m_session->next(); break;
         case Qt::Key_BracketLeft:
         case Qt::Key_Backtab:  m_session->previous(); break;
+        // Shift: as A or B held -- save all; this light back to its last save.
         case Qt::Key_Return:
-        case Qt::Key_Enter:    m_session->save(); break;
+        case Qt::Key_Enter:
+            if (modifiers & Qt::ShiftModifier)
+                m_session->saveAllHeld();
+            else
+                m_session->save();
+            break;
         case Qt::Key_Backspace:
-        case Qt::Key_Delete:   m_session->revert(); break;
+        case Qt::Key_Delete:
+            if (modifiers & Qt::ShiftModifier)
+                m_session->revertLight();
+            else
+                m_session->revert();
+            break;
+        // Both bumpers: the next light not saved.
+        case Qt::Key_U:        m_session->nextUnsaved(); break;
         case Qt::Key_0:        m_session->zero(); break;
         case Qt::Key_R:        m_session->toggleReference(); break;
         // Focus calls and the scope (the triggers and Y on the controller).
@@ -1050,6 +1092,8 @@ bool FocusModePanel::requestExit()
 void FocusModePanel::finish()
 {
     showHighlight(0xFFFFFFFF);
+    if (Monitor *mon = Monitor::instance())
+        mon->showFocusGhost(0xFFFFFFFF, QVector3D(), QString(), false);
     if (Monitor *mon = Monitor::instance())
         mon->showFocusUnsaved(QList<quint32>());
     /* Everything this session saved is one step on the Lighting Studio's

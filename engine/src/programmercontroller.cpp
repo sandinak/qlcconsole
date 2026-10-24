@@ -111,6 +111,19 @@ ProgrammerController::ProgrammerController(Doc *doc)
     });
     connect(m_focusSession, &FocusSession::announce, this, spoken);
     connect(m_refineSession, &RefineSession::announce, this, spoken);
+    /* The pad (Q126): its light bar follows the status lamp, and it buzzes
+       on a keep -- twice when another light is still unsaved. */
+    connect(m_focusSession, &FocusSession::unsavedChanged, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::currentChanged, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::started, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::stopped, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::headSaved, this, [this]() {
+        padRumble(m_focusSession->saveStatus() == FocusSession::AllSaved ? 1 : 2);
+    });
+    connect(m_refineSession, &RefineSession::changed, this, &ProgrammerController::refreshPadLight);
+    connect(m_refineSession, &RefineSession::started, this, &ProgrammerController::refreshPadLight);
+    connect(m_refineSession, &RefineSession::stopped, this, &ProgrammerController::refreshPadLight);
+    connect(m_refineSession, &RefineSession::kept, this, [this]() { padRumble(1); });
     // Say the light: asked for, so always said.
     connect(m_focusSession, &FocusSession::sayLight, this, &ProgrammerController::operatorAnnounce);
     connect(m_refineSession, &RefineSession::sayLight, this, &ProgrammerController::operatorAnnounce);
@@ -1409,6 +1422,86 @@ void ProgrammerController::setOperatorFeedback(ControllerScheme::Feedback feedba
     emit operatorFeedbackChanged(feedback);
 }
 
+void ProgrammerController::refreshPadLight()
+{
+    // The lamp's colours: green all saved, yellow this light, red another.
+    QColor c;
+    if (m_focusSession->isActive())
+    {
+        switch (m_focusSession->saveStatus())
+        {
+            case FocusSession::AllSaved:      c = QColor(0x3a, 0xc0, 0x4a); break;
+            case FocusSession::ThisUnsaved:   c = QColor(0xff, 0xc0, 0x00); break;
+            case FocusSession::OthersUnsaved:
+            case FocusSession::BothUnsaved:   c = QColor(0xe0, 0x30, 0x20); break;
+        }
+    }
+    else if (m_refineSession->isActive())
+        c = m_refineSession->hasPending() ? QColor(0xff, 0xc0, 0x00) : QColor(0x3a, 0xc0, 0x4a);
+    setPadLight(c);
+}
+
+void ProgrammerController::setPadLight(const QColor &colour)
+{
+    if (colour == m_padLight)
+        return;
+    m_padLight = colour;
+    QVariantMap p;
+    p.insert(QStringLiteral("gamepad"), QStringLiteral("light"));
+    p.insert(QStringLiteral("rgb"), colour.isValid() ? colour.name() : QString());
+    sendPadFeedback(p);
+    emit padLightChanged(colour);
+}
+
+void ProgrammerController::padRumble(int pulses)
+{
+    if (pulses <= 0)
+        return;
+    ++m_padRumbles;
+    QVariantMap p;
+    p.insert(QStringLiteral("gamepad"), QStringLiteral("rumble"));
+    p.insert(QStringLiteral("pulses"), pulses);
+    sendPadFeedback(p);
+    emit padRumbled(pulses);
+}
+
+void ProgrammerController::sendPadFeedback(const QVariantMap &params)
+{
+    // The controller the tools read: its own plugin, its own line.
+    const FocusController pad = focusController();
+    if (!pad.present || m_doc->inputOutputMap() == nullptr)
+        return;
+    InputPatch *ip = m_doc->inputOutputMap()->inputPatch(pad.universe);
+    if (ip == nullptr || ip->plugin() == nullptr)
+        return;
+    ip->plugin()->sendFeedBack(pad.universe, ip->input(), 0, 0, params);
+}
+
+void ProgrammerController::heldTick(double dt)
+{
+    const bool refine = m_refineSession->isActive();
+    if (m_holdA.due(dt))
+    {
+        if (refine)
+        {
+            // Everything pending is kept by A already: say it is.
+            if (m_refineSession->hasPending())
+                m_refineSession->keep();
+            else
+                emit operatorAnnounce(tr("All kept."));
+        }
+        else
+            m_focusSession->saveAllHeld();
+    }
+    if (m_holdB.due(dt))
+    {
+        if (refine)
+            m_refineSession->revert();
+        else
+            m_focusSession->revertLight();
+    }
+}
+
 void ProgrammerController::cycleOperatorFeedback()
 {
     setOperatorFeedback(ControllerScheme::nextFeedback(m_feedback));
@@ -2162,6 +2255,28 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
                                                                         : (value > 0 ? 1.0f : 0.0f));
 
+    /* A and B held (Q126): the press does its own thing below; held to
+       holdFor(), save all / back to the last save (heldTick()). */
+    if (role == GamepadRole::A)
+        value > 0 ? m_holdA.press() : void(m_holdA.release());
+    else if (role == GamepadRole::B)
+        value > 0 ? m_holdB.press() : void(m_holdB.release());
+
+    /* Both bumpers (Q126): the second one down, with the first held, jumps
+       to the next unsaved light (Refine: the next pending change). */
+    if ((role == GamepadRole::LB || role == GamepadRole::RB) && value > 0
+        && m_heldRoles.contains(role == GamepadRole::LB ? GamepadRole::RB : GamepadRole::LB))
+    {
+        // From where the first bumper of the pair stepped from.
+        if (refine)
+            m_refineSession->nextPending();
+        else
+            m_focusSession->nextUnsaved(m_bumperFrom);
+        return true;
+    }
+    if ((role == GamepadRole::LB || role == GamepadRole::RB) && value > 0 && !refine)
+        m_bumperFrom = m_focusSession->currentFixture();
+
     /* RS, in every tool: a tap says the light, a hold (the controller
        tick, LongPress::holdFor()) changes the feedback. */
     if (role == GamepadRole::RS)
@@ -2265,6 +2380,7 @@ void ProgrammerController::applyDesignJoystick()
             m_joyTickClock.start();
         if (m_sayHold.due(dt))
             cycleOperatorFeedback();
+        heldTick(dt);
         m_focusSession->tick(dt);
         return;
     }
@@ -2280,6 +2396,7 @@ void ProgrammerController::applyDesignJoystick()
             m_joyTickClock.start();
         if (m_sayHold.due(dt))
             cycleOperatorFeedback();
+        heldTick(dt);
         m_refineSession->tick(dt);
         return;
     }

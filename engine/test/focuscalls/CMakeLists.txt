@@ -4,6 +4,7 @@ add_executable(focuscalls_test WIN32
 target_include_directories(focuscalls_test PRIVATE
     ../../../plugins/interfaces
     ../../src
+    ../iopluginstub
 )
 
 target_link_libraries(focuscalls_test PRIVATE

@@ -160,6 +160,10 @@ public:
     bool keepsToSource() const { return m_keepToSource; }
     /** Where A keeps a tracked layer's change (said). */
     void setKeepToSource(bool source);
+    /** Both bumpers (Q126): to the next pending change -- its layer, its
+     *  scope, its fixture -- said; "All kept." when nothing is pending. */
+    bool nextPending();
+
     /** View + A (board Q118): keep this once at the source cue, whatever
      *  setKeepToSource() says; on a layer of the cue's own, an ordinary keep. */
     bool keepAtSource(QString *why = nullptr);

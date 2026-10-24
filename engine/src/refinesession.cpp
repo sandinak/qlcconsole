@@ -1058,6 +1058,32 @@ bool RefineSession::keep(QString *why)
     return true;
 }
 
+bool RefineSession::nextPending()
+{
+    if (!m_active)
+        return false;
+    if (m_editOrder.isEmpty())
+    {
+        say(tr("All kept."));
+        return false;
+    }
+    // After where we are, round to the start.
+    const QString here = editKey();
+    int at = m_editOrder.indexOf(here);
+    const Edit e = m_edits.value(m_editOrder.at((at + 1) % m_editOrder.size()));
+    m_layerIndex = qMax(0, m_layers.indexOf(e.layer));
+    m_scope = e.scope;
+    if (e.scope == FixtureScope)
+        m_fixtureIndex = qMax(0, layerFixtures().indexOf(e.fixtures.value(0)));
+    else if (e.scope == GroupScope)
+        m_groupIndex = qMax(0, groups().indexOf(e.target));
+    rebuildWrites();
+    emit changed();
+    flashSelection();
+    say(tr("%1, not kept.").arg(keptLight()));
+    return true;
+}
+
 bool RefineSession::keepAtSource(QString *why)
 {
     if (!isTrackedLayer())
@@ -1339,7 +1365,12 @@ void RefineSession::apply(ControllerScheme::Verb verb)
         case ControllerScheme::Revert:        revert(); break;
         case ControllerScheme::Reset:         clearException(); break;
         case ControllerScheme::Undo:          undo(); break;
-        case ControllerScheme::Exit:          emit exitRequested(); break;
+        case ControllerScheme::Exit:
+            if (hasPending())
+                say(m_editOrder.size() == 1 ? tr("1 change not kept.")
+                                            : tr("%1 changes not kept.").arg(m_editOrder.size()));
+            emit exitRequested();
+            break;
         case ControllerScheme::ZoomWider:
             if (m_page == BeamPage)
                 nudgeZoom(1.0f);

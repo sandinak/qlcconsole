@@ -50,6 +50,7 @@
 #include "focuscalls.h"
 #include "programmingoutline.h"
 #include "workbench.h"
+#include "monitorgraphicsview.h"
 #include "focuscallcue.h"
 #include "cuerunner.h"
 #include "controllerscheme.h"
@@ -486,6 +487,37 @@ void FocusCallsUi_Test::theLaptopAsksForTheVenue()
     QTRY_VERIFY(ask.isNull());                   // it closes itself
     m_doc->programmer()->focusSession()->stop();
     m_doc->setMode(Doc::Design);
+}
+
+void FocusCallsUi_Test::theChangeSinceTheSaveShows()
+{
+    FocusSession::Options o;
+    o.fixtures = m_spots;
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = m_target;
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(m_doc, nullptr, o, &why,
+                                                               int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY(panel->deltaLine().isEmpty());
+    QTest::keyClick(panel, Qt::Key_Right, Qt::ShiftModifier);    // 1 degree of pan
+    QCOMPARE(panel->deltaLine(), QString("Since the save: +1.0\u00b0 pan"));
+    QTest::keyClick(panel, Qt::Key_Return);
+    QVERIFY(panel->deltaLine().isEmpty());
+    // U: the next light not saved (none: "All saved").
+    QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
+    QTest::keyClick(panel, Qt::Key_U);
+    QCOMPARE(said.last().at(0).toString(), QString("All saved."));
+
+    // The plot's ghost, as Monitor draws it.
+    MonitorGraphicsView view(m_doc);
+    view.resize(800, 600);
+    QVERIFY(!view.hasFocusGhost());
+    view.setFocusGhost(true, QVector3D(3.0f, 4.0f, 1.6f), QString("+2.5\u00b0 pan"));
+    QVERIFY(view.hasFocusGhost());
+    QCOMPARE(view.focusGhostLabel(), QString("saved (+2.5\u00b0 pan)"));
+    view.setFocusGhost(false, QVector3D(), QString());
+    QVERIFY(!view.hasFocusGhost());
 }
 
 void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()

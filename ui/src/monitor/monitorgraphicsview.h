@@ -763,6 +763,12 @@ public:
     void highlightFixtures(const QList<quint32> &ids);
     /** Focus mode: mark the lights with unsaved changes (the rest unmarked). */
     void markUnsavedFixtures(const QList<quint32> &ids);
+    /** Focus mode's ghost (Q126): a dashed ring where the head would land
+     *  with its saved calibration (@p point, metres), and @p label beside
+     *  it ("+2.5° pan"); @p on false hides it. */
+    void setFocusGhost(bool on, const QVector3D &point, const QString &label);
+    bool hasFocusGhost() const;
+    QString focusGhostLabel() const;
 
     /** Set the active scene whose target palette links are shown as aim lines.
      *  Pass Function::invalidId() to hide all aim lines. */
@@ -1129,6 +1135,8 @@ signals:
 private:
     Doc *m_doc;
     QGraphicsScene *m_scene;
+    class QGraphicsEllipseItem *m_focusGhost = nullptr;
+    class QGraphicsSimpleTextItem *m_focusGhostLabel = nullptr;
 
     /** Size of the grid. How many horizontal and vertical cells */
     QSize m_gridSize;

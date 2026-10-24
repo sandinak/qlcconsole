@@ -54,6 +54,8 @@ private slots:
     void aFocusCallCueWaitsForTheController();
     /** Q120: the laptop asks for the venue; typing holds the clock. */
     void theLaptopAsksForTheVenue();
+    /** Q126: the change since the save on the panel, U, the plot's ghost. */
+    void theChangeSinceTheSaveShows();
     /** Build's Workbench: Refine from its header and from a row. */
     void refineFromTheWorkbench();
     /** Feedback is one setting, on the panels, with Shift+W; W says the light. */

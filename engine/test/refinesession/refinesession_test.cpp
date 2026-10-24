@@ -723,6 +723,36 @@ void RefineSession_Test::aTrackedLayerKeepsHereOrAtItsSource()
     r->stop();
 }
 
+void RefineSession_Test::refineTellsYouMoreToo()
+{
+    RefineSession *r = m_doc->programmer()->refineSession();
+    ProgrammerController *pc = m_doc->programmer();
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy buzz(pc, &ProgrammerController::padRumbled);
+    QVERIFY(r->start(m_cue));
+    QCOMPARE(pc->padLight(), QColor(0x3a, 0xc0, 0x4a));        // nothing pending: green
+    QVERIFY(!r->nextPending());
+    QCOMPARE(said.last().at(0).toString(), QString("All kept."));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QCOMPARE(pc->padLight(), QColor(0xff, 0xc0, 0x00));        // pending: yellow
+    r->setScope(RefineSession::LayerScope);
+    // Both bumpers: back to the change not kept.
+    QVERIFY(r->nextPending());
+    QCOMPARE(r->scope(), RefineSession::FixtureScope);
+    QCOMPARE(r->currentFixture(), m_spots.at(1));
+    QCOMPARE(said.last().at(0).toString(), QString("AT 2, not kept."));
+    // Exit with it pending says so; a keep buzzes and says the light.
+    r->apply(ControllerScheme::Exit);
+    QCOMPARE(said.last().at(0).toString(), QString("1 change not kept."));
+    QVERIFY(r->keep());
+    QCOMPARE(said.last().at(0).toString(), QString("AT 2 kept."));
+    QCOMPARE(buzz.last().at(0).toInt(), 1);
+    r->stop();
+    QVERIFY(!pc->padLight().isValid());
+}
+
 void RefineSession_Test::aBuildSceneIsRefinedTheSameWay()
 {
     // A Build scene: the AT spots group, the Centre position palette.
