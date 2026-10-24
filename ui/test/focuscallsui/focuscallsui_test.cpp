@@ -175,6 +175,54 @@ void FocusCallsUi_Test::theDialogEditsCallsAndPicksTheVenue()
     QCOMPARE(d2.venueChoice(), QString("Lincoln HS"));   // the one applied is offered
 }
 
+void FocusCallsUi_Test::theVenueManager()
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    MonitorProperties *props = m_doc->monitorProperties();
+    QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));
+    FixtureRigProps rp = props->fixtureRigProps(m_spots.first());
+    rp.tiltOffsetDeg = 2.0f;
+    props->setFixtureRigProps(m_spots.first(), rp);     // recorded into Lincoln HS (Q111)
+    venues->addVenue("Kennedy");
+
+    FocusCallsDialog d(m_doc);
+    QComboBox *combo = d.findChild<QComboBox *>("fcVenue");
+    QVERIFY(combo->currentText().startsWith("Lincoln HS"));
+    QVERIFY(combo->currentText().contains("applied"));
+    QCOMPARE(d.venueChoice(), QString("Lincoln HS"));
+
+    // Switch: Kennedy's corrections (none) in place of Lincoln's, at once.
+    QVERIFY(d.switchVenue("Kennedy"));
+    QCOMPARE(venues->activeVenue(), QString("Kennedy"));
+    QCOMPARE(props->fixtureRigProps(m_spots.first()).tiltOffsetDeg, 0.0f);
+    QVERIFY(combo->currentText().startsWith("Kennedy"));
+    // None: the show's own.
+    QVERIFY(d.switchVenue(QString()));
+    QVERIFY(!venues->isActive());
+
+    // Rename: kept, with its corrections.
+    QVERIFY(d.renameVenue("Lincoln HS", "Lincoln High"));
+    QVERIFY(!d.renameVenue("Lincoln High", "Kennedy"));     // taken
+    QCOMPARE(venues->venueNames(), QStringList({ "Lincoln High", "Kennedy" }));
+    QCOMPARE(venues->venue("Lincoln High").fixtures.value(m_spots.first()).tiltOffsetDeg, 2.0f);
+    QCOMPARE(d.venueChoice(), QString("Lincoln High"));
+    QVERIFY(d.switchVenue("Lincoln High"));
+    QCOMPARE(props->fixtureRigProps(m_spots.first()).tiltOffsetDeg, 2.0f);
+
+    // Delete the applied one: its corrections come off, the show's back.
+    QVERIFY(d.deleteVenue("Lincoln High"));
+    QVERIFY(!venues->isActive());
+    QCOMPARE(props->fixtureRigProps(m_spots.first()).tiltOffsetDeg, 0.0f);
+    QCOMPARE(venues->venueNames(), QStringList({ "Kennedy" }));
+    // The file says so.
+    QFile f(venues->filePath());
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray xml = f.readAll();
+    QVERIFY(!xml.contains("Lincoln"));
+    QVERIFY(xml.contains("Kennedy"));
+}
+
 void FocusCallsUi_Test::aVenueNeedsASavedShow()
 {
     FocusCallsDialog d(m_doc);

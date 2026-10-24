@@ -26,6 +26,7 @@
 #include <QVBoxLayout>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QInputDialog>
 #include <QFileInfo>
 #include <QLabel>
 
@@ -116,6 +117,17 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_newVenue->setObjectName(QStringLiteral("fcNewVenue"));
     m_newVenue->setPlaceholderText(VenueCorrections::defaultVenueName());
     venueRow->addWidget(m_newVenue, 1);
+    // The venue manager: apply now, rename, delete (the engine's own).
+    m_applyVenue = new QPushButton(tr("Apply now"), this);
+    m_applyVenue->setObjectName(QStringLiteral("fcApplyVenue"));
+    m_applyVenue->setToolTip(tr("Put this venue's corrections on the rig now (or, for None, the show's own)"));
+    m_renameVenue = new QPushButton(tr("Rename\342\200\246"), this);
+    m_renameVenue->setObjectName(QStringLiteral("fcRenameVenue"));
+    m_deleteVenue = new QPushButton(tr("Delete"), this);
+    m_deleteVenue->setObjectName(QStringLiteral("fcDeleteVenue"));
+    m_deleteVenue->setToolTip(tr("Forget this venue and its corrections (the show is not changed)"));
+    for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue })
+        venueRow->addWidget(b);
     vl->addLayout(venueRow);
     m_venueNote = new QLabel(this);
     m_venueNote->setObjectName(QStringLiteral("fcVenueNote"));
@@ -131,13 +143,28 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     bb->addButton(QDialogButtonBox::Cancel);
     vl->addWidget(bb);
 
-    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
-    m_venue->addItem(tr("None: the show's own calibration"), kNoVenue);
-    for (const QString &v : venues->venueNames())
-        m_venue->addItem(v, 0);
-    m_venue->addItem(tr("New venue\342\200\246"), kNewVenue);
-    m_venue->setCurrentIndex(venues->isActive() ? m_venue->findText(venues->activeVenue())
-                                                : m_venue->count() - 1);
+    fillVenues(QString());
+    connect(m_applyVenue, &QPushButton::clicked, this, [this]() {
+        QString why;
+        if (!switchVenue(venueChoice(), &why))
+            QMessageBox::information(this, windowTitle(), why);
+    });
+    connect(m_renameVenue, &QPushButton::clicked, this, [this]() {
+        const QString from = venueAt(m_venue->currentIndex());
+        bool ok = false;
+        const QString to = QInputDialog::getText(this, tr("Rename venue"), tr("Venue name:"),
+                                                 QLineEdit::Normal, from, &ok);
+        if (ok && !renameVenue(from, to))
+            QMessageBox::information(this, windowTitle(),
+                                     tr("\342\200\234%1\342\200\235 is empty or already a venue.").arg(to));
+    });
+    connect(m_deleteVenue, &QPushButton::clicked, this, [this]() {
+        const QString name = venueAt(m_venue->currentIndex());
+        if (QMessageBox::question(this, windowTitle(),
+                tr("Forget the venue \342\200\234%1\342\200\235 and its corrections? The show is not changed.")
+                .arg(name)) == QMessageBox::Yes)
+            deleteVenue(name);
+    });
 
     connect(m_list, &QListWidget::currentRowChanged, this, [this](int row) {
         storeCall();
@@ -297,7 +324,7 @@ QString FocusCallsDialog::venueChoice() const
         const QString typed = m_newVenue->text().trimmed();
         return typed.isEmpty() ? m_newVenue->placeholderText() : typed;
     }
-    return m_venue->currentText();
+    return venueAt(m_venue->currentIndex());
 }
 
 void FocusCallsDialog::setVenueChoice(const QString &name)
@@ -307,20 +334,88 @@ void FocusCallsDialog::setVenueChoice(const QString &name)
         m_venue->setCurrentIndex(m_venue->findData(kNoVenue));
         return;
     }
-    const int at = m_venue->findText(name);
+    const int at = m_doc->programmer()->venueCorrections()->venueNames().indexOf(name);
     if (at >= 0)
     {
-        m_venue->setCurrentIndex(at);
+        m_venue->setCurrentIndex(at + 1);
         return;
     }
     m_venue->setCurrentIndex(m_venue->findData(kNewVenue));
     m_newVenue->setText(name);
 }
 
+void FocusCallsDialog::fillVenues(const QString &select)
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    const bool was = m_venue->blockSignals(true);
+    m_venue->clear();
+    m_venue->addItem(tr("None: the show's own calibration"), kNoVenue);
+    for (const QString &v : venues->venueNames())
+        m_venue->addItem(venues->activeVenue() == v ? tr("%1 (applied)").arg(v) : v, 0);
+    m_venue->addItem(tr("New venue\342\200\246"), kNewVenue);
+    const QString want = select.isEmpty() ? venues->activeVenue() : select;
+    int at = want.isEmpty() ? -1 : venues->venueNames().indexOf(want);
+    m_venue->setCurrentIndex(at >= 0 ? at + 1 : m_venue->count() - 1);
+    m_venue->blockSignals(was);
+    refreshVenue();
+}
+
+QString FocusCallsDialog::venueAt(int index) const
+{
+    if (m_venue->itemData(index).toInt() != 0)
+        return QString();
+    // The combo's names may say "(applied)": the engine's list is the truth.
+    const QStringList names = m_doc->programmer()->venueCorrections()->venueNames();
+    return names.value(index - 1);
+}
+
+bool FocusCallsDialog::switchVenue(const QString &name, QString *why)
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    if (!name.isEmpty() && venues->filePath().isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("Save the show first: a venue's corrections are kept in a file beside it.");
+        return false;
+    }
+    if (m_doc->programmer()->focusSession()->isActive())
+    {
+        if (why != nullptr)
+            *why = tr("Leave Focus mode first: its heads are being worked on.");
+        return false;
+    }
+    const QString target = name.isEmpty() ? QString() : venues->addVenue(name);
+    if (!venues->setActiveVenue(target))
+        return false;
+    fillVenues(target);
+    return true;
+}
+
+bool FocusCallsDialog::renameVenue(const QString &from, const QString &to)
+{
+    const QString source = from;
+    if (!m_doc->programmer()->venueCorrections()->renameVenue(source, to.trimmed()))
+        return false;
+    fillVenues(to.trimmed());
+    return true;
+}
+
+bool FocusCallsDialog::deleteVenue(const QString &name)
+{
+    const QString source = name;
+    if (m_doc->programmer()->focusSession()->isActive()
+            || !m_doc->programmer()->venueCorrections()->removeVenue(source))
+        return false;
+    fillVenues(QString());
+    return true;
+}
+
 void FocusCallsDialog::refreshVenue()
 {
     const int kind = m_venue->currentData().toInt();
     m_newVenue->setVisible(kind == kNewVenue);
+    m_renameVenue->setEnabled(kind == 0);
+    m_deleteVenue->setEnabled(kind == 0);
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();
     const QString file = venues->filePath();
     if (kind == kNoVenue)
