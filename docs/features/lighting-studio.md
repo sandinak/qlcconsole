@@ -1027,8 +1027,18 @@ and jump as you nudged.)
 | This light back to its last save | B held | ⇧Backspace |
 | The next light not saved | LB + RB together | U |
 | Next / previous focus call | RT / LT | PgDn / PgUp |
-| Undo the last save | View | ⌘Z |
+| Undo the last save | View (on release) | ⌘Z |
+| How many are not saved | View + RS | N |
 | Leave | Menu | Esc |
+
+Hold **A** a full second to save every light; a press saves this one. In
+a venue, a save says where it went ("Spot 3 kept for Lincoln HS.") and
+**X** goes back to the show's own calibration. The save lamp is blue
+(all saved, a tick), yellow (this light, "!") or orange (another), with
+the number not saved on it, and the light you are on breathes slowly on
+the rig until it is saved. If the controller drops out, everything it
+held is let go and the laptop says "Controller lost. Lights held."; with
+two pads, the first to press a button has the controls.
 
 The layout is the one every on-stage tool uses — Focus mode,
 [Focus calls](focus-calls.md) and [Refine](refine.md): the triggers step
@@ -1058,7 +1068,8 @@ stick pushed up and to the right:
   (Cross, Circle, R1, Options…), and a control its profile does not have is
   greyed and marked *not on this controller*. The Guide button is not
   used. The triggers step focus calls (they say so when calls are being
-  run), the left stick click is the second reference and the right stick
+  run), the left stick click is the second reference (in focus calls, the
+  target page: the stick moves the call's target) and the right stick
   click is **Say the light** (held: the feedback setting, see
   [Focus calls](focus-calls.md#telling-the-operator-where-they-are)).
 - **Click a control** on the map to do what pressing it would.

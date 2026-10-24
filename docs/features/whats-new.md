@@ -27,6 +27,20 @@ their house lights, relays and subs.
   spots, layer", "fixture 3 of 8".
 - **One layout.** Y is now the scope in Focus mode too (one head, or all
   of them); the second reference moved to the left stick click.
+- **Still at the venue?** A show whose venue was last changed over a day
+  ago asks on open, New venue being the default; a focus-call cue always
+  asks. The footer shows **Venue:** and its name. Venues also keep the
+  room's truss trims and target positions, and the **target page** (left
+  stick click in focus calls) moves a call's target with every head on
+  it. See [Venues](focus-calls.md#venues-corrections-that-stay-with-the-room).
+- **Safe on stage.** A controller that drops out freezes everything it
+  held ("Controller lost. Lights held."). Warnings are always spoken,
+  with a slow blink and one long buzz. The first pad to press Start owns
+  the tools. The save lamp is blue, yellow and orange with a tick or "!"
+  and a count, in Refine too. See
+  [Telling the operator](focus-calls.md#telling-the-operator-where-they-are).
+- **Venue files travel.** Collect for Transfer copies the venues, and a
+  show saved under a new version offers the earlier version's venues.
 
 ### Build and the Workbench
 

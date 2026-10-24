@@ -1,7 +1,7 @@
 # Focus calls and Refine — design (board Q105–Q108)
 
-Branch `feat/focus-calls-refine`, 2026-10-23 (decisions Q109–Q113 built the same night). A design plus a first working
-version. Not merged.
+Branch `feat/focus-calls-refine`, 2026-10-23 (decisions Q109–Q113 built the same night; Q116–Q127 and
+the gaps review, Q128–Q136, on 2026-10-24). A design plus a working version. Not merged.
 
 ## Try this (about 10 minutes)
 
@@ -76,6 +76,29 @@ pad if you have one.
    Set **Feedback** on the panel (or hold RS / ⇧W) to *Lights only* (no
    voice), *Voice only* (no blinks) or both. **Say the light** (RS / W)
    speaks either way.
+9. **The gaps review (Q128–Q136).**
+   - Set a venue's file date back a few days (edit `Modified=` in the
+     `.venues.xml`) and reopen: "Still at …?", New venue the default. The
+     footer says **Venue: …**. GO a focus-call cue with a venue applied:
+     the laptop asks "Still at …?" too, and waiting 8 s makes a new one.
+   - In focus calls press **LS** (T): the **target page**. The stick
+     moves the call's target and every head follows; **A** keeps it for
+     the venue (`<Target>` in the sidecar), **B** puts it back.
+   - Switch the pad off mid-move with A held: "Controller lost. Lights
+     held." and nothing moves; on again: "Controller back."
+   - Set Feedback to Lights only and press Menu with a light unsaved: the
+     warning is still spoken, with a slow blink and one long buzz.
+   - Hold A: a full second to save all. In Build, a shared palette's
+     warning waits for a fresh A, never a hold.
+   - Refine in Operate a cue that is not running: refused. On the running
+     one: no blink, no dim; GO lets go of what was held.
+   - The lamp: blue ✓ / yellow ! / orange, with a count; the Refine panel
+     has it too. View + RS (N) says "2 not saved."
+   - Swap a corrected fixture's definition: it is flagged **needs focus**
+     (panel, plot "!", voice). **Corrections…** lists and clears one.
+   - Save the show as `…-0.2`, delete its new `.venues.xml`, reopen: the
+     earlier version's venues are offered. Collect for Transfer copies
+     the venue file.
 
 ---
 
@@ -147,16 +170,17 @@ does the same **kind** of thing in every tool:
 | **Right stick** | Fine | 1°/s | 1°/s | 1°/s |
 | **D-pad ↑ / ↓** | Zoom **in** (narrower) / **out** (wider): up is in, like a camera | Lens (hand zoom: saved) or zoom channel (live only) | same | The cue's **zoom** (on the colour/gobo pages: nothing) |
 | **D-pad → / ←** | Focus **tighter** (value up) / **looser** (value down): right is always the value up | Focus channel, live only | same | The cue's **focus**. On the colour/gobo pages: next / previous palette. |
-| **A** | Keep | Save the head's offsets ("Spot 3 kept."; the pad buzzes, twice if another light is still unsaved) | **Save for this venue** (sidecar, at once) | **Keep in the cue** (one Show Tree step; in Build, a shared palette asks first, Q116) |
-| **A held (0.6 s)** | Keep all | Every unsaved head saved ("3 lights kept.") | same | All pending kept ("All kept.") |
+| **A** | Keep | Save the head's offsets ("Spot 3 kept."; in a venue "Spot 3 kept for Lincoln HS."; the pad buzzes, twice if another light is still unsaved) | **Save for this venue** (sidecar, at once); on the target page: keep the target | **Keep in the cue** ("AT spots kept in cue 4."; one Show Tree step; a shared palette or a reusable layer asks first, Q116) |
+| **A held (1.0 s, Q132)** | Keep all | Every unsaved head saved ("3 lights kept.") | same | All pending kept ("All kept."). Never answers a warning: only a fresh press does |
 | **B** | Revert | Back to saved | Back to saved | **Back to the cue** (drops pending) |
 | **B held (0.6 s)** | Back to the last save | This light back to its last save, whatever the scope | same | Back to the cue |
 | **LB + RB** | Next unsaved | The next light not saved ("Spot 7, not saved."; "All saved.") | same, in any call | The next change not kept ("All kept.") |
-| **X** | Reset | Zero the offsets | Zero the offsets | **Clear the exception** (Group/Fixture). At Layer scope it is the same as B. |
-| **View / Back** | Undo | Undo last save (a group save is one step) | same | Show Tree (or Build) undo, on View's release |
+| **X** | Reset | Zero the offsets (in a venue: back to the show's calibration) | same | **Clear the exception** (Group/Fixture). At Layer scope it is the same as B. |
+| **View / Back** | Undo | Undo last save (a group save is one step) -- **on View's release** in every tool, and not after a chord | same | Show Tree (or Build) undo, on View's release |
 | **View + A** | Keep at the source | — | — | A tracked layer's change kept in the cue it tracks from (Q118); ⇧Return |
+| **View + RS** | How many | "2 not saved." (N) | same | "1 not kept." |
 | **Menu / Start** | Exit | Ask about unsaved, leave | same. **On an armed focus-call cue (no session yet): begins the calls** (§7) | Ask "Keep what is pending?", leave |
-| **LS click** | Alternate | Second reference | Second reference (rarely needed: each call has its own point) | **D-pad page**: beam → colour → gobo |
+| **LS click** | Alternate | Second reference | **Target page** (Q128): the stick moves the call's target, its heads follow; A keeps (venue), B back. T | **D-pad page**: beam → colour → gobo |
 | **RS click** | Say the light | The light's name first, then where; flashed. Spoken whatever the feedback setting | same | same |
 | **RS held (0.6 s)** | Feedback | Lights → Voice → Both, said ("Feedback: voice only.") | same | same |
 | View + Menu held | — | Opens Focus mode (as before) | — | — |
@@ -200,6 +224,8 @@ truss trims a little low. A bumper goes back to one head.
 | Next unsaved (both bumpers) | U |
 | Keep at the source (View + A, Refine) | ⇧Return (Refine) |
 | Page (Refine) | P |
+| Target page (focus calls) | T (R too) |
+| How many not saved (View + RS) | N |
 | Keep | Return |
 | Back | Backspace |
 | Reset | 0 |
@@ -207,8 +233,21 @@ truss trims a little low. A bumper goes back to one head.
 | Focus | ; / ' |
 | Exit | Esc |
 
-**Not used: rumble.** The TODO item mentioned rumble. The HID plugin has no
-output path to a pad's motors yet, so it is left as an open question (§11).
+**Rumble.** Built (Q126): a short buzz on a keep (two when another light is
+still unsaved) and one long buzz (700 ms) for something important (Q131).
+On a Mac it reaches pads read through GameController; see §11.
+
+**Two pads (Q135).** The first pad to press Start (on an armed focus-call
+cue), or any button for a tool started on the laptop, owns the tools
+until they end. Others are ignored, sticks too, and told "Another
+controller is in use." The panels name the owner.
+
+**The controller lost (safety).** When the pad the tools read goes away
+(main's `inputDeviceDisconnected`, `focusControllerChanged`),
+`ProgrammerController::freezeController()` centres both sticks, resets
+the A/B/RS holds and a held D-pad repeat and clears the held buttons, so
+nothing moves and no keep-all fires: "Controller lost. Lights held."; on
+its return "Controller back."
 
 ---
 
@@ -225,6 +264,14 @@ back at the laptop.
 `flashDurationMs()`). They then stay steady. A 30 ms timer drives the blink
 through the same OutputLayer the tool already writes, so nothing else in
 the show is touched.
+
+**A warning's blink (Q131).** Warnings, refusals, the controller lost and
+the venue asked get one slow long blink of the selection (dark 800 ms,
+then lit), unlike the selection's three quick ones and a save's double.
+
+**The unsaved light breathes (gap 10).** While the light being focused is
+not saved it breathes slowly on the rig (2.4 s, 45–100 % of its focus
+level), Lights/Both only.
 
 **Only the current scope stays at full:**
 
@@ -280,9 +327,14 @@ together with the blink (owner, 2026-10-23):
 
 - **A line is never cut off or spoken over.** A line that arrives while
   another is being said waits.
-- **Stale lines are dropped.** Only the newest line waits, so stepping
-  quickly through eight fixtures says the one you stopped on, not every
-  fixture on the way.
+- **Two priorities (gap 9, `ControllerScheme::Priority`).** "Where am I"
+  lines go stale: only the newest waits, so stepping quickly through eight
+  fixtures says the one you stopped on. Confirmations ("Spot 3 kept.") and
+  important lines are queued and never dropped.
+- **Important lines always speak (Q131)**, in Lights only too: warnings,
+  refusals, the controller lost/back, the venue ask, nothing reaching the
+  rig (Blackout, Grand Master at 0, a universe with no output where others
+  have one), another pad.
 - **The voice is in step with the blink.** A line is spoken at the same
   moment as the blink it describes (`OperatorVoice::say`, `waiting()`).
 
@@ -531,8 +583,8 @@ Some layers a cue only inherits (tracked in from an earlier cue, not in
   - **The source cue: the alternative.** `updateSource()` makes the change
     there, so every cue that tracks it plays it.
 - **Switching between them.** On the panel's checkbox or the **S** key. The
-  choice is spoken: "Keeps go into cue 2." The controller has no button for
-  it: every button already has a job. This is Q-C2 in §11.
+  choice is spoken: "Keeps go into cue 2." On the controller, **View + A**
+  keeps once at the source (Q118).
 - **Layer scope only.** An exception on a tracked layer needs this cue's own
   layer first, so Y says so and stays at Layer scope until A keeps it here.
 
@@ -570,8 +622,9 @@ Entry points:
 
 - Editing a shared palette in place is Build's rule, but it differs from
   the Show Tree, where Refine makes a one-off. This is question Q-B1 in §11.
-- A Layer-scope keep that changes a palette **and** raw values is two undo
-  steps, not one.
+  (Q116 made it warn first; a reusable Show Tree layer warns the same way.)
+- A Layer-scope keep that changes a palette and raw values is **one** undo
+  step (Q117, `PaletteOps::sceneValueStep()`).
 
 ---
 
@@ -782,13 +835,15 @@ Help:
 - **Framing shutters** on profiles, and barn doors. This is the separate
   future item in TODO.md. Its starting idea ("the triggers pick a side")
   **conflicts** with triggers stepping calls. See §11.
-- Rumble or vibration feedback (the HID plugin has no output path to the
-  pad).
+- Rumble on pads not read through GameController (Linux, Windows, PS pads
+  over raw HID): see §11.
 - Refine of effects, and of intensity. The dimmer is deliberately not on the controller: the
   flash and dim feedback use it.
-- Editing a reusable layer through Refine. `setLayerLook` on a use edits
-  the reusable everywhere. v1 does not warn about this.
-- Multiple controllers (two operators, one per side).
+- Two operators at once (one per side). Two pads are handled: the first
+  to press Start owns it (Q135).
+- Ideas from the gaps review kept for later: a focus report page/CSV, a
+  scramble practice mode, spoken stage positions, a freeze chord, crew
+  words.
 - Remote (phone) controllers. The verb layer would make this easy.
 
 ---
@@ -876,6 +931,28 @@ step").
   angles, met at the reference's height. For a fixed light it is the saved
   landing point. The label reads "saved (+2.5° pan)".
 
+### Decisions from the gaps review, Q128–Q136 (2026-10-24)
+
+| Q / gap | Decision | Built |
+|---|---|---|
+| Q128 | A venue also overrides truss trims and stage target positions; a pad **target page** moves the current call's target, its heads following (like Eos focus palettes). | `<Trim>`/`<Target>` in the sidecar; `Truss::setBaseTrim()`, `StageTarget::setBasePosition()` keep the show's own in the show file; `syncStructure()` records moves while a venue is applied. Target page = **LS click** in focus calls (T), A keeps, B back. Child bars follow their parent. |
+| Q129 | Confirm the venue: on open when last changed over ~a day ago ("Still at …?", New venue default); the focus-call cue ALWAYS confirms (voice + laptop, 8 s → new dated venue); footer "Venue: …"; the dialog no longer defaults to an old venue. | `needsConfirm()` (20 h), `FocusCallsDialog::confirmVenue()`, `askVenue(…, current)`, `App::updateVenueFooter()`. |
+| Q130 | Quiet Refine in Operate: the running cue only, no blink, no dim; the hold is released on GO; "It plays next time cue N runs". | `RefineSession::cueIsRunning()`, `isBlind()`; others refused. |
+| Q131 | Important lines always speak (Lights only too) with a slow long blink and one long buzz. | `ControllerScheme::Priority`, `ProgrammerController::warnOperator()`, `flashWarning()`, `padRumble(1, 700)`. |
+| Q132 | Hold A is 1.0 s; a hold never confirms a warning. | `keepAllHoldSeconds()`, `RefineSession::hasWarningPending()`. |
+| Q133 | Corrections store the fixture's definition and mode; a mismatch is skipped and flagged "needs focus" (panel, plot badge, calls); a deleted fixture's correction is kept, listed as orphaned; old files apply with a one-time note. | `VenueCorrections::needsFocus()`, `orphaned()`, `note()`; plot `markNeedsFocusFixtures()`. |
+| Q134 | Both (as answered on the board). | — see the board; built as items above. |
+| Q135 | Two pads: the first to press Start owns the session; others ignored and told; the panel names the owner. | `controllerOwner()`, `controllerOwnerName()`. |
+| Q136 | As recommended on the board. | — |
+| Safety | Controller lost: freeze everything, say so; "Controller back." | `freezeController()`, `controllerLost()`. |
+| Gap 5 | GO only if the list is still on the focus cue; a start never discards unsaved work; "Focus calls ended" when stopped from outside. | `FocusSession::finish()`, start guards. |
+| Gap 8 | The venue file travels: Collect for Transfer copies it; a sibling's (versioned Save As, Finder copy) is offered on open. | `writeSidecarFor()`, `importCandidates()`, `importFrom()`. |
+| Gap 9 | The voice never drops confirmations. | `OperatorVoice` queue with priorities. |
+| Gap 10 | Accessible lamp: blue/yellow/orange, ✓ / !, the count; on the Refine panel; the unsaved light breathes; View + RS says how many. | `FocusStatusLamp`, `ControllerScheme::savedColour()` etc. |
+| Review | One word per tool saying where a change lands; X in a venue → the show's calibration; View timing the same everywhere (on release); a reusable layer warns first; nothing reaching the rig is said; see and clear one correction. | As listed in §2, §3; `rigOutputProblem()`, `FocusCallsDialog::showCorrections()`. |
+
+Hold B (Q-F1) is still open and unchanged.
+
 ### Open questions (after Q116–Q127)
 
 | # | Question | What is built now |
@@ -924,11 +1001,20 @@ Built on the night of 2026-10-23, at the owner's request:
 - A voice queue and output device.
 - Help pictures for the new panels.
 
+Built on 2026-10-24 from the gaps review (§11, Q128–Q136): venue
+confirm, the controller-lost freeze, quiet Refine in Operate, important
+lines always spoken, hold A 1.0 s, the focus-call cue's robustness, the
+fixture-type check, per-venue trims and targets with the target page,
+the venue file travelling, the voice's priorities, the accessible lamp,
+two pads, the review's consistency items, and "nothing reaching the rig".
+
 **Stubbed or not built:**
 
-- Rumble.
+- Rumble and the light bar beyond GameController pads (§11).
 - A voice output device on Linux and Windows.
-- A controller button for "keep at the source" (Q-C2).
+- A Lighting Studio undo snapshot restored while a venue is applied puts
+  the show's own trims and targets back on the rig until the venue is
+  applied again.
 
 **Next, in order:**
 

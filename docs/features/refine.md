@@ -76,6 +76,7 @@ scope picks the first fixture.
 | Keep at the cue it tracks from | View + A | ⇧Return |
 | Say the light | RS (right stick click) | W |
 | The next change not kept | LB + RB together | U |
+| How many are not kept | View + RS | — |
 | Feedback: lights / voice / both | RS held | ⇧W |
 | Leave | Menu | Esc |
 
@@ -86,9 +87,22 @@ and left step forward and back through the show's colour or gobo palettes and sa
 
 What you change is **pending**: the rig shows it at once, but the cue is
 not changed until **A**. Then everything pending is kept as **one** Show
-Tree step (⌘Z or View undoes it). **B** drops what is pending and the rig
+Tree step (⌘Z or View undoes it), and the voice says where it went
+("AT spots kept in cue 4."). **B** drops what is pending and the rig
 shows the cue again. Leaving with something pending asks whether to keep
-it.
+it. Holding **A** for a second keeps everything too, but a hold never
+answers a warning (below): only a fresh press does.
+
+**A reusable layer** changes in every cue that uses it. The first **A**
+only says so ("Specials is reusable: it is also used in Main 4. Press A
+again to change it there too.") and the panel lists the other uses with
+**Change them all**; **A** again goes on, **B** drops it.
+
+The panel has Focus mode's lamp: blue with a tick, all kept; yellow, a
+change pending here; orange, pending elsewhere; with the count.
+
+Starting Refine while Focus mode (or Refine) has work not saved is
+refused, saying what to do first.
 
 **X** at Group or Fixture scope takes the exception off: the child layer
 loses what it set on this page (position, zoom and focus on the beam
@@ -150,8 +164,12 @@ The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
   the cue has brighter than that; one already lower is never raised. On
   every change what is picked blinks three times.
 - **The voice.** "AT spots, layer." "AT spots, fixture 3 of 8."
-  "DS wash, group 2 of 3." "Kept." "Back to the cue." **Say the light**
-  adds the cue: "Cue 4, AT spots, fixture 3 of 8."
+  "DS wash, group 2 of 3." "AT spots kept in cue 4." "Back to the cue."
+  **Say the light** adds the cue: "Cue 4, AT spots, fixture 3 of 8."
+- **Warnings** are always spoken, with a slow blink and a long buzz: a
+  refusal, a reusable layer, the controller lost ("Controller lost. Lights
+  held."), nothing reaching the rig (Blackout, the Grand Master at zero).
+  See [Focus calls](focus-calls.md#telling-the-operator-where-they-are).
 
 ## Refine during the show
 
@@ -165,9 +183,9 @@ does not end it. In Operate the show is running, so Refine is quiet:
   the layer is not dimmed: the audience sees the show. The voice still
   says where you are.
 - **Kept, and held.** What you move shows on the rig at once, and **A**
-  keeps it in the cue as in Design. The voice says "AT spots kept. It
-  plays next time cue 4 runs." Until then Refine holds what was kept on
-  the rig.
+  keeps it in the cue as in Design. The voice says "AT spots kept in cue
+  4. It plays next time it runs." Until then Refine holds what was kept
+  on the rig.
 - **GO lets go.** When the list moves off the cue, the hold is released
   and Refine sends nothing until that cue runs again. The voice says so.
 
