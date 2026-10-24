@@ -221,6 +221,62 @@ public:
     inline void setStageOrigin(const QPointF &metres) { m_stageOrigin = metres; }
     inline QPointF stageOrigin() const { return m_stageOrigin; }
 
+    /********************************************************************
+     * Stage reference marks
+     *
+     * The marks a crew spikes and focuses by, drawn on the plot and on the
+     * Rig Overview's floor: the centre line's mark at the downstage edge
+     * (DSC) and, optionally, the whole centre line; the curtain line; and
+     * the number line, ticked in the show's unit either side of centre.
+     * Per show, saved with it only when used: an older show loads with all
+     * of them off. Positions are world metres along Y (downstage +), like
+     * every other position on the plot.
+     ********************************************************************/
+    enum StageMark
+    {
+        NoStageMarks    = 0,
+        CentreMarkFlag  = (1 << 0),   ///< the centre line's mark at the downstage edge
+        CentreLineFlag  = (1 << 1),   ///< the whole centre line, dashed, running upstage
+        CurtainLineFlag = (1 << 2),   ///< where the main curtain / proscenium sits
+        NumberLineFlag  = (1 << 3)    ///< distances left and right of centre
+    };
+    inline int stageMarks() const { return m_stageMarks; }
+    inline void setStageMarks(int marks) { m_stageMarks = marks & 0x0F; }
+    inline bool stageMarkVisible(StageMark mark) const { return (m_stageMarks & mark) != 0; }
+    void setStageMarkVisible(StageMark mark, bool on);
+
+    /** The one grid unit in metres: a foot or a metre. The number line is
+     *  ticked in it. */
+    inline float gridUnitMetres() const { return m_gridUnits == Feet ? 0.3048f : 1.0f; }
+
+    /** Where the stage's front edge (the front of the apron) crosses the
+     *  centre line, in world metres along Y. The deck is the biggest
+     *  square-on platform across the centre line, carried on downstage by any
+     *  platform butted against its front across the centre (an apron added
+     *  as its own piece), and a rounded front is followed to its middle.
+     *  With no such platform, the downstage edge of the stage grid. */
+    float downstageEdgeY() const;
+
+    /** The curtain line. Automatic until moved: the most downstage main
+     *  drape across the centre line, else a proscenium's, else a typical
+     *  apron's depth (4 ft, or 1.2 m) upstage of the downstage edge. */
+    float curtainLineY() const;
+    float autoCurtainLineY() const;
+    /** The scenery the automatic curtain line comes from, if any. */
+    const Scenery *curtainLineScenery() const;
+    inline bool curtainLineIsAuto() const { return !m_curtainLineSet; }
+    void setCurtainLineY(float metres);
+    inline void setCurtainLineAuto() { m_curtainLineSet = false; }
+
+    /** The number line: at the downstage edge until moved. */
+    float numberLineY() const;
+    inline bool numberLineIsAuto() const { return !m_numberLineSet; }
+    void setNumberLineY(float metres);
+    inline void setNumberLineAuto() { m_numberLineSet = false; }
+    /** How many whole units the number line reaches either side of centre:
+     *  as far as the stage grid goes. */
+    int numberLineReach() const;
+
 private:
     QVector3D m_gridSize;
     GridUnits m_gridUnits;
@@ -231,6 +287,11 @@ private:
     int m_snapDivisions;
     float m_aimSubjectHeight;
     QPointF m_stageOrigin;
+    int m_stageMarks = NoStageMarks;
+    bool m_curtainLineSet = false;
+    float m_curtainLineY = 0.0f;
+    bool m_numberLineSet = false;
+    float m_numberLineY = 0.0f;
     int m_occlusionKinds = BeamOcclusion::defaultKinds();
     float m_occlusionMinSize = BeamOcclusion::defaultMinSize();
     mutable BeamOcclusion::Cache m_occlusion;

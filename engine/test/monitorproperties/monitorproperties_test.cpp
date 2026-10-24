@@ -2685,3 +2685,148 @@ void MonitorProperties_Test::autoStageLooksIsSavedWithTheShow()
     QVERIFY(!mp.autoStageLooks());
 }
 
+
+static QByteArray stageMarksXml(const MonitorProperties &mp)
+{
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    return buf;
+}
+
+static void loadStageMarksXml(MonitorProperties &mp, const QByteArray &buf)
+{
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+    {
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp.loadXML(reader, nullptr));
+    }
+}
+
+void MonitorProperties_Test::stageMarksAreSavedWithTheShow()
+{
+    MonitorProperties mp;
+    QCOMPARE(mp.stageMarks(), int(MonitorProperties::NoStageMarks));
+    QVERIFY(mp.curtainLineIsAuto());
+    QVERIFY(mp.numberLineIsAuto());
+
+    // Unused, nothing is written: an older reader sees what it always did.
+    const QByteArray plain = stageMarksXml(mp);
+    QVERIFY(!plain.contains("StageMarks"));
+    QVERIFY(!plain.contains("CurtainLineY"));
+    QVERIFY(!plain.contains("NumberLineY"));
+
+    mp.setStageMarkVisible(MonitorProperties::CentreMarkFlag, true);
+    mp.setStageMarkVisible(MonitorProperties::NumberLineFlag, true);
+    mp.setStageMarkVisible(MonitorProperties::CurtainLineFlag, true);
+    mp.setStageMarkVisible(MonitorProperties::CurtainLineFlag, false);
+    QVERIFY(mp.stageMarkVisible(MonitorProperties::CentreMarkFlag));
+    QVERIFY(!mp.stageMarkVisible(MonitorProperties::CentreLineFlag));
+    QVERIFY(!mp.stageMarkVisible(MonitorProperties::CurtainLineFlag));
+    mp.setCurtainLineY(3.25f);
+    QVERIFY(!mp.curtainLineIsAuto());
+    QCOMPARE(mp.curtainLineY(), 3.25f);
+
+    MonitorProperties back;
+    loadStageMarksXml(back, stageMarksXml(mp));
+    QCOMPARE(back.stageMarks(), int(MonitorProperties::CentreMarkFlag | MonitorProperties::NumberLineFlag));
+    QVERIFY(!back.curtainLineIsAuto());
+    QCOMPARE(back.curtainLineY(), 3.25f);
+    QVERIFY(back.numberLineIsAuto());
+
+    // A show from before: off and automatic, whatever was there before it.
+    loadStageMarksXml(back, plain);
+    back.reset();
+    loadStageMarksXml(back, plain);
+    QCOMPARE(back.stageMarks(), int(MonitorProperties::NoStageMarks));
+    QVERIFY(back.curtainLineIsAuto());
+
+    // Back to automatic is saved as automatic; a stray bit is not kept.
+    mp.setCurtainLineAuto();
+    mp.setNumberLineY(-1.5f);
+    mp.setStageMarks(0xFF);
+    QCOMPARE(mp.stageMarks(), 0x0F);
+    MonitorProperties again;
+    loadStageMarksXml(again, stageMarksXml(mp));
+    QVERIFY(again.curtainLineIsAuto());
+    QCOMPARE(again.numberLineY(), -1.5f);
+    QCOMPARE(again.stageMarks(), 0x0F);
+}
+
+void MonitorProperties_Test::stageMarksFollowTheStage()
+{
+    MonitorProperties mp;
+    mp.setGridUnits(MonitorProperties::Meters);
+    mp.setGridSize(QVector3D(10, 6, 8));
+
+    // A bare floor: the grid's front edge; the curtain a typical apron behind.
+    QCOMPARE(mp.stageCentre().x(), 5.0f);
+    QCOMPARE(mp.downstageEdgeY(), 8.0f);
+    QCOMPARE(mp.numberLineY(), 8.0f);
+    QVERIFY(qAbs(mp.curtainLineY() - 6.8f) < 1e-4f);
+    QCOMPARE(mp.numberLineReach(), 5);
+
+    // The deck across centre stage...
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(8.0f); deck->setDepth(5.0f);
+    QCOMPARE(mp.downstageEdgeY(), 6.0f);
+    // ...not a riser on it, nor a platform off to one side.
+    StagePlatform *riser = mp.addPlatform();
+    riser->setOriginX(4.0f); riser->setOriginY(5.5f);
+    riser->setWidth(2.0f); riser->setDepth(1.5f);
+    riser->setStackable(true);
+    StagePlatform *side = mp.addPlatform();
+    side->setOriginX(0.0f); side->setOriginY(6.0f);
+    side->setWidth(2.0f); side->setDepth(1.8f);
+    QCOMPARE(mp.downstageEdgeY(), 6.0f);
+    // An apron built as its own piece, butted against the front, rounded.
+    StagePlatform *apron = mp.addPlatform();
+    apron->setOriginX(2.0f); apron->setOriginY(6.0f);
+    apron->setWidth(6.0f); apron->setDepth(1.5f);
+    apron->setFrontCurve(0.5f);
+    QCOMPARE(mp.downstageEdgeY(), 7.5f);
+    QCOMPARE(mp.numberLineY(), 7.5f);
+    QVERIFY(qAbs(mp.autoCurtainLineY() - 6.3f) < 1e-4f);
+    QVERIFY(mp.curtainLineScenery() == nullptr);
+
+    // The proscenium gives the curtain line, and a main drape before it.
+    Scenery *pros = mp.addScenery();
+    pros->setKind(Scenery::Proscenium);
+    pros->setOriginX(5.0f); pros->setOriginY(5.0f); pros->setWidth(10.0f);
+    QCOMPARE(mp.curtainLineScenery(), pros);
+    QCOMPARE(mp.curtainLineY(), 5.0f);
+    Scenery *offCentre = mp.addScenery();      // a drape not across centre
+    offCentre->setKind(Scenery::MainDrape);
+    offCentre->setOriginX(1.0f); offCentre->setOriginY(5.5f); offCentre->setWidth(1.0f);
+    QCOMPARE(mp.curtainLineScenery(), pros);
+    Scenery *main = mp.addScenery();
+    main->setKind(Scenery::MainDrape);
+    main->setOriginX(5.0f); main->setOriginY(4.8f); main->setWidth(9.0f);
+    main->setRotation(180.0f);                  // a sheet turned round is still across
+    QCOMPARE(mp.curtainLineScenery(), main);
+    QCOMPARE(mp.curtainLineY(), 4.8f);
+
+    // Moved, a line stays put; back to automatic, it follows again.
+    mp.setCurtainLineY(4.0f);
+    mp.setNumberLineY(7.0f);
+    main->setOriginY(4.6f);
+    QCOMPARE(mp.curtainLineY(), 4.0f);
+    QCOMPARE(mp.numberLineY(), 7.0f);
+    mp.setCurtainLineAuto();
+    mp.setNumberLineAuto();
+    QCOMPARE(mp.curtainLineY(), 4.6f);
+    QCOMPARE(mp.numberLineY(), 7.5f);
+
+    // In feet the number line counts feet, and the fallback apron is 4 ft.
+    MonitorProperties ft;
+    ft.setGridUnits(MonitorProperties::Feet);
+    ft.setGridSize(QVector3D(41, 20, 30));
+    QCOMPARE(ft.gridUnitMetres(), 0.3048f);
+    QCOMPARE(ft.numberLineReach(), 20);
+    QVERIFY(qAbs(ft.downstageEdgeY() - 30.0f * 0.3048f) < 1e-4f);
+    QVERIFY(qAbs(ft.curtainLineY() - 26.0f * 0.3048f) < 1e-4f);
+}

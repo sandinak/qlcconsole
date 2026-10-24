@@ -777,6 +777,173 @@ void Monitor_Test::theRigViewHidesWhatTheStudioHides()
     }
 }
 
+void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    Scenery *main = props->addScenery();
+    main->setKind(Scenery::MainDrape);
+    main->setOriginX(5.0f);
+    main->setOriginY(5.0f);
+    main->setWidth(9.0f);
+    {
+        QWidget parent;
+        parent.resize(1200, 800);
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->resize(1000, 700);
+        QResizeEvent ev(QSize(1000, 700), QSize(800, 600));
+        gv->resizeEvent(&ev);
+        QVERIFY(gv->m_cellPixels > 0);
+        QVERIFY2(gv->m_stageMarkItems.isEmpty(), "off by default");
+
+        auto ofKind = [gv](const QString &kind) {
+            QList<QGraphicsItem *> out;
+            foreach (QGraphicsItem *it, gv->m_stageMarkItems)
+                if (it->data(0).toString() == kind)
+                    out << it;
+            return out;
+        };
+        auto labels = [&ofKind](const QString &kind) {
+            QStringList out;
+            foreach (QGraphicsItem *it, ofKind(kind))
+                if (it->data(1).isValid())
+                    out << it->data(1).toString();
+            return out;
+        };
+
+        QMenu *marks = mon.findChild<QMenu *>(QStringLiteral("stageMarksMenu"));
+        QVERIFY(marks != nullptr);
+        auto action = [marks](const char *name) {
+            foreach (QAction *a, marks->actions())
+                if (a->objectName() == QLatin1String(name))
+                    return a;
+            return static_cast<QAction *>(nullptr);
+        };
+        QAction *centre = action("stageMarkCentreMark");
+        QAction *curtain = action("stageMarkCurtainLine");
+        QAction *number = action("stageMarkNumberLine");
+        QAction *centreLine = action("stageMarkCentreLine");
+        QVERIFY(centre && curtain && number && centreLine);
+
+        centre->setChecked(true);
+        QVERIFY(props->stageMarkVisible(MonitorProperties::CentreMarkFlag));
+        QVERIFY(doc->isModified());
+        QCOMPARE(ofKind("centreMark").size(), 2);       // the spike and its CL
+        QCOMPARE(labels("centreMark"), QStringList() << "CL");
+        // The spike's tip is at centre stage, on the downstage edge.
+        QGraphicsPolygonItem *spike = nullptr;
+        foreach (QGraphicsItem *it, ofKind("centreMark"))
+            if (auto *pi = dynamic_cast<QGraphicsPolygonItem *>(it))
+                spike = pi;
+        QVERIFY(spike != nullptr);
+        QCOMPARE(props->downstageEdgeY(), 8.0f);      // the grid's front: no deck
+        const QPointF dsc = gv->realPositionToPixels(5000.0, props->downstageEdgeY() * 1000.0);
+        QVERIFY((spike->polygon().first() - dsc).manhattanLength() < 0.5);
+
+        centreLine->setChecked(true);
+        QCOMPARE(ofKind("centreLine").size(), 2);
+
+        curtain->setChecked(true);
+        QList<QGraphicsItem *> cl = ofKind("curtainLine");
+        QCOMPARE(cl.size(), 2);
+        QCOMPARE(labels("curtainLine"), QStringList() << "Curtain line");
+        QGraphicsLineItem *curtainLine = nullptr;
+        foreach (QGraphicsItem *it, cl)
+            if (auto *li = dynamic_cast<QGraphicsLineItem *>(it))
+                curtainLine = li;
+        QVERIFY(curtainLine != nullptr);
+        QCOMPARE(curtainLine->line().y1(), gv->realPositionToPixels(0, 5000.0).y());
+
+        number->setChecked(true);
+        // 11 ticks (5 each side and 0), the line, 11 numbers, SR and SL.
+        QCOMPARE(ofKind("numberLine").size(), 1 + 11 + 11 + 2);
+        const QStringList numbers = labels("numberLine");
+        QCOMPARE(numbers.count("0"), 1);
+        QCOMPARE(numbers.count("1"), 2);
+        QCOMPARE(numbers.count("5"), 2);
+        QVERIFY(numbers.contains("SR") && numbers.contains("SL"));
+
+        // Moved from the menu: the curtain line goes there.
+        QCheckBox *autoChk = marks->findChild<QCheckBox *>(QStringLiteral("curtainLineYAuto"));
+        QDoubleSpinBox *spin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("curtainLineY"));
+        QVERIFY(autoChk != nullptr && spin != nullptr);
+        emit marks->aboutToShow();
+        QVERIFY(autoChk->isChecked());
+        QCOMPARE(spin->value(), 5.0);
+        QVERIFY(!spin->isEnabled());
+        autoChk->setChecked(false);
+        QVERIFY(spin->isEnabled());
+        spin->setValue(4.0);
+        QVERIFY(!props->curtainLineIsAuto());
+        QCOMPARE(props->curtainLineY(), 4.0f);
+        foreach (QGraphicsItem *it, ofKind("curtainLine"))
+            if (auto *li = dynamic_cast<QGraphicsLineItem *>(it))
+                QCOMPARE(li->line().y1(), gv->realPositionToPixels(0, 4000.0).y());
+        autoChk->setChecked(true);
+        QVERIFY(props->curtainLineIsAuto());
+        QCOMPARE(spin->value(), 5.0);
+
+        // Only looking down: an elevation has no floor to draw them on.
+        gv->setViewPOV(MonitorGraphicsView::PovFront);
+        gv->updateGrid();
+        QVERIFY(gv->m_stageMarkItems.isEmpty());
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateGrid();
+        QVERIFY(!gv->m_stageMarkItems.isEmpty());
+
+        // A show loaded later: the menu ticks what it has.
+        props->setStageMarks(MonitorProperties::NumberLineFlag);
+        emit marks->aboutToShow();
+        QVERIFY(number->isChecked());
+        QVERIFY(!centre->isChecked());
+
+        // The Rig Overview draws them on its floor, from above and at 45 degrees.
+        // On a deck, from above and at 45 degrees.
+        StagePlatform *deck = props->addPlatform();
+        deck->setOriginX(1.0f);
+        deck->setOriginY(0.5f);
+        deck->setWidth(8.0f);
+        deck->setDepth(6.0f);
+        deck->setHeight(1.0f);
+        foreach (StructureStudioView::Plane plane,
+                 QList<StructureStudioView::Plane>() << StructureStudioView::Top
+                                                     << StructureStudioView::Angled)
+        {
+            StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+            view.resize(640, 480);
+            view.setPlane(plane);
+            auto shot = [&view]() {
+                QImage img(view.size(), QImage::Format_ARGB32);
+                img.fill(Qt::black);
+                view.render(&img);
+                return img;
+            };
+            props->setStageMarks(MonitorProperties::NoStageMarks);
+            const QImage off = shot();
+            props->setStageMarks(MonitorProperties::CentreMarkFlag | MonitorProperties::CurtainLineFlag
+                                 | MonitorProperties::NumberLineFlag);
+            const QImage on = shot();
+            int yellow = 0, changed = 0;
+            for (int y = 0; y < on.height(); ++y)
+                for (int x = 0; x < on.width(); ++x)
+                {
+                    const QRgb a = on.pixel(x, y);
+                    if (a != off.pixel(x, y))
+                        ++changed;
+                    if (qRed(a) > 200 && qGreen(a) > 170 && qBlue(a) < 150)
+                        ++yellow;   // the number line's spike-tape yellow
+                }
+            QVERIFY2(changed > 300, qPrintable(QString("plane %1: %2 pixels changed").arg(int(plane)).arg(changed)));
+            QVERIFY2(yellow > 30, qPrintable(QString("plane %1: %2 yellow pixels").arg(int(plane)).arg(yellow)));
+        }
+    }
+    delete doc;
+}
+
 QTEST_MAIN(Monitor_Test)
 
 /****************************************************************************

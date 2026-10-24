@@ -973,6 +973,119 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         QSettings().setValue(SETTINGS_CENTERLINES, on);
     });
 
+    /* Stage reference marks: what a crew spikes and focuses by. The show's
+       own (saved with it, off in an older show), so the plot reads the same
+       on every computer; drawn on the plot's Top view and on the Rig
+       Overview's floor. */
+    {
+        QMenu *marksMenu = showMenu->addMenu(tr("Stage marks"));
+        marksMenu->setObjectName(QStringLiteral("stageMarksMenu"));
+        marksMenu->setToolTipsVisible(true);
+        struct MarkEntry
+        {
+            MonitorProperties::StageMark mark;
+            const char *name;
+            QString text;
+            QString tip;
+        };
+        const QList<MarkEntry> entries = {
+            { MonitorProperties::CentreMarkFlag, "stageMarkCentreMark", tr("Centre mark (DSC)"),
+              tr("The centre line's mark at the front of the stage, labelled CL") },
+            { MonitorProperties::CentreLineFlag, "stageMarkCentreLine", tr("Centre line, full depth"),
+              tr("The centre line, dashed, from the front of the stage to the back") },
+            { MonitorProperties::CurtainLineFlag, "stageMarkCurtainLine", tr("Curtain line"),
+              tr("Where the main curtain hangs: the most downstage main drape, else the "
+                 "proscenium, else 4 ft (1.2 m) upstage of the stage edge. Set it below.") },
+            { MonitorProperties::NumberLineFlag, "stageMarkNumberLine", tr("Number line"),
+              tr("Distances left and right of centre, in the show's unit, along the front "
+                 "of the stage (or where it is set below)") }
+        };
+        foreach (const MarkEntry &e, entries)
+        {
+            QAction *a = marksMenu->addAction(e.text);
+            a->setObjectName(QString::fromLatin1(e.name));
+            a->setCheckable(true);
+            a->setToolTip(e.tip);
+            a->setData(int(e.mark));
+            connect(a, &QAction::toggled, this, [this, mark = e.mark](bool on) {
+                if (m_props->stageMarkVisible(mark) == on)
+                    return;
+                m_props->setStageMarkVisible(mark, on);
+                stageMarksChanged();
+            });
+        }
+
+        /* Where the curtain line and the number line are: on the plan's Y,
+           as every position dialog has it (downstage is bigger). Auto
+           follows the stage; a value moves the line there. */
+        const bool feet = (m_props->gridUnits() == MonitorProperties::Feet);
+        QWidget *pw = new QWidget(marksMenu);
+        QFormLayout *pfl = new QFormLayout(pw);
+        pfl->setContentsMargins(10, 6, 10, 6);
+        auto positionRow = [pw, pfl, feet](const QString &title, const char *name,
+                                                 std::function<bool()> isAuto,
+                                                 std::function<float()> value,
+                                                 std::function<void(bool, float)> apply) {
+            QWidget *row = new QWidget(pw);
+            QHBoxLayout *hl = new QHBoxLayout(row);
+            hl->setContentsMargins(0, 0, 0, 0);
+            QCheckBox *autoChk = new QCheckBox(tr("Auto"), row);
+            autoChk->setObjectName(QString::fromLatin1(name) + QStringLiteral("Auto"));
+            FeetInchesSpinBox *spin = new FeetInchesSpinBox(feet, row);
+            spin->setObjectName(QString::fromLatin1(name));
+            const double toDisp = feet ? 3.28084 : 1.0;
+            spin->setRange(-100.0 * toDisp, 300.0 * toDisp);
+            spin->setToolTip(tr("Up/downstage on the plan (Y): bigger is further downstage"));
+            hl->addWidget(autoChk);
+            hl->addWidget(spin, 1);
+            pfl->addRow(title, row);
+            auto sync = [autoChk, spin, isAuto, value, toDisp]() {
+                QSignalBlocker b1(autoChk), b2(spin);
+                autoChk->setChecked(isAuto());
+                spin->setValue(double(value()) * toDisp);
+                spin->setEnabled(!isAuto());
+            };
+            connect(autoChk, &QCheckBox::toggled, row, [spin, apply, toDisp, sync](bool on) {
+                apply(on, float(spin->value() / toDisp));
+                sync();
+            });
+            connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), row,
+                    [apply, toDisp](double v) { apply(false, float(v / toDisp)); });
+            return std::function<void()>(sync);
+        };
+        auto syncCurtain = positionRow(tr("Curtain line:"), "curtainLineY",
+            [this]() { return m_props->curtainLineIsAuto(); },
+            [this]() { return m_props->curtainLineY(); },
+            [this](bool isAuto, float y) {
+                if (isAuto) m_props->setCurtainLineAuto(); else m_props->setCurtainLineY(y);
+                stageMarksChanged();
+            });
+        auto syncNumber = positionRow(tr("Number line:"), "numberLineY",
+            [this]() { return m_props->numberLineIsAuto(); },
+            [this]() { return m_props->numberLineY(); },
+            [this](bool isAuto, float y) {
+                if (isAuto) m_props->setNumberLineAuto(); else m_props->setNumberLineY(y);
+                stageMarksChanged();
+            });
+        marksMenu->addSeparator();
+        QWidgetAction *wa = new QWidgetAction(marksMenu);
+        wa->setDefaultWidget(pw);
+        marksMenu->addAction(wa);
+
+        // A show loaded later brings its own marks: tick them to match on opening.
+        connect(marksMenu, &QMenu::aboutToShow, this, [this, marksMenu, syncCurtain, syncNumber]() {
+            foreach (QAction *a, marksMenu->actions())
+            {
+                if (!a->isCheckable())
+                    continue;
+                QSignalBlocker block(a);
+                a->setChecked(m_props->stageMarkVisible(MonitorProperties::StageMark(a->data().toInt())));
+            }
+            syncCurtain();
+            syncNumber();
+        });
+    }
+
     // Origin / centering control: click-to-place or a preset. The ⌖ glyph
     // marks it as the "set the 0,0 origin / centre" control.
     QToolButton *originBtn = new QToolButton(footer);
@@ -2468,6 +2581,16 @@ void Monitor::slotToggleLayersPanel(bool show)
         const int total = qMax(600, m_splitter->width());
         m_splitter->setSizes(QList<int>() << 260 << (total - 260));
     }
+}
+
+void Monitor::stageMarksChanged()
+{
+    m_doc->setModified();
+    m_graphicsView->updateStageMarks();
+    foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
+        v->update();
+    if (m_overviewView != NULL)         // its own window: not one of ours
+        m_overviewView->update();
 }
 
 void Monitor::toggleStageOverview()

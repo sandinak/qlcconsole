@@ -1671,6 +1671,106 @@ void StructureStudioView::drawGrid(QPainter &p) const
     }
 }
 
+void StructureStudioView::drawStageMarks(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (m_kind != StageKind || (m_plane != Top && m_plane != Angled) || props == nullptr
+        || props->stageMarks() == MonitorProperties::NoStageMarks)
+        return;
+
+    /* Lines on the stage floor: at the height of the deck at the front of
+       the stage (just upstage of the edge, so on it), all of them -- a
+       reference plane, not a line that drops off a rounded apron's corners. */
+    const float deckZ = props->platformHeightAt(float(props->stageCentre().x()),
+                                                float(props->downstageEdgeY() - 0.01)) + 0.005f;
+    auto floorAt = [deckZ](double x, double y) {
+        return QVector3D(float(x), float(y), deckZ);
+    };
+    auto floorLine = [&](double ax, double ay, double bx, double by) {
+        p.drawLine(w2s(floorAt(ax, ay)), w2s(floorAt(bx, by)));
+    };
+    QFont f = p.font();
+    f.setPointSizeF(9.0);
+    auto label = [&](const QString &text, const QPointF &at, const QColor &c) {
+        const QFontMetricsF fm(f);
+        QRectF r(0, 0, fm.horizontalAdvance(text) + 6.0, fm.height() + 2.0);
+        r.moveCenter(at);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0, 0, 0, 150));
+        p.drawRoundedRect(r, 3.0, 3.0);
+        p.setFont(f);
+        p.setPen(c);
+        p.drawText(r, Qt::AlignCenter, text);
+        p.setBrush(Qt::NoBrush);
+    };
+
+    p.save();
+    const QColor centreColour(170, 215, 255);       // as the plot draws them
+    const QColor curtainColour(240, 130, 130);
+    const QColor numberColour(240, 210, 110);
+    const double unit = props->gridUnitMetres();
+    const double cx = props->stageCentre().x();
+    const double dsY = props->downstageEdgeY();
+    const double x0 = 0.0, x1 = props->gridSize().x() * unit;
+
+    if (props->stageMarkVisible(MonitorProperties::CentreLineFlag))
+    {
+        p.setPen(QPen(centreColour, 1.2, Qt::DashLine));
+        floorLine(cx, dsY, cx, 0.0);
+        label(tr("CL"), w2s(floorAt(cx, 0.0)) + QPointF(0, -10), centreColour);
+    }
+    if (props->stageMarkVisible(MonitorProperties::CentreMarkFlag))
+    {
+        // A spike on the edge: a short cross-piece and the CL just in front.
+        p.setPen(QPen(centreColour, 2.0));
+        floorLine(cx - 0.25 * unit, dsY, cx + 0.25 * unit, dsY);
+        floorLine(cx, dsY, cx, dsY - 0.5 * unit);
+        label(tr("CL"), w2s(floorAt(cx + 0.25 * unit, dsY - 0.5 * unit)) + QPointF(12, -6), centreColour);
+    }
+    if (props->stageMarkVisible(MonitorProperties::CurtainLineFlag))
+    {
+        const double y = props->curtainLineY();
+        p.setPen(QPen(curtainColour, 1.4, Qt::DashDotLine));
+        floorLine(x0, y, x1, y);
+        const QPointF at = w2s(floorAt(x0, y));
+        const QFontMetricsF fm(f);
+        label(tr("Curtain line"), at + QPointF(fm.horizontalAdvance(tr("Curtain line")) / 2.0 + 6, -10),
+              curtainColour);
+    }
+    if (props->stageMarkVisible(MonitorProperties::NumberLineFlag))
+    {
+        const double y = props->numberLineY();
+        const int reach = props->numberLineReach();
+        p.setPen(QPen(numberColour, 1.2));
+        floorLine(cx - reach * unit, y, cx + reach * unit, y);
+        // Numbered as often as there is room for: about 22 px a number.
+        const double unitPx = QLineF(w2s(floorAt(cx, y)), w2s(floorAt(cx + unit, y))).length();
+        int stride = 1;
+        const int strides[] = { 1, 2, 5, 10, 20, 50 };
+        for (int st : strides)
+        {
+            stride = st;
+            if (st * unitPx >= 22.0)
+                break;
+        }
+        for (int k = -reach; k <= reach; ++k)
+        {
+            const double x = cx + k * unit;
+            const double t = ((k % 5) == 0 ? 0.25 : 0.12) * unit;
+            p.setPen(QPen(numberColour, (k % 5) == 0 ? 1.6 : 1.0));
+            floorLine(x, y - t, x, y + t);
+            if (k % stride == 0)
+                label(QString::number(qAbs(k)), w2s(floorAt(x, y - t)) + QPointF(0, -9), numberColour);
+        }
+        if (reach > 0)
+        {
+            label(tr("SR"), w2s(floorAt(cx - reach * unit, y)) + QPointF(12, -26), numberColour);
+            label(tr("SL"), w2s(floorAt(cx + reach * unit, y)) + QPointF(-12, -26), numberColour);
+        }
+    }
+    p.restore();
+}
+
 void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
 {
     const QPointF a = w2s(pipe->positionAt(0.0f));
@@ -9315,6 +9415,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
             drawChildBars(p, m_id);
         drawRotateHandle(p);    // on top of everything it might overlap
     }
+    drawStageMarks(p);   // on top: a reference is read through the rig
     drawCursorReadout(p);
     drawDimensions(p);   // selected fixture's own W/H, or the structure's
 

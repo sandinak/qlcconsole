@@ -50,6 +50,10 @@ private slots:
     void aPatchCanBeUndone();
     void fixturesSitAlongAHorizontalPipe();
     void theTrussEditorSpansTwoStands();
+    /** The stage marks: ticked in Show > Stage marks, drawn on the plot's
+     *  Top view with their labels, moved from the same menu, and on the Rig
+     *  Overview's floor. */
+    void stageMarksAreDrawnOnThePlotAndTheOverview();
     void initTestCase();
     void init();
     void cleanupTestCase();

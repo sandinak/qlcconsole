@@ -19,6 +19,17 @@ circuits and subs.
 
 ### Added
 
+- **Stage marks** in the Lighting Studio's **Show ▸ Stage marks**: the
+  centre mark at the front of the stage (DSC, "CL") and optionally the full
+  centre line, dashed; the curtain line (from the most downstage main drape
+  or proscenium across centre, else 4 ft / 1.2 m upstage of the front); and
+  the number line, ticked and numbered in the show's unit out from 0 at
+  centre, at the front of the deck (the biggest platform across centre and
+  an apron butted to it) or the grid's front edge. The curtain and number
+  lines can be moved (Auto or a set position). Drawn on the plot's Top view
+  and on the Rig Overview's floor (Top and 45°). Saved with the show only
+  when used (`StageMarks`, `CurtainLineY`, `NumberLineY` on `Monitor`), so
+  older shows are unchanged and open with them off.
 - **The beam in Focus mode** (Q103): D-pad up/down (or . and ,) widen and narrow
   the beam within the definition's lens range, D-pad right/left (or ' and ;)
   a focus channel's edge while focusing. A lens zoomed by hand is set

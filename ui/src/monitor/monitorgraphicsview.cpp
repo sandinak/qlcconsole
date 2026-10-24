@@ -127,6 +127,17 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(m_scene, &QGraphicsScene::selectionChanged,
             this, &MonitorGraphicsView::extendSelectionToGroups);
 
+    /* The stage marks' spikes and numbers are sized for the screen: redrawn
+       at a new zoom (rulersChanged() is how a zoom is told), and when a deck
+       or a curtain they are found from is moved. */
+    connect(this, &MonitorGraphicsView::rulersChanged, this, [this]() {
+        MonitorProperties *props = m_doc->monitorProperties();
+        if (props != nullptr && props->stageMarks() != MonitorProperties::NoStageMarks)
+            updateStageMarks();
+    });
+    connect(this, &MonitorGraphicsView::mapStructureChanged,
+            this, &MonitorGraphicsView::updateStageMarks);
+
     /* A new or opened show deletes the stage targets (MonitorProperties::
        reset()) before the view is rebuilt, and a TargetItem only borrows its
        StageTarget. The Doc is still emitting while it clears -- unloading the
@@ -614,6 +625,7 @@ MonitorGraphicsView::~MonitorGraphicsView()
         delete li;
     }
     m_trussAnchorLines.clear();
+    m_stageMarkItems.clear();       // the scene's to delete, just below
 
     // Scene was created without a parent — delete it explicitly.
     delete m_scene;
@@ -4480,6 +4492,9 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
 
 void MonitorGraphicsView::updatePlatforms()
 {
+    /* The marks follow the deck and the curtain they are found from: redrawn
+       with them, however this returns. */
+    auto marks = qScopeGuard([this]() { updateStageMarks(); });
     QScopedValueRollback<bool> rb(m_itemsRebuilding); m_itemsRebuilding = true;
     foreach (PlatformItem *pi, m_platformItems)
     {
@@ -6394,6 +6409,183 @@ void MonitorGraphicsView::setCenterLinesVisible(bool on)
     m_centerLinesVisible = on;
     if (m_centerLineV != nullptr) m_centerLineV->setVisible(on);
     if (m_centerLineH != nullptr) m_centerLineH->setVisible(on);
+}
+
+/* ------------------------------------------------------------------------ *
+ *  Stage reference marks: centre mark / centre line, curtain line, number
+ *  line. Drawn from MonitorProperties (saved with the show), Top view only.
+ * ------------------------------------------------------------------------ */
+
+namespace
+{
+/** A mark's label: small text on a dark backing, so it reads on the plot's
+ *  near-black and on a light background picture alike. The same size on
+ *  screen whatever the zoom, and never turned with the page -- so it is
+ *  not a QGraphicsSimpleTextItem, which refreshLabelRotations() would turn. */
+class StageMarkLabel final : public QGraphicsItem
+{
+public:
+    StageMarkLabel(const QString &text, const QColor &colour, Qt::Alignment align)
+        : m_text(text), m_colour(colour)
+    {
+        setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
+        setAcceptedMouseButtons(Qt::NoButton);
+        m_font.setPointSizeF(8.5);
+        const QFontMetricsF fm(m_font);
+        const QSizeF sz(fm.horizontalAdvance(m_text) + 6.0, fm.height() + 2.0);
+        qreal x = -sz.width() / 2.0, y = -sz.height() / 2.0;
+        if (align & Qt::AlignLeft)   x = 3.0;
+        if (align & Qt::AlignRight)  x = -sz.width() - 3.0;
+        if (align & Qt::AlignTop)    y = 3.0;          // below the anchor
+        if (align & Qt::AlignBottom) y = -sz.height() - 3.0;
+        m_rect = QRectF(QPointF(x, y), sz);
+    }
+    QString text() const { return m_text; }
+    QRectF boundingRect() const override { return m_rect; }
+    void paint(QPainter *p, const QStyleOptionGraphicsItem *, QWidget *) override
+    {
+        p->setPen(Qt::NoPen);
+        p->setBrush(QColor(0, 0, 0, 150));
+        p->drawRoundedRect(m_rect, 3.0, 3.0);
+        p->setFont(m_font);
+        p->setPen(m_colour);
+        p->drawText(m_rect, Qt::AlignCenter, m_text);
+    }
+
+private:
+    QString m_text;
+    QColor m_colour;
+    QFont m_font;
+    QRectF m_rect;
+};
+}
+
+void MonitorGraphicsView::updateStageMarks()
+{
+    if (m_scene == nullptr)
+        return;
+    foreach (QGraphicsItem *it, m_stageMarkItems)
+    {
+        m_scene->removeItem(it);
+        delete it;
+    }
+    m_stageMarkItems.clear();
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (m_scene == nullptr || props == nullptr || m_cellPixels <= 0 || !m_gridEnabled || m_pov != PovTop
+        || props->stageMarks() == MonitorProperties::NoStageMarks)
+        return;
+
+    const qreal ppm = 1000.0 * m_cellPixels / m_unitValue;     // scene px a metre
+    const qreal x0 = m_xOffset, x1 = m_xOffset + m_gridSize.width() * m_cellPixels;
+    const qreal y0 = m_yOffset;
+    auto sx = [this, ppm](double m) { return m_xOffset + m * ppm; };
+    auto sy = [this, ppm](double m) { return m_yOffset + m * ppm; };
+    const qreal zoom = qMax(0.01, viewScale());
+    const qreal onePx = 1.0 / zoom;                           // a screen pixel, in scene px
+
+    auto add = [this](QGraphicsItem *it, const char *kind, qreal z) {
+        it->setData(0, QString::fromLatin1(kind));
+        it->setZValue(z);
+        it->setAcceptedMouseButtons(Qt::NoButton);   // in front of the rig, never in its way
+        m_scene->addItem(it);
+        m_stageMarkItems.append(it);
+    };
+    auto line = [&](qreal ax, qreal ay, qreal bx, qreal by, const QPen &pen, const char *kind) {
+        add(new QGraphicsLineItem(ax, ay, bx, by), kind, 2.2);
+        static_cast<QGraphicsLineItem *>(m_stageMarkItems.last())->setPen(pen);
+    };
+    auto label = [&](const QString &text, const QPointF &at, const QColor &c,
+                     Qt::Alignment align, const char *kind) {
+        StageMarkLabel *l = new StageMarkLabel(text, c, align);
+        l->setPos(at);
+        l->setData(1, text);
+        add(l, kind, 2.4);
+    };
+    /* Cosmetic pens: a hairline on screen at any zoom, dashes included. */
+    auto pen = [](const QColor &c, qreal w, Qt::PenStyle style) {
+        QPen p(c, w, style);
+        p.setCosmetic(true);
+        return p;
+    };
+
+    const double cxM = props->stageCentre().x();
+    const qreal cx = sx(cxM);
+    const qreal dsY = sy(props->downstageEdgeY());
+
+    const QColor centreColour(170, 215, 255);      // pale blue
+    const QColor curtainColour(240, 130, 130);     // house-curtain red, lightened
+    const QColor numberColour(240, 210, 110);      // spike-tape yellow
+
+    /* Everything is drawn ON the stage -- upstage of the front edge, which
+       is often the very edge of the plot -- and clear of the orientation
+       words round the plot's edges. */
+    const bool spike = props->stageMarkVisible(MonitorProperties::CentreMarkFlag);
+    const qreal s = 7.0 * onePx;                  // the spike's half width
+    if (props->stageMarkVisible(MonitorProperties::CentreLineFlag))
+    {
+        line(cx, dsY, cx, y0, pen(centreColour, 1.2, Qt::DashLine), "centreLine");
+        label(tr("CL"), QPointF(cx, y0 + 0.75 * m_cellPixels), centreColour,
+              Qt::AlignLeft | Qt::AlignVCenter, "centreLine");
+    }
+    if (spike)
+    {
+        /* A spike: a triangle on the deck, its tip on the edge at centre. */
+        QPolygonF tri;
+        tri << QPointF(cx, dsY) << QPointF(cx - s, dsY - 1.6 * s) << QPointF(cx + s, dsY - 1.6 * s);
+        QGraphicsPolygonItem *pi = new QGraphicsPolygonItem(tri);
+        pi->setPen(pen(centreColour, 1.0, Qt::SolidLine));
+        pi->setBrush(centreColour);
+        add(pi, "centreMark", 2.3);
+        label(tr("CL"), QPointF(cx + s, dsY - 1.6 * s), centreColour,
+              Qt::AlignLeft | Qt::AlignBottom, "centreMark");
+    }
+    if (props->stageMarkVisible(MonitorProperties::CurtainLineFlag))
+    {
+        const qreal y = sy(props->curtainLineY());
+        line(x0, y, x1, y, pen(curtainColour, 1.4, Qt::DashDotLine), "curtainLine");
+        label(tr("Curtain line"), QPointF(x0, y), curtainColour,
+              Qt::AlignLeft | Qt::AlignBottom, "curtainLine");
+    }
+    if (props->stageMarkVisible(MonitorProperties::NumberLineFlag))
+    {
+        const qreal y = sy(props->numberLineY());
+        const int reach = props->numberLineReach();
+        const qreal unitPx = props->gridUnitMetres() * ppm;
+        line(cx - reach * unitPx, y, cx + reach * unitPx, y,
+             pen(numberColour, 1.2, Qt::SolidLine), "numberLine");
+
+        /* Numbered every unit when there is room on screen, else every 2, 5,
+           10...: each number needs about 22 screen pixels. */
+        int stride = 1;
+        const int strides[] = { 1, 2, 5, 10, 20, 50 };
+        for (int st : strides)
+        {
+            stride = st;
+            if (st * unitPx * zoom >= 22.0)
+                break;
+        }
+        for (int k = -reach; k <= reach; ++k)
+        {
+            const qreal x = cx + k * unitPx;
+            const bool major = (k % 5) == 0;
+            const qreal t = (major ? 6.0 : 3.5) * onePx;
+            line(x, y - t, x, y + t, pen(numberColour, major ? 1.4 : 1.0, Qt::SolidLine), "numberLine");
+            // Above the line (on the deck); the 0 above a centre spike.
+            const qreal above = (k == 0 && spike && qAbs(y - dsY) < 2.0 * s) ? 1.6 * s : t;
+            if (k % stride == 0)
+                label(QString::number(qAbs(k)), QPointF(x, y - above), numberColour,
+                      Qt::AlignHCenter | Qt::AlignBottom, "numberLine");
+        }
+        /* Which side is which: stage right is the plot's left. */
+        if (reach > 0)
+        {
+            label(tr("SR"), QPointF(cx - reach * unitPx, y - 24.0 * onePx), numberColour,
+                  Qt::AlignLeft | Qt::AlignBottom, "numberLine");
+            label(tr("SL"), QPointF(cx + reach * unitPx, y - 24.0 * onePx), numberColour,
+                  Qt::AlignRight | Qt::AlignBottom, "numberLine");
+        }
+    }
 }
 
 void MonitorGraphicsView::updateGrid()

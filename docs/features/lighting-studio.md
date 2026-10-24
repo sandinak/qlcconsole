@@ -64,6 +64,45 @@ trusses, decks, scenery — the rulers band its extent; while you drag it,
 the ruler mark sits at its **middle**, not wherever the pointer grabbed it.
 So dragging a drape reads its centre line on the ruler.
 
+### Stage marks: centre line, curtain line, number line
+
+![The plot with the stage marks on: the centre mark and dashed centre line, the curtain line, and the number line along the front of a rounded apron](../images/lighting-studio-stage-marks.png)
+
+The plot's **Show ▸ Stage marks** menu draws the marks a crew spikes and
+focuses by. Each one is a tick in the menu:
+
+- **Centre mark (DSC):** a spike on the front edge of the stage at centre,
+  labelled **CL**.
+- **Centre line, full depth:** the centre line, dashed, from the front of the
+  stage to the back.
+- **Curtain line:** where the main curtain hangs, labelled **Curtain line**.
+- **Number line:** a line across the stage, ticked every foot or metre (the
+  show's unit) and numbered out from **0** at centre, **SR** on one end and
+  **SL** on the other, so "SL 4 on the number line" is a place you can find
+  on the plot. When the plot is zoomed out, the numbers skip (every 2, 5 or
+  10) rather than overlap.
+
+**Where they go.** Centre is the middle of the stage grid, the same point
+as the teal centre lines. The **front of the stage** is the front of the
+deck at centre: the biggest platform across the centre line, plus an apron
+built as its own platform against its front, and the middle of a rounded
+front. A bare floor uses the front edge of the grid. The **curtain line**
+follows the most downstage **Main drape** across the centre line, or a
+**Proscenium** if there is no main drape. With neither, it sits 4 ft
+(1.2 m) upstage of the front of the stage. The **number line** sits at the
+front of the stage.
+
+**Moving them.** Below the ticks, **Curtain line** and **Number line** each
+have **Auto** and a position. Untick **Auto** and type where the line goes,
+as a position up or down the plan (the plan's Y, as the position fields in
+every editor have it). Tick **Auto** again and it goes back to following
+the stage.
+
+They're drawn in the **Top** view, over the rig so they're never hidden
+and never in the way of a click. The **Rig Overview** draws them on its
+floor, from above and at 45°, at the height of the deck at the front of the
+stage. They're saved with the show; an older show opens with them off.
+
 ### Front / Side — elevation, and count badges
 
 ![Lighting Studio Front view: the two trusses at their hung heights](../images/lighting-studio-front-view-badges.png)
@@ -1207,6 +1246,9 @@ Two small but load-bearing visual cues:
 | **Light footprint / coverage** | Everywhere a fixture's full pan/tilt range can reach — distinct from where it's currently pointed. |
 | **Shift-drop** | Holding Shift as you drop a fixture over a truss, pipe or deck, to hang or stand it there; a plain drop only moves it. |
 | **Beneath (faded)** | In the Top view, a fixture with a structure more than half a metre above it, drawn faded and dashed but still clickable. |
+| **Curtain line** | Where the main curtain hangs, across the stage (also called the setting line; the plaster line is the proscenium's). Show ▸ Stage marks. |
+| **Number line** | A line across the front of the stage numbered out from 0 at centre, in feet or metres, for spiking and focusing. Show ▸ Stage marks. |
+| **DSC / CL** | Downstage centre: where the centre line (CL) meets the front of the stage. |
 | **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |
 | **Calibration offsets** | A head's pan/tilt offsets: in the DMX so the real light lands where intended, left out of every view so it shows the intended aim. |
 | **Focus mode** | Stepping through the heads, each aimed at its reference, to set their calibration offsets with the controller or keyboard. |

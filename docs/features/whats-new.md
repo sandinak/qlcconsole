@@ -277,6 +277,13 @@ their house lights, relays and subs.
   next free addresses after the originals, leave them unpatched, or
   cancel. See [Selecting and undo on the
   plot](lighting-studio.md#selecting-and-undo-on-the-plot).
+- **Stage marks on the plot.** **Show ▸ Stage marks** draws the centre
+  mark at the front of the stage (DSC, labelled CL) and, if you want it, the
+  whole centre line; the curtain line, found from the main drape or the
+  proscenium; and a number line ticked in feet or metres out from 0 at
+  centre. The curtain line and the number line can be moved from the same
+  menu. The Rig Overview draws them on its floor, and they're saved with the
+  show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Auto fixtures as their closest symbol.** The plot's **Show** menu has
   **Show Auto fixtures as their closest plot symbol**, saved with the show.
 - **One icon per fixture, everywhere**, and curtains have a drape. Icons

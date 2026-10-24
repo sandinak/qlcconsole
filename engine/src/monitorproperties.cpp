@@ -66,6 +66,9 @@
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
 #define KXMLQLCMonitorAutoStageLooks QStringLiteral("AutoStageLooks")
+#define KXMLQLCMonitorStageMarks    QStringLiteral("StageMarks")
+#define KXMLQLCMonitorCurtainLineY  QStringLiteral("CurtainLineY")
+#define KXMLQLCMonitorNumberLineY   QStringLiteral("NumberLineY")
 
 #define KXMLQLCMonitorCommonBackground  QStringLiteral("Background")
 #define KXMLQLCMonitorBgColor           QStringLiteral("BackgroundColor")
@@ -300,6 +303,145 @@ MonitorProperties::GridUnits MonitorProperties::gridUnitsFor(MeasurementUnits::L
     return MeasurementUnits::weightUnitFor(unit) == MeasurementUnits::Pounds ? Feet : Meters;
 }
 
+/*********************************************************************
+ * Stage reference marks
+ *********************************************************************/
+
+void MonitorProperties::setStageMarkVisible(StageMark mark, bool on)
+{
+    setStageMarks(on ? (m_stageMarks | mark) : (m_stageMarks & ~mark));
+}
+
+namespace
+{
+    /** Square to the stage, front downstage: not turned (or a whole turn). */
+    bool squareOn(float degrees)
+    {
+        const float r = std::fmod(std::fabs(degrees), 360.0f);
+        return r < 0.5f || r > 359.5f;
+    }
+    /** Running across the stage: not turned, or turned half way round (a
+     *  sheet has no front to lose). */
+    bool acrossStage(float degrees)
+    {
+        const float r = std::fmod(std::fabs(degrees), 180.0f);
+        return r < 0.5f || r > 179.5f;
+    }
+}
+
+float MonitorProperties::downstageEdgeY() const
+{
+    const float cx = stageCentre().x();
+    const float gridFront = m_gridSize.z() * gridUnitMetres();
+
+    /* The decks that cross the centre line, square on. Steps and risers
+       stacked on a deck are not the stage. */
+    QList<const StagePlatform *> decks;
+    foreach (const StagePlatform *p, m_platforms)
+    {
+        if (p == nullptr || p->isSteps() || p->stackable() || !squareOn(p->rotation()))
+            continue;
+        if (cx < p->originX() || cx > p->originX() + p->width())
+            continue;
+        decks.append(p);
+    }
+    if (decks.isEmpty())
+        return gridFront;
+
+    /* The stage is the biggest of them... */
+    const StagePlatform *deck = decks.first();
+    foreach (const StagePlatform *p, decks)
+        if (p->width() * p->depth() > deck->width() * deck->depth())
+            deck = p;
+    auto frontOf = [cx](const StagePlatform *p) { return p->frontEdgeAt(cx); };
+    float front = frontOf(deck);
+
+    /* ...carried on by an apron built as its own piece: a deck whose back
+       meets this front (within 5 cm) across the centre line. */
+    QList<const StagePlatform *> rest = decks;
+    rest.removeAll(deck);
+    bool grew = true;
+    while (grew)
+    {
+        grew = false;
+        foreach (const StagePlatform *p, rest)
+        {
+            if (std::fabs(p->originY() - front) <= 0.05f && frontOf(p) > front)
+            {
+                front = frontOf(p);
+                rest.removeAll(p);
+                grew = true;
+                break;
+            }
+        }
+    }
+    return front;
+}
+
+const Scenery *MonitorProperties::curtainLineScenery() const
+{
+    const float cx = stageCentre().x();
+    const Scenery *best = nullptr;
+    /* A main drape is the curtain line itself; a proscenium is where it is
+       when there is no drape drawn. The most downstage of either kind. */
+    foreach (int kind, QList<int>() << Scenery::MainDrape << Scenery::Proscenium)
+    {
+        foreach (const Scenery *sc, m_sceneries)
+        {
+            if (sc == nullptr || sc->kind() != kind || sc->outline() != Scenery::SheetOutline
+                || !acrossStage(sc->rotation()))
+                continue;
+            if (std::fabs(sc->originX() - cx) > sc->width() / 2.0f)
+                continue;   // not across the centre line
+            if (best == nullptr || sc->originY() > best->originY())
+                best = sc;
+        }
+        if (best != nullptr)
+            return best;
+    }
+    return nullptr;
+}
+
+float MonitorProperties::autoCurtainLineY() const
+{
+    if (const Scenery *sc = curtainLineScenery())
+        return sc->originY();
+    const float apron = (m_gridUnits == Feet) ? 4.0f * 0.3048f : 1.2f;
+    return qMax(0.0f, downstageEdgeY() - apron);
+}
+
+float MonitorProperties::curtainLineY() const
+{
+    return m_curtainLineSet ? m_curtainLineY : autoCurtainLineY();
+}
+
+void MonitorProperties::setCurtainLineY(float metres)
+{
+    if (!std::isfinite(metres))
+        return;
+    m_curtainLineY = metres;
+    m_curtainLineSet = true;
+}
+
+float MonitorProperties::numberLineY() const
+{
+    return m_numberLineSet ? m_numberLineY : downstageEdgeY();
+}
+
+void MonitorProperties::setNumberLineY(float metres)
+{
+    if (!std::isfinite(metres))
+        return;
+    m_numberLineY = metres;
+    m_numberLineSet = true;
+}
+
+int MonitorProperties::numberLineReach() const
+{
+    // The grid is counted in units, centred on the centre line.
+    return qMax(0, int(std::floor(m_gridSize.x() / 2.0f + 1e-4f)));
+}
+
 void MonitorProperties::reset()
 {
     m_gridSize = QVector3D(GRID_DEFAULT_WIDTH, GRID_DEFAULT_HEIGHT, GRID_DEFAULT_DEPTH);
@@ -314,6 +456,11 @@ void MonitorProperties::reset()
     m_occlusionMinSize = BeamOcclusion::defaultMinSize();
     m_occlusion.clear();
     m_stageOrigin = QPointF(0, 0);
+    m_stageMarks = NoStageMarks;
+    m_curtainLineSet = false;
+    m_curtainLineY = 0.0f;
+    m_numberLineSet = false;
+    m_numberLineY = 0.0f;
     m_showLabels = true;
     /* Quietly: a load or an undo snapshot sets it again straight after, and
        its setter says so then if it differs. */
@@ -2382,6 +2529,13 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         setStageOrigin(QPointF(attrs.value(KXMLQLCMonitorOriginX).toString().toDouble(),
                                attrs.value(KXMLQLCMonitorOriginY).toString().toDouble()));
 
+    if (attrs.hasAttribute(KXMLQLCMonitorStageMarks))
+        setStageMarks(attrs.value(KXMLQLCMonitorStageMarks).toString().toInt());
+    if (attrs.hasAttribute(KXMLQLCMonitorCurtainLineY))
+        setCurtainLineY(QLocale::c().toFloat(attrs.value(KXMLQLCMonitorCurtainLineY).toString()));
+    if (attrs.hasAttribute(KXMLQLCMonitorNumberLineY))
+        setNumberLineY(QLocale::c().toFloat(attrs.value(KXMLQLCMonitorNumberLineY).toString()));
+
     while (root.readNextStartElement())
     {
         QXmlStreamAttributes tAttrs = root.attributes();
@@ -3275,6 +3429,13 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeAttribute(KXMLQLCMonitorOriginX, QString::number(stageOrigin().x()));
         doc->writeAttribute(KXMLQLCMonitorOriginY, QString::number(stageOrigin().y()));
     }
+    // Stage marks: only what was turned on or moved, so older shows are unchanged.
+    if (stageMarks() != NoStageMarks)
+        doc->writeAttribute(KXMLQLCMonitorStageMarks, QString::number(stageMarks()));
+    if (!curtainLineIsAuto())
+        doc->writeAttribute(KXMLQLCMonitorCurtainLineY, QString::number(double(m_curtainLineY)));
+    if (!numberLineIsAuto())
+        doc->writeAttribute(KXMLQLCMonitorNumberLineY, QString::number(double(m_numberLineY)));
 
     /* Font */
     doc->writeTextElement(KXMLQLCMonitorFont, font().toString());

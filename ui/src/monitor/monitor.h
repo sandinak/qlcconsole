@@ -329,6 +329,10 @@ public:
      *  behind others, it is brought forward rather than shut unseen. */
     void toggleStageOverview();
 
+    /** The show's stage marks (MonitorProperties::stageMarks()) or their
+     *  positions changed: redraw them on the plot and the Rig Overview. */
+    void stageMarksChanged();
+
 protected:
 
 private:

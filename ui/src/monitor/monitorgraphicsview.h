@@ -170,6 +170,11 @@ public:
     void setCenterLinesVisible(bool on);
     bool centerLinesVisible() const { return m_centerLinesVisible; }
 
+    /** Redraw the stage reference marks (MonitorProperties::stageMarks():
+     *  the centre mark and line, the curtain line, the number line) where
+     *  the show has them. Top view only; labelled, and in no one's way. */
+    void updateStageMarks();
+
     /** Get the current number of grid sub-divisions */
     int gridSubdivisions() const { return m_gridSubdivisions; }
 
@@ -1148,6 +1153,11 @@ private:
     QGraphicsLineItem *m_centerLineV = nullptr;
     QGraphicsLineItem *m_centerLineH = nullptr;
     bool m_centerLinesVisible = true;
+
+    /** The stage reference marks' lines, ticks and labels (updateStageMarks()).
+     *  Each carries its kind in data(0): "centreMark", "centreLine",
+     *  "curtainLine", "numberLine". */
+    QList<QGraphicsItem *> m_stageMarkItems;
 
     /** Number of sub-divisions drawn inside each grid cell */
     int m_gridSubdivisions;

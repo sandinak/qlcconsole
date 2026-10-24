@@ -353,6 +353,10 @@ private:
     QList<QPair<Kind, quint32> > everyStructure() const;
 
     void drawGrid(QPainter &p) const;
+    /** The show's stage reference marks on the floor (the whole-stage view's
+     *  Top and 45° planes): centre mark and line, curtain line, number line,
+     *  lying on the deck where there is one. */
+    void drawStageMarks(QPainter &p) const;
     void drawStructure(QPainter &p) const;
     void drawOneStructure(QPainter &p, Kind kind, quint32 id) const;
     /** The hangers on truss/tower @p id: clamp, arm, chain. */

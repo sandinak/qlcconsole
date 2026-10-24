@@ -155,6 +155,14 @@ private slots:
     /** Q100: a fixed light aimed by pan and tilt points there, and keeps it
      *  through save and load; one never aimed is left as it was. */
     void aFixedLightIsAimedByPanAndTilt();
+
+    /** Stage reference marks: off and automatic by default (and in an older
+     *  show), saved with the show only when used, and back after a load. */
+    void stageMarksAreSavedWithTheShow();
+    /** ...and where they go: the front of the deck (and of an apron added to
+     *  it), the main drape or proscenium for the curtain line, the grid's
+     *  width for the number line. */
+    void stageMarksFollowTheStage();
 };
 
 #endif

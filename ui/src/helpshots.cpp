@@ -50,6 +50,7 @@
 #include "monitor.h"
 #include "monitorgraphicsview.h"
 #include "truss.h"
+#include "stageplatform.h"
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "patchinventorydialog.h"
@@ -642,6 +643,46 @@ QList<HelpShots::Shot> HelpShots::shots()
             f.grab = app;
         return f;
     }, nullptr };
+
+    // The stage marks: centre mark and line, curtain line, number line.
+    list << Shot{ QStringLiteral("lighting-studio-stage-marks"), [=]() {
+        window();
+        Frame f;
+        Monitor *mon = studio(MonitorGraphicsView::PovTop);
+        if (mon == NULL)
+            return f;
+        /* A stage with a rounded apron for them to find, for this picture
+           only: the demo is a bare floor. */
+        const float u = mon->m_props->gridUnitMetres();
+        const QVector3D grid = mon->m_props->gridSize();
+        StagePlatform *deck = mon->m_props->addPlatform();
+        deck->setName(QStringLiteral("Deck"));
+        deck->setOriginX(1.0f * u);
+        deck->setOriginY(0.5f * u);
+        deck->setWidth((grid.x() - 2.0f) * u);
+        deck->setDepth((grid.z() - 1.5f) * u);
+        deck->setHeight(0.9f);
+        deck->setFrontCurve(0.6f * u);
+        deck->setColor(QColor(40, 44, 52));
+        mon->setProperty("helpShotDeck", deck->id());
+        mon->m_graphicsView->updatePlatforms();
+        mon->m_props->setStageMarks(MonitorProperties::CentreMarkFlag | MonitorProperties::CentreLineFlag
+                                    | MonitorProperties::CurtainLineFlag
+                                    | MonitorProperties::NumberLineFlag);
+        mon->m_graphicsView->updateStageMarks();
+        settle();
+        f.grab = mon->m_graphicsView;
+        return f;
+    }, [=]() {
+        Monitor *mon = Monitor::instance();
+        if (mon == NULL)
+            return;
+        mon->m_props->setStageMarks(MonitorProperties::NoStageMarks);
+        if (mon->property("helpShotDeck").isValid())
+            mon->m_props->removePlatform(mon->property("helpShotDeck").toUInt());
+        mon->setProperty("helpShotDeck", QVariant());
+        mon->m_graphicsView->updatePlatforms();
+    } };
 
     list << Shot{ QStringLiteral("lighting-studio-front-view-badges"), [=]() {
         window();
