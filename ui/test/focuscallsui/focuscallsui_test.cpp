@@ -357,6 +357,23 @@ void FocusCallsUi_Test::refineFromTheWorkbench()
              QString("Scope: layer \342\206\222 group \342\206\222 fixture"));
     r->stop();
 
+    /* Q116: the Centre palette is the scene's own here, so no warning; give
+       it a second user and Refine asks first. */
+    Scene *other = new Scene(m_doc);
+    other->setName("Chorus look");
+    other->addPalette(centre->id());
+    QVERIFY(m_doc->addFunction(other));
+    QVERIFY(wb.openRefine());
+    r->nudgePosition(1.0f, 0.0f);
+    QVERIFY(!r->keep());
+    QVERIFY2(panel->sharedLine().contains("Chorus look"), qPrintable(panel->sharedLine()));
+    QPushButton *all = panel->findChild<QPushButton *>("refineSharedConfirm");
+    QVERIFY(all != nullptr);
+    all->click();
+    QCOMPARE(centre->values(), QVariantList({ 271, 135 }));
+    QVERIFY(panel->sharedLine().isEmpty());
+    r->stop();
+
     // A fixture's row: Refine starts on that fixture, at Fixture scope.
     QVERIFY(wb.openRefine(s->id(), 0xFFFFFFFF, m_spots.at(1)));
     QCOMPARE(r->scope(), RefineSession::FixtureScope);

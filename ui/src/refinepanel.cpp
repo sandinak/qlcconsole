@@ -146,6 +146,25 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
             m_session->setKeepToSource(on);
     });
     vl->addWidget(m_toSource);
+    // Board Q116: a shared palette -- who else uses it, and the second A.
+    {
+        m_shared = new QWidget(this);
+        m_shared->setObjectName(QStringLiteral("refineShared"));
+        QHBoxLayout *sh = new QHBoxLayout(m_shared);
+        sh->setContentsMargins(0, 0, 0, 0);
+        m_sharedLabel = new QLabel(m_shared);
+        m_sharedLabel->setObjectName(QStringLiteral("refineSharedText"));
+        m_sharedLabel->setWordWrap(true);
+        m_sharedLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+        sh->addWidget(m_sharedLabel, 1);
+        QPushButton *all = new QPushButton(tr("Change them all"), m_shared);
+        all->setObjectName(QStringLiteral("refineSharedConfirm"));
+        all->setFocusPolicy(Qt::NoFocus);
+        connect(all, &QPushButton::clicked, this, [this]() { m_session->confirmShared(); });
+        sh->addWidget(all);
+        m_shared->hide();
+        vl->addWidget(m_shared);
+    }
     vl->addWidget(m_device);
 
     m_map = new FocusControlMap(this);
@@ -225,6 +244,11 @@ QString RefinePanel::pendingLine() const
     return m_pending->text();
 }
 
+QString RefinePanel::sharedLine() const
+{
+    return m_shared->isHidden() ? QString() : m_sharedLabel->text();
+}
+
 QString RefinePanel::keepToLine() const
 {
     return m_toSource->isHidden() ? QString() : m_toSource->text();
@@ -289,6 +313,14 @@ void RefinePanel::refresh()
     else
         m_toSource->hide();
 
+    if (!m_session->sharedWarning().isEmpty())
+    {
+        m_sharedLabel->setText(m_session->sharedWarning() + QStringLiteral("\n")
+                               + m_session->sharedUsers().join(QStringLiteral(", ")));
+        m_shared->show();
+    }
+    else
+        m_shared->hide();
     if (!m_session->hasPending())
     {
         m_pending->setText(tr("Nothing pending: the rig shows the cue."));

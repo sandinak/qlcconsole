@@ -147,6 +147,9 @@ void RefineSession::stop()
     m_editOrder.clear();
     m_layers.clear();
     m_tracked.clear();
+    m_sharedConfirmed = false;
+    m_sharedWarning.clear();
+    m_sharedUsers.clear();
     m_kept.clear();
     m_levelCache.clear();
     m_layerIndex = -1;
@@ -891,6 +894,7 @@ bool RefineSession::keep(QString *why)
         return st->setTargetLook(m_cue, t->layer.target, look);
     };
     const bool wasTracked = isTrackedLayer();
+    const QString light = keptLight();
     const ShowTree::Target trackedTarget = wasTracked ? layer(currentLayer())->target : ShowTree::Target();
 
     st->beginBatch(tr("Refine"));
@@ -1045,15 +1049,38 @@ bool RefineSession::keep(QString *why)
         m_layers = findLayers(nullptr);
     rebuildWrites();
     emit changed();
+    emit kept();
     if (wasTracked)
         say(toSource ? tr("Kept in the cue it tracks from.") : tr("Kept in this cue."));
     else
-        say(m_doc->mode() == Doc::Operate ? tr("Kept. It plays from the next GO.") : tr("Kept."));
+        say(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the next GO.").arg(light)
+                                          : tr("%1 kept.").arg(light));
     return true;
+}
+
+bool RefineSession::confirmShared(QString *why)
+{
+    if (m_sharedWarning.isEmpty())
+        return false;
+    m_sharedConfirmed = true;
+    return keep(why);
+}
+
+QString RefineSession::keptLight() const
+{
+    if (m_scope == FixtureScope)
+        if (const Fixture *fx = m_doc->fixture(currentFixture()))
+            return fx->name();
+    if (m_scope == GroupScope)
+        return targetName(scopeTarget());
+    return layerName(currentLayer());
 }
 
 void RefineSession::revert()
 {
+    m_sharedConfirmed = false;
+    m_sharedWarning.clear();
+    m_sharedUsers.clear();
     if (m_edits.isEmpty())
         return;
     m_edits.clear();

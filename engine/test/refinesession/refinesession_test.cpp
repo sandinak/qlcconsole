@@ -532,7 +532,7 @@ void RefineSession_Test::operateHoldsWhatIsKept()
     QVERIFY(st->previewedCue() != m_cue);
     QVERIFY(r->nudgePosition(4.0f, 0.0f));
     QVERIFY(r->keep());
-    QCOMPARE(said.last().at(0).toString(), QString("Kept. It plays from the next GO."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT spots kept. It plays from the next GO."));
     QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
              QVariantList({ 274, 135 }));
     // Held on the rig until the next GO plays it.
@@ -753,17 +753,44 @@ void RefineSession_Test::aBuildSceneIsRefinedTheSameWay()
         raw = raw || sv.fxi == m_spots.at(1);
     QVERIFY(!raw);
 
-    // Layer scope: the scene's palette moves (as the Look Editor does), one step.
+    /* Layer scope: the scene's palette moves (as the Look Editor does). But
+       Centre is also the Show Tree cue's (its baked scene): Q116 -- said,
+       and only on a second A. */
     r->setScope(RefineSession::LayerScope);
     QVERIFY(r->nudgePosition(2.0f, -1.0f));
-    QVERIFY(r->keep());
+    QVERIFY(r->nudgeZoom(-5.0f));            // no zoom palette: the scene's own values
+    why.clear();
+    QVERIFY(!r->keep(&why));
+    QVERIFY2(why.startsWith("Centre is also used by 1-Ballad"), qPrintable(why));
+    QCOMPARE(r->sharedUsers().size(), 1);
+    QCOMPARE(said.last().at(0).toString(), why);
+    QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 270, 135 }));   // not yet
+    QVERIFY(r->keep());                      // A again: changed everywhere
+    QVERIFY(r->sharedWarning().isEmpty());
     QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 272, 134 }));
+    int zoomedNow = 0;
+    for (const SceneValue &sv : s->values())
+        if (sv.channel == 5)
+            ++zoomedNow;
+    QCOMPARE(zoomedNow, m_spots.size());
+    // Q117: the palette and the scene's own values are ONE step.
     QVERIFY(r->undo());
+    QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 270, 135 }));
+    zoomedNow = 0;
+    for (const SceneValue &sv : s->values())
+        if (sv.channel == 5)
+            ++zoomedNow;
+    QCOMPARE(zoomedNow, 0);
+    // B before the second A: nothing changes, and the warning goes.
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(!r->keep());
+    r->revert();
+    QVERIFY(r->sharedWarning().isEmpty());
     QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 270, 135 }));
 
     // Zoom, with no zoom palette: the scene's own values on all of it.
     QVERIFY(r->nudgeZoom(-5.0f));
-    QVERIFY(r->keep());
+    QVERIFY(r->keep());                      // no shared palette: at once
     int zoomed = 0;
     for (const SceneValue &sv : s->values())
         if (sv.channel == 5)
