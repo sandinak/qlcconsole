@@ -4428,6 +4428,19 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
 
+    // Snap the dragged truss's origin to the grid, then shift the rest by the
+    // same delta so a grouped selection keeps its relative layout intact.
+    if (m_snapDivisions > 0 && m_cellPixels > 0 && item != nullptr)
+    {
+        const QPointF snapped = snapScenePos(item->pos());
+        const QPointF delta = snapped - item->pos();
+        if (!delta.isNull())
+        {
+            foreach (TrussItem *ti, moved)
+                ti->setPos(ti->pos() + delta);
+        }
+    }
+
     UndoEntry e; e.type = UndoEntry::TrussMove;
     foreach (TrussItem *ti, moved)
     {
@@ -4792,6 +4805,17 @@ void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
     if (!moved.contains(item))
         moved.append(item);
 
+    // Snap the dragged one to the grid; the rest move by the same delta.
+    if (m_snapDivisions > 0)
+    {
+        const QPointF delta = snapScenePos(item->pos()) - item->pos();
+        if (!delta.isNull())
+        {
+            foreach (TowerItem *ti2, moved)
+                ti2->setPos(ti2->pos() + delta);
+        }
+    }
+
     UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (TowerItem *ti, moved)
     {
@@ -4837,6 +4861,17 @@ void MonitorGraphicsView::slotStandMoved(StandItem *item)
             moved.append(si);
     if (!moved.contains(item))
         moved.append(item);
+
+    // Snap the dragged one to the grid; the rest move by the same delta.
+    if (m_snapDivisions > 0)
+    {
+        const QPointF delta = snapScenePos(item->pos()) - item->pos();
+        if (!delta.isNull())
+        {
+            foreach (StandItem *si2, moved)
+                si2->setPos(si2->pos() + delta);
+        }
+    }
 
     UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (StandItem *si, moved)
@@ -4945,6 +4980,17 @@ void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)
     if (!moved.contains(item))
         moved.append(item);
 
+    // Snap the dragged one to the grid; the rest move by the same delta.
+    if (m_snapDivisions > 0)
+    {
+        const QPointF delta = snapScenePos(item->pos()) - item->pos();
+        if (!delta.isNull())
+        {
+            foreach (SceneryItem *sc2, moved)
+                sc2->setPos(sc2->pos() + delta);
+        }
+    }
+
     UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (SceneryItem *sci, moved)
     {
@@ -4979,6 +5025,17 @@ void MonitorGraphicsView::slotPipeMoved(PipeItem *item)
             moved.append(pi);
     if (!moved.contains(item))
         moved.append(item);
+
+    // Snap the dragged one to the grid; the rest move by the same delta.
+    if (m_snapDivisions > 0)
+    {
+        const QPointF delta = snapScenePos(item->pos()) - item->pos();
+        if (!delta.isNull())
+        {
+            foreach (PipeItem *pi2, moved)
+                pi2->setPos(pi2->pos() + delta);
+        }
+    }
 
     UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (PipeItem *pi, moved)
