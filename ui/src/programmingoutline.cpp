@@ -2075,7 +2075,23 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         }
         if (parts.size() == 1 && at.kind == GroupRow)
             menu.addAction(tr("Edit the group's layout"), this, [this, at]() { emit editGroupLayoutRequested(at.id); });
+        // Refine (FOCUS_REFINE_DESIGN.md 6B): this row from the stage.
+        if (parts.size() == 1 && m_mode == Stack && (at.kind == GroupRow || at.kind == FixtureRow))
+        {
+            QAction *refine = menu.addAction(tr("Refine on the controller\342\200\246"), this, [this, at]() {
+                emit refineRequested(at.scene, at.kind == GroupRow ? at.id : 0xFFFFFFFF,
+                                     at.kind == FixtureRow ? at.id : 0xFFFFFFFF);
+            });
+            refine->setObjectName(QStringLiteral("outlineRefine"));
+        }
         menu.addSeparator();
+    }
+    if (at.kind == SceneRow && m_mode == Stack && clicked != nullptr)
+    {
+        QAction *refine = menu.addAction(tr("Refine on the controller\342\200\246"), this, [this, at]() {
+            emit refineRequested(at.id, 0xFFFFFFFF, 0xFFFFFFFF);
+        });
+        refine->setObjectName(QStringLiteral("outlineRefine"));
     }
     if (!scenes.isEmpty() && m_mode == Navigator)
     {

@@ -22,6 +22,8 @@
 
 #include "showtreecontroller.h"
 #include "inputoutputmap.h"
+#include "paletteops.h"
+#include "function.h"
 #include "refinesession.h"
 #include "focussession.h"
 #include "qlcfixturemode.h"
@@ -74,7 +76,7 @@ RefineSession::RefineSession(Doc *doc, QObject *parent)
             if (!m_active)
                 return;
             m_levelCache.clear();
-            if (mode == Doc::Design)
+            if (mode == Doc::Design && !m_sceneMode)
             {
                 m_kept.clear();
                 m_doc->showTree()->previewCue(m_cue);
@@ -110,6 +112,7 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
 
     if (m_active)
         stop();
+    m_sceneMode = false;
     m_cue = cueId;
     m_layers = layers;
     m_layerIndex = qMax(0, layers.indexOf(layerId));
@@ -146,6 +149,7 @@ void RefineSession::stop()
     m_levelCache.clear();
     m_layerIndex = -1;
     m_cue = kInvalid;
+    m_sceneMode = false;
     for (int s = 0; s < 2; ++s)
         m_stick[s][0] = m_stick[s][1] = 0.5f;
     m_trigger[0].reset();
@@ -224,6 +228,8 @@ void RefineSession::previousLayer()
 
 QList<ShowTree::Target> RefineSession::groups() const
 {
+    if (m_sceneMode)
+        return sceneGroups();
     const ShowTree::Layer *l = layer(currentLayer());
     if (l == nullptr)
         return QList<ShowTree::Target>();
@@ -234,6 +240,8 @@ QList<ShowTree::Target> RefineSession::groups() const
 
 QList<quint32> RefineSession::layerFixtures() const
 {
+    if (m_sceneMode)
+        return sceneFixtures();
     const ShowTree::Layer *l = layer(currentLayer());
     return l != nullptr ? m_doc->showTree()->targetFixtures(l->target) : QList<quint32>();
 }
@@ -312,6 +320,31 @@ void RefineSession::previousItem()
     say(wherePhrase());
 }
 
+bool RefineSession::pickFixture(quint32 fid)
+{
+    const int at = layerFixtures().indexOf(fid);
+    if (!m_active || at < 0)
+        return false;
+    m_fixtureIndex = at;
+    m_scope = LayerScope;           // so setScope() says and flashes it
+    setScope(FixtureScope);
+    return true;
+}
+
+bool RefineSession::pickGroup(quint32 groupId)
+{
+    const QList<ShowTree::Target> gs = groups();
+    for (int i = 0; i < gs.size(); ++i)
+        if (gs.at(i).groups.contains(groupId))
+        {
+            m_groupIndex = i;
+            m_scope = LayerScope;
+            setScope(GroupScope);
+            return true;
+        }
+    return false;
+}
+
 ShowTree::Target RefineSession::scopeTarget() const
 {
     if (m_scope == GroupScope)
@@ -356,6 +389,8 @@ void RefineSession::cyclePage()
 
 const ShowTree::Look *RefineSession::lookFor(quint32 fid, const QString &key, QList<quint32> *lit) const
 {
+    if (m_sceneMode)
+        return sceneLookFor(fid, key, lit);
     const ShowTree::Cue *c = cue();
     const ShowTree::Layer *l = layer(currentLayer());
     if (c == nullptr || l == nullptr)
@@ -482,6 +517,8 @@ bool RefineSession::cuePosition(quint32 fid, float &pan, float &tilt) const
                     if (sv.fxi == fid)
                         ch.insert(sv.channel, sv.value);
     }
+    if (ch.isEmpty() && m_sceneMode)
+        ch = sceneRawValues(fid);
     if (ch.isEmpty())
     {
         // Nothing the cue says here (tracked in, say): where it is now.
@@ -535,7 +572,8 @@ bool RefineSession::nudgePosition(float dPan, float dTilt)
         // An aimed layer follows its target: the whole layer cannot be moved
         // by degrees without losing that.
         const ShowTree::Layer *l = layer(currentLayer());
-        const ShowTree::Look *look = l != nullptr ? l->look(ShowTree::KeyPosition) : nullptr;
+        const ShowTree::Look *look = m_sceneMode ? lookFor(fixtures.first(), ShowTree::KeyPosition)
+                                   : l != nullptr ? l->look(ShowTree::KeyPosition) : nullptr;
         if (look != nullptr)
             for (quint32 pid : look->palettes)
                 if (const QLCPalette *p = m_doc->palette(pid))
@@ -731,6 +769,8 @@ bool RefineSession::keep(QString *why)
 {
     if (!m_active || m_edits.isEmpty())
         return false;
+    if (m_sceneMode)
+        return sceneKeep(why);
     ShowTreeController *st = m_doc->showTree();
     // Layer edits first, then groups, then fixtures: the most specific last.
     QList<QString> order = m_editOrder;
@@ -923,6 +963,8 @@ bool RefineSession::clearException()
         revert();
         return true;
     }
+    if (m_sceneMode)
+        return sceneClearException();
     // Pending at this scope goes first.
     const QString key = editKey();
     if (m_edits.remove(key) > 0)
@@ -1002,7 +1044,8 @@ bool RefineSession::clearException()
 
 bool RefineSession::undo()
 {
-    const bool done = m_doc->showTree()->undo();
+    const bool done = m_sceneMode ? (m_doc->paletteOps() != nullptr && m_doc->paletteOps()->undo())
+                                  : m_doc->showTree()->undo();
     rebuildWrites();
     emit changed();
     say(done ? tr("Undone.") : tr("Nothing to undo."));
@@ -1020,6 +1063,11 @@ QString RefineSession::targetName(const ShowTree::Target &t) const
 
 QString RefineSession::layerName(quint32 layerId) const
 {
+    if (m_sceneMode)
+    {
+        const Function *f = m_doc->function(layerId);
+        return f != nullptr ? f->name() : QString();
+    }
     const ShowTree::Layer *l = layer(layerId);
     if (l == nullptr)
         return QString();
@@ -1051,6 +1099,11 @@ void RefineSession::whereAmI()
     if (!m_active)
         return;
     flashSelection();
+    if (m_sceneMode)
+    {
+        say(tr("Scene %1, %2").arg(layerName(currentLayer()), wherePhrase()));
+        return;
+    }
     const ShowTree::Cue *c = cue();
     say(tr("Cue %1, %2").arg(c != nullptr ? (c->number.isEmpty() ? c->name : c->number) : QString(),
                              wherePhrase()));
@@ -1179,7 +1232,9 @@ QList<SceneValue> RefineSession::previewValues(const Edit &e) const
         {
             bool own = false;
             // A layer's nudge leaves a fixture with its own position alone.
-            if (e.scope == LayerScope && c != nullptr)
+            if (e.scope == LayerScope && m_sceneMode)
+                own = sceneHasOwn(fid, ShowTree::KeyPosition);
+            else if (e.scope == LayerScope && c != nullptr)
                 for (const ShowTree::Layer &ch : c->layers)
                     if (ch.parent == e.layer && ch.look(ShowTree::KeyPosition) != nullptr
                             && m_doc->showTree()->targetFixtures(ch.target).contains(fid))

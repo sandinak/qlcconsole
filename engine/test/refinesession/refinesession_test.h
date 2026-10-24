@@ -63,6 +63,9 @@ private slots:
     /** Q112c: a group's position moves each fixture from its own, kept on
      *  each fixture, so a fan inside the group stays a fan. */
     void groupScopeKeepsTheFan();
+    /** Refine on a Build scene: the scene is the layer, an exception is a
+     *  fixture out of the palette with the scene's own values. */
+    void aBuildSceneIsRefinedTheSameWay();
 
 private:
     Doc *m_doc = nullptr;

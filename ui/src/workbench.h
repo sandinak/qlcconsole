@@ -132,6 +132,14 @@ public:
 public:
     /** The scene the editor pane edits: the selected layer's (the loaded
      *  scene's), invalid if none. */
+    /** Refine on the controller what is loaded (FOCUS_REFINE_DESIGN.md 6B):
+     *  a Show Tree cue from its selected layer, else the stack's scenes from
+     *  @p sceneId (invalid: the current one), on group @p groupId or fixture
+     *  @p fixtureId when given. False when there is nothing to refine. */
+    bool openRefine(quint32 sceneId = 0xFFFFFFFF, quint32 groupId = 0xFFFFFFFF,
+                    quint32 fixtureId = 0xFFFFFFFF);
+    /** The scenes Refine would step through (the stack's scene layers). */
+    QList<quint32> refineScenes() const;
     quint32 currentSceneId() const { return m_currentScene; }
     /** The palette the Look Editor shows (invalid: none). */
     quint32 currentPaletteId() const;
@@ -273,6 +281,7 @@ private:
     void openSelected();
     /** The selected layer (-1: none) and its groups' / fixtures' members. */
     int selectedLayer() const;
+
     QList<quint32> layerGroups(int layer) const;
     /** The heads of layer @a layer's targets: its groups' layouts, then
      *  every head of its fixed fixtures. */
@@ -422,6 +431,7 @@ private:
     /** Host the factory's @a pane under @a heading. */
     void hostEffectPane(QWidget *pane, const QString &heading, bool bench);
     QToolButton *m_sendToTreeBtn = nullptr;
+    QToolButton *m_refineBtn = nullptr;
 };
 
 /** @} */

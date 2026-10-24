@@ -22,6 +22,16 @@ as it is running (see [Refine during the show](#refine-during-the-show)).
 The Refine panel shows the cue, the layer, the scope, what the D-pad sets,
 and what is pending.
 
+In Build's [Workbench](build.md#the-workbench):
+
+- **Refine…** in the Workbench's header, for what is loaded: a Show Tree
+  cue (from its selected layer) or a Build scene, or
+- right-click a cue's layer, a scene, or a scene's group or fixture row:
+  **Refine on the controller…** (it starts on that row).
+
+The controller works exactly the same on a Build scene; see
+[On a Build scene](#on-a-build-scene).
+
 ## Scope: layer, group, fixture
 
 **Y** goes Layer → Group → Fixture → Layer.
@@ -80,6 +90,25 @@ A layer aimed at a stage target (an Aim position) cannot be moved by
 degrees as a whole: it would stop following its target. Move the target
 in the Lighting Studio, or pick one fixture (Y) and give it a position of
 its own.
+
+## On a Build scene
+
+A Build scene has no layers of its own, so Refine takes the nearest
+thing to each part of a cue:
+
+- **The layer is the scene.** With a collection loaded, the triggers step
+  its scenes; with one scene, they stay on it.
+- **The groups are the scene's group rows** (and its loose fixtures, as
+  one).
+- **Layer scope edits the scene's looks: its palettes.** A position, zoom
+  or focus palette has its value moved in place, as the Look Editor does —
+  a palette other scenes use changes there too. With no palette for it,
+  the scene's own values on every fixture. On the colour or gobo page, the
+  palette picked takes the place of the scene's.
+- **An exception** (Group or Fixture scope) leaves those fixtures out of
+  the attribute's palettes and gives them the scene's own values — the
+  fixture row's ▣ count shows them. **X** puts them back in the palette.
+- Each keep is one step of Build's undo (⌘Z, or View on the controller).
 
 ## Where am I?
 

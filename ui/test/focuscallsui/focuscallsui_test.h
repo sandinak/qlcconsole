@@ -49,6 +49,8 @@ private slots:
     /** Refine's panel: the cue and layer, the map in Refine's words, the
      *  keys doing what the controller does. */
     void theRefinePanel();
+    /** Build's Workbench: Refine from its header and from a row. */
+    void refineFromTheWorkbench();
     /** The voice: silent under a test, and what is announced reaches it
      *  while it is on. */
     void theVoiceHearsTheAnnouncements();
