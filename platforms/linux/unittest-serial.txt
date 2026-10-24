@@ -14,3 +14,8 @@ ui/test/mainbar
 # budget (12 ms optimised). It counts thread CPU time, but next to five other
 # tests on the Linux build host (8 threads on 4 cores) a tick measured 12.34 ms.
 engine/test/effectinstance
+
+# The macOS update helper tests build, sign and attach disk images (hdiutil,
+# codesign): system services every leg and every other gate share. Next to
+# the other legs' copies a prepare took over its 120 s budget.
+ui/test/updates

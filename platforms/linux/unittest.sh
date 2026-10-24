@@ -91,8 +91,12 @@ fi
 # waiting on timers, not computing.
 #
 # Each program gets what it would have had to itself: its own build dir as
-# its working directory, its own TMPDIR (a fresh folder, removed after), so
-# nothing one writes to a temporary file meets another's. QSettings are
+# its working directory, its own TMPDIR and HOME (fresh folders, removed
+# after), so nothing one writes to a temporary file or to "your" folders
+# meets another's -- QLCFile::userDirectory() is under $HOME, and three legs'
+# QLCFixtureDefCache_Test::storeDef() wrote and removed the same
+# ~/Library/Application Support/.../storeTest.qxf at once (and every run
+# left things in the real one). QSettings are
 # already per program -- the UI tests keep theirs in a QTemporaryDir
 # (ui/test/common/testsettings.cpp), which now lands in that TMPDIR, and the
 # engine tests that save any point QSettings at their own temporary folder.
@@ -159,7 +163,8 @@ run_one()
         rc=1
     else
         tmp=$(mktemp -d "$TMPBASE/$name.XXXXXX")
-        ( cd "$t" && export TMPDIR="$tmp/" && eval $TESTPREFIX ./test.sh ) \
+        mkdir -p "$tmp/home"
+        ( cd "$t" && export TMPDIR="$tmp/" HOME="$tmp/home" && eval $TESTPREFIX ./test.sh ) \
             > "$log" 2>&1 < /dev/null
         rc=$?
         rm -rf "$tmp"
