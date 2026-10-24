@@ -244,6 +244,12 @@ their house lights, relays and subs.
   **Upgrade This Show…**; its GO is grey until there is something to play.
   See [Upgrade this show](show-tree.md#upgrade-this-show) and
   [An old show: convert it](show-tree.md#an-old-show-convert-it).
+- **Originals say what they are.** After an upgrade in place, the old
+  chaser and the scenes and collections only it plays open greyed as
+  *Original from the import, kept for Restore original*, naming the cue
+  to edit instead, with **Show in Show Tree** going there. A scene the cue
+  list plays as it is stays yours to edit. See
+  [Restore original](show-tree.md#send-to-show-tree-from-build).
 - **A chaser made a cue list shows a sheet**: whether the cue list plays the same
   (checked channel by channel), a row per cue, and what plays as it is and
   why. It moves the VC buttons, VC Cue Lists and show control that fire

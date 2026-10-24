@@ -347,6 +347,19 @@ leaves the tree, with any change made to it since; the chaser and its
 originals go back to their folders; and what fires the list fires the
 chaser again. It asks first and is one undo step.
 
+Until then the originals are **view only**. Click the chaser, or a scene
+or collection only it plays that the list doesn't play as it is, in the
+Functions tab or Build, and it opens greyed under *Original from the
+import, kept for Restore original*, naming the cue to change instead (*The
+show plays the Show Tree's cue list Haunted Variety Show; edit cue 6.1
+Backout there*), with **Show in Show Tree** going to that cue. Editing an
+original would change nothing that plays. That includes a scene left
+where it was filed (an Eos show's *Eos/Preshow*, say) and one Capture into
+palettes took out of the list. A scene the list plays as it is (a ▣ row)
+is still yours to edit, as is one something else plays too: editing it
+changes the show. What the tree made itself keeps *Made by the Show Tree
+— edit it there*.
+
 **Raw scenes into palettes.** A ▣ row that plays a scene of raw channel
 values has **Capture into palettes…** (on its page and its right-click
 menu). It reads the scene fixture by fixture into Dimmer, Colour,

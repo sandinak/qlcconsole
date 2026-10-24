@@ -2084,7 +2084,9 @@ ShowTreeView *ShowTreeView::instance()
 bool ShowTreeView::reveal(quint32 functionId)
 {
     quint32 listId = invalidId(), cueId = invalidId(), layerId = invalidId();
-    if (!m_st->generatedNode(functionId, &listId, &cueId, &layerId))
+    // An original Import in place kept: the cue that stands for it.
+    if (!m_st->generatedNode(functionId, &listId, &cueId, &layerId)
+        && (listId = m_st->originalFor(functionId, &cueId)) == invalidId())
         return false;
     const bool ok = layerId != invalidId() ? selectNode(layerId, cueId)
                     : cueId != invalidId() ? selectNode(cueId) : selectNode(listId);
@@ -2133,13 +2135,25 @@ QWidget *ShowTreeView::lockedBanner(QWidget *parent, Doc *doc, quint32 functionI
     QLabel *text = new QLabel(bar);
     text->setObjectName(QStringLiteral("stLockedText"));
     text->setWordWrap(true);
-    const QString what = st->describeGenerated(functionId);
-    QString body = QStringLiteral("<b>%1</b>").arg(ShowTreeController::lockedText().toHtmlEscaped());
-    if (!what.isEmpty())
-        body += QStringLiteral("<br>") + tr("It is %1.").arg(what.toHtmlEscaped());
-    if (qobject_cast<Chaser *>(doc->function(functionId)) != nullptr)
-        body += QStringLiteral("<br>") + tr("Its run order, direction and speed modes are yours to set "
-                                            "here; its steps and name are the tree's.");
+    QString body;
+    if (st->isGenerated(functionId))
+    {
+        const QString what = st->describeGenerated(functionId);
+        body = QStringLiteral("<b>%1</b>").arg(ShowTreeController::lockedText().toHtmlEscaped());
+        if (!what.isEmpty())
+            body += QStringLiteral("<br>") + tr("It is %1.").arg(what.toHtmlEscaped());
+        if (qobject_cast<Chaser *>(doc->function(functionId)) != nullptr)
+            body += QStringLiteral("<br>") + tr("Its run order, direction and speed modes are yours to set "
+                                                "here; its steps and name are the tree's.");
+    }
+    else
+    {
+        // An original Import in place kept (Q141): what plays is the list.
+        body = QStringLiteral("<b>%1</b>").arg(ShowTreeController::originalText().toHtmlEscaped());
+        const QString where = st->originalWhere(functionId);
+        if (!where.isEmpty())
+            body += QStringLiteral("<br>") + where.toHtmlEscaped();
+    }
     text->setText(body);
     h->addWidget(text, 1);
 

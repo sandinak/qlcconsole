@@ -132,6 +132,12 @@ ShowTreeController::ShowTreeController(Doc *doc)
     connect(m_doc, &Doc::functionRemoved, this, &ShowTreeController::slotFunctionRemoved);
     connect(m_doc, &Doc::paletteRemoved, this, &ShowTreeController::slotPaletteRemoved);
     connect(m_doc, &Doc::modeChanged, this, &ShowTreeController::slotModeChanged);
+    // originalFor() asks again once the show's functions change.
+    auto stale = [this]() { m_originalsStale = true; };
+    connect(m_doc, &Doc::functionAdded, this, stale);
+    connect(m_doc, &Doc::functionRemoved, this, stale);
+    connect(m_doc, &Doc::functionChanged, this, stale);
+    connect(this, &ShowTreeController::changed, this, stale);
     m_sweepTimer = new QTimer(this);
     m_sweepTimer->setSingleShot(true);
     m_sweepTimer->setInterval(250);

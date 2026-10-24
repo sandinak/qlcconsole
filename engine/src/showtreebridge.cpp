@@ -154,7 +154,7 @@ QList<quint32> ShowTreeController::convertibleChasers() const
     QList<const Function *> fs;
     for (const Function *f : m_doc->functions())
         if (f->type() == Function::ChaserType && f->isVisible() && !isGenerated(f->id())
-            && importedInto(f->id()) == invalidId())
+            && importedInto(f->id()) == invalidId() && originalFor(f->id()) == invalidId())
             fs << f;
     std::sort(fs.begin(), fs.end(), [](const Function *a, const Function *b) {
         const int c = a->name().compare(b->name(), Qt::CaseInsensitive);
@@ -186,6 +186,9 @@ QString ShowTreeController::whyNotSend(quint32 chaserId) const
         return tr("Upgraded already: cue list %1 (Restore original puts the chaser back).")
                .arg(list == nullptr ? f->name() : list->name);
     }
+    // A chaser only the original plays: kept with it, view only (Q141).
+    if (originalFor(chaserId) != invalidId())
+        return lockedTextFor(chaserId);
     return QString();
 }
 
@@ -253,17 +256,16 @@ static QList<quint32> repointTimelines(Doc *doc, quint32 from, quint32 to)
     return shows;
 }
 
-QList<quint32> ShowTreeController::originalsOf(quint32 listId, QList<quint32> *timelines) const
+QSet<quint32> ShowTreeController::unplayedOriginals(const CueList &list, QSet<quint32> *timelines) const
 {
-    QList<quint32> out;
-    const CueList *list = cueList(listId);
-    if (list == nullptr || list->inPlace || list->source == invalidId() || m_doc->function(list->source) == nullptr)
-        return out;
-
-    // The chaser and what it plays, down through collections and chasers.
+    // The chaser and what it plays, down through collections and chasers
+    // (what another list filed is that list's).
     QSet<quint32> filed;
     std::function<void(quint32, int)> walk = [&](quint32 fid, int depth) {
-        if (filed.contains(fid) || depth > 8 || isGenerated(fid) || importedInto(fid) != invalidId())
+        if (filed.contains(fid) || depth > 8 || isGenerated(fid))
+            return;
+        const quint32 into = importedInto(fid);
+        if (into != invalidId() && into != list.id)
             return;
         const Function *f = m_doc->function(fid);
         if (f == nullptr)
@@ -276,7 +278,7 @@ QList<quint32> ShowTreeController::originalsOf(quint32 listId, QList<quint32> *t
             for (const ChaserStep &s : ch->steps())
                 walk(s.fid, depth + 1);
     };
-    walk(list->source, 0);
+    walk(list.source, 0);
 
     // A Show timeline that plays the chaser fires it, as a VC button does:
     // it will play the list (fileOriginals() points it there).
@@ -285,13 +287,10 @@ QList<quint32> ShowTreeController::originalsOf(quint32 listId, QList<quint32> *t
         if (const Show *show = qobject_cast<const Show *>(f))
             for (const Track *t : show->tracks())
                 for (const ShowFunction *sf : t->showFunctions())
-                    if (sf->functionID() == list->source)
+                    if (sf->functionID() == list.source)
                         shows.insert(show->id());
     if (timelines != nullptr)
-    {
-        *timelines = shows.values();
-        std::sort(timelines->begin(), timelines->end());
-    }
+        *timelines = shows;
 
     // What the tree plays as it is stays where it is: editing it still
     // changes the list.
@@ -312,7 +311,7 @@ QList<quint32> ShowTreeController::originalsOf(quint32 listId, QList<quint32> *t
             for (int i = 0; i + 1 < usage.count(); i += 2)
             {
                 const quint32 user = usage.at(i);
-                if (id == list->source && shows.contains(user))
+                if (id == list.source && shows.contains(user))
                     continue;
                 if (!filed.contains(user) && !isGenerated(user))
                 {
@@ -323,8 +322,23 @@ QList<quint32> ShowTreeController::originalsOf(quint32 listId, QList<quint32> *t
             }
         }
     }
-    out = filed.values();
+    return filed;
+}
+
+QList<quint32> ShowTreeController::originalsOf(quint32 listId, QList<quint32> *timelines) const
+{
+    QList<quint32> out;
+    const CueList *list = cueList(listId);
+    if (list == nullptr || list->inPlace || list->source == invalidId() || m_doc->function(list->source) == nullptr)
+        return out;
+    QSet<quint32> shows;
+    out = unplayedOriginals(*list, &shows).values();
     std::sort(out.begin(), out.end());
+    if (timelines != nullptr)
+    {
+        *timelines = shows.values();
+        std::sort(timelines->begin(), timelines->end());
+    }
     return out;
 }
 
@@ -391,6 +405,131 @@ quint32 ShowTreeController::importedInto(quint32 functionId) const
                     if (o.function == functionId)
                         return l.id;
     return invalidId();
+}
+
+void ShowTreeController::refreshOriginals() const
+{
+    // What decides it on the tree's side: the in-place lists, their
+    // sources and what they play as it is. The functions' side marks the
+    // map stale (m_originalsStale) as they change.
+    QList<quint32> key;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+        {
+            if (!l.inPlace)
+                continue;
+            key << l.id << l.source << quint32(l.cues.count());
+            for (const Cue &c : l.cues)
+                for (const Layer &layer : c.layers)
+                    if (layer.target.isOpaque())
+                        key << layer.target.function;
+        }
+    // Every cue's opaque layers count, in-place list or not.
+    if (!key.isEmpty())
+        for (const Production &p : m_productions)
+            for (const CueList &l : p.lists)
+                if (!l.inPlace)
+                    for (const Cue &c : l.cues)
+                        for (const Layer &layer : c.layers)
+                            if (layer.target.isOpaque())
+                                key << layer.target.function;
+    if (!m_originalsStale && key == m_originalsKey)
+        return;
+    m_originalsKey = key;
+    m_originalsStale = false;
+    m_originals.clear();
+    if (key.isEmpty())
+        return;
+
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+        {
+            const Chaser *source = qobject_cast<const Chaser *>(m_doc->function(l.source));
+            if (!l.inPlace || source == nullptr)
+                continue;
+            const QSet<quint32> originals = unplayedOriginals(l, nullptr);
+            const QList<ChaserStep> steps = source->steps();
+            for (quint32 fid : originals)
+            {
+                // The cue that stands for it: the step that plays it, by
+                // the number the import gave the cue, else by position.
+                quint32 cue = invalidId();
+                for (int i = 0; fid != source->id() && i < steps.count() && cue == invalidId(); ++i)
+                {
+                    QSet<quint32> under;
+                    std::function<void(quint32, int)> walk = [&](quint32 id, int depth) {
+                        if (under.contains(id) || depth > 8)
+                            return;
+                        under.insert(id);
+                        if (const Collection *c = qobject_cast<const Collection *>(m_doc->function(id)))
+                            for (quint32 m : c->functions())
+                                walk(m, depth + 1);
+                        else if (const Chaser *ch = qobject_cast<const Chaser *>(m_doc->function(id)))
+                            for (const ChaserStep &s : ch->steps())
+                                walk(s.fid, depth + 1);
+                    };
+                    walk(steps.at(i).fid, 0);
+                    if (!under.contains(fid))
+                        continue;
+                    QString number = steps.at(i).cueNumber;
+                    const Function *f = m_doc->function(steps.at(i).fid);
+                    if (number.isEmpty() && f != nullptr)
+                        splitNumberedName(f->name(), &number, nullptr);
+                    for (int k = 0; !number.isEmpty() && k < l.cues.count() && cue == invalidId(); ++k)
+                        if (cueNumber(l, k) == number)
+                            cue = l.cues.at(k).id;
+                    if (cue == invalidId() && l.cues.count() == steps.count())
+                        cue = l.cues.at(i).id;
+                }
+                m_originals.insert(fid, qMakePair(l.id, cue));
+            }
+        }
+}
+
+quint32 ShowTreeController::originalFor(quint32 functionId, quint32 *cueId) const
+{
+    if (cueId != nullptr)
+        *cueId = invalidId();
+    if (functionId == invalidId() || isGenerated(functionId))
+        return invalidId();
+    refreshOriginals();
+    const auto it = m_originals.constFind(functionId);
+    if (it == m_originals.constEnd())
+        return invalidId();
+    if (cueId != nullptr)
+        *cueId = it.value().second;
+    return it.value().first;
+}
+
+QString ShowTreeController::originalText()
+{
+    return tr("Original from the import, kept for Restore original.");
+}
+
+QString ShowTreeController::originalWhere(quint32 functionId) const
+{
+    quint32 cueId = invalidId();
+    const CueList *list = cueList(originalFor(functionId, &cueId));
+    if (list == nullptr)
+        return QString();
+    const int index = list->indexOf(cueId);
+    if (index >= 0)
+        return tr("The show plays the Show Tree's cue list %1; edit cue %2 there.")
+               .arg(list->name, cueLabel(*list, index));
+    return tr("The show plays the Show Tree's cue list %1; edit it there.").arg(list->name);
+}
+
+QString ShowTreeController::lockedTextFor(quint32 functionId) const
+{
+    if (isGenerated(functionId))
+        return lockedText();
+    const QString where = originalWhere(functionId);
+    return where.isEmpty() ? QString() : QStringLiteral("%1 %2").arg(originalText(), where);
+}
+
+bool ShowTreeController::isLocked(quint32 functionId) const
+{
+    return isGenerated(functionId) || originalFor(functionId) != invalidId();
 }
 
 bool ShowTreeController::canRestoreOriginal(quint32 listId, QString *why) const

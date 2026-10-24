@@ -6045,6 +6045,129 @@ void ShowTreeView_Test::theConverterImportsCueListsInPlace()
     QCOMPARE(dial->functions().at(0).functionId, listChaser);
 }
 
+/* Q141: an original Import in place keeps for Restore original, which the
+   list doesn't play, opens view only under its own banner -- not "Made by
+   the Show Tree" -- naming the cue to edit, with Show in Show Tree going
+   there; a scene the list plays as it is opens to edit as ever; what the
+   tree made keeps its words. The Functions tab, its tooltips, Build. */
+void ShowTreeView_Test::originalsOpenViewOnlyElsewhere()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = nullptr;
+    EFX *efx = nullptr;
+    Chaser *chaser = oldShow(m_doc, towers->id(), dimmer(255, "Full"), &haze, &efx);
+    Scene *tw = nullptr;
+    for (Function *f : m_doc->functions())
+        if (f->name() == "Towers-Full")
+            tw = qobject_cast<Scene *>(f);
+    QVERIFY(tw != nullptr);
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importInPlace(chaser->id());
+    const CueList *list = st->cueList(rep.list);
+    QVERIFY(list != nullptr && list->cues.count() == 2);
+    quint32 cueId = invalidId();
+    QCOMPARE(st->originalFor(tw->id(), &cueId), rep.list);
+    QCOMPARE(cueId, list->cues[1].id);
+    QCOMPARE(st->originalFor(haze->id()), invalidId());      // played as it is
+    quint32 made = invalidId();
+    const Collection *cue1 = qobject_cast<const Collection *>(m_doc->function(list->cues[1].collection));
+    QVERIFY(cue1 != nullptr);
+    for (quint32 fid : cue1->functions())
+        if (st->isGenerated(fid) && qobject_cast<Scene *>(m_doc->function(fid)) != nullptr)
+            made = fid;
+    QVERIFY(made != invalidId());
+    m_doc->function(made)->setVisible(true);                  // listed, as an Eos import's are
+    const QString original = ShowTreeController::originalText();
+    const QString locked = ShowTreeController::lockedText();
+    const QString edit = QString("edit cue %1 there").arg(st->cueLabel(*list, 1));
+
+    ShowTreeView view(nullptr, m_doc);
+    {
+        FunctionManager fm(nullptr, m_doc);
+        FunctionsTreeWidget *ftree = fm.findChild<FunctionsTreeWidget *>();
+        QVERIFY(ftree != nullptr);
+        auto open = [&](Function *f) {
+            QTreeWidgetItem *row = ftree->functionItem(f);
+            if (row == nullptr)
+                return static_cast<SceneEditor *>(nullptr);
+            QMetaObject::invokeMethod(&fm, "slotTreeItemDoubleClicked", Q_ARG(QTreeWidgetItem *, row));
+            // The editor before goes later: gone now.
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            return fm.findChild<SceneEditor *>();
+        };
+
+        // The original: greyed under its banner, which names the cue.
+        QTreeWidgetItem *row = ftree->functionItem(tw);
+        QVERIFY(row != nullptr);
+        QVERIFY(row->toolTip(0).startsWith(original));
+        QVERIFY(row->toolTip(0).contains(edit));
+        QVERIFY(!row->toolTip(0).contains(locked));
+        SceneEditor *ed = open(tw);
+        QVERIFY(ed != nullptr);
+        QVERIFY(!ed->isEnabled());
+        QList<QLabel *> texts = fm.findChildren<QLabel *>("stLockedText");
+        QCOMPARE(texts.count(), 1);
+        QVERIFY(texts.first()->text().contains(original.toHtmlEscaped()));
+        QVERIFY(texts.first()->text().contains(edit));
+        QVERIFY(!texts.first()->text().contains(locked.toHtmlEscaped()));
+        QVERIFY(fm.findChild<QPushButton *>("stLockedDetach") == nullptr);
+        QPushButton *reveal = fm.findChild<QPushButton *>("stLockedReveal");
+        QVERIFY(reveal != nullptr && reveal->isEnabled());
+        reveal->click();
+        QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+        QCOMPARE(view.currentId(), list->cues[1].id);
+
+        // Its chaser too, naming the list.
+        QMetaObject::invokeMethod(&fm, "slotTreeItemDoubleClicked",
+                                  Q_ARG(QTreeWidgetItem *, ftree->functionItem(chaser)));
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        ChaserEditor *ced = fm.findChild<ChaserEditor *>();
+        QVERIFY(ced != nullptr && !ced->isEnabled());
+        texts = fm.findChildren<QLabel *>("stLockedText");
+        QCOMPARE(texts.count(), 1);
+        QVERIFY(texts.first()->text().contains(original.toHtmlEscaped()));
+        QVERIFY(texts.first()->text().contains("edit it there"));
+
+        // Played as it is: the user's scene, to edit.
+        row = ftree->functionItem(haze);
+        QVERIFY(row != nullptr && !row->toolTip(0).contains(original) && !row->toolTip(0).contains(locked));
+        ed = open(haze);
+        QVERIFY(ed != nullptr && ed->isEnabled());
+
+        // What the tree made: its own words.
+        row = ftree->functionItem(m_doc->function(made));
+        QVERIFY(row != nullptr && row->toolTip(0).startsWith(locked));
+        ed = open(m_doc->function(made));
+        QVERIFY(ed != nullptr && !ed->isEnabled());
+        texts = fm.findChildren<QLabel *>("stLockedText");
+        QCOMPARE(texts.count(), 1);
+        QVERIFY(texts.first()->text().contains(locked.toHtmlEscaped()));
+        QVERIFY(!texts.first()->text().contains(original.toHtmlEscaped()));
+    }
+
+    // Build: the Workbench says the same, greyed; Send to Show Tree too.
+    {
+        FunctionStack fs(m_doc, tw->id());
+        QVERIFY(fs.readOnlyReason().startsWith(original));
+        FunctionStack plain(m_doc, haze->id());
+        QVERIFY(plain.readOnlyReason().isEmpty());
+        FunctionStack gen(m_doc, made);
+        QVERIFY(gen.readOnlyReason().startsWith("Made by the Show Tree"));
+
+        ProgrammingManager pm(nullptr, m_doc);
+        Workbench *wb = pm.workbench();
+        wb->load(tw->id());
+        QVERIFY(wb->m_lockedBanner != nullptr);
+        QLabel *text = wb->m_lockedBanner->findChild<QLabel *>("stLockedText");
+        QVERIFY(text != nullptr && text->text().contains(original.toHtmlEscaped()) && text->text().contains(edit));
+        QVERIFY(!wb->m_page->isEnabled());
+        wb->load(haze->id());
+        QVERIFY(wb->m_lockedBanner == nullptr);
+        QVERIFY(wb->m_page->isEnabled());
+    }
+    QVERIFY(st->whyNotSend(chaser->id()).startsWith("Upgraded already"));
+}
+
 /* Restore original: asks, then the list goes, the originals come back and
    what fired the list fires the chaser -- one undo step, both ways. */
 void ShowTreeView_Test::restoreOriginalPointsVcBack()

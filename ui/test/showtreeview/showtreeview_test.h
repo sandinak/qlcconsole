@@ -86,6 +86,7 @@ private slots:
     void severalRowsSelectedDeleteAndDrag();
     void aNewCueListIsTracking();
     void generatedFunctionsAreLockedElsewhere();
+    void originalsOpenViewOnlyElsewhere();
     void everyActionIsOneUndoStep();
 
     // P3 (2026-10-17)

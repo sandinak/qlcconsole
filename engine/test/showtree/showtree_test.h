@@ -112,6 +112,7 @@ private slots:
     void bridgeFlattensCollectionsThatAreNoStep();
     void bridgePlansWithoutChangingTheShow();
     void importInPlaceFilesTheOriginals();
+    void originalsKeptForRestoreAreViewOnly();
     void restoreOriginalPutsTheShowBack();
     void theBridgeLinkSavesAndAnOlderReaderSkipsIt();
     void captureARawSceneIntoPalettes();

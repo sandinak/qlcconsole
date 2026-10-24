@@ -1165,6 +1165,25 @@ public:
     static QString originalsFolder(const QString &chaserName);
     /** The in-place list that filed @a functionId (invalid: none). */
     quint32 importedInto(quint32 functionId) const;
+    /** An original Import in place keeps for Restore original that the
+     *  list doesn't play (Q141): its source chaser, and what only that
+     *  chaser plays and no cue plays as it is -- what Capture into palettes
+     *  left behind too, filed or not. Its in-place list (invalid: not an
+     *  original); @a cueId: the cue that stands for it (by the step's cue
+     *  number, else its position; invalid: none, or the chaser itself).
+     *  View only: editing it would not change what plays. */
+    quint32 originalFor(quint32 functionId, quint32 *cueId = nullptr) const;
+    /** "Original from the import, kept for Restore original." */
+    static QString originalText();
+    /** Where an original's show is edited: "The show plays the Show
+     *  Tree's cue list X; edit cue 6.1 Backout there." Empty: not one. */
+    QString originalWhere(quint32 functionId) const;
+    /** Why @a functionId is edited in the tree, not where it is: lockedText()
+     *  for a generated function, originalText() and originalWhere() for an
+     *  original. Empty: neither (it is the user's to edit). */
+    QString lockedTextFor(quint32 functionId) const;
+    /** Generated, or an original kept for Restore original. */
+    bool isLocked(quint32 functionId) const;
     /** Whether Restore original can run on @a listId (@a why: not). */
     bool canRestoreOriginal(quint32 listId, QString *why = nullptr) const;
     /** Restore original: the list (its production too, when it has no
@@ -1225,6 +1244,16 @@ public:
 
 private:
     QList<quint32> m_lastTimelines;
+    /** What of @a list's source chaser only the chaser plays and the tree
+     *  doesn't play as it is (originalsOf(), originalFor()); the Show
+     *  timelines that play the chaser in @a timelines. */
+    QSet<quint32> unplayedOriginals(const ShowTree::CueList &list, QSet<quint32> *timelines) const;
+    /** m_originals brought up to date. */
+    void refreshOriginals() const;
+    /** originalFor(): function -> (its in-place list, its cue). */
+    mutable QHash<quint32, QPair<quint32, quint32>> m_originals;
+    mutable QList<quint32> m_originalsKey;
+    mutable bool m_originalsStale = true;
 
     /************************************************************************
      * Load & save

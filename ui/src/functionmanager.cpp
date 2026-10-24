@@ -1298,8 +1298,14 @@ void FunctionManager::editFunction(Function* function)
     // cue's collection or a layer's scene opens in its editor to look at,
     // greyed, under a banner saying why, with Show in Show Tree and, for a
     // scene, Detach to plain scene. (The banner alone, at the foot of an
-    // empty pane, read as "clicking a scene opens nothing".)
+    // empty pane, read as "clicking a scene opens nothing".) An original
+    // Import in place kept for Restore original opens the same way, view
+    // only (Q141): what plays is the list, so the banner names its cue.
     const bool generated = m_doc->showTree()->isGenerated(function->id());
+    const bool original = !generated && m_doc->showTree()->originalFor(function->id()) != Function::invalidId();
+    const bool locked = generated || original;
+    if (original)
+        m_lockedBanner = ShowTreeView::lockedBanner(m_hsplitter->widget(1), m_doc, function->id());
     if (generated)
     {
         const quint32 fid = function->id();
@@ -1429,7 +1435,7 @@ void FunctionManager::editFunction(Function* function)
     {
         showEditorPane(m_hsplitter->widget(1));
         m_hsplitter->widget(1)->layout()->addWidget(m_editor);
-        m_editor->setEnabled(!generated);
+        m_editor->setEnabled(!locked);
         m_editor->show();
     }
     if (m_scene_editor != NULL)
@@ -1441,7 +1447,7 @@ void FunctionManager::editFunction(Function* function)
                                                      : m_vsplitter->widget(1);
         showEditorPane(sceneContainer);
         sceneContainer->layout()->addWidget(m_scene_editor);
-        m_scene_editor->setEnabled(!generated);
+        m_scene_editor->setEnabled(!locked);
         m_scene_editor->show();
     }
 

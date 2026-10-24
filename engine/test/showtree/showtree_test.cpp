@@ -2918,6 +2918,102 @@ void ShowTree_Test::importInPlaceFilesTheOriginals()
     QVERIFY(why.contains("beside"));
 }
 
+/* What Import in place keeps for Restore original and the list doesn't
+   play is an original, view only (Q141), wherever it is filed: the banner
+   names the cue that stands for it. What the tree made keeps its own
+   words; what the list plays as it is, and what something else plays too,
+   is the user's to edit. A scene Capture into palettes leaves behind is an
+   original from then on. */
+void ShowTree_Test::originalsKeptForRestoreAreViewOnly()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    Scene *sA = groupScene(m_doc, "TowersFull", towers->id(), { dimmer(255, "Full") });
+    Scene *sB = groupScene(m_doc, "TowersLow", towers->id(), { dimmer(100, "Low") });
+    Scene *raw = new Scene(m_doc);
+    raw->setName("Haze");
+    raw->setPath("Washes");
+    raw->setValue(m_fixtures[2], 0, 90);
+    m_doc->addFunction(raw);
+    Scene *shared = groupScene(m_doc, "Shared", towers->id(), { dimmer(50, "Half") });
+    Collection *one = collection(m_doc, "0.0.1-One", { sA->id(), raw->id() });
+    Collection *two = collection(m_doc, "0.0.2-Two", { sB->id(), shared->id() });
+    Collection *busk = collection(m_doc, "Busk", { shared->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(two->id(), 0, Function::infiniteSpeed(), 0));
+
+    ShowTreeController *st = m_doc->showTree();
+    QCOMPARE(st->originalFor(sA->id()), invalidId());       // nothing imported yet
+    const ShowTreeController::ImportReport rep = st->importInPlace(chaser->id());
+    const CueList *list = st->cueList(rep.list);
+    QVERIFY(list != nullptr && list->cues.count() == 2);
+    const QString where = "The show plays the Show Tree's cue list Full Show; edit cue %1 there.";
+
+    // Originals kept for Restore original: view only, the cue named.
+    quint32 cue = invalidId();
+    QCOMPARE(st->originalFor(sA->id(), &cue), rep.list);
+    QCOMPARE(cue, list->cues[0].id);
+    QCOMPARE(st->originalFor(sB->id(), &cue), rep.list);
+    QCOMPARE(cue, list->cues[1].id);
+    QCOMPARE(st->originalFor(two->id(), &cue), rep.list);
+    QCOMPARE(cue, list->cues[1].id);
+    QVERIFY(st->isLocked(sA->id()));
+    QVERIFY(!st->isGenerated(sA->id()));
+    QCOMPARE(st->originalWhere(sA->id()), QString(where).arg(st->cueLabel(*list, 0)));
+    QCOMPARE(st->lockedTextFor(sB->id()),
+             ShowTreeController::originalText() + " " + QString(where).arg(st->cueLabel(*list, 1)));
+    QVERIFY(st->lockedTextFor(sB->id()).startsWith("Original from the import, kept for Restore original."));
+    // The chaser itself: the list, no one cue.
+    QCOMPARE(st->originalFor(chaser->id(), &cue), rep.list);
+    QCOMPARE(cue, invalidId());
+    QCOMPARE(st->originalWhere(chaser->id()),
+             QString("The show plays the Show Tree's cue list Full Show; edit it there."));
+    // Filed elsewhere since: still an original.
+    sA->setPath("Spots");
+    QCOMPARE(st->originalFor(sA->id()), rep.list);
+
+    // Played as it is (an opaque layer), or by something else too: the
+    // user's, not locked.
+    QCOMPARE(st->originalFor(raw->id()), invalidId());
+    QVERIFY(!st->isLocked(raw->id()));
+    QVERIFY(st->lockedTextFor(raw->id()).isEmpty());
+    QCOMPARE(st->originalFor(shared->id()), invalidId());
+    QCOMPARE(st->originalFor(busk->id()), invalidId());
+    QVERIFY(st->lockedTextFor(shared->id()).isEmpty());
+
+    // The tree's own: its own words.
+    const Collection *made = qobject_cast<const Collection *>(m_doc->function(list->cues[0].collection));
+    QVERIFY(made != nullptr && st->isGenerated(made->id()));
+    QCOMPARE(st->originalFor(list->chaser), invalidId());
+    QCOMPARE(st->lockedTextFor(list->chaser), ShowTreeController::lockedText());
+    QCOMPARE(st->lockedTextFor(made->id()), ShowTreeController::lockedText());
+    for (quint32 fid : made->functions())
+        if (st->isGenerated(fid))
+        {
+            QVERIFY(st->isLocked(fid));
+            QCOMPARE(st->lockedTextFor(fid), ShowTreeController::lockedText());
+        }
+
+    // Capture into palettes: the list no longer plays the scene, so it is
+    // an original too (what an Eos show upgraded and then captured is).
+    QVERIFY(st->captureIntoPalettes(raw->id()));
+    QCOMPARE(st->originalFor(raw->id(), &cue), rep.list);
+    QCOMPARE(cue, list->cues[0].id);
+    QVERIFY(st->undo());
+    QCOMPARE(st->originalFor(raw->id()), invalidId());
+
+    // Send to Show Tree: refused for the chaser (upgraded already).
+    QVERIFY(st->whyNotSend(chaser->id()).startsWith("Upgraded already"));
+
+    // Restore original: the user's again.
+    QVERIFY(st->restoreOriginal(rep.list));
+    QCOMPARE(st->originalFor(sA->id()), invalidId());
+    QCOMPARE(st->originalFor(chaser->id()), invalidId());
+    QVERIFY(st->lockedTextFor(sB->id()).isEmpty());
+}
+
 /** The first line two XML texts differ at, as a person reads it (empty: none). */
 static QString firstDifference(const QByteArray &a, const QByteArray &b)
 {

@@ -579,11 +579,14 @@ public:
     static ShowTreeView *instance();
     /** Bring the tab forward with generated function @a functionId's node
      *  selected (a list's chaser: the list; a cue's collection: the cue; a
-     *  layer's scene: the layer). False: not in the tree. */
+     *  layer's scene: the layer; an original Import in place kept: the cue
+     *  that stands for it, else its list). False: not in the tree. */
     bool reveal(quint32 functionId);
     /** A bar saying generated function @a functionId is the tree's
-     *  (ShowTreeController::lockedText() and what it plays), with **Show in
-     *  Show Tree** and, for a layer's scene, **Detach to plain scene**;
+     *  (ShowTreeController::lockedText() and what it plays) -- or, for an
+     *  original Import in place kept, that it is one and which cue to edit
+     *  (originalText(), originalWhere()) -- with **Show in Show Tree** and,
+     *  for a layer's scene, **Detach to plain scene**;
      *  @a detached is told the new scene. Editors of a generated function
      *  show it in place of (or, a chaser's, above) their controls. */
     static QWidget *lockedBanner(QWidget *parent, Doc *doc, quint32 functionId,

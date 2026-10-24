@@ -337,13 +337,10 @@ void FunctionsTreeWidget::updateFunctionItem(QTreeWidgetItem* item, const Functi
                    & ~Qt::ItemIsDropEnabled);
     // Made by the Show Tree (D13): named and filed by it, so not renamed
     // here. It still drags out to play (a VC Cue List, a show).
-    if (m_doc->showTree()->isGenerated(function->id()))
-    {
+    const bool generated = m_doc->showTree()->isGenerated(function->id());
+    if (generated)
         item->setFlags(item->flags() & ~Qt::ItemIsEditable);
-        item->setToolTip(COL_NAME, tr("%1 It is %2.")
-                         .arg(ShowTreeController::lockedText(),
-                              m_doc->showTree()->describeGenerated(function->id())));
-    }
+    item->setToolTip(COL_NAME, QString());
 
     // Colour-code scenes by composition: dynamic (look/group-driven), static
     // (baked channel values) or mixed.
@@ -372,6 +369,20 @@ void FunctionsTreeWidget::updateFunctionItem(QTreeWidgetItem* item, const Functi
         {
             item->setToolTip(COL_NAME, tr("Empty scene"));
         }
+    }
+
+    // Why it is edited in the Show Tree (generated, or an original Import
+    // in place kept for Restore original), ahead of what it is.
+    QString locked;
+    if (generated)
+        locked = tr("%1 It is %2.").arg(ShowTreeController::lockedText(),
+                                        m_doc->showTree()->describeGenerated(function->id()));
+    else
+        locked = m_doc->showTree()->lockedTextFor(function->id());
+    if (!locked.isEmpty())
+    {
+        const QString what = item->toolTip(COL_NAME);
+        item->setToolTip(COL_NAME, what.isEmpty() ? locked : locked + QLatin1Char('\n') + what);
     }
 }
 

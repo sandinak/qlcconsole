@@ -889,6 +889,9 @@ void Workbench::updateHeader()
         const Function *f = m_doc->function(id);
         m_sendToTreeBtn->setVisible(f != nullptr && f->type() == Function::ChaserType
                                     && m_doc->showTree()->whyNotSend(id).isEmpty());
+        // An original Import in place kept for Restore original (Q141):
+        // looked at, greyed, under the banner -- what plays is the list.
+        m_page->setEnabled(m_doc->showTree()->originalFor(id) == Function::invalidId());
     }
     if (m_stack == nullptr)
     {
@@ -1215,6 +1218,10 @@ void Workbench::showPage(Page page)
     m_paletteDetour = false;
     m_lookEditor->setBackText(QString());
     m_page->setCurrentWidget(w);
+    // An original Import in place kept for Restore original (Q141): looked
+    // at, greyed, under the header's banner -- what plays is the list.
+    m_page->setEnabled(m_stack == nullptr
+                       || m_doc->showTree()->originalFor(loadedFunction()) == Function::invalidId());
     // The bench's designer has the width; the layers come back with anything else.
     m_split->widget(0)->setVisible(!(w == m_functionPage && m_benchPane && !m_effectPane.isNull()
                                      && m_funcEditor == m_effectPane));

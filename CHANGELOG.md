@@ -419,6 +419,23 @@ circuits and subs.
 
 ### Fixed
 
+- **An upgraded show's originals no longer say "Made by the Show Tree".**
+  The chaser Import in place keeps for Restore original, and the scenes and
+  collections only it plays that its cue list doesn't play as they are --
+  wherever they are filed, so an Eos show's *Eos/Preshow* scenes too, and a
+  scene Capture into palettes took out of the list -- open view only (Q141)
+  under *Original from the import, kept for Restore original*, naming the
+  cue to edit (*The show plays the Show Tree's cue list Haunted Variety
+  Show; edit cue 6.1 Backout there*), with **Show in Show Tree** going to
+  that cue. Before, they opened editable with nothing said, while the
+  list's own chaser beside them, under the same name, opened locked as the
+  tree's; editing an original changed nothing that plays. Generated scenes
+  and collections keep "Made by the Show Tree — edit it there"; a scene
+  the list plays as it is (a ▣ layer), or that something else plays too,
+  stays the user's to edit. `ShowTreeController::originalFor()`,
+  `originalWhere()`, `lockedTextFor()`, `isLocked()`, used by the
+  Functions tab (editor and tooltip), Build's Workbench and Send to Show
+  Tree.
 - **Classic QLC+ Functions tab: the editor beside the tree, as in QLC+.**
   Picking one function in the tree opens its editor in the right pane
   (`FunctionManager::setOpenOnSelect()`, on in Classic QLC+ only; the other

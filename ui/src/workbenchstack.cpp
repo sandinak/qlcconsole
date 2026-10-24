@@ -263,6 +263,9 @@ QString FunctionStack::readOnlyReason() const
     if (st != nullptr && (st->isGenerated(m_fid)
                           || (chaser() != nullptr && st->isGenerated(stepFunction()))))
         return tr("Made by the Show Tree: change it there.");
+    // An original Import in place kept for Restore original (Q141).
+    if (st != nullptr && st->originalFor(m_fid) != Function::invalidId())
+        return st->lockedTextFor(m_fid);
     return QString();
 }
 

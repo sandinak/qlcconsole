@@ -342,8 +342,14 @@ In **Classic QLC+** the tab works as in QLC+: click a function and its
 editor opens on the right, beside the tree; pick several and it closes. In
 **Everything**, a click selects (so you can drag it into the collection or
 chaser that is open) and a double-click opens it. A scene or collection the
-Show Tree made (an imported Eos show's cue scenes are) opens greyed, under a
-line saying so, with **Show in Show Tree**: change it there.
+Show Tree made opens greyed, under a line saying so, with **Show in Show
+Tree**: change it there. A chaser upgraded in place, and the scenes and
+collections only it plays that its cue list doesn't, open greyed too, as
+*Original from the import, kept for Restore original*, with the cue to
+edit named and **Show in Show Tree** going to it: the show plays the cue
+list, not them ([Upgrade this show](show-tree.md#upgrade-this-show)). A
+scene the list plays as it is opens to edit as usual. Build's Workbench
+does the same.
 
 Most of what the Function Manager did is also here in Build:
 
