@@ -102,6 +102,10 @@ private slots:
     /** Gap 8: the venue file travels -- a copy for another show file, and
      *  an earlier version's (or a Finder copy's) found and imported. */
     void theVenueFileTravels();
+    /** Gap 10 and the review: the unsaved light breathes on the rig (lights
+     *  feedback only); View + RS says how many are not saved; View undoes
+     *  on its release, the same in every tool, and not after a chord. */
+    void theUnsavedLightBreathesAndViewRsCounts();
     /** Safety: the pad dropping with a stick and A held -- everything is
      *  let go, nothing moves, no keep-all fires; said, and said when back.
      *  In Focus mode (and focus calls) and in Refine. */

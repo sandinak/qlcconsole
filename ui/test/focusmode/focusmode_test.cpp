@@ -610,40 +610,45 @@ void FocusMode_Test::theLampSaysWhatIsUnsaved()
     QVERIFY(lamp != nullptr && lamp == panel->statusLamp() && words != nullptr);
     const QString first = m_doc->fixture(s->currentFixture())->name();
 
-    // Green: all saved.
+    // Blue, with a tick: all saved (gap 10: colour-blind safe, a shape, a count).
     QCOMPARE(lamp->state(), FocusStatusLamp::AllSaved);
-    QCOMPARE(lamp->centreColor(), FocusStatusLamp::greenColor());
-    QCOMPARE(lamp->ringColor(), FocusStatusLamp::greenColor());
+    QCOMPARE(lamp->symbol(), QString::fromUtf8("\u2713"));
+    QCOMPARE(lamp->count(), 0);
+    QCOMPARE(FocusStatusLamp::savedColor(), QColor(0x00, 0x72, 0xb2));
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::savedColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::savedColor());
     QCOMPARE(words->text(), QStringLiteral("All saved"));
 
     // Yellow: the light being focused.
     QTest::keyClick(panel, Qt::Key_Right);
     QCOMPARE(lamp->state(), FocusStatusLamp::ThisUnsaved);
-    QCOMPARE(lamp->centreColor(), FocusStatusLamp::yellowColor());
-    QCOMPARE(lamp->ringColor(), FocusStatusLamp::yellowColor());
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::thisColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::thisColor());
     QCOMPARE(words->text(), QStringLiteral("Unsaved: this light"));
 
     // Red: another light, by name.
     QTest::keyClick(panel, Qt::Key_BracketRight);
     QCOMPARE(lamp->state(), FocusStatusLamp::OthersUnsaved);
-    QCOMPARE(lamp->centreColor(), FocusStatusLamp::redColor());
-    QCOMPARE(lamp->ringColor(), FocusStatusLamp::redColor());
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::othersColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::othersColor());
     QCOMPARE(words->text(), QStringLiteral("Unsaved: 1 other light (%1)").arg(first));
 
     // Both: red outside, yellow in the middle.
     QTest::keyClick(panel, Qt::Key_Up);
     QCOMPARE(lamp->state(), FocusStatusLamp::BothUnsaved);
-    QCOMPARE(lamp->ringColor(), FocusStatusLamp::redColor());
-    QCOMPARE(lamp->centreColor(), FocusStatusLamp::yellowColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::othersColor());
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::thisColor());
     QCOMPARE(words->text(), QStringLiteral("Unsaved: this light and 1 other (%1)").arg(first));
+    QCOMPARE(lamp->symbol(), QStringLiteral("!"));
+    QCOMPARE(lamp->count(), 2);
 
     // Save this one: a green flash, then red for the other.
     QTest::keyClick(panel, Qt::Key_Return);
     QVERIFY(lamp->isFlashing());
-    QCOMPARE(lamp->centreColor(), FocusStatusLamp::greenColor());
+    QCOMPARE(lamp->centreColor(), FocusStatusLamp::savedColor());
     QCOMPARE(lamp->state(), FocusStatusLamp::OthersUnsaved);
     QTRY_VERIFY(!lamp->isFlashing());
-    QCOMPARE(lamp->ringColor(), FocusStatusLamp::redColor());
+    QCOMPARE(lamp->ringColor(), FocusStatusLamp::othersColor());
 
     // Back to it, revert: all saved, and a revert does not flash.
     QTest::keyClick(panel, Qt::Key_BracketLeft);

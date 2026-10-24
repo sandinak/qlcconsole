@@ -1456,20 +1456,22 @@ void ProgrammerController::setOperatorFeedback(ControllerScheme::Feedback feedba
 
 void ProgrammerController::refreshPadLight()
 {
-    // The lamp's colours: green all saved, yellow this light, red another.
+    // The lamp's colours: blue all saved, yellow this light, orange another.
     QColor c;
     if (m_focusSession->isActive())
     {
         switch (m_focusSession->saveStatus())
         {
-            case FocusSession::AllSaved:      c = QColor(0x3a, 0xc0, 0x4a); break;
-            case FocusSession::ThisUnsaved:   c = QColor(0xff, 0xc0, 0x00); break;
+            case FocusSession::AllSaved:      c = ControllerScheme::savedColour(); break;
+            case FocusSession::ThisUnsaved:   c = ControllerScheme::thisUnsavedColour(); break;
             case FocusSession::OthersUnsaved:
-            case FocusSession::BothUnsaved:   c = QColor(0xe0, 0x30, 0x20); break;
+            case FocusSession::BothUnsaved:   c = ControllerScheme::othersUnsavedColour(); break;
         }
     }
     else if (m_refineSession->isActive())
-        c = m_refineSession->hasPending() ? QColor(0xff, 0xc0, 0x00) : QColor(0x3a, 0xc0, 0x4a);
+        c = !m_refineSession->hasPending() ? ControllerScheme::savedColour()
+            : m_refineSession->hasPendingHere() ? ControllerScheme::thisUnsavedColour()
+                                                : ControllerScheme::othersUnsavedColour();
     setPadLight(c);
 }
 
@@ -1569,6 +1571,7 @@ void ProgrammerController::freezeController()
     m_sayHold.reset();
     m_heldRoles.clear();
     m_viewChord = false;
+    m_rsChord = false;
     m_bumperFrom = 0xFFFFFFFF;
     m_focusSession->releaseControls();
     m_refineSession->releaseControls();
@@ -2329,7 +2332,12 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     if (!GamepadRole::isAxis(role) && role != GamepadRole::None)
     {
         if (value > 0)
+        {
+            // Anything pressed with View held makes a chord: View then does not undo.
+            if (role != GamepadRole::Back && m_heldRoles.contains(GamepadRole::Back))
+                m_viewChord = true;
             m_heldRoles.insert(role);
+        }
         else
             m_heldRoles.remove(role);
         // A focus-call cue armed: Start (Menu) begins the calls.
@@ -2386,6 +2394,38 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
 
     /* RS, in every tool: a tap says the light, a hold (the controller
        tick, LongPress::holdFor()) changes the feedback. */
+    /* View (Back) is the same in every tool (the gaps review): it undoes on
+       its RELEASE, unless another control was pressed while it was held --
+       View + A (Refine: keep at the source), View + RS (how many are not
+       saved). */
+    if (role == GamepadRole::Back)
+    {
+        if (value > 0)
+            m_viewChord = false;
+        else if (!m_viewChord)
+        {
+            if (refine)
+                m_refineSession->apply(ControllerScheme::Undo);
+            else
+                m_focusSession->apply(FocusSession::UndoSave);
+        }
+        return true;
+    }
+    if (role == GamepadRole::RS && value > 0 && m_heldRoles.contains(GamepadRole::Back))
+    {
+        // View + RS: "2 not saved." -- asked for, so said whatever the feedback.
+        m_viewChord = true;
+        m_rsChord = true;
+        emit operatorAnnounce(refine ? m_refineSession->pendingCountPhrase()
+                                     : m_focusSession->unsavedCountPhrase(),
+                              ControllerScheme::ConfirmPriority);
+        return true;
+    }
+    if (role == GamepadRole::RS && value == 0 && m_rsChord)
+    {
+        m_rsChord = false;
+        return true;
+    }
     if (role == GamepadRole::RS)
     {
         if (value > 0)
@@ -2413,15 +2453,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_fineNormY = norm;
         else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
             m_refineSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
-        /* View + A (board Q118): keep at the source cue. So View undoes on
-           its release, unless A went down while it was held. */
-        else if (role == GamepadRole::Back)
-        {
-            if (value > 0)
-                m_viewChord = false;
-            else if (!m_viewChord)
-                m_refineSession->apply(ControllerScheme::Undo);
-        }
+        /* View + A (board Q118): keep at the source cue (View itself is
+           handled above, on its release). */
         else if (role == GamepadRole::A && value > 0 && m_heldRoles.contains(GamepadRole::Back))
         {
             m_viewChord = true;

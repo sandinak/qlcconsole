@@ -942,7 +942,9 @@ void FocusCalls_Test::thePadAndTheVoiceTellYouMore()
     QVERIFY(s->start(o));
 
     // 1. The light bar is the lamp: green, yellow (this one), red (another).
-    const QColor green(0x3a, 0xc0, 0x4a), yellow(0xff, 0xc0, 0x00), red(0xe0, 0x30, 0x20);
+    // Gap 10: colour-blind safe -- blue, yellow, orange.
+    const QColor green = ControllerScheme::savedColour(), yellow = ControllerScheme::thisUnsavedColour(),
+                 red = ControllerScheme::othersUnsavedColour();
     QCOMPARE(s->saveStatus(), FocusSession::AllSaved);
     QCOMPARE(pc->padLight(), green);
     s->nudge(2.5f, -1.0f);
@@ -1046,7 +1048,7 @@ void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
     QVERIFY(!stub->m_feedbackParams.isEmpty());
     QVariantMap fb = stub->m_feedbackParams.last().toMap();
     QCOMPARE(fb.value("gamepad").toString(), QString("light"));
-    QCOMPARE(fb.value("rgb").toString(), QString("#3ac04a"));
+    QCOMPARE(fb.value("rgb").toString(), ControllerScheme::savedColour().name());
 
     // Both bumpers: the next light not saved.
     s->nudge(1.0f, 0.0f);
@@ -1529,6 +1531,64 @@ void FocusCalls_Test::theVenueFileTravels()
     QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(a->id()).panOffsetDeg, 2.0f);
     QVERIFY(QFile::exists(VenueCorrections::sidecarPath(v6)));
     QVERIFY(v->toXml().contains("Show=\"Dance-0.6.qlcc\""));
+}
+
+void FocusCalls_Test::theUnsavedLightBreathesAndViewRsCounts()
+{
+    QCOMPARE(FocusSession::breathLevel(0), 1.0f);
+    QVERIFY(qAbs(FocusSession::breathLevel(FocusSession::breathPeriodMs() / 2) - FocusSession::breathLow()) < 0.001f);
+
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" },
+                             { 16, "back" }, { 17, "start" }, { 18, "rs" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto down = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 255, QString()); };
+    auto up = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 0, QString()); };
+
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setFlashEnabled(true);
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QVERIFY(!s->isBreathing());
+    s->nudge(1.0f, 0.0f);
+    QVERIFY(s->isBreathing());                       // unsaved: it breathes
+    pc->setOperatorFeedback(ControllerScheme::VoiceFeedback);
+    QVERIFY(!s->isBreathing());                      // voice only: no lights
+    pc->setOperatorFeedback(ControllerScheme::BothFeedback);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    s->next();
+    s->nudge(1.0f, 0.0f);
+
+    // View + RS: how many are not saved; View then does not undo.
+    s->save();                                       // Spot 7 saved: undo would bring it back
+    down(16);
+    down(18);
+    QCOMPARE(said.last().at(0).toString(), QString("1 not saved."));
+    up(18);
+    up(16);
+    QCOMPARE(s->savedOffset(b->id()).pan, 1.0f);     // not undone
+    // View alone: undoes, on its release.
+    down(16);
+    QCOMPARE(s->savedOffset(b->id()).pan, 1.0f);
+    up(16);
+    QCOMPARE(s->savedOffset(b->id()).pan, 0.0f);
+    s->discardAll();
+    s->stop();
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
 QTEST_GUILESS_MAIN(FocusCalls_Test)

@@ -300,6 +300,14 @@ public:
      *  lit -- unlike the selection's three quick ones and a save's double. */
     static constexpr int warnDarkMs() { return 800; }
     static bool warnLit(qint64 ms) { return ms < 0 || ms >= warnDarkMs(); }
+    /** Gap 10: the light being focused, while it is not saved, "breathes"
+     *  on the rig -- slowly between breathLow() and full, once every
+     *  breathPeriodMs() -- so the crew sees it is not saved yet (lights
+     *  feedback only). The share of its focus level at @p ms. */
+    static constexpr int breathPeriodMs() { return 2400; }
+    static constexpr float breathLow() { return 0.45f; }
+    static float breathLevel(qint64 ms);
+    bool isBreathing() const;
     /** The selection's slow long blink (lights feedback only). */
     void flashWarning();
     bool isWarningFlash() const { return m_warnFlash && isFlashing(); }
@@ -427,6 +435,9 @@ public:
      *  head @p after (invalid: the one being worked) -- the head the first
      *  bumper of the pair stepped from. */
     bool nextUnsaved(quint32 after = 0xFFFFFFFF);
+    /** View + RS (or N): how many lights are not saved -- "2 not saved.",
+     *  "All saved." -- said whatever the feedback: it was asked for. */
+    QString unsavedCountPhrase() const;
 
     /** Where head @p fid would land with its SAVED calibration, as its
      *  live one lands on the reference (the plot's ghost while nudging);
@@ -634,6 +645,8 @@ private:
     QTimer *m_flashTimer = nullptr;
     bool m_flashEnabled = true;
     bool m_warnFlash = false;
+    QTimer *m_breathTimer = nullptr;
+    QElapsedTimer m_breathClock;
     std::function<bool(QString *)> m_startGuard;
     bool m_endedByOperator = false;
     bool m_targetPage = false;

@@ -761,13 +761,13 @@ void RefineSession_Test::refineTellsYouMoreToo()
     QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
     QSignalSpy buzz(pc, &ProgrammerController::padRumbled);
     QVERIFY(r->start(m_cue));
-    QCOMPARE(pc->padLight(), QColor(0x3a, 0xc0, 0x4a));        // nothing pending: green
+    QCOMPARE(pc->padLight(), ControllerScheme::savedColour());       // nothing pending: blue
     QVERIFY(!r->nextPending());
     QCOMPARE(said.last().at(0).toString(), QString("All kept."));
     r->setScope(RefineSession::FixtureScope);
     r->nextItem();
     QVERIFY(r->nudgePosition(1.0f, 0.0f));
-    QCOMPARE(pc->padLight(), QColor(0xff, 0xc0, 0x00));        // pending: yellow
+    QCOMPARE(pc->padLight(), ControllerScheme::thisUnsavedColour()); // pending here: yellow
     r->setScope(RefineSession::LayerScope);
     // Both bumpers: back to the change not kept.
     QVERIFY(r->nextPending());

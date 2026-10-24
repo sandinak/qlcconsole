@@ -23,6 +23,8 @@
 #include <QString>
 
 #include "qlcengine_export.h"
+#include <QColor>
+
 #include "gamepadrole.h"
 
 /** @addtogroup engine Engine
@@ -103,6 +105,14 @@ namespace ControllerScheme
      *    setting; the rig gives a slow long blink and the pad one long
      *    buzz, unlike a save's double blink and short buzz. */
     enum Priority { WherePriority = 0, ConfirmPriority = 1, ImportantPriority = 2 };
+
+    /** The save lamp's colours (gap 10), the panels' and the pad's light
+     *  bar alike: colour-blind safe -- blue, all saved; yellow, this light
+     *  unsaved; orange, another light unsaved -- and never the only sign:
+     *  the lamp also shows a shape (a tick, a "!") and the count. */
+    inline QColor savedColour() { return QColor(0x00, 0x72, 0xb2); }
+    inline QColor thisUnsavedColour() { return QColor(0xf0, 0xc8, 0x20); }
+    inline QColor othersUnsavedColour() { return QColor(0xe0, 0x6c, 0x00); }
 
     /** A short buzz (a keep) and the long one (something important). */
     constexpr int rumbleShortMs() { return 120; }

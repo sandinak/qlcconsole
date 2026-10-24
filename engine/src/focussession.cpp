@@ -77,6 +77,23 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
     connect(this, &FocusSession::stopped, this, &FocusSession::checkUnsaved);
     m_blinkTimer.setInterval(kBlinkPhaseMs);
     connect(&m_blinkTimer, &QTimer::timeout, this, &FocusSession::advanceBlink);
+    // The unsaved light's slow breath (gap 10).
+    m_breathTimer = new QTimer(this);
+    m_breathTimer->setInterval(50);
+    connect(m_breathTimer, &QTimer::timeout, this, &FocusSession::rebuildWrites);
+}
+
+float FocusSession::breathLevel(qint64 ms)
+{
+    const double phase = double(ms % breathPeriodMs()) / breathPeriodMs();
+    const double up = 0.5 + 0.5 * qCos(phase * 2.0 * M_PI);       // 1 at the start
+    return float(breathLow() + (1.0 - breathLow()) * up);
+}
+
+bool FocusSession::isBreathing() const
+{
+    return m_active && m_flashEnabled && m_lightsFeedback && m_rigFeedback
+        && m_scope == FixtureScope && !m_targetPage && isDirty(currentFixture());
 }
 
 FocusSession::~FocusSession()
@@ -626,6 +643,9 @@ void FocusSession::stop()
     if (m_flashTimer != nullptr)
         m_flashTimer->stop();
     m_flashClock.invalidate();
+    if (m_breathTimer != nullptr)
+        m_breathTimer->stop();
+    m_breathClock.invalidate();
     emit stopped();
 }
 
@@ -1398,6 +1418,12 @@ void FocusSession::saveAll()
     savedChanged(saved);
 }
 
+QString FocusSession::unsavedCountPhrase() const
+{
+    const int n = unsavedFixtures().size();
+    return n == 0 ? tr("All saved.") : tr("%1 not saved.").arg(n);
+}
+
 bool FocusSession::targetMoved() const
 {
     if (!m_targetPage || m_doc == nullptr)
@@ -1771,6 +1797,13 @@ void FocusSession::rebuildWrites()
         /* What is selected is lit (blinking while it flashes); the rest of
            the call (list) is dark or dim, as chosen. */
         const QList<quint32> selected = scopeFixtures();
+        const bool breathing = isBreathing();
+        if (breathing && !m_breathClock.isValid())
+            m_breathClock.start();
+        else if (!breathing)
+            m_breathClock.invalidate();
+        if (m_breathTimer != nullptr && breathing != m_breathTimer->isActive())
+            breathing ? m_breathTimer->start() : m_breathTimer->stop();
         const bool dark = m_flashClock.isValid()
                           && !(m_warnFlash ? warnLit(m_flashClock.elapsed()) : flashLit(m_flashClock.elapsed()));
         for (quint32 fid : m_order)
@@ -1802,7 +1835,10 @@ void FocusSession::rebuildWrites()
                 for (const SceneValue &sv : fx->positionToValues(QLCChannel::Tilt, sol.tiltDeg))
                     put(fx, sv.channel, sv.value);
             }
-            lightLevel(fx, dark ? 0.0f : m_options.level, true);
+            float level = m_options.level;
+            if (breathing && fid == currentFixture() && !isFlashing())
+                level *= breathLevel(m_breathClock.elapsed());
+            lightLevel(fx, dark ? 0.0f : level, true);
             // A zoom channel, to the beam asked for while focusing.
             const Head hd = m_heads.value(fid);
             bool rev = false;

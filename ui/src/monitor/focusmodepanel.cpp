@@ -97,6 +97,19 @@ void FocusStatusLamp::setState(State state)
     update();
 }
 
+void FocusStatusLamp::setCount(int count)
+{
+    if (count == m_count)
+        return;
+    m_count = count;
+    update();
+}
+
+QString FocusStatusLamp::symbol() const
+{
+    return (m_flashing || m_state == AllSaved) ? QString::fromUtf8("\u2713") : QStringLiteral("!");
+}
+
 void FocusStatusLamp::flash()
 {
     m_flashing = true;
@@ -114,29 +127,29 @@ void FocusStatusLamp::flash()
 QColor FocusStatusLamp::ringColor() const
 {
     if (m_flashing)
-        return greenColor();
+        return savedColor();
     switch (m_state)
     {
-        case ThisUnsaved:   return yellowColor();
+        case ThisUnsaved:   return thisColor();
         case OthersUnsaved:
-        case BothUnsaved:   return redColor();
+        case BothUnsaved:   return othersColor();
         case AllSaved:      break;
     }
-    return greenColor();
+    return savedColor();
 }
 
 QColor FocusStatusLamp::centreColor() const
 {
     if (m_flashing)
-        return greenColor();
+        return savedColor();
     switch (m_state)
     {
         case ThisUnsaved:
-        case BothUnsaved:   return yellowColor();
-        case OthersUnsaved: return redColor();
+        case BothUnsaved:   return thisColor();
+        case OthersUnsaved: return othersColor();
         case AllSaved:      break;
     }
-    return greenColor();
+    return savedColor();
 }
 
 void FocusStatusLamp::paintEvent(QPaintEvent *)
@@ -158,6 +171,28 @@ void FocusStatusLamp::paintEvent(QPaintEvent *)
         p.setPen(QPen(QColor(20, 20, 22), 1.5));
         p.setBrush(centreColor());
         p.drawEllipse(c, inner, inner);
+    }
+    /* Not by colour alone (gap 10): a tick or a "!" in the middle, and how
+       many are not saved on the rim. */
+    {
+        QFont f = font();
+        f.setBold(true);
+        f.setPixelSize(int(d * 0.42));
+        p.setFont(f);
+        p.setPen(m_state == ThisUnsaved && !m_flashing ? QColor(20, 20, 22) : QColor(255, 255, 255));
+        p.drawText(outer, Qt::AlignCenter, symbol());
+        if (m_count > 0 && !m_flashing)
+        {
+            const qreal r = d * 0.2;
+            const QPointF at(outer.right() - r * 0.7, outer.bottom() - r * 0.7);
+            p.setPen(QPen(QColor(20, 20, 22), 1.5));
+            p.setBrush(QColor(250, 250, 250));
+            p.drawEllipse(at, r, r);
+            f.setPixelSize(int(r * 1.3));
+            p.setFont(f);
+            p.setPen(QColor(20, 20, 22));
+            p.drawText(QRectF(at.x() - r, at.y() - r, 2 * r, 2 * r), Qt::AlignCenter, QString::number(m_count));
+        }
     }
     // The glass: a soft highlight up and to the left.
     QRadialGradient gloss(c - QPointF(d * 0.18, d * 0.2), d * 0.45);
@@ -863,11 +898,12 @@ void FocusModePanel::refreshSaveStatus()
                                        : here ? FocusStatusLamp::ThisUnsaved
                                               : FocusStatusLamp::AllSaved;
     m_lamp->setState(state);
+    m_lamp->setCount(unsaved.size());
     m_statusLabel->setText(saveStatusText());
     // The words in the lamp's colour -- the darker yellow reads on a light theme.
-    m_statusLabel->setStyleSheet(elsewhere ? QStringLiteral("color: #d03a30;")
-                                 : here ? QStringLiteral("color: #d08a1c;")
-                                        : QStringLiteral("color: #3a9a4a;"));
+    m_statusLabel->setStyleSheet(elsewhere ? QStringLiteral("color: #c05a00;")
+                                 : here ? QStringLiteral("color: #b08a10;")
+                                        : QStringLiteral("color: #0072b2;"));
     if (Monitor *mon = Monitor::instance())
         mon->showFocusUnsaved(unsaved);
     refreshDelta();
@@ -993,6 +1029,11 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
             break;
         // Both bumpers: the next light not saved.
         case Qt::Key_U:        m_session->nextUnsaved(); break;
+        // View + RS on the controller: how many are not saved.
+        case Qt::Key_N:
+            emit m_doc->programmer()->operatorAnnounce(m_session->unsavedCountPhrase(),
+                                                       ControllerScheme::ConfirmPriority);
+            break;
         case Qt::Key_0:        m_session->zero(); break;
         // R: the second reference; in focus calls, the target page (Q128).
         case Qt::Key_R:

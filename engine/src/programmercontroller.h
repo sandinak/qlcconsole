@@ -673,6 +673,8 @@ private:
     ControllerScheme::LongPress m_sayHold;
     /** Refine: A went down while View was held (View + A, Q118). */
     bool m_viewChord = false;
+    /** RS went down with View held (View + RS: how many are not saved). */
+    bool m_rsChord = false;
     /** Hold A: save all / keep; hold B: back to the last save (Q126). */
     ControllerScheme::LongPress m_holdA { ControllerScheme::keepAllHoldSeconds() };
     /** The head the first bumper of a pair stepped from (both bumpers). */

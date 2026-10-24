@@ -197,6 +197,12 @@ public:
 
     bool hasPending() const { return !m_edits.isEmpty(); }
     int pendingCount() const { return m_editOrder.size(); }
+    /** A change pending where the controller is now (this layer, group or
+     *  fixture). */
+    bool hasPendingHere() const { return m_active && m_edits.contains(editKey()); }
+    /** View + RS: "2 not kept." / "All kept." */
+    QString pendingCountPhrase() const
+    { return pendingCount() == 0 ? tr("All kept.") : tr("%1 not kept.").arg(pendingCount()); }
     /** Asked before a start (ProgrammerController's): false, with the
      *  reason, while another controller tool -- or this one -- has work
      *  that a start would throw away (gap 5: never silently discarded). */

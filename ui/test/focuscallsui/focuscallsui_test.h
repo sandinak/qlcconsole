@@ -72,6 +72,8 @@ private slots:
     void anOldVenueIsAskedAbout();
     /** Gap 8: opened with no venue file, a sibling's is offered. */
     void aSiblingsVenuesAreOffered();
+    /** Gap 10: the Refine panel has the same lamp: kept, here, elsewhere. */
+    void theRefinePanelHasTheLamp();
 
 private:
     Doc *m_doc = nullptr;

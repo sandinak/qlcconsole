@@ -687,4 +687,36 @@ void FocusCallsUi_Test::aSiblingsVenuesAreOffered()
     QVERIFY(QFile::exists(VenueCorrections::sidecarPath(v6)));
 }
 
+void FocusCallsUi_Test::theRefinePanelHasTheLamp()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Main");
+    const quint32 cue = st->addCue(list, -1, "Ballad");
+    ShowTree::Target t;
+    t.groups << m_group;
+    const quint32 layer = st->addLayer(cue, t);
+    ShowTree::Look look;
+    look.key = ShowTree::KeyPosition;
+    look.palettes << st->createInlinePalette(QLCPalette::PanTilt, { 270, 135 }, "Centre");
+    QVERIFY(st->setLayerLook(cue, layer, look));
+    QString why;
+    QPointer<RefinePanel> panel = RefinePanel::open(m_doc, nullptr, cue, 0xFFFFFFFF, &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    FocusStatusLamp *lamp = panel->statusLamp();
+    QVERIFY(lamp != nullptr);
+    QCOMPARE(lamp->state(), FocusStatusLamp::AllSaved);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QCOMPARE(lamp->state(), FocusStatusLamp::ThisUnsaved);
+    QCOMPARE(lamp->count(), 1);
+    r->nextItem();
+    QCOMPARE(lamp->state(), FocusStatusLamp::OthersUnsaved);
+    QCOMPARE(r->pendingCountPhrase(), QString("1 not kept."));
+    r->revert();
+    QCOMPARE(lamp->state(), FocusStatusLamp::AllSaved);
+    r->stop();
+    QTRY_VERIFY(panel.isNull());
+}
+
 QTEST_MAIN(FocusCallsUi_Test)

@@ -32,6 +32,7 @@
 #include "refinesession.h"
 #include "operatorvoice.h"
 #include "refinepanel.h"
+#include "focusmodepanel.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -131,8 +132,17 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     m_pending->setWordWrap(true);
     m_device = new QLabel(this);
     m_device->setStyleSheet(QStringLiteral("color: palette(mid);"));
-    for (QLabel *l : { m_title, m_layer, m_scope, m_pending })
+    for (QLabel *l : { m_title, m_layer, m_scope })
         vl->addWidget(l);
+    // The same lamp as Focus mode's: blue all kept, yellow here, orange elsewhere.
+    {
+        QHBoxLayout *lampRow = new QHBoxLayout;
+        m_lamp = new FocusStatusLamp(this);
+        m_lamp->setObjectName(QStringLiteral("refineStatusLamp"));
+        lampRow->addWidget(m_lamp);
+        lampRow->addWidget(m_pending, 1);
+        vl->addLayout(lampRow);
+    }
     // A layer only tracked in (section 6C): where A keeps the change.
     m_toSource = new QCheckBox(this);
     m_toSource->setObjectName(QStringLiteral("refineToSource"));
@@ -324,10 +334,17 @@ void RefinePanel::refresh()
     }
     else
         m_shared->hide();
+    {
+        const bool here = m_session->hasPendingHere();
+        const bool elsewhere = m_session->pendingCount() > (here ? 1 : 0);
+        m_lamp->setState(elsewhere ? (here ? FocusStatusLamp::BothUnsaved : FocusStatusLamp::OthersUnsaved)
+                                   : here ? FocusStatusLamp::ThisUnsaved : FocusStatusLamp::AllSaved);
+        m_lamp->setCount(m_session->pendingCount());
+    }
     if (!m_session->hasPending())
     {
         m_pending->setText(tr("Nothing pending: the rig shows the cue."));
-        m_pending->setStyleSheet(QStringLiteral("color: #3a9a4a;"));
+        m_pending->setStyleSheet(QStringLiteral("color: #0072b2;"));
         return;
     }
     QStringList parts;
@@ -342,7 +359,7 @@ void RefinePanel::refresh()
         parts << tr("focus %1%").arg(qRound(focus * 100.0 / 255.0));
     m_pending->setText(tr("Pending (A keeps it in the cue, B goes back): %1")
                        .arg(parts.isEmpty() ? tr("a palette") : parts.join(QStringLiteral(", "))));
-    m_pending->setStyleSheet(QStringLiteral("color: #d08a1c;"));
+    m_pending->setStyleSheet(QStringLiteral("color: #b08a10;"));
 }
 
 bool RefinePanel::requestExit()

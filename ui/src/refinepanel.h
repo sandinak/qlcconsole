@@ -24,6 +24,7 @@
 #include <QWidget>
 
 class FocusControlMap;
+class FocusStatusLamp;
 class RefineSession;
 class QLabel;
 class Doc;
@@ -88,6 +89,11 @@ private:
     QLabel *m_layer;
     QLabel *m_scope;
     QLabel *m_pending;
+    /** The save lamp, as in Focus mode (gap 10). */
+    FocusStatusLamp *m_lamp = nullptr;
+public:
+    FocusStatusLamp *statusLamp() const { return m_lamp; }
+private:
     QLabel *m_device;
     class QCheckBox *m_toSource = nullptr;
     QWidget *m_shared = nullptr;
