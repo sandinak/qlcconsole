@@ -48,6 +48,7 @@
 #include "showtreeview.h"
 #include "workbench.h"
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "inputpatch.h"
 #include "virtualconsole.h"
 #include "fixturemanager.h"
@@ -2221,8 +2222,8 @@ void App::initMenuBar()
     /* ---- Edit: Undo / Redo, named (open 24) ---- */
     {
         // Each tab's own history (Q81): Build's, the Show Tree's (one shared
-        // history with the palette operations) and the Lighting Studio's rig
-        // undo. Other tabs have none yet, and the menu says so instead of
+        // history with the palette operations), the Lighting Studio's rig
+        // undo and Connections' patch undo (Q115). Other tabs have none yet, and the menu says so instead of
         // reaching into another tab's history. The menu names the step; ⌘Z /
         // ⇧⌘Z stay each tab's own shortcuts (a second binding here would
         // make them ambiguous), shown beside the text.
@@ -2253,7 +2254,12 @@ void App::initMenuBar()
             Monitor *m = qobject_cast<Monitor *>(w);
             return m != nullptr ? m : (w != nullptr ? w->findChild<Monitor *>() : nullptr);
         };
-        connect(editMenu, &QMenu::aboutToShow, this, [this, undo, redo, programming, treeView, studio]() {
+        // Connections' ⌘Z: Undo Patch Change (one step, no redo).
+        auto connections = [current]() -> InputOutputManager * {
+            return qobject_cast<InputOutputManager *>(current());
+        };
+        connect(editMenu, &QMenu::aboutToShow, this,
+                [this, undo, redo, programming, treeView, studio, connections]() {
             QString u, r;
             bool known = true;
             if (ProgrammingManager *pm = programming())
@@ -2272,12 +2278,19 @@ void App::initMenuBar()
                 // The rig's undo has no names and no redo.
                 u = m->canUndo() ? tr("rig change") : QString();
             }
+            else if (connections() != nullptr)
+            {
+                const PatchUndo *pu = m_doc->inputOutputMap() != nullptr ? m_doc->inputOutputMap()->patchUndo()
+                                                                         : nullptr;
+                u = pu != nullptr && pu->canUndo() ? tr("Patch Change") : QString();
+            }
             else
                 known = false;
             if (!known)
             {
                 undo->setText(tr("Nothing to undo on this tab"));
-                undo->setToolTip(tr("Undo works in Build, the Show Tree, Fixtures and the Lighting Studio so far"));
+                undo->setToolTip(tr("Undo works in Build, the Show Tree, Fixtures, the Lighting Studio and "
+                                    "Connections so far"));
                 undo->setEnabled(false);
                 redo->setText(tr("Redo"));
                 redo->setEnabled(false);
@@ -2289,13 +2302,15 @@ void App::initMenuBar()
             redo->setText(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r));
             redo->setEnabled(!r.isEmpty());
         });
-        connect(undo, &QAction::triggered, this, [programming, treeView, studio]() {
+        connect(undo, &QAction::triggered, this, [programming, treeView, studio, connections]() {
             if (ProgrammingManager *pm = programming())
                 QMetaObject::invokeMethod(pm, "slotUndo");
             else if (ShowTreeView *v = treeView())
                 QMetaObject::invokeMethod(v, "slotUndo");
             else if (Monitor *m = studio())
                 m->undo();
+            else if (InputOutputManager *io = connections())
+                io->slotUndoPatch();
         });
         connect(redo, &QAction::triggered, this, [programming, treeView]() {
             if (ProgrammingManager *pm = programming())

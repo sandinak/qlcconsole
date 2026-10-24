@@ -83,6 +83,7 @@
 #include "showconverter.h"
 #include <QToolButton>
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "networkroute.h"
 #include "outputpatch.h"
 #include "iopluginstub.h"
@@ -729,6 +730,42 @@ static void answerNextBox(QMessageBox::StandardButton answer, QString *text)
             QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
         }
     });
+}
+
+/* Q115: Connections has its own ⌘Z (Undo Patch Change), so Edit ▸ Undo
+   there is that step -- not "Nothing to undo on this tab". It asks first, as
+   the tab's own action does. */
+void AppViews_Test::editUndoOnConnectionsIsUndoPatchChange()
+{
+    QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
+    QVERIFY(undo != nullptr);
+    QMenu *edit = nullptr;
+    for (QAction *a : m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->menu()->actions().contains(undo))
+            edit = a->menu();
+    QVERIFY(edit != nullptr);
+    PatchUndo *pu = m_app->m_doc->inputOutputMap()->patchUndo();
+    QVERIFY(pu != nullptr);
+    pu->clear();
+
+    m_app->showContext("Connections");
+    QVERIFY(qobject_cast<InputOutputManager *>(m_app->m_tab->currentWidget()) != nullptr);
+    emit edit->aboutToShow();
+    QCOMPARE(undo->text(), QString("Undo"));
+    QVERIFY(!undo->isEnabled());
+
+    pu->captureUniverses(QStringLiteral("add a universe"));
+    QVERIFY(pu->canUndo());
+    emit edit->aboutToShow();
+    QCOMPARE(undo->text(), QString("Undo Patch Change"));
+    QVERIFY(undo->isEnabled());
+    // Triggered: the tab's own confirmation; No keeps the step.
+    QString asked;
+    answerNextBox(QMessageBox::No, &asked);
+    undo->trigger();
+    QVERIFY2(asked.contains("add a universe"), qPrintable(asked));
+    QVERIFY(pu->canUndo());
+    pu->clear();
 }
 
 void AppViews_Test::missingDefinitionsAreAskedAboutAndFetchedBack()

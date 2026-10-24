@@ -408,6 +408,24 @@ void CueRunner::makeTree()
     });
 }
 
+/* The state column fits its longest word, bold, on a sub-cue's row: a
+   lesson has students read "▷ STANDBY", so it mustn't end in "…" (Q115). */
+void CueRunner::fitStateColumn()
+{
+    if (m_tree == nullptr)
+        return;
+    QFont bold = m_tree->font();
+    bold.setBold(true);
+    const QFontMetrics fm(bold);
+    int text = 0;
+    for (const QString &s : { tr("▷ STANDBY"), tr("SUB NEXT"), tr("NEXT"), tr("▶ %1%").arg(100) })
+        text = qMax(text, fm.horizontalAdvance(s));
+    const int margin = m_tree->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, m_tree) + 1;
+    const int width = 2 * m_tree->indentation() + text + 2 * margin + fm.averageCharWidth();
+    if (m_tree->header()->sectionSize(ColState) < width)
+        m_tree->header()->resizeSection(ColState, width);
+}
+
 /* The Run tab: big targets, the list, every button. */
 void CueRunner::buildFullLayout()
 {
@@ -1068,6 +1086,7 @@ void CueRunner::rebuildTree()
     m_treeDirty = false;
     m_builtFor = key;
     m_tree->clear();
+    fitStateColumn();
     if (ch == nullptr)
         return;
 

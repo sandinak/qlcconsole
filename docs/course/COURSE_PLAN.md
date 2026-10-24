@@ -357,7 +357,9 @@ worked around in the course and checked by the course test.
    the current production changes, and both shows' productions had the
    same id. Every course file uses *Spring Show*, so students won't meet
    it; the course test takes the 0.1 pictures (the *Qualities* production)
-   last.
+   last. **Fixed in 0.2.2:** the box is refilled on every Show Tree change,
+   opening a show included, and compares the names, not only the ids
+   (`cuerunner_test` `theBoxNamesTheOpenedShowsProduction`).
 10. **The command line's last message carries over to the next show** (the
     bottom right still said *✓ TrussW-RGB colour White dimmer Full* after
     File → Open). Cosmetic.

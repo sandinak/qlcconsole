@@ -169,8 +169,8 @@ share the rig's history: patching, properties, renames, plot symbols,
 output rules); adding or deleting fixtures and editing groups aren't undone
 yet; on other tabs **Edit ▸ Undo** reads *Nothing
 to undo on this tab* and is greyed. The menu always undoes the tab in
-front, never another tab's step. (Connections keeps its own ⌘Z, **Undo
-Patch Change**, for patching there; the Edit menu doesn't reach it.)
+front, never another tab's step. On **Connections** it is that tab's own
+⌘Z, **Undo Patch Change** (one step, asked first, no redo).
 
 **Where did the Functions tab go?** The qlcconsole view has none; the
 Classic QLC+ and Everything views show it. **Window ▸ Functions** opens it,

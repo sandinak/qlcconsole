@@ -80,6 +80,7 @@ private slots:
      *  each back its definition once it is on this computer -- where the
      *  mode and channel count match -- and says which still have none. */
     void missingDefinitionsAreAskedAboutAndFetchedBack();
+    void editUndoOnConnectionsIsUndoPatchChange();
 
     /** "set the h,w,d by the configured measurement type": one Settings
      *  entry, kept for the person, read by the fixture editor too. */

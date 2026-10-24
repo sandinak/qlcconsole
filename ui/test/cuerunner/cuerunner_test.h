@@ -43,6 +43,7 @@ private slots:
     void aRunnerFollowsOneListOfAnyProduction();
     /** Q75: one list, no Current production drop-down */
     void oneListHasNothingToChoose();
+    void theBoxNamesTheOpenedShowsProduction();
     void liveDesignAndTimecode();
     void spaceIsGoInTheRunTab();
     void theVcWidgetSavesLoadsAndCopies();

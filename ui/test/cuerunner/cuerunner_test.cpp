@@ -33,6 +33,8 @@
 #include <QBuffer>
 #include <QFile>
 #include <QDir>
+#include <QScopeGuard>
+#include <QHeaderView>
 #include <QtTest>
 
 #define private public
@@ -384,6 +386,13 @@ void CueRunner_Test::goSubGoBackAndWhatChanges()
 void CueRunner_Test::clickLoadsDoubleClickJumps()
 {
     show();
+    // The Mac's 13 pt, as the course pictures are taken (offscreen's own is
+    // smaller, and "▷ STANDBY" fitted the default column there anyway).
+    const QFont appFont = QApplication::font();
+    auto restoreFont = qScopeGuard([appFont]() { QApplication::setFont(appFont); });
+    QFont mac = appFont;
+    mac.setPointSize(13);
+    QApplication::setFont(mac);
     CueRunner runner(m_doc, CueRunner::Full);
     runner.resize(800, 600);
     runner.show();
@@ -399,6 +408,13 @@ void CueRunner_Test::clickLoadsDoubleClickJumps()
     QCOMPARE(m_doc->showControl()->loadedStep(ch->id()), 1);
     QCOMPARE(m_doc->showControl()->loadedSubCue(ch->id()), 1);
     QCOMPARE(rowFor(tree, "2.2")->text(0), QString("▷ STANDBY"));
+    // Q115: all of it, a sub-cue's indent and bold included -- not "▷ STA…".
+    {
+        const QFontMetrics fm(s22->font(0));
+        const int room = tree->header()->sectionSize(0) - 2 * tree->indentation();
+        const int need = fm.horizontalAdvance(s22->text(0)) + 6;
+        QVERIFY2(room >= need, qPrintable(QString("%1 < %2").arg(room).arg(need)));
+    }
     QVERIFY(runner.nextText().startsWith("▷ STANDBY 2.2 Down: "));
     runner.go();
     settle();
@@ -484,6 +500,37 @@ void CueRunner_Test::aRunnerFollowsOneListOfAnyProduction()
     runner.refresh();
     QCOMPARE(runner.headerText(), QString("Corporate · Keynote"));
     QCOMPARE(follow->itemText(0), QString("Current production (Corporate)"));
+}
+
+/* COURSE_PLAN issue 9: a show opened after another whose production had
+   the same id but another name. The box names the new one (it is refilled
+   on every tree change, a load included), not the last show's. */
+void CueRunner_Test::theBoxNamesTheOpenedShowsProduction()
+{
+    ShowTreeController *st = m_doc->showTree();
+    st->setCurrentProduction(st->addProduction("Spring Show"));
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        st->saveXML(&w);
+        w.writeEndDocument();
+    }
+    st->reset();
+    const quint32 qualities = st->addProduction("Qualities");
+    st->setCurrentProduction(qualities);
+    CueRunner runner(m_doc, CueRunner::Full);
+    QComboBox *follow = runner.findChild<QComboBox *>("crFollow");
+    QVERIFY(follow != nullptr);
+    QCOMPARE(follow->itemText(0), QString("Current production (Qualities)"));
+
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(st->loadXML(r));
+    QCOMPARE(st->currentProduction(), qualities);       // the same id
+    QCOMPARE(follow->itemText(0), QString("Current production (Spring Show)"));
 }
 
 /* Q75: one production with one list: GO plays it, nothing to choose -- no

@@ -138,9 +138,9 @@ their house lights, relays and subs.
   and a console Grand Master fader works in Operate. GO pressed in Design
   offers **Switch to Operate**, once a session. See
   [Running the show](getting-started.md#running-the-show).
-- **Edit ▸ Undo undoes the tab in front** — Build, the Show Tree, Fixtures
-  or the Lighting Studio — and elsewhere reads *Nothing to undo on this
-  tab*. It no longer undoes a Show Tree step from another tab. See
+- **Edit ▸ Undo undoes the tab in front** — Build, the Show Tree, Fixtures,
+  the Lighting Studio, or Connections' **Undo Patch Change** — and
+  elsewhere reads *Nothing to undo on this tab*. It no longer undoes a Show Tree step from another tab. See
   [Finding things](troubleshooting.md#finding-things).
 - **Connections opens where you'd look**: on **Universes** (it was
   *Detailed*) in Classic QLC+, on **Devices** otherwise. Show control and

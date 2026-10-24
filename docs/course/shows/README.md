@@ -56,12 +56,12 @@ would save:
    ```
 
 3. **Take the pictures** (every lesson's, into `docs/course/images/lesson-L-N/`),
-   at 2x, in the Blue theme, as the help's are — in a run of their own
+   at 1x (1280×800; the committed ones are), in the Blue theme — in a run of their own
    (`lessonPictures` only), so nothing an earlier test did (an open Look
    Editor, Recent items) shows in them:
 
    ```sh
-   COURSE_SHOTS=$PWD/../../../../docs/course/images QT_SCALE_FACTOR=2 \
+   COURSE_SHOTS=$PWD/../../../../docs/course/images \
        QT_QPA_PLATFORM=offscreen DYLD_FALLBACK_LIBRARY_PATH=../../src:../../../engine/src \
        ./courseshow_test.app/Contents/MacOS/courseshow_test lessonPictures
    python3 tools/png-colour-chunks.py docs/course/images   # from the repo root

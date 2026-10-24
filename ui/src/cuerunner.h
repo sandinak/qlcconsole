@@ -223,6 +223,7 @@ private:
     void makeButtons();
     void makeFollowBox();
     void makeTree();
+    void fitStateColumn();
     void buildPanelLayout();
     /** Sizes the button area, the GO row and the info's fonts and lines to
      *  the room there is (VC sizes). */

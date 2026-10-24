@@ -264,7 +264,7 @@ circuits and subs.
 - **Edit ▸ Undo says where it works** (board Q81): it undoes the tab in
   front (Build, the Show Tree, Fixtures and the Lighting Studio -- the last
   two share the rig's history; renaming a fixture in the tree is now a
-  step of it too) and elsewhere
+  step of it too; on Connections, its Undo Patch Change, Q115) and elsewhere
   reads "Nothing to undo on this tab", greyed. It no longer undoes a Show
   Tree step from another tab.
 
@@ -348,6 +348,10 @@ circuits and subs.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+
+- **Run tab: the state column fits "▷ STANDBY"** (Q115). It was cut to
+  "▷ STA…" at the Run tab's large type; it now fits its longest word, bold,
+  on a sub-cue's row.
 - **A fixture group's row in Plot layers keeps its fixtures selected** on
   the plot: they lit and went out again a moment later.
 - **The Show Tree's flags in columns** (board Q104): **S** (Sets), **T**
