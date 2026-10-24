@@ -651,8 +651,9 @@ QList<HelpShots::Shot> HelpShots::shots()
         Monitor *mon = studio(MonitorGraphicsView::PovTop);
         if (mon == NULL)
             return f;
-        /* A stage with a rounded apron for them to find, for this picture
-           only: the demo is a bare floor. */
+        /* A stage with an apron built on in front of it, and the FOH
+           electric out over the audience, for this picture only: the demo
+           is a bare floor. */
         const float u = mon->m_props->gridUnitMetres();
         const QVector3D grid = mon->m_props->gridSize();
         StagePlatform *deck = mon->m_props->addPlatform();
@@ -660,11 +661,25 @@ QList<HelpShots::Shot> HelpShots::shots()
         deck->setOriginX(1.0f * u);
         deck->setOriginY(0.5f * u);
         deck->setWidth((grid.x() - 2.0f) * u);
-        deck->setDepth((grid.z() - 1.5f) * u);
+        deck->setDepth((grid.z() - 3.0f) * u);
         deck->setHeight(0.9f);
-        deck->setFrontCurve(0.6f * u);
         deck->setColor(QColor(40, 44, 52));
         mon->setProperty("helpShotDeck", deck->id());
+        // The apron: from the curtain line (found 1.2 m up from the deck's
+        // front) out to a unit and a half short of the grid's front.
+        mon->m_props->setApronDepth(1.2f + 1.5f * u);
+        if (StagePlatform *apron = mon->m_props->apronPlatform())
+        {
+            apron->setFrontCurve(0.5f * u);
+            mon->setProperty("helpShotApron", apron->id());
+        }
+        Truss *foh = mon->m_props->addTruss();
+        foh->setName(QStringLiteral("FOH"));
+        foh->setType(Truss::Horizontal);
+        foh->setOrigin(QVector3D(3.0f * u, (grid.z() - 0.4f) * u, 6.0f));
+        foh->setLength((grid.x() - 6.0f) * u);
+        mon->setProperty("helpShotFoh", foh->id());
+        mon->m_graphicsView->updateTrusses();
         mon->m_graphicsView->updatePlatforms();
         mon->m_props->setStageMarks(MonitorProperties::CentreMarkFlag | MonitorProperties::CentreLineFlag
                                     | MonitorProperties::CurtainLineFlag
@@ -678,9 +693,17 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (mon == NULL)
             return;
         mon->m_props->setStageMarks(MonitorProperties::NoStageMarks);
-        if (mon->property("helpShotDeck").isValid())
-            mon->m_props->removePlatform(mon->property("helpShotDeck").toUInt());
-        mon->setProperty("helpShotDeck", QVariant());
+        mon->m_props->setCurtainLineAuto();
+        foreach (const char *name, QList<const char *>() << "helpShotDeck" << "helpShotApron")
+        {
+            if (mon->property(name).isValid())
+                mon->m_props->removePlatform(mon->property(name).toUInt());
+            mon->setProperty(name, QVariant());
+        }
+        if (mon->property("helpShotFoh").isValid())
+            mon->m_props->removeTruss(mon->property("helpShotFoh").toUInt());
+        mon->setProperty("helpShotFoh", QVariant());
+        mon->m_graphicsView->updateTrusses();
         mon->m_graphicsView->updatePlatforms();
     } };
 

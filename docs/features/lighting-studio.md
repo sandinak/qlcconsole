@@ -66,7 +66,7 @@ So dragging a drape reads its centre line on the ruler.
 
 ### Stage marks: centre line, curtain line, number line
 
-![The plot with the stage marks on: the centre mark and dashed centre line, the curtain line, and the number line along the front of a rounded apron](../images/lighting-studio-stage-marks.png)
+![The plot with the stage marks on: the centre mark and dashed centre line, the curtain line with the apron tinted and dimensioned in front of it, the DS truss and the FOH truss labelled with their distance downstage of the curtain line, and the number line along the front of a rounded apron](../images/lighting-studio-stage-marks.png)
 
 The plot's **Show ▸ Stage marks** menu draws the marks a crew spikes and
 focuses by. Each one is a tick in the menu:
@@ -78,6 +78,12 @@ focuses by. Each one is a tick in the menu:
   up-and-down line, which isn't drawn while it's on; the cross's line across
   the stage, at half the grid's depth, stays.
 - **Curtain line:** where the main curtain hangs, labelled **Curtain line**.
+  It's the stage's main reference (the plaster line). With it on, the plot
+  also shows the **apron**, the deck downstage of the curtain line, tinted,
+  with its depth at centre dimensioned from the curtain line to the front of
+  the stage (**Apron 1.8 m**). Every truss or pipe hung downstage of the
+  curtain line, like the FOH electric out over the audience, is labelled
+  with how far: **FOH · 4.2 m DS of curtain line**.
 - **Number line:** a line across the stage, ticked every foot or metre (the
   show's unit) and numbered out from **0** at centre, **SR** on one end and
   **SL** on the other, so "SL 4 on the number line" is a place you can find
@@ -95,13 +101,33 @@ follows the most downstage **Main drape** across the centre line, or a
 front of the stage.
 
 **Moving them.** Below the ticks, **Curtain line** and **Number line** each
-have **Auto** and a distance. Untick **Auto** and type how far upstage of the
-front of the stage the line goes, in the show's unit. A negative distance
-puts it downstage of the front, out on an apron extension. Tick **Auto**
-again and it goes back to following the stage. A line you've set stays where
-it is on the plan: add or move a deck and the line stays put, and the
-distance shown changes to match the new front of the stage. (Shows saved
+have **Auto** and a distance, with what it means written under it. Untick
+**Auto** and type where the line goes, in the show's unit:
+
+- **Curtain line:** how far upstage of the front of the stage it is. A
+  negative distance puts it downstage of the front.
+- **Number line:** how far downstage of the curtain line it is (**1.5 m DS of
+  curtain line**). A negative distance puts it upstage of the curtain line.
+  On **Auto** it sits at the front of the stage.
+
+Tick **Auto** again and the line goes back to following the stage. A line
+you've set stays where it is on the plan: move a deck or the curtain line
+and it stays put, and the distance shown changes to match. (Shows saved
 before the boxes took a distance keep their lines exactly where they were.)
+
+**The apron.** The apron is whatever deck is downstage of the curtain line.
+To build one on a stage that has none, set **Apron depth** in the same menu
+to how deep it should be from the curtain line. That adds a platform in
+front of the main deck, as wide and as high as it, or resizes the one
+that's there; a depth the main deck already reaches without it takes the
+added platform away again. Each change is one undo step. You can also add
+the platform yourself: any platform whose back edge meets the deck's front
+(within 5 cm) across the centre line counts as part of the stage, so the
+front of the stage moves out to its front. If the curtain line has nothing
+to follow (no main drape or proscenium), setting the apron depth fixes it
+where it is first, so the curtain line doesn't move out with the new front.
+**Apron depth** is greyed out on a bare floor: there's no deck to build in
+front of.
 
 **Where a target is, in crew terms.** Every stage target on the plot has a
 small readout under it giving where it is against these marks, in the show's

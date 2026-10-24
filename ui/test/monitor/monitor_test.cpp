@@ -905,21 +905,83 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         autoChk->setChecked(true);
         QVERIFY(props->curtainLineIsAuto());
         QCOMPARE(spin->value(), 3.0);
-        // Negative: downstage of the front, out on an apron extension.
+        // The number line is set from the curtain line (y 5): downstage of it
+        // is positive, and the row says so in words.
         QCheckBox *numAuto = marks->findChild<QCheckBox *>(QStringLiteral("numberLineYAuto"));
         QDoubleSpinBox *numSpin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("numberLineY"));
-        QVERIFY(numAuto != nullptr && numSpin != nullptr);
-        QCOMPARE(numSpin->value(), 0.0);
+        QLabel *numWords = marks->findChild<QLabel *>(QStringLiteral("numberLineYWords"));
+        QLabel *curtainWords = marks->findChild<QLabel *>(QStringLiteral("curtainLineYWords"));
+        QVERIFY(numAuto != nullptr && numSpin != nullptr && numWords != nullptr && curtainWords != nullptr);
+        QCOMPARE(numSpin->value(), 3.0);                // automatic: on the front, y 8
+        QCOMPARE(numWords->text(), QStringLiteral("3.0 m DS of curtain line"));
+        QCOMPARE(curtainWords->text(), QStringLiteral("3.0 m US of the front of the stage"));
         numAuto->setChecked(false);
-        numSpin->setValue(-0.5);
-        QCOMPARE(props->numberLineY(), 8.5f);
+        numSpin->setValue(1.5);
+        QCOMPARE(props->numberLineY(), 6.5f);
+        QCOMPARE(numWords->text(), QStringLiteral("1.5 m DS of curtain line"));
+        numSpin->setValue(-0.5);                        // upstage of it
+        QCOMPARE(props->numberLineY(), 4.5f);
+        QCOMPARE(numWords->text(), QStringLiteral("0.5 m US of curtain line"));
         // A show saved with a line set (its plan Y): the box shows the distance.
         props->setNumberLineY(6.0f);
         emit marks->aboutToShow();
         QVERIFY(!numAuto->isChecked());
-        QCOMPARE(numSpin->value(), 2.0);
+        QCOMPARE(numSpin->value(), 1.0);
         numAuto->setChecked(true);
         QVERIFY(props->numberLineIsAuto());
+
+        // The apron: from the curtain line to the front, tinted and
+        // dimensioned at centre (a bare floor: the grid's front, 3 m).
+        QCOMPARE(labels("apron"), QStringList() << "Apron 3.0 m");
+        bool tinted = false;
+        foreach (QGraphicsItem *it, ofKind("apron"))
+            if (auto *pi = dynamic_cast<QGraphicsPathItem *>(it))
+                tinted = !pi->path().isEmpty() && pi->zValue() < 0.0;   // under the rig
+        QVERIFY(tinted);
+
+        // A pipe over the audience says how far it is from the curtain line;
+        // one upstage of it doesn't.
+        Truss *foh = props->addTruss();
+        foh->setName("FOH");
+        foh->setType(Truss::Horizontal);
+        foh->setOrigin(QVector3D(2.0f, 9.2f, 6.0f));
+        foh->setLength(6.0f);
+        Truss *mid = props->addTruss();
+        mid->setName("Mid");
+        mid->setType(Truss::Horizontal);
+        mid->setOrigin(QVector3D(2.0f, 3.0f, 6.0f));
+        mid->setLength(6.0f);
+        gv->updateStageMarks();
+        QCOMPARE(labels("curtainOffset"), QStringList() << QString::fromUtf8("FOH · 4.2 m DS of curtain line"));
+        props->removeTruss(foh->id());
+        props->removeTruss(mid->id());
+        gv->updateStageMarks();
+        QVERIFY(labels("curtainOffset").isEmpty());
+
+        // Apron depth builds the apron on the deck: one undo step a change.
+        QDoubleSpinBox *apronSpin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"));
+        QVERIFY(apronSpin != nullptr);
+        emit marks->aboutToShow();
+        QVERIFY2(!apronSpin->isEnabled(), "a bare floor has no deck to add an apron to");
+        StagePlatform *stage = props->addPlatform();
+        const quint32 stageId = stage->id();
+        stage->setOriginX(1.0f); stage->setOriginY(1.0f);
+        stage->setWidth(8.0f); stage->setDepth(5.0f);
+        gv->updatePlatforms();
+        emit marks->aboutToShow();
+        QVERIFY(apronSpin->isEnabled());
+        QCOMPARE(apronSpin->value(), 1.0);              // drape at 5, deck front at 6
+        QVERIFY(props->apronPlatform() == nullptr);
+        apronSpin->setValue(2.0);
+        QVERIFY(props->apronPlatform() != nullptr);
+        QVERIFY(qAbs(props->downstageEdgeY() - 7.0f) < 1e-4f);
+        QCOMPARE(labels("apron"), QStringList() << "Apron 2.0 m");
+        QVERIFY(mon.canUndo());
+        mon.undo();
+        QVERIFY(props->apronPlatform() == nullptr);
+        QCOMPARE(props->downstageEdgeY(), 6.0f);
+        props->removePlatform(stageId);
+        gv->updatePlatforms();
 
         // Only looking down: an elevation has no floor to draw them on (and
         // keeps the whole teal cross).

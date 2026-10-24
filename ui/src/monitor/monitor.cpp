@@ -1032,69 +1032,133 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             stageMarksChanged();
         });
 
-        /* Where the curtain line and the number line are: how far upstage of
-           the front of the stage (the edge the centre mark sits on), as a
-           crew measures it; negative is out on an apron extension. Kept as
-           the plan's Y (MonitorProperties::setCurtainLineUpstage()). Auto
-           follows the stage; a value moves the line there. */
-        const bool feet = (m_props->gridUnits() == MonitorProperties::Feet);
+        /* Where the lines are, as a crew measures them. The curtain line is
+           the main reference (the plaster line): it is set by how far
+           upstage of the front of the stage (the edge the centre mark sits
+           on) it is, and the number line by how far downstage of the
+           curtain line; negative the other way. Both are kept as the plan's
+           Y (MonitorProperties::setCurtainLineUpstage() and
+           setNumberLineDownstageOfCurtain()). Auto follows the stage; a
+           value moves the line there. Each row says it in words too. */
+        const MonitorProperties::GridUnits units = m_props->gridUnits();
+        const bool feet = (units == MonitorProperties::Feet);
+        const double toDisp = feet ? 3.28084 : 1.0;
         QWidget *pw = new QWidget(marksMenu);
         QFormLayout *pfl = new QFormLayout(pw);
         pfl->setContentsMargins(10, 6, 10, 6);
-        pfl->addRow(new QLabel(tr("Upstage of the front of the stage:"), pw));
-        auto positionRow = [pw, pfl, feet](const QString &title, const char *name,
-                                                 std::function<bool()> isAuto,
-                                                 std::function<float()> value,
-                                                 std::function<void(bool, float)> apply) {
+        auto positionRow = [pw, pfl, feet, toDisp](const QString &title, const char *name,
+                                                   const QString &tip,
+                                                   std::function<bool()> isAuto,
+                                                   std::function<float()> value,
+                                                   std::function<void(bool, float)> apply,
+                                                   std::function<QString()> words) {
             QWidget *row = new QWidget(pw);
-            QHBoxLayout *hl = new QHBoxLayout(row);
-            hl->setContentsMargins(0, 0, 0, 0);
+            QGridLayout *gl = new QGridLayout(row);
+            gl->setContentsMargins(0, 0, 0, 0);
+            gl->setVerticalSpacing(1);
             QCheckBox *autoChk = new QCheckBox(tr("Auto"), row);
             autoChk->setObjectName(QString::fromLatin1(name) + QStringLiteral("Auto"));
             FeetInchesSpinBox *spin = new FeetInchesSpinBox(feet, row);
             spin->setObjectName(QString::fromLatin1(name));
-            const double toDisp = feet ? 3.28084 : 1.0;
             spin->setRange(-100.0 * toDisp, 300.0 * toDisp);
-            spin->setToolTip(tr("How far upstage of the front of the stage. Negative is "
-                                "downstage of it, out on an apron extension."));
-            hl->addWidget(autoChk);
-            hl->addWidget(spin, 1);
+            spin->setToolTip(tip);
+            QLabel *said = new QLabel(row);
+            said->setObjectName(QString::fromLatin1(name) + QStringLiteral("Words"));
+            QFont small = said->font();
+            small.setPointSizeF(small.pointSizeF() * 0.9);
+            said->setFont(small);
+            gl->addWidget(autoChk, 0, 0);
+            gl->addWidget(spin, 0, 1);
+            gl->addWidget(said, 1, 1);
+            gl->setColumnStretch(1, 1);
             pfl->addRow(title, row);
-            auto sync = [autoChk, spin, isAuto, value, toDisp]() {
+            auto sync = [autoChk, spin, said, isAuto, value, words, toDisp]() {
                 QSignalBlocker b1(autoChk), b2(spin);
                 autoChk->setChecked(isAuto());
                 spin->setValue(double(value()) * toDisp);
                 spin->setEnabled(!isAuto());
+                said->setText(words());
             };
             connect(autoChk, &QCheckBox::toggled, row, [spin, apply, toDisp, sync](bool on) {
                 apply(on, float(spin->value() / toDisp));
                 sync();
             });
             connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), row,
-                    [apply, toDisp](double v) { apply(false, float(v / toDisp)); });
+                    [apply, toDisp, said, words](double v) {
+                        apply(false, float(v / toDisp));
+                        said->setText(words());
+                    });
             return std::function<void()>(sync);
         };
         auto syncCurtain = positionRow(tr("Curtain line:"), "curtainLineY",
+            tr("How far upstage of the front of the stage the curtain line is. "
+               "Negative is downstage of the front."),
             [this]() { return m_props->curtainLineIsAuto(); },
             [this]() { return m_props->curtainLineUpstage(); },
             [this](bool isAuto, float upstage) {
                 if (isAuto) m_props->setCurtainLineAuto(); else m_props->setCurtainLineUpstage(upstage);
                 stageMarksChanged();
+            },
+            [this, units]() {
+                const float up = m_props->curtainLineUpstage();
+                if (std::fabs(up) < 0.005f)
+                    return tr("at the front of the stage");
+                return (up > 0.0f ? tr("%1 US of the front of the stage") : tr("%1 DS of the front of the stage"))
+                        .arg(MonitorProperties::formatStageDistance(up, units));
             });
         auto syncNumber = positionRow(tr("Number line:"), "numberLineY",
+            tr("How far downstage of the curtain line the number line is. Negative is "
+               "upstage of it. Auto puts it at the front of the stage."),
             [this]() { return m_props->numberLineIsAuto(); },
-            [this]() { return m_props->numberLineUpstage(); },
-            [this](bool isAuto, float upstage) {
-                if (isAuto) m_props->setNumberLineAuto(); else m_props->setNumberLineUpstage(upstage);
+            [this]() { return m_props->numberLineDownstageOfCurtain(); },
+            [this](bool isAuto, float downstage) {
+                if (isAuto) m_props->setNumberLineAuto(); else m_props->setNumberLineDownstageOfCurtain(downstage);
                 stageMarksChanged();
-            });
+            },
+            [this]() { return m_props->curtainLineOffsetText(m_props->numberLineY()); });
+
+        /* The apron: the deck downstage of the curtain line. Setting its
+           depth resizes the apron piece in front of the main deck, or adds
+           one (MonitorProperties::setApronDepth()) -- a change to the rig,
+           so one undo step a change. */
+        QWidget *apronRow = new QWidget(pw);
+        QHBoxLayout *ahl = new QHBoxLayout(apronRow);
+        ahl->setContentsMargins(0, 0, 0, 0);
+        FeetInchesSpinBox *apronSpin = new FeetInchesSpinBox(feet, apronRow);
+        apronSpin->setObjectName(QStringLiteral("apronDepth"));
+        apronSpin->setRange(0.0, 100.0 * toDisp);
+        apronSpin->setKeyboardTracking(false);      // one change when typed, not one a key
+        apronSpin->setToolTip(tr("How deep the apron is, from the curtain line to the front of the "
+                                 "stage. Changing it resizes the apron platform in front of the main "
+                                 "deck, or adds one."));
+        ahl->addWidget(apronSpin, 1);
+        pfl->addRow(tr("Apron depth:"), apronRow);
+        auto syncApron = [this, apronSpin, toDisp]() {
+            QSignalBlocker b(apronSpin);
+            apronSpin->setValue(double(qMax(0.0f, m_props->apronDepth())) * toDisp);
+            apronSpin->setEnabled(m_props->mainDeck() != nullptr);
+        };
+        connect(apronSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+                [this, toDisp, syncApron, syncCurtain, syncNumber](double v) {
+                    {
+                        RigEditSession edit(this);
+                        m_props->setApronDepth(float(v / toDisp));
+                    }
+                    m_graphicsView->updatePlatforms();     // and the marks with it
+                    stageMarksChanged();
+                    syncCurtain();      // a found-from-nothing curtain line is pinned
+                    syncNumber();
+                    syncApron();
+                });
+
         marksMenu->addSeparator();
         QWidgetAction *wa = new QWidgetAction(marksMenu);
         wa->setDefaultWidget(pw);
         marksMenu->addAction(wa);
 
         // A show loaded later brings its own marks: tick them to match on opening.
-        connect(marksMenu, &QMenu::aboutToShow, this, [this, marksMenu, syncCurtain, syncNumber]() {
+        connect(marksMenu, &QMenu::aboutToShow, this,
+                [this, marksMenu, syncCurtain, syncNumber, syncApron]() {
             foreach (QAction *a, marksMenu->actions())
             {
                 if (!a->isCheckable())
@@ -1107,6 +1171,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             }
             syncCurtain();
             syncNumber();
+            syncApron();
         });
     }
 

@@ -274,17 +274,53 @@ public:
     void setNumberLineY(float metres);
     inline void setNumberLineAuto() { m_numberLineSet = false; }
 
-    /** The curtain and number lines as the Stage marks menu enters them: how
-     *  far upstage of the front of the stage (downstageEdgeY()) they are, in
-     *  metres; negative is downstage of it, out on an apron extension. They
-     *  are kept, and saved (CurtainLineY / NumberLineY), as the plan's Y all
-     *  the same: a line set where the curtain hangs stays there when a deck
-     *  is added or moved (the distance shown changes instead), and a show
-     *  saved before reads exactly as it did. */
+    /** The curtain line is the stage's main reference (the plaster line):
+     *  the Stage marks menu sets it as how far upstage of the front of the
+     *  stage (downstageEdgeY()) it is, and the number line as how far
+     *  downstage of the curtain line; negative the other way. Both are kept,
+     *  and saved (CurtainLineY / NumberLineY), as the plan's Y all the same:
+     *  a line set where it belongs stays there when a deck is added or moved
+     *  or the other line moves (the distance shown changes instead), and a
+     *  show saved before reads exactly as it did. */
     inline float curtainLineUpstage() const { return downstageEdgeY() - curtainLineY(); }
     inline void setCurtainLineUpstage(float metres) { setCurtainLineY(downstageEdgeY() - metres); }
-    inline float numberLineUpstage() const { return downstageEdgeY() - numberLineY(); }
-    inline void setNumberLineUpstage(float metres) { setNumberLineY(downstageEdgeY() - metres); }
+    inline float numberLineDownstageOfCurtain() const { return numberLineY() - curtainLineY(); }
+    inline void setNumberLineDownstageOfCurtain(float metres) { setNumberLineY(curtainLineY() + metres); }
+
+    /** How far downstage of the curtain line a plan Y is (negative upstage),
+     *  and that written in crew terms: "4.2 m DS of curtain line",
+     *  "1' 6\" US of curtain line", "on the curtain line". For a pipe or a
+     *  truss over the audience, like the FOH electric. */
+    inline float curtainLineOffset(float y) const { return y - curtainLineY(); }
+    static QString formatCurtainLineOffset(float downstage, GridUnits units);
+    QString curtainLineOffsetText(float y) const
+    { return formatCurtainLineOffset(curtainLineOffset(y), m_gridUnits); }
+    /** A distance on its own, as the screen writes it: "1.8 m", "5' 11\"". */
+    static QString formatStageDistance(float metres, GridUnits units);
+
+    /** The apron: the deck downstage of the curtain line. Its depth at
+     *  centre is from the curtain line to the front of the stage (0 or less
+     *  when the stage has none). */
+    inline float apronDepth() const { return downstageEdgeY() - curtainLineY(); }
+    /** The deck the stage is: the biggest square-on platform across the
+     *  centre line (downstageEdgeY() starts from its front); null on a bare
+     *  floor. */
+    const StagePlatform *mainDeck() const;
+    /** The main deck, then the pieces butted on in front of it at the centre
+     *  line, upstage to downstage: what downstageEdgeY() is found from. */
+    QList<StagePlatform *> stageDecks() const;
+    /** The apron built as its own piece: the platform butted against the
+     *  main deck's front across the centre line (the most downstage one, if
+     *  several are chained); null if there is none. */
+    StagePlatform *apronPlatform() const;
+    /** Make the apron @p metres deep from the curtain line: the apron piece
+     *  is resized, or one is added against the main deck's front (its width,
+     *  height and colour), or taken away when the deck alone reaches. An
+     *  automatic curtain line with nothing hung to find it from is pinned
+     *  where it is first, or it would follow the new front. False (and
+     *  nothing changed) with no main deck, or when the main deck alone
+     *  already reaches further downstage than asked. */
+    bool setApronDepth(float metres);
 
     /** Whether the plot and the Rig Overview write where each target is
      *  beside it (stagePositionText()). On unless turned off; saved with the

@@ -330,53 +330,121 @@ namespace
     }
 }
 
+namespace
+{
+    /** The stage at the centre line: the biggest square-on deck across it
+     *  first, then any platform butted against the front so far (within
+     *  5 cm) that reaches further downstage -- an apron built as its own
+     *  piece -- in order, upstage to downstage. Steps and risers stacked on
+     *  a deck are not the stage. Empty on a bare floor. */
+    QList<StagePlatform *> stageChain(const QList<StagePlatform *> &all, float cx)
+    {
+        QList<StagePlatform *> decks;
+        foreach (StagePlatform *p, all)
+        {
+            if (p == nullptr || p->isSteps() || p->stackable() || !squareOn(p->rotation()))
+                continue;
+            if (cx < p->originX() || cx > p->originX() + p->width())
+                continue;
+            decks.append(p);
+        }
+        QList<StagePlatform *> chain;
+        if (decks.isEmpty())
+            return chain;
+
+        StagePlatform *deck = decks.first();
+        foreach (StagePlatform *p, decks)
+            if (p->width() * p->depth() > deck->width() * deck->depth())
+                deck = p;
+        chain << deck;
+        decks.removeAll(deck);
+        float front = deck->frontEdgeAt(cx);
+        bool grew = true;
+        while (grew)
+        {
+            grew = false;
+            foreach (StagePlatform *p, decks)
+            {
+                if (std::fabs(p->originY() - front) <= 0.05f && p->frontEdgeAt(cx) > front)
+                {
+                    front = p->frontEdgeAt(cx);
+                    chain << p;
+                    decks.removeAll(p);
+                    grew = true;
+                    break;
+                }
+            }
+        }
+        return chain;
+    }
+}
+
 float MonitorProperties::downstageEdgeY() const
 {
     const float cx = stageCentre().x();
-    const float gridFront = m_gridSize.z() * gridUnitMetres();
+    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), cx);
+    if (chain.isEmpty())
+        return m_gridSize.z() * gridUnitMetres();     // the grid's front edge
+    return chain.last()->frontEdgeAt(cx);
+}
 
-    /* The decks that cross the centre line, square on. Steps and risers
-       stacked on a deck are not the stage. */
-    QList<const StagePlatform *> decks;
-    foreach (const StagePlatform *p, m_platforms)
+QList<StagePlatform *> MonitorProperties::stageDecks() const
+{
+    return stageChain(m_platforms.values(), stageCentre().x());
+}
+
+const StagePlatform *MonitorProperties::mainDeck() const
+{
+    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), stageCentre().x());
+    return chain.isEmpty() ? nullptr : chain.first();
+}
+
+StagePlatform *MonitorProperties::apronPlatform() const
+{
+    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), stageCentre().x());
+    return chain.size() > 1 ? chain.last() : nullptr;
+}
+
+bool MonitorProperties::setApronDepth(float metres)
+{
+    if (!std::isfinite(metres))
+        return false;
+    const float cx = stageCentre().x();
+    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), cx);
+    if (chain.isEmpty())
+        return false;
+    StagePlatform *deck = chain.first();
+    const float deckFront = deck->frontEdgeAt(cx);
+
+    // An automatic curtain line found from nothing would follow the new front.
+    if (curtainLineIsAuto() && curtainLineScenery() == nullptr)
+        setCurtainLineY(curtainLineY());
+    const float target = curtainLineY() + metres;
+
+    if (chain.size() > 1)
     {
-        if (p == nullptr || p->isSteps() || p->stackable() || !squareOn(p->rotation()))
-            continue;
-        if (cx < p->originX() || cx > p->originX() + p->width())
-            continue;
-        decks.append(p);
-    }
-    if (decks.isEmpty())
-        return gridFront;
-
-    /* The stage is the biggest of them... */
-    const StagePlatform *deck = decks.first();
-    foreach (const StagePlatform *p, decks)
-        if (p->width() * p->depth() > deck->width() * deck->depth())
-            deck = p;
-    auto frontOf = [cx](const StagePlatform *p) { return p->frontEdgeAt(cx); };
-    float front = frontOf(deck);
-
-    /* ...carried on by an apron built as its own piece: a deck whose back
-       meets this front (within 5 cm) across the centre line. */
-    QList<const StagePlatform *> rest = decks;
-    rest.removeAll(deck);
-    bool grew = true;
-    while (grew)
-    {
-        grew = false;
-        foreach (const StagePlatform *p, rest)
+        StagePlatform *apron = chain.last();
+        const float behind = chain.at(chain.size() - 2)->frontEdgeAt(cx);
+        if (target <= behind + 0.01f)
         {
-            if (std::fabs(p->originY() - front) <= 0.05f && frontOf(p) > front)
-            {
-                front = frontOf(p);
-                rest.removeAll(p);
-                grew = true;
-                break;
-            }
+            removePlatform(apron->id());     // what is behind it reaches
+            return true;
         }
+        apron->setDepth(apron->depth() + (target - apron->frontEdgeAt(cx)));
+        return true;
     }
-    return front;
+    if (target <= deckFront + 0.01f)
+        return false;
+
+    StagePlatform *apron = addPlatform();
+    apron->setName(tr("Apron"));
+    apron->setOriginX(deck->originX());
+    apron->setOriginY(deckFront);
+    apron->setWidth(deck->width());
+    apron->setDepth(target - deckFront);
+    apron->setHeight(deck->height());
+    apron->setColor(deck->color());
+    return true;
 }
 
 const Scenery *MonitorProperties::curtainLineScenery() const
@@ -512,6 +580,26 @@ QString MonitorProperties::formatStageOffset(const StageOffset &offset, GridUnit
     if (!feet && !spoken && lastNumber >= 0)
         parts[lastNumber] += QStringLiteral(" m");
     return parts.join(spoken ? QStringLiteral(", ") : QStringLiteral(" · "));
+}
+
+QString MonitorProperties::formatStageDistance(float metres, GridUnits units)
+{
+    const double v = std::fabs(double(metres));
+    if (units != Feet)
+        return QStringLiteral("%1 m").arg(QString::number(std::round(v * 10.0) / 10.0, 'f', 1));
+    const int inches = int(std::lround(v / 0.0254));
+    return (inches % 12) == 0 ? QStringLiteral("%1'").arg(inches / 12)
+                              : QStringLiteral("%1' %2\"").arg(inches / 12).arg(inches % 12);
+}
+
+QString MonitorProperties::formatCurtainLineOffset(float downstage, GridUnits units)
+{
+    // Rounded to what is written: a tenth of a metre, or an inch.
+    const double step = (units == Feet) ? 0.0254 : 0.1;
+    if (std::round(std::fabs(double(downstage)) / step) == 0.0)
+        return tr("on the curtain line");
+    return downstage > 0.0f ? tr("%1 DS of curtain line").arg(formatStageDistance(downstage, units))
+                            : tr("%1 US of curtain line").arg(formatStageDistance(downstage, units));
 }
 
 void MonitorProperties::reset()

@@ -6612,6 +6612,62 @@ void MonitorGraphicsView::updateStageMarks()
         line(x0, y, x1, y, pen(curtainColour, 1.4, Qt::DashDotLine), "curtainLine");
         label(tr("Curtain line"), QPointF(x0, y), curtainColour,
               Qt::AlignLeft | Qt::AlignBottom, "curtainLine");
+
+        /* The apron: the deck downstage of the curtain line, tinted, with its
+           depth at centre dimensioned from the curtain line to the front. */
+        const double apron = props->apronDepth();
+        if (apron > 0.005)
+        {
+            QPainterPath deck;
+            foreach (const StagePlatform *p, props->stageDecks())
+            {
+                QPolygonF outline;
+                foreach (const QPointF &pt, p->footprint())
+                    outline << QPointF(sx(pt.x()), sy(pt.y()));
+                deck.addPolygon(outline);
+                deck.closeSubpath();
+            }
+            if (deck.isEmpty())                 // a bare floor: the grid's front edge
+                deck.addRect(QRectF(QPointF(x0, y), QPointF(x1, dsY)));
+            QPainterPath downstage;
+            downstage.addRect(QRectF(QPointF(x0 - 1.0, y), QPointF(x1 + 1.0, dsY + 1.0)));
+            deck.setFillRule(Qt::WindingFill);
+            QGraphicsPathItem *tint = new QGraphicsPathItem(deck.intersected(downstage));
+            tint->setPen(Qt::NoPen);
+            QColor wash(curtainColour);
+            wash.setAlpha(40);
+            tint->setBrush(wash);
+            add(tint, "apron", -0.9);           // over the deck, under the rig
+
+            const qreal ax = cx + 34.0 * onePx;
+            const qreal tick = 5.0 * onePx;
+            const QPen dimPen = pen(curtainColour, 1.0, Qt::SolidLine);
+            line(ax, y, ax, dsY, dimPen, "apron");
+            line(ax - tick, y, ax + tick, y, dimPen, "apron");
+            line(ax - tick, dsY, ax + tick, dsY, dimPen, "apron");
+            label(tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron), props->gridUnits())),
+                  QPointF(ax, y), curtainColour, Qt::AlignLeft | Qt::AlignTop, "apron");   // under the curtain line
+        }
+
+        /* What hangs downstage of the curtain line -- the FOH electric out
+           over the audience -- says how far, in crew terms, just above its
+           stage-left end (inside its own span, so never off the plot). */
+        auto overhang = [&](const QString &name, const QVector3D &a, const QVector3D &b) {
+            const float midY = (a.y() + b.y()) / 2.0f;
+            if (props->curtainLineOffset(midY) <= 0.005f)
+                return;
+            const QVector3D end = (a.x() >= b.x()) ? a : b;
+            const QString where = props->curtainLineOffsetText(midY);
+            label(name.isEmpty() ? where : QStringLiteral("%1 \u00B7 %2").arg(name, where),
+                  QPointF(sx(end.x()), sy(end.y()) - 0.3 * ppm), curtainColour,
+                  Qt::AlignRight | Qt::AlignBottom, "curtainOffset");
+        };
+        foreach (const Truss *t, props->trusses())
+            if (t != nullptr && t->type() == Truss::Horizontal)
+                overhang(t->name(), t->positionAt(0.0f), t->positionAt(t->length()));
+        foreach (const Pipe *pp, props->pipes())
+            if (pp != nullptr && !pp->isVertical())
+                overhang(pp->name(), pp->positionAt(0.0f), pp->positionAt(pp->length()));
     }
     if (props->stageMarkVisible(MonitorProperties::NumberLineFlag))
     {

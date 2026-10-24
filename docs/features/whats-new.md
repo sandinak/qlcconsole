@@ -281,11 +281,14 @@ their house lights, relays and subs.
   mark at the front of the stage (DSC, labelled CL) and, if you want it, the
   whole centre line; the curtain line, found from the main drape or the
   proscenium; and a number line ticked in feet or metres out from 0 at
-  centre. The curtain line and the number line can be moved from the same
-  menu, by how far upstage of the front of the stage they go (negative for
-  out on an apron). The full centre line replaces the teal centre cross's
-  line along it. The Rig Overview draws them on its floor, and they're saved
-  with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+  centre. The curtain line is the main reference: it's set by how far
+  upstage of the front of the stage it is, and the number line by how far
+  downstage of the curtain line. With the curtain line on, the apron in
+  front of it is tinted and its depth dimensioned, **Apron depth** builds or
+  resizes an apron platform, and trusses and pipes over the audience say how
+  far out they hang (**FOH · 4.2 m DS of curtain line**). The full centre
+  line replaces the teal centre cross's line along it. The Rig Overview
+  draws them on its floor, and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Where a target is, in crew terms.** Each stage target on the plot,
   each figure in the Rig Overview, and the person Focus mode stands where a
   fixed light lands has a small readout of where it is against the stage

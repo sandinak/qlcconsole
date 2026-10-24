@@ -2893,7 +2893,7 @@ void MonitorProperties_Test::aPositionIsWrittenAgainstTheStageMarks()
     QCOMPARE(mp.stagePositionText(spot, MP::SpokenOffset), QStringLiteral("SL 8, US 10"));
 }
 
-void MonitorProperties_Test::stageLinesAreSetUpstageOfTheFront()
+void MonitorProperties_Test::stageLinesAreSetFromTheFrontAndTheCurtainLine()
 {
     MonitorProperties mp;
     mp.setGridUnits(MonitorProperties::Meters);
@@ -2903,45 +2903,50 @@ void MonitorProperties_Test::stageLinesAreSetUpstageOfTheFront()
     deck->setWidth(8.0f); deck->setDepth(5.0f);
     QCOMPARE(mp.downstageEdgeY(), 6.0f);
 
-    // Automatic, they read as distances too: the number line on the front,
-    // the curtain a typical apron behind it.
-    QCOMPARE(mp.numberLineUpstage(), 0.0f);
+    // Automatic, they read as distances too: the curtain a typical apron
+    // upstage of the front, the number line on the front -- downstage of
+    // the curtain line by as much.
     QVERIFY(qAbs(mp.curtainLineUpstage() - 1.2f) < 1e-4f);
+    QVERIFY(qAbs(mp.numberLineDownstageOfCurtain() - 1.2f) < 1e-4f);
 
-    // Set as a distance upstage of the front; negative is out on an apron.
+    // The curtain line upstage of the front; the number line downstage of
+    // the curtain line (negative: upstage of it).
     mp.setCurtainLineUpstage(2.5f);
-    mp.setNumberLineUpstage(-0.75f);
+    mp.setNumberLineDownstageOfCurtain(1.5f);
     QVERIFY(!mp.curtainLineIsAuto());
     QVERIFY(!mp.numberLineIsAuto());
     QCOMPARE(mp.curtainLineY(), 3.5f);
-    QCOMPARE(mp.numberLineY(), 6.75f);
+    QCOMPARE(mp.numberLineY(), 5.0f);
     QCOMPARE(mp.curtainLineUpstage(), 2.5f);
-    QCOMPARE(mp.numberLineUpstage(), -0.75f);
+    QCOMPARE(mp.numberLineDownstageOfCurtain(), 1.5f);
 
-    // Saved as the plan's Y, as before; back as the same distance.
+    // Saved as the plan's Y, as before; back as the same distances.
     const QByteArray xml = stageMarksXml(mp);
     QVERIFY(xml.contains("CurtainLineY=\"3.5\""));
-    QVERIFY(xml.contains("NumberLineY=\"6.75\""));
+    QVERIFY(xml.contains("NumberLineY=\"5\""));
     MonitorProperties back;
     loadStageMarksXml(back, xml);
     StagePlatform *deck2 = back.addPlatform();
     deck2->setOriginX(1.0f); deck2->setOriginY(1.0f);
     deck2->setWidth(8.0f); deck2->setDepth(5.0f);
     QCOMPARE(back.curtainLineUpstage(), 2.5f);
-    QCOMPARE(back.numberLineUpstage(), -0.75f);
+    QCOMPARE(back.numberLineDownstageOfCurtain(), 1.5f);
 
-    // A line set where the curtain hangs stays there when an apron is added;
-    // the distance from the new front grows instead.
+    // Each set line stays where it is: the curtain line moved, the number
+    // line doesn't follow (its distance changes); an apron added, the
+    // curtain line stays and is further from the new front.
+    mp.setCurtainLineUpstage(2.0f);
+    QCOMPARE(mp.numberLineY(), 5.0f);
+    QCOMPARE(mp.numberLineDownstageOfCurtain(), 1.0f);
     StagePlatform *apron = mp.addPlatform();
     apron->setOriginX(2.0f); apron->setOriginY(6.0f);
     apron->setWidth(6.0f); apron->setDepth(1.0f);
     QCOMPARE(mp.downstageEdgeY(), 7.0f);
-    QCOMPARE(mp.curtainLineY(), 3.5f);
-    QCOMPARE(mp.curtainLineUpstage(), 3.5f);
-    QCOMPARE(mp.numberLineUpstage(), 0.25f);
+    QCOMPARE(mp.curtainLineY(), 4.0f);
+    QCOMPARE(mp.curtainLineUpstage(), 3.0f);
 
     // A show saved before this (a plan Y, written the same way) reads as it
-    // did: the same line, shown as its distance from the front.
+    // did: the same lines, shown as their distances.
     const QByteArray old("<?xml version=\"1.0\"?><Monitor DisplayMode=\"0\" ShowLabels=\"1\" "
                          "StageMarks=\"12\" CurtainLineY=\"4.2\" NumberLineY=\"6\"/>");
     MonitorProperties older;
@@ -2951,7 +2956,7 @@ void MonitorProperties_Test::stageLinesAreSetUpstageOfTheFront()
     QCOMPARE(older.curtainLineY(), 4.2f);
     QCOMPARE(older.numberLineY(), 6.0f);
     QVERIFY(qAbs(older.curtainLineUpstage() - 3.8f) < 1e-4f);
-    QCOMPARE(older.numberLineUpstage(), 2.0f);
+    QVERIFY(qAbs(older.numberLineDownstageOfCurtain() - 1.8f) < 1e-4f);
     QVERIFY(older.targetPositionsVisible());
 
     // In feet the distance is still metres in the model; the menu shows feet.
@@ -2960,6 +2965,73 @@ void MonitorProperties_Test::stageLinesAreSetUpstageOfTheFront()
     ft.setGridSize(QVector3D(40, 20, 30));
     ft.setCurtainLineUpstage(4.0f * 0.3048f);
     QVERIFY(qAbs(ft.curtainLineY() - 26.0f * 0.3048f) < 1e-4f);
+}
+
+void MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine()
+{
+    typedef MonitorProperties MP;
+    MonitorProperties mp;
+    mp.setGridUnits(MP::Meters);
+    mp.setGridSize(QVector3D(10, 6, 8));
+    QVERIFY(mp.mainDeck() == nullptr);
+    QVERIFY(!mp.setApronDepth(1.0f));             // a bare floor: nothing to build on
+
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(8.0f); deck->setDepth(5.0f);
+    deck->setHeight(1.0f);
+    deck->setColor(QColor(120, 40, 40));
+    QCOMPARE(mp.mainDeck(), deck);
+    QVERIFY(mp.apronPlatform() == nullptr);
+    QVERIFY(qAbs(mp.apronDepth() - 1.2f) < 1e-4f);  // the automatic curtain line
+
+    // Deeper: an apron piece against the deck's front, like it. The curtain
+    // line found from nothing is pinned first, or it would follow.
+    QVERIFY(mp.setApronDepth(2.0f));
+    QVERIFY(!mp.curtainLineIsAuto());
+    QVERIFY(qAbs(mp.curtainLineY() - 4.8f) < 1e-4f);
+    StagePlatform *apron = mp.apronPlatform();
+    QVERIFY(apron != nullptr);
+    QCOMPARE(apron->originX(), 1.0f);
+    QCOMPARE(apron->originY(), 6.0f);
+    QCOMPARE(apron->width(), 8.0f);
+    QCOMPARE(apron->height(), 1.0f);
+    QCOMPARE(apron->color(), QColor(120, 40, 40));
+    QVERIFY(qAbs(mp.downstageEdgeY() - 6.8f) < 1e-4f);
+    QVERIFY(qAbs(mp.apronDepth() - 2.0f) < 1e-4f);
+    QCOMPARE(mp.stageDecks().size(), 2);
+
+    // Resized, not added again.
+    const int count = mp.platforms().size();
+    QVERIFY(mp.setApronDepth(2.5f));
+    QCOMPARE(mp.platforms().size(), count);
+    QVERIFY(qAbs(mp.apronDepth() - 2.5f) < 1e-4f);
+
+    // Shallower than the deck alone reaches: the piece goes.
+    QVERIFY(mp.setApronDepth(0.5f));
+    QCOMPARE(mp.platforms().size(), count - 1);
+    QVERIFY(mp.apronPlatform() == nullptr);
+    QCOMPARE(mp.downstageEdgeY(), 6.0f);
+    QVERIFY(!mp.setApronDepth(0.5f));             // and the deck itself is not cut
+
+    // A curtain line found from the main drape stays automatic.
+    Scenery *main = mp.addScenery();
+    main->setKind(Scenery::MainDrape);
+    main->setOriginX(5.0f); main->setOriginY(5.0f); main->setWidth(9.0f);
+    mp.setCurtainLineAuto();
+    QCOMPARE(mp.curtainLineY(), 5.0f);
+    QVERIFY(mp.setApronDepth(3.0f));
+    QVERIFY(mp.curtainLineIsAuto());
+    QVERIFY(qAbs(mp.downstageEdgeY() - 8.0f) < 1e-4f);
+
+    // Over the audience: how far from the curtain line, in crew terms.
+    QCOMPARE(mp.curtainLineOffsetText(9.2f), QStringLiteral("4.2 m DS of curtain line"));
+    QCOMPARE(mp.curtainLineOffsetText(4.0f), QStringLiteral("1.0 m US of curtain line"));
+    QCOMPARE(mp.curtainLineOffsetText(5.02f), QStringLiteral("on the curtain line"));
+    QCOMPARE(MP::formatCurtainLineOffset(-0.4572f, MP::Feet), QStringLiteral("1' 6\" US of curtain line"));
+    QCOMPARE(MP::formatStageDistance(1.8f, MP::Meters), QStringLiteral("1.8 m"));
+    QCOMPARE(MP::formatStageDistance(1.8f, MP::Feet), QStringLiteral("5' 11\""));
+    QCOMPARE(MP::formatStageDistance(1.2192f, MP::Feet), QStringLiteral("4'"));
 }
 
 void MonitorProperties_Test::targetPositionsAreSavedOnlyWhenOff()

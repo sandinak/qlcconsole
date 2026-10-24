@@ -42,9 +42,16 @@ circuits and subs.
   the number line, ticked and numbered in the show's unit out from 0 at
   centre, at the front of the deck (the biggest platform across centre and
   an apron butted to it) or the grid's front edge. The curtain and number
-  lines can be moved (Auto, or a distance upstage of the front of the stage,
-  negative out on an apron extension; kept and saved as the plan's Y, so a
-  set line stays put when the deck changes). With the full centre line on,
+  lines can be moved: Auto, or the curtain line (the main reference) a
+  distance upstage of the front of the stage and the number line a distance
+  downstage of the curtain line, negative the other way; both kept and saved
+  as the plan's Y, so a set line stays put when the deck or the other line
+  moves. With the curtain line on, the apron (the deck downstage of it) is
+  tinted and dimensioned ("Apron 1.8 m"), **Apron depth** resizes or adds
+  the apron platform in front of the main deck (one undo step;
+  `MonitorProperties::setApronDepth()`), and horizontal trusses and pipes
+  downstage of it are labelled "FOH · 4.2 m DS of curtain line"
+  (`curtainLineOffsetText()`). With the full centre line on,
   the teal centre cross's up-and-down arm isn't drawn (its arm across the
   stage stays). Drawn on the plot's Top view and on the Rig Overview's floor
   (Top and 45°). Saved with the show only when used (`StageMarks`,
