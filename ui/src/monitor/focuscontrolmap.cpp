@@ -229,14 +229,15 @@ QString FocusControlMap::actionText(int role) const
         case FocusSession::StepTiltUp:
         case FocusSession::StepTiltDown:
             return tr("%1\302\260 step").arg(double(m_step), 0, 'g', 3);
-        case FocusSession::ZoomWider:
-            // The D-pad's one callout reads its up arm: say all four.
-            return tr("Zoom \342\206\225  Focus \342\206\224");
         case FocusSession::ZoomNarrower:
-            return tr("Narrower beam");
+            // The D-pad's one callout reads its up arm: say all four.
+            return tr("Zoom \342\226\262in \342\226\274out  Focus \342\227\200looser tighter\342\226\266");
+        case FocusSession::ZoomWider:
+            return tr("Wider beam");
         case FocusSession::FocusNearer:
+            return tr("Focus looser");
         case FocusSession::FocusFarther:
-            return tr("Focus");
+            return tr("Focus tighter");
         case FocusSession::NoControl:
             break;
     }

@@ -325,8 +325,8 @@ their house lights, relays and subs.
 - **Fixed lights aimed and focused.** A par or profile has **Pan** and
   **Tilt** in Aim &amp; Mount, and Focus mode steps through fixed lights
   too, with a person standing where each lands. Where the beam can
-  change, D-pad up / down (. and ,) zooms and left / right (' and ;)
-  focuses. See [Fixed lights](lighting-studio.md#fixed-lights-pars-and-fixed-spots)
+  change, D-pad up zooms in and down zooms out (, and .), and right
+  tightens the focus and left loosens it (' and ;). See [Fixed lights](lighting-studio.md#fixed-lights-pars-and-fixed-spots)
   and [The beam](lighting-studio.md#the-beam).
 
 ### Importing an Eos show

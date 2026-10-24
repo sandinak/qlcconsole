@@ -523,8 +523,8 @@ void FocusSession_Test::buttonsByRole()
     QCOMPARE(FocusSession::controlFor(GamepadRole::Back), FocusSession::UndoSave);
     QCOMPARE(FocusSession::controlFor(GamepadRole::Start), FocusSession::Exit);
     // The D-pad is zoom (up, down) and focus (left, right): Q103.
-    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadUp), FocusSession::ZoomWider);
-    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadDown), FocusSession::ZoomNarrower);
+    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadUp), FocusSession::ZoomNarrower);
+    QCOMPARE(FocusSession::controlFor(GamepadRole::DpadDown), FocusSession::ZoomWider);
     QCOMPARE(FocusSession::controlFor(GamepadRole::DpadRight), FocusSession::FocusFarther);
     QCOMPARE(FocusSession::controlFor(GamepadRole::LeftX), FocusSession::NoControl);
 

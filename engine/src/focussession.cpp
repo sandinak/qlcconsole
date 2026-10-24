@@ -861,10 +861,10 @@ FocusSession::Control FocusSession::controlFor(GamepadRole::Role role)
         case GamepadRole::Back:      return UndoSave;
         case GamepadRole::Start:     return Exit;
         // Zoom up and down, focus left and right (Q103); the sticks nudge.
-        case GamepadRole::DpadUp:    return ZoomWider;
-        case GamepadRole::DpadDown:  return ZoomNarrower;
-        case GamepadRole::DpadLeft:  return FocusNearer;
-        case GamepadRole::DpadRight: return FocusFarther;
+        case GamepadRole::DpadUp:    return ZoomNarrower;   // up is in
+        case GamepadRole::DpadDown:  return ZoomWider;      // down is out
+        case GamepadRole::DpadLeft:  return FocusNearer;    // looser
+        case GamepadRole::DpadRight: return FocusFarther;   // tighter
         default:                     return NoControl;
     }
 }

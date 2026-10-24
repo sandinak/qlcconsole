@@ -924,8 +924,8 @@ and jump as you nudged.)
 | Nudge (coarse) | Left stick | ⇧ + arrows (1°) |
 | Nudge (fine) | Right stick | — |
 | One step (0.1°) | — | Arrows |
-| Zoom: wider / narrower | D-pad up / down | . / , |
-| Focus (the edge) | D-pad right / left | ' / ; |
+| Zoom: in (narrower) / out (wider) | D-pad up / down | , / . |
+| Focus (the edge): tighter / looser | D-pad right / left | ' / ; |
 | Step size ×10 / ÷10 | — | + / − |
 | Save this head | A | Return |
 | Back to what was saved | B | Backspace |
@@ -1102,10 +1102,10 @@ first.
 ### The beam
 
 Where a light's beam can change, Focus mode changes it too: **D-pad up**
-widens, **down** narrows (or **.** and **,** on the keyboard, ⇧ for 5°),
+zooms in (narrower), **down** zooms out (wider) (or **,** and **.** on the keyboard, ⇧ for 5°),
 always within the lens range its definition gives, and the panel shows the
-angle. Where it has a focus channel, **D-pad right / left** (or **'** and
-**;**) moves its focus — the edge — while you focus, to see it; that isn't
+angle. Where it has a focus channel, **D-pad right**
+tightens its focus — the edge — and **left** loosens it (or **'** and **;**), while you focus, to see it; that isn't
 saved either, the cues set it.
 
 - **A lens zoomed by hand** (a fixed spot or wash with a range but no zoom
