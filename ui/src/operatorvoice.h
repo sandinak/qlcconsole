@@ -153,7 +153,7 @@ public:
     QString lastSaid() const { return m_last; }
 
 public slots:
-    void announce(const QString &text);
+    void announce(const QString &text, int priority = 0);
 
 private:
     OperatorVoice *m_voice;

@@ -431,7 +431,7 @@ void FocusSession::nextCall()
     if (m_options.endAfterLastCall && m_callIndex == m_calls.size() - 1)
     {
         // The last call done: leave (asking about anything unsaved).
-        emit announce(tr("Last call done."));
+        emit announce(tr("Last call done."), ControllerScheme::ConfirmPriority);
         emit exitRequested();
         return;
     }
@@ -525,6 +525,18 @@ void FocusSession::flashSelection()
 {
     if (!m_active || !m_flashEnabled || !m_lightsFeedback)
         return;
+    m_warnFlash = false;
+    m_flashClock.start();
+    if (m_flashTimer != nullptr)
+        m_flashTimer->start();
+    rebuildWrites();
+}
+
+void FocusSession::flashWarning()
+{
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
+        return;
+    m_warnFlash = true;
     m_flashClock.start();
     if (m_flashTimer != nullptr)
         m_flashTimer->start();
@@ -533,7 +545,8 @@ void FocusSession::flashSelection()
 
 bool FocusSession::isFlashing() const
 {
-    return m_active && m_flashClock.isValid() && m_flashClock.elapsed() < flashDurationMs();
+    return m_active && m_flashClock.isValid()
+        && m_flashClock.elapsed() < (m_warnFlash ? warnDarkMs() : flashDurationMs());
 }
 
 void FocusSession::onFlashTick()
@@ -911,10 +924,10 @@ void FocusSession::save()
     if (saved.size() == 1)
     {
         const Fixture *fx = m_doc->fixture(saved.first());
-        emit announce(fx != nullptr ? tr("%1 kept.").arg(fx->name()) : tr("Kept."));
+        emit announce(fx != nullptr ? tr("%1 kept.").arg(fx->name()) : tr("Kept."), ControllerScheme::ConfirmPriority);
     }
     else if (!saved.isEmpty())
-        emit announce(tr("%1 lights kept.").arg(saved.size()));
+        emit announce(tr("%1 lights kept.").arg(saved.size()), ControllerScheme::ConfirmPriority);
 }
 
 FocusSession::SaveStatus FocusSession::saveStatus() const
@@ -931,7 +944,7 @@ void FocusSession::saveAllHeld()
         return;
     const int n = unsavedFixtures().size();
     saveAll();
-    emit announce(n == 0 ? tr("All saved.") : n == 1 ? tr("1 light kept.") : tr("%1 lights kept.").arg(n));
+    emit announce(n == 0 ? tr("All saved.") : n == 1 ? tr("1 light kept.") : tr("%1 lights kept.").arg(n), ControllerScheme::ConfirmPriority);
 }
 
 void FocusSession::revertLight()
@@ -947,7 +960,7 @@ void FocusSession::revertLight()
         emit offsetChanged(fid);
     }
     if (const Fixture *fx = m_doc->fixture(fid))
-        emit announce(tr("%1 back to its last save.").arg(fx->name()));
+        emit announce(tr("%1 back to its last save.").arg(fx->name()), ControllerScheme::ConfirmPriority);
 }
 
 bool FocusSession::nextUnsaved(quint32 after)
@@ -957,7 +970,7 @@ bool FocusSession::nextUnsaved(quint32 after)
     const QList<quint32> unsaved = unsavedFixtures();
     if (unsaved.isEmpty())
     {
-        emit announce(tr("All saved."));
+        emit announce(tr("All saved."), ControllerScheme::ConfirmPriority);
         return false;
     }
     // After the head we are on, round to the start: in call order.
@@ -982,7 +995,7 @@ bool FocusSession::nextUnsaved(quint32 after)
     m_scope = FixtureScope;
     setIndex(m_order.indexOf(to));
     if (const Fixture *fx = m_doc->fixture(to))
-        emit announce(tr("%1, not saved.").arg(fx->name()));
+        emit announce(tr("%1, not saved.").arg(fx->name()), ControllerScheme::ConfirmPriority);
     return true;
 }
 
@@ -1273,7 +1286,7 @@ void FocusSession::revert()
     if (!any)
         return;
     rebuildWrites();
-    emit announce(tr("Reverted."));
+    emit announce(tr("Reverted."), ControllerScheme::ConfirmPriority);
 }
 
 void FocusSession::zero()
@@ -1304,7 +1317,7 @@ void FocusSession::zero()
     if (!any)
         return;
     rebuildWrites();
-    emit announce(tr("Zeroed."));
+    emit announce(tr("Zeroed."), ControllerScheme::ConfirmPriority);
 }
 
 bool FocusSession::undoSave()
@@ -1335,7 +1348,7 @@ bool FocusSession::undoSave()
         return false;
     savedChanged(undone);
     rebuildWrites();
-    emit announce(tr("Undone."));
+    emit announce(tr("Undone."), ControllerScheme::ConfirmPriority);
     return true;
 }
 
@@ -1414,7 +1427,7 @@ void FocusSession::apply(Control control)
         case Revert:          revert(); break;
         case Zero:            zero(); break;
         case ToggleReference: toggleReference(); break;
-        case UndoSave:        if (!undoSave()) emit announce(tr("Nothing to undo.")); break;
+        case UndoSave:        if (!undoSave()) emit announce(tr("Nothing to undo."), ControllerScheme::ConfirmPriority); break;
         case Exit:
         {
             // "2 lights not saved." -- the panel then asks what to do.
@@ -1422,10 +1435,10 @@ void FocusSession::apply(Control control)
             if (n == 1)
             {
                 const Fixture *fx = m_doc->fixture(unsavedFixtures().first());
-                emit announce(fx != nullptr ? tr("%1 not saved.").arg(fx->name()) : tr("1 light not saved."));
+                emit announce(fx != nullptr ? tr("%1 not saved.").arg(fx->name()) : tr("1 light not saved."), ControllerScheme::ImportantPriority);
             }
             else if (n > 1)
-                emit announce(tr("%1 lights not saved.").arg(n));
+                emit announce(tr("%1 lights not saved.").arg(n), ControllerScheme::ImportantPriority);
             emit exitRequested();
             break;
         }
@@ -1599,7 +1612,8 @@ void FocusSession::rebuildWrites()
         /* What is selected is lit (blinking while it flashes); the rest of
            the call (list) is dark or dim, as chosen. */
         const QList<quint32> selected = scopeFixtures();
-        const bool dark = m_flashClock.isValid() && !flashLit(m_flashClock.elapsed());
+        const bool dark = m_flashClock.isValid()
+                          && !(m_warnFlash ? warnLit(m_flashClock.elapsed()) : flashLit(m_flashClock.elapsed()));
         for (quint32 fid : m_order)
         {
             Fixture *fx = m_doc->fixture(fid);

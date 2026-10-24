@@ -1042,4 +1042,64 @@ void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
     iom->setInputPatch(0, QString(), QString(), 0);
 }
 
+void FocusCalls_Test::importantLinesAlwaysSpeak()
+{
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    s->setFlashEnabled(true);
+    s->setBlinkTimed(false);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy buzz(pc, &ProgrammerController::padRumbled);
+    FocusSession::Options o;
+    o.fixtures = { a->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    pc->setOperatorFeedback(ControllerScheme::LightsFeedback);
+
+    // Lights only: a where line and a confirmation are not said...
+    said.clear();
+    s->nudge(1.0f, 0.0f);
+    s->whereAmI();                             // (Say the light is asked for: said)
+    said.clear();
+    s->revert();
+    QCOMPARE(said.count(), 0);
+    QVERIFY(!s->isWarningFlash());
+    // ...but a warning is, marked important, with the long blink and buzz.
+    s->nudge(1.0f, 0.0f);
+    s->apply(FocusSession::Exit);
+    QCOMPARE(said.count(), 1);
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 not saved."));
+    QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
+    QVERIFY(s->isWarningFlash());
+    QCOMPARE(buzz.last().at(0).toInt(), 1);
+    QCOMPARE(buzz.last().at(1).toInt(), ControllerScheme::rumbleLongMs());
+    // The long blink: dark well past the selection's quick ones, then lit.
+    QVERIFY(!FocusSession::warnLit(FocusSession::flashDurationMs()));
+    QVERIFY(FocusSession::warnLit(FocusSession::warnDarkMs()));
+    // A save buzzes short, and its blink is the double one.
+    s->save();
+    QCOMPARE(buzz.last().at(1).toInt(), ControllerScheme::rumbleShortMs());
+    s->discardAll();
+    s->stop();
+
+    // A refusal on the armed cue, in Lights only: said too.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Pre-show");
+    const quint32 focus = st->addCue(list, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    FocusCallCue *fcc = pc->focusCallCue();
+    m_doc->setMode(Doc::Operate);
+    said.clear();
+    fcc->cueCurrent(list, focus);
+    QCOMPARE(said.count(), 0);                 // "ready" is not a warning: quiet
+    QVERIFY(!fcc->start());
+    QCOMPARE(said.last().at(0).toString(), QString("This show has no focus calls yet."));
+    QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
+    pc->setOperatorFeedback(ControllerScheme::BothFeedback);
+    m_doc->setMode(Doc::Design);
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)

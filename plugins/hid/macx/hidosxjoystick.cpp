@@ -43,10 +43,10 @@ bool HIDOSXJoystick::setPadLight(float r, float g, float b)
     return gc != 0 && HIDGameController::setLight(gc, r, g, b);
 }
 
-bool HIDOSXJoystick::padRumble(int pulses)
+bool HIDOSXJoystick::padRumble(int pulses, int lengthMs)
 {
     const int gc = m_gcHandle.loadRelaxed();
-    return gc != 0 && HIDGameController::rumble(gc, pulses);
+    return gc != 0 && HIDGameController::rumble(gc, pulses, lengthMs);
 }
 
 HIDOSXJoystick::~HIDOSXJoystick()

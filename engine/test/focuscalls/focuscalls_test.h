@@ -82,6 +82,9 @@ private slots:
      *  both bumpers, A and B held, RS tapped and held, the light bar and the
      *  buzz sent to the controller's plugin. */
     void theControllerDoesItThroughTheProgrammer();
+    /** Q131: warnings and refusals speak even in Lights only, with a slow
+     *  long blink and one long buzz -- not a save's double blink. */
+    void importantLinesAlwaysSpeak();
 
 private:
     Doc *m_doc = nullptr;

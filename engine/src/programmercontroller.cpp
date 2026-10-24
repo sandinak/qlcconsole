@@ -98,19 +98,16 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
     m_focusCallCue = new FocusCallCue(m_doc, m_focusSession, m_focusCalls, this);
-    // Spoken unless the operator chose lights only.
-    auto spoken = [this](const QString &text) {
-        if (m_feedback != ControllerScheme::LightsFeedback)
-            emit operatorAnnounce(text);
-    };
-    connect(m_focusCallCue, &FocusCallCue::announce, this, spoken);
+    /* Spoken unless the operator chose lights only -- except what is
+       important, which is always said (Q131). */
+    connect(m_focusCallCue, &FocusCallCue::announce, this, &ProgrammerController::tellOperator);
     connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
         // Armed: the controller is read for Start, even with nothing else on.
         if (m_focusCallCue->isArmed())
             connectControllerInput();
     });
-    connect(m_focusSession, &FocusSession::announce, this, spoken);
-    connect(m_refineSession, &RefineSession::announce, this, spoken);
+    connect(m_focusSession, &FocusSession::announce, this, &ProgrammerController::tellOperator);
+    connect(m_refineSession, &RefineSession::announce, this, &ProgrammerController::tellOperator);
     /* The pad (Q126): its light bar follows the status lamp, and it buzzes
        on a keep -- twice when another light is still unsaved. */
     connect(m_focusSession, &FocusSession::unsavedChanged, this, &ProgrammerController::refreshPadLight);
@@ -125,8 +122,12 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_refineSession, &RefineSession::stopped, this, &ProgrammerController::refreshPadLight);
     connect(m_refineSession, &RefineSession::kept, this, [this]() { padRumble(1); });
     // Say the light: asked for, so always said.
-    connect(m_focusSession, &FocusSession::sayLight, this, &ProgrammerController::operatorAnnounce);
-    connect(m_refineSession, &RefineSession::sayLight, this, &ProgrammerController::operatorAnnounce);
+    connect(m_focusSession, &FocusSession::sayLight, this, [this](const QString &text) {
+        emit operatorAnnounce(text, ControllerScheme::ConfirmPriority);
+    });
+    connect(m_refineSession, &RefineSession::sayLight, this, [this](const QString &text) {
+        emit operatorAnnounce(text, ControllerScheme::ConfirmPriority);
+    });
     connect(m_doc, &Doc::clearing, this, [this]() {
         m_refineSession->stop();
         m_venues->reset();
@@ -1453,7 +1454,7 @@ void ProgrammerController::setPadLight(const QColor &colour)
     emit padLightChanged(colour);
 }
 
-void ProgrammerController::padRumble(int pulses)
+void ProgrammerController::padRumble(int pulses, int lengthMs)
 {
     if (pulses <= 0)
         return;
@@ -1461,8 +1462,28 @@ void ProgrammerController::padRumble(int pulses)
     QVariantMap p;
     p.insert(QStringLiteral("gamepad"), QStringLiteral("rumble"));
     p.insert(QStringLiteral("pulses"), pulses);
+    p.insert(QStringLiteral("ms"), lengthMs);
     sendPadFeedback(p);
-    emit padRumbled(pulses);
+    emit padRumbled(pulses, lengthMs);
+}
+
+void ProgrammerController::tellOperator(const QString &text, int priority)
+{
+    if (priority >= ControllerScheme::ImportantPriority)
+        warnOperator(text);
+    else if (m_feedback != ControllerScheme::LightsFeedback)
+        emit operatorAnnounce(text, priority);
+}
+
+void ProgrammerController::warnOperator(const QString &text)
+{
+    // Said whatever the feedback; the rig and the pad each say "listen".
+    emit operatorAnnounce(text, ControllerScheme::ImportantPriority);
+    if (m_focusSession->isActive())
+        m_focusSession->flashWarning();
+    else if (m_refineSession->isActive())
+        m_refineSession->flashWarning();
+    padRumble(1, ControllerScheme::rumbleLongMs());
 }
 
 void ProgrammerController::sendPadFeedback(const QVariantMap &params)
@@ -1494,7 +1515,7 @@ void ProgrammerController::heldTick(double dt)
             else if (m_refineSession->hasPending())
                 m_refineSession->keep();
             else
-                emit operatorAnnounce(tr("All kept."));
+                emit operatorAnnounce(tr("All kept."), ControllerScheme::ConfirmPriority);
         }
         else
             m_focusSession->saveAllHeld();
@@ -1512,7 +1533,8 @@ void ProgrammerController::cycleOperatorFeedback()
 {
     setOperatorFeedback(ControllerScheme::nextFeedback(m_feedback));
     // Said whatever it now is: it was asked for.
-    emit operatorAnnounce(tr("Feedback: %1.").arg(ControllerScheme::feedbackName(m_feedback)));
+    emit operatorAnnounce(tr("Feedback: %1.").arg(ControllerScheme::feedbackName(m_feedback)),
+                          ControllerScheme::ConfirmPriority);
 }
 
 bool ProgrammerController::saveFocusCallsXML(QXmlStreamWriter *doc) const

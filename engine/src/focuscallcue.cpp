@@ -138,7 +138,7 @@ bool FocusCallCue::start(QString *why)
     auto refuse = [this, why](const QString &reason) {
         if (why != nullptr)
             *why = reason;
-        emit announce(reason);
+        emit announce(reason, ControllerScheme::ImportantPriority);
         return false;
     };
     if (m_state != Armed)
@@ -152,7 +152,7 @@ bool FocusCallCue::start(QString *why)
     if (venues != nullptr && !venues->isActive() && !venues->filePath().isEmpty())
     {
         setState(NamingVenue);
-        emit announce(tr("Name this venue on the laptop, or wait for today's date."));
+        emit announce(tr("Name this venue on the laptop, or wait for today's date."), ControllerScheme::ImportantPriority);
         emit venueNeeded(VenueCorrections::defaultVenueName(), m_askTimeout);
         m_askTimer->start(m_askTimeout);
         return true;
@@ -174,7 +174,7 @@ bool FocusCallCue::useVenue(const QString &name)
     QString why;
     if (!beginCalls(&why))
     {
-        emit announce(why);
+        emit announce(why, ControllerScheme::ImportantPriority);
         return false;
     }
     return true;
@@ -190,7 +190,7 @@ bool FocusCallCue::beginCalls(QString *why)
     auto refuse = [this, why](const QString &reason) {
         if (why != nullptr)
             *why = reason;
-        emit announce(reason);
+        emit announce(reason, ControllerScheme::ImportantPriority);
         return false;
     };
     FocusSession::Options o;

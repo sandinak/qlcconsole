@@ -252,11 +252,12 @@ OperatorAnnouncer::OperatorAnnouncer(QObject *source, OperatorVoice *voice, QObj
     , m_voice(voice)
 {
     if (source != nullptr)
-        connect(source, SIGNAL(operatorAnnounce(QString)), this, SLOT(announce(QString)));
+        connect(source, SIGNAL(operatorAnnounce(QString,int)), this, SLOT(announce(QString,int)));
 }
 
-void OperatorAnnouncer::announce(const QString &text)
+void OperatorAnnouncer::announce(const QString &text, int priority)
 {
+    Q_UNUSED(priority)
     m_last = text;
     if (m_voice != nullptr && OperatorVoice::isEnabled())
         m_voice->say(text);

@@ -92,6 +92,22 @@ namespace ControllerScheme
     QLC_ENGINE_EXPORT QString feedbackKey(Feedback feedback);
     QLC_ENGINE_EXPORT Feedback feedbackFromKey(const QString &key);
 
+    /** How much a spoken line matters (board Q131, gap 9):
+     *  - Where: "fixture 3 of 8", the start line, a palette's name. Only the
+     *    newest waits; a newer one replaces it (stepping through fixtures
+     *    says where you stopped). Silent in Lights only.
+     *  - Confirm: what a press did ("Spot 3 kept.", "Undone.", "Feedback:
+     *    voice only."). Queued, never dropped. Silent in Lights only.
+     *  - Important: warnings, refusals, the controller lost or back, the
+     *    venue asked. Queued, never dropped, and spoken in EVERY feedback
+     *    setting; the rig gives a slow long blink and the pad one long
+     *    buzz, unlike a save's double blink and short buzz. */
+    enum Priority { WherePriority = 0, ConfirmPriority = 1, ImportantPriority = 2 };
+
+    /** A short buzz (a keep) and the long one (something important). */
+    constexpr int rumbleShortMs() { return 120; }
+    constexpr int rumbleLongMs() { return 700; }
+
     /**
      * A press that means one thing when tapped and another when held
      * (RS: say the light; held: change the feedback). release() says a tap;

@@ -25,6 +25,7 @@
 
 #include "qlcengine_export.h"
 #include "gamepadrole.h"
+#include "controllerscheme.h"
 
 class FocusSession;
 class FocusCalls;
@@ -95,7 +96,7 @@ public:
 
 signals:
     void stateChanged(FocusCallCue::State state);
-    void announce(const QString &text);
+    void announce(const QString &text, int priority = ControllerScheme::ConfirmPriority);
     /** The calls are done: the list goes on (GO on its chaser). */
     void continueRequested(quint32 chaserId);
     /** Start with no venue applied: ask for its name on the laptop, the

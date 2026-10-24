@@ -230,6 +230,8 @@ public:
     /** The rig blinks and dims (Feedback: Lights or Both); off: Voice only. */
     void setLightsFeedback(bool on);
     void flashSelection();
+    /** Something important: the selection's slow long blink (Q131). */
+    void flashWarning();
     void setFlashEnabled(bool on) { m_flashEnabled = on; }
     bool isFlashing() const;
     /** Out-of-scope fixtures of the layer are dimmed to this, 0..1. */
@@ -261,7 +263,7 @@ signals:
     void started();
     void stopped();
     void changed();
-    void announce(const QString &text);
+    void announce(const QString &text, int priority = ControllerScheme::WherePriority);
     /** Said because the operator asked (Say the light): always spoken. */
     void sayLight(const QString &text);
     void exitRequested();
@@ -318,7 +320,10 @@ private:
      *  else the output as it was before Refine dimmed it), 0..255. */
     int cueLevel(quint32 fid, quint32 channel);
     void onFlashTick();
-    void say(const QString &text) { emit announce(text); }
+    void say(const QString &text, int priority = ControllerScheme::WherePriority)
+    { emit announce(text, priority); }
+    void confirm(const QString &text) { say(text, ControllerScheme::ConfirmPriority); }
+    void warn(const QString &text) { say(text, ControllerScheme::ImportantPriority); }
 
 private:
     Doc *m_doc;
@@ -361,6 +366,7 @@ private:
     QTimer *m_flashTimer = nullptr;
     QElapsedTimer m_flashClock;
     bool m_flashEnabled = true;
+    bool m_warnFlash = false;
     bool m_lightsFeedback = true;
 
     mutable QMutex m_writesMutex;

@@ -285,6 +285,14 @@ public:
     static constexpr int flashDurationMs() { return flashBlinks() * (flashOnMs() + flashOffMs()); }
     /** Lit @p ms into a flash (steady once it is over). */
     static bool flashLit(qint64 ms);
+    /** Something important (a warning, a refusal, the controller lost --
+     *  board Q131): one slow, long blink -- dark for warnDarkMs(), then
+     *  lit -- unlike the selection's three quick ones and a save's double. */
+    static constexpr int warnDarkMs() { return 800; }
+    static bool warnLit(qint64 ms) { return ms < 0 || ms >= warnDarkMs(); }
+    /** The selection's slow long blink (lights feedback only). */
+    void flashWarning();
+    bool isWarningFlash() const { return m_warnFlash && isFlashing(); }
     /** Start the flash on what is selected now. */
     void flashSelection();
     bool isFlashing() const;
@@ -489,7 +497,7 @@ signals:
     void callChanged(int index);
     void scopeChanged(FocusSession::Scope scope);
     /** Something to say to the operator on stage (the voice reads it). */
-    void announce(const QString &text);
+    void announce(const QString &text, int priority = ControllerScheme::WherePriority);
     /** Said because the operator asked (Say the light): always spoken. */
     void sayLight(const QString &text);
 
@@ -594,6 +602,7 @@ private:
     VenueCorrections *m_venues = nullptr;
     QTimer *m_flashTimer = nullptr;
     bool m_flashEnabled = true;
+    bool m_warnFlash = false;
     bool m_lightsFeedback = true;
     QElapsedTimer m_flashClock;
 

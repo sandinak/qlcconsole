@@ -80,7 +80,7 @@ public:
      *  this pad is read that way; false otherwise (or no light). */
     bool setPadLight(float r, float g, float b);
     /** @p pulses buzzes, the same way; false where it cannot. */
-    bool padRumble(int pulses);
+    bool padRumble(int pulses, int lengthMs = 120);
 
     /** From the IOHIDDevice input-report callback (the USB GIP report). */
     void processRawReport(uint32_t reportID, const uint8_t *report, CFIndex len);

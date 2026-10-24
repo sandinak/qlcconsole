@@ -235,7 +235,7 @@ void RefineSession::setKeepToSource(bool source)
     if (isTrackedLayer())
     {
         const ShowTree::Cue *src = m_doc->showTree()->cue(trackedSource());
-        say(source && src != nullptr ? tr("Keeps go into cue %1.").arg(src->number.isEmpty() ? src->name : src->number)
+        confirm(source && src != nullptr ? tr("Keeps go into cue %1.").arg(src->number.isEmpty() ? src->name : src->number)
                                      : tr("Keeps go into this cue."));
     }
 }
@@ -335,7 +335,7 @@ void RefineSession::setScope(Scope scope)
     if (scope != LayerScope && isTrackedLayer())
     {
         // An exception needs the layer to be this cue's own first.
-        say(tr("Tracked layer: keep it in this cue first, then pick a fixture."));
+        warn(tr("Tracked layer: keep it in this cue first, then pick a fixture."));
         return;
     }
     if (scope == m_scope)
@@ -458,9 +458,9 @@ void RefineSession::cyclePage()
     emit changed();
     switch (m_page)
     {
-        case BeamPage:   say(tr("Beam page: zoom and focus.")); break;
-        case ColourPage: say(tr("Colour page.")); break;
-        case GoboPage:   say(tr("Gobo page.")); break;
+        case BeamPage:   confirm(tr("Beam page: zoom and focus.")); break;
+        case ColourPage: confirm(tr("Colour page.")); break;
+        case GoboPage:   confirm(tr("Gobo page.")); break;
     }
 }
 
@@ -661,7 +661,7 @@ bool RefineSession::nudgePosition(float dPan, float dTilt)
                     if (!isPositionType(p->type()))
                     {
                         if (!m_edits.contains(editKey()))
-                            say(tr("This layer is aimed at a target. Refine a fixture, or move the target."));
+                            warn(tr("This layer is aimed at a target. Refine a fixture, or move the target."));
                         return false;
                     }
         Edit &e = edit();
@@ -710,7 +710,7 @@ bool RefineSession::nudgeZoom(float dDeg)
         }
     if (!ranged)
     {
-        say(tr("No zoom here."));
+        warn(tr("No zoom here."));
         return false;
     }
     Edit &e = edit();
@@ -739,7 +739,7 @@ bool RefineSession::nudgeFocus(int dValue)
         any = any || focusChannel(m_doc->fixture(fid), &rev) >= 0;
     if (!any)
     {
-        say(tr("No focus here."));
+        warn(tr("No focus here."));
         return false;
     }
     Edit &e = edit();
@@ -771,7 +771,7 @@ bool RefineSession::stepPalette(int dir)
             list << p;
     if (list.isEmpty())
     {
-        say(m_page == ColourPage ? tr("No colour palettes.") : tr("No gobo palettes."));
+        warn(m_page == ColourPage ? tr("No colour palettes.") : tr("No gobo palettes."));
         return false;
     }
     std::sort(list.begin(), list.end(), [](const QLCPalette *a, const QLCPalette *b) {
@@ -1030,7 +1030,7 @@ bool RefineSession::keep(QString *why)
         m_kept.clear();
         if (why != nullptr && why->isEmpty())
             *why = tr("The Show Tree did not take the change.");
-        say(tr("Not kept."));
+        warn(tr("Not kept."));
         return false;
     }
     m_edits.clear();
@@ -1051,9 +1051,9 @@ bool RefineSession::keep(QString *why)
     emit changed();
     emit kept();
     if (wasTracked)
-        say(toSource ? tr("Kept in the cue it tracks from.") : tr("Kept in this cue."));
+        confirm(toSource ? tr("Kept in the cue it tracks from.") : tr("Kept in this cue."));
     else
-        say(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the next GO.").arg(light)
+        confirm(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the next GO.").arg(light)
                                           : tr("%1 kept.").arg(light));
     return true;
 }
@@ -1064,7 +1064,7 @@ bool RefineSession::nextPending()
         return false;
     if (m_editOrder.isEmpty())
     {
-        say(tr("All kept."));
+        confirm(tr("All kept."));
         return false;
     }
     // After where we are, round to the start.
@@ -1080,7 +1080,7 @@ bool RefineSession::nextPending()
     rebuildWrites();
     emit changed();
     flashSelection();
-    say(tr("%1, not kept.").arg(keptLight()));
+    confirm(tr("%1, not kept.").arg(keptLight()));
     return true;
 }
 
@@ -1125,7 +1125,7 @@ void RefineSession::revert()
     m_editOrder.clear();
     rebuildWrites();
     emit changed();
-    say(tr("Back to the cue."));
+    confirm(tr("Back to the cue."));
 }
 
 bool RefineSession::clearException()
@@ -1159,7 +1159,7 @@ bool RefineSession::clearException()
     {
         rebuildWrites();
         emit changed();
-        say(tr("No exception here."));
+        warn(tr("No exception here."));
         return false;
     }
     if (child == nullptr)
@@ -1178,7 +1178,7 @@ bool RefineSession::clearException()
         st->endBatch(true);
         rebuildWrites();
         emit changed();
-        say(tr("Exception cleared."));
+        confirm(tr("Exception cleared."));
         return true;
     }
     const quint32 childId = child->id;
@@ -1212,7 +1212,7 @@ bool RefineSession::clearException()
     st->endBatch(true);
     rebuildWrites();
     emit changed();
-    say(tr("Exception cleared."));
+    confirm(tr("Exception cleared."));
     return true;
 }
 
@@ -1222,7 +1222,7 @@ bool RefineSession::undo()
                                   : m_doc->showTree()->undo();
     rebuildWrites();
     emit changed();
-    say(done ? tr("Undone.") : tr("Nothing to undo."));
+    confirm(done ? tr("Undone.") : tr("Nothing to undo."));
     return done;
 }
 
@@ -1325,6 +1325,17 @@ void RefineSession::flashSelection()
 {
     if (!m_active || !m_flashEnabled || !m_lightsFeedback)
         return;
+    m_warnFlash = false;
+    m_flashClock.start();
+    m_flashTimer->start();
+    rebuildWrites();
+}
+
+void RefineSession::flashWarning()
+{
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
+        return;
+    m_warnFlash = true;
     m_flashClock.start();
     m_flashTimer->start();
     rebuildWrites();
@@ -1333,7 +1344,8 @@ void RefineSession::flashSelection()
 bool RefineSession::isFlashing() const
 {
     return m_active && m_flashClock.isValid()
-        && m_flashClock.elapsed() < FocusSession::flashDurationMs();
+        && m_flashClock.elapsed() < (m_warnFlash ? FocusSession::warnDarkMs()
+                                                 : FocusSession::flashDurationMs());
 }
 
 void RefineSession::onFlashTick()
@@ -1367,7 +1379,7 @@ void RefineSession::apply(ControllerScheme::Verb verb)
         case ControllerScheme::Undo:          undo(); break;
         case ControllerScheme::Exit:
             if (hasPending())
-                say(m_editOrder.size() == 1 ? tr("1 change not kept.")
+                warn(m_editOrder.size() == 1 ? tr("1 change not kept.")
                                             : tr("%1 changes not kept.").arg(m_editOrder.size()));
             emit exitRequested();
             break;
@@ -1570,7 +1582,8 @@ void RefineSession::rebuildWrites()
            or fixture is picked, and what is picked blinking on a change. */
         const QList<quint32> selected = scopeFixtures();
         const bool dark = m_flashClock.isValid()
-                          && !FocusSession::flashLit(m_flashClock.elapsed());
+                          && !(m_warnFlash ? FocusSession::warnLit(m_flashClock.elapsed())
+                                           : FocusSession::flashLit(m_flashClock.elapsed()));
         for (quint32 fid : layerFixtures())
         {
             Fixture *fx = m_doc->fixture(fid);

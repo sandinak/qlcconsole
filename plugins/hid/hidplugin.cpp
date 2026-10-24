@@ -680,7 +680,8 @@ void HIDPlugin::sendFeedBack(quint32 universe, quint32 inputLine, quint32 channe
         pad->setPadLight(float(show.redF()), float(show.greenF()), float(show.blueF()));
     }
     else if (what == QLatin1String("rumble"))
-        pad->padRumble(p.value(QStringLiteral("pulses")).toInt());
+        pad->padRumble(p.value(QStringLiteral("pulses")).toInt(),
+                       p.value(QStringLiteral("ms"), 120).toInt());
 #else
     Q_UNUSED(inputLine)
 #endif

@@ -368,7 +368,7 @@ bool setLight(int handle, float r, float g, float b)
     return false;
 }
 
-bool rumble(int handle, int pulses)
+bool rumble(int handle, int pulses, int lengthMs)
 {
     if (pulses <= 0)
         return false;
@@ -400,7 +400,9 @@ bool rumble(int handle, int pulses)
         NSError *error = nil;
         if (![engine startAndReturnError:&error])
             return false;
-        // Short, firm buzzes 0.22 s apart: one for a save, two for "but".
+        /* Firm buzzes, each lengthMs long, 0.1 s apart: one short for a
+           save, two for "but", one long for something important. */
+        const double length = qBound(0.05, lengthMs / 1000.0, 2.0);
         NSMutableArray<CHHapticEvent *> *events = [NSMutableArray array];
         for (int i = 0; i < pulses; ++i)
         {
@@ -409,8 +411,8 @@ bool rumble(int handle, int pulses)
                                                               value:1.0f];
             [events addObject:[[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous
                                                             parameters:@[ strong ]
-                                                          relativeTime:0.22 * i
-                                                              duration:0.12]];
+                                                          relativeTime:(length + 0.1) * i
+                                                              duration:length]];
         }
         CHHapticPattern *pattern = [[CHHapticPattern alloc] initWithEvents:events parameters:@[] error:&error];
         if (pattern == nil)

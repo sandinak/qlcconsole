@@ -298,7 +298,7 @@ bool RefineSession::sceneKeep(QString *why)
             m_sharedUsers = users;
             m_sharedConfirmed = true;           // the next A goes on
             emit changed();
-            say(m_sharedWarning);
+            warn(m_sharedWarning);
             if (why != nullptr)
                 *why = m_sharedWarning;
             return false;
@@ -422,7 +422,7 @@ bool RefineSession::sceneKeep(QString *why)
         if (why != nullptr && why->isEmpty())
             *why = tr("The scene did not take the change.");
         m_kept.clear();
-        say(tr("Not kept."));
+        warn(tr("Not kept."));
         return false;
     }
     const QString light = keptLight();
@@ -432,7 +432,7 @@ bool RefineSession::sceneKeep(QString *why)
     rebuildWrites();
     emit changed();
     emit kept();
-    say(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the scene's next start.").arg(light)
+    confirm(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the scene's next start.").arg(light)
                                       : tr("%1 kept.").arg(light));
     return true;
 }
@@ -465,7 +465,7 @@ bool RefineSession::sceneClearException()
     {
         rebuildWrites();
         emit changed();
-        say(tr("No exception here."));
+        warn(tr("No exception here."));
         return false;
     }
     ops->sceneStep(tr("Refine %1: clear exception").arg(s->name()), { s->id() }, [&]() {
@@ -494,6 +494,6 @@ bool RefineSession::sceneClearException()
         s->requestPaletteRefresh();
     rebuildWrites();
     emit changed();
-    say(tr("Exception cleared."));
+    confirm(tr("Exception cleared."));
     return true;
 }

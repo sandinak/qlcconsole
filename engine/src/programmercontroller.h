@@ -201,7 +201,16 @@ public:
      *  {"gamepad": "light", "rgb": "#rrggbb"} or {"gamepad": "rumble",
      *  "pulses": n}); a plugin or pad that cannot do it ignores it. */
     void setPadLight(const QColor &colour);
-    void padRumble(int pulses);
+    void padRumble(int pulses, int lengthMs = ControllerScheme::rumbleShortMs());
+    /** Something important for the operator on stage (board Q131): said
+     *  in every feedback setting, the selection's slow long blink, one
+     *  long buzz. Warnings, refusals, the controller lost or back, the
+     *  venue asked. */
+    void warnOperator(const QString &text);
+    /** Speak @p text at @p priority (ControllerScheme::Priority): where
+     *  and confirmations follow the Feedback setting; important lines go
+     *  through warnOperator(). */
+    void tellOperator(const QString &text, int priority);
     QColor padLight() const { return m_padLight; }
     int padRumbles() const { return m_padRumbles; }
     /** Refine: the controller on a Show Tree cue's own values. Never null. */
@@ -497,10 +506,10 @@ signals:
     void focusModeRequested();
     /** Focus mode, Focus calls or Refine has something to say to the
      *  operator on stage (the UI's voice reads it). */
-    void operatorAnnounce(const QString &text);
+    void operatorAnnounce(const QString &text, int priority = ControllerScheme::WherePriority);
     void operatorFeedbackChanged(ControllerScheme::Feedback feedback);
     void padLightChanged(const QColor &colour);
-    void padRumbled(int pulses);
+    void padRumbled(int pulses, int lengthMs);
     /** A controller came or went, or its profile changed: ask
      *  focusController() again. */
     void focusControllerChanged();
