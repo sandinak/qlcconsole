@@ -23,6 +23,7 @@
 #include <QVBoxLayout>
 #include <QCloseEvent>
 #include <QKeyEvent>
+#include <QCheckBox>
 #include <QLabel>
 
 #include "programmercontroller.h"
@@ -129,8 +130,22 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     m_pending->setWordWrap(true);
     m_device = new QLabel(this);
     m_device->setStyleSheet(QStringLiteral("color: palette(mid);"));
-    for (QLabel *l : { m_title, m_layer, m_scope, m_pending, m_device })
+    for (QLabel *l : { m_title, m_layer, m_scope, m_pending })
         vl->addWidget(l);
+    // A layer only tracked in (section 6C): where A keeps the change.
+    m_toSource = new QCheckBox(this);
+    m_toSource->setObjectName(QStringLiteral("refineToSource"));
+    m_toSource->setFocusPolicy(Qt::NoFocus);
+    m_toSource->setToolTip(tr("Off (the default): A keeps the change in this cue, and the layer becomes "
+                              "its own here. On: A keeps it in the cue its values track from, so it "
+                              "changes there and in every cue that tracks it. S switches."));
+    m_toSource->hide();
+    connect(m_toSource, &QCheckBox::toggled, this, [this](bool on) {
+        if (on != m_session->keepsToSource())
+            m_session->setKeepToSource(on);
+    });
+    vl->addWidget(m_toSource);
+    vl->addWidget(m_device);
 
     m_map = new FocusControlMap(this);
     m_map->setTool(ControllerScheme::RefineTool);
@@ -206,6 +221,11 @@ QString RefinePanel::pendingLine() const
     return m_pending->text();
 }
 
+QString RefinePanel::keepToLine() const
+{
+    return m_toSource->isHidden() ? QString() : m_toSource->text();
+}
+
 void RefinePanel::refresh()
 {
     if (!m_session->isActive())
@@ -253,6 +273,17 @@ void RefinePanel::refresh()
                        : m_session->page() == RefineSession::ColourPage ? tr("colour palettes")
                                                                         : tr("gobo palettes");
     m_scope->setText(tr("%1  Y changes the scope.  D-pad: %2 (LS click changes it).").arg(scope, page));
+    if (m_session->isTrackedLayer())
+    {
+        const ShowTree::Cue *src = m_doc->showTree()->cue(m_session->trackedSource());
+        m_toSource->setText(tr("Keep in the cue it tracks from (cue %1), not this one")
+                            .arg(src != nullptr ? (src->number.isEmpty() ? src->name : src->number) : QString()));
+        QSignalBlocker block(m_toSource);
+        m_toSource->setChecked(m_session->keepsToSource());
+        m_toSource->show();
+    }
+    else
+        m_toSource->hide();
 
     if (!m_session->hasPending())
     {
@@ -338,6 +369,11 @@ bool RefinePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Apostrophe: m_session->apply(CS::FocusFarther); break;
         case Qt::Key_P:        m_session->apply(CS::Alternate); break;
         case Qt::Key_W:        m_session->apply(CS::WhereAmI); break;
+        case Qt::Key_S:
+            if (!m_session->isTrackedLayer())
+                return false;
+            m_session->setKeepToSource(!m_session->keepsToSource());
+            break;
         default:
             return false;
     }

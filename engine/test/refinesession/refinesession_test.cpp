@@ -169,7 +169,7 @@ void RefineSession_Test::refusesWhatItCannotRefine()
     QVERIFY(!why.isEmpty());
 
     ShowTreeController *st = m_doc->showTree();
-    const quint32 empty = st->addCue(st->listOfCue(m_cue)->id, 0, "Empty");
+    const quint32 empty = st->addCue(st->listOfCue(m_cue)->id, -1, "Empty");
     why.clear();
     QVERIFY(!r->start(empty, 0xFFFFFFFF, &why));
     QVERIFY(why.contains("layer"));
@@ -629,6 +629,60 @@ void RefineSession_Test::groupScopeKeepsTheFan()
     QVERIFY(r->clearException());
     QCOMPARE(positionOf(m_spots.at(0)), -1);
     QCOMPARE(positionOf(m_spots.at(1)), -1);
+    r->stop();
+}
+
+void RefineSession_Test::aTrackedLayerKeepsHereOrAtItsSource()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->listOfCue(m_cue)->id;
+    // Cue 2 sets nothing: AT spots track in from cue 1.
+    const quint32 cue2 = st->addCue(list, 0, "Verse");
+    QVERIFY(st->cue(cue2)->layers.isEmpty());
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QString why;
+    QVERIFY2(r->start(cue2, invalidId(), &why), qPrintable(why));
+    QCOMPARE(r->layers().size(), 1);
+    QVERIFY(r->isTrackedLayer());
+    QCOMPARE(r->trackedSource(), m_cue);
+    // The default, said: a keep goes into this cue.
+    QVERIFY2(said.last().at(0).toString().endsWith("AT spots, tracked from 1. Keeps go into this cue."),
+             qPrintable(said.last().at(0).toString()));
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(r->cuePosition(m_spots.at(0), pan, tilt));
+    QCOMPARE(pan, 270.0f);
+    // An exception needs the layer to be this cue's own first.
+    r->cycleScope();
+    QCOMPARE(r->scope(), RefineSession::LayerScope);
+
+    // A keeps it in this cue: its own layer now, cue 1 as it was.
+    QVERIFY(r->nudgePosition(4.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(said.last().at(0).toString(), QString("Kept in this cue."));
+    QCOMPARE(st->cue(cue2)->layers.size(), 1);
+    QCOMPARE(m_doc->palette(st->cue(cue2)->layers.first().look(KeyPosition)->palettes.first())->values(),
+             QVariantList({ 274, 135 }));
+    QCOMPARE(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes, QList<quint32>({ m_position }));
+    QVERIFY(!r->isTrackedLayer());                  // stepping on from its own layer
+    r->cycleScope();
+    QCOMPARE(r->scope(), RefineSession::FixtureScope);
+    r->stop();
+
+    // Cue 3 tracks from cue 2; this time keep at the source.
+    const quint32 cue3 = st->addCue(list, 1, "Bridge");
+    QVERIFY(r->start(cue3));
+    QVERIFY(r->isTrackedLayer());
+    QCOMPARE(r->trackedSource(), cue2);
+    r->setKeepToSource(true);
+    QCOMPARE(said.last().at(0).toString(), QString("Keeps go into cue 2."));
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(said.last().at(0).toString(), QString("Kept in the cue it tracks from."));
+    QVERIFY(st->cue(cue3)->layers.isEmpty());       // still only tracks in
+    QCOMPARE(m_doc->palette(st->cue(cue2)->layers.first().look(KeyPosition)->palettes.first())->values(),
+             QVariantList({ 275, 135 }));
     r->stop();
 }
 

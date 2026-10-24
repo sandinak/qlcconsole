@@ -150,6 +150,17 @@ public:
     Page page() const { return m_page; }
     void cyclePage();
 
+    /** The current layer is only carried into the cue (tracked from an
+     *  earlier one, section 6C): Layer scope only, and A keeps either in
+     *  this cue (the default: the layer becomes its own here) or in the cue
+     *  the value comes from (it then tracks on from there). */
+    bool isTrackedLayer() const;
+    /** The cue the current tracked layer's values come from (invalid: none). */
+    quint32 trackedSource() const;
+    bool keepsToSource() const { return m_keepToSource; }
+    /** Where A keeps a tracked layer's change (said). */
+    void setKeepToSource(bool source);
+
     /*********************************************************************
      * Editing
      *********************************************************************/
@@ -284,6 +295,17 @@ private:
     int m_groupIndex = 0;
     int m_fixtureIndex = 0;
     Page m_page = BeamPage;
+    /** A layer carried into the cue: a stand-in Layer (its target, its
+     *  played looks) and where its values come from. */
+    struct Tracked
+    {
+        ShowTree::Layer layer;
+        quint32 source = 0xFFFFFFFF;
+    };
+    QHash<quint32, Tracked> m_tracked;
+    bool m_keepToSource = false;
+    /** The layers of the cue to step through: own top layers, then tracked. */
+    QList<quint32> findLayers(QString *why) const;
     QHash<QString, Edit> m_edits;
     QList<QString> m_editOrder;
     /** Kept in Operate: held on the rig until the next GO plays it. */

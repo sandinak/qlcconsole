@@ -64,6 +64,9 @@ public:
     QString headline() const;
     QString scopeLine() const;
     QString pendingLine() const;
+    /** Where A keeps a tracked layer's change, as the panel offers it; null
+     *  text when the layer is the cue's own. */
+    QString keepToLine() const;
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -84,6 +87,7 @@ private:
     QLabel *m_scope;
     QLabel *m_pending;
     QLabel *m_device;
+    class QCheckBox *m_toSource = nullptr;
     FocusControlMap *m_map;
 
     static QPointer<RefinePanel> s_instance;

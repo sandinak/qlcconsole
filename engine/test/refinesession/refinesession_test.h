@@ -66,6 +66,9 @@ private slots:
     /** Refine on a Build scene: the scene is the layer, an exception is a
      *  fixture out of the palette with the scene's own values. */
     void aBuildSceneIsRefinedTheSameWay();
+    /** A layer only tracked in: said where a keep goes (this cue, by
+     *  default), Layer scope only until it is own, or kept at its source. */
+    void aTrackedLayerKeepsHereOrAtItsSource();
 
 private:
     Doc *m_doc = nullptr;
