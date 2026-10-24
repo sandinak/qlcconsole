@@ -67,7 +67,10 @@ pad if you have one.
 8. **The voice on the headsets.** In Focus calls, **Voice to:** sends the
    voice to the output that feeds them. Step quickly through the fixtures:
    the voice never talks over itself, and only the fixture you stop on is
-   read out.
+   read out. Hold a D-pad arm: zoom or focus keeps going until you let go.
+   Set **Feedback** on the panel (or hold RS / ⇧W) to *Lights only* (no
+   voice), *Voice only* (no blinks) or both. **Say the light** (RS / W)
+   speaks either way.
 
 ---
 
