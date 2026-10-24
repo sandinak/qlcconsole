@@ -177,6 +177,9 @@ private slots:
      *  resizing, adding or removing the piece in front of the main deck;
      *  and what hangs downstage of the curtain line written in crew terms. */
     void theApronIsMeasuredFromTheCurtainLine();
+    /** The number line's numbering: CL at centre, a stride that leaves
+     *  room, long ticks only on numbered places, mirrored about centre. */
+    void theNumberLineReadsFromCentre();
     /** Q125: target positions are shown unless turned off, saved only when
      *  off, and back after a load. */
     void targetPositionsAreSavedOnlyWhenOff();

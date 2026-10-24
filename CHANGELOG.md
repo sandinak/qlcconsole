@@ -51,7 +51,12 @@ circuits and subs.
   the apron platform in front of the main deck (one undo step;
   `MonitorProperties::setApronDepth()`), and horizontal trusses and pipes
   downstage of it are labelled "FOH · 4.2 m DS of curtain line"
-  (`curtainLineOffsetText()`). With the full centre line on,
+  (`curtainLineOffsetText()`). The number line labels centre **CL** (not 0),
+  each number centred on its tick, long ticks only on numbered places, the
+  same rule on the plot and the Rig Overview (`numberLineStride()`,
+  `numberLineMajorTick()`, `numberLineLabel()`); the centre mark's own CL
+  sits straight over it, and gives way to the number line's when that runs
+  through it. With the full centre line on,
   the teal centre cross's up-and-down arm isn't drawn (its arm across the
   stage stays). Drawn on the plot's Top view and on the Rig Overview's floor
   (Top and 45°). Saved with the show only when used (`StageMarks`,

@@ -280,8 +280,8 @@ their house lights, relays and subs.
 - **Stage marks on the plot.** **Show ▸ Stage marks** draws the centre
   mark at the front of the stage (DSC, labelled CL) and, if you want it, the
   whole centre line; the curtain line, found from the main drape or the
-  proscenium; and a number line ticked in feet or metres out from 0 at
-  centre. The curtain line is the main reference: it's set by how far
+  proscenium; and a number line ticked in feet or metres out from centre,
+  labelled CL, its long ticks only on numbered places. The curtain line is the main reference: it's set by how far
   upstage of the front of the stage it is, and the number line by how far
   downstage of the curtain line. With the curtain line on, the apron in
   front of it is tinted and its depth dimensioned, **Apron depth** builds or

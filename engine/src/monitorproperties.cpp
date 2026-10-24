@@ -505,6 +505,15 @@ void MonitorProperties::setNumberLineY(float metres)
     m_numberLineSet = true;
 }
 
+int MonitorProperties::numberLineStride(double unitPixels)
+{
+    const int strides[] = { 1, 2, 5, 10, 20, 50 };
+    for (int st : strides)
+        if (st * unitPixels >= 22.0)
+            return st;
+    return 50;
+}
+
 int MonitorProperties::numberLineReach() const
 {
     // The grid is counted in units, centred on the centre line.

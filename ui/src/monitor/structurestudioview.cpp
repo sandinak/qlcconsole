@@ -1763,7 +1763,12 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
         p.setPen(QPen(centreColour, 2.0));
         floorLine(cx - 0.25 * unit, dsY, cx + 0.25 * unit, dsY);
         floorLine(cx, dsY, cx, dsY - 0.5 * unit);
-        label(tr("CL"), w2s(floorAt(cx + 0.25 * unit, dsY - 0.5 * unit)) + QPointF(12, -6), centreColour);
+        /* Its CL straight over it, on centre -- unless the number line runs
+           through it, whose own centre label is the CL there. */
+        const bool numberHere = props->stageMarkVisible(MonitorProperties::NumberLineFlag)
+                                && std::fabs(props->numberLineY() - dsY) < 0.5 * unit;
+        if (!numberHere)
+            label(tr("CL"), w2s(floorAt(cx, dsY - 0.5 * unit)) + QPointF(0, -10), centreColour);
     }
     if (props->stageMarkVisible(MonitorProperties::CurtainLineFlag))
     {
@@ -1781,24 +1786,20 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
         const int reach = props->numberLineReach();
         p.setPen(QPen(numberColour, 1.2));
         floorLine(cx - reach * unit, y, cx + reach * unit, y);
-        // Numbered as often as there is room for: about 22 px a number.
+        // Numbered as often as there is room for, "CL" at centre, long ticks
+        // on numbered places only: the plot's rule, mirrored about centre.
         const double unitPx = QLineF(w2s(floorAt(cx, y)), w2s(floorAt(cx + unit, y))).length();
-        int stride = 1;
-        const int strides[] = { 1, 2, 5, 10, 20, 50 };
-        for (int st : strides)
-        {
-            stride = st;
-            if (st * unitPx >= 22.0)
-                break;
-        }
+        const int stride = MonitorProperties::numberLineStride(unitPx);
         for (int k = -reach; k <= reach; ++k)
         {
             const double x = cx + k * unit;
-            const double t = ((k % 5) == 0 ? 0.25 : 0.12) * unit;
-            p.setPen(QPen(numberColour, (k % 5) == 0 ? 1.6 : 1.0));
+            const bool major = MonitorProperties::numberLineMajorTick(k, stride);
+            const double t = (major ? 0.25 : 0.12) * unit;
+            p.setPen(QPen(numberColour, major ? 1.6 : 1.0));
             floorLine(x, y - t, x, y + t);
             if (k % stride == 0)
-                label(QString::number(qAbs(k)), w2s(floorAt(x, y - t)) + QPointF(0, -9), numberColour);
+                label(MonitorProperties::numberLineLabel(k), w2s(floorAt(x, y - t)) + QPointF(0, -9),
+                      numberColour);
         }
         if (reach > 0)
         {

@@ -3053,3 +3053,33 @@ void MonitorProperties_Test::targetPositionsAreSavedOnlyWhenOff()
     mp.setTargetPositionsVisible(true);
     QVERIFY(!stageMarksXml(mp).contains("TargetPositions"));
 }
+
+void MonitorProperties_Test::theNumberLineReadsFromCentre()
+{
+    typedef MonitorProperties MP;
+    QCOMPARE(MP::numberLineLabel(0), QStringLiteral("CL"));
+    QCOMPARE(MP::numberLineLabel(4), QStringLiteral("4"));
+    QCOMPARE(MP::numberLineLabel(-4), QStringLiteral("4"));
+
+    QCOMPARE(MP::numberLineStride(40.0), 1);
+    QCOMPARE(MP::numberLineStride(15.0), 2);
+    QCOMPARE(MP::numberLineStride(5.0), 5);
+    QCOMPARE(MP::numberLineStride(2.0), 20);
+    QCOMPARE(MP::numberLineStride(0.01), 50);
+
+    foreach (int stride, QList<int>() << 1 << 2 << 5 << 10 << 20 << 50)
+    {
+        for (int k = -60; k <= 60; ++k)
+        {
+            // Mirrored, and long only where numbered.
+            QCOMPARE(MP::numberLineMajorTick(k, stride), MP::numberLineMajorTick(-k, stride));
+            if (MP::numberLineMajorTick(k, stride))
+                QCOMPARE(k % stride, 0);
+        }
+        QVERIFY(MP::numberLineMajorTick(0, stride));
+    }
+    // Every 2 numbered: no long tick at 5 between 4 and 6.
+    QVERIFY(!MP::numberLineMajorTick(5, 2));
+    QVERIFY(MP::numberLineMajorTick(4, 2));
+    QVERIFY(MP::numberLineMajorTick(5, 1));
+}

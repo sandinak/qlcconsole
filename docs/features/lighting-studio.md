@@ -72,7 +72,8 @@ The plot's **Show ▸ Stage marks** menu draws the marks a crew spikes and
 focuses by. Each one is a tick in the menu:
 
 - **Centre mark (DSC):** a spike on the front edge of the stage at centre,
-  labelled **CL**.
+  labelled **CL** straight over it. When the number line runs through the
+  spike, the number line's own **CL** labels it.
 - **Centre line, full depth:** the centre line, dashed, from the front of the
   stage to the back. It takes the place of the teal centre cross's
   up-and-down line, which isn't drawn while it's on; the cross's line across
@@ -85,10 +86,13 @@ focuses by. Each one is a tick in the menu:
   curtain line, like the FOH electric out over the audience, is labelled
   with how far: **FOH · 4.2 m DS of curtain line**.
 - **Number line:** a line across the stage, ticked every foot or metre (the
-  show's unit) and numbered out from **0** at centre, **SR** on one end and
-  **SL** on the other, so "SL 4 on the number line" is a place you can find
-  on the plot. When the plot is zoomed out, the numbers skip (every 2, 5 or
-  10) rather than overlap.
+  show's unit) and numbered out from centre, which is labelled **CL** (0 on
+  the line), with **SR** on one end and **SL** on the other, so "SL 4 on the
+  number line" is a place you can find on the plot. When the plot is zoomed
+  out, the numbers skip (every 2, 5 or 10) rather than overlap. Each number
+  sits centred on its tick, the two sides mirror each other, and the long
+  ticks fall only on numbered places: every 5 when every unit is numbered,
+  otherwise on every number.
 
 **Where they go.** Centre is the middle of the stage grid, the same point
 as the teal centre lines. The **front of the stage** is the front of the
@@ -1321,7 +1325,7 @@ Two small but load-bearing visual cues:
 | **Shift-drop** | Holding Shift as you drop a fixture over a truss, pipe or deck, to hang or stand it there; a plain drop only moves it. |
 | **Beneath (faded)** | In the Top view, a fixture with a structure more than half a metre above it, drawn faded and dashed but still clickable. |
 | **Curtain line** | Where the main curtain hangs, across the stage (also called the setting line; the plaster line is the proscenium's). Show ▸ Stage marks. |
-| **Number line** | A line across the front of the stage numbered out from 0 at centre, in feet or metres, for spiking and focusing. Show ▸ Stage marks. |
+| **Number line** | A line across the front of the stage numbered out from centre (CL), in feet or metres, for spiking and focusing. Show ▸ Stage marks. |
 | **DSC / CL** | Downstage centre: where the centre line (CL) meets the front of the stage. |
 | **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |
 | **Calibration offsets** | A head's pan/tilt offsets: in the DMX so the real light lands where intended, left out of every view so it shows the intended aim. |

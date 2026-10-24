@@ -879,10 +879,68 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         // 11 ticks (5 each side and 0), the line, 11 numbers, SR and SL.
         QCOMPARE(ofKind("numberLine").size(), 1 + 11 + 11 + 2);
         const QStringList numbers = labels("numberLine");
-        QCOMPARE(numbers.count("0"), 1);
+        QCOMPARE(numbers.count("CL"), 1);               // centre reads as centre, not 0
+        QVERIFY(!numbers.contains("0"));
         QCOMPARE(numbers.count("1"), 2);
         QCOMPARE(numbers.count("5"), 2);
         QVERIFY(numbers.contains("SR") && numbers.contains("SL"));
+        // The number line runs through the spike: its CL is the only one there.
+        QVERIFY(labels("centreMark").isEmpty());
+
+        /* At every zoom: CL exactly on the spike's tip, every number centred
+           on its tick and mirrored about centre, and the long ticks only
+           where there is a number. */
+        const qreal cxPx = gv->realPositionToPixels(5000.0, 0).x();
+        const QList<qreal> zooms = { 0.2, 0.45, 1.0, 2.0, 4.0 };
+        foreach (qreal z, zooms)
+        {
+            gv->resetViewZoom();
+            gv->scale(z, z);
+            gv->updateStageMarks();
+            QMap<int, QString> numberAt;          // tenths of a scene pixel from centre
+            QMap<int, qreal> tickAt;              // ...and each tick's length
+            foreach (QGraphicsItem *it, ofKind("numberLine"))
+            {
+                const int dx = qRound((it->pos().x() - cxPx) * 10.0);
+                if (it->data(1).isValid())
+                {
+                    const QString text = it->data(1).toString();
+                    if (text == "SR" || text == "SL")
+                        continue;
+                    QVERIFY2(qAbs(it->boundingRect().center().x()) < 0.01, "a number centred on its tick");
+                    numberAt.insert(dx, text);
+                }
+                else if (auto *li = dynamic_cast<QGraphicsLineItem *>(it))
+                {
+                    if (li->line().x1() == li->line().x2())
+                        tickAt.insert(qRound((li->line().x1() - cxPx) * 10.0), qAbs(li->line().dy()));
+                }
+            }
+            QCOMPARE(numberAt.value(0), QStringLiteral("CL"));
+            QCOMPARE(tickAt.size(), 11);
+            foreach (int dx, numberAt.keys())
+                QCOMPARE(numberAt.value(-dx), numberAt.value(dx));
+            qreal shortest = 1e9, longest = 0;
+            foreach (qreal len, tickAt)
+            {
+                shortest = qMin(shortest, len);
+                longest = qMax(longest, len);
+            }
+            foreach (int dx, tickAt.keys())
+            {
+                QVERIFY(tickAt.contains(-dx));
+                QCOMPARE(tickAt.value(-dx), tickAt.value(dx));
+                if (tickAt.value(dx) > shortest + 1e-6)
+                    QVERIFY2(numberAt.contains(dx), "a long tick with no number at it");
+            }
+            QVERIFY(longest > shortest);          // the centre is always long
+            QVERIFY(tickAt.value(0) == longest);
+            foreach (QGraphicsItem *it, ofKind("centreMark"))
+                if (auto *pi = dynamic_cast<QGraphicsPolygonItem *>(it))
+                    QVERIFY(qAbs(pi->polygon().first().x() - cxPx) < 0.01);
+        }
+        gv->resetViewZoom();
+        gv->updateStageMarks();
 
         // Moved from the menu: the curtain line goes there.
         QCheckBox *autoChk = marks->findChild<QCheckBox *>(QStringLiteral("curtainLineYAuto"));

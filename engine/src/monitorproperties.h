@@ -330,6 +330,20 @@ public:
     /** How many whole units the number line reaches either side of centre:
      *  as far as the stage grid goes. */
     int numberLineReach() const;
+    /** How the number line is numbered, the same on the plot and the Rig
+     *  Overview, mirrored about centre at any zoom: every @return units,
+     *  the fewest of 1, 2, 5, 10, 20, 50 that leaves about 22 pixels a
+     *  number when one unit is @p unitPixels on screen. */
+    static int numberLineStride(double unitPixels);
+    /** A long tick at @p k units from centre: every labelled one (every 5
+     *  when every unit is labelled), so a long tick never falls between
+     *  numbers. */
+    static bool numberLineMajorTick(int k, int stride)
+    { return stride <= 1 ? (k % 5) == 0 : (k % stride) == 0; }
+    /** The label at @p k units from centre: "CL" at centre, so the centre
+     *  reads as centre and nothing else; the distance either side. */
+    static QString numberLineLabel(int k)
+    { return k == 0 ? QStringLiteral("CL") : QString::number(k < 0 ? -k : k); }
 
     /** Where a point is in crew terms, against the stage marks' positions
      *  (whether or not the marks are shown): across from the centre line

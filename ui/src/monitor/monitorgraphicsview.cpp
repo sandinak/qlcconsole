@@ -6592,7 +6592,7 @@ void MonitorGraphicsView::updateStageMarks()
     {
         line(cx, dsY, cx, y0, pen(centreColour, 1.2, Qt::DashLine), "centreLine");
         label(tr("CL"), QPointF(cx, y0 + 0.75 * m_cellPixels), centreColour,
-              Qt::AlignLeft | Qt::AlignVCenter, "centreLine");
+              Qt::AlignHCenter | Qt::AlignVCenter, "centreLine");       // on the line
     }
     if (spike)
     {
@@ -6603,8 +6603,13 @@ void MonitorGraphicsView::updateStageMarks()
         pi->setPen(pen(centreColour, 1.0, Qt::SolidLine));
         pi->setBrush(centreColour);
         add(pi, "centreMark", 2.3);
-        label(tr("CL"), QPointF(cx + s, dsY - 1.6 * s), centreColour,
-              Qt::AlignLeft | Qt::AlignBottom, "centreMark");
+        /* Its CL straight over it, on centre -- unless the number line runs
+           through it, whose own centre label is the CL there. */
+        const bool numberHere = props->stageMarkVisible(MonitorProperties::NumberLineFlag)
+                                && qAbs(sy(props->numberLineY()) - dsY) < 2.0 * s;
+        if (!numberHere)
+            label(tr("CL"), QPointF(cx, dsY - 1.6 * s), centreColour,
+                  Qt::AlignHCenter | Qt::AlignBottom, "centreMark");
     }
     if (props->stageMarkVisible(MonitorProperties::CurtainLineFlag))
     {
@@ -6678,25 +6683,20 @@ void MonitorGraphicsView::updateStageMarks()
              pen(numberColour, 1.2, Qt::SolidLine), "numberLine");
 
         /* Numbered every unit when there is room on screen, else every 2, 5,
-           10...: each number needs about 22 screen pixels. */
-        int stride = 1;
-        const int strides[] = { 1, 2, 5, 10, 20, 50 };
-        for (int st : strides)
-        {
-            stride = st;
-            if (st * unitPx * zoom >= 22.0)
-                break;
-        }
+           10... (each number needs about 22 screen pixels), with "CL" at
+           centre and the long ticks on numbered places only -- the same rule
+           as the Rig Overview, mirrored about centre. */
+        const int stride = MonitorProperties::numberLineStride(unitPx * zoom);
         for (int k = -reach; k <= reach; ++k)
         {
             const qreal x = cx + k * unitPx;
-            const bool major = (k % 5) == 0;
+            const bool major = MonitorProperties::numberLineMajorTick(k, stride);
             const qreal t = (major ? 6.0 : 3.5) * onePx;
             line(x, y - t, x, y + t, pen(numberColour, major ? 1.4 : 1.0, Qt::SolidLine), "numberLine");
-            // Above the line (on the deck); the 0 above a centre spike.
+            // Above the line (on the deck); the CL above a centre spike.
             const qreal above = (k == 0 && spike && qAbs(y - dsY) < 2.0 * s) ? 1.6 * s : t;
             if (k % stride == 0)
-                label(QString::number(qAbs(k)), QPointF(x, y - above), numberColour,
+                label(MonitorProperties::numberLineLabel(k), QPointF(x, y - above), numberColour,
                       Qt::AlignHCenter | Qt::AlignBottom, "numberLine");
         }
         /* Which side is which: stage right is the plot's left. */
