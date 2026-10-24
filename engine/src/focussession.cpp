@@ -575,7 +575,7 @@ void FocusSession::stop()
         m_venues->setHeld(QList<quint32>());
     m_active = false;
     m_index = -1;
-    m_held = NoControl;
+    m_hold.reset();
     m_blinkTimer.stop();
     m_blinkPhase = 0;
     m_blinkFid = 0xFFFFFFFF;
@@ -1298,12 +1298,10 @@ void FocusSession::press(Control control, bool down)
 {
     if (!down)
     {
-        if (control == m_held)
-            m_held = NoControl;
+        m_hold.release(int(control));
         return;
     }
-    m_held = repeats(control) ? control : NoControl;
-    m_heldWait = kRepeatDelay;
+    m_hold.press(int(control), repeats(control));
     apply(control);
 }
 
@@ -1352,15 +1350,8 @@ void FocusSession::tick(double dt)
     if (!m_active || m_input == KeyboardInput)
         return;
     // A held D-pad arm repeats (press()).
-    if (m_held != NoControl)
-    {
-        m_heldWait -= dt;
-        while (m_heldWait <= 0.0 && m_held != NoControl)
-        {
-            apply(m_held);
-            m_heldWait += kRepeatInterval;
-        }
-    }
+    for (int n = m_hold.due(dt); n > 0 && m_hold.held() >= 0; --n)
+        apply(Control(m_hold.held()));
     float dPan = 0.0f, dTilt = 0.0f;
     for (int s = 0; s < 2; ++s)
     {

@@ -239,10 +239,12 @@ by Focus mode, Focus calls and Refine. It lives in
 (`controllerTools/feedback`), not in the show. Each panel has it as a
 **Feedback:** choice.
 
-- **Lights:** the rig's blinks (and Refine's dimming) plus the panel's
-  status lamp; no voice.
-- **Voice:** spoken lines only; the rig is not blinked. The lamp stays on
-  screen, since it is harmless.
+- **Lights:** the rig's blinks (selection flashes, the save's double
+  blink, Refine's dimming) plus the panel's status lamp (main 241e51c1c);
+  no voice.
+- **Voice:** spoken lines only; the rig is not blinked
+  (`FocusSession::setRigFeedback(false)`, `setLightsFeedback(false)`). The
+  lamp stays on screen, since it is harmless.
 - **Both:** lights and voice.
 
 **Say the light** (RS tap, or W) speaks in every mode, because the operator
