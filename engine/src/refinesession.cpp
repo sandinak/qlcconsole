@@ -1058,6 +1058,18 @@ bool RefineSession::keep(QString *why)
     return true;
 }
 
+bool RefineSession::keepAtSource(QString *why)
+{
+    if (!isTrackedLayer())
+        return keep(why);
+    const bool was = m_keepToSource;
+    m_keepToSource = true;
+    const bool ok = keep(why);
+    m_keepToSource = was;
+    emit changed();
+    return ok;
+}
+
 bool RefineSession::confirmShared(QString *why)
 {
     if (m_sharedWarning.isEmpty())

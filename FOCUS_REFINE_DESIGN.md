@@ -145,7 +145,8 @@ does the same **kind** of thing in every tool:
 | **A** | Keep | Save the head's offsets | **Save for this venue** (sidecar, at once) | **Keep in the cue** (one Show Tree step) |
 | **B** | Revert | Back to saved | Back to saved | **Back to the cue** (drops pending) |
 | **X** | Reset | Zero the offsets | Zero the offsets | **Clear the exception** (Group/Fixture). At Layer scope it is the same as B. |
-| **View / Back** | Undo | Undo last save (a group save is one step) | same | Show Tree undo |
+| **View / Back** | Undo | Undo last save (a group save is one step) | same | Show Tree (or Build) undo, on View's release |
+| **View + A** | Keep at the source | — | — | A tracked layer's change kept in the cue it tracks from (Q118); ⇧Return |
 | **Menu / Start** | Exit | Ask about unsaved, leave | same. **On an armed focus-call cue (no session yet): begins the calls** (§7) | Ask "Keep what is pending?", leave |
 | **LS click** | Alternate | Second reference | Second reference (rarely needed: each call has its own point) | **D-pad page**: beam → colour → gobo |
 | **RS click** | Say the light | The light's name first, then where; flashed. Spoken whatever the feedback setting | same | same |

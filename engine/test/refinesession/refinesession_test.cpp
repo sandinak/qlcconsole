@@ -693,6 +693,20 @@ void RefineSession_Test::aTrackedLayerKeepsHereOrAtItsSource()
     QCOMPARE(r->scope(), RefineSession::FixtureScope);
     r->stop();
 
+    // View + A (Q118): once at the source, the setting left as it was.
+    const quint32 cue4 = st->addCue(list, 1, "Middle 8");
+    QVERIFY(r->start(cue4));
+    QVERIFY(r->isTrackedLayer());
+    QVERIFY(!r->keepsToSource());
+    QVERIFY(r->nudgePosition(0.0f, 2.0f));
+    QVERIFY(r->keepAtSource());
+    QCOMPARE(said.last().at(0).toString(), QString("Kept in the cue it tracks from."));
+    QVERIFY(!r->keepsToSource());
+    QVERIFY(st->cue(cue4)->layers.isEmpty());
+    QCOMPARE(m_doc->palette(st->cue(cue2)->layers.first().look(KeyPosition)->palettes.first())->values(),
+             QVariantList({ 274, 137 }));
+    r->stop();
+
     // Cue 3 tracks from cue 2; this time keep at the source.
     const quint32 cue3 = st->addCue(list, 1, "Bridge");
     QVERIFY(r->start(cue3));
@@ -705,7 +719,7 @@ void RefineSession_Test::aTrackedLayerKeepsHereOrAtItsSource()
     QCOMPARE(said.last().at(0).toString(), QString("Kept in the cue it tracks from."));
     QVERIFY(st->cue(cue3)->layers.isEmpty());       // still only tracks in
     QCOMPARE(m_doc->palette(st->cue(cue2)->layers.first().look(KeyPosition)->palettes.first())->values(),
-             QVariantList({ 275, 135 }));
+             QVariantList({ 275, 137 }));
     r->stop();
 }
 

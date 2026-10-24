@@ -160,6 +160,9 @@ public:
     bool keepsToSource() const { return m_keepToSource; }
     /** Where A keeps a tracked layer's change (said). */
     void setKeepToSource(bool source);
+    /** View + A (board Q118): keep this once at the source cue, whatever
+     *  setKeepToSource() says; on a layer of the cue's own, an ordinary keep. */
+    bool keepAtSource(QString *why = nullptr);
 
     /*********************************************************************
      * Editing

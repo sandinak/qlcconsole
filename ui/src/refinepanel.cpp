@@ -389,7 +389,13 @@ bool RefinePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Backtab:  m_session->apply(CS::PreviousItem); break;
         case Qt::Key_G:        m_session->apply(CS::CycleScope); break;
         case Qt::Key_Return:
-        case Qt::Key_Enter:    m_session->apply(CS::Keep); break;
+        case Qt::Key_Enter:
+            // Shift: keep at the source cue (View + A on the controller).
+            if (modifiers & Qt::ShiftModifier)
+                m_session->keepAtSource();
+            else
+                m_session->apply(CS::Keep);
+            break;
         case Qt::Key_Backspace:
         case Qt::Key_Delete:   m_session->apply(CS::Revert); break;
         case Qt::Key_0:        m_session->apply(CS::Reset); break;

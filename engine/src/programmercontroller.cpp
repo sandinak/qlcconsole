@@ -2191,6 +2191,20 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_fineNormY = norm;
         else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
             m_refineSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
+        /* View + A (board Q118): keep at the source cue. So View undoes on
+           its release, unless A went down while it was held. */
+        else if (role == GamepadRole::Back)
+        {
+            if (value > 0)
+                m_viewChord = false;
+            else if (!m_viewChord)
+                m_refineSession->apply(ControllerScheme::Undo);
+        }
+        else if (role == GamepadRole::A && value > 0 && m_heldRoles.contains(GamepadRole::Back))
+        {
+            m_viewChord = true;
+            m_refineSession->keepAtSource();
+        }
         else if (ControllerScheme::verbFor(role) != ControllerScheme::NoVerb)
         {
             // Down applies (a held D-pad arm repeats); up stops it.
