@@ -953,7 +953,9 @@ void FocusModePanel::refreshController()
     m_useController->setEnabled(pad.present);
     m_useController->setToolTip(pad.present ? tr("Nudge from %1").arg(pad.name)
                                             : tr("No controller Focus mode can use is connected"));
-    m_deviceLabel->setText(pad.present ? pad.name : tr("No controller connected"));
+    const QString owner = m_doc->programmer()->controllerOwnerName();
+    m_deviceLabel->setText(!owner.isEmpty() ? tr("%1 has it (any other is ignored)").arg(owner)
+                           : pad.present ? pad.name : tr("No controller connected"));
 
     if (!pad.present && m_session->inputDevice() == FocusSession::ControllerInput)
     {

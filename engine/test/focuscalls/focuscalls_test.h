@@ -106,6 +106,9 @@ private slots:
      *  feedback only); View + RS says how many are not saved; View undoes
      *  on its release, the same in every tool, and not after a chord. */
     void theUnsavedLightBreathesAndViewRsCounts();
+    /** Q135: two pads -- the first to press Start owns it; the other is
+     *  ignored and told so. */
+    void theFirstPadOwnsIt();
     /** Safety: the pad dropping with a stick and A held -- everything is
      *  let go, nothing moves, no keep-all fires; said, and said when back.
      *  In Focus mode (and focus calls) and in Refine. */

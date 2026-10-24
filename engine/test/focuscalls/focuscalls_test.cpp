@@ -1591,4 +1591,65 @@ void FocusCalls_Test::theUnsavedLightBreathesAndViewRsCounts()
     iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
+void FocusCalls_Test::theFirstPadOwnsIt()
+{
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" },
+                             { 16, "back" }, { 17, "start" }, { 18, "rs" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));    // pad 1
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1));    // pad 2
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto value = [iom](quint32 u, quint32 ch, uchar v) { emit iom->inputValueChanged(u, ch, v, QString()); };
+
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    FixtureGroup *g = makeGroup(m_doc, "Spots", { a });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << g->id();
+    c1.target = targetRef(dsc->id());
+    pc->focusCalls()->setCalls({ c1 });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Pre-show");
+    const quint32 focus = st->addCue(list, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    m_doc->setMode(Doc::Operate);
+    fcc->cueCurrent(list, focus);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // Pad 2 presses Start first: it owns the calls.
+    value(1, 17, 255);
+    value(1, 17, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(pc->controllerOwner(), quint32(1));
+    QCOMPARE(pc->controllerOwnerName(), QString("2: Stub 2"));
+    // Pad 1: ignored, and told so -- its A saves nothing, its stick moves nothing.
+    s->nudge(1.0f, 0.0f);
+    value(0, 10, 255);
+    QCOMPARE(said.last().at(0).toString(), QString("Another controller is in use."));
+    value(0, 10, 0);
+    QVERIFY(s->isDirty(a->id()));
+    const FocusSession::Offset before = s->liveOffset(a->id());
+    value(0, 0, 255);
+    for (int i = 0; i < 10; ++i)
+        pc->applyDesignJoystick();
+    QCOMPARE(s->liveOffset(a->id()), before);
+    // Pad 2's A saves.
+    value(1, 10, 255);
+    value(1, 10, 0);
+    QVERIFY(!s->isDirty(a->id()));
+    s->stop();
+    QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));             // let go when done
+    m_doc->setMode(Doc::Design);
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)

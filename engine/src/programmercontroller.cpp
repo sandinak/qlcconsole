@@ -130,6 +130,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
         // Armed: the controller is read for Start, even with nothing else on.
         if (m_focusCallCue->isArmed())
             connectControllerInput();
+        releaseOwnerIfIdle();
     });
     connect(m_focusSession, &FocusSession::announce, this, &ProgrammerController::tellOperator);
     connect(m_refineSession, &RefineSession::announce, this, &ProgrammerController::tellOperator);
@@ -171,6 +172,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
     });
     connect(m_refineSession, &RefineSession::stopped, this, [this]() {
         refreshControllerKeepAlive();
+        releaseOwnerIfIdle();
     });
     /* Focus mode takes the stick from the follow spot's data channel while it
        runs (a free-flying follow spot must not fly while its stick is
@@ -191,6 +193,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_focusSession, &FocusSession::stopped, this, [this]() {
         emit joystickUpdated(m_panNorm, m_tiltNorm);
         refreshControllerKeepAlive();
+        releaseOwnerIfIdle();
     });
     /* While Focus mode or the follow spot reads a controller, keep the app
        out of App Nap and say when the controller is paused. */
@@ -1578,6 +1581,20 @@ void ProgrammerController::freezeController()
     emit joystickUpdated(m_panNorm, m_tiltNorm);
 }
 
+QString ProgrammerController::controllerOwnerName() const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = (m_ownerUniverse != 0xFFFFFFFF && iom != nullptr) ? iom->inputPatch(m_ownerUniverse) : nullptr;
+    return ip != nullptr && ip->plugin() != nullptr ? ip->inputName() : QString();
+}
+
+void ProgrammerController::releaseOwnerIfIdle()
+{
+    if (!m_focusSession->isActive() && !m_refineSession->isActive()
+        && m_focusCallCue->state() == FocusCallCue::Idle)
+        m_ownerUniverse = 0xFFFFFFFF;
+}
+
 void ProgrammerController::checkControllerPresence()
 {
     const bool present = focusController().present;
@@ -1587,6 +1604,8 @@ void ProgrammerController::checkControllerPresence()
         /* Mid-move or mid-hold, the pad sends no "let go": everything it
            held is let go here, so no light drifts and no hold fires. */
         freezeController();
+        // The owner gone: the next pad to press takes it.
+        m_ownerUniverse = 0xFFFFFFFF;
         if (tool)
         {
             m_padLost = true;
@@ -2301,7 +2320,9 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
         if (used == 0)
             continue;
         // Most of what Focus mode uses wins; the follow spot's breaks a tie.
-        const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0);
+        // The pad that owns the tools (Q135) is the one, though.
+        const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0)
+                          + (u == m_ownerUniverse ? 1000 : 0);
         if (score > bestScore)
         {
             bestScore = score;
@@ -2328,6 +2349,27 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     const GamepadRole::Role role = GamepadRole::Role(controllerRole(universe, channel));
     if (role == GamepadRole::None && !active)
         return false;
+
+    /* Board Q135, two pads: the first to press Start (a tool started on the
+       laptop: any button) owns it; another is ignored, and told so. */
+    if ((active || m_focusCallCue->isArmed()) && (role != GamepadRole::None || isPan || isTilt))
+    {
+        const bool press = value > 0 && !GamepadRole::isAxis(role) && !isPan && !isTilt;
+        if (m_ownerUniverse == 0xFFFFFFFF)
+        {
+            if (press && (active || role == FocusCallCue::startRole()))
+            {
+                m_ownerUniverse = universe;
+                emit focusControllerChanged();     // the panels name it
+            }
+        }
+        else if (universe != m_ownerUniverse)
+        {
+            if (press)
+                warnOperator(tr("Another controller is in use."));
+            return true;
+        }
+    }
 
     if (!GamepadRole::isAxis(role) && role != GamepadRole::None)
     {

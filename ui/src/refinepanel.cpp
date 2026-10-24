@@ -210,7 +210,9 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     auto controls = [this, pc]() {
         const ProgrammerController::FocusController pad = pc->focusController();
         m_map->setControls(pad.controls);
-        m_device->setText(pad.present ? tr("Controller: %1").arg(pad.name)
+        m_device->setText(!pc->controllerOwnerName().isEmpty()
+                          ? tr("Controller: %1 has it (any other is ignored).").arg(pc->controllerOwnerName())
+                          : pad.present ? tr("Controller: %1").arg(pad.name)
                           : pc->isControllerLost()
                             ? tr("Controller lost: the lights are held. The keys work (see Help).")
                             : tr("No controller connected: the keys work (see Help)."));
