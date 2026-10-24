@@ -99,10 +99,26 @@ fixture, the scope, and where saves go.
 | Undo the last save | View | ⌘Z |
 | Say the light | RS (right stick click) | W |
 | Feedback: lights / voice / both | RS held | ⇧W |
+| Save every light not saved | A held | ⇧Return |
+| This light back to its last save | B held | ⇧Backspace |
+| The next light not saved | LB + RB together | U |
 | Leave | Menu | Esc |
 
 Held, a D-pad arm keeps zooming or focusing until you let go; the
 bumpers and triggers step once a press.
+
+**While you nudge,** the panel says what has changed since the light was
+last saved ("Since the save: +2.5° pan, −1.0° tilt") and the plot shows a
+dashed ghost where the saved focus lands. **A save** says the light
+("Spot 3 kept.") and makes an Xbox pad buzz — twice if another light is
+still unsaved. **Leaving** with lights unsaved says how many ("2 lights not
+saved.") before the panel asks.
+
+**The pad's light bar** follows the panel's lamp — green all saved, yellow
+this light, red another. On a Mac this goes to pads the app reads through
+Apple's GameController framework; today that is Xbox pads, which have no
+coloured light, so you see it only on the panel (see FOCUS_REFINE_DESIGN.md
+§11).
 
 **The whole call** (Y): a nudge moves every fixture of the call by the
 same amount — the truss came in a little low — and **A** saves them all,
