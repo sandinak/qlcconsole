@@ -273,6 +273,24 @@ public:
     inline bool numberLineIsAuto() const { return !m_numberLineSet; }
     void setNumberLineY(float metres);
     inline void setNumberLineAuto() { m_numberLineSet = false; }
+
+    /** The curtain and number lines as the Stage marks menu enters them: how
+     *  far upstage of the front of the stage (downstageEdgeY()) they are, in
+     *  metres; negative is downstage of it, out on an apron extension. They
+     *  are kept, and saved (CurtainLineY / NumberLineY), as the plan's Y all
+     *  the same: a line set where the curtain hangs stays there when a deck
+     *  is added or moved (the distance shown changes instead), and a show
+     *  saved before reads exactly as it did. */
+    inline float curtainLineUpstage() const { return downstageEdgeY() - curtainLineY(); }
+    inline void setCurtainLineUpstage(float metres) { setCurtainLineY(downstageEdgeY() - metres); }
+    inline float numberLineUpstage() const { return downstageEdgeY() - numberLineY(); }
+    inline void setNumberLineUpstage(float metres) { setNumberLineY(downstageEdgeY() - metres); }
+
+    /** Whether the plot and the Rig Overview write where each target is
+     *  beside it (stagePositionText()). On unless turned off; saved with the
+     *  show only when off. */
+    inline bool targetPositionsVisible() const { return m_targetPositionsVisible; }
+    inline void setTargetPositionsVisible(bool on) { m_targetPositionsVisible = on; }
     /** How many whole units the number line reaches either side of centre:
      *  as far as the stage grid goes. */
     int numberLineReach() const;
@@ -317,6 +335,7 @@ private:
     float m_curtainLineY = 0.0f;
     bool m_numberLineSet = false;
     float m_numberLineY = 0.0f;
+    bool m_targetPositionsVisible = true;
     int m_occlusionKinds = BeamOcclusion::defaultKinds();
     float m_occlusionMinSize = BeamOcclusion::defaultMinSize();
     mutable BeamOcclusion::Cache m_occlusion;

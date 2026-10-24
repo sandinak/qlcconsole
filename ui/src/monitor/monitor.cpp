@@ -1015,13 +1015,33 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             });
         }
 
-        /* Where the curtain line and the number line are: on the plan's Y,
-           as every position dialog has it (downstage is bigger). Auto
+        /* Where each target is ("SL 2.4 · US 3.1 m"), written beside it on
+           the plot and the Rig Overview. On unless turned off; the show's,
+           like the marks, but a view of it, not an edit: no undo step. */
+        marksMenu->addSeparator();
+        QAction *positionsAct = marksMenu->addAction(tr("Target positions"));
+        positionsAct->setObjectName(QStringLiteral("stageMarkTargetPositions"));
+        positionsAct->setCheckable(true);
+        positionsAct->setChecked(m_props->targetPositionsVisible());
+        positionsAct->setToolTip(tr("Write where each target is beside it, measured from the "
+                                    "centre line and the number line"));
+        connect(positionsAct, &QAction::toggled, this, [this](bool on) {
+            if (m_props->targetPositionsVisible() == on)
+                return;
+            m_props->setTargetPositionsVisible(on);
+            stageMarksChanged();
+        });
+
+        /* Where the curtain line and the number line are: how far upstage of
+           the front of the stage (the edge the centre mark sits on), as a
+           crew measures it; negative is out on an apron extension. Kept as
+           the plan's Y (MonitorProperties::setCurtainLineUpstage()). Auto
            follows the stage; a value moves the line there. */
         const bool feet = (m_props->gridUnits() == MonitorProperties::Feet);
         QWidget *pw = new QWidget(marksMenu);
         QFormLayout *pfl = new QFormLayout(pw);
         pfl->setContentsMargins(10, 6, 10, 6);
+        pfl->addRow(new QLabel(tr("Upstage of the front of the stage:"), pw));
         auto positionRow = [pw, pfl, feet](const QString &title, const char *name,
                                                  std::function<bool()> isAuto,
                                                  std::function<float()> value,
@@ -1035,7 +1055,8 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             spin->setObjectName(QString::fromLatin1(name));
             const double toDisp = feet ? 3.28084 : 1.0;
             spin->setRange(-100.0 * toDisp, 300.0 * toDisp);
-            spin->setToolTip(tr("Up/downstage on the plan (Y): bigger is further downstage"));
+            spin->setToolTip(tr("How far upstage of the front of the stage. Negative is "
+                                "downstage of it, out on an apron extension."));
             hl->addWidget(autoChk);
             hl->addWidget(spin, 1);
             pfl->addRow(title, row);
@@ -1055,16 +1076,16 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         };
         auto syncCurtain = positionRow(tr("Curtain line:"), "curtainLineY",
             [this]() { return m_props->curtainLineIsAuto(); },
-            [this]() { return m_props->curtainLineY(); },
-            [this](bool isAuto, float y) {
-                if (isAuto) m_props->setCurtainLineAuto(); else m_props->setCurtainLineY(y);
+            [this]() { return m_props->curtainLineUpstage(); },
+            [this](bool isAuto, float upstage) {
+                if (isAuto) m_props->setCurtainLineAuto(); else m_props->setCurtainLineUpstage(upstage);
                 stageMarksChanged();
             });
         auto syncNumber = positionRow(tr("Number line:"), "numberLineY",
             [this]() { return m_props->numberLineIsAuto(); },
-            [this]() { return m_props->numberLineY(); },
-            [this](bool isAuto, float y) {
-                if (isAuto) m_props->setNumberLineAuto(); else m_props->setNumberLineY(y);
+            [this]() { return m_props->numberLineUpstage(); },
+            [this](bool isAuto, float upstage) {
+                if (isAuto) m_props->setNumberLineAuto(); else m_props->setNumberLineUpstage(upstage);
                 stageMarksChanged();
             });
         marksMenu->addSeparator();
@@ -1079,7 +1100,10 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
                 if (!a->isCheckable())
                     continue;
                 QSignalBlocker block(a);
-                a->setChecked(m_props->stageMarkVisible(MonitorProperties::StageMark(a->data().toInt())));
+                if (a->objectName() == QLatin1String("stageMarkTargetPositions"))
+                    a->setChecked(m_props->targetPositionsVisible());
+                else
+                    a->setChecked(m_props->stageMarkVisible(MonitorProperties::StageMark(a->data().toInt())));
             }
             syncCurtain();
             syncNumber();

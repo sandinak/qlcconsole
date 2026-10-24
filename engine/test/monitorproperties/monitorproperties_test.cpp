@@ -2892,3 +2892,92 @@ void MonitorProperties_Test::aPositionIsWrittenAgainstTheStageMarks()
     mp.setGridSize(QVector3D(10 / 0.3048f, 6, 8 / 0.3048f));
     QCOMPARE(mp.stagePositionText(spot, MP::SpokenOffset), QStringLiteral("SL 8, US 10"));
 }
+
+void MonitorProperties_Test::stageLinesAreSetUpstageOfTheFront()
+{
+    MonitorProperties mp;
+    mp.setGridUnits(MonitorProperties::Meters);
+    mp.setGridSize(QVector3D(10, 6, 8));
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(8.0f); deck->setDepth(5.0f);
+    QCOMPARE(mp.downstageEdgeY(), 6.0f);
+
+    // Automatic, they read as distances too: the number line on the front,
+    // the curtain a typical apron behind it.
+    QCOMPARE(mp.numberLineUpstage(), 0.0f);
+    QVERIFY(qAbs(mp.curtainLineUpstage() - 1.2f) < 1e-4f);
+
+    // Set as a distance upstage of the front; negative is out on an apron.
+    mp.setCurtainLineUpstage(2.5f);
+    mp.setNumberLineUpstage(-0.75f);
+    QVERIFY(!mp.curtainLineIsAuto());
+    QVERIFY(!mp.numberLineIsAuto());
+    QCOMPARE(mp.curtainLineY(), 3.5f);
+    QCOMPARE(mp.numberLineY(), 6.75f);
+    QCOMPARE(mp.curtainLineUpstage(), 2.5f);
+    QCOMPARE(mp.numberLineUpstage(), -0.75f);
+
+    // Saved as the plan's Y, as before; back as the same distance.
+    const QByteArray xml = stageMarksXml(mp);
+    QVERIFY(xml.contains("CurtainLineY=\"3.5\""));
+    QVERIFY(xml.contains("NumberLineY=\"6.75\""));
+    MonitorProperties back;
+    loadStageMarksXml(back, xml);
+    StagePlatform *deck2 = back.addPlatform();
+    deck2->setOriginX(1.0f); deck2->setOriginY(1.0f);
+    deck2->setWidth(8.0f); deck2->setDepth(5.0f);
+    QCOMPARE(back.curtainLineUpstage(), 2.5f);
+    QCOMPARE(back.numberLineUpstage(), -0.75f);
+
+    // A line set where the curtain hangs stays there when an apron is added;
+    // the distance from the new front grows instead.
+    StagePlatform *apron = mp.addPlatform();
+    apron->setOriginX(2.0f); apron->setOriginY(6.0f);
+    apron->setWidth(6.0f); apron->setDepth(1.0f);
+    QCOMPARE(mp.downstageEdgeY(), 7.0f);
+    QCOMPARE(mp.curtainLineY(), 3.5f);
+    QCOMPARE(mp.curtainLineUpstage(), 3.5f);
+    QCOMPARE(mp.numberLineUpstage(), 0.25f);
+
+    // A show saved before this (a plan Y, written the same way) reads as it
+    // did: the same line, shown as its distance from the front.
+    const QByteArray old("<?xml version=\"1.0\"?><Monitor DisplayMode=\"0\" ShowLabels=\"1\" "
+                         "StageMarks=\"12\" CurtainLineY=\"4.2\" NumberLineY=\"6\"/>");
+    MonitorProperties older;
+    loadStageMarksXml(older, old);
+    older.setGridUnits(MonitorProperties::Meters);
+    older.setGridSize(QVector3D(10, 6, 8));      // no deck: the grid's front, 8
+    QCOMPARE(older.curtainLineY(), 4.2f);
+    QCOMPARE(older.numberLineY(), 6.0f);
+    QVERIFY(qAbs(older.curtainLineUpstage() - 3.8f) < 1e-4f);
+    QCOMPARE(older.numberLineUpstage(), 2.0f);
+    QVERIFY(older.targetPositionsVisible());
+
+    // In feet the distance is still metres in the model; the menu shows feet.
+    MonitorProperties ft;
+    ft.setGridUnits(MonitorProperties::Feet);
+    ft.setGridSize(QVector3D(40, 20, 30));
+    ft.setCurtainLineUpstage(4.0f * 0.3048f);
+    QVERIFY(qAbs(ft.curtainLineY() - 26.0f * 0.3048f) < 1e-4f);
+}
+
+void MonitorProperties_Test::targetPositionsAreSavedOnlyWhenOff()
+{
+    MonitorProperties mp;
+    QVERIFY(mp.targetPositionsVisible());
+    QVERIFY(!stageMarksXml(mp).contains("TargetPositions"));
+
+    mp.setTargetPositionsVisible(false);
+    const QByteArray off = stageMarksXml(mp);
+    QVERIFY(off.contains("TargetPositions=\"0\""));
+    MonitorProperties back;
+    loadStageMarksXml(back, off);
+    QVERIFY(!back.targetPositionsVisible());
+
+    // A new show, or one that never turned them off, has them on.
+    back.reset();
+    QVERIFY(back.targetPositionsVisible());
+    mp.setTargetPositionsVisible(true);
+    QVERIFY(!stageMarksXml(mp).contains("TargetPositions"));
+}

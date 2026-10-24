@@ -74,7 +74,9 @@ focuses by. Each one is a tick in the menu:
 - **Centre mark (DSC):** a spike on the front edge of the stage at centre,
   labelled **CL**.
 - **Centre line, full depth:** the centre line, dashed, from the front of the
-  stage to the back.
+  stage to the back. It takes the place of the teal centre cross's
+  up-and-down line, which isn't drawn while it's on; the cross's line across
+  the stage, at half the grid's depth, stays.
 - **Curtain line:** where the main curtain hangs, labelled **Curtain line**.
 - **Number line:** a line across the stage, ticked every foot or metre (the
   show's unit) and numbered out from **0** at centre, **SR** on one end and
@@ -93,10 +95,13 @@ follows the most downstage **Main drape** across the centre line, or a
 front of the stage.
 
 **Moving them.** Below the ticks, **Curtain line** and **Number line** each
-have **Auto** and a position. Untick **Auto** and type where the line goes,
-as a position up or down the plan (the plan's Y, as the position fields in
-every editor have it). Tick **Auto** again and it goes back to following
-the stage.
+have **Auto** and a distance. Untick **Auto** and type how far upstage of the
+front of the stage the line goes, in the show's unit. A negative distance
+puts it downstage of the front, out on an apron extension. Tick **Auto**
+again and it goes back to following the stage. A line you've set stays where
+it is on the plan: add or move a deck and the line stays put, and the
+distance shown changes to match the new front of the stage. (Shows saved
+before the boxes took a distance keep their lines exactly where they were.)
 
 **Where a target is, in crew terms.** Every stage target on the plot has a
 small readout under it giving where it is against these marks, in the show's
@@ -105,11 +110,13 @@ centre line (**SR** for stage right, **CL** on it) and 3.1 m upstage of the
 number line (**DS** downstage, **on line** on it). In feet it's to the inch
 (**SR 7' 11" · US 10'**). If the target stands on a deck, the deck's height
 follows: **↑ 0.9 m**. Distances count from the number line, or from the
-curtain line when only the curtain line is shown. The readout is always
-there, whether or not the marks are shown, and it follows the target as you
+curtain line when only the curtain line is shown. The readout is
+there whether or not the marks are shown, and it follows the target as you
 drag it. In the Rig Overview, the same readout sits at the feet of each
 figure and area, and under the person Focus mode stands where a fixed light
-lands, so it follows that spot as you nudge it.
+lands, so it follows that spot as you nudge it. To hide the readouts, untick
+**Target positions** in **Show ▸ Stage marks**. It's on by default and
+saved with the show.
 
 They're drawn in the **Top** view, over the rig so they're never hidden
 and never in the way of a click. The **Rig Overview** draws them on its

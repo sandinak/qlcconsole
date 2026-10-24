@@ -627,8 +627,13 @@ MonitorGraphicsView::~MonitorGraphicsView()
     }
     m_trussAnchorLines.clear();
     m_stageMarkItems.clear();       // the scene's to delete, just below
+    m_centerLineV = nullptr;        // likewise
+    m_centerLineH = nullptr;
 
-    // Scene was created without a parent — delete it explicitly.
+    /* Scene was created without a parent — delete it explicitly. The view
+       lets go of it as it goes, which moves the scroll bars: say nothing
+       then (rulersChanged() would redraw the stage marks into it). */
+    const QSignalBlocker quiet(this);
     delete m_scene;
     m_scene = nullptr;
 }
@@ -5535,20 +5540,24 @@ void MonitorGraphicsView::updateTargets()
         TargetItem *ti = new TargetItem(t, m_doc, pxX, pxY);
         /* Where it is in crew terms, against the stage marks: read from where
            the item is while it is dragged in the Top view, from the target
-           itself in an elevation (where the plot shows no Y). */
-        ti->setPositionReadout([this, at](const QPointF &scenePos) {
-            MonitorProperties *mp = m_doc->monitorProperties();
-            if (mp == nullptr)
-                return QString();
-            QVector3D w = at;
-            if (m_pov == PovTop)
-            {
-                const QPointF mm = pixelsToRealPosition(scenePos.x(), scenePos.y());
-                w = QVector3D(float(mm.x() / 1000.0), float(mm.y() / 1000.0), 0.0f);
-            }
-            w.setZ(mp->platformHeightAt(w.x(), w.y()));      // what it stands on
-            return mp->stagePositionText(w);
-        });
+           itself in an elevation (where the plot shows no Y). Unless Show >
+           Stage marks > Target positions is off. */
+        if (m_doc->monitorProperties() != nullptr && m_doc->monitorProperties()->targetPositionsVisible())
+        {
+            ti->setPositionReadout([this, at](const QPointF &scenePos) {
+                MonitorProperties *mp = m_doc->monitorProperties();
+                if (mp == nullptr)
+                    return QString();
+                QVector3D w = at;
+                if (m_pov == PovTop)
+                {
+                    const QPointF mm = pixelsToRealPosition(scenePos.x(), scenePos.y());
+                    w = QVector3D(float(mm.x() / 1000.0), float(mm.y() / 1000.0), 0.0f);
+                }
+                w.setZ(mp->platformHeightAt(w.x(), w.y()));      // what it stands on
+                return mp->stagePositionText(w);
+            });
+        }
         /* A Person is drawn standing where the aim rule stands it: on the deck
            under it, with its chest at the aim height. Taking both from
            targetAimPoint() keeps the figure and the beams on one answer. */
@@ -6436,8 +6445,20 @@ void MonitorGraphicsView::setGridVisible(bool on)
 void MonitorGraphicsView::setCenterLinesVisible(bool on)
 {
     m_centerLinesVisible = on;
-    if (m_centerLineV != nullptr) m_centerLineV->setVisible(on);
+    if (m_centerLineV != nullptr) m_centerLineV->setVisible(on && !centreLineReplacesCross());
     if (m_centerLineH != nullptr) m_centerLineH->setVisible(on);
+}
+
+bool MonitorGraphicsView::centreLineReplacesCross() const
+{
+    /* Looking down, the stage marks' full centre line runs where the cross's
+       up-and-down arm does (both at the middle of the grid's width): one line
+       there, the crew's. The cross's other arm -- half way up and down the
+       grid, the depth centre stage is reckoned from -- has no mark of its
+       own, so it stays. An elevation draws no marks and keeps the cross. */
+    const MonitorProperties *props = m_doc->monitorProperties();
+    return m_pov == PovTop && props != nullptr
+           && props->stageMarkVisible(MonitorProperties::CentreLineFlag);
 }
 
 /* ------------------------------------------------------------------------ *
@@ -6455,6 +6476,9 @@ void MonitorGraphicsView::updateStageMarks()
         delete it;
     }
     m_stageMarkItems.clear();
+    // The full centre line takes the place of the teal cross's arm along it.
+    if (m_centerLineV != nullptr)
+        m_centerLineV->setVisible(m_centerLinesVisible && !centreLineReplacesCross());
 
     MonitorProperties *props = m_doc->monitorProperties();
     if (m_scene == nullptr || props == nullptr || m_cellPixels <= 0 || !m_gridEnabled || m_pov != PovTop
@@ -6698,7 +6722,7 @@ void MonitorGraphicsView::updateGrid()
         m_centerLineV = m_scene->addLine(cx, m_yOffset, cx, m_yOffset + gridH, centerPen);
         m_centerLineV->setZValue(2);
         m_centerLineV->setAcceptedMouseButtons(Qt::NoButton);   // above trusses, but not in their way
-        m_centerLineV->setVisible(m_centerLinesVisible);
+        m_centerLineV->setVisible(m_centerLinesVisible && !centreLineReplacesCross());
         m_centerLineH = m_scene->addLine(m_xOffset, cy, m_xOffset + gridW, cy, centerPen);
         m_centerLineH->setZValue(2);
         m_centerLineH->setAcceptedMouseButtons(Qt::NoButton);

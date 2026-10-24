@@ -69,6 +69,7 @@
 #define KXMLQLCMonitorStageMarks    QStringLiteral("StageMarks")
 #define KXMLQLCMonitorCurtainLineY  QStringLiteral("CurtainLineY")
 #define KXMLQLCMonitorNumberLineY   QStringLiteral("NumberLineY")
+#define KXMLQLCMonitorTargetPositions QStringLiteral("TargetPositions")
 
 #define KXMLQLCMonitorCommonBackground  QStringLiteral("Background")
 #define KXMLQLCMonitorBgColor           QStringLiteral("BackgroundColor")
@@ -532,6 +533,7 @@ void MonitorProperties::reset()
     m_curtainLineY = 0.0f;
     m_numberLineSet = false;
     m_numberLineY = 0.0f;
+    m_targetPositionsVisible = true;
     m_showLabels = true;
     /* Quietly: a load or an undo snapshot sets it again straight after, and
        its setter says so then if it differs. */
@@ -2606,6 +2608,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         setCurtainLineY(QLocale::c().toFloat(attrs.value(KXMLQLCMonitorCurtainLineY).toString()));
     if (attrs.hasAttribute(KXMLQLCMonitorNumberLineY))
         setNumberLineY(QLocale::c().toFloat(attrs.value(KXMLQLCMonitorNumberLineY).toString()));
+    if (attrs.hasAttribute(KXMLQLCMonitorTargetPositions))
+        setTargetPositionsVisible(attrs.value(KXMLQLCMonitorTargetPositions).toString().toInt() != 0);
 
     while (root.readNextStartElement())
     {
@@ -3507,6 +3511,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeAttribute(KXMLQLCMonitorCurtainLineY, QString::number(double(m_curtainLineY)));
     if (!numberLineIsAuto())
         doc->writeAttribute(KXMLQLCMonitorNumberLineY, QString::number(double(m_numberLineY)));
+    if (!targetPositionsVisible())
+        doc->writeAttribute(KXMLQLCMonitorTargetPositions, QStringLiteral("0"));
 
     /* Font */
     doc->writeTextElement(KXMLQLCMonitorFont, font().toString());

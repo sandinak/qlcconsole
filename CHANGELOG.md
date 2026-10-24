@@ -26,17 +26,23 @@ circuits and subs.
   the number line, ticked and numbered in the show's unit out from 0 at
   centre, at the front of the deck (the biggest platform across centre and
   an apron butted to it) or the grid's front edge. The curtain and number
-  lines can be moved (Auto or a set position). Drawn on the plot's Top view
-  and on the Rig Overview's floor (Top and 45°). Saved with the show only
-  when used (`StageMarks`, `CurtainLineY`, `NumberLineY` on `Monitor`), so
-  older shows are unchanged and open with them off.
+  lines can be moved (Auto, or a distance upstage of the front of the stage,
+  negative out on an apron extension; kept and saved as the plan's Y, so a
+  set line stays put when the deck changes). With the full centre line on,
+  the teal centre cross's up-and-down arm isn't drawn (its arm across the
+  stage stays). Drawn on the plot's Top view and on the Rig Overview's floor
+  (Top and 45°). Saved with the show only when used (`StageMarks`,
+  `CurtainLineY`, `NumberLineY` on `Monitor`), so older shows are unchanged
+  and open with them off.
 - **Target positions in crew terms**: a readout beside each stage target on
   the plot, each figure/area in the Rig Overview and Focus mode's fixed-light
   figure ("SL 2.4 · US 3.1 m", "SR 7' 11\" · US 10'", "↑ 0.9 m" on a deck),
   measured from centre and the number line (the curtain line when only that
   is shown), live while dragged or nudged. One formatter,
   `MonitorProperties::formatStageOffset()`, with a compact and a spoken
-  form ("SL 2, US 1") for calls and voice.
+  form ("SL 2, US 1") for calls and voice. **Show ▸ Stage marks ▸ Target
+  positions** hides them; on by default, saved with the show only when off
+  (`TargetPositions="0"` on `Monitor`), not an undo step.
 - **Focus mode save status**: a status lamp in the panel (`FocusStatusLamp`)
   -- green all saved, yellow the current light unsaved, red another light
   unsaved, a red ring round a yellow centre for both -- with the unsaved

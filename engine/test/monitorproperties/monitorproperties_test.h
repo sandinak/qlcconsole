@@ -167,6 +167,14 @@ private slots:
      *  number line (or the curtain line), rounded to what is written, in the
      *  show's unit; and the same spoken in whole units. */
     void aPositionIsWrittenAgainstTheStageMarks();
+    /** Q123: the curtain and number lines are entered as a distance upstage
+     *  of the front of the stage (negative out on an apron extension), kept
+     *  and saved as the plan's Y, so an older show reads as it did and a set
+     *  line stays where it is when the deck changes. */
+    void stageLinesAreSetUpstageOfTheFront();
+    /** Q125: target positions are shown unless turned off, saved only when
+     *  off, and back after a load. */
+    void targetPositionsAreSavedOnlyWhenOff();
 };
 
 #endif

@@ -282,13 +282,15 @@ their house lights, relays and subs.
   whole centre line; the curtain line, found from the main drape or the
   proscenium; and a number line ticked in feet or metres out from 0 at
   centre. The curtain line and the number line can be moved from the same
-  menu. The Rig Overview draws them on its floor, and they're saved with the
-  show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+  menu, by how far upstage of the front of the stage they go (negative for
+  out on an apron). The full centre line replaces the teal centre cross's
+  line along it. The Rig Overview draws them on its floor, and they're saved
+  with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Where a target is, in crew terms.** Each stage target on the plot,
   each figure in the Rig Overview, and the person Focus mode stands where a
   fixed light lands has a small readout of where it is against the stage
   marks, for example **SL 2.4 · US 3.1 m**. It follows the target as it
-  moves. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+  moves. Untick **Target positions** in **Show ▸ Stage marks** to hide it. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Auto fixtures as their closest symbol.** The plot's **Show** menu has
   **Show Auto fixtures as their closest plot symbol**, saved with the show.
 - **One icon per fixture, everywhere**, and curtains have a drape. Icons

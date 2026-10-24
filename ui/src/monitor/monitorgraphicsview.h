@@ -174,6 +174,9 @@ public:
      *  the centre mark and line, the curtain line, the number line) where
      *  the show has them. Top view only; labelled, and in no one's way. */
     void updateStageMarks();
+    /** The stage marks' full centre line is shown where the teal centre
+     *  cross's up-and-down arm would be (Top view): that arm is not drawn. */
+    bool centreLineReplacesCross() const;
 
     /** Get the current number of grid sub-divisions */
     int gridSubdivisions() const { return m_gridSubdivisions; }

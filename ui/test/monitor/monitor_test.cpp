@@ -844,8 +844,25 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         const QPointF dsc = gv->realPositionToPixels(5000.0, props->downstageEdgeY() * 1000.0);
         QVERIFY((spike->polygon().first() - dsc).manhattanLength() < 0.5);
 
+        // The teal stage-centre cross: both arms until the full centre line
+        // is on, then only the one across the stage -- the centre line is
+        // drawn where its other arm was.
+        QVERIFY(gv->m_centerLineV != nullptr && gv->m_centerLineH != nullptr);
+        QVERIFY(gv->m_centerLineV->isVisible() && gv->m_centerLineH->isVisible());
         centreLine->setChecked(true);
         QCOMPARE(ofKind("centreLine").size(), 2);
+        QVERIFY(!gv->m_centerLineV->isVisible());
+        QVERIFY(gv->m_centerLineH->isVisible());
+        gv->updateGrid();                               // rebuilt, still so
+        QVERIFY(!gv->m_centerLineV->isVisible());
+        QVERIFY(gv->m_centerLineH->isVisible());
+        gv->setCenterLinesVisible(false);               // the cross off: both arms off
+        QVERIFY(!gv->m_centerLineV->isVisible() && !gv->m_centerLineH->isVisible());
+        gv->setCenterLinesVisible(true);
+        QVERIFY(!gv->m_centerLineV->isVisible() && gv->m_centerLineH->isVisible());
+        centreLine->setChecked(false);
+        QVERIFY(gv->m_centerLineV->isVisible());
+        centreLine->setChecked(true);
 
         curtain->setChecked(true);
         QList<QGraphicsItem *> cl = ofKind("curtainLine");
@@ -871,26 +888,45 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         QCheckBox *autoChk = marks->findChild<QCheckBox *>(QStringLiteral("curtainLineYAuto"));
         QDoubleSpinBox *spin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("curtainLineY"));
         QVERIFY(autoChk != nullptr && spin != nullptr);
+        // Entered as a distance upstage of the front of the stage (y 8 here).
         emit marks->aboutToShow();
         QVERIFY(autoChk->isChecked());
-        QCOMPARE(spin->value(), 5.0);
+        QCOMPARE(spin->value(), 3.0);                   // the drape at y 5
         QVERIFY(!spin->isEnabled());
         autoChk->setChecked(false);
         QVERIFY(spin->isEnabled());
-        spin->setValue(4.0);
+        spin->setValue(2.5);
         QVERIFY(!props->curtainLineIsAuto());
-        QCOMPARE(props->curtainLineY(), 4.0f);
+        QCOMPARE(props->curtainLineY(), 5.5f);
+        QCOMPARE(props->curtainLineUpstage(), 2.5f);
         foreach (QGraphicsItem *it, ofKind("curtainLine"))
             if (auto *li = dynamic_cast<QGraphicsLineItem *>(it))
-                QCOMPARE(li->line().y1(), gv->realPositionToPixels(0, 4000.0).y());
+                QCOMPARE(li->line().y1(), gv->realPositionToPixels(0, 5500.0).y());
         autoChk->setChecked(true);
         QVERIFY(props->curtainLineIsAuto());
-        QCOMPARE(spin->value(), 5.0);
+        QCOMPARE(spin->value(), 3.0);
+        // Negative: downstage of the front, out on an apron extension.
+        QCheckBox *numAuto = marks->findChild<QCheckBox *>(QStringLiteral("numberLineYAuto"));
+        QDoubleSpinBox *numSpin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("numberLineY"));
+        QVERIFY(numAuto != nullptr && numSpin != nullptr);
+        QCOMPARE(numSpin->value(), 0.0);
+        numAuto->setChecked(false);
+        numSpin->setValue(-0.5);
+        QCOMPARE(props->numberLineY(), 8.5f);
+        // A show saved with a line set (its plan Y): the box shows the distance.
+        props->setNumberLineY(6.0f);
+        emit marks->aboutToShow();
+        QVERIFY(!numAuto->isChecked());
+        QCOMPARE(numSpin->value(), 2.0);
+        numAuto->setChecked(true);
+        QVERIFY(props->numberLineIsAuto());
 
-        // Only looking down: an elevation has no floor to draw them on.
+        // Only looking down: an elevation has no floor to draw them on (and
+        // keeps the whole teal cross).
         gv->setViewPOV(MonitorGraphicsView::PovFront);
         gv->updateGrid();
         QVERIFY(gv->m_stageMarkItems.isEmpty());
+        QVERIFY(gv->m_centerLineV->isVisible());
         gv->setViewPOV(MonitorGraphicsView::PovTop);
         gv->updateGrid();
         QVERIFY(!gv->m_stageMarkItems.isEmpty());
@@ -914,6 +950,32 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         // The marks moved: the readouts count from where they are now.
         props->setStageMarks(MonitorProperties::CurtainLineFlag);
         mon.stageMarksChanged();
+        ti = gv->m_targetItems.value(soloist->id());
+        QCOMPARE(ti->positionReadout(), QString::fromUtf8("SL 2.4 \u00B7 US 0.1 m"));
+
+        // Q125: Stage marks > Target positions hides the readouts, and is the
+        // show's to keep -- but no undo step.
+        QAction *positions = action("stageMarkTargetPositions");
+        QVERIFY(positions != nullptr);
+        emit marks->aboutToShow();
+        QVERIFY(positions->isChecked());
+        doc->resetModified();
+        const bool couldUndo = mon.canUndo();
+        positions->setChecked(false);
+        QVERIFY(!props->targetPositionsVisible());
+        QVERIFY(doc->isModified());
+        QCOMPARE(mon.canUndo(), couldUndo);
+        ti = gv->m_targetItems.value(soloist->id());
+        QVERIFY(ti->positionReadout().isEmpty());
+        ti->setPos(gv->realPositionToPixels(4000.0, 8500.0));     // dragged: still none
+        QVERIFY(ti->positionReadout().isEmpty());
+        props->setTargetPositionsVisible(true);                   // a show loaded later
+        emit marks->aboutToShow();
+        QVERIFY(positions->isChecked());
+        props->setTargetPositionsVisible(false);
+        emit marks->aboutToShow();
+        QVERIFY(!positions->isChecked());
+        positions->setChecked(true);
         ti = gv->m_targetItems.value(soloist->id());
         QCOMPARE(ti->positionReadout(), QString::fromUtf8("SL 2.4 \u00B7 US 0.1 m"));
 

@@ -1812,7 +1812,7 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
 void StructureStudioView::drawTargetPositions(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    if (m_kind != StageKind || m_plane != Angled || props == nullptr)
+    if (m_kind != StageKind || m_plane != Angled || props == nullptr || !props->targetPositionsVisible())
         return;
 
     /* Where each one stands: the deck under a person or an area, the aim
