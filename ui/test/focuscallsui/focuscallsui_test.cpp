@@ -400,6 +400,7 @@ void FocusCallsUi_Test::aFocusCallCueWaitsForTheController()
     CueRunner runner(m_doc, CueRunner::Full);
     QVERIFY(runner.focusArmedText().isEmpty());
     FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    fcc->setRunningCueProbe([cue](quint32) { return cue; });   // the list plays it
     m_doc->setMode(Doc::Operate);
     fcc->cueCurrent(list, cue);
     QCOMPARE(runner.focusArmedText(), QString("Focus calls: waiting for the controller \u2014 press Start"));
@@ -419,6 +420,7 @@ void FocusCallsUi_Test::aFocusCallCueWaitsForTheController()
     QTRY_COMPARE(fcc->state(), FocusCallCue::Idle);
     QCOMPARE(goOn.count(), 1);
     QVERIFY(runner.focusArmedText().isEmpty());
+    fcc->setRunningCueProbe({});
     m_doc->setMode(Doc::Design);
 }
 

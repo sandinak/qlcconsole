@@ -25,6 +25,7 @@
 #include <QMutex>
 #include <QSet>
 #include <QHash>
+#include <functional>
 #include <QList>
 #include <QPair>
 #include <QVector3D>
@@ -170,10 +171,19 @@ public:
      *  reference to aim at. Restarting replaces a running session after
      *  discarding its unsaved offsets. */
     bool start(const Options &options, QString *why = nullptr);
+    /** Asked before a start: false, with the reason, while another
+     *  controller tool -- or this one -- has unsaved work a start would
+     *  throw away (gap 5: never silently discarded). */
+    void setStartGuard(const std::function<bool(QString *)> &guard) { m_startGuard = guard; }
 
     /** Stop, discarding any unsaved offsets (saveAll() first to keep them).
      *  Lets go of the heads. */
     void stop();
+    /** The operator leaves (Menu, the panel's Exit, RT past the last
+     *  call): stop(), with endedByOperator() true while stopped() is
+     *  emitted. Anything else that stops it is "from outside". */
+    void finish();
+    bool endedByOperator() const { return m_endedByOperator; }
 
     bool isActive() const { return m_active; }
     const Options &options() const { return m_options; }
@@ -607,6 +617,8 @@ private:
     QTimer *m_flashTimer = nullptr;
     bool m_flashEnabled = true;
     bool m_warnFlash = false;
+    std::function<bool(QString *)> m_startGuard;
+    bool m_endedByOperator = false;
     bool m_lightsFeedback = true;
     QElapsedTimer m_flashClock;
 

@@ -108,6 +108,9 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
     if (st == nullptr || st->cue(cueId) == nullptr)
         return refuse(tr("Choose a cue to refine."));
+    QString busy;
+    if (m_startGuard && !m_startGuard(&busy))
+        return refuse(busy);
     /* Q130: in Operate the show is running -- only the cue on stage, so a
        nudge never lights a cue that is not playing. */
     if (m_doc->mode() == Doc::Operate)

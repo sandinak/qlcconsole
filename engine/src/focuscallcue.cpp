@@ -52,7 +52,9 @@ FocusCallCue::FocusCallCue(Doc *doc, FocusSession *session, FocusCalls *calls, Q
         }, Qt::QueuedConnection);
     }
     if (m_session != nullptr)
+    {
         connect(m_session, &FocusSession::stopped, this, &FocusCallCue::sessionStopped);
+    }
     // Nobody named the venue in time: today's date (Q120).
     m_askTimer = new QTimer(this);
     m_askTimer->setSingleShot(true);
@@ -234,11 +236,23 @@ void FocusCallCue::sessionStopped()
     if (m_state != Running)
         return;
     const quint32 chaser = chaserOf(m_list);
+    const quint32 running = m_runningProbe ? m_runningProbe(m_list)
+                                           : m_doc->showTree()->runningCue(m_list);
+    const bool stillOnIt = running == m_cue;
+    const bool asked = m_session->endedByOperator();
     m_finished = m_cue;
     m_cue = m_list = kInvalid;
     setState(Idle);
-    // Done: on with the list.
-    if (chaser != kInvalid)
+    /* Ended by something else (Refine started, the show closed): said, and
+       the list is left where it is. */
+    if (!asked)
+    {
+        emit announce(tr("Focus calls ended."), ControllerScheme::ImportantPriority);
+        return;
+    }
+    /* Done: on with the list -- only if it is still on this cue. Moved on
+       by hand meanwhile, a GO would skip a cue. */
+    if (chaser != kInvalid && stillOnIt)
     {
         emit continueRequested(chaser);
         if (ShowControl *sc = m_doc->showControl())

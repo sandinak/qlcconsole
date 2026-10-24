@@ -98,6 +98,31 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
     m_focusCallCue = new FocusCallCue(m_doc, m_focusSession, m_focusCalls, this);
+    /* Gap 5: one controller tool at a time, and a start never throws away
+       another's (or its own) unsaved work: it is refused, saying what to
+       do first. */
+    auto busy = [this](QString *why) {
+        QString reason;
+        if (m_focusSession->isActive() && m_focusSession->hasUnsaved())
+        {
+            const int n = m_focusSession->unsavedFixtures().size();
+            reason = (n == 1 ? tr("Focus mode has 1 light not saved") : tr("Focus mode has %1 lights not saved").arg(n))
+                     + tr(": save it (A) or put it back (B) first.");
+        }
+        else if (m_refineSession->isActive() && m_refineSession->hasPending())
+        {
+            const int n = m_refineSession->pendingCount();
+            reason = (n == 1 ? tr("Refine has 1 change not kept") : tr("Refine has %1 changes not kept").arg(n))
+                     + tr(": keep it (A) or go back to the cue (B) first.");
+        }
+        if (reason.isEmpty())
+            return true;
+        if (why != nullptr)
+            *why = reason;
+        return false;
+    };
+    m_focusSession->setStartGuard(busy);
+    m_refineSession->setStartGuard(busy);
     /* Spoken unless the operator chose lights only -- except what is
        important, which is always said (Q131). */
     connect(m_focusCallCue, &FocusCallCue::announce, this, &ProgrammerController::tellOperator);

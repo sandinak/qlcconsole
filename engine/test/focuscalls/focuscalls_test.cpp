@@ -753,6 +753,8 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     FocusSession *s = m_doc->programmer()->focusSession();
     QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
     QSignalSpy goOn(fcc, &FocusCallCue::continueRequested);
+    quint32 running = focus;                 // the list is on the focus cue
+    fcc->setRunningCueProbe([&running](quint32) { return running; });
     m_doc->setMode(Doc::Operate);
 
     // GO onto it: armed, said once, nothing running yet.
@@ -781,7 +783,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     s->setTrigger(1, 1.0f);
     QCOMPARE(exit.count(), 1);
     QCOMPARE(s->callIndex(), 1);
-    s->stop();
+    s->finish();
     // Leaving goes on with the list.
     QCOMPARE(fcc->state(), FocusCallCue::Idle);
     QCOMPARE(goOn.count(), 1);
@@ -789,6 +791,24 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     // ...and does not arm the same cue again as the list moves off it.
     fcc->cueCurrent(list, focus);
     QCOMPARE(fcc->state(), FocusCallCue::Idle);
+
+    // Gap 5: the list moved on by hand meanwhile -- no GO (it would skip).
+    fcc->cueCurrent(list, house);
+    fcc->cueCurrent(list, focus);
+    QVERIFY(fcc->start());
+    running = house;
+    s->finish();
+    QCOMPARE(goOn.count(), 1);
+    // Stopped from outside (not Menu): said, and no GO.
+    running = focus;
+    fcc->cueCurrent(list, house);
+    fcc->cueCurrent(list, focus);
+    QVERIFY(fcc->start());
+    s->stop();
+    QCOMPARE(goOn.count(), 1);
+    QCOMPARE(said.last().at(0).toString(), QString("Focus calls ended."));
+    QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
+    fcc->cueCurrent(list, house);
 
     // Armed, then the list moves on before Start: let go.
     fcc->cueCurrent(list, house);
@@ -819,6 +839,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     QVERIFY(!fcc->start(&why));
     QCOMPARE(said.last().at(0).toString(), QString("This show has no focus calls yet."));
     QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    fcc->setRunningCueProbe({});
     m_doc->setMode(Doc::Design);
 }
 
@@ -1273,6 +1294,58 @@ void FocusCalls_Test::anOldVenueIsConfirmed()
     write(now.addSecs(-3 * 3600));
     v->setShowFile(show, true);
     QVERIFY(!v->needsConfirm());
+}
+
+void FocusCalls_Test::unsavedWorkIsNeverDiscarded()
+{
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    RefineSession *r = pc->refineSession();
+    r->setFlashEnabled(false);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Main");
+    const quint32 cue = st->addCue(list, -1, "Ballad");
+    FixtureGroup *g = makeGroup(m_doc, "Spots", { a, b });
+    ShowTree::Target t;
+    t.groups << g->id();
+    const quint32 layer = st->addLayer(cue, t);
+    ShowTree::Look look;
+    look.key = ShowTree::KeyPosition;
+    look.palettes << st->createInlinePalette(QLCPalette::PanTilt, { 270, 135 }, "Centre");
+    QVERIFY(st->setLayerLook(cue, layer, look));
+
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    s->nudge(1.0f, 0.0f);
+    // Refine refused while Focus mode has a light not saved; Focus kept.
+    QString why;
+    QVERIFY(!r->start(cue, 0xFFFFFFFF, &why));
+    QCOMPARE(why, QString("Focus mode has 1 light not saved: save it (A) or put it back (B) first."));
+    QVERIFY(s->isActive());
+    QVERIFY(s->isDirty(a->id()));
+    // Focus mode itself again: refused too.
+    QVERIFY(!s->start(o, &why));
+    QVERIFY(s->isDirty(a->id()));
+    // Saved: Refine starts, and Focus mode gives way.
+    s->save();
+    QVERIFY(r->start(cue));
+    QVERIFY(!s->isActive());
+    // Refine with a change pending: Focus mode refused, Refine kept.
+    QVERIFY(r->nudgePosition(2.0f, 0.0f));
+    QVERIFY(!s->start(o, &why));
+    QCOMPARE(why, QString("Refine has 1 change not kept: keep it (A) or go back to the cue (B) first."));
+    QVERIFY(r->isActive());
+    QVERIFY(r->hasPending());
+    r->revert();
+    QVERIFY(s->start(o));
+    QVERIFY(!r->isActive());
+    s->stop();
 }
 
 QTEST_GUILESS_MAIN(FocusCalls_Test)

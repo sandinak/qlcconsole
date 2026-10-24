@@ -21,6 +21,7 @@
 #define FOCUSCALLCUE_H
 
 #include <QPointer>
+#include <functional>
 #include <QObject>
 
 #include "qlcengine_export.h"
@@ -92,6 +93,10 @@ public:
     void holdVenueAsk();
     int venueAskTimeout() const { return m_askTimeout; }
 
+    /** The cue a list is running (ShowTreeController::runningCue()); a
+     *  test stands in for playing lists with @p probe (empty: the tree). */
+    void setRunningCueProbe(const std::function<quint32(quint32)> &probe) { m_runningProbe = probe; }
+
     /** What is said when armed. */
     static QString armedPhrase();
 
@@ -123,6 +128,8 @@ private:
     quint32 m_finished = 0xFFFFFFFF;    ///< the focus-call cue just done
     QList<QPointer<Chaser>> m_watched;
     int m_askTimeout = 8000;
+    std::function<quint32(quint32)> m_runningProbe;
+
     class QTimer *m_askTimer = nullptr;
 };
 

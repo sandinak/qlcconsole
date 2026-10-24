@@ -232,6 +232,9 @@ bool FocusSession::start(const Options &options, QString *why)
     /* A Design-mode tool: in Perform the rig belongs to the show. */
     if (m_doc->mode() == Doc::Operate && !options.allowOperate)
         return refuse(tr("Focus mode works in Design mode only: switch out of Operate first."));
+    QString busy;
+    if (m_startGuard && !m_startGuard(&busy))
+        return refuse(busy);
     const bool runCalls = !options.calls.isEmpty();
     QList<quint32> heads;
     if (runCalls)
@@ -576,6 +579,13 @@ void FocusSession::savedChanged(const QList<quint32> &fids)
         return;
     }
     markModified();
+}
+
+void FocusSession::finish()
+{
+    m_endedByOperator = true;
+    stop();
+    m_endedByOperator = false;
 }
 
 void FocusSession::stop()

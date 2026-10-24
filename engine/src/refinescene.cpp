@@ -99,6 +99,9 @@ bool RefineSession::startScene(const QList<quint32> &sceneIds, quint32 first, QS
             scenes << sid;
     if (scenes.isEmpty())
         return refuse(tr("Choose a scene to refine."));
+    QString busy;
+    if (m_startGuard && !m_startGuard(&busy))
+        return refuse(busy);
     if (m_active)
         stop();
     m_sceneMode = true;

@@ -196,6 +196,11 @@ public:
     bool stepPalette(int dir);
 
     bool hasPending() const { return !m_edits.isEmpty(); }
+    int pendingCount() const { return m_editOrder.size(); }
+    /** Asked before a start (ProgrammerController's): false, with the
+     *  reason, while another controller tool -- or this one -- has work
+     *  that a start would throw away (gap 5: never silently discarded). */
+    void setStartGuard(const std::function<bool(QString *)> &guard) { m_startGuard = guard; }
     /** Board Q116 (Build): a keep that would change a palette other scenes
      *  use is held until A is pressed again; this says which, empty when
      *  nothing waits. confirmShared() is that second A (or the panel's
@@ -386,6 +391,7 @@ private:
     bool m_flashEnabled = true;
     bool m_warnFlash = false;
     std::function<quint32(quint32)> m_runningProbe;
+    std::function<bool(QString *)> m_startGuard;
     bool m_wasRunning = true;
     /** Operate: Refine is quiet (no blink, no dim). */
     bool isQuiet() const;

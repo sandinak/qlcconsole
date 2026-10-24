@@ -1083,7 +1083,7 @@ bool FocusModePanel::requestExit()
             m_session->saveAll();
     }
     m_finishing = true;
-    m_session->stop();
+    m_session->finish();
     finish();
     close();
     return true;
