@@ -28,6 +28,7 @@
 #include <QLineEdit>
 #include <QInputDialog>
 #include <QFileInfo>
+#include <QLocale>
 #include <QLabel>
 
 #include "programmercontroller.h"
@@ -243,7 +244,8 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
         QMessageBox::warning(parent, tr("Focus Calls"), why);
 }
 
-QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fallback, int timeoutMs)
+QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fallback, int timeoutMs,
+                                    const QString &current)
 {
     FocusCallCue *fcc = doc->programmer()->focusCallCue();
     QDialog *d = new QDialog(parent);
@@ -251,7 +253,14 @@ QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fa
     d->setAttribute(Qt::WA_DeleteOnClose);
     d->setWindowTitle(tr("Venue"));
     QVBoxLayout *vl = new QVBoxLayout(d);
-    vl->addWidget(new QLabel(tr("Which venue is this? Corrections are saved for it, beside the show."), d));
+    // Board Q129: always asked, the one applied too -- the room may be new.
+    QLabel *question = new QLabel(current.isEmpty()
+        ? tr("Which venue is this? Corrections are saved for it, beside the show.")
+        : tr("Still at %1? If this is another room, name it (or wait): its corrections "
+             "start from the show's own.").arg(current), d);
+    question->setObjectName(QStringLiteral("fcAskVenueQuestion"));
+    question->setWordWrap(true);
+    vl->addWidget(question);
     QLineEdit *name = new QLineEdit(d);
     name->setObjectName(QStringLiteral("fcAskVenueName"));
     name->setPlaceholderText(fallback);
@@ -260,8 +269,18 @@ QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fa
     left->setObjectName(QStringLiteral("fcAskVenueLeft"));
     vl->addWidget(left);
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok, d);
-    QPushButton *date = bb->addButton(tr("Use today's date"), QDialogButtonBox::RejectRole);
+    bb->button(QDialogButtonBox::Ok)->setText(tr("New venue"));
+    QPushButton *date = bb->addButton(tr("New venue, today's date"), QDialogButtonBox::RejectRole);
     date->setObjectName(QStringLiteral("fcAskVenueDate"));
+    if (!current.isEmpty())
+    {
+        QPushButton *still = bb->addButton(tr("Still at %1").arg(current), QDialogButtonBox::ActionRole);
+        still->setObjectName(QStringLiteral("fcAskVenueStill"));
+        QObject::connect(still, &QPushButton::clicked, d, [fcc, current, d]() {
+            fcc->useVenue(current);
+            d->close();
+        });
+    }
     vl->addWidget(bb);
 
     // The countdown: once someone types, it waits for them.
@@ -272,8 +291,8 @@ QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fa
     auto update = [=]() {
         const int secs = qMax(0, int((timeoutMs - clock->elapsed() + 999) / 1000));
         left->setText(name->text().isEmpty()
-                      ? tr("Today's date in %1 s: %2").arg(secs).arg(fallback)
-                      : tr("Press OK to use this name."));
+                      ? tr("A new venue in %1 s: %2").arg(secs).arg(fallback)
+                      : tr("Press New venue to use this name."));
     };
     QObject::connect(tick, &QTimer::timeout, d, update);
     QObject::connect(d, &QObject::destroyed, [clock]() { delete clock; });
@@ -296,6 +315,58 @@ QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fa
     });
     update();
     tick->start();
+    d->show();
+    d->raise();
+    return d;
+}
+
+QDialog *FocusCallsDialog::confirmVenue(Doc *doc, QWidget *parent)
+{
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    if (!venues->needsConfirm())
+        return nullptr;
+    const QString current = venues->activeVenue();
+    QDialog *d = new QDialog(parent);
+    d->setObjectName(QStringLiteral("venueConfirm"));
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->setWindowTitle(tr("Venue"));
+    d->setProperty("helpTopic", QStringLiteral("focus-calls.md"));
+    QVBoxLayout *vl = new QVBoxLayout(d);
+    const QDateTime when = venues->lastChanged(current);
+    QLabel *question = new QLabel(tr("<b>Still at %1?</b><br>This show's focus corrections for %1 were "
+                                     "last changed %2. In another room, start a new venue: its "
+                                     "corrections start from the show's own, and %1's are kept.")
+                                  .arg(current.toHtmlEscaped(),
+                                       when.isValid() ? QLocale().toString(when, QLocale::ShortFormat)
+                                                      : tr("some time ago")), d);
+    question->setObjectName(QStringLiteral("venueConfirmQuestion"));
+    question->setWordWrap(true);
+    vl->addWidget(question);
+    QLineEdit *name = new QLineEdit(d);
+    name->setObjectName(QStringLiteral("venueConfirmName"));
+    name->setPlaceholderText(VenueCorrections::defaultVenueName());
+    vl->addWidget(name);
+    QDialogButtonBox *bb = new QDialogButtonBox(d);
+    QPushButton *fresh = bb->addButton(tr("New venue"), QDialogButtonBox::AcceptRole);
+    fresh->setObjectName(QStringLiteral("venueConfirmNew"));
+    fresh->setDefault(true);
+    QPushButton *still = bb->addButton(tr("Still at %1").arg(current), QDialogButtonBox::ActionRole);
+    still->setObjectName(QStringLiteral("venueConfirmStill"));
+    QPushButton *none = bb->addButton(tr("None: the show's own"), QDialogButtonBox::RejectRole);
+    none->setObjectName(QStringLiteral("venueConfirmNone"));
+    vl->addWidget(bb);
+    QObject::connect(fresh, &QPushButton::clicked, d, [venues, name, d]() {
+        venues->setActiveVenue(venues->addVenue(name->text()));
+        d->close();
+    });
+    QObject::connect(still, &QPushButton::clicked, d, [venues, d]() {
+        venues->confirmVenue();
+        d->close();
+    });
+    QObject::connect(none, &QPushButton::clicked, d, [venues, d]() {
+        venues->setActiveVenue(QString());
+        d->close();
+    });
     d->show();
     d->raise();
     return d;
@@ -439,7 +510,10 @@ void FocusCallsDialog::fillVenues(const QString &select)
     for (const QString &v : venues->venueNames())
         m_venue->addItem(venues->activeVenue() == v ? tr("%1 (applied)").arg(v) : v, 0);
     m_venue->addItem(tr("New venue\342\200\246"), kNewVenue);
-    const QString want = select.isEmpty() ? venues->activeVenue() : select;
+    /* An applied venue nobody has said is still the room (last changed
+       over a day ago, Q129) is not offered as the default: New venue is. */
+    const QString want = !select.isEmpty() ? select
+                       : venues->needsConfirm() ? QString() : venues->activeVenue();
     int at = want.isEmpty() ? -1 : venues->venueNames().indexOf(want);
     m_venue->setCurrentIndex(at >= 0 ? at + 1 : m_venue->count() - 1);
     m_venue->blockSignals(was);
@@ -508,6 +582,12 @@ void FocusCallsDialog::refreshVenue()
         m_venueNote->setText(tr("Saves go into the show's own calibration, as Focus mode does."));
     else if (file.isEmpty())
         m_venueNote->setText(tr("Save the show first: a venue's corrections are kept in a file beside it."));
+    else if (kind == kNewVenue && venues->needsConfirm())
+        m_venueNote->setText(tr("%1 is applied, but was last changed %2: pick it above if this is "
+                                "still that room.")
+                             .arg(venues->activeVenue(),
+                                  QLocale().toString(venues->lastChanged(venues->activeVenue()),
+                                                     QLocale::ShortFormat)));
     else
         m_venueNote->setText(tr("Corrections are saved for this venue in %1, next to the show, the "
                                 "moment A is pressed. The show file is never changed by them.")

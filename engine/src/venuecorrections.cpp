@@ -98,6 +98,7 @@ void VenueCorrections::setShowFile(const QString &showFile, bool opened)
     if (opened)
     {
         reset();
+        m_confirmed = false;
         m_showFile = showFile;
         if (!load())
             return;
@@ -369,11 +370,27 @@ bool VenueCorrections::setActiveVenue(const QString &name)
         return true;
     unapply();
     m_active = name;
+    // Chosen just now: the room it is.
+    m_confirmed = !name.isEmpty();
     apply();
     save();
     emit activeVenueChanged(m_active);
     emit correctionsChanged();
     return true;
+}
+
+QDateTime VenueCorrections::lastChanged(const QString &name) const
+{
+    const Venue v = venue(name);
+    return v.modified.isValid() ? v.modified : v.created;
+}
+
+bool VenueCorrections::needsConfirm(const QDateTime &now) const
+{
+    if (!isActive() || m_confirmed)
+        return false;
+    const QDateTime when = lastChanged(m_active);
+    return !when.isValid() || when.secsTo(now) > qint64(staleAfterHours()) * 3600;
 }
 
 /*****************************************************************************

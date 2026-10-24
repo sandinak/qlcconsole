@@ -870,8 +870,36 @@ void FocusCalls_Test::aFocusCallCueAsksForTheVenue()
     QVERIFY(v->activeVenue().startsWith("Venue "));
     bool dated = false;
     for (const QList<QVariant> &l : said)
-        dated = dated || l.at(0).toString() == QLatin1String("Venue named for today.");
+        dated = dated || l.at(0).toString() == QLatin1String("New venue, named for today.");
     QVERIFY(dated);
+    s->stop();
+
+    /* Q129: a venue applied is ALWAYS confirmed -- "Still at ...?", and
+       said in Lights only too; the answer keeps it... */
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    const int venues = v->venueNames().size();
+    fcc->setVenueAskTimeout(8000);
+    m_doc->programmer()->setOperatorFeedback(ControllerScheme::LightsFeedback);
+    fcc->cueCurrent(list, st->addCue(list, 0, "House 2"));
+    fcc->cueCurrent(list, focus);
+    QVERIFY(fcc->start());
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QCOMPARE(asked.last().at(2).toString(), QString("Lincoln HS"));
+    QCOMPARE(said.last().at(0).toString(), QString("Still at Lincoln HS? Answer on the laptop, or wait for a new venue."));
+    m_doc->programmer()->setOperatorFeedback(ControllerScheme::BothFeedback);
+    QVERIFY(fcc->useVenue("Lincoln HS"));
+    QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
+    QCOMPARE(v->venueNames().size(), venues);
+    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 1, DH Tspots to DSC. Fixture 1 of 1."));
+    s->stop();
+    // ...and nobody answering is a new venue, never the old one.
+    fcc->setVenueAskTimeout(50);
+    fcc->cueCurrent(list, st->addCue(list, 0, "House 3"));
+    fcc->cueCurrent(list, focus);
+    QVERIFY(fcc->start());
+    QTRY_COMPARE_WITH_TIMEOUT(fcc->state(), FocusCallCue::Running, 2000);
+    QVERIFY(v->activeVenue() != QLatin1String("Lincoln HS"));
+    QCOMPARE(v->venueNames().size(), venues + 1);
     s->stop();
     m_doc->setMode(Doc::Design);
 }
@@ -1210,6 +1238,41 @@ void FocusCalls_Test::theControllerLostFreezesEverything()
     r->revert();
     r->stop();
     iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
+void FocusCalls_Test::anOldVenueIsConfirmed()
+{
+    makeSpot(m_doc, "A", 2.0f, 2.0f);
+    const QString show = m_dir->filePath("Spring.qlcc");
+    const QDateTime now = QDateTime::currentDateTime();
+    auto write = [&](const QDateTime &modified) {
+        QFile f(VenueCorrections::sidecarPath(show));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QString("<QlcVenues Version=\"1\" Show=\"Spring.qlcc\" Active=\"Lincoln HS\">"
+                        "<Venue Name=\"Lincoln HS\" Created=\"%1\" Modified=\"%1\"/></QlcVenues>")
+                .arg(modified.toString(Qt::ISODate)).toUtf8());
+    };
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    // Changed two days ago: asked.
+    write(now.addDays(-2));
+    v->setShowFile(show, true);
+    QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
+    QVERIFY(v->needsConfirm());
+    QVERIFY(!v->needsConfirm(now.addDays(-2).addSecs(3600)));    // an hour after: not old
+    v->confirmVenue();
+    QVERIFY(!v->needsConfirm());
+    // Opened again: asked again.
+    v->setShowFile(show, true);
+    QVERIFY(v->needsConfirm());
+    // Choosing a venue is confirming it.
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(!v->needsConfirm());
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QVERIFY(!v->needsConfirm());
+    // Changed this morning: not asked.
+    write(now.addSecs(-3 * 3600));
+    v->setShowFile(show, true);
+    QVERIFY(!v->needsConfirm());
 }
 
 QTEST_GUILESS_MAIN(FocusCalls_Test)

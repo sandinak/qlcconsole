@@ -661,9 +661,12 @@ void App::init()
             slotUpdateStandby();
         });
         connect(pc->focusCallCue(), &FocusCallCue::venueNeeded, this,
-                [this](const QString &fallback, int timeoutMs) {
-            FocusCallsDialog::askVenue(m_doc, this, fallback, timeoutMs);
+                [this](const QString &fallback, int timeoutMs, const QString &current) {
+            FocusCallsDialog::askVenue(m_doc, this, fallback, timeoutMs, current);
         });
+        // The venue applied, in the footer (board Q129).
+        connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged,
+                this, &App::updateVenueFooter);
         QShortcut *startCalls = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
         startCalls->setContext(Qt::ApplicationShortcut);
         connect(startCalls, &QShortcut::activated, this, [this]() {
@@ -4764,6 +4767,12 @@ QFile::FileError App::loadXML(const QString& fileName)
             /* The venue it was last focused for, from the file beside it:
                applied over the show's own calibration, never into it. */
             m_doc->programmer()->venueCorrections()->setShowFile(fileName, true);
+            updateVenueFooter();
+            /* Last changed over a day ago: "Still at <venue>?", New venue
+               the default (board Q129). Not modal, so it never holds up a
+               show opened from the command line. */
+            if (m_noGui == false)
+                QTimer::singleShot(0, this, [this]() { FocusCallsDialog::confirmVenue(m_doc, this); });
             m_doc->resetModified();
             retval = QFile::NoError;
             cacheShowDefinitions();     // the next run of it needs nothing remote
@@ -5749,6 +5758,24 @@ void App::removeAutosaveFile()
  * Status Bar
  *****************************************************************************/
 
+void App::updateVenueFooter()
+{
+    if (m_statusVenueLabel == nullptr || m_doc == nullptr || m_doc->programmer() == nullptr)
+        return;
+    const QString venue = m_doc->programmer()->venueCorrections()->activeVenue();
+    m_statusVenueLabel->setText(venue.isEmpty() ? QString() : tr("Venue: %1").arg(venue));
+    m_statusVenueLabel->setToolTip(tr("Focus corrections for this venue are applied over the show's "
+                                      "own calibration (from the .venues.xml beside the show). "
+                                      "Focus calls changes it."));
+    m_statusVenueLabel->setVisible(!venue.isEmpty());
+}
+
+QString App::venueFooterText() const
+{
+    return m_statusVenueLabel != nullptr && !m_statusVenueLabel->isHidden()
+           ? m_statusVenueLabel->text() : QString();
+}
+
 void App::initStatusBar()
 {
     QStatusBar* sb = statusBar();
@@ -5760,6 +5787,14 @@ void App::initStatusBar()
     m_statusModeLabel->setMinimumWidth(160);
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
+
+    // The venue the focus corrections come from (board Q129): "Venue:
+    // Lincoln HS", beside the readiness chip; hidden with none applied.
+    m_statusVenueLabel = new QLabel(this);
+    m_statusVenueLabel->setObjectName("footerVenue");
+    m_statusVenueLabel->setProperty("helpTopic", QStringLiteral("focus-calls.md"));
+    m_statusVenueLabel->hide();
+    sb->addWidget(m_statusVenueLabel, 0);
 
     // Rig network gate (InputOutputMap::transmitGateStatus()), right beside
     // the readiness chip: "Output held — not on the rig network". Hidden

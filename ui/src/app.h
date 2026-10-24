@@ -870,6 +870,12 @@ private:
      *  has none set or the check is off/lifted. Click opens the setting. */
     QLabel* m_statusRigNetLabel = nullptr;
     void updateRigNetworkFooter();
+    /** "Venue: Lincoln HS" while a venue's focus corrections are applied. */
+    QLabel* m_statusVenueLabel = nullptr;
+public:
+    void updateVenueFooter();
+    QString venueFooterText() const;
+private:
     /** "Update available: 0.1.1" -- driven by m_updateManager, hidden while
      *  there is nothing to say; a click opens Software Update. */
     QLabel* m_statusUpdateLabel = nullptr;

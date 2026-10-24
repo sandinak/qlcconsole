@@ -81,8 +81,9 @@ public:
     /** Let go of an armed cue (the list moved on, or stopped). */
     void disarm();
 
-    /** While NamingVenue: the venue's name (empty: today's date), and the
-     *  calls begin. False when nothing is being named. */
+    /** While NamingVenue: the venue's name (empty: a new one for today's
+     *  date; the one applied: still at it), and the calls begin. False
+     *  when nothing is being named. */
     bool useVenue(const QString &name);
     /** How long the laptop waits for a name before it uses the date, ms
      *  (8 s; a test shortens it). */
@@ -99,9 +100,10 @@ signals:
     void announce(const QString &text, int priority = ControllerScheme::ConfirmPriority);
     /** The calls are done: the list goes on (GO on its chaser). */
     void continueRequested(quint32 chaserId);
-    /** Start with no venue applied: ask for its name on the laptop, the
-     *  date's @p fallback in @p timeoutMs if nobody answers. */
-    void venueNeeded(const QString &fallback, int timeoutMs);
+    /** Start: confirm the venue on the laptop (board Q129) -- "Still at
+     *  @p current?" (empty: none applied, "Which venue is this?") -- and,
+     *  if nobody answers in @p timeoutMs, a new venue named @p fallback. */
+    void venueNeeded(const QString &fallback, int timeoutMs, const QString &current);
 
 private:
     void setState(State state);

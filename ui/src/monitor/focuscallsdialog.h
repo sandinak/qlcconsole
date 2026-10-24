@@ -57,7 +57,14 @@ public:
     /** A focus-call cue's Start with no venue applied (Q120): ask for the
      *  venue's name, showing how long until today's date is used; closes
      *  itself when the calls begin. Not modal: the controller still works. */
-    static QDialog *askVenue(Doc *doc, QWidget *parent, const QString &fallback, int timeoutMs);
+    static QDialog *askVenue(Doc *doc, QWidget *parent, const QString &fallback, int timeoutMs,
+                             const QString &current = QString());
+
+    /** The show opened with a venue applied that was last changed more
+     *  than a day ago (board Q129): "Still at <venue>?" -- New venue (the
+     *  default), Still here, or None. Not modal; null when nothing needs
+     *  asking. */
+    static QDialog *confirmVenue(Doc *doc, QWidget *parent);
 
     /** The calls as edited (they are the show's once Start or Save). */
     QList<FocusCall> calls() const { return m_calls; }

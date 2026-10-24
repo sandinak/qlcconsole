@@ -145,15 +145,20 @@ bool FocusCallCue::start(QString *why)
         return false;
     if (m_calls == nullptr || m_calls->count() == 0)
         return refuse(tr("This show has no focus calls yet."));
-    /* Saves go to a venue. None applied, where the show has a file to keep
-       one beside: ask for its name on the laptop, and if nobody answers in
-       a few seconds, name it for today (Q120). */
+    /* Saves go to a venue, and a show moves between rooms: ALWAYS confirm
+       it on the laptop (Q120, Q129) -- the one applied, or a name -- and if
+       nobody answers in a few seconds, a new venue for today, so last
+       week's room is never corrected by mistake. */
     VenueCorrections *venues = m_session->venues();
-    if (venues != nullptr && !venues->isActive() && !venues->filePath().isEmpty())
+    if (venues != nullptr && !venues->filePath().isEmpty())
     {
         setState(NamingVenue);
-        emit announce(tr("Name this venue on the laptop, or wait for today's date."), ControllerScheme::ImportantPriority);
-        emit venueNeeded(VenueCorrections::defaultVenueName(), m_askTimeout);
+        const QString current = venues->activeVenue();
+        emit announce(current.isEmpty()
+                      ? tr("Name this venue on the laptop, or wait for today's date.")
+                      : tr("Still at %1? Answer on the laptop, or wait for a new venue.").arg(current),
+                      ControllerScheme::ImportantPriority);
+        emit venueNeeded(VenueCorrections::defaultVenueName(), m_askTimeout, current);
         m_askTimer->start(m_askTimeout);
         return true;
     }
@@ -166,10 +171,19 @@ bool FocusCallCue::useVenue(const QString &name)
         return false;
     m_askTimer->stop();
     VenueCorrections *venues = m_session->venues();
-    const QString applied = venues->addVenue(name.trimmed());
-    venues->setActiveVenue(applied);
-    emit announce(name.trimmed().isEmpty() ? tr("Venue named for today.")
-                                           : tr("Venue %1.").arg(applied));
+    const QString wanted = name.trimmed();
+    if (!wanted.isEmpty() && wanted == venues->activeVenue())
+    {
+        venues->confirmVenue();
+        emit announce(tr("Still at %1.").arg(wanted));
+    }
+    else
+    {
+        const QString applied = venues->addVenue(wanted);
+        venues->setActiveVenue(applied);
+        emit announce(wanted.isEmpty() ? tr("New venue, named for today.")
+                                       : tr("Venue %1.").arg(applied));
+    }
     setState(Armed);
     QString why;
     if (!beginCalls(&why))

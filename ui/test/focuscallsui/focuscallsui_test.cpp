@@ -469,15 +469,16 @@ void FocusCallsUi_Test::theLaptopAsksForTheVenue()
     venues->setShowFile(m_dir->filePath("Spring.qlcc"), false);
     FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
     QPointer<QDialog> ask;
-    connect(fcc, &FocusCallCue::venueNeeded, this, [&](const QString &fallback, int ms) {
-        ask = FocusCallsDialog::askVenue(m_doc, nullptr, fallback, ms);
+    connect(fcc, &FocusCallCue::venueNeeded, this, [&](const QString &fallback, int ms, const QString &current) {
+        ask = FocusCallsDialog::askVenue(m_doc, nullptr, fallback, ms, current);
     });
     m_doc->setMode(Doc::Operate);
     fcc->cueCurrent(list, cue);
     QVERIFY(fcc->start());
     QVERIFY(ask != nullptr);
     QLabel *left = ask->findChild<QLabel *>("fcAskVenueLeft");
-    QVERIFY2(left->text().startsWith("Today's date in 8 s"), qPrintable(left->text()));
+    QVERIFY2(left->text().startsWith("A new venue in 8 s"), qPrintable(left->text()));
+    QVERIFY(ask->findChild<QPushButton *>("fcAskVenueStill") == nullptr);   // none applied yet
     QLineEdit *name = ask->findChild<QLineEdit *>("fcAskVenueName");
     QTest::keyClicks(name, "Kennedy");          // typing: the clock waits
     QVERIFY(fcc->state() == FocusCallCue::NamingVenue);
@@ -486,7 +487,68 @@ void FocusCallsUi_Test::theLaptopAsksForTheVenue()
     QCOMPARE(fcc->state(), FocusCallCue::Running);
     QTRY_VERIFY(ask.isNull());                   // it closes itself
     m_doc->programmer()->focusSession()->stop();
+
+    // Q129: with one applied, still asked -- "Still at Kennedy" keeps it.
+    fcc->cueCurrent(list, st->addCue(list, 0, "House"));
+    fcc->cueCurrent(list, cue);
+    QVERIFY(fcc->start());
+    QVERIFY(ask != nullptr);
+    QVERIFY(ask->findChild<QLabel *>("fcAskVenueQuestion")->text().startsWith("Still at Kennedy?"));
+    QPushButton *still = ask->findChild<QPushButton *>("fcAskVenueStill");
+    QVERIFY(still != nullptr);
+    still->click();
+    QCOMPARE(venues->activeVenue(), QString("Kennedy"));
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    m_doc->programmer()->focusSession()->stop();
     m_doc->setMode(Doc::Design);
+}
+
+void FocusCallsUi_Test::anOldVenueIsAskedAbout()
+{
+    // A show whose applied venue was last changed three days ago.
+    const QString show = m_dir->filePath("Old.qlcc");
+    QFile f(VenueCorrections::sidecarPath(show));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QString("<QlcVenues Version=\"1\" Show=\"Old.qlcc\" Active=\"Lincoln HS\">"
+                    "<Venue Name=\"Lincoln HS\" Modified=\"%1\"/></QlcVenues>")
+            .arg(QDateTime::currentDateTime().addDays(-3).toString(Qt::ISODate)).toUtf8());
+    f.close();
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(show, true);
+    QVERIFY(venues->needsConfirm());
+
+    // The Focus calls dialog does not default to it: New venue does.
+    {
+        FocusCallsDialog d(m_doc);
+        QCOMPARE(d.findChild<QComboBox *>("fcVenue")->currentData().toInt(), -2);
+        QVERIFY(d.findChild<QLabel *>("fcVenueNote")->text().contains("Lincoln HS"));
+    }
+
+    // On open: "Still at Lincoln HS?", New venue the default.
+    QPointer<QDialog> d = FocusCallsDialog::confirmVenue(m_doc, nullptr);
+    QVERIFY(d != nullptr);
+    QVERIFY(d->findChild<QLabel *>("venueConfirmQuestion")->text().contains("Still at Lincoln HS?"));
+    QPushButton *fresh = d->findChild<QPushButton *>("venueConfirmNew");
+    QVERIFY(fresh->isDefault());
+    d->findChild<QPushButton *>("venueConfirmStill")->click();
+    QTRY_VERIFY(d.isNull());
+    QCOMPARE(venues->activeVenue(), QString("Lincoln HS"));
+    QVERIFY(!venues->needsConfirm());
+    QVERIFY(FocusCallsDialog::confirmVenue(m_doc, nullptr) == nullptr);   // nothing to ask
+    {
+        FocusCallsDialog dlg(m_doc);
+        QCOMPARE(dlg.venueChoice(), QString("Lincoln HS"));                 // confirmed: the default
+    }
+
+    // Opened again, New venue: a new one, Lincoln HS kept.
+    venues->setShowFile(show, true);
+    d = FocusCallsDialog::confirmVenue(m_doc, nullptr);
+    QVERIFY(d != nullptr);
+    QTest::keyClicks(d->findChild<QLineEdit *>("venueConfirmName"), "Kennedy");
+    d->findChild<QPushButton *>("venueConfirmNew")->click();
+    QTRY_VERIFY(d.isNull());
+    QCOMPARE(venues->activeVenue(), QString("Kennedy"));
+    QVERIFY(venues->hasVenue("Lincoln HS"));
 }
 
 void FocusCallsUi_Test::theChangeSinceTheSaveShows()

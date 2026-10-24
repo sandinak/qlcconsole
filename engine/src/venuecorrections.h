@@ -128,6 +128,19 @@ public:
      *  remember it in the sidecar. */
     bool setActiveVenue(const QString &name);
 
+    /** When @p name's corrections last changed (else when it was made). */
+    QDateTime lastChanged(const QString &name) const;
+    /** How old an applied venue may be before opening the show asks
+     *  "Still at <venue>?" (board Q129): about a day. */
+    static constexpr int staleAfterHours() { return 20; }
+    /** The venue applied was last changed more than staleAfterHours()
+     *  before @p now and nobody has said it is still the room since the
+     *  show was opened: ask. */
+    bool needsConfirm(const QDateTime &now = QDateTime::currentDateTime()) const;
+    /** Someone said the applied venue is still the room. */
+    void confirmVenue() { m_confirmed = true; }
+    bool isConfirmed() const { return m_confirmed; }
+
     /*********************************************************************
      * Corrections (in the active venue)
      *********************************************************************/
@@ -178,6 +191,9 @@ private:
     QList<Venue> m_venues;
     QString m_active;
     bool m_writing = false;
+    /** The applied venue was chosen, or said to be still the room, since
+     *  the show was opened. */
+    bool m_confirmed = false;
     QSet<quint32> m_held;
 };
 
