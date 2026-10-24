@@ -163,6 +163,10 @@ private slots:
      *  it), the main drape or proscenium for the curtain line, the grid's
      *  width for the number line. */
     void stageMarksFollowTheStage();
+    /** Where a target is, in crew terms: SL/SR/CL from centre, US/DS from the
+     *  number line (or the curtain line), rounded to what is written, in the
+     *  show's unit; and the same spoken in whole units. */
+    void aPositionIsWrittenAgainstTheStageMarks();
 };
 
 #endif

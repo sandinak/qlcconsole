@@ -357,6 +357,10 @@ private:
      *  Top and 45° planes): centre mark and line, curtain line, number line,
      *  lying on the deck where there is one. */
     void drawStageMarks(QPainter &p) const;
+    /** Beside each stage figure and target the overview draws -- and Focus
+     *  mode's figure where a fixed light lands -- where it is against the
+     *  stage marks (MonitorProperties::stagePositionText()). */
+    void drawTargetPositions(QPainter &p) const;
     void drawStructure(QPainter &p) const;
     void drawOneStructure(QPainter &p, Kind kind, quint32 id) const;
     /** The hangers on truss/tower @p id: clamp, arm, chain. */

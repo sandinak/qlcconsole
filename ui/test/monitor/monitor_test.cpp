@@ -895,6 +895,28 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         gv->updateGrid();
         QVERIFY(!gv->m_stageMarkItems.isEmpty());
 
+        // A target says where it is against the marks, and again as it moves.
+        props->setStageMarks(MonitorProperties::NoStageMarks);
+        StageTarget *soloist = props->addStageTarget();
+        soloist->setName("Soloist");
+        soloist->setKind(StageTarget::Kind::Person);
+        soloist->setX(7.4f);
+        soloist->setY(4.9f);
+        gv->updateTargets();
+        TargetItem *ti = gv->m_targetItems.value(soloist->id());
+        QVERIFY(ti != nullptr);
+        QCOMPARE(ti->positionReadout(), QString::fromUtf8("SL 2.4 \u00B7 US 3.1 m"));
+        ti->setPos(gv->realPositionToPixels(4000.0, 8500.0));     // dragged
+        QCOMPARE(ti->positionReadout(), QString::fromUtf8("SR 1.0 \u00B7 DS 0.5 m"));
+        gv->updateTargets();                                      // put back from the model
+        ti = gv->m_targetItems.value(soloist->id());
+        QCOMPARE(ti->positionReadout(), QString::fromUtf8("SL 2.4 \u00B7 US 3.1 m"));
+        // The marks moved: the readouts count from where they are now.
+        props->setStageMarks(MonitorProperties::CurtainLineFlag);
+        mon.stageMarksChanged();
+        ti = gv->m_targetItems.value(soloist->id());
+        QCOMPARE(ti->positionReadout(), QString::fromUtf8("SL 2.4 \u00B7 US 0.1 m"));
+
         // A show loaded later: the menu ticks what it has.
         props->setStageMarks(MonitorProperties::NumberLineFlag);
         emit marks->aboutToShow();

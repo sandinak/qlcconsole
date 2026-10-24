@@ -22,11 +22,13 @@
 #include <QVector>
 #include <QStringList>
 #include <QObject>
+#include <functional>
 
 class QGraphicsTextItem;
 class QGraphicsSceneMouseEvent;
 class QGraphicsSceneContextMenuEvent;
 class StageTarget;
+class StageMarkLabel;
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -57,6 +59,17 @@ public:
 
     /** Move the item to the given scene-pixel position. */
     void setScenePos(float pxX, float pxY);
+
+    /** Where it is against the stage marks ("SL 2.4 · US 3.1 m"), in a small
+     *  label under it: @p text gives the words for the item's scene position,
+     *  and is asked again whenever the item moves -- while it is dragged, or
+     *  nudged in Focus mode. An empty function takes the label away. */
+    void setPositionReadout(std::function<QString(const QPointF &scenePos)> text);
+    /** Ask the readout again where it is (a deck under it, or the marks,
+     *  moved). */
+    void refreshPositionReadout();
+    /** The readout as it stands; empty when there is none. */
+    QString positionReadout() const;
 
     /** Enable or disable movement (global layout lock). */
     void setMovable(bool movable);
@@ -154,6 +167,8 @@ private:
     StageTarget       *m_target;
     Doc               *m_doc;
     QGraphicsTextItem *m_label;
+    StageMarkLabel    *m_readout = nullptr;
+    std::function<QString(const QPointF &)> m_readoutText;
     bool               m_aimed = false;
     int                m_unreachable = 0;
     int                m_aimedHeads = 0;

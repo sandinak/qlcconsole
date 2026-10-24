@@ -442,6 +442,77 @@ int MonitorProperties::numberLineReach() const
     return qMax(0, int(std::floor(m_gridSize.x() / 2.0f + 1e-4f)));
 }
 
+MonitorProperties::StageOffset MonitorProperties::stageOffset(const QVector3D &world) const
+{
+    StageOffset o;
+    o.fromCurtainLine = stageMarkVisible(CurtainLineFlag) && !stageMarkVisible(NumberLineFlag);
+    const float ref = o.fromCurtainLine ? curtainLineY() : numberLineY();
+    o.across = world.x() - stageCentre().x();
+    o.upstage = ref - world.y();            // +Y is downstage
+    o.height = world.z();
+    return o;
+}
+
+QString MonitorProperties::formatStageOffset(const StageOffset &offset, GridUnits units,
+                                             OffsetStyle style)
+{
+    const bool feet = (units == Feet);
+    const bool spoken = (style == SpokenOffset);
+    /* Rounded to what is written: a tenth of a metre or an inch on screen,
+       a whole unit spoken. Zero is what rounds to nothing. */
+    const double step = spoken ? 1.0 : (feet ? 1.0 / 12.0 : 0.1);
+    auto rounded = [feet, step](float metres) {
+        const double inUnits = double(metres) / (feet ? 0.3048 : 1.0);
+        return std::round(std::fabs(inUnits) / step) * step;
+    };
+    auto number = [feet, spoken](double v) {
+        if (spoken)
+            return QString::number(qRound(v));
+        if (!feet)
+            return QString::number(v, 'f', 1);
+        const int inches = qRound(v * 12.0);
+        return (inches % 12) == 0 ? QStringLiteral("%1'").arg(inches / 12)
+                                  : QStringLiteral("%1' %2\"").arg(inches / 12).arg(inches % 12);
+    };
+
+    QStringList parts;
+    int lastNumber = -1;
+    const double across = rounded(offset.across);
+    if (across <= 0.0)
+        parts << QStringLiteral("CL");
+    else
+    {
+        parts << QStringLiteral("%1 %2").arg(offset.across > 0.0f ? QStringLiteral("SL") : QStringLiteral("SR"),
+                                             number(across));
+        lastNumber = 0;
+    }
+    const double up = rounded(offset.upstage);
+    if (up <= 0.0)
+    {
+        if (spoken)
+            parts << (offset.fromCurtainLine ? tr("on the curtain line") : tr("on the number line"));
+        else
+            parts << tr("on line");
+    }
+    else
+    {
+        parts << QStringLiteral("%1 %2").arg(offset.upstage > 0.0f ? QStringLiteral("US") : QStringLiteral("DS"),
+                                             number(up));
+        lastNumber = parts.size() - 1;
+    }
+    const double high = rounded(offset.height);
+    if (high > 0.0 && offset.height > 0.0f)
+    {
+        parts << (spoken ? tr("%1 up").arg(number(high))
+                         : QStringLiteral("↑ %1").arg(number(high)));
+        lastNumber = parts.size() - 1;
+    }
+    // Metres once, after the last number (feet carry their own marks).
+    if (!feet && !spoken && lastNumber >= 0)
+        parts[lastNumber] += QStringLiteral(" m");
+    return parts.join(spoken ? QStringLiteral(", ") : QStringLiteral(" · "));
+}
+
 void MonitorProperties::reset()
 {
     m_gridSize = QVector3D(GRID_DEFAULT_WIDTH, GRID_DEFAULT_HEIGHT, GRID_DEFAULT_DEPTH);

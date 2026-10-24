@@ -1771,6 +1771,58 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
     p.restore();
 }
 
+void StructureStudioView::drawTargetPositions(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (m_kind != StageKind || m_plane != Angled || props == nullptr)
+        return;
+
+    /* Where each one stands: the deck under a person or an area, the aim
+       point of anything else. */
+    QList<QVector3D> spots;
+    foreach (StageTarget *t, props->stageTargets())
+    {
+        if (t == nullptr || !layerShown(t->layerId()))
+            continue;
+        const bool person = t->kind() == StageTarget::Kind::Person
+                            && props->targetFigureHeight(t) > 0.0f;
+        const bool area = (t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
+                          && !t->footprint().isEmpty();
+        if (!person && !area && !t->isLine())
+            continue;           // the overview draws nothing for it to label
+        QVector3D at = props->targetAimPoint(t, true);
+        at.setZ(props->platformHeightAt(at.x(), at.y()));
+        spots << at;
+    }
+    if (FocusSession *fs = (m_doc->programmer() != nullptr) ? m_doc->programmer()->focusSession() : nullptr)
+    {
+        QVector3D at;
+        const quint32 cur = fs->isActive() ? fs->currentFixture() : 0xFFFFFFFF;
+        if (cur != 0xFFFFFFFF && fs->isFixedLight(cur) && fs->referencePoint(cur, at))
+            spots << QVector3D(at.x(), at.y(), props->platformHeightAt(at.x(), at.y()));
+    }
+    if (spots.isEmpty())
+        return;
+
+    p.save();
+    QFont f = p.font();
+    f.setPointSizeF(8.5);
+    p.setFont(f);
+    const QFontMetricsF fm(f);
+    foreach (const QVector3D &at, spots)
+    {
+        const QString text = props->stagePositionText(at);
+        QRectF r(0, 0, fm.horizontalAdvance(text) + 6.0, fm.height() + 2.0);
+        r.moveCenter(w2s(at) + QPointF(0, fm.height()));     // just in front of the feet
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0, 0, 0, 150));
+        p.drawRoundedRect(r, 3.0, 3.0);
+        p.setPen(QColor(225, 230, 240));
+        p.drawText(r, Qt::AlignCenter, text);
+    }
+    p.restore();
+}
+
 void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
 {
     const QPointF a = w2s(pipe->positionAt(0.0f));
@@ -9416,6 +9468,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
         drawRotateHandle(p);    // on top of everything it might overlap
     }
     drawStageMarks(p);   // on top: a reference is read through the rig
+    drawTargetPositions(p);
     drawCursorReadout(p);
     drawDimensions(p);   // selected fixture's own W/H, or the structure's
 

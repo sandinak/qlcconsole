@@ -30,6 +30,13 @@ circuits and subs.
   and on the Rig Overview's floor (Top and 45°). Saved with the show only
   when used (`StageMarks`, `CurtainLineY`, `NumberLineY` on `Monitor`), so
   older shows are unchanged and open with them off.
+- **Target positions in crew terms**: a readout beside each stage target on
+  the plot, each figure/area in the Rig Overview and Focus mode's fixed-light
+  figure ("SL 2.4 · US 3.1 m", "SR 7' 11\" · US 10'", "↑ 0.9 m" on a deck),
+  measured from centre and the number line (the curtain line when only that
+  is shown), live while dragged or nudged. One formatter,
+  `MonitorProperties::formatStageOffset()`, with a compact and a spoken
+  form ("SL 2, US 1") for calls and voice.
 - **The beam in Focus mode** (Q103): D-pad up/down (or . and ,) widen and narrow
   the beam within the definition's lens range, D-pad right/left (or ' and ;)
   a focus channel's edge while focusing. A lens zoomed by hand is set

@@ -2830,3 +2830,65 @@ void MonitorProperties_Test::stageMarksFollowTheStage()
     QVERIFY(qAbs(ft.downstageEdgeY() - 30.0f * 0.3048f) < 1e-4f);
     QVERIFY(qAbs(ft.curtainLineY() - 26.0f * 0.3048f) < 1e-4f);
 }
+
+void MonitorProperties_Test::aPositionIsWrittenAgainstTheStageMarks()
+{
+    typedef MonitorProperties MP;
+    MP::StageOffset o;
+    o.across = 2.44f;
+    o.upstage = 3.06f;
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters), QString::fromUtf8("SL 2.4 · US 3.1 m"));
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters, MP::SpokenOffset), QStringLiteral("SL 2, US 3"));
+
+    // Stage right and downstage; a hair off centre is centre.
+    o.across = -1.0f;
+    o.upstage = -0.5f;
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters), QString::fromUtf8("SR 1.0 · DS 0.5 m"));
+    o.across = 0.04f;
+    o.upstage = 0.0f;
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters), QString::fromUtf8("CL · on line"));
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters, MP::SpokenOffset),
+             QStringLiteral("CL, on the number line"));
+    o.fromCurtainLine = true;
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters, MP::SpokenOffset),
+             QStringLiteral("CL, on the curtain line"));
+    o.fromCurtainLine = false;
+
+    // Rounding is to what is written: 0.05 m rounds up, spoken to the unit.
+    o.across = 0.06f;
+    o.upstage = 1.49f;
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters), QString::fromUtf8("SL 0.1 · US 1.5 m"));
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters, MP::SpokenOffset), QStringLiteral("CL, US 1"));
+
+    // Off the floor: its height, with the unit after the last number.
+    o.across = 2.0f;
+    o.upstage = 0.0f;
+    o.height = 0.6f;
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters),
+             QString::fromUtf8("SL 2.0 · on line · ↑ 0.6 m"));
+    QCOMPARE(MP::formatStageOffset(o, MP::Meters, MP::SpokenOffset), QStringLiteral("SL 2, on the number line, 1 up"));
+
+    // Feet: to the inch, in feet and inches; spoken in whole feet.
+    o.across = -7.0f * 0.3048f - 0.0254f * 11.0f;    // 7' 11"
+    o.upstage = 10.0f * 0.3048f;
+    o.height = 0.0f;
+    QCOMPARE(MP::formatStageOffset(o, MP::Feet), QString::fromUtf8("SR 7' 11\" · US 10'"));
+    QCOMPARE(MP::formatStageOffset(o, MP::Feet, MP::SpokenOffset), QStringLiteral("SR 8, US 10"));
+
+    // Against the show: from centre and the number line, else the curtain line.
+    MonitorProperties mp;
+    mp.setGridUnits(MP::Meters);
+    mp.setGridSize(QVector3D(10, 6, 8));         // centre x 5, front edge y 8
+    const QVector3D spot(7.4f, 4.9f, 0.0f);
+    QCOMPARE(mp.stagePositionText(spot), QString::fromUtf8("SL 2.4 · US 3.1 m"));
+    mp.setCurtainLineY(6.0f);
+    QCOMPARE(mp.stagePositionText(spot), QString::fromUtf8("SL 2.4 · US 3.1 m"));  // marks off: number line
+    mp.setStageMarkVisible(MP::CurtainLineFlag, true);
+    QVERIFY(mp.stageOffset(spot).fromCurtainLine);
+    QCOMPARE(mp.stagePositionText(spot), QString::fromUtf8("SL 2.4 · US 1.1 m"));
+    mp.setStageMarkVisible(MP::NumberLineFlag, true);
+    QCOMPARE(mp.stagePositionText(spot), QString::fromUtf8("SL 2.4 · US 3.1 m"));
+    mp.setGridUnits(MP::Feet);
+    mp.setGridSize(QVector3D(10 / 0.3048f, 6, 8 / 0.3048f));
+    QCOMPARE(mp.stagePositionText(spot, MP::SpokenOffset), QStringLiteral("SL 8, US 10"));
+}

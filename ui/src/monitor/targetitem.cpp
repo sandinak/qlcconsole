@@ -26,6 +26,7 @@
 #include "scene.h"
 #include "monitorproperties.h"
 #include "targetitem.h"
+#include "stagemarklabel.h"
 #include "stagetarget.h"
 #include "humanfigure.h"
 #include "doc.h"
@@ -66,6 +67,36 @@ quint32 TargetItem::targetId() const
 void TargetItem::setScenePos(float pxX, float pxY)
 {
     setPos(pxX, pxY);
+}
+
+void TargetItem::setPositionReadout(std::function<QString(const QPointF &)> text)
+{
+    m_readoutText = text;
+    if (!m_readoutText)
+    {
+        delete m_readout;
+        m_readout = nullptr;
+        return;
+    }
+    if (m_readout == nullptr)
+    {
+        m_readout = new StageMarkLabel(QString(), QColor(225, 230, 240),
+                                       Qt::AlignHCenter | Qt::AlignTop, this);
+        m_readout->setZValue(0.2);
+        m_readout->setPos(0.0, kRadius);
+    }
+    m_readout->setText(m_readoutText(scenePos()));
+}
+
+void TargetItem::refreshPositionReadout()
+{
+    if (m_readout != nullptr && m_readoutText)
+        m_readout->setText(m_readoutText(scenePos()));
+}
+
+QString TargetItem::positionReadout() const
+{
+    return m_readout != nullptr ? m_readout->text() : QString();
 }
 
 void TargetItem::setMovable(bool movable)
@@ -433,7 +464,9 @@ void TargetItem::paint(QPainter *painter,
 
 QVariant TargetItem::itemChange(GraphicsItemChange change, const QVariant &value)
 {
-    Q_UNUSED(change)
+    // Moved -- dragged, or put somewhere new: say where it is now.
+    if (change == ItemPositionHasChanged && m_readout != nullptr && m_readoutText)
+        m_readout->setText(m_readoutText(value.toPointF()));
     return QGraphicsItem::itemChange(change, value);
 }
 

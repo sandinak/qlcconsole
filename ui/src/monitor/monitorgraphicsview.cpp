@@ -50,6 +50,7 @@
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
+#include "stagemarklabel.h"
 #include "righeads.h"
 #include "patchinventorydialog.h"
 #include "headtypesdialog.h"
@@ -4494,7 +4495,12 @@ void MonitorGraphicsView::updatePlatforms()
 {
     /* The marks follow the deck and the curtain they are found from: redrawn
        with them, however this returns. */
-    auto marks = qScopeGuard([this]() { updateStageMarks(); });
+    auto marks = qScopeGuard([this]() {
+        updateStageMarks();
+        // A target's readout gives the deck it stands on.
+        foreach (TargetItem *ti, m_targetItems)
+            ti->refreshPositionReadout();
+    });
     QScopedValueRollback<bool> rb(m_itemsRebuilding); m_itemsRebuilding = true;
     foreach (PlatformItem *pi, m_platformItems)
     {
@@ -5527,6 +5533,22 @@ void MonitorGraphicsView::updateTargets()
         float pxY = float(tp.y());
 
         TargetItem *ti = new TargetItem(t, m_doc, pxX, pxY);
+        /* Where it is in crew terms, against the stage marks: read from where
+           the item is while it is dragged in the Top view, from the target
+           itself in an elevation (where the plot shows no Y). */
+        ti->setPositionReadout([this, at](const QPointF &scenePos) {
+            MonitorProperties *mp = m_doc->monitorProperties();
+            if (mp == nullptr)
+                return QString();
+            QVector3D w = at;
+            if (m_pov == PovTop)
+            {
+                const QPointF mm = pixelsToRealPosition(scenePos.x(), scenePos.y());
+                w = QVector3D(float(mm.x() / 1000.0), float(mm.y() / 1000.0), 0.0f);
+            }
+            w.setZ(mp->platformHeightAt(w.x(), w.y()));      // what it stands on
+            return mp->stagePositionText(w);
+        });
         /* A Person is drawn standing where the aim rule stands it: on the deck
            under it, with its chest at the aim height. Taking both from
            targetAimPoint() keeps the figure and the beams on one answer. */
@@ -6415,50 +6437,6 @@ void MonitorGraphicsView::setCenterLinesVisible(bool on)
  *  Stage reference marks: centre mark / centre line, curtain line, number
  *  line. Drawn from MonitorProperties (saved with the show), Top view only.
  * ------------------------------------------------------------------------ */
-
-namespace
-{
-/** A mark's label: small text on a dark backing, so it reads on the plot's
- *  near-black and on a light background picture alike. The same size on
- *  screen whatever the zoom, and never turned with the page -- so it is
- *  not a QGraphicsSimpleTextItem, which refreshLabelRotations() would turn. */
-class StageMarkLabel final : public QGraphicsItem
-{
-public:
-    StageMarkLabel(const QString &text, const QColor &colour, Qt::Alignment align)
-        : m_text(text), m_colour(colour)
-    {
-        setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
-        setAcceptedMouseButtons(Qt::NoButton);
-        m_font.setPointSizeF(8.5);
-        const QFontMetricsF fm(m_font);
-        const QSizeF sz(fm.horizontalAdvance(m_text) + 6.0, fm.height() + 2.0);
-        qreal x = -sz.width() / 2.0, y = -sz.height() / 2.0;
-        if (align & Qt::AlignLeft)   x = 3.0;
-        if (align & Qt::AlignRight)  x = -sz.width() - 3.0;
-        if (align & Qt::AlignTop)    y = 3.0;          // below the anchor
-        if (align & Qt::AlignBottom) y = -sz.height() - 3.0;
-        m_rect = QRectF(QPointF(x, y), sz);
-    }
-    QString text() const { return m_text; }
-    QRectF boundingRect() const override { return m_rect; }
-    void paint(QPainter *p, const QStyleOptionGraphicsItem *, QWidget *) override
-    {
-        p->setPen(Qt::NoPen);
-        p->setBrush(QColor(0, 0, 0, 150));
-        p->drawRoundedRect(m_rect, 3.0, 3.0);
-        p->setFont(m_font);
-        p->setPen(m_colour);
-        p->drawText(m_rect, Qt::AlignCenter, m_text);
-    }
-
-private:
-    QString m_text;
-    QColor m_colour;
-    QFont m_font;
-    QRectF m_rect;
-};
-}
 
 void MonitorGraphicsView::updateStageMarks()
 {

@@ -2587,6 +2587,7 @@ void Monitor::stageMarksChanged()
 {
     m_doc->setModified();
     m_graphicsView->updateStageMarks();
+    m_graphicsView->updateTargets();     // their readouts count from the marks
     foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
         v->update();
     if (m_overviewView != NULL)         // its own window: not one of ours

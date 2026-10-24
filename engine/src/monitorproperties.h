@@ -277,6 +277,31 @@ public:
      *  as far as the stage grid goes. */
     int numberLineReach() const;
 
+    /** Where a point is in crew terms, against the stage marks' positions
+     *  (whether or not the marks are shown): across from the centre line
+     *  (+ stage left), up or down stage from the reference line (+ upstage),
+     *  and how far above the floor. The reference line is the number line,
+     *  or the curtain line when that is shown and the number line is not. */
+    struct StageOffset
+    {
+        float across = 0.0f;        ///< metres, + toward stage left
+        float upstage = 0.0f;       ///< metres, + upstage of the reference line
+        float height = 0.0f;        ///< metres above the floor
+        bool fromCurtainLine = false;
+    };
+    StageOffset stageOffset(const QVector3D &world) const;
+
+    /** How a StageOffset is written. Compact: a label beside a target on
+     *  screen, to a tenth of a metre or the nearest inch ("SL 2.4 · US 3.1 m",
+     *  "SR 3' 4\" · DS 1' 6\"", "CL · on line"). Spoken: whole units, for a
+     *  call or a voice ("SL 2, US 1", "CL, on the number line"). */
+    enum OffsetStyle { CompactOffset, SpokenOffset };
+    static QString formatStageOffset(const StageOffset &offset, GridUnits units,
+                                     OffsetStyle style = CompactOffset);
+    /** stageOffset() written in this show's unit. */
+    QString stagePositionText(const QVector3D &world, OffsetStyle style = CompactOffset) const
+    { return formatStageOffset(stageOffset(world), m_gridUnits, style); }
+
 private:
     QVector3D m_gridSize;
     GridUnits m_gridUnits;

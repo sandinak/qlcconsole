@@ -98,6 +98,19 @@ as a position up or down the plan (the plan's Y, as the position fields in
 every editor have it). Tick **Auto** again and it goes back to following
 the stage.
 
+**Where a target is, in crew terms.** Every stage target on the plot has a
+small readout under it giving where it is against these marks, in the show's
+unit, for example **SL 2.4 · US 3.1 m**. That's 2.4 m stage left of the
+centre line (**SR** for stage right, **CL** on it) and 3.1 m upstage of the
+number line (**DS** downstage, **on line** on it). In feet it's to the inch
+(**SR 7' 11" · US 10'**). If the target stands on a deck, the deck's height
+follows: **↑ 0.9 m**. Distances count from the number line, or from the
+curtain line when only the curtain line is shown. The readout is always
+there, whether or not the marks are shown, and it follows the target as you
+drag it. In the Rig Overview, the same readout sits at the feet of each
+figure and area, and under the person Focus mode stands where a fixed light
+lands, so it follows that spot as you nudge it.
+
 They're drawn in the **Top** view, over the rig so they're never hidden
 and never in the way of a click. The **Rig Overview** draws them on its
 floor, from above and at 45°, at the height of the deck at the front of the
