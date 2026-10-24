@@ -64,12 +64,29 @@
                 var rings = Math.ceil((reach + width) / spacing) + 1;
                 var boxIndex = (perBox && p.box) ? p.box.index : 0;
                 var best = 0, which = newest, acc = 0;
-                for (var k = newest; k > newest - rings; k--) {
+                var kHi = newest, kLo = newest - rings + 1;
+                var fixed = origin !== 5, dist = 0;
+                if (fixed) {
+                    // One origin for every ring: only the rings whose radius
+                    // is within a width of this pixel can light it (one more
+                    // each side for rounding; the test below still decides).
+                    var o0 = originOf(0, p, boxIndex);
+                    var dx0 = p.x - o0.x, dy0 = p.y - o0.y;
+                    dist = Math.sqrt(dx0 * dx0 + dy0 * dy0);
+                    kHi = Math.min(kHi, Math.floor(pos - (dist - width) / spacing) + 1);
+                    kLo = Math.max(kLo, Math.ceil(pos - (dist + width) / spacing) - 1);
+                }
+                for (var k = kHi; k >= kLo; k--) {
                     var r = (pos - k) * spacing;                    // this ring's radius
                     if (r < 0) continue;
-                    var o = originOf(k, p, boxIndex);
-                    var dx = p.x - o.x, dy = p.y - o.y;
-                    var d = Math.abs(Math.sqrt(dx * dx + dy * dy) - r);
+                    var d;
+                    if (fixed) {
+                        d = Math.abs(dist - r);
+                    } else {
+                        var o = originOf(k, p, boxIndex);
+                        var dx = p.x - o.x, dy = p.y - o.y;
+                        d = Math.abs(Math.sqrt(dx * dx + dy * dy) - r);
+                    }
                     if (d > width) continue;
                     var lvl = (1 - d / width) * (1 - fade * Math.min(1, r / reach));
                     if (lvl > best) { best = lvl; which = k; }
