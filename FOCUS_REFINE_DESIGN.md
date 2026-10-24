@@ -719,7 +719,7 @@ step").
 **Stubbed or not built:**
 
 - A venue manager UI (rename and delete exist in the engine only).
-- Help screenshots for the new panels (`./help-shots.sh` entries).
+
 - Rumble.
 
 **Next, in order:**

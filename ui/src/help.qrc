@@ -24,6 +24,9 @@
     <file alias="images/effects-stack-checker.png">../../docs/images/effects-stack-checker.png</file>
     <file alias="images/fixture-manager-grid-editor.png">../../docs/images/fixture-manager-grid-editor.png</file>
     <file alias="images/fixture-manager-groups.png">../../docs/images/fixture-manager-groups.png</file>
+    <file alias="images/focus-calls-dialog.png">../../docs/images/focus-calls-dialog.png</file>
+    <file alias="images/focus-calls-panel.png">../../docs/images/focus-calls-panel.png</file>
+    <file alias="images/refine-panel.png">../../docs/images/refine-panel.png</file>
     <file alias="images/focus-mode-controller-map.png">../../docs/images/focus-mode-controller-map.png</file>
     <file alias="images/focus-mode-keyboard-map.png">../../docs/images/focus-mode-keyboard-map.png</file>
     <file alias="images/focus-mode-save-status.png">../../docs/images/focus-mode-save-status.png</file>
