@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QScopedPointer>
 #include <QtTest>
 #include <QScrollBar>
 #include <QShortcut>
@@ -724,7 +725,10 @@ void Monitor_Test::theRulerMarksTheMiddleOfADraggedDrape()
    own object. Toggling the layer in the Studio redraws the overview. */
 void Monitor_Test::theRigViewHidesWhatTheStudioHides()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     StagePlatform *deck = props->addPlatform();
     deck->setOriginX(2.0f); deck->setOriginY(2.0f);
@@ -771,7 +775,6 @@ void Monitor_Test::theRigViewHidesWhatTheStudioHides()
         if (mon.m_overviewDlg != nullptr)
             mon.m_overviewDlg->close();
     }
-    delete doc;
 }
 
 QTEST_MAIN(Monitor_Test)
@@ -3487,7 +3490,10 @@ static Fixture *makeMover(Doc *doc, double beamDeg, quint32 addr, const char *na
    was assembled base-up and head-down however it was actually rigged. */
 void Monitor_Test::aMoverStandingOnAShelfIsNotDrawnHanging()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Tower *tw = props->addTower();
@@ -3585,7 +3591,6 @@ void Monitor_Test::aMoverStandingOnAShelfIsNotDrawnHanging()
              qPrintable(QString("a mover hung under a shelf is drawn standing on it "
                                 "(widest part %1 of the way down its own outline; "
                                 "0 = base at the top)").arg(hung)));
-    delete doc;
 }
 
 /* "fixture set as underhung .. visually upright": aMoverStandingOnAShelfIsNot-
@@ -3598,7 +3603,10 @@ void Monitor_Test::aMoverStandingOnAShelfIsNotDrawnHanging()
    mountingType said. */
 void Monitor_Test::aMoverOnATrussElevationIsNotDrawnUpright()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *bar = props->addTruss();
@@ -3690,7 +3698,6 @@ void Monitor_Test::aMoverOnATrussElevationIsNotDrawnUpright()
                                 "upright instead of hanging (widest part %1 of the "
                                 "way down its own outline; 0 = base at the top)")
                         .arg(hung)));
-    delete doc;
 }
 
 /* "Now it's in the tower vs on top of it where I have it set in the editor."
@@ -3700,7 +3707,10 @@ void Monitor_Test::aMoverOnATrussElevationIsNotDrawnUpright()
    in exactly the way they disagreed about which way up it goes. */
 void Monitor_Test::aMoverOnAShelfSitsOnItRatherThanInIt()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Tower *tw = props->addTower();
@@ -3766,7 +3776,6 @@ void Monitor_Test::aMoverOnAShelfSitsOnItRatherThanInIt()
              qPrintable(QString("a mover standing on the tower cap is drawn sunk "
                                 "into it -- %1% of its body is below the surface "
                                 "it is standing on").arg(sunk * 100.0, 0, 'f', 1)));
-    delete doc;
 }
 
 /* "UST2-6 are in the platform .. and those are solid platforms?"
@@ -3778,7 +3787,10 @@ void Monitor_Test::aMoverOnAShelfSitsOnItRatherThanInIt()
    someone HAD set to FloorMounted sat on top correctly, which is the tell. */
 void Monitor_Test::aMoverOnADeckIsNotBuriedInIt()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     StagePlatform *pl = props->addPlatform();
@@ -3852,7 +3864,6 @@ void Monitor_Test::aMoverOnADeckIsNotBuriedInIt()
        not depend on a mountingType nobody set. */
     QVERIFY2(v.fixtureBodyUp(rp).z() > 0.0f,
              "a deck-mounted fixture's body points down");
-    delete doc;
 }
 
 /* "the truss editor shows the fixtures just under the cross member as it
@@ -3973,7 +3984,10 @@ void Monitor_Test::aMoverHungOnATrussIsAtTheSameHeightInEveryView()
    selected fixture's own size into account at all. */
 void Monitor_Test::selectingAFixtureShowsItsOwnDimensionCallouts()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *bar = props->addTruss();
@@ -4041,7 +4055,6 @@ void Monitor_Test::selectingAFixtureShowsItsOwnDimensionCallouts()
                                 "dimension-callout band right below its own "
                                 "box (%1 pixels changed) -- no width/height "
                                 "label appeared").arg(changed)));
-    delete doc;
 }
 
 /* "when selecing the bar .. should just show the bar on the rulers" / "when
@@ -4053,7 +4066,10 @@ void Monitor_Test::selectingAFixtureShowsItsOwnDimensionCallouts()
    describing a structure that wasn't even the one highlighted. */
 void Monitor_Test::rulersFollowWhicheverOfTrussOrBarIsSelected()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *t1 = props->addTruss();
@@ -4110,7 +4126,6 @@ void Monitor_Test::rulersFollowWhicheverOfTrussOrBarIsSelected()
 
     props->removeTruss(bar->id());
     props->removeTruss(t1->id());
-    delete doc;
 }
 
 /* "Why are these lights showing not in the right places in rig view relative to
@@ -4120,7 +4135,10 @@ void Monitor_Test::rulersFollowWhicheverOfTrussOrBarIsSelected()
    Measured, the gap was exactly half the footprint on each axis. */
 void Monitor_Test::planAndRigAgreeOnAFixturesPosition()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     StagePlatform *pl = props->addPlatform();
@@ -4176,7 +4194,6 @@ void Monitor_Test::planAndRigAgreeOnAFixturesPosition()
                         .arg(rigMm.x()).arg(rigMm.y())));
     delete mon;
     doc->deleteFixture(fx->id());
-    delete doc;
 }
 
 /* Two fixtures in stage-structures-demo.qxw sit 13.8 m UPSTAGE of the origin,
@@ -4859,7 +4876,10 @@ void Monitor_Test::aBarBecomesItsOwnContainerInTheLayersList()
  */
 void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     // 1. Add a fixture. No test anywhere drives the AddFixture dialog to
@@ -5123,7 +5143,6 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     doc->deleteFixture(fid);
     props->removeTruss(bar->id());
     props->removeTruss(t->id());
-    delete doc;
 }
 
 /* Chains the target/aim workflow: add a fixture, add a target through the
@@ -5338,7 +5357,10 @@ void Monitor_Test::aimingAFixtureAtATargetFollowsItThroughARealSession()
  */
 void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     // 1. Add two fixtures -- one ends up DECK-mounted, one RISER-mounted.
@@ -5543,7 +5565,6 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
     doc->deleteFixture(deckFx->id());
     doc->deleteFixture(riserFx->id());
     props->removePlatform(plat->id());
-    delete doc;
 }
 
 /* Chains the stand/boom/crossbar workflow through the SAME real-UI
@@ -5556,7 +5577,10 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
  */
 void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     // 1. Add a fixture. No dialog-driven AddFixture path exists yet (see
@@ -5761,7 +5785,6 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
     props->removePipe(crossbar->id());
     props->removePipe(boom->id());
     props->removeStand(stand->id());
-    delete doc;
 }
 
 void Monitor_Test::aTrussRowInLayersOpensTheTrussNotItsGroup()
@@ -6018,7 +6041,10 @@ void Monitor_Test::hidingMountedFixturesSurvivesARefresh()
 /* "Put bars in T1 .. and they're not visible on the rig display." */
 void Monitor_Test::aBarOnATowerIsDrawnInTheRigView()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *tower = props->addTruss();
@@ -6075,7 +6101,6 @@ void Monitor_Test::aBarOnATowerIsDrawnInTheRigView()
 
     props->removeTruss(bar->id());
     props->removeTruss(tower->id());
-    delete doc;
 }
 
 /* "Truss on T1 is STILL not part of T1 .. even tho if I double click it on
@@ -6091,7 +6116,10 @@ void Monitor_Test::aBarOnATowerIsDrawnInTheRigView()
    that had never been taught to recurse into its own children. */
 void Monitor_Test::aBarShowsInItsParentTrusssOwnEditor()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *t1 = props->addTruss();
@@ -6143,7 +6171,6 @@ void Monitor_Test::aBarShowsInItsParentTrusssOwnEditor()
 
     props->removeTruss(bar->id());
     props->removeTruss(t1->id());
-    delete doc;
 }
 
 /* A Horizontal truss's default bar used to render EXACTLY on top of the
@@ -6158,7 +6185,10 @@ void Monitor_Test::aBarShowsInItsParentTrusssOwnEditor()
  */
 void Monitor_Test::aBarOnAHorizontalTrussDefaultsClearOfItInTopView()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *t = props->addTruss();
@@ -6205,7 +6235,6 @@ void Monitor_Test::aBarOnAHorizontalTrussDefaultsClearOfItInTopView()
 
     props->removeTruss(barId);
     props->removeTruss(t->id());
-    delete doc;
 }
 
 /* "not selectable at all with mouse to move it in position." Half of the
@@ -6214,7 +6243,10 @@ void Monitor_Test::aBarOnAHorizontalTrussDefaultsClearOfItInTopView()
    bar at all before this. */
 void Monitor_Test::hitTestBarFindsANearbyBar()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *t1 = props->addTruss();
@@ -6287,7 +6319,6 @@ void Monitor_Test::hitTestBarFindsANearbyBar()
     props->removeTruss(elsewhere->id());
     props->removeTruss(bar->id());
     props->removeTruss(t1->id());
-    delete doc;
 }
 
 /* "when I select it .. it does't hilight nor does the right side change to
@@ -6300,7 +6331,10 @@ void Monitor_Test::hitTestBarFindsANearbyBar()
    is the view-level contract that wiring depends on. */
 void Monitor_Test::clickingABarSelectsAndHighlightsIt()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *t1 = props->addTruss();
@@ -6349,12 +6383,14 @@ void Monitor_Test::clickingABarSelectsAndHighlightsIt()
 
     props->removeTruss(bar->id());
     props->removeTruss(t1->id());
-    delete doc;
 }
 
 void Monitor_Test::doubleClickingABarActivatesIt()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *t1 = props->addTruss();
@@ -6403,12 +6439,14 @@ void Monitor_Test::doubleClickingABarActivatesIt()
 
     props->removeTruss(bar->id());
     props->removeTruss(t1->id());
-    delete doc;
 }
 
 void Monitor_Test::draggingABarChangesItsPositionAlongTheParent()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *t1 = props->addTruss();
@@ -6489,7 +6527,6 @@ void Monitor_Test::draggingABarChangesItsPositionAlongTheParent()
 
     props->removeTruss(bar->id());
     props->removeTruss(t1->id());
-    delete doc;
 }
 
 /* "Put bars in T1 .. and they're not visible on the rig display." The bars are
@@ -6497,7 +6534,10 @@ void Monitor_Test::draggingABarChangesItsPositionAlongTheParent()
    rigged within the structure's volume rather than bolted to its face. */
 void Monitor_Test::aFixtureInsideATrussIsStillDrawn()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *tower = props->addTruss();
@@ -6545,7 +6585,6 @@ void Monitor_Test::aFixtureInsideATrussIsStillDrawn()
 
     doc->deleteFixture(fx->id());
     props->removeTruss(tower->id());
-    delete doc;
 }
 
 /* A vertical truss seen from ABOVE is a small square and its own fixtures bury
@@ -7008,7 +7047,10 @@ void Monitor_Test::stackedFixturesOnAStepBecomeACount()
    studioTilt tips the face itself. */
 void Monitor_Test::studioTiltRollsAFixtureAboutItsLength()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Fixture *fx = makeMover(doc, 14.0, 0, "Step Bar", QVector3D(2.0f, 2.0f, 0.2f));
@@ -7051,7 +7093,6 @@ void Monitor_Test::studioTiltRollsAFixtureAboutItsLength()
     QVERIFY(qAbs(double(N1.length()) - 1.0) < 1e-4);
 
     doc->deleteFixture(fx->id());
-    delete doc;
 }
 
 void Monitor_Test::theRigGridMatchesTheStudioGrid()
@@ -7060,7 +7101,10 @@ void Monitor_Test::theRigGridMatchesTheStudioGrid()
        The rig view used to rule its floor in a twelfth of however wide the rig
        happened to be -- an arbitrary fraction of a stage, different for every
        show, and unrelated to the grid the studio draws. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     props->setGridUnits(MonitorProperties::Meters);
     props->setGridSize(QVector3D(20, 3, 12));
@@ -7099,8 +7143,6 @@ void Monitor_Test::theRigGridMatchesTheStudioGrid()
     vf.grab();
     QCOMPARE(int(props->gridUnits()), int(MonitorProperties::Feet));
     QVERIFY(metresPerCell > 0.3048);
-
-    delete doc;
 }
 
 void Monitor_Test::aZoomHeadsConeFollowsItsZoomChannel()
@@ -7201,7 +7243,10 @@ void Monitor_Test::editingALookUpdatesTheRigView()
        fixture per frame is far too expensive -- but a cache of something the
        user is actively editing goes stale the moment they edit it. Exactly the
        same mistake as caching a target's position while someone drags it. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
 
     Fixture *head = makeMover(doc, 14.0, 0, "Edited", QVector3D(3.0f, 3.0f, 5.0f));
     QVERIFY(head != nullptr);
@@ -7291,13 +7336,14 @@ void Monitor_Test::editingALookUpdatesTheRigView()
     QVERIFY2(fallback.red() > 200 && fallback.green() > 200,
              qPrintable(QString("an undriven fixture should fall back to the "
                                 "selected look, got %1").arg(fallback.name())));
-
-    delete doc;
 }
 
 void Monitor_Test::overlappingFixturesAreFlagged()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
 
     Fixture *a = makeMover(doc, 14.0, 0, "A", QVector3D(3.0f, 3.0f, 1.0f));
     Fixture *b = makeMover(doc, 14.0, 10, "B", QVector3D(3.0f, 3.0f, 1.0f));  // same spot
@@ -7315,8 +7361,6 @@ void Monitor_Test::overlappingFixturesAreFlagged()
              "fixture B, rigged into the same space as A, was not flagged");
     QVERIFY2(v.m_overlappingFixtures.contains(c->id()) == false,
              "fixture C, rigged well clear of the others, was flagged anyway");
-
-    delete doc;
 }
 
 /* A show opened on a computer without some of its definitions (the Windows
@@ -7327,7 +7371,10 @@ void Monitor_Test::overlappingFixturesAreFlagged()
    wireframed in red. A stand-in is one small body, never an overlap. */
 void Monitor_Test::aStandInForAMissingDefinitionIsOneSmallBody()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     for (int i = 0; i < 2; ++i)
     {
         QXmlStreamReader in(QString(
@@ -7352,8 +7399,6 @@ void Monitor_Test::aStandInForAMissingDefinitionIsOneSmallBody()
     v.reload();
     v.rebuildOverlapWarnings();
     QVERIFY2(v.m_overlappingFixtures.isEmpty(), "stand-ins flagged as overlapping");
-
-    delete doc;
 }
 
 void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
@@ -7365,7 +7410,10 @@ void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
        QLCPalette already did exactly this when resolving an Aim palette -- the
        rig view was using the target's own Z and so pointed somewhere the rig
        does not. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     props->setAimSubjectHeight(1.4f);
 
@@ -7429,8 +7477,6 @@ void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
              qPrintable(QString("subject height did not re-resolve against what "
                                 "the target now stands on, got %1")
                         .arg(double(pt.z()))));
-
-    delete doc;
 }
 
 void Monitor_Test::theReachOverlayShadesWhereASpotCannotAim()
@@ -7996,7 +8042,10 @@ void Monitor_Test::manyWhiteBeamsDoNotBlowOut()
 
 void Monitor_Test::aLineTargetIsEditedInTheStudio()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     StageTarget *line = props->addStageTarget();
     line->setName("L");
@@ -8116,8 +8165,6 @@ void Monitor_Test::aLineTargetIsEditedInTheStudio()
     QCOMPARE(line->linePoints(), held);
     drag(vpFront(3.0f, 0.0f), vpFront(2.0f, 1.0f));
     QCOMPARE(line->linePoints(), held);
-
-    delete doc;
 }
 
 void Monitor_Test::headsAimedAtALineGoToTheirOwnPoints()
@@ -8711,7 +8758,10 @@ void Monitor_Test::aBeamCarriesOnPastWhatItIsAimedAt()
        on past them. This test used to assert the opposite -- the cone was cut
        at the subject so follow-spots aimed up at chest height did not sail on
        -- and it is kept, inverted, so the cut cannot quietly come back. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     // Low fixture, target above it: nothing below to stop the beam.
@@ -8785,8 +8835,6 @@ void Monitor_Test::aBeamCarriesOnPastWhatItIsAimedAt()
              qPrintable(QString("only %1 px lit 1.5 m past the subject -- the "
                                 "beam is stopping at what it is aimed at")
                         .arg(lit)));
-
-    delete doc;
 }
 
 void Monitor_Test::aSelectedLookLightsTheRigInDesign()
@@ -8802,7 +8850,10 @@ void Monitor_Test::aSelectedLookLightsTheRigInDesign()
        The selected scene's palettes are now resolved into channel values shaped
        exactly like live DMX, so colour, level, beam and visibility all read it
        without knowing the difference. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Fixture *head = makeMover(doc, 14.0, 0, "Design Head", QVector3D(3.0f, 3.0f, 5.0f));
@@ -8876,8 +8927,6 @@ void Monitor_Test::aSelectedLookLightsTheRigInDesign()
     QVERIFY2(dimmed * 3 < selected,
              qPrintable(QString("a look at 5%% drew nearly as much as one at "
                                 "full (%1 against %2)").arg(dimmed).arg(selected)));
-
-    delete doc;
 }
 
 void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
@@ -8891,7 +8940,10 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
        it had nothing to show and left the heads wherever they were last
        pointed. The target IS the intent -- and live DMX still wins over it when
        there is any, because that is what the rig is actually doing. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Fixture *head = makeMover(doc, 14.0, 0, "Aimed", QVector3D(1.0f, 1.0f, 5.0f));
@@ -9032,8 +9084,6 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
     v.setActiveScene(scene->id());
     QVERIFY2(v.m_aimTarget.contains(par->id()) == false,
              "a fixture with no pan or tilt was given an aim direction");
-
-    delete doc;
 }
 
 void Monitor_Test::aBeamFadesAllTheWayOutWithTheDimmer()
@@ -9043,7 +9093,10 @@ void Monitor_Test::aBeamFadesAllTheWayOutWithTheDimmer()
        a beam measuring 40 against a full beam's 78 -- barely dimmer -- and then
        snapped to nothing at zero. Alpha is now strictly proportional to the
        level, with no floor. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     Fixture *head = makeMover(doc, 14.0, 0, "Fader", QVector3D(3.0f, 3.0f, 5.0f));
     QVERIFY(head != nullptr);
 
@@ -9100,8 +9153,6 @@ void Monitor_Test::aBeamFadesAllTheWayOutWithTheDimmer()
     QVERIFY2(half > low && full > half,
              qPrintable(QString("beam brightness is not monotonic in the dimmer: "
                                 "%1 / %2 / %3").arg(low).arg(half).arg(full)));
-
-    delete doc;
 }
 
 void Monitor_Test::aBeamStopsAtWhatItLandsOn()
@@ -9110,7 +9161,10 @@ void Monitor_Test::aBeamStopsAtWhatItLandsOn()
        thrown over -- that is what catches light on a rig built out of steps.
        One thrown level or upward hits nothing and gets a sensible throw
        instead of running to the horizon. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     StructureStudioView v(doc, StructureStudioView::StageKind, 0);
@@ -9137,8 +9191,6 @@ void Monitor_Test::aBeamStopsAtWhatItLandsOn()
        pass nowhere near it. */
     const QVector3D away(9.0f, 9.0f, 6.0f);
     QCOMPARE(qRound(v.beamThrow(away, QVector3D(0, 0, -1)) * 100.0) / 100.0, 6.0);
-
-    delete doc;
 }
 
 void Monitor_Test::aLitMoverThrowsAVisibleBeam()
@@ -9146,7 +9198,10 @@ void Monitor_Test::aLitMoverThrowsAVisibleBeam()
     /* The beam is the point of the exercise: a head at full should put light
        between itself and the floor, in its own colour, and a head at zero
        should not. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     Fixture *head = makeMover(doc, 14.0, 0, "Beamer", QVector3D(3.0f, 3.0f, 5.0f));
     QVERIFY(head != nullptr);
 
@@ -9196,8 +9251,6 @@ void Monitor_Test::aLitMoverThrowsAVisibleBeam()
              qPrintable(QString("turning beams off left them on screen "
                                 "(%1 vs %2)").arg(off).arg(lit)));
     v.setBeams(true);
-
-    delete doc;
 }
 
 void Monitor_Test::aTwoArmHeadDrawsEachArmOnItsOwn()
@@ -9352,7 +9405,10 @@ void Monitor_Test::aFixedConeHeadDimsWhenAimedAway()
          - an UNDECLARED lens (0 degrees, which is what most definitions in the
            wild say) means no falloff at all. Dimming those by viewing angle
            would black out half a rig for no reason. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     auto makeHead = [&](double beamDeg, quint32 addr, const char *name) -> Fixture * {
@@ -9442,8 +9498,6 @@ void Monitor_Test::aFixedConeHeadDimsWhenAimedAway()
     QCOMPARE(v.beamVisibility(undeclared, rp, tu, double(tu.beamMaxDeg)), 1.0);
     FixtureRigProps rp2;
     QCOMPARE(v.beamVisibility(undeclared, rp2, tu, double(tu.beamMaxDeg)), 1.0);
-
-    delete doc;
 }
 
 void Monitor_Test::aFrameIsDrawnFromOneInstant()
@@ -9454,7 +9508,10 @@ void Monitor_Test::aFrameIsDrawnFromOneInstant()
        than fixtures drawn late, with the boundary moving every frame -- the rig
        flickers in and out ACROSS the stage instead of showing one picture that
        changes. The frame has to be drawn from a single instant. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     QLCFixtureDef *def = new QLCFixtureDef();
@@ -9516,8 +9573,6 @@ void Monitor_Test::aFrameIsDrawnFromOneInstant()
     v.grab();                                  // next frame picks the change up
     QCOMPARE(uchar(v.liveValuesFor(fxi).at(0)), uchar(0));
     QCOMPARE(uchar(v.liveValuesFor(fxi).at(2)), uchar(255));
-
-    delete doc;
 }
 
 /* A pixel bar on the front face of a step, built to order. */
@@ -9730,7 +9785,10 @@ void Monitor_Test::aStepsOwnTapeSitsInFrontOfWhatIsInsideIt()
     /* Lifting in-step fixtures clear of the step's faces (so they stop being
        swallowed by them) must not lift them past the LED tape on the OUTSIDE
        of that same step. From out here the tape is the nearer thing. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     StagePlatform *pl = props->addPlatform();
     pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
@@ -9796,8 +9854,6 @@ void Monitor_Test::aStepsOwnTapeSitsInFrontOfWhatIsInsideIt()
              qPrintable(QString("what is rigged INSIDE the step painted over the "
                                 "tape on its outside: %1 red vs %2 green")
                         .arg(red2).arg(green2)));
-
-    delete doc;
 }
 
 void Monitor_Test::fixturesInsideAStepAreAllVisible()
@@ -10145,7 +10201,10 @@ void Monitor_Test::aLongTrussSortsAlongItsLength()
        cannot fail is worse than no test. What has to be true is simple -- a
        line whose ends are at different depths carries both of them into the
        rasteriser, which resolves per pixel and has its own test for that. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
 
     StructureStudioView v(doc, StructureStudioView::StageKind, 0);
     v.resize(800, 600);
@@ -10180,8 +10239,6 @@ void Monitor_Test::aLongTrussSortsAlongItsLength()
              qPrintable(QString("both ends arrived at the same depth (%1, %2) -- "
                                 "they are being averaged")
                         .arg(o.zs.at(0)).arg(o.zs.at(1))));
-
-    delete doc;
 }
 
 void Monitor_Test::aSolidBoxHidesItsOwnFarEdges()
@@ -10190,7 +10247,10 @@ void Monitor_Test::aSolidBoxHidesItsOwnFarEdges()
        truss EDITORS painted their 45-degree view with the old unsorted path
        while only the whole-rig view used the depth buffer, so a solid deck drew
        its own far edges straight through itself. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     StagePlatform *pl = props->addPlatform();
     pl->setName("Solid"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
@@ -10239,8 +10299,6 @@ void Monitor_Test::aSolidBoxHidesItsOwnFarEdges()
              qPrintable(QString("a solid box shows %1 colour transitions across "
                                 "its widest row -- its own hidden edges are "
                                 "drawing through it").arg(transitions)));
-
-    delete doc;
 }
 
 void Monitor_Test::bothRenderersAgreeOnPlainOcclusion()
@@ -10251,7 +10309,10 @@ void Monitor_Test::bothRenderersAgreeOnPlainOcclusion()
        separated boxes, no coplanar surfaces, nothing spanning depth -- the two
        renderers must agree. Where they disagree is exactly the set of cases the
        depth buffer exists for, and those are covered by their own tests. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     StagePlatform *back = props->addPlatform();
@@ -10302,8 +10363,6 @@ void Monitor_Test::bothRenderersAgreeOnPlainOcclusion()
              qPrintable(QString("the two renderers disagree on plain occlusion: "
                                 "%1 of %2 sampled pixels differ")
                         .arg(differ).arg(subject)));
-
-    delete doc;
 }
 
 void Monitor_Test::zRasterResolvesDepthPerPixel()
@@ -11181,7 +11240,10 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
 
 void Monitor_Test::aCalibratedHeadsPoolLandsOnItsMark()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     Truss *bar = props->addTruss();
     bar->setName("T-1");
@@ -11241,8 +11303,6 @@ void Monitor_Test::aCalibratedHeadsPoolLandsOnItsMark()
     QVERIFY2(raw < 0.0 || raw > 1.0,
              qPrintable(QString("without removing the offset the pool is still %1 m from the mark")
                         .arg(raw)));
-
-    delete doc;
 }
 
 void Monitor_Test::focusModeSetupOffersTheSceneAimFirst()
@@ -11394,7 +11454,10 @@ void Monitor_Test::focusDrawsTheIntentNotTheNudge()
        it, so the beam crept and jumped -- the DMX is whole steps (truncated,
        for a 16-bit head read from its coarse byte) and a frame behind the
        offset the nudge has already put in the rig. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     Fixture *a = makeMover(doc, 10.0, 0, "FA", QVector3D(2.0f, 6.0f, 5.0f));
     Fixture *b = makeMover(doc, 10.0, 16, "FB", QVector3D(6.0f, 6.0f, 5.0f));
@@ -11489,7 +11552,6 @@ void Monitor_Test::focusDrawsTheIntentNotTheNudge()
     s->stop();
     QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 4.0f + 23.7f);
     QCOMPARE(props->fixtureRigProps(a->id()).tiltOffsetDeg, -2.0f - 11.3f);
-    delete doc;
 }
 
 void Monitor_Test::focusLightsAndRingsTheHeadInTheRigOverview()
@@ -11656,7 +11718,10 @@ void Monitor_Test::aWashOnATrussThrowsLightToo()
        beam pass lived inside drawMoverSolid, so a fixture that cannot move
        could not shine -- which on a real stage is most of the light. A par or
        bar hung on a truss now throws a cone down the way it faces. */
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
 
     Truss *bar = props->addTruss();
@@ -11710,8 +11775,6 @@ void Monitor_Test::aWashOnATrussThrowsLightToo()
     QVERIFY2(lit - dark > 10.0,
              qPrintable(QString("a lit wash threw nothing below it (%1 against a "
                                 "dark room's %2)").arg(lit).arg(dark)));
-
-    delete doc;
 }
 
 void Monitor_Test::aPlatformOffersToPutSomethingOnIt()
@@ -16944,7 +17007,10 @@ void Monitor_Test::theInspectorEditsEveryFixtureSelected()
 
 void Monitor_Test::cmdClickBuildsASelectionThatDragsTogether()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MultiTrussRig rig;
     rig.build(doc, { 0.5f, 1.5f, 2.5f, 3.5f });
     StructureStudioView view(doc, StructureStudioView::TrussKind, rig.truss->id());
@@ -16996,12 +17062,14 @@ void Monitor_Test::cmdClickBuildsASelectionThatDragsTogether()
     // A plain click (no drag) on one of them narrows the selection to it.
     click(at(2), Qt::NoModifier);
     QCOMPARE(view.m_highlight, QSet<quint32>({ rig.fx[2]->id() }));
-    delete doc;
 }
 
 void Monitor_Test::distributingAFewSpacesThemBetweenTheOutermost()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MultiTrussRig rig;
     rig.build(doc, { 0.5f, 0.7f, 3.0f, 3.5f });
     StructureStudioView view(doc, StructureStudioView::TrussKind, rig.truss->id());
@@ -17040,7 +17108,6 @@ void Monitor_Test::distributingAFewSpacesThemBetweenTheOutermost()
     const float z0 = props->fixtureRigPosition(rig.fx[0]->id()).z();
     for (int i = 1; i < 4; ++i)
         QCOMPARE(props->fixtureRigPosition(rig.fx[i]->id()).z(), z0);
-    delete doc;
 }
 
 void Monitor_Test::aRightClickKeepsTheSelectionItLandsIn()
@@ -18217,11 +18284,15 @@ void Monitor_Test::twoBarsOfOneKindEachSplitIntoAGroupPerKind()
 {
     QTemporaryDir lib;
     HeadLayoutLibrary::setUserDirectoryOverride(lib.path());
-    QLCFixtureDef *def = makeWallWasher();
+    QScopedPointer<QLCFixtureDef> defOwner(makeWallWasher());
+    QLCFixtureDef *def = defOwner.data();
     // The 8 x 4 grid is the 32-head mode's, not these 16-head modes'.
     QCOMPARE(HeadLayout::declaredGrid(def->modes().at(0)), QSize());
     QCOMPARE(HeadLayout::declaredGrid(def->modes().at(1)), QSize());
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     const QList<Fixture *> bars = washersOnSteps(doc, def);
     QCOMPARE(HeadLayout::headOrder(bars[0]).size, QSize(16, 1));   // a strip: one row
 
@@ -18253,8 +18324,6 @@ void Monitor_Test::twoBarsOfOneKindEachSplitIntoAGroupPerKind()
     QCOMPARE(rgb->head(QLCPoint(15, 0)).head, 15);
     QCOMPARE(rgb->head(QLCPoint(16, 0)).fxi, bars[2]->id());
     QCOMPARE(w->head(QLCPoint(48, 0)).fxi, bars[7]->id());
-    delete doc;
-    delete def;
     HeadLayoutLibrary::setUserDirectoryOverride(testLayouts());
 }
 
@@ -18307,8 +18376,12 @@ void Monitor_Test::editFixtureFromLayersEditsThatFixture()
    next to a 3500-lumen bar; a fixture declaring neither is drawn as before. */
 void Monitor_Test::aFixturesLightFollowsWhatItsDefinitionPutsOut()
 {
-    QLCFixtureDef *def = makeWallWasher();
-    Doc *doc = new Doc(this);
+    QScopedPointer<QLCFixtureDef> defOwner(makeWallWasher());
+    QLCFixtureDef *def = defOwner.data();
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     const QList<Fixture *> bars = washersOnSteps(doc, def);
     Fixture *bar = bars[0];
     MonitorProperties *props = doc->monitorProperties();
@@ -18351,14 +18424,16 @@ void Monitor_Test::aFixturesLightFollowsWhatItsDefinitionPutsOut()
     // Light is linear in what is put out: 10 lm is 1/350 of 3500 lm.
     QVERIFY2(qAbs(strip * 350.0 / bright - 1.0) < 0.05,
              qPrintable(QString("%1 vs %2").arg(strip).arg(bright)));
-    delete doc;
-    delete def;
 }
 
 void Monitor_Test::aBarLitInSectionsLightsOnlyAboveThem()
 {
-    QLCFixtureDef *def = makeWallWasher();
-    Doc *doc = new Doc(this);
+    QScopedPointer<QLCFixtureDef> defOwner(makeWallWasher());
+    QLCFixtureDef *def = defOwner.data();
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     const QList<Fixture *> bars = washersOnSteps(doc, def);
     Fixture *bar = bars[0];
     MonitorProperties *props = doc->monitorProperties();
@@ -18389,8 +18464,6 @@ void Monitor_Test::aBarLitInSectionsLightsOnlyAboveThem()
     QVERIFY(view.beamLightAt(leftEnd, down).z() > 50);
     QVERIFY(view.beamLightAt(rightEnd, down).z() > 50);
     QCOMPARE(view.beamLightAt(middle, down).z(), 0.0f);
-    delete doc;
-    delete def;
 }
 
 /* "would there be any overwash on the cyclorama from the top steps at 20
@@ -18400,8 +18473,12 @@ void Monitor_Test::aBarLitInSectionsLightsOnlyAboveThem()
    vertical reaches the cloth D metres upstage at height z0 + D / tan(a). */
 void Monitor_Test::stepBarsTippedUpstageWashTheTopOfTheCyc()
 {
-    QLCFixtureDef *def = makeWallWasher();
-    Doc *doc = new Doc(this);
+    QScopedPointer<QLCFixtureDef> defOwner(makeWallWasher());
+    QLCFixtureDef *def = defOwner.data();
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     const QList<Fixture *> bars = washersOnSteps(doc, def);      // steps at y 4.9, tipped 20
     MonitorProperties *props = doc->monitorProperties();
     Scenery *cyc = props->addScenery();
@@ -18464,8 +18541,6 @@ void Monitor_Test::stepBarsTippedUpstageWashTheTopOfTheCyc()
     props->setFixtureRigProps(bar->id(), rp);
     props->platform(rp.riserPlatformId)->setTopMaterial(StagePlatform::SolidTop);
     QCOMPARE(wash(zmin, zmax).first, 0);
-    delete doc;
-    delete def;
 }
 
 /* "the source appears centred on the matrix, not using the individual LEDs":
@@ -18474,8 +18549,12 @@ void Monitor_Test::stepBarsTippedUpstageWashTheTopOfTheCyc()
    An XL-450 hung on a truss (15 columns along its 401 mm). */
 void Monitor_Test::aPixelBarsLightComesFromItsLitPixels()
 {
-    QLCFixtureDef *def = makeXl450();
-    Doc *doc = new Doc(this);
+    QScopedPointer<QLCFixtureDef> defOwner(makeXl450());
+    QLCFixtureDef *def = defOwner.data();
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     QList<Fixture *> bars = xlBarsOnATruss(doc, def, 0.0f);         // lying along the truss
     Fixture *bar = bars[0];
     Scene *scene = new Scene(doc);
@@ -18529,8 +18608,6 @@ void Monitor_Test::aPixelBarsLightComesFromItsLitPixels()
         right |= u > 0;
     }
     QVERIFY(left && right);
-    delete doc;
-    delete def;
 }
 
 /* "the effect on these bars appears to be going backwards, not frontwards ..
@@ -19587,7 +19664,8 @@ void Monitor_Test::clickingAGroupMemberAgainPicksItOut()
 
 void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
 {
-    QLCFixtureDef *def = new QLCFixtureDef();
+    QScopedPointer<QLCFixtureDef> defOwner(new QLCFixtureDef());
+    QLCFixtureDef *def = defOwner.data();
     def->setManufacturer("WLED");
     def->setModel("Lantern");
     def->setType(QLCFixtureDef::ColorChanger);
@@ -19611,7 +19689,10 @@ void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
     mode->setPhysical(ph);
     def->addMode(mode);
 
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     Fixture *lantern = new Fixture(doc);
     lantern->setFixtureDefinition(def, mode);
     lantern->setName("Lantern SL");
@@ -19672,9 +19753,6 @@ void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
     QVERIFY2(litFar.x() < litNear.x() / 50.0f, qPrintable(QString("%1 vs %2").arg(litFar.x()).arg(litNear.x())));
     // Turned away from it, nothing.
     QCOMPARE(view.beamLightAt(near, QVector3D(1, 0, 0)).x(), 0.0f);
-
-    delete doc;
-    delete def;
 }
 
 /* Hangers are rigging: put one on a tower, copy it to every other tower
@@ -19774,8 +19852,12 @@ void Monitor_Test::hangersAreRiggingCopiedToEveryTower()
 
 void Monitor_Test::aBarHungOnATrussShinesOutOfItsFace()
 {
-    QLCFixtureDef *def = makeXl450();
-    Doc *doc = new Doc(this);
+    QScopedPointer<QLCFixtureDef> defOwner(makeXl450());
+    QLCFixtureDef *def = defOwner.data();
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     QList<Fixture *> bars = xlBarsOnATruss(doc, def, 90.0f);       // hanging, face chosen
     Fixture *bar = bars[0];
     MonitorProperties *props = doc->monitorProperties();
@@ -19798,8 +19880,6 @@ void Monitor_Test::aBarHungOnATrussShinesOutOfItsFace()
     QCOMPARE(StructureStudioView::spreadFactor(qDegreesToRadians(7.0)), 1.0);
     const double flood = StructureStudioView::spreadFactor(qDegreesToRadians(75.0));
     QVERIFY2(flood > 0.05 && flood < 0.12, qPrintable(QString::number(flood)));
-    delete doc;
-    delete def;
 }
 
 /* Steps as in stage-structures-demo, smaller: two decks side by side in each
@@ -19814,7 +19894,8 @@ void Monitor_Test::aBarHungOnATrussShinesOutOfItsFace()
    shaded from. */
 void Monitor_Test::aClearTopGlowsWithTheLightInsideIt()
 {
-    QLCFixtureDef *def = new QLCFixtureDef();
+    QScopedPointer<QLCFixtureDef> defOwner(new QLCFixtureDef());
+    QLCFixtureDef *def = defOwner.data();
     def->setManufacturer("Oppsk");
     def->setModel("Wall Washer");
     def->setType(QLCFixtureDef::LEDBarPixels);
@@ -19838,7 +19919,10 @@ void Monitor_Test::aClearTopGlowsWithTheLightInsideIt()
     }
     def->addMode(mode);
 
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go) and goes before the definition its fixtures use.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     StagePlatform *step = props->addPlatform();
     step->setName("US-1");
@@ -19922,9 +20006,6 @@ void Monitor_Test::aClearTopGlowsWithTheLightInsideIt()
     frame();
     QCOMPARE(apertured(), 0);
     QCOMPARE(view.beamLightAt(upstage, down).z(), 0.0f);
-
-    delete doc;
-    delete def;
 }
 
 void Monitor_Test::stepFrontsAndTopsAreLaidOutAsOnStage()
@@ -21173,7 +21254,10 @@ void Monitor_Test::theCrosshairsSayWhereThePointerIs()
    target whatever it was sent. Selected, the target; running, the DMX. */
 void Monitor_Test::aRunningLookIsDrawnWhereItsHeadsAreSent()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     for (int u = 0; u < 4; ++u)
         doc->inputOutputMap()->addUniverse();
     MonitorProperties *props = doc->monitorProperties();
@@ -21222,7 +21306,6 @@ void Monitor_Test::aRunningLookIsDrawnWhereItsHeadsAreSent()
     for (int i = 0; i < 3; ++i)
         timer->timerTick();
     QVERIFY(QVector3D::dotProduct(v.moverAim(head->id()), toTarget) > 0.99f);
-    delete doc;
 }
 
 /* "we should always start with centering on the floor and center stage":
@@ -21230,7 +21313,10 @@ void Monitor_Test::aRunningLookIsDrawnWhereItsHeadsAreSent()
    trusses at 6 m had its floor half that below the middle of the window. */
 void Monitor_Test::theAngledViewStandsOnCentreStage()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     MonitorProperties *props = doc->monitorProperties();
     props->setGridSize(QVector3D(12, 3, 10));           // metres
     Truss *t = props->addTruss();
@@ -21256,7 +21342,6 @@ void Monitor_Test::theAngledViewStandsOnCentreStage()
     v.setAngledView(120, 30);
     const QPointF turned = v.w2s(props->stageCentre());
     QVERIFY(qAbs(turned.x() - 400) < 2 && qAbs(turned.y() - 360) < 2);
-    delete doc;
 }
 
 void Monitor_Test::aWiderFollowSpotAimsLowerOnThePerson()
@@ -21428,7 +21513,10 @@ void Monitor_Test::aWashShowsItsLedsOnItsFace()
 
 void Monitor_Test::lasersThrowStarsAndPencilBeams()
 {
-    Doc *doc = new Doc(this);
+    // The Doc outlives the views below (a view's items ask it for their
+    // fixtures as they go): it goes last.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
     QLCFixtureDef *def = new QLCFixtureDef();
     def->setManufacturer("Test"); def->setModel("Sky Laser");
     def->setType(QLCFixtureDef::Laser);
@@ -21531,7 +21619,6 @@ void Monitor_Test::lasersThrowStarsAndPencilBeams()
              qPrintable(QString("a laser beam should be a thin line: %1 x %2 px, the wash's light %3 x %4")
                             .arg(pencil.box.width()).arg(pencil.box.height())
                             .arg(wash.box.width()).arg(wash.box.height())));
-    delete doc;
 }
 
 /* "I moved a light that's at the base of a tower with a bar on top .. and it
