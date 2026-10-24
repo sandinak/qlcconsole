@@ -940,6 +940,20 @@ void InputOutputMap_Test::profiles()
     QVERIFY(im.m_profiles.size() == 0);
 }
 
+void InputOutputMap_Test::repatchAfterUnpatchByName()
+{
+    InputOutputMap im(m_doc, 4);
+    IOPluginStub* stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    QVERIFY(stub != NULL);
+    QVERIFY(im.setInputPatch(0, stub->name(), "", 0));
+    QVERIFY(im.inputPatch(0) != NULL);
+    im.setInputPatch(0, QString(), QString(), 0);              // no plugin, line 0: left pluginless
+    QVERIFY(im.setInputPatch(0, stub->name(), "", 0));         // crashed before
+    QVERIFY(im.inputPatch(0) != NULL);
+    QVERIFY(im.inputPatch(0)->plugin() == stub);
+    QVERIFY(im.setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+}
+
 void InputOutputMap_Test::setInputPatch()
 {
     InputOutputMap im(m_doc, 4);

@@ -495,7 +495,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         currProfile = currInPatch->profile();
         disconnect(currInPatch, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
                 this, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
-        if (currInPatch->plugin()->capabilities() & QLCIOPlugin::Beats)
+        // A patch left with no plugin (unpatched by name, not by line) has none.
+        if (currInPatch->plugin() != NULL && (currInPatch->plugin()->capabilities() & QLCIOPlugin::Beats))
         {
             disconnect(currInPatch, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
                        this, SLOT(slotPluginBeat(quint32,quint32,uchar,const QString&)));
@@ -532,7 +533,7 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
                     this, SIGNAL(inputTimeCodeChanged(quint32,quint32,uchar)));
             connect(ip, SIGNAL(inputSysExReceived(quint32,QByteArray)),
                     this, SIGNAL(inputSysExReceived(quint32,QByteArray)));
-            if (ip->plugin()->capabilities() & QLCIOPlugin::Beats)
+            if (ip->plugin() != NULL && (ip->plugin()->capabilities() & QLCIOPlugin::Beats))
             {
                 connect(ip, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
                         this, SLOT(slotPluginBeat(quint32,quint32,uchar,const QString&)));
