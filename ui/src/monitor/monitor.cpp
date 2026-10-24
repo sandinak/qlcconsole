@@ -1690,6 +1690,13 @@ void Monitor::showFocusFixture(quint32 fid)
         m_overviewView->setHighlight(ids);
 }
 
+void Monitor::showFocusGhost(quint32 fid, const QVector3D &point, const QString &label, bool on)
+{
+    Q_UNUSED(fid)
+    if (m_graphicsView != NULL)
+        m_graphicsView->setFocusGhost(on, point, label);
+}
+
 void Monitor::showFocusUnsaved(const QList<quint32> &ids)
 {
     if (m_graphicsView != NULL)

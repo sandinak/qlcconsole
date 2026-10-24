@@ -907,8 +907,148 @@ void FocusSession::save()
         if (saveHead(fid, batch))
             saved << fid;
     savedChanged(saved);
-    if (!saved.isEmpty())
-        emit announce(saved.size() == 1 ? tr("Saved.") : tr("Saved %1.").arg(saved.size()));
+    // "Spot 3 kept." -- or how many, for a whole call.
+    if (saved.size() == 1)
+    {
+        const Fixture *fx = m_doc->fixture(saved.first());
+        emit announce(fx != nullptr ? tr("%1 kept.").arg(fx->name()) : tr("Kept."));
+    }
+    else if (!saved.isEmpty())
+        emit announce(tr("%1 lights kept.").arg(saved.size()));
+}
+
+FocusSession::SaveStatus FocusSession::saveStatus() const
+{
+    const QList<quint32> unsaved = unsavedFixtures();
+    const bool here = unsaved.contains(currentFixture());
+    const bool elsewhere = unsaved.size() > (here ? 1 : 0);
+    return elsewhere ? (here ? BothUnsaved : OthersUnsaved) : here ? ThisUnsaved : AllSaved;
+}
+
+void FocusSession::saveAllHeld()
+{
+    if (!m_active)
+        return;
+    const int n = unsavedFixtures().size();
+    saveAll();
+    emit announce(n == 0 ? tr("All saved.") : n == 1 ? tr("1 light kept.") : tr("%1 lights kept.").arg(n));
+}
+
+void FocusSession::revertLight()
+{
+    const quint32 fid = currentFixture();
+    if (!m_heads.contains(fid))
+        return;
+    Head &h = m_heads[fid];
+    if (h.dirty())
+    {
+        backToSaved(fid, h);
+        rebuildWrites();
+        emit offsetChanged(fid);
+    }
+    if (const Fixture *fx = m_doc->fixture(fid))
+        emit announce(tr("%1 back to its last save.").arg(fx->name()));
+}
+
+bool FocusSession::nextUnsaved(quint32 after)
+{
+    if (!m_active)
+        return false;
+    const QList<quint32> unsaved = unsavedFixtures();
+    if (unsaved.isEmpty())
+    {
+        emit announce(tr("All saved."));
+        return false;
+    }
+    // After the head we are on, round to the start: in call order.
+    const int from = m_all.indexOf(after != 0xFFFFFFFF ? after : currentFixture());
+    quint32 to = unsaved.first();
+    for (int i = 1; i <= m_all.size(); ++i)
+    {
+        const quint32 fid = m_all.at((from + i) % m_all.size());
+        if (unsaved.contains(fid))
+        {
+            to = fid;
+            break;
+        }
+    }
+    if (isRunningCalls() && !m_order.contains(to))
+        for (int c = 0; c < m_calls.size(); ++c)
+            if (m_calls.at(c).order.contains(to))
+            {
+                enterCall(c);
+                break;
+            }
+    m_scope = FixtureScope;
+    setIndex(m_order.indexOf(to));
+    if (const Fixture *fx = m_doc->fixture(to))
+        emit announce(tr("%1, not saved.").arg(fx->name()));
+    return true;
+}
+
+bool FocusSession::savedGhost(quint32 fid, QVector3D &point) const
+{
+    if (!m_active || fid != currentFixture() || !m_heads.contains(fid))
+        return false;
+    const Head &h = m_heads[fid];
+    if (h.fixed)
+    {
+        if (h.first == h.landSaved)
+            return false;
+        point = h.landSaved;
+        return true;
+    }
+    if (h.live == h.saved)
+        return false;
+    FixtureRigProps rp;
+    double pan = 0.0, tilt = 0.0;
+    QVector3D target;
+    if (!intendedCentred(fid, rp, pan, tilt) || !referencePoint(fid, target))
+        return false;
+    /* The live offsets land the head on the reference; with the saved ones
+       its DMX would be that much the other way. */
+    QVector3D dir;
+    if (!AimSolver::beamDirection(rp, pan + double(h.saved.pan - h.live.pan),
+                                  tilt + double(h.saved.tilt - h.live.tilt), dir))
+        return false;
+    const QVector3D from = m_doc->monitorProperties()->fixtureRigPosition(fid);
+    if (qAbs(dir.z()) < 1e-4f)
+        return false;
+    const float t = (target.z() - from.z()) / dir.z();
+    if (t <= 0.0f)
+        return false;
+    point = from + dir * t;
+    return true;
+}
+
+QString FocusSession::deltaText(quint32 fid) const
+{
+    if (!m_heads.contains(fid))
+        return QString();
+    const Head &h = m_heads[fid];
+    auto sign = [](double v, int places) {
+        // A real minus sign, as the panel's numbers have.
+        return (v < 0.0 ? QStringLiteral("\u2212") : QStringLiteral("+"))
+               + QString::number(qAbs(v), 'f', places);
+    };
+    QStringList parts;
+    if (h.fixed)
+    {
+        const QVector3D d = h.first - h.landSaved;
+        if (qAbs(d.x()) >= 0.005f)
+            parts << tr("%1 m %2").arg(qAbs(d.x()), 0, 'f', 2)
+                     .arg(d.x() > 0 ? tr("stage left") : tr("stage right"));
+        if (qAbs(d.y()) >= 0.005f)
+            parts << tr("%1 m %2").arg(qAbs(d.y()), 0, 'f', 2)
+                     .arg(d.y() > 0 ? tr("downstage") : tr("upstage"));
+        return parts.join(QStringLiteral(", "));
+    }
+    const float dp = h.live.pan - h.saved.pan, dt = h.live.tilt - h.saved.tilt;
+    if (qAbs(dp) >= 0.005f)
+        parts << tr("%1\u00b0 pan").arg(sign(dp, qAbs(dp) < 10.0f ? 1 : 0));
+    if (qAbs(dt) >= 0.005f)
+        parts << tr("%1\u00b0 tilt").arg(sign(dt, qAbs(dt) < 10.0f ? 1 : 0));
+    return parts.join(QStringLiteral(", "));
 }
 
 bool FocusSession::saveHead(quint32 fid, int batch)
@@ -1275,7 +1415,20 @@ void FocusSession::apply(Control control)
         case Zero:            zero(); break;
         case ToggleReference: toggleReference(); break;
         case UndoSave:        if (!undoSave()) emit announce(tr("Nothing to undo.")); break;
-        case Exit:            emit exitRequested(); break;
+        case Exit:
+        {
+            // "2 lights not saved." -- the panel then asks what to do.
+            const int n = unsavedFixtures().size();
+            if (n == 1)
+            {
+                const Fixture *fx = m_doc->fixture(unsavedFixtures().first());
+                emit announce(fx != nullptr ? tr("%1 not saved.").arg(fx->name()) : tr("1 light not saved."));
+            }
+            else if (n > 1)
+                emit announce(tr("%1 lights not saved.").arg(n));
+            emit exitRequested();
+            break;
+        }
         case StepPanUp:       nudge(m_step, 0.0f); break;
         case StepPanDown:     nudge(-m_step, 0.0f); break;
         case StepTiltUp:      nudge(0.0f, m_step); break;

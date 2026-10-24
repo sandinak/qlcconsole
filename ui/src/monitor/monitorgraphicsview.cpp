@@ -6276,6 +6276,49 @@ void MonitorGraphicsView::highlightFixtures(const QList<quint32> &ids)
         it.value()->setHighlighted(idSet.contains(it.key()));
 }
 
+void MonitorGraphicsView::setFocusGhost(bool on, const QVector3D &point, const QString &label)
+{
+    if (!on)
+    {
+        if (m_focusGhost != nullptr)
+            m_focusGhost->hide();
+        if (m_focusGhostLabel != nullptr)
+            m_focusGhostLabel->hide();
+        return;
+    }
+    if (m_focusGhost == nullptr)
+    {
+        m_focusGhost = new QGraphicsEllipseItem();
+        QPen pen(QColor(255, 192, 0), 2.0, Qt::DashLine);
+        pen.setCosmetic(true);
+        m_focusGhost->setPen(pen);
+        m_focusGhost->setBrush(QColor(255, 192, 0, 40));
+        m_focusGhost->setZValue(10000);
+        m_scene->addItem(m_focusGhost);
+        m_focusGhostLabel = new QGraphicsSimpleTextItem();
+        m_focusGhostLabel->setBrush(QColor(255, 192, 0));
+        m_focusGhostLabel->setZValue(10001);
+        m_scene->addItem(m_focusGhostLabel);
+    }
+    const QPointF at = realPositionToPixels(double(point.x()) * 1000.0, double(point.y()) * 1000.0);
+    const qreal r = qMax(6.0, double(m_cellPixels) * 0.3);   // about 0.3 m across a 1 m cell
+    m_focusGhost->setRect(QRectF(at.x() - r, at.y() - r, 2 * r, 2 * r));
+    m_focusGhost->show();
+    m_focusGhostLabel->setText(tr("saved") + (label.isEmpty() ? QString() : QStringLiteral(" (") + label + QLatin1Char(')')));
+    m_focusGhostLabel->setPos(at.x() + r + 3, at.y() - r);
+    m_focusGhostLabel->show();
+}
+
+bool MonitorGraphicsView::hasFocusGhost() const
+{
+    return m_focusGhost != nullptr && m_focusGhost->isVisible();
+}
+
+QString MonitorGraphicsView::focusGhostLabel() const
+{
+    return hasFocusGhost() ? m_focusGhostLabel->text() : QString();
+}
+
 void MonitorGraphicsView::markUnsavedFixtures(const QList<quint32> &ids)
 {
     const QSet<quint32> idSet(ids.begin(), ids.end());

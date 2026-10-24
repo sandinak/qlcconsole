@@ -66,6 +66,8 @@ private slots:
     /** Refine on a Build scene: the scene is the layer, an exception is a
      *  fixture out of the palette with the scene's own values. */
     void aBuildSceneIsRefinedTheSameWay();
+    /** Q126 in Refine: the light bar, the buzz, both bumpers, what is said. */
+    void refineTellsYouMoreToo();
     /** A layer only tracked in: said where a keep goes (this cue, by
      *  default), Layer scope only until it is own, or kept at its source. */
     void aTrackedLayerKeepsHereOrAtItsSource();

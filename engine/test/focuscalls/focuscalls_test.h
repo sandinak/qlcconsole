@@ -74,6 +74,14 @@ private slots:
     /** Q120: no venue applied, the laptop asks; a name, or after a few
      *  seconds today's date, said. */
     void aFocusCallCueAsksForTheVenue();
+    /** Q126: the pad's light bar and buzzes, "Spot 3 kept", "2 lights not
+     *  saved", the change since the save and its ghost, hold A / B, both
+     *  bumpers to the next unsaved light. */
+    void thePadAndTheVoiceTellYouMore();
+    /** The same through the programmer, as a controller's events arrive:
+     *  both bumpers, A and B held, RS tapped and held, the light bar and the
+     *  buzz sent to the controller's plugin. */
+    void theControllerDoesItThroughTheProgrammer();
 
 private:
     Doc *m_doc = nullptr;

@@ -23,6 +23,10 @@
 #include <QtTest>
 
 #include "focuscalls_test.h"
+#include "inputoutputmap.h"
+#include "iopluginstub.h"
+#include "qlcioplugin.h"
+#include "qlcfile.h"
 #include "programmercontroller.h"
 #include "monitorproperties.h"
 #include "venuecorrections.h"
@@ -489,7 +493,7 @@ void FocusCalls_Test::theOperatorIsToldWhereTheyAre()
     s->whereAmI();
     QCOMPARE(said.last().at(0).toString(), QString("C. Call 2 of 2, AT spots to Soloist DS. Fixture 1 of 1."));
     s->save();
-    QCOMPARE(said.last().at(0).toString(), QString("Saved."));
+    QCOMPARE(said.last().at(0).toString(), QString("C kept."));
     s->apply(FocusSession::UndoSave);
     QCOMPARE(said.last().at(0).toString(), QString("Undone."));
     s->apply(FocusSession::UndoSave);
@@ -868,6 +872,172 @@ void FocusCalls_Test::aFocusCallCueAsksForTheVenue()
     QVERIFY(dated);
     s->stop();
     m_doc->setMode(Doc::Design);
+}
+
+void FocusCalls_Test::thePadAndTheVoiceTellYouMore()
+{
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy buzz(pc, &ProgrammerController::padRumbled);
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+
+    // 1. The light bar is the lamp: green, yellow (this one), red (another).
+    const QColor green(0x3a, 0xc0, 0x4a), yellow(0xff, 0xc0, 0x00), red(0xe0, 0x30, 0x20);
+    QCOMPARE(s->saveStatus(), FocusSession::AllSaved);
+    QCOMPARE(pc->padLight(), green);
+    s->nudge(2.5f, -1.0f);
+    QCOMPARE(s->saveStatus(), FocusSession::ThisUnsaved);
+    QCOMPARE(pc->padLight(), yellow);
+
+    // 4. What changed since the save, and the ghost where the saved one lands.
+    QCOMPARE(s->deltaText(a->id()), QString("+2.5\u00b0 pan, \u22121.0\u00b0 tilt"));
+    QVector3D ghost, ref;
+    QVERIFY(s->savedGhost(a->id(), ghost));
+    QVERIFY(s->referencePoint(a->id(), ref));
+    QVERIFY((ghost - ref).length() > 0.05f);
+    QVERIFY(qAbs(ghost.z() - ref.z()) < 0.01f);
+    QVERIFY(!s->savedGhost(b->id(), ghost));            // only the head being worked
+
+    s->next();
+    QCOMPARE(s->saveStatus(), FocusSession::OthersUnsaved);
+    QCOMPARE(pc->padLight(), red);
+    s->nudge(1.0f, 0.0f);
+    QCOMPARE(s->saveStatus(), FocusSession::BothUnsaved);
+
+    // 2 + 3. A save buzzes twice (another light is still unsaved), and says it.
+    s->save();
+    QCOMPARE(buzz.last().at(0).toInt(), 2);
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 7 kept."));
+    QVERIFY(s->deltaText(b->id()).isEmpty());
+
+    // 6. Both bumpers: to the next light not saved, said.
+    QVERIFY(s->nextUnsaved());
+    QCOMPARE(s->currentFixture(), a->id());
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3, not saved."));
+
+    // 3. Exit with something unsaved says what.
+    QSignalSpy exit(s, &FocusSession::exitRequested);
+    s->apply(FocusSession::Exit);
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 not saved."));
+    QCOMPARE(exit.count(), 1);
+
+    // 5. Hold B: this light back to its last save; hold A: all saved.
+    s->revertLight();
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 back to its last save."));
+    QVERIFY(!s->isDirty(a->id()));
+    s->nudge(0.5f, 0.0f);
+    s->next();
+    s->nudge(0.5f, 0.0f);
+    s->saveAllHeld();
+    QCOMPARE(said.last().at(0).toString(), QString("2 lights kept."));
+    QVERIFY(!s->hasUnsaved());
+    QCOMPARE(pc->padLight(), green);
+    QVERIFY(!s->nextUnsaved());
+    QCOMPARE(said.last().at(0).toString(), QString("All saved."));
+    s->nudge(0.5f, 0.0f);
+    s->save();
+    QCOMPARE(buzz.last().at(0).toInt(), 1);             // nothing else unsaved: once
+    s->stop();
+    QVERIFY(!pc->padLight().isValid());                 // back to the pad's own
+
+    // The hold itself: 0.6 s, as RS.
+    ControllerScheme::LongPress hold;
+    hold.press();
+    QVERIFY(!hold.due(0.5));
+    QVERIFY(hold.due(0.1));
+}
+
+void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
+{
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
+                             { 10, "a" }, { 11, "b" }, { 14, "lb" }, { 15, "rb" },
+                             { 16, "back" }, { 17, "start" }, { 18, "rs" } };
+    stub->m_feedbackParams.clear();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto down = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 255, QString()); };
+    auto up = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 0, QString()); };
+    auto held = [pc](int ticks) {
+        for (int i = 0; i < ticks; ++i)
+            pc->applyDesignJoystick();
+    };
+
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // The pad's own light bar, through the plugin: the lamp's green.
+    QVERIFY(!stub->m_feedbackParams.isEmpty());
+    QVariantMap fb = stub->m_feedbackParams.last().toMap();
+    QCOMPARE(fb.value("gamepad").toString(), QString("light"));
+    QCOMPARE(fb.value("rgb").toString(), QString("#3ac04a"));
+
+    // Both bumpers: the next light not saved.
+    s->nudge(1.0f, 0.0f);
+    s->next();
+    s->nudge(1.0f, 0.0f);
+    down(14);
+    down(15);                                  // RB with LB held
+    up(15);
+    up(14);
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3, not saved."));
+
+    // A held 0.6 s: save all (the press saved this one first).
+    down(10);
+    held(40);
+    up(10);
+    QVERIFY(!s->hasUnsaved());
+    QCOMPARE(said.last().at(0).toString(), QString("1 light kept."));
+    fb = stub->m_feedbackParams.last().toMap();          // ... and the buzz went out
+    bool buzzed = false;
+    for (const QVariant &v : stub->m_feedbackParams)
+        buzzed = buzzed || v.toMap().value("gamepad").toString() == QLatin1String("rumble");
+    QVERIFY(buzzed);
+
+    // B held: this light back to its last save.
+    s->nudge(0.5f, 0.0f);
+    down(11);
+    held(40);
+    up(11);
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 back to its last save."));
+
+    // RS: a tap says the light; held, the feedback changes.
+    down(18);
+    up(18);
+    QVERIFY(said.last().at(0).toString().startsWith("Spot 3. "));
+    down(18);
+    held(40);
+    up(18);
+    QCOMPARE(pc->operatorFeedback(), ControllerScheme::LightsFeedback);
+    pc->setOperatorFeedback(ControllerScheme::BothFeedback);
+    s->stop();
+    QVERIFY(!stub->m_feedbackParams.last().toMap().value("rgb").toString().size());   // its own colour back
+    iom->setInputPatch(0, QString(), QString(), 0);
 }
 
 QTEST_GUILESS_MAIN(FocusCalls_Test)

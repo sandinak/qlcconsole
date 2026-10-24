@@ -133,6 +133,14 @@ public:
     /** @reimp */
     void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp -- a gamepad's own output (Q126): params {"gamepad": "light",
+     *  "rgb": "#rrggbb" (empty: its own colour)} or {"gamepad": "rumble",
+     *  "pulses": n}, to the pad on @p inputLine. macOS through the
+     *  GameController framework only; elsewhere, and for anything else,
+     *  nothing. */
+    void sendFeedBack(quint32 universe, quint32 inputLine, quint32 channel, uchar value,
+                      const QVariant &params) override;
+
     /*********************************************************************
      * Configuration
      *********************************************************************/

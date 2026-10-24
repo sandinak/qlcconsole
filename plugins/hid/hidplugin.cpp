@@ -30,6 +30,8 @@
 #include "hidprofile.h"
 #include "hidprofileeditor.h"
 #include "hidapi.h"
+#include <QColor>
+
 #include "hidplugin.h"
 #include "qlcfile.h"
 
@@ -645,6 +647,34 @@ HIDDevice* HIDPlugin::device(const QString& path) const
     }
 
     return NULL;
+}
+
+void HIDPlugin::sendFeedBack(quint32 universe, quint32 inputLine, quint32 channel, uchar value,
+                             const QVariant &params)
+{
+    Q_UNUSED(universe)
+    Q_UNUSED(channel)
+    Q_UNUSED(value)
+    const QVariantMap p = params.toMap();
+    const QString what = p.value(QStringLiteral("gamepad")).toString();
+    if (what.isEmpty())
+        return;
+#if defined(Q_OS_MACOS)
+    HIDOSXJoystick *pad = qobject_cast<HIDOSXJoystick *>(device(inputLine));
+    if (pad == nullptr)
+        return;
+    if (what == QLatin1String("light"))
+    {
+        // Its own colour back: what a DualShock shows by itself, blue.
+        const QColor c(p.value(QStringLiteral("rgb")).toString());
+        const QColor show = c.isValid() ? c : QColor(0, 0, 255);
+        pad->setPadLight(float(show.redF()), float(show.greenF()), float(show.blueF()));
+    }
+    else if (what == QLatin1String("rumble"))
+        pad->padRumble(p.value(QStringLiteral("pulses")).toInt());
+#else
+    Q_UNUSED(inputLine)
+#endif
 }
 
 HIDDevice* HIDPlugin::device(quint32 index) const

@@ -194,6 +194,16 @@ public:
     void setOperatorFeedback(ControllerScheme::Feedback feedback);
     /** The next one, said ("Feedback: lights only."): RS held, or Shift+W. */
     void cycleOperatorFeedback();
+
+    /** The pad itself (board Q126): its light bar in the status lamp's colour
+     *  (an invalid colour: back to its own), and buzzes. Sent to the
+     *  controller's plugin as feedback (QLCIOPlugin::sendFeedBack(), params
+     *  {"gamepad": "light", "rgb": "#rrggbb"} or {"gamepad": "rumble",
+     *  "pulses": n}); a plugin or pad that cannot do it ignores it. */
+    void setPadLight(const QColor &colour);
+    void padRumble(int pulses);
+    QColor padLight() const { return m_padLight; }
+    int padRumbles() const { return m_padRumbles; }
     /** Refine: the controller on a Show Tree cue's own values. Never null. */
     RefineSession *refineSession() const { return m_refineSession; }
 
@@ -489,6 +499,8 @@ signals:
      *  operator on stage (the UI's voice reads it). */
     void operatorAnnounce(const QString &text);
     void operatorFeedbackChanged(ControllerScheme::Feedback feedback);
+    void padLightChanged(const QColor &colour);
+    void padRumbled(int pulses);
     /** A controller came or went, or its profile changed: ask
      *  focusController() again. */
     void focusControllerChanged();
@@ -647,6 +659,17 @@ private:
     ControllerScheme::LongPress m_sayHold;
     /** Refine: A went down while View was held (View + A, Q118). */
     bool m_viewChord = false;
+    /** Hold A: save all / keep; hold B: back to the last save (Q126). */
+    ControllerScheme::LongPress m_holdA;
+    /** The head the first bumper of a pair stepped from (both bumpers). */
+    quint32 m_bumperFrom = 0xFFFFFFFF;
+    ControllerScheme::LongPress m_holdB;
+    QColor m_padLight;
+    int m_padRumbles = 0;
+    void sendPadFeedback(const QVariantMap &params);
+    void refreshPadLight();
+    /** A hold came round on the controller tick. */
+    void heldTick(double dt);
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
     /** See controllerKeepAlive(). */

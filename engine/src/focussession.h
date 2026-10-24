@@ -390,6 +390,33 @@ public:
 
     /** Save every head with unsaved offsets (one undo step each). */
     void saveAll();
+
+    /*********************************************************************
+     * Where things stand (board Q126)
+     *********************************************************************/
+public:
+    /** The status lamp's (and the pad's light bar's) colour. */
+    enum SaveStatus { AllSaved, ThisUnsaved, OthersUnsaved, BothUnsaved };
+    SaveStatus saveStatus() const;
+
+    /** Hold A: every unsaved head saved, said ("3 lights kept."). */
+    void saveAllHeld();
+    /** Hold B: the light being worked back to its last save, whatever the
+     *  scope, said ("Spot 3 back to its last save."). */
+    void revertLight();
+    /** Both bumpers: on to the next head with unsaved changes, in any call
+     *  ("Spot 7, not saved."); "All saved." when there is none. From the
+     *  head @p after (invalid: the one being worked) -- the head the first
+     *  bumper of the pair stepped from. */
+    bool nextUnsaved(quint32 after = 0xFFFFFFFF);
+
+    /** Where head @p fid would land with its SAVED calibration, as its
+     *  live one lands on the reference (the plot's ghost while nudging);
+     *  false when they are the same, or for another head. */
+    bool savedGhost(quint32 fid, QVector3D &point) const;
+    /** What has changed since the save: "+2.5° pan, −1.0° tilt", or for a
+     *  fixed light "0.50 m stage left, 0.25 m upstage"; empty: nothing. */
+    QString deltaText(quint32 fid) const;
     /** Put every head back to its saved offsets. */
     void discardAll();
 

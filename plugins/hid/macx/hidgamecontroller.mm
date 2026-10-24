@@ -19,6 +19,7 @@
 
 #import <Foundation/Foundation.h>
 #import <GameController/GameController.h>
+#import <CoreHaptics/CoreHaptics.h>
 
 #include <memory>
 #include <mutex>
@@ -47,6 +48,7 @@ struct Claim
     GCController *controller;           // strong (ARC)
     dispatch_queue_t queue;             // strong (ARC)
     std::shared_ptr<Shared> shared;
+    id haptics = nil;                   // CHHapticEngine, made on the first buzz (strong)
 };
 
 std::mutex g_mutex;                     // guards the three below
@@ -343,6 +345,82 @@ bool read(int handle, PadState *state, QList<Event> *events)
         events->swap(sp->events);
     sp->events.clear();
     return sp->connected;
+}
+
+bool setLight(int handle, float r, float g, float b)
+{
+    GCController *c = nil;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto it = g_claims.find(handle);
+        if (it == g_claims.end())
+            return false;
+        c = it->second.controller;
+    }
+    if (@available(macOS 11.0, *))
+    {
+        GCDeviceLight *light = c.light;
+        if (light == nil)
+            return false;
+        light.color = [[GCColor alloc] initWithRed:r green:g blue:b];
+        return true;
+    }
+    return false;
+}
+
+bool rumble(int handle, int pulses)
+{
+    if (pulses <= 0)
+        return false;
+    if (@available(macOS 11.0, *))
+    {
+        GCController *c = nil;
+        CHHapticEngine *engine = nil;
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            auto it = g_claims.find(handle);
+            if (it == g_claims.end())
+                return false;
+            c = it->second.controller;
+            engine = it->second.haptics;
+        }
+        if (engine == nil)
+        {
+            GCDeviceHaptics *h = c.haptics;
+            if (h == nil)
+                return false;
+            engine = [h createEngineWithLocality:GCHapticsLocalityDefault];
+            if (engine == nil)
+                return false;
+            std::lock_guard<std::mutex> lock(g_mutex);
+            auto it = g_claims.find(handle);
+            if (it != g_claims.end())
+                it->second.haptics = engine;
+        }
+        NSError *error = nil;
+        if (![engine startAndReturnError:&error])
+            return false;
+        // Short, firm buzzes 0.22 s apart: one for a save, two for "but".
+        NSMutableArray<CHHapticEvent *> *events = [NSMutableArray array];
+        for (int i = 0; i < pulses; ++i)
+        {
+            CHHapticEventParameter *strong =
+                [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity
+                                                              value:1.0f];
+            [events addObject:[[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous
+                                                            parameters:@[ strong ]
+                                                          relativeTime:0.22 * i
+                                                              duration:0.12]];
+        }
+        CHHapticPattern *pattern = [[CHHapticPattern alloc] initWithEvents:events parameters:@[] error:&error];
+        if (pattern == nil)
+            return false;
+        id<CHHapticPatternPlayer> player = [engine createPlayerWithPattern:pattern error:&error];
+        if (player == nil)
+            return false;
+        return [player startAtTime:CHHapticTimeImmediate error:&error];
+    }
+    return false;
 }
 
 QString describe(int handle)

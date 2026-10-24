@@ -37,6 +37,18 @@ HIDOSXJoystick::HIDOSXJoystick(HIDPlugin *parent, quint32 line, struct hid_devic
     init();
 }
 
+bool HIDOSXJoystick::setPadLight(float r, float g, float b)
+{
+    const int gc = m_gcHandle.loadRelaxed();
+    return gc != 0 && HIDGameController::setLight(gc, r, g, b);
+}
+
+bool HIDOSXJoystick::padRumble(int pulses)
+{
+    const int gc = m_gcHandle.loadRelaxed();
+    return gc != 0 && HIDGameController::rumble(gc, pulses);
+}
+
 HIDOSXJoystick::~HIDOSXJoystick()
 {
     /* Stop the reader before what it reads goes: the base class would only

@@ -410,6 +410,8 @@ bool RefinePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Semicolon: m_session->apply(CS::FocusNearer); break;
         case Qt::Key_Apostrophe: m_session->apply(CS::FocusFarther); break;
         case Qt::Key_P:        m_session->apply(CS::Alternate); break;
+        // Both bumpers: the next change not kept.
+        case Qt::Key_U:        m_session->nextPending(); break;
         case Qt::Key_W:
             // Say the light; with Shift, the feedback changes (as RS held).
             if (modifiers & Qt::ShiftModifier)
