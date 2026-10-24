@@ -4908,6 +4908,8 @@ void ShowTreeView::refreshFocusCallState()
     const bool mine = fcc != nullptr && m_pageCue != invalidId() && fcc->cueId() == m_pageCue;
     if (mine && fcc->state() == FocusCallCue::Armed)
         m_cueFocusState->setText(tr("Focus calls: waiting for the controller (Start, or \u2318\u21a9)"));
+    else if (mine && fcc->state() == FocusCallCue::NamingVenue)
+        m_cueFocusState->setText(tr("Focus calls: name the venue on the laptop"));
     else if (mine && fcc->state() == FocusCallCue::Running)
         m_cueFocusState->setText(tr("Focus calls running: Menu ends them and goes on"));
     m_cueFocusState->setVisible(mine && fcc->state() != FocusCallCue::Idle);

@@ -71,6 +71,9 @@ private slots:
      *  Operate, triggers step, past the last call it asks to leave, and
      *  leaving goes on with the list. */
     void aFocusCallCueArmsThenStartsOnTheController();
+    /** Q120: no venue applied, the laptop asks; a name, or after a few
+     *  seconds today's date, said. */
+    void aFocusCallCueAsksForTheVenue();
 
 private:
     Doc *m_doc = nullptr;

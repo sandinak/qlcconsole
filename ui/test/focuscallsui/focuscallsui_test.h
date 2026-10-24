@@ -52,6 +52,8 @@ private slots:
     /** A focus-call cue: the Run tab says it waits for the controller; its
      *  button starts the calls; leaving goes on. */
     void aFocusCallCueWaitsForTheController();
+    /** Q120: the laptop asks for the venue; typing holds the clock. */
+    void theLaptopAsksForTheVenue();
     /** Build's Workbench: Refine from its header and from a row. */
     void refineFromTheWorkbench();
     /** Feedback is one setting, on the panels, with Shift+W; W says the light. */

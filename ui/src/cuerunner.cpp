@@ -1030,6 +1030,10 @@ void CueRunner::refreshFocusArmed()
             m_focusArmedLabel->setText(tr("Focus calls running \u2014 Menu ends them and goes on"));
             m_focusStart->hide();
             break;
+        case FocusCallCue::NamingVenue:
+            m_focusArmedLabel->setText(tr("Focus calls: name the venue on the laptop"));
+            m_focusStart->hide();
+            break;
         case FocusCallCue::Idle:
             break;
     }

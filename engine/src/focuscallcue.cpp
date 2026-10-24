@@ -17,6 +17,8 @@
   limitations under the License.
 */
 
+#include <QTimer>
+
 #include "showtreecontroller.h"
 #include "venuecorrections.h"
 #include "focuscallcue.h"
@@ -51,6 +53,10 @@ FocusCallCue::FocusCallCue(Doc *doc, FocusSession *session, FocusCalls *calls, Q
     }
     if (m_session != nullptr)
         connect(m_session, &FocusSession::stopped, this, &FocusCallCue::sessionStopped);
+    // Nobody named the venue in time: today's date (Q120).
+    m_askTimer = new QTimer(this);
+    m_askTimer->setSingleShot(true);
+    connect(m_askTimer, &QTimer::timeout, this, [this]() { useVenue(QString()); });
     if (m_doc != nullptr)
         connect(m_doc, &Doc::clearing, this, [this]() {
             m_watched.clear();
@@ -139,12 +145,54 @@ bool FocusCallCue::start(QString *why)
         return false;
     if (m_calls == nullptr || m_calls->count() == 0)
         return refuse(tr("This show has no focus calls yet."));
-    /* Saves go to a venue: the one applied, else one named for today
-       (Q110), where the show has a file to keep it beside. */
+    /* Saves go to a venue. None applied, where the show has a file to keep
+       one beside: ask for its name on the laptop, and if nobody answers in
+       a few seconds, name it for today (Q120). */
     VenueCorrections *venues = m_session->venues();
     if (venues != nullptr && !venues->isActive() && !venues->filePath().isEmpty())
-        venues->setActiveVenue(venues->addVenue());
+    {
+        setState(NamingVenue);
+        emit announce(tr("Name this venue on the laptop, or wait for today's date."));
+        emit venueNeeded(VenueCorrections::defaultVenueName(), m_askTimeout);
+        m_askTimer->start(m_askTimeout);
+        return true;
+    }
+    return beginCalls(why);
+}
 
+bool FocusCallCue::useVenue(const QString &name)
+{
+    if (m_state != NamingVenue)
+        return false;
+    m_askTimer->stop();
+    VenueCorrections *venues = m_session->venues();
+    const QString applied = venues->addVenue(name.trimmed());
+    venues->setActiveVenue(applied);
+    emit announce(name.trimmed().isEmpty() ? tr("Venue named for today.")
+                                           : tr("Venue %1.").arg(applied));
+    setState(Armed);
+    QString why;
+    if (!beginCalls(&why))
+    {
+        emit announce(why);
+        return false;
+    }
+    return true;
+}
+
+void FocusCallCue::holdVenueAsk()
+{
+    m_askTimer->stop();
+}
+
+bool FocusCallCue::beginCalls(QString *why)
+{
+    auto refuse = [this, why](const QString &reason) {
+        if (why != nullptr)
+            *why = reason;
+        emit announce(reason);
+        return false;
+    };
     FocusSession::Options o;
     o.calls = m_calls->sessionCalls();
     o.order = FocusSession::ByStagePosition;
@@ -160,8 +208,9 @@ bool FocusCallCue::start(QString *why)
 
 void FocusCallCue::disarm()
 {
-    if (m_state != Armed)
+    if (m_state != Armed && m_state != NamingVenue)
         return;
+    m_askTimer->stop();
     m_cue = m_list = kInvalid;
     setState(Idle);
 }
