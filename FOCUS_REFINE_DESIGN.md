@@ -3,6 +3,67 @@
 Branch `feat/focus-calls-refine`, 2026-10-23 (decisions Q109–Q113 built the same night). A design plus a first working
 version. Not merged.
 
+## Try this (about 10 minutes)
+
+Build and open a show with moving heads on the plot, one fixture group of
+them, and a stage target. `test-workspaces/help-demo.qxw` has Movers, Pars
+and a target called Centre:
+
+```
+build/main/qlcconsole -o test-workspaces/help-demo.qxw
+```
+
+Save it once under a new name, because a venue's file lives beside the show.
+Keys are given in brackets for running without a controller. Plug in an Xbox
+pad if you have one.
+
+1. **Set up the focus calls.** Lighting Studio → **Focus calls**. Click
+   **+ Call**, tick **Movers**, and set Focus to **Centre**. Add another
+   call for **Pars**, which focuses to "where they land". Venue: leave
+   **New venue…** with the date. Click **Start focus calls**.
+2. **Step and nudge.**
+   - **RT / LT** (PgDn / PgUp): step calls.
+   - **RB / LB** (] / [): step fixtures. The picked fixture blinks three
+     times and the laptop says "Fixture 2 of 8."
+   - **Left stick** (arrows): nudge.
+   - **A** (Return): save.
+   - **Y** (G): the whole call. Nudge once, and every head moves.
+   - **RS click** (W): "Where am I?"
+3. **Venue, not show.** Leave the calls with **Menu** (Esc). In Finder,
+   look for `<show>.venues.xml` next to the show: it holds your offsets. The
+   show is not marked modified. Reopen Focus calls: **Rename…**, **Apply
+   now** (None puts the show's own back), and **Delete** manage venues. Type
+   a pan offset in a fixture's properties while a venue is applied: it goes
+   into the venue too (Q111).
+4. **Refine a cue.**
+   - In the Show Tree, add a cue with a layer on **Movers** and a position.
+   - On its cue page, click **Refine on the controller…**.
+   - Move with the stick (arrows) and the lights follow. **A** (Return)
+     keeps the change: one undo step. **Y** (G) goes to one fixture; a move
+     there is an exception, a child layer in the tree. **X** (0) clears it.
+   - **LS click** (P) changes the D-pad to colour and then gobo palettes.
+5. **A tracked layer.** Add a cue after it that sets nothing and Refine
+   that. The voice says "Movers, tracked from 1. Keeps go into this cue."
+   **S** on the panel switches to keeping in cue 1.
+6. **From Build.** Load a scene in Build's Workbench and click **Refine…**
+   in its header, or right-click a group or fixture row → **Refine on the
+   controller…**. The controller is the same; an exception is that fixture
+   out of the palette, with the scene's own values.
+7. **A focus-call cue.**
+   - Make a "Pre-show" list with a cue that sets the work light. Tick
+     **Focus call** on its cue page (the F column says **focus**).
+   - Go to Operate and **GO** to it. The light comes up, the voice says
+     "Focus calls ready. Press Start to begin.", and the Run tab and footer
+     say it is waiting.
+   - Press **Start/Menu** (⌘↩) to begin the calls. **Menu** (Esc) ends them
+     and the list GOes to the next cue.
+8. **The voice on the headsets.** In Focus calls, **Voice to:** sends the
+   voice to the output that feeds them. Step quickly through the fixtures:
+   the voice never talks over itself, and only the fixture you stop on is
+   read out.
+
+---
+
 **The idea.** Kids already know game controllers, so the controller is the
 star here. Two jobs on the stage use one controller layout:
 
@@ -382,8 +443,8 @@ between them does not end it.
   Leaving Refine lets go. Going back to Design drops the hold and
   previews the cue with the edit.
 
-**Layers listed.** The cue's **own top-level** layers on fixtures. Opaque
-function layers, and layers that are only tracked in, are not listed (§12).
+**Layers listed.** The cue's **own top-level** layers on fixtures, then the
+layers it only tracks in (§6C). Opaque function layers are not listed.
 
 ### 6C. A layer the cue only tracks
 
@@ -655,8 +716,7 @@ Help:
   **conflicts** with triggers stepping calls. See §11.
 - Rumble or vibration feedback (the HID plugin has no output path to the
   pad).
-- Refine of tracked-in layers (only the cue's own layers), of effects, and
-  of intensity. The dimmer is deliberately not on the controller: the
+- Refine of effects, and of intensity. The dimmer is deliberately not on the controller: the
   flash and dim feedback use it.
 - Editing a reusable layer through Refine. `setLayerLook` on a use edits
   the reusable everywhere. v1 does not warn about this.
@@ -684,6 +744,19 @@ whether it says fixture names, whether it is off by default in class;
 rumble; and which control picks a shutter side (suggestion: a D-pad
 "shutter page" on the left stick click, so the triggers keep meaning "big
 step").
+
+### New questions (2026-10-23 night build)
+
+| # | Question | What is built now |
+|---|---|---|
+| Q-B1 | In Build, Refine at Layer scope moves the scene's **palette in place**, as the Look Editor does, so a palette other scenes use changes there too. The Show Tree makes a one-off instead. Should Build make a copy for this scene (Own copy) and warn? | In place; no warning. |
+| Q-B2 | A Build Layer-scope keep that changes a palette **and** raw values is two undo steps. Is that acceptable? | Two steps. |
+| Q-C1 | Where should a keep on a layer the cue only tracks go by default: this cue or the cue it comes from? | **This cue** (said by voice; S switches). |
+| Q-C2 | Should there be a controller button for "keep at the source"? Every button is in use. Holding View with A is one option. | Panel checkbox and the S key only. |
+| Q-D1 | Which control starts a focus-call cue: Start/Menu or A? | **Start/Menu**: the same button begins and ends; A is Save inside. Keyboard ⌘↩. |
+| Q-D2 | When a focus-call cue starts and no venue is applied, it makes a **dated venue** by itself (Q110). Should it ask instead? | Dated venue. |
+| Q-D3 | Should finishing the calls GO on automatically, or wait for the stage manager's GO? | GOes on automatically (as asked). |
+| Q-D4 | Voice output device on Linux and Windows. | Mac only (`say -a`); the others use the system output. |
 
 ---
 
@@ -716,17 +789,25 @@ step").
 - Voice: `say` on macOS, `spd-say` on Linux, Qt TextToSpeech elsewhere.
 - Help pages and tests.
 
+Built on the night of 2026-10-23, at the owner's request:
+
+- Refine from Build's Workbench, on scenes and on cues (§6B).
+- A focus-call cue that arms on GO and starts on the controller (§7).
+- Refine of a layer that is only tracked in (§6C).
+- A venue manager: apply now, rename, delete.
+- A voice queue and output device.
+- Help pictures for the new panels.
+
 **Stubbed or not built:**
 
-- A venue manager UI (rename and delete exist in the engine only).
-
 - Rumble.
+- A voice output device on Linux and Windows.
+- A controller button for "keep at the source" (Q-C2).
 
 **Next, in order:**
 
-1. Branson tries it; then voice, rumble and shutters (Q113).
-4. A venue manager (rename/delete) in the dialog.
-5. Help shots.
-6. A real-rig check on `ender`/the show VLAN: flash timing visible at
+1. Branson tries it ("Try this" at the top); then voice, rumble and
+   shutters (Q113), and the new questions in §11.
+2. A real-rig check on `ender`/the show VLAN: flash timing visible at
    distance, `say` audible over a hall, trigger thresholds on a worn
    controller.
