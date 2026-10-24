@@ -54,6 +54,8 @@ private slots:
     void aFocusCallCueWaitsForTheController();
     /** Build's Workbench: Refine from its header and from a row. */
     void refineFromTheWorkbench();
+    /** Feedback is one setting, on the panels, with Shift+W; W says the light. */
+    void feedbackIsOneSettingOnEveryPanel();
     /** The voice: silent under a test, and what is announced reaches it
      *  while it is on. */
     void theVoiceHearsTheAnnouncements();

@@ -98,14 +98,22 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
     m_focusCallCue = new FocusCallCue(m_doc, m_focusSession, m_focusCalls, this);
-    connect(m_focusCallCue, &FocusCallCue::announce, this, &ProgrammerController::operatorAnnounce);
+    // Spoken unless the operator chose lights only.
+    auto spoken = [this](const QString &text) {
+        if (m_feedback != ControllerScheme::LightsFeedback)
+            emit operatorAnnounce(text);
+    };
+    connect(m_focusCallCue, &FocusCallCue::announce, this, spoken);
     connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
         // Armed: the controller is read for Start, even with nothing else on.
         if (m_focusCallCue->isArmed())
             connectControllerInput();
     });
-    connect(m_focusSession, &FocusSession::announce, this, &ProgrammerController::operatorAnnounce);
-    connect(m_refineSession, &RefineSession::announce, this, &ProgrammerController::operatorAnnounce);
+    connect(m_focusSession, &FocusSession::announce, this, spoken);
+    connect(m_refineSession, &RefineSession::announce, this, spoken);
+    // Say the light: asked for, so always said.
+    connect(m_focusSession, &FocusSession::sayLight, this, &ProgrammerController::operatorAnnounce);
+    connect(m_refineSession, &RefineSession::sayLight, this, &ProgrammerController::operatorAnnounce);
     connect(m_doc, &Doc::clearing, this, [this]() {
         m_refineSession->stop();
         m_venues->reset();
@@ -1389,6 +1397,24 @@ bool ProgrammerController::hasParkedFixtures() const
     return m_parkEffect != nullptr && !m_parkEffect->isEmpty();
 }
 
+void ProgrammerController::setOperatorFeedback(ControllerScheme::Feedback feedback)
+{
+    const bool lights = feedback != ControllerScheme::VoiceFeedback;
+    m_focusSession->setLightsFeedback(lights);
+    m_refineSession->setLightsFeedback(lights);
+    if (feedback == m_feedback)
+        return;
+    m_feedback = feedback;
+    emit operatorFeedbackChanged(feedback);
+}
+
+void ProgrammerController::cycleOperatorFeedback()
+{
+    setOperatorFeedback(ControllerScheme::nextFeedback(m_feedback));
+    // Said whatever it now is: it was asked for.
+    emit operatorAnnounce(tr("Feedback: %1.").arg(ControllerScheme::feedbackName(m_feedback)));
+}
+
 bool ProgrammerController::saveFocusCallsXML(QXmlStreamWriter *doc) const
 {
     return m_focusCalls != nullptr ? m_focusCalls->saveXML(doc) : true;
@@ -2132,6 +2158,22 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
                                                                         : (value > 0 ? 1.0f : 0.0f));
 
+    /* RS, in every tool: a tap says the light, a hold (the controller
+       tick, LongPress::holdFor()) changes the feedback. */
+    if (role == GamepadRole::RS)
+    {
+        if (value > 0)
+            m_sayHold.press();
+        else if (m_sayHold.release())
+        {
+            if (refine)
+                m_refineSession->whereAmI();
+            else
+                m_focusSession->whereAmI();
+        }
+        return true;
+    }
+
     // Refine: the same controller on the cue's own values (ControllerScheme).
     if (refine)
     {
@@ -2203,6 +2245,8 @@ void ProgrammerController::applyDesignJoystick()
             dt = qBound(nominal, m_joyTickClock.restart() / 1000.0, qMax(nominal, 0.1));
         else
             m_joyTickClock.start();
+        if (m_sayHold.due(dt))
+            cycleOperatorFeedback();
         m_focusSession->tick(dt);
         return;
     }
@@ -2216,6 +2260,8 @@ void ProgrammerController::applyDesignJoystick()
             dt = qBound(nominal, m_joyTickClock.restart() / 1000.0, qMax(nominal, 0.1));
         else
             m_joyTickClock.start();
+        if (m_sayHold.due(dt))
+            cycleOperatorFeedback();
         m_refineSession->tick(dt);
         return;
     }

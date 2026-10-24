@@ -1211,24 +1211,54 @@ QString RefineSession::wherePhrase() const
     return QString();
 }
 
+QString RefineSession::lightPhrase() const
+{
+    if (!m_active)
+        return QString();
+    QString where;
+    if (m_sceneMode)
+        where = tr("Scene %1, %2").arg(layerName(currentLayer()), wherePhrase());
+    else
+    {
+        const ShowTree::Cue *c = cue();
+        where = tr("Cue %1, %2").arg(c != nullptr ? (c->number.isEmpty() ? c->name : c->number) : QString(),
+                                     wherePhrase());
+    }
+    // The light first and briefly: the fixture, else what is picked.
+    QString light;
+    if (m_scope == FixtureScope)
+    {
+        if (const Fixture *fx = m_doc->fixture(currentFixture()))
+            light = fx->name();
+    }
+    else if (m_scope == GroupScope)
+        light = targetName(scopeTarget());
+    else
+        light = layerName(currentLayer());
+    return light.isEmpty() ? where : tr("%1. %2").arg(light, where);
+}
+
 void RefineSession::whereAmI()
 {
     if (!m_active)
         return;
     flashSelection();
-    if (m_sceneMode)
-    {
-        say(tr("Scene %1, %2").arg(layerName(currentLayer()), wherePhrase()));
+    emit sayLight(lightPhrase());
+}
+
+void RefineSession::setLightsFeedback(bool on)
+{
+    if (on == m_lightsFeedback)
         return;
-    }
-    const ShowTree::Cue *c = cue();
-    say(tr("Cue %1, %2").arg(c != nullptr ? (c->number.isEmpty() ? c->name : c->number) : QString(),
-                             wherePhrase()));
+    m_lightsFeedback = on;
+    if (!on)
+        m_flashClock.invalidate();
+    rebuildWrites();
 }
 
 void RefineSession::flashSelection()
 {
-    if (!m_active || !m_flashEnabled)
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
         return;
     m_flashClock.start();
     m_flashTimer->start();
@@ -1479,7 +1509,7 @@ void RefineSession::rebuildWrites()
             const bool picked = selected.contains(fid);
             if (picked && !dark)
                 continue;   // as the cue has it
-            if (!picked && m_scope == LayerScope)
+            if (!picked && (m_scope == LayerScope || !m_lightsFeedback))
                 continue;
             const uchar dim = uchar(qRound(dimLevel() * 255.0f));
             for (quint32 c = 0; c < fx->channels(); ++c)

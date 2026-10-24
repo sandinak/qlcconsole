@@ -97,7 +97,8 @@ fixture, the scope, and where saves go.
 | Back to what was saved | B | Backspace |
 | Zero | X | 0 |
 | Undo the last save | View | ⌘Z |
-| Where am I? | RS (right stick click) | W |
+| Say the light | RS (right stick click) | W |
+| Feedback: lights / voice / both | RS held | ⇧W |
 | Leave | Menu | Esc |
 
 Held, a D-pad arm keeps zooming or focusing until you let go; the
@@ -144,7 +145,21 @@ screen. Two things tell them where they are:
   - a fixture: "Fixture 3 of 8."
   - the whole call: "All 4, group."
   - A, B, X, View: "Saved." "Reverted." "Zeroed." "Undone."
-  - **Where am I?** (right stick click) says it all again and blinks.
+  - **Say the light** (right stick click, or W) says the light's name
+    first and then where you are — "Spot 3. Call 2 of 5, AT spots to
+    DSC. Fixture 3 of 8." — and blinks it.
+
+**Feedback: lights, voice or both.** The **Feedback** setting on the panel
+(Focus mode, Focus calls and Refine share it; it is this computer's, not
+the show's) picks how you are told:
+
+- **Lights and voice** (the default): the blinks and the voice.
+- **Lights only**: the blinks (and the panel's lamp); nothing is said.
+- **Voice only**: the voice; the rig is not blinked.
+
+**Say the light** speaks whichever it is — you asked. Hold the right stick
+click (or press ⇧W) to switch; the voice says the new one ("Feedback:
+lights only.").
 
 The voice is the Mac's own (`say`); on Linux `spd-say`, elsewhere Qt's
 speech, if the computer has one. [Refine](refine.md) speaks the same way.

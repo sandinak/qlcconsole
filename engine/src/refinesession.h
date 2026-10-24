@@ -206,7 +206,12 @@ public:
      *********************************************************************/
 public:
     QString wherePhrase() const;
+    /** "Say the light" (RS): the light's name first -- "Mover 3. Cue 4,
+     *  Movers, fixture 3 of 8." -- said whatever the feedback setting. */
+    QString lightPhrase() const;
     void whereAmI();
+    /** The rig blinks and dims (Feedback: Lights or Both); off: Voice only. */
+    void setLightsFeedback(bool on);
     void flashSelection();
     void setFlashEnabled(bool on) { m_flashEnabled = on; }
     bool isFlashing() const;
@@ -240,6 +245,8 @@ signals:
     void stopped();
     void changed();
     void announce(const QString &text);
+    /** Said because the operator asked (Say the light): always spoken. */
+    void sayLight(const QString &text);
     void exitRequested();
 
 private:
@@ -327,6 +334,7 @@ private:
     QTimer *m_flashTimer = nullptr;
     QElapsedTimer m_flashClock;
     bool m_flashEnabled = true;
+    bool m_lightsFeedback = true;
 
     mutable QMutex m_writesMutex;
     QHash<QPair<int, int>, uchar> m_writes;

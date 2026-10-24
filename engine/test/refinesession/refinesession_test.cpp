@@ -465,8 +465,9 @@ void RefineSession_Test::theOperatorIsToldWhereTheyAre()
     r->nextItem();
     r->nextItem();
     QCOMPARE(said.last().at(0).toString(), QString("AT spots, fixture 3 of 4."));
+    // Say the light: its name first.
     r->apply(ControllerScheme::WhereAmI);
-    QCOMPARE(said.last().at(0).toString(), QString("Cue 1, AT spots, fixture 3 of 4."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT 3. Cue 1, AT spots, fixture 3 of 4."));
 
     // Only the fixture picked is at the cue's level: the rest of the layer dim.
     const QHash<QPair<int, int>, uchar> w = r->pendingWrites();

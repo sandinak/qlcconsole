@@ -73,7 +73,8 @@ scope picks the first fixture.
 | Back to the cue | B | Backspace |
 | Clear the exception | X | 0 |
 | Undo | View | ⌘Z |
-| Where am I? | RS (right stick click) | W |
+| Say the light | RS (right stick click) | W |
+| Feedback: lights / voice / both | RS held | ⇧W |
 | Leave | Menu | Esc |
 
 Up is in, down is out; right tightens the focus and left loosens it,
@@ -133,7 +134,7 @@ thing to each part of a cue:
   fixture row's ▣ count shows them. **X** puts them back in the palette.
 - Each keep is one step of Build's undo (⌘Z, or View on the controller).
 
-## Where am I?
+## Telling you where you are
 
 The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
 
@@ -142,7 +143,7 @@ The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
   the cue has brighter than that; one already lower is never raised. On
   every change what is picked blinks three times.
 - **The voice.** "AT spots, layer." "AT spots, fixture 3 of 8."
-  "DS wash, group 2 of 3." "Kept." "Back to the cue." **Where am I?**
+  "DS wash, group 2 of 3." "Kept." "Back to the cue." **Say the light**
   adds the cue: "Cue 4, AT spots, fixture 3 of 8."
 
 ## Refine during the show

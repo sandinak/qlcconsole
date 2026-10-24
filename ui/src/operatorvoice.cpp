@@ -26,12 +26,15 @@
 #include <QTextToSpeech>
 #endif
 
+#include "programmercontroller.h"
+#include "controllerscheme.h"
 #include "operatorvoice.h"
 
 namespace
 {
 const QString kEnabledSetting = QStringLiteral("operatorVoice/enabled");
 const QString kDeviceSetting = QStringLiteral("operatorVoice/device");
+const QString kFeedbackSetting = QStringLiteral("controllerTools/feedback");
 
 #ifdef QLC_HAVE_TEXTTOSPEECH
 /** Qt's own: whatever engine this platform's Qt TextToSpeech has. */
@@ -257,4 +260,43 @@ void OperatorAnnouncer::announce(const QString &text)
     m_last = text;
     if (m_voice != nullptr && OperatorVoice::isEnabled())
         m_voice->say(text);
+}
+
+/*****************************************************************************
+ * OperatorFeedbackCombo
+ *****************************************************************************/
+
+OperatorFeedbackCombo::OperatorFeedbackCombo(ProgrammerController *pc, QWidget *parent)
+    : QComboBox(parent)
+    , m_pc(pc)
+{
+    setObjectName(QStringLiteral("operatorFeedback"));
+    setFocusPolicy(Qt::NoFocus);
+    addItem(tr("Lights and voice"), int(ControllerScheme::BothFeedback));
+    addItem(tr("Lights only"), int(ControllerScheme::LightsFeedback));
+    addItem(tr("Voice only"), int(ControllerScheme::VoiceFeedback));
+    setToolTip(tr("How you are told where you are: the rig blinks what is picked, the laptop says it, "
+                  "or both. Say the light (RS, or W) always speaks. Hold RS, or Shift+W, to switch."));
+    sync();
+    connect(this, &QComboBox::currentIndexChanged, this, [this]() {
+        m_pc->setOperatorFeedback(ControllerScheme::Feedback(currentData().toInt()));
+    });
+    connect(m_pc, &ProgrammerController::operatorFeedbackChanged, this, &OperatorFeedbackCombo::sync);
+}
+
+void OperatorFeedbackCombo::sync()
+{
+    const bool was = blockSignals(true);
+    setCurrentIndex(findData(int(m_pc->operatorFeedback())));
+    blockSignals(was);
+}
+
+int OperatorFeedbackCombo::savedFeedback()
+{
+    return int(ControllerScheme::feedbackFromKey(QSettings().value(kFeedbackSetting).toString()));
+}
+
+void OperatorFeedbackCombo::saveFeedback(int feedback)
+{
+    QSettings().setValue(kFeedbackSetting, ControllerScheme::feedbackKey(ControllerScheme::Feedback(feedback)));
 }
