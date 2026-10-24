@@ -268,8 +268,14 @@ public:
     /** What is said on stepping to a call, a fixture or a scope, and for
      *  Where am I? -- the phrases the design lists. */
     QString wherePhrase() const;
-    /** Say where it is (announce()) and flash what is selected. */
+    /** "Say the light" (RS): the light's name first, then where it is --
+     *  "Spot 3. Call 2 of 5, AT spots to DSC. Fixture 3 of 8." -- said
+     *  (sayLight(), whatever the feedback setting: it was asked for) and
+     *  what is selected flashed. */
     void whereAmI();
+    QString lightPhrase() const;
+    /** The rig blinks (Feedback: Lights or Both); off: Voice only. */
+    void setLightsFeedback(bool on) { m_lightsFeedback = on; }
 
     /** The flash that shows what is selected: three blinks, flashOnMs()
      *  lit and flashOffMs() dark, then steady. */
@@ -457,6 +463,8 @@ signals:
     void scopeChanged(FocusSession::Scope scope);
     /** Something to say to the operator on stage (the voice reads it). */
     void announce(const QString &text);
+    /** Said because the operator asked (Say the light): always spoken. */
+    void sayLight(const QString &text);
 
 private:
     struct Head
@@ -559,6 +567,7 @@ private:
     VenueCorrections *m_venues = nullptr;
     QTimer *m_flashTimer = nullptr;
     bool m_flashEnabled = true;
+    bool m_lightsFeedback = true;
     QElapsedTimer m_flashClock;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };

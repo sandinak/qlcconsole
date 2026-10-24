@@ -30,6 +30,7 @@
 #include "showtreecontroller.h"
 #include "focuscontrolmap.h"
 #include "refinesession.h"
+#include "operatorvoice.h"
 #include "refinepanel.h"
 #include "fixture.h"
 #include "doc.h"
@@ -156,6 +157,9 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     });
 
     QHBoxLayout *bottom = new QHBoxLayout;
+    // Feedback: lights, voice or both (shared with Focus mode).
+    bottom->addWidget(new QLabel(tr("Feedback:"), this));
+    bottom->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
     QPushButton *keep = new QPushButton(tr("Keep (A)"), this);
     keep->setObjectName(QStringLiteral("refineKeep"));
     QPushButton *back = new QPushButton(tr("Back to the cue (B)"), this);
@@ -368,7 +372,13 @@ bool RefinePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Semicolon: m_session->apply(CS::FocusNearer); break;
         case Qt::Key_Apostrophe: m_session->apply(CS::FocusFarther); break;
         case Qt::Key_P:        m_session->apply(CS::Alternate); break;
-        case Qt::Key_W:        m_session->apply(CS::WhereAmI); break;
+        case Qt::Key_W:
+            // Say the light; with Shift, the feedback changes (as RS held).
+            if (modifiers & Qt::ShiftModifier)
+                m_doc->programmer()->cycleOperatorFeedback();
+            else
+                m_session->apply(CS::WhereAmI);
+            break;
         case Qt::Key_S:
             if (!m_session->isTrackedLayer())
                 return false;

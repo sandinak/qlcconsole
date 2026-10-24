@@ -79,6 +79,55 @@ namespace ControllerScheme
     /** Every verb in map order, for a table. */
     QLC_ENGINE_EXPORT QList<Verb> verbs();
 
+    /** How the tools tell the operator on stage where they are (Branson):
+     *  the rig's blinks (and the panel's lamp), the laptop's voice, or both.
+     *  "Say the light" speaks whatever this is: it was asked for. */
+    enum Feedback { LightsFeedback, VoiceFeedback, BothFeedback };
+    /** "lights only", "voice only", "lights and voice". */
+    QLC_ENGINE_EXPORT QString feedbackName(Feedback feedback);
+    /** Both -> Lights -> Voice -> Both. */
+    QLC_ENGINE_EXPORT Feedback nextFeedback(Feedback feedback);
+    /** As a setting is kept: "lights", "voice", "both" (and back; anything
+     *  else is Both). */
+    QLC_ENGINE_EXPORT QString feedbackKey(Feedback feedback);
+    QLC_ENGINE_EXPORT Feedback feedbackFromKey(const QString &key);
+
+    /**
+     * A press that means one thing when tapped and another when held
+     * (RS: say the light; held: change the feedback). release() says a tap;
+     * due() says, once, that it has been held long enough.
+     */
+    class QLC_ENGINE_EXPORT LongPress
+    {
+    public:
+        static constexpr double holdFor() { return 0.6; }
+        void press() { m_down = true; m_held = 0.0; m_fired = false; }
+        /** Let go: true when it was a tap (not held to holdFor()). */
+        bool release()
+        {
+            const bool tap = m_down && !m_fired;
+            m_down = false;
+            return tap;
+        }
+        /** True once, when it has been held for holdFor(). */
+        bool due(double dt)
+        {
+            if (!m_down || m_fired)
+                return false;
+            m_held += dt;
+            if (m_held + 1e-9 < holdFor())
+                return false;
+            m_fired = true;
+            return true;
+        }
+        bool isDown() const { return m_down; }
+
+    private:
+        bool m_down = false;
+        bool m_fired = false;
+        double m_held = 0.0;
+    };
+
     /** Whether @p verb repeats while its control is held: the D-pad's zoom
      *  and focus arms. Bumpers, triggers and the rest step once a press. */
     QLC_ENGINE_EXPORT bool repeats(Verb verb);

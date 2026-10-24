@@ -30,7 +30,10 @@ pad if you have one.
      left loosens it (' and ;).
    - **A** (Return): save.
    - **Y** (G): the whole call. Nudge once, and every head moves.
-   - **RS click** (W): "Where am I?"
+   - **RS click** (W): **Say the light** — "Mover 2. Call 1 of 2, Movers
+     to Centre. Fixture 2 of 8." Hold RS (⇧W) to switch the feedback
+     between lights only, voice only, and both; the setting is also on the
+     panel.
 3. **Venue, not show.** Leave the calls with **Menu** (Esc). In Finder,
    look for `<show>.venues.xml` next to the show: it holds your offsets. The
    show is not marked modified. Reopen Focus calls: **Rename…**, **Apply
@@ -142,7 +145,8 @@ does the same **kind** of thing in every tool:
 | **View / Back** | Undo | Undo last save (a group save is one step) | same | Show Tree undo |
 | **Menu / Start** | Exit | Ask about unsaved, leave | same. **On an armed focus-call cue (no session yet): begins the calls** (§7) | Ask "Keep what is pending?", leave |
 | **LS click** | Alternate | Second reference | Second reference (rarely needed: each call has its own point) | **D-pad page**: beam → colour → gobo |
-| **RS click** | Where am I? | Say it, flash it | Say it, flash it | Say it, flash it |
+| **RS click** | Say the light | The light's name first, then where; flashed. Spoken whatever the feedback setting | same | same |
+| **RS held (0.6 s)** | Feedback | Lights → Voice → Both, said ("Feedback: voice only.") | same | same |
 | View + Menu held | — | Opens Focus mode (as before) | — | — |
 | Guide | — | unused | unused | unused |
 
@@ -177,7 +181,8 @@ truss trims a little low. A bumper goes back to one head.
 | Calls / layers | PgDn / PgUp |
 | Fixtures | ] / [ |
 | Scope | G |
-| Where am I? | W |
+| Say the light | W |
+| Feedback (cycle) | ⇧W |
 | Page (Refine) | P |
 | Keep | Return |
 | Back | Backspace |
@@ -223,6 +228,25 @@ the show is touched.
   - Other layers are left as the cue has them.
   - The flash darkens the selected fixtures in the "off" phase.
 
+### Feedback: lights, voice or both
+
+Branson's ask: one setting, **Lights / Voice / Both** (default Both), shared
+by Focus mode, Focus calls and Refine. It lives in
+`ProgrammerController::operatorFeedback()`; the UI keeps it in Settings
+(`controllerTools/feedback`), not in the show. Each panel has it as a
+**Feedback:** choice.
+
+- **Lights:** the rig's blinks (and Refine's dimming) plus the panel's
+  status lamp; no voice.
+- **Voice:** spoken lines only; the rig is not blinked. The lamp stays on
+  screen, since it is harmless.
+- **Both:** lights and voice.
+
+**Say the light** (RS tap, or W) speaks in every mode, because the operator
+asked for it. It gives the light's name first and briefly, then where it is.
+Holding RS for 0.6 s (or pressing ⇧W) cycles the setting and says the new one
+(`ControllerScheme::LongPress`, ticked by the controller tick).
+
 ### Voice
 
 The laptop says where the controller is, briefly. The laptop's output feeds
@@ -254,7 +278,7 @@ device choice; Qt TextToSpeech uses the system output).
 | Next call / layer | "Call 2 of 5, AT spots to Soloist DS. Fixture 1 of 3." | "DS wash, layer." |
 | Next fixture | "Fixture 3 of 8." (with the call prefix) | "AT spots, fixture 3 of 8." |
 | Scope to group | "… All 4, group." | "AT spots SL, group 1 of 2." |
-| Where am I? (RS click) | The full phrase again | "Cue 4, AT spots, fixture 3 of 8." |
+| Say the light (RS click) | "Spot 3. Call 2 of 5, AT spots to Soloist DS. Fixture 3 of 8." | "Mover 3. Cue 4, AT spots, fixture 3 of 8." |
 | A / B / X / View | "Saved." / "Saved 4." / "Reverted." / "Zeroed." / "Undone." / "Nothing to undo." | "Kept." / "Back to the cue." / "Exception cleared." / "Undone." |
 | Refusals | — | "This layer is aimed at a target. Refine a fixture, or move the target." / "No zoom here." / "No focus here." |
 | Page / palette | — | "Colour page." / "Gobo page." / "Beam page: zoom and focus." / the palette's name |
@@ -632,7 +656,7 @@ Tests:
 │ Second reference ────┤  (LS)  ○X ○B ───┼── Revert                   │
 │ Zoom ▲in▼out Focus ◀▶┤  ✚       ○A ───┼── Save for this venue      │
 │                      └──────( R )──────┼── Fine nudge               │
-│                                 (RS) ──┴── Where am I?              │
+│                                 (RS) ──┴── Say the light (hold: fb) │
 │                                                            [ Exit ] │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -656,7 +680,7 @@ Tests:
 │ D-pad page ──────────┤  (LS)  ○X ○B ───┼── Back to the cue          │
 │ Zoom ▲in▼out Focus ◀▶┤  ✚       ○A ───┼── Keep in the cue          │
 │  colour, gobo) ──────┘  ────( R )──────┼── Fine move                │
-│                                 (RS) ──┴── Where am I?              │
+│                                 (RS) ──┴── Say the light (hold: fb) │
 │ [Keep (A)]  [Back to the cue (B)]                          [ Exit ] │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -773,6 +797,8 @@ step").
 | Q-D2 | When a focus-call cue starts and no venue is applied, it makes a **dated venue** by itself (Q110). Should it ask instead? | Dated venue. |
 | Q-D3 | Should finishing the calls GO on automatically, or wait for the stage manager's GO? | GOes on automatically (as asked). |
 | Q-D4 | Voice output device on Linux and Windows. | Mac only (`say -a`); the others use the system output. |
+| Q-E1 | Is holding RS the right way to change the feedback from the controller? Every other control is taken. | RS held 0.6 s; ⇧W on the keyboard; the panel's Feedback choice. |
+| Q-E2 | In Lights only, should the armed focus-call cue still say "Focus calls ready"? Today it does not; the cue page, Run tab and footer still show it. | Silent in Lights only. |
 
 ---
 

@@ -37,6 +37,9 @@ private slots:
     void theControllerSchemeIsOneMap();
     /** A held D-pad arm repeats after a delay; nothing else does. */
     void aHeldArmRepeats();
+    /** Feedback: lights, voice or both, cycled by a held RS; Say the light
+     *  speaks whatever it is. */
+    void feedbackIsLightsVoiceOrBoth();
     /** A trigger is a button with hysteresis. */
     void aTriggerPressesOnce();
     /** The show's calls survive a save and load, in order. */

@@ -1021,7 +1021,8 @@ and jump as you nudged.)
 | Zero the offsets | X | 0 |
 | This head / all of them (scope) | Y | G |
 | The other reference | LS (left stick click) | R |
-| Where am I? (said and flashed) | RS (right stick click) | W |
+| Say the light (its name, then where you are) | RS (right stick click) | W |
+| Feedback: lights / voice / both | RS held | ⇧W |
 | Next / previous focus call | RT / LT | PgDn / PgUp |
 | Undo the last save | View | ⌘Z |
 | Leave | Menu | Esc |
@@ -1055,7 +1056,8 @@ stick pushed up and to the right:
   greyed and marked *not on this controller*. The Guide button is not
   used. The triggers step focus calls (they say so when calls are being
   run), the left stick click is the second reference and the right stick
-  click is **Where am I?**
+  click is **Say the light** (held: the feedback setting, see
+  [Focus calls](focus-calls.md#telling-the-operator-where-they-are)).
 - **Click a control** on the map to do what pressing it would.
 
 ### Controller or keyboard

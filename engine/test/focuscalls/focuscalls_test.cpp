@@ -201,6 +201,64 @@ void FocusCalls_Test::aHeldArmRepeats()
     QCOMPARE(h.due(1.0), 0);
 }
 
+void FocusCalls_Test::feedbackIsLightsVoiceOrBoth()
+{
+    using namespace ControllerScheme;
+    QCOMPARE(nextFeedback(BothFeedback), LightsFeedback);
+    QCOMPARE(nextFeedback(LightsFeedback), VoiceFeedback);
+    QCOMPARE(nextFeedback(VoiceFeedback), BothFeedback);
+    QCOMPARE(feedbackFromKey(feedbackKey(VoiceFeedback)), VoiceFeedback);
+    QCOMPARE(feedbackFromKey("nonsense"), BothFeedback);
+    QCOMPARE(label(FocusTool, WhereAmI), QString("Say the light (hold: feedback)"));
+
+    // RS: a tap says the light; held for holdFor() it changes the feedback.
+    LongPress rs;
+    rs.press();
+    QVERIFY(!rs.due(0.3));
+    QVERIFY(rs.release());                        // a tap
+    rs.press();
+    QVERIFY(!rs.due(0.3));
+    QVERIFY(rs.due(0.3));                         // held 0.6 s: once
+    QVERIFY(!rs.due(1.0));
+    QVERIFY(!rs.release());                       // not a tap as well
+
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    ProgrammerController *pc = m_doc->programmer();
+    QCOMPARE(pc->operatorFeedback(), BothFeedback);     // the default
+    FocusSession *s = pc->focusSession();
+    s->setFlashEnabled(true);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    FocusSession::Options o;
+    o.fixtures = { a->id() };
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QVERIFY(s->isFlashing());
+    QCOMPARE(said.last().at(0).toString(), QString("Fixture 1 of 1."));
+
+    // Lights only: no voice, but Say the light still speaks (asked for).
+    pc->cycleOperatorFeedback();
+    QCOMPARE(pc->operatorFeedback(), LightsFeedback);
+    QCOMPARE(said.last().at(0).toString(), QString("Feedback: lights only."));
+    const int count = said.count();
+    s->next();
+    s->zero();
+    QCOMPARE(said.count(), count);
+    s->whereAmI();
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3. Fixture 1 of 1."));
+    QVERIFY(s->isFlashing());
+
+    // Voice only: no blinks on the rig.
+    pc->cycleOperatorFeedback();
+    QCOMPARE(said.last().at(0).toString(), QString("Feedback: voice only."));
+    QTRY_VERIFY_WITH_TIMEOUT(!s->isFlashing(), 2000);
+    s->whereAmI();
+    QVERIFY(!s->isFlashing());
+    pc->cycleOperatorFeedback();
+    QCOMPARE(pc->operatorFeedback(), BothFeedback);
+    s->stop();
+}
+
 void FocusCalls_Test::aTriggerPressesOnce()
 {
     ControllerScheme::TriggerButton t;
@@ -414,8 +472,12 @@ void FocusCalls_Test::theOperatorIsToldWhereTheyAre()
     QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. All 2, group."));
     s->nextCall();
     QCOMPARE(said.last().at(0).toString(), QString("Call 2 of 2, AT spots to Soloist DS. All 1, group."));
+    // Say the light: the light (here the whole call, by its groups) first.
     s->apply(FocusSession::WhereAmI);
-    QCOMPARE(said.last().at(0).toString(), QString("Call 2 of 2, AT spots to Soloist DS. All 1, group."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT spots. Call 2 of 2, AT spots to Soloist DS. All 1, group."));
+    s->setScope(FocusSession::FixtureScope);
+    s->whereAmI();
+    QCOMPARE(said.last().at(0).toString(), QString("C. Call 2 of 2, AT spots to Soloist DS. Fixture 1 of 1."));
     s->save();
     QCOMPARE(said.last().at(0).toString(), QString("Saved."));
     s->apply(FocusSession::UndoSave);

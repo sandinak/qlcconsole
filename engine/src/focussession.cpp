@@ -492,12 +492,26 @@ QString FocusSession::wherePhrase() const
     return parts.join(QLatin1Char(' '));
 }
 
+QString FocusSession::lightPhrase() const
+{
+    if (!m_active)
+        return QString();
+    // The light first and briefly; the whole call, by its groups.
+    QString light;
+    if (m_scope == GroupScope)
+        light = isRunningCalls() && !currentCall().who.isEmpty() ? currentCall().who
+                                                                 : tr("All %1").arg(m_order.size());
+    else if (const Fixture *fx = m_doc->fixture(currentFixture()))
+        light = fx->name();
+    return light.isEmpty() ? wherePhrase() : tr("%1. %2").arg(light, wherePhrase());
+}
+
 void FocusSession::whereAmI()
 {
     if (!m_active)
         return;
     flashSelection();
-    emit announce(wherePhrase());
+    emit sayLight(lightPhrase());
 }
 
 bool FocusSession::flashLit(qint64 ms)
@@ -509,7 +523,7 @@ bool FocusSession::flashLit(qint64 ms)
 
 void FocusSession::flashSelection()
 {
-    if (!m_active || !m_flashEnabled)
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
         return;
     m_flashClock.start();
     if (m_flashTimer != nullptr)

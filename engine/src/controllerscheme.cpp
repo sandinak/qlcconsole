@@ -129,7 +129,7 @@ QString ControllerScheme::label(Tool tool, Verb verb)
             return tool == RefineTool ? tr("D-pad page: beam / colour / gobo")
                                       : tr("Second reference");
         case WhereAmI:
-            return tr("Where am I?");
+            return tr("Say the light (hold: feedback)");
         case NoVerb:
             break;
     }
@@ -141,6 +141,48 @@ QString ControllerScheme::stickLabel(Tool tool, bool fine)
     if (tool == RefineTool)
         return fine ? tr("Fine move") : tr("Move");
     return fine ? tr("Fine nudge") : tr("Nudge");
+}
+
+QString ControllerScheme::feedbackName(Feedback feedback)
+{
+    switch (feedback)
+    {
+        case LightsFeedback: return tr("lights only");
+        case VoiceFeedback:  return tr("voice only");
+        case BothFeedback:   break;
+    }
+    return tr("lights and voice");
+}
+
+ControllerScheme::Feedback ControllerScheme::nextFeedback(Feedback feedback)
+{
+    switch (feedback)
+    {
+        case BothFeedback:   return LightsFeedback;
+        case LightsFeedback: return VoiceFeedback;
+        case VoiceFeedback:  break;
+    }
+    return BothFeedback;
+}
+
+QString ControllerScheme::feedbackKey(Feedback feedback)
+{
+    switch (feedback)
+    {
+        case LightsFeedback: return QStringLiteral("lights");
+        case VoiceFeedback:  return QStringLiteral("voice");
+        case BothFeedback:   break;
+    }
+    return QStringLiteral("both");
+}
+
+ControllerScheme::Feedback ControllerScheme::feedbackFromKey(const QString &key)
+{
+    if (key == QLatin1String("lights"))
+        return LightsFeedback;
+    if (key == QLatin1String("voice"))
+        return VoiceFeedback;
+    return BothFeedback;
 }
 
 bool ControllerScheme::repeats(Verb verb)

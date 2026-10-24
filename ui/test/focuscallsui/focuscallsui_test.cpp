@@ -52,6 +52,7 @@
 #include "workbench.h"
 #include "focuscallcue.h"
 #include "cuerunner.h"
+#include "controllerscheme.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -401,6 +402,38 @@ void FocusCallsUi_Test::aFocusCallCueWaitsForTheController()
     QCOMPARE(goOn.count(), 1);
     QVERIFY(runner.focusArmedText().isEmpty());
     m_doc->setMode(Doc::Design);
+}
+
+void FocusCallsUi_Test::feedbackIsOneSettingOnEveryPanel()
+{
+    QSettings().remove("controllerTools/feedback");
+    QCOMPARE(OperatorFeedbackCombo::savedFeedback(), int(ControllerScheme::BothFeedback));
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession::Options o;
+    o.fixtures = m_spots;
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = m_target;
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(m_doc, nullptr, o, &why,
+                                                               int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QComboBox *combo = panel->findChild<QComboBox *>("operatorFeedback");
+    QVERIFY(combo != nullptr);
+    QCOMPARE(combo->currentData().toInt(), int(ControllerScheme::BothFeedback));
+    combo->setCurrentIndex(combo->findData(int(ControllerScheme::VoiceFeedback)));
+    QCOMPARE(pc->operatorFeedback(), ControllerScheme::VoiceFeedback);
+    // Shift+W: the next one, said; the panel follows.
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QTest::keyClick(panel, Qt::Key_W, Qt::ShiftModifier);
+    QCOMPARE(pc->operatorFeedback(), ControllerScheme::BothFeedback);
+    QCOMPARE(said.last().at(0).toString(), QString("Feedback: lights and voice."));
+    QCOMPARE(combo->currentData().toInt(), int(ControllerScheme::BothFeedback));
+    // W: Say the light.
+    QTest::keyClick(panel, Qt::Key_W);
+    QCOMPARE(said.last().at(0).toString(), QString("T1. Fixture 1 of 3."));
+    OperatorFeedbackCombo::saveFeedback(int(ControllerScheme::LightsFeedback));
+    QCOMPARE(OperatorFeedbackCombo::savedFeedback(), int(ControllerScheme::LightsFeedback));
+    QSettings().remove("controllerTools/feedback");
 }
 
 void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()

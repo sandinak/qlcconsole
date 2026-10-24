@@ -646,6 +646,11 @@ void App::init()
         /* Focus calls and Refine say where the controller is, from the
            laptop, to whoever holds it on stage (board Q107). */
         new OperatorAnnouncer(pc, OperatorVoice::create(this), this);
+        // Feedback: Lights / Voice / Both, this computer's choice.
+        pc->setOperatorFeedback(ControllerScheme::Feedback(OperatorFeedbackCombo::savedFeedback()));
+        connect(pc, &ProgrammerController::operatorFeedbackChanged, this, [](ControllerScheme::Feedback f) {
+            OperatorFeedbackCombo::saveFeedback(int(f));
+        });
         /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): the panel when
            its calls begin; Cmd+Return begins them, as Start does; the
            footer says it waits. */

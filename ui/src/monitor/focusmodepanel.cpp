@@ -39,6 +39,7 @@
 #include "controllerkeepalive.h"
 #include "focuscontrolmap.h"
 #include "venuecorrections.h"
+#include "operatorvoice.h"
 #include "focusmodepanel.h"
 #include "programmercontroller.h"
 #include "monitorproperties.h"
@@ -598,6 +599,9 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     });
     m_deviceLabel = new QLabel(this);
     m_deviceLabel->setObjectName(QStringLiteral("focusDevice"));
+    // Feedback: lights, voice or both (shared with Refine).
+    use->addWidget(new QLabel(tr("Feedback:"), this));
+    use->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
     m_deviceLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
     use->addWidget(m_deviceLabel, 1);
     vl->addLayout(use);
@@ -943,7 +947,13 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_PageDown: m_session->nextCall(); break;
         case Qt::Key_PageUp:   m_session->previousCall(); break;
         case Qt::Key_G:        m_session->cycleScope(); break;
-        case Qt::Key_W:        m_session->whereAmI(); break;
+        case Qt::Key_W:
+            // Say the light; with Shift, the feedback changes (as RS held).
+            if (modifiers & Qt::ShiftModifier)
+                m_doc->programmer()->cycleOperatorFeedback();
+            else
+                m_session->whereAmI();
+            break;
         // The beam (Q103): narrower, wider; ⇧ for 5°.
         case Qt::Key_Comma:
         case Qt::Key_Less:     m_session->nudgeBeam(shift ? -5.0f : -1.0f); refresh(); break;

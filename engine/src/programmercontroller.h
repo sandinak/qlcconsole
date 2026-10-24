@@ -34,6 +34,7 @@
 #include <QElapsedTimer>
 #include <QVector3D>
 
+#include "controllerscheme.h"
 #include "scenevalue.h"
 #include "doc.h"
 
@@ -184,6 +185,15 @@ public:
     /** A focus-call cue in a playing list: armed, Start begins the calls.
      *  Never null. */
     FocusCallCue *focusCallCue() const { return m_focusCallCue; }
+
+    /** How Focus mode, Focus calls and Refine tell the operator where they
+     *  are: the rig's blinks, the voice, or both (the operator's choice, kept
+     *  by the UI in Settings, not in the show). Lights only: nothing is said
+     *  but what Say the light is asked for. */
+    ControllerScheme::Feedback operatorFeedback() const { return m_feedback; }
+    void setOperatorFeedback(ControllerScheme::Feedback feedback);
+    /** The next one, said ("Feedback: lights only."): RS held, or Shift+W. */
+    void cycleOperatorFeedback();
     /** Refine: the controller on a Show Tree cue's own values. Never null. */
     RefineSession *refineSession() const { return m_refineSession; }
 
@@ -478,6 +488,7 @@ signals:
     /** Focus mode, Focus calls or Refine has something to say to the
      *  operator on stage (the UI's voice reads it). */
     void operatorAnnounce(const QString &text);
+    void operatorFeedbackChanged(ControllerScheme::Feedback feedback);
     /** A controller came or went, or its profile changed: ask
      *  focusController() again. */
     void focusControllerChanged();
@@ -631,6 +642,9 @@ private:
     FocusSession *m_focusSession = nullptr;
     FocusCalls *m_focusCalls = nullptr;
     FocusCallCue *m_focusCallCue = nullptr;
+    ControllerScheme::Feedback m_feedback = ControllerScheme::BothFeedback;
+    /** RS: a tap says the light, a hold changes the feedback. */
+    ControllerScheme::LongPress m_sayHold;
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
     /** See controllerKeepAlive(). */

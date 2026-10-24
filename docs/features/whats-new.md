@@ -21,7 +21,9 @@ their house lights, relays and subs.
 - **Refine.** The same controller on a Show Tree cue's own values:
   position, zoom, focus, colour, gobo — the layer as a whole, or one
   fixture as an exception (a child layer). See [Refine](refine.md).
-- **Where am I?** What is picked blinks, and the laptop says it: "AT
+- **Say the light.** The right stick click says the light's name and
+  where you are; **Feedback** picks lights, voice or both (hold it to
+  switch). What is picked blinks, and the laptop says it: "AT
   spots, layer", "fixture 3 of 8".
 - **One layout.** Y is now the scope in Focus mode too (one head, or all
   of them); the second reference moved to the left stick click.

@@ -20,6 +20,7 @@
 #ifndef OPERATORVOICE_H
 #define OPERATORVOICE_H
 
+#include <QComboBox>
 #include <QPointer>
 #include <QObject>
 #include <QString>
@@ -157,6 +158,26 @@ public slots:
 private:
     OperatorVoice *m_voice;
     QString m_last;
+};
+
+/**
+ * Feedback: Lights / Voice / Both -- one setting for Focus mode, Focus calls
+ * and Refine (ProgrammerController::operatorFeedback()), on each panel. The
+ * setting is this computer's (Settings), not the show's.
+ */
+class OperatorFeedbackCombo final : public QComboBox
+{
+    Q_OBJECT
+public:
+    OperatorFeedbackCombo(class ProgrammerController *pc, QWidget *parent = nullptr);
+
+    /** Settings: what this computer last chose (Both when nothing). */
+    static int savedFeedback();
+    static void saveFeedback(int feedback);
+
+private:
+    void sync();
+    class ProgrammerController *m_pc;
 };
 
 /** @} */
