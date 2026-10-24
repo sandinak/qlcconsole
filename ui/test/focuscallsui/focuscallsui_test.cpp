@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QToolButton>
 #include <QListWidget>
 #include <QPushButton>
 #include <QComboBox>
@@ -46,7 +47,10 @@
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "focuscalls.h"
+#include "programmingoutline.h"
+#include "workbench.h"
 #include "fixture.h"
+#include "scene.h"
 #include "doc.h"
 
 namespace
@@ -302,6 +306,45 @@ void FocusCallsUi_Test::theRefinePanel()
     // Escape with nothing pending leaves at once.
     QTest::keyClick(panel, Qt::Key_Escape);
     QVERIFY(!m_doc->programmer()->refineSession()->isActive());
+    QTRY_VERIFY(panel.isNull());
+}
+
+void FocusCallsUi_Test::refineFromTheWorkbench()
+{
+    Scene *s = new Scene(m_doc);
+    s->setName("Ballad look");
+    s->addFixtureGroup(m_group);
+    QLCPalette *centre = new QLCPalette(QLCPalette::PanTilt);
+    centre->setName("Centre");
+    centre->setValues({ 270, 135 });
+    m_doc->addPalette(centre);
+    s->addPalette(centre->id());
+    QVERIFY(m_doc->addFunction(s));
+
+    Workbench wb(m_doc);
+    QToolButton *btn = wb.findChild<QToolButton *>("workbenchRefine");
+    QVERIFY(btn != nullptr);
+    wb.load(s->id());
+    QCOMPARE(wb.refineScenes(), QList<quint32>({ s->id() }));
+    QVERIFY(!btn->isHidden());
+
+    // The header's Refine: the scene, as a layer, on the same controller.
+    btn->click();
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->isSceneMode());
+    QPointer<RefinePanel> panel = RefinePanel::instance();
+    QVERIFY(panel != nullptr);
+    QVERIFY2(panel->headline().contains("scene Ballad look"), qPrintable(panel->headline()));
+    QCOMPARE(panel->controlMap()->actionText(GamepadRole::Y),
+             QString("Scope: layer \342\206\222 group \342\206\222 fixture"));
+    r->stop();
+
+    // A fixture's row: Refine starts on that fixture, at Fixture scope.
+    QVERIFY(wb.openRefine(s->id(), 0xFFFFFFFF, m_spots.at(1)));
+    QCOMPARE(r->scope(), RefineSession::FixtureScope);
+    QCOMPARE(r->currentFixture(), m_spots.at(1));
+    QVERIFY(panel->scopeLine().startsWith("Fixture: an exception for T2"));
+    r->stop();
     QTRY_VERIFY(panel.isNull());
 }
 

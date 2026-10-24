@@ -95,6 +95,14 @@ public:
      *  it can refine (own, top-level, on fixtures), or no cue. Previews the
      *  cue. */
     bool start(quint32 cueId, quint32 layerId = 0xFFFFFFFF, QString *why = nullptr);
+    /** Refine Build scenes (the Workbench's stack): each scene is a layer,
+     *  its group rows the groups, an exception a fixture left out of the
+     *  attribute's palettes with the scene's own values on it (section 6B).
+     *  Starts on @p first (invalid: the first). */
+    bool startScene(const QList<quint32> &sceneIds, quint32 first = 0xFFFFFFFF,
+                    QString *why = nullptr);
+    /** Refining Build scenes, not a Show Tree cue. */
+    bool isSceneMode() const { return m_active && m_sceneMode; }
     /** Stop, dropping anything not kept. */
     void stop();
     bool isActive() const { return m_active; }
@@ -128,6 +136,11 @@ public:
      *  the first fixture. */
     void nextItem();
     void previousItem();
+
+    /** Start on @p fid at Fixture scope (an entry from a fixture's row). */
+    bool pickFixture(quint32 fid);
+    /** Start on the group (piece) with group @p groupId at Group scope. */
+    bool pickGroup(quint32 groupId);
 
     /** What the controller works on now. */
     QList<quint32> scopeFixtures() const;
@@ -230,6 +243,17 @@ private:
     };
 
     const ShowTree::Cue *cue() const;
+    /* Build scenes (refinescene.cpp). */
+    class Scene *sceneAt(quint32 sceneId) const;
+    QList<quint32> sceneFixtures() const;
+    QList<ShowTree::Target> sceneGroups() const;
+    /** The scene's palettes that set @p key on @p fid, as a look. */
+    const ShowTree::Look *sceneLookFor(quint32 fid, const QString &key, QList<quint32> *lit = nullptr) const;
+    /** @p fid has its own (raw) @p key values, out of the palettes. */
+    bool sceneHasOwn(quint32 fid, const QString &key) const;
+    QHash<quint32, uchar> sceneRawValues(quint32 fid) const;
+    bool sceneKeep(QString *why);
+    bool sceneClearException();
     const ShowTree::Layer *layer(quint32 layerId) const;
     /** The child layer of @p layerId exactly on @p target, if any. */
     const ShowTree::Layer *childOn(quint32 layerId, const ShowTree::Target &target) const;
@@ -251,6 +275,8 @@ private:
 private:
     Doc *m_doc;
     bool m_active = false;
+    bool m_sceneMode = false;
+    mutable ShowTree::Look m_sceneLook;
     quint32 m_cue = 0xFFFFFFFF;
     QList<quint32> m_layers;
     int m_layerIndex = -1;

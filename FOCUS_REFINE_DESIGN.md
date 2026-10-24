@@ -370,6 +370,37 @@ between them does not end it.
 **Layers listed.** The cue's **own top-level** layers on fixtures. Opaque
 function layers, and layers that are only tracked in, are not listed (§12).
 
+### 6B. Refine on a Build scene (from the Workbench)
+
+The owner asked for Refine "in the show-tree/builder" with the controller
+"very consistent between the two". It is the same `RefineSession`, the same
+controller table, panel, flash and voice. Only what an edit is stored as
+changes (`engine/src/refinescene.cpp`). A Build scene has no layers, so each
+part of a cue maps to its nearest equivalent:
+
+| Cue part | Build scene equivalent |
+|---|---|
+| Layer (triggers) | **The scene.** The triggers step the scenes in the Workbench stack (a collection's members); with one scene they stay on it. |
+| Group (Group scope) | **A group row** of the scene (`Scene::fixtureGroups()`), plus its loose fixtures as one piece. |
+| Layer's look | **The scene's palettes.** In a scene they play on everything it lights, minus each palette's excluded fixtures. |
+| Layer-scope edit | The scene's palette for the attribute has its **value moved in place**: `PaletteOps::valueStep`, the Look Editor's step, so a shared palette changes everywhere it is used. With no palette, the scene's raw values on all its fixtures. Colour/gobo: the palette picked replaces the scene's palette of that type. |
+| Exception (child layer) | **Out of the attribute's palettes** (`Scene::setExcludedFixtures`), with the value as the scene's own **raw values** on those fixtures (added as fixture rows if they are only in a group). This is what the Show Tree's child layers bake to. One `PaletteOps::sceneStep`. **X** reverses it. |
+| Show Tree undo | Build's undo (`PaletteOps::undo`). |
+
+Entry points:
+
+- the Workbench header's **Refine…**, for a scene or a cue on loan from the
+  Show Tree;
+- **Refine on the controller…** on the right-click menu of a scene, group
+  or fixture row (Stack mode), and of a cue's layer row (`TreeCueStack`).
+
+**Not clean:**
+
+- Editing a shared palette in place is Build's rule, but it differs from
+  the Show Tree, where Refine makes a one-off. This is question Q-B1 in §11.
+- A Layer-scope keep that changes a palette **and** raw values is two undo
+  steps, not one.
+
 ---
 
 ## 7. Entry points
@@ -381,7 +412,8 @@ function layers, and layers that are only tracked in, are not listed (§12).
 | Controller **View + Menu** | Plain Focus mode (as before) | ✅ (unchanged) |
 | Show Tree cue page → **Refine on the controller…** | Refine that cue, first layer | ✅ |
 | Show Tree layer right-click → **Refine on the controller…** | Refine starting on that layer | ✅ |
-| Build Workbench (a cue on loan from the Show Tree) | A Refine button on the Workbench header | ✗ (next) |
+| Build Workbench header → **Refine…** (a scene, or a cue on loan) | Refine what is loaded (§6B) | ✅ |
+| Build Workbench right-click on a scene, group, fixture or cue-layer row | Refine starting there | ✅ |
 | A **focus-call cue** in a cue list | See below | ✗ (designed) |
 
 **A focus-call cue (designed, not built).** This is a cue flag
@@ -589,7 +621,6 @@ step").
 **Stubbed or not built:**
 
 - A focus-call cue in a list (designed in §7).
-- A Refine button on the Build Workbench.
 - Refine of tracked-in layers.
 - A venue manager UI (rename and delete exist in the engine only).
 - Help screenshots for the new panels (`./help-shots.sh` entries).
@@ -598,7 +629,6 @@ step").
 **Next, in order:**
 
 1. Branson tries it; then voice, rumble and shutters (Q113).
-2. A Refine button on the Workbench header when a cue is on loan.
 3. The focus-call cue (needs Focus mode in Operate, as Refine now is).
 4. A venue manager (rename/delete) in the dialog.
 5. Help shots.

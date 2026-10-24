@@ -58,6 +58,32 @@ RefinePanel *RefinePanel::open(Doc *doc, QWidget *parent, quint32 cueId, quint32
             QMessageBox::information(parent, tr("Refine"), reason);
         return nullptr;
     }
+    return showPanel(doc, parent);
+}
+
+RefinePanel *RefinePanel::openScene(Doc *doc, QWidget *parent, const QList<quint32> &sceneIds,
+                                    quint32 first, quint32 groupId, quint32 fixtureId, QString *why)
+{
+    RefineSession *s = doc->programmer()->refineSession();
+    QString reason;
+    if (!s->startScene(sceneIds, first, &reason))
+    {
+        if (why != nullptr)
+            *why = reason;
+        else
+            QMessageBox::information(parent, tr("Refine"), reason);
+        return nullptr;
+    }
+    // From a row: that group or fixture, as the Show Tree's layer menu does.
+    if (fixtureId != 0xFFFFFFFF)
+        s->pickFixture(fixtureId);
+    else if (groupId != 0xFFFFFFFF)
+        s->pickGroup(groupId);
+    return showPanel(doc, parent);
+}
+
+RefinePanel *RefinePanel::showPanel(Doc *doc, QWidget *parent)
+{
     if (s_instance != nullptr)
     {
         s_instance->refresh();
@@ -185,25 +211,40 @@ void RefinePanel::refresh()
     if (!m_session->isActive())
         return;
     const ShowTree::Cue *cue = m_doc->showTree()->cue(m_session->cueId());
-    m_title->setText(tr("Refine \342\200\224 cue %1 %2  \302\267  layer %3 of %4")
-                     .arg(cue != nullptr ? cue->number : QString(),
-                          cue != nullptr ? cue->name : QString())
-                     .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
+    if (m_session->isSceneMode())
+    {
+        const Function *f = m_doc->function(m_session->currentLayer());
+        m_title->setText(tr("Refine \342\200\224 scene %1  \302\267  %2 of %3 (Build)")
+                         .arg(f != nullptr ? f->name() : QString())
+                         .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
+    }
+    else
+        m_title->setText(tr("Refine \342\200\224 cue %1 %2  \302\267  layer %3 of %4")
+                         .arg(cue != nullptr ? cue->number : QString(),
+                              cue != nullptr ? cue->name : QString())
+                         .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
     m_layer->setText(m_session->wherePhrase());
     QString scope;
     switch (m_session->scope())
     {
         case RefineSession::LayerScope:
-            scope = tr("Layer: edits the layer's own look, for all %1 of its fixtures.")
-                    .arg(m_session->layerFixtures().size());
+            scope = m_session->isSceneMode()
+                    ? tr("Scene: edits the scene's own looks (its palettes), for all %1 of its fixtures.")
+                      .arg(m_session->layerFixtures().size())
+                    : tr("Layer: edits the layer's own look, for all %1 of its fixtures.")
+                      .arg(m_session->layerFixtures().size());
             break;
         case RefineSession::GroupScope:
-            scope = tr("Group: an exception for this group (a child layer).");
+            scope = m_session->isSceneMode()
+                    ? tr("Group: an exception for this group (out of the palette, the scene's own values).")
+                    : tr("Group: an exception for this group (a child layer).");
             break;
         case RefineSession::FixtureScope:
         {
             const Fixture *fx = m_doc->fixture(m_session->currentFixture());
-            scope = tr("Fixture: an exception for %1 alone (a child layer).")
+            scope = (m_session->isSceneMode()
+                     ? tr("Fixture: an exception for %1 alone (out of the palette, the scene's own values).")
+                     : tr("Fixture: an exception for %1 alone (a child layer)."))
                     .arg(fx != nullptr ? fx->name() : QString());
             break;
         }

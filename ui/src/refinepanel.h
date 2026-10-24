@@ -47,6 +47,11 @@ public:
      *  is running). Null, with the reason shown, if it cannot. */
     static RefinePanel *open(Doc *doc, QWidget *parent, quint32 cueId,
                              quint32 layerId = 0xFFFFFFFF, QString *why = nullptr);
+    /** Refine Build scenes @p sceneIds from @p first (Build's Workbench),
+     *  starting on group @p groupId or fixture @p fixtureId when given. */
+    static RefinePanel *openScene(Doc *doc, QWidget *parent, const QList<quint32> &sceneIds,
+                                  quint32 first, quint32 groupId = 0xFFFFFFFF,
+                                  quint32 fixtureId = 0xFFFFFFFF, QString *why = nullptr);
     static RefinePanel *instance();
 
     ~RefinePanel() override;
@@ -66,6 +71,7 @@ protected:
 
 private:
     RefinePanel(Doc *doc, QWidget *parent);
+    static RefinePanel *showPanel(Doc *doc, QWidget *parent);
     void refresh();
     bool handleKey(int key, Qt::KeyboardModifiers modifiers);
 

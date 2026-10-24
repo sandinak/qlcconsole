@@ -126,6 +126,7 @@ add_library(${module_name} SHARED
     venuecorrections.cpp venuecorrections.h
     controllerscheme.cpp controllerscheme.h
     refinesession.cpp refinesession.h
+    refinescene.cpp
     controllerkeepalive.cpp controllerkeepalive.h
     gamepadrole.cpp gamepadrole.h
     parkeffect.cpp parkeffect.h

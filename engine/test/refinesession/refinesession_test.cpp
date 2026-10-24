@@ -36,7 +36,9 @@
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "scenevalue.h"
+#include "paletteops.h"
 #include "fixture.h"
+#include "scene.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -628,6 +630,70 @@ void RefineSession_Test::groupScopeKeepsTheFan()
     QCOMPARE(positionOf(m_spots.at(0)), -1);
     QCOMPARE(positionOf(m_spots.at(1)), -1);
     r->stop();
+}
+
+void RefineSession_Test::aBuildSceneIsRefinedTheSameWay()
+{
+    // A Build scene: the AT spots group, the Centre position palette.
+    Scene *s = new Scene(m_doc);
+    s->setName("Ballad look");
+    s->addFixtureGroup(m_group);
+    s->addPalette(m_position);
+    QVERIFY(m_doc->addFunction(s));
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QString why;
+    QVERIFY2(r->startScene({ s->id() }, s->id(), &why), qPrintable(why));
+    QVERIFY(r->isSceneMode());
+    QCOMPARE(said.last().at(0).toString(), QString("Refine, scene Ballad look. Ballad look, layer."));
+    QCOMPARE(r->layers(), QList<quint32>({ s->id() }));
+    QCOMPARE(r->layerFixtures(), m_spots);
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(r->cuePosition(m_spots.at(1), pan, tilt));
+    QCOMPARE(pan, 270.0f);
+
+    // Fixture scope: the exception -- out of the palette, the scene's own values.
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgePosition(3.0f, 0.0f));
+    QVERIFY(r->keep());
+    QVERIFY(s->excludedFixtures(m_position).contains(m_spots.at(1)));
+    QVERIFY(!s->excludedFixtures(m_position).contains(m_spots.at(0)));
+    QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 270, 135 }));
+    QVERIFY(r->cuePosition(m_spots.at(1), pan, tilt));
+    QVERIFY(qAbs(pan - 273.0f) < 0.05f);
+    QVERIFY(qAbs(tilt - 135.0f) < 0.05f);
+    QVERIFY(m_doc->paletteOps()->canUndo());
+
+    // X: back in the palette, its own values gone.
+    QVERIFY(r->clearException());
+    QVERIFY(!s->excludedFixtures(m_position).contains(m_spots.at(1)));
+    QVERIFY(r->cuePosition(m_spots.at(1), pan, tilt));
+    QCOMPARE(pan, 270.0f);
+    bool raw = false;
+    for (const SceneValue &sv : s->values())
+        raw = raw || sv.fxi == m_spots.at(1);
+    QVERIFY(!raw);
+
+    // Layer scope: the scene's palette moves (as the Look Editor does), one step.
+    r->setScope(RefineSession::LayerScope);
+    QVERIFY(r->nudgePosition(2.0f, -1.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 272, 134 }));
+    QVERIFY(r->undo());
+    QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 270, 135 }));
+
+    // Zoom, with no zoom palette: the scene's own values on all of it.
+    QVERIFY(r->nudgeZoom(-5.0f));
+    QVERIFY(r->keep());
+    int zoomed = 0;
+    for (const SceneValue &sv : s->values())
+        if (sv.channel == 5)
+            ++zoomed;
+    QCOMPARE(zoomed, m_spots.size());
+    r->stop();
+    QVERIFY(!r->isSceneMode());
 }
 
 QTEST_GUILESS_MAIN(RefineSession_Test)

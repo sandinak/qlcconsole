@@ -196,6 +196,9 @@ signals:
     /** Stack mode: the layers changed (added, removed, reordered). */
     void layersEdited();
     void editGroupLayoutRequested(quint32 groupId);
+    /** Refine on the controller, from a scene row, group row or fixture row
+     *  (Stack mode): the scene, and the group or fixture (invalid: none). */
+    void refineRequested(quint32 sceneId, quint32 groupId, quint32 fixtureId);
     void revealPaletteRequested(quint32 paletteId);
     /** Chaser from selection: @a functionIds as its steps, in @a folder. */
     void chaserRequested(const QList<quint32> &functionIds, const QString &folder);
