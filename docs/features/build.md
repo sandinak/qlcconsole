@@ -336,8 +336,16 @@ only ever means stock QLC+.
 The **qlcconsole** view doesn't show Functions as a tab; the **Classic QLC+** and
 **Everything** views do ([Views](getting-started.md#views)). **Window →
 Functions** opens the stock Functions tab, switching to **Everything** (with
-a line saying so and a button back) when the view doesn't have it. Most of
-what the Function Manager did is also here in Build:
+a line saying so and a button back) when the view doesn't have it.
+
+In **Classic QLC+** the tab works as in QLC+: click a function and its
+editor opens on the right, beside the tree; pick several and it closes. In
+**Everything**, a click selects (so you can drag it into the collection or
+chaser that is open) and a double-click opens it. A scene or collection the
+Show Tree made (an imported Eos show's cue scenes are) opens greyed, under a
+line saying so, with **Show in Show Tree**: change it there.
+
+Most of what the Function Manager did is also here in Build:
 
 | Functions tab | Build |
 |---|---|

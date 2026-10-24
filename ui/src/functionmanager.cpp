@@ -28,6 +28,7 @@
 #include <QFileDialog>
 #include <QCheckBox>
 #include <QSplitter>
+#include <QtMath>
 #include <QSettings>
 #include <QToolBar>
 #include <QToolButton>
@@ -109,7 +110,9 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     , m_selectAllAction(NULL)
     , m_editor(NULL)
     , m_scene_editor(NULL)
+    , m_lockedBanner(NULL)
     , m_editedFunctionId(Function::invalidId())
+    , m_openOnSelect(false)
 {
     Q_ASSERT(s_instance == NULL);
     s_instance = this;
@@ -136,12 +139,16 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     connect(m_doc, SIGNAL(paletteAdded(quint32)), this, SLOT(slotPaletteAdded(quint32)));
     connect(m_doc, SIGNAL(paletteRemoved(quint32)), this, SLOT(slotPaletteRemoved(quint32)));
 
+    /* A saved state that collapses a pane is put right when the editor
+       opens (showEditorPane()); one that doesn't read, half and half. */
     QSettings settings;
     QVariant var = settings.value(SETTINGS_SPLITTER);
-    if (var.isValid() == true)
-        m_hsplitter->restoreState(var.toByteArray());
-    else
+    if (var.isValid() == false || m_hsplitter->restoreState(var.toByteArray()) == false
+        || m_hsplitter->orientation() != Qt::Horizontal)
+    {
+        m_hsplitter->setOrientation(Qt::Horizontal);
         m_hsplitter->setSizes(QList <int> () << int(this->width() / 2) << int(this->width() / 2));
+    }
 }
 
 FunctionManager::~FunctionManager()
@@ -440,6 +447,7 @@ void FunctionManager::initToolbar()
 
 void FunctionManager::setClassicToolbar(bool classic)
 {
+    setOpenOnSelect(classic);
     for (QAction *a : m_classicToolbarActions)
         a->setVisible(classic);
     if (m_addButtonAction != nullptr)
@@ -1043,9 +1051,10 @@ void FunctionManager::initTree()
     connect(m_tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotTreeItemDoubleClicked(QTreeWidgetItem*)));
 
-    // Catch selection changes to update action status
+    // Catch selection changes to update action status (and, in the
+    // Classic QLC+ view, to open the picked function as QLC+ does)
     connect(m_tree, SIGNAL(itemSelectionChanged()),
-            this, SLOT(updateActionStatus()));
+            this, SLOT(slotTreeSelectionChanged()));
 
     // Catch right-mouse clicks
     connect(m_tree, SIGNAL(customContextMenuRequested(const QPoint&)),
@@ -1132,6 +1141,28 @@ void FunctionManager::deleteSelectedFunctions()
         m_doc->deletePalette(pid);
 }
 
+void FunctionManager::setOpenOnSelect(bool open)
+{
+    m_openOnSelect = open;
+}
+
+void FunctionManager::slotTreeSelectionChanged()
+{
+    updateActionStatus();
+    if (m_openOnSelect == false)
+        return;
+
+    // As QLC+: one function picked opens it, anything else closes the pane.
+    // A palette opens its own dialog on a double-click, as before.
+    const QList <QTreeWidgetItem*> selection(m_tree->selectedItems());
+    Function *function = NULL;
+    if (selection.size() == 1)
+        function = m_doc->function(m_tree->itemFunctionId(selection.first()));
+    if (function != NULL && function->id() == m_editedFunctionId)
+        return;     // already open: keep the editor (and what it was doing)
+    editFunction(function);
+}
+
 void FunctionManager::slotTreeItemDoubleClicked(QTreeWidgetItem* item)
 {
     if (item == NULL)
@@ -1157,8 +1188,11 @@ void FunctionManager::slotTreeItemDoubleClicked(QTreeWidgetItem* item)
         return;
     }
 
-    // Edit the double-clicked function
+    // Edit the double-clicked function (already open from the click in
+    // Classic QLC+: keep it)
     Function* function = m_doc->function(m_tree->itemFunctionId(item));
+    if (function != NULL && function->id() == m_editedFunctionId)
+        return;
     editFunction(function);
 }
 
@@ -1261,9 +1295,12 @@ void FunctionManager::editFunction(Function* function)
 
     // Made by the Show Tree (D13): edited there. Its chaser opens with the
     // steps and name locked (its playback settings stay the user's); a
-    // cue's collection or a layer's scene shows only why, with Show in
-    // Show Tree and, for a scene, Detach to plain scene.
-    if (m_doc->showTree()->isGenerated(function->id()))
+    // cue's collection or a layer's scene opens in its editor to look at,
+    // greyed, under a banner saying why, with Show in Show Tree and, for a
+    // scene, Detach to plain scene. (The banner alone, at the foot of an
+    // empty pane, read as "clicking a scene opens nothing".)
+    const bool generated = m_doc->showTree()->isGenerated(function->id());
+    if (generated)
     {
         const quint32 fid = function->id();
         if (Chaser *chaser = qobject_cast<Chaser *>(function))
@@ -1273,22 +1310,19 @@ void FunctionManager::editFunction(Function* function)
             connect(this, SIGNAL(functionManagerActive(bool)),
                     ed, SLOT(slotFunctionManagerActive(bool)));
             m_editor = ed;
+            showEditorPane(m_hsplitter->widget(1));
+            m_hsplitter->widget(1)->layout()->addWidget(m_editor);
+            m_editor->show();
+            highlightEditedFunction(fid);
+            return;
         }
-        else
-        {
-            m_editor = ShowTreeView::lockedBanner(m_hsplitter->widget(1), m_doc, fid, [this](quint32 sid) {
-                // The detached copy is an ordinary scene: edit it.
-                QTimer::singleShot(0, this, [this, sid]() {
-                    selectFunction(sid);
-                    editFunction(m_doc->function(sid));
-                });
+        m_lockedBanner = ShowTreeView::lockedBanner(m_hsplitter->widget(1), m_doc, fid, [this](quint32 sid) {
+            // The detached copy is an ordinary scene: edit it.
+            QTimer::singleShot(0, this, [this, sid]() {
+                selectFunction(sid);
+                editFunction(m_doc->function(sid));
             });
-        }
-        m_hsplitter->widget(1)->show();
-        m_hsplitter->widget(1)->layout()->addWidget(m_editor);
-        m_editor->show();
-        highlightEditedFunction(fid);
-        return;
+        });
     }
 
     // Choose the editor by the selected function's type
@@ -1384,11 +1418,18 @@ void FunctionManager::editFunction(Function* function)
         m_scene_editor = NULL;
     }
 
-    // Show the editor
+    // Show the editor (under the banner, greyed, for the Show Tree's own)
+    if (m_lockedBanner != NULL)
+    {
+        showEditorPane(m_hsplitter->widget(1));
+        m_hsplitter->widget(1)->layout()->addWidget(m_lockedBanner);
+        m_lockedBanner->show();
+    }
     if (m_editor != NULL)
     {
-        m_hsplitter->widget(1)->show();
+        showEditorPane(m_hsplitter->widget(1));
         m_hsplitter->widget(1)->layout()->addWidget(m_editor);
+        m_editor->setEnabled(!generated);
         m_editor->show();
     }
     if (m_scene_editor != NULL)
@@ -1398,8 +1439,9 @@ void FunctionManager::editFunction(Function* function)
         // in the bottom pane instead.
         QWidget *sceneContainer = (m_editor == NULL) ? m_hsplitter->widget(1)
                                                      : m_vsplitter->widget(1);
-        sceneContainer->show();
+        showEditorPane(sceneContainer);
         sceneContainer->layout()->addWidget(m_scene_editor);
+        m_scene_editor->setEnabled(!generated);
         m_scene_editor->show();
     }
 
@@ -1419,12 +1461,15 @@ void FunctionManager::deleteCurrentEditor(bool async)
     {
         if (m_editor) m_editor->deleteLater();
         if (m_scene_editor) m_scene_editor->deleteLater();
+        if (m_lockedBanner) m_lockedBanner->deleteLater();
     }
     else
     {
         delete m_editor;
         delete m_scene_editor;
+        delete m_lockedBanner;
     }
+    m_lockedBanner = NULL;
 
     m_editor = NULL;
     m_scene_editor = NULL;
@@ -1442,9 +1487,32 @@ void FunctionManager::highlightEditedFunction(quint32 fid)
     QTreeWidgetItem* item = m_tree->functionItem(function);
     if (item != NULL)
     {
-        // Set a distinct background color for the edited function
-        QColor highlightColor = palette().color(QPalette::Highlight).lighter(160);
-        item->setBackground(0, QBrush(highlightColor));
+        /* A tint of the selection colour over the list's own, and the text
+           in whichever of the theme's two text colours reads on it: the
+           selection colour lightened, under the row's own colour (orange,
+           grey, blue for a scene's kind), was unreadable on dark themes. */
+        const QPalette pal = m_tree->palette();
+        const QColor base = pal.color(QPalette::Base);
+        const QColor hl = pal.color(QPalette::Highlight);
+        const qreal k = 0.35;
+        const QColor tint = QColor::fromRgbF(base.redF() + (hl.redF() - base.redF()) * k,
+                                             base.greenF() + (hl.greenF() - base.greenF()) * k,
+                                             base.blueF() + (hl.blueF() - base.blueF()) * k);
+        auto lum = [](const QColor &c) {
+            auto lin = [](qreal v) { return v <= 0.03928 ? v / 12.92 : qPow((v + 0.055) / 1.055, 2.4); };
+            return 0.2126 * lin(c.redF()) + 0.7152 * lin(c.greenF()) + 0.0722 * lin(c.blueF());
+        };
+        auto contrast = [&lum](const QColor &a, const QColor &b) {
+            const qreal la = lum(a), lb = lum(b);
+            return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+        };
+        QColor text = pal.color(QPalette::Text);
+        const QColor alt = pal.color(QPalette::HighlightedText);
+        if (contrast(alt, tint) > contrast(text, tint))
+            text = alt;
+        m_editedForeground = item->data(0, Qt::ForegroundRole);
+        item->setBackground(0, QBrush(tint));
+        item->setForeground(0, QBrush(text));
 
         // Make the text bold
         QFont font = item->font(0);
@@ -1466,8 +1534,9 @@ void FunctionManager::clearEditedFunctionHighlight()
         QTreeWidgetItem* item = m_tree->functionItem(function);
         if (item != NULL)
         {
-            // Clear the background color
+            // Clear the background color, and give the text its own back
             item->setBackground(0, QBrush());
+            item->setData(0, Qt::ForegroundRole, m_editedForeground);
 
             // Remove bold font
             QFont font = item->font(0);
@@ -1477,4 +1546,26 @@ void FunctionManager::clearEditedFunctionHighlight()
     }
 
     m_editedFunctionId = Function::invalidId();
+    m_editedForeground = QVariant();
+}
+
+void FunctionManager::showEditorPane(QWidget *pane)
+{
+    pane->show();
+    if (pane != m_hsplitter->widget(1))
+        return;
+
+    /* Each pane at least a usable width: a saved state that collapsed (or
+       all but collapsed) the editor or the tree, from an earlier session or
+       a smaller window, would show the editor as a dead strip. Half and half
+       instead, as a first run has it. */
+    m_hsplitter->refresh();
+    const QList<int> sizes = m_hsplitter->sizes();
+    const int total = sizes.value(0) + sizes.value(1);
+    const int least = qMin(200, total / 5);
+    if (sizes.count() != 2 || total <= 0 || sizes.at(0) < least || sizes.at(1) < least)
+    {
+        const int w = total > 0 ? total : width();
+        m_hsplitter->setSizes(QList<int>() << w / 2 << w - w / 2);
+    }
 }

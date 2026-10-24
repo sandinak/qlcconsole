@@ -66,6 +66,11 @@ public:
      *  new function type and a folder -- instead of the Add dropdown. */
     void setClassicToolbar(bool classic);
 
+    /** Classic QLC+ view: picking one function in the tree opens its editor,
+     *  as in QLC+; elsewhere a double-click does (a single click selects,
+     *  to drag it into the open collection or chaser). */
+    void setOpenOnSelect(bool open);
+
 signals:
     /** Emitted when the FunctionManager's tab is de/activated */
     void functionManagerActive(bool active);
@@ -110,6 +115,10 @@ private:
     void deleteSelectedFunctions();
 
 private slots:
+    /** The tree's selection changed: the actions follow it, and with
+     *  setOpenOnSelect() one picked function opens in the editor pane. */
+    void slotTreeSelectionChanged();
+
     /** Function was double-clicked in the tree */
     void slotTreeItemDoubleClicked(QTreeWidgetItem* item);
 
@@ -205,10 +214,19 @@ private:
     /** Clear the highlight from the previously edited function */
     void clearEditedFunctionHighlight();
 
+    /** Show the editor pane at a usable width: a saved splitter state that
+     *  collapsed it (or the tree) would leave the editor a dead strip. */
+    void showEditorPane(QWidget *pane);
+
 private:
     QWidget* m_editor;
     QWidget* m_scene_editor;
+    /** Above a Show Tree function's editor: why it can't be changed here */
+    QWidget* m_lockedBanner;
     quint32 m_editedFunctionId;  // ID of the currently edited function
+    /** The edited row's own text colour, put back with its highlight */
+    QVariant m_editedForeground;
+    bool m_openOnSelect;
 };
 
 /** @} */

@@ -419,6 +419,26 @@ circuits and subs.
 
 ### Fixed
 
+- **Classic QLC+ Functions tab: the editor beside the tree, as in QLC+.**
+  Picking one function in the tree opens its editor in the right pane
+  (`FunctionManager::setOpenOnSelect()`, on in Classic QLC+ only; the other
+  views keep double-click, so a click can start a drag into the open
+  collection or chaser). A saved `functionmanager/splitter` state that had
+  collapsed the editor (or the tree) no longer opens every editor as a
+  strip the width of its minimum: `showEditorPane()` puts a pane under a
+  fifth of the tab back to half and half. A scene or collection the Show
+  Tree made (an Eos import's cue scenes are) opens in its editor, greyed,
+  under the "Made by the Show Tree" banner, instead of the banner alone at
+  the foot of an empty pane -- together these were "not using the entire
+  screen" and "clicking on a scene doesn't open anything". The row being
+  edited is a tint of the selection colour with the theme's text colour
+  that reads on it (it was the selection colour lightened, under the row's
+  own colour: orange on light blue in the dark themes). New
+  `ui/test/viewlayout`: every tab of every view at 1280x800, 1920x1080 and
+  2560x1440 fills the window (no gap at the right or bottom, no visible
+  splitter pane at no width, no pane holding only a strip), and Classic's
+  Functions tab opens a scene, a chaser and an EFX from a collapsed saved
+  state.
 - **Run tab: the state column fits "▷ STANDBY"** (Q115). It was cut to
   "▷ STA…" at the Run tab's large type; it now fits its longest word, bold,
   on a sub-cue's row.

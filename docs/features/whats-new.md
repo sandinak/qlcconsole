@@ -154,6 +154,11 @@ their house lights, relays and subs.
   window scrolls sideways instead of holding the window wide.
 - **The Show Tree and Run have their own tab icons**: a cue tree and a
   green GO button.
+- **Classic QLC+ Functions works as in QLC+.** Click a function and its
+  editor opens beside the tree, using the whole window; a scene the Show
+  Tree made (an Eos show's cue scenes) opens greyed under a line saying
+  where to edit it. Elsewhere a double-click opens one, as before. See
+  [Coming from the Functions window](build.md#coming-from-the-functions-window).
 
 ### Show Tree
 

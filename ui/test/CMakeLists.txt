@@ -84,6 +84,7 @@ add_subdirectory(vcxypad)
 add_subdirectory(vcxypadarea)
 add_subdirectory(vcxypadfixture)
 add_subdirectory(vcxypadfixtureeditor)
+add_subdirectory(viewlayout)
 
 # Every UI test program gets settings of its own, never the user's, and no
 # first-run modal (common/testsettings.cpp says why).
