@@ -3309,8 +3309,16 @@ void EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()
     QVERIFY(!picture.isEmpty());
 
     const int ticks = qMax(30, qEnvironmentVariableIntValue("QLC_MATRIX_TICKS"));
+    // 12 ms in an optimised build, what plays a show. Unoptimised (Debug,
+    // and CI's coverage build, which also counts every line) gets twice
+    // that: there matrix-lissajous measured 12.4 ms on a GitHub runner.
+#ifdef __OPTIMIZE__
+    const double defaultBudget = 12.0;
+#else
+    const double defaultBudget = 24.0;
+#endif
     const double budget = qEnvironmentVariableIsSet("QLC_MATRIX_BUDGET_MS")
-        ? qEnvironmentVariable("QLC_MATRIX_BUDGET_MS").toDouble() : 12.0;
+        ? qEnvironmentVariable("QLC_MATRIX_BUDGET_MS").toDouble() : defaultBudget;
     QStringList slow, table;
     double worst = 0;
     for (const QString &file : kMatrixScripts)
