@@ -206,7 +206,8 @@ bool Truss::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) const
     doc->writeAttribute(KXMLTrussWidth,   QString::number(double(m_width),  'f', 3));
     doc->writeAttribute(KXMLTrussOriginX, QString::number(double(m_origin.x()), 'f', 3));
     doc->writeAttribute(KXMLTrussOriginY, QString::number(double(m_origin.y()), 'f', 3));
-    doc->writeAttribute(KXMLTrussOriginZ, QString::number(double(m_origin.z()), 'f', 3));
+    // A venue's trim is the venue's (Q128): the show keeps its own.
+    doc->writeAttribute(KXMLTrussOriginZ, QString::number(double(m_hasBaseTrim ? m_baseTrim : m_origin.z()), 'f', 3));
     doc->writeAttribute(KXMLTrussDirX,    QString::number(double(m_direction.x()), 'f', 6));
     doc->writeAttribute(KXMLTrussDirY,    QString::number(double(m_direction.y()), 'f', 6));
     if (m_locked)

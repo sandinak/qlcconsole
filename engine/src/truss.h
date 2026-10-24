@@ -223,9 +223,18 @@ public:
      *  when it is in the show's folder (Doc::normalizeComponentPath()). */
     bool saveXML(QXmlStreamWriter *doc, const Doc *mainDocument = nullptr) const;
 
+    /** The show's own trim (origin Z), held while a venue trims it
+     *  differently (board Q128): saveXML() writes it in place. */
+    void setBaseTrim(float z) { m_hasBaseTrim = true; m_baseTrim = z; }
+    void clearBaseTrim() { m_hasBaseTrim = false; }
+    bool hasBaseTrim() const { return m_hasBaseTrim; }
+    float baseTrim() const { return m_hasBaseTrim ? m_baseTrim : m_origin.z(); }
+
 private:
     quint32   m_id;
     QString   m_name;
+    bool      m_hasBaseTrim = false;
+    float     m_baseTrim = 0.0f;
     TrussType m_type;
     QVector3D m_origin;
     QPointF   m_direction;  ///< normalised

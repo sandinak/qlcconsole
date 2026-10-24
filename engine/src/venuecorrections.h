@@ -26,6 +26,7 @@
 #include <QSet>
 #include <QList>
 #include <QMap>
+#include <QVector3D>
 
 #include "qlcengine_export.h"
 #include "truss.h"
@@ -76,6 +77,10 @@ public:
          *  definition's manufacturer and model, and the mode. Empty in a
          *  file from before they were kept. */
         QMap<quint32, QString> makers, models, modes;
+        /** Board Q128: truss id -> this venue's trim (its height, metres),
+         *  and stage target id -> this venue's position (metres). */
+        QMap<quint32, float> trims;
+        QMap<quint32, QVector3D> targets;
     };
 
     /*********************************************************************
@@ -167,6 +172,27 @@ public:
     bool hasCorrection(quint32 fid) const;
     RigCalibration correction(quint32 fid) const;
     int correctionCount() const;
+
+    /*********************************************************************
+     * Trims and targets (board Q128): a room's truss heights and stage
+     * marks differ too. With a venue applied, moving a target or trimming
+     * a truss (anywhere: the Lighting Studio, the pad's target page) goes
+     * into the venue's file; the show keeps its own.
+     *********************************************************************/
+public:
+    /** Take target @p id's position as it is now as the venue's (or drop
+     *  it when it is the show's again) and write the sidecar. */
+    bool recordTarget(quint32 id, QString *why = nullptr);
+    /** The same for truss @p id's trim (its origin's height). */
+    bool recordTrim(quint32 id, QString *why = nullptr);
+    bool hasTargetOverride(quint32 id) const;
+    bool hasTrimOverride(quint32 id) const;
+    /** Put target @p id back where the show has it. */
+    bool clearTarget(quint32 id);
+    bool clearTrim(quint32 id);
+    /** Compare every truss and target with what the venue (or the show)
+     *  says and record what was moved meanwhile. */
+    void syncStructure();
 
     /** Board Q133: lights whose correction was skipped when the venue was
      *  applied because the fixture is no longer what was focused (another

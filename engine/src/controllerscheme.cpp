@@ -127,7 +127,8 @@ QString ControllerScheme::label(Tool tool, Verb verb)
             return tr("Focus tighter");
         case Alternate:
             return tool == RefineTool ? tr("D-pad page: beam / colour / gobo")
-                                      : tr("Second reference");
+                 : tool == FocusCallsTool ? tr("Target page: move the call's target")
+                                          : tr("Second reference");
         case WhereAmI:
             return tr("Say the light (hold: feedback)");
         case NoVerb:

@@ -28,6 +28,7 @@
 #include "monitorproperties.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
+#include "stagetarget.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -54,6 +55,14 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
     if (m_doc != nullptr && m_doc->monitorProperties() != nullptr)
         connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged,
                 this, &VenueCorrections::onRigPropsChanged);
+    // A target moved or a truss trimmed while a venue is applied (Q128).
+    if (m_doc != nullptr && m_doc->monitorProperties() != nullptr)
+    {
+        connect(m_doc->monitorProperties(), &MonitorProperties::stageTargetsChanged,
+                this, &VenueCorrections::syncStructure);
+        connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged,
+                this, &VenueCorrections::syncStructure);
+    }
     // A fixture added while a venue is applied: its calibration is held too.
     if (m_doc != nullptr)
         connect(m_doc, &Doc::fixtureAdded, this, [this](quint32 fid) {
@@ -220,6 +229,28 @@ QByteArray VenueCorrections::toXml() const
                 w.writeAttribute(QStringLiteral("Lens"), num(c.lensDeg, 1));
             w.writeEndElement();
         }
+        for (auto it = v.trims.constBegin(); it != v.trims.constEnd(); ++it)
+        {
+            w.writeStartElement(QStringLiteral("Trim"));
+            w.writeAttribute(QStringLiteral("Truss"), QString::number(it.key()));
+            if (const Truss *t = m_doc != nullptr && m_doc->monitorProperties() != nullptr
+                                 ? m_doc->monitorProperties()->truss(it.key()) : nullptr)
+                w.writeAttribute(QStringLiteral("Name"), t->name());
+            w.writeAttribute(QStringLiteral("Z"), num(it.value(), 3));
+            w.writeEndElement();
+        }
+        for (auto it = v.targets.constBegin(); it != v.targets.constEnd(); ++it)
+        {
+            w.writeStartElement(QStringLiteral("Target"));
+            w.writeAttribute(QStringLiteral("ID"), QString::number(it.key()));
+            if (const StageTarget *t = m_doc != nullptr && m_doc->monitorProperties() != nullptr
+                                       ? m_doc->monitorProperties()->stageTarget(it.key()) : nullptr)
+                w.writeAttribute(QStringLiteral("Name"), t->name());
+            w.writeAttribute(QStringLiteral("X"), num(it.value().x(), 3));
+            w.writeAttribute(QStringLiteral("Y"), num(it.value().y(), 3));
+            w.writeAttribute(QStringLiteral("Z"), num(it.value().z(), 3));
+            w.writeEndElement();
+        }
         w.writeEndElement();
     }
     w.writeEndElement();
@@ -278,6 +309,23 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
                         v.modes.insert(fid, a.value(QStringLiteral("Mode")).toString());
                     }
                 }
+            }
+            else if (r.name() == QLatin1String("Trim"))
+            {
+                bool ok = false;
+                const quint32 id = r.attributes().value(QStringLiteral("Truss")).toUInt(&ok);
+                if (ok)
+                    v.trims.insert(id, r.attributes().value(QStringLiteral("Z")).toFloat());
+            }
+            else if (r.name() == QLatin1String("Target"))
+            {
+                bool ok = false;
+                const QXmlStreamAttributes a = r.attributes();
+                const quint32 id = a.value(QStringLiteral("ID")).toUInt(&ok);
+                if (ok)
+                    v.targets.insert(id, QVector3D(a.value(QStringLiteral("X")).toFloat(),
+                                                   a.value(QStringLiteral("Y")).toFloat(),
+                                                   a.value(QStringLiteral("Z")).toFloat()));
             }
             r.skipCurrentElement();
         }
@@ -452,6 +500,36 @@ void VenueCorrections::apply()
        -- not only what the venue corrects now. */
     for (const Fixture *fx : m_doc->fixtures())
         ensureBase(fx->id());
+    /* Trims and targets (Q128): the show's own held, the venue's on. */
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        const Venue vv = venue(m_active);
+        const bool was = m_writing;
+        m_writing = true;
+        for (Truss *t : props->trusses())
+        {
+            if (t->isChildBar())
+                continue;
+            if (!t->hasBaseTrim())
+                t->setBaseTrim(t->origin().z());
+            if (vv.trims.contains(t->id()))
+            {
+                QVector3D o = t->origin();
+                o.setZ(vv.trims.value(t->id()));
+                t->setOrigin(o);
+            }
+        }
+        for (StageTarget *t : props->stageTargets())
+        {
+            if (!t->hasBasePosition())
+                t->setBasePosition(t->position());
+            if (vv.targets.contains(t->id()))
+                t->setPosition(vv.targets.value(t->id()));
+        }
+        if (!vv.trims.isEmpty())
+            props->recomputeChildTrusses();
+        m_writing = was;
+    }
     m_needsFocus.clear();
     QList<quint32> unchecked;
     const Venue v = venue(m_active);
@@ -544,6 +622,32 @@ void VenueCorrections::unapply()
     m_needsFocus.clear();
     if (props == nullptr)
         return;
+    {
+        const bool was = m_writing;
+        m_writing = true;
+        bool trimmed = false;
+        for (Truss *t : props->trusses())
+            if (t->hasBaseTrim())
+            {
+                if (t->origin().z() != t->baseTrim())
+                {
+                    QVector3D o = t->origin();
+                    o.setZ(t->baseTrim());
+                    t->setOrigin(o);
+                    trimmed = true;
+                }
+                t->clearBaseTrim();
+            }
+        for (StageTarget *t : props->stageTargets())
+            if (t->hasBasePosition())
+            {
+                t->setPosition(t->basePosition());
+                t->clearBasePosition();
+            }
+        if (trimmed)
+            props->recomputeChildTrusses();
+        m_writing = was;
+    }
     for (quint32 fid : props->calibrationBaseFixtures())
     {
         if (m_doc->fixture(fid) != nullptr)
@@ -592,6 +696,113 @@ bool VenueCorrections::record(quint32 fid, QString *why)
     m_needsFocus.removeAll(fid);
     emit correctionsChanged();
     return save(why);
+}
+
+bool VenueCorrections::recordTarget(quint32 id, QString *why)
+{
+    StageTarget *t = isActive() ? m_doc->monitorProperties()->stageTarget(id) : nullptr;
+    if (t == nullptr)
+    {
+        if (why != nullptr)
+            *why = tr("No venue is applied.");
+        return false;
+    }
+    if (!t->hasBasePosition())
+        t->setBasePosition(t->position());
+    for (Venue &v : m_venues)
+        if (v.name == m_active)
+        {
+            if (t->position() == t->basePosition())
+                v.targets.remove(id);
+            else
+                v.targets.insert(id, t->position());
+            v.modified = QDateTime::currentDateTime();
+        }
+    emit correctionsChanged();
+    return save(why);
+}
+
+bool VenueCorrections::recordTrim(quint32 id, QString *why)
+{
+    Truss *t = isActive() ? m_doc->monitorProperties()->truss(id) : nullptr;
+    if (t == nullptr)
+    {
+        if (why != nullptr)
+            *why = tr("No venue is applied.");
+        return false;
+    }
+    if (!t->hasBaseTrim())
+        t->setBaseTrim(t->origin().z());
+    for (Venue &v : m_venues)
+        if (v.name == m_active)
+        {
+            if (qFuzzyCompare(1.0f + t->origin().z(), 1.0f + t->baseTrim()))
+                v.trims.remove(id);
+            else
+                v.trims.insert(id, t->origin().z());
+            v.modified = QDateTime::currentDateTime();
+        }
+    emit correctionsChanged();
+    return save(why);
+}
+
+bool VenueCorrections::hasTargetOverride(quint32 id) const
+{
+    return isActive() && venue(m_active).targets.contains(id);
+}
+
+bool VenueCorrections::hasTrimOverride(quint32 id) const
+{
+    return isActive() && venue(m_active).trims.contains(id);
+}
+
+bool VenueCorrections::clearTarget(quint32 id)
+{
+    StageTarget *t = hasTargetOverride(id) ? m_doc->monitorProperties()->stageTarget(id) : nullptr;
+    if (t == nullptr)
+        return false;
+    const bool was = m_writing;
+    m_writing = true;
+    t->setPosition(t->basePosition());
+    m_writing = was;
+    const bool ok = recordTarget(id);
+    m_doc->monitorProperties()->notifyStageTargetsChanged();
+    return ok;
+}
+
+bool VenueCorrections::clearTrim(quint32 id)
+{
+    Truss *t = hasTrimOverride(id) ? m_doc->monitorProperties()->truss(id) : nullptr;
+    if (t == nullptr)
+        return false;
+    QVector3D o = t->origin();
+    o.setZ(t->baseTrim());
+    t->setOrigin(o);
+    m_doc->monitorProperties()->recomputeChildTrusses();
+    return recordTrim(id);
+}
+
+void VenueCorrections::syncStructure()
+{
+    if (!isActive() || m_writing || m_doc == nullptr || m_doc->monitorProperties() == nullptr)
+        return;
+    const Venue v = venue(m_active);
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (StageTarget *t : props->stageTargets())
+    {
+        const QVector3D expected = v.targets.value(t->id(), t->basePosition());
+        if (t->position() != expected)
+            recordTarget(t->id());
+    }
+    for (Truss *t : props->trusses())
+    {
+        // A bar on a truss follows its parent: the parent's trim is the one.
+        if (t->isChildBar())
+            continue;
+        const float expected = v.trims.value(t->id(), t->baseTrim());
+        if (!qFuzzyCompare(1.0f + t->origin().z(), 1.0f + expected))
+            recordTrim(t->id());
+    }
 }
 
 bool VenueCorrections::clearCorrection(quint32 fid)

@@ -773,7 +773,9 @@ void FocusModePanel::refresh()
                                    .arg(venues->activeVenue(), venues->correctedAs(fid)));
     }
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
-        m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
+        m_session->isTargetPage()
+            ? tr("  \u2014 target page: the stick moves it (A keeps, B puts it back)")
+            : m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
     const FocusSession::Offset live = m_session->liveOffset(fid);
     const FocusSession::Offset saved = m_session->savedOffset(fid);
     m_offsetLabel->setText(tr("Pan %1    Tilt %2").arg(signedDegrees(live.pan), signedDegrees(live.tilt)));
@@ -992,7 +994,9 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         // Both bumpers: the next light not saved.
         case Qt::Key_U:        m_session->nextUnsaved(); break;
         case Qt::Key_0:        m_session->zero(); break;
-        case Qt::Key_R:        m_session->toggleReference(); break;
+        // R: the second reference; in focus calls, the target page (Q128).
+        case Qt::Key_R:
+        case Qt::Key_T:        m_session->apply(FocusSession::ToggleReference); break;
         // Focus calls and the scope (the triggers and Y on the controller).
         case Qt::Key_PageDown: m_session->nextCall(); break;
         case Qt::Key_PageUp:   m_session->previousCall(); break;

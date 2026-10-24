@@ -258,6 +258,7 @@ bool FocusSession::start(const Options &options, QString *why)
         stop();
 
     m_options = options;
+    m_targetPage = false;
     m_order = (options.order == ByStagePosition) ? stageOrder(m_doc, heads) : heads;
     m_heads.clear();
     m_checked.clear();
@@ -878,6 +879,12 @@ void FocusSession::applyOffset(quint32 fid, const Offset &offset)
 
 void FocusSession::nudge(float dPan, float dTilt)
 {
+    if (m_targetPage)
+    {
+        // Right is across the stage, up is upstage.
+        nudgeTarget(dPan * targetMetresPerDegree(), dTilt * targetMetresPerDegree());
+        return;
+    }
     for (quint32 fid : scopeFixtures())
         nudgeHead(fid, dPan, dTilt);
 }
@@ -929,6 +936,11 @@ void FocusSession::markModified()
 
 void FocusSession::save()
 {
+    if (m_targetPage)
+    {
+        keepTarget();
+        return;
+    }
     const int batch = ++m_batch;
     QList<quint32> saved;
     for (quint32 fid : scopeFixtures())
@@ -1286,6 +1298,11 @@ void FocusSession::backToSaved(quint32 fid, Head &h)
 
 void FocusSession::revert()
 {
+    if (m_targetPage)
+    {
+        revertTarget();
+        return;
+    }
     bool any = false;
     for (quint32 fid : scopeFixtures())
     {
@@ -1381,8 +1398,124 @@ void FocusSession::saveAll()
     savedChanged(saved);
 }
 
+bool FocusSession::targetMoved() const
+{
+    if (!m_targetPage || m_doc == nullptr)
+        return false;
+    const StageTarget *t = m_doc->monitorProperties()->stageTarget(m_targetId);
+    return t != nullptr && t->position() != m_targetKept;
+}
+
+bool FocusSession::targetBlocks()
+{
+    if (!targetMoved())
+        return false;
+    const StageTarget *t = m_doc->monitorProperties()->stageTarget(m_targetId);
+    emit announce(tr("%1 moved: A keeps it, B puts it back.").arg(t->name()),
+                  ControllerScheme::ImportantPriority);
+    return true;
+}
+
+bool FocusSession::toggleTargetPage()
+{
+    if (!m_active)
+        return false;
+    if (m_targetPage)
+    {
+        if (targetBlocks())
+            return false;
+        m_targetPage = false;
+        emit referenceChanged();
+        emit announce(tr("Target page off: the stick nudges the light."), ControllerScheme::ConfirmPriority);
+        return true;
+    }
+    const Call c = currentCall();
+    const StageTarget *t = (isRunningCalls() && c.target.kind == Reference::Target)
+                           ? m_doc->monitorProperties()->stageTarget(c.target.id) : nullptr;
+    if (t == nullptr)
+    {
+        emit announce(tr("This call has no target to move."), ControllerScheme::ImportantPriority);
+        return false;
+    }
+    m_targetPage = true;
+    m_targetId = t->id();
+    m_targetKept = t->position();
+    emit referenceChanged();
+    emit announce(tr("Target page: the stick moves %1. A keeps it, B puts it back.").arg(t->name()),
+                  ControllerScheme::ConfirmPriority);
+    return true;
+}
+
+void FocusSession::reresolveCall()
+{
+    if (m_callIndex < 0 || m_callIndex >= m_calls.size())
+        return;
+    CallState &cs = m_calls[m_callIndex];
+    const QHash<quint32, QVector3D> pts = resolve(cs.call.target);
+    for (quint32 fid : cs.order)
+    {
+        Head &h = m_heads[fid];
+        if (h.fixed || !pts.contains(fid))
+            continue;
+        cs.points.insert(fid, pts.value(fid));
+        h.first = pts.value(fid);
+    }
+    rebuildWrites();
+    emit referenceChanged();
+}
+
+void FocusSession::nudgeTarget(float dx, float dy)
+{
+    StageTarget *t = m_targetPage ? m_doc->monitorProperties()->stageTarget(m_targetId) : nullptr;
+    if (t == nullptr || (dx == 0.0f && dy == 0.0f))
+        return;
+    t->setPosition(t->position() + QVector3D(dx, dy, 0.0f));
+    // Every head aimed at it follows.
+    reresolveCall();
+}
+
+bool FocusSession::keepTarget()
+{
+    StageTarget *t = m_targetPage ? m_doc->monitorProperties()->stageTarget(m_targetId) : nullptr;
+    if (t == nullptr)
+        return false;
+    QString where;
+    if (m_venues != nullptr && m_venues->isActive())
+    {
+        // The room's: the venue file, never the show (Q128).
+        if (!m_venues->recordTarget(t->id()))
+            return false;
+        where = m_venues->activeVenue();
+    }
+    else
+        m_doc->setModified();
+    m_targetKept = t->position();
+    m_doc->monitorProperties()->notifyStageTargetsChanged();
+    emit announce(where.isEmpty() ? tr("%1 kept in the show.").arg(t->name())
+                                  : tr("%1 kept for %2.").arg(t->name(), where),
+                  ControllerScheme::ConfirmPriority);
+    return true;
+}
+
+void FocusSession::revertTarget()
+{
+    StageTarget *t = m_targetPage ? m_doc->monitorProperties()->stageTarget(m_targetId) : nullptr;
+    if (t == nullptr)
+        return;
+    t->setPosition(m_targetKept);
+    reresolveCall();
+    emit announce(tr("%1 back.").arg(t->name()), ControllerScheme::ConfirmPriority);
+}
+
 void FocusSession::discardAll()
 {
+    // A target moved and not kept goes back too.
+    if (m_targetPage)
+    {
+        if (StageTarget *t = m_doc->monitorProperties()->stageTarget(m_targetId))
+            t->setPosition(m_targetKept);
+        m_targetPage = false;
+    }
     for (quint32 fid : m_all)
     {
         Head &h = m_heads[fid];
@@ -1434,14 +1567,15 @@ void FocusSession::apply(Control control)
         // A bumper picks a fixture: from the whole group, that one.
         case Next:            if (m_scope == GroupScope) setScope(FixtureScope); else next(); break;
         case Previous:        if (m_scope == GroupScope) setScope(FixtureScope); else previous(); break;
-        case NextCall:        nextCall(); break;
-        case PreviousCall:    previousCall(); break;
+        case NextCall:        if (!targetBlocks()) { m_targetPage = false; nextCall(); } break;
+        case PreviousCall:    if (!targetBlocks()) { m_targetPage = false; previousCall(); } break;
         case CycleScope:      cycleScope(); break;
         case WhereAmI:        whereAmI(); break;
         case Save:            save(); break;
         case Revert:          revert(); break;
         case Zero:            zero(); break;
-        case ToggleReference: toggleReference(); break;
+        // Focus calls: the target page (Q128); Focus mode: the second reference.
+        case ToggleReference: isRunningCalls() ? void(toggleTargetPage()) : void(toggleReference()); break;
         case UndoSave:        if (!undoSave()) emit announce(tr("Nothing to undo."), ControllerScheme::ConfirmPriority); break;
         case Exit:
         {

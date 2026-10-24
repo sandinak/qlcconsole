@@ -482,6 +482,23 @@ public:
      *  triggers released -- so nothing moves until it is touched again. */
     void releaseControls();
 
+    /** Board Q128, the target page (focus calls; LS click, or T): the
+     *  sticks move the TARGET of the current call on the floor and every
+     *  head aimed at it follows, like an Eos focus palette. A keeps the
+     *  target -- into the venue applied (its sidecar), else the show -- B
+     *  puts it back. Leaving the page, or stepping calls, with a move not
+     *  kept is refused. False (said) when the call has no target. */
+    bool toggleTargetPage();
+    bool isTargetPage() const { return m_targetPage; }
+    /** The target moved and not yet kept. */
+    bool targetMoved() const;
+    /** Move the call's target @p dx, @p dy metres (on the target page). */
+    void nudgeTarget(float dx, float dy);
+    bool keepTarget();
+    void revertTarget();
+    /** A stick or key "degree" on the target page, in metres. */
+    static constexpr float targetMetresPerDegree() { return 0.1f; }
+
     static constexpr float coarseRate() { return 8.0f; }
     static constexpr float fineRate() { return 1.0f; }
 
@@ -619,6 +636,13 @@ private:
     bool m_warnFlash = false;
     std::function<bool(QString *)> m_startGuard;
     bool m_endedByOperator = false;
+    bool m_targetPage = false;
+    quint32 m_targetId = 0xFFFFFFFF;
+    QVector3D m_targetKept;
+    /** Re-aim the current call's heads at its target where it is now. */
+    void reresolveCall();
+    /** On the target page with a move not kept: said, true (refused). */
+    bool targetBlocks();
     bool m_lightsFeedback = true;
     QElapsedTimer m_flashClock;
 

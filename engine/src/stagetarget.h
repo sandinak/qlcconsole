@@ -232,9 +232,19 @@ public:
     bool loadXML(QXmlStreamReader &root);
     bool saveXML(QXmlStreamWriter *doc) const;
 
+    /** The show's own position, held while a venue moves the target (board
+     *  Q128): saveXML() writes it in place of the venue's, so the show file
+     *  never takes a venue's targets. */
+    void setBasePosition(const QVector3D &p) { m_hasBase = true; m_base = p; }
+    void clearBasePosition() { m_hasBase = false; }
+    bool hasBasePosition() const { return m_hasBase; }
+    QVector3D basePosition() const { return m_hasBase ? m_base : position(); }
+
 private:
     quint32   m_id;
     QString   m_name;
+    bool      m_hasBase = false;
+    QVector3D m_base;
     QVector3D m_position;
     mutable QMutex m_positionMutex;   ///< guards m_position (GUI joystick vs DMX aim read)
     QColor    m_color;

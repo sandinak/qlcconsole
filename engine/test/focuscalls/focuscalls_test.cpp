@@ -1416,4 +1416,79 @@ void FocusCalls_Test::aSwappedFixtureNeedsFocus()
     QVERIFY(v->needsFocus().isEmpty());
 }
 
+void FocusCalls_Test::aVenueHasItsOwnTrimsAndTargets()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    FixtureGroup *g = makeGroup(m_doc, "Spots", { a, b });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *truss = props->addTruss();
+    truss->setName("LX1");
+    truss->setOrigin(QVector3D(0.0f, 3.0f, 6.0f));
+    FocusCall c1;
+    c1.groups << g->id();
+    c1.target = targetRef(dsc->id());
+    m_doc->programmer()->focusCalls()->setCalls({ c1 });
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+
+    // The target page: the stick moves DSC, the heads aimed at it follow.
+    FocusSession *s = m_doc->programmer()->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.calls = m_doc->programmer()->focusCalls()->sessionCalls();
+    o.order = FocusSession::AsGiven;
+    QVERIFY(s->start(o));
+    QVector3D before;
+    QVERIFY(s->referencePoint(a->id(), before));
+    s->apply(FocusSession::ToggleReference);           // LS click in the calls
+    QVERIFY(s->isTargetPage());
+    s->nudge(10.0f, 5.0f);                              // 1 m across, 0.5 m upstage
+    QVERIFY((dsc->position() - QVector3D(6.0f, 6.5f, 0.0f)).length() < 0.001f);
+    QVector3D after;
+    QVERIFY(s->referencePoint(a->id(), after));
+    QVERIFY((after - before).length() > 0.5f);          // the head follows
+    QVERIFY(!s->isDirty(a->id()));                      // its calibration untouched
+    // Not kept: leaving the page or stepping is refused.
+    QVERIFY(!s->toggleTargetPage());
+    QVERIFY(s->isTargetPage());
+    s->apply(FocusSession::Save);                       // A: kept for the venue
+    QVERIFY(v->hasTargetOverride(dsc->id()));
+    QVERIFY(s->toggleTargetPage());
+    QVERIFY(!s->isTargetPage());
+    s->stop();
+    // The show keeps its own DSC; the venue's file has the room's.
+    QByteArray xml = saveDoc(m_doc);
+    QVERIFY(xml.contains("X=\"5.000\""));
+    QVERIFY(!xml.contains("X=\"6.000\""));
+    QVERIFY(v->toXml().contains("<Target ID="));
+
+    // A trim in this room: the venue's, not the show's.
+    QVector3D o2 = truss->origin();
+    o2.setZ(5.5f);
+    truss->setOrigin(o2);
+    QVERIFY(v->recordTrim(truss->id()));
+    QVERIFY(v->hasTrimOverride(truss->id()));
+    xml = saveDoc(m_doc);
+    QVERIFY(xml.contains("OriginZ=\"6.000\""));
+    // None: the show's own back on the rig...
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(truss->origin().z(), 6.0f);
+    QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
+    // ...and the venue's again when it is applied.
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(truss->origin().z(), 5.5f);
+    QVERIFY((dsc->position() - QVector3D(6.0f, 6.5f, 0.0f)).length() < 0.001f);
+    // Read back from the file.
+    VenueCorrections copy(nullptr);
+    QVERIFY(copy.fromXml(v->toXml()));
+    QCOMPARE(copy.venue("Lincoln HS").trims.value(truss->id()), 5.5f);
+    // Cleared: the show's again.
+    QVERIFY(v->clearTarget(dsc->id()));
+    QVERIFY(!v->hasTargetOverride(dsc->id()));
+    QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)

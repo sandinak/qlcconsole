@@ -95,6 +95,10 @@ private slots:
      *  fixture's is skipped and it needs focus; a deleted one's is kept as
      *  orphaned; an old file still applies, with one note. */
     void aSwappedFixtureNeedsFocus();
+    /** Q128: a venue's own trims and target positions, in the sidecar and
+     *  never the show; the target page moves a call's target, its heads
+     *  following, and A keeps it for the venue. */
+    void aVenueHasItsOwnTrimsAndTargets();
     /** Safety: the pad dropping with a stick and A held -- everything is
      *  let go, nothing moves, no keep-all fires; said, and said when back.
      *  In Focus mode (and focus calls) and in Refine. */
