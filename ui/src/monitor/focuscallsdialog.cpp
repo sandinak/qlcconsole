@@ -589,9 +589,24 @@ void FocusCallsDialog::refreshVenue()
                                   QLocale().toString(venues->lastChanged(venues->activeVenue()),
                                                      QLocale::ShortFormat)));
     else
-        m_venueNote->setText(tr("Corrections are saved for this venue in %1, next to the show, the "
-                                "moment A is pressed. The show file is never changed by them.")
-                             .arg(QFileInfo(file).fileName()));
+    {
+        QString text = tr("Corrections are saved for this venue in %1, next to the show, the "
+                          "moment A is pressed. The show file is never changed by them.")
+                       .arg(QFileInfo(file).fileName());
+        // Q133: what the venue applied could not use.
+        const int skipped = venues->needsFocus().size();
+        const int orphans = venues->orphaned().size();
+        if (kind == 0 && venueAt(m_venue->currentIndex()) == venues->activeVenue())
+        {
+            if (skipped > 0)
+                text += QLatin1Char(' ') + tr("%n light(s) need focus: the fixture is not the one focused here.",
+                                              "", skipped);
+            if (orphans > 0)
+                text += QLatin1Char(' ') + tr("%n correction(s) for fixtures no longer in the show are kept.",
+                                              "", orphans);
+        }
+        m_venueNote->setText(text);
+    }
 }
 
 bool FocusCallsDialog::apply(QString *why)

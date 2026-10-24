@@ -1159,6 +1159,28 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setPen(keep);
     }
 
+    /* Needs focus here (Q133): an orange "!" on the lower corner. Orange
+       and a shape, so it reads without colour vision too. */
+    if (m_needsFocus)
+    {
+        const QPen keep = painter->pen();
+        const QFont keepFont = painter->font();
+        QPen edge(QColor(60, 30, 0), 1.0);
+        edge.setCosmetic(true);
+        painter->setPen(edge);
+        painter->setBrush(QColor(240, 140, 30));
+        const QPointF at(m_width, m_height);
+        painter->drawEllipse(at, 6.0, 6.0);
+        QFont f = keepFont;
+        f.setPixelSize(10);
+        f.setBold(true);
+        painter->setFont(f);
+        painter->setPen(QColor(30, 15, 0));
+        painter->drawText(QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), Qt::AlignCenter, QStringLiteral("!"));
+        painter->setFont(keepFont);
+        painter->setPen(keep);
+    }
+
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
     drawBody(painter, QRectF(0, 0, m_width, m_height));

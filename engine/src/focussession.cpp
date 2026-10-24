@@ -491,7 +491,12 @@ QString FocusSession::wherePhrase() const
         parts << (isRunningCalls() ? tr("All %1, group.").arg(m_order.size())
                                    : tr("All %1 fixtures.").arg(m_order.size()));
     else
+    {
         parts << tr("Fixture %1 of %2.").arg(m_index + 1).arg(m_order.size());
+        // Its venue correction was skipped: another fixture type now (Q133).
+        if (m_venues != nullptr && m_venues->needsFocus(currentFixture()))
+            parts << tr("Needs focus: the fixture changed.");
+    }
     return parts.join(QLatin1Char(' '));
 }
 

@@ -667,6 +667,10 @@ void App::init()
         // The venue applied, in the footer (board Q129).
         connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged,
                 this, &App::updateVenueFooter);
+        // Said once: an old venue file applied without fixture types (Q133).
+        connect(pc->venueCorrections(), &VenueCorrections::note, this, [this](const QString &text) {
+            showViewNotice(text);
+        });
         QShortcut *startCalls = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
         startCalls->setContext(Qt::ApplicationShortcut);
         connect(startCalls, &QShortcut::activated, this, [this]() {

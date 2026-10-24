@@ -91,6 +91,10 @@ private slots:
     /** Gap 5: starting a controller tool never throws away another's (or
      *  its own) unsaved work: refused, saying what to do first. */
     void unsavedWorkIsNeverDiscarded();
+    /** Q133: a correction remembers the fixture type and mode; a swapped
+     *  fixture's is skipped and it needs focus; a deleted one's is kept as
+     *  orphaned; an old file still applies, with one note. */
+    void aSwappedFixtureNeedsFocus();
     /** Safety: the pad dropping with a stick and A held -- everything is
      *  let go, nothing moves, no keep-all fires; said, and said when back.
      *  In Focus mode (and focus calls) and in Refine. */

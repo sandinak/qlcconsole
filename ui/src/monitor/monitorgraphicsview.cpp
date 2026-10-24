@@ -6392,6 +6392,22 @@ void MonitorGraphicsView::markUnsavedFixtures(const QList<quint32> &ids)
         it.value()->setUnsaved(idSet.contains(it.key()));
 }
 
+void MonitorGraphicsView::markNeedsFocusFixtures(const QList<quint32> &ids)
+{
+    const QSet<quint32> idSet(ids.begin(), ids.end());
+    for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
+        it.value()->setNeedsFocus(idSet.contains(it.key()));
+}
+
+QList<quint32> MonitorGraphicsView::needsFocusFixtures() const
+{
+    QList<quint32> out;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value()->needsFocus())
+            out << it.key();
+    return out;
+}
+
 QPointF MonitorGraphicsView::pixelsToRealPosition(qreal px, qreal py)
 {
     if (m_cellPixels == 0)

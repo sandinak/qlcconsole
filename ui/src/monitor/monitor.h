@@ -218,6 +218,8 @@ public:
      *  calibration, a dashed ghost on the plot labelled @p label; @p on
      *  false takes it away. */
     void showFocusGhost(quint32 fid, const QVector3D &point, const QString &label, bool on = true);
+    /** Badge the lights that need focus in the venue applied (Q133). */
+    void refreshNeedsFocus();
     /** Open Focus mode (FocusModePanel) on the selected scene and the heads
      *  selected on the plot or in the programmer. */
     void openFocusMode();

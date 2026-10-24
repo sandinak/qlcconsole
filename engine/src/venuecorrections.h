@@ -72,6 +72,10 @@ public:
         QMap<quint32, RigCalibration> fixtures;
         /** fixture id -> its name when corrected (for a reader of the file) */
         QMap<quint32, QString> names;
+        /** fixture id -> what it was when corrected (board Q133): the
+         *  definition's manufacturer and model, and the mode. Empty in a
+         *  file from before they were kept. */
+        QMap<quint32, QString> makers, models, modes;
     };
 
     /*********************************************************************
@@ -164,6 +168,17 @@ public:
     RigCalibration correction(quint32 fid) const;
     int correctionCount() const;
 
+    /** Board Q133: lights whose correction was skipped when the venue was
+     *  applied because the fixture is no longer what was focused (another
+     *  definition or mode): they need focusing again here. */
+    QList<quint32> needsFocus() const { return m_needsFocus; }
+    bool needsFocus(quint32 fid) const { return m_needsFocus.contains(fid); }
+    /** Corrections in the applied venue for fixtures no longer in the show:
+     *  kept (the fixture may come back), listed. */
+    QList<quint32> orphaned() const;
+    /** "Spot 3 (Robe Robin 600, 16 bit)" -- how the venue remembers @p fid. */
+    QString correctedAs(quint32 fid) const;
+
     /** The doc was cleared: forget everything without touching the rig. */
     void reset();
 
@@ -178,6 +193,9 @@ signals:
     void activeVenueChanged(const QString &name);
     void venuesChanged();
     void correctionsChanged();
+    /** Something the operator should read once, about the venue applied
+     *  (a file from before definitions were kept). */
+    void note(const QString &text);
 
 private:
     void apply();
@@ -195,6 +213,9 @@ private:
      *  the show was opened. */
     bool m_confirmed = false;
     QSet<quint32> m_held;
+    QList<quint32> m_needsFocus;
+    /** What @p fid is now: its definition and mode. */
+    void identify(quint32 fid, QString &maker, QString &model, QString &mode) const;
 };
 
 /** @} */

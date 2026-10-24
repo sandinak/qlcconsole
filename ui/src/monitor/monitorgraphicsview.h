@@ -763,6 +763,10 @@ public:
     void highlightFixtures(const QList<quint32> &ids);
     /** Focus mode: mark the lights with unsaved changes (the rest unmarked). */
     void markUnsavedFixtures(const QList<quint32> &ids);
+    /** Board Q133: badge the lights that need focus in this venue. */
+    void markNeedsFocusFixtures(const QList<quint32> &ids);
+    /** The lights badged so (tests). */
+    QList<quint32> needsFocusFixtures() const;
     /** Focus mode's ghost (Q126): a dashed ring where the head would land
      *  with its saved calibration (@p point, metres), and @p label beside
      *  it ("+2.5° pan"); @p on false hides it. */

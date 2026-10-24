@@ -1348,4 +1348,72 @@ void FocusCalls_Test::unsavedWorkIsNeverDiscarded()
     s->stop();
 }
 
+void FocusCalls_Test::aSwappedFixtureNeedsFocus()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    Fixture *other = makeSpot(m_doc, "Other", 6.0f, 2.0f);   // another type, for the swap
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QString show = m_dir->filePath("Spring.qlcc");
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(show, false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    for (Fixture *f : { a, b })
+    {
+        FixtureRigProps rp = props->fixtureRigProps(f->id());
+        rp.panOffsetDeg = 3.0f;
+        props->setFixtureRigProps(f->id(), rp);       // recorded into the venue (Q111)
+    }
+    QVERIFY(v->hasCorrection(a->id()));
+    QFile f(v->filePath());
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray xml = f.readAll();
+    f.close();
+    QVERIFY(xml.contains("Model=\"Calls Spot A\""));
+    QVERIFY(xml.contains("Mode=\"3ch\""));
+
+    // A is swapped for another fixture type: its correction is skipped.
+    QVERIFY(v->setActiveVenue(QString()));
+    a->setFixtureDefinition(other->fixtureDef(), other->fixtureMode());
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(v->needsFocus(), QList<quint32>({ a->id() }));
+    QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 0.0f);   // not applied
+    QCOMPARE(props->fixtureRigProps(b->id()).panOffsetDeg, 3.0f);
+    QVERIFY(v->correctedAs(a->id()).contains("Calls Spot A"));
+    // Focus mode says so on it.
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.fixtures = { a->id() };
+    o.first = targetRef(makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f))->id());
+    QVERIFY(s->start(o));
+    QVERIFY(s->wherePhrase().endsWith("Needs focus: the fixture changed."));
+    // Focused again and saved: its new type is what the venue keeps.
+    s->nudge(1.0f, 0.0f);
+    s->save();
+    s->stop();
+    QVERIFY(!v->needsFocus(a->id()));
+    QVERIFY(v->correctedAs(a->id()).contains("Calls Spot Other"));
+
+    // B deleted: its correction is kept, and listed as orphaned.
+    const quint32 bid = b->id();
+    QVERIFY(m_doc->deleteFixture(bid));
+    QCOMPARE(v->orphaned(), QList<quint32>({ bid }));
+    QVERIFY(v->venue("Lincoln HS").fixtures.contains(bid));
+
+    // A file from before fixture types: applied, said once, then remembered.
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QString("<QlcVenues Version=\"1\" Show=\"Spring.qlcc\" Active=\"Kennedy\">"
+                    "<Venue Name=\"Kennedy\"><Fixture ID=\"%1\" PanOfs=\"4.00\" TiltOfs=\"0.00\" PanZero=\"0.0\"/>"
+                    "</Venue></QlcVenues>").arg(a->id()).toUtf8());
+    f.close();
+    QSignalSpy note(v, &VenueCorrections::note);
+    v->setShowFile(show, true);
+    QCOMPARE(v->activeVenue(), QString("Kennedy"));
+    QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 4.0f);
+    QCOMPARE(note.count(), 1);
+    v->setShowFile(show, true);                         // again: no note now
+    QCOMPARE(note.count(), 1);
+    QVERIFY(v->needsFocus().isEmpty());
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)

@@ -764,6 +764,14 @@ void FocusModePanel::refresh()
                                    where));
     }
     m_nameLabel->setText(fx != nullptr ? tr("%1  (ID %2)").arg(fx->name()).arg(fid) : QString());
+    {
+        // Q133: its venue correction was skipped -- another fixture type now.
+        VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+        if (fx != nullptr && venues->needsFocus(fid))
+            m_nameLabel->setText(m_nameLabel->text()
+                                 + tr("\n! Needs focus: not the fixture focused in %1 (%2)")
+                                   .arg(venues->activeVenue(), venues->correctedAs(fid)));
+    }
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
         m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
     const FocusSession::Offset live = m_session->liveOffset(fid);

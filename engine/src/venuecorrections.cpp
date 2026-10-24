@@ -26,6 +26,8 @@
 
 #include "venuecorrections.h"
 #include "monitorproperties.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -66,7 +68,8 @@ void VenueCorrections::onRigPropsChanged(quint32 fid)
         return;
     MonitorProperties *props = m_doc->monitorProperties();
     const RigCalibration now = RigCalibration::of(props->fixtureRigProps(fid));
-    const RigCalibration was = hasCorrection(fid) ? correction(fid) : baseOf(fid);
+    // A skipped correction (Q133) is not on the rig: compare with the base.
+    const RigCalibration was = (hasCorrection(fid) && !needsFocus(fid)) ? correction(fid) : baseOf(fid);
     if (now == was)
         return;     // something else about the fixture: its place, its mount
     record(fid);
@@ -195,6 +198,13 @@ QByteArray VenueCorrections::toXml() const
             w.writeAttribute(QStringLiteral("ID"), QString::number(it.key()));
             if (v.names.contains(it.key()))
                 w.writeAttribute(QStringLiteral("Name"), v.names.value(it.key()));
+            // What it was when focused (Q133), so a swapped fixture is caught.
+            if (!v.models.value(it.key()).isEmpty())
+            {
+                w.writeAttribute(QStringLiteral("Manufacturer"), v.makers.value(it.key()));
+                w.writeAttribute(QStringLiteral("Model"), v.models.value(it.key()));
+                w.writeAttribute(QStringLiteral("Mode"), v.modes.value(it.key()));
+            }
             w.writeAttribute(QStringLiteral("PanOfs"), num(c.panOffsetDeg, 2));
             w.writeAttribute(QStringLiteral("TiltOfs"), num(c.tiltOffsetDeg, 2));
             if (c.fixedAim)
@@ -261,6 +271,12 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
                     v.fixtures.insert(fid, c);
                     if (a.hasAttribute(QStringLiteral("Name")))
                         v.names.insert(fid, a.value(QStringLiteral("Name")).toString());
+                    if (a.hasAttribute(QStringLiteral("Model")))
+                    {
+                        v.makers.insert(fid, a.value(QStringLiteral("Manufacturer")).toString());
+                        v.models.insert(fid, a.value(QStringLiteral("Model")).toString());
+                        v.modes.insert(fid, a.value(QStringLiteral("Mode")).toString());
+                    }
                 }
             }
             r.skipCurrentElement();
@@ -436,20 +452,96 @@ void VenueCorrections::apply()
        -- not only what the venue corrects now. */
     for (const Fixture *fx : m_doc->fixtures())
         ensureBase(fx->id());
+    m_needsFocus.clear();
+    QList<quint32> unchecked;
     const Venue v = venue(m_active);
     for (auto it = v.fixtures.constBegin(); it != v.fixtures.constEnd(); ++it)
     {
-        // A fixture removed from the show since: nothing to correct.
+        // A fixture removed from the show since: kept, listed (orphaned()).
         if (m_doc->fixture(it.key()) == nullptr)
             continue;
+        /* Board Q133: focused as another fixture (definition or mode
+           changed, a lamp swapped for a mover): its correction would aim
+           it wrong. Skipped, and it needs focusing again. */
+        QString maker, model, mode;
+        identify(it.key(), maker, model, mode);
+        if (v.models.contains(it.key()))
+        {
+            if (v.makers.value(it.key()) != maker || v.models.value(it.key()) != model
+                || v.modes.value(it.key()) != mode)
+            {
+                m_needsFocus << it.key();
+                continue;
+            }
+        }
+        else
+            unchecked << it.key();
         ensureBase(it.key());
         writeRig(it.key(), it.value());
     }
+    /* A file from before definitions were kept: applied as it is, said
+       once, and from now on it remembers what each light is. */
+    if (!unchecked.isEmpty())
+    {
+        for (Venue &w : m_venues)
+            if (w.name == m_active)
+                for (quint32 fid : unchecked)
+                {
+                    QString maker, model, mode;
+                    identify(fid, maker, model, mode);
+                    w.makers.insert(fid, maker);
+                    w.models.insert(fid, model);
+                    w.modes.insert(fid, mode);
+                }
+        save();
+        emit note(tr("%1 was saved before venues remembered each light's fixture type: its "
+                     "corrections were applied as they are. Check any light that was swapped "
+                     "since.").arg(m_active));
+    }
+}
+
+void VenueCorrections::identify(quint32 fid, QString &maker, QString &model, QString &mode) const
+{
+    const Fixture *fx = m_doc != nullptr ? m_doc->fixture(fid) : nullptr;
+    maker.clear();
+    model.clear();
+    mode.clear();
+    if (fx == nullptr)
+        return;
+    if (const QLCFixtureDef *def = fx->fixtureDef())
+    {
+        maker = def->manufacturer();
+        model = def->model();
+    }
+    if (const QLCFixtureMode *m = fx->fixtureMode())
+        mode = m->name();
+}
+
+QList<quint32> VenueCorrections::orphaned() const
+{
+    QList<quint32> out;
+    if (!isActive())
+        return out;
+    const Venue v = venue(m_active);
+    for (auto it = v.fixtures.constBegin(); it != v.fixtures.constEnd(); ++it)
+        if (m_doc->fixture(it.key()) == nullptr)
+            out << it.key();
+    return out;
+}
+
+QString VenueCorrections::correctedAs(quint32 fid) const
+{
+    const Venue v = venue(m_active);
+    const QString name = v.names.value(fid, tr("Fixture %1").arg(fid));
+    if (v.models.value(fid).isEmpty())
+        return name;
+    return tr("%1 (%2 %3, %4)").arg(name, v.makers.value(fid), v.models.value(fid), v.modes.value(fid));
 }
 
 void VenueCorrections::unapply()
 {
     MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    m_needsFocus.clear();
     if (props == nullptr)
         return;
     for (quint32 fid : props->calibrationBaseFixtures())
@@ -479,15 +571,25 @@ bool VenueCorrections::record(quint32 fid, QString *why)
         {
             v.fixtures.remove(fid);
             v.names.remove(fid);
+            v.makers.remove(fid);
+            v.models.remove(fid);
+            v.modes.remove(fid);
         }
         else
         {
             v.fixtures.insert(fid, now);
             if (const Fixture *fx = m_doc->fixture(fid))
                 v.names.insert(fid, fx->name());
+            QString maker, model, mode;
+            identify(fid, maker, model, mode);
+            v.makers.insert(fid, maker);
+            v.models.insert(fid, model);
+            v.modes.insert(fid, mode);
         }
         v.modified = QDateTime::currentDateTime();
     }
+    // Focused again here: no longer skipped.
+    m_needsFocus.removeAll(fid);
     emit correctionsChanged();
     return save(why);
 }
@@ -524,6 +626,7 @@ void VenueCorrections::reset()
     const bool had = isActive();
     m_venues.clear();
     m_active.clear();
+    m_needsFocus.clear();
     m_showFile.clear();
     if (had)
         emit activeVenueChanged(QString());
