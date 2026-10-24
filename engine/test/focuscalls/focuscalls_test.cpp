@@ -949,7 +949,7 @@ void FocusCalls_Test::thePadAndTheVoiceTellYouMore()
     s->stop();
     QVERIFY(!pc->padLight().isValid());                 // back to the pad's own
 
-    // The hold itself: 0.6 s, as RS.
+    // B's hold: 0.6 s, as RS (A's is a second, Q132).
     ControllerScheme::LongPress hold;
     hold.press();
     QVERIFY(!hold.due(0.5));
@@ -1007,9 +1007,11 @@ void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
     up(14);
     QCOMPARE(said.last().at(0).toString(), QString("Spot 3, not saved."));
 
-    // A held 0.6 s: save all (the press saved this one first).
+    // A held a second (Q132): save all (the press saved this one first).
     down(10);
-    held(40);
+    held(30);
+    QVERIFY(s->hasUnsaved());                  // not yet at 0.6 s
+    held(25);
     up(10);
     QVERIFY(!s->hasUnsaved());
     QCOMPARE(said.last().at(0).toString(), QString("1 light kept."));

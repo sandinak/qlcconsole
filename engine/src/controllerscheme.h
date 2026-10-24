@@ -97,10 +97,19 @@ namespace ControllerScheme
      * (RS: say the light; held: change the feedback). release() says a tap;
      * due() says, once, that it has been held long enough.
      */
+    /** How long A is held to keep (save) everything, in seconds (board
+     *  Q132: a deliberate second, longer than RS's and B's holds, so a
+     *  firm press is never taken for it). A constant for now; it could
+     *  become a setting. */
+    constexpr double keepAllHoldSeconds() { return 1.0; }
+
     class QLC_ENGINE_EXPORT LongPress
     {
     public:
-        static constexpr double holdFor() { return 0.6; }
+        /** RS (the feedback) and B (back to the last save). */
+        static constexpr double defaultHold() { return 0.6; }
+        explicit LongPress(double holdFor = defaultHold()) : m_holdFor(holdFor) {}
+        double holdFor() const { return m_holdFor; }
         void press() { m_down = true; m_held = 0.0; m_fired = false; }
         /** Let go: true when it was a tap (not held to holdFor()). */
         bool release()
@@ -121,8 +130,11 @@ namespace ControllerScheme
             return true;
         }
         bool isDown() const { return m_down; }
+        /** Let go without it counting as a tap (the controller went away). */
+        void reset() { m_down = false; m_fired = false; m_held = 0.0; }
 
     private:
+        double m_holdFor;
         bool m_down = false;
         bool m_fired = false;
         double m_held = 0.0;

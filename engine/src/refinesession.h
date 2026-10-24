@@ -188,6 +188,9 @@ public:
      *  nothing waits. confirmShared() is that second A (or the panel's
      *  button). */
     QString sharedWarning() const { return m_sharedWarning; }
+    /** A warning waits for a fresh press of A (board Q132): a held A
+     *  never answers it. */
+    bool hasWarningPending() const { return !m_sharedWarning.isEmpty(); }
     QStringList sharedUsers() const { return m_sharedUsers; }
     bool confirmShared(QString *why = nullptr);
     /** Keep everything pending in the cue: one Show Tree step. */

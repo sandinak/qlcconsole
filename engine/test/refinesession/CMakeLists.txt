@@ -4,6 +4,7 @@ add_executable(refinesession_test WIN32
 target_include_directories(refinesession_test PRIVATE
     ../../../plugins/interfaces
     ../../src
+    ../iopluginstub
 )
 
 target_link_libraries(refinesession_test PRIVATE

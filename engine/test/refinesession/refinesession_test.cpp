@@ -37,6 +37,9 @@
 #include "qlcchannel.h"
 #include "scenevalue.h"
 #include "paletteops.h"
+#include "inputoutputmap.h"
+#include "iopluginstub.h"
+#include "qlcfile.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -842,6 +845,70 @@ void RefineSession_Test::aBuildSceneIsRefinedTheSameWay()
     QCOMPARE(zoomed, m_spots.size());
     r->stop();
     QVERIFY(!r->isSceneMode());
+}
+
+void RefineSession_Test::aHeldANeverAnswersAWarning()
+{
+    // The pad, through the stub plugin: A on channel 10.
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" },
+                             { 16, "back" }, { 17, "start" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto down = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 255, QString()); };
+    auto up = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 0, QString()); };
+    auto held = [pc](double secs) {
+        for (int i = 0; i < qRound(secs / 0.02); ++i)
+            pc->applyDesignJoystick();
+    };
+
+    // Centre is the scene's and the cue's: a Layer-scope keep warns first.
+    Scene *s = new Scene(m_doc);
+    s->setName("Ballad look");
+    s->addFixtureGroup(m_group);
+    s->addPalette(m_position);
+    QVERIFY(m_doc->addFunction(s));
+    RefineSession *r = pc->refineSession();
+    QVERIFY(r->startScene({ s->id() }, s->id()));
+    QVERIFY(r->nudgePosition(2.0f, 0.0f));
+    down(10);                                   // A: the warning
+    QVERIFY(r->hasWarningPending());
+    held(1.5);                                  // ...held well past the keep-all hold
+    up(10);
+    QVERIFY(r->hasWarningPending());
+    QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 270, 135 }));   // not changed
+    QVERIFY(r->hasPending());
+    down(10);                                   // a fresh press answers it
+    up(10);
+    QVERIFY(!r->hasWarningPending());
+    QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 272, 135 }));
+    r->stop();
+
+    // The keep-all hold is a second: not at 0.8 s, at 1.0 s.
+    QCOMPARE(ControllerScheme::keepAllHoldSeconds(), 1.0);
+    ControllerScheme::LongPress keepAll(ControllerScheme::keepAllHoldSeconds());
+    keepAll.press();
+    QVERIFY(!keepAll.due(0.8));
+    QVERIFY(keepAll.due(0.2));
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    r->nextItem();
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QSignalSpy kept(r, &RefineSession::kept);
+    down(10);                                   // the press keeps
+    QCOMPARE(kept.count(), 1);
+    QVERIFY(!r->hasPending());
+    up(10);
+    r->stop();
+    iom->setInputPatch(0, QString(), QString(), 0);
 }
 
 QTEST_GUILESS_MAIN(RefineSession_Test)

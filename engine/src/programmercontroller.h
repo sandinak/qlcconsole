@@ -660,7 +660,7 @@ private:
     /** Refine: A went down while View was held (View + A, Q118). */
     bool m_viewChord = false;
     /** Hold A: save all / keep; hold B: back to the last save (Q126). */
-    ControllerScheme::LongPress m_holdA;
+    ControllerScheme::LongPress m_holdA { ControllerScheme::keepAllHoldSeconds() };
     /** The head the first bumper of a pair stepped from (both bumpers). */
     quint32 m_bumperFrom = 0xFFFFFFFF;
     ControllerScheme::LongPress m_holdB;

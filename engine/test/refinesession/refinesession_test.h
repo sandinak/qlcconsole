@@ -71,6 +71,9 @@ private slots:
     /** A layer only tracked in: said where a keep goes (this cue, by
      *  default), Layer scope only until it is own, or kept at its source. */
     void aTrackedLayerKeepsHereOrAtItsSource();
+    /** Q132: A held for a second keeps everything; a hold never answers
+     *  a warning (a shared palette's "press A again"), only a fresh press. */
+    void aHeldANeverAnswersAWarning();
 
 private:
     Doc *m_doc = nullptr;

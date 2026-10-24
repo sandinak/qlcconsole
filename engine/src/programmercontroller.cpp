@@ -1484,8 +1484,14 @@ void ProgrammerController::heldTick(double dt)
     {
         if (refine)
         {
+            /* Board Q132: a hold never answers a warning (a shared
+               palette's "press A again"): only a fresh press does. */
+            if (m_refineSession->hasWarningPending())
+            {
+                // Left waiting for that press.
+            }
             // Everything pending is kept by A already: say it is.
-            if (m_refineSession->hasPending())
+            else if (m_refineSession->hasPending())
                 m_refineSession->keep();
             else
                 emit operatorAnnounce(tr("All kept."));
