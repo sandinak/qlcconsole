@@ -68,7 +68,7 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
        still being nudged goes back to what was saved. */
     if (m_doc != nullptr)
         connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
-            if (mode == Doc::Operate)
+            if (mode == Doc::Operate && !m_options.allowOperate)
                 stop();
         });
     /* Which heads are unsaved can change with any of these; tell it once. */
@@ -230,7 +230,7 @@ bool FocusSession::start(const Options &options, QString *why)
     if (m_doc == nullptr || m_doc->monitorProperties() == nullptr)
         return refuse(tr("There is no rig to focus."));
     /* A Design-mode tool: in Perform the rig belongs to the show. */
-    if (m_doc->mode() == Doc::Operate)
+    if (m_doc->mode() == Doc::Operate && !options.allowOperate)
         return refuse(tr("Focus mode works in Design mode only: switch out of Operate first."));
     const bool runCalls = !options.calls.isEmpty();
     QList<quint32> heads;
@@ -428,6 +428,13 @@ void FocusSession::nextCall()
 {
     if (m_calls.isEmpty())
         return;
+    if (m_options.endAfterLastCall && m_callIndex == m_calls.size() - 1)
+    {
+        // The last call done: leave (asking about anything unsaved).
+        emit announce(tr("Last call done."));
+        emit exitRequested();
+        return;
+    }
     enterCall(m_callIndex + 1);
 }
 

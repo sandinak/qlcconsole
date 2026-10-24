@@ -41,6 +41,7 @@ class ProgrammerFlasher;
 class HighlightEffect;
 class FocusSession;
 class FocusCalls;
+class FocusCallCue;
 class RefineSession;
 class VenueCorrections;
 class ControllerKeepAlive;
@@ -180,6 +181,9 @@ public:
     FocusCalls *focusCalls() const { return m_focusCalls; }
     /** The venue corrections beside the show file (board Q105). Never null. */
     VenueCorrections *venueCorrections() const { return m_venues; }
+    /** A focus-call cue in a playing list: armed, Start begins the calls.
+     *  Never null. */
+    FocusCallCue *focusCallCue() const { return m_focusCallCue; }
     /** Refine: the controller on a Show Tree cue's own values. Never null. */
     RefineSession *refineSession() const { return m_refineSession; }
 
@@ -626,6 +630,7 @@ private:
     /** Focus mode: see focusSession(). */
     FocusSession *m_focusSession = nullptr;
     FocusCalls *m_focusCalls = nullptr;
+    FocusCallCue *m_focusCallCue = nullptr;
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
     /** See controllerKeepAlive(). */

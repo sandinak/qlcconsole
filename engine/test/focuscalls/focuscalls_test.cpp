@@ -35,6 +35,8 @@
 #include "stagetarget.h"
 #include "qlcphysical.h"
 #include "focuscalls.h"
+#include "focuscallcue.h"
+#include "showtreecontroller.h"
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "doc.h"
@@ -614,6 +616,91 @@ void FocusCalls_Test::anEditElsewhereGoesToTheVenue()
     rp.tiltOffsetDeg = 1.0f;
     props->setFixtureRigProps(a->id(), rp);
     QVERIFY(saveDoc(m_doc).contains("TiltOfs=\"1.00\""));
+}
+
+void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    Fixture *c = makeSpot(m_doc, "C", 6.0f, 2.0f);
+    FixtureGroup *dh = makeGroup(m_doc, "DH Tspots", { a, b });
+    FixtureGroup *at = makeGroup(m_doc, "AT spots", { c });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << dh->id();
+    c1.target = targetRef(dsc->id());
+    FocusCall c2;
+    c2.groups << at->id();
+    c2.target = targetRef(dsc->id());
+    m_doc->programmer()->focusCalls()->setCalls({ c1, c2 });
+
+    // A Pre-show list: the focus-call cue, then the show.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Spring");
+    const quint32 list = st->addCueList(prod, "Pre-show");
+    const quint32 focus = st->addCue(list, -1, "Focus");
+    const quint32 house = st->addCue(list, 0, "House to half");
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    QVERIFY(st->isCueFocusCall(focus));
+    QCOMPARE(st->undoText(), QString("Make cue a focus call"));
+    QVERIFY(!st->isCueFocusCall(house));
+
+    FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
+    QSignalSpy goOn(fcc, &FocusCallCue::continueRequested);
+    m_doc->setMode(Doc::Operate);
+
+    // GO onto it: armed, said once, nothing running yet.
+    fcc->cueCurrent(list, focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(said.last().at(0).toString(), QString("Focus calls ready. Press Start to begin."));
+    const int saidOnce = said.count();
+    fcc->cueCurrent(list, focus);           // the same cue again: no repeat
+    QCOMPARE(said.count(), saidOnce);
+    QVERIFY(!s->isActive());
+    QCOMPARE(FocusCallCue::startRole(), GamepadRole::Start);
+
+    // Start: the calls, in Operate, the first one said.
+    QVERIFY(fcc->start());
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QVERIFY(s->isActive());
+    QVERIFY(s->isRunningCalls());
+    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. Fixture 1 of 2."));
+    // Step: the next call.
+    s->setTrigger(1, 1.0f);
+    s->setTrigger(1, 0.0f);
+    QCOMPARE(s->callIndex(), 1);
+    // RT on the last call: done -- it asks to leave (the panel asks about
+    // anything unsaved, then stops).
+    QSignalSpy exit(s, &FocusSession::exitRequested);
+    s->setTrigger(1, 1.0f);
+    QCOMPARE(exit.count(), 1);
+    QCOMPARE(s->callIndex(), 1);
+    s->stop();
+    // Leaving goes on with the list.
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QCOMPARE(goOn.count(), 1);
+    QCOMPARE(goOn.first().at(0).toUInt(), st->cueList(list)->chaser);
+    // ...and does not arm the same cue again as the list moves off it.
+    fcc->cueCurrent(list, focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+
+    // Armed, then the list moves on before Start: let go.
+    fcc->cueCurrent(list, house);
+    fcc->cueCurrent(list, focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    fcc->cueCurrent(list, house);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+
+    // No calls in the show: Start says so and stays armed.
+    m_doc->programmer()->focusCalls()->clear();
+    fcc->cueCurrent(list, focus);
+    QString why;
+    QVERIFY(!fcc->start(&why));
+    QCOMPARE(said.last().at(0).toString(), QString("This show has no focus calls yet."));
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    m_doc->setMode(Doc::Design);
 }
 
 QTEST_GUILESS_MAIN(FocusCalls_Test)

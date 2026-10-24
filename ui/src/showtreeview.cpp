@@ -79,6 +79,7 @@
 #include "stagetarget.h"
 #include "linespread.h"
 #include "effectdesigner.h"
+#include "focuscallcue.h"
 #include "refinepanel.h"
 #include "showtreeview.h"
 #include "itemicons.h"
@@ -1227,7 +1228,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             tr("M \u2014 Mode. B: Block (starts from nothing). C: Cue-only (its changes don't pass on). "
                "Blank: it tracks."),
             tr("F \u2014 Flags. base: the list's base cue. skip: GO passes over it. no MIB: no move in "
-               "black into it. \u2295 includes, \u00d7 reusable uses, mix, VC buttons that fire it.") };
+               "black into it. focus: a focus-call cue (GO arms the focus calls). \u2295 includes, "
+               "\u00d7 reusable uses, mix, VC buttons that fire it.") };
         for (int c = 0; c < tips.size(); ++c)
             if (!tips.at(c).isEmpty())
                 m_tree->headerItem()->setToolTip(c, tips.at(c));
@@ -1568,6 +1570,27 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                   "closely to move them unseen. Right-click a cue, or nomib 0.0.3, does the "
                                   "same."));
         f->addRow(QString(), m_cueNoMib);
+        /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): GO arms the
+           show's focus calls; the controller's Start begins them. */
+        m_cueFocusCall = new QCheckBox(tr("Focus call: GO arms the focus calls, Start begins them"), inner);
+        m_cueFocusCall->setObjectName("stCueFocusCall");
+        m_cueFocusCall->setToolTip(tr("Pre-show: GO onto this cue plays its looks as a preset and waits; the "
+                                      "voice says \"Focus calls ready\". Start (Menu) on the controller, or "
+                                      "\u2318\u21a9, begins the show's focus calls; Menu, or past the last "
+                                      "call, goes on to the next cue."));
+        f->addRow(QString(), m_cueFocusCall);
+        connect(m_cueFocusCall, &QCheckBox::toggled, this, [this](bool on) {
+            if (m_inspectorUpdating || m_pageCue == invalidId())
+                return;
+            m_st->setCuesFocusCall({ m_pageCue }, on);
+        });
+        m_cueFocusState = new QLabel(inner);
+        m_cueFocusState->setObjectName("stCueFocusState");
+        m_cueFocusState->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+        m_cueFocusState->hide();
+        f->addRow(QString(), m_cueFocusState);
+        if (FocusCallCue *fcc = m_doc->programmer()->focusCallCue())
+            connect(fcc, &FocusCallCue::stateChanged, this, &ShowTreeView::refreshFocusCallState);
         /* Refine (FOCUS_REFINE_DESIGN.md): this cue's own values from the
            stage, with the controller. */
         QPushButton *refine = new QPushButton(tr("Refine on the controller\342\200\246"), inner);
@@ -2629,6 +2652,14 @@ void ShowTreeView::buildTree()
                                          "rule would change what it plays; untick Overlapping layers mix on "
                                          "the cue page to put it on the rule anyway."));
                 }
+                // A focus-call cue (FOCUS_REFINE_DESIGN.md section 7).
+                if (!list.looks && cue.focusCall)
+                {
+                    badges << tr("focus");
+                    badgeTip = QStringList({ badgeTip, tr("Focus call: GO arms the show's focus calls; Start "
+                                                          "on the controller begins them.") })
+                               .join(QStringLiteral("\n\n")).trimmed();
+                }
                 // Q38: a cue that says no move in black where its list
                 // would (a list's own setting is badged on the list).
                 if (!list.looks && cue.noMoveInBlack)
@@ -3468,7 +3499,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueFadeIn), static_cast<QWidget *>(m_cueFadeOut),
                             static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext),
                             static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip),
-                            static_cast<QWidget *>(m_cueNoMib) })
+                            static_cast<QWidget *>(m_cueNoMib), static_cast<QWidget *>(m_cueFocusCall) })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
         // A sub-cue (P6): its advance, not a mode, base, includes or hold
@@ -3541,6 +3572,11 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         QSignalBlocker block(m_cueNoMib);
         m_cueNoMib->setChecked(cue.noMoveInBlack);
     }
+    {
+        QSignalBlocker block(m_cueFocusCall);
+        m_cueFocusCall->setChecked(cue.focusCall);
+    }
+    refreshFocusCallState();
     m_cueReuse->setText(reuseLine(cue.id, invalidId()));
 
     // Includes, in order (the later wins); the selected one kept.
@@ -4862,6 +4898,19 @@ void ShowTreeView::slotCueSkipToggled(bool on)
     if (m_inspectorUpdating || m_pageCue == invalidId())
         return;
     setCuesSkipped({ m_pageCue }, on);
+}
+
+void ShowTreeView::refreshFocusCallState()
+{
+    if (m_cueFocusState == nullptr)
+        return;
+    FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    const bool mine = fcc != nullptr && m_pageCue != invalidId() && fcc->cueId() == m_pageCue;
+    if (mine && fcc->state() == FocusCallCue::Armed)
+        m_cueFocusState->setText(tr("Focus calls: waiting for the controller (Start, or \u2318\u21a9)"));
+    else if (mine && fcc->state() == FocusCallCue::Running)
+        m_cueFocusState->setText(tr("Focus calls running: Menu ends them and goes on"));
+    m_cueFocusState->setVisible(mine && fcc->state() != FocusCallCue::Idle);
 }
 
 void ShowTreeView::slotCueNoMibToggled(bool on)

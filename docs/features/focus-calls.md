@@ -90,6 +90,25 @@ fixture, the scope, and where saves go.
 same amount — the truss came in a little low — and **A** saves them all,
 one undo step. A bumper picks one fixture again.
 
+## A focus-call cue (pre-show)
+
+Put the focus at the top of a pre-show cue list, so the list and the focus
+are one checklist:
+
+1. Make a cue for it (its looks are the preset: work light, or the first
+   call's lights parked at their point) and tick **Focus call** on its
+   cue page. The F column says **focus**.
+2. **GO** onto it in Operate. The cue's looks play and the focus calls are
+   **armed**: nothing moves yet. The laptop says "Focus calls ready.
+   Press Start to begin." and the cue page, the Run tab and the footer say
+   **Focus calls: waiting for the controller**.
+3. When the crew is ready, press **Start** (Menu) on the controller — or
+   **Start focus calls** on the Run tab, or **⌘↩**. The first call comes up,
+   blinking, as the voice says it.
+4. Work the calls as below. **Menu**, or **RT** on the last call, ends
+   them (asking about anything unsaved) and the list goes on to the next
+   cue.
+
 ## Telling the operator where they are
 
 Whoever holds the controller is on the stage, looking at the rig, not the
@@ -98,8 +117,12 @@ screen. Two things tell them where they are:
 - **The lights.** On every change — a call, a fixture, the scope — what
   is picked blinks three times (120 ms on, 120 ms off) and then stays
   lit; the rest of the call stays dim.
-- **The laptop's voice.** It says where you are, briefly, cutting off
-  whatever it was saying:
+- **The laptop's voice.** It says where you are, briefly. Feed the
+  laptop's output to the crew's headsets and it is their cue: a line is
+  never cut off or spoken over, and when you step quickly only the latest
+  one waits (the fixtures you passed are not read out). **Voice to:** in
+  the Focus calls dialog sends it to a chosen output (a Mac's audio
+  interface for the headsets, say).
   - stepping to a call: "Call 2 of 5, AT spots to Soloist DS. Fixture 1 of 4."
   - a fixture: "Fixture 3 of 8."
   - the whole call: "All 4, group."

@@ -38,8 +38,12 @@ class QProcess;
  *
  * A small interface, so each platform can say it its own way: Qt's
  * TextToSpeech where this Qt has it, else macOS's `say`, else nothing.
- * A new phrase cuts off the one before (stepping quickly through fixtures
- * says only where you stopped).
+ *
+ * The laptop feeds the crew's headsets, so the voice is their cue and must
+ * land with the blink: a line is never cut off mid-word, and never spoken
+ * over. A line that comes while one is being said waits; a newer one takes
+ * its place (stepping quickly through fixtures says where you stopped,
+ * not every fixture on the way).
  */
 class OperatorVoice : public QObject
 {
@@ -52,9 +56,22 @@ public:
     /** What speaks: "Qt TextToSpeech", "macOS say", "none". */
     virtual QString backend() const = 0;
     virtual bool isAvailable() const = 0;
-    /** Say @p text, cutting off anything still being said. */
-    virtual void say(const QString &text) = 0;
-    virtual void stop() = 0;
+
+    /** Say @p text: now, or after the line being said (a newer line takes
+     *  the place of one still waiting). */
+    void say(const QString &text);
+    /** Stop now, and drop what is waiting. */
+    void stop();
+    bool isSpeaking() const { return m_speaking; }
+    /** The line waiting for the one being said; empty for none. */
+    QString waiting() const { return m_waiting; }
+
+    /** The audio outputs this computer's voice can be sent to (macOS
+     *  `say -a`), by name; empty where it cannot choose. */
+    static QStringList outputDevices();
+    /** The output chosen (Settings; empty: the system's). */
+    static QString outputDevice();
+    static void setOutputDevice(const QString &name);
 
     /** The best voice this computer has (none under a test, or with
      *  QLC_NO_VOICE set, so a test run is never heard). */
@@ -63,6 +80,17 @@ public:
     /** The user's choice, kept on this machine (Settings, on by default). */
     static bool isEnabled();
     static void setEnabled(bool on);
+
+protected:
+    /** Speak @p text now (nothing is being said). */
+    virtual void speakNow(const QString &text) = 0;
+    virtual void stopNow() = 0;
+    /** The line has been said: the one waiting, if any, now. */
+    void finished();
+
+private:
+    bool m_speaking = false;
+    QString m_waiting;
 };
 
 /** Says nothing; records what it was asked to (tests). */
@@ -73,11 +101,22 @@ public:
     using OperatorVoice::OperatorVoice;
     QString backend() const override { return QStringLiteral("none"); }
     bool isAvailable() const override { return false; }
-    void say(const QString &text) override { m_said << text; }
-    void stop() override {}
     QStringList said() const { return m_said; }
+    /** Hold each line "being said" until finishLine() (a test of the
+     *  queue); off, a line is done at once. */
+    void setSlow(bool slow) { m_slow = slow; }
+    void finishLine() { finished(); }
+protected:
+    void speakNow(const QString &text) override
+    {
+        m_said << text;
+        if (!m_slow)
+            finished();
+    }
+    void stopNow() override {}
 private:
     QStringList m_said;
+    bool m_slow = false;
 };
 
 /** macOS's `say`, one process at a time. Linux (spd-say, espeak) and
@@ -91,8 +130,9 @@ public:
     ~CommandVoice() override;
     QString backend() const override;
     bool isAvailable() const override;
-    void say(const QString &text) override;
-    void stop() override;
+protected:
+    void speakNow(const QString &text) override;
+    void stopNow() override;
 private:
     QString m_program;
     QStringList m_args;

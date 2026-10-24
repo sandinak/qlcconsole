@@ -261,6 +261,12 @@ namespace ShowTree
          *  follows too closely). This use's, like its number. Saved as
          *  NoMoveInBlack="1", which an older build ignores. */
         bool noMoveInBlack = false;
+        /** A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): GO plays its
+         *  own looks as a preset and ARMS the show's focus calls; the
+         *  controller's Start begins them, and leaving them goes on to the
+         *  next cue. This use's, like its number. Saved as FocusCall="1",
+         *  which an older build ignores (it is then an ordinary cue). */
+        bool focusCall = false;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);

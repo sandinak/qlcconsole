@@ -43,6 +43,8 @@
 #include "timecodesource.h"
 #include "chaserrunner.h"
 #include "focuscallsdialog.h"
+#include "programmercontroller.h"
+#include "focuscallcue.h"
 #include "cuerunner.h"
 #include "chaser.h"
 #include "doc.h"
@@ -511,6 +513,31 @@ void CueRunner::buildFullLayout()
     m_now->setFont(hf);
     m_now->setWordWrap(true);
     v->addWidget(m_now);
+    /* A focus-call cue armed (FOCUS_REFINE_DESIGN.md section 7): waiting for
+       the controller's Start; this button, or Cmd+Return, does the same. */
+    {
+        m_focusArmed = new QWidget(this);
+        m_focusArmed->setObjectName(QStringLiteral("crFocusArmed"));
+        QHBoxLayout *fh = new QHBoxLayout(m_focusArmed);
+        fh->setContentsMargins(0, 0, 0, 0);
+        m_focusArmedLabel = new QLabel(m_focusArmed);
+        m_focusArmedLabel->setObjectName(QStringLiteral("crFocusArmedText"));
+        m_focusArmedLabel->setFont(hf);
+        m_focusArmedLabel->setStyleSheet(QStringLiteral("color: #d08a1c;"));
+        fh->addWidget(m_focusArmedLabel, 1);
+        m_focusStart = new QToolButton(m_focusArmed);
+        m_focusStart->setObjectName(QStringLiteral("crFocusStart"));
+        m_focusStart->setText(tr("Start focus calls"));
+        m_focusStart->setToolTip(tr("Begin the focus calls (Start on the controller, or \u2318\u21a9)"));
+        connect(m_focusStart, &QToolButton::clicked, this, [this]() {
+            m_doc->programmer()->focusCallCue()->start();
+        });
+        fh->addWidget(m_focusStart);
+        v->addWidget(m_focusArmed);
+        connect(m_doc->programmer()->focusCallCue(), &FocusCallCue::stateChanged,
+                this, &CueRunner::refreshFocusArmed);
+        refreshFocusArmed();
+    }
     m_next = new QLabel(this);
     m_next->setObjectName(QStringLiteral("crNext"));
     m_next->setFont(big);
@@ -986,6 +1013,32 @@ bool CueRunner::execute(ShowControl::Command command, const QString &cue)
     const bool ok = m_doc->showControl()->execute(r);
     refresh();
     return ok;
+}
+
+void CueRunner::refreshFocusArmed()
+{
+    if (m_focusArmed == nullptr)
+        return;
+    const FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    switch (fcc->state())
+    {
+        case FocusCallCue::Armed:
+            m_focusArmedLabel->setText(tr("Focus calls: waiting for the controller \u2014 press Start"));
+            m_focusStart->show();
+            break;
+        case FocusCallCue::Running:
+            m_focusArmedLabel->setText(tr("Focus calls running \u2014 Menu ends them and goes on"));
+            m_focusStart->hide();
+            break;
+        case FocusCallCue::Idle:
+            break;
+    }
+    m_focusArmed->setVisible(fcc->state() != FocusCallCue::Idle);
+}
+
+QString CueRunner::focusArmedText() const
+{
+    return m_focusArmed != nullptr && !m_focusArmed->isHidden() ? m_focusArmedLabel->text() : QString();
 }
 
 void CueRunner::go()

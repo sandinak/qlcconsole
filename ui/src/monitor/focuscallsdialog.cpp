@@ -33,7 +33,10 @@
 #include "programmercontroller.h"
 #include "monitorproperties.h"
 #include "venuecorrections.h"
+#include <QGuiApplication>
+
 #include "focuscallsdialog.h"
+#include "operatorvoice.h"
 #include "focusmodepanel.h"
 #include "fixturegroup.h"
 #include "stagetarget.h"
@@ -129,6 +132,29 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue })
         venueRow->addWidget(b);
     vl->addLayout(venueRow);
+    // The voice is the crew's cue: send it to the output that feeds the headsets.
+    {
+        const QStringList devices = QGuiApplication::platformName() == QLatin1String("offscreen")
+                                    ? QStringList() : OperatorVoice::outputDevices();
+        if (!devices.isEmpty())
+        {
+            QHBoxLayout *voiceRow = new QHBoxLayout;
+            voiceRow->addWidget(new QLabel(tr("Voice to:"), this));
+            QComboBox *voice = new QComboBox(this);
+            voice->setObjectName(QStringLiteral("fcVoiceDevice"));
+            voice->addItem(tr("The system's output"), QString());
+            for (const QString &d : devices)
+                voice->addItem(d, d);
+            const int at = voice->findData(OperatorVoice::outputDevice());
+            voice->setCurrentIndex(qMax(0, at));
+            voice->setToolTip(tr("Where the spoken calls go: the output that feeds the crew's headsets"));
+            connect(voice, &QComboBox::currentIndexChanged, this, [voice]() {
+                OperatorVoice::setOutputDevice(voice->currentData().toString());
+            });
+            voiceRow->addWidget(voice, 1);
+            vl->addLayout(voiceRow);
+        }
+    }
     m_venueNote = new QLabel(this);
     m_venueNote->setObjectName(QStringLiteral("fcVenueNote"));
     m_venueNote->setWordWrap(true);

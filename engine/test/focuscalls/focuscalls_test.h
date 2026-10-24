@@ -62,6 +62,10 @@ private slots:
      *  venue is applied goes into the venue and its file, not the show; a
      *  Focus mode nudge only when saved. */
     void anEditElsewhereGoesToTheVenue();
+    /** A focus-call cue: GO arms it (said once), Start begins the calls in
+     *  Operate, triggers step, past the last call it asks to leave, and
+     *  leaving goes on with the list. */
+    void aFocusCallCueArmsThenStartsOnTheController();
 
 private:
     Doc *m_doc = nullptr;
