@@ -103,17 +103,18 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
     if (st == nullptr || st->cue(cueId) == nullptr)
         return refuse(tr("Choose a cue to refine."));
-    QList<quint32> layers;
-    for (const ShowTree::Layer &l : st->cue(cueId)->layers)
-        if (l.parent == kInvalid && !l.target.isOpaque() && !st->targetFixtures(l.target).isEmpty())
-            layers << l.id;
-    if (layers.isEmpty())
-        return refuse(tr("This cue has no layer of its own on fixtures to refine."));
-
     if (m_active)
         stop();
     m_sceneMode = false;
     m_cue = cueId;
+    const QList<quint32> layers = findLayers(why);
+    if (layers.isEmpty())
+    {
+        m_cue = kInvalid;
+        m_tracked.clear();
+        return false;
+    }
+    m_keepToSource = false;
     m_layers = layers;
     m_layerIndex = qMax(0, layers.indexOf(layerId));
     m_scope = LayerScope;
@@ -145,6 +146,7 @@ void RefineSession::stop()
     m_edits.clear();
     m_editOrder.clear();
     m_layers.clear();
+    m_tracked.clear();
     m_kept.clear();
     m_levelCache.clear();
     m_layerIndex = -1;
@@ -168,6 +170,72 @@ void RefineSession::stop()
  * Where it is
  *****************************************************************************/
 
+QList<quint32> RefineSession::findLayers(QString *why) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> layers;
+    const ShowTree::Cue *c = st->cue(m_cue);
+    if (c == nullptr)
+        return layers;
+    for (const ShowTree::Layer &l : c->layers)
+        if (l.parent == kInvalid && !l.target.isOpaque() && !st->targetFixtures(l.target).isEmpty())
+            layers << l.id;
+    /* What only tracks in (section 6C): a stand-in for each top layer
+       carried in from an earlier cue, with its looks as they play here. */
+    RefineSession *self = const_cast<RefineSession *>(this);
+    self->m_tracked.clear();
+    const ShowTree::CueList *list = st->listOfCue(m_cue);
+    if (list != nullptr)
+    {
+        const QList<ShowTree::ResolvedCue> rc = st->resolved(*list);
+        const int at = list->indexOf(m_cue);
+        if (at >= 0 && at < rc.size())
+            for (const ShowTree::ResolvedLayer &rl : rc.at(at).layers)
+            {
+                if (rl.own || rl.depth > 0 || rl.target.isOpaque() || rl.isDark()
+                        || st->targetFixtures(rl.target).isEmpty())
+                    continue;
+                Tracked t;
+                t.layer.id = 0xF0000000u + quint32(self->m_tracked.size());
+                t.layer.target = rl.target;
+                t.layer.name = rl.name;
+                t.layer.looks = rl.playedLooks();
+                quint32 src = kInvalid;
+                for (const QString &key : rl.values.keys())
+                    if (src == kInvalid)
+                        st->valueSource(m_cue, rl.target, key, &src);
+                t.source = src != kInvalid ? src : rl.fromCue;
+                self->m_tracked.insert(t.layer.id, t);
+                layers << t.layer.id;
+            }
+    }
+    if (layers.isEmpty() && why != nullptr)
+        *why = tr("This cue has no layer on fixtures to refine.");
+    return layers;
+}
+
+bool RefineSession::isTrackedLayer() const
+{
+    return !m_sceneMode && m_tracked.contains(currentLayer());
+}
+
+quint32 RefineSession::trackedSource() const
+{
+    return m_tracked.value(currentLayer()).source;
+}
+
+void RefineSession::setKeepToSource(bool source)
+{
+    m_keepToSource = source;
+    emit changed();
+    if (isTrackedLayer())
+    {
+        const ShowTree::Cue *src = m_doc->showTree()->cue(trackedSource());
+        say(source && src != nullptr ? tr("Keeps go into cue %1.").arg(src->number.isEmpty() ? src->name : src->number)
+                                     : tr("Keeps go into this cue."));
+    }
+}
+
 const ShowTree::Cue *RefineSession::cue() const
 {
     return m_doc->showTree()->cue(m_cue);
@@ -175,6 +243,9 @@ const ShowTree::Cue *RefineSession::cue() const
 
 const ShowTree::Layer *RefineSession::layer(quint32 layerId) const
 {
+    const auto t = m_tracked.constFind(layerId);
+    if (t != m_tracked.constEnd())
+        return &t->layer;
     const ShowTree::Cue *c = cue();
     if (c == nullptr)
         return nullptr;
@@ -257,6 +328,12 @@ void RefineSession::setScope(Scope scope)
         return;
     if (scope == GroupScope && groups().isEmpty())
         scope = FixtureScope;
+    if (scope != LayerScope && isTrackedLayer())
+    {
+        // An exception needs the layer to be this cue's own first.
+        say(tr("Tracked layer: keep it in this cue first, then pick a fixture."));
+        return;
+    }
     if (scope == m_scope)
         return;
     m_scope = scope;
@@ -798,6 +875,23 @@ bool RefineSession::keep(QString *why)
         for (const QString &k : order)
             m_kept << previewValues(m_edits[k]);
 
+    /* A look onto its layer -- or, for a layer only tracked in, into this
+       cue (it becomes its own here) or the cue its values come from. */
+    bool toSource = false;
+    auto setLook = [&](quint32 layerId, const ShowTree::Look &look) {
+        const auto t = m_tracked.constFind(layerId);
+        if (t == m_tracked.constEnd())
+            return st->setLayerLook(m_cue, layerId, look);
+        if (m_keepToSource && st->updateSource(m_cue, t->layer.target, look))
+        {
+            toSource = true;
+            return true;
+        }
+        return st->setTargetLook(m_cue, t->layer.target, look);
+    };
+    const bool wasTracked = isTrackedLayer();
+    const ShowTree::Target trackedTarget = wasTracked ? layer(currentLayer())->target : ShowTree::Target();
+
     st->beginBatch(tr("Refine"));
     bool ok = true;
     for (const QString &k : order)
@@ -886,14 +980,14 @@ bool RefineSession::keep(QString *why)
                                                          { qRound(pan), qRound(tilt) },
                                                          tr("Refined position"));
             }
-            ok = ok && st->setLayerLook(m_cue, onLayer, look);
+            ok = ok && setLook(onLayer, look);
         }
         if (e.hasZoom)
         {
             ShowTree::Look look;
             look.key = ShowTree::KeyZoom;
             look.palettes << st->createInlinePalette(QLCPalette::Zoom, { double(e.zoom) }, tr("Refined zoom"));
-            ok = ok && st->setLayerLook(m_cue, onLayer, look);
+            ok = ok && setLook(onLayer, look);
         }
         if (e.hasFocus)
         {
@@ -906,21 +1000,21 @@ bool RefineSession::keep(QString *why)
             ShowTree::Look look;
             look.key = ShowTree::KeyBeam;
             look.palettes << st->createInlinePalette(QLCPalette::Beam, v, tr("Refined focus"));
-            ok = ok && st->setLayerLook(m_cue, onLayer, look);
+            ok = ok && setLook(onLayer, look);
         }
         if (e.colour != kInvalid)
         {
             ShowTree::Look look;
             look.key = ShowTree::KeyColour;
             look.palettes << e.colour;
-            ok = ok && st->setLayerLook(m_cue, onLayer, look);
+            ok = ok && setLook(onLayer, look);
         }
         if (e.gobo != kInvalid)
         {
             ShowTree::Look look;
             look.key = ShowTree::KeyGobo;
             look.palettes << e.gobo;
-            ok = ok && st->setLayerLook(m_cue, onLayer, look);
+            ok = ok && setLook(onLayer, look);
         }
         if (!ok)
             break;
@@ -937,9 +1031,23 @@ bool RefineSession::keep(QString *why)
     m_edits.clear();
     m_editOrder.clear();
     m_levelCache.clear();
+    if (wasTracked && !toSource)
+    {
+        // Its own here now: step on from that layer.
+        m_layers = findLayers(nullptr);
+        for (int i = 0; i < m_layers.size(); ++i)
+            if (const ShowTree::Layer *l = layer(m_layers.at(i)))
+                if (!m_tracked.contains(l->id) && l->target == trackedTarget)
+                    m_layerIndex = i;
+    }
+    else if (wasTracked)
+        m_layers = findLayers(nullptr);
     rebuildWrites();
     emit changed();
-    say(m_doc->mode() == Doc::Operate ? tr("Kept. It plays from the next GO.") : tr("Kept."));
+    if (wasTracked)
+        say(toSource ? tr("Kept in the cue it tracks from.") : tr("Kept in this cue."));
+    else
+        say(m_doc->mode() == Doc::Operate ? tr("Kept. It plays from the next GO.") : tr("Kept."));
     return true;
 }
 
@@ -1083,6 +1191,14 @@ QString RefineSession::wherePhrase() const
     switch (m_scope)
     {
         case LayerScope:
+            if (isTrackedLayer())
+            {
+                const ShowTree::Cue *src = m_doc->showTree()->cue(trackedSource());
+                const QString from = src != nullptr ? (src->number.isEmpty() ? src->name : src->number) : QString();
+                // The default said: a keep goes into this cue.
+                return m_keepToSource ? tr("%1, tracked from %2. Keeps go into %2.").arg(name, from)
+                                      : tr("%1, tracked from %2. Keeps go into this cue.").arg(name, from);
+            }
             return tr("%1, layer.").arg(name);
         case GroupScope:
             return tr("%1, group %2 of %3.").arg(targetName(scopeTarget()))

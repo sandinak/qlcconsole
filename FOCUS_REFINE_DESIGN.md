@@ -385,6 +385,37 @@ between them does not end it.
 **Layers listed.** The cue's **own top-level** layers on fixtures. Opaque
 function layers, and layers that are only tracked in, are not listed (§12).
 
+### 6C. A layer the cue only tracks
+
+Some layers a cue only inherits (tracked in from an earlier cue, not in
+`Cue::layers`). Refine now lists them after the cue's own layers:
+
+- **How they are listed.** `ShowTreeController::resolved()` gives every
+  `ResolvedLayer` with `own == false` at depth 0. Each one gets a stand-in
+  layer holding its target and the looks it plays here, so the controller,
+  the preview and the start values work exactly as on an own layer.
+  `valueSource()` gives the cue its values come from.
+- **What the voice says.** "AT spots, tracked from 2. Keeps go into this
+  cue."
+- **Where A keeps the change.** It can go either to this cue or to the
+  source cue:
+  - **This cue: the default.** `setTargetLook()` makes the layer this cue's
+    own; the source cue is untouched. Refine then steps on from that own
+    layer.
+  - **The source cue: the alternative.** `updateSource()` makes the change
+    there, so every cue that tracks it plays it.
+- **Switching between them.** On the panel's checkbox or the **S** key. The
+  choice is spoken: "Keeps go into cue 2." The controller has no button for
+  it: every button already has a job. This is Q-C2 in §11.
+- **Layer scope only.** An exception on a tracked layer needs this cue's own
+  layer first, so Y says so and stays at Layer scope until A keeps it here.
+
+The default is "this cue" because what the operator is looking at is this
+cue. Changing the source silently would also change every cue between there
+and here. This is Q-C1.
+
+Test: `refinesession_test aTrackedLayerKeepsHereOrAtItsSource`.
+
 ### 6B. Refine on a Build scene (from the Workbench)
 
 The owner asked for Refine "in the show-tree/builder" with the controller
@@ -687,7 +718,6 @@ step").
 
 **Stubbed or not built:**
 
-- Refine of tracked-in layers.
 - A venue manager UI (rename and delete exist in the engine only).
 - Help screenshots for the new panels (`./help-shots.sh` entries).
 - Rumble.

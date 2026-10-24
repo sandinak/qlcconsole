@@ -303,12 +303,26 @@ void FocusCallsUi_Test::theRefinePanel()
     QVERIFY(panel->pendingLine().startsWith("Nothing pending"));
     QCOMPARE(m_doc->palette(st->cue(cue)->layers.first().look(ShowTree::KeyPosition)->palettes.first())
              ->values(), QVariantList({ 271, 135 }));
+    QVERIFY(panel->keepToLine().isEmpty());     // its own layer
     // G: to one fixture.
     QTest::keyClick(panel, Qt::Key_G);
     QVERIFY(panel->scopeLine().startsWith("Fixture: an exception for T1"));
     // Escape with nothing pending leaves at once.
     QTest::keyClick(panel, Qt::Key_Escape);
     QVERIFY(!m_doc->programmer()->refineSession()->isActive());
+    QTRY_VERIFY(panel.isNull());
+
+    // A cue that only tracks it: the panel offers where A keeps (S switches).
+    const quint32 verse = st->addCue(list, 0, "Verse");
+    panel = RefinePanel::open(m_doc, nullptr, verse, 0xFFFFFFFF, &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY2(panel->keepToLine().startsWith("Keep in the cue it tracks from (cue 1)"),
+             qPrintable(panel->keepToLine()));
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(!r->keepsToSource());
+    QTest::keyClick(panel, Qt::Key_S);
+    QVERIFY(r->keepsToSource());
+    QTest::keyClick(panel, Qt::Key_Escape);
     QTRY_VERIFY(panel.isNull());
 }
 

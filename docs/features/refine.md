@@ -91,6 +91,20 @@ degrees as a whole: it would stop following its target. Move the target
 in the Lighting Studio, or pick one fixture (Y) and give it a position of
 its own.
 
+## A layer the cue only tracks
+
+A cue that sets nothing on a layer still plays it, tracked in from an
+earlier cue. Refine steps through those layers too, after the cue's own,
+and the voice says so: "AT spots, tracked from 2. Keeps go into this cue."
+
+- **By default A keeps the change in this cue.** The layer becomes the
+  cue's own here, and the cue the value came from is not touched.
+- **Or keep it where it comes from:** tick *Keep in the cue it tracks
+  from* on the panel, or press **S**. The change is then made in that cue,
+  and every cue that tracks it plays it too. The voice says which.
+- A tracked layer is edited as a whole (Layer scope). Keep it in this
+  cue first, and then Y picks a group or a fixture for an exception.
+
 ## On a Build scene
 
 A Build scene has no layers of its own, so Refine takes the nearest
