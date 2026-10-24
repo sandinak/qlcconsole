@@ -360,13 +360,24 @@ elif [ "$NLOCAL" -gt 0 ]; then
         STATE[i]=done
     done
 fi
+# How many test programs a leg must run: one per test.sh in the tree
+# (engine, UI, and the plugins unittest.sh runs; Velleman not on macOS). A
+# leg that runs fewer -- none found, a group gone missing -- fails, however
+# its programs did: "the tests passed" means nothing about tests not run.
+EXPECTED=$(cd "$REPO" && { ls engine/test/*/test.sh ui/test/*/test.sh
+    ls plugins/{enttecwing,midi,artnet,E1.31,wled}/test/test.sh
+    [ "$(uname)" = Darwin ] || ls plugins/velleman/test/test.sh; } 2>/dev/null | wc -l | tr -d ' ')
 for ((i = 0; i < NLEGS; i++)); do
-    if [ "${STATE[i]}" = done ] && [ -z "${RESULT[i]}" ]; then RESULT[i]=PASS; fi
     if [ "${STATE[i]}" = done ]; then
         # "Test programs run: 99 engine, 77 of 78 UI, 5 plugin" per phase, summed.
         NTESTS[i]=$(grep -E "^Test programs run:" "$(log_of $i)" \
             | awk '{ n += $4 + $6 + $10 } END { print n + 0 }')
+        if [ "$QUICK" != 1 ] && [ "${NTESTS[i]}" -lt "$EXPECTED" ]; then
+            say "${LEG_NAME[i]}: ran ${NTESTS[i]} test programs of the $EXPECTED in the tree. This is not a pass."
+            [ -z "${RESULT[i]}" ] && RESULT[i]="FAIL(count)"
+        fi
     fi
+    if [ "${STATE[i]}" = done ] && [ -z "${RESULT[i]}" ]; then RESULT[i]=PASS; fi
 done
 
 #############################################################################
@@ -381,7 +392,7 @@ if [ -n "$REMOTE_PIDS" ]; then
         read rc secs < "$LOGS/${LEG_NAME[i]}.remote" || { rc=255; secs=0; }
         T_TEST[i]=$secs
         # The remote gate's own summary line for the leg: "... tests  184 PASS".
-        NTESTS[i]=$(grep -E "^  ${LEG_NAME[i]} " "$(log_of $i)" | tail -n 1 | sed -n 's/.* tests *\([0-9]*\) .*/\1/p')
+        NTESTS[i]=$(grep -E "^  ${LEG_NAME[i]} " "$(log_of $i)" | tail -n 1 | sed -n 's/.* tests *\([0-9]*\)[/ ].*/\1/p')
         if [ "$rc" -eq 0 ]; then RESULT[i]=PASS
         elif [ "$rc" -eq 255 ]; then RESULT[i]="FAIL(ssh ${HOST[i]})"
         else RESULT[i]="FAIL(on ${HOST[i]})"; fi
@@ -417,9 +428,11 @@ for ((i = 0; i < NLEGS; i++)); do
         *)
             if grep -qE "^==================== FAILED:|^FAILED test programs" "$log"; then
                 awk '/^==================== FAILED:/ { on = 1 } on { print } /^Unit tests failed/ { on = 0 }' "$log" | head -n 600
-            else
-                tail -n 40 "$log"
-            fi ;;
+            fi
+            # What stopped a run before (or instead of) its tests: the
+            # fixture check, staging, a count that came up short.
+            grep -nE "not valid|not a pass|Traceback|Error:|Could not copy|No test programs|ran [0-9]+ test programs of" -B 3 -A 1 "$log" | head -n 60
+            grep -qE "^==================== FAILED:" "$log" || { echo "[... last 20 lines ...]"; tail -n 20 "$log"; } ;;
     esac
 done
 
@@ -443,8 +456,8 @@ done
         elif [ "${STATE[i]}" = remote ]; then
             printf '  %-12s on %-14s %5ss   tests %4s   %s\n' "${LEG_NAME[i]}" "${HOST[i]}" "${T_TEST[i]}" "${NTESTS[i]:-?}" "${RESULT[i]}"
         else
-            printf '  %-12s configure %3ss   build %4ss   test %4ss   alone %3ss   tests %4s   %s\n' \
-                "${LEG_NAME[i]}" "${T_CONF[i]}" "${T_BUILD[i]}" "${T_TEST[i]}" "${T_ALONE[i]}" "${NTESTS[i]:-0}" "${RESULT[i]}"
+            printf '  %-12s configure %3ss   build %4ss   test %4ss   alone %3ss   tests %4s/%s   %s\n' \
+                "${LEG_NAME[i]}" "${T_CONF[i]}" "${T_BUILD[i]}" "${T_TEST[i]}" "${T_ALONE[i]}" "${NTESTS[i]:-0}" "$EXPECTED" "${RESULT[i]}"
         fi
     done
     echo "  whole gate $(( $(date +%s) - GATE_START ))s"

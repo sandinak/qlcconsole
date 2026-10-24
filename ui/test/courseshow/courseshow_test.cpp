@@ -92,6 +92,7 @@
 #include "doc.h"
 
 #include "courseshow_test.h"
+#include "../common/dragpos.h"
 
 using namespace ShowTree;
 
@@ -246,9 +247,9 @@ QMimeData *idsMime(const QString &type, const QList<quint32> &ids)
    hint at the top right said while over it. */
 QString dragAndDrop(QWidget *w, const QPoint &at, QMimeData *mime, QLabel *hint)
 {
-    QDragEnterEvent enter(at, Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(w, &enter);
-    QDragMoveEvent move(at, Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent move(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(w, &move);
     const QString said = hint != nullptr ? hint->text() : QString();
     QDropEvent drop(at, Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);

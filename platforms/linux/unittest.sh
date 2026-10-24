@@ -283,6 +283,16 @@ case "$PHASE" in
   parallel) SER_TESTS="" ;;
   serial)   PAR_TESTS="" ;;
 esac
+# Every test the serial list names must be in this build: a run that finds
+# fewer than it should is not a pass (see the counts at the end).
+if [ -z "${QLC_TEST_ONLY:-}" ]; then
+    for t in $SERIAL_ALL; do
+        if ! echo "$ALL_TESTS" | grep -qx "$t"; then
+            echo "$SERIAL_LIST names $t, which this build dir doesn't have. This is not a pass."
+            exit 1
+        fi
+    done
+fi
 RUN_TESTS="$PAR_TESTS $SER_TESTS"
 
 mkdir -p "$LOGDIR"
@@ -299,7 +309,15 @@ export LOGDIR TMPBASE TESTPREFIX TOTAL
 T0=$(date +%s)
 NPAR=$(echo $PAR_TESTS | wc -w | tr -d ' ')
 NSER=$(echo $SER_TESTS | wc -w | tr -d ' ')
-echo "Running $NPAR test programs, $JOBS at a time; then $NSER alone (from $SERIAL_LIST)."
+if [ "$PHASE" = "serial" ]; then
+    echo "Running the $NSER test programs in $SERIAL_LIST alone."
+else
+    echo "Running $NPAR test programs, $JOBS at a time; then $NSER alone (from $SERIAL_LIST)."
+fi
+if [ "$TOTAL" -eq 0 ] && [ -z "${QLC_TEST_ONLY:-}" ]; then
+    echo "No test programs found in $PWD. This is not a pass."
+    exit 1
+fi
 if [ "$NPAR" -gt 0 ]; then
     printf '%s\n' $PAR_TESTS | order_by_time | run_batch "$JOBS"
 fi

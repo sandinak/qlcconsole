@@ -118,6 +118,7 @@
 #include "doc.h"
 
 #include "showtreeview_test.h"
+#include "../common/dragpos.h"
 
 using namespace ShowTree;
 
@@ -1045,9 +1046,9 @@ void ShowTreeView_Test::dropsOnTheTreeWidget()
     QDataStream gs(&g, QIODevice::WriteOnly);
     gs << towers->id();
     mime->setData(FixtureGroupSource::fixtureGroupMimeType(), g);
-    QDragEnterEvent enter(at, Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &enter);
-    QDragMoveEvent move(at, Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent move(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &move);
     QVERIFY(move.isAccepted());
     QLabel *hint = view.findChild<QLabel *>("stDropHint");
@@ -1072,9 +1073,9 @@ void ShowTreeView_Test::dropsOnTheTreeWidget()
     tree->doItemsLayout();
     tree->scrollToItem(cueItem);
     const QPoint at2 = tree->visualItemRect(cueItem).center();
-    QDragEnterEvent enter2(at2, Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
+    QDragEnterEvent enter2(dragPos(at2), Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
     QCoreApplication::sendEvent(tree->viewport(), &enter2);
-    QDragMoveEvent altMove(at2, Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
+    QDragMoveEvent altMove(dragPos(at2), Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
     QCoreApplication::sendEvent(tree->viewport(), &altMove);
     QCOMPARE(hint->text(), QString("2 new layers in 1 One, one for each group"));
     QDropEvent altDrop(at2, Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
@@ -1091,9 +1092,9 @@ void ShowTreeView_Test::dropsOnTheTreeWidget()
     tree->doItemsLayout();
     tree->scrollToItem(layerItem);
     const QPoint at3 = tree->visualItemRect(layerItem).center();
-    QDragEnterEvent enter3(at3, Qt::CopyAction, two, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter3(dragPos(at3), Qt::CopyAction, two, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &enter3);
-    QDragMoveEvent onLayer(at3, Qt::CopyAction, two, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent onLayer(dragPos(at3), Qt::CopyAction, two, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &onLayer);
     QVERIFY(onLayer.isAccepted());
     QCOMPARE(hint->text(), QString("add USTs + Spots to layer Towers in 1 One"));
@@ -1927,9 +1928,9 @@ static QMimeData *idsMime(const char *type, const QList<quint32> &ids)
 static QString dragAndDrop(QWidget *w, const QPoint &at, QMimeData *mime, QLabel *hint,
                            Qt::KeyboardModifiers mods = Qt::NoModifier, bool *accepted = nullptr)
 {
-    QDragEnterEvent enter(at, Qt::CopyAction, mime, Qt::LeftButton, mods);
+    QDragEnterEvent enter(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, mods);
     QCoreApplication::sendEvent(w, &enter);
-    QDragMoveEvent move(at, Qt::CopyAction, mime, Qt::LeftButton, mods);
+    QDragMoveEvent move(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, mods);
     QCoreApplication::sendEvent(w, &move);
     if (accepted != nullptr)
         *accepted = move.isAccepted();
@@ -2713,9 +2714,9 @@ void ShowTreeView_Test::severalRowsSelectedDeleteAndDrag()
     const QRect rect = tree->visualItemRect(onto);
     const QPoint at(rect.center().x(), rect.top() + rect.height() * 3 / 4);     // its lower half: after it
     {
-        QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::AltModifier);
+        QDragEnterEvent enter(dragPos(at), Qt::MoveAction, mime, Qt::LeftButton, Qt::AltModifier);
         QCoreApplication::sendEvent(tree->viewport(), &enter);
-        QDragMoveEvent move(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::AltModifier);
+        QDragMoveEvent move(dragPos(at), Qt::MoveAction, mime, Qt::LeftButton, Qt::AltModifier);
         QCoreApplication::sendEvent(tree->viewport(), &move);
         QVERIFY(!move.isAccepted());
         QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("one cue at a time"));
@@ -2730,9 +2731,9 @@ void ShowTreeView_Test::severalRowsSelectedDeleteAndDrag()
     // Without Alt they move as a block after it, renumbered; the hint says
     // where and as what first.
     const QString c3Number = st->cue(c3)->number;
-    QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(dragPos(at), Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &enter);
-    QDragMoveEvent move(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent move(dragPos(at), Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &move);
     QVERIFY(move.isAccepted());
     QVERIFY(view.findChild<QLabel *>("stDropHint")->text().startsWith("Move 2 cues after"));

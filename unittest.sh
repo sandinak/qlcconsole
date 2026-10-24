@@ -29,14 +29,29 @@ if [ ! -d $DEST_DIR/resources/ ]; then
   mkdir -p $DEST_DIR/resources/
 fi
 
-# Copy resources directories necessary for unittest
-cp -r $SOURCE_DIR/resources/colorfilters $DEST_DIR/resources
-cp -r $SOURCE_DIR/resources/fixtures $DEST_DIR/resources
-cp -r $SOURCE_DIR/resources/gobos $DEST_DIR/resources
-cp -r $SOURCE_DIR/resources/icons $DEST_DIR/resources
-cp -r $SOURCE_DIR/resources/inputprofiles $DEST_DIR/resources
-cp -r $SOURCE_DIR/resources/rgbscripts $DEST_DIR/resources
-cp -r $SOURCE_DIR/resources/schemas $DEST_DIR/resources
+# Copy resources directories necessary for unittest -- entry by entry, and
+# not what the build dir already has as a link to the very same file. A macOS
+# build links resources/<kind>/* to the sources (resources/CMakeLists.txt), so
+# copying onto those links wrote each source file over itself; with the gate's
+# legs staging at the same time, through their own links to the same sources,
+# that failed ("Permission denied", "Not a directory") and left files half
+# written while another leg read them.
+stage_resources()
+{
+    local kind="$1" e
+    mkdir -p "$DEST_DIR/resources/$kind"
+    for e in "$SOURCE_DIR/resources/$kind"/*; do
+        [ -e "$e" ] || continue
+        [ "$e" -ef "$DEST_DIR/resources/$kind/$(basename "$e")" ] && continue
+        cp -R "$e" "$DEST_DIR/resources/$kind/" || return 1
+    done
+}
+for kind in colorfilters fixtures gobos icons inputprofiles rgbscripts schemas; do
+    if ! stage_resources $kind; then
+        echo "Could not copy resources/$kind into $DEST_DIR for the tests."
+        exit 1
+    fi
+done
 
 # Find all files necessary for tests recursively in the source directory and copy
 # to destination directory.
@@ -55,8 +70,13 @@ for file in $(find $SOURCE_DIR \( -path "$SOURCE_DIR/build*" -o -path "$DEST_DIR
     # Create the destination directory if it doesn't exist
     mkdir -p $DEST_DIR/$dir
 
-    # Move the file to the new destination
-    cp $file $DEST_DIR/$dir/
+    # Copy the file there, unless it is there already as a link to itself
+    # (see stage_resources above).
+    [ "$file" -ef "$DEST_DIR/$dir/$(basename $file)" ] && continue
+    if ! cp $file $DEST_DIR/$dir/; then
+        echo "Could not copy $file into $DEST_DIR for the tests."
+        exit 1
+    fi
 done
 
 cp $SOURCE_DIR/platforms/linux/unittest.sh $DEST_DIR/

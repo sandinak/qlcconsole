@@ -62,6 +62,7 @@
 #include "doc.h"
 
 #include "ledlayout_test.h"
+#include "../common/dragpos.h"
 
 /* The column of the Fixture Manager tree that carries a row's ids. */
 #define KColumnName 0
@@ -192,7 +193,7 @@ static bool dropFixtureAtCentre(MonitorGraphicsView *gv, quint32 fid)
     s << fid;
     QMimeData mime;
     mime.setData(QStringLiteral("application/x-qlc-fid"), data);
-    QDragEnterEvent en(gv->viewport()->rect().center(), Qt::CopyAction, &mime,
+    QDragEnterEvent en(dragPos(gv->viewport()->rect().center()), Qt::CopyAction, &mime,
                        Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(gv->viewport(), &en);
     QDropEvent ev(QPointF(gv->viewport()->rect().center()), Qt::CopyAction, &mime,

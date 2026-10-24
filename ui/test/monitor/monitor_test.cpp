@@ -139,6 +139,7 @@
 #include "qlcfile.h"
 #include "qlcfixturedefcache.h"
 #include <QFileInfo>
+#include "../common/dragpos.h"
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
 // QMessageBox's extra buttons (confirmFeatureDelete's "Delete"/"Detach &&
@@ -12725,7 +12726,7 @@ bool dropFixtureAtCentre(MonitorGraphicsView *gv, quint32 fid)
                   Qt::LeftButton, Qt::NoModifier);
     // Qt only delivers a Drop to a widget that has accepted the DragEnter, so
     // play the sequence a real drag makes.
-    QDragEnterEvent en(gv->viewport()->rect().center(), Qt::CopyAction, &mime,
+    QDragEnterEvent en(dragPos(gv->viewport()->rect().center()), Qt::CopyAction, &mime,
                        Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(gv->viewport(), &en);
     QApplication::sendEvent(gv->viewport(), &ev);
@@ -13077,7 +13078,7 @@ void Monitor_Test::aDragFromTheInventoryCarriesEverySelectedFixture()
     QVERIFY(mime->hasFormat("application/x-qlc-fid"));
 
     // What the plot receives is what a drop of that payload places.
-    QDragEnterEvent en(rig.gv->viewport()->rect().center(), Qt::CopyAction, mime.get(),
+    QDragEnterEvent en(dragPos(rig.gv->viewport()->rect().center()), Qt::CopyAction, mime.get(),
                        Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(rig.gv->viewport(), &en);
     QDropEvent ev(QPointF(rig.gv->viewport()->rect().center()), Qt::CopyAction, mime.get(),
@@ -16968,9 +16969,9 @@ void Monitor_Test::onlyInventoryDragsAreTakenByThePlot()
 
     QMimeData text;
     text.setText("not a fixture");
-    QDragEnterEvent en(c, Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent en(dragPos(c), Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(rig.gv->viewport(), &en);
-    QDragMoveEvent mv(c, Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent mv(dragPos(c), Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(rig.gv->viewport(), &mv);
     QDropEvent dr(QPointF(c), Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(rig.gv->viewport(), &dr);
@@ -16978,9 +16979,9 @@ void Monitor_Test::onlyInventoryDragsAreTakenByThePlot()
 
     // An inventory drag is taken while it moves over the plot.
     std::unique_ptr<QMimeData> mime(InventoryTree::fixtureMime({ 12345 }));
-    QDragEnterEvent en2(c, Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent en2(dragPos(c), Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(rig.gv->viewport(), &en2);
-    QDragMoveEvent mv2(c, Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent mv2(dragPos(c), Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
     mv2.setDropAction(Qt::IgnoreAction);
     mv2.ignore();
     QApplication::sendEvent(rig.gv->viewport(), &mv2);
