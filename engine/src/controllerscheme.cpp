@@ -143,6 +143,37 @@ QString ControllerScheme::stickLabel(Tool tool, bool fine)
     return fine ? tr("Fine nudge") : tr("Nudge");
 }
 
+bool ControllerScheme::repeats(Verb verb)
+{
+    return verb == ZoomWider || verb == ZoomNarrower || verb == FocusNearer || verb == FocusFarther;
+}
+
+void ControllerScheme::HoldRepeat::press(int key, bool repeats)
+{
+    m_held = repeats ? key : -1;
+    m_wait = delay();
+}
+
+void ControllerScheme::HoldRepeat::release(int key)
+{
+    if (key == m_held)
+        m_held = -1;
+}
+
+int ControllerScheme::HoldRepeat::due(double dt)
+{
+    if (m_held < 0)
+        return 0;
+    m_wait -= dt;
+    int n = 0;
+    while (m_wait <= 1e-9)      // a hair over: sums of seconds are not exact
+    {
+        ++n;
+        m_wait += interval();
+    }
+    return n;
+}
+
 bool ControllerScheme::TriggerButton::update(float norm)
 {
     if (!m_down && norm >= pressAt())

@@ -219,6 +219,12 @@ public:
 public:
     /** Do what @p verb means here. Exit only asks (exitRequested()). */
     void apply(ControllerScheme::Verb verb);
+    /** A control went down (@p down) or up: applied once on the press; the
+     *  D-pad's zoom and focus arms repeat while held (tick() does them) --
+     *  not on the colour and gobo pages, where they step palettes. */
+    void press(ControllerScheme::Verb verb, bool down);
+    /** Whether @p verb repeats on the page now. */
+    bool repeats(ControllerScheme::Verb verb) const;
     void setStick(Stick stick, float xNorm, float yNorm);
     void setStickResponse(float deadzone, float sensitivity);
     void setTrigger(int side, float norm);
@@ -316,6 +322,7 @@ private:
     float m_deadzone = 0.05f;
     float m_sensitivity = 1.0f;
     ControllerScheme::TriggerButton m_trigger[2];
+    ControllerScheme::HoldRepeat m_hold;
 
     QTimer *m_flashTimer = nullptr;
     QElapsedTimer m_flashClock;

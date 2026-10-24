@@ -384,6 +384,23 @@ void RefineSession_Test::zoomAndFocus()
     QCOMPARE(m_doc->palette(l.look(KeyZoom)->palettes.first())->value().toFloat(), 25.0f);
     QCOMPARE(m_doc->palette(l.look(KeyBeam)->palettes.first())->values().first().toInt(), 133);
 
+    // Held, the D-pad repeats: once on the press, then after 0.4 s every 80 ms.
+    const ControllerScheme::Verb in = ControllerScheme::verbFor(GamepadRole::DpadUp);
+    r->press(in, true);
+    QVERIFY(r->pendingZoom(m_spots.first(), deg));
+    QCOMPARE(deg, 24.0f);
+    r->tick(0.3);
+    QVERIFY(r->pendingZoom(m_spots.first(), deg));
+    QCOMPARE(deg, 24.0f);
+    r->tick(0.1 + ControllerScheme::HoldRepeat::interval() * 2);
+    QVERIFY(r->pendingZoom(m_spots.first(), deg));
+    QCOMPARE(deg, 21.0f);                   // three more steps in
+    r->press(in, false);
+    r->tick(1.0);
+    QVERIFY(r->pendingZoom(m_spots.first(), deg));
+    QCOMPARE(deg, 21.0f);                   // let go: no more
+    r->revert();
+
     // The colour page steps the show's colour palettes; A keeps the one picked.
     QLCPalette *red = new QLCPalette(QLCPalette::Color);
     red->setName("Red");
@@ -395,7 +412,11 @@ void RefineSession_Test::zoomAndFocus()
     m_doc->addPalette(blue);
     r->apply(ControllerScheme::Alternate);
     QCOMPARE(r->page(), RefineSession::ColourPage);
-    r->apply(ControllerScheme::FocusFarther);   // D-pad right: the first, by name
+    // Paging palettes does not repeat: held, D-pad right steps once.
+    QVERIFY(!r->repeats(ControllerScheme::FocusFarther));
+    r->press(ControllerScheme::FocusFarther, true);   // D-pad right: the first, by name
+    r->tick(2.0);
+    r->press(ControllerScheme::FocusFarther, false);
     QVERIFY(r->keep());
     QCOMPARE(st->cue(m_cue)->layers.first().look(KeyColour)->palettes, QList<quint32>({ blue->id() }));
     r->stop();

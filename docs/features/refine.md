@@ -77,7 +77,8 @@ scope picks the first fixture.
 | Leave | Menu | Esc |
 
 Up is in, down is out; right tightens the focus and left loosens it,
-here as in Focus mode. On the **colour** and **gobo** pages, D-pad right
+here as in Focus mode. Hold an arm and it keeps going: once, then after
+a moment over and over until you let go. On the **colour** and **gobo** pages, D-pad right
 and left step forward and back through the show's colour or gobo palettes and say the name of each.
 
 What you change is **pending**: the rig shows it at once, but the cue is

@@ -100,6 +100,9 @@ fixture, the scope, and where saves go.
 | Where am I? | RS (right stick click) | W |
 | Leave | Menu | Esc |
 
+Held, a D-pad arm keeps zooming or focusing until you let go; the
+bumpers and triggers step once a press.
+
 **The whole call** (Y): a nudge moves every fixture of the call by the
 same amount — the truss came in a little low — and **A** saves them all,
 one undo step. A bumper picks one fixture again.

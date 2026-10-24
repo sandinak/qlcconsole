@@ -2145,8 +2145,11 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_fineNormY = norm;
         else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
             m_refineSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
-        else if (value > 0)
-            m_refineSession->apply(ControllerScheme::verbFor(role));
+        else if (ControllerScheme::verbFor(role) != ControllerScheme::NoVerb)
+        {
+            // Down applies (a held D-pad arm repeats); up stops it.
+            m_refineSession->press(ControllerScheme::verbFor(role), value > 0);
+        }
         m_refineSession->setStick(RefineSession::Coarse, m_panNorm, m_tiltNorm);
         m_refineSession->setStick(RefineSession::Fine, m_fineNormX, m_fineNormY);
         return true;
