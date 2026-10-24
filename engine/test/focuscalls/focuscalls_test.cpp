@@ -801,4 +801,58 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     m_doc->setMode(Doc::Design);
 }
 
+void FocusCalls_Test::aFocusCallCueAsksForTheVenue()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    FixtureGroup *dh = makeGroup(m_doc, "DH Tspots", { a });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << dh->id();
+    c1.target = targetRef(dsc->id());
+    m_doc->programmer()->focusCalls()->setCalls({ c1 });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Pre-show");
+    const quint32 focus = st->addCue(list, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Spring.qlcc"), false);   // a show with a file, no venue
+
+    FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
+    QSignalSpy asked(fcc, &FocusCallCue::venueNeeded);
+    m_doc->setMode(Doc::Operate);
+
+    // Start with no venue: the laptop asks (said), nothing runs yet.
+    fcc->cueCurrent(list, focus);
+    QVERIFY(fcc->start());
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QCOMPARE(asked.count(), 1);
+    QCOMPARE(asked.first().at(1).toInt(), 8000);
+    QCOMPARE(said.last().at(0).toString(), QString("Name this venue on the laptop, or wait for today's date."));
+    QVERIFY(!s->isActive());
+    // A name: that venue, and the calls begin.
+    QVERIFY(fcc->useVenue("Lincoln HS"));
+    QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QVERIFY(s->isActive());
+    s->stop();
+
+    // Nobody answers: today's date, said.
+    QVERIFY(v->setActiveVenue(QString()));
+    fcc->setVenueAskTimeout(50);
+    fcc->cueCurrent(list, st->addCue(list, 0, "House"));
+    fcc->cueCurrent(list, focus);
+    QVERIFY(fcc->start());
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QTRY_COMPARE_WITH_TIMEOUT(fcc->state(), FocusCallCue::Running, 2000);
+    QVERIFY(v->activeVenue().startsWith("Venue "));
+    bool dated = false;
+    for (const QList<QVariant> &l : said)
+        dated = dated || l.at(0).toString() == QLatin1String("Venue named for today.");
+    QVERIFY(dated);
+    s->stop();
+    m_doc->setMode(Doc::Design);
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)

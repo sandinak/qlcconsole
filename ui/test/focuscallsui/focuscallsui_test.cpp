@@ -453,6 +453,41 @@ void FocusCallsUi_Test::feedbackIsOneSettingOnEveryPanel()
     QSettings().remove("controllerTools/feedback");
 }
 
+void FocusCallsUi_Test::theLaptopAsksForTheVenue()
+{
+    FocusCall c;
+    c.groups << m_group;
+    c.target.kind = FocusSession::Reference::Target;
+    c.target.id = m_target;
+    m_doc->programmer()->focusCalls()->setCalls({ c });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Pre-show");
+    const quint32 cue = st->addCue(list, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ cue }, true));
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    QPointer<QDialog> ask;
+    connect(fcc, &FocusCallCue::venueNeeded, this, [&](const QString &fallback, int ms) {
+        ask = FocusCallsDialog::askVenue(m_doc, nullptr, fallback, ms);
+    });
+    m_doc->setMode(Doc::Operate);
+    fcc->cueCurrent(list, cue);
+    QVERIFY(fcc->start());
+    QVERIFY(ask != nullptr);
+    QLabel *left = ask->findChild<QLabel *>("fcAskVenueLeft");
+    QVERIFY2(left->text().startsWith("Today's date in 8 s"), qPrintable(left->text()));
+    QLineEdit *name = ask->findChild<QLineEdit *>("fcAskVenueName");
+    QTest::keyClicks(name, "Kennedy");          // typing: the clock waits
+    QVERIFY(fcc->state() == FocusCallCue::NamingVenue);
+    QTest::keyClick(name, Qt::Key_Return);
+    QCOMPARE(venues->activeVenue(), QString("Kennedy"));
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QTRY_VERIFY(ask.isNull());                   // it closes itself
+    m_doc->programmer()->focusSession()->stop();
+    m_doc->setMode(Doc::Design);
+}
+
 void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
 {
     OperatorVoice *voice = OperatorVoice::create(this);

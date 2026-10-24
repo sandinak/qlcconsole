@@ -122,7 +122,10 @@ are one checklist:
    **Focus calls: waiting for the controller**.
 3. When the crew is ready, press **Start** (Menu) on the controller — or
    **Start focus calls** on the Run tab, or **⌘↩**. The first call comes up,
-   blinking, as the voice says it.
+   blinking, as the voice says it. If no venue is applied, the laptop first
+   asks for the venue's name ("Name this venue on the laptop, or wait for
+   today's date."); type it and press Return, or after 8 seconds it is
+   named with today's date. Typing holds the clock.
 4. Work the calls as below. **Menu**, or **RT** on the last call, ends
    them (asking about anything unsaved) and the list goes on to the next
    cue.

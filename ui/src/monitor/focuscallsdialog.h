@@ -54,6 +54,11 @@ public:
     /** Open it; Start runs the calls in Focus mode. */
     static void run(Doc *doc, QWidget *parent);
 
+    /** A focus-call cue's Start with no venue applied (Q120): ask for the
+     *  venue's name, showing how long until today's date is used; closes
+     *  itself when the calls begin. Not modal: the controller still works. */
+    static QDialog *askVenue(Doc *doc, QWidget *parent, const QString &fallback, int timeoutMs);
+
     /** The calls as edited (they are the show's once Start or Save). */
     QList<FocusCall> calls() const { return m_calls; }
     void setCalls(const QList<FocusCall> &calls);

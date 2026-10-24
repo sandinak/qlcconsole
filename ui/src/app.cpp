@@ -98,6 +98,7 @@
 #include "venuecorrections.h"
 #include "operatorvoice.h"
 #include "focuscallcue.h"
+#include "focuscallsdialog.h"
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -656,6 +657,10 @@ void App::init()
             if (s == FocusCallCue::Running)
                 FocusModePanel::attach(m_doc, this);
             slotUpdateStandby();
+        });
+        connect(pc->focusCallCue(), &FocusCallCue::venueNeeded, this,
+                [this](const QString &fallback, int timeoutMs) {
+            FocusCallsDialog::askVenue(m_doc, this, fallback, timeoutMs);
         });
         QShortcut *startCalls = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
         startCalls->setContext(Qt::ApplicationShortcut);
@@ -6630,7 +6635,9 @@ void App::slotUpdateStandby()
         if (fcc->state() != FocusCallCue::Idle)
         {
             m_statusStandby->setText(fcc->isArmed() ? tr("Focus calls: waiting for the controller (Start)")
-                                                    : tr("Focus calls running (Menu ends them)"));
+                                     : fcc->state() == FocusCallCue::NamingVenue
+                                       ? tr("Focus calls: name the venue on the laptop")
+                                       : tr("Focus calls running (Menu ends them)"));
             m_statusStandby->show();
             return;
         }

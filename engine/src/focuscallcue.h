@@ -54,7 +54,9 @@ class QLC_ENGINE_EXPORT FocusCallCue final : public QObject
     Q_OBJECT
 
 public:
-    enum State { Idle, Armed, Running };
+    /** NamingVenue: Start was pressed with no venue applied; the laptop
+     *  asks for its name (board Q120) until useVenue() or the time is up. */
+    enum State { Idle, Armed, NamingVenue, Running };
     Q_ENUM(State)
 
     FocusCallCue(Doc *doc, FocusSession *session, FocusCalls *calls, QObject *parent = nullptr);
@@ -78,6 +80,16 @@ public:
     /** Let go of an armed cue (the list moved on, or stopped). */
     void disarm();
 
+    /** While NamingVenue: the venue's name (empty: today's date), and the
+     *  calls begin. False when nothing is being named. */
+    bool useVenue(const QString &name);
+    /** How long the laptop waits for a name before it uses the date, ms
+     *  (8 s; a test shortens it). */
+    void setVenueAskTimeout(int ms) { m_askTimeout = ms; }
+    /** Someone is typing the name: wait for them, not the clock. */
+    void holdVenueAsk();
+    int venueAskTimeout() const { return m_askTimeout; }
+
     /** What is said when armed. */
     static QString armedPhrase();
 
@@ -86,9 +98,13 @@ signals:
     void announce(const QString &text);
     /** The calls are done: the list goes on (GO on its chaser). */
     void continueRequested(quint32 chaserId);
+    /** Start with no venue applied: ask for its name on the laptop, the
+     *  date's @p fallback in @p timeoutMs if nobody answers. */
+    void venueNeeded(const QString &fallback, int timeoutMs);
 
 private:
     void setState(State state);
+    bool beginCalls(QString *why);
     void watch(quint32 functionId);
     void stepped(quint32 chaserId);
     void sessionStopped();
@@ -103,6 +119,8 @@ private:
     quint32 m_list = 0xFFFFFFFF;
     quint32 m_finished = 0xFFFFFFFF;    ///< the focus-call cue just done
     QList<QPointer<Chaser>> m_watched;
+    int m_askTimeout = 8000;
+    class QTimer *m_askTimer = nullptr;
 };
 
 /** @} */

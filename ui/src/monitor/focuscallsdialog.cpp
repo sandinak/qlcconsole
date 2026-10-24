@@ -34,9 +34,12 @@
 #include "monitorproperties.h"
 #include "venuecorrections.h"
 #include <QGuiApplication>
+#include <QElapsedTimer>
+#include <QTimer>
 
 #include "focuscallsdialog.h"
 #include "operatorvoice.h"
+#include "focuscallcue.h"
 #include "focusmodepanel.h"
 #include "fixturegroup.h"
 #include "stagetarget.h"
@@ -238,6 +241,64 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
     QString why;
     if (FocusModePanel::startWith(doc, parent, o, &why) == nullptr)
         QMessageBox::warning(parent, tr("Focus Calls"), why);
+}
+
+QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fallback, int timeoutMs)
+{
+    FocusCallCue *fcc = doc->programmer()->focusCallCue();
+    QDialog *d = new QDialog(parent);
+    d->setObjectName(QStringLiteral("focusCallsVenueAsk"));
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->setWindowTitle(tr("Venue"));
+    QVBoxLayout *vl = new QVBoxLayout(d);
+    vl->addWidget(new QLabel(tr("Which venue is this? Corrections are saved for it, beside the show."), d));
+    QLineEdit *name = new QLineEdit(d);
+    name->setObjectName(QStringLiteral("fcAskVenueName"));
+    name->setPlaceholderText(fallback);
+    vl->addWidget(name);
+    QLabel *left = new QLabel(d);
+    left->setObjectName(QStringLiteral("fcAskVenueLeft"));
+    vl->addWidget(left);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok, d);
+    QPushButton *date = bb->addButton(tr("Use today's date"), QDialogButtonBox::RejectRole);
+    date->setObjectName(QStringLiteral("fcAskVenueDate"));
+    vl->addWidget(bb);
+
+    // The countdown: once someone types, it waits for them.
+    QTimer *tick = new QTimer(d);
+    tick->setInterval(250);
+    QElapsedTimer *clock = new QElapsedTimer();
+    clock->start();
+    auto update = [=]() {
+        const int secs = qMax(0, int((timeoutMs - clock->elapsed() + 999) / 1000));
+        left->setText(name->text().isEmpty()
+                      ? tr("Today's date in %1 s: %2").arg(secs).arg(fallback)
+                      : tr("Press OK to use this name."));
+    };
+    QObject::connect(tick, &QTimer::timeout, d, update);
+    QObject::connect(d, &QObject::destroyed, [clock]() { delete clock; });
+    QObject::connect(name, &QLineEdit::textEdited, d, [fcc, name]() {
+        // A name being typed: the date is not put in under it.
+        if (!name->text().isEmpty())
+            fcc->holdVenueAsk();
+    });
+    QObject::connect(bb, &QDialogButtonBox::accepted, d, [fcc, name, d]() {
+        fcc->useVenue(name->text());
+        d->close();
+    });
+    QObject::connect(date, &QPushButton::clicked, d, [fcc, d]() {
+        fcc->useVenue(QString());
+        d->close();
+    });
+    QObject::connect(fcc, &FocusCallCue::stateChanged, d, [d](FocusCallCue::State s) {
+        if (s != FocusCallCue::NamingVenue)
+            d->close();
+    });
+    update();
+    tick->start();
+    d->show();
+    d->raise();
+    return d;
 }
 
 void FocusCallsDialog::setCalls(const QList<FocusCall> &calls)

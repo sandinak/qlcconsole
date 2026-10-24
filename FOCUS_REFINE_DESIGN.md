@@ -612,8 +612,11 @@ Starting:
 
 - runs Focus mode on the show's calls **in Operate** (`Options::allowOperate`),
   dimming the others;
-- uses a venue: the one applied, else a dated one when the show has a file
-  (Q110);
+- uses a venue: the one applied. With none applied (and a show file to
+  keep one beside), the laptop asks for its name first (Q120, state
+  `NamingVenue`): the voice says "Name this venue on the laptop, or wait for
+  today's date."; after 8 s with no answer it is the dated name ("Venue
+  named for today."). Typing a name holds the clock;
 - speaks the first call ("Call 1 of 5, DH Tspots to DSC. Fixture 1 of 4.")
   as its blink begins.
 
