@@ -12,7 +12,7 @@ SHELL := /bin/bash
 DEV_APP ?= $(HOME)/Applications/qlcconsole-dev.app
 export DEV_APP
 
-.PHONY: help test run check dmg beta release attach publish
+.PHONY: help test run check quick dmg beta release attach publish
 
 help:
 	@v=$$(cat VERSION); \
@@ -27,7 +27,11 @@ help:
 	echo "                  NOTE: despite the name it runs NO unit tests -- that's 'make check'."; \
 	echo "  make run SHOW=path/show.qlcc"; \
 	echo "                  'make test', then launch the dev app with -o SHOW (SHOW optional)."; \
-	echo "  make check      The unit-test gate: ./check-all.sh (Qt6, Qt6-Release, Qt6-Werror)."; \
+	echo "  make check      The unit-test gate: ./check-all.sh (Qt6, Qt6-Release, Qt6-Werror),"; \
+	echo "                  built together and tested concurrently; ends with gate=N."; \
+	echo "  make quick      Iterate: ./check-all.sh --quick -- the Qt6 leg only (build-qt6/),"; \
+	echo "                  testing just the test dirs your change touches since origin/main"; \
+	echo "                  (its own tests, tests that #include a changed header). Not the gate."; \
 	echo "  make dmg        The signed release DMG of a committed HEAD: universal Release build"; \
 	echo "                  (build-universal/), Developer ID sign, notarize (qlc-notary), staple;"; \
 	echo "                  dist/qlcconsole-$$v-universal-<date>-<rev>.dmg + dist/SHA256SUMS."; \
@@ -59,6 +63,9 @@ run:
 
 check:
 	./check-all.sh
+
+quick:
+	./check-all.sh --quick
 
 dmg:
 	@platforms/macos/make-release.sh

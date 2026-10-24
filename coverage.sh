@@ -96,7 +96,9 @@ done
 # Run unit tests
 #############################################################################
 
-./unittest.sh $TARGET
+# One program at a time: every test writes the shared libraries' .gcda
+# counters on exit, and coverage is not where the gate's speed matters.
+QLC_TEST_JOBS=${QLC_TEST_JOBS:-1} ./unittest.sh $TARGET
 FAILED=$?
 if [ ${FAILED} != 0 ]; then
     echo "Will not measure coverage because ${FAILED} unit tests failed."

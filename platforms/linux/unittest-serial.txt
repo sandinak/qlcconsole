@@ -1,0 +1,16 @@
+# Test programs that run ALONE, one after another, after the concurrent
+# batch (platforms/linux/unittest.sh; check-all.sh runs every leg's list at
+# the end, with nothing else of the gate running). One build-dir test dir per
+# line, then why. Only tests that measure wall-clock time belong here: a
+# test that fails under load for any other reason is an isolation bug to fix.
+
+# Assert a fade's or a timer's wall-clock length unless CI is set (where they
+# already can't be trusted); next to other tests, the fade's late ticks run
+# back to back and "Fade 1 second and stop" was out after 164 ms.
+engine/test/mastertimer
+ui/test/mainbar
+
+# matrixEffectsKeepTimeOnEightBoxes holds each matrix script to a per-tick
+# budget (12 ms optimised). It counts thread CPU time, but next to five other
+# tests on the Linux build host (8 threads on 4 cores) a tick measured 12.34 ms.
+engine/test/effectinstance

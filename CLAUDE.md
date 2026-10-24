@@ -27,6 +27,23 @@ separate build dirs. The Release leg is not redundant: one shipped bug
 (undefined narrowing in `VCXYPadFixture::writeDMX`) only misbehaved under
 `-O2` and was invisible to every default-build check.
 
+The gate builds the three legs together (one shared `-j` of performance
+cores, ccache when installed), runs each leg's test programs concurrently
+(`platforms/linux/unittest.sh`: `QLC_TEST_JOBS`, default perf cores − 2), then
+runs the wall-clock-sensitive tests listed in
+`platforms/linux/unittest-serial.txt` alone at the end. Its last block starts
+with `gate=N` (also in `build-gate-logs/summary.txt`, next to each leg's full
+log); a skipped leg (no Qt at `QT6_PREFIX` / `brew --prefix qt6`) fails it
+unless `ALLOW_SKIP=1`. A test that fails only under load is an isolation bug
+to fix; add it to the serial list only if it measures wall-clock time.
+
+For iterating, **`make quick`** (= `./check-all.sh --quick`) builds only the
+Qt6 leg and runs only the tests your change touches since `origin/main`
+(`QUICK_BASE` to change): the test's own dir, tests that `#include` a changed
+header, a plugin's test; everything if CMake files or the runner changed.
+It is not the gate — run the full one before pushing. One test dir by hand:
+`QLC_TEST_ONLY="ui/test/workbench" ./check-all.sh --quick`.
+
 CI (`.github/workflows/build.yml`) runs macOS + Linux + Linux-coverage on every
 push. It had never executed before 2026-08-25; if runs stop appearing, check
 Settings → Actions → General rather than assuming the workflow is wrong.

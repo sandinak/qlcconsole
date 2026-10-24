@@ -60,6 +60,8 @@ for file in $(find $SOURCE_DIR \( -path "$SOURCE_DIR/build*" -o -path "$DEST_DIR
 done
 
 cp $SOURCE_DIR/platforms/linux/unittest.sh $DEST_DIR/
+# The tests that must run alone, after the concurrent batch (see there).
+cp $SOURCE_DIR/platforms/linux/unittest-serial.txt $DEST_DIR/
 
 # Propagate the runner's exit status. Without capturing it, this script's exit
 # status is popd's -- always 0 -- so "make check" reported failures in its

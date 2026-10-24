@@ -80,232 +80,319 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
   export PATH="${DLLDIRS}${PATH}"
 fi
 
-# How many test programs actually ran, per group -- checked at the end.
-# Run one test's test.sh. A connection to a slot or signal that doesn't
-# exist only logs "No such slot"/"No such signal" and the feature it was for
-# silently does nothing (the Studio's Add Target/Copy/Paste, the patch grid,
-# the Function Manager's actions all did, for weeks): such a log fails the test.
-run_test()
+#############################################################################
+# How the test programs run
+#############################################################################
+#
+# Concurrently: QLC_TEST_JOBS programs at a time, by default the performance
+# cores less two (all cores less two where there is no performance tier),
+# never fewer than one. Run one after another, the suite took eight minutes a
+# build on a machine with ten idle cores: most programs spend their time
+# waiting on timers, not computing.
+#
+# Each program gets what it would have had to itself: its own build dir as
+# its working directory, its own TMPDIR (a fresh folder, removed after), so
+# nothing one writes to a temporary file meets another's. QSettings are
+# already per program -- the UI tests keep theirs in a QTemporaryDir
+# (ui/test/common/testsettings.cpp), which now lands in that TMPDIR, and the
+# engine tests that save any point QSettings at their own temporary folder.
+#
+# Some tests measure wall-clock time (a fade's length, a timer's rate) and
+# can't promise their budget on a loaded machine. unittest-serial.txt (next
+# to this script; staged with it) lists them: they run after the concurrent
+# batch, one at a time. Add a test there, with the reason, rather than
+# widening its budget until it means nothing.
+#
+# Settings (environment):
+#   QLC_TEST_JOBS=N     programs at once (1 = the old one-after-another run)
+#   QLC_TEST_PHASE      all (default) | parallel | serial -- check-all.sh runs
+#                       every leg's parallel batch first, then the serial
+#                       lists with nothing else running; stage = only put
+#                       the tests' files in place and check the fixtures
+#                       (CI's Windows job, which runs the programs itself)
+#   QLC_TEST_ONLY="engine/test/scene ui/test/workbench ..."
+#                       run only these test dirs (check-all.sh --quick)
+#   QLC_TEST_TIMES      where the last run's per-test times are kept, to start
+#                       the longest first (default ~/.cache/qlcconsole/)
+#
+# Every program runs to the end, failing or not, so one run names every
+# failure; the output is one line per program, then each failure's log.
+
+PHASE="${QLC_TEST_PHASE:-all}"
+case "$PHASE" in
+  all|parallel|serial|stage) ;;
+  *) echo >&2 "QLC_TEST_PHASE must be all, parallel, serial or stage (got '$PHASE')"; exit 1 ;;
+esac
+
+if [ -n "${QLC_TEST_JOBS:-}" ]; then
+  JOBS="$QLC_TEST_JOBS"
+else
+  CORES=$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null \
+          || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 3)
+  JOBS=$((CORES - 2))
+fi
+case "$JOBS" in ''|*[!0-9]*) JOBS=1 ;; esac
+[ "$JOBS" -lt 1 ] && JOBS=1
+
+SERIAL_LIST=unittest-serial.txt
+TIMES="${QLC_TEST_TIMES:-${HOME:-/tmp}/.cache/qlcconsole/unittest-times}"
+
+LOGDIR="$PWD/test-logs"
+TMPBASE=$(mktemp -d "${TMPDIR:-/tmp}/qlctests.XXXXXX") || exit 1
+trap 'rm -rf "$TMPBASE"' EXIT
+
+# Run one test's test.sh, in its own dir with its own TMPDIR, output to its
+# log; record "<exit> <seconds>" beside it and print one line. A connection
+# to a slot or signal that doesn't exist only logs "No such slot"/"No such
+# signal" and the feature it was for silently does nothing (the Studio's Add
+# Target/Copy/Paste, the patch grid, the Function Manager's actions all did,
+# for weeks): such a log fails the test. Always exits 0 -- xargs stops
+# handing out work after a child exits 255 -- the verdict is in the file.
+run_one()
 {
-    local out rc
-    out=$(mktemp)
-    eval $TESTPREFIX ./test.sh 2>&1 | tee "$out"
-    rc=${PIPESTATUS[0]}
-    if grep -qE "No such (slot|signal)" "$out"; then
-        echo "*** A broken signal/slot connection was logged:"
-        grep -E "No such (slot|signal)" "$out" | sort | uniq -c
-        [ "$rc" -eq 0 ] && rc=1
+    local t="$1" name log tmp start rc dur done verdict
+    name=$(echo "$t" | tr '/' '_')
+    log="$LOGDIR/$name.log"
+    start=$(date +%s)
+    if [ ! -f "$t/test.sh" ]; then
+        echo "'$t' has no test.sh in the build dir, so it can't be run." > "$log"
+        rc=1
+    else
+        tmp=$(mktemp -d "$TMPBASE/$name.XXXXXX")
+        ( cd "$t" && export TMPDIR="$tmp/" && eval $TESTPREFIX ./test.sh ) \
+            > "$log" 2>&1 < /dev/null
+        rc=$?
+        rm -rf "$tmp"
+        if grep -qE "No such (slot|signal)" "$log"; then
+            {
+                echo "*** A broken signal/slot connection was logged:"
+                grep -E "No such (slot|signal)" "$log" | sort | uniq -c
+            } >> "$log"
+            [ "$rc" -eq 0 ] && rc=1
+        fi
     fi
-    rm -f "$out"
-    return $rc
+    dur=$(( $(date +%s) - start ))
+    echo "$rc $dur" > "$LOGDIR/$name.rc"
+    touch "$TMPBASE/done/$name"
+    done=$(ls "$TMPBASE/done" | wc -l | tr -d ' ')
+    if [ "$rc" -eq 0 ]; then
+        verdict="PASS"
+    elif [ "$rc" -gt 128 ]; then
+        verdict="FAIL (signal $((rc - 128)))"
+    else
+        verdict="FAIL (exit $rc)"
+    fi
+    printf '[%3s/%s] %-44s %4ss  %s\n' "$done" "$TOTAL" "$t" "$dur" "$verdict"
+    return 0
 }
 
-ENGINE_RAN=0
-UI_RAN=0
-UI_EXPECTED=0
+# The test dirs, longest (as last timed) first, so a long one doesn't start
+# last and keep the run going alone at the end. Unknown ones go first.
+order_by_time()
+{
+    awk -v f="$TIMES" '
+        BEGIN { while ((getline l < f) > 0) { split(l, a, " "); t[a[2]] = a[1] } }
+        { print (($0 in t) ? t[$0] : 100000), $0 }' \
+    | sort -k1,1nr -k2,2 | cut -d' ' -f2
+}
+
+# Run the dirs on stdin, $1 at a time.
+run_batch()
+{
+    # "$BASH", not bash: the exported function must reach the same shell
+    # (macOS has bash 3.2 as /bin/bash and often a newer one first on PATH).
+    xargs -n 1 -P "$1" "$BASH" -c 'run_one "$1"' _
+}
 
 #############################################################################
 # Fixture definitions check with xmllint
 #############################################################################
 
-pushd resources/fixtures/scripts
-./check
-RET=$?
-popd
-if [ $RET -ne 0 ]; then
-    echo "Fixture definitions are not valid. Please fix before commit."
-    exit $RET
-fi
-
-#############################################################################
-# Engine tests
-#############################################################################
-
-TESTDIR=engine/test
-TESTS=$(find ${TESTDIR} -maxdepth 1 -mindepth 1 -type d)
-for test in ${TESTS}
-do
-    # Ignore .git
-    if [ $(echo ${test} | grep ".git") ]; then
-        continue
-    fi
-
-    # Ignore CMakeFiles
-    if [ $(echo ${test} | grep "CMakeFiles") ]; then
-        continue
-    fi
-
-    # Isolate just the test name
-    test=$(echo ${test} | sed 's/engine\/test\///')
-
-    $SLEEPCMD
-    # Execute the test
-    pushd ${TESTDIR}/${test}
-    echo "$TESTPREFIX ./test.sh"
-    run_test
-    RESULT=${?}
-    popd
-    if [ ${RESULT} != 0 ]; then
-        echo "${RESULT} Engine unit tests failed. Please fix before commit."
-        exit ${RESULT}
-    fi
-    ENGINE_RAN=$((ENGINE_RAN + 1))
-done
-
-#############################################################################
-# UI tests
-#############################################################################
-
-# Skip ui in qmlui mode
-if [ "$TARGET" != "qmlui" ]; then
-
-TESTDIR=ui/test
-TESTS=$(find ${TESTDIR} -maxdepth 1 -mindepth 1 -type d)
-for test in ${TESTS}
-do
-    # Ignore .git
-    if [ $(echo ${test} | grep ".git") ]; then
-        continue
-    fi
-
-    # Ignore CMakeFiles
-    if [ $(echo ${test} | grep "CMakeFiles") ]; then
-        continue
-    fi
-
-    # Isolate just the test name
-    test=$(echo ${test} | sed 's/ui\/test\///')
-
-    UI_EXPECTED=$((UI_EXPECTED + 1))
-    if [ ! -f ${TESTDIR}/${test}/test.sh ]; then
-        echo "UI test '${test}' has no test.sh in the build dir, so it can't be run. Please fix before commit."
-        exit 1
-    fi
-
-    $SLEEPCMD
-    # Execute the test via its checked-in test.sh (sets LD_LIBRARY_PATH/
-    # DYLD_FALLBACK_LIBRARY_PATH itself, and already resolves the macOS
-    # <name>_test.app/Contents/MacOS/<name>_test bundle path vs. a plain
-    # executable — the old bare "./${test}_test" here didn't).
-    pushd ${TESTDIR}/${test}
-    run_test
-    RESULT=${?}
-    popd
-    if [ ${RESULT} != 0 ]; then
-        echo "${RESULT} UI unit tests failed. Please fix before commit."
-        exit ${RESULT}
-    fi
-    UI_RAN=$((UI_RAN + 1))
-done
-
-fi
-
-#############################################################################
-# Enttec wing tests
-#############################################################################
-
-$SLEEPCMD
-pushd plugins/enttecwing/test
-run_test
-RESULT=$?
-if [ $RESULT != 0 ]; then
-	echo "${RESULT} Enttec wing unit tests failed. Please fix before commit."
-	exit $RESULT
-fi
-popd
-
-#############################################################################
-# Velleman test
-#############################################################################
-
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "Skip Velleman test (not supported on OSX)"
-elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-  echo "Skip Velleman test (plugin not built on Windows)"
-else
-  $SLEEPCMD
-  pushd plugins/velleman/test
-  run_test
-  RESULT=$?
-  if [ $RESULT != 0 ]; then
-    echo "Velleman unit test failed ($RESULT). Please fix before commit."
-	exit $RESULT
-  fi
+if [ "$PHASE" != "serial" ]; then
+  pushd resources/fixtures/scripts
+  ./check
+  RET=$?
   popd
+  if [ $RET -ne 0 ]; then
+      echo "Fixture definitions are not valid. Please fix before commit."
+      exit $RET
+  fi
 fi
 
+[ "$PHASE" = "stage" ] && exit 0
+
 #############################################################################
-# MIDI tests
+# The test programs
 #############################################################################
 
-$SLEEPCMD
-pushd plugins/midi/test
-run_test
-RESULT=$?
-if [ $RESULT != 0 ]; then
-	echo "${RESULT} MIDI unit tests failed. Please fix before commit."
-	exit $RESULT
+list_tests()
+{
+    local d
+    for d in $(find engine/test -maxdepth 1 -mindepth 1 -type d | sort); do
+        case "$d" in *.git*|*CMakeFiles*) continue ;; esac
+        echo "$d"
+    done
+    if [ "$TARGET" != "qmlui" ]; then
+        for d in $(find ui/test -maxdepth 1 -mindepth 1 -type d | sort); do
+            case "$d" in *.git*|*CMakeFiles*) continue ;; esac
+            echo "$d"
+        done
+    fi
+    echo plugins/enttecwing/test
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo >&2 "Skip Velleman test (not supported on OSX)"
+    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        echo >&2 "Skip Velleman test (plugin not built on Windows)"
+    else
+        echo plugins/velleman/test
+    fi
+    echo plugins/midi/test
+    echo plugins/artnet/test
+    echo plugins/E1.31/test
+    echo plugins/wled/test
+}
+
+ALL_TESTS=$(list_tests)
+if [ -n "${QLC_TEST_ONLY:-}" ]; then
+    SELECTED=""
+    for t in $ALL_TESTS; do
+        for w in $QLC_TEST_ONLY; do
+            [ "$t" = "${w%/}" ] && SELECTED="$SELECTED $t"
+        done
+    done
+    for w in $QLC_TEST_ONLY; do
+        echo "$ALL_TESTS" | grep -qx "${w%/}" \
+            || echo "QLC_TEST_ONLY: no test dir '$w' in this build -- ignored"
+    done
+else
+    SELECTED="$ALL_TESTS"
 fi
-popd
 
-#############################################################################
-# ArtNet tests
-#############################################################################
+SERIAL_ALL=""
+[ -f "$SERIAL_LIST" ] && SERIAL_ALL=$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$SERIAL_LIST")
+PAR_TESTS=""
+SER_TESTS=""
+for t in $SELECTED; do
+    if echo "$SERIAL_ALL" | grep -qx "$t"; then
+        SER_TESTS="$SER_TESTS $t"
+    else
+        PAR_TESTS="$PAR_TESTS $t"
+    fi
+done
+case "$PHASE" in
+  parallel) SER_TESTS="" ;;
+  serial)   PAR_TESTS="" ;;
+esac
+RUN_TESTS="$PAR_TESTS $SER_TESTS"
 
-$SLEEPCMD
-pushd plugins/artnet/test
-run_test
-RESULT=$?
-if [ $RESULT != 0 ]; then
-	echo "${RESULT} ArtNet unit tests failed. Please fix before commit."
-	exit $RESULT
+mkdir -p "$LOGDIR"
+for t in $RUN_TESTS; do
+    n=$(echo "$t" | tr '/' '_')
+    rm -f "$LOGDIR/$n.log" "$LOGDIR/$n.rc"
+done
+mkdir -p "$TMPBASE/done"     # the [n/N] counter
+
+TOTAL=$(echo $RUN_TESTS | wc -w | tr -d ' ')
+export -f run_one
+export LOGDIR TMPBASE TESTPREFIX TOTAL
+
+T0=$(date +%s)
+NPAR=$(echo $PAR_TESTS | wc -w | tr -d ' ')
+NSER=$(echo $SER_TESTS | wc -w | tr -d ' ')
+echo "Running $NPAR test programs, $JOBS at a time; then $NSER alone (from $SERIAL_LIST)."
+if [ "$NPAR" -gt 0 ]; then
+    printf '%s\n' $PAR_TESTS | order_by_time | run_batch "$JOBS"
 fi
-popd
-
-#############################################################################
-# E1.31 tests
-#############################################################################
-
-$SLEEPCMD
-pushd plugins/E1.31/test
-run_test
-RESULT=$?
-if [ $RESULT != 0 ]; then
-	echo "${RESULT} E1.31 unit tests failed. Please fix before commit."
-	exit $RESULT
+T1=$(date +%s)
+if [ "$NSER" -gt 0 ]; then
+    echo "-- alone: the timing-sensitive tests in $SERIAL_LIST --"
+    printf '%s\n' $SER_TESTS | run_batch 1
 fi
-popd
-
-#############################################################################
-# WLED tests
-#############################################################################
-
-$SLEEPCMD
-pushd plugins/wled/test
-run_test
-RESULT=$?
-if [ $RESULT != 0 ]; then
-	echo "${RESULT} WLED unit tests failed. Please fix before commit."
-	exit $RESULT
-fi
-popd
+T2=$(date +%s)
 
 #############################################################################
 # Final judgment
 #############################################################################
 
+ENGINE_RAN=0
+UI_RAN=0
+UI_EXPECTED=0
+PLUGINS_RAN=0
+FAILED=""
+for t in $RUN_TESTS; do
+    n=$(echo "$t" | tr '/' '_')
+    case "$t" in ui/test/*) UI_EXPECTED=$((UI_EXPECTED + 1)) ;; esac
+    if [ ! -f "$LOGDIR/$n.rc" ]; then
+        FAILED="$FAILED $t"
+        echo "1 0" > "$LOGDIR/$n.rc"
+        echo "(never ran -- the runner was interrupted?)" >> "$LOGDIR/$n.log"
+        continue
+    fi
+    read rc dur < "$LOGDIR/$n.rc"
+    [ "$rc" -ne 0 ] && FAILED="$FAILED $t"
+    case "$t" in
+        engine/test/*) ENGINE_RAN=$((ENGINE_RAN + 1)) ;;
+        ui/test/*)     UI_RAN=$((UI_RAN + 1)) ;;
+        *)             PLUGINS_RAN=$((PLUGINS_RAN + 1)) ;;
+    esac
+done
+
+# Keep this run's times for the next run's order (merged, written whole).
+mkdir -p "$(dirname "$TIMES")" 2>/dev/null
+{
+    [ -f "$TIMES" ] && cat "$TIMES"
+    for t in $RUN_TESTS; do
+        n=$(echo "$t" | tr '/' '_')
+        read rc dur < "$LOGDIR/$n.rc"
+        echo "$dur $t new"
+    done
+} | awk '{ if ($3 == "new" || !($2 in t)) t[$2] = $1 } END { for (k in t) print t[k], k }' \
+  | sort -k2 > "$TIMES.$$" 2>/dev/null && mv -f "$TIMES.$$" "$TIMES" 2>/dev/null
+rm -f "$TIMES.$$" 2>/dev/null
+
+echo
+echo "Slowest:$(for t in $RUN_TESTS; do n=$(echo "$t" | tr '/' '_'); read rc dur < "$LOGDIR/$n.rc"; echo "$dur $t"; done \
+    | sort -k1,1nr | head -n 5 | awk '{ printf "  %s %ss", $2, $1 }')"
+echo "Times: $((T1 - T0))s for $NPAR programs at $JOBS at a time, $((T2 - T1))s for $NSER alone."
+
 # A gate that ran nothing must not pass. Count what actually ran, say it, and
 # fail if a whole group came up empty -- that is how the UI tests used to go
-# missing for a third of the suite without anyone noticing.
-echo "Test programs run: ${ENGINE_RAN} engine, ${UI_RAN} of ${UI_EXPECTED} UI" \
-     "(platform: ${TESTPREFIX:-QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-default}})"
-if [ ${ENGINE_RAN} -eq 0 ]; then
-    echo "No engine test programs were run. This is not a pass."
+# missing for a third of the suite without anyone noticing. (Not for the
+# serial phase on its own or a QLC_TEST_ONLY selection: those choose a part.)
+echo "Test programs run: ${ENGINE_RAN} engine, ${UI_RAN} of ${UI_EXPECTED} UI, ${PLUGINS_RAN} plugin" \
+     "(phase: ${PHASE}; platform: ${TESTPREFIX:-QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-default}})"
+
+if [ -n "$FAILED" ]; then
+    for t in $FAILED; do
+        n=$(echo "$t" | tr '/' '_')
+        log="$LOGDIR/$n.log"
+        read rc dur < "$LOGDIR/$n.rc"
+        echo
+        echo "==================== FAILED: $t (exit $rc) -- $log"
+        if [ "$(wc -l < "$log")" -le 300 ]; then
+            cat "$log"
+        else
+            grep -nE "^(FAIL!|XPASS|QFATAL)|Received a fatal|No such (slot|signal)|Totals:" -A 4 "$log" | head -n 200
+            echo "[... last 80 lines ...]"
+            tail -n 80 "$log"
+        fi
+    done
+    echo
+    echo "FAILED test programs ($(echo $FAILED | wc -w | tr -d ' ')):"
+    for t in $FAILED; do echo "  $t"; done
+    echo "Unit tests failed. Please fix before commit."
     exit 1
 fi
-if [ "$TARGET" != "qmlui" ] && [ ${UI_RAN} -eq 0 ]; then
-    echo "No UI test programs were run (is ui/test in the build dir?). This is not a pass."
-    exit 1
+
+if [ -z "${QLC_TEST_ONLY:-}" ] && [ "$PHASE" != "serial" ]; then
+    if [ ${ENGINE_RAN} -eq 0 ]; then
+        echo "No engine test programs were run. This is not a pass."
+        exit 1
+    fi
+    if [ "$TARGET" != "qmlui" ] && [ ${UI_RAN} -eq 0 ]; then
+        echo "No UI test programs were run (is ui/test in the build dir?). This is not a pass."
+        exit 1
+    fi
 fi
 
 echo "Unit tests passed."

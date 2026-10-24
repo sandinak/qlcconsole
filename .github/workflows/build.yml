@@ -404,14 +404,15 @@ jobs:
 
       # Informational, after the artifact on purpose: the suite does not pass
       # on Windows yet (TODO.md lists the failures), and a failing test there
-      # should not withhold the installer. Runs every test binary rather than
-      # stopping at the first failure like unittest.sh, and lists them all.
-      # (unittest.sh itself also works under MSYS2: ./unittest.sh ui build.)
+      # should not withhold the installer. Runs every test binary under its
+      # own timeout and lists the failures. (unittest.sh itself also works
+      # under MSYS2: ./unittest.sh ui build.)
       - name: Test (informational)
         continue-on-error: true
         timeout-minutes: 45
         run: |
-          ./unittest.sh ui build > /tmp/unittest.log 2>&1 || true   # stages resources for the tests
+          # Stages resources for the tests (and checks the fixtures); runs none.
+          QLC_TEST_PHASE=stage ./unittest.sh ui build > /tmp/unittest.log 2>&1 || true
           grep -E "^Fixtures|definitions processed|^Fixturesmap" /tmp/unittest.log || true
           DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
           FAILED=""
