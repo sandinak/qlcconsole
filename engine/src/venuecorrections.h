@@ -180,7 +180,8 @@ public:
      *  own again -- and write the sidecar. False with no active venue, or
      *  when it cannot be written (@p why). */
     bool record(quint32 fid, QString *why = nullptr);
-    /** Drop @p fid's correction: back to the show's calibration. */
+    /** Drop @p fid's correction: back to the show's calibration. A fixture
+     *  no longer in the show (orphaned) is just forgotten. */
     bool clearCorrection(quint32 fid);
 
     bool hasCorrection(quint32 fid) const;

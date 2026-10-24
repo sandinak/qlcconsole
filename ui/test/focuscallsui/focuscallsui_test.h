@@ -74,6 +74,8 @@ private slots:
     void aSiblingsVenuesAreOffered();
     /** Gap 10: the Refine panel has the same lamp: kept, here, elsewhere. */
     void theRefinePanelHasTheLamp();
+    /** One light's venue correction seen and cleared (the venue manager). */
+    void oneCorrectionIsSeenAndCleared();
 
 private:
     Doc *m_doc = nullptr;

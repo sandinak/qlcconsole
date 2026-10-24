@@ -44,6 +44,8 @@
 #include "focusmodepanel.h"
 #include "fixturegroup.h"
 #include "stagetarget.h"
+#include "fixture.h"
+#include "truss.h"
 #include "doc.h"
 
 namespace
@@ -133,7 +135,10 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_deleteVenue = new QPushButton(tr("Delete"), this);
     m_deleteVenue->setObjectName(QStringLiteral("fcDeleteVenue"));
     m_deleteVenue->setToolTip(tr("Forget this venue and its corrections (the show is not changed)"));
-    for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue })
+    m_corrections = new QPushButton(tr("Corrections\342\200\246"), this);
+    m_corrections->setObjectName(QStringLiteral("fcCorrections"));
+    m_corrections->setToolTip(tr("See and clear the applied venue's corrections, one light at a time"));
+    for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue, m_corrections })
         venueRow->addWidget(b);
     vl->addLayout(venueRow);
     // The voice is the crew's cue: send it to the output that feeds the headsets.
@@ -178,6 +183,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
         if (!switchVenue(venueChoice(), &why))
             QMessageBox::information(this, windowTitle(), why);
     });
+    connect(m_corrections, &QPushButton::clicked, this, [this]() { showCorrections(m_doc, this); });
     connect(m_renameVenue, &QPushButton::clicked, this, [this]() {
         const QString from = venueAt(m_venue->currentIndex());
         bool ok = false;
@@ -410,6 +416,88 @@ QDialog *FocusCallsDialog::offerVenueImport(Doc *doc, QWidget *parent, const QSt
     return d;
 }
 
+QDialog *FocusCallsDialog::showCorrections(Doc *doc, QWidget *parent)
+{
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    if (!venues->isActive())
+        return nullptr;
+    QDialog *d = new QDialog(parent);
+    d->setObjectName(QStringLiteral("venueCorrections"));
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->setWindowTitle(tr("Corrections: %1").arg(venues->activeVenue()));
+    d->setProperty("helpTopic", QStringLiteral("focus-calls.md"));
+    QVBoxLayout *vl = new QVBoxLayout(d);
+    QListWidget *list = new QListWidget(d);
+    list->setObjectName(QStringLiteral("venueCorrectionList"));
+    vl->addWidget(list, 1);
+    enum Kind { LightKind = 1, TrimKind, TargetKind };
+    auto fill = [doc, venues, list]() {
+        list->clear();
+        const VenueCorrections::Venue v = venues->venue(venues->activeVenue());
+        MonitorProperties *props = doc->monitorProperties();
+        for (auto it = v.fixtures.constBegin(); it != v.fixtures.constEnd(); ++it)
+        {
+            const Fixture *fx = doc->fixture(it.key());
+            QString text = tr("%1: pan %2\302\260, tilt %3\302\260")
+                           .arg(fx != nullptr ? fx->name() : venues->correctedAs(it.key()))
+                           .arg(double(it.value().panOffsetDeg), 0, 'f', 2)
+                           .arg(double(it.value().tiltOffsetDeg), 0, 'f', 2);
+            if (fx == nullptr)
+                text += tr("  (no longer in the show: kept)");
+            else if (venues->needsFocus(it.key()))
+                text += tr("  ! needs focus: not the fixture focused here");
+            QListWidgetItem *item = new QListWidgetItem(text, list);
+            item->setData(Qt::UserRole, int(LightKind));
+            item->setData(Qt::UserRole + 1, it.key());
+        }
+        for (auto it = v.trims.constBegin(); it != v.trims.constEnd(); ++it)
+        {
+            const Truss *t = props->truss(it.key());
+            QListWidgetItem *item = new QListWidgetItem(tr("Trim %1: %2 m").arg(t != nullptr ? t->name() : QString::number(it.key()))
+                                                        .arg(double(it.value()), 0, 'f', 2), list);
+            item->setData(Qt::UserRole, int(TrimKind));
+            item->setData(Qt::UserRole + 1, it.key());
+        }
+        for (auto it = v.targets.constBegin(); it != v.targets.constEnd(); ++it)
+        {
+            const StageTarget *t = props->stageTarget(it.key());
+            QListWidgetItem *item = new QListWidgetItem(tr("Target %1: %2, %3 m")
+                                                        .arg(t != nullptr ? t->name() : QString::number(it.key()))
+                                                        .arg(double(it.value().x()), 0, 'f', 2)
+                                                        .arg(double(it.value().y()), 0, 'f', 2), list);
+            item->setData(Qt::UserRole, int(TargetKind));
+            item->setData(Qt::UserRole + 1, it.key());
+        }
+        if (list->count() == 0)
+            new QListWidgetItem(tr("No corrections yet: the rig is as the show has it."), list);
+    };
+    fill();
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, d);
+    QPushButton *clear = bb->addButton(tr("Clear"), QDialogButtonBox::ActionRole);
+    clear->setObjectName(QStringLiteral("venueCorrectionClear"));
+    clear->setToolTip(tr("Back to the show's own for the one picked"));
+    vl->addWidget(bb);
+    QObject::connect(clear, &QPushButton::clicked, d, [venues, list, fill]() {
+        QListWidgetItem *item = list->currentItem();
+        if (item == nullptr)
+            return;
+        const quint32 id = item->data(Qt::UserRole + 1).toUInt();
+        switch (item->data(Qt::UserRole).toInt())
+        {
+            case LightKind:  venues->clearCorrection(id); break;
+            case TrimKind:   venues->clearTrim(id); break;
+            case TargetKind: venues->clearTarget(id); break;
+            default:         return;
+        }
+        fill();
+    });
+    QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::close);
+    d->resize(520, 360);
+    d->show();
+    d->raise();
+    return d;
+}
+
 void FocusCallsDialog::setCalls(const QList<FocusCall> &calls)
 {
     m_calls = calls;
@@ -614,6 +702,7 @@ void FocusCallsDialog::refreshVenue()
     m_newVenue->setVisible(kind == kNewVenue);
     m_renameVenue->setEnabled(kind == 0);
     m_deleteVenue->setEnabled(kind == 0);
+    m_corrections->setEnabled(m_doc->programmer()->venueCorrections()->isActive());
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();
     const QString file = venues->filePath();
     if (kind == kNoVenue)

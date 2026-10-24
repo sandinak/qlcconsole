@@ -248,6 +248,11 @@ public:
     /** The owning pad's name, empty with no owner. */
     QString controllerOwnerName() const;
 
+    /** Why light @p fid (invalid: any) would not show what a controller
+     *  tool sends -- Blackout on, the Grand Master at zero, its universe
+     *  with no output -- in words; empty when nothing is in the way. */
+    QString rigOutputProblem(quint32 fid) const;
+
     /** The controller went away while a tool used it, and is not back. */
     bool isControllerLost() const { return m_padLost; }
 
@@ -705,6 +710,9 @@ private:
     quint32 m_ownerUniverse = 0xFFFFFFFF;
     /** Nobody is using the controller tools (nothing running or armed). */
     void releaseOwnerIfIdle();
+    /** Said once until it changes: what keeps the rig from showing it. */
+    QString m_lastRigProblem;
+    void checkRigOutput(quint32 fid);
     bool m_padLost = false;
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;

@@ -908,6 +908,23 @@ bool VenueCorrections::clearCorrection(quint32 fid)
 {
     if (!hasCorrection(fid))
         return false;
+    if (m_doc->fixture(fid) == nullptr || needsFocus(fid))
+    {
+        // Not on the rig (orphaned, or skipped): only the venue holds it.
+        for (Venue &v : m_venues)
+            if (v.name == m_active)
+            {
+                v.fixtures.remove(fid);
+                v.names.remove(fid);
+                v.makers.remove(fid);
+                v.models.remove(fid);
+                v.modes.remove(fid);
+                v.modified = QDateTime::currentDateTime();
+            }
+        m_needsFocus.removeAll(fid);
+        emit correctionsChanged();
+        return save();
+    }
     writeRig(fid, baseOf(fid));
     return record(fid);
 }

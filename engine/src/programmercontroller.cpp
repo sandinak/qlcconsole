@@ -147,6 +147,21 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_refineSession, &RefineSession::started, this, &ProgrammerController::refreshPadLight);
     connect(m_refineSession, &RefineSession::stopped, this, &ProgrammerController::refreshPadLight);
     connect(m_refineSession, &RefineSession::kept, this, [this]() { padRumble(1); });
+    /* Nothing reaching the rig (Blackout, the Grand Master at zero, a
+       universe with no output): said, not a cheerful "fixture 3 of 8". */
+    connect(m_focusSession, &FocusSession::started, this, [this]() {
+        m_lastRigProblem.clear();
+        checkRigOutput(m_focusSession->currentFixture());
+    });
+    connect(m_focusSession, &FocusSession::currentChanged, this, [this](quint32 fid) { checkRigOutput(fid); });
+    connect(m_refineSession, &RefineSession::started, this, [this]() {
+        m_lastRigProblem.clear();
+        checkRigOutput(m_refineSession->scopeFixtures().value(0, 0xFFFFFFFF));
+    });
+    connect(m_refineSession, &RefineSession::changed, this, [this]() {
+        if (m_refineSession->isActive())
+            checkRigOutput(m_refineSession->scopeFixtures().value(0, 0xFFFFFFFF));
+    });
     // Say the light: asked for, so always said.
     connect(m_focusSession, &FocusSession::sayLight, this, [this](const QString &text) {
         emit operatorAnnounce(text, ControllerScheme::ConfirmPriority);
@@ -1581,6 +1596,42 @@ void ProgrammerController::freezeController()
     emit joystickUpdated(m_panNorm, m_tiltNorm);
 }
 
+QString ProgrammerController::rigOutputProblem(quint32 fid) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return QString();
+    if (iom->blackout())
+        return tr("Blackout is on: the rig shows nothing.");
+    if (iom->grandMasterValue() == 0)
+        return tr("The Grand Master is at zero: the rig shows nothing.");
+    /* Its universe with no output, where others have one -- a laptop with
+       no outputs at all is previewing, as the footer says, not a problem. */
+    const Fixture *fx = fid != 0xFFFFFFFF ? m_doc->fixture(fid) : nullptr;
+    bool anyOutput = false;
+    for (quint32 u = 0; u < iom->universesCount() && !anyOutput; ++u)
+        anyOutput = iom->outputPatchesCount(u) > 0;
+    if (anyOutput && fx != nullptr && fx->universe() < iom->universesCount()
+        && iom->outputPatchesCount(fx->universe()) == 0)
+        return tr("%1's universe has no output: it shows nothing.").arg(fx->name());
+    return QString();
+}
+
+void ProgrammerController::checkRigOutput(quint32 fid)
+{
+    if (!m_focusSession->isActive() && !m_refineSession->isActive())
+    {
+        m_lastRigProblem.clear();
+        return;
+    }
+    const QString problem = rigOutputProblem(fid);
+    if (problem == m_lastRigProblem)
+        return;
+    m_lastRigProblem = problem;
+    if (!problem.isEmpty())
+        warnOperator(problem);
+}
+
 QString ProgrammerController::controllerOwnerName() const
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
@@ -2038,6 +2089,13 @@ void ProgrammerController::connectControllerInput()
             this, &ProgrammerController::focusControllerChanged);
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceConnected,
             this, &ProgrammerController::focusControllerChanged);
+    // Blackout or the Grand Master to zero mid-session: said.
+    auto recheck = [this]() {
+        checkRigOutput(m_focusSession->isActive() ? m_focusSession->currentFixture()
+                       : m_refineSession->scopeFixtures().value(0, 0xFFFFFFFF));
+    };
+    connect(m_doc->inputOutputMap(), &InputOutputMap::blackoutChanged, this, recheck);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged, this, recheck);
     m_controllerInputConnected = true;
 }
 

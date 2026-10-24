@@ -719,4 +719,36 @@ void FocusCallsUi_Test::theRefinePanelHasTheLamp()
     QTRY_VERIFY(panel.isNull());
 }
 
+void FocusCallsUi_Test::oneCorrectionIsSeenAndCleared()
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(FocusCallsDialog::showCorrections(m_doc, nullptr) == nullptr);   // none applied
+    QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (quint32 fid : { m_spots.at(0), m_spots.at(1) })
+    {
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.panOffsetDeg = 1.5f;
+        props->setFixtureRigProps(fid, rp);
+    }
+    QCOMPARE(venues->correctionCount(), 2);
+    {
+        FocusCallsDialog dlg(m_doc);
+        QVERIFY(dlg.findChild<QPushButton *>("fcCorrections")->isEnabled());
+    }
+    QPointer<QDialog> d = FocusCallsDialog::showCorrections(m_doc, nullptr);
+    QVERIFY(d != nullptr);
+    QListWidget *list = d->findChild<QListWidget *>("venueCorrectionList");
+    QCOMPARE(list->count(), 2);
+    QVERIFY(list->item(0)->text().contains("pan 1.50"));
+    list->setCurrentRow(0);
+    d->findChild<QPushButton *>("venueCorrectionClear")->click();
+    QCOMPARE(venues->correctionCount(), 1);
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(props->fixtureRigProps(m_spots.at(0)).panOffsetDeg, 0.0f);       // the show's own
+    QCOMPARE(props->fixtureRigProps(m_spots.at(1)).panOffsetDeg, 1.5f);
+    d->close();
+}
+
 QTEST_MAIN(FocusCallsUi_Test)

@@ -1679,4 +1679,42 @@ void FocusCalls_Test::inAVenueKeptSaysWhereAndXIsTheShows()
     s->stop();
 }
 
+void FocusCalls_Test::nothingReachingTheRigIsSaid()
+{
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    ProgrammerController *pc = m_doc->programmer();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    FocusSession *s = pc->focusSession();
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    FocusSession::Options o;
+    o.fixtures = { a->id() };
+    o.first = targetRef(dsc->id());
+    QVERIFY(pc->rigOutputProblem(a->id()).isEmpty());       // no outputs at all: previewing
+    iom->setBlackout(true);
+    QVERIFY(s->start(o));
+    bool told = false;
+    for (const QList<QVariant> &l : said)
+        told = told || (l.at(0).toString() == QLatin1String("Blackout is on: the rig shows nothing.")
+                        && l.at(1).toInt() == int(ControllerScheme::ImportantPriority));
+    QVERIFY(told);
+    iom->setBlackout(false);
+    QVERIFY(pc->rigOutputProblem(a->id()).isEmpty());
+    iom->setGrandMasterValue(0);
+    QCOMPARE(pc->rigOutputProblem(a->id()), QString("The Grand Master is at zero: the rig shows nothing."));
+    QCOMPARE(said.last().at(0).toString(), QString("The Grand Master is at zero: the rig shows nothing."));
+    iom->setGrandMasterValue(255);
+
+    // Another universe has an output, Spot 3's has none.
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    QVERIFY(iom->setOutputPatch(1, stub->name(), QString(), 0));
+    QCOMPARE(pc->rigOutputProblem(a->id()), QString("Spot 3's universe has no output: it shows nothing."));
+    s->stop();
+    iom->setOutputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)

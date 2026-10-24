@@ -72,6 +72,11 @@ public:
      *  Not modal; null when there is nothing to offer. */
     static QDialog *offerVenueImport(Doc *doc, QWidget *parent, const QString &showFile);
 
+    /** The applied venue's corrections, one per line -- each light (needs
+     *  focus, or no longer in the show, marked), each trim and target --
+     *  and Clear for the one picked: back to the show's own. */
+    static QDialog *showCorrections(Doc *doc, QWidget *parent);
+
     /** The calls as edited (they are the show's once Start or Save). */
     QList<FocusCall> calls() const { return m_calls; }
     void setCalls(const QList<FocusCall> &calls);
@@ -124,6 +129,7 @@ private:
     QPushButton *m_applyVenue = nullptr;
     QPushButton *m_renameVenue = nullptr;
     QPushButton *m_deleteVenue = nullptr;
+    QPushButton *m_corrections = nullptr;
 };
 
 /** @} */
