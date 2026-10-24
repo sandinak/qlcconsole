@@ -435,8 +435,10 @@ bool RefineSession::sceneKeep(QString *why)
     rebuildWrites();
     emit changed();
     emit kept();
-    confirm(m_doc->mode() == Doc::Operate ? tr("%1 kept. It plays from the scene's next start.").arg(light)
-                                      : tr("%1 kept.").arg(light));
+    const QString scene = s->name();
+    confirm(m_doc->mode() == Doc::Operate
+            ? tr("%1 kept in %2. It plays from the scene's next start.").arg(light, scene)
+            : tr("%1 kept in %2.").arg(light, scene));
     return true;
 }
 

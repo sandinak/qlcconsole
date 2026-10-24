@@ -109,6 +109,9 @@ private slots:
     /** Q135: two pads -- the first to press Start owns it; the other is
      *  ignored and told so. */
     void theFirstPadOwnsIt();
+    /** The review: in a venue a save says where ("kept for Lincoln HS"),
+     *  and X goes back to the show's calibration, not to zero. */
+    void inAVenueKeptSaysWhereAndXIsTheShows();
     /** Safety: the pad dropping with a stick and A held -- everything is
      *  let go, nothing moves, no keep-all fires; said, and said when back.
      *  In Focus mode (and focus calls) and in Refine. */

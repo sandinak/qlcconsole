@@ -971,10 +971,11 @@ void FocusSession::save()
     if (saved.size() == 1)
     {
         const Fixture *fx = m_doc->fixture(saved.first());
-        emit announce(fx != nullptr ? tr("%1 kept.").arg(fx->name()) : tr("Kept."), ControllerScheme::ConfirmPriority);
+        emit announce(fx != nullptr ? tr("%1 kept%2.").arg(fx->name(), keptWhere()) : tr("Kept%1.").arg(keptWhere()),
+                      ControllerScheme::ConfirmPriority);
     }
     else if (!saved.isEmpty())
-        emit announce(tr("%1 lights kept.").arg(saved.size()), ControllerScheme::ConfirmPriority);
+        emit announce(tr("%1 lights kept%2.").arg(saved.size()).arg(keptWhere()), ControllerScheme::ConfirmPriority);
 }
 
 FocusSession::SaveStatus FocusSession::saveStatus() const
@@ -991,7 +992,9 @@ void FocusSession::saveAllHeld()
         return;
     const int n = unsavedFixtures().size();
     saveAll();
-    emit announce(n == 0 ? tr("All saved.") : n == 1 ? tr("1 light kept.") : tr("%1 lights kept.").arg(n), ControllerScheme::ConfirmPriority);
+    emit announce(n == 0 ? tr("All saved.") : n == 1 ? tr("1 light kept%1.").arg(keptWhere())
+                                            : tr("%1 lights kept%2.").arg(n).arg(keptWhere()),
+                  ControllerScheme::ConfirmPriority);
 }
 
 void FocusSession::revertLight()
@@ -1358,9 +1361,18 @@ void FocusSession::zero()
         }
         else
         {
-            if (h.live == Offset())
+            /* In a venue, X is the show's own calibration -- what the venue
+               corrects from -- not absolute zero (the review). */
+            Offset base;
+            if (savesToVenue())
+            {
+                const RigCalibration c = m_venues->baseOf(fid);
+                base.pan = c.panOffsetDeg;
+                base.tilt = c.tiltOffsetDeg;
+            }
+            if (h.live == base)
                 continue;
-            h.live = Offset();
+            h.live = base;
             applyOffset(fid, h.live);
         }
         any = true;
@@ -1369,7 +1381,8 @@ void FocusSession::zero()
     if (!any)
         return;
     rebuildWrites();
-    emit announce(tr("Zeroed."), ControllerScheme::ConfirmPriority);
+    emit announce(savesToVenue() ? tr("Back to the show's calibration.") : tr("Zeroed."),
+                  ControllerScheme::ConfirmPriority);
 }
 
 bool FocusSession::undoSave()
@@ -1416,6 +1429,11 @@ void FocusSession::saveAll()
             saved << fid;
     }
     savedChanged(saved);
+}
+
+QString FocusSession::keptWhere() const
+{
+    return savesToVenue() ? tr(" for %1").arg(m_venues->activeVenue()) : QString();
 }
 
 QString FocusSession::unsavedCountPhrase() const

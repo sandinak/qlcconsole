@@ -438,6 +438,9 @@ public:
     /** View + RS (or N): how many lights are not saved -- "2 not saved.",
      *  "All saved." -- said whatever the feedback: it was asked for. */
     QString unsavedCountPhrase() const;
+    /** Where a save lands, for the voice (the review: one word per tool,
+     *  saying where): " for Lincoln HS" in a venue, else nothing. */
+    QString keptWhere() const;
 
     /** Where head @p fid would land with its SAVED calibration, as its
      *  live one lands on the reference (the plot's ghost while nudging);

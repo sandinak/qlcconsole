@@ -550,7 +550,7 @@ void RefineSession_Test::operateHoldsWhatIsKept()
     r->setScope(RefineSession::LayerScope);
     QVERIFY(r->nudgePosition(4.0f, 0.0f));
     QVERIFY(r->keep());
-    QCOMPARE(said.last().at(0).toString(), QString("AT spots kept. It plays next time cue 1 runs."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT spots kept in cue 1. It plays next time it runs."));
     QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
              QVariantList({ 274, 135 }));
     // Held on the rig until the next GO plays it.
@@ -778,7 +778,7 @@ void RefineSession_Test::refineTellsYouMoreToo()
     r->apply(ControllerScheme::Exit);
     QCOMPARE(said.last().at(0).toString(), QString("1 change not kept."));
     QVERIFY(r->keep());
-    QCOMPARE(said.last().at(0).toString(), QString("AT 2 kept."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT 2 kept in cue 1."));
     QCOMPARE(buzz.last().at(0).toInt(), 1);
     r->stop();
     QVERIFY(!pc->padLight().isValid());
@@ -937,6 +937,34 @@ void RefineSession_Test::aHeldANeverAnswersAWarning()
     up(10);
     r->stop();
     iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
+void RefineSession_Test::aReusableLayerWarnsFirst()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QString why;
+    const quint32 reusable = st->makeLayerReusable(m_cue, m_layer, "Specials", &why);
+    QVERIFY2(reusable != invalidId(), qPrintable(why));
+    const quint32 list = st->listOfCue(m_cue)->id;
+    const quint32 cue2 = st->addCue(list, 0, "Verse");
+    QVERIFY(st->insertReusableLayer(cue2, reusable) != invalidId());
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->nudgePosition(3.0f, 0.0f));
+    why.clear();
+    QVERIFY(!r->keep(&why));                                  // warned, not kept
+    QVERIFY2(why.startsWith("Specials is reusable: it is also used in"), qPrintable(why));
+    QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
+    QVERIFY(r->hasWarningPending());
+    QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
+             QVariantList({ 270, 135 }));
+    QVERIFY(r->keep());                                       // A again: in every use
+    QVERIFY(!r->hasWarningPending());
+    QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
+             QVariantList({ 273, 135 }));
+    r->stop();
 }
 
 QTEST_GUILESS_MAIN(RefineSession_Test)

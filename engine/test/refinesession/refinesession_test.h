@@ -74,6 +74,9 @@ private slots:
     /** Q132: A held for a second keeps everything; a hold never answers
      *  a warning (a shared palette's "press A again"), only a fresh press. */
     void aHeldANeverAnswersAWarning();
+    /** The review: a reusable layer changes in every use -- warned first,
+     *  a second A goes on (as Build's shared palette). */
+    void aReusableLayerWarnsFirst();
 
 private:
     Doc *m_doc = nullptr;

@@ -898,10 +898,6 @@ bool RefineSession::keep(QString *why)
                 groupPositions[k] << qMakePair(fid, qMakePair(p + e.pan, t + e.tilt));
         }
     }
-    // In Operate, what is kept lands on the next GO: hold it on the rig.
-    if (m_doc->mode() == Doc::Operate)
-        for (const QString &k : order)
-            m_kept << previewValues(m_edits[k]);
 
     /* A look onto its layer -- or, for a layer only tracked in, into this
        cue (it becomes its own here) or the cue its values come from. */
@@ -917,6 +913,57 @@ bool RefineSession::keep(QString *why)
         }
         return st->setTargetLook(m_cue, t->layer.target, look);
     };
+    /* The review: a reusable layer (or a use of a reusable cue) changes in
+       every cue that uses it -- said first, as Build does for a shared
+       palette (Q116); a second A (or Change them all) goes on. */
+    if (!m_sharedConfirmed)
+    {
+        QStringList users;
+        QStringList names;
+        auto addUses = [&](quint32 reusableId) {
+            for (const ShowTreeController::ReusableUse &u : st->reusableUses(reusableId))
+                if (u.cue != m_cue && !users.contains(u.label))
+                    users << u.label;
+            const QString n = st->reusableName(reusableId);
+            if (!n.isEmpty() && !names.contains(n))
+                names << n;
+        };
+        const ShowTree::Cue *here = cue();
+        if (here != nullptr && here->reusable != kInvalid)
+            addUses(here->reusable);
+        for (const QString &k : order)
+        {
+            const Edit &e = m_edits[k];
+            if (e.scope != LayerScope || m_tracked.contains(e.layer))
+                continue;
+            if (const ShowTree::Layer *l = layer(e.layer))
+                if (l->reusable != kInvalid)
+                    addUses(l->reusable);
+        }
+        if (!users.isEmpty())
+        {
+            m_sharedWarning = users.size() == 1
+                ? tr("%1 is reusable: it is also used in %2. Press A again to change it there too.")
+                  .arg(names.join(QStringLiteral(", ")), users.first())
+                : tr("%1 is reusable: it is also used in %2 and %3 more. Press A again to change them all.")
+                  .arg(names.join(QStringLiteral(", ")), users.first()).arg(users.size() - 1);
+            m_sharedUsers = users;
+            m_sharedConfirmed = true;           // the next A goes on
+            emit changed();
+            warn(m_sharedWarning);
+            if (why != nullptr)
+                *why = m_sharedWarning;
+            return false;
+        }
+    }
+    m_sharedConfirmed = false;
+    m_sharedWarning.clear();
+    m_sharedUsers.clear();
+    // In Operate, what is kept lands on the cue's next run: hold it on the rig.
+    if (m_doc->mode() == Doc::Operate)
+        for (const QString &k : order)
+            m_kept << previewValues(m_edits[k]);
+
     const bool wasTracked = isTrackedLayer();
     const QString light = keptLight();
     const ShowTree::Target trackedTarget = wasTracked ? layer(currentLayer())->target : ShowTree::Target();
@@ -1078,8 +1125,8 @@ bool RefineSession::keep(QString *why)
         confirm(toSource ? tr("Kept in the cue it tracks from.") : tr("Kept in this cue."));
     else
         confirm(m_doc->mode() == Doc::Operate
-                ? tr("%1 kept. It plays next time cue %2 runs.").arg(light, cueNumber())
-                : tr("%1 kept.").arg(light));
+                ? tr("%1 kept in cue %2. It plays next time it runs.").arg(light, cueNumber())
+                : tr("%1 kept in cue %2.").arg(light, cueNumber()));
     return true;
 }
 

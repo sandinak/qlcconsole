@@ -1652,4 +1652,31 @@ void FocusCalls_Test::theFirstPadOwnsIt()
     iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
+void FocusCalls_Test::inAVenueKeptSaysWhereAndXIsTheShows()
+{
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 2.0f;                                    // the show's own
+    props->setFixtureRigProps(a->id(), rp);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
+    FocusSession::Options o;
+    o.fixtures = { a->id() };
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    s->nudge(1.0f, 0.0f);
+    s->save();
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 kept for Lincoln HS."));
+    s->zero();
+    QCOMPARE(s->liveOffset(a->id()).pan, 2.0f);               // the show's, not 0
+    QCOMPARE(said.last().at(0).toString(), QString("Back to the show's calibration."));
+    s->discardAll();
+    s->stop();
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)
