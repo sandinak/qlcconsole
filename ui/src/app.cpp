@@ -3375,7 +3375,16 @@ void App::slotFileCollectForTransfer()
         return;
     }
     QStringList written;
-    const bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    // The venues travel with it (gap 8): the room's focus corrections.
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    if (!venues->venueNames().isEmpty())
+    {
+        if (venues->writeSidecarFor(show))
+            written << VenueCorrections::sidecarPath(show);
+        else
+            ok = false;
+    }
     if (!ok)
         QMessageBox::warning(this, tr("Collect for Transfer"),
             tr("The show is in %1, but some of the files it uses could not be written there.")
@@ -4776,7 +4785,13 @@ QFile::FileError App::loadXML(const QString& fileName)
                the default (board Q129). Not modal, so it never holds up a
                show opened from the command line. */
             if (m_noGui == false)
-                QTimer::singleShot(0, this, [this]() { FocusCallsDialog::confirmVenue(m_doc, this); });
+                QTimer::singleShot(0, this, [this, fileName]() {
+                    /* No venue file of its own, but one beside it for the
+                       same show (an earlier version, a Finder copy): offered
+                       (gap 8); else, an old venue confirmed. */
+                    if (FocusCallsDialog::offerVenueImport(m_doc, this, fileName) == nullptr)
+                        FocusCallsDialog::confirmVenue(m_doc, this);
+                });
             m_doc->resetModified();
             retval = QFile::NoError;
             cacheShowDefinitions();     // the next run of it needs nothing remote

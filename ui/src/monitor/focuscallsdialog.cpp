@@ -372,6 +372,44 @@ QDialog *FocusCallsDialog::confirmVenue(Doc *doc, QWidget *parent)
     return d;
 }
 
+QDialog *FocusCallsDialog::offerVenueImport(Doc *doc, QWidget *parent, const QString &showFile)
+{
+    const QStringList candidates = VenueCorrections::importCandidates(showFile);
+    if (candidates.isEmpty())
+        return nullptr;
+    const QString from = candidates.first();
+    QDialog *d = new QDialog(parent);
+    d->setObjectName(QStringLiteral("venueImport"));
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->setWindowTitle(tr("Venues"));
+    d->setProperty("helpTopic", QStringLiteral("focus-calls.md"));
+    QVBoxLayout *vl = new QVBoxLayout(d);
+    QLabel *text = new QLabel(tr("This show has no venue file of its own, but %1 beside it holds the "
+                                 "focus corrections of an earlier copy of it. Use its venues for this "
+                                 "show? (It is copied; that file is not changed.)")
+                              .arg(QFileInfo(from).fileName()), d);
+    text->setObjectName(QStringLiteral("venueImportText"));
+    text->setWordWrap(true);
+    vl->addWidget(text);
+    QDialogButtonBox *bb = new QDialogButtonBox(d);
+    QPushButton *use = bb->addButton(tr("Use its venues"), QDialogButtonBox::AcceptRole);
+    use->setObjectName(QStringLiteral("venueImportUse"));
+    use->setDefault(true);
+    QPushButton *no = bb->addButton(tr("Not now"), QDialogButtonBox::RejectRole);
+    no->setObjectName(QStringLiteral("venueImportNo"));
+    vl->addWidget(bb);
+    QObject::connect(use, &QPushButton::clicked, d, [doc, parent, from, d]() {
+        doc->programmer()->venueCorrections()->importFrom(from);
+        d->close();
+        // Then, as on any open: an old venue is confirmed.
+        FocusCallsDialog::confirmVenue(doc, parent);
+    });
+    QObject::connect(no, &QPushButton::clicked, d, &QDialog::close);
+    d->show();
+    d->raise();
+    return d;
+}
+
 void FocusCallsDialog::setCalls(const QList<FocusCall> &calls)
 {
     m_calls = calls;

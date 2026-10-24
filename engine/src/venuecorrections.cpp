@@ -19,6 +19,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QFileInfo>
 #include <QFile>
@@ -176,6 +177,104 @@ bool VenueCorrections::save(QString *why)
             *why = tr("Cannot write %1: %2").arg(QDir::toNativeSeparators(path), f.errorString());
         return false;
     }
+    return true;
+}
+
+bool VenueCorrections::writeSidecarFor(const QString &showFile, QString *why) const
+{
+    const QString path = sidecarPath(showFile);
+    if (path.isEmpty() || m_venues.isEmpty())
+        return false;
+    QByteArray xml = toXml();
+    if (!m_showFile.isEmpty())
+        xml.replace(QStringLiteral("Show=\"%1\"").arg(QFileInfo(m_showFile).fileName().toHtmlEscaped()).toUtf8(),
+                    QStringLiteral("Show=\"%1\"").arg(QFileInfo(showFile).fileName().toHtmlEscaped()).toUtf8());
+    QSaveFile f(path);
+    if (!f.open(QIODevice::WriteOnly) || f.write(xml) < 0 || !f.commit())
+    {
+        if (why != nullptr)
+            *why = tr("Cannot write %1: %2").arg(QDir::toNativeSeparators(path), f.errorString());
+        return false;
+    }
+    return true;
+}
+
+QString VenueCorrections::showStem(const QString &showFile)
+{
+    QString stem = QFileInfo(showFile).completeBaseName();
+    if (stem.endsWith(QStringLiteral(".venues")))
+        stem.chop(7);
+    static const QRegularExpression tails[] = {
+        QRegularExpression(QStringLiteral("\\s*\\(\\d+\\)$")),          // "Show (2)"
+        QRegularExpression(QStringLiteral("\\s+copy(\\s+\\d+)?$"),
+                           QRegularExpression::CaseInsensitiveOption),    // "Show copy 2"
+        QRegularExpression(QStringLiteral("[-_ ]v?\\d+(\\.\\d+)*$"),
+                           QRegularExpression::CaseInsensitiveOption),    // "Show-0.6", "Show v3"
+    };
+    for (bool again = true; again;)
+    {
+        again = false;
+        for (const QRegularExpression &re : tails)
+        {
+            const QString cut = QString(stem).remove(re);
+            if (cut != stem && !cut.isEmpty())
+            {
+                stem = cut;
+                again = true;
+            }
+        }
+    }
+    return stem.trimmed();
+}
+
+QStringList VenueCorrections::importCandidates(const QString &showFile)
+{
+    QStringList out;
+    if (showFile.isEmpty() || QFile::exists(sidecarPath(showFile)))
+        return out;
+    const QFileInfo fi(showFile);
+    const QString stem = showStem(showFile);
+    const QFileInfoList files = fi.dir().entryInfoList({ QStringLiteral("*.venues.xml") }, QDir::Files,
+                                                       QDir::Time);
+    for (const QFileInfo &f : files)
+    {
+        QFile file(f.absoluteFilePath());
+        if (!file.open(QIODevice::ReadOnly))
+            continue;
+        QXmlStreamReader r(&file);
+        if (!r.readNextStartElement() || r.name() != kRoot)
+            continue;
+        const QString show = r.attributes().value(QStringLiteral("Show")).toString();
+        if (!show.isEmpty() && showStem(show) == stem)
+            out << f.absoluteFilePath();
+    }
+    return out;
+}
+
+bool VenueCorrections::importFrom(const QString &sidecar, QString *why)
+{
+    QFile f(sidecar);
+    if (!f.open(QIODevice::ReadOnly))
+    {
+        if (why != nullptr)
+            *why = tr("Cannot read %1: %2").arg(QDir::toNativeSeparators(sidecar), f.errorString());
+        return false;
+    }
+    unapply();
+    if (!fromXml(f.readAll(), why))
+        return false;
+    const QString wanted = m_active;
+    m_active.clear();
+    m_confirmed = false;
+    if (!wanted.isEmpty() && hasVenue(wanted))
+    {
+        m_active = wanted;
+        apply();
+    }
+    save(why);
+    emit activeVenueChanged(m_active);
+    emit venuesChanged();
+    emit correctionsChanged();
     return true;
 }
 

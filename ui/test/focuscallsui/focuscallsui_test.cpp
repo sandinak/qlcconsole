@@ -665,4 +665,26 @@ void FocusCallsUi_Test::theVoiceNeverDropsAConfirmation()
     OperatorVoice::setEnabled(was);
 }
 
+void FocusCallsUi_Test::aSiblingsVenuesAreOffered()
+{
+    const QString v5 = m_dir->filePath("Dance-0.5.qlcc");
+    QFile f(VenueCorrections::sidecarPath(v5));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QString("<QlcVenues Version=\"1\" Show=\"Dance-0.5.qlcc\" Active=\"Lincoln HS\">"
+                    "<Venue Name=\"Lincoln HS\" Modified=\"%1\"/></QlcVenues>")
+            .arg(QDateTime::currentDateTime().toString(Qt::ISODate)).toUtf8());
+    f.close();
+    const QString v6 = m_dir->filePath("Dance-0.6.qlcc");
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(v6, true);
+    QVERIFY(FocusCallsDialog::offerVenueImport(m_doc, nullptr, v5) == nullptr);   // has its own
+    QPointer<QDialog> d = FocusCallsDialog::offerVenueImport(m_doc, nullptr, v6);
+    QVERIFY(d != nullptr);
+    QVERIFY(d->findChild<QLabel *>("venueImportText")->text().contains("Dance-0.5.venues.xml"));
+    d->findChild<QPushButton *>("venueImportUse")->click();
+    QTRY_VERIFY(d.isNull());
+    QCOMPARE(venues->activeVenue(), QString("Lincoln HS"));
+    QVERIFY(QFile::exists(VenueCorrections::sidecarPath(v6)));
+}
+
 QTEST_MAIN(FocusCallsUi_Test)

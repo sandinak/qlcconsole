@@ -99,6 +99,9 @@ private slots:
      *  never the show; the target page moves a call's target, its heads
      *  following, and A keeps it for the venue. */
     void aVenueHasItsOwnTrimsAndTargets();
+    /** Gap 8: the venue file travels -- a copy for another show file, and
+     *  an earlier version's (or a Finder copy's) found and imported. */
+    void theVenueFileTravels();
     /** Safety: the pad dropping with a stick and A held -- everything is
      *  let go, nothing moves, no keep-all fires; said, and said when back.
      *  In Focus mode (and focus calls) and in Refine. */

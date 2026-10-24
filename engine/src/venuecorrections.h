@@ -107,6 +107,20 @@ public:
      *  no show file yet or it cannot be written. */
     bool save(QString *why = nullptr);
 
+    /** Gap 8, the file travels: write these venues as the sidecar of
+     *  @p showFile too (Collect for Transfer's copy of the show). */
+    bool writeSidecarFor(const QString &showFile, QString *why = nullptr) const;
+    /** A show's name without a version or copy ending: "Dance-0.6",
+     *  "Dance copy 2", "Dance (3)" -> "Dance". */
+    static QString showStem(const QString &showFile);
+    /** Opened with no sidecar of its own: venue files beside it written
+     *  for the same show under another name (an earlier versioned Save As,
+     *  a Finder copy) -- their Show= has the same stem. Newest first. */
+    static QStringList importCandidates(const QString &showFile);
+    /** Take @p sidecar's venues as this show's (written beside it), the
+     *  venue it names applied. */
+    bool importFrom(const QString &sidecar, QString *why = nullptr);
+
     /** The XML, without a file (tests, and save()). */
     QByteArray toXml() const;
     bool fromXml(const QByteArray &xml, QString *why = nullptr);

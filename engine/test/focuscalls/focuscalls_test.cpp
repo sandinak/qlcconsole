@@ -1491,4 +1491,44 @@ void FocusCalls_Test::aVenueHasItsOwnTrimsAndTargets()
     QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
 }
 
+void FocusCalls_Test::theVenueFileTravels()
+{
+    QCOMPARE(VenueCorrections::showStem("/x/DanceHysteria-0.6.qlcc"), QString("DanceHysteria"));
+    QCOMPARE(VenueCorrections::showStem("/x/DanceHysteria-0.5.venues.xml"), QString("DanceHysteria"));
+    QCOMPARE(VenueCorrections::showStem("/x/Spring Show copy 2.qlcc"), QString("Spring Show"));
+    QCOMPARE(VenueCorrections::showStem("/x/Spring Show (3).qlcc"), QString("Spring Show"));
+    QCOMPARE(VenueCorrections::showStem("/x/Spring Show.qlcc"), QString("Spring Show"));
+
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    const QString v5 = m_dir->filePath("Dance-0.5.qlcc");
+    v->setShowFile(v5, false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 2.0f;
+    m_doc->monitorProperties()->setFixtureRigProps(a->id(), rp);
+    QVERIFY(v->hasCorrection(a->id()));
+
+    // Collect for Transfer: a copy beside the copied show, named for it.
+    QDir(m_dir->path()).mkdir("Transfer");
+    const QString moved = m_dir->filePath("Transfer/Dance-0.5.qlcc");
+    QVERIFY(v->writeSidecarFor(moved));
+    QFile t(VenueCorrections::sidecarPath(moved));
+    QVERIFY(t.open(QIODevice::ReadOnly));
+    QVERIFY(t.readAll().contains("Lincoln HS"));
+
+    // Saved As 0.6 elsewhere (no sidecar): 0.5's is offered, and imported.
+    const QString v6 = m_dir->filePath("Dance-0.6.qlcc");
+    QCOMPARE(VenueCorrections::importCandidates(v6), QStringList({ VenueCorrections::sidecarPath(v5) }));
+    QVERIFY(VenueCorrections::importCandidates(v5).isEmpty());          // has its own
+    QVERIFY(VenueCorrections::importCandidates(m_dir->filePath("Other.qlcc")).isEmpty());
+    v->setShowFile(v6, true);
+    QVERIFY(!v->isActive());
+    QVERIFY(v->importFrom(VenueCorrections::sidecarPath(v5)));
+    QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(a->id()).panOffsetDeg, 2.0f);
+    QVERIFY(QFile::exists(VenueCorrections::sidecarPath(v6)));
+    QVERIFY(v->toXml().contains("Show=\"Dance-0.6.qlcc\""));
+}
+
 QTEST_GUILESS_MAIN(FocusCalls_Test)

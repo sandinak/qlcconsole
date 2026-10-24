@@ -66,6 +66,12 @@ public:
      *  asking. */
     static QDialog *confirmVenue(Doc *doc, QWidget *parent);
 
+    /** Gap 8: @p showFile opened with no venue file of its own, but a
+     *  sibling *.venues.xml for the same show (its Show= has the same name
+     *  but for a version or copy ending): offer to bring its venues over.
+     *  Not modal; null when there is nothing to offer. */
+    static QDialog *offerVenueImport(Doc *doc, QWidget *parent, const QString &showFile);
+
     /** The calls as edited (they are the show's once Start or Save). */
     QList<FocusCall> calls() const { return m_calls; }
     void setCalls(const QList<FocusCall> &calls);
