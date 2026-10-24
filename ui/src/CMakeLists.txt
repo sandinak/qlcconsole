@@ -76,6 +76,7 @@ add_library(${module_name}
     importselectiondialog.cpp importselectiondialog.h
     eosimportwizard.cpp eosimportwizard.h
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
+    inputdevicenotices.cpp inputdevicenotices.h
     inputoutputmanager.cpp inputoutputmanager.h
     connectionstree.cpp connectionstree.h
     universepatcher.cpp universepatcher.h

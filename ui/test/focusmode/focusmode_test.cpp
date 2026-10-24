@@ -438,6 +438,47 @@ void FocusMode_Test::aDisconnectFallsBackToTheKeyboard()
     QVERIFY(!back->isVisible());
 }
 
+void FocusMode_Test::aPadThatSleepsIsPickedUpAgain()
+{
+    /* The real path: the plugin's device goes (a Bluetooth pad asleep) and
+       comes back. The input patch is kept meanwhile and put back by name,
+       and Focus mode reads the pad again without a restart. */
+    plugInPad();
+    m_stub->m_linesAreHardware = true;
+    auto restore = qScopeGuard([this]() {
+        m_stub->m_lineCount = 4;
+        m_stub->m_linesAreHardware = false;
+        if (m_doc->inputOutputMap()->inputPatch(0) == nullptr)
+            m_stub->configure();
+    });
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    panel->show();
+    QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
+    QLabel *note = panel->findChild<QLabel *>("focusInputNote");
+    QPushButton *back = panel->findChild<QPushButton *>("focusControllerBack");
+
+    m_stub->m_lineCount = 0;            // asleep: no line for it
+    m_stub->configure();                // the plugin's rescan
+    QVERIFY(m_doc->inputOutputMap()->inputPatch(0) == nullptr);
+    QVERIFY(m_doc->programmer()->focusController().present == false);
+    QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
+    QVERIFY2(note->text().contains("disconnected"), qPrintable(note->text()));
+
+    m_stub->m_lineCount = 4;            // awake
+    m_stub->configure();
+    QVERIFY(m_doc->inputOutputMap()->inputPatch(0) != nullptr);
+    QVERIFY(m_doc->programmer()->focusController().present);
+    QVERIFY2(note->text().contains("Controller connected"), qPrintable(note->text()));
+    QVERIFY(back->isVisible());
+    back->click();
+    QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
+    panel->close();
+}
+
 namespace
 {
 /** The keep-alive's platform side, inert: no real activity in a test. */

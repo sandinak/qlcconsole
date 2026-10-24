@@ -51,6 +51,7 @@ private slots:
     /** The controller unplugged mid-session: the keyboard takes over, and
      *  it is offered back when it returns. */
     void aDisconnectFallsBackToTheKeyboard();
+    void aPadThatSleepsIsPickedUpAgain();
     /** A paused controller is said, with why -- not silence -- and the
      *  panel stays up when another app is in front. */
     void aPausedControllerSaysWhy();

@@ -814,7 +814,7 @@ void FocusModePanel::refreshController()
     }
     else if (pad.present && m_fellBack && m_session->inputDevice() == FocusSession::KeyboardInput)
     {
-        m_noteLabel->setText(tr("The controller is back."));
+        m_noteLabel->setText(tr("Controller connected: %1 is back.").arg(pad.name));
         m_noteLabel->show();
         m_backButton->show();
     }

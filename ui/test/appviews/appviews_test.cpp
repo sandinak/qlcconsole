@@ -90,6 +90,7 @@
 #include "ioplugincache.h"
 #include "qlcfile.h"
 #include "showstatus.h"
+#include "inputdevicenotices.h"
 #include "speedmastersfooter.h"
 #undef protected
 #undef private
@@ -1252,6 +1253,64 @@ void AppViews_Test::rigNetworkSettingsRoundTrip()
         settings.setValue(App::rigNetworkGateSettingKey(), before);
     else
         settings.remove(App::rigNetworkGateSettingKey());
+}
+
+void AppViews_Test::aControllerComingAndGoingIsSaid()
+{
+    /* A pad patched as universe 2's input goes to sleep and wakes: said in
+       the notice line (amber while it is away) and in the footer. The
+       plugin is the engine's test stub dressed as a device plugin. */
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    if (cache->plugin(QStringLiteral("I/O Plugin Stub")) == nullptr)
+        cache->load(stubDir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(cache->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    const QString pad = QStringLiteral("DualSense Wireless Controller");
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << pad;
+    auto restore = qScopeGuard([this, stub]() {
+        m_app->clearDocument();
+        stub->m_linesAreHardware = false;
+        stub->m_lineNames.clear();
+        m_app->hideViewNotice();
+    });
+
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    if (iom->universesCount() < 2)
+        iom->addUniverse();
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 0));
+    m_app->m_inputNotices->settleNow();
+    m_app->hideViewNotice();
+
+    stub->m_lineNames = QStringList() << "Keyboard";
+    stub->configure();
+    m_app->m_inputNotices->settleNow();
+    QVERIFY(m_app->m_viewNotice->isHidden() == false);
+    QCOMPARE(m_app->m_viewNoticeText->text(),
+             QString("Input device '%1' disconnected — universe 2").arg(pad));
+    QVERIFY(m_app->m_viewNotice->styleSheet().contains("#f5a623"));
+    bool inFooter = false;
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+        if (e.key == QLatin1String("input.devices"))
+            inFooter = e.summary.contains(pad);
+    QVERIFY(inFooter);
+    // Said once, in its own words: not also as an interface "not present".
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+        QVERIFY2(e.key != QLatin1String("output.dangling") || e.summary.contains(pad) == false,
+                 qPrintable(e.summary));
+
+    stub->m_lineNames = QStringList() << "Keyboard" << pad;
+    stub->configure();
+    m_app->m_inputNotices->settleNow();
+    QCOMPARE(m_app->m_viewNoticeText->text(),
+             QString("Input device '%1' connected — universe 2").arg(pad));
+    QVERIFY(m_app->m_viewNotice->styleSheet().isEmpty());
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+        QVERIFY(e.key != QLatin1String("input.devices"));
 }
 
 void AppViews_Test::goInDesignOffersOperateOnce()

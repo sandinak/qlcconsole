@@ -1730,6 +1730,9 @@ void ProgrammerController::connectControllerInput()
             this, &ProgrammerController::focusControllerChanged);
     connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged,
             this, &ProgrammerController::focusControllerChanged);
+    /* A pad kept offline coming back (or going) on the retry tick. */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
+            this, &ProgrammerController::focusControllerChanged);
     m_controllerInputConnected = true;
 }
 

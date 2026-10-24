@@ -457,6 +457,51 @@ void ConnectionsTree_Test::lineAliasIsShownOnTheRow()
     QVERIFY(lines.at(0)->text(COL_NAME).contains("1: Stub 1"));
 }
 
+void ConnectionsTree_Test::anAbsentInputDeviceIsShownNotConnected()
+{
+    /* A pad patched as universe 1's input goes to sleep: its line is not
+       silently missing, it is there, greyed, saying so -- and back as a
+       real line when the pad is. */
+    const QString pad = QStringLiteral("DualSense Wireless Controller (aa-bb)");
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << pad;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+
+    ConnectionsTree tree(m_doc);
+    stub->m_lineNames = QStringList() << "Keyboard";
+    stub->configure();      // the plugin's rescan
+    QVERIFY(iom->inputPatch(0) == NULL);
+    tree.refresh();
+
+    QTreeWidgetItem *ghost = NULL;
+    foreach (QTreeWidgetItem *it, tree.m_tree->findItems(pad, Qt::MatchExactly | Qt::MatchRecursive, COL_NAME))
+        ghost = it;
+    QVERIFY2(ghost != NULL, "the absent pad has no row");
+    QVERIFY2(ghost->text(COL_DETAIL).contains("not connected"), qPrintable(ghost->text(COL_DETAIL)));
+    QCOMPARE(ghost->childCount(), 1);
+    QCOMPARE(ghost->child(0)->data(COL_NAME, ROLE_UNIVERSE).toUInt(), quint32(0));
+    QVERIFY(ghost->child(0)->text(COL_DETAIL).contains("not connected"));
+    // Not filed as an unpatched universe as well.
+    foreach (QTreeWidgetItem *it, tree.m_tree->findItems("Unpatched", Qt::MatchExactly | Qt::MatchRecursive, COL_NAME))
+        for (int i = 0; i < it->childCount(); i++)
+            QVERIFY(it->child(i)->data(COL_NAME, ROLE_UNIVERSE).toUInt() != 0);
+
+    // Back: a real line again, carrying the universe.
+    stub->m_lineNames = QStringList() << "Keyboard" << pad;
+    stub->configure();
+    QVERIFY(iom->inputPatch(0) != NULL);
+    tree.refresh();
+    bool real = false;
+    foreach (QTreeWidgetItem *it, itemsOfKind(tree.m_tree, KIND_LINE))
+        if (it->data(COL_NAME, ROLE_LINENAME).toString() == pad)
+            real = it->text(COL_DETAIL).contains("not connected") == false;
+    QVERIFY(real);
+    foreach (QTreeWidgetItem *it, tree.m_tree->findItems(pad, Qt::MatchExactly | Qt::MatchRecursive, COL_NAME))
+        QVERIFY(it->text(COL_DETAIL).contains("not connected") == false);
+}
+
 void ConnectionsTree_Test::targetAliasIsShownOnTheRow()
 {
     IOPluginStub *stub = stubOf(m_doc);

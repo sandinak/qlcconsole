@@ -392,6 +392,12 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
         connect(m_doc->inputOutputMap(),
                 SIGNAL(inputValueChanged(quint32,quint32,uchar)),
                 this, SLOT(slotInputActivity(quint32,quint32,uchar)));
+        /* A device coming or going (a controller asleep or back) shows at
+           once, not at the next five-second tick. */
+        connect(m_doc->inputOutputMap(), SIGNAL(offlinePatchesChanged()),
+                this, SLOT(slotTargetProblemsChanged()));
+        connect(m_doc->inputOutputMap(), SIGNAL(pluginConfigurationChanged(QString,bool)),
+                this, SLOT(slotTargetProblemsChanged()));
     }
     m_activityTimer = new QTimer(this);
     m_activityTimer->setSingleShot(true);
@@ -832,6 +838,7 @@ void ConnectionsTree::refresh()
        belongs on that protocol's own branch. */
     QMap<QString, QMap<QString, QList<Universe *> > > pendingByPluginThenInterface;
     QSet<quint32> pendingUniverseIds;
+    QMap<QString, QMap<QString, QList<Universe *> > > absentInputsByPluginThenDevice;
     if (m_doc->inputOutputMap() != NULL)
     {
         foreach (Universe *u, m_doc->inputOutputMap()->universes())
@@ -847,6 +854,20 @@ void ConnectionsTree::refresh()
                     pendingUniverseIds.insert(u->id());
                     break;   // one ghost row per universe is enough
                 }
+            }
+            /* A device input kept while its device is away (a pad asleep,
+               a MIDI surface unplugged): drawn as that device's line, not
+               connected, under its plugin (InputOutputMap::
+               followInputDevices()). */
+            foreach (const Universe::OfflinePatch &rec, u->offlinePatches())
+            {
+                if (rec.tag != Universe::InputPatchTag || rec.uid.isEmpty())
+                    continue;
+                QLCIOPlugin *p = cache->plugin(rec.plugin);
+                if (p == NULL || p->linesAreHardware() == false)
+                    continue;
+                absentInputsByPluginThenDevice[rec.plugin][rec.uid] << u;
+                pendingUniverseIds.insert(u->id());
             }
         }
     }
@@ -1607,6 +1628,48 @@ void ConnectionsTree::refresh()
                     uitem->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
                     uitem->setText(COL_DETAIL, targetAddr.isEmpty() ? tr("output · broadcast")
                                                                      : tr("output"));
+                    uitem->setData(COL_NAME, ROLE_KIND, KIND_PENDING_UNIVERSE);
+                    uitem->setData(COL_NAME, ROLE_UNIVERSE, u->id());
+                    setCarriesFixtures(uitem, u->id());
+                }
+                ghostLine->setText(COL_CARRIES, tr("%1 universe%2")
+                                        .arg(it.value().count())
+                                        .arg(it.value().count() == 1 ? QString() : QString("s")));
+            }
+        }
+
+        /* A device a universe's input is patched to, away right now: its
+           line, greyed and saying so, where it sits when it is here -- not
+           silently missing. It turns back into the real line, universe and
+           all, when the device reappears. */
+        if (absentInputsByPluginThenDevice.contains(plugin->name()))
+        {
+            const QMap<QString, QList<Universe *> > &byDevice =
+                absentInputsByPluginThenDevice.value(plugin->name());
+            const QBrush absentBrush(QColor(138, 142, 153));
+            for (QMap<QString, QList<Universe *> >::const_iterator it = byDevice.constBegin();
+                 it != byDevice.constEnd(); ++it)
+            {
+                QTreeWidgetItem *ghostLine = new QTreeWidgetItem(pitem);
+                ghostLine->setText(COL_NAME, it.key());
+                ghostLine->setText(COL_DETAIL, tr("input · not connected — kept, reconnects by itself"));
+                ghostLine->setForeground(COL_NAME, absentBrush);
+                ghostLine->setForeground(COL_DETAIL, absentBrush);
+                ghostLine->setData(COL_NAME, ROLE_LINENAME, it.key());
+                ghostLine->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
+                setRowTooltip(ghostLine, tr(
+                    "<b>%1</b><br>Not connected: switched off, asleep, out of range or "
+                    "unplugged. Its universe stays patched to it -- profile and controller "
+                    "roles too -- and picks it up again by itself the moment it is back, "
+                    "on whichever line it then appears.").arg(it.key().toHtmlEscaped()));
+                foreach (Universe *u, it.value())
+                {
+                    QTreeWidgetItem *uitem = new QTreeWidgetItem(ghostLine);
+                    uitem->setFlags(uitem->flags() | Qt::ItemIsEditable);
+                    uitem->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
+                    uitem->setText(COL_DETAIL, tr("input · not connected"));
+                    uitem->setForeground(COL_NAME, absentBrush);
+                    uitem->setForeground(COL_DETAIL, absentBrush);
                     uitem->setData(COL_NAME, ROLE_KIND, KIND_PENDING_UNIVERSE);
                     uitem->setData(COL_NAME, ROLE_UNIVERSE, u->id());
                     setCarriesFixtures(uitem, u->id());

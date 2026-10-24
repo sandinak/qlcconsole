@@ -64,6 +64,10 @@ private slots:
     void storedNetworkResolves();
     void offlinePatchReconnectsWhenNetworkAppears();
     void userUnpatchOfflineRemovesIt();
+    void inputDeviceGoesAndComesBack();
+    void inputDeviceFollowedToANewLine();
+    void inputDeviceAbsentAtLoadAttachesWhenItAppears();
+    void inputOnANonDevicePluginIsLeftAlone();
     void inputAndFeedbackKeptOffline();
     void missingPluginKept();
     void routeLookupLoopback();

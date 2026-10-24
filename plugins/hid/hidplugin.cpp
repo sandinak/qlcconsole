@@ -18,6 +18,7 @@
 */
 
 #include <QApplication>
+#include <QFileSystemWatcher>
 #include <QMessageBox>
 #include <QStringList>
 #include <QTimer>
@@ -72,6 +73,14 @@ void HIDPlugin::init()
                                          scheduleRescan(1500);
                                          QTimer::singleShot(6000, this, [this]() { scheduleRescan(0); });
                                      });
+#elif defined(Q_OS_LINUX)
+    /* The app's hotplug monitor watches the USB subsystem only, so a
+       Bluetooth pad coming and going was never seen here either. Its
+       joystick node (/dev/input/jsN) appearing or going is. */
+    QFileSystemWatcher *inputNodes = new QFileSystemWatcher(this);
+    if (inputNodes->addPath(QStringLiteral("/dev/input")))
+        connect(inputNodes, &QFileSystemWatcher::directoryChanged,
+                this, [this]() { scheduleRescan(); });
 #endif
 }
 

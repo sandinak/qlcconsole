@@ -59,6 +59,7 @@ private slots:
 
     /* Labels */
     void lineAliasIsShownOnTheRow();
+    void anAbsentInputDeviceIsShownNotConnected();
     void targetAliasIsShownOnTheRow();
 
     /* Default expansion and its memory */

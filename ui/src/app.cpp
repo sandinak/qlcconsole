@@ -48,6 +48,8 @@
 #include "showtreeview.h"
 #include "workbench.h"
 #include "inputoutputmap.h"
+#include "inputdevicenotices.h"
+#include "ioplugincache.h"
 #include "patchundo.h"
 #include "inputpatch.h"
 #include "virtualconsole.h"
@@ -736,6 +738,11 @@ void App::init()
        notice has to drop it without waiting for the next mode change. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
             this, [this]() { updateOutputReadiness(); updateRigNetworkFooter(); });
+    /* A controller (or MIDI surface) patched as an input coming and going:
+       said in the notice line, and in the footer while it is away. */
+    m_inputNotices = new InputDeviceNotices(m_doc, this);
+    connect(m_inputNotices, &InputDeviceNotices::notice,
+            this, &App::showInputDeviceNotice);
 
     // Listen to DMX value changes and update each Fixture values array
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),
@@ -994,6 +1001,8 @@ void App::clearDocument()
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
     hideViewNotice();
+    if (m_inputNotices != nullptr)
+        m_inputNotices->reset();
     setWorkspaceView(ConsoleView, false);
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
@@ -1445,6 +1454,13 @@ void App::updateOutputReadiness()
             items << tr("Universe %1 — %2 output held: %3")
                         .arg(p.universe + 1).arg(p.pluginName, p.heldReason);
         }
+        else if (p.kind == QLatin1String("input") && p.pluginMissing == false
+                 && m_doc->ioPluginCache()->plugin(p.pluginName) != NULL
+                 && m_doc->ioPluginCache()->plugin(p.pluginName)->linesAreHardware())
+        {
+            // A controller or MIDI device away: InputDeviceNotices' own entry.
+            continue;
+        }
         else if (p.missingInterface.isEmpty() == false)
         {
             // Kept offline: the interface/network (an Art-Net address, most
@@ -1468,6 +1484,12 @@ void App::updateOutputReadiness()
             items << tr("Universe %1 — %2 line %3 does not exist here (offers %4)")
                         .arg(p.universe + 1).arg(p.pluginName).arg(p.line).arg(p.availableLines);
         }
+    }
+
+    if (items.isEmpty())
+    {
+        ShowStatus::instance()->clearStatus("output.dangling");
+        return;
     }
 
     // The summary line (shown in the footer chip's tooltip) explains the
@@ -3988,6 +4010,7 @@ void App::showViewNotice(const QString &text, const QString &buttonText,
 {
     if (m_viewNotice == nullptr)
         return;
+    m_viewNotice->setStyleSheet(QString());     // showInputDeviceNotice() may have tinted it
     m_viewNoticeText->setText(text);
     m_viewNoticeAction = action;
     m_viewNoticeButton->setText(buttonText);
@@ -4001,6 +4024,26 @@ void App::hideViewNotice()
         return;
     m_viewNotice->hide();
     m_viewNoticeAction = nullptr;
+}
+
+void App::showInputDeviceNotice(const QString &text, bool warning)
+{
+    if (m_viewNotice == nullptr)
+        return;
+    showViewNotice(text);
+    if (warning)
+    {
+        m_viewNotice->setStyleSheet(QStringLiteral(
+            "QFrame#viewNotice { background:#f5a623; }"
+            " QFrame#viewNotice QLabel, QFrame#viewNotice QToolButton { color:#000000; }"));
+        return;
+    }
+    // Good news needs no dismissing: it goes, unless something else is said by then.
+    QTimer::singleShot(8000, this, [this, text]() {
+        if (m_viewNotice != nullptr && m_viewNotice->isVisible()
+                && m_viewNoticeText->text() == text)
+            hideViewNotice();
+    });
 }
 
 void App::offerOperateAfterGo()
@@ -4704,6 +4747,8 @@ QFile::FileError App::loadXML(const QString& fileName)
             // whose tab is built lazily on first view and so isn't affected).
             slotLoadProgress(tr("Building views"), 0);
             updateOutputReadiness();
+            if (m_inputNotices != nullptr)
+                m_inputNotices->reset();
             if (FixtureManager::instance() != NULL)
                 FixtureManager::instance()->updateView();
             if (Monitor::instance() != NULL)

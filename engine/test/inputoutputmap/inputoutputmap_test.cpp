@@ -354,6 +354,7 @@ void InputOutputMap_Test::cleanup()
     IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_nameOverride.clear();
     stub->m_lineNames.clear();
+    stub->m_linesAreHardware = false;
     stub->m_openOutputs.clear();
     stub->m_openInputs.clear();
     stub->setTransmitNetworks(QStringList());
@@ -579,6 +580,158 @@ void InputOutputMap_Test::offlinePatchReconnectsWhenNetworkAppears()
     QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString("172.18.2.60"));
     QVERIFY(iom.danglingOutputPatches().isEmpty());
     QVERIFY(iom.hasOfflinePatches() == false);
+}
+
+/*****************************************************************************
+ * Device inputs follow their device (a Bluetooth pad asleep and awake)
+ *****************************************************************************/
+
+namespace
+{
+    const QString kPad = QStringLiteral("Sony DualSense Wireless Controller (aa-bb-cc)");
+
+    /** The stub as a device plugin offering @p lines; returns it. */
+    IOPluginStub *devicePlugin(Doc *doc, const QStringList &lines)
+    {
+        IOPluginStub *stub = static_cast<IOPluginStub*>(doc->ioPluginCache()->plugins().at(0));
+        stub->m_linesAreHardware = true;
+        stub->m_lineNames = lines;
+        stub->m_openInputs.clear();
+        return stub;
+    }
+
+    /** Its lines changed: as a plugin says after a rescan. */
+    void rescanned(IOPluginStub *stub, const QStringList &lines)
+    {
+        stub->m_lineNames = lines;
+        stub->configure();      // emits configurationChanged()
+    }
+}
+
+void InputOutputMap_Test::inputDeviceGoesAndComesBack()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kPad);
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setInputPatch(1, stub->name(), QString(), 1));
+    InputPatch *ip = iom.inputPatch(1);
+    QVERIFY(ip != NULL);
+    QCOMPARE(ip->inputUID(), kPad);
+    ip->setHidProfileName("DualSense");
+    ip->setPluginParameter("mode", "pad");
+
+    QSignalSpy gone(&iom, SIGNAL(inputDeviceDisconnected(quint32,QString,QString)));
+    QSignalSpy back(&iom, SIGNAL(inputDeviceConnected(quint32,QString,QString)));
+    QSignalSpy offline(&iom, SIGNAL(offlinePatchesChanged()));
+    QSignalSpy config(&iom, SIGNAL(pluginConfigurationChanged(QString,bool)));
+
+    // The pad goes to sleep: its line goes.
+    rescanned(stub, QStringList() << "Keyboard");
+    QCOMPARE(gone.count(), 1);
+    QCOMPARE(gone.at(0).at(0).toUInt(), quint32(1));
+    QCOMPARE(gone.at(0).at(1).toString(), stub->name());
+    QCOMPARE(gone.at(0).at(2).toString(), kPad);
+    QCOMPARE(back.count(), 0);
+    QVERIFY(offline.count() >= 1);
+    QCOMPARE(config.count(), 1);
+    // Not patched to whatever is on its old line now; kept, as it was.
+    QVERIFY(iom.inputPatch(1) == NULL);
+    QCOMPARE(iom.universe(1)->offlinePatches().count(), 1);
+    const Universe::OfflinePatch rec = iom.universe(1)->offlinePatches().first();
+    QCOMPARE(rec.tag, Universe::InputPatchTag);
+    QCOMPARE(rec.uid, kPad);
+    QCOMPARE(rec.hidProfile, QString("DualSense"));
+    QCOMPARE(rec.params.value("mode").toString(), QString("pad"));
+    // Saved while it is away: still the pad, by name.
+    QVERIFY2(saveIOMap(iom).contains(kPad), qPrintable(saveIOMap(iom)));
+    // Said once: the retry tick does not say it again.
+    QCOMPARE(iom.retryOfflinePatches(), 0);
+    QCOMPARE(gone.count(), 1);
+
+    // It wakes -- first in the list this time.
+    rescanned(stub, QStringList() << kPad << "Keyboard");
+    QCOMPARE(back.count(), 1);
+    QCOMPARE(back.at(0).at(0).toUInt(), quint32(1));
+    QCOMPARE(back.at(0).at(2).toString(), kPad);
+    ip = iom.inputPatch(1);
+    QVERIFY(ip != NULL);
+    QCOMPARE(ip->input(), quint32(0));
+    QCOMPARE(ip->inputUID(), kPad);
+    QCOMPARE(ip->hidProfileName(), QString("DualSense"));
+    QCOMPARE(ip->getPluginParameters().value("mode").toString(), QString("pad"));
+    QVERIFY(iom.hasOfflinePatches() == false);
+    QVERIFY(stub->m_openInputs.contains(0));
+
+    // And its input arrives on the universe again.
+    QSignalSpy values(&iom, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
+    stub->emitValueChanged(UINT_MAX, 0, 5, 200);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toUInt(), quint32(1));
+    QCOMPARE(values.at(0).at(1).toUInt(), quint32(5));
+}
+
+void InputOutputMap_Test::inputDeviceFollowedToANewLine()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Mouse" << kPad);
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 1));
+    InputPatch *ip = iom.inputPatch(0);
+    QSignalSpy gone(&iom, SIGNAL(inputDeviceDisconnected(quint32,QString,QString)));
+
+    // A device before it goes: the pad is still here, one line up.
+    rescanned(stub, QStringList() << kPad);
+    QCOMPARE(gone.count(), 0);
+    QCOMPARE(iom.inputPatch(0), ip);
+    QCOMPARE(ip->input(), quint32(0));
+    QCOMPARE(ip->inputName(), kPad);
+
+    QSignalSpy values(&iom, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
+    stub->emitValueChanged(UINT_MAX, 1, 3, 9);     // the old line: nothing
+    stub->emitValueChanged(UINT_MAX, 0, 3, 10);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(2).toUInt(), uint(10));
+}
+
+void InputOutputMap_Test::inputDeviceAbsentAtLoadAttachesWhenItAppears()
+{
+    // The show opens with the pad switched off.
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard");
+    InputOutputMap iom(m_doc, 2);
+    const QString xml = QString(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Pad\" ID=\"0\"/>\n"
+        " <Universe Name=\"Pad\" ID=\"1\">\n"
+        "  <Input Plugin=\"%1\" UID=\"%2\" Line=\"1\" HIDProfile=\"DualSense\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n").arg(stub->name(), kPad);
+    QVERIFY(loadIOMap(iom, xml));
+    QVERIFY(iom.inputPatch(1) == NULL);
+    QVERIFY(iom.hasOfflinePatches());
+
+    // Switched on: the plugin's rescan alone reattaches it, no tick needed.
+    QSignalSpy back(&iom, SIGNAL(inputDeviceConnected(quint32,QString,QString)));
+    rescanned(stub, QStringList() << "Keyboard" << kPad);
+    QCOMPARE(back.count(), 1);
+    QVERIFY(iom.inputPatch(1) != NULL);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(1));
+    QCOMPARE(iom.inputPatch(1)->hidProfileName(), QString("DualSense"));
+    QVERIFY(iom.hasOfflinePatches() == false);
+}
+
+void InputOutputMap_Test::inputOnANonDevicePluginIsLeftAlone()
+{
+    /* A protocol's lines are interfaces, not devices: renaming one is not
+       a device leaving, and its patch stays where it is (as before). */
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "10.0.0.1" << "10.0.0.2");
+    stub->m_linesAreHardware = false;
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 1));
+    QSignalSpy gone(&iom, SIGNAL(inputDeviceDisconnected(quint32,QString,QString)));
+    rescanned(stub, QStringList() << "10.0.0.1");
+    QCOMPARE(gone.count(), 0);
+    QVERIFY(iom.inputPatch(0) != NULL);
+    QCOMPARE(iom.inputPatch(0)->input(), quint32(1));
 }
 
 void InputOutputMap_Test::userUnpatchOfflineRemovesIt()

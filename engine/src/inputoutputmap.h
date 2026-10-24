@@ -714,6 +714,18 @@ private:
     /** In case of duplicate strings, append a number to make them unique */
     void removeDuplicates(QStringList &list);
 
+    /**
+     * Keep input patches on @p plugin's devices with their devices. A
+     * device that went away (a Bluetooth pad asleep, a MIDI surface
+     * unplugged) leaves its patch KEPT offline -- profile, controller
+     * profile and parameters with it -- and retryOfflinePatches() puts it
+     * back when the device reappears. One whose line moved (another device
+     * left before it) is reopened on its new line. Matched by the line's
+     * name (InputPatch::inputUID(): the device, with its serial where it
+     * has one), never by the line number alone.
+     */
+    void followInputDevices(QLCIOPlugin *plugin);
+
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
     void slotPluginConfigurationChanged(QLCIOPlugin* plugin);
@@ -731,6 +743,14 @@ signals:
 
     /** Kept offline patches reconnected (or were forgotten). */
     void offlinePatchesChanged();
+
+    /** The device input @p universe is patched to (@p device, a line of
+     *  @p pluginName) went away; the patch is kept offline. */
+    void inputDeviceDisconnected(quint32 universe, const QString &pluginName,
+                                 const QString &device);
+    /** A kept input patch's device came back and the patch reopened on it. */
+    void inputDeviceConnected(quint32 universe, const QString &pluginName,
+                              const QString &device);
 
     /** Everyone interested in input data should connect to this signal */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);

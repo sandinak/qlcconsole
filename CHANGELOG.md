@@ -19,6 +19,22 @@ circuits and subs.
 
 ### Added
 
+- **Input devices follow their device** (Bluetooth pads asleep and awake):
+  an input patch on a plugin whose lines are hardware (HID, MIDI) remembers
+  its line's name (`InputPatch::inputUID()`: maker, model and serial). When
+  the plugin rescans (`configurationChanged()`),
+  `InputOutputMap::followInputDevices()` keeps a patch whose device is gone
+  as an offline patch (profile, HID profile and parameters with it), reopens
+  one whose device moved to another line on that line, and the retry puts a
+  kept one back as soon as its device reappears -- at once on the rescan,
+  not at the next 5 s tick. New signals `inputDeviceDisconnected()` /
+  `inputDeviceConnected()`. `InputDeviceNotices` (UI) says it in the notice
+  line ("Controller '…' disconnected — universe 2", amber; "… connected"),
+  debounced 2.5 s so a Bluetooth flap says nothing, and as the footer
+  readiness entry `input.devices`. Connections ▸ Devices draws an absent
+  device as a greyed line, "not connected", with its universe; Focus mode
+  says "Controller connected". On Linux the HID plugin now rescans when
+  `/dev/input` changes, so a Bluetooth pad is noticed there too.
 - **Stage marks** in the Lighting Studio's **Show ▸ Stage marks**: the
   centre mark at the front of the stage (DSC, "CL") and optionally the full
   centre line, dashed; the curtain line (from the most downstage main drape

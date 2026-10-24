@@ -148,6 +148,45 @@ Saved shows keep the interface address and line number older versions
 read, plus the network they're on (a `Network` attribute older versions
 ignore).
 
+### Controllers and MIDI devices coming and going
+
+A game controller (PS4, PS5 or Xbox pad) or a MIDI surface patched as a
+universe's **input** stays patched to that **device**, not to a line
+number. A Bluetooth pad switched off, asleep, out of range or flat, or a
+USB one unplugged, can go and come back at any time — including after the
+show was opened without it:
+
+- **While it is away,** the universe's input is kept, with its input
+  profile, its controller profile (the gamepad roles Focus mode, the
+  follow spot and focus calls use) and its settings. **Connections ▸
+  Devices** shows the device under its plugin, greyed: "input · not
+  connected — kept, reconnects by itself", its universe under it. The
+  notice line above the tabs says **Controller 'DualSense Wireless
+  Controller' disconnected — universe 2** in amber (**not connected** when
+  the show opened without it), and the readiness footer lists it until it
+  is back. Saving keeps the patch exactly as it was.
+- **When it comes back** — on whichever line it now appears — the input is
+  patched to it again by itself, within a moment of the computer seeing it,
+  and the notice says **Controller '…' connected — universe 2**, then goes.
+  Focus mode, the follow spot and focus calls carry on with it without a
+  restart; Focus mode's panel says **Controller connected** and offers
+  **Use the controller** (see
+  [Controller or keyboard](lighting-studio.md#controller-or-keyboard)).
+- **A quick drop is not news.** A pad that drops out and is back within
+  a couple of seconds (Bluetooth waking, reconnecting) is not mentioned.
+- **Two of the same pad** are told apart by their serial number, where the
+  pad reports one.
+
+The device is found by its name — maker, model and serial, as listed in
+Connections — so another device that turns up on the same line is never
+taken for it. **Forget this patch** (right-click the greyed universe)
+stops waiting for it.
+
+On a Mac, controllers are noticed coming and going over USB, Bluetooth and
+Bluetooth LE, and after the Mac wakes. On Linux, a controller's joystick
+device appearing or going is noticed, Bluetooth included. MIDI devices
+follow the same rules wherever the system reports them coming and going.
+
 ### Only transmit on the rig network
 
 A laptop that is on some other network — a school's, a venue office's
@@ -457,6 +496,9 @@ problem can be fixed on the spot. It checks for:
 - **WLED devices not answering**, or on weak Wi-Fi;
 - **WLEDs not set up as the show drives them** (see WLED output), with
   **Fix on Device…**;
+- **controllers and MIDI devices not connected** — a device a universe's
+  input is patched to that is switched off, asleep or unplugged (see
+  [Controllers and MIDI devices coming and going](#controllers-and-midi-devices-coming-and-going));
 - **channels the Simple Desk is holding** — a channel touched on the desk
   overrides every look and scene until released, so a look that "doesn't
   change the fixture" is often this. Listed by universe and channel, with

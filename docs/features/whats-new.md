@@ -383,6 +383,15 @@ their house lights, relays and subs.
   keeps working with qlcconsole behind other windows, is found again when
   switched back on or after the Mac sleeps, and every Xbox model is read
   in the right layout. See [Controller test](lighting-studio.md#controller-test).
+- **A controller coming back is picked up, and said.** A pad (or MIDI
+  surface) patched as an input that is switched off, asleep or unplugged
+  keeps its patch, profile and controller roles; Connections ▸ Devices
+  shows it greyed, "not connected", and the notice line says **Controller
+  '…' disconnected — universe 2** in amber. When it comes back, on whatever
+  line, it is patched again by itself — **Controller '…' connected** —
+  and Focus mode, the follow spot and focus calls carry on with it. A
+  show opened with the pad off picks it up the moment it is switched on.
+  See [Controllers and MIDI devices coming and going](other-improvements.md#controllers-and-midi-devices-coming-and-going).
 
 ## 0.2.1 (October 2026)
 

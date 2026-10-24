@@ -91,6 +91,8 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     m_plugin = plugin;
     m_pluginLine = input;
     m_profile = profile;
+    m_inputUID = (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+                 ? m_plugin->inputs().value(int(m_pluginLine)) : QString();
 
     if (m_plugin != NULL)
     {

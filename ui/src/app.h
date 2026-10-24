@@ -180,6 +180,9 @@ public:
     void showViewNotice(const QString &text, const QString &buttonText = QString(),
                         const std::function<void()> &action = nullptr);
     void hideViewNotice();
+    /** A device input came or went (InputDeviceNotices): the notice line,
+     *  amber while @p warning; a plain one puts itself away after a while. */
+    void showInputDeviceNotice(const QString &text, bool warning);
     /** After Upgrade This Show… on a Classic show that now has a Show Tree:
      *  offer (once per show) the qlcconsole view. True: offered. */
     bool offerConsoleViewAfterUpgrade();
@@ -215,6 +218,7 @@ private:
     class QLabel *m_viewNoticeText = nullptr;
     class QPushButton *m_viewNoticeButton = nullptr;
     std::function<void()> m_viewNoticeAction;
+    class InputDeviceNotices *m_inputNotices = nullptr;
 
     /*********************************************************************
      * Show controls placement (MainBar)

@@ -1005,6 +1005,9 @@ int InputOutputMap::retryOfflinePatches()
                 uni->removeOfflinePatch(k);
                 loadPatch(i, rec);
                 reconnected++;
+                if (rec.tag == Universe::InputPatchTag && uni->inputPatch() != NULL)
+                    emit inputDeviceConnected(i, rec.plugin, rec.uid.isEmpty()
+                                              ? uni->inputPatch()->inputName() : rec.uid);
                 again = true;
                 break;
             }
@@ -1575,8 +1578,63 @@ bool InputOutputMap::sendFeedBack(quint32 universe, quint32 channel, uchar value
     }
 }
 
+void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
+{
+    const QStringList lines = plugin->inputs();
+    bool kept = false;
+
+    for (quint32 i = 0; i < universesCount(); i++)
+    {
+        Universe *uni = m_universeArray.at(i);
+        InputPatch *ip = uni->inputPatch();
+        if (ip == NULL || ip->plugin() != plugin || ip->inputUID().isEmpty())
+            continue;
+
+        const QString device = ip->inputUID();
+        const int line = lines.indexOf(device);
+        if (line == int(ip->input()))
+            continue;   // where it was: reconnect() below is enough
+
+        if (line >= 0)
+        {
+            /* Still here, on another line: a device before it in the
+               plugin's list went away. Reopened on its own line, not on
+               whatever now sits at the old one. */
+            qDebug() << "[IOMAP] universe" << i + 1 << "input" << device
+                     << "moved from line" << ip->input() << "to" << line;
+            QMutexLocker locker(&m_universeMutex);
+            uni->setInputPatch(plugin, quint32(line), ip->profile());
+            continue;
+        }
+
+        /* Gone. Keep the patch as a workspace would describe it, so it is
+           saved unchanged and reopens by itself when the device is back. */
+        qDebug() << "[IOMAP] universe" << i + 1 << "input" << device << "disconnected: kept offline";
+        Universe::OfflinePatch rec;
+        rec.tag = Universe::InputPatchTag;
+        rec.plugin = plugin->name();
+        rec.uid = device;
+        rec.line = ip->input();
+        rec.profile = ip->profileName();
+        rec.hidProfile = ip->hidProfileName();
+        rec.params = ip->getPluginParameters();
+        setInputPatch(i, KInputNone, QString(), QLCIOPlugin::invalidLine());
+        uni->addOfflinePatch(rec);
+        kept = true;
+        emit inputDeviceDisconnected(i, rec.plugin, device);
+    }
+
+    if (kept)
+        emit offlinePatchesChanged();
+}
+
 void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 {
+    /* A device input (game controller, MIDI surface) is a line that comes
+       and goes: follow it by name before reopening anything by number. */
+    if (plugin->linesAreHardware())
+        followInputDevices(plugin);
+
     QMutexLocker locker(&m_universeMutex);
     bool success = true;
     for (quint32 i = 0; i < universesCount(); i++)
@@ -1606,6 +1664,11 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
         }
     }
     locker.unlock();
+
+    /* The device a kept patch waits for may be what just appeared: reopen
+       it now rather than at the next retry tick. */
+    if (plugin->linesAreHardware() && hasOfflinePatches())
+        retryOfflinePatches();
 
     emit pluginConfigurationChanged(plugin->name(), success);
 }

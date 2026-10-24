@@ -147,6 +147,7 @@ private slots:
     void theReadinessChipIsGreyWithNoOutputs();
     /** Q92: GO in Design offers Operate once a session, in the notice bar. */
     void goInDesignOffersOperateOnce();
+    void aControllerComingAndGoingIsSaid();
     /** "resize still has problems": no qlcconsole page holds the window
      *  wide (a page narrower than it is cut off on the right). */
     void pagesSquashWithTheWindow();

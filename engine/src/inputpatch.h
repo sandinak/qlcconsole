@@ -108,6 +108,12 @@ public:
     /** Friendly name of the assigned input line */
     QString inputName() const;
 
+    /** The name the input line had when it was patched (the device: "Sony
+     *  ... DualSense Wireless Controller (serial)", a MIDI port). A device
+     *  that goes away and comes back is found again by it, whatever line it
+     *  then turns up on -- see InputOutputMap::followInputDevices(). */
+    QString inputUID() const { return m_inputUID; }
+
     /** Assigned input profile instance */
     QLCInputProfile* profile() const;
 
@@ -155,6 +161,8 @@ private:
     QLCIOPlugin* m_plugin;
     /** The plugin line open by this Input patch */
     quint32 m_pluginLine;
+    /** The line's name when it was patched (inputUID()) */
+    QString m_inputUID;
     /** The reference of an input profile if activated by the user (otherwise NULL) */
     QLCInputProfile* m_profile;
     /** HID device profile name assigned by user (stored by name, not pointer) */
