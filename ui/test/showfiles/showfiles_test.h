@@ -67,6 +67,14 @@ private slots:
      *  venue file, and the show opened from there has its venues. */
     void collectForTransferTakesTheVenues();
 
+    /** Fixture Properties opens for every fixture in every course show and
+     *  test workspace, from a double-click in the Fixture Manager and from
+     *  its Fixture Properties… entry: on the plot or not, staged, a house
+     *  light, a generic dimmer, a definition that is missing. A fixture not
+     *  on the plot has its position rows greyed. */
+    void fixturePropertiesOpensForEveryFixture_data();
+    void fixturePropertiesOpensForEveryFixture();
+
 private:
     QStringList fingerprint() const;
     void addShowRows(bool stockOnly);

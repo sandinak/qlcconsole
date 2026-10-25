@@ -10,7 +10,8 @@ add_executable(${module_name} WIN32 MACOSX_BUNDLE
 # shows in test-workspaces/ and the bundled sample.
 target_compile_definitions(${module_name} PRIVATE
     SHOWFILES_WORKSPACES="${CMAKE_SOURCE_DIR}/test-workspaces/"
-    SHOWFILES_SAMPLE="${CMAKE_SOURCE_DIR}/resources/samples/Sample.qxw")
+    SHOWFILES_SAMPLE="${CMAKE_SOURCE_DIR}/resources/samples/Sample.qxw"
+    SHOWFILES_COURSE="${CMAKE_SOURCE_DIR}/docs/course/shows/")
 
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src
@@ -18,6 +19,7 @@ target_include_directories(${module_name} PRIVATE
     ../../src
     ../../src/virtualconsole
     ../../src/showmanager
+    ../../src/monitor
     ../../../engine/test/iopluginstub
 )
 

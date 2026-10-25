@@ -40,8 +40,12 @@
 #define private public
 #define protected public
 #include "app.h"
+#include "fixturemanager.h"
+#include "monitor.h"
 #undef protected
 #undef private
+#include "fixturetreewidget.h"
+#include "monitorgraphicsview.h"
 #include "doc.h"
 #include "fixture.h"
 #include "fixturegroup.h"
@@ -552,6 +556,108 @@ void ShowFiles_Test::collectForTransferTakesTheVenues()
     venues = m_app->doc()->programmer()->venueCorrections();
     QVERIFY(venues->venueNames().contains(QStringLiteral("Lincoln HS")));
     QCOMPARE(venues->activeVenue(), QStringLiteral("Lincoln HS"));
+}
+
+void ShowFiles_Test::fixturePropertiesOpensForEveryFixture_data()
+{
+    QTest::addColumn<QString>("path");
+    QStringList paths = showFiles();
+    QDir course(QStringLiteral(SHOWFILES_COURSE));
+    for (const QString &name : course.entryList({ QStringLiteral("*.qlcc") }, QDir::Files, QDir::Name))
+        paths << course.absoluteFilePath(name);
+    for (const QString &path : paths)
+        QTest::newRow(qPrintable(QFileInfo(path).fileName())) << path;
+}
+
+void ShowFiles_Test::fixturePropertiesOpensForEveryFixture()
+{
+    QFETCH(QString, path);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString copy = dir.filePath(QStringLiteral("show.") + QFileInfo(path).suffix());
+    QVERIFY(QFile::copy(path, copy));
+    QCOMPARE(open(m_app, copy), QFile::NoError);
+    Doc *doc = m_app->doc();
+    if (doc->fixtures().isEmpty())
+        QSKIP("no fixtures in this show");
+    doc->setMode(Doc::Design);
+
+    FixtureManager *fm = FixtureManager::instance();
+    QVERIFY(fm != nullptr);
+    fm->updateView();
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+
+    // Every fixture's row in the Fixture Manager (not a head row).
+    QHash<quint32, QTreeWidgetItem *> rows;
+    for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+    {
+        const QVariant v = (*it)->data(0, PROP_ID);
+        if (v.isValid() && !(*it)->data(0, PROP_HEAD).isValid() && !rows.contains(v.toUInt()))
+            rows.insert(v.toUInt(), *it);
+    }
+
+    /* Each opening's modal: its title, and whether its position rows are
+       greyed. Rejected, so nothing is changed. */
+    QString title;
+    bool posEnabled = false;
+    bool offPlotNote = false;
+    QTimer watch;
+    watch.setInterval(5);
+    QObject::connect(&watch, &QTimer::timeout, [&]() {
+        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (d == nullptr)
+            return;
+        title = d->windowTitle();
+        QWidget *x = d->findChild<QWidget *>(QStringLiteral("fixtureX"));
+        posEnabled = x != nullptr && x->isEnabled();
+        offPlotNote = d->findChild<QWidget *>(QStringLiteral("fixtureNotOnPlot")) != nullptr;
+        d->reject();
+    });
+    watch.start();
+
+    QStringList failed;
+    int offPlot = 0;
+    const QList<Fixture *> fixtures = doc->fixtures();
+    for (Fixture *fx : fixtures)
+    {
+        const quint32 fid = fx->id();
+        QTreeWidgetItem *row = rows.value(fid, nullptr);
+        if (row == nullptr)
+        {
+            failed << QStringLiteral("%1 '%2': no row in the Fixture Manager").arg(fid).arg(fx->name());
+            continue;
+        }
+        const bool onPlot = mon->m_graphicsView->fixtureItemForId(fid) != nullptr;
+        offPlot += onPlot ? 0 : 1;
+
+        // A double-click on its row.
+        title.clear();
+        fm->slotDoubleClicked(row);
+        if (!title.startsWith(QStringLiteral("Fixture Properties")))
+            failed << QStringLiteral("%1 '%2' (%3): double-click opened '%4'")
+                          .arg(fid).arg(fx->name()).arg(onPlot ? "on the plot" : "not on the plot").arg(title);
+        else if (posEnabled == !onPlot || offPlotNote == onPlot)
+            failed << QStringLiteral("%1 '%2': position rows %3 for a fixture %4")
+                          .arg(fid).arg(fx->name()).arg(posEnabled ? "enabled" : "greyed")
+                          .arg(onPlot ? "on the plot" : "not on the plot");
+
+        // Its right-click ▸ Fixture Properties… (the same action), for the first one.
+        if (fid == fixtures.first()->id())
+        {
+            fm->m_fixtures_tree->clearSelection();
+            fm->m_fixtures_tree->setCurrentItem(row);
+            row->setSelected(true);
+            title.clear();
+            QVERIFY(fm->m_propertiesAction->isEnabled());
+            fm->m_propertiesAction->trigger();
+            if (!title.startsWith(QStringLiteral("Fixture Properties")))
+                failed << QStringLiteral("%1: Fixture Properties… opened '%2'").arg(fid).arg(title);
+        }
+    }
+    watch.stop();
+    qDebug() << fixtures.size() << "fixtures," << offPlot << "not on the plot";
+    QVERIFY2(failed.isEmpty(), qPrintable(failed.mid(0, 12).join(QStringLiteral("\n  "))));
 }
 
 QTEST_MAIN(ShowFiles_Test)

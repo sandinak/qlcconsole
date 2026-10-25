@@ -10104,24 +10104,25 @@ void Monitor::editFixturesProperties(const QList<quint32> &fids)
 
 void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 {
-    QList<MonitorFixtureItem *> items;
+    /* Every fixture in the show, on the plot or not: a fixture not yet placed
+       (a staged one, another venue's house light, one added from the Fixture
+       Manager only) used to have no plot item, and Fixture Properties silently
+       did not open for it. Its rows open; those that need a place on the plot
+       (X, Y, icon rotation) are greyed. */
     QList<quint32> fids;
     foreach (quint32 fid, fidList)
     {
-        if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fid))
-        {
-            items << it;
+        if (m_doc->fixture(fid) != nullptr && !fids.contains(fid))
             fids << fid;
-        }
     }
-    if (items.isEmpty())
+    if (fids.isEmpty())
         return;
     // Live as it is edited; Cancel puts back whatever was tried; OK is one
     // undo step.
     RigEditSession edit(this);
 
     // ---- Several fixtures: the same rows, "mixed" where they differ ----
-    if (items.count() > 1)
+    if (fids.count() > 1)
     {
         QDialog dlg(this);
         dlg.setWindowTitle(tr("Fixture Properties — %n fixtures", "", fids.count()));
@@ -10247,9 +10248,12 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 return;
             foreach (quint32 fid, fids)
             {
+                // Only for those on the plot: a rotation would place the rest at 0, 0.
+                MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid);
+                if (fi == nullptr)
+                    continue;
                 m_props->setFixtureRotation(fid, 0, 0, QVector3D(0, float(v), 0));
-                if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid))
-                    fi->setRotation(int(v));
+                fi->setRotation(int(v));
             }
             loadExtras();
         });
@@ -10271,11 +10275,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     }
 
     // ---- Single fixture ----
-    MonitorFixtureItem *fxItem = items.first();
-    Fixture *fxi = m_doc->fixture(fxItem->fixtureID());
+    const quint32 fxId = fids.first();
+    // Null when the fixture is not on the plot: its position rows are greyed.
+    MonitorFixtureItem *fxItem = m_graphicsView->fixtureItemForId(fxId);
+    Fixture *fxi = m_doc->fixture(fxId);
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Fixture Properties — %1").arg(fxItem->name()));
+    dlg.setWindowTitle(tr("Fixture Properties — %1").arg(fxi->name()));
     dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#mounting-a-fixture"));
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
     QLineEdit *nameEdit = nullptr;
@@ -10285,7 +10291,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         QHBoxLayout *headerRow = new QHBoxLayout;
         // The name is editable here: "when I edit a fixture from studio I
         // should be able to change its name".
-        nameEdit = new QLineEdit(fxi != nullptr ? fxi->name() : fxItem->name());
+        nameEdit = new QLineEdit(fxi->name());
         nameEdit->setObjectName("fixtureNameEdit");
         nameEdit->setPlaceholderText(tr("Fixture name"));
         QFont nf = nameEdit->font();
@@ -10410,7 +10416,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     QGroupBox *fixtureBox = new QGroupBox(tr("Fixture"), &dlg);
     QFormLayout *fixtureForm = new QFormLayout(fixtureBox);
     FixtureFields *fields = new FixtureFields(this, fixtureForm, fixtureBox);
-    fields->setFixtures({ fxItem->fixtureID() }, fxItem->fixtureID());
+    fields->setFixtures({ fxId }, fxId);
     vl->addWidget(fixtureBox);
 
     // Its mount's fine-tuning, its aim and calibration, testing it.
@@ -10489,12 +10495,12 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     testRowLayout->setSpacing(4);
     QComboBox *testModeCb = new QComboBox;
     testModeCb->setObjectName(QStringLiteral("testOrientation"));
-    testModeCb->addItem(centredPoseName(fxItem->fixtureID()), QVariant(0));
+    testModeCb->addItem(centredPoseName(fxId), QVariant(0));
     testModeCb->addItem(tr("Aim at 0° (stage front)"),  QVariant(1));
     testModeCb->addItem(tr("Aim at target:"),            QVariant(2));
     /* The centred pose is straight down only for a hung fixture: say what it
        is for this one, and follow its Orientation as it is changed here. */
-    connect(m_props, &MonitorProperties::rigPropsChanged, testModeCb, [this, testFid = fxItem->fixtureID(), testModeCb](quint32 f) {
+    connect(m_props, &MonitorProperties::rigPropsChanged, testModeCb, [this, testFid = fxId, testModeCb](quint32 f) {
         if (f == testFid)
             testModeCb->setItemText(0, centredPoseName(testFid));
     });
@@ -10548,7 +10554,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         testTargetCb->setVisible(testModeCb->currentData().toInt() == 2);
     });
 
-    const FixtureRigProps rp = m_props->fixtureRigProps(fxItem->fixtureID());
+    const FixtureRigProps rp = m_props->fixtureRigProps(fxId);
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
     panZeroSpin->setValue(double(rp.panZeroDir));
     double lensLo = 0.0, lensHi = 0.0;
@@ -10610,7 +10616,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     vl->addWidget(rigBox);
 
     // --- Test orientation DMX source (owned by shared_ptr; cleaned up when dialog closes) ---
-    const quint32 fxId_dlg = fxItem->fixtureID();
+    const quint32 fxId_dlg = fxId;
     auto makeTestDegrees = [&](float &outPan, float &outTilt) {
         float panMax = 360.0f, tiltMax = 270.0f;
         if (fxi && fxi->fixtureMode()) {
@@ -10806,21 +10812,39 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     xSpin->setObjectName(QStringLiteral("fixtureX"));
     xSpin->setMaximum(m_graphicsView->gridSize().width());
     xSpin->setSingleStep(0.1); xSpin->setDecimals(2);
-    xSpin->setValue(fxItem->realPosition().x() * toDisp_fx / 1000.0);
+    /* Not on the plot: its plot position and icon rotation read what the
+       show has stored (0 for a light never placed) and are greyed. */
+    const PreviewItem stored = m_props->fixtureItem(fxId, 0, 0);
+    const QPointF plotPos = fxItem != nullptr ? fxItem->realPosition()
+                                              : QPointF(stored.m_position.x(), stored.m_position.y());
+    xSpin->setValue(plotPos.x() * toDisp_fx / 1000.0);
     posForm->addRow(tr("X:"), xSpin);
 
     QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
     ySpin->setObjectName(QStringLiteral("fixtureY"));
     ySpin->setMaximum(m_graphicsView->gridSize().height());
     ySpin->setSingleStep(0.1); ySpin->setDecimals(2);
-    ySpin->setValue(fxItem->realPosition().y() * toDisp_fx / 1000.0);
+    ySpin->setValue(plotPos.y() * toDisp_fx / 1000.0);
     posForm->addRow(tr("Y:"), ySpin);
 
     QSpinBox *rotSpin = new QSpinBox;
     rotSpin->setRange(0, 359);
     rotSpin->setSuffix(QString::fromUtf8("°"));
-    rotSpin->setValue(int(fxItem->rotation()));
+    rotSpin->setValue(fxItem != nullptr ? int(fxItem->rotation()) : int(stored.m_rotation.y()));
     posForm->addRow(tr("Icon rotation (visual):"), rotSpin);
+    if (fxItem == nullptr)
+    {
+        const QString why = tr("Not on the plot: place it in the Lighting Studio to set this");
+        for (QWidget *w : std::initializer_list<QWidget *>{ xSpin, ySpin, rotSpin })
+        {
+            w->setEnabled(false);
+            w->setToolTip(why);
+        }
+        QLabel *offPlot = new QLabel(tr("<i>Not on the plot.</i>"), posBox);
+        offPlot->setObjectName(QStringLiteral("fixtureNotOnPlot"));
+        offPlot->setToolTip(why);
+        posForm->addRow(QString(), offPlot);
+    }
 
     /* Where the fixture actually ENDS UP, in stage coordinates.
      *
@@ -10897,6 +10921,8 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 
     // Live, like every rig dialog: position, icon rotation, height offset.
     auto applyPosition = [&]() {
+        if (fxItem == nullptr)
+            return;
         const QPointF newPos(xSpin->value() * fromDisp_fx * 1000.0, ySpin->value() * fromDisp_fx * 1000.0);
         fxItem->setPos(m_graphicsView->realPositionToPixels(newPos.x(), newPos.y()));
         fxItem->setRealPosition(newPos);
@@ -10906,6 +10932,8 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     for (QDoubleSpinBox *sp : { xSpin, ySpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { applyPosition(); });
     connect(rotSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [&](int v) {
+        if (fxItem == nullptr)
+            return;
         fxItem->setRotation(v);
         m_props->setFixtureRotation(fxId_dlg, 0, 0, QVector3D(0, v, 0));
     });
