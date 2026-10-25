@@ -42,6 +42,11 @@
 #include "mastertimer.h"
 #include "outputpatch.h"
 #include "qlcpalette.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
 #include "qlcfile.h"
 #include "universe.h"
 #include "venuerig.h"
@@ -805,6 +810,59 @@ void VenueRig_Test::moveTheShowsHouseFixturesIn()
 
     QVERIFY(v->setActiveVenue(QString()));
     QVERIFY(m_doc->fixture(par) == nullptr);   // Home's now
+}
+
+void VenueRig_Test::aPracticeKeepsTheHouseRig()
+{
+    VenueCorrections *v = venues(m_doc);
+    // A tour mover to scramble.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(QStringLiteral("Venue Rig Spot"));
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("3ch"));
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    QLCFixtureHead head;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QStringLiteral("Ch %1").arg(k));
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(quint32(k));
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *spot = new Fixture(m_doc);
+    spot->setName(QStringLiteral("Tour spot"));
+    spot->setFixtureDefinition(def, mode);
+    spot->setAddress(0);
+    QVERIFY(m_doc->addFixture(spot));
+
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = dimmers(1, 0, 100, QStringLiteral("Lincoln par"));
+    m_doc->fixture(par)->setOwner(RigOwner::House);
+    QVERIFY(v->isVenueFixture(par));
+
+    // The room's own lights stay up while the student practises.
+    const QString practice = v->startPractice({ spot->id() }, 7);
+    QVERIFY(!practice.isEmpty());
+    QCOMPARE(v->activeVenue(), practice);
+    QVERIFY(m_doc->fixture(par) != nullptr);
+    QVERIFY(v->isVenueFixture(par));
+    QVERIFY(v->endPractice());
+    QCOMPARE(v->activeVenue(), a);
+    QVERIFY(m_doc->fixture(par) != nullptr);
+    QCOMPARE(v->venue(a).rig.fixtures.size(), 1);
 }
 
 QTEST_GUILESS_MAIN(VenueRig_Test)

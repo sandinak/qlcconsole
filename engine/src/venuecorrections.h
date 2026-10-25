@@ -402,6 +402,9 @@ private:
     void identify(quint32 fid, QString &maker, QString &model, QString &mode) const;
     Venue *activeVenueData();
     void updateReserved();
+    /** @p fid's calibration is kept in its house-rig entry, not as a
+     *  correction: a house fixture, unless a practice venue is applied. */
+    bool houseByRig(quint32 fid) const;
 
     VenueRig *m_rig = nullptr;
     class QTimer *m_rigTimer = nullptr;

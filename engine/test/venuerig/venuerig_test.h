@@ -48,6 +48,7 @@ private slots:
     void notOursIsNeverSent();
     void theVenuePatchIsAppliedAndRestored();
     void moveTheShowsHouseFixturesIn();
+    void aPracticeKeepsTheHouseRig();
 
 private:
     QString showFile() const;

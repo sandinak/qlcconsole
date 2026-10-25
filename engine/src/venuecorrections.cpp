@@ -135,7 +135,7 @@ void VenueCorrections::onRigPropsChanged(quint32 fid)
     if (!isActive() || m_writing || m_held.contains(fid) || m_doc->fixture(fid) == nullptr)
         return;
     // A house fixture's calibration is part of its house-rig entry.
-    if (m_rig->isVenueFixture(fid))
+    if (houseByRig(fid))
         return;
     MonitorProperties *props = m_doc->monitorProperties();
     const RigCalibration now = RigCalibration::of(props->fixtureRigProps(fid));
@@ -589,6 +589,14 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
     return true;
 }
 
+bool VenueCorrections::houseByRig(quint32 fid) const
+{
+    /* A practice venue scrambles and scores the room's own lights by
+       corrections, like any other light (the practice keeps the house rig
+       it was started in). */
+    return m_rig->isVenueFixture(fid) && !isPracticeActive();
+}
+
 void VenueCorrections::updateReserved()
 {
     QSet<quint32> ids;
@@ -623,7 +631,7 @@ bool VenueCorrections::recordRig(QString *why)
        not a correction. One now the show's: its calibration as it is, the
        show's own. */
     for (quint32 fid : m_rig->venueFixtures())
-        if (v->fixtures.remove(fid) > 0)
+        if (!v->practice.on && v->fixtures.remove(fid) > 0)
         {
             v->names.remove(fid);
             v->makers.remove(fid);
@@ -632,7 +640,7 @@ bool VenueCorrections::recordRig(QString *why)
             changed = true;
         }
     for (const Fixture *fx : m_doc->fixtures())
-        if (!m_rig->isVenueFixture(fx->id()))
+        if (!houseByRig(fx->id()))
             ensureBase(fx->id());
     if (!changed)
         return true;
@@ -849,7 +857,7 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
 void VenueCorrections::ensureBase(quint32 fid)
 {
     MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
-    if (props == nullptr || !isActive() || props->hasCalibrationBase(fid) || m_rig->isVenueFixture(fid))
+    if (props == nullptr || !isActive() || props->hasCalibrationBase(fid) || houseByRig(fid))
         return;
     props->setCalibrationBase(fid, RigCalibration::of(props->fixtureRigProps(fid)));
 }
@@ -928,7 +936,7 @@ void VenueCorrections::apply()
     {
         // A fixture removed from the show since: kept, listed (orphaned()).
         // A house fixture's calibration is part of its house-rig entry.
-        if (m_doc->fixture(it.key()) == nullptr || m_rig->isVenueFixture(it.key()))
+        if (m_doc->fixture(it.key()) == nullptr || houseByRig(it.key()))
             continue;
         /* Board Q133: focused as another fixture (definition or mode
            changed, a lamp swapped for a mover): its correction would aim
@@ -1077,7 +1085,7 @@ bool VenueCorrections::record(quint32 fid, QString *why)
         return false;
     }
     // A house fixture's calibration is part of its house-rig entry.
-    if (m_rig->isVenueFixture(fid))
+    if (houseByRig(fid))
         return recordRig(why);
     MonitorProperties *props = m_doc->monitorProperties();
     ensureBase(fid);
@@ -1480,6 +1488,8 @@ QString VenueCorrections::startPractice(const QList<quint32> &fids, quint32 seed
         const Venue cur = venue(m_active);
         v.trims = cur.trims;
         v.targets = cur.targets;
+        // The room's own lights stay up for the practice (VENUES.md).
+        v.rig = cur.rig;
     }
     m_venues << v;
     emit venuesChanged();
