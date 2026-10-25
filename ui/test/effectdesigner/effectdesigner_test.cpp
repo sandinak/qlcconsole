@@ -1477,3 +1477,90 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     QVERIFY(shout->functions().isEmpty());
     pm.hide();
 }
+
+void EffectDesigner_Test::buildEffectsRightClickOnAnRgbMatrix()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    RGBMatrix *matrix = new RGBMatrix(m_doc);
+    matrix->setName("Rainbow Wall");
+    matrix->setFixtureGroup(towers->id());
+    m_doc->addFunction(matrix);
+    const quint32 matrixId = matrix->id();
+    Collection *shout = new Collection(m_doc);
+    shout->setName("0.0.5-WALL");
+    m_doc->addFunction(shout);
+    shout->addFunction(matrixId);
+
+    EffectDesigner::plugIntoWorkbench();            // as the app does
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    pm.setSection(ProgrammingManager::EffectsSection);
+    QTreeWidget *list = pm.findChild<QTreeWidget *>("buildEffects");
+    QVERIFY(list != nullptr);
+    ShowTreeController *st = m_doc->showTree();
+    QTRY_VERIFY(effectsRow(list, "Rainbow Wall") != nullptr);
+
+    auto run = [&](const QString &row, const char *action) {
+        QCoreApplication::processEvents();          // a queued rebuild: rows are new
+        QTreeWidgetItem *item = effectsRow(list, row);
+        if (item == nullptr)
+            return false;
+        QMenu *menu = pm.effectsContextMenu(item, &pm);
+        QAction *a = menuAction(menu, action);
+        if (a != nullptr)
+            a->trigger();
+        delete menu;
+        return a != nullptr;
+    };
+
+    // Duplicate: a matrix beside it, one step; undo takes it, redo brings it
+    // back with its id.
+    QString undoBefore = pm.undoText();
+    const int functions = m_doc->functions().count();
+    QVERIFY(run("Rainbow Wall", "effectsDuplicate"));
+    QCOMPARE(m_doc->functions().count(), functions + 1);
+    quint32 copyId = Function::invalidId();
+    foreach (Function *f, m_doc->functions())
+        if (f->type() == Function::RGBMatrixType && f->id() != matrixId)
+            copyId = f->id();
+    QVERIFY(copyId != Function::invalidId());
+    QCOMPARE(qobject_cast<RGBMatrix *>(m_doc->function(copyId))->fixtureGroup(), towers->id());
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->function(copyId) == nullptr);
+    QCOMPARE(m_doc->functions().count(), functions);
+    QCOMPARE(pm.undoText(), undoBefore);
+    QVERIFY(st->redoShared());
+    QVERIFY(qobject_cast<RGBMatrix *>(m_doc->function(copyId)) != nullptr);
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->function(copyId) == nullptr);
+    undoBefore = pm.undoText();
+
+    // Delete: the question names the collection using it; one step back,
+    // with its id, in the collection; redo deletes it again.
+    QTRY_VERIFY(effectsRow(list, "Rainbow Wall") != nullptr);
+    {
+        ModalAnswerer yes;
+        QVERIFY(run("Rainbow Wall", "effectsDelete"));
+        QCOMPARE(yes.seen.count(), 1);
+        QVERIFY2(yes.seen.first().contains("0.0.5-WALL"), qPrintable(yes.seen.first()));
+    }
+    QVERIFY(m_doc->function(matrixId) == nullptr);
+    QVERIFY(shout->functions().isEmpty());
+    QTRY_VERIFY(effectsRow(list, "Rainbow Wall") == nullptr);
+    QVERIFY(pm.undoText() != undoBefore);
+    QVERIFY(st->undoShared());
+    RGBMatrix *back = qobject_cast<RGBMatrix *>(m_doc->function(matrixId));
+    QVERIFY(back != nullptr);
+    QCOMPARE(back->name(), QString("Rainbow Wall"));
+    QCOMPARE(back->fixtureGroup(), towers->id());
+    QCOMPARE(shout->functions(), QList<quint32>({ matrixId }));
+    QCOMPARE(pm.undoText(), undoBefore);
+    QTRY_VERIFY(effectsRow(list, "Rainbow Wall") != nullptr);
+    QVERIFY(st->redoShared());
+    QVERIFY(m_doc->function(matrixId) == nullptr);
+    QVERIFY(shout->functions().isEmpty());
+    pm.hide();
+}

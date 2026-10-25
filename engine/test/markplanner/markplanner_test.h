@@ -38,6 +38,10 @@ private slots:
      *  every change signalled (the lead time too, so every view follows),
      *  saved and loaded with the show, and a new show starts it off. */
     void theShowsMoveInBlackSavesLoadsAndResets();
+    /** "Move in black no longer carries over to the next show": after a
+     *  show with it on is opened, opening one saved without the setting
+     *  starts it off, at the default lead time. */
+    void openingAShowWithoutMoveInBlackStartsItOff();
     /** The "pre-positioning N heads" count follows the planner's pre-sets. */
     void thePresetCountFollowsThePlanner();
     /** Q38: a Show Tree list set On pre-positions with the show's setting

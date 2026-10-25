@@ -35,6 +35,8 @@ private slots:
     void theWledLanternLoadsAsALantern();
     void missingDataIsAWarning();
     void onlyALightIsAskedForLightOutput();
+    void theEtcColorSourceDefinitionsLoadClean_data();
+    void theEtcColorSourceDefinitionsLoadClean();
 };
 
 #endif

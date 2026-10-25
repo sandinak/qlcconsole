@@ -778,6 +778,56 @@ void Monitor_Test::theRigViewHidesWhatTheStudioHides()
     }
 }
 
+void Monitor_Test::apronDepthIsOneUndoStepAChange()
+{
+    Doc *doc = new Doc(this);
+    auto dropDoc = qScopeGuard([doc]() { delete doc; });
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    Scenery *main = props->addScenery();
+    main->setKind(Scenery::MainDrape);
+    main->setOriginX(5.0f);
+    main->setOriginY(5.0f);
+    main->setWidth(9.0f);
+    StagePlatform *stage = props->addPlatform();
+    stage->setOriginX(1.0f); stage->setOriginY(1.0f);
+    stage->setWidth(8.0f); stage->setDepth(5.0f);   // its front at 6: a 1 m apron
+    {
+        QWidget parent;
+        parent.resize(1200, 800);
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updatePlatforms();
+        QMenu *marks = mon.findChild<QMenu *>(QStringLiteral("stageMarksMenu"));
+        QVERIFY(marks != nullptr);
+        QDoubleSpinBox *apronSpin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"));
+        QVERIFY(apronSpin != nullptr);
+        emit marks->aboutToShow();
+        QVERIFY(apronSpin->isEnabled());
+        QVERIFY(!mon.canUndo());
+        QVERIFY(qAbs(props->apronDepth() - 1.0f) < 1e-4f);
+
+        apronSpin->setValue(2.0);                     // adds the apron
+        QVERIFY(qAbs(props->apronDepth() - 2.0f) < 1e-4f);
+        apronSpin->setValue(3.5);                     // resizes it
+        QVERIFY(qAbs(props->apronDepth() - 3.5f) < 1e-4f);
+        QVERIFY(mon.canUndo());
+
+        mon.undo();                                   // the resize alone
+        QVERIFY2(qAbs(props->apronDepth() - 2.0f) < 1e-4f, qPrintable(QString::number(props->apronDepth())));
+        QVERIFY(props->apronPlatform() != nullptr);
+        QVERIFY(mon.canUndo());
+        mon.undo();                                   // then the apron added
+        QVERIFY2(qAbs(props->apronDepth() - 1.0f) < 1e-4f, qPrintable(QString::number(props->apronDepth())));
+        QVERIFY(props->apronPlatform() == nullptr);
+        QVERIFY(!mon.canUndo());
+        /* The rig's undo has no redo (Monitor / MonitorGraphicsView have none);
+           the changelog promises one undo step a change, which this checks. */
+    }
+}
+
 void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
 {
     Doc *doc = new Doc(this);
@@ -1395,6 +1445,71 @@ void Monitor_Test::dropStaysPutSideView()
 
 }
 
+namespace
+{
+/* Two free fixtures selected and dragged together in @p pov by @p deltaPx:
+   the drop comes in on the one under the mouse (as a real drag's release
+   does); each must stay where it was dropped, at once and after the model
+   re-places it, with the depth the view doesn't show untouched. */
+void dropTwoTogether(Doc *doc, MonitorGraphicsView::ViewPOV pov, const QPointF &deltaPx, int hiddenAxis)
+{
+    DropRig rig;
+    QVERIFY(rig.build(doc, QVector3D(30000, 20000, 0)));
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *other = new Fixture(doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(33000, 17000, 1500));
+    rig.gv->addFixture(other->id(), QPointF(33000, 17000));
+    MonitorFixtureItem *second = rig.gv->m_fixtures.value(other->id(), nullptr);
+    QVERIFY(second != nullptr);
+    rig.gv->setViewPOV(pov);
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.gv->updateFixture(other->id());
+
+    auto hidden = [props](quint32 fid, int axis) {
+        const QVector3D p = props->fixturePosition(fid, 0, 0);
+        return axis == 0 ? p.x() : p.y();
+    };
+    const float hidden1 = hidden(rig.fxi->id(), hiddenAxis);
+    const float hidden2 = hidden(other->id(), hiddenAxis);
+
+    rig.gv->scene()->clearSelection();
+    rig.item->setSelected(true);
+    second->setSelected(true);
+    const QPointF target1 = rig.item->pos() + deltaPx;
+    const QPointF target2 = second->pos() + deltaPx;
+    rig.item->setPos(target1);
+    second->setPos(target2);
+    rig.gv->slotFixtureMoved(rig.item);
+    QVERIFY2((rig.item->pos() - target1).manhattanLength() < 2.0, "the one dragged jumped");
+    QVERIFY2((second->pos() - target2).manhattanLength() < 2.0,
+             qPrintable(QString("the other jumped %1 px at the drop")
+                        .arg((second->pos() - target2).manhattanLength())));
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.gv->updateFixture(other->id());
+    QVERIFY2((rig.item->pos() - target1).manhattanLength() < 2.0, "the one dragged snapped back");
+    QVERIFY2((second->pos() - target2).manhattanLength() < 2.0,
+             qPrintable(QString("the other snapped back %1 px on re-place")
+                        .arg((second->pos() - target2).manhattanLength())));
+    QCOMPARE(hidden(rig.fxi->id(), hiddenAxis), hidden1);
+    QCOMPARE(hidden(other->id(), hiddenAxis), hidden2);
+}
+} // namespace
+
+void Monitor_Test::twoDroppedTogetherStayPutFrontView()
+{
+    dropTwoTogether(m_doc, MonitorGraphicsView::PovFront, QPointF(-120, -60), 1);
+}
+
+void Monitor_Test::twoDroppedTogetherStayPutSideView()
+{
+    dropTwoTogether(m_doc, MonitorGraphicsView::PovSide, QPointF(100, -80), 0);
+}
+
 void Monitor_Test::aGroupDroppedOnATrussAllHang()
 {
     DropRig rig;
@@ -1540,6 +1655,137 @@ void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
     const FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
     QVERIFY(rp.fixedAim);
     QCOMPARE(rp.aimDown, 40.0f);
+}
+
+void Monitor_Test::aLensSetInFixturePropertiesIsTheLights()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    // A zoom par zoomed by hand: 15-35 degrees, a dimmer and no zoom channel.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Hand Zoom Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer"); dim->setPreset(QLCChannel::IntensityMasterDimmer);
+    def->addChannel(dim); mode->insertChannel(dim, 0);
+    QLCPhysical ph;
+    ph.setLensDegreesMin(15); ph.setLensDegreesMax(35);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    rig.fxi->setFixtureDefinition(def, mode);
+    MonitorProperties *props = m_doc->monitorProperties();
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).lensDeg, 0.0f);
+    QCOMPARE(RigHeads::setLensAngle(rig.fxi), 0.0);    // not set: drawn at its widest
+
+    bool shown = false;
+    double lo = 0, hi = 0, before = 0;
+    driveDialog([&](QWidget *dlg) {
+        QDoubleSpinBox *lens = dlg->findChild<QDoubleSpinBox *>("fixtureLensSetTo");
+        if (lens == nullptr)
+            return false;
+        shown = lens->isVisibleTo(dlg);
+        lo = lens->minimum();
+        hi = lens->maximum();
+        before = lens->value();
+        lens->setValue(22.0);
+        return true;
+    });
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY(shown);
+    QCOMPARE(lo, 15.0);
+    QCOMPARE(hi, 35.0);
+    QCOMPARE(before, 35.0);
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).lensDeg, 22.0f);
+    QCOMPARE(RigHeads::setLensAngle(rig.fxi), 22.0);
+    QCOMPARE(RigHeads::beamAngle(rig.fxi, QByteArray(1, char(255))), 22.0);
+
+    // Opened again, it shows what it is set to.
+    double again = 0;
+    driveDialog([&](QWidget *dlg) {
+        QDoubleSpinBox *lens = dlg->findChild<QDoubleSpinBox *>("fixtureLensSetTo");
+        if (lens == nullptr)
+            return false;
+        again = lens->value();
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QCOMPARE(again, 22.0);
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).lensDeg, 22.0f);
+}
+
+/* "Fixture Properties edits every selected fixture: double-clicking one of
+   several selected fixtures, on the plot or in Plot layers, opens the editor
+   for all of them (... a double-click in the list kept only its own row)." */
+void Monitor_Test::aLayersDoubleClickEditsTheWholeSelection()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(12000, 8000, 0));
+    rig.gv->addFixture(other->id(), QPointF(12000, 8000));
+    QVERIFY(!props->fixtureRigProps(rig.fxi->id()).fixedAim);
+    QVERIFY(!props->fixtureRigProps(other->id()).fixedAim);
+
+    MonitorLayersPanel *panel = rig.mon->findChild<MonitorLayersPanel *>();
+    QVERIFY(panel != nullptr);
+    rig.parent.resize(1400, 900);
+    rig.mon->resize(1400, 900);
+    panel->setVisible(true);
+    rig.parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    panel->reload();
+    QTreeWidget *tree = panel->m_tree;
+    tree->expandAll();
+    QTreeWidgetItem *rowA = nullptr, *rowB = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+    {
+        if ((*it)->data(0, Qt::UserRole).toInt() != int(MonitorLayersPanel::NodeItem)
+                || (*it)->data(0, Qt::UserRole + 2).toString() != QLatin1String("fixture"))
+            continue;
+        const quint32 id = (*it)->data(0, Qt::UserRole + 1).toUInt();
+        if (id == rig.fxi->id())
+            rowA = *it;
+        else if (id == other->id())
+            rowB = *it;
+    }
+    QVERIFY2(rowA != nullptr && rowB != nullptr, "Plot layers should list both fixtures");
+
+    tree->clearSelection();
+    rowA->setSelected(true);
+    rowB->setSelected(true);
+    tree->scrollToItem(rowB);
+    const QPoint at = tree->visualItemRect(rowB).center();
+    QVERIFY(!at.isNull());
+
+    // The editor that opens: its title, and Tilt set on it, then OK.
+    QString title;
+    driveDialog([&title](QWidget *dlg) {
+        title = dlg->windowTitle();
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        if (down == nullptr)
+            return false;
+        down->setValue(35.0);
+        return true;
+    });
+    // A real double-click: its first press leaves only rowB selected.
+    QTest::mousePress(tree->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QTest::mouseRelease(tree->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(at), tree->viewport()->mapToGlobal(QPointF(at)),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(tree->viewport(), &dbl);
+    QVERIFY2(title.contains("2 fixtures"), qPrintable(title));
+    QVERIFY(props->fixtureRigProps(rig.fxi->id()).fixedAim);
+    QVERIFY(props->fixtureRigProps(other->id()).fixedAim);
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).aimDown, 35.0f);
+    QCOMPARE(props->fixtureRigProps(other->id()).aimDown, 35.0f);
 }
 
 namespace { void inspectModal(const std::function<void(QWidget *)> &look); }

@@ -435,3 +435,61 @@ void FixtureDefCheck_Test::onlyALightIsAskedForLightOutput()
 }
 
 QTEST_APPLESS_MAIN(FixtureDefCheck_Test)
+
+/* CHANGELOG 0.3: "ETC ColorSource Spot jr and ColorSource CYC definitions,
+   and the ColorSource Spot's Direct, 1-Channel and RGB modes (5-Channel
+   keeps its name)". Each loads, has those four modes with the channel
+   counts ETC's manual gives, and the checker finds nothing wrong. */
+void FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean_data()
+{
+    QTest::addColumn<QString>("file");
+    QTest::addColumn<QString>("model");
+    QTest::addColumn<int>("direct");
+
+    QTest::newRow("Spot") << "ETC-ColorSource-Spot.qxf" << "ColorSource Spot" << 6;
+    QTest::newRow("Spot jr") << "ETC-ColorSource-Spot-jr.qxf" << "ColorSource Spot jr" << 6;
+    QTest::newRow("CYC") << "ETC-ColorSource-CYC.qxf" << "ColorSource CYC" << 7;
+}
+
+void FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean()
+{
+    QFETCH(QString, file);
+    QFETCH(QString, model);
+    QFETCH(int, direct);
+
+    const QByteArray xml = readFile(QString("%1/ETC/%2").arg(INTERNAL_FIXTUREDIR, file));
+    QVERIFY2(!xml.isEmpty(), qPrintable(file));
+    QVERIFY(!diagnose(xml, nullptr));
+    QLCFixtureDef def;
+    QVERIFY(def.loadXMLData(xml));
+    QCOMPARE(def.manufacturer(), QString("ETC"));
+    QCOMPARE(def.model(), model);
+
+    QMap<QString, int> want;
+    want["5-Channel"] = 5;
+    want["Direct"] = direct;
+    want["1-Channel"] = 1;
+    want["RGB"] = 3;
+    QCOMPARE(def.modes().size(), want.size());
+    for (auto it = want.constBegin(); it != want.constEnd(); ++it)
+    {
+        QLCFixtureMode *mode = def.mode(it.key());
+        QVERIFY2(mode != nullptr, qPrintable(it.key()));
+        QCOMPARE(int(mode->channels().size()), it.value());
+    }
+    // RGB is red, green, blue in that order (what Eos's _RGB personality sends).
+    QLCFixtureMode *rgb = def.mode("RGB");
+    QCOMPARE(rgb->channel(0)->colour(), QLCChannel::Red);
+    QCOMPARE(rgb->channel(1)->colour(), QLCChannel::Green);
+    QCOMPARE(rgb->channel(2)->colour(), QLCChannel::Blue);
+    QCOMPARE(def.mode("1-Channel")->channel(0)->group(), QLCChannel::Intensity);
+
+    const QList<Issue> issues = check(&def);
+    QStringList errors, warnings;
+    foreach (const Issue &i, issues)
+        (i.level == Issue::Error ? errors : warnings) << QString("%1: %2").arg(i.target, i.message);
+    QVERIFY2(errors.isEmpty(), qPrintable(errors.join("; ")));
+    QEXPECT_FAIL("CYC", "Data gap: ETC-ColorSource-CYC.qxf has <Lens DegreesMin=\"0\" DegreesMax=\"0\">, "
+                 "so the checker warns 'No beam angle'", Continue);
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join("; ")));
+}

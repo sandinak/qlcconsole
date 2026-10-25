@@ -151,6 +151,13 @@ private slots:
      *  folder (~/Downloads) is copied into its images/ folder on save and
      *  saved relative; loading resolves it against the show's folder. */
     void patternPicturesAreKeptWithTheShow();
+    /** ...the same through the show's real save (Doc::saveXML), while an
+     *  undo snapshot of the rig copies nothing and keeps the original path. */
+    void savingTheShowKeepsItsPatternPictures();
+
+    /** "The beam in Focus mode": a lens set by hand is saved with the
+     *  light's rig props and read back; a light never set writes no Lens. */
+    void aLensSetByHandIsSavedWithTheLight();
 
     /** Q100: a fixed light aimed by pan and tilt points there, and keeps it
      *  through save and load; one never aimed is left as it was. */

@@ -50,6 +50,9 @@ private slots:
      *  being touched, and one taken out lets go of it. */
     void aLookOnAGroupFollowsItsMembersLive();
     void aGroupMemberFadesByTheScenesFades();
+    /** ...and what the scene holds on that fixture itself (not through the
+     *  group) is the scene's still: it stays when the fixture leaves. */
+    void aLeavingMembersOwnValuesStay();
     void editingALookWhileItPlaysKeepsTheOrder();
     void aPaletteTriedOnShowsByTheSameRules();
     void theCheckerSaysWhatWontWork();

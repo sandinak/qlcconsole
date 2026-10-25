@@ -1470,6 +1470,87 @@ void MonitorProperties_Test::patternPicturesAreKeptWithTheShow()
              QFileInfo(show.filePath("images/stones-2.jpg")).canonicalFilePath());
 }
 
+void MonitorProperties_Test::savingTheShowKeepsItsPatternPictures()
+{
+    QTemporaryDir show, downloads;
+    QVERIFY(show.isValid() && downloads.isValid());
+    const QString picked = downloads.filePath("velour.jpg");
+    {
+        QFile f(picked);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("velour");
+    }
+
+    Doc doc(this);
+    doc.setWorkspacePath(show.path());
+    MonitorProperties *mp = doc.monitorProperties();
+    Truss *t = mp->addTruss();
+    t->setSock(true);
+    t->setSockPattern(picked);
+    Tower *tw = mp->addTower();
+    tw->setFaces(true);
+    tw->setFacesPattern(picked);
+
+    const QString copy = QDir(show.path()).absoluteFilePath("images/velour.jpg");
+
+    // An undo snapshot is not a save: nothing is copied, the path is kept.
+    const QByteArray snap = mp->snapshot(&doc);
+    QVERIFY(!QFile::exists(copy));
+    QVERIFY(!QDir(show.path()).exists("images"));
+    QCOMPARE(t->sockPattern(), picked);
+    QCOMPARE(tw->facesPattern(), picked);
+    QVERIFY(!snap.contains("images/velour.jpg"));
+
+    // Saving the show copies the picture beside it and writes it relative.
+    QByteArray xml;
+    QXmlStreamWriter w(&xml);
+    w.writeStartDocument();
+    QVERIFY(doc.saveXML(&w));
+    w.writeEndDocument();
+    QVERIFY(QFile::exists(copy));
+    QVERIFY2(xml.contains("SockPattern=\"images/velour.jpg\""), xml.constData());
+    QVERIFY2(xml.contains("FacesPattern=\"images/velour.jpg\""), xml.constData());
+    QVERIFY(!xml.contains(downloads.path().toUtf8()));
+    QCOMPARE(QFileInfo(t->sockPattern()).canonicalFilePath(), QFileInfo(copy).canonicalFilePath());
+    QCOMPARE(QFileInfo(tw->facesPattern()).canonicalFilePath(), QFileInfo(copy).canonicalFilePath());
+}
+
+void MonitorProperties_Test::aLensSetByHandIsSavedWithTheLight()
+{
+    MonitorProperties mp;
+    mp.setFixturePosition(3, 0, 0, QVector3D(1, 1, 0));
+    mp.setFixturePosition(4, 0, 0, QVector3D(2, 1, 0));
+    FixtureRigProps zoomed = mp.fixtureRigProps(3);
+    zoomed.lensDeg = 26.0f;
+    mp.setFixtureRigProps(3, zoomed);
+    FixtureRigProps plain = mp.fixtureRigProps(4);
+    plain.panZeroDir = 90.0f;                  // a rig entry, but no lens
+    mp.setFixtureRigProps(4, plain);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    // Exactly one Lens, on the light set by hand.
+    const QString xml = QString::fromUtf8(buf);
+    QCOMPARE(xml.count(QStringLiteral("Lens=")), 1);
+    QRegularExpression rig(QStringLiteral("<FixtureRig [^>]*FID=\"3\"[^>]*>"));
+    const QRegularExpressionMatch m = rig.match(xml);
+    QVERIFY2(m.hasMatch(), qPrintable(xml));
+    QVERIFY2(m.captured(0).contains(QStringLiteral("Lens=\"26.0\"")), qPrintable(m.captured(0)));
+
+    MonitorProperties back;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(back.loadXML(reader, nullptr));
+    QCOMPARE(back.fixtureRigProps(3).lensDeg, 26.0f);
+    QCOMPARE(back.fixtureRigProps(4).lensDeg, 0.0f);
+    QCOMPARE(back.fixtureRigProps(4).panZeroDir, 90.0f);
+}
+
 void MonitorProperties_Test::aFixedLightIsAimedByPanAndTilt()
 {
     FixtureRigProps rp;

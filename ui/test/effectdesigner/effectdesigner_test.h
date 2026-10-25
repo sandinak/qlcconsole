@@ -79,6 +79,9 @@ private slots:
      *  on an effect palette and on an EFX: each changes the show and is one
      *  undo step; Delete's question names where the effect is used. */
     void buildEffectsRightClickActionsChangeTheShow();
+    /** ...and on an RGB Matrix: Duplicate and Delete are one undo step
+     *  each, and undo/redo bring it back with its own id. */
+    void buildEffectsRightClickOnAnRgbMatrix();
 
     /** Make a layer (board Q37), into a Show Tree cue: a saved, unchanged
      *  palette plays by name; a changed design is a one-off copy (the bench

@@ -114,6 +114,12 @@ private slots:
     void stageLookIsOfferedInOperate();
     /** Q51: Plot Symbol ▸ ends with a Scenery section holding Curtain */
     void stageLookMenuHasAScenerySectionWithCurtain();
+    /** "the toolbar's Properties opens Fixture Properties for several
+     *  fixtures": two selected, one editor, OK sets both. */
+    void toolbarPropertiesEditsEverySelectedFixture();
+    /** "Plot Symbol ▸ in Operate: it changes only the picture": the symbol
+     *  changes (one rig undo step on the plot), the show's output does not. */
+    void plotSymbolInOperateChangesOnlyThePicture();
 
 private:
     Doc* m_doc;

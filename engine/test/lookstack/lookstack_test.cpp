@@ -653,6 +653,41 @@ void LookStack_Test::aGroupMemberFadesByTheScenesFades()
     IS(dimmerOf(d, m_mover), 200);
 }
 
+/* "A playing scene follows its group's members live ... one that leaves is
+   let go of": of what it had through the group. A pan and a red the scene
+   holds on the mover itself are not the group's, and stay. */
+void LookStack_Test::aLeavingMembersOwnValuesStay()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(grp);
+    grp->assignFixture(m_par->id());
+    grp->assignFixture(m_mover->id());
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(dimmer(200)->id());
+    scene->addFixture(m_mover->id());                      // named by the scene too
+    scene->setValue(SceneValue(m_mover->id(), 0, 77));     // its pan
+    scene->setValue(SceneValue(m_mover->id(), 2, 180));    // its red
+    m_playing = scene;
+    const int pan = int(m_mover->address()) + 0;
+    const int red = int(m_mover->address()) + 2;
+
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    QByteArray d = tickAndRead();
+    IS(dimmerOf(d, m_mover), 200);
+    IS(uchar(d.at(pan)), 77);
+    IS(uchar(d.at(red)), 180);
+
+    grp->resignFixture(m_mover->id());
+    d = tickAndRead();
+    d = tickAndRead();
+    IS(dimmerOf(d, m_par), 200);                // the rest play on
+    IS(uchar(d.at(pan)), 77);                   // the scene's own values stay
+    IS(uchar(d.at(red)), 180);
+    QVERIFY(scene->isRunning());
+}
+
 /* A look edited while it plays is re-painted by the same rules. */
 void LookStack_Test::editingALookWhileItPlaysKeepsTheOrder()
 {

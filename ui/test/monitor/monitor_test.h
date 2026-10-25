@@ -54,6 +54,9 @@ private slots:
      *  Top view with their labels, moved from the same menu, and on the Rig
      *  Overview's floor. */
     void stageMarksAreDrawnOnThePlotAndTheOverview();
+    /** Apron depth is one rig undo step a change: two changes, two undos,
+     *  each back to the depth before it. */
+    void apronDepthIsOneUndoStepAChange();
     void initTestCase();
     void init();
     void cleanupTestCase();
@@ -75,16 +78,27 @@ private slots:
     void dropStaysPutTopView();
     void dropStaysPutFrontView();
     void dropStaysPutSideView();
+    /** "in Front and Side every free fixture of the selection keeps its
+     *  drop instead of snapping back": two dragged together, both stay. */
+    void twoDroppedTogetherStayPutFrontView();
+    void twoDroppedTogetherStayPutSideView();
     void dropOnTrussAttachesAndStays();
     /** Several fixtures dropped together on a truss all hang on it, each
      *  where it landed along it, not only the one over it. */
     void aGroupDroppedOnATrussAllHang();
     void aDoubleClickEditsTheWholeSelection();
+    /** ...and the same in Plot layers: a double-click on one of two selected
+     *  fixture rows opens Fixture Properties for both, and OK sets both. */
+    void aLayersDoubleClickEditsTheWholeSelection();
     /** The truss editor's fixture list: a double-click on one of several
      *  selected rows edits them all. */
     void aTrussEditorsDoubleClickEditsItsSelectedRows();
     /** Q100: a fixed light's editor aims it by Pan and Tilt. */
     void aFixedLightsEditorAimsItByPanAndTilt();
+    /** Q103: a light whose lens is zoomed by hand (a lens range, no zoom
+     *  channel) has "Beam (lens set to)" in Fixture Properties; setting it
+     *  sets the light's lens, which is what its beam is drawn at. */
+    void aLensSetInFixturePropertiesIsTheLights();
     void theStageStaysCentredWithFixturesOffIt();
     /** "can't c/p stage features": scenery, towers, booms and stands copy
      *  and paste, one undo step. */

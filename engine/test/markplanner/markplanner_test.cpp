@@ -271,6 +271,59 @@ void MarkPlanner_Test::theShowsMoveInBlackSavesLoadsAndResets()
     pc->setAutoMoveInBlack(false);
 }
 
+void MarkPlanner_Test::openingAShowWithoutMoveInBlackStartsItOff()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    QVERIFY(pc != nullptr);
+
+    // The show's whole Engine, saved as File > Save does.
+    auto saveShow = [this]() {
+        QByteArray xml;
+        QXmlStreamWriter w(&xml);
+        w.writeStartDocument();
+        m_doc->saveXML(&w);
+        w.writeEndDocument();
+        return xml;
+    };
+    // ...and opened as File > Open does: the old show cleared, the new loaded.
+    auto openShow = [this](const QByteArray &xml) {
+        m_doc->clearContents();
+        QXmlStreamReader r(xml);
+        while (!r.atEnd() && !(r.isStartElement() && r.name() == QStringLiteral("Engine")))
+            r.readNext();
+        return m_doc->loadXML(r, true);
+    };
+
+    // The movers' made-up definitions can't be found on a load: not this test's.
+    QVERIFY(m_doc->deleteFixture(m_fixtureA));
+    QVERIFY(m_doc->deleteFixture(m_fixtureB));
+    pc->setAutoMoveInBlack(true);
+    pc->setMoveInBlackDarkGapMs(1500);
+    const QByteArray withMib = saveShow();
+    QVERIFY(withMib.contains("<MoveInBlack"));
+
+    // An older show: the same, with no <MoveInBlack> at all.
+    QByteArray without = withMib;
+    const int at = without.indexOf("<MoveInBlack");
+    const int end = without.indexOf("/>", at);
+    QVERIFY(at >= 0 && end > at);
+    without.remove(at, end + 2 - at);
+    QVERIFY(!without.contains("MoveInBlack"));
+
+    // Opening the first brings its Move in black back...
+    QVERIFY(openShow(withMib));
+    QVERIFY(pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), 1500);
+
+    // ...and opening the second does not keep it.
+    QSignalSpy spy(pc, &ProgrammerController::autoMoveInBlackChanged);
+    QVERIFY(openShow(without));
+    QVERIFY(!pc->isAutoMoveInBlack());
+    QCOMPARE(pc->moveInBlackDarkGapMs(), MarkPlanner::defaultDarkGapMs());
+    QVERIFY(spy.count() >= 1);
+    QCOMPARE(spy.last().at(0).toBool(), false);
+}
+
 void MarkPlanner_Test::thePresetCountFollowsThePlanner()
 {
     ProgrammerController *pc = m_doc->programmer();

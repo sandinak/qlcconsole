@@ -63,6 +63,13 @@
 #undef protected
 
 #include "fixturemanager_test.h"
+#include "monitor.h"
+#include "monitorproperties.h"
+#include "mastertimer.h"
+#include "universe.h"
+#include "scene.h"
+#include "functionparent.h"
+#include <QDoubleSpinBox>
 
 /* Schedules a zero-delay callback that runs `fill` against whatever modal
  * QDialog is open by then (via QApplication::activeModalWidget() -- called
@@ -1814,4 +1821,97 @@ void FixtureManager_Test::stageLookMenuHasAScenerySectionWithCurtain()
     QVERIFY2(!again.actions().first()->text().contains("Curtain"),
              qPrintable(again.actions().first()->text()));
     fx->setStageLook(Fixture::AutoLook);
+}
+
+void FixtureManager_Test::toolbarPropertiesEditsEverySelectedFixture()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    const QList<quint32> two = addDimmers(m_doc, 2, 1, "Front");
+    QCOMPARE(two.size(), 2);
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(two[0], 0, 0, QVector3D(3000, 3000, 0));
+    props->setFixturePosition(two[1], 0, 0, QVector3D(5000, 3000, 0));
+    QWidget parent;
+    Monitor mon(&parent, m_doc);                // as the app has it, a tab of its own
+    QCOMPARE(Monitor::instance(), &mon);
+    FixtureManager mgr(nullptr, m_doc);
+    selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, two[0]), fixtureRow(mgr, two[1]) });
+    mgr.slotSelectionChanged();
+    QVERIFY(mgr.m_propertiesAction->isEnabled());
+
+    QString title;
+    bool found = false;
+    QTimer::singleShot(0, [&]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        if (modal == nullptr)
+            return;
+        title = modal->windowTitle();
+        QDoubleSpinBox *down = modal->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        found = down != nullptr;
+        if (down != nullptr)
+            down->setValue(30.0);
+        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
+        QPushButton *ok = btns != nullptr ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        if (ok != nullptr)
+            ok->click();
+        else
+            modal->close();
+    });
+    mgr.m_propertiesAction->trigger();
+    QVERIFY2(title.contains("2 fixtures"), qPrintable(title));
+    QVERIFY(found);
+    QCOMPARE(props->fixtureRigProps(two[0]).aimDown, 30.0f);
+    QCOMPARE(props->fixtureRigProps(two[1]).aimDown, 30.0f);
+    QVERIFY(props->fixtureRigProps(two[0]).fixedAim && props->fixtureRigProps(two[1]).fixedAim);
+}
+
+void FixtureManager_Test::plotSymbolInOperateChangesOnlyThePicture()
+{
+    const QList<quint32> one = addDimmers(m_doc, 1, 1, "Practical");
+    QCOMPARE(one.size(), 1);
+    Fixture *fx = m_doc->fixture(one.first());
+    QVERIFY(fx != nullptr);
+    m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(3000, 3000, 0));
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    QVERIFY(!mon.canUndo());
+
+    // The show playing: a scene holding the practical at 200.
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(fx->id());
+    scene->setValue(SceneValue(fx->id(), 0, 200));
+    QVERIFY(m_doc->addFunction(scene));
+    m_doc->setMode(Doc::Operate);
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    auto output = [this]() {
+        for (int i = 0; i < 3; ++i)
+            m_doc->masterTimer()->timerTick();
+        QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+        for (Universe *u : unis)
+            u->processFaders();
+        const QByteArray out = unis.first()->preGMValues().left(512);
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return out;
+    };
+    const QByteArray before = output();
+    QCOMPARE(uchar(before.at(int(fx->address()))), uchar(200));
+
+    QMenu menu;
+    FixtureManager::fillStageLookMenu(&menu, m_doc, one);
+    QAction *lantern = menu.findChild<QAction *>("stageLook_Lantern");
+    QVERIFY(lantern != nullptr);
+    lantern->trigger();
+    QCOMPARE(fx->stageLook(), Fixture::LanternLook);
+    QCOMPARE(m_doc->mode(), Doc::Operate);               // still playing the show
+    QVERIFY(scene->isRunning());
+    QCOMPARE(output(), before);                          // and its output untouched
+    // A change to the plot: one Ctrl+Z step there puts the picture back.
+    QVERIFY(mon.canUndo());
+    mon.undo();
+    QCOMPARE(fx->stageLook(), Fixture::AutoLook);
+    QCOMPARE(output(), before);
+
+    scene->stop(FunctionParent::master());
+    m_doc->masterTimer()->timerTick();
+    m_doc->setMode(Doc::Design);
 }
