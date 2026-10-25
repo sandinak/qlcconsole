@@ -130,6 +130,7 @@
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
 #include "rigeditsession.h"
+#include "stagepiecedialog.h"
 #include "colourswatchbutton.h"
 #include "targetitem.h"
 #include "truss.h"
@@ -578,6 +579,16 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotImageRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::platformDoubleClicked,
             this, &Monitor::slotPlatformDoubleClicked);
+    connect(m_graphicsView, &MonitorGraphicsView::stagePieceDoubleClicked,
+            this, &Monitor::editStagePiece);
+    // A stage piece dragged or shown from its menu: what reads from it follows.
+    connect(m_graphicsView, &MonitorGraphicsView::stagePiecesChanged, this, [this]() {
+        m_graphicsView->updateTargets();
+        foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
+            v->update();
+        if (m_overviewView != NULL)
+            m_overviewView->update();
+    });
     connect(m_graphicsView, &MonitorGraphicsView::pipeDoubleClicked,
             this, &Monitor::slotEditPipe);
     connect(m_graphicsView, &MonitorGraphicsView::standDoubleClicked,
@@ -1003,54 +1014,14 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         QSettings().setValue(SETTINGS_CENTERLINES, on);
     });
 
-    /* Stage reference marks: what a crew spikes and focuses by. The show's
-       own (saved with it, off in an older show), so the plot reads the same
-       on every computer; drawn on the plot's Top view and on the Rig
-       Overview's floor. */
+    /* Where each target is ("SL 2.4 · US 3.1 m"), written beside it on the
+       plot and the Rig Overview: a way of looking, so it is here with the
+       other view toggles. The stage marks it measures from are objects on
+       the plot's Stage layer now (Q147), shown, set and dragged there. On
+       unless turned off; the show's, but no undo step. */
     {
-        QMenu *marksMenu = showMenu->addMenu(tr("Stage marks"));
-        marksMenu->setObjectName(QStringLiteral("stageMarksMenu"));
-        marksMenu->setToolTipsVisible(true);
-        struct MarkEntry
-        {
-            MonitorProperties::StageMark mark;
-            const char *name;
-            QString text;
-            QString tip;
-        };
-        const QList<MarkEntry> entries = {
-            { MonitorProperties::CentreMarkFlag, "stageMarkCentreMark", tr("Centre mark (DSC)"),
-              tr("The centre line's mark at the front of the stage, labelled CL") },
-            { MonitorProperties::CentreLineFlag, "stageMarkCentreLine", tr("Centre line, full depth"),
-              tr("The centre line, dashed, from the front of the stage to the back") },
-            { MonitorProperties::CurtainLineFlag, "stageMarkCurtainLine", tr("Curtain line"),
-              tr("Where the main curtain hangs: the most downstage main drape, else the "
-                 "proscenium, else 4 ft (1.2 m) upstage of the stage edge. Set it below.") },
-            { MonitorProperties::NumberLineFlag, "stageMarkNumberLine", tr("Number line"),
-              tr("Distances left and right of centre, in the show's unit, along the front "
-                 "of the stage (or where it is set below)") }
-        };
-        foreach (const MarkEntry &e, entries)
-        {
-            QAction *a = marksMenu->addAction(e.text);
-            a->setObjectName(QString::fromLatin1(e.name));
-            a->setCheckable(true);
-            a->setToolTip(e.tip);
-            a->setData(int(e.mark));
-            connect(a, &QAction::toggled, this, [this, mark = e.mark](bool on) {
-                if (m_props->stageMarkVisible(mark) == on)
-                    return;
-                m_props->setStageMarkVisible(mark, on);
-                stageMarksChanged();
-            });
-        }
-
-        /* Where each target is ("SL 2.4 · US 3.1 m"), written beside it on
-           the plot and the Rig Overview. On unless turned off; the show's,
-           like the marks, but a view of it, not an edit: no undo step. */
-        marksMenu->addSeparator();
-        QAction *positionsAct = marksMenu->addAction(tr("Target positions"));
-        positionsAct->setObjectName(QStringLiteral("stageMarkTargetPositions"));
+        QAction *positionsAct = showMenu->addAction(tr("Target positions"));
+        positionsAct->setObjectName(QStringLiteral("showTargetPositions"));
         positionsAct->setCheckable(true);
         positionsAct->setChecked(m_props->targetPositionsVisible());
         positionsAct->setToolTip(tr("Write where each target is beside it, measured from the "
@@ -1061,147 +1032,10 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             m_props->setTargetPositionsVisible(on);
             stageMarksChanged();
         });
-
-        /* Where the lines are, as a crew measures them. The curtain line is
-           the main reference (the plaster line): it is set by how far
-           upstage of the front of the stage (the edge the centre mark sits
-           on) it is, and the number line by how far downstage of the
-           curtain line; negative the other way. Both are kept as the plan's
-           Y (MonitorProperties::setCurtainLineUpstage() and
-           setNumberLineDownstageOfCurtain()). Auto follows the stage; a
-           value moves the line there. Each row says it in words too. */
-        const MonitorProperties::GridUnits units = m_props->gridUnits();
-        const bool feet = (units == MonitorProperties::Feet);
-        const double toDisp = feet ? 3.28084 : 1.0;
-        QWidget *pw = new QWidget(marksMenu);
-        QFormLayout *pfl = new QFormLayout(pw);
-        pfl->setContentsMargins(10, 6, 10, 6);
-        auto positionRow = [pw, pfl, feet, toDisp](const QString &title, const char *name,
-                                                   const QString &tip,
-                                                   std::function<bool()> isAuto,
-                                                   std::function<float()> value,
-                                                   std::function<void(bool, float)> apply,
-                                                   std::function<QString()> words) {
-            QWidget *row = new QWidget(pw);
-            QGridLayout *gl = new QGridLayout(row);
-            gl->setContentsMargins(0, 0, 0, 0);
-            gl->setVerticalSpacing(1);
-            QCheckBox *autoChk = new QCheckBox(tr("Auto"), row);
-            autoChk->setObjectName(QString::fromLatin1(name) + QStringLiteral("Auto"));
-            FeetInchesSpinBox *spin = new FeetInchesSpinBox(feet, row);
-            spin->setObjectName(QString::fromLatin1(name));
-            spin->setRange(-100.0 * toDisp, 300.0 * toDisp);
-            spin->setToolTip(tip);
-            QLabel *said = new QLabel(row);
-            said->setObjectName(QString::fromLatin1(name) + QStringLiteral("Words"));
-            QFont small = said->font();
-            small.setPointSizeF(small.pointSizeF() * 0.9);
-            said->setFont(small);
-            gl->addWidget(autoChk, 0, 0);
-            gl->addWidget(spin, 0, 1);
-            gl->addWidget(said, 1, 1);
-            gl->setColumnStretch(1, 1);
-            pfl->addRow(title, row);
-            auto sync = [autoChk, spin, said, isAuto, value, words, toDisp]() {
-                QSignalBlocker b1(autoChk), b2(spin);
-                autoChk->setChecked(isAuto());
-                spin->setValue(double(value()) * toDisp);
-                spin->setEnabled(!isAuto());
-                said->setText(words());
-            };
-            connect(autoChk, &QCheckBox::toggled, row, [spin, apply, toDisp, sync](bool on) {
-                apply(on, float(spin->value() / toDisp));
-                sync();
-            });
-            connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), row,
-                    [apply, toDisp, said, words](double v) {
-                        apply(false, float(v / toDisp));
-                        said->setText(words());
-                    });
-            return std::function<void()>(sync);
-        };
-        auto syncCurtain = positionRow(tr("Curtain line:"), "curtainLineY",
-            tr("How far upstage of the front of the stage the curtain line is. "
-               "Negative is downstage of the front."),
-            [this]() { return m_props->curtainLineIsAuto(); },
-            [this]() { return m_props->curtainLineUpstage(); },
-            [this](bool isAuto, float upstage) {
-                if (isAuto) m_props->setCurtainLineAuto(); else m_props->setCurtainLineUpstage(upstage);
-                stageMarksChanged();
-            },
-            [this, units]() {
-                const float up = m_props->curtainLineUpstage();
-                if (std::fabs(up) < 0.005f)
-                    return tr("at the front of the stage");
-                return (up > 0.0f ? tr("%1 US of the front of the stage") : tr("%1 DS of the front of the stage"))
-                        .arg(MonitorProperties::formatStageDistance(up, units));
-            });
-        auto syncNumber = positionRow(tr("Number line:"), "numberLineY",
-            tr("How far downstage of the curtain line the number line is. Negative is "
-               "upstage of it. Auto puts it at the front of the stage."),
-            [this]() { return m_props->numberLineIsAuto(); },
-            [this]() { return m_props->numberLineDownstageOfCurtain(); },
-            [this](bool isAuto, float downstage) {
-                if (isAuto) m_props->setNumberLineAuto(); else m_props->setNumberLineDownstageOfCurtain(downstage);
-                stageMarksChanged();
-            },
-            [this]() { return m_props->curtainLineOffsetText(m_props->numberLineY()); });
-
-        /* The apron: the deck downstage of the curtain line. Setting its
-           depth resizes the apron piece in front of the main deck, or adds
-           one (MonitorProperties::setApronDepth()) -- a change to the rig,
-           so one undo step a change. */
-        QWidget *apronRow = new QWidget(pw);
-        QHBoxLayout *ahl = new QHBoxLayout(apronRow);
-        ahl->setContentsMargins(0, 0, 0, 0);
-        FeetInchesSpinBox *apronSpin = new FeetInchesSpinBox(feet, apronRow);
-        apronSpin->setObjectName(QStringLiteral("apronDepth"));
-        apronSpin->setRange(0.0, 100.0 * toDisp);
-        apronSpin->setKeyboardTracking(false);      // one change when typed, not one a key
-        apronSpin->setToolTip(tr("How deep the apron is, from the curtain line to the front of the "
-                                 "stage. Changing it resizes the apron platform in front of the main "
-                                 "deck, or adds one."));
-        ahl->addWidget(apronSpin, 1);
-        pfl->addRow(tr("Apron depth:"), apronRow);
-        auto syncApron = [this, apronSpin, toDisp]() {
-            QSignalBlocker b(apronSpin);
-            apronSpin->setValue(double(qMax(0.0f, m_props->apronDepth())) * toDisp);
-            apronSpin->setEnabled(m_props->mainDeck() != nullptr);
-        };
-        connect(apronSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-                [this, toDisp, syncApron, syncCurtain, syncNumber](double v) {
-                    {
-                        RigEditSession edit(this);
-                        m_props->setApronDepth(float(v / toDisp));
-                    }
-                    m_graphicsView->updatePlatforms();     // and the marks with it
-                    stageMarksChanged();
-                    syncCurtain();      // a found-from-nothing curtain line is pinned
-                    syncNumber();
-                    syncApron();
-                });
-
-        marksMenu->addSeparator();
-        QWidgetAction *wa = new QWidgetAction(marksMenu);
-        wa->setDefaultWidget(pw);
-        marksMenu->addAction(wa);
-
-        // A show loaded later brings its own marks: tick them to match on opening.
-        connect(marksMenu, &QMenu::aboutToShow, this,
-                [this, marksMenu, syncCurtain, syncNumber, syncApron]() {
-            foreach (QAction *a, marksMenu->actions())
-            {
-                if (!a->isCheckable())
-                    continue;
-                QSignalBlocker block(a);
-                if (a->objectName() == QLatin1String("stageMarkTargetPositions"))
-                    a->setChecked(m_props->targetPositionsVisible());
-                else
-                    a->setChecked(m_props->stageMarkVisible(MonitorProperties::StageMark(a->data().toInt())));
-            }
-            syncCurtain();
-            syncNumber();
-            syncApron();
+        // A show loaded later brings its own: tick it to match on opening.
+        connect(showMenu, &QMenu::aboutToShow, positionsAct, [this, positionsAct]() {
+            QSignalBlocker block(positionsAct);
+            positionsAct->setChecked(m_props->targetPositionsVisible());
         });
     }
 
@@ -2782,10 +2616,32 @@ void Monitor::slotToggleLayersPanel(bool show)
     }
 }
 
+void Monitor::editStagePiece(int piece)
+{
+    /* Its properties, live on the plot as they change: OK keeps them as one
+       undo step, Cancel puts the stage back. In the show's unit as it is
+       now (Q147: the positions read "1.00 m" on a feet show). */
+    if (m_props == NULL || piece < MonitorProperties::CentrePiece || piece > MonitorProperties::ApronPiece)
+        return;
+    RigEditSession edit(this);
+    StagePieceDialog dlg(m_props, piece, this);
+    m_stagePieceDialog = &dlg;
+    connect(&dlg, &StagePieceDialog::changed, this, &Monitor::stageMarksChanged);
+    const int result = dlg.exec();
+    m_stagePieceDialog = NULL;
+    if (result != QDialog::Accepted)
+        edit.cancel();
+    else
+        edit.accept();
+    stageMarksChanged();
+}
+
 void Monitor::stageMarksChanged()
 {
     m_doc->setModified();
     m_graphicsView->updateStageMarks();
+    if (m_layersPanel != NULL)
+        m_layersPanel->reload();        // a piece's eye and lock
     m_graphicsView->updateTargets();     // their readouts count from the marks
     foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
         v->update();
@@ -2901,65 +2757,45 @@ void Monitor::showStageOverview()
         m.exec(globalPos);
     });
 
-    QHBoxLayout *bar = new QHBoxLayout;
-    bar->addWidget(new QLabel(tr("View:"), &dlg));
-    QComboBox *planeCombo = new QComboBox(&dlg);
+    /* Its controls along the foot, as the Lighting Studio plot has them
+       (Q145): Show and the layers on the left, View on the right, in a dark
+       footer bar under the picture. The window's own title bar (move, close)
+       stays as it is. */
+    QWidget *footer = new QWidget(&dlg);
+    footer->setObjectName(QStringLiteral("rigFooter"));
+    footer->setAutoFillBackground(true);
+    {
+        QPalette pal = footer->palette();
+        pal.setColor(QPalette::Window, QColor(34, 34, 34));
+        footer->setPalette(pal);
+    }
+    QHBoxLayout *bar = new QHBoxLayout(footer);
+    bar->setContentsMargins(6, 2, 6, 2);
+    bar->setSpacing(6);
+    auto addSep = [footer, bar]() {
+        QFrame *sep = new QFrame(footer);
+        sep->setFrameShape(QFrame::VLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        bar->addWidget(sep);
+    };
+
+    /* Made first, placed last (right-justified, as the plot's View is): it
+       stays the first combo in the window, then Room. */
+    QComboBox *planeCombo = new QComboBox(footer);
+    planeCombo->setObjectName(QStringLiteral("rigView"));
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side"), tr("45°") });
     planeCombo->setCurrentIndex(int(StructureStudioView::Angled));
     planeCombo->setProperty("cycleOnClick", true);   // same as the plot's View
     planeCombo->installEventFilter(this);
-    planeCombo->setToolTip(tr("Click to cycle, arrow for the full list"));
-    bar->addWidget(planeCombo);
+    planeCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [view](int i) { view->setPlane(StructureStudioView::Plane(i)); });
-    /* Live output: the whole point of watching a rig rather than reading a
-       plot. Default ON when the desk is running, so opening the window during a
-       show shows the show. */
-    /* Checked state has to be UNMISTAKABLE. A checkable QToolButton on macOS
-       renders its on state as a barely-different grey, and "why can't I see the
-       beams" turned out to be exactly that: beam brightness comes from DMX, so
-       with Live off there is nothing to draw, and nothing on screen said Live
-       was off. */
-    const QString toggleStyle =
-        "QToolButton { padding: 2px 8px; border: 1px solid #4a4f5a;"
-        " border-radius: 3px; }"
-        "QToolButton:checked { background: #2d6cdf; color: white;"
-        " border: 1px solid #5b8ee8; }";
-
-    QToolButton *liveBtn = new QToolButton(&dlg);
-    liveBtn->setText(tr("Live"));
-    liveBtn->setCheckable(true);
-    liveBtn->setStyleSheet(toggleStyle);
-    liveBtn->setToolTip(tr("Colour and brightness from the DMX being sent, "
-                           "instead of the fixtures' gel colours. Beams need "
-                           "this: how bright a beam is comes from the DMX."));
-    bar->addWidget(liveBtn);
-    connect(liveBtn, &QToolButton::toggled, view,
-            [view](bool on) { view->setLiveValues(on); });
-    /* On by default, not only in Operate. Opening the window while a scene is
-       up and seeing nothing change is the wrong first impression -- and with
-       the room level applied, an idle rig still reads perfectly well. */
-    liveBtn->setChecked(true);
-
-    /* Beams. Their own switch because they are the one thing here that draws
-       over the rig rather than in it: unmissable when you want to see what a
-       look is doing in the air, in the way when you are reading the plot. */
-    QToolButton *beamBtn = new QToolButton(&dlg);
-    beamBtn->setText(tr("Beams"));
-    beamBtn->setCheckable(true);
-    beamBtn->setStyleSheet(toggleStyle);
-    beamBtn->setToolTip(tr("Draw the light moving heads are throwing, out to "
-                           "whatever it lands on"));
-    bar->addWidget(beamBtn);
-    connect(beamBtn, &QToolButton::toggled, view,
-            [view](bool on) { view->setBeams(on); });
-    beamBtn->setChecked(true);
 
     /* How much light is in the ROOM. Without it the rendered colours are as
        vivid as a test card whatever the rig is doing, and a blackout still
        shows bright scenery. */
-    bar->addWidget(new QLabel(tr("Room:"), &dlg));
-    QComboBox *ambientCombo = new QComboBox(&dlg);
+    QComboBox *ambientCombo = new QComboBox(footer);
+    ambientCombo->setObjectName(QStringLiteral("rigRoom"));
     ambientCombo->addItem(tr("Work light"), 1.00);
     ambientCombo->addItem(tr("House"),      0.62);
     ambientCombo->addItem(tr("Dim"),        0.30);
@@ -2969,58 +2805,45 @@ void Monitor::showStageOverview()
     ambientCombo->installEventFilter(this);
     ambientCombo->setToolTip(tr("Ambient light in the room, separate from what "
                                 "the rig is emitting — click to cycle"));
-    bar->addWidget(ambientCombo);
     connect(ambientCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [view, ambientCombo](int) {
         view->setAmbient(ambientCombo->currentData().toDouble());
     });
     view->setAmbient(ambientCombo->currentData().toDouble());
 
-    /* Haze: whether the beams show IN THE AIR. Only the shafts -- where the
-       light lands and what it lights do not change with it. */
-    bar->addWidget(new QLabel(tr("Haze:"), &dlg));
-    QComboBox *hazeCombo = new QComboBox(&dlg);
-    hazeCombo->addItem(tr("None"),   0.0);
-    hazeCombo->addItem(tr("Light"),  0.4);
-    hazeCombo->addItem(tr("Medium"), 1.0);
-    hazeCombo->addItem(tr("Heavy"),  1.8);
-    hazeCombo->setCurrentIndex(2);
-    hazeCombo->setProperty("cycleOnClick", true);
-    hazeCombo->installEventFilter(this);
-    hazeCombo->setToolTip(tr("How much haze is in the air: how visible the "
-                             "beams are between the fixture and where they "
-                             "land — click to cycle"));
-    bar->addWidget(hazeCombo);
-    connect(hazeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
-            [view, hazeCombo](int) {
-        view->setHaze(hazeCombo->currentData().toDouble());
+    /* Show: what is drawn -- the plot's own Show menu, where it applies
+       here. Target positions is the show's, the same tick as the plot's. */
+    QToolButton *showBtn = new QToolButton(footer);
+    showBtn->setObjectName(QStringLiteral("rigShow"));
+    showBtn->setText(tr("Show"));
+    showBtn->setPopupMode(QToolButton::InstantPopup);
+    showBtn->setToolTip(tr("Choose what is drawn on the rig"));
+    QMenu *showMenu = new QMenu(showBtn);
+    showBtn->setMenu(showMenu);
+    QAction *positionsAct = showMenu->addAction(tr("Target positions"));
+    positionsAct->setObjectName(QStringLiteral("rigShowTargetPositions"));
+    positionsAct->setCheckable(true);
+    positionsAct->setToolTip(tr("Write where each target is beside it, measured from the "
+                                "centre line and the number line"));
+    connect(positionsAct, &QAction::toggled, &dlg, [this](bool on) {
+        if (m_props->targetPositionsVisible() == on)
+            return;
+        m_props->setTargetPositionsVisible(on);
+        stageMarksChanged();
     });
-    view->setHaze(hazeCombo->currentData().toDouble());
-
-    /* Fidelity against speed, for the machine this is running on: sharper
-       edges cost fill, and the rate is only a ceiling -- a frame that takes
-       longer than the rate allows still slows the view down on its own. Both
-       are remembered. */
-    bar->addWidget(new QLabel(tr("Quality:"), &dlg));
-    QComboBox *qualityCombo = new QComboBox(&dlg);
-    qualityCombo->addItem(tr("Fast"),     1);
-    qualityCombo->addItem(tr("Smooth"),   2);
-    qualityCombo->addItem(tr("Sharp"),    3);
-    qualityCombo->addItem(tr("Sharpest"), 4);
-    qualityCombo->setCurrentIndex(qMax(0, qualityCombo->findData(view->supersample())));
-    qualityCombo->setToolTip(tr("Edge smoothing: Fast draws at screen resolution, "
-                                "Sharpest at four times it in each direction"));
-    bar->addWidget(qualityCombo);
-    connect(qualityCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
-            [view, qualityCombo](int) {
-        view->setSupersample(qualityCombo->currentData().toInt());
+    connect(showMenu, &QMenu::aboutToShow, &dlg, [this, positionsAct]() {
+        QSignalBlocker block(positionsAct);
+        positionsAct->setChecked(m_props->targetPositionsVisible());
     });
+    positionsAct->setChecked(m_props->targetPositionsVisible());
+    bar->addWidget(showBtn);
 
     /* Layers, from here: show or hide one without the Studio open. The same
        switch as the Studio's eye (saved with the show), so the two agree --
        and in any mode, since it is how you look at the rig, not a change to
-       it. Rebuilt each time it opens, so it is the show's layers as they are. */
-    QToolButton *layersBtn = new QToolButton(&dlg);
+       it. Rebuilt each time it opens, so it is the show's layers as they are;
+       the Stage layer lists its pieces under it, each with its own tick. */
+    QToolButton *layersBtn = new QToolButton(footer);
     layersBtn->setObjectName(QStringLiteral("rigLayers"));
     layersBtn->setText(tr("Plot layers"));
     layersBtn->setToolTip(tr("Show or hide a plot layer (the same as its eye in the Studio)"));
@@ -3044,6 +2867,19 @@ void Monitor::showStageOverview()
             a->setChecked(lyr.visible);
             const quint32 id = lyr.id;
             connect(a, &QAction::toggled, layersMenu, [setShown, id](bool on) { setShown(id, on); });
+            if (!props->hasStageLayer() || id != props->stageLayerId())
+                continue;
+            foreach (MonitorProperties::StagePiece piece, MonitorProperties::stagePieces())
+            {
+                QAction *pa = layersMenu->addAction(QStringLiteral("    ") + MonitorProperties::stagePieceName(piece));
+                pa->setObjectName(QStringLiteral("rigStagePiece%1").arg(int(piece)));
+                pa->setCheckable(true);
+                pa->setChecked(props->stagePieceVisible(piece));
+                connect(pa, &QAction::toggled, layersMenu, [this, props, piece](bool on) {
+                    props->setStagePieceVisible(piece, on);
+                    stageMarksChanged();
+                });
+            }
         }
         layersMenu->addSeparator();
         QAction *all = layersMenu->addAction(tr("Show all"));
@@ -3054,11 +2890,102 @@ void Monitor::showStageOverview()
         });
     });
     bar->addWidget(layersBtn);
+    addSep();
+
+    /* Live output: the whole point of watching a rig rather than reading a
+       plot. Default ON when the desk is running, so opening the window during a
+       show shows the show. */
+    /* Checked state has to be UNMISTAKABLE. A checkable QToolButton on macOS
+       renders its on state as a barely-different grey, and "why can't I see the
+       beams" turned out to be exactly that: beam brightness comes from DMX, so
+       with Live off there is nothing to draw, and nothing on screen said Live
+       was off. */
+    const QString toggleStyle =
+        "QToolButton { padding: 2px 8px; border: 1px solid #4a4f5a;"
+        " border-radius: 3px; }"
+        "QToolButton:checked { background: #2d6cdf; color: white;"
+        " border: 1px solid #5b8ee8; }";
+
+    QToolButton *liveBtn = new QToolButton(footer);
+    liveBtn->setObjectName(QStringLiteral("rigLive"));
+    liveBtn->setText(tr("Live"));
+    liveBtn->setCheckable(true);
+    liveBtn->setStyleSheet(toggleStyle);
+    liveBtn->setToolTip(tr("Colour and brightness from the DMX being sent, "
+                           "instead of the fixtures' gel colours. Beams need "
+                           "this: how bright a beam is comes from the DMX."));
+    bar->addWidget(liveBtn);
+    connect(liveBtn, &QToolButton::toggled, view,
+            [view](bool on) { view->setLiveValues(on); });
+    /* On by default, not only in Operate. Opening the window while a scene is
+       up and seeing nothing change is the wrong first impression -- and with
+       the room level applied, an idle rig still reads perfectly well. */
+    liveBtn->setChecked(true);
+
+    /* Beams. Their own switch because they are the one thing here that draws
+       over the rig rather than in it: unmissable when you want to see what a
+       look is doing in the air, in the way when you are reading the plot. */
+    QToolButton *beamBtn = new QToolButton(footer);
+    beamBtn->setObjectName(QStringLiteral("rigBeams"));
+    beamBtn->setText(tr("Beams"));
+    beamBtn->setCheckable(true);
+    beamBtn->setStyleSheet(toggleStyle);
+    beamBtn->setToolTip(tr("Draw the light moving heads are throwing, out to "
+                           "whatever it lands on"));
+    bar->addWidget(beamBtn);
+    connect(beamBtn, &QToolButton::toggled, view,
+            [view](bool on) { view->setBeams(on); });
+    beamBtn->setChecked(true);
+
+    bar->addWidget(new QLabel(tr("Room:"), footer));
+    bar->addWidget(ambientCombo);
+
+    /* Haze: whether the beams show IN THE AIR. Only the shafts -- where the
+       light lands and what it lights do not change with it. */
+    bar->addWidget(new QLabel(tr("Haze:"), footer));
+    QComboBox *hazeCombo = new QComboBox(footer);
+    hazeCombo->setObjectName(QStringLiteral("rigHaze"));
+    hazeCombo->addItem(tr("None"),   0.0);
+    hazeCombo->addItem(tr("Light"),  0.4);
+    hazeCombo->addItem(tr("Medium"), 1.0);
+    hazeCombo->addItem(tr("Heavy"),  1.8);
+    hazeCombo->setCurrentIndex(2);
+    hazeCombo->setProperty("cycleOnClick", true);
+    hazeCombo->installEventFilter(this);
+    hazeCombo->setToolTip(tr("How much haze is in the air: how visible the "
+                             "beams are between the fixture and where they "
+                             "land — click to cycle"));
+    bar->addWidget(hazeCombo);
+    connect(hazeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, hazeCombo](int) {
+        view->setHaze(hazeCombo->currentData().toDouble());
+    });
+    view->setHaze(hazeCombo->currentData().toDouble());
+    addSep();
+
+    /* Fidelity against speed, for the machine this is running on: sharper
+       edges cost fill, and the rate is only a ceiling -- a frame that takes
+       longer than the rate allows still slows the view down on its own. Both
+       are remembered. */
+    QComboBox *qualityCombo = new QComboBox(footer);
+    qualityCombo->setObjectName(QStringLiteral("rigQuality"));
+    qualityCombo->addItem(tr("Fast"),     1);
+    qualityCombo->addItem(tr("Smooth"),   2);
+    qualityCombo->addItem(tr("Sharp"),    3);
+    qualityCombo->addItem(tr("Sharpest"), 4);
+    qualityCombo->setCurrentIndex(qMax(0, qualityCombo->findData(view->supersample())));
+    qualityCombo->setToolTip(tr("Edge smoothing: Fast draws at screen resolution, "
+                                "Sharpest at four times it in each direction"));
+    bar->addWidget(qualityCombo);
+    connect(qualityCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, qualityCombo](int) {
+        view->setSupersample(qualityCombo->currentData().toInt());
+    });
 
     /* On the graphics card when there is one (RhiRaster): the same picture,
        drawn there instead of on the CPU. Off falls back to the CPU renderer,
        for comparing or for a driver that misbehaves. */
-    QCheckBox *gpuCheck = new QCheckBox(tr("GPU"), &dlg);
+    QCheckBox *gpuCheck = new QCheckBox(tr("GPU"), footer);
     gpuCheck->setObjectName(QStringLiteral("rigGpu"));
     gpuCheck->setEnabled(RhiRaster::available());
     gpuCheck->setChecked(view->gpuActive());
@@ -3070,7 +2997,8 @@ void Monitor::showStageOverview()
     bar->addWidget(gpuCheck);
     connect(gpuCheck, &QCheckBox::toggled, &dlg, [view](bool on) { view->setGpu(on); });
 
-    QComboBox *rateCombo = new QComboBox(&dlg);
+    QComboBox *rateCombo = new QComboBox(footer);
+    rateCombo->setObjectName(QStringLiteral("rigRate"));
     for (int fps : { 25, 30, 60, 120 })
         rateCombo->addItem(tr("%1 fps").arg(fps), fps);
     rateCombo->setCurrentIndex(qMax(0, rateCombo->findData(view->maxFrameRate())));
@@ -3081,26 +3009,40 @@ void Monitor::showStageOverview()
             [view, rateCombo](int) {
         view->setMaxFrameRate(rateCombo->currentData().toInt());
     });
+    addSep();
 
-    /* Focus mode from here too: the Overview is where you watch the beams
-       land while you align them. */
-    QToolButton *focusBtn = new QToolButton(&dlg);
+    /* Quick focus from here too: the Overview is where you watch the beams
+       land while you align them. Greyed, with why, with no light placed. */
+    QToolButton *focusBtn = new QToolButton(footer);
     focusBtn->setObjectName(QStringLiteral("rigFocus"));
-    focusBtn->setText(tr("Focus"));
-    focusBtn->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
-                            "nudge its calibration offsets"));
+    focusBtn->setText(tr("Quick focus"));
+    FocusMenu::setAvailable(focusBtn, FocusMenu::quickFocusBlocked(m_doc),
+                            tr("Quick focus: aim each light at its reference in turn and nudge its "
+                               "calibration until it lands there"));
     bar->addWidget(focusBtn);
     connect(focusBtn, &QToolButton::clicked, this, &Monitor::openFocusMode);
 
-    bar->addStretch();
-    bar->addWidget(new QLabel(tr("drag to swing · shift-drag to pan · "
-                                 "wheel to zoom · read-only"), &dlg));
-    vl->addLayout(bar);
-    vl->addWidget(view, 1);
+    // Zoom: the wheel zooms, this puts the whole rig back in view.
+    QToolButton *fitBtn = new QToolButton(footer);
+    fitBtn->setObjectName(QStringLiteral("rigFit"));
+    fitBtn->setText(tr("Fit"));
+    fitBtn->setToolTip(tr("Zoom to the whole rig again, after a zoom or a pan"));
+    bar->addWidget(fitBtn);
+    connect(fitBtn, &QToolButton::clicked, view, [view]() { view->fitToRig(); });
 
-    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
-    connect(bb, &QDialogButtonBox::rejected, dock, &QDockWidget::close);
-    vl->addWidget(bb);
+    bar->addStretch(1);
+    // How to move round it: on the picture itself, not a row of the bar.
+    view->setToolTip(tr("Drag to swing · shift-drag to pan · wheel to zoom · read-only"));
+    addSep();
+    bar->addWidget(new QLabel(tr("View:"), footer));
+    bar->addWidget(planeCombo);
+
+    vl->setContentsMargins(0, 0, 0, 0);
+    vl->setSpacing(0);
+    vl->addWidget(view, 1);
+    /* In a ShrinkableBar, as the plot's footer is: a row of controls this
+       long must not hold the window wider than the person makes it. */
+    vl->addWidget(new ShrinkableBar(footer, &dlg));
 
     /* Follow the rig while it is open: structures and fixtures move under it as
        the plot is edited, and a stale overview is worse than none. */

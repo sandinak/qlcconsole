@@ -103,6 +103,9 @@
 #include "scenery.h"
 #include "networktopology.h"
 #include "platformitem.h"
+#include "stagepieceitem.h"
+#include "stagepiecedialog.h"
+#include "shrinkablebar.h"
 #include "studiotemplate.h"
 #include <QTreeWidgetItemIterator>
 #include "fixturevisualtraits.h"
@@ -783,6 +786,22 @@ void Monitor_Test::theRigViewHidesWhatTheStudioHides()
     }
 }
 
+/* Run @p work on the next modal dialog to open (editStagePiece() runs one). */
+static void onNextDialog(std::function<void(QDialog *)> work)
+{
+    QTimer::singleShot(0, [work]() {
+        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (dlg == nullptr)
+        {
+            foreach (QWidget *w, QApplication::topLevelWidgets())
+                if (qobject_cast<StagePieceDialog *>(w) != nullptr && w->isVisible())
+                    dlg = qobject_cast<QDialog *>(w);
+        }
+        QVERIFY(dlg != nullptr);
+        work(dlg);
+    });
+}
+
 void Monitor_Test::apronDepthIsOneUndoStepAChange()
 {
     Doc *doc = new Doc(this);
@@ -798,6 +817,7 @@ void Monitor_Test::apronDepthIsOneUndoStepAChange()
     StagePlatform *stage = props->addPlatform();
     stage->setOriginX(1.0f); stage->setOriginY(1.0f);
     stage->setWidth(8.0f); stage->setDepth(5.0f);   // its front at 6: a 1 m apron
+    props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
     {
         QWidget parent;
         parent.resize(1200, 800);
@@ -805,32 +825,488 @@ void Monitor_Test::apronDepthIsOneUndoStepAChange()
         MonitorGraphicsView *gv = mon.m_graphicsView;
         gv->setViewPOV(MonitorGraphicsView::PovTop);
         gv->updatePlatforms();
-        QMenu *marks = mon.findChild<QMenu *>(QStringLiteral("stageMarksMenu"));
-        QVERIFY(marks != nullptr);
-        QDoubleSpinBox *apronSpin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"));
-        QVERIFY(apronSpin != nullptr);
-        emit marks->aboutToShow();
-        QVERIFY(apronSpin->isEnabled());
         QVERIFY(!mon.canUndo());
         QVERIFY(qAbs(props->apronDepth() - 1.0f) < 1e-4f);
+        QVERIFY(props->apronAuto());
 
-        apronSpin->setValue(2.0);                     // adds the apron
+        // Its properties, OK: one undo step for all that was done in them.
+        auto setDepth = [&mon](double depth) {
+            onNextDialog([depth](QDialog *dlg) {
+                QCheckBox *autoBox = dlg->findChild<QCheckBox *>(QStringLiteral("apronDepthAuto"));
+                QDoubleSpinBox *spin = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"));
+                QVERIFY(autoBox != nullptr && spin != nullptr);
+                autoBox->setChecked(false);
+                spin->setValue(depth);
+                spin->setValue(depth);
+                dlg->accept();
+            });
+            mon.editStagePiece(MonitorProperties::ApronPiece);
+        };
+        setDepth(2.0);
         QVERIFY(qAbs(props->apronDepth() - 2.0f) < 1e-4f);
-        apronSpin->setValue(3.5);                     // resizes it
+        QVERIFY(!props->apronAuto());
+        setDepth(3.5);
         QVERIFY(qAbs(props->apronDepth() - 3.5f) < 1e-4f);
         QVERIFY(mon.canUndo());
 
-        mon.undo();                                   // the resize alone
+        mon.undo();                                   // the second change alone
         QVERIFY2(qAbs(props->apronDepth() - 2.0f) < 1e-4f, qPrintable(QString::number(props->apronDepth())));
         QVERIFY(props->apronPlatform() != nullptr);
         QVERIFY(mon.canUndo());
-        mon.undo();                                   // then the apron added
+        mon.undo();                                   // then the first
         QVERIFY2(qAbs(props->apronDepth() - 1.0f) < 1e-4f, qPrintable(QString::number(props->apronDepth())));
-        QVERIFY(props->apronPlatform() == nullptr);
+        QVERIFY(props->apronAuto());
         QVERIFY(!mon.canUndo());
+
+        // Cancel puts it back, and leaves no step.
+        onNextDialog([](QDialog *dlg) {
+            dlg->findChild<QCheckBox *>(QStringLiteral("apronDepthAuto"))->setChecked(false);
+            dlg->findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"))->setValue(4.0);
+            dlg->reject();
+        });
+        mon.editStagePiece(MonitorProperties::ApronPiece);
+        QVERIFY(qAbs(props->apronDepth() - 1.0f) < 1e-4f);
+        QVERIFY(props->apronAuto());
+        QVERIFY(!mon.canUndo());
+        QCOMPARE(stage->depth(), 5.0f);
         /* The rig's undo has no redo (Monitor / MonitorGraphicsView have none);
            the changelog promises one undo step a change, which this checks. */
     }
+}
+
+/* Q147: the stage pieces are objects on the plot. A click selects one (and
+   Plot layers follows), a rubber band never does; the curtain line and the
+   number line drag up and down stage, the apron by its front edge, each one
+   undo step; locked, they stay; a double-click asks for the properties. */
+void Monitor_Test::stagePiecesAreObjectsOnThePlot()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(8.0f); deck->setDepth(5.0f);       // front at 6
+    deck->setHeight(1.0f);
+    props->setCurtainLineY(4.5f);
+    props->setStageMarks(MonitorProperties::CentreMarkFlag | MonitorProperties::CurtainLineFlag
+                         | MonitorProperties::NumberLineFlag | MonitorProperties::ApronFlag);
+    QVERIFY(props->hasStageLayer());
+
+    QWidget parent;
+    parent.resize(1200, 800);
+    Monitor mon(&parent, doc);
+    parent.show();
+    MonitorGraphicsView *gv = mon.m_graphicsView;
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    gv->resize(1000, 700);
+    QResizeEvent ev(QSize(1000, 700), QSize(800, 600));
+    gv->resizeEvent(&ev);
+    gv->updatePlatforms();
+    QVERIFY(gv->m_cellPixels > 0);
+
+    StagePieceItem *curtain = gv->stagePieceItem(MonitorProperties::CurtainPiece);
+    StagePieceItem *number = gv->stagePieceItem(MonitorProperties::NumberPiece);
+    StagePieceItem *apron = gv->stagePieceItem(MonitorProperties::ApronPiece);
+    StagePieceItem *centre = gv->stagePieceItem(MonitorProperties::CentrePiece);
+    QVERIFY(curtain && number && apron && centre);
+    QVERIFY(curtain->isVisible() && number->isVisible() && apron->isVisible() && centre->isVisible());
+    QVERIFY(curtain->isMovable() && number->isMovable() && apron->isMovable());
+    QVERIFY(!centre->isMovable());                      // the centre is the centre
+
+    auto viewPoint = [gv](double xm, double ym) {
+        return gv->mapFromScene(gv->realPositionToPixels(xm * 1000.0, ym * 1000.0));
+    };
+    auto send = [gv](QEvent::Type type, const QPoint &at, Qt::MouseButton button, Qt::MouseButtons buttons) {
+        QMouseEvent me(type, QPointF(at), QPointF(gv->viewport()->mapToGlobal(at)), button, buttons, Qt::NoModifier);
+        QApplication::sendEvent(gv->viewport(), &me);
+    };
+    auto drag = [&](const QPoint &from, const QPoint &to) {
+        send(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+        send(QEvent::MouseMove, from + QPoint(0, (to.y() > from.y()) ? 4 : -4), Qt::NoButton, Qt::LeftButton);
+        send(QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton);
+        send(QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+    };
+
+    // A rubber band across the whole stage leaves them be.
+    gv->scene()->setSelectionArea(QPainterPath(QPointF(-10, -10)));
+    QPainterPath everything;
+    everything.addRect(gv->sceneRect());
+    gv->scene()->setSelectionArea(everything);
+    QVERIFY(!curtain->isSelected() && !number->isSelected() && !apron->isSelected());
+
+    // A click selects the curtain line, and Plot layers follows.
+    const QPoint onCurtain = viewPoint(2.0, 4.5);
+    send(QEvent::MouseButtonPress, onCurtain, Qt::LeftButton, Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, onCurtain, Qt::LeftButton, Qt::NoButton);
+    QVERIFY(curtain->isSelected());
+    QCOMPARE(gv->selectedStagePiece(), int(MonitorProperties::CurtainPiece));
+    QVERIFY(gv->selectedMapObjects().contains(qMakePair(QStringLiteral("stage"), quint32(MonitorProperties::CurtainPiece))));
+    QCOMPARE(props->curtainLineY(), 4.5f);              // a click is not a drag
+
+    // Dragged a metre upstage: there, and one undo step.
+    QVERIFY(!mon.canUndo());
+    drag(onCurtain, viewPoint(2.0, 3.5));
+    QVERIFY2(qAbs(props->curtainLineY() - 3.5f) < 0.05f, qPrintable(QString::number(props->curtainLineY())));
+    QVERIFY(qAbs(props->apronPlatform()->originY() - props->curtainLineY()) < 1e-4f);   // the apron starts there
+    QVERIFY(doc->isModified());
+    QVERIFY(mon.canUndo());
+    mon.undo();
+    QCOMPARE(props->curtainLineY(), 4.5f);
+    QVERIFY(!mon.canUndo());
+
+    // The number line too (at the front of the stage, y 6, until moved).
+    QCOMPARE(props->numberLineY(), 6.0f);
+    drag(viewPoint(7.0, 6.0), viewPoint(7.0, 7.0));
+    QVERIFY(!props->numberLineIsAuto());
+    QVERIFY2(qAbs(props->numberLineY() - 7.0f) < 0.05f, qPrintable(QString::number(props->numberLineY())));
+
+    // The apron by its front edge: deeper, Auto off, the deck untouched.
+    QVERIFY(qAbs(props->apronDepth() - 1.5f) < 1e-4f);
+    drag(viewPoint(3.0, 6.0), viewPoint(3.0, 6.75));
+    QVERIFY(!props->apronAuto());
+    QVERIFY2(qAbs(props->apronDepth() - 2.25f) < 0.05f, qPrintable(QString::number(props->apronDepth())));
+    QCOMPARE(deck->depth(), 5.0f);
+    QCOMPARE(deck->originY(), 1.0f);
+    // Inside the apron, away from its front, a press selects it and moves nothing.
+    const float depthNow = props->apronDepth();
+    drag(viewPoint(3.0, 5.0), viewPoint(3.0, 5.6));
+    QCOMPARE(props->apronDepth(), depthNow);
+    QVERIFY(apron->isSelected());
+
+    // Locked, on its own or with its layer: it stays.
+    props->setStagePieceLocked(MonitorProperties::CurtainPiece, true);
+    mon.stageMarksChanged();
+    QVERIFY(!curtain->isMovable());
+    drag(viewPoint(2.0, 4.5), viewPoint(2.0, 3.0));
+    QCOMPARE(props->curtainLineY(), 4.5f);
+    props->setStagePieceLocked(MonitorProperties::CurtainPiece, false);
+    props->setLayerLocked(props->stageLayerId(), true);
+    gv->refreshItemLayerState();
+    QVERIFY(!curtain->isMovable() && !number->isMovable() && !apron->isMovable());
+    props->setLayerLocked(props->stageLayerId(), false);
+    gv->refreshItemLayerState();
+    QVERIFY(curtain->isMovable());
+
+    // The layer hidden: not drawn, the apron's deck with it.
+    props->setLayerVisible(props->stageLayerId(), false);
+    gv->refreshItemLayerState();
+    QVERIFY(!curtain->isVisible() && !apron->isVisible());
+    QVERIFY(gv->m_apronDeckItem == nullptr);
+    QVERIFY(gv->m_stageMarkItems.isEmpty());
+    props->setLayerVisible(props->stageLayerId(), true);
+    gv->refreshItemLayerState();
+    QVERIFY(curtain->isVisible() && gv->m_apronDeckItem != nullptr);
+
+    // A double-click asks for its properties (they open); so does its menu.
+    QSignalSpy wants(gv, &MonitorGraphicsView::stagePieceDoubleClicked);
+    int opened = -1;
+    auto closeIt = [&opened](QDialog *dlg) {
+        if (StagePieceDialog *spd = qobject_cast<StagePieceDialog *>(dlg))
+            opened = spd->piece();
+        dlg->reject();
+    };
+    onNextDialog(closeIt);
+    gv->requestEditItem(QStringLiteral("stage"), MonitorProperties::NumberPiece);
+    QCOMPARE(opened, int(MonitorProperties::NumberPiece));
+    QCOMPARE(wants.count(), 1);
+    QCOMPARE(wants.last().at(0).toInt(), int(MonitorProperties::NumberPiece));
+    QMenu menu;
+    MonitorGraphicsView::MenuPlace place;
+    gv->buildItemMenu(&menu, QStringLiteral("stage"), MonitorProperties::CurtainPiece, place, QPointF());
+    QAction *propsAct = menu.findChild<QAction *>(QStringLiteral("stagePieceProperties"));
+    QAction *shownAct = menu.findChild<QAction *>(QStringLiteral("stagePieceShown"));
+    QAction *lockAct = menu.findChild<QAction *>(QStringLiteral("stagePieceLocked"));
+    QAction *autoAct = menu.findChild<QAction *>(QStringLiteral("stagePieceAuto"));
+    QVERIFY(propsAct && shownAct && lockAct && autoAct);
+    onNextDialog(closeIt);
+    propsAct->trigger();
+    QCOMPARE(opened, int(MonitorProperties::CurtainPiece));
+    QCOMPARE(wants.count(), 2);
+    QCOMPARE(wants.last().at(0).toInt(), int(MonitorProperties::CurtainPiece));
+    QVERIFY(!autoAct->isChecked());
+    autoAct->trigger();                                  // back to Auto: one undo step
+    QVERIFY(props->curtainLineIsAuto());
+    QVERIFY(mon.canUndo());
+    shownAct->trigger();                                 // hidden from its menu
+    QVERIFY(!props->stagePieceVisible(MonitorProperties::CurtainPiece));
+    QVERIFY(!curtain->isVisible());
+
+    // Plot layers lists the pieces under Stage, each with its own eye and lock.
+    MonitorLayersPanel *panel = mon.m_layersPanel;
+    QVERIFY(panel != nullptr);
+    panel->reload();
+    QTreeWidgetItem *stageRow = nullptr;
+    for (int i = 0; i < panel->m_tree->topLevelItemCount(); ++i)
+        if (panel->m_tree->topLevelItem(i)->data(0, Qt::UserRole + 1).toUInt() == props->stageLayerId()
+            && panel->m_tree->topLevelItem(i)->text(0) == QStringLiteral("Stage"))
+            stageRow = panel->m_tree->topLevelItem(i);
+    QVERIFY(stageRow != nullptr);
+    QStringList names;
+    QTreeWidgetItem *curtainRow = nullptr;
+    for (int i = 0; i < stageRow->childCount(); ++i)
+    {
+        names << stageRow->child(i)->text(0);
+        if (stageRow->child(i)->text(0) == QStringLiteral("Curtain line"))
+            curtainRow = stageRow->child(i);
+    }
+    QVERIFY2(names.contains("Curtain line") && names.contains("Number line") && names.contains("Apron")
+             && names.contains("Centre line / DSC mark"), qPrintable(names.join("|")));
+    QVERIFY(!names.contains("Platform 1"));              // the apron's deck is the apron
+    QVERIFY(curtainRow != nullptr);
+    QWidget *toggles = panel->m_tree->itemWidget(curtainRow, 1);
+    QVERIFY(toggles != nullptr);
+    QToolButton *eye = toggles->findChild<QToolButton *>(QStringLiteral("stagePieceEye"));
+    QToolButton *lock = toggles->findChild<QToolButton *>(QStringLiteral("stagePieceLock"));
+    QVERIFY(eye != nullptr && lock != nullptr);
+    QVERIFY(!eye->isChecked());
+    eye->click();                                        // shown again, from its row
+    QVERIFY(props->stagePieceVisible(MonitorProperties::CurtainPiece));
+    QVERIFY(curtain->isVisible());
+    QTRY_VERIFY(panel->m_tree->topLevelItemCount() > 0);
+    // The Stage layer can't be removed.
+    props->removeLayer(props->stageLayerId());
+    QVERIFY(props->hasStageLayer());
+}
+
+/* Q147: the stage pieces' positions are entered and read in the show's
+   unit. They read "1.00 m" on a feet show while the readouts were in feet:
+   the menu was built with the unit the show had when the Studio opened. */
+void Monitor_Test::stagePiecePositionsFollowTheShowsUnit()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    // Then the show turns out to be in feet (Settings > Units on load).
+    props->convertGridUnits(MonitorProperties::Feet);
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(0.3048f); deck->setOriginY(0.3048f);
+    deck->setWidth(30.0f * 0.3048f); deck->setDepth(20.0f * 0.3048f);   // front at 21'
+    props->setStagePieceVisible(MonitorProperties::CurtainPiece, true);
+    props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
+    mon.stageMarksChanged();
+    QVERIFY(qAbs(props->curtainLineUpstage() - 4.0f * 0.3048f) < 1e-4f);   // a 4' apron
+
+    foreach (int piece, QList<int>() << MonitorProperties::CurtainPiece << MonitorProperties::NumberPiece
+                                     << MonitorProperties::ApronPiece)
+    {
+        StagePieceDialog dlg(props, piece, &mon);
+        QObject::connect(&dlg, &StagePieceDialog::changed, &mon, &Monitor::stageMarksChanged);
+        const QString name = piece == MonitorProperties::CurtainPiece ? QStringLiteral("curtainLineY")
+                           : piece == MonitorProperties::NumberPiece ? QStringLiteral("numberLineY")
+                                                                     : QStringLiteral("apronDepth");
+        QDoubleSpinBox *spin = dlg.findChild<QDoubleSpinBox *>(name);
+        QLabel *words = dlg.findChild<QLabel *>(name + QStringLiteral("Words"));
+        QVERIFY(spin != nullptr && words != nullptr);
+        QVERIFY2(!spin->text().contains(QLatin1String(" m")), qPrintable(name + ": " + spin->text()));
+        QVERIFY2(spin->text().contains(QLatin1Char('\'')), qPrintable(name + ": " + spin->text()));
+        QVERIFY2(!words->text().contains(QLatin1String(" m")), qPrintable(name + ": " + words->text()));
+        QCOMPARE(spin->text(), QStringLiteral("4'"));       // every one of them is 4 ft here
+    }
+
+    // Typed in feet and inches, kept in metres.
+    StagePieceDialog curtainDlg(props, MonitorProperties::CurtainPiece, &mon);
+    curtainDlg.findChild<QCheckBox *>(QStringLiteral("curtainLineYAuto"))->setChecked(false);
+    QDoubleSpinBox *spin = curtainDlg.findChild<QDoubleSpinBox *>(QStringLiteral("curtainLineY"));
+    spin->setValue(spin->valueFromText(QStringLiteral("6' 6\"")));
+    QVERIFY(qAbs(props->curtainLineUpstage() - 6.5f * 0.3048f) < 1e-4f);
+    QCOMPARE(curtainDlg.findChild<QLabel *>(QStringLiteral("curtainLineYWords"))->text(),
+             QStringLiteral("6' 6\" US of the front of the deck"));
+    // The apron starts at it: 6' 6" deep on Auto, said in feet.
+    StagePieceDialog apronDlg(props, MonitorProperties::ApronPiece, &mon);
+    QCOMPARE(apronDlg.findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"))->text(), QStringLiteral("6' 6\""));
+    QCOMPARE(apronDlg.findChild<QLabel *>(QStringLiteral("apronDepthWords"))->text(),
+             QStringLiteral("Front 6' 6\" DS of the curtain line"));
+}
+
+/* Q147 regression, in the app: a riser butted against the deck's front at
+   centre stays where it is however the apron is set -- it was taken for the
+   apron piece and moved ("Apron depth moved a centre riser"). */
+void Monitor_Test::theApronLeavesARiserAtTheFrontAlone()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 10));
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(10.0f); deck->setDepth(5.0f);
+    deck->setHeight(0.9f);
+    StagePlatform *riser = props->addPlatform();
+    riser->setName(QStringLiteral("Centre riser"));
+    riser->setOriginX(5.0f); riser->setOriginY(6.0f);
+    riser->setWidth(2.0f); riser->setDepth(1.0f);
+    riser->setHeight(0.4f);
+    props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    mon.m_graphicsView->setViewPOV(MonitorGraphicsView::PovTop);
+    mon.m_graphicsView->updatePlatforms();
+    const int before = props->platforms().size();
+    foreach (double depth, QList<double>() << 2.0 << 3.0 << 0.5)
+    {
+        onNextDialog([depth](QDialog *dlg) {
+            dlg->findChild<QCheckBox *>(QStringLiteral("apronDepthAuto"))->setChecked(false);
+            dlg->findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"))->setValue(depth);
+            dlg->findChild<QDoubleSpinBox *>(QStringLiteral("apronFrontCurve"))->setValue(0.4);
+            dlg->accept();
+        });
+        mon.editStagePiece(MonitorProperties::ApronPiece);
+        QVERIFY(qAbs(props->apronDepth() - float(depth)) < 1e-4f);
+        QCOMPARE(props->platform(riser->id()), riser);
+        QCOMPARE(riser->originX(), 5.0f);
+        QCOMPARE(riser->originY(), 6.0f);
+        QCOMPARE(riser->width(), 2.0f);
+        QCOMPARE(riser->depth(), 1.0f);
+        QCOMPARE(riser->frontCurve(), 0.0f);
+        QCOMPARE(deck->depth(), 5.0f);
+        QCOMPARE(props->platforms().size(), before);
+        QVERIFY(props->apronPlatform() != riser);
+    }
+    // The riser is still its own row in Plot layers, on its layer.
+    QVERIFY(mon.m_graphicsView->m_platformItems.contains(riser->id()));
+}
+
+/* Q146: the apron is deck in the Rig Overview -- from above, at 45 degrees
+   and in 3D -- whatever stage marks are on (it was only a tint drawn while
+   the curtain line was on). */
+void Monitor_Test::theApronIsDeckInTheRigOverview()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(0.5f);
+    deck->setWidth(8.0f); deck->setDepth(4.5f);           // front at 5: the curtain line
+    deck->setHeight(1.0f);
+    deck->setColor(QColor(150, 90, 40));
+    props->setCurtainLineY(5.0f);
+    QVERIFY(props->setApronDepth(2.0f));                  // out to 7, beyond the deck
+    QVERIFY(!props->stageMarkVisible(MonitorProperties::CurtainLineFlag));
+
+    foreach (StructureStudioView::Plane plane,
+             QList<StructureStudioView::Plane>() << StructureStudioView::Top << StructureStudioView::Angled)
+    {
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        view.resize(640, 480);
+        view.setPlane(plane);
+        auto shot = [&view]() {
+            QImage img(view.size(), QImage::Format_ARGB32);
+            img.fill(Qt::black);
+            view.render(&img);
+            return img;
+        };
+        const QString where = QString("plane %1").arg(int(plane));
+        props->setStagePieceVisible(MonitorProperties::ApronPiece, false);
+        QVERIFY(props->apronPlatform() == nullptr);
+        const QImage without = shot();
+        props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
+        QVERIFY(props->apronPlatform() != nullptr);
+        QVERIFY(view.everyStructure().contains(qMakePair(StructureStudioView::PlatformKind,
+                                                         props->apronPlatform()->id())));
+        const QImage with = shot();
+        // On the apron, out past the deck: deck there now, in the deck's colour.
+        const QPoint at = view.w2s(QVector3D(3.0f, 6.0f, 1.0f)).toPoint();
+        QVERIFY2(QRect(QPoint(0, 0), view.size()).contains(at), qPrintable(where));
+        const QColor was(without.pixel(at)), is(with.pixel(at));
+        QVERIFY2(was != is, qPrintable(QString("%1: %2").arg(where, is.name())));
+        QVERIFY2(is.red() > is.blue() + 20, qPrintable(QString("%1: %2 -> %3").arg(where, was.name(), is.name())));
+        // No marks were drawn for it: it is the deck that shows.
+        QVERIFY2(!view.m_stageMarkLabels.join("|").contains("Curtain"), qPrintable(where));
+    }
+    // It stands on the floor (the deck's height), not on the deck.
+    QCOMPARE(props->platformBaseZ(props->apronPlatform()->id()), 0.0f);
+    QCOMPARE(props->platformHeightAt(3.0f, 6.0f), 1.0f);
+}
+
+/* Q145: the Rig Overview's controls are in a footer bar under the picture,
+   as the Lighting Studio plot's are -- Show (with Target positions) and
+   Plot layers on the left, View on the right -- the window's own title bar
+   as it was. */
+void Monitor_Test::theRigOverviewHasAFooterBar()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    mon.showStageOverview();
+    QDockWidget *dock = mon.m_overviewDlg;
+    QVERIFY(dock != nullptr && mon.m_overviewView != nullptr);
+    dock->resize(1100, 760);
+    QWidget *footer = dock->findChild<QWidget *>(QStringLiteral("rigFooter"));
+    QVERIFY(footer != nullptr);
+    // In a ShrinkableBar (a scroll area), as the plot's footer is.
+    bool inBar = false;
+    for (QWidget *w = footer->parentWidget(); w != nullptr && w != dock; w = w->parentWidget())
+        inBar = inBar || dynamic_cast<ShrinkableBar *>(w) != nullptr;
+    QVERIFY(inBar);
+    QVERIFY(dock->findChild<QDialogButtonBox *>() == nullptr);   // no Close row: the title bar's
+    QVERIFY(dock->features() & QDockWidget::DockWidgetClosable);
+    QApplication::processEvents();
+    // Below the picture.
+    const QPoint viewBottom = mon.m_overviewView->mapTo(dock, QPoint(0, mon.m_overviewView->height()));
+    const QPoint footerTop = footer->mapTo(dock, QPoint(0, 0));
+    QVERIFY2(footerTop.y() >= viewBottom.y() - 1,
+             qPrintable(QString("footer at %1, view ends at %2").arg(footerTop.y()).arg(viewBottom.y())));
+    foreach (const char *name, QList<const char *>() << "rigView" << "rigShow" << "rigLayers" << "rigLive"
+                                                     << "rigBeams" << "rigRoom" << "rigHaze" << "rigQuality"
+                                                     << "rigGpu" << "rigRate" << "rigFocus" << "rigFit")
+        QVERIFY2(footer->findChild<QWidget *>(QString::fromLatin1(name)) != nullptr, name);
+    // View first, Room second, as they always were.
+    const QList<QComboBox *> combos = dock->findChildren<QComboBox *>();
+    QVERIFY(combos.size() >= 2);
+    QCOMPARE(combos.at(0)->objectName(), QStringLiteral("rigView"));
+    QCOMPARE(combos.at(1)->objectName(), QStringLiteral("rigRoom"));
+    // View on the right, Show on the left, as on the plot.
+    QWidget *show = footer->findChild<QWidget *>(QStringLiteral("rigShow"));
+    QWidget *viewCombo = footer->findChild<QWidget *>(QStringLiteral("rigView"));
+    QVERIFY(show->geometry().x() < viewCombo->geometry().x());
+    combos.at(0)->setCurrentIndex(int(StructureStudioView::Top));
+    QCOMPARE(mon.m_overviewView->m_plane, StructureStudioView::Top);
+
+    // Show > Target positions: the show's, the same as the plot's.
+    QToolButton *showBtn = qobject_cast<QToolButton *>(show);
+    QVERIFY(showBtn != nullptr && showBtn->menu() != nullptr);
+    QAction *positions = nullptr;
+    foreach (QAction *a, showBtn->menu()->actions())
+        if (a->objectName() == QLatin1String("rigShowTargetPositions"))
+            positions = a;
+    QVERIFY(positions != nullptr);
+    emit showBtn->menu()->aboutToShow();
+    QVERIFY(positions->isChecked());
+    positions->setChecked(false);
+    QVERIFY(!props->targetPositionsVisible());
+    QAction *plotPositions = mon.findChild<QAction *>(QStringLiteral("showTargetPositions"));
+    QVERIFY(plotPositions != nullptr);
+    emit qobject_cast<QMenu *>(plotPositions->parent())->aboutToShow();
+    QVERIFY(!plotPositions->isChecked());
+
+    // Plot layers lists the stage pieces under the Stage layer.
+    props->setStagePieceVisible(MonitorProperties::NumberPiece, true);
+    QToolButton *layers = footer->findChild<QToolButton *>(QStringLiteral("rigLayers"));
+    emit layers->menu()->aboutToShow();
+    QAction *numberAct = nullptr;
+    foreach (QAction *a, layers->menu()->actions())
+        if (a->objectName() == QStringLiteral("rigStagePiece%1").arg(int(MonitorProperties::NumberPiece)))
+            numberAct = a;
+    QVERIFY(numberAct != nullptr && numberAct->isChecked());
+    numberAct->setChecked(false);
+    QVERIFY(!props->stagePieceVisible(MonitorProperties::NumberPiece));
+
+    // Fit: back to the whole rig after a zoom.
+    mon.m_overviewView->m_zoomed = true;
+    footer->findChild<QToolButton *>(QStringLiteral("rigFit"))->click();
+    QVERIFY(!mon.m_overviewView->m_zoomed);
+    dock->close();
 }
 
 void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
@@ -871,19 +1347,28 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
             return out;
         };
 
-        QMenu *marks = mon.findChild<QMenu *>(QStringLiteral("stageMarksMenu"));
-        QVERIFY(marks != nullptr);
-        auto action = [marks](const char *name) {
-            foreach (QAction *a, marks->actions())
-                if (a->objectName() == QLatin1String(name))
-                    return a;
-            return static_cast<QAction *>(nullptr);
+        /* Q147: no Stage marks menu now -- the marks are pieces on the Stage
+           layer, shown from Plot layers, their menus or their properties,
+           all of which set the show and say so (stageMarksChanged()). */
+        QVERIFY(mon.findChild<QMenu *>(QStringLiteral("stageMarksMenu")) == nullptr);
+        struct Mark
+        {
+            Monitor *mon;
+            MonitorProperties *props;
+            MonitorProperties::StageMark flag;
+            void setChecked(bool on) const
+            {
+                props->setStageMarkVisible(flag, on);
+                mon->stageMarksChanged();
+            }
+            bool isChecked() const { return props->stageMarkVisible(flag); }
         };
-        QAction *centre = action("stageMarkCentreMark");
-        QAction *curtain = action("stageMarkCurtainLine");
-        QAction *number = action("stageMarkNumberLine");
-        QAction *centreLine = action("stageMarkCentreLine");
-        QVERIFY(centre && curtain && number && centreLine);
+        const Mark centreMark { &mon, props, MonitorProperties::CentreMarkFlag };
+        const Mark curtainMark { &mon, props, MonitorProperties::CurtainLineFlag };
+        const Mark numberMark { &mon, props, MonitorProperties::NumberLineFlag };
+        const Mark centreLineMark { &mon, props, MonitorProperties::CentreLineFlag };
+        const Mark *centre = &centreMark, *curtain = &curtainMark, *number = &numberMark,
+                   *centreLine = &centreLineMark;
 
         centre->setChecked(true);
         QVERIFY(props->stageMarkVisible(MonitorProperties::CentreMarkFlag));
@@ -998,12 +1483,13 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         gv->resetViewZoom();
         gv->updateStageMarks();
 
-        // Moved from the menu: the curtain line goes there.
-        QCheckBox *autoChk = marks->findChild<QCheckBox *>(QStringLiteral("curtainLineYAuto"));
-        QDoubleSpinBox *spin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("curtainLineY"));
+        // Moved from its properties: the curtain line goes there.
+        StagePieceDialog curtainProps(props, MonitorProperties::CurtainPiece, &mon);
+        QObject::connect(&curtainProps, &StagePieceDialog::changed, &mon, &Monitor::stageMarksChanged);
+        QCheckBox *autoChk = curtainProps.findChild<QCheckBox *>(QStringLiteral("curtainLineYAuto"));
+        QDoubleSpinBox *spin = curtainProps.findChild<QDoubleSpinBox *>(QStringLiteral("curtainLineY"));
         QVERIFY(autoChk != nullptr && spin != nullptr);
-        // Entered as a distance upstage of the front of the stage (y 8 here).
-        emit marks->aboutToShow();
+        // Entered as a distance upstage of the front of the deck (y 8 here).
         QVERIFY(autoChk->isChecked());
         QCOMPARE(spin->value(), 3.0);                   // the drape at y 5
         QVERIFY(!spin->isEnabled());
@@ -1021,14 +1507,16 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         QCOMPARE(spin->value(), 3.0);
         // The number line is set from the curtain line (y 5): downstage of it
         // is positive, and the row says so in words.
-        QCheckBox *numAuto = marks->findChild<QCheckBox *>(QStringLiteral("numberLineYAuto"));
-        QDoubleSpinBox *numSpin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("numberLineY"));
-        QLabel *numWords = marks->findChild<QLabel *>(QStringLiteral("numberLineYWords"));
-        QLabel *curtainWords = marks->findChild<QLabel *>(QStringLiteral("curtainLineYWords"));
+        StagePieceDialog numberProps(props, MonitorProperties::NumberPiece, &mon);
+        QObject::connect(&numberProps, &StagePieceDialog::changed, &mon, &Monitor::stageMarksChanged);
+        QCheckBox *numAuto = numberProps.findChild<QCheckBox *>(QStringLiteral("numberLineYAuto"));
+        QDoubleSpinBox *numSpin = numberProps.findChild<QDoubleSpinBox *>(QStringLiteral("numberLineY"));
+        QLabel *numWords = numberProps.findChild<QLabel *>(QStringLiteral("numberLineYWords"));
+        QLabel *curtainWords = curtainProps.findChild<QLabel *>(QStringLiteral("curtainLineYWords"));
         QVERIFY(numAuto != nullptr && numSpin != nullptr && numWords != nullptr && curtainWords != nullptr);
         QCOMPARE(numSpin->value(), 3.0);                // automatic: on the front, y 8
         QCOMPARE(numWords->text(), QStringLiteral("3.0 m DS of curtain line"));
-        QCOMPARE(curtainWords->text(), QStringLiteral("3.0 m US of the front of the stage"));
+        QCOMPARE(curtainWords->text(), QStringLiteral("3.0 m US of the front of the deck"));
         numAuto->setChecked(false);
         numSpin->setValue(1.5);
         QCOMPARE(props->numberLineY(), 6.5f);
@@ -1038,20 +1526,23 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         QCOMPARE(numWords->text(), QStringLiteral("0.5 m US of curtain line"));
         // A show saved with a line set (its plan Y): the box shows the distance.
         props->setNumberLineY(6.0f);
-        emit marks->aboutToShow();
+        numberProps.sync();
         QVERIFY(!numAuto->isChecked());
         QCOMPARE(numSpin->value(), 1.0);
         numAuto->setChecked(true);
         QVERIFY(props->numberLineIsAuto());
 
-        // The apron: from the curtain line to the front, tinted and
+        // The apron, shown: its own deck from the curtain line to the front,
         // dimensioned at centre (a bare floor: the grid's front, 3 m).
+        QVERIFY(labels("apron").isEmpty());
+        props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
+        mon.stageMarksChanged();
         QCOMPARE(labels("apron"), QStringList() << "Apron 3.0 m");
-        bool tinted = false;
-        foreach (QGraphicsItem *it, ofKind("apron"))
-            if (auto *pi = dynamic_cast<QGraphicsPathItem *>(it))
-                tinted = !pi->path().isEmpty() && pi->zValue() < 0.0;   // under the rig
-        QVERIFY(tinted);
+        QVERIFY(gv->m_apronDeckItem != nullptr);
+        QVERIFY(props->apronPlatform() != nullptr);
+        QCOMPARE(gv->m_apronDeckItem->platform(), props->apronPlatform());
+        QVERIFY(gv->m_apronDeckItem->zValue() < 0.0);       // under the rig
+        QVERIFY(!gv->m_platformItems.contains(props->apronPlatform()->id()));
 
         // A pipe over the audience says how far it is from the curtain line;
         // one upstage of it doesn't.
@@ -1072,27 +1563,30 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         gv->updateStageMarks();
         QVERIFY(labels("curtainOffset").isEmpty());
 
-        // Apron depth builds the apron on the deck: one undo step a change.
-        QDoubleSpinBox *apronSpin = marks->findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"));
-        QVERIFY(apronSpin != nullptr);
-        emit marks->aboutToShow();
-        QVERIFY2(!apronSpin->isEnabled(), "a bare floor has no deck to add an apron to");
+        // Apron depth from its properties: its own deck, deeper.
         StagePlatform *stage = props->addPlatform();
         const quint32 stageId = stage->id();
         stage->setOriginX(1.0f); stage->setOriginY(1.0f);
         stage->setWidth(8.0f); stage->setDepth(5.0f);
         gv->updatePlatforms();
-        emit marks->aboutToShow();
-        QVERIFY(apronSpin->isEnabled());
+        StagePieceDialog apronProps(props, MonitorProperties::ApronPiece, &mon);
+        QObject::connect(&apronProps, &StagePieceDialog::changed, &mon, &Monitor::stageMarksChanged);
+        QDoubleSpinBox *apronSpin = apronProps.findChild<QDoubleSpinBox *>(QStringLiteral("apronDepth"));
+        QCheckBox *apronAuto = apronProps.findChild<QCheckBox *>(QStringLiteral("apronDepthAuto"));
+        QVERIFY(apronSpin != nullptr && apronAuto != nullptr);
+        QVERIFY(apronAuto->isChecked());
         QCOMPARE(apronSpin->value(), 1.0);              // drape at 5, deck front at 6
-        QVERIFY(props->apronPlatform() == nullptr);
+        apronAuto->setChecked(false);
         apronSpin->setValue(2.0);
         QVERIFY(props->apronPlatform() != nullptr);
+        QCOMPARE(stage->depth(), 5.0f);                 // the deck is not touched
         QVERIFY(qAbs(props->downstageEdgeY() - 7.0f) < 1e-4f);
         QCOMPARE(labels("apron"), QStringList() << "Apron 2.0 m");
-        QVERIFY(mon.canUndo());
-        mon.undo();
+        props->setStagePieceVisible(MonitorProperties::ApronPiece, false);
+        props->setApronAuto(true);
+        mon.stageMarksChanged();
         QVERIFY(props->apronPlatform() == nullptr);
+        QVERIFY(gv->m_apronDeckItem == nullptr);
         QCOMPARE(props->downstageEdgeY(), 6.0f);
         props->removePlatform(stageId);
         gv->updatePlatforms();
@@ -1129,10 +1623,12 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         ti = gv->m_targetItems.value(soloist->id());
         QCOMPARE(ti->positionReadout(), QString::fromUtf8("SL 2.4 \u00B7 US 0.1 m"));
 
-        // Q125: Stage marks > Target positions hides the readouts, and is the
+        // Q125: Show > Target positions hides the readouts, and is the
         // show's to keep -- but no undo step.
-        QAction *positions = action("stageMarkTargetPositions");
+        QAction *positions = mon.findChild<QAction *>(QStringLiteral("showTargetPositions"));
         QVERIFY(positions != nullptr);
+        QMenu *marks = qobject_cast<QMenu *>(positions->parent());
+        QVERIFY(marks != nullptr);
         emit marks->aboutToShow();
         QVERIFY(positions->isChecked());
         doc->resetModified();
@@ -1155,9 +1651,8 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         ti = gv->m_targetItems.value(soloist->id());
         QCOMPARE(ti->positionReadout(), QString::fromUtf8("SL 2.4 \u00B7 US 0.1 m"));
 
-        // A show loaded later: the menu ticks what it has.
+        // A show loaded later: the marks it has.
         props->setStageMarks(MonitorProperties::NumberLineFlag);
-        emit marks->aboutToShow();
         QVERIFY(number->isChecked());
         QVERIFY(!centre->isChecked());
 
@@ -1201,10 +1696,10 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
             QVERIFY2(yellow > 30, qPrintable(QString("plane %1: %2 yellow pixels").arg(int(plane)).arg(yellow)));
         }
 
-        /* With the curtain line, as on the plot: the apron (the deck from the
-           drape at y 5 to its front at 6.5) tinted and dimensioned, and the
-           FOH truss out over the audience labelled. A small overview (its
-           smallest, 360 x 320) keeps the tint and drops the words. */
+        /* With the curtain line and the apron, as on the plot: the apron (the
+           deck from the drape at y 5 to its front at 6.5) its own deck and
+           dimensioned, and the FOH truss out over the audience labelled. A
+           small overview (its smallest, 360 x 320) drops the words. */
         Truss *fohOver = props->addTruss();
         fohOver->setName("FOH");
         fohOver->setType(Truss::Horizontal);
@@ -1227,14 +1722,18 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
                     return img;
                 };
                 const QString where = QString("plane %1, %2 px").arg(int(plane)).arg(size.width());
-                props->setStageMarks(MonitorProperties::CurtainLineFlag);
+                props->setStageMarks(MonitorProperties::CurtainLineFlag | MonitorProperties::ApronFlag);
                 props->setCurtainLineUpstage(0.0f);             // at the front: no apron
                 QCOMPARE(props->apronDepth(), 0.0f);
-                const QImage flush = shot();
+                QVERIFY(props->apronPlatform() == nullptr);
+                shot();
                 QVERIFY2(!view.m_stageMarkLabels.join("|").contains("Apron"), qPrintable(where));
                 props->setCurtainLineAuto();                    // the drape at y 5
                 QCOMPARE(props->apronDepth(), 1.5f);
-                const QImage apron = shot();
+                QVERIFY(props->apronPlatform() != nullptr);
+                QVERIFY(view.everyStructure().contains(qMakePair(StructureStudioView::PlatformKind,
+                                                                 props->apronPlatform()->id())));
+                shot();
                 const QStringList words = view.m_stageMarkLabels;
                 if (size.width() >= 640)
                 {
@@ -1247,12 +1746,6 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
                              qPrintable(where + ": " + words.join("|") + QString(" %1 px/m").arg(
                                  QLineF(view.w2s(QVector3D(4, 5, 1)), view.w2s(QVector3D(5, 5, 1))).length())));
                 }
-                // The tint: the deck stage right of centre, on the apron, reads redder.
-                const QPoint at = view.w2s(QVector3D(3.5f, 5.75f, 1.005f)).toPoint();
-                QVERIFY2(QRect(QPoint(0, 0), size).contains(at), qPrintable(where));
-                const QRgb was = flush.pixel(at), is = apron.pixel(at);
-                QVERIFY2(qRed(is) - qBlue(is) > qRed(was) - qBlue(was) + 6,
-                         qPrintable(QString("%1: %2 -> %3").arg(where, QColor(was).name(), QColor(is).name())));
             }
         }
 
@@ -1264,7 +1757,7 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
             StructureStudioView view(doc, StructureStudioView::StageKind, 0);
             view.resize(640, 480);
             view.setPlane(StructureStudioView::Angled);
-            props->setStageMarks(MonitorProperties::CurtainLineFlag);
+            props->setStageMarks(MonitorProperties::CurtainLineFlag | MonitorProperties::ApronFlag);
             props->setCurtainLineAuto();
             QImage img(view.size(), QImage::Format_ARGB32);
             const QString apronText("Apron 1.5 m");

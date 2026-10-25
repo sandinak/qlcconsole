@@ -119,6 +119,8 @@ add_library(${module_name}
     monitor/fountaindiagram.cpp monitor/fountaindiagram.h
     monitor/beamoptics.cpp monitor/beamoptics.h
     monitor/gobowheelsdialog.cpp monitor/gobowheelsdialog.h
+    monitor/stagepieceitem.cpp monitor/stagepieceitem.h
+    monitor/stagepiecedialog.cpp monitor/stagepiecedialog.h
     monitor/standitem.cpp monitor/standitem.h
     monitor/hangeritem.cpp monitor/hangeritem.h
     monitor/toweritem.cpp monitor/toweritem.h

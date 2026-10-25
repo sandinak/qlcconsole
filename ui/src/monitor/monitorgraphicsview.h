@@ -174,6 +174,11 @@ public:
      *  the centre mark and line, the curtain line, the number line) where
      *  the show has them. Top view only; labelled, and in no one's way. */
     void updateStageMarks();
+    /** The stage piece the plot has selected (MonitorProperties::StagePiece),
+     *  or -1. */
+    int selectedStagePiece() const;
+    /** The plot's item for a stage piece (tests, the Layers list). */
+    class StagePieceItem *stagePieceItem(int piece) const { return m_stagePieceItems.value(piece, nullptr); }
     /** The stage marks' full centre line is shown where the teal centre
      *  cross's up-and-down arm would be (Top view): that arm is not drawn. */
     bool centreLineReplacesCross() const;
@@ -1114,6 +1119,12 @@ signals:
      *  the enabled state of the Group / Ungroup actions. */
     void mapSelectionChanged();
 
+    /** A stage piece was dragged, or shown, hidden or locked from its menu:
+     *  what reads from it (the targets' positions, the Rig Overview) follows. */
+    void stagePiecesChanged();
+    /** Open a stage piece's properties (MonitorProperties::StagePiece). */
+    void stagePieceDoubleClicked(int piece);
+
     /** Fixtures were dropped on the plot from the Inventory panel, at this
      *  scene position. The host places them (it owns layers and undo). */
     void fixturesDropped(const QList<quint32> &fixtureIds, QPointF scenePos);
@@ -1175,6 +1186,22 @@ private:
      *  Each carries its kind in data(0): "centreMark", "centreLine",
      *  "curtainLine", "numberLine". */
     QList<QGraphicsItem *> m_stageMarkItems;
+    /** The stage pieces as plot objects (MonitorProperties::StagePiece ->
+     *  its item): kept, not rebuilt, so one being dragged stays itself. */
+    QHash<int, class StagePieceItem *> m_stagePieceItems;
+    /** The apron's own deck, drawn as a deck but picked as the apron piece. */
+    PlatformItem *m_apronDeckItem = nullptr;
+    PlatformItem *newPlatformItem(class StagePlatform *p);
+    /** A stage piece being dragged: the rig before it, and how far the
+     *  piece's line was from the pointer when it was taken hold of. */
+    QByteArray m_stageDragBefore;
+    double m_stageDragOffset = 0.0;
+    void stagePieceDragStarted(int piece, const QPointF &scenePos);
+    void stagePieceDragMoved(int piece, const QPointF &scenePos);
+    void stagePieceDragFinished(int piece, bool moved);
+    /** Reshape and place the stage pieces' items (updateStageMarks()). */
+    void updateStagePieceItems();
+    void buildStagePieceMenu(class QMenu *menu, int piece, bool inList);
 
     /** Number of sub-divisions drawn inside each grid cell */
     int m_gridSubdivisions;

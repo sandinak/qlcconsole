@@ -32,6 +32,7 @@
 #include <cmath>
 
 #include <QLocale>
+#include <QScopedValueRollback>
 #include "monitorproperties.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
@@ -70,6 +71,8 @@
 #define KXMLQLCMonitorCurtainLineY  QStringLiteral("CurtainLineY")
 #define KXMLQLCMonitorNumberLineY   QStringLiteral("NumberLineY")
 #define KXMLQLCMonitorTargetPositions QStringLiteral("TargetPositions")
+#define KXMLQLCMonitorStagePieces   QStringLiteral("StagePieces")
+#define KXMLQLCMonitorStagePiece    QStringLiteral("StagePiece")
 
 #define KXMLQLCMonitorCommonBackground  QStringLiteral("Background")
 #define KXMLQLCMonitorBgColor           QStringLiteral("BackgroundColor")
@@ -297,6 +300,7 @@ void MonitorProperties::convertGridUnits(GridUnits units)
                            float(cur.y() * factor),
                            float(qMax(0.001, cur.z() * factor)));
     m_gridUnits = units;
+    syncApron();        // an automatic curtain line is a typical apron in the unit
 }
 
 MonitorProperties::GridUnits MonitorProperties::gridUnitsFor(MeasurementUnits::LengthUnit unit)
@@ -308,9 +312,100 @@ MonitorProperties::GridUnits MonitorProperties::gridUnitsFor(MeasurementUnits::L
  * Stage reference marks
  *********************************************************************/
 
+void MonitorProperties::setStageMarks(int marks)
+{
+    m_stageMarks = marks & 0x1F;
+    if (m_stageMarks & (CentreMarkFlag | CentreLineFlag))
+        m_centreParts = m_stageMarks & (CentreMarkFlag | CentreLineFlag);
+    if (m_stageMarks != NoStageMarks && !m_loadingXml)
+        ensureStageLayer();
+    syncApron();
+}
+
 void MonitorProperties::setStageMarkVisible(StageMark mark, bool on)
 {
     setStageMarks(on ? (m_stageMarks | mark) : (m_stageMarks & ~mark));
+}
+
+bool MonitorProperties::stageMarkShown(StageMark mark) const
+{
+    return stageMarkVisible(mark) && (!hasStageLayer() || layer(m_stageLayerId).visible);
+}
+
+QList<MonitorProperties::StagePiece> MonitorProperties::stagePieces()
+{
+    return QList<StagePiece>() << CentrePiece << CurtainPiece << NumberPiece << ApronPiece;
+}
+
+QString MonitorProperties::stagePieceName(StagePiece piece)
+{
+    switch (piece)
+    {
+        case CentrePiece:  return tr("Centre line / DSC mark");
+        case CurtainPiece: return tr("Curtain line");
+        case NumberPiece:  return tr("Number line");
+        case ApronPiece:   return tr("Apron");
+    }
+    return QString();
+}
+
+namespace
+{
+    int stagePieceFlags(MonitorProperties::StagePiece piece)
+    {
+        switch (piece)
+        {
+            case MonitorProperties::CentrePiece:
+                return MonitorProperties::CentreMarkFlag | MonitorProperties::CentreLineFlag;
+            case MonitorProperties::CurtainPiece: return MonitorProperties::CurtainLineFlag;
+            case MonitorProperties::NumberPiece:  return MonitorProperties::NumberLineFlag;
+            case MonitorProperties::ApronPiece:   return MonitorProperties::ApronFlag;
+        }
+        return 0;
+    }
+}
+
+bool MonitorProperties::stagePieceVisible(StagePiece piece) const
+{
+    return (m_stageMarks & stagePieceFlags(piece)) != 0;
+}
+
+void MonitorProperties::setStagePieceVisible(StagePiece piece, bool on)
+{
+    if (stagePieceVisible(piece) == on)
+        return;
+    int marks = m_stageMarks & ~stagePieceFlags(piece);
+    if (on)
+        marks |= (piece == CentrePiece) ? (m_centreParts != 0 ? m_centreParts : int(CentreMarkFlag))
+                                        : stagePieceFlags(piece);
+    setStageMarks(marks);
+}
+
+void MonitorProperties::setStagePieceLocked(StagePiece piece, bool on)
+{
+    m_stagePieceLocks = on ? (m_stagePieceLocks | (1 << int(piece)))
+                           : (m_stagePieceLocks & ~(1 << int(piece)));
+}
+
+bool MonitorProperties::stagePieceShown(StagePiece piece) const
+{
+    return stagePieceVisible(piece) && (!hasStageLayer() || layer(m_stageLayerId).visible);
+}
+
+bool MonitorProperties::stagePieceMovable(StagePiece piece) const
+{
+    return stagePieceShown(piece) && !stagePieceLocked(piece)
+           && (!hasStageLayer() || !layer(m_stageLayerId).locked);
+}
+
+quint32 MonitorProperties::ensureStageLayer()
+{
+    if (hasStageLayer())
+        return m_stageLayerId;
+    m_stageLayerId = addLayer(tr("Stage"));
+    if (StagePlatform *apron = apronPlatform())
+        apron->setLayerId(m_stageLayerId);
+    return m_stageLayerId;
 }
 
 namespace
@@ -337,12 +432,14 @@ namespace
      *  5 cm) that reaches further downstage -- an apron built as its own
      *  piece -- in order, upstage to downstage. Steps and risers stacked on
      *  a deck are not the stage. Empty on a bare floor. */
-    QList<StagePlatform *> stageChain(const QList<StagePlatform *> &all, float cx)
+    QList<StagePlatform *> stageChain(const QList<StagePlatform *> &all, float cx,
+                                      quint32 apronId)
     {
         QList<StagePlatform *> decks;
         foreach (StagePlatform *p, all)
         {
-            if (p == nullptr || p->isSteps() || p->stackable() || !squareOn(p->rotation()))
+            if (p == nullptr || p->id() == apronId || p->isSteps() || p->stackable()
+                || !squareOn(p->rotation()))
                 continue;
             if (cx < p->originX() || cx > p->originX() + p->width())
                 continue;
@@ -379,72 +476,290 @@ namespace
     }
 }
 
-float MonitorProperties::downstageEdgeY() const
+float MonitorProperties::deckFrontY() const
 {
     const float cx = stageCentre().x();
-    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), cx);
+    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), cx, m_apronPlatformId);
     if (chain.isEmpty())
         return m_gridSize.z() * gridUnitMetres();     // the grid's front edge
     return chain.last()->frontEdgeAt(cx);
 }
 
+float MonitorProperties::downstageEdgeY() const
+{
+    const float front = deckFrontY();
+    if (const StagePlatform *apron = apronPlatform())
+        return qMax(front, apron->frontEdgeAt(stageCentre().x()));
+    return front;
+}
+
 QList<StagePlatform *> MonitorProperties::stageDecks() const
 {
-    return stageChain(m_platforms.values(), stageCentre().x());
+    return stageChain(m_platforms.values(), stageCentre().x(), m_apronPlatformId);
 }
 
 const StagePlatform *MonitorProperties::mainDeck() const
 {
-    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), stageCentre().x());
+    const QList<StagePlatform *> chain = stageDecks();
     return chain.isEmpty() ? nullptr : chain.first();
 }
 
 StagePlatform *MonitorProperties::apronPlatform() const
 {
-    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), stageCentre().x());
-    return chain.size() > 1 ? chain.last() : nullptr;
+    return m_platforms.value(m_apronPlatformId, nullptr);
+}
+
+void MonitorProperties::setApronAuto(bool on)
+{
+    if (!on && m_apronAuto)
+    {
+        // Set from here on: where it is now, to start from.
+        m_apronDepth = qMax(0.0f, autoApronDepth());
+        const StagePlatform *deck = mainDeck();
+        m_apronFrontCurve = (deck != nullptr) ? deck->frontCurve() : 0.0f;
+    }
+    m_apronAuto = on;
+    syncApron();
+}
+
+float MonitorProperties::autoApronDepth() const
+{
+    const StagePlatform *deck = mainDeck();
+    const float front = (deck != nullptr) ? deck->frontEdgeAt(stageCentre().x())
+                                          : m_gridSize.z() * gridUnitMetres();
+    return front - curtainLineY();
+}
+
+float MonitorProperties::apronDepth() const
+{
+    return qMax(0.0f, m_apronAuto ? autoApronDepth() : m_apronDepth);
 }
 
 bool MonitorProperties::setApronDepth(float metres)
 {
-    if (!std::isfinite(metres))
+    if (!std::isfinite(metres) || metres < 0.0f)
         return false;
-    const float cx = stageCentre().x();
-    const QList<StagePlatform *> chain = stageChain(m_platforms.values(), cx);
-    if (chain.isEmpty())
-        return false;
-    StagePlatform *deck = chain.first();
-    const float deckFront = deck->frontEdgeAt(cx);
+    if (m_apronAuto)
+        setApronAuto(false);
+    m_apronDepth = metres;
+    syncApron();
+    return true;
+}
 
-    // An automatic curtain line found from nothing would follow the new front.
-    if (curtainLineIsAuto() && curtainLineScenery() == nullptr)
-        setCurtainLineY(curtainLineY());
-    const float target = curtainLineY() + metres;
-
-    if (chain.size() > 1)
+float MonitorProperties::apronFrontCurve() const
+{
+    if (m_apronAuto)
     {
-        StagePlatform *apron = chain.last();
-        const float behind = chain.at(chain.size() - 2)->frontEdgeAt(cx);
-        if (target <= behind + 0.01f)
-        {
-            removePlatform(apron->id());     // what is behind it reaches
-            return true;
-        }
-        apron->setDepth(apron->depth() + (target - apron->frontEdgeAt(cx)));
+        const StagePlatform *deck = mainDeck();
+        return (deck != nullptr) ? deck->frontCurve() : 0.0f;
+    }
+    return m_apronFrontCurve;
+}
+
+void MonitorProperties::setApronFrontCurve(float metres)
+{
+    if (!std::isfinite(metres))
+        return;
+    if (m_apronAuto)
+        setApronAuto(false);
+    m_apronFrontCurve = qMax(0.0f, metres);
+    syncApron();
+}
+
+bool MonitorProperties::syncApron()
+{
+    if (m_loadingXml)
+        return false;
+    const float depth = apronDepth();
+    StagePlatform *apron = apronPlatform();
+    if (!stageMarkVisible(ApronFlag) || depth < 0.01f)
+    {
+        if (apron == nullptr)
+            return false;
+        removePlatform(apron->id());     // the id is kept, to come back as
         return true;
     }
-    if (target <= deckFront + 0.01f)
-        return false;
 
-    StagePlatform *apron = addPlatform();
-    apron->setName(tr("Apron"));
-    apron->setOriginX(deck->originX());
-    apron->setOriginY(deckFront);
-    apron->setWidth(deck->width());
-    apron->setDepth(target - deckFront);
-    apron->setHeight(deck->height());
-    apron->setColor(deck->color());
-    return true;
+    const StagePlatform *deck = mainDeck();
+    const float unit = gridUnitMetres();
+    const float x0 = (deck != nullptr) ? deck->originX() : 0.0f;
+    const float width = (deck != nullptr) ? deck->width() : m_gridSize.x() * unit;
+    const float height = (deck != nullptr) ? deck->height() : 0.0f;
+    const QColor colour = (deck != nullptr && deck->color().isValid()) ? deck->color() : QColor(70, 74, 84);
+    const float curve = apronFrontCurve();
+    const float y0 = curtainLineY();
+
+    bool changed = false;
+    if (apron == nullptr)
+    {
+        quint32 id = m_apronPlatformId;
+        if (id == 0xFFFFFFFF || m_platforms.contains(id))
+            id = nextPlatformId();
+        apron = new StagePlatform(id, this);
+        m_platforms.insert(id, apron);
+        m_apronPlatformId = id;
+        apron->setName(tr("Apron"));
+        apron->setSolid(false);         // it lies over the deck, not beside it
+        apron->setStackable(false);
+        changed = true;
+    }
+    auto differs = [](float a, float b) { return std::fabs(a - b) > 1e-6f; };
+    if (differs(apron->originX(), x0) || differs(apron->originY(), y0) || differs(apron->width(), width)
+        || differs(apron->depth(), depth) || differs(apron->height(), height)
+        || differs(apron->frontCurve(), qMin(curve, qMin(width / 2.0f, depth)))
+        || apron->color() != colour || apron->layerId() != m_stageLayerId
+        || differs(apron->rotation(), 0.0f))
+    {
+        apron->setOriginX(x0);
+        apron->setOriginY(y0);
+        apron->setWidth(width);
+        apron->setDepth(depth);
+        apron->setHeight(height);
+        apron->setFrontCurve(curve);
+        apron->setColor(colour);
+        apron->setRotation(0.0f);
+        apron->setLayerId(m_stageLayerId);
+        changed = true;
+    }
+    const bool locked = hasStageLayer() && layer(m_stageLayerId).locked;
+    if (apron->locked() != locked)
+        apron->setLocked(locked);
+    return changed;
+}
+
+namespace
+{
+    const char *stagePieceKind(MonitorProperties::StagePiece piece)
+    {
+        switch (piece)
+        {
+            case MonitorProperties::CentrePiece:  return "Centre";
+            case MonitorProperties::CurtainPiece: return "Curtain";
+            case MonitorProperties::NumberPiece:  return "Number";
+            case MonitorProperties::ApronPiece:   return "Apron";
+        }
+        return "";
+    }
+    QString metresText(float m) { return QString::number(double(m)); }
+}
+
+void MonitorProperties::saveStagePieces(QXmlStreamWriter *doc) const
+{
+    /* Only once used -- a piece shown, moved, set or locked -- so a show
+       that never used them saves as it always has. */
+    const bool used = m_stageMarks != NoStageMarks || m_curtainLineSet || m_numberLineSet
+                      || !m_apronAuto || m_stagePieceLocks != 0 || hasStageLayer();
+    if (!used)
+        return;
+    doc->writeStartElement(KXMLQLCMonitorStagePieces);
+    if (hasStageLayer())
+        doc->writeAttribute(QStringLiteral("Layer"), QString::number(m_stageLayerId));
+    foreach (StagePiece piece, stagePieces())
+    {
+        doc->writeStartElement(KXMLQLCMonitorStagePiece);
+        doc->writeAttribute(QStringLiteral("Kind"), QString::fromLatin1(stagePieceKind(piece)));
+        doc->writeAttribute(QStringLiteral("Visible"), stagePieceVisible(piece) ? "1" : "0");
+        if (stagePieceLocked(piece))
+            doc->writeAttribute(QStringLiteral("Locked"), QStringLiteral("1"));
+        switch (piece)
+        {
+            case CentrePiece:
+            {
+                const int parts = stagePieceVisible(piece) ? (m_stageMarks & (CentreMarkFlag | CentreLineFlag))
+                                                           : m_centreParts;
+                doc->writeAttribute(QStringLiteral("Mark"), (parts & CentreMarkFlag) ? "1" : "0");
+                doc->writeAttribute(QStringLiteral("Line"), (parts & CentreLineFlag) ? "1" : "0");
+            }
+            break;
+            case CurtainPiece:
+                if (m_curtainLineSet)
+                    doc->writeAttribute(QStringLiteral("Y"), metresText(m_curtainLineY));
+            break;
+            case NumberPiece:
+                if (m_numberLineSet)
+                    doc->writeAttribute(QStringLiteral("Y"), metresText(m_numberLineY));
+            break;
+            case ApronPiece:
+                doc->writeAttribute(QStringLiteral("Auto"), m_apronAuto ? "1" : "0");
+                if (!m_apronAuto)
+                {
+                    doc->writeAttribute(QStringLiteral("Depth"), metresText(m_apronDepth));
+                    doc->writeAttribute(QStringLiteral("FrontCurve"), metresText(m_apronFrontCurve));
+                }
+                if (m_apronPlatformId != 0xFFFFFFFF)
+                    doc->writeAttribute(QStringLiteral("Platform"), QString::number(m_apronPlatformId));
+            break;
+        }
+        doc->writeEndElement();
+    }
+    doc->writeEndElement();
+}
+
+void MonitorProperties::loadStagePieces(QXmlStreamReader &root)
+{
+    const QXmlStreamAttributes top = root.attributes();
+    if (top.hasAttribute(QStringLiteral("Layer")))
+        m_stageLayerId = top.value(QStringLiteral("Layer")).toUInt();
+    int marks = NoStageMarks;
+    auto number = [](const QXmlStreamAttributes &a, const QString &name) {
+        return QLocale::c().toFloat(a.value(name).toString());
+    };
+    while (root.readNextStartElement())
+    {
+        if (root.name() != KXMLQLCMonitorStagePiece)
+        {
+            root.skipCurrentElement();
+            continue;
+        }
+        const QXmlStreamAttributes a = root.attributes();
+        const QString kind = a.value(QStringLiteral("Kind")).toString();
+        const bool visible = a.value(QStringLiteral("Visible")).toString() == QLatin1String("1");
+        const bool locked = a.value(QStringLiteral("Locked")).toString() == QLatin1String("1");
+        StagePiece piece = CentrePiece;
+        bool known = true;
+        if (kind == QLatin1String("Centre"))
+        {
+            piece = CentrePiece;
+            int parts = 0;
+            if (a.value(QStringLiteral("Mark")).toString() == QLatin1String("1")) parts |= CentreMarkFlag;
+            if (a.value(QStringLiteral("Line")).toString() == QLatin1String("1")) parts |= CentreLineFlag;
+            m_centreParts = (parts != 0) ? parts : int(CentreMarkFlag);
+            if (visible)
+                marks |= m_centreParts;
+        }
+        else if (kind == QLatin1String("Curtain"))
+        {
+            piece = CurtainPiece;
+            if (visible) marks |= CurtainLineFlag;
+            if (a.hasAttribute(QStringLiteral("Y"))) setCurtainLineY(number(a, QStringLiteral("Y")));
+            else m_curtainLineSet = false;
+        }
+        else if (kind == QLatin1String("Number"))
+        {
+            piece = NumberPiece;
+            if (visible) marks |= NumberLineFlag;
+            if (a.hasAttribute(QStringLiteral("Y"))) setNumberLineY(number(a, QStringLiteral("Y")));
+            else m_numberLineSet = false;
+        }
+        else if (kind == QLatin1String("Apron"))
+        {
+            piece = ApronPiece;
+            if (visible) marks |= ApronFlag;
+            m_apronAuto = a.value(QStringLiteral("Auto")).toString() != QLatin1String("0");
+            if (a.hasAttribute(QStringLiteral("Depth")))
+                m_apronDepth = qMax(0.0f, number(a, QStringLiteral("Depth")));
+            if (a.hasAttribute(QStringLiteral("FrontCurve")))
+                m_apronFrontCurve = qMax(0.0f, number(a, QStringLiteral("FrontCurve")));
+            if (a.hasAttribute(QStringLiteral("Platform")))
+                m_apronPlatformId = a.value(QStringLiteral("Platform")).toUInt();
+        }
+        else
+            known = false;
+        if (known)
+            setStagePieceLocked(piece, locked);
+        root.skipCurrentElement();
+    }
+    m_stageMarks = marks;
 }
 
 const Scenery *MonitorProperties::curtainLineScenery() const
@@ -476,7 +791,7 @@ float MonitorProperties::autoCurtainLineY() const
     if (const Scenery *sc = curtainLineScenery())
         return sc->originY();
     const float apron = (m_gridUnits == Feet) ? 4.0f * 0.3048f : 1.2f;
-    return qMax(0.0f, downstageEdgeY() - apron);
+    return qMax(0.0f, deckFrontY() - apron);
 }
 
 float MonitorProperties::curtainLineY() const
@@ -490,6 +805,13 @@ void MonitorProperties::setCurtainLineY(float metres)
         return;
     m_curtainLineY = metres;
     m_curtainLineSet = true;
+    syncApron();             // the apron starts at it
+}
+
+void MonitorProperties::setCurtainLineAuto()
+{
+    m_curtainLineSet = false;
+    syncApron();
 }
 
 float MonitorProperties::numberLineY() const
@@ -626,6 +948,13 @@ void MonitorProperties::reset()
     m_occlusion.clear();
     m_stageOrigin = QPointF(0, 0);
     m_stageMarks = NoStageMarks;
+    m_centreParts = CentreMarkFlag;
+    m_stagePieceLocks = 0;
+    m_stageLayerId = defaultLayerId;
+    m_apronAuto = true;
+    m_apronDepth = 0.0f;
+    m_apronFrontCurve = 0.0f;
+    m_apronPlatformId = 0xFFFFFFFF;
     m_curtainLineSet = false;
     m_curtainLineY = 0.0f;
     m_numberLineSet = false;
@@ -1200,8 +1529,8 @@ quint32 MonitorProperties::addLayer(const QString &name)
 
 void MonitorProperties::removeLayer(quint32 id)
 {
-    if (id == defaultLayerId)
-        return; // Default is permanent
+    if (id == defaultLayerId || id == m_stageLayerId)
+        return; // Default is permanent, and so is the stage pieces' layer
     m_layers.remove(id);
     if (m_activeLayerId == id)
         m_activeLayerId = defaultLayerId;
@@ -1730,7 +2059,8 @@ void MonitorProperties::removeTruss(quint32 id)
 quint32 MonitorProperties::nextPlatformId() const
 {
     quint32 id = 0;
-    while (m_platforms.contains(id))
+    // The apron's id stays its own while it is hidden.
+    while (m_platforms.contains(id) || id == m_apronPlatformId)
         ++id;
     return id;
 }
@@ -2248,8 +2578,8 @@ float MonitorProperties::targetFigureHeight(const StageTarget *t) const
 float MonitorProperties::platformBaseZ(quint32 id) const
 {
     const StagePlatform *b = m_platforms.value(id, nullptr);
-    if (b == nullptr)
-        return 0.0f;
+    if (b == nullptr || id == m_apronPlatformId)
+        return 0.0f;        // the apron is deck itself, from the floor, over or beside the deck
     // A platform sits ON the deck of another when its CENTRE falls inside that
     // other footprint — a small step block on a big deck rides the deck even
     // though the block is shorter. Height does NOT decide the relationship:
@@ -2670,6 +3000,9 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         qWarning() << Q_FUNC_INFO << "Cannot determine Monitor display mode !";
         return false;
     }
+    // The apron's deck is made once the platforms and the stage are in.
+    QScopedValueRollback<bool> loading(m_loadingXml, true);
+    bool stagePiecesRead = false;
 
     setDisplayMode(DisplayMode(attrs.value(KXMLQLCMonitorDisplay).toString().toInt()));
     if (attrs.hasAttribute(KXMLQLCMonitorShowLabels))
@@ -2700,8 +3033,11 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         setStageOrigin(QPointF(attrs.value(KXMLQLCMonitorOriginX).toString().toDouble(),
                                attrs.value(KXMLQLCMonitorOriginY).toString().toDouble()));
 
+    /* The stage marks as a show saved them before they were stage pieces
+       (Show ▸ Stage marks): read into the pieces below, unless the show has
+       its StagePieces too. */
     if (attrs.hasAttribute(KXMLQLCMonitorStageMarks))
-        setStageMarks(attrs.value(KXMLQLCMonitorStageMarks).toString().toInt());
+        setStageMarks(attrs.value(KXMLQLCMonitorStageMarks).toString().toInt() & 0x0F);
     if (attrs.hasAttribute(KXMLQLCMonitorCurtainLineY))
         setCurtainLineY(QLocale::c().toFloat(attrs.value(KXMLQLCMonitorCurtainLineY).toString()));
     if (attrs.hasAttribute(KXMLQLCMonitorNumberLineY))
@@ -2771,6 +3107,11 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         else if (root.name() == KXMLQLCMonitorStageItem)
         {
             setStageType(StageType(root.readElementText().toInt()));
+        }
+        else if (root.name() == KXMLQLCMonitorStagePieces)
+        {
+            loadStagePieces(root);
+            stagePiecesRead = true;
         }
         else if (root.name() == KXMLQLCMonitorFixtureItem)
         {
@@ -3252,6 +3593,22 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
     if (!m_layers.contains(m_activeLayerId))
         m_activeLayerId = defaultLayerId;
 
+    /* MIGRATION: a show saved with Show ▸ Stage marks (attributes only).
+       The marks it had on are the pieces shown, at the same places; with
+       the curtain line on, the deck downstage of it was tinted as the
+       apron, which is now the apron piece, Auto: the same deck, from the
+       curtain line to the front. */
+    if (!stagePiecesRead && (m_stageMarks & CurtainLineFlag))
+        m_stageMarks |= ApronFlag;
+    if (!hasStageLayer())
+        m_stageLayerId = defaultLayerId;
+    if (m_platforms.contains(m_apronPlatformId))
+        m_apronPlatformId = 0xFFFFFFFF;     // a platform of the show's own: not the apron
+    m_loadingXml = false;
+    if (m_stageMarks != NoStageMarks)
+        ensureStageLayer();
+    syncApron();
+
     // MIGRATION: the old single global background image is now a placeable Floor
     // image object. Convert it (once) so existing workspaces keep their plot.
     if (!m_commonBackgroundImage.isEmpty())
@@ -3606,13 +3963,7 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
         doc->writeAttribute(KXMLQLCMonitorOriginX, QString::number(stageOrigin().x()));
         doc->writeAttribute(KXMLQLCMonitorOriginY, QString::number(stageOrigin().y()));
     }
-    // Stage marks: only what was turned on or moved, so older shows are unchanged.
-    if (stageMarks() != NoStageMarks)
-        doc->writeAttribute(KXMLQLCMonitorStageMarks, QString::number(stageMarks()));
-    if (!curtainLineIsAuto())
-        doc->writeAttribute(KXMLQLCMonitorCurtainLineY, QString::number(double(m_curtainLineY)));
-    if (!numberLineIsAuto())
-        doc->writeAttribute(KXMLQLCMonitorNumberLineY, QString::number(double(m_numberLineY)));
+    // The stage pieces are a StagePieces element below; this is a view setting.
     if (!targetPositionsVisible())
         doc->writeAttribute(KXMLQLCMonitorTargetPositions, QStringLiteral("0"));
 
@@ -3914,9 +4265,11 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
     foreach (const Truss *t, m_trusses)
         t->saveXML(doc, mainDocument);
 
-    // Stage platforms
+    // Stage platforms (the apron's deck is the apron's, saved with it)
     foreach (const StagePlatform *p, m_platforms)
-        p->saveXML(doc);
+        if (p->id() != m_apronPlatformId)
+            p->saveXML(doc);
+    saveStagePieces(doc);
 
     // Booms
     foreach (const Pipe *b, m_pipes)

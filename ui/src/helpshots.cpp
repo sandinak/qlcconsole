@@ -51,6 +51,7 @@
 #include "fixturetreewidget.h"
 #include "monitor.h"
 #include "monitorgraphicsview.h"
+#include "stagepiecedialog.h"
 #include "truss.h"
 #include "stageplatform.h"
 #include "programmingoutline.h"
@@ -683,14 +684,13 @@ QList<HelpShots::Shot> HelpShots::shots()
         deck->setHeight(0.9f);
         deck->setColor(QColor(40, 44, 52));
         mon->setProperty("helpShotDeck", deck->id());
-        // The apron: from the curtain line (found 1.2 m up from the deck's
-        // front) out to a unit and a half short of the grid's front.
-        mon->m_props->setApronDepth(1.2f + 1.5f * u);
-        if (StagePlatform *apron = mon->m_props->apronPlatform())
-        {
-            apron->setFrontCurve(0.5f * u);
-            mon->setProperty("helpShotApron", apron->id());
-        }
+        // The apron, its own deck: from the curtain line (found a typical
+        // apron's depth up from the deck's front) out past the deck, rounded.
+        mon->m_props->setStageMarks(MonitorProperties::CentreMarkFlag | MonitorProperties::CentreLineFlag
+                                    | MonitorProperties::CurtainLineFlag
+                                    | MonitorProperties::NumberLineFlag | MonitorProperties::ApronFlag);
+        mon->m_props->setApronDepth(mon->m_props->autoApronDepth() + 1.5f * u);
+        mon->m_props->setApronFrontCurve(0.5f * u);
         Truss *foh = mon->m_props->addTruss();
         foh->setName(QStringLiteral("FOH"));
         foh->setType(Truss::Horizontal);
@@ -699,10 +699,8 @@ QList<HelpShots::Shot> HelpShots::shots()
         mon->setProperty("helpShotFoh", foh->id());
         mon->m_graphicsView->updateTrusses();
         mon->m_graphicsView->updatePlatforms();
-        mon->m_props->setStageMarks(MonitorProperties::CentreMarkFlag | MonitorProperties::CentreLineFlag
-                                    | MonitorProperties::CurtainLineFlag
-                                    | MonitorProperties::NumberLineFlag);
-        mon->m_graphicsView->updateStageMarks();
+        // The curtain line selected: an object on the plot, to drag.
+        mon->m_graphicsView->selectMapItem(QStringLiteral("stage"), MonitorProperties::CurtainPiece);
         settle();
         f.grab = mon->m_graphicsView;
         return f;
@@ -712,7 +710,8 @@ QList<HelpShots::Shot> HelpShots::shots()
             return;
         mon->m_props->setStageMarks(MonitorProperties::NoStageMarks);
         mon->m_props->setCurtainLineAuto();
-        foreach (const char *name, QList<const char *>() << "helpShotDeck" << "helpShotApron")
+        mon->m_props->setApronAuto(true);
+        foreach (const char *name, QList<const char *>() << "helpShotDeck")
         {
             if (mon->property(name).isValid())
                 mon->m_props->removePlatform(mon->property(name).toUInt());
@@ -722,6 +721,58 @@ QList<HelpShots::Shot> HelpShots::shots()
             mon->m_props->removeTruss(mon->property("helpShotFoh").toUInt());
         mon->setProperty("helpShotFoh", QVariant());
         mon->m_graphicsView->updateTrusses();
+        mon->m_graphicsView->updatePlatforms();
+    } };
+
+    // A stage piece's properties: the apron's, in the show's unit.
+    list << Shot{ QStringLiteral("lighting-studio-apron-properties"), [=]() {
+        window();
+        Frame f;
+        Monitor *mon = studio(MonitorGraphicsView::PovTop);
+        if (mon == NULL)
+            return f;
+        const float u = mon->m_props->gridUnitMetres();
+        const QVector3D grid = mon->m_props->gridSize();
+        StagePlatform *deck = mon->m_props->addPlatform();
+        deck->setName(QStringLiteral("Deck"));
+        deck->setOriginX(1.0f * u);
+        deck->setOriginY(0.5f * u);
+        deck->setWidth((grid.x() - 2.0f) * u);
+        deck->setDepth((grid.z() - 3.0f) * u);
+        deck->setHeight(0.9f);
+        mon->setProperty("helpShotDeck", deck->id());
+        mon->m_props->setStageMarks(MonitorProperties::CurtainLineFlag | MonitorProperties::ApronFlag);
+        mon->m_props->setApronDepth(mon->m_props->autoApronDepth() + 1.5f * u);
+        mon->m_props->setApronFrontCurve(0.5f * u);
+        StagePieceDialog *d = new StagePieceDialog(mon->m_props, MonitorProperties::ApronPiece, app);
+        d->setObjectName(QStringLiteral("helpShotApronProperties"));
+        d->setAttribute(Qt::WA_DeleteOnClose);
+        d->show();
+        settle();
+        f.grab = d;
+        // Numbers to the right, clear of the labels.
+        f.pad = QMargins(0, 0, 36, 0);
+        int n = 0;
+        foreach (const char *name, QList<const char *>() << "stagePieceVisible" << "stagePieceLocked"
+                                                        << "apronDepthAuto" << "apronDepth" << "apronFrontCurve")
+        {
+            Callout c = mark(named(d, name), ++n);
+            c.place = (n == 3) ? Left : Right;
+            f.callouts << c;
+        }
+        return f;
+    }, [=]() {
+        foreach (QWidget *w, QApplication::topLevelWidgets())
+            if (w->objectName() == QLatin1String("helpShotApronProperties"))
+                w->close();
+        Monitor *mon = Monitor::instance();
+        if (mon == NULL)
+            return;
+        mon->m_props->setStageMarks(MonitorProperties::NoStageMarks);
+        mon->m_props->setApronAuto(true);
+        if (mon->property("helpShotDeck").isValid())
+            mon->m_props->removePlatform(mon->property("helpShotDeck").toUInt());
+        mon->setProperty("helpShotDeck", QVariant());
         mon->m_graphicsView->updatePlatforms();
     } };
 

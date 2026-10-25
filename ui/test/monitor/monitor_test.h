@@ -55,8 +55,24 @@ private slots:
      *  Overview's floor. */
     void stageMarksAreDrawnOnThePlotAndTheOverview();
     /** Apron depth is one rig undo step a change: two changes, two undos,
-     *  each back to the depth before it. */
+     *  each back to the depth before it; Cancel leaves none. */
     void apronDepthIsOneUndoStepAChange();
+    /** Q147: the stage pieces are objects on the plot: selected by a click
+     *  (never a rubber band), dragged (the lines, the apron's front), one
+     *  undo step a drag, held by their lock or their layer's, hidden with
+     *  their layer, with a menu and properties, and in Plot layers with
+     *  their own eye and lock. */
+    void stagePiecesAreObjectsOnThePlot();
+    /** Q147: their positions are entered and read in the show's unit. */
+    void stagePiecePositionsFollowTheShowsUnit();
+    /** Q147 regression: a riser at the deck's front is never moved by the
+     *  apron. */
+    void theApronLeavesARiserAtTheFrontAlone();
+    /** Q146: the apron is drawn as deck in the Rig Overview whatever marks
+     *  are on. */
+    void theApronIsDeckInTheRigOverview();
+    /** Q145: the Rig Overview's controls are in a footer bar like the plot's. */
+    void theRigOverviewHasAFooterBar();
     void initTestCase();
     void init();
     void cleanupTestCase();

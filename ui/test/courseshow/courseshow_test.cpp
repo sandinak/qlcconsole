@@ -63,6 +63,7 @@
 #undef protected
 #undef private
 #include "structurestudioview.h"
+#include "monitorlayerspanel.h"
 #include "fixturegroupsource.h"
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
@@ -2390,21 +2391,32 @@ void CourseShow_Test::lessonFocusAndCalibration()
         m_app->resize(1280, 800);
     }
 
-    // Part A: Show ▸ Stage marks, by the names the handout uses.
+    /* Part A: the stage marks, by the names the handout uses -- rows on
+       the Stage layer in Plot layers, each turned on with its eye -- and
+       Show ▸ Target positions, on already. */
     Monitor *studio = Monitor::instance();
     QVERIFY(studio != nullptr);
-    QMap<QString, QAction *> marks;
-    for (QAction *a : studio->findChildren<QAction *>())
-        if (a->objectName().startsWith(QLatin1String("stageMark")))
-            marks[a->text()] = a;
-    for (const QString &name : { QStringLiteral("Centre mark (DSC)"), QStringLiteral("Curtain line"),
-                                 QStringLiteral("Number line"), QStringLiteral("Target positions") })
-        QVERIFY2(marks.contains(name), qPrintable(name));
-    QVERIFY(marks["Target positions"]->isChecked());       // on already
-    for (const QString &name : { QStringLiteral("Centre mark (DSC)"), QStringLiteral("Curtain line"),
-                                 QStringLiteral("Number line") })
-        if (!marks[name]->isChecked())
-            marks[name]->trigger();
+    QVERIFY(studio->m_layersPanel != nullptr);
+    studio->m_layersPanel->setVisible(true);
+    studio->m_layersPanel->reload();
+    QAction *positions = studio->findChild<QAction *>(QStringLiteral("showTargetPositions"));
+    QVERIFY(positions != nullptr);
+    QCOMPARE(positions->text(), QStringLiteral("Target positions"));
+    QVERIFY(positions->isChecked());       // on already
+    QCOMPARE(MonitorProperties::stagePieceName(MonitorProperties::CentrePiece), QStringLiteral("Centre line / DSC mark"));
+    QCOMPARE(MonitorProperties::stagePieceName(MonitorProperties::CurtainPiece), QStringLiteral("Curtain line"));
+    QCOMPARE(MonitorProperties::stagePieceName(MonitorProperties::NumberPiece), QStringLiteral("Number line"));
+    for (int piece : { int(MonitorProperties::CentrePiece), int(MonitorProperties::CurtainPiece),
+                       int(MonitorProperties::NumberPiece) })
+    {
+        QWidget *row = studio->findChild<QWidget *>(QStringLiteral("stagePieceToggles%1").arg(piece));
+        QVERIFY2(row != nullptr, qPrintable(QString::number(piece)));
+        QToolButton *eye = row->findChild<QToolButton *>(QStringLiteral("stagePieceEye"));
+        QVERIFY(eye != nullptr);
+        if (!eye->isChecked())
+            eye->click();
+        settle(50);
+    }
     settle(50);
     QVERIFY(props->stageMarkVisible(MonitorProperties::CurtainLineFlag));
     QVERIFY(props->stageMarkVisible(MonitorProperties::NumberLineFlag));

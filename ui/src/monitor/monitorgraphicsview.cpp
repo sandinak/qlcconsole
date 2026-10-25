@@ -51,6 +51,7 @@
 #include <cmath>
 #include "monitorgraphicsview.h"
 #include "stagemarklabel.h"
+#include "stagepieceitem.h"
 #include "righeads.h"
 #include "patchinventorydialog.h"
 #include "headtypesdialog.h"
@@ -479,7 +480,10 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         if (hit != nullptr && (hit->flags() & QGraphicsItem::ItemIsSelectable) && !hit->isSelected())
         {
             m_scene->clearSelection();
-            hit->setSelected(true);
+            if (StagePieceItem *spi = dynamic_cast<StagePieceItem *>(hit))
+                spi->selectNow(true);
+            else
+                hit->setSelected(true);
         }
         event->accept();
         return;
@@ -598,6 +602,13 @@ MonitorGraphicsView::~MonitorGraphicsView()
         delete pi;
     }
     m_platformItems.clear();
+    if (m_apronDeckItem != nullptr)
+    {
+        m_scene->removeItem(m_apronDeckItem);
+        delete m_apronDeckItem;
+        m_apronDeckItem = nullptr;
+    }
+    m_stagePieceItems.clear();      // the scene's to delete, below
 
     foreach (MonitorImageItem *ii, m_imageItems)
     {
@@ -2412,6 +2423,11 @@ void MonitorGraphicsView::selectMapItem(const QString &kind, quint32 id)
         target = (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
     else if (kind == QStringLiteral("image"))
         target = m_imageItems.value(id, nullptr);
+    else if (kind == QStringLiteral("stage"))
+    {
+        StagePieceItem *spi = m_stagePieceItems.value(int(id), nullptr);
+        target = (spi != nullptr && spi->isVisible()) ? spi : nullptr;
+    }
 
     // Selecting from the tree targets exactly ONE item so it can be edited /
     // repositioned individually — suppress the select-together group extension.
@@ -2419,7 +2435,10 @@ void MonitorGraphicsView::selectMapItem(const QString &kind, quint32 id)
     m_scene->clearSelection();
     if (target)
     {
-        target->setSelected(true);
+        if (StagePieceItem *spi = dynamic_cast<StagePieceItem *>(target))
+            spi->selectNow(true);      // only ever picked on purpose
+        else
+            target->setSelected(true);
         target->ensureVisible();   // scroll the canvas so it's on screen
     }
     m_extendingSelection = false;
@@ -2433,6 +2452,7 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
     if (kind == QStringLiteral("fixture"))       emit fixtureDoubleClicked(id);
     else if (kind == QStringLiteral("truss"))    emit trussDoubleClicked(id);
     else if (kind == QStringLiteral("platform")) emit platformDoubleClicked(id);
+    else if (kind == QStringLiteral("stage"))    emit stagePieceDoubleClicked(int(id));
     else if (kind == QStringLiteral("pipe"))     emit pipeDoubleClicked(id);
     else if (kind == QStringLiteral("hanger"))   emit hangerDoubleClicked(id);
     else if (kind == QStringLiteral("stand"))    emit standDoubleClicked(id);
@@ -2886,6 +2906,7 @@ void MonitorGraphicsView::refreshItemLayerState()
         Hanger *h = props->hanger(hgi->hangerId());
         hgi->setVisible(props->layer(h ? h->layerId() : 0).visible);
     }
+    updateStageMarks();         // the stage pieces, on their own layer
     emit layerStateChanged();   // the rig view follows what is shown here
 }
 
@@ -4509,6 +4530,57 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
     refreshFixtureCountBadges();       // its count bubble goes where it went
 }
 
+PlatformItem *MonitorGraphicsView::newPlatformItem(StagePlatform *p)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const float scale = float(m_cellPixels) / m_unitValue;
+    float pxX, pxY, pxW, pxD;
+    if (m_pov == PovTop)
+    {
+        pxX = float(m_xOffset + (p->originX() * 1000.0 * m_cellPixels) / m_unitValue);
+        pxY = float(m_yOffset + (p->originY() * 1000.0 * m_cellPixels) / m_unitValue);
+        pxW = float((p->width()  * 1000.0 * m_cellPixels) / m_unitValue);
+        pxD = float((p->depth()  * 1000.0 * m_cellPixels) / m_unitValue);
+    }
+    else
+    {
+        // Elevation: a riser is a box from its BASE (which may be the deck of
+        // a platform it sits on, not the floor) up to its deck top. height()
+        // is the block's own thickness, so the absolute top is base + height.
+        const float b0  = props->platformBaseZ(p->id());
+        const float top = b0 + p->height();
+        const QPointF tl = projectMm(p->originX() * 1000.0, p->originY() * 1000.0, top * 1000.0);
+        pxX = float(tl.x());
+        pxY = float(tl.y());
+        pxW = float(((m_pov == PovFront) ? p->width() : p->depth()) * 1000.0f * scale);
+        pxD = qMax(2.0f, float(p->height() * 1000.0f * scale));
+        if (p->isRotated())
+        {
+            // Turned, it is seen as wide as its outline reaches.
+            double ax = 1e9, ay = 1e9, bx = -1e9, by = -1e9;
+            foreach (const QPointF &q, p->footprint(16))
+            {
+                ax = qMin(ax, q.x()); bx = qMax(bx, q.x());
+                ay = qMin(ay, q.y()); by = qMax(by, q.y());
+            }
+            const QPointF a = projectMm(ax * 1000.0, ay * 1000.0, top * 1000.0);
+            const QPointF b = projectMm(bx * 1000.0, by * 1000.0, top * 1000.0);
+            pxX = float(qMin(a.x(), b.x()));
+            pxW = float(qAbs(b.x() - a.x()));
+        }
+    }
+
+    PlatformItem *pi = new PlatformItem(p, m_doc, pxX, pxY, pxW, pxD);
+    pi->setView(m_pov == PovTop ? 0 : m_pov == PovSide ? 2 : 1);
+    if (m_pov == PovTop && p->isRotated())
+    {
+        // Turned about its middle; its position is still the unturned corner.
+        pi->setTransformOriginPoint(pxW / 2.0, pxD / 2.0);
+        pi->setRotation(double(p->rotation()));
+    }
+    return pi;
+}
+
 void MonitorGraphicsView::updatePlatforms()
 {
     /* The marks follow the deck and the curtain they are found from: redrawn
@@ -4555,53 +4627,12 @@ void MonitorGraphicsView::updatePlatforms()
     if (props == nullptr || m_cellPixels == 0)
         return;
 
-    const float scale = float(m_cellPixels) / m_unitValue;
     foreach (StagePlatform *p, props->platforms())
     {
-        float pxX, pxY, pxW, pxD;
-        if (m_pov == PovTop)
-        {
-            pxX = float(m_xOffset + (p->originX() * 1000.0 * m_cellPixels) / m_unitValue);
-            pxY = float(m_yOffset + (p->originY() * 1000.0 * m_cellPixels) / m_unitValue);
-            pxW = float((p->width()  * 1000.0 * m_cellPixels) / m_unitValue);
-            pxD = float((p->depth()  * 1000.0 * m_cellPixels) / m_unitValue);
-        }
-        else
-        {
-            // Elevation: a riser is a box from its BASE (which may be the deck of
-            // a platform it sits on, not the floor) up to its deck top. height()
-            // is the block's own thickness, so the absolute top is base + height.
-            const float b0  = props->platformBaseZ(p->id());
-            const float top = b0 + p->height();
-            const QPointF tl = projectMm(p->originX() * 1000.0, p->originY() * 1000.0, top * 1000.0);
-            pxX = float(tl.x());
-            pxY = float(tl.y());
-            pxW = float(((m_pov == PovFront) ? p->width() : p->depth()) * 1000.0f * scale);
-            pxD = qMax(2.0f, float(p->height() * 1000.0f * scale));
-            if (p->isRotated())
-            {
-                // Turned, it is seen as wide as its outline reaches.
-                double ax = 1e9, ay = 1e9, bx = -1e9, by = -1e9;
-                foreach (const QPointF &q, p->footprint(16))
-                {
-                    ax = qMin(ax, q.x()); bx = qMax(bx, q.x());
-                    ay = qMin(ay, q.y()); by = qMax(by, q.y());
-                }
-                const QPointF a = projectMm(ax * 1000.0, ay * 1000.0, top * 1000.0);
-                const QPointF b = projectMm(bx * 1000.0, by * 1000.0, top * 1000.0);
-                pxX = float(qMin(a.x(), b.x()));
-                pxW = float(qAbs(b.x() - a.x()));
-            }
-        }
-
-        PlatformItem *pi = new PlatformItem(p, m_doc, pxX, pxY, pxW, pxD);
-        pi->setView(m_pov == PovTop ? 0 : m_pov == PovSide ? 2 : 1);
-        if (m_pov == PovTop && p->isRotated())
-        {
-            // Turned about its middle; its position is still the unturned corner.
-            pi->setTransformOriginPoint(pxW / 2.0, pxD / 2.0);
-            pi->setRotation(double(p->rotation()));
-        }
+        // The apron's own deck is the apron piece's (updateStageMarks()).
+        if (props->isApronPlatform(p->id()))
+            continue;
+        PlatformItem *pi = newPlatformItem(p);
         pi->setMovable(!m_layoutLocked && (m_pov == PovTop || !p->isRotated()));
         pi->showLabel(m_doc->monitorProperties()->layer(p->layerId()).labels);
         m_scene->addItem(pi);
@@ -6574,7 +6605,7 @@ bool MonitorGraphicsView::centreLineReplacesCross() const
        own, so it stays. An elevation draws no marks and keeps the cross. */
     const MonitorProperties *props = m_doc->monitorProperties();
     return m_pov == PovTop && props != nullptr
-           && props->stageMarkVisible(MonitorProperties::CentreLineFlag);
+           && props->stageMarkShown(MonitorProperties::CentreLineFlag);
 }
 
 /* ------------------------------------------------------------------------ *
@@ -6597,7 +6628,35 @@ void MonitorGraphicsView::updateStageMarks()
         m_centerLineV->setVisible(m_centerLinesVisible && !centreLineReplacesCross());
 
     MonitorProperties *props = m_doc->monitorProperties();
-    if (m_scene == nullptr || props == nullptr || m_cellPixels <= 0 || !m_gridEnabled || m_pov != PovTop
+
+    /* The apron's own deck, in every view: a deck like any other, but it is
+       the apron piece's, so it is picked as that (updateStagePieceItems()).
+       Kept to the curtain line and the main deck first. */
+    if (m_apronDeckItem != nullptr)
+    {
+        m_scene->removeItem(m_apronDeckItem);
+        delete m_apronDeckItem;
+        m_apronDeckItem = nullptr;
+    }
+    if (props != nullptr)
+    {
+        props->syncApron();
+        StagePlatform *apron = props->apronPlatform();
+        if (apron != nullptr && m_cellPixels > 0 && props->layer(apron->layerId()).visible)
+        {
+            m_apronDeckItem = newPlatformItem(apron);
+            m_apronDeckItem->setFlag(QGraphicsItem::ItemIsMovable, false);
+            m_apronDeckItem->setFlag(QGraphicsItem::ItemIsSelectable, false);
+            m_apronDeckItem->setAcceptedMouseButtons(Qt::NoButton);
+            m_apronDeckItem->unsetCursor();
+            m_apronDeckItem->setZValue(-0.98);          // over the deck it lies on
+            m_apronDeckItem->showLabel(props->layer(apron->layerId()).labels);
+            m_scene->addItem(m_apronDeckItem);
+        }
+    }
+    auto pieces = qScopeGuard([this]() { updateStagePieceItems(); });
+
+    if (props == nullptr || m_cellPixels <= 0 || !m_gridEnabled || m_pov != PovTop
         || props->stageMarks() == MonitorProperties::NoStageMarks)
         return;
 
@@ -6644,10 +6703,11 @@ void MonitorGraphicsView::updateStageMarks()
 
     /* Everything is drawn ON the stage -- upstage of the front edge, which
        is often the very edge of the plot -- and clear of the orientation
-       words round the plot's edges. */
-    const bool spike = props->stageMarkVisible(MonitorProperties::CentreMarkFlag);
+       words round the plot's edges. Only what is shown: on, and its layer
+       (Stage) not hidden. */
+    const bool spike = props->stageMarkShown(MonitorProperties::CentreMarkFlag);
     const qreal s = 7.0 * onePx;                  // the spike's half width
-    if (props->stageMarkVisible(MonitorProperties::CentreLineFlag))
+    if (props->stageMarkShown(MonitorProperties::CentreLineFlag))
     {
         line(cx, dsY, cx, y0, pen(centreColour, 1.2, Qt::DashLine), "centreLine");
         label(tr("CL"), QPointF(cx, y0 + 0.75 * m_cellPixels), centreColour,
@@ -6664,54 +6724,34 @@ void MonitorGraphicsView::updateStageMarks()
         add(pi, "centreMark", 2.3);
         /* Its CL straight over it, on centre -- unless the number line runs
            through it, whose own centre label is the CL there. */
-        const bool numberHere = props->stageMarkVisible(MonitorProperties::NumberLineFlag)
+        const bool numberHere = props->stageMarkShown(MonitorProperties::NumberLineFlag)
                                 && qAbs(sy(props->numberLineY()) - dsY) < 2.0 * s;
         if (!numberHere)
             label(tr("CL"), QPointF(cx, dsY - 1.6 * s), centreColour,
                   Qt::AlignHCenter | Qt::AlignBottom, "centreMark");
     }
-    if (props->stageMarkVisible(MonitorProperties::CurtainLineFlag))
+    if (props->stageMarkShown(MonitorProperties::ApronFlag) && props->apronPlatform() != nullptr)
+    {
+        /* The apron is deck (its own platform, drawn above); its depth at
+           centre dimensioned from the curtain line to its front. */
+        const double apron = props->apronDepth();
+        const qreal y = sy(props->curtainLineY());
+        const qreal front = sy(props->curtainLineY() + apron);
+        const qreal ax = cx + 34.0 * onePx;
+        const qreal tick = 5.0 * onePx;
+        const QPen dimPen = pen(curtainColour, 1.0, Qt::SolidLine);
+        line(ax, y, ax, front, dimPen, "apron");
+        line(ax - tick, y, ax + tick, y, dimPen, "apron");
+        line(ax - tick, front, ax + tick, front, dimPen, "apron");
+        label(tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron), props->gridUnits())),
+              QPointF(ax, y), curtainColour, Qt::AlignLeft | Qt::AlignTop, "apron");   // under the curtain line
+    }
+    if (props->stageMarkShown(MonitorProperties::CurtainLineFlag))
     {
         const qreal y = sy(props->curtainLineY());
         line(x0, y, x1, y, pen(curtainColour, 1.4, Qt::DashDotLine), "curtainLine");
         label(tr("Curtain line"), QPointF(x0, y), curtainColour,
               Qt::AlignLeft | Qt::AlignBottom, "curtainLine");
-
-        /* The apron: the deck downstage of the curtain line, tinted, with its
-           depth at centre dimensioned from the curtain line to the front. */
-        const double apron = props->apronDepth();
-        if (apron > 0.005)
-        {
-            QPainterPath deck;
-            foreach (const StagePlatform *p, props->stageDecks())
-            {
-                QPolygonF outline;
-                foreach (const QPointF &pt, p->footprint())
-                    outline << QPointF(sx(pt.x()), sy(pt.y()));
-                deck.addPolygon(outline);
-                deck.closeSubpath();
-            }
-            if (deck.isEmpty())                 // a bare floor: the grid's front edge
-                deck.addRect(QRectF(QPointF(x0, y), QPointF(x1, dsY)));
-            QPainterPath downstage;
-            downstage.addRect(QRectF(QPointF(x0 - 1.0, y), QPointF(x1 + 1.0, dsY + 1.0)));
-            deck.setFillRule(Qt::WindingFill);
-            QGraphicsPathItem *tint = new QGraphicsPathItem(deck.intersected(downstage));
-            tint->setPen(Qt::NoPen);
-            QColor wash(curtainColour);
-            wash.setAlpha(40);
-            tint->setBrush(wash);
-            add(tint, "apron", -0.9);           // over the deck, under the rig
-
-            const qreal ax = cx + 34.0 * onePx;
-            const qreal tick = 5.0 * onePx;
-            const QPen dimPen = pen(curtainColour, 1.0, Qt::SolidLine);
-            line(ax, y, ax, dsY, dimPen, "apron");
-            line(ax - tick, y, ax + tick, y, dimPen, "apron");
-            line(ax - tick, dsY, ax + tick, dsY, dimPen, "apron");
-            label(tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron), props->gridUnits())),
-                  QPointF(ax, y), curtainColour, Qt::AlignLeft | Qt::AlignTop, "apron");   // under the curtain line
-        }
 
         /* What hangs downstage of the curtain line -- the FOH electric out
            over the audience -- says how far, in crew terms, just above its
@@ -6722,7 +6762,7 @@ void MonitorGraphicsView::updateStageMarks()
                 return;
             const QVector3D end = (a.x() >= b.x()) ? a : b;
             const QString where = props->curtainLineOffsetText(midY);
-            label(name.isEmpty() ? where : QStringLiteral("%1 \u00B7 %2").arg(name, where),
+            label(name.isEmpty() ? where : QStringLiteral("%1 · %2").arg(name, where),
                   QPointF(sx(end.x()), sy(end.y()) - 0.3 * ppm), curtainColour,
                   Qt::AlignRight | Qt::AlignBottom, "curtainOffset");
         };
@@ -6733,7 +6773,7 @@ void MonitorGraphicsView::updateStageMarks()
             if (pp != nullptr && !pp->isVertical())
                 overhang(pp->name(), pp->positionAt(0.0f), pp->positionAt(pp->length()));
     }
-    if (props->stageMarkVisible(MonitorProperties::NumberLineFlag))
+    if (props->stageMarkShown(MonitorProperties::NumberLineFlag))
     {
         const qreal y = sy(props->numberLineY());
         const int reach = props->numberLineReach();
@@ -6767,6 +6807,189 @@ void MonitorGraphicsView::updateStageMarks()
                   Qt::AlignRight | Qt::AlignBottom, "numberLine");
         }
     }
+}
+
+/* The stage pieces as objects: each a band along its line (the apron, its
+   own outline) that a click selects and a drag moves up or down stage --
+   the curtain line and the number line by themselves, the apron by its
+   front edge. Over the decks (so a deck covering the stage does not take
+   every click) and under everything rigged. */
+void MonitorGraphicsView::updateStagePieceItems()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (m_scene == nullptr || props == nullptr)
+        return;
+    const bool drawn = m_cellPixels > 0 && m_gridEnabled && m_pov == PovTop;
+    const qreal ppm = drawn ? 1000.0 * m_cellPixels / m_unitValue : 1.0;
+    auto sx = [this, ppm](double m) { return m_xOffset + m * ppm; };
+    auto sy = [this, ppm](double m) { return m_yOffset + m * ppm; };
+    const qreal onePx = 1.0 / qMax(0.01, viewScale());
+    const qreal band = 5.0 * onePx;
+    const qreal x0 = m_xOffset, x1 = m_xOffset + m_gridSize.width() * m_cellPixels;
+    const bool design = (m_doc->mode() == Doc::Design);
+
+    foreach (MonitorProperties::StagePiece piece, MonitorProperties::stagePieces())
+    {
+        StagePieceItem *item = m_stagePieceItems.value(int(piece), nullptr);
+        bool shown = drawn && props->stagePieceShown(piece);
+        if (piece == MonitorProperties::ApronPiece && props->apronPlatform() == nullptr)
+            shown = false;
+        if (!shown)
+        {
+            if (item != nullptr)
+            {
+                if (item->isSelected())
+                    item->selectNow(false);
+                item->setVisible(false);
+            }
+            continue;
+        }
+        if (item == nullptr)
+        {
+            item = new StagePieceItem(int(piece));
+            m_scene->addItem(item);
+            m_stagePieceItems.insert(int(piece), item);
+            connect(item, &StagePieceItem::dragStarted, this, &MonitorGraphicsView::stagePieceDragStarted);
+            connect(item, &StagePieceItem::dragMoved, this, &MonitorGraphicsView::stagePieceDragMoved);
+            connect(item, &StagePieceItem::dragFinished, this, &MonitorGraphicsView::stagePieceDragFinished);
+        }
+        item->setVisible(true);
+        QPainterPath hit, drag;
+        switch (piece)
+        {
+            case MonitorProperties::CentrePiece:
+            {
+                const qreal cx = sx(props->stageCentre().x());
+                const qreal dsY = sy(props->downstageEdgeY());
+                const qreal top = props->stageMarkVisible(MonitorProperties::CentreLineFlag)
+                                ? m_yOffset : dsY - 12.0 * onePx;
+                hit.addRect(QRectF(QPointF(cx - band, top), QPointF(cx + band, dsY)));
+                hit.addRect(QRectF(QPointF(cx - 8.0 * onePx, dsY - 12.0 * onePx), QPointF(cx + 8.0 * onePx, dsY)));
+                hit.setFillRule(Qt::WindingFill);
+                item->setZValue(-0.6);
+            }
+            break;
+            case MonitorProperties::CurtainPiece:
+            {
+                const qreal y = sy(props->curtainLineY());
+                hit.addRect(QRectF(QPointF(x0, y - band), QPointF(x1, y + band)));
+                drag = hit;
+                item->setZValue(-0.6);
+            }
+            break;
+            case MonitorProperties::NumberPiece:
+            {
+                const qreal y = sy(props->numberLineY());
+                const qreal cx = sx(props->stageCentre().x());
+                const qreal reach = props->numberLineReach() * props->gridUnitMetres() * ppm;
+                hit.addRect(QRectF(QPointF(cx - reach - band, y - band), QPointF(cx + reach + band, y + band)));
+                drag = hit;
+                item->setZValue(-0.6);
+            }
+            break;
+            case MonitorProperties::ApronPiece:
+            {
+                const StagePlatform *apron = props->apronPlatform();
+                QPolygonF outline;
+                foreach (const QPointF &pt, apron->footprint(24))
+                    outline << QPointF(sx(pt.x()), sy(pt.y()));
+                hit.addPolygon(outline);
+                hit.closeSubpath();
+                // The front edge, followed round a rounded front.
+                QPainterPath front;
+                const int steps = 24;
+                for (int i = 0; i <= steps; ++i)
+                {
+                    const float x = apron->originX() + apron->width() * float(i) / float(steps);
+                    const QPointF at(sx(x), sy(apron->frontEdgeAt(x)));
+                    if (i == 0) front.moveTo(at); else front.lineTo(at);
+                }
+                QPainterPathStroker stroker;
+                stroker.setWidth(2.0 * band + 2.0 * onePx);
+                drag = stroker.createStroke(front);
+                hit = hit.united(drag);
+                item->setZValue(-0.97);                   // over its own deck, under the rig
+            }
+            break;
+        }
+        item->setHitShape(hit);
+        item->setDragShape(drag);
+        item->setMovable(design && !m_layoutLocked && !drag.isEmpty() && props->stagePieceMovable(piece));
+        item->update();
+    }
+}
+
+int MonitorGraphicsView::selectedStagePiece() const
+{
+    for (auto it = m_stagePieceItems.constBegin(); it != m_stagePieceItems.constEnd(); ++it)
+        if (it.value() != nullptr && it.value()->isVisible() && it.value()->isSelected())
+            return it.key();
+    return -1;
+}
+
+namespace
+{
+    /** Where a stage piece's line is along Y (metres): what a drag moves. */
+    double stagePieceY(const MonitorProperties *props, int piece)
+    {
+        switch (MonitorProperties::StagePiece(piece))
+        {
+            case MonitorProperties::CurtainPiece: return props->curtainLineY();
+            case MonitorProperties::NumberPiece:  return props->numberLineY();
+            case MonitorProperties::ApronPiece:   return props->curtainLineY() + props->apronDepth();
+            default: break;
+        }
+        return 0.0;
+    }
+}
+
+void MonitorGraphicsView::stagePieceDragStarted(int piece, const QPointF &scenePos)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    m_stageDragBefore = m_rigSnapshotter ? m_rigSnapshotter() : QByteArray();
+    const qreal ppm = 1000.0 * m_cellPixels / m_unitValue;
+    if (props == nullptr || ppm <= 0.0)
+        return;
+    // The line keeps the gap it had to the pointer where it was taken hold of.
+    m_stageDragOffset = stagePieceY(props, piece) - (scenePos.y() - m_yOffset) / ppm;
+}
+
+void MonitorGraphicsView::stagePieceDragMoved(int piece, const QPointF &scenePos)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const qreal ppm = 1000.0 * m_cellPixels / m_unitValue;
+    if (props == nullptr || ppm <= 0.0)
+        return;
+    double y = (scenePos.y() - m_yOffset) / ppm + m_stageDragOffset;
+    if (m_snapDivisions > 0)
+        y = (snapScenePos(QPointF(scenePos.x(), m_yOffset + y * ppm)).y() - m_yOffset) / ppm;
+    switch (MonitorProperties::StagePiece(piece))
+    {
+        case MonitorProperties::CurtainPiece:
+            props->setCurtainLineY(float(y));
+        break;
+        case MonitorProperties::NumberPiece:
+            props->setNumberLineY(float(y));
+        break;
+        case MonitorProperties::ApronPiece:
+            props->setApronDepth(float(qMax(0.0, y - double(props->curtainLineY()))));
+        break;
+        default:
+            return;
+    }
+    updateStageMarks();
+    emit stagePiecesChanged();
+}
+
+void MonitorGraphicsView::stagePieceDragFinished(int, bool moved)
+{
+    if (!moved)
+        return;
+    if (!m_stageDragBefore.isEmpty())
+        pushRigUndo(m_stageDragBefore);
+    m_stageDragBefore.clear();
+    m_doc->setModified();
+    emit stagePiecesChanged();
 }
 
 void MonitorGraphicsView::updateGrid()
@@ -7256,6 +7479,11 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         emit platformDoubleClicked(pi->platformId());
         return;
     }
+    if (auto *spi = dynamic_cast<StagePieceItem *>(it))
+    {
+        emit stagePieceDoubleClicked(spi->piece());
+        return;
+    }
     if (auto *bi = dynamic_cast<PipeItem *>(it))
     {
         if (drilledIntoGroup(bi)) return;
@@ -7398,6 +7626,7 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
     else if (auto *tgi = dynamic_cast<TargetItem *>(it))      { kind = QStringLiteral("target");   id = tgi->targetId(); }
     else if (auto *psi = dynamic_cast<PowerSourceItem *>(it)) { kind = QStringLiteral("power");    id = quint32(psi->sourceIndex()); }
     else if (auto *nni = dynamic_cast<NetworkNodeItem *>(it)) { kind = QStringLiteral("network");  id = quint32(nni->nodeIndex()); }
+    else if (auto *spi = dynamic_cast<StagePieceItem *>(it))  { kind = QStringLiteral("stage");    id = quint32(spi->piece()); }
 
     if (kind.isEmpty())
     {
@@ -7455,8 +7684,81 @@ QList<QPair<QString, quint32> > MonitorGraphicsView::selectedMapObjects() const
         else if (auto *tgi = dynamic_cast<TargetItem *>(gi))       out << qMakePair(QStringLiteral("target"), tgi->targetId());
         else if (auto *psi = dynamic_cast<PowerSourceItem *>(gi))  out << qMakePair(QStringLiteral("power"), quint32(psi->sourceIndex()));
         else if (auto *nni = dynamic_cast<NetworkNodeItem *>(gi))  out << qMakePair(QStringLiteral("network"), quint32(nni->nodeIndex()));
+        else if (auto *spi = dynamic_cast<StagePieceItem *>(gi))   out << qMakePair(QStringLiteral("stage"), quint32(spi->piece()));
     }
     return out;
+}
+
+/* A stage piece's menu: its properties, where it is, and showing, locking
+   and Auto -- the same from the plot and from Plot layers. */
+void MonitorGraphicsView::buildStagePieceMenu(QMenu *menu, int piece, bool inList)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return;
+    typedef MonitorProperties MP;
+    const MP::StagePiece sp = MP::StagePiece(piece);
+    const bool design = (m_doc->mode() == Doc::Design);
+    QAction *edit = menu->addAction(tr("%1 Properties…").arg(MP::stagePieceName(sp)), this,
+                                    [this, piece]() { emit stagePieceDoubleClicked(piece); });
+    edit->setObjectName(QStringLiteral("stagePieceProperties"));
+    menu->addSeparator();
+    if (inList)
+        menu->addAction(tr("Show on Map"), this, [this, piece]() { selectMapItem(QStringLiteral("stage"), quint32(piece)); });
+    else
+        menu->addAction(tr("Show in Plot Layers"), this, [this, piece]() {
+            emit revealInLayersRequested(QStringLiteral("stage"), quint32(piece));
+        });
+    auto changed = [this]() {
+        m_doc->setModified();
+        updateStageMarks();
+        emit stagePiecesChanged();
+        emit mapStructureChanged();      // the Layers list's eye and lock
+    };
+    QAction *shown = menu->addAction(tr("Shown"));
+    shown->setObjectName(QStringLiteral("stagePieceShown"));
+    shown->setCheckable(true);
+    shown->setChecked(props->stagePieceVisible(sp));
+    connect(shown, &QAction::toggled, this, [props, sp, changed](bool on) {
+        props->setStagePieceVisible(sp, on);
+        changed();
+    });
+    QAction *lock = menu->addAction(tr("Locked"));
+    lock->setObjectName(QStringLiteral("stagePieceLocked"));
+    lock->setCheckable(true);
+    lock->setChecked(props->stagePieceLocked(sp));
+    lock->setEnabled(design);
+    connect(lock, &QAction::toggled, this, [props, sp, changed](bool on) {
+        props->setStagePieceLocked(sp, on);
+        changed();
+    });
+    if (sp != MP::CentrePiece)
+    {
+        const bool isAuto = (sp == MP::CurtainPiece) ? props->curtainLineIsAuto()
+                          : (sp == MP::NumberPiece) ? props->numberLineIsAuto() : props->apronAuto();
+        QAction *autoAct = menu->addAction(sp == MP::ApronPiece ? tr("Auto depth (to the deck's front)")
+                                                               : tr("Auto position"));
+        autoAct->setObjectName(QStringLiteral("stagePieceAuto"));
+        autoAct->setCheckable(true);
+        autoAct->setChecked(isAuto);
+        autoAct->setEnabled(design);
+        connect(autoAct, &QAction::toggled, this, [this, props, sp, changed](bool on) {
+            const QByteArray before = m_rigSnapshotter ? m_rigSnapshotter() : QByteArray();
+            if (sp == MP::CurtainPiece)
+            {
+                if (on) props->setCurtainLineAuto(); else props->setCurtainLineY(props->curtainLineY());
+            }
+            else if (sp == MP::NumberPiece)
+            {
+                if (on) props->setNumberLineAuto(); else props->setNumberLineY(props->numberLineY());
+            }
+            else
+                props->setApronAuto(on);
+            if (!before.isEmpty())
+                pushRigUndo(before);
+            changed();
+        });
+    }
 }
 
 void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint32 id,
@@ -7466,6 +7768,12 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
         return;
     MonitorProperties *props = m_doc->monitorProperties();
     const bool design = (m_doc->mode() == Doc::Design);
+
+    if (kind == QLatin1String("stage"))
+    {
+        buildStagePieceMenu(menu, int(id), place.inList);
+        return;
+    }
 
     // 1. The thing.
     m_menuSelection = place.selection;

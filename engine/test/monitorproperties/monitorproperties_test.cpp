@@ -2838,12 +2838,12 @@ void MonitorProperties_Test::stageMarksAreSavedWithTheShow()
     mp.setCurtainLineAuto();
     mp.setNumberLineY(-1.5f);
     mp.setStageMarks(0xFF);
-    QCOMPARE(mp.stageMarks(), 0x0F);
+    QCOMPARE(mp.stageMarks(), 0x1F);
     MonitorProperties again;
     loadStageMarksXml(again, stageMarksXml(mp));
     QVERIFY(again.curtainLineIsAuto());
     QCOMPARE(again.numberLineY(), -1.5f);
-    QCOMPARE(again.stageMarks(), 0x0F);
+    QCOMPARE(again.stageMarks(), 0x1F);
 }
 
 void MonitorProperties_Test::stageMarksFollowTheStage()
@@ -3012,8 +3012,8 @@ void MonitorProperties_Test::stageLinesAreSetFromTheFrontAndTheCurtainLine()
 
     // Saved as the plan's Y, as before; back as the same distances.
     const QByteArray xml = stageMarksXml(mp);
-    QVERIFY(xml.contains("CurtainLineY=\"3.5\""));
-    QVERIFY(xml.contains("NumberLineY=\"5\""));
+    QVERIFY(xml.contains("Kind=\"Curtain\" Visible=\"0\" Y=\"3.5\""));
+    QVERIFY(xml.contains("Kind=\"Number\" Visible=\"0\" Y=\"5\""));
     MonitorProperties back;
     loadStageMarksXml(back, xml);
     StagePlatform *deck2 = back.addPlatform();
@@ -3064,7 +3064,6 @@ void MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine()
     mp.setGridUnits(MP::Meters);
     mp.setGridSize(QVector3D(10, 6, 8));
     QVERIFY(mp.mainDeck() == nullptr);
-    QVERIFY(!mp.setApronDepth(1.0f));             // a bare floor: nothing to build on
 
     StagePlatform *deck = mp.addPlatform();
     deck->setOriginX(1.0f); deck->setOriginY(1.0f);
@@ -3072,39 +3071,81 @@ void MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine()
     deck->setHeight(1.0f);
     deck->setColor(QColor(120, 40, 40));
     QCOMPARE(mp.mainDeck(), deck);
-    QVERIFY(mp.apronPlatform() == nullptr);
-    QVERIFY(qAbs(mp.apronDepth() - 1.2f) < 1e-4f);  // the automatic curtain line
+    QVERIFY(mp.apronAuto());
+    QVERIFY(qAbs(mp.apronDepth() - 1.2f) < 1e-4f);  // the automatic curtain line to the front
+    QVERIFY(mp.apronPlatform() == nullptr);         // hidden: no deck of its own
 
-    // Deeper: an apron piece against the deck's front, like it. The curtain
-    // line found from nothing is pinned first, or it would follow.
-    QVERIFY(mp.setApronDepth(2.0f));
-    QVERIFY(!mp.curtainLineIsAuto());
-    QVERIFY(qAbs(mp.curtainLineY() - 4.8f) < 1e-4f);
+    // Shown: its own deck, from the curtain line to the deck's front, like it.
+    const int count = mp.platforms().size();
+    mp.setStagePieceVisible(MP::ApronPiece, true);
     StagePlatform *apron = mp.apronPlatform();
     QVERIFY(apron != nullptr);
+    QVERIFY(apron != deck);
+    QCOMPARE(mp.platforms().size(), count + 1);
+    QVERIFY(mp.isApronPlatform(apron->id()));
     QCOMPARE(apron->originX(), 1.0f);
-    QCOMPARE(apron->originY(), 6.0f);
+    QVERIFY(qAbs(apron->originY() - 4.8f) < 1e-4f);
     QCOMPARE(apron->width(), 8.0f);
     QCOMPARE(apron->height(), 1.0f);
     QCOMPARE(apron->color(), QColor(120, 40, 40));
+    QCOMPARE(apron->layerId(), mp.stageLayerId());
+    QVERIFY(mp.hasStageLayer());
+    QCOMPARE(mp.platformBaseZ(apron->id()), 0.0f);  // deck, not a riser on it
+    QCOMPARE(mp.mainDeck(), deck);                  // never the stage's own deck
+    QCOMPARE(mp.downstageEdgeY(), 6.0f);
+
+    // Deeper: its front moves; the curtain line, the deck, the count don't.
+    QVERIFY(mp.setApronDepth(2.0f));
+    QVERIFY(!mp.apronAuto());
+    QVERIFY(mp.curtainLineIsAuto());
+    QCOMPARE(mp.platforms().size(), count + 1);
     QVERIFY(qAbs(mp.downstageEdgeY() - 6.8f) < 1e-4f);
     QVERIFY(qAbs(mp.apronDepth() - 2.0f) < 1e-4f);
-    QCOMPARE(mp.stageDecks().size(), 2);
+    QCOMPARE(deck->depth(), 5.0f);
+    QCOMPARE(mp.deckFrontY(), 6.0f);
+    QVERIFY(qAbs(mp.curtainLineUpstage() - 1.2f) < 1e-4f);  // from the deck's front
+    QVERIFY(!mp.setApronDepth(-1.0f));
 
-    // Resized, not added again.
-    const int count = mp.platforms().size();
-    QVERIFY(mp.setApronDepth(2.5f));
-    QCOMPARE(mp.platforms().size(), count);
-    QVERIFY(qAbs(mp.apronDepth() - 2.5f) < 1e-4f);
+    // Its front curve, right at its front.
+    mp.setApronFrontCurve(0.5f);
+    QCOMPARE(apron->frontCurve(), 0.5f);
+    QVERIFY(qAbs(apron->frontEdgeAt(5.0f) - 6.8f) < 1e-4f);
 
-    // Shallower than the deck alone reaches: the piece goes.
-    QVERIFY(mp.setApronDepth(0.5f));
-    QCOMPARE(mp.platforms().size(), count - 1);
+    // The curtain line moved: the apron starts there, its depth kept.
+    mp.setCurtainLineY(4.0f);
+    QCOMPARE(apron->originY(), 4.0f);
+    QVERIFY(qAbs(mp.downstageEdgeY() - 6.0f) < 1e-4f);
+
+    // Back to Auto: to the deck's front again, the deck's front curve.
+    mp.setApronAuto(true);
+    QVERIFY(qAbs(mp.apronDepth() - 2.0f) < 1e-4f);
+    QCOMPARE(apron->frontCurve(), 0.0f);
+
+    // Saved with the apron, not as a platform of the show's: back the same.
+    const QByteArray xml = stageMarksXml(mp);
+    QCOMPARE(xml.count("<StagePlatform "), count);
+    QVERIFY(xml.contains("Kind=\"Apron\" Visible=\"1\" Auto=\"1\""));
+    MonitorProperties back;
+    loadStageMarksXml(back, xml);
+    QCOMPARE(back.platforms().size(), count + 1);
+    QVERIFY(back.apronPlatform() != nullptr);
+    QCOMPARE(back.apronPlatform()->id(), apron->id());
+    QCOMPARE(back.apronPlatform()->originY(), 4.0f);
+    QVERIFY(qAbs(back.apronDepth() - 2.0f) < 1e-4f);
+
+    // Hidden: no deck, the id kept for it; a new platform does not take it.
+    const quint32 apronId = apron->id();
+    mp.setStagePieceVisible(MP::ApronPiece, false);
     QVERIFY(mp.apronPlatform() == nullptr);
-    QCOMPARE(mp.downstageEdgeY(), 6.0f);
-    QVERIFY(!mp.setApronDepth(0.5f));             // and the deck itself is not cut
+    QCOMPARE(mp.platforms().size(), count);
+    StagePlatform *other = mp.addPlatform();
+    QVERIFY(other->id() != apronId);
+    mp.removePlatform(other->id());
+    mp.setStagePieceVisible(MP::ApronPiece, true);
+    QVERIFY(mp.apronPlatform() != nullptr);
+    QCOMPARE(mp.apronPlatform()->id(), apronId);
 
-    // A curtain line found from the main drape stays automatic.
+    // A curtain line found from the main drape: the apron starts there.
     Scenery *main = mp.addScenery();
     main->setKind(Scenery::MainDrape);
     main->setOriginX(5.0f); main->setOriginY(5.0f); main->setWidth(9.0f);
@@ -3113,6 +3154,7 @@ void MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine()
     QVERIFY(mp.setApronDepth(3.0f));
     QVERIFY(mp.curtainLineIsAuto());
     QVERIFY(qAbs(mp.downstageEdgeY() - 8.0f) < 1e-4f);
+    QCOMPARE(mp.apronPlatform()->originY(), 5.0f);
 
     // Over the audience: how far from the curtain line, in crew terms.
     QCOMPARE(mp.curtainLineOffsetText(9.2f), QStringLiteral("4.2 m DS of curtain line"));
@@ -3172,4 +3214,194 @@ void MonitorProperties_Test::theNumberLineReadsFromCentre()
     QVERIFY(!MP::numberLineMajorTick(5, 2));
     QVERIFY(MP::numberLineMajorTick(4, 2));
     QVERIFY(MP::numberLineMajorTick(5, 1));
+}
+
+void MonitorProperties_Test::theApronNeverMovesARiserAtTheFront()
+{
+    /* Branson's stage: a deck, and a centre riser butted against its front.
+       Setting the apron's depth moved the riser (it was taken for the apron
+       piece). The apron is its own piece now. */
+    typedef MonitorProperties MP;
+    MonitorProperties mp;
+    mp.setGridUnits(MP::Meters);
+    mp.setGridSize(QVector3D(12, 6, 10));
+    StagePlatform *deck = mp.addPlatform();
+    deck->setName(QStringLiteral("Deck"));
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(10.0f); deck->setDepth(5.0f);
+    deck->setHeight(0.9f);
+    StagePlatform *riser = mp.addPlatform();
+    riser->setName(QStringLiteral("Centre riser"));
+    riser->setOriginX(5.0f); riser->setOriginY(6.0f);     // butted at the front, at centre
+    riser->setWidth(2.0f); riser->setDepth(1.0f);
+    riser->setHeight(0.4f);
+    const QList<QPair<QString, float> > before = QList<QPair<QString, float> >()
+        << qMakePair(QStringLiteral("x"), riser->originX()) << qMakePair(QStringLiteral("y"), riser->originY())
+        << qMakePair(QStringLiteral("w"), riser->width()) << qMakePair(QStringLiteral("d"), riser->depth())
+        << qMakePair(QStringLiteral("h"), riser->height());
+    auto unchanged = [&]() {
+        const QList<float> now = QList<float>() << riser->originX() << riser->originY()
+                                                << riser->width() << riser->depth() << riser->height();
+        for (int i = 0; i < before.size(); ++i)
+            if (qAbs(now.at(i) - before.at(i).second) > 1e-5f)
+                return false;
+        return mp.platform(riser->id()) == riser && deck->depth() == 5.0f && deck->originY() == 1.0f;
+    };
+
+    mp.setStagePieceVisible(MP::CurtainPiece, true);
+    mp.setStagePieceVisible(MP::ApronPiece, true);
+    mp.setCurtainLineY(4.5f);
+    foreach (float depth, QList<float>() << 0.5f << 1.5f << 3.0f << 4.0f << 0.0f << 2.0f)
+    {
+        QVERIFY(mp.setApronDepth(depth));
+        QVERIFY2(unchanged(), qPrintable(QString::number(double(depth))));
+    }
+    // The apron is its own platform, from the curtain line, as wide as the deck.
+    StagePlatform *apron = mp.apronPlatform();
+    QVERIFY(apron != nullptr);
+    QVERIFY(apron != riser && apron != deck);
+    QCOMPARE(apron->originY(), 4.5f);
+    QCOMPARE(apron->depth(), 2.0f);
+    QCOMPARE(apron->originX(), 1.0f);
+    QCOMPARE(apron->width(), 10.0f);
+    // Its front curve and Auto don't touch the riser either.
+    mp.setApronFrontCurve(0.6f);
+    mp.setApronAuto(true);
+    QVERIFY(unchanged());
+    // Nor does a save and load.
+    MonitorProperties back;
+    loadStageMarksXml(back, stageMarksXml(mp));
+    const StagePlatform *riser2 = back.platform(riser->id());
+    QVERIFY(riser2 != nullptr);
+    QCOMPARE(riser2->originY(), 6.0f);
+    QCOMPARE(riser2->depth(), 1.0f);
+    QVERIFY(back.apronPlatform() != nullptr);
+    QVERIFY(back.apronPlatform()->id() != riser->id());
+}
+
+void MonitorProperties_Test::stageMarksMigrateToStagePieces()
+{
+    typedef MonitorProperties MP;
+    /* A show saved with Show ▸ Stage marks: the centre mark and line, the
+       curtain line and number line on and set, target positions off. */
+    const QByteArray old("<?xml version=\"1.0\"?><Monitor DisplayMode=\"0\" ShowLabels=\"1\" "
+                         "StageMarks=\"15\" CurtainLineY=\"4.2\" NumberLineY=\"6\" TargetPositions=\"0\">"
+                         "<Grid Width=\"10\" Height=\"6\" Depth=\"8\" Units=\"0\"/>"
+                         "<StagePlatform ID=\"0\" Name=\"Deck\" OriginX=\"1\" OriginY=\"1\" Width=\"8\" Depth=\"5\" Height=\"1\"/>"
+                         "</Monitor>");
+    MonitorProperties mp;
+    loadStageMarksXml(mp, old);
+    QVERIFY(mp.stagePieceVisible(MP::CentrePiece));
+    QVERIFY(mp.stageMarkVisible(MP::CentreMarkFlag));
+    QVERIFY(mp.stageMarkVisible(MP::CentreLineFlag));
+    QVERIFY(mp.stagePieceVisible(MP::CurtainPiece));
+    QVERIFY(mp.stagePieceVisible(MP::NumberPiece));
+    QCOMPARE(mp.curtainLineY(), 4.2f);
+    QCOMPARE(mp.numberLineY(), 6.0f);
+    QVERIFY(!mp.targetPositionsVisible());
+    // The tinted apron is the apron piece now: Auto, the deck past the curtain line.
+    QVERIFY(mp.stagePieceVisible(MP::ApronPiece));
+    QVERIFY(mp.apronAuto());
+    QVERIFY(mp.hasStageLayer());
+    QCOMPARE(mp.layer(mp.stageLayerId()).name, QStringLiteral("Stage"));
+    const int platforms = mp.platforms().size();
+    QVERIFY(mp.mainDeck() != nullptr);
+    QCOMPARE(mp.deckFrontY(), 6.0f);
+    QVERIFY(qAbs(mp.apronDepth() - 1.8f) < 1e-4f);
+    QVERIFY(mp.apronPlatform() != nullptr);
+    QCOMPARE(mp.apronPlatform()->originY(), 4.2f);
+    QCOMPARE(platforms, 2);
+    QCOMPARE(mp.downstageEdgeY(), 6.0f);         // the same front as before
+
+    // Saved the new way only; back exactly as it was.
+    const QByteArray now = stageMarksXml(mp);
+    QVERIFY(now.contains("<StagePieces"));
+    QVERIFY(!now.contains("StageMarks="));
+    QVERIFY(!now.contains("CurtainLineY="));
+    QVERIFY(!now.contains("NumberLineY="));
+    QVERIFY(now.contains("TargetPositions=\"0\""));
+    MonitorProperties back;
+    loadStageMarksXml(back, now);
+    QCOMPARE(back.stageMarks(), mp.stageMarks());
+    QCOMPARE(back.curtainLineY(), 4.2f);
+    QCOMPARE(back.numberLineY(), 6.0f);
+    QCOMPARE(back.stageLayerId(), mp.stageLayerId());
+    QCOMPARE(back.layers().size(), mp.layers().size());
+    QCOMPARE(back.platforms().size(), platforms);
+    QCOMPARE(stageMarksXml(back), now);
+
+    // Only the number line shown before: just that, and no apron.
+    MonitorProperties some;
+    loadStageMarksXml(some, QByteArray("<?xml version=\"1.0\"?><Monitor DisplayMode=\"0\" StageMarks=\"8\"/>"));
+    QCOMPARE(some.stageMarks(), int(MP::NumberLineFlag));
+    QVERIFY(!some.stagePieceVisible(MP::ApronPiece));
+    // And a show from before the marks: none, no Stage layer, saved as before.
+    MonitorProperties none;
+    loadStageMarksXml(none, QByteArray("<?xml version=\"1.0\"?><Monitor DisplayMode=\"0\"/>"));
+    QCOMPARE(none.stageMarks(), int(MP::NoStageMarks));
+    QVERIFY(!none.hasStageLayer());
+    QCOMPARE(none.layers().size(), 1);
+    QVERIFY(!stageMarksXml(none).contains("StagePieces"));
+}
+
+void MonitorProperties_Test::stagePiecesAreShownAndLockedOnTheirOwnAndByLayer()
+{
+    typedef MonitorProperties MP;
+    MonitorProperties mp;
+    QVERIFY(!mp.hasStageLayer());
+    QCOMPARE(mp.stagePieces().size(), 4);
+    foreach (MP::StagePiece piece, MP::stagePieces())
+    {
+        QVERIFY(!mp.stagePieceVisible(piece));
+        QVERIFY(!MP::stagePieceName(piece).isEmpty());
+    }
+
+    // Shown: the Stage layer is made, and it stays.
+    mp.setStagePieceVisible(MP::CurtainPiece, true);
+    QVERIFY(mp.hasStageLayer());
+    const quint32 stage = mp.stageLayerId();
+    QVERIFY(stage != MP::defaultLayerId);
+    mp.removeLayer(stage);
+    QVERIFY(mp.hasLayer(stage));
+    QCOMPARE(mp.ensureStageLayer(), stage);
+    QVERIFY(mp.stagePieceShown(MP::CurtainPiece));
+    QVERIFY(mp.stagePieceMovable(MP::CurtainPiece));
+
+    // Its layer hidden: not drawn, though it is still on.
+    mp.setLayerVisible(stage, false);
+    QVERIFY(mp.stagePieceVisible(MP::CurtainPiece));
+    QVERIFY(!mp.stagePieceShown(MP::CurtainPiece));
+    QVERIFY(!mp.stageMarkShown(MP::CurtainLineFlag));
+    QVERIFY(!mp.stagePieceMovable(MP::CurtainPiece));
+    mp.setLayerVisible(stage, true);
+
+    // Locked on its own, or with its layer.
+    mp.setStagePieceLocked(MP::CurtainPiece, true);
+    QVERIFY(!mp.stagePieceMovable(MP::CurtainPiece));
+    QVERIFY(mp.stagePieceShown(MP::CurtainPiece));
+    mp.setStagePieceLocked(MP::CurtainPiece, false);
+    mp.setLayerLocked(stage, true);
+    QVERIFY(!mp.stagePieceMovable(MP::CurtainPiece));
+    mp.setLayerLocked(stage, false);
+
+    // The centre piece comes back as it was hidden.
+    mp.setStageMarks(mp.stageMarks() | MP::CentreLineFlag);
+    QVERIFY(mp.stagePieceVisible(MP::CentrePiece));
+    mp.setStagePieceVisible(MP::CentrePiece, false);
+    QVERIFY(!mp.stageMarkVisible(MP::CentreLineFlag));
+    mp.setStagePieceVisible(MP::CentrePiece, true);
+    QVERIFY(mp.stageMarkVisible(MP::CentreLineFlag));
+    QVERIFY(!mp.stageMarkVisible(MP::CentreMarkFlag));
+
+    // Locks and a hidden centre piece's parts are saved with the show.
+    mp.setStagePieceLocked(MP::NumberPiece, true);
+    mp.setStagePieceVisible(MP::CentrePiece, false);
+    MonitorProperties back;
+    loadStageMarksXml(back, stageMarksXml(mp));
+    QVERIFY(back.stagePieceLocked(MP::NumberPiece));
+    QVERIFY(!back.stagePieceLocked(MP::CurtainPiece));
+    QVERIFY(!back.stagePieceVisible(MP::CentrePiece));
+    back.setStagePieceVisible(MP::CentrePiece, true);
+    QVERIFY(back.stageMarkVisible(MP::CentreLineFlag));
+    QCOMPARE(back.stageLayerId(), stage);
 }

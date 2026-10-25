@@ -38,6 +38,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include "qlceventpos.h"
+#include "monitorproperties.h"
 
 class QTreeWidgetItem;
 class QToolButton;
@@ -198,6 +199,8 @@ private:
      *  group across several trusses -- can be given a home at the end. */
     QSet<quint32> m_listedFixtureGroups;
     void addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d);
+    /** A stage piece's own eye and lock on its row (Q147). */
+    void addStagePieceToggles(QTreeWidgetItem *node, MonitorProperties::StagePiece piece);
     /** The tree icon for an item KIND (fixture/truss/platform/pipe/stand/tower/
      *  image/power). @p color tints the platform swatch. */
     QIcon kindIcon(const QString &kind, const QColor &color) const;

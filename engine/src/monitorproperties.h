@@ -226,11 +226,14 @@ public:
      *
      * The marks a crew spikes and focuses by, drawn on the plot and on the
      * Rig Overview's floor: the centre line's mark at the downstage edge
-     * (DSC) and, optionally, the whole centre line; the curtain line; and
-     * the number line, ticked in the show's unit either side of centre.
-     * Per show, saved with it only when used: an older show loads with all
-     * of them off. Positions are world metres along Y (downstage +), like
-     * every other position on the plot.
+     * (DSC) and, optionally, the whole centre line; the curtain line; the
+     * number line, ticked in the show's unit either side of centre; and the
+     * apron, the deck downstage of the curtain line, built as its own piece.
+     * They are objects on the plot -- the stage pieces, on their own Stage
+     * layer in Plot layers -- each shown or hidden and locked on its own as
+     * well as with the layer. Per show, saved with it only when used: an
+     * older show loads with all of them off. Positions are world metres
+     * along Y (downstage +), like every other position on the plot.
      ********************************************************************/
     enum StageMark
     {
@@ -238,35 +241,69 @@ public:
         CentreMarkFlag  = (1 << 0),   ///< the centre line's mark at the downstage edge
         CentreLineFlag  = (1 << 1),   ///< the whole centre line, dashed, running upstage
         CurtainLineFlag = (1 << 2),   ///< where the main curtain / proscenium sits
-        NumberLineFlag  = (1 << 3)    ///< distances left and right of centre
+        NumberLineFlag  = (1 << 3),   ///< distances left and right of centre
+        ApronFlag       = (1 << 4)    ///< the apron, its own deck from the curtain line
     };
     inline int stageMarks() const { return m_stageMarks; }
-    inline void setStageMarks(int marks) { m_stageMarks = marks & 0x0F; }
+    void setStageMarks(int marks);
     inline bool stageMarkVisible(StageMark mark) const { return (m_stageMarks & mark) != 0; }
     void setStageMarkVisible(StageMark mark, bool on);
+    /** Drawn: turned on, and the Stage layer shown. */
+    bool stageMarkShown(StageMark mark) const;
+
+    /** The stage pieces as the plot and Plot layers list them. The centre
+     *  piece is the DSC mark and the full centre line together (either or
+     *  both, CentreMarkFlag / CentreLineFlag). */
+    enum StagePiece { CentrePiece = 0, CurtainPiece = 1, NumberPiece = 2, ApronPiece = 3 };
+    static QList<StagePiece> stagePieces();
+    static QString stagePieceName(StagePiece piece);
+    /** Shown or hidden on its own (the layer's eye aside). Showing the
+     *  centre piece brings back the parts it had when it was hidden (the DSC
+     *  mark, the first time). Showing any piece makes the Stage layer. */
+    bool stagePieceVisible(StagePiece piece) const;
+    void setStagePieceVisible(StagePiece piece, bool on);
+    /** Locked on its own: not dragged on the plot. */
+    bool stagePieceLocked(StagePiece piece) const { return (m_stagePieceLocks & (1 << int(piece))) != 0; }
+    void setStagePieceLocked(StagePiece piece, bool on);
+    /** Drawn: visible, and the Stage layer shown. */
+    bool stagePieceShown(StagePiece piece) const;
+    /** Can be dragged: shown, and neither it nor the Stage layer locked. */
+    bool stagePieceMovable(StagePiece piece) const;
+
+    /** The layer the stage pieces (and the apron's deck) are on: made the
+     *  first time one is shown or Plot layers lists them, and kept with the
+     *  show; it can be hidden and locked like any layer but not removed.
+     *  0 (the Default layer's id) until it is made. */
+    quint32 stageLayerId() const { return m_stageLayerId; }
+    bool hasStageLayer() const { return m_stageLayerId != defaultLayerId && m_layers.contains(m_stageLayerId); }
+    quint32 ensureStageLayer();
 
     /** The one grid unit in metres: a foot or a metre. The number line is
      *  ticked in it. */
     inline float gridUnitMetres() const { return m_gridUnits == Feet ? 0.3048f : 1.0f; }
 
-    /** Where the stage's front edge (the front of the apron) crosses the
-     *  centre line, in world metres along Y. The deck is the biggest
-     *  square-on platform across the centre line, carried on downstage by any
-     *  platform butted against its front across the centre (an apron added
-     *  as its own piece), and a rounded front is followed to its middle.
-     *  With no such platform, the downstage edge of the stage grid. */
+    /** Where the stage's front edge crosses the centre line, in world
+     *  metres along Y: the front of the deck (deckFrontY()), or of the apron
+     *  piece when that is shown and reaches further downstage. */
     float downstageEdgeY() const;
+    /** The front of the deck at the centre line, the apron piece left out:
+     *  the biggest square-on platform across the centre line, carried on
+     *  downstage by any platform butted against its front across the centre,
+     *  a rounded front followed to its middle. With no such platform, the
+     *  downstage edge of the stage grid. The curtain line is found, and
+     *  measured, from here. */
+    float deckFrontY() const;
 
     /** The curtain line. Automatic until moved: the most downstage main
      *  drape across the centre line, else a proscenium's, else a typical
-     *  apron's depth (4 ft, or 1.2 m) upstage of the downstage edge. */
+     *  apron's depth (4 ft, or 1.2 m) upstage of the front of the deck. */
     float curtainLineY() const;
     float autoCurtainLineY() const;
     /** The scenery the automatic curtain line comes from, if any. */
     const Scenery *curtainLineScenery() const;
     inline bool curtainLineIsAuto() const { return !m_curtainLineSet; }
     void setCurtainLineY(float metres);
-    inline void setCurtainLineAuto() { m_curtainLineSet = false; }
+    void setCurtainLineAuto();
 
     /** The number line: at the downstage edge until moved. */
     float numberLineY() const;
@@ -275,15 +312,16 @@ public:
     inline void setNumberLineAuto() { m_numberLineSet = false; }
 
     /** The curtain line is the stage's main reference (the plaster line):
-     *  the Stage marks menu sets it as how far upstage of the front of the
-     *  stage (downstageEdgeY()) it is, and the number line as how far
+     *  its properties set it as how far upstage of the front of the deck
+     *  (deckFrontY(), the apron piece left out: the apron starts at the
+     *  curtain line) it is, and the number line as how far
      *  downstage of the curtain line; negative the other way. Both are kept,
      *  and saved (CurtainLineY / NumberLineY), as the plan's Y all the same:
      *  a line set where it belongs stays there when a deck is added or moved
      *  or the other line moves (the distance shown changes instead), and a
      *  show saved before reads exactly as it did. */
-    inline float curtainLineUpstage() const { return downstageEdgeY() - curtainLineY(); }
-    inline void setCurtainLineUpstage(float metres) { setCurtainLineY(downstageEdgeY() - metres); }
+    inline float curtainLineUpstage() const { return deckFrontY() - curtainLineY(); }
+    inline void setCurtainLineUpstage(float metres) { setCurtainLineY(deckFrontY() - metres); }
     inline float numberLineDownstageOfCurtain() const { return numberLineY() - curtainLineY(); }
     inline void setNumberLineDownstageOfCurtain(float metres) { setNumberLineY(curtainLineY() + metres); }
 
@@ -298,29 +336,49 @@ public:
     /** A distance on its own, as the screen writes it: "1.8 m", "5' 11\"". */
     static QString formatStageDistance(float metres, GridUnits units);
 
-    /** The apron: the deck downstage of the curtain line. Its depth at
-     *  centre is from the curtain line to the front of the stage (0 or less
-     *  when the stage has none). */
-    inline float apronDepth() const { return downstageEdgeY() - curtainLineY(); }
+    /** The apron: the stage downstage of the curtain line, as its own
+     *  piece. It starts at the curtain line and runs downstage by its depth,
+     *  its front rounded by its front curve, as wide and as high as the main
+     *  deck (the stage grid's width, on the floor, with none) and in its
+     *  colour, and it is drawn and stood on as real deck (apronPlatform()).
+     *  It never borrows another platform: a riser butted to the front stays
+     *  as it is whatever the apron does. Automatic until set: it reaches the
+     *  main deck's front, with the deck's own front curve. */
+    inline bool apronAuto() const { return m_apronAuto; }
+    void setApronAuto(bool on);
+    /** Its depth at centre, from the curtain line (0 when it has none). */
+    float apronDepth() const;
+    /** The depth it has on Auto: from the curtain line to the main deck's
+     *  front (0 or less when the deck stops upstage of the curtain line). */
+    float autoApronDepth() const;
+    /** Set the apron @p metres deep from the curtain line (Auto off): its
+     *  front moves, nothing else does. False for a depth that is not a
+     *  finite number of 0 or more. */
+    bool setApronDepth(float metres);
+    /** How far the middle of its front reaches past the corners (metres). */
+    float apronFrontCurve() const;
+    /** Set its front curve (Auto off, the depth kept as it is). */
+    void setApronFrontCurve(float metres);
+    /** The apron's deck: a platform on the Stage layer, made, kept to the
+     *  curtain line and resized by syncApron(), and saved with the apron,
+     *  not as a platform of its own. Null while the apron is hidden or has
+     *  no depth. */
+    StagePlatform *apronPlatform() const;
+    bool isApronPlatform(quint32 platformId) const
+    { return platformId == m_apronPlatformId && m_platforms.contains(platformId); }
+    /** Make the apron's deck agree with the apron as it is now: made when
+     *  it is shown, taken away when it is hidden, moved with the curtain
+     *  line and the main deck. Every stage setter calls it; a view calls it
+     *  after the deck or the curtain it is found from is edited. True when
+     *  anything changed. */
+    bool syncApron();
     /** The deck the stage is: the biggest square-on platform across the
-     *  centre line (downstageEdgeY() starts from its front); null on a bare
-     *  floor. */
+     *  centre line (deckFrontY() starts from its front); null on a bare
+     *  floor. Never the apron's own deck. */
     const StagePlatform *mainDeck() const;
     /** The main deck, then the pieces butted on in front of it at the centre
-     *  line, upstage to downstage: what downstageEdgeY() is found from. */
+     *  line, upstage to downstage: what deckFrontY() is found from. */
     QList<StagePlatform *> stageDecks() const;
-    /** The apron built as its own piece: the platform butted against the
-     *  main deck's front across the centre line (the most downstage one, if
-     *  several are chained); null if there is none. */
-    StagePlatform *apronPlatform() const;
-    /** Make the apron @p metres deep from the curtain line: the apron piece
-     *  is resized, or one is added against the main deck's front (its width,
-     *  height and colour), or taken away when the deck alone reaches. An
-     *  automatic curtain line with nothing hung to find it from is pinned
-     *  where it is first, or it would follow the new front. False (and
-     *  nothing changed) with no main deck, or when the main deck alone
-     *  already reaches further downstage than asked. */
-    bool setApronDepth(float metres);
 
     /** Whether the plot and the Rig Overview write where each target is
      *  beside it (stagePositionText()). On unless turned off; saved with the
@@ -381,6 +439,16 @@ private:
     float m_aimSubjectHeight;
     QPointF m_stageOrigin;
     int m_stageMarks = NoStageMarks;
+    int m_centreParts = CentreMarkFlag;     ///< what the centre piece shows when shown again
+    int m_stagePieceLocks = 0;              ///< 1 << StagePiece
+    quint32 m_stageLayerId = 0;             ///< 0: not made yet
+    bool m_apronAuto = true;
+    float m_apronDepth = 0.0f;              ///< set depth, metres
+    float m_apronFrontCurve = 0.0f;         ///< set front curve, metres
+    quint32 m_apronPlatformId = 0xFFFFFFFF; ///< its deck's platform id, kept while hidden
+    bool m_loadingXml = false;              ///< syncApron() waits for the platforms
+    void loadStagePieces(QXmlStreamReader &root);
+    void saveStagePieces(QXmlStreamWriter *doc) const;
     bool m_curtainLineSet = false;
     float m_curtainLineY = 0.0f;
     bool m_numberLineSet = false;

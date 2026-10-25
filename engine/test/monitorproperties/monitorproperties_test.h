@@ -180,10 +180,21 @@ private slots:
      *  it did and a set line stays put when the deck or the other line
      *  moves. */
     void stageLinesAreSetFromTheFrontAndTheCurtainLine();
-    /** The apron: its depth from the curtain line to the front, set by
-     *  resizing, adding or removing the piece in front of the main deck;
-     *  and what hangs downstage of the curtain line written in crew terms. */
+    /** Q147: the apron is its own piece: from the curtain line, as deep as
+     *  set (or to the deck's front on Auto), its front curve at its front,
+     *  its own deck on the Stage layer, saved with it; and what hangs
+     *  downstage of the curtain line written in crew terms. */
     void theApronIsMeasuredFromTheCurtainLine();
+    /** Q147 regression: a riser butted against the deck's front is never
+     *  moved or resized by the apron (it was taken for the apron piece). */
+    void theApronNeverMovesARiserAtTheFront();
+    /** Q147: a show saved with Show ▸ Stage marks (StageMarks, CurtainLineY,
+     *  NumberLineY, TargetPositions) loads as the same stage pieces, at the
+     *  same places, and saves them the new way; an older show has none. */
+    void stageMarksMigrateToStagePieces();
+    /** Q147: each piece is shown and locked on its own and with the Stage
+     *  layer, which is made when one is shown and can't be removed. */
+    void stagePiecesAreShownAndLockedOnTheirOwnAndByLayer();
     /** The number line's numbering: CL at centre, a stride that leaves
      *  room, long ticks only on numbered places, mirrored about centre. */
     void theNumberLineReadsFromCentre();

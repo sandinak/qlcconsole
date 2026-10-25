@@ -396,23 +396,37 @@ their house lights, relays and subs.
   next free addresses after the originals, leave them unpatched, or
   cancel. See [Selecting and undo on the
   plot](lighting-studio.md#selecting-and-undo-on-the-plot).
-- **Stage marks on the plot.** **Show ▸ Stage marks** draws the centre
-  mark at the front of the stage (DSC, labelled CL) and, if you want it, the
-  whole centre line; the curtain line, found from the main drape or the
-  proscenium; and a number line ticked in feet or metres out from centre,
-  labelled CL, its long ticks only on numbered places. The curtain line is the main reference: it's set by how far
-  upstage of the front of the stage it is, and the number line by how far
-  downstage of the curtain line. With the curtain line on, the apron in
-  front of it is tinted and its depth dimensioned, **Apron depth** builds or
-  resizes an apron platform, and trusses and pipes over the audience say how
-  far out they hang (**FOH · 4.2 m DS of curtain line**). The full centre
-  line replaces the teal centre cross's line along it. The Rig Overview
-  draws them on its floor, the apron tint and the FOH labels included, and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+- **Stage marks on the plot, as objects.** The centre line and DSC mark,
+  the curtain line, the number line and the apron are **stage pieces** on
+  their own **Stage** layer in Plot layers, each with its own eye and lock
+  (and the layer's). Click one to select it, drag the curtain line or the
+  number line up or downstage, drag the apron's front edge; each drag is one
+  undo step. Double-click (or right-click, **Properties…**) for where it is
+  as a crew measures it — the curtain line upstage of the front of the deck,
+  the number line downstage of the curtain line, the apron's depth and front
+  curve, each **Auto** until set — always in the show's unit. The curtain
+  line is found from the main drape or the proscenium; the number line is
+  ticked in feet or metres out from centre, labelled CL, its long ticks only
+  on numbered places; trusses and pipes over the audience say how far out
+  they hang (**FOH · 4.2 m DS of curtain line**). The full centre line
+  replaces the teal centre cross's line along it. The Rig Overview draws
+  the lines on its floor and lists the pieces in its **Plot layers** menu,
+  and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+- **The apron is its own deck.** It starts at the curtain line and runs
+  downstage by its depth, with its rounded front right at its front edge,
+  and it's real deck: drawn as deck on the plot and in the Rig Overview
+  (from above, at 45° and in 3D, whatever marks are on), and stood on. It
+  never moves or resizes another platform, so a riser butted against the
+  front of the deck stays where it is. See [The apron](lighting-studio.md#the-apron).
+- **The Rig Overview's controls are in a footer bar** along its foot, like
+  the Lighting Studio plot's: **Show** (Target positions) and **Plot
+  layers** on the left, **View** on the right, and a **Fit** button to put
+  the whole rig back in view after a zoom. See [Angled](lighting-studio.md#angled--the-free-3d-view).
 - **Where a target is, in crew terms.** Each stage target on the plot,
   each figure in the Rig Overview, and the person Quick focus stands where a
   fixed light lands has a small readout of where it is against the stage
   marks, for example **SL 2.4 · US 3.1 m**. It follows the target as it
-  moves. Untick **Target positions** in **Show ▸ Stage marks** to hide it. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+  moves. Untick **Show ▸ Target positions** to hide it. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Auto fixtures as their closest symbol.** The plot's **Show** menu has
   **Show Auto fixtures as their closest plot symbol**, saved with the show.
 - **One icon per fixture, everywhere**, and curtains have a drape. Icons

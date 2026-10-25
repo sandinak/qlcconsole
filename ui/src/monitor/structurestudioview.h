@@ -329,6 +329,8 @@ public:
      *  turns about, across the middle and a little below half way -- rather
      *  than centring what is there. The Rig Overview does. */
     void setStandOnCentreStage(bool on) { m_standOnCentreStage = on; refit(); update(); }
+    /** Back to the whole rig in view, after a zoom or a pan by hand. */
+    void fitToRig() { m_zoomed = false; refit(); update(); }
 private:
     bool m_standOnCentreStage = false;
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame

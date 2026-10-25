@@ -135,27 +135,30 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   device as a greyed line, "not connected", with its universe; Quick focus
   says "Controller connected". On Linux the HID plugin now rescans when
   `/dev/input` changes, so a Bluetooth pad is noticed there too.
-- **Stage marks** in the Lighting Studio's **Show ▸ Stage marks**: the
-  centre mark at the front of the stage (DSC, "CL") and optionally the full
-  centre line, dashed; the curtain line (from the most downstage main drape
-  or proscenium across centre, else 4 ft / 1.2 m upstage of the front); and
-  the number line, ticked and numbered in the show's unit out from 0 at
-  centre, at the front of the deck (the biggest platform across centre and
-  an apron butted to it) or the grid's front edge. The curtain and number
-  lines can be moved: Auto, or the curtain line (the main reference) a
-  distance upstage of the front of the stage and the number line a distance
-  downstage of the curtain line, negative the other way; both kept and saved
-  as the plan's Y, so a set line stays put when the deck or the other line
-  moves. With the curtain line on, the apron (the deck downstage of it) is
-  tinted and dimensioned ("Apron 1.8 m"), **Apron depth** resizes or adds
-  the apron platform in front of the main deck (one undo step;
-  `MonitorProperties::setApronDepth()`), and horizontal trusses and pipes
-  downstage of it are labelled "FOH · 4.2 m DS of curtain line"
-  (`curtainLineOffsetText()`); the Rig Overview draws the apron and these
-  labels on its floor too, Top and 45°, the words left out while it's small.
-  The number line labels centre **CL** (not 0),
-  each number centred on its tick, long ticks only on numbered places, the
-  same rule on the plot and the Rig Overview (`numberLineStride()`,
+- **Stage marks, as stage pieces** (board Q147): the centre line / DSC
+  mark, the curtain line, the number line and the apron are objects on the
+  plot (`StagePieceItem`), on their own **Stage** layer in Plot layers
+  (`MonitorProperties::ensureStageLayer()`, kept with the show, hidden and
+  locked like any layer but never removed), each with its own eye and lock
+  as well (`stagePieceVisible()`, `stagePieceLocked()`). A click selects one
+  (a rubber band never does), the Layers list follows; the curtain line and
+  the number line drag up and downstage and the apron by its front edge,
+  one undo step a drag, snapped with Snap on; a locked piece or layer holds
+  it. Double-click or **Properties…** (`StagePieceDialog`, one undo step,
+  Cancel puts it back): Shown, Lock, and where it is as a crew measures it
+  -- the curtain line Auto or a distance upstage of the front of the deck,
+  the number line Auto or a distance downstage of the curtain line, the
+  apron Auto or a depth and front curve, the centre piece's DSC mark and
+  full-depth line -- every distance entered and read in the show's unit as
+  it is when it opens (the positions read "1.00 m" on a feet show, built
+  with the unit the Studio opened with). The curtain line is found from
+  the most downstage main drape or proscenium across centre, else 4 ft /
+  1.2 m upstage of the front of the deck (the biggest platform across
+  centre and any butted to its front, or the grid's front edge); a set line
+  is kept as the plan's Y and stays put when the deck or the other line
+  moves. The number line is ticked and numbered in the show's unit out from
+  CL, each number centred on its tick, long ticks only on numbered places,
+  the same rule on the plot and the Rig Overview (`numberLineStride()`,
   `numberLineMajorTick()`, `numberLineLabel()`); the centre mark's own CL
   gives way to the number line's when that runs through it; with the full
   centre line on, the teal centre cross's up-and-down arm isn't drawn.
@@ -205,8 +208,8 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   measured from centre and the number line (the curtain line when only that
   is shown), live while dragged or nudged. One formatter,
   `MonitorProperties::formatStageOffset()`, with a compact and a spoken
-  form ("SL 2, US 1") for calls and voice. **Show ▸ Stage marks ▸ Target
-  positions** hides them; on by default, saved with the show only when off
+  form ("SL 2, US 1") for calls and voice. **Show ▸ Target positions**
+  (on the plot and the Rig Overview) hides them; on by default, saved with the show only when off
   (`TargetPositions="0"` on `Monitor`), not an undo step.
 - **Quick focus save status**: a status lamp in the panel (`FocusStatusLamp`)
   -- green all saved, yellow the current light unsaved, red another light

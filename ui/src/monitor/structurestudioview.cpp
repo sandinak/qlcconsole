@@ -1759,13 +1759,13 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
     const double dsY = props->downstageEdgeY();
     const double x0 = 0.0, x1 = props->gridSize().x() * unit;
 
-    if (props->stageMarkVisible(MonitorProperties::CentreLineFlag))
+    if (props->stageMarkShown(MonitorProperties::CentreLineFlag))
     {
         p.setPen(QPen(centreColour, 1.2, Qt::DashLine));
         floorLine(cx, dsY, cx, 0.0);
         label(tr("CL"), w2s(floorAt(cx, 0.0)) + QPointF(0, -10), centreColour);
     }
-    if (props->stageMarkVisible(MonitorProperties::CentreMarkFlag))
+    if (props->stageMarkShown(MonitorProperties::CentreMarkFlag))
     {
         // A spike on the edge: a short cross-piece and the CL just in front.
         p.setPen(QPen(centreColour, 2.0));
@@ -1773,97 +1773,74 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
         floorLine(cx, dsY, cx, dsY - 0.5 * unit);
         /* Its CL straight over it, on centre -- unless the number line runs
            through it, whose own centre label is the CL there. */
-        const bool numberHere = props->stageMarkVisible(MonitorProperties::NumberLineFlag)
+        const bool numberHere = props->stageMarkShown(MonitorProperties::NumberLineFlag)
                                 && std::fabs(props->numberLineY() - dsY) < 0.5 * unit;
         if (!numberHere)
             label(tr("CL"), w2s(floorAt(cx, dsY - 0.5 * unit)) + QPointF(0, -10), centreColour);
     }
-    if (props->stageMarkVisible(MonitorProperties::CurtainLineFlag))
+    const QFontMetricsF fm(f);
+    const double cy = props->curtainLineY();
+    const double pxPerMetre = QLineF(w2s(floorAt(cx, cy)), w2s(floorAt(cx + 1.0, cy))).length();
+    /* The words only while there's room for them: a small overview (under
+       480 x 360, or under 18 px a metre) keeps the lines. */
+    const bool roomy = pxPerMetre >= 18.0 && width() >= 480 && height() >= 360;
+    /* The apron is deck now -- its own platform, drawn with the rest of the
+       rig whatever marks are on (Q146) -- so only its depth is marked here:
+       dimensioned beside centre, from the curtain line to its front. */
+    if (props->stageMarkShown(MonitorProperties::ApronFlag) && props->apronPlatform() != nullptr)
     {
-        const double y = props->curtainLineY();
-        p.setPen(QPen(curtainColour, 1.4, Qt::DashDotLine));
-        floorLine(x0, y, x1, y);
-        const QPointF at = w2s(floorAt(x0, y));
-        const QFontMetricsF fm(f);
-        label(tr("Curtain line"), at + QPointF(fm.horizontalAdvance(tr("Curtain line")) / 2.0 + 6, -10),
-              curtainColour);
-
-        /* The plot's apron and overhangs (MonitorGraphicsView::
-           updateStageMarks()), on the floor: the deck downstage of the
-           curtain line tinted, its depth dimensioned beside centre, and what
-           hangs downstage of the curtain line saying how far. The words
-           only while there's room for them: a small overview (under 480 x
-           360, or under 18 px a metre) keeps the tint and the lines. */
-        const double pxPerMetre = QLineF(w2s(floorAt(cx, y)), w2s(floorAt(cx + 1.0, y))).length();
-        const bool roomy = pxPerMetre >= 18.0 && width() >= 480 && height() >= 360;
+        const double y = cy;
         const double apron = props->apronDepth();
-        if (apron > 0.005)
+        const double front = y + apron;
+        const QPointF top = w2s(floorAt(cx, y)), frontPt = w2s(floorAt(cx, front));
+        if (roomy && QLineF(top, frontPt).length() >= 16.0)
         {
-            QPainterPath deck;
-            foreach (const StagePlatform *sp, props->stageDecks())
+            const double ax = cx + 34.0 / pxPerMetre;
+            const double tick = 5.0 / pxPerMetre;
+            p.setPen(QPen(curtainColour, 1.0));
+            floorLine(ax, y, ax, front);
+            floorLine(ax - tick, y, ax + tick, y);
+            floorLine(ax - tick, front, ax + tick, front);
+            const QString text = tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron),
+                                                                                         props->gridUnits()));
+            const QPointF mid = (w2s(floorAt(ax, y)) + w2s(floorAt(ax, front))) / 2.0;
+            /* Beside the dimension line, just off centre -- where a figure
+               standing near centre has its position readout
+               (drawTargetPositions()). Not on top of one: the other side of
+               the line, then a line's height up or down; with no clear
+               place, the line and its ticks say enough. */
+            const double side = fm.horizontalAdvance(text) / 2.0 + 8.0;
+            const double rise = fm.height() + 4.0;
+            QList<QRectF> readouts;
+            foreach (const auto &ro, targetReadouts(p.font()))
+                readouts << ro.second.adjusted(-2, -2, 2, 2);
+            const QList<QPointF> tries = QList<QPointF>()
+                << QPointF(side, 0) << QPointF(-side, 0)
+                << QPointF(side, -rise) << QPointF(-side, -rise)
+                << QPointF(side, rise) << QPointF(-side, rise);
+            foreach (const QPointF &off, tries)
             {
-                deck.addPolygon(QPolygonF(sp->footprint()));
-                deck.closeSubpath();
-            }
-            if (deck.isEmpty())                 // a bare floor: the grid's front edge
-                deck.addRect(QRectF(QPointF(x0, y), QPointF(x1, dsY)));
-            deck.setFillRule(Qt::WindingFill);
-            QPainterPath downstage;
-            downstage.addRect(QRectF(QPointF(x0 - 1.0, y), QPointF(x1 + 1.0, dsY + 0.01)));
-            QColor wash(curtainColour);
-            wash.setAlpha(40);
-            p.setPen(Qt::NoPen);
-            p.setBrush(wash);
-            foreach (const QPolygonF &poly, deck.intersected(downstage).toFillPolygons())
-            {
-                QPolygonF onScreen;
-                foreach (const QPointF &pt, poly)
-                    onScreen << w2s(floorAt(pt.x(), pt.y()));
-                p.drawPolygon(onScreen);
-            }
-            p.setBrush(Qt::NoBrush);
-
-            const QPointF top = w2s(floorAt(cx, y)), front = w2s(floorAt(cx, dsY));
-            if (roomy && QLineF(top, front).length() >= 16.0)
-            {
-                const double ax = cx + 34.0 / pxPerMetre;
-                const double tick = 5.0 / pxPerMetre;
-                p.setPen(QPen(curtainColour, 1.0));
-                floorLine(ax, y, ax, dsY);
-                floorLine(ax - tick, y, ax + tick, y);
-                floorLine(ax - tick, dsY, ax + tick, dsY);
-                const QString text = tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron),
-                                                                                             props->gridUnits()));
-                const QPointF mid = (w2s(floorAt(ax, y)) + w2s(floorAt(ax, dsY))) / 2.0;
-                /* Beside the dimension line, just off centre -- where a
-                   figure standing near centre has its position readout
-                   (drawTargetPositions()). Not on top of one: the other
-                   side of the line, then a line's height up or down; with
-                   no clear place, the line and its ticks say enough. */
-                const double side = fm.horizontalAdvance(text) / 2.0 + 8.0;
-                const double rise = fm.height() + 4.0;
-                QList<QRectF> readouts;
-                foreach (const auto &ro, targetReadouts(p.font()))
-                    readouts << ro.second.adjusted(-2, -2, 2, 2);
-                const QList<QPointF> tries = QList<QPointF>()
-                    << QPointF(side, 0) << QPointF(-side, 0)
-                    << QPointF(side, -rise) << QPointF(-side, -rise)
-                    << QPointF(side, rise) << QPointF(-side, rise);
-                foreach (const QPointF &off, tries)
+                const QRectF r = labelRect(text, mid + off);
+                bool clear = true;
+                foreach (const QRectF &o, readouts)
+                    if (o.intersects(r))
+                        clear = false;
+                if (clear)
                 {
-                    const QRectF r = labelRect(text, mid + off);
-                    bool clear = true;
-                    foreach (const QRectF &o, readouts)
-                        if (o.intersects(r))
-                            clear = false;
-                    if (clear)
-                    {
-                        label(text, mid + off, curtainColour);
-                        break;
-                    }
+                    label(text, mid + off, curtainColour);
+                    break;
                 }
             }
         }
+    }
+    if (props->stageMarkShown(MonitorProperties::CurtainLineFlag))
+    {
+        const double y = cy;
+        p.setPen(QPen(curtainColour, 1.4, Qt::DashDotLine));
+        floorLine(x0, y, x1, y);
+        const QPointF at = w2s(floorAt(x0, y));
+        label(tr("Curtain line"), at + QPointF(fm.horizontalAdvance(tr("Curtain line")) / 2.0 + 6, -10),
+              curtainColour);
 
         // The FOH electric out over the audience: how far, just above its
         // stage-left end. One that would sit on another's words is left out.
@@ -1894,7 +1871,7 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
             if (pp != nullptr && !pp->isVertical())
                 overhang(pp->name(), pp->positionAt(0.0f), pp->positionAt(pp->length()));
     }
-    if (props->stageMarkVisible(MonitorProperties::NumberLineFlag))
+    if (props->stageMarkShown(MonitorProperties::NumberLineFlag))
     {
         const double y = props->numberLineY();
         const int reach = props->numberLineReach();

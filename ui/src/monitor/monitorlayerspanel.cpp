@@ -423,6 +423,8 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
     }
     foreach (StagePlatform *p, m_props->platforms())
     {
+        if (m_props->isApronPlatform(p->id()))
+            continue;           // the apron's own deck: listed as the apron, below
         ItemDesc d;
         d.kind    = QStringLiteral("platform");
         d.id      = p->id();
@@ -545,6 +547,21 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.groupId = img.groupId;
         out << d;
     }
+    /* The stage pieces (Q147), on their own Stage layer: always listed, so
+       a hidden one can be found and shown. */
+    if (m_props->hasStageLayer())
+    {
+        foreach (MonitorProperties::StagePiece piece, MonitorProperties::stagePieces())
+        {
+            ItemDesc d;
+            d.kind    = QStringLiteral("stage");
+            d.id      = quint32(piece);
+            d.name    = MonitorProperties::stagePieceName(piece);
+            d.layerId = m_props->stageLayerId();
+            d.groupId = 0;
+            out << d;
+        }
+    }
     return out;
 }
 
@@ -656,6 +673,75 @@ void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
         node->setIcon(0, ItemIcons::fixtureIcon(m_doc->fixture(d.id)));
     else
         node->setIcon(0, kindIcon(d.kind, d.color));
+    if (d.kind == QStringLiteral("stage"))
+        addStagePieceToggles(node, MonitorProperties::StagePiece(d.id));
+}
+
+/* A stage piece's row: its own eye and lock, beside the name, as a layer
+   has -- the piece is shown and locked by itself as well as with the Stage
+   layer. Not renamed, nor dragged to another layer. */
+void MonitorLayersPanel::addStagePieceToggles(QTreeWidgetItem *node, MonitorProperties::StagePiece piece)
+{
+    node->setFirstColumnSpanned(false);
+    node->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    const bool shown = m_props->stagePieceVisible(piece);
+    const bool locked = m_props->stagePieceLocked(piece);
+    if (!shown)
+        node->setForeground(0, QBrush(QColor(140, 140, 146)));
+    node->setToolTip(0, tr("%1: double-click for its properties").arg(MonitorProperties::stagePieceName(piece)));
+
+    QWidget *row = new QWidget(m_tree);
+    row->setObjectName(QStringLiteral("stagePieceToggles%1").arg(int(piece)));
+    QHBoxLayout *h = new QHBoxLayout(row);
+    h->setContentsMargins(2, 1, 2, 1);
+    h->setSpacing(3);
+    auto style = [](QToolButton *b, bool on, const QString &glyph, const char *onBg, const char *offBg) {
+        b->setText(glyph);
+        QFont f = b->font(); f.setBold(true); b->setFont(f);
+        b->setFixedSize(20, 20);
+        b->setStyleSheet(QString(
+            "QToolButton{border:none;border-radius:4px;background:%1;}"
+            "QToolButton:hover{border:1px solid rgba(255,255,255,0.4);}"
+            "QToolButton:disabled{background:rgba(90,90,94,0.25);}")
+            .arg(QLatin1String(on ? onBg : offBg)));
+    };
+    QToolButton *eye = new QToolButton(row);
+    eye->setObjectName(QStringLiteral("stagePieceEye"));
+    eye->setCheckable(true);
+    eye->setChecked(shown);
+    eye->setToolTip(shown ? tr("Shown — click to hide") : tr("Hidden — click to show"));
+    style(eye, shown, QString::fromUtf8(shown ? kEyeShown : kEyeHidden), "rgb(42,120,60)", "rgb(120,46,46)");
+    h->addWidget(eye);
+    QToolButton *lock = new QToolButton(row);
+    lock->setObjectName(QStringLiteral("stagePieceLock"));
+    lock->setCheckable(true);
+    lock->setChecked(locked);
+    lock->setEnabled(m_editable);
+    lock->setToolTip(locked ? tr("Locked — click to unlock") : tr("Unlocked — click to lock"));
+    style(lock, locked, QString::fromUtf8(locked ? kLockOn : kLockOff), "rgb(168,120,30)", "rgb(64,64,68)");
+    h->addWidget(lock);
+    h->addStretch(1);
+    m_tree->setItemWidget(node, 1, row);
+
+    auto changed = [this]() {
+        m_doc->setModified();
+        if (m_view != nullptr)
+        {
+            m_view->updateStageMarks();
+            emit m_view->stagePiecesChanged();
+        }
+        QTimer::singleShot(0, this, &MonitorLayersPanel::reload);   // not under the button
+    };
+    connect(eye, &QToolButton::toggled, this, [this, piece, changed](bool on) {
+        if (m_reloading) return;
+        m_props->setStagePieceVisible(piece, on);
+        changed();
+    });
+    connect(lock, &QToolButton::toggled, this, [this, piece, changed](bool on) {
+        if (m_reloading) return;
+        m_props->setStagePieceLocked(piece, on);
+        changed();
+    });
 }
 
 QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) const
@@ -673,6 +759,7 @@ QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) con
     if (kind == QStringLiteral("network"))  return glyphIcon(QStringLiteral("\xF0\x9F\x8C\x90"), QColor(70, 140, 220));  // 🌐 network node
     if (kind == QStringLiteral("target"))   return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xAF"), QColor(255, 180, 0));    // 🎯 aim target
     if (kind == QStringLiteral("image"))    return QIcon(":/image.png");
+    if (kind == QStringLiteral("stage"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x90"), QColor(240, 210, 110)); // 📐 stage piece
     if (kind == QStringLiteral("scenery"))  return swatchIcon(color.isValid() ? color : QColor(226, 228, 236)); // the cloth
     return style()->standardIcon(QStyle::SP_FileIcon);
 }
@@ -973,6 +1060,9 @@ void MonitorLayersPanel::reload()
     m_collapsedKeys.clear();
     for (int i = 0; i < m_tree->topLevelItemCount(); i++)
         collectCollapsedNodes(m_tree->topLevelItem(i), m_collapsedKeys);
+
+    // The stage pieces' layer, so they can be found here (made once).
+    m_props->ensureStageLayer();
 
     m_reloading = true;
     m_tree->clear();
@@ -1704,7 +1794,8 @@ void MonitorLayersPanel::slotItemClicked(QTreeWidgetItem *item, int)
 
     if (type == NodeLayer)
     {
-        if (m_props->activeLayerId() != id)
+        // New things are never put on the stage pieces' layer.
+        if (m_props->activeLayerId() != id && id != m_props->stageLayerId())
         {
             m_props->setActiveLayerId(id);
             m_doc->setModified();
@@ -2063,7 +2154,8 @@ void MonitorLayersPanel::slotRemoveLayer()
     if (!m_editable)
         return;
     const quint32 id = currentLayerId();
-    if (id == MonitorProperties::defaultLayerId)
+    // Default and the stage pieces' layer stay.
+    if (id == MonitorProperties::defaultLayerId || id == m_props->stageLayerId())
         return;
     if (m_view)
         m_view->reassignLayerItems(id, MonitorProperties::defaultLayerId);
