@@ -145,6 +145,19 @@ private slots:
      *  and Undo Patch Change (Ctrl+Z there) puts either back */
     void ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack();
 
+    /* One connection window (ConnectionEditor): a double-click on a
+       universe opens it, as right-click > Edit connection… does; patching
+       a new universe and editing a patched one are the same window, the
+       second filled in; Art-Net, sACN and a USB widget each show their own
+       settings in it; OK is one undo step, Cancel changes nothing. */
+    void doubleClickingAUniverseOpensItsConnection();
+    void aUniversesMenuHasOneEditConnection();
+    void connectionEditorPatchesANewArtNetUniverse();
+    void connectionEditorOpensFilledInForAPatchedUniverse();
+    void connectionEditorSetsSacnSettings();
+    void connectionEditorPatchesAUsbWidget();
+    void connectionEditorRefusesATakenPortAndChangesNothing();
+
 private:
     Doc *m_doc;
 };

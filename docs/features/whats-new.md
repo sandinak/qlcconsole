@@ -501,6 +501,19 @@ their house lights, relays and subs.
   show opened with the pad off picks it up the moment it is switched on.
   See [Controllers and MIDI devices coming and going](other-improvements.md#controllers-and-midi-devices-coming-and-going).
 
+### Connections
+
+- **One connection window.** Right-click a universe ▸ **Edit
+  connection…**, or double-click it: the universe, the protocol and the
+  interface, then that protocol's settings right there — Art-Net's node
+  port, sACN's universe and priority, MIDI's mode, a USB widget's device —
+  and the input, feedback and passthrough below. A patched universe opens
+  filled in. One window instead of a question per step, and one entry
+  instead of a dozen on the right-click. See
+  [Editing a connection](other-improvements.md#editing-a-connection).
+- **Fixture Properties opens for every fixture**, on the plot or not; a
+  fixture not on the plot has its position rows greyed.
+
 ## 0.2.1 (October 2026)
 
 ### Focus mode: the controller on screen

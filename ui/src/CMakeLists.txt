@@ -80,6 +80,7 @@ add_library(${module_name}
     inputdevicenotices.cpp inputdevicenotices.h
     inputoutputmanager.cpp inputoutputmanager.h
     connectionstree.cpp connectionstree.h
+    connectioneditor.cpp connectioneditor.h
     universepatcher.cpp universepatcher.h
     powerprofiledialog.cpp powerprofiledialog.h
     outputrulesdialog.cpp outputrulesdialog.h

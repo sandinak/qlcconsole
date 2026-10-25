@@ -104,12 +104,22 @@ private slots:
     void slotUndoAvailabilityChanged();
     /** Commit an inline edit of a target's name. */
     void slotItemChanged(class QTreeWidgetItem *item, int column);
+    /** A universe row: its connection (ConnectionEditor), as
+     *  right-click ▸ Edit connection… opens it. */
+    void slotItemDoubleClicked(class QTreeWidgetItem *item, int column);
 
 private:
     /** Universe ids patched to this plugin line. */
     QList<quint32> universesOn(const QString &pluginName, quint32 line, bool output) const;
     /** Universe ids whose FEEDBACK is routed to this plugin line. */
     QList<quint32> feedbackOn(const QString &pluginName, quint32 line) const;
+
+    /** A row a universe's connection is opened from: a patched, pending or
+     *  unpatched universe. */
+    static bool isUniverseRow(const QTreeWidgetItem *item);
+    /** Open the connection window for that row's universe (and its leg),
+     *  filled in. True if it changed anything. */
+    bool editConnection(QTreeWidgetItem *item);
 
     /** Patch an existing or new universe to this plugin line. */
     void patchUniverseTo(const QString &pluginName, quint32 line, bool output);

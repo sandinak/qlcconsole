@@ -29,6 +29,10 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QListWidget>
+#include <QComboBox>
+#include <QSpinBox>
+#include <QPushButton>
+#include <QStackedWidget>
 
 #define protected public
 #define private public
@@ -49,6 +53,7 @@
 #include "showstatus.h"
 #include "networkroute.h"
 #include "inputoutputmanager.h"
+#include "connectioneditor.h"
 
 #undef private
 #undef protected
@@ -2019,10 +2024,10 @@ void ConnectionsTree_Test::repatchAsksTheInterfaceAgain()
         QCOMPARE(sel.preselected.first(), sel.lists.first().at(1));
     }
 
-    // And the menu says it does more than the target now.
+    // The menu has it as the one connection window, which asks the interface too.
     showUniverseList(tree);
     const QStringList offered = contextMenuOn(tree, 6, QString());
-    QVERIFY2(offered.contains("Change interface / target…"), qPrintable(offered.join(" | ")));
+    QVERIFY2(offered.contains("Edit connection…"), qPrintable(offered.join(" | ")));
 }
 
 /* "By-universe and By-device views must agree": a node patched from the
@@ -2236,4 +2241,375 @@ void ConnectionsTree_Test::ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack()
     answerNextMessageBox(QMessageBox::No);
     undo->trigger();
     QCOMPARE(io->universesCount(), before);
+}
+
+
+/****************************************************************************
+ * One connection window
+ ****************************************************************************/
+
+namespace
+{
+/* The connection window the next call opens: what it was opened on, then
+   Cancel -- a test never waits on a modal. */
+struct EditorSpy
+{
+    quint32 universe = 0xFFFFFFFF;
+    QString protocol;
+    int opened = 0;
+    QTimer timer;
+    EditorSpy()
+    {
+        timer.setInterval(10);
+        QObject::connect(&timer, &QTimer::timeout, [this]() {
+            ConnectionEditor *ed = qobject_cast<ConnectionEditor *>(QApplication::activeModalWidget());
+            if (ed == NULL)
+                return;
+            ++opened;
+            universe = ed->universe();
+            protocol = ed->m_protocolCombo->currentData().toString();
+            ed->reject();
+        });
+        timer.start();
+    }
+};
+
+/* A double-click as a hand makes one: press, release, then the second press
+   arriving as the double-click, and its release -- sent straight to the
+   list, so nothing in between makes a second double-click of it. */
+void doubleClickRow(ConnectionsTree &tree, QTreeWidgetItem *row)
+{
+    QWidget *vp = tree.m_tree->viewport();
+    const QPoint at = tree.m_tree->visualItemRect(row).center();
+    const QPointF global = vp->mapToGlobal(QPointF(at));
+    auto send = [vp, at, global](QEvent::Type type, Qt::MouseButtons held) {
+        QMouseEvent ev(type, QPointF(at), global, Qt::LeftButton, held, Qt::NoModifier);
+        QApplication::sendEvent(vp, &ev);
+    };
+    send(QEvent::MouseButtonPress, Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, Qt::NoButton);
+    send(QEvent::MouseButtonPress, Qt::LeftButton);
+    send(QEvent::MouseButtonDblClick, Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, Qt::NoButton);
+    QApplication::processEvents();
+}
+
+QString settingsPage(ConnectionEditor &ed)
+{
+    return ed.m_settings->currentWidget() != NULL ? ed.m_settings->currentWidget()->objectName()
+                                                  : QString();
+}
+
+void pickProtocol(ConnectionEditor &ed, const QString &name)
+{
+    const int i = ed.m_protocolCombo->findData(name);
+    QVERIFY2(i >= 0, qPrintable(name));
+    ed.m_protocolCombo->setCurrentIndex(i);
+}
+}
+
+void ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(2, stub->name(), "", 0, false, 0));
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    // A patched universe: its window, on its protocol.
+    {
+        EditorSpy spy;
+        QTreeWidgetItem *row = universeRow(tree.m_tree, 2);
+        QVERIFY(row != NULL);
+        doubleClickRow(tree, row);
+        QCOMPARE(spy.opened, 1);
+        QCOMPARE(spy.universe, quint32(2));
+        QCOMPARE(spy.protocol, QString("ArtNet"));
+    }
+    // It did not start renaming it instead.
+    foreach (QLineEdit *e, tree.m_tree->viewport()->findChildren<QLineEdit *>())
+        QVERIFY2(e->isVisible() == false, "a double-click started renaming the row");
+
+    // An unpatched one: the same window, nothing patched yet.
+    {
+        EditorSpy spy;
+        QTreeWidgetItem *row = universeRow(tree.m_tree, 5);
+        QVERIFY(row != NULL);
+        doubleClickRow(tree, row);
+        QCOMPARE(spy.opened, 1);
+        QCOMPARE(spy.universe, quint32(5));
+        QCOMPARE(spy.protocol, QString());
+    }
+
+    // And in the wiring view, the universe row under its output.
+    tree.m_byUniverse->setChecked(false);
+    tree.refresh();
+    QApplication::processEvents();
+    QTreeWidgetItem *wired = NULL;
+    foreach (QTreeWidgetItem *it, itemsOfKind(tree.m_tree, KIND_UNIVERSE))
+        if (it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 2)
+            wired = it;
+    QVERIFY(wired != NULL);
+    for (QTreeWidgetItem *p = wired->parent(); p != NULL; p = p->parent())
+        p->setExpanded(true);
+    tree.m_tree->scrollToItem(wired);
+    {
+        EditorSpy spy;
+        doubleClickRow(tree, wired);
+        QCOMPARE(spy.opened, 1);
+        QCOMPARE(spy.universe, quint32(2));
+    }
+}
+
+void ConnectionsTree_Test::aUniversesMenuHasOneEditConnection()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    stub->m_canConfigure = true;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    const QStringList patched = contextMenuOn(tree, 1, QString());
+    QVERIFY2(patched.contains("Edit connection…"), qPrintable(patched.join(" | ")));
+    // The editing entries it replaces are gone from the menu.
+    const QStringList gone = QStringList() << "Change interface / target…" << "Configure interface…"
+        << "Transmit mode" << "Passthrough" << "Feedback to" << "Input profile"
+        << "MIDI output mode" << "Change feedback address / port…";
+    foreach (const QString &g, gone)
+        QVERIFY2(patched.contains(g) == false, qPrintable(g + " still in: " + patched.join(" | ")));
+    // What is not editing stays.
+    QVERIFY(patched.contains("Rename universe…"));
+    QVERIFY(patched.contains("Unpatch from this interface"));
+    QVERIFY(patched.contains("Delete universe entirely…"));
+
+    // An unpatched universe: the same entry, where "Patch to…" was.
+    const QStringList unpatched = contextMenuOn(tree, 4, QString());
+    QVERIFY2(unpatched.contains("Edit connection…"), qPrintable(unpatched.join(" | ")));
+    QVERIFY(unpatched.contains("Patch to…") == false);
+
+    // And it opens the window on that universe.
+    EditorSpy spy;
+    contextMenuOn(tree, 1, "Edit connection…");
+    QCOMPARE(spy.opened, 1);
+    QCOMPARE(spy.universe, quint32(1));
+}
+
+void ConnectionsTree_Test::connectionEditorPatchesANewArtNetUniverse()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QCOMPARE(iom->universe(3)->outputPatchesCount(), 0);
+
+    ConnectionEditor ed(m_doc, 3);
+    QCOMPARE(ed.m_protocolCombo->currentData().toString(), QString());   // not patched
+    QCOMPARE(settingsPage(ed), QString("connPageNone"));
+
+    // Pick the protocol: the lower part becomes Art-Net's, with the node's ports.
+    pickProtocol(ed, "ArtNet");
+    QCOMPARE(settingsPage(ed), QString("connPageTargets"));
+    QCOMPARE(ed.m_interfaceCombo->count(), 4);
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 0);
+    // Broadcast, the four free ports of "Quad", another address.
+    QCOMPARE(ed.m_targetCombo->count(), 6);
+    QVERIFY(ed.m_targetIP->isEnabled() == false);          // broadcast picked
+    ed.m_targetCombo->setCurrentIndex(3);                  // Quad port 3
+    QCOMPARE(ed.m_targetIP->text(), QString("172.18.2.50"));
+    QCOMPARE(ed.m_targetPort->text(), QString("0:0:2"));
+    ed.m_transmitMode->setCurrentIndex(ed.m_transmitMode->findText("Full"));
+
+    const QString undoBefore = iom->patchUndo()->summary();
+    QVERIFY2(ed.apply(), qPrintable(ed.error()));
+    Universe *u = iom->universe(3);
+    QCOMPARE(u->outputPatchesCount(), 1);
+    OutputPatch *op = u->outputPatch(0);
+    QCOMPARE(op->plugin()->name(), QString("ArtNet"));
+    QCOMPARE(op->output(), quint32(0));
+    QMap<QString, QVariant> pp = op->getPluginParameters();
+    QCOMPARE(pp.value("outputIP").toString(), QString("172.18.2.50"));
+    QCOMPARE(pp.value("outputUni").toUInt(), quint32(2));
+    QCOMPARE(pp.value("transmitMode").toString(), QString("Full"));
+
+    // One undo step takes all of it back.
+    QVERIFY(iom->patchUndo()->summary() != undoBefore);
+    QVERIFY(iom->patchUndo()->undo());
+    QCOMPARE(iom->universe(3)->outputPatchesCount(), 0);
+
+    // An address typed by hand, on another interface.
+    ConnectionEditor typed(m_doc, 3);
+    pickProtocol(typed, "ArtNet");
+    typed.m_interfaceCombo->setCurrentIndex(2);
+    typed.m_targetCombo->setCurrentIndex(0);
+    typed.m_targetIP->setText("10.1.1.9");
+    typed.slotTargetTyped();
+    typed.m_targetPort->setText("1:2:3");
+    QCOMPARE(typed.m_targetCombo->currentData().toInt(), -2);   // another address
+    QVERIFY2(typed.apply(), qPrintable(typed.error()));
+    op = iom->universe(3)->outputPatch(0);
+    QCOMPARE(op->output(), quint32(2));
+    pp = op->getPluginParameters();
+    QCOMPARE(pp.value("outputIP").toString(), QString("10.1.1.9"));
+    QCOMPARE(pp.value("outputUni").toUInt(), quint32((1 << 8) | (2 << 4) | 3));
+}
+
+void ConnectionsTree_Test::connectionEditorOpensFilledInForAPatchedUniverse()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(6, stub->name(), "", 1, false, 0));
+    OutputPatch *op = iom->universe(6)->outputPatch(0);
+    op->setPluginParameter("outputIP", "10.0.0.7");
+    op->setPluginParameter("outputUni", 0x23);
+    op->setPluginParameter("transmitMode", "Partial");
+    QVERIFY(iom->setInputPatch(6, stub->name(), "", 3));
+    iom->setUniversePassthrough(6, true);
+
+    ConnectionEditor ed(m_doc, 6, stub->name(), 1);
+    QCOMPARE(ed.m_universeCombo->currentData().toUInt(), quint32(6));
+    QCOMPARE(ed.m_protocolCombo->currentData().toString(), QString("ArtNet"));
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 1);
+    QCOMPARE(settingsPage(ed), QString("connPageTargets"));
+    // The node only that patch names is listed, its port the current one.
+    QCOMPARE(ed.m_targetCombo->currentData().toInt(), 0);
+    QVERIFY2(ed.m_targetCombo->currentText().endsWith("(current)"),
+             qPrintable(ed.m_targetCombo->currentText()));
+    QCOMPARE(ed.m_targetIP->text(), QString("10.0.0.7"));
+    QCOMPARE(ed.m_targetPort->text(), QString("0:2:3"));
+    QCOMPARE(ed.m_transmitMode->currentText(), QString("Partial"));
+    QCOMPARE(ed.m_inputCombo->currentData(Qt::UserRole).toString(), QString("ArtNet"));
+    QCOMPARE(ed.m_inputCombo->currentData(Qt::UserRole + 1).toUInt(), quint32(3));
+    QVERIFY(ed.m_artnetInUni->isEnabled());
+    QVERIFY(ed.m_midiChannel->isEnabled() == false);              // greyed, not hidden
+    QVERIFY(ed.m_passthrough->isChecked());
+
+    // OK with nothing touched changes nothing.
+    QVERIFY(ed.apply());
+    op = iom->universe(6)->outputPatch(0);
+    QCOMPARE(op->output(), quint32(1));
+    QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString("10.0.0.7"));
+    QCOMPARE(op->getPluginParameters().value("outputUni").toUInt(), quint32(0x23));
+    QVERIFY(iom->universe(6)->inputPatch() != NULL);
+
+    // A port of a listed node, the current one marked when it opens again.
+    QVERIFY(iom->setOutputPatch(5, stub->name(), "", 0, false, 0));
+    iom->universe(5)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.50");
+    iom->universe(5)->outputPatch(0)->setPluginParameter("outputUni", 1);
+    ConnectionEditor again(m_doc, 5);
+    QCOMPARE(again.m_targetCombo->currentData().toInt(), 1);
+    QVERIFY2(again.m_targetCombo->currentText().endsWith("(current)"),
+             qPrintable(again.m_targetCombo->currentText()));
+
+    // Moving it to Not patched unpatches just that leg.
+    pickProtocol(again, QString());
+    QVERIFY(again.apply());
+    QCOMPARE(iom->universe(5)->outputPatchesCount(), 0);
+}
+
+void ConnectionsTree_Test::connectionEditorSetsSacnSettings()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_nameOverride = "E1.31";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    ConnectionEditor ed(m_doc, 1);
+    pickProtocol(ed, "E1.31");
+    QCOMPARE(settingsPage(ed), QString("connPageSacn"));
+    // The plugin's defaults until it is set: multicast, its own number, 100.
+    QVERIFY(ed.m_sacnMulticast->isChecked());
+    QVERIFY(ed.m_sacnIP->isEnabled() == false);
+    QCOMPARE(ed.m_sacnUniverse->value(), 2);
+    QCOMPARE(ed.m_sacnPriority->value(), 100);
+
+    // Unicast with no address is refused, and nothing changes.
+    ed.m_sacnMulticast->setChecked(false);
+    QVERIFY(ed.m_sacnIP->isEnabled());
+    QVERIFY(ed.apply() == false);
+    QVERIFY(ed.error().contains("Unicast"));
+    QCOMPARE(iom->universe(1)->outputPatchesCount(), 0);
+
+    ed.m_sacnIP->setText("192.168.5.20");
+    ed.m_sacnUniverse->setValue(17);
+    ed.m_sacnPriority->setValue(150);
+    ed.m_interfaceCombo->setCurrentIndex(1);
+    QVERIFY2(ed.apply(), qPrintable(ed.error()));
+    OutputPatch *op = iom->universe(1)->outputPatch(0);
+    QVERIFY(op != NULL);
+    QCOMPARE(op->output(), quint32(1));
+    const QMap<QString, QVariant> pp = op->getPluginParameters();
+    QCOMPARE(pp.value("multicast").toInt(), 0);
+    QCOMPARE(pp.value("ucastIP").toString(), QString("192.168.5.20"));
+    QCOMPARE(pp.value("universe").toInt(), 17);
+    QCOMPARE(pp.value("priority").toInt(), 150);
+    QVERIFY(pp.contains("outputIP") == false);
+
+    // Opened again, filled in.
+    ConnectionEditor again(m_doc, 1);
+    QCOMPARE(again.m_protocolCombo->currentData().toString(), QString("E1.31"));
+    QCOMPARE(again.m_interfaceCombo->currentIndex(), 1);
+    QVERIFY(again.m_sacnMulticast->isChecked() == false);
+    QCOMPARE(again.m_sacnIP->text(), QString("192.168.5.20"));
+    QCOMPARE(again.m_sacnUniverse->value(), 17);
+    QCOMPARE(again.m_sacnPriority->value(), 150);
+}
+
+void ConnectionsTree_Test::connectionEditorPatchesAUsbWidget()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_nameOverride = "DMX USB";
+    stub->m_linesAreHardware = true;
+    stub->m_canConfigure = true;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    ConnectionEditor ed(m_doc, 0);
+    pickProtocol(ed, "DMX USB");
+    // The interface is the device; its own settings window is a button away.
+    QCOMPARE(settingsPage(ed), QString("connPageDevice"));
+    QVERIFY(ed.m_deviceNote->text().contains("DMX USB"));
+    QVERIFY(ed.m_configureButton->isVisibleTo(&ed));
+    QCOMPARE(ed.m_configureButton->text(), QString("Configure DMX USB…"));
+    const int before = stub->m_configureCalled;
+    ed.m_configureButton->click();
+    QCOMPARE(stub->m_configureCalled, before + 1);
+
+    ed.m_interfaceCombo->setCurrentIndex(2);
+    QVERIFY2(ed.apply(), qPrintable(ed.error()));
+    QCOMPARE(iom->universe(0)->outputPatch(0)->plugin()->name(), QString("DMX USB"));
+    QCOMPARE(iom->universe(0)->outputPatch(0)->output(), quint32(2));
+
+    // A plugin with nothing to configure has no button.
+    stub->m_canConfigure = false;
+    ConnectionEditor plain(m_doc, 0);
+    QCOMPARE(settingsPage(plain), QString("connPageDevice"));
+    QVERIFY(plain.m_configureButton->isVisibleTo(&plain) == false);
+}
+
+void ConnectionsTree_Test::connectionEditorRefusesATakenPortAndChangesNothing()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0));
+    iom->universe(0)->outputPatch(0)->setPluginParameter("outputIP", "172.18.2.50");
+    iom->universe(0)->outputPatch(0)->setPluginParameter("outputUni", 0);
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 2, false, 0));
+
+    ConnectionEditor ed(m_doc, 1);
+    QCOMPARE(ed.m_interfaceCombo->currentIndex(), 2);
+    ed.m_interfaceCombo->setCurrentIndex(0);
+    // Port 1 is universe 1's: listed after the free ones, saying whose.
+    int taken = -1;
+    for (int i = 0; i < ed.m_targetCombo->count(); i++)
+        if (ed.m_targetCombo->itemText(i).contains("used by"))
+            taken = i;
+    QVERIFY(taken > 0);
+    ed.m_targetCombo->setCurrentIndex(taken);
+    QVERIFY(ed.apply() == false);
+    QVERIFY2(ed.error().contains("already sends"), qPrintable(ed.error()));
+    // Universe 2 is still on interface 3, untargeted.
+    QCOMPARE(iom->universe(1)->outputPatch(0)->output(), quint32(2));
+    QVERIFY(iom->universe(1)->outputPatch(0)->getPluginParameters().contains("outputIP") == false);
 }

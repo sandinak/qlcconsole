@@ -47,24 +47,49 @@ values are what goes out, after the grand master; hover a channel for whose
 it is ("Front Par, channel 1 — Dimmer").
 
 Right-click an interface to patch a universe to it or configure the
-protocol; right-click a universe to rename it, set its feedback line or
-input profile, unpatch it, or delete it. Those act on the one row you
-right-clicked.
+protocol. Right-click a universe for **Edit connection…** (or just
+double-click it), **Rename universe…**, **Unpatch from this interface** and
+**Delete universe entirely…**. Those act on the one row you right-clicked.
 
-**Choosing where it goes.** Patching a universe asks the protocol, then the
-interface (with more than one), then, for a protocol that sends to a
-device (Art-Net, WLED), the **port**: a
-list of every port of every device under that interface, whether heard on
-the network, added by hand or only named by an existing patch, **free ones
-first**, then the ones another universe holds, saying which. Pick one, type
-one with **Another address…**, or choose **Broadcast (no target)**. A port
-another universe already sends to is refused with its name (one port, one
-universe). Nothing changes until you've answered, so cancelling leaves the
-universe as it was. **Change interface / target…** on a patched universe asks the
-interface again with the current one preselected, so it can move to
-another network card. In the lists, **port** is the socket on the node
+### Editing a connection
+
+**Edit connection…** — or a double-click on any universe, in either view —
+opens one window for everything about where that universe goes. Patching an
+unpatched universe and editing a patched one are the same window; a patched
+one opens filled in.
+
+- At the top: the **universe** (switch to another without closing), its
+  **name**, the **protocol** (or **Not patched**) and the **interface**.
+- Below, that protocol's own settings, in place:
+  - **Art-Net** (and any protocol that sends to a node): **Send to** lists
+    every port of every device under that interface, whether heard on the
+    network, added by hand or only named by an existing patch, **free ones
+    first**, then the ones another universe holds, saying which; or
+    **Broadcast (no target)**, or **Another address…** — type the node IP
+    and its universe as net:subnet:universe. Then the **transmit mode**.
+  - **sACN (E1.31)**: the sACN **universe**, **Multicast** or a unicast
+    address, the **priority** (0–200, 100 by default) and the transmit mode.
+  - **MIDI**: the output mode.
+  - **WLED**: its devices — the primary and any backup lanterns — are set in
+    their own window: the button opens it, and a universe newly sent to WLED
+    opens it when you press OK.
+  - **A USB widget** (and other plugins whose interface is the device):
+    nothing more to set per universe.
+  - **Configure &lt;protocol&gt;…** opens the protocol's own settings window
+    (a USB widget's output speed, Art-Net's interfaces) — it stays a window
+    of its own; the plugins only have it as one.
+- At the foot: the universe's **input** and **input profile** (and, for a
+  MIDI input, its channel; for Art-Net, the universe it listens to),
+  **feedback** (with its address for a network protocol) and
+  **Passthrough**. Rows that don't apply are greyed, not hidden.
+
+Nothing changes until **OK**, and then as one step of **Undo Patch Change**;
+**Cancel** leaves the universe as it was. A port another universe already
+sends to is refused with its name (one port, one universe), and so is
+unicast with no address. In the lists, **port** is the socket on the node
 (port 1, 2…) and **universe** its Art-Net address (net:subnet:universe,
-e.g. 0:0:1).
+e.g. 0:0:1). Classic QLC+'s **Universes** page keeps QLC+'s own patch
+editor.
 
 **Several universes at once.** Ctrl-click (⌘-click on a Mac) universes —
 in either view, patched or not — and right-click one of them:

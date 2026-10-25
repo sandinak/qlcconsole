@@ -451,6 +451,13 @@ Findings that are not marked as bugs:
 | M304 | Controller test | The test lists each input and what it does (opened from Focus mode) | FocusMode_Test::theControllerTestListsEachInput (ui/test/focusmode/focusmode_test.h) | covered | covered | low |  |
 | M305 | Controller test | Opened from Settings ▸ Advanced ▸ Game controllers | — | none | none | low | Open ControllerTestDialog from the AppSettings button |
 | M306 | Controller test | Focus mode says when the controller is paused and why | FocusMode_Test::aPausedControllerSaysWhy; ControllerKeepAlive_Test::pausedSaysWhy (engine/test/controllerkeepalive/controllerkeepalive_test.h) | covered | covered | low |  |
+| M484 | One connection window | Patching a new universe: protocol, interface, then Art-Net's node port (or a typed address) and transmit mode in the same window; one undo step | **ConnectionsTree_Test::connectionEditorPatchesANewArtNetUniverse** (new, ui/test/connectionstree/connectionstree_test.cpp) | none | covered | high | — |
+| M485 | One connection window | A patched universe opens filled in (protocol, interface, current port, transmit mode, input, passthrough); OK untouched changes nothing; Not patched unpatches the leg | **ConnectionsTree_Test::connectionEditorOpensFilledInForAPatchedUniverse** (new) | none | covered | high | — |
+| M486 | One connection window | sACN: universe, multicast/unicast, priority set in place and read back; unicast with no address refused | **ConnectionsTree_Test::connectionEditorSetsSacnSettings** (new) | none | covered | med | Stub plugin named E1.31, not the real plugin |
+| M487 | One connection window | A USB widget: the device page, Configure… opens the plugin's own window | **ConnectionsTree_Test::connectionEditorPatchesAUsbWidget** (new) | none | covered | med | Stub plugin named DMX USB |
+| M488 | One connection window | A port another universe sends to is refused and nothing changes | **ConnectionsTree_Test::connectionEditorRefusesATakenPortAndChangesNothing** (new) | none | covered | high | — |
+| M489 | One connection window | A universe's right-click has one Edit connection… and none of the editing entries it replaces; an unpatched one too | **ConnectionsTree_Test::aUniversesMenuHasOneEditConnection** (new); ConnectionsTree_Test::repatchAsksTheInterfaceAgain | none | covered | med | — |
+
 
 ## Changed
 
@@ -648,6 +655,9 @@ Findings that are not marked as bugs:
 | M481 | Override track | When its item ends, what plays underneath comes back; nothing is left over after the show stops | ShowRunner_Test::theNormalTrackReturnsWhenTheOverrideItemEnds | covered | covered | high | — |
 | M482 | Track intensity before Start | Fader and attribute are one value; the last one set plays from Start | ShowRunner_Test::theTrackFaderAndItsAttributeAreOneValue, ::aTrackAtHalfIntensityPlaysAtHalf | covered | covered | med | — |
 | M483 | Track intensity | A saved 50% plays at 50% after load | ShowRunner_Test::aTrackIntensityIsSavedAndPlaysAfterLoad | covered | covered | high | — |
+| M490 | Fixture Properties for every fixture | Double-click and Fixture Properties… open the dialog for every fixture of every course show and test workspace, on the plot or not; off the plot its X, Y and rotation are greyed | **ShowFiles_Test::fixturePropertiesOpensForEveryFixture** (new, ui/test/showfiles/showfiles_test.cpp) | none | covered | high | — |
+| M491 | Double-click a universe | A double-click on a universe row (By universe and wiring view, patched or not) opens its connection window, not a rename | **ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection** (new) | none | covered | med | — |
+
 
 ## Data safety across features (old shows, file formats)
 

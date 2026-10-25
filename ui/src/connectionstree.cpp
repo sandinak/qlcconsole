@@ -46,6 +46,7 @@
 
 #include "connectionstree.h"
 #include "shrinkablebar.h"
+#include "connectioneditor.h"
 #include "networkroute.h"
 #include "universeoutputview.h"
 #include "deviceprofile.h"
@@ -311,6 +312,11 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotContextMenu(QPoint)));
+    /* A double-click on a universe opens its connection ("double clicking on
+       a universe doesn't open its editor. It should."), so it no longer
+       renames: a click on the selected row, or F2, still does. */
+    m_tree->setEditTriggers(QAbstractItemView::SelectedClicked | QAbstractItemView::EditKeyPressed);
+    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, &ConnectionsTree::slotItemDoubleClicked);
     /* Beside it, what the selected universe is sending ("it would be nice to
        see what's being sent out on a U if selected on the right hand side"). */
     m_output = new UniverseOutputView(m_doc, this);
@@ -2622,7 +2628,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            port. Same destination as patching from a port row, just reached
            by starting from the universe instead of from the wire. */
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
-        QAction *patchTo = menu.addAction(tr("Patch to…"));
+        QAction *patchTo = menu.addAction(tr("Edit connection…"));
+        menu.setDefaultAction(patchTo);
         menu.addSeparator();
         QAction *ren = menu.addAction(tr("Rename universe…"));
         menu.addSeparator();
@@ -2632,7 +2639,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
             return;
         if (chosen == patchTo)
-            patchUnpatchedUniverseTo(uni);
+            editConnection(item);
         else if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == del)
@@ -2649,6 +2656,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            interface exists again, and offering it invited configuring a
            destination that has no effect. Only "give up on it" is real. */
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+        /* Patch it to an interface that IS here: the connection window,
+           which says what it is waiting for and replaces it. */
+        QAction *editConn = menu.addAction(tr("Edit connection…"));
+        menu.addSeparator();
         QAction *ren = menu.addAction(tr("Rename universe…"));
         menu.addSeparator();
         QAction *forget = menu.addAction(tr("Forget this patch (unpatch)…"));
@@ -2658,7 +2669,9 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
             return;
-        if (chosen == ren)
+        if (chosen == editConn)
+            editConnection(item);
+        else if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == forget)
             forgetPendingPatch(uni);
@@ -2672,219 +2685,15 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
         const bool output = item->data(COL_NAME, ROLE_OUTPUT).toBool();
 
+        /* Everything about this patch -- where it goes, the interface, the
+           protocol's own settings (target, transmit mode, MIDI mode, sACN
+           priority...), the universe's input, profile, feedback and
+           passthrough -- is one window, filled in: "Edit connection…". It
+           used to be a dozen entries here, each its own small dialog. */
+        QAction *editConn = menu.addAction(tr("Edit connection…"));
+        menu.setDefaultAction(editConn);
+        menu.addSeparator();
         QAction *ren = menu.addAction(tr("Rename universe…"));
-        /* Repointing an existing patch, rather than unpatching and starting
-           over -- which is what a node swapped for a spare, or renumbered on
-           its front panel, used to cost. */
-        QAction *retgt = (output && pluginSupportsTargetsIn(m_doc, plugin))
-            ? menu.addAction(UniversePatcher::retargetText(plugin)) : NULL;
-
-        /* DMX-USB and MIDI widgets have no per-patch parameters at all --
-           their real settings (DMX output speed/mode, MIDI init template,
-           and so on) live per PHYSICAL WIDGET, reached only through the
-           plugin's own config dialog. That dialog was already reachable
-           from the plugin and interface rows above this one; offering it
-           here too means the universe row a patch actually shows up on is
-           also somewhere you can reach the hardware settings behind it,
-           rather than having to go find the right interface row first. */
-        QLCIOPlugin *ownerPlugin = NULL;
-        if (m_doc->ioPluginCache() != NULL)
-        {
-            foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
-                if (cand != NULL && cand->name() == plugin)
-                    ownerPlugin = cand;
-        }
-        QAction *cfgIface = (ownerPlugin != NULL && ownerPlugin->canConfigure())
-            ? menu.addAction(tr("Configure interface…")) : NULL;
-
-        const bool isMidi = plugin.contains("MIDI", Qt::CaseInsensitive);
-        const bool isArtNet = plugin.contains("ArtNet", Qt::CaseInsensitive);
-
-        /* Plugin parameters that were previously reachable only from the
-           Overview grid. They are properties of THIS patch, so they belong on
-           the row that represents it -- reading a value in one tab and having
-           to change it in another is how a rig ends up configured differently
-           from how it reads. */
-        QMenu *midiModeMenu = NULL;
-        QStringList midiModes;
-        if (output && isMidi)
-        {
-            midiModes << "Control Change" << "Note Velocity" << "Program Change";
-            midiModeMenu = menu.addMenu(tr("MIDI output mode"));
-            const QVariant curV = patchParameter(uni, plugin, line, true, "mode");
-            const QString cur = curV.isValid() ? curV.toString() : QString("Control Change");
-            foreach (const QString &m, midiModes)
-            {
-                QAction *a = midiModeMenu->addAction(m);
-                a->setCheckable(true);
-                a->setChecked(m == cur);
-            }
-        }
-
-        QMenu *midiChMenu = NULL;
-        if (output == false && isMidi)
-        {
-            /* 0 means "every channel" in the plugin's encoding; the operator
-               thinks in 1-16, so the menu counts the way the hardware is
-               labelled and the translation happens here. */
-            midiChMenu = menu.addMenu(tr("MIDI input channel"));
-            const QVariant curV = patchParameter(uni, plugin, line, false, "midichannel");
-            const int cur = curV.isValid() ? curV.toInt() : 0;
-            QAction *anyCh = midiChMenu->addAction(tr("All channels"));
-            anyCh->setCheckable(true);
-            anyCh->setChecked(cur == 0);
-            anyCh->setData(0);
-            midiChMenu->addSeparator();
-            for (int ch = 1; ch <= 16; ch++)
-            {
-                QAction *a = midiChMenu->addAction(tr("Channel %1").arg(ch));
-                a->setCheckable(true);
-                a->setChecked(cur == ch);
-                a->setData(ch);
-            }
-        }
-
-        QAction *inUni = NULL;
-        if (output == false && isArtNet)
-            inUni = menu.addAction(tr("Art-Net input universe…"));
-
-        /* Passthrough is a property of the UNIVERSE, not of any one patch, and
-           until now the Detailed tab was the only place in the whole
-           application that could set it -- a single point of access for a
-           setting that changes what the universe does with incoming data. One
-           reorganisation of that tab and it becomes unreachable. */
-        QAction *ptAct = menu.addAction(tr("Passthrough"));
-        ptAct->setCheckable(true);
-        ptAct->setChecked(m_doc->inputOutputMap()
-                          ? m_doc->inputOutputMap()->getUniversePassthrough(int(uni))
-                          : false);
-        ptAct->setToolTip(tr("Pass incoming values straight through to the "
-                             "output instead of into the engine"));
-
-        /* A MIDI port carries output and feedback over the same physical
-           connection, so a universe uses it as one or the other, never both.
-           Overview expresses that as a two-state combo; here it is the one
-           action that swaps which side of the patch the line sits on, because
-           "unpatch the output, then set the feedback to the same line" is the
-           same intent spelled out in three steps. */
-        QAction *roleSwap = NULL;
-        if (isMidi && output)
-            roleSwap = menu.addAction(tr("Use this MIDI port for feedback instead"));
-
-        /* Feedback has a destination of its own, under the same outputIP /
-           outputUni keys, and nothing outside the Overview grid could set it. */
-        Universe *fbU = m_doc->inputOutputMap()
-                        ? m_doc->inputOutputMap()->universe(uni) : NULL;
-        QAction *fbTgt = (fbU != NULL && fbU->feedbackPatch() != NULL
-                          && pluginSupportsTargetsIn(m_doc,
-                                 fbU->feedbackPatch()->pluginName()))
-            ? menu.addAction(tr("Change feedback address / port…")) : NULL;
-
-        /* ArtNet transmit mode: Standard sends only on change (plus a periodic
-           refresh), Full sends every tick. It changes the packet rate by
-           orders of magnitude, so it belongs next to the patch it applies to
-           rather than buried in a grid column. */
-        QMenu *modeMenu = NULL;
-        QStringList modes;
-        if (output)
-        {
-            modes << "Standard" << "Full" << "Partial";
-            modeMenu = menu.addMenu(tr("Transmit mode"));
-            QString cur = "Standard";
-            Universe *u = m_doc->inputOutputMap()
-                          ? m_doc->inputOutputMap()->universe(uni) : NULL;
-            if (u != NULL)
-            {
-                for (int i = 0; i < u->outputPatchesCount(); i++)
-                {
-                    OutputPatch *op = u->outputPatch(i);
-                    if (op != NULL && op->plugin() != NULL
-                            && op->plugin()->name() == plugin && op->output() == line)
-                    {
-                        cur = op->getPluginParameters()
-                                .value("transmitMode", "Standard").toString();
-                        break;
-                    }
-                }
-            }
-            foreach (const QString &m, modes)
-            {
-                QAction *a = modeMenu->addAction(m);
-                a->setCheckable(true);
-                a->setChecked(m == cur);
-            }
-        }
-
-        /* Feedback: which output line carries status back to a controller.
-           Listed as a submenu of real lines rather than a free-text field so
-           an unreachable line cannot be typed in. */
-        /* Feedback exists so a control surface can be lit or its motorised
-           faders moved when the console changes -- it is sent by UI widgets
-           back to whatever provides INPUT for this universe. Offering it from a
-           universe's Art-Net OUTPUT row invited the reasonable question of what
-           MIDI was doing in an Art-Net patch. Offer it where the controller
-           relationship lives: the input row, or the feedback row itself. */
-        QMenu *fbMenu = NULL;
-        QAction *fbNone = NULL;
-        QList<QPair<QString, quint32> > fbTargets;
-        const bool feedbackRelevant =
-            (output == false) || (item->text(COL_DETAIL) == tr("feedback"));
-        if (feedbackRelevant)
-        fbMenu = menu.addMenu(tr("Feedback to"));
-        if (fbMenu != NULL)
-        {
-        fbNone = fbMenu->addAction(tr("None"));
-        fbNone->setCheckable(true);
-        OutputPatch *curFb = m_doc->inputOutputMap()
-                             ? m_doc->inputOutputMap()->feedbackPatch(uni) : NULL;
-        fbNone->setChecked(curFb == NULL || curFb->plugin() == NULL);
-        if (m_doc->ioPluginCache() != NULL)
-        {
-            foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
-            {
-                /* Feedback is its own capability -- a plugin that can output
-                   DMX cannot necessarily send anything back. Listing every
-                   output line here offered targets that could never work. */
-                if (p == NULL || (p->capabilities() & QLCIOPlugin::Feedback) == 0)
-                    continue;
-                const QStringList outs = p->outputs();
-                for (int i = 0; i < outs.count(); i++)
-                {
-                    QAction *a = fbMenu->addAction(QString("%1: %2").arg(p->name())
-                                                                    .arg(outs.at(i)));
-                    a->setCheckable(true);
-                    a->setChecked(curFb != NULL && curFb->plugin() != NULL
-                                  && curFb->plugin()->name() == p->name()
-                                  && curFb->output() == quint32(i));
-                    fbTargets << qMakePair(p->name(), quint32(i));
-                }
-            }
-        }
-        }
-
-        /* Input profile: how a controller's notes/CCs map to widgets. Only
-           meaningful on an input patch, so do not offer it otherwise. */
-        QMenu *profMenu = NULL;
-        QStringList profNames;
-        if (output == false && m_doc->inputOutputMap() != NULL)
-        {
-            profMenu = menu.addMenu(tr("Input profile"));
-            QAction *pNone = profMenu->addAction(tr("None"));
-            pNone->setCheckable(true);
-            Universe *u = m_doc->inputOutputMap()->universe(uni);
-            InputPatch *ip = u ? u->inputPatch() : NULL;
-            const QString cur = ip ? ip->profileName() : QString();
-            pNone->setChecked(cur.isEmpty());
-            profNames = m_doc->inputOutputMap()->profileNames();
-            profNames.sort();
-            foreach (const QString &pn, profNames)
-            {
-                QAction *a = profMenu->addAction(pn);
-                a->setCheckable(true);
-                a->setChecked(pn == cur);
-            }
-        }
-
         /* Wording matters here: a universe can be patched to several lines, so
            removing it from THIS one must not read as deleting the universe.
            Conflating the two would quietly destroy a fan-out. */
@@ -2897,119 +2706,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == NULL)
             return;
-
-        if (fbMenu != NULL && qobject_cast<QWidget*>(chosen->parent()) == fbMenu)
-        {
-            if (chosen == fbNone)
-                setFeedback(uni, QString(), 0);
-            else
-            {
-                const int idx = fbMenu->actions().indexOf(chosen) - 1; // skip "None"
-                if (idx >= 0 && idx < fbTargets.count())
-                    setFeedback(uni, fbTargets.at(idx).first, fbTargets.at(idx).second);
-            }
-            return;
-        }
-        if (modeMenu != NULL && qobject_cast<QWidget*>(chosen->parent()) == modeMenu)
-        {
-            const int idx = modeMenu->actions().indexOf(chosen);
-            if (idx >= 0 && idx < modes.count())
-                setTransmitMode(uni, plugin, line, modes.at(idx));
-            return;
-        }
-        if (profMenu != NULL && qobject_cast<QWidget*>(chosen->parent()) == profMenu)
-        {
-            const int idx = profMenu->actions().indexOf(chosen) - 1; // skip "None"
-            setProfile(uni, idx < 0 ? QString() : profNames.value(idx));
-            return;
-        }
-
-        if (midiModeMenu != NULL && chosen != NULL
-                && midiModeMenu->actions().contains(chosen))
-        {
-            setPatchParameter(uni, plugin, line, true, "mode", chosen->text());
-            return;
-        }
-        if (midiChMenu != NULL && chosen != NULL
-                && midiChMenu->actions().contains(chosen))
-        {
-            setPatchParameter(uni, plugin, line, false, "midichannel",
-                              chosen->data().toInt());
-            return;
-        }
-        if (inUni != NULL && chosen == inUni)
-        {
-            const QVariant curV = patchParameter(uni, plugin, line, false, "inputUni");
-            bool ok = false;
-            const int v = QInputDialog::getInt(
-                this, tr("Art-Net input universe"),
-                tr("Which Art-Net universe does this input listen to?"),
-                curV.isValid() ? curV.toInt() : 0, 0, 32767, 1, &ok);
-            if (ok)
-                setPatchParameter(uni, plugin, line, false, "inputUni", v);
-            return;
-        }
-        if (chosen == ptAct)
-        {
-            InputOutputMap *iom = m_doc->inputOutputMap();
-            if (iom != NULL)
-            {
-                iom->setUniversePassthrough(int(uni), ptAct->isChecked());
-                /* Detailed persists this immediately rather than on save, and
-                   a setting that disagrees between two tabs is worse than one
-                   that lives in only one of them. */
-                iom->saveDefaults();
-                m_doc->setModified();
-                refresh();
-            }
-            return;
-        }
-        if (roleSwap != NULL && chosen == roleSwap)
-        {
-            InputOutputMap *iom = m_doc->inputOutputMap();
-            if (iom != NULL)
-            {
-                if (iom->patchUndo() != NULL)
-                    iom->patchUndo()->capture(QList<quint32>() << uni,
-                        tr("use MIDI port for feedback on universe %1").arg(uni + 1));
-
-                /* Find this leg's index before dropping it: a universe fanned
-                   out to several lines must lose the right one. */
-                int index = 0;
-                Universe *u = iom->universe(uni);
-                if (u != NULL)
-                {
-                    for (int i = 0; i < u->outputPatchesCount(); i++)
-                    {
-                        OutputPatch *op = u->outputPatch(i);
-                        if (op != NULL && op->plugin() != NULL
-                                && op->plugin()->name() == plugin
-                                && op->output() == line)
-                        {
-                            index = i;
-                            break;
-                        }
-                    }
-                }
-                iom->setOutputPatch(uni, QString(), QString(), 0, false, index);
-                iom->setOutputPatch(uni, plugin, QString(), line, true, 0);
-                m_doc->setModified();
-                refresh();
-            }
-            return;
-        }
-        if (fbTgt != NULL && chosen == fbTgt)
-        {
-            retargetFeedback(uni);
-            return;
-        }
-        if (cfgIface != NULL && chosen == cfgIface)
-        {
-            configurePlugin(plugin);
-            return;
-        }
-        if (retgt != NULL && chosen == retgt)
-            retargetPatch(uni, plugin, line);
+        if (chosen == editConn)
+            editConnection(item);
         else if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == unp)
@@ -3029,6 +2727,50 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
     QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
     handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv);
+}
+
+bool ConnectionsTree::isUniverseRow(const QTreeWidgetItem *item)
+{
+    if (item == NULL)
+        return false;
+    const int kind = item->data(COL_NAME, ROLE_KIND).toInt();
+    return kind == KIND_UNIVERSE || kind == KIND_UNPATCHED_UNIVERSE
+           || kind == KIND_PENDING_UNIVERSE;
+}
+
+bool ConnectionsTree::editConnection(QTreeWidgetItem *item)
+{
+    if (isUniverseRow(item) == false)
+        return false;
+    const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+    QString plugin;
+    quint32 line = 0;
+    QString section;
+    if (item->data(COL_NAME, ROLE_KIND).toInt() == KIND_UNIVERSE)
+    {
+        /* An output row: that leg. An input or feedback row: the universe's
+           connection, opened on its input / feedback. */
+        if (item->data(COL_NAME, ROLE_OUTPUT).toBool()
+                && item->text(COL_DETAIL) != tr("feedback"))
+        {
+            plugin = item->data(COL_NAME, ROLE_PLUGIN).toString();
+            line = item->data(COL_NAME, ROLE_LINE).toUInt();
+        }
+        else
+            section = item->text(COL_DETAIL) == tr("feedback") ? QStringLiteral("feedback")
+                                                                : QStringLiteral("input");
+    }
+    const bool changed = ConnectionEditor::edit(m_doc, uni, plugin, line, this, section);
+    if (changed)
+        refresh();
+    return changed;
+}
+
+void ConnectionsTree::slotItemDoubleClicked(QTreeWidgetItem *item, int column)
+{
+    Q_UNUSED(column)
+    if (isUniverseRow(item))
+        editConnection(item);
 }
 
 bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut,

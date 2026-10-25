@@ -331,6 +331,24 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   controllers), and Focus mode saying when the controller is paused and
   why.
 
+- **One connection window** (`ConnectionEditor`, ui/src/connectioneditor.*).
+  Connections ▸ Devices: right-click a universe ▸ **Edit connection…**, or
+  double-click it, in the wiring or By universe view. The universe, its
+  protocol and interface, then that protocol's own settings in place (Art-Net:
+  the node port, or an address typed, or broadcast, and the transmit mode;
+  sACN: universe, multicast or unicast, priority, transmit mode; MIDI: output
+  mode; WLED: its devices window; a USB widget: the device), then input,
+  profile, feedback and passthrough. Patching and editing are the same
+  window, the second filled in; OK is one Undo Patch Change step, Cancel
+  changes nothing; a taken port and unicast with no address are refused.
+  The plugin's own Configure… window opens from it. It replaces the
+  protocol / interface / port cascade and the universe row's dozen editing
+  entries (Change interface / target, Configure interface, Transmit mode,
+  MIDI modes, Art-Net input universe, Passthrough, Feedback to, Input
+  profile, the MIDI feedback swap, Change feedback address); "Patch to…" on
+  an unpatched universe is Edit connection… too. Classic QLC+'s Universes
+  page is unchanged. Devices vs Overview: docs/CONNECTIONS_CLEANUP.md.
+
 ### Changed
 
 - **Connections opens where you'd look for it**: in Classic QLC+ on its
@@ -534,6 +552,15 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
 
 ### Fixed
 
+- **Fixture Properties opens for every fixture.** A double-click or
+  Fixture Properties… in the Fixture Manager did nothing for a fixture not
+  on the plot (a staged one, another venue's house light, one never placed):
+  the dialog was built around its plot item and returned without one. It
+  opens now, its X, Y and icon rotation greyed with "Not on the plot";
+  several selected edit together whether placed or not.
+- **A double-click on a universe in Connections opens its connection**
+  instead of starting a rename (a click on the selected row, or F2, still
+  renames).
 - **Re-patching an input left with no plugin no longer crashes.** An input
   unpatched by name with a valid line kept an `InputPatch` with no plugin,
   and patching it again dereferenced that null plugin.
