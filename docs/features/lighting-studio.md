@@ -82,7 +82,7 @@ focuses by. Each one is a tick in the menu:
   It's the stage's main reference (the plaster line). With it on, the plot
   also shows the **apron**, the deck downstage of the curtain line, tinted,
   with its depth at centre dimensioned from the curtain line to the front of
-  the stage (**Apron 1.8 m**). Every truss or pipe hung downstage of the
+  the stage (**Apron 1.8 m**). Every horizontal truss or pipe hung downstage of the
   curtain line, like the FOH electric out over the audience, is labelled
   with how far: **FOH · 4.2 m DS of curtain line**.
 - **Number line:** a line across the stage, ticked every foot or metre (the
@@ -708,6 +708,11 @@ of, and doesn't override, the real locks above.
 
 ## Selecting and undo on the plot
 
+- **Snap**, on the plot's footer bar, puts what you drag on the grid:
+  fixtures, trusses, towers, stands, pipes, scenery, platforms, power
+  sources and network nodes. Its arrow picks the step (**Snap to:**
+  Full, 1/2 or 1/4 of a grid square). A grouped selection moves by the
+  same amount as the piece you drag, so it keeps its shape.
 - **Select All** (Ctrl/⌘+A, or **More → Select All**) selects every
   visible, selectable object on the plot at once.
 - **Undo** (Ctrl/⌘+Z, or the toolbar's **Undo**) puts back the last move,
@@ -1028,7 +1033,7 @@ and jump as you nudged.)
 | Say the light (its name, then where you are) | RS (right stick click) | W |
 | Feedback: lights / voice / both | RS held | ⇧W |
 | Save every light not saved | A held | ⇧Return |
-| This light back to its last save | B held | ⇧Backspace |
+| Every light not saved back to its last save | B held | ⇧Backspace |
 | The next light not saved | LB + RB together | U |
 | Next / previous focus call | RT / LT | PgDn / PgUp |
 | Undo the last save | View (on release) | ⌘Z |
@@ -1116,18 +1121,21 @@ the stage:
 
 | Lamp | Means |
 |---|---|
-| Green | Everything is saved. |
-| Yellow | The light you're on has unsaved changes. |
-| Red | Some *other* light has unsaved changes. |
-| Red ring, yellow centre | Both: this light and another. |
+| Blue, with a tick | Everything is saved. |
+| Yellow, with "!" | The light you're on has unsaved changes. |
+| Orange | Some *other* light has unsaved changes. |
+| Orange ring, yellow centre | Both: this light and another. |
+
+The colours can be told apart by people who are colour-blind, and the
+number not saved is on the lamp's rim.
 
 Beside it the panel says which: **All saved**, **Unsaved: this light**, or
 **Unsaved: 2 other lights (Spot 3, Spot 7)**. It changes as you nudge,
 save, revert, zero and undo.
 
-![The status lamp: a red ring round a yellow centre, this light and another unsaved](../images/focus-mode-save-status.png)
+![The status lamp: an orange ring round a yellow centre, this light and another unsaved](../images/focus-mode-save-status.png)
 
-**A save shows on the rig.** When A keeps a light, the lamp flashes green
+**A save shows on the rig.** When A keeps a light, the lamp flashes blue
 and the real fixture dips to dark and back twice, quickly, so whoever is
 standing on stage sees it was kept. A revert (B) doesn't blink. With
 **Feedback: Voice only** (see

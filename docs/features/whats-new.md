@@ -41,7 +41,14 @@ their house lights, relays and subs.
   [Focus calls](focus-calls.md).
 - **Refine.** The same controller on a Show Tree cue's own values:
   position, zoom, focus, colour, gobo — the layer as a whole, or one
-  fixture as an exception (a child layer). See [Refine](refine.md).
+  fixture as an exception (a child layer). See [Refine](refine.md). It
+  works on a Build scene too, from the Workbench's **Refine…** (see
+  [On a Build scene](refine.md#on-a-build-scene)), and in Operate on the
+  running cue only, quietly (see
+  [Refine during the show](refine.md#refine-during-the-show)).
+- **A focus-call cue.** Tick **Focus call** on a pre-show cue: GO arms
+  the focus calls, and Start on the controller begins them. See
+  [A focus-call cue](focus-calls.md#a-focus-call-cue-pre-show).
 - **Say the light.** The right stick click says the light's name and
   where you are; **Feedback** picks lights, voice or both (hold it to
   switch). What is picked blinks, and the laptop says it: "AT
@@ -345,6 +352,9 @@ their house lights, relays and subs.
 
 ### Fixtures and the plot
 
+- **Snap takes the whole rig.** With **Snap** on, trusses, towers,
+  stands, pipes and scenery land on the grid too, not only fixtures and
+  platforms. See [Selecting and undo on the plot](lighting-studio.md#selecting-and-undo-on-the-plot).
 - **Plot symbols.** Fixture Properties and the Fixtures tab's right-click
   **Plot Symbol ▸** say what a fixture looks like: Auto, or one of sixteen
   symbols in five sections — moving heads, fixed conventionals (PAR can,

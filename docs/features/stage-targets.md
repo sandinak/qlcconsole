@@ -55,6 +55,13 @@ look using a deleted target just stops resolving, and the fixtures hold
 their last position. The delete confirmation names every scene that would
 be affected before you commit.
 
+**Where a target is, in crew terms.** Beside each target the plot writes
+its place from the stage marks ("SL 2.4 · US 3.1 m": left or right of the
+centre line, up or downstage of the number line), live while you drag
+it. The Rig Overview writes it too, and focus calls say it ("SL 2, US
+1"). **Show ▸ Stage marks ▸ Target positions** hides it. See
+[Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
+
 ## Line targets
 
 A **Line** spreads lights out instead of converging them: every head an Aim

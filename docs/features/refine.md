@@ -63,13 +63,13 @@ scope picks the first fixture.
 | Do | Controller | Keyboard |
 |---|---|---|
 | Next / previous layer | RT / LT | PgDn / PgUp |
-| Next / previous fixture (or group) | RB / LB | ] / [ |
+| Next / previous fixture (or group) | RB / LB | ] / [ (or Tab / ⇧Tab) |
 | Scope: layer → group → fixture | Y | G |
-| Move (coarse, fine) | Left stick, right stick | Arrows (⇧: 5°) |
+| Move (coarse, fine) | Left stick, right stick | Arrows (1°; ⇧: 5°) |
 | Spot down / flood out (zoom) | D-pad up / down | , / . |
 | Sharper / softer (focus) | D-pad right / left | ' / ; |
 | D-pad page: beam / colour / gobo | LS (left stick click) | P |
-| Keep in the cue | A | Return |
+| Keep in the cue (held: everything) | A | Return |
 | Back to the cue | B | Backspace |
 | Clear the exception | X | 0 |
 | Undo (on its release) | View | ⌘Z |
@@ -83,9 +83,11 @@ scope picks the first fixture.
 
 Up spots the beam down (narrower), down floods it out; right sharpens
 the edge and left softens it, here as in Focus mode, and the voice says
-the word once a press ("Spot down."). Hold an arm and it keeps going: once, then after
-a moment over and over until you let go. On the **colour** and **gobo** pages, D-pad right
-and left step forward and back through the show's colour or gobo palettes and say the name of each.
+the word once a press ("Spot down."). On the beam page, hold an arm and
+it keeps going: once, then after a moment over and over until you let go.
+On the **colour** and **gobo** pages, D-pad right and left step forward
+and back through the show's colour or gobo palettes, once a press, and
+say the name of each.
 
 What you change is **pending**: the rig shows it at once, but the cue is
 not changed until **A**. Then everything pending is kept as **one** Show
@@ -167,7 +169,8 @@ The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
   every change what is picked blinks three times.
 - **The voice.** "AT spots, layer." "AT spots, fixture 3 of 8."
   "DS wash, group 2 of 3." "AT spots kept in cue 4." "Back to the cue."
-  **Say the light** adds the cue: "Cue 4, AT spots, fixture 3 of 8."
+  **Say the light** says the light, then the cue: "Spot 3. Cue 4, AT
+  spots, fixture 3 of 8."
 - **Holding.** Both stick clicks (or H) hold everything where it is:
   "Holding."; again, "Released." The left stick click (the D-pad page)
   acts when you let it go, so the two can be pressed together.
@@ -192,7 +195,8 @@ does not end it. In Operate the show is running, so Refine is quiet:
   4. It plays next time it runs." Until then Refine holds what was kept
   on the rig.
 - **GO lets go.** When the list moves off the cue, the hold is released
-  and Refine sends nothing until that cue runs again. The voice says so.
+  and Refine sends nothing until that cue runs again. The voice says so:
+  "Cue 4 has moved on: nothing is sent until it runs again."
 
 Leaving Refine lets go of the hold too. Back in Design, the cue is
 previewed with everything kept.

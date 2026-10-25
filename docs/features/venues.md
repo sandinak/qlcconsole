@@ -21,8 +21,9 @@ Every fixture has an owner:
 
 Set it on a **fixture group** and every fixture in the group follows:
 open the group in the Fixture Manager and pick **Owner** beside its
-name. One fixture can say otherwise in **Fixture Properties** (its
-**Owner** row; **From its group** follows the group). A fixture in two
+name (**Not set (Tour)** until you do). One fixture can say otherwise in
+**Fixture Properties** (its **Owner** row; the first choice follows the
+group and says what that gives: "From FOH wash: House"). A fixture in two
 groups that disagree takes the first group's owner. A fixture nobody
 says anything about is Tour.
 
@@ -89,11 +90,22 @@ dialog marks it **CONFLICT**.
 ## The venue page
 
 **Focus calls ▸ Rig and universes…** opens the page of the venue chosen
-beside it:
+beside it (with **None** or **New venue…** chosen, it asks you to choose
+a venue first). Apply the venue first to change its house rig or its
+patch; **Not ours** and the clash check work either way.
+
+![The venue page: the house rig, each universe's slot, output and channels not ours, and the clash check](../images/venue-rig-page.png)
+
+1. The house rig: the venue's house fixtures and the groups they fill.
+2. Each universe: its slot, its output in this venue, the channels not ours.
+3. Keep the outputs on the Connections tab as this venue's patch.
+4. What clashes now.
 
 - **House rig**: its house fixtures and the groups they fill, and **Move
-  the show's house fixtures in** when there are any.
-- **Universes**: each universe with its **Slot**, its **Output in this
+  the show's house fixtures in** when there are any (while the venue is
+  applied).
+- **Universes**: each universe with its **Slot** (Tour or House; change
+  it here or on the Connections toolbar), its **Output in this
   venue** (the venue's own, or the show's), and **Not ours** (type
   `all`, a range such as `401-512`, or several: `1-24, 500-512`).
 - **Keep this patch for Lincoln HS** makes the outputs on the
@@ -102,11 +114,14 @@ beside it:
 
 ## The clash check
 
-Before a venue goes live, **Apply now** lists what clashes with the
-show, with **Apply anyway** or **Cancel**:
+**Apply now** (in Focus calls, beside the venue) first lists what
+clashes with the show, with **Apply anyway** or **Cancel** (the default).
+Starting the focus calls on a venue applies it without asking, so press
+Apply now first in a new room:
 
-- **Overlap**: a house fixture and a tour or rental fixture on the same
-  addresses in a universe.
+- **Overlap**: two fixtures on the same addresses in a universe, at
+  least one of them the room's: a house fixture and a tour or rental
+  fixture, or two house fixtures.
 - **Not ours**: a fixture on channels the venue keeps.
 - **Slot**: a house fixture in a Tour slot, or a tour fixture in a House
   slot (only once the show has House slots).
@@ -118,7 +133,7 @@ dialog lists the venue's clashes under its table.
 
 ## Seeing who owns what
 
-- **Lighting Studio ▸ Overlay ▸ Owner** colours the plot: Tour blue,
+- **Overlay: Owner**, on the Lighting Studio plot's bar, colours the plot: Tour blue,
   House amber, Rental violet. The tooltip says where the owner comes
   from and whose file a house fixture is in.
 - The **Inventory** panel shows **[House]** or **[Rental]** beside a

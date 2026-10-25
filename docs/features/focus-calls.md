@@ -13,8 +13,8 @@ this venue** — never into the show.
 
 ## Setting up the calls
 
-**Lighting Studio → Focus calls**, or **Run → Focus calls…**, opens the
-list.
+**Focus calls** on the Lighting Studio's toolbar, or **Focus calls…** on
+the Run tab, opens the list.
 
 - **+ Call** adds one; **Up** / **Down** set the order they are run in;
   **Remove** takes one out.
@@ -55,6 +55,12 @@ the **Venue** before you start:
 - **None** — saves go into the show's own calibration, as Focus mode
   always did.
 
+**Apply now** puts the chosen venue on the rig without starting the calls
+(listing its clashes first: see [The clash check](venues.md#the-clash-check)).
+**Rename…** and **Delete** rename or forget a venue and its corrections;
+the show is not changed. A venue needs a saved show: until the show has
+been saved, the dialog says "Save the show first".
+
 A venue's corrections are kept in a file **next to the show**, named after
 it: `Spring Show.qlcc` keeps them in `Spring Show.venues.xml`. Every **A**
 writes that file at once, so quitting or a crash loses nothing. The show
@@ -77,7 +83,7 @@ by hand, and which fixture type and mode it was. It also holds the room's
 **truss trims** and **target positions** (below).
 
 **Still at the venue?** When you open a show whose applied venue was last
-changed more than about a day ago, the laptop asks "Still at Lincoln
+changed more than 20 hours ago, the laptop asks "Still at Lincoln
 HS?":
 
 - **New venue** (the default): name it, or leave it empty for the date.
@@ -136,16 +142,17 @@ fixture, the scope, and where saves go.
 | Do | Controller | Keyboard |
 |---|---|---|
 | Next / previous focus call | RT / LT | PgDn / PgUp |
-| Next / previous fixture | RB / LB | ] / [ |
+| Next / previous fixture | RB / LB | ] / [ (or Tab / ⇧Tab) |
 | One fixture / the whole call (scope) | Y | G |
-| Nudge (coarse, fine) | Left stick, right stick | Arrows (⇧: 1°) |
-| Spot down / flood out (zoom) | D-pad up / down | , / . |
-| Sharper / softer (focus) | D-pad right / left | ' / ; |
+| Nudge (coarse, fine) | Left stick, right stick | Arrows (0.1°; ⇧: 1°) |
+| Step size ×10 / ÷10 | — | + / − |
+| Spot down / flood out (zoom) | D-pad up / down | , / . (⇧: 5°) |
+| Sharper / softer (focus) | D-pad right / left | ' / ; (⇧: a bigger step) |
 | Save for this venue | A | Return |
 | Back to what was saved | B | Backspace |
 | Zero | X | 0 |
 | Undo the last save | View (on release) | ⌘Z |
-| Target page: move this call's target | LS (left stick click) | T |
+| Target page: move this call's target | LS (left stick click) | T (or R) |
 | How many are not saved | View + RS | N |
 | Say the light | RS (right stick click) | W |
 | Feedback: lights / voice / both | RS held | ⇧W |
@@ -187,7 +194,8 @@ crew, or hand the pad over. The left stick click (the target page) acts
 when you let it go, so the two clicks can be pressed together.
 
 **A dead light.** A lamp out, a light that will not move: **View + X**
-(or D) marks it **dead** in the venue ("Spot 3 marked dead."). The panel
+(or D) marks it **dead** in the venue ("Spot 3 marked dead."); with no venue
+applied it is refused ("Apply a venue to mark a light dead."). The panel
 and the plot mark it, the Corrections list shows it, and the focus report
 lists it. Again marks it not dead.
 
@@ -227,12 +235,13 @@ one undo step. A bumper picks one fixture again.
 
 ## The focus report
 
-**Export focus report…** (beside the venue) writes what was focused in
+**Export focus report…** (below the venue, beside **Focused by:**) writes what was focused in
 the venue picked, light by light and call by call:
 
-- the call, the fixture, its type and where it hangs;
+- the call, the fixture, its type, whose it is (Tour, House or Rental)
+  and where it hangs;
 - where it focuses to, with the target's place from the stage marks
-  ("SL 2.4 · US 3.1");
+  ("SL 2.4 · US 3.1 m");
 - the correction from the show's own calibration ("+1.3° pan, −0.4°
   tilt"), and a lens set by hand;
 - who checked it and when (every save notes it), and the call's note;
@@ -245,24 +254,33 @@ Choose the kind of file by its ending:
 - **PDF** to print or hand in (landscape, one table);
 - **Web page** (.html) to open in a browser;
 - **CSV for Lightwright**: one line a light, in Lightwright's column names
-  (Purpose, Position, Unit#, Instrument Type, Address, Focus…).
+  (Purpose, Position, Unit#, Instrument Type, Address, Focus…, Owner).
 
 The report also lists the lights corrected outside the calls, and the
 room's trims and targets.
 
+![A focus report: each light's call, owner, target and where it is, its correction, who checked it, and the flags](../images/focus-report.png)
+
 ## Practice: scramble and focus back
 
 For the classroom. **Practice (scramble)…** asks how far off (easy 1–3°,
-medium 2–6°, hard 4–10°), then puts every moving head in the calls off
+medium 2–6°, the default; hard 4–10°), then puts every moving head in the calls off
 its focus by a random pan and tilt and starts the calls. Focus each light
 back onto its target and save it.
 
 - It is a **practice venue** of its own ("Practice 2026-10-24 19:30"):
   the real venues are not changed, and the one you were in comes back when
-  the calls end.
+  the calls end. It takes that room's trims, targets and house rig with
+  it, so the room's own lights are there too; its house movers are
+  scrambled and scored like the tour's. The show must be saved first.
 - On the **real rig** the lights are really off. On the **visualiser**
   the beams are drawn where the scrambled lights land, so the drill works
   with no rig at all.
+![The practice score: lights within 1°, the average and worst error, the saves](../images/practice-score.png)
+
+1. The score.
+2. The focus report of the practice, with each light's error.
+
 - When the calls end you get the score: how many lights are within 1°,
   the average and worst error, how many were saved, the saves, and the
   time from the start to the last save. **Export the report…** gives the
@@ -283,11 +301,11 @@ are one checklist:
    **Focus calls: waiting for the controller**.
 3. When the crew is ready, press **Start** (Menu) on the controller — or
    **Start focus calls** on the Run tab, or **⌘↩**. The first call comes up,
-   blinking, as the voice says it. First the laptop always confirms the
-   venue: "Still at Lincoln HS? Answer on the laptop, or wait for a new
+   blinking, as the voice says it. First the laptop confirms the venue
+   (for a show that has been saved: a venue lives beside the show file): "Still at Lincoln HS? Answer on the laptop, or wait for a new
    venue." (with none applied: "Name this venue on the laptop, or wait
    for today's date."). Press **Still at Lincoln HS**, or type a name and
-   press Return; after 8 seconds a new venue is made, named with today's
+   press Return (**New venue**); after 8 seconds a new venue is made, named with today's
    date, so an old room is never corrected by mistake. Typing holds the
    clock.
 4. Work the calls as below. **Menu**, or **RT** on the last call, ends
@@ -319,7 +337,9 @@ screen. Two things tell them where they are:
     "Call 2 of 5, AT spots to Soloist DS, SL 2, US 1. Fixture 1 of 4."
   - a fixture: "Fixture 3 of 8."
   - the whole call: "All 4, group."
-  - A, B, X, View: "Saved." "Reverted." "Zeroed." "Undone."
+  - A: "Spot 3 kept." (with a venue: "Spot 3 kept for Lincoln HS."); B:
+    "Reverted."; X: "Zeroed." (with a venue: "Back to the show's
+    calibration."); View: "Undone."
   - the D-pad: "Spot down." "Flood out." "Sharper." "Softer."
   - **Say the light** (right stick click, or W) says the light's name
     first and then where you are — "Spot 3. Call 2 of 5, AT spots to
@@ -346,8 +366,11 @@ double blink and a short buzz):
 - the venue asked;
 - **the controller lost**: if the pad drops out (asleep, unplugged,
   flat), everything it held is let go — the sticks, a held button — so no
-  light drifts and no hold fires: "Controller lost. Lights held." When it
-  is back: "Controller back.";
+  light drifts and no hold fires: "Controller lost. Lights held." The
+  panel switches to the keyboard. When the pad is back the voice says
+  "Controller back.", but in Focus mode and focus calls it drives nothing
+  until someone presses **Use the controller** on the panel; Refine takes
+  it back at once. The keys work all the while;
 - **nothing reaching the rig**: Blackout on, the Grand Master at zero, or
   the light's universe with no output ("Spot 3's universe has no output:
   it shows nothing.");

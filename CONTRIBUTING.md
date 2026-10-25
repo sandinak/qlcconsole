@@ -47,5 +47,5 @@ or replacing a picture run
     tools/png-colour-chunks.py --strip path/to/new.png
 
 It drops only those chunks; the pixels are untouched, and the app never
-colour-managed them anyway. `make check` (unittest.sh) and `help-shots.sh` fail
+colour-managed them anyway. `make check` (check-all.sh, which runs unittest.sh in each leg) and `help-shots.sh` fail
 if any PNG still carries one.

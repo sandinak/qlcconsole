@@ -42,6 +42,8 @@
 #include <QTemporaryDir>
 #include <QWidget>
 #include <QTimer>
+#include <QTextBrowser>
+#include <QTableWidget>
 #include <QDir>
 
 #include "programmingmanager.h"
@@ -62,6 +64,10 @@
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
 #include "focuscallsdialog.h"
+#include "venuerigdialog.h"
+#include "venuecorrections.h"
+#include "focusreport.h"
+#include "inputoutputmap.h"
 #include "focuscontrolmap.h"
 #include "focusmodepanel.h"
 #include "refinesession.h"
@@ -962,6 +968,198 @@ QList<HelpShots::Shot> HelpShots::shots()
         return f;
     }, [=]() {
         doc->programmer()->refineSession()->stop();
+        settle();
+    } };
+
+    /* Venues (VENUES.md): the demo's Pars as Lincoln HS's house rig, the
+       fourth universe a House slot, a range of the first one not ours. */
+    auto groupNamed = [doc](const QString &name) -> FixtureGroup * {
+        for (FixtureGroup *g : doc->fixtureGroups())
+            if (g->name() == name)
+                return g;
+        return nullptr;
+    };
+    auto endVenue = [doc, groupNamed]() {
+        VenueCorrections *v = doc->programmer()->venueCorrections();
+        if (FixtureGroup *pars = groupNamed(QStringLiteral("Pars")))
+            pars->setOwner(RigOwner::Unset);
+        if (doc->inputOutputMap()->universesCount() > 3)
+            doc->inputOutputMap()->setUniverseSlotOwner(3, RigOwner::Unset);
+        v->setCheckedBy(QString());
+        v->setActiveVenue(QString());
+        for (const QString &name : v->venueNames())
+            v->removeVenue(name);
+        doc->resetModified();
+    };
+    list << Shot{ QStringLiteral("venue-rig-page"), [=]() {
+        Frame f;
+        VenueCorrections *v = doc->programmer()->venueCorrections();
+        const QString venue = v->addVenue(QStringLiteral("Lincoln HS"));
+        v->setActiveVenue(venue);
+        if (FixtureGroup *pars = groupNamed(QStringLiteral("Pars")))
+            pars->setOwner(RigOwner::House);
+        if (doc->inputOutputMap()->universesCount() > 3)
+            doc->inputOutputMap()->setUniverseSlotOwner(3, RigOwner::House);
+        VenueRigDialog *d = new VenueRigDialog(doc, venue, app);
+        d->setObjectName(QStringLiteral("helpShotVenueRig"));
+        if (QTableWidgetItem *it = d->universeTable()->item(0, VenueRigDialog::NotOursCol))
+            it->setText(QStringLiteral("401-512"));
+        d->resize(820, 640);
+        d->show();
+        settle();
+        f.grab = d;
+        QWidget *clashes = named(d, "vrClashes");
+        if (clashes == nullptr || !clashes->isVisible())
+            clashes = named(d, "vrNoClashes");
+        f.callouts << mark(named(d, "vrHouse"), 1) << mark(named(d, "vrUniverses"), 2)
+                   << mark(named(d, "vrKeepPatch"), 3) << mark(clashes, 4);
+        for (Callout &c : f.callouts)
+            c.place = Left;
+        f.pad = QMargins(40, 0, 0, 0);
+        return f;
+    }, [=]() {
+        if (QWidget *d = app->findChild<QWidget *>(QStringLiteral("helpShotVenueRig")))
+            delete d;
+        endVenue();
+        settle();
+    } };
+
+    /* The focus report of a venue: two movers corrected and checked, one
+       dead, as the web page (the PDF is the same page). */
+    list << Shot{ QStringLiteral("focus-report"), [=]() {
+        demoCalls();
+        Frame f;
+        VenueCorrections *v = doc->programmer()->venueCorrections();
+        MonitorProperties *props = doc->monitorProperties();
+        const QString venue = v->addVenue(QStringLiteral("Lincoln HS"));
+        v->setActiveVenue(venue);
+        v->setCheckedBy(QStringLiteral("Sam"));
+        QList<quint32> movers;
+        if (FixtureGroup *g = groupNamed(QStringLiteral("Movers")))
+            movers = g->fixtureList();
+        for (int i = 0; i < movers.size() && i < 3; ++i)
+        {
+            FixtureRigProps rp = props->fixtureRigProps(movers.at(i));
+            rp.panOffsetDeg = (i == 0) ? 1.3f : -0.8f * i;
+            rp.tiltOffsetDeg = (i == 0) ? -0.4f : 0.5f;
+            props->setFixtureRigProps(movers.at(i), rp);
+            v->record(movers.at(i));
+        }
+        v->markChecked(movers.mid(0, 6));
+        if (movers.size() > 6)
+            v->setDead(movers.at(6), true);
+        QTextBrowser *page = new QTextBrowser(app);
+        page->setObjectName(QStringLiteral("helpShotFocusReport"));
+        page->setWindowFlags(Qt::Window);
+        page->setHtml(FocusReport::html(doc, venue, QStringLiteral("Spring Show")));
+        page->resize(960, 350);
+        page->show();
+        settle();
+        f.grab = page;
+        return f;
+    }, [=]() {
+        if (QWidget *d = app->findChild<QWidget *>(QStringLiteral("helpShotFocusReport")))
+            delete d;
+        endVenue();
+        settle();
+    } };
+
+    /* Scramble practice, focused back: six of eight movers put back on
+       their marks and saved, one close, one not touched. */
+    list << Shot{ QStringLiteral("practice-score"), [=]() {
+        demoCalls();
+        Frame f;
+        VenueCorrections *v = doc->programmer()->venueCorrections();
+        FocusCallsDialog calls(doc, app);
+        QString why;
+        if (!calls.startPractice(2.0f, 6.0f, 7, &why))
+        {
+            fprintf(stderr, "[HELPSHOT] practice did not start: %s\n", qPrintable(why));
+            return f;
+        }
+        FocusSession::Options o;
+        o.calls = doc->programmer()->focusCalls()->sessionCalls();
+        o.others = FocusSession::OthersDim;
+        FocusModePanel *panel = FocusModePanel::startWith(doc, app, o, &why,
+                                                          int(FocusSession::KeyboardInput));
+        FocusSession *s = doc->programmer()->focusSession();
+        if (panel != nullptr)
+        {
+            const VenueCorrections::Venue pv = v->venue(v->activeVenue());
+            MonitorProperties *props = doc->monitorProperties();
+            for (int i = 0; i < s->count(); ++i)
+            {
+                const quint32 fid = s->currentFixture();
+                if (pv.practice.truth.contains(fid) && i < s->count() - 1)
+                {
+                    const RigCalibration truth = pv.practice.truth.value(fid);
+                    const FixtureRigProps rp = props->fixtureRigProps(fid);
+                    // The last but one lands a little off; the rest on the mark.
+                    const float miss = (i == s->count() - 2) ? 1.6f : 0.3f;
+                    s->nudge(truth.panOffsetDeg - rp.panOffsetDeg + miss,
+                             truth.tiltOffsetDeg - rp.tiltOffsetDeg - 0.2f);
+                    s->save();
+                }
+                s->next();
+            }
+            QPointer<FocusModePanel> left(panel);
+            s->stop();
+            settle();
+            if (!left.isNull())
+                delete left.data();
+        }
+        QDialog *d = FocusCallsDialog::showPracticeResult(doc, app);
+        if (d == nullptr)
+            return f;
+        d->setObjectName(QStringLiteral("helpShotPractice"));
+        d->show();
+        settle();
+        f.grab = d;
+        d->resize(620, d->sizeHint().height());
+        settle();
+        f.callouts << mark(named(d, "practiceResultText"), 1) << mark(named(d, "practiceResultReport"), 2);
+        for (Callout &c : f.callouts)
+            c.place = Left;
+        f.pad = QMargins(40, 0, 0, 0);
+        return f;
+    }, [=]() {
+        if (QWidget *d = app->findChild<QWidget *>(QStringLiteral("helpShotPractice")))
+            delete d;
+        doc->programmer()->focusSession()->stop();
+        endVenue();
+        settle();
+    } };
+
+    /* Focus mode's save lamp: this light and another not saved. */
+    list << Shot{ QStringLiteral("focus-mode-save-status"), [=]() {
+        demoCalls();
+        Frame f;
+        FocusSession::Options o;
+        o.calls = doc->programmer()->focusCalls()->sessionCalls();
+        o.others = FocusSession::OthersDim;
+        QString why;
+        FocusModePanel *panel = FocusModePanel::startWith(doc, app, o, &why,
+                                                          int(FocusSession::KeyboardInput));
+        if (panel == nullptr)
+            return f;
+        FocusSession *s = doc->programmer()->focusSession();
+        s->setFlashEnabled(false);
+        s->nudge(1.5f, 0.0f);
+        s->next();
+        s->nudge(0.0f, -1.0f);
+        panel->resize(700, 720);
+        settle();
+        QWidget *lamp = named(panel, "focusStatusLamp");
+        QWidget *words = named(panel, "focusSaveStatus");
+        f.grab = panel;
+        if (lamp != nullptr && words != nullptr)
+            f.crop = QRect(lamp->mapTo(panel, QPoint(0, 0)), lamp->size())
+                     | QRect(words->mapTo(panel, QPoint(0, 0)), words->size());
+        f.pad = QMargins(12, 12, 12, 12);
+        return f;
+    }, [=]() {
+        doc->programmer()->focusSession()->stop();
+        doc->resetModified();
         settle();
     } };
 

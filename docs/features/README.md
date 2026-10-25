@@ -21,11 +21,14 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 |---|---|
 | [Getting started](getting-started.md) | Starting the app, show files and autosave, finding your way around (the tabs and the Classic QLC+ / qlcconsole / Everything views), importing (another show, an ETC Eos show), and the ways a show comes together — designing first, patch first, at a venue, a row of like structures |
 | [What's new](whats-new.md) | The latest changes |
-| [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, plot symbols, locks; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
+| [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, plot symbols, locks, stage marks (curtain line, number line, apron), Focus mode; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
 | [Build Tab](build.md) | Making the show's palettes, effects, scenes and collections: the navigator by section, the Workbench (a scene or a collection as layers, + Scene and + Effect ▾), looks out of reusable palettes instead of raw DMX, the inline look editor and effect browser, scene transitions, WLED effects |
 | [Show Tree](show-tree.md) | Writing the show as one tree of cue lists, cues and layers: tracking, cue numbers and reordering, move in black, hits for busking, the Run tab and the cue runner |
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog, output rules (relays, house and work lights), plot symbols and icons |
 | [Definition updates](definition-updates.md) | Bringing old fixture definitions up to date, in your fixture folder and inside saved shows, with a way back |
+| [Focus calls](focus-calls.md) | Focusing the rig on the controller, call by call; venues and their corrections, the focus report, scramble practice, the focus-call cue, the laptop's voice |
+| [House rig and tour package](venues.md) | Owners (Tour, House, Rental), each venue's house rig, universes and outputs per venue, channels not ours, the clash check |
+| [Refine](refine.md) | Changing a cue or a Build scene from the stage with the controller: position, zoom, focus, colour and gobo |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Plot layers panel, Studio groups, Blind/Park/Highlight, and more |
 | [Shows (the timeline)](shows.md) | Tracks, items, sequences and cues, the show end, track flags, following timecode |
