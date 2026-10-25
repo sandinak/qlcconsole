@@ -32,6 +32,11 @@
 #include "functionparent.h"
 #include "lastlookeffect.h"
 #include "parkeffect.h"
+#include "highlighteffect.h"
+#include "programmerflasher.h"
+#include "ioplugincache.h"
+#include "qlcfile.h"
+#include "../iopluginstub/iopluginstub.h"
 #include "fixture.h"
 #include "show.h"
 #include "track.h"
@@ -269,6 +274,21 @@ struct Rig
     {
         show->start(doc->masterTimer(), FunctionParent::master());
     }
+
+    /** The test output plugin on universe 1: what goes out on the wire. */
+    IOPluginStub *patchStub()
+    {
+        QDir dir(QStringLiteral("../iopluginstub"));
+        dir.setFilter(QDir::Files);
+        dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+        doc->ioPluginCache()->load(dir);
+        if (doc->ioPluginCache()->plugins().isEmpty())
+            return nullptr;
+        IOPluginStub *stub = static_cast<IOPluginStub *>(doc->ioPluginCache()->plugins().at(0));
+        if (!doc->inputOutputMap()->setOutputPatch(0, stub->name(), QString(), 0))
+            return nullptr;
+        return stub;
+    }
 };
 }
 
@@ -457,6 +477,95 @@ void ShowRunner_Test::theNormalTrackReturnsWhenTheOverrideItemEnds()
     rig2.tick(5);
     QCOMPARE(rig2.at(0), 200);              // a plain cue: no Override stuck to it
     QCOMPARE(normal->fadePriority(), int(Universe::Auto));
+}
+
+/* An Override track is the show's own top layer: Blackout still takes it
+   out (it is not exempt, and not past the Grand Master either). */
+void ShowRunner_Test::blackoutTakesAnOverrideTrackOut()
+{
+    Rig rig(this);
+    IOPluginStub *stub = rig.patchStub();
+    QVERIFY(stub != nullptr);
+    Track *over = rig.track(rig.scene(rig.dims[0], 60), 0, 2000);
+    over->setPriority(Track::Override);
+    rig.track(rig.scene(rig.dims[0], 255), 0, 2000);
+    rig.start();
+    rig.playTo(200);
+    QCOMPARE(rig.at(0), 60);
+    QCOMPARE(int(uchar(stub->m_universe.at(0))), 60);
+
+    rig.doc->inputOutputMap()->setBlackout(true);
+    rig.tick(2);
+    QCOMPARE(rig.at(0), 60);                // still played...
+    QCOMPARE(int(uchar(stub->m_universe.at(0))), 0);     // ...but not sent
+    rig.doc->inputOutputMap()->setBlackout(false);
+    rig.tick(2);
+    QCOMPARE(int(uchar(stub->m_universe.at(0))), 60);
+}
+
+/* "Override (this track wins)": over a cue at full that runs outside the
+   show -- started before the show or while it plays -- on an intensity
+   channel, at a lower level. The show stopped, the cue has it again. */
+void ShowRunner_Test::anOverrideTrackBeatsACueOutsideTheShow()
+{
+    for (bool cueFirst : { true, false })
+    {
+        Rig rig(this);
+        Scene *cue = rig.scene(rig.dims[0], 255);
+        Track *over = rig.track(rig.scene(rig.dims[0], 60), 0, 2000);
+        over->setPriority(Track::Override);
+        if (cueFirst)
+        {
+            cue->start(rig.doc->masterTimer(), FunctionParent::master());
+            rig.tick(3);
+            QCOMPARE(rig.at(0), 255);
+        }
+        rig.start();
+        rig.playTo(200);
+        if (!cueFirst)
+        {
+            cue->start(rig.doc->masterTimer(), FunctionParent::master());
+            rig.tick(3);
+        }
+        QVERIFY(cue->isRunning());
+        QCOMPARE(rig.at(0), 60);
+
+        rig.show->stop(FunctionParent::master());
+        rig.tick(4);
+        QCOMPARE(rig.at(0), 255);
+    }
+}
+
+/* Highlight and a Flash are over everything that runs, the show's Override
+   tracks too; let go, the track has the light again. */
+void ShowRunner_Test::highlightAndFlashBeatAnOverrideTrack()
+{
+    Rig rig(this);
+    Track *over = rig.track(rig.scene(rig.dims[0], 60), 0, 4000);
+    over->setPriority(Track::Override);
+    rig.track(rig.scene(rig.dims[0], 255), 0, 4000);
+    rig.start();
+    rig.playTo(200);
+    QCOMPARE(rig.at(0), 60);
+
+    {
+        HighlightEffect highlight(rig.doc);
+        highlight.setFixtures({ rig.dims[0] });
+        rig.tick(2);
+        QCOMPARE(rig.at(0), 255);
+        highlight.setFixtures({});
+        rig.tick(2);
+        QCOMPARE(rig.at(0), 60);
+    }
+    {
+        // Long enough never to end by the clock here: let go by going away.
+        ProgrammerFlasher flash(rig.doc);
+        flash.flashFixture(rig.dims[0], 600000);
+        rig.tick(2);
+        QCOMPARE(rig.at(0), 255);           // the track's 60 is dim: flashed up
+    }
+    rig.tick(2);
+    QCOMPARE(rig.at(0), 60);
 }
 
 void ShowRunner_Test::aTrackAtHalfIntensityPlaysAtHalf()

@@ -57,6 +57,13 @@ private slots:
     /** When an Override item ends (or the show stops), what plays under it
      *  comes back -- Normal and Background -- and nothing stays Override. */
     void theNormalTrackReturnsWhenTheOverrideItemEnds();
+    /** Blackout takes an Override track's dimmer out on the wire. */
+    void blackoutTakesAnOverrideTrackOut();
+    /** An Override track beats a cue at full started outside the show
+     *  (master parent), before the show or while it plays. */
+    void anOverrideTrackBeatsACueOutsideTheShow();
+    /** Highlight and a Flash beat an Override track; let go, the track. */
+    void highlightAndFlashBeatAnOverrideTrack();
     /** A track's intensity submaster scales what it plays, set before the
      *  show starts and moved while it runs. */
     void aTrackAtHalfIntensityPlaysAtHalf();

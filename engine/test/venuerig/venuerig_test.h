@@ -49,6 +49,23 @@ private slots:
     void theVenuePatchIsAppliedAndRestored();
     void moveTheShowsHouseFixturesIn();
     void aPracticeKeepsTheHouseRig();
+    /** Not ours stays zero through Blind holding the Blackout-exempt
+     *  channels, and through an output-patch blackout */
+    void notOursStaysZeroThroughBlindAndBlackout();
+    /** On the real tick (the timer's thread, the universes' threads): a
+     *  range is zero on the wire, a whole universe sends nothing */
+    void notOursOnTheRealTick();
+    /** "Patching there refused": every way a fixture gets an address */
+    void patchingOntoNotOursIsRefusedEveryWay();
+    /** The clash check on open: overlap, not ours, slot -- the note, and
+     *  an overlapping house fixture in unpatched */
+    void theClashCheckRunsOnOpen();
+    /** A sidecar written by a newer build (version 3, unknown elements and
+     *  attributes) still loads, everything known intact, and saves back */
+    void aSidecarFromANewerBuildStillLoads();
+    /** A practice scramble never reaches the show file, nor the real
+     *  venue's section of the sidecar */
+    void aPracticeNeverReachesTheShowFile();
 
 private:
     QString showFile() const;

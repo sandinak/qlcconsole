@@ -19,6 +19,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QBuffer>
 #include <QtTest>
@@ -33,6 +34,10 @@
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
+#include "outputrulekeeper.h"
+#include "focussession.h"
+#include "stagetarget.h"
+#include "scene.h"
 #include "venuecorrections.h"
 #include "inputoutputmap.h"
 #include "functionparent.h"
@@ -121,6 +126,84 @@ IOPluginStub *stub(Doc *doc)
 {
     return static_cast<IOPluginStub *>(doc->ioPluginCache()->plugin(QStringLiteral("I/O Plugin Stub")));
 }
+
+/* A 540/270 spot (pan, tilt, dimmer) at @p address, on the plot at (x, y)
+   metres, hung at 5 m: a light Focus mode and a practice can move. */
+Fixture *makeSpot(Doc *doc, const QString &name, quint32 address, float x, float y)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(QStringLiteral("Venue Spot ") + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("3ch"));
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    QLCFixtureHead head;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QStringLiteral("Ch %1").arg(k));
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(quint32(k));
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    if (!doc->fixtureDefCache()->addFixtureDef(def))
+    {
+        delete def;
+        return nullptr;
+    }
+    Fixture *fx = new Fixture(doc);
+    fx->setName(name);
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(0);
+    fx->setAddress(address);
+    if (!doc->addFixture(fx))
+    {
+        delete fx;
+        return nullptr;
+    }
+    doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(x * 1000.0f, y * 1000.0f, 5.0f));
+    return fx;
+}
+
+QByteArray readFile(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+}
+
+bool writeFile(const QString &path, const QByteArray &data)
+{
+    QFile f(path);
+    return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(data) == data.size();
+}
+
+/* Venue @p name's element in a sidecar, as written. */
+QByteArray venueSection(const QByteArray &xml, const QString &name)
+{
+    const QRegularExpression re(QStringLiteral("<Venue Name=\"%1\"[^>]*>.*?</Venue>")
+                                    .arg(QRegularExpression::escape(name)),
+                                QRegularExpression::DotMatchesEverythingOption);
+    return re.match(QString::fromUtf8(xml)).captured(0).toUtf8();
+}
+
+/* A scene with every channel of @p fixtures at full. */
+Scene *fullScene(Doc *doc, const QList<quint32> &fixtures)
+{
+    Scene *s = new Scene(doc);
+    for (quint32 id : fixtures)
+        s->setValue(id, 0, 255);
+    doc->addFunction(s);
+    return s;
+}
 } // namespace
 
 void VenueRig_Test::initTestCase()
@@ -136,6 +219,8 @@ void VenueRig_Test::init()
     dir.setFilter(QDir::Files);
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
+    // Without it the patch tests would crash, not fail.
+    QVERIFY2(stub(m_doc) != nullptr, "the I/O plugin stub (engine/test/iopluginstub) is not built");
     venues(m_doc)->setShowFile(showFile(), false);
 }
 
@@ -863,6 +948,469 @@ void VenueRig_Test::aPracticeKeepsTheHouseRig()
     QCOMPARE(v->activeVenue(), a);
     QVERIFY(m_doc->fixture(par) != nullptr);
     QCOMPARE(v->venue(a).rig.fixtures.size(), 1);
+}
+
+/****************************************************************************
+ * Not ours on every output path (VENUES.md section 5)
+ ****************************************************************************/
+
+/* Not ours is zero in every frame we send (CHANGELOG "House rig, tour
+   package and universes per venue"): in the frame Blind sends when it holds
+   the Blackout-exempt channels (Universe::dumpOutput's blindHoldsExempt
+   branch), and under an output patch's blackout -- even on a house light
+   that is exempt from both. */
+void VenueRig_Test::notOursStaysZeroThroughBlindAndBlackout()
+{
+    VenueCorrections *v = venues(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    IOPluginStub *plugin = stub(m_doc);
+    QVERIFY(plugin != nullptr);
+    QVERIFY(iom->setOutputPatch(0, plugin->name(), QString(), 0));
+    const quint32 stage = dimmers(1, 0, 0, QStringLiteral("Stage"));
+    // Two house lights, Ignore Blackout: one on the house desk's channels.
+    const quint32 kept = dimmers(1, 0, 5, QStringLiteral("Kept"));
+    const quint32 house = dimmers(1, 0, 10, QStringLiteral("House"));
+    for (quint32 id : { kept, house })
+        m_doc->fixture(id)->setOutputRules(Fixture::ExemptBlackout);
+    m_doc->outputRuleKeeper()->rebuild();
+    m_doc->outputRuleKeeper()->setBlindHoldsExempt(true);
+    fullScene(m_doc, { stage, kept, house })->start(m_doc->masterTimer(), FunctionParent::master());
+
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    VenueRig::NotOurs range;
+    range.universe = 0;
+    range.from = 4;
+    range.to = 7;
+    QVERIFY(v->setNotOurs(a, { range }));
+    QVERIFY(v->setActiveVenue(a));
+
+    auto wire = [plugin](int c) { return int(uchar(plugin->m_universe.at(c))); };
+    tick(4);
+    QCOMPARE(int(dmx(0, 5)), 255);             // the show asks for it...
+    QCOMPARE(wire(0), 255);
+    QCOMPARE(wire(5), 0);                      // ...it is not sent
+    QCOMPARE(wire(10), 255);
+
+    // Blackout (every output patch's): the exempt house light stays up.
+    QVERIFY(iom->setBlackout(true));
+    tick(2);
+    QCOMPARE(wire(0), 0);
+    QCOMPARE(wire(10), 255);
+    QCOMPARE(wire(5), 0);
+    QVERIFY(iom->setBlackout(false));
+
+    // Blind, holding the exempt channels: a Blackout frame goes out.
+    plugin->m_universe.fill(char(0xAA));
+    iom->setOutputInhibited(true);
+    tick(2);
+    QCOMPARE(wire(10), 255);                   // held through Blind
+    QCOMPARE(wire(0), 0);
+    QCOMPARE(wire(5), 0);                      // not ours: zero, not the live 255
+    iom->setOutputInhibited(false);
+    tick(2);
+    QCOMPARE(wire(0), 255);
+    QCOMPARE(wire(5), 0);
+}
+
+/* The same through the real tick: the master timer's thread runs the
+   functions and wakes each universe's own thread, which computes the frame
+   and sends it -- no frame computed by hand. */
+void VenueRig_Test::notOursOnTheRealTick()
+{
+    VenueCorrections *v = venues(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    IOPluginStub *plugin = stub(m_doc);
+    QVERIFY(plugin != nullptr);
+    QVERIFY(iom->setOutputPatch(0, plugin->name(), QString(), 0));
+    QVERIFY(iom->setOutputPatch(1, plugin->name(), QString(), 1));
+    const quint32 u1 = dimmers(9, 0, 0, QStringLiteral("U1"));
+    const quint32 u2 = dimmers(2, 1, 0, QStringLiteral("U2"));
+    QList<quint32> all;
+    for (quint32 i = 0; i < 9; ++i)
+        all << u1 + i;
+    all << u2 << u2 + 1;
+    Scene *full = fullScene(m_doc, all);
+
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    VenueRig::NotOurs whole;
+    whole.universe = 1;
+    VenueRig::NotOurs range;
+    range.universe = 0;
+    range.from = 4;
+    range.to = 7;
+    QVERIFY(v->setNotOurs(a, { whole, range }));
+    QVERIFY(v->setActiveVenue(a));
+
+    plugin->m_universe.fill(char(0xAA));
+    QList<Universe *> unis = iom->universes();
+    iom->startUniverses();
+    QTRY_VERIFY(unis.at(0)->isRunning() && unis.at(1)->isRunning());
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->start();
+    full->start(mt, FunctionParent::master());
+
+    auto wire = [plugin](int c) { return int(uchar(plugin->m_universe.at(c))); };
+    QTRY_COMPARE_WITH_TIMEOUT(wire(0), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(wire(8), 255, 5000);
+    // A few more frames on the whole-not-ours universe's own thread.
+    const quint32 frames0 = unis.at(0)->m_frame.load();
+    const quint32 frames1 = unis.at(1)->m_frame.load();
+    QTRY_VERIFY_WITH_TIMEOUT(unis.at(0)->m_frame.load() >= frames0 + 3, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(unis.at(1)->m_frame.load() >= frames1 + 3, 5000);
+
+    // Read while it runs (stopping the timer stops every function).
+    QCOMPARE(int(unis.at(1)->preGMValue(0)), 255);  // the show plays there...
+    QCOMPARE(int(unis.at(0)->preGMValue(5)), 255);
+    for (int c = 4; c <= 7; ++c)
+        QCOMPARE(wire(c), 0);                       // ...a range is zero
+    QCOMPARE(wire(3), 255);
+    for (int c = 512; c < 1024; ++c)                // ...and U2 gets nothing at all
+        QCOMPARE(wire(c), 0xAA);
+    mt->stop();
+}
+
+/* "Patching there refused" (CHANGELOG): the Patch dialog's and the Lighting
+   Studio's way in (Doc::patchFixtures) is refused -- notOursIsNeverSent --
+   and so must every other way a fixture gets an address on the house desk's
+   channels: added with one (the Add Fixture dialog, a RGB panel, Doc::
+   addFixture), or a patched one's address changed (the fixture edit dialog,
+   Fixture::setAddress). */
+void VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay()
+{
+    VenueCorrections *v = venues(m_doc);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    VenueRig::NotOurs range;
+    range.universe = 0;
+    range.from = 4;
+    range.to = 7;
+    QVERIFY(v->setNotOurs(a, { range }));
+    QVERIFY(v->setActiveVenue(a));
+    auto onNotOurs = [this](const Fixture *fx) {
+        return fx != nullptr && fx->isPatched() && fx->universe() == 0
+               && fx->address() + fx->channels() > 4 && fx->address() <= 7;
+    };
+
+    // Added with an address there.
+    Fixture *added = new Fixture(m_doc);
+    added->setName(QStringLiteral("Added"));
+    added->setChannels(1);
+    added->setUniverse(0);
+    added->setAddress(5);
+    const bool in = m_doc->addFixture(added);
+    if (!in)
+        delete added;
+    QEXPECT_FAIL("", "Bug: Doc::addFixture() does not check the venue's not-ours channels "
+                     "(only Doc::canPatchFixtures() does): a fixture added with an address "
+                     "there is patched there", Continue);
+    QVERIFY(!in || !onNotOurs(m_doc->fixture(added->id())));
+
+    // A patched fixture's address changed onto them.
+    const quint32 moved = dimmers(1, 0, 9, QStringLiteral("Moved"));
+    QVERIFY(moved != Fixture::invalidId());
+    m_doc->fixture(moved)->setAddress(6);
+    QEXPECT_FAIL("", "Bug: Fixture::setAddress() on a patched fixture (the fixture edit dialog's "
+                     "path) is not checked against the venue's not-ours channels", Continue);
+    QVERIFY(!onNotOurs(m_doc->fixture(moved)));
+
+    // The refused way, for contrast: still refused, with why.
+    const quint32 other = dimmers(1, 0, 20, QStringLiteral("Other"));
+    QString why;
+    QVERIFY(!m_doc->patchFixtures({ Doc::FixturePatch{ other, 0, 4 } }, &why));
+    QVERIFY(why.contains(QStringLiteral("not ours")));
+    QCOMPARE(m_doc->fixture(other)->address(), 20u);
+}
+
+/* The clash check runs on open (CHANGELOG: "before Apply now, on open and in
+   the Patch dialog"): the show reopened after it was edited elsewhere, its
+   sidecar's venue applied again, says what clashes -- an overlap, a tour
+   fixture on channels the venue keeps, a fixture in the other's slot -- and
+   a house fixture overlapping a tour one goes in unpatched. */
+void VenueRig_Test::theClashCheckRunsOnOpen()
+{
+    VenueCorrections *v = venues(m_doc);
+    const quint32 tour = dimmers(10, 0, 0, QStringLiteral("Tour"));
+    dimmers(1, 1, 0, QStringLiteral("Tour U2"));
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = dimmers(1, 0, 50, QStringLiteral("House par"));
+    m_doc->fixture(par)->setOwner(RigOwner::House);
+    VenueRig::NotOurs keep;
+    keep.universe = 0;
+    keep.from = 60;
+    keep.to = 62;
+    QVERIFY(v->setNotOurs(a, { keep }));
+    QVERIFY(v->recordRig());
+    QVERIFY(v->clashes(a).isEmpty());
+    const QByteArray show = engineXml(m_doc);
+    const QByteArray sidecar = readFile(v->filePath());
+    QVERIFY(sidecar.contains("Active=\"Lincoln HS\""));
+    QVERIFY(sidecar.contains("House par 1"));
+
+    enum Edit { MovedOntoTheHousePar, MovedOntoNotOurs, HouseSlot };
+    for (Edit edit : { MovedOntoTheHousePar, MovedOntoNotOurs, HouseSlot })
+    {
+        QVERIFY(writeFile(v->filePath(), sidecar));
+        Doc reopened(this);
+        {
+            QXmlStreamReader r(show);
+            r.readNextStartElement();
+            QVERIFY(reopened.loadXML(r, false));
+        }
+        QVERIFY(reopened.fixture(par) == nullptr);      // the venue's, not the show's
+        // Edited elsewhere, meanwhile.
+        VenueRig::Clash::Kind kind = VenueRig::Clash::Overlap;
+        QString words;
+        switch (edit)
+        {
+            case MovedOntoTheHousePar:
+                QVERIFY(reopened.patchFixtures({ Doc::FixturePatch{ tour + 9, 0, 50 } }));
+                kind = VenueRig::Clash::Overlap;
+                words = QStringLiteral("on the same addresses");
+            break;
+            case MovedOntoNotOurs:
+                QVERIFY(reopened.patchFixtures({ Doc::FixturePatch{ tour + 9, 0, 61 } }));
+                kind = VenueRig::Clash::NotOursKind;
+                words = QStringLiteral("not ours");
+            break;
+            case HouseSlot:
+                reopened.inputOutputMap()->setUniverseSlotOwner(1, RigOwner::House);
+                kind = VenueRig::Clash::Slot;
+                words = QStringLiteral("House slot");
+            break;
+        }
+
+        VenueCorrections *rv = venues(&reopened);
+        QSignalSpy note(rv, &VenueCorrections::note);
+        rv->setShowFile(showFile(), true);
+        QCOMPARE(rv->activeVenue(), a);
+        QVERIFY2(note.count() >= 1, qPrintable(QString("edit %1: no note").arg(int(edit))));
+        const QString text = note.first().first().toString();
+        QVERIFY2(text.contains(a) && text.contains(words), qPrintable(text));
+        bool listed = false;
+        for (const VenueRig::Clash &c : rv->clashes(a))
+            listed = listed || c.kind == kind;
+        QVERIFY(listed);
+
+        Fixture *hp = reopened.fixture(par);
+        QVERIFY(hp != nullptr);
+        QCOMPARE(hp->address(), 50u);
+        if (edit == MovedOntoTheHousePar)
+        {
+            // In, unpatched, keeping its address: it never drives Tour 10.
+            QVERIFY(!hp->isPatched());
+            QVERIFY(hp->addressClash());
+            QCOMPARE(reopened.fixtureForAddress(50), tour + 9);
+        }
+        else
+        {
+            QVERIFY(hp->isPatched());               // nothing of its own clashes
+        }
+    }
+}
+
+/* A sidecar from a newer build (VENUES.md section 7: the version goes up
+   only when a venue owns more) is read for what this build knows: version
+   3, unknown elements between and inside the venues, inside <House> and
+   <Practice>, unknown attributes -- every correction, trim, target, check,
+   the house rig, not ours and the patch still load, from the file on disk,
+   and save back. */
+void VenueRig_Test::aSidecarFromANewerBuildStillLoads()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, stub(m_doc)->name(), QString(), 0));
+    Fixture *spot = makeSpot(m_doc, QStringLiteral("Spot"), 0, 2.0f, 2.0f);
+    QVERIFY(spot != nullptr);
+    FixtureGroup *foh = makeGroup(m_doc, QStringLiteral("FOH wash"), {}, RigOwner::House);
+    Truss *pipe = props->addTruss();
+    pipe->setOrigin(QVector3D(0.0f, 0.0f, 5.0f));
+    StageTarget *mark = props->addStageTarget();
+    mark->setName(QStringLiteral("DSC"));
+    mark->setPosition(QVector3D(1.0f, 2.0f, 0.0f));
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+
+    // Everything a venue keeps.
+    const quint32 par = dimmers(2, 0, 100, QStringLiteral("Lincoln par"));
+    foh->assignFixture(par);
+    foh->assignFixture(par + 1);
+    VenueRig::NotOurs whole;
+    whole.universe = 3;
+    VenueRig::NotOurs range;
+    range.universe = 0;
+    range.from = 400;
+    range.to = 511;
+    QVERIFY(v->setNotOurs(a, { whole, range }));
+    QVERIFY(v->keepPatch());
+    QVERIFY(v->recordRig());
+    FixtureRigProps rp = props->fixtureRigProps(spot->id());
+    rp.panOffsetDeg = 1.5f;
+    rp.tiltOffsetDeg = -0.75f;
+    props->setFixtureRigProps(spot->id(), rp);
+    QVERIFY(v->record(spot->id()));
+    QVERIFY(v->recordTrim(pipe->id()));
+    pipe->setOrigin(QVector3D(0.0f, 0.0f, 6.5f));
+    QVERIFY(v->recordTrim(pipe->id()));
+    QVERIFY(v->recordTarget(mark->id()));
+    mark->setPosition(QVector3D(1.5f, 2.0f, 0.0f));
+    QVERIFY(v->recordTarget(mark->id()));
+    v->setCheckedBy(QStringLiteral("Sam"));
+    QVERIFY(v->markChecked({ spot->id() }));
+    // Another venue, and a practice kept for its report.
+    v->addVenue(QStringLiteral("Grand Hall"));
+    const QString practice = v->startPractice({ spot->id() }, 7);
+    QVERIFY(!practice.isEmpty());
+    QVERIFY(v->endPractice());
+    QCOMPARE(v->activeVenue(), a);
+
+    const QByteArray known = v->toXml();
+    QVERIFY(known.contains("Version=\"2\""));
+    QVERIFY(known.contains("<Practice "));
+    QVERIFY(known.contains("<House>"));
+    QVERIFY(known.contains("<Trim "));
+    QVERIFY(known.contains("<Target "));
+    QVERIFY(known.contains("<Check "));
+
+    // What a newer build might write around it.
+    QString future = QString::fromUtf8(known);
+    future.replace(QStringLiteral("Version=\"2\""), QStringLiteral("Version=\"3\" Edition=\"future\""));
+    future.replace(QRegularExpression(QStringLiteral("(<Venue )")),
+                   QStringLiteral("<Rooms Count=\"3\"><Room/></Rooms>\n\\1Colour=\"teal\" "));
+    future.replace(QRegularExpression(QStringLiteral("(<Venue [^>]*[^/]>)")),
+                   QStringLiteral("\\1<Weather Rain=\"1\"><Forecast/></Weather>"));
+    future.replace(QRegularExpression(QStringLiteral("(<Fixture ID=)")),
+                   QStringLiteral("<Haze Level=\"2\"/>\\1"));
+    future.replace(QStringLiteral("<Fixture ID="), QStringLiteral("<Fixture Hue=\"4\" ID="));
+    future.replace(QStringLiteral("<House>"), QStringLiteral("<House><Rack Name=\"DSR\"><Slot/></Rack>"));
+    future.replace(QRegularExpression(QStringLiteral("(<Practice [^>]*[^/]>)")),
+                   QStringLiteral("\\1<Coach Name=\"Ana\"><Tip/></Coach>"));
+    future.replace(QStringLiteral("</QlcVenues>"), QStringLiteral("<Trailer/></QlcVenues>"));
+    QVERIFY(future.contains(QStringLiteral("<Coach ")));
+    QVERIFY(future.contains(QStringLiteral("<Rack ")));
+    QVERIFY(future.contains(QStringLiteral("<Weather ")));
+
+    const QString futureShow = m_dir->filePath(QStringLiteral("Future.qlcc"));
+    QVERIFY(writeFile(VenueCorrections::sidecarPath(futureShow), future.toUtf8()));
+
+    Doc other(this);
+    VenueCorrections reference(&other);
+    reference.setShowFile(futureShow, false);
+    QVERIFY(reference.fromXml(known));
+    VenueCorrections back(&other);
+    back.setShowFile(futureShow, false);
+    QString why;
+    QVERIFY2(back.load(&why), qPrintable(why));
+
+    // Everything known, as this build would have written it.
+    QCOMPARE(back.toXml(), reference.toXml());
+    QCOMPARE(back.activeVenue(), a);
+    QCOMPARE(back.venueNames(), v->venueNames());
+    const VenueCorrections::Venue lv = back.venue(a);
+    QCOMPARE(lv.fixtures.size(), 1);
+    QCOMPARE(lv.fixtures.value(spot->id()).panOffsetDeg, 1.5f);
+    QCOMPARE(lv.fixtures.value(spot->id()).tiltOffsetDeg, -0.75f);
+    QCOMPARE(lv.trims.value(pipe->id()), 6.5f);
+    QCOMPARE(lv.targets.value(mark->id()), QVector3D(1.5f, 2.0f, 0.0f));
+    QCOMPARE(lv.checks.value(spot->id()).by, QStringLiteral("Sam"));
+    QCOMPARE(lv.rig.fixtures.size(), 2);
+    QCOMPARE(lv.rig.fixtures.at(1).name, QStringLiteral("Lincoln par 2"));
+    QCOMPARE(lv.rig.fills.size(), 1);
+    QCOMPARE(lv.rig.fills.first().heads.size(), 2);
+    QCOMPARE(lv.rig.notOurs.size(), 2);
+    QVERIFY(lv.rig.notOurs.contains(whole));
+    QVERIFY(lv.rig.notOurs.contains(range));
+    QCOMPARE(lv.rig.patch.value(0).first().plugin, stub(m_doc)->name());
+    const VenueCorrections::Venue pv = back.venue(practice);
+    QVERIFY(pv.practice.on);
+    QCOMPARE(pv.practice.from, a);
+    QVERIFY(pv.practice.truth.contains(spot->id()));
+    QVERIFY(back.isReservedFixtureId(par + 1));
+
+    // Saved back and read again: the same. (What this build does not know
+    // is not kept: it is skipped on read, so a save drops it.)
+    QVERIFY2(back.save(&why), qPrintable(why));
+    const QByteArray saved = readFile(back.filePath());
+    QVERIFY(saved.contains("Version=\"2\""));
+    VenueCorrections again(&other);
+    again.setShowFile(futureShow, false);
+    QVERIFY2(again.load(&why), qPrintable(why));
+    QCOMPARE(again.toXml(), reference.toXml());
+}
+
+/* Scramble practice (FOCUS_REFINE_DESIGN.md section 13) moves the lights in
+   a practice venue only: the show file keeps the real calibration -- while
+   the scramble is on, after the student saves, after the show is saved --
+   and the real venue's section of the sidecar is never touched. */
+void VenueRig_Test::aPracticeNeverReachesTheShowFile()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    Fixture *a = makeSpot(m_doc, QStringLiteral("A"), 0, 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, QStringLiteral("B"), 3, 6.0f, 2.0f);
+    QVERIFY(a != nullptr && b != nullptr);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName(QStringLiteral("Mark"));
+    mark->setPosition(QVector3D(4.0f, 6.0f, 0.0f));
+    // The show's own calibration, and the room's correction on top.
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 3.0f;
+    rp.tiltOffsetDeg = -2.0f;
+    props->setFixtureRigProps(a->id(), rp);
+    rp = props->fixtureRigProps(b->id());
+    rp.tiltOffsetDeg = 1.0f;
+    props->setFixtureRigProps(b->id(), rp);
+    const QString lincoln = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(lincoln));
+    rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 1.0f;
+    props->setFixtureRigProps(a->id(), rp);
+    QVERIFY(v->record(a->id()));
+    QVERIFY(v->hasCorrection(a->id()));
+
+    const QByteArray show = engineXml(m_doc);
+    QVERIFY(show.contains("PanOfs=\"3.00\""));
+    QVERIFY(show.contains("TiltOfs=\"-2.00\""));
+    const QByteArray lincolnBefore = venueSection(readFile(v->filePath()), lincoln);
+    QVERIFY(lincolnBefore.contains("PanOfs=\"1.00\""));
+
+    QString why;
+    const QString practice = v->startPractice({ a->id(), b->id() }, 42, 2.0f, 8.0f, &why);
+    QVERIFY2(!practice.isEmpty(), qPrintable(why));
+    for (Fixture *fx : { a, b })
+    {
+        RigCalibration truth;
+        QVERIFY(v->practiceTruth(fx->id(), truth));
+        QVERIFY(RigCalibration::of(props->fixtureRigProps(fx->id())) != truth);   // scrambled
+    }
+    QCOMPARE(engineXml(m_doc), show);
+    QCOMPARE(venueSection(readFile(v->filePath()), lincoln), lincolnBefore);
+
+    // The student focuses A and saves it, in the practice.
+    FocusSession *s = m_doc->programmer()->focusSession();
+    s->setFlashEnabled(false);
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = mark->id();
+    QVERIFY2(s->start(o, &why), qPrintable(why));
+    QCOMPARE(s->currentFixture(), a->id());
+    s->nudge(1.0f, -0.5f);
+    s->save();
+    s->stop();
+    QCOMPARE(v->practiceScore(practice).saves, 1);
+    QCOMPARE(engineXml(m_doc), show);
+    QCOMPARE(venueSection(readFile(v->filePath()), lincoln), lincolnBefore);
+
+    // The show saved mid-practice (its file name told again).
+    v->setShowFile(showFile(), false);
+    QCOMPARE(engineXml(m_doc), show);
+    QCOMPARE(venueSection(readFile(v->filePath()), lincoln), lincolnBefore);
+
+    QVERIFY(v->endPractice());
+    QCOMPARE(v->activeVenue(), lincoln);
+    QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 1.0f);
+    QCOMPARE(engineXml(m_doc), show);
 }
 
 QTEST_GUILESS_MAIN(VenueRig_Test)

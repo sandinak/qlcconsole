@@ -27,6 +27,7 @@ class GenericFader;
 class IOPluginStub;
 class Universe;
 class Fixture;
+class QLCFixtureDef;
 class Doc;
 
 class OutputRules_Test final : public QObject
@@ -51,6 +52,21 @@ private slots:
     void parkIgnoresTheGrandMaster();
     /** Blackout still takes a parked dimmer to zero */
     void blackoutTakesAParkOut();
+    /** Highlight, Flash and Focus are over what runs, not over the Grand
+     *  Master: it scales them, and Blackout takes them to zero */
+    void theGrandMasterAndBlackoutApplyToAHighlight();
+    void theGrandMasterAndBlackoutApplyToAFlash();
+    void theGrandMasterAndBlackoutApplyToFocus();
+    /** The ladder, two at a time on one light; let go of the top one and
+     *  the next one shows: Park over Focus and Flash */
+    void parkBeatsFocusAndFlash();
+    /** Focus over Flash, and both over Highlight */
+    void focusAndFlashBeatHighlight();
+    /** Highlight over a running cue, intensity and colour */
+    void highlightBeatsARunningCue();
+    /** A held last look is under everything: a cue takes its colour, and
+     *  Highlight, Flash, Focus and Park each take it over */
+    void aHeldLastLookIsUnderEverything();
     void switchSnapsAtHalf();
     void switchNeverFades();
     void grandMasterCannotSwitchARelayOff();
@@ -71,11 +87,21 @@ private:
     int frame(int address);
     void put(int address, uchar value);
     Fixture *addDimmer(const QString &name, int address, int rulesMask);
+    /** A two-channel light (dimmer, cyan) at @p address, on the plot */
+    Fixture *addSpot(const QString &name, int address);
+    /** A master timer tick (the flasher's) and one frame */
+    int tickFrame(int address);
+    /** Focus mode on @p fid alone, its light at @p level */
+    void startFocus(quint32 fid, float level);
+    /** What goes out at @p address: GM 255 at @p full, half at half GM,
+     *  0 under Blackout (with the house light still on), back after */
+    void checkGrandMasterAndBlackout(int address, int full);
 
     Doc *m_doc = nullptr;
     Universe *m_uni = nullptr;
     IOPluginStub *m_stub = nullptr;
     QSharedPointer<GenericFader> m_fader;
+    QLCFixtureDef *m_spotDef = nullptr;
 };
 
 #endif

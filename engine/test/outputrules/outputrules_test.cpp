@@ -24,6 +24,7 @@
 
 #define private public
 #define protected public
+#include "mastertimer.h"
 #include "universe.h"
 #include "iopluginstub.h"
 #undef private
@@ -38,6 +39,15 @@
 #include "grandmaster.h"
 #include "qlcfile.h"
 #include "parkeffect.h"
+#include "highlighteffect.h"
+#include "programmerflasher.h"
+#include "lastlookeffect.h"
+#include "focussession.h"
+#include "programmercontroller.h"
+#include "monitorproperties.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -86,6 +96,8 @@ void OutputRules_Test::init()
 
 void OutputRules_Test::cleanup()
 {
+    m_doc->programmer()->focusSession()->stop();
+    m_doc->lastLook()->clear();
     m_uni->dismissFader(m_fader);
     m_fader.clear();
     m_doc->inputOutputMap()->setBlackout(false);
@@ -119,6 +131,92 @@ Fixture *OutputRules_Test::addDimmer(const QString &name, int address, int rules
         return nullptr;
     }
     return f;
+}
+
+Fixture *OutputRules_Test::addSpot(const QString &name, int address)
+{
+    // One definition for the whole run (the cache owns it).
+    QLCFixtureDef *def = m_spotDef;
+    if (def == nullptr)
+    {
+        def = new QLCFixtureDef();
+        def->setManufacturer(QStringLiteral("Test"));
+        def->setModel(QStringLiteral("Ladder Spot"));
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName(QStringLiteral("2ch"));
+        QLCChannel *dim = new QLCChannel();
+        dim->setName(QStringLiteral("Dimmer"));
+        dim->setGroup(QLCChannel::Intensity);
+        def->addChannel(dim);
+        mode->insertChannel(dim, 0);
+        QLCChannel *cyan = new QLCChannel();
+        cyan->setName(QStringLiteral("Cyan"));
+        cyan->setGroup(QLCChannel::Colour);
+        cyan->setColour(QLCChannel::Cyan);
+        def->addChannel(cyan);
+        mode->insertChannel(cyan, 1);
+        def->addMode(mode);
+        if (!m_doc->fixtureDefCache()->addFixtureDef(def))
+        {
+            delete def;
+            return nullptr;
+        }
+        m_spotDef = def;
+    }
+    Fixture *f = new Fixture(m_doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, def->modes().first());
+    f->setUniverse(0);
+    f->setAddress(quint32(address));
+    if (m_doc->addFixture(f) == false)
+    {
+        delete f;
+        return nullptr;
+    }
+    // On the plot, hung over the stage: Focus mode can light it.
+    m_doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(4000, 2000, 5));
+    return f;
+}
+
+int OutputRules_Test::tickFrame(int address)
+{
+    m_doc->masterTimer()->timerTick();
+    return frame(address);
+}
+
+void OutputRules_Test::startFocus(quint32 fid, float level)
+{
+    FocusSession *s = m_doc->programmer()->focusSession();
+    s->setFlashEnabled(false);     // a steady light to read
+    FocusSession::Options o;
+    o.fixtures = { fid };
+    o.level = level;
+    QString why;
+    QVERIFY2(s->start(o, &why), qPrintable(why));
+}
+
+void OutputRules_Test::checkGrandMasterAndBlackout(int address, int full)
+{
+    put(House, 180);                       // Ignore Blackout: proves the frame went out
+    QCOMPARE(frame(address), full);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(address))), full);
+
+    m_doc->inputOutputMap()->setGrandMasterValue(128);
+    const int half = frame(address);
+    QVERIFY2(qAbs(half - full / 2) <= 2, qPrintable(QString("%1 at half GM is %2").arg(full).arg(half)));
+    QCOMPARE(int(uchar(m_stub->m_universe.at(address))), half);
+    m_doc->inputOutputMap()->setGrandMasterValue(0);
+    QCOMPARE(frame(address), 0);
+    m_doc->inputOutputMap()->setGrandMasterValue(255);
+    QCOMPARE(frame(address), full);
+
+    m_doc->inputOutputMap()->setBlackout(true);
+    frame(address);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(address))), 0);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(House))), 180);
+    m_doc->inputOutputMap()->setBlackout(false);
+    frame(address);
+    QCOMPARE(int(uchar(m_stub->m_universe.at(address))), full);
 }
 
 int OutputRules_Test::frame(int address)
@@ -288,6 +386,188 @@ void OutputRules_Test::blackoutTakesAParkOut()
     m_doc->inputOutputMap()->setBlackout(false);
     frame(Stage);
     QCOMPARE(int(uchar(m_stub->m_universe.at(Stage))), 200);   // still parked
+}
+
+/* Highlight, Flash and Focus are over everything that runs (B1), but only
+   Park goes past the Grand Master: these three are scaled by it, and
+   Blackout takes them out (Universe::FaderPriority, CHANGELOG "Park,
+   Highlight and a held last look hold their dimmers"). */
+void OutputRules_Test::theGrandMasterAndBlackoutApplyToAHighlight()
+{
+    HighlightEffect highlight(m_doc);
+    highlight.setFixtures({ m_doc->fixtureForAddress(Stage) });
+    checkGrandMasterAndBlackout(Stage, 255);
+    highlight.setFixtures({});
+    QCOMPARE(frame(Stage), 0);
+}
+
+void OutputRules_Test::theGrandMasterAndBlackoutApplyToAFlash()
+{
+    ProgrammerFlasher flash(m_doc);
+    // Long enough never to end by the clock here: let go by going away.
+    flash.flashFixture(m_doc->fixtureForAddress(Stage), 600000);
+    QCOMPARE(tickFrame(Stage), 255);       // dark: flashed up
+    checkGrandMasterAndBlackout(Stage, 255);
+}
+
+void OutputRules_Test::theGrandMasterAndBlackoutApplyToFocus()
+{
+    const quint32 stage = m_doc->fixtureForAddress(Stage);
+    m_doc->monitorProperties()->setFixturePosition(stage, 0, 0, QVector3D(4000, 2000, 5));
+    startFocus(stage, 1.0f);
+    checkGrandMasterAndBlackout(Stage, 255);
+    m_doc->programmer()->focusSession()->stop();
+    QCOMPARE(frame(Stage), 0);
+}
+
+/* The ladder (Universe::FaderPriority): Park, Focus, Flash, Highlight, then
+   what runs, and a held last look under all of it. Each pair on one light:
+   the higher one goes out, and letting go of it shows the one under it. */
+void OutputRules_Test::parkBeatsFocusAndFlash()
+{
+    Fixture *spot = addSpot("Spot", 20);
+    QVERIFY(spot != nullptr);
+    const int dim = 20;
+    ParkEffect park(m_doc);
+
+    startFocus(spot->id(), 0.6f);
+    QCOMPARE(frame(dim), 153);
+    park.parkFixture(spot->id(), { { 0, 50 } });
+    QCOMPARE(frame(dim), 50);
+    park.unparkFixture(spot->id());
+    QCOMPARE(frame(dim), 153);             // Focus again
+    m_doc->programmer()->focusSession()->stop();
+    QCOMPARE(frame(dim), 0);
+
+    {
+        ProgrammerFlasher flash(m_doc);
+        flash.flashFixture(spot->id(), 600000);
+        QCOMPARE(tickFrame(dim), 255);
+        park.parkFixture(spot->id(), { { 0, 50 } });
+        QCOMPARE(tickFrame(dim), 50);
+        park.unparkFixture(spot->id());
+        QCOMPARE(tickFrame(dim), 255);     // the flash again
+    }
+    QCOMPARE(tickFrame(dim), 0);
+}
+
+void OutputRules_Test::focusAndFlashBeatHighlight()
+{
+    Fixture *spot = addSpot("Spot", 20);
+    QVERIFY(spot != nullptr);
+    const int dim = 20;
+    HighlightEffect highlight(m_doc);
+    highlight.setFixtures({ spot->id() });
+    QCOMPARE(frame(dim), 255);
+
+    // Focus over Highlight.
+    startFocus(spot->id(), 0.3f);
+    QCOMPARE(frame(dim), 77);
+    m_doc->programmer()->focusSession()->stop();
+    QCOMPARE(frame(dim), 255);             // the highlight again
+
+    // Flash over Highlight: the light is up, so the flash takes it down.
+    {
+        ProgrammerFlasher flash(m_doc);
+        flash.flashFixture(spot->id(), 600000);
+        QCOMPARE(tickFrame(dim), 0);
+    }
+    QCOMPARE(tickFrame(dim), 255);
+    highlight.setFixtures({});
+    QCOMPARE(frame(dim), 0);
+
+    // Focus over Flash.
+    {
+        ProgrammerFlasher flash(m_doc);
+        flash.flashFixture(spot->id(), 600000);
+        QCOMPARE(tickFrame(dim), 255);
+        startFocus(spot->id(), 0.3f);
+        QCOMPARE(tickFrame(dim), 77);
+        m_doc->programmer()->focusSession()->stop();
+        QCOMPARE(tickFrame(dim), 255);     // the flash again
+    }
+    QCOMPARE(tickFrame(dim), 0);
+}
+
+void OutputRules_Test::highlightBeatsARunningCue()
+{
+    Fixture *spot = addSpot("Spot", 20);
+    QVERIFY(spot != nullptr);
+    put(20, 100);                          // a running cue: dimmer and colour
+    put(21, 200);
+    QCOMPARE(frame(20), 100);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 200);
+
+    HighlightEffect highlight(m_doc);
+    highlight.setFixtures({ spot->id() });
+    QCOMPARE(frame(20), 255);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 0);    // open white: no cyan
+    QCOMPARE(int(uchar(m_stub->m_universe.at(21))), 0);
+    highlight.setFixtures({});
+    QCOMPARE(frame(20), 100);
+    QCOMPARE(int(uchar(m_uni->postGMValues()->at(21))), 200);
+}
+
+void OutputRules_Test::aHeldLastLookIsUnderEverything()
+{
+    Fixture *spot = addSpot("Spot", 20);
+    QVERIFY(spot != nullptr);
+    const int dim = 20, cyan = 21;
+    auto at = [this](int address) { return int(uchar(m_uni->postGMValues()->at(address))); };
+    LastLookEffect *hold = m_doc->lastLook();
+    LastLookEffect::ChannelHold hd;
+    hd.fixtureId = spot->id();
+    hd.universeId = 0;
+    hd.address = dim;
+    hd.value = 200;
+    LastLookEffect::ChannelHold hc = hd;
+    hc.address = cyan;
+    hold->hold({ hd, hc });
+    QCOMPARE(frame(dim), 200);
+    QCOMPARE(at(cyan), 200);
+
+    // A cue takes the colour it plays.
+    put(cyan, 90);
+    frame(dim);
+    QCOMPARE(at(cyan), 90);
+    m_uni->dismissFader(m_fader);
+    m_fader = m_uni->requestFader();
+    frame(dim);
+    QCOMPARE(frame(dim), 200);
+    QCOMPARE(at(cyan), 200);
+
+    // Highlight.
+    {
+        HighlightEffect highlight(m_doc);
+        highlight.setFixtures({ spot->id() });
+        QCOMPARE(frame(dim), 255);
+        QCOMPARE(at(cyan), 0);
+    }
+    QCOMPARE(frame(dim), 200);
+    QCOMPARE(at(cyan), 200);
+
+    // Flash: the look is up, so the flash takes it down.
+    {
+        ProgrammerFlasher flash(m_doc);
+        flash.flashFixture(spot->id(), 600000);
+        QCOMPARE(tickFrame(dim), 0);
+    }
+    QCOMPARE(tickFrame(dim), 200);
+
+    // Focus.
+    startFocus(spot->id(), 0.3f);
+    QCOMPARE(frame(dim), 77);
+    m_doc->programmer()->focusSession()->stop();
+    QCOMPARE(frame(dim), 200);
+
+    // Park.
+    {
+        ParkEffect park(m_doc);
+        park.parkFixture(spot->id(), { { 0, 50 } });
+        QCOMPARE(frame(dim), 50);
+    }
+    QCOMPARE(frame(dim), 200);
+    QCOMPARE(at(cyan), 200);
 }
 
 void OutputRules_Test::switchSnapsAtHalf()
