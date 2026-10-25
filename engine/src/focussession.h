@@ -595,7 +595,9 @@ private:
     /** Make @p fid's live state its saved one (an undo entry in @p batch). */
     bool saveHead(quint32 fid, int batch);
     /** A head's saved state has changed: into the venue, or the show. */
-    void savedChanged(const QList<quint32> &fids);
+    /** @p checked: a save (the venue notes who checked the lights and
+     *  when, Q134), not an undo. */
+    void savedChanged(const QList<quint32> &fids, bool checked = true);
     void onFlashTick();
     /** Write a lens-set-by-hand angle into the rig. */
     void applyLens(quint32 fid, float deg);

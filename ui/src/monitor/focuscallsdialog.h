@@ -93,6 +93,13 @@ public:
 
     QListWidget *callList() const { return m_list; }
 
+    /** Board Q134: write venue @p venue's focus report to @p path -- a PDF,
+     *  a web page (.html) or a Lightwright-style CSV, by its ending. False,
+     *  with @p why, when it cannot be written. */
+    static bool writeReport(Doc *doc, const QString &venue, const QString &path, QString *why = nullptr);
+    /** Ask where, then writeReport(). */
+    static void exportReport(Doc *doc, QWidget *parent, const QString &venue);
+
     /* The venue manager (the buttons beside the venue). */
     /** Apply @p name now (made if new; empty: none). */
     bool switchVenue(const QString &name, QString *why = nullptr);
@@ -130,6 +137,8 @@ private:
     QPushButton *m_renameVenue = nullptr;
     QPushButton *m_deleteVenue = nullptr;
     QPushButton *m_corrections = nullptr;
+    QPushButton *m_report = nullptr;
+    QLineEdit *m_checkedBy = nullptr;
 };
 
 /** @} */

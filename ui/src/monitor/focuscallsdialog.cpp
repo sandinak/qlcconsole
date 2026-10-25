@@ -27,8 +27,16 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QInputDialog>
+#include <QTextDocument>
+#include <QFileDialog>
+#include <QPdfWriter>
+#include <QPageSize>
+#include <QSaveFile>
+#include <QSettings>
 #include <QFileInfo>
 #include <QLocale>
+#include <QRegularExpression>
+#include <QDir>
 #include <QLabel>
 
 #include "programmercontroller.h"
@@ -39,6 +47,7 @@
 #include <QTimer>
 
 #include "focuscallsdialog.h"
+#include "focusreport.h"
 #include "operatorvoice.h"
 #include "focuscallcue.h"
 #include "focusmodepanel.h"
@@ -141,6 +150,27 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue, m_corrections })
         venueRow->addWidget(b);
     vl->addLayout(venueRow);
+    // Who is focusing, for the report (Q134), and the report itself.
+    QHBoxLayout *reportRow = new QHBoxLayout;
+    reportRow->addWidget(new QLabel(tr("Focused by:"), this));
+    m_checkedBy = new QLineEdit(this);
+    m_checkedBy->setObjectName(QStringLiteral("fcCheckedBy"));
+    m_checkedBy->setPlaceholderText(tr("Your name, for the focus report"));
+    m_checkedBy->setText(m_doc->programmer()->venueCorrections()->checkedBy());
+    connect(m_checkedBy, &QLineEdit::textEdited, this, [this](const QString &t) {
+        m_doc->programmer()->venueCorrections()->setCheckedBy(t);
+        QSettings().setValue(QStringLiteral("focusCalls/checkedBy"), t.trimmed());
+    });
+    reportRow->addWidget(m_checkedBy, 1);
+    m_report = new QPushButton(tr("Export focus report\342\200\246"), this);
+    m_report->setObjectName(QStringLiteral("fcReport"));
+    m_report->setToolTip(tr("This venue's focus, light by light: a PDF or web page to print, "
+                            "or a CSV for Lightwright"));
+    connect(m_report, &QPushButton::clicked, this, [this]() {
+        exportReport(m_doc, this, venueAt(m_venue->currentIndex()));
+    });
+    reportRow->addWidget(m_report);
+    vl->addLayout(reportRow);
     // The voice is the crew's cue: send it to the output that feeds the headsets.
     {
         const QStringList devices = QGuiApplication::platformName() == QLatin1String("offscreen")
@@ -705,6 +735,7 @@ void FocusCallsDialog::refreshVenue()
     m_renameVenue->setEnabled(kind == 0);
     m_deleteVenue->setEnabled(kind == 0);
     m_corrections->setEnabled(m_doc->programmer()->venueCorrections()->isActive());
+    m_report->setEnabled(kind == 0);
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();
     const QString file = venues->filePath();
     if (kind == kNoVenue)
@@ -753,4 +784,73 @@ bool FocusCallsDialog::apply(QString *why)
         return false;
     }
     return venues->setActiveVenue(venues->addVenue(venue));
+}
+
+bool FocusCallsDialog::writeReport(Doc *doc, const QString &venue, const QString &path, QString *why)
+{
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    if (!venues->hasVenue(venue))
+    {
+        if (why != nullptr)
+            *why = tr("There is no venue called \342\200\234%1\342\200\235.").arg(venue);
+        return false;
+    }
+    const QString show = QFileInfo(venues->showFile()).completeBaseName();
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    if (suffix == QLatin1String("pdf"))
+    {
+        QPdfWriter pdf(path);
+        pdf.setTitle(tr("Focus report: %1").arg(venue));
+        pdf.setCreator(QStringLiteral("qlcconsole"));
+        // Landscape: ten columns read across the page.
+        pdf.setPageLayout(QPageLayout(QPageSize(QPageSize::Letter), QPageLayout::Landscape,
+                                      QMarginsF(12, 12, 12, 12), QPageLayout::Millimeter));
+        QTextDocument page;
+        page.setHtml(FocusReport::html(doc, venue, show));
+        page.print(&pdf);
+        if (!QFileInfo::exists(path))
+        {
+            if (why != nullptr)
+                *why = tr("Cannot write %1.").arg(QDir::toNativeSeparators(path));
+            return false;
+        }
+        return true;
+    }
+    const QString text = suffix == QLatin1String("csv") ? FocusReport::csv(doc, venue)
+                                                        : FocusReport::html(doc, venue, show);
+    QSaveFile f(path);
+    if (!f.open(QIODevice::WriteOnly) || f.write(text.toUtf8()) < 0 || !f.commit())
+    {
+        if (why != nullptr)
+            *why = tr("Cannot write %1: %2").arg(QDir::toNativeSeparators(path), f.errorString());
+        return false;
+    }
+    return true;
+}
+
+void FocusCallsDialog::exportReport(Doc *doc, QWidget *parent, const QString &venue)
+{
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    if (!venues->hasVenue(venue))
+        return;
+    const QFileInfo show(venues->showFile());
+    const QString dir = show.exists() ? show.absolutePath() : QDir::homePath();
+    QString name = tr("%1 focus report").arg(venue);
+    name.replace(QRegularExpression(QStringLiteral("[/:\\\\]")), QStringLiteral("-"));
+    QString filter;
+    const QString pdf = tr("PDF, to print (*.pdf)");
+    const QString html = tr("Web page (*.html)");
+    const QString csv = tr("CSV for Lightwright (*.csv)");
+    QString path = QFileDialog::getSaveFileName(parent, tr("Export focus report"),
+                                                QDir(dir).filePath(name + QStringLiteral(".pdf")),
+                                                QStringList({ pdf, html, csv }).join(QStringLiteral(";;")),
+                                                &filter);
+    if (path.isEmpty())
+        return;
+    if (QFileInfo(path).suffix().isEmpty())
+        path += filter == csv ? QStringLiteral(".csv") : filter == html ? QStringLiteral(".html")
+                                                                         : QStringLiteral(".pdf");
+    QString why;
+    if (!writeReport(doc, venue, path, &why))
+        QMessageBox::warning(parent, tr("Export focus report"), why);
 }

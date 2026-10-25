@@ -590,7 +590,7 @@ bool FocusSession::savesToVenue() const
     return m_venues != nullptr && m_venues->isActive();
 }
 
-void FocusSession::savedChanged(const QList<quint32> &fids)
+void FocusSession::savedChanged(const QList<quint32> &fids, bool checked)
 {
     if (fids.isEmpty())
         return;
@@ -599,6 +599,9 @@ void FocusSession::savedChanged(const QList<quint32> &fids)
         // Into the venue's corrections, and its file now; the show is untouched.
         for (quint32 fid : fids)
             m_venues->record(fid);
+        // Who checked them, and when: the focus report's (Q134).
+        if (checked)
+            m_venues->markChecked(fids);
         return;
     }
     markModified();
@@ -1411,7 +1414,7 @@ bool FocusSession::undoSave()
     }
     if (undone.isEmpty())
         return false;
-    savedChanged(undone);
+    savedChanged(undone, false);
     rebuildWrites();
     emit announce(tr("Undone."), ControllerScheme::ConfirmPriority);
     return true;

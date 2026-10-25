@@ -76,6 +76,9 @@ private slots:
     void theRefinePanelHasTheLamp();
     /** One light's venue correction seen and cleared (the venue manager). */
     void oneCorrectionIsSeenAndCleared();
+    /** Q134: the venue manager exports the focus report -- PDF, web page
+     *  or CSV, by the file's ending -- with who focused, typed once. */
+    void theFocusReportIsExported();
 
 private:
     Doc *m_doc = nullptr;

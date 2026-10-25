@@ -19,11 +19,14 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QFileInfo>
 #include <QFile>
 #include <QDir>
+
+#include <cmath>
 
 #include "venuecorrections.h"
 #include "monitorproperties.h"
@@ -43,6 +46,37 @@ const int kVersion = 1;
 QString num(float v, int places)
 {
     return QString::number(double(v), 'f', places);
+}
+
+/* A practice venue's right calibration, as a <Truth> (Q140 practice). */
+void writeTruth(QXmlStreamWriter &w, quint32 fid, const RigCalibration &c)
+{
+    w.writeStartElement(QStringLiteral("Truth"));
+    w.writeAttribute(QStringLiteral("ID"), QString::number(fid));
+    w.writeAttribute(QStringLiteral("PanOfs"), num(c.panOffsetDeg, 2));
+    w.writeAttribute(QStringLiteral("TiltOfs"), num(c.tiltOffsetDeg, 2));
+    w.writeAttribute(QStringLiteral("PanZero"), num(c.panZeroDir, 1));
+    if (c.lensDeg > 0.0f)
+        w.writeAttribute(QStringLiteral("Lens"), num(c.lensDeg, 1));
+    w.writeEndElement();
+}
+
+RigCalibration readTruth(const QXmlStreamAttributes &a)
+{
+    RigCalibration c;
+    c.panOffsetDeg = a.value(QStringLiteral("PanOfs")).toFloat();
+    c.tiltOffsetDeg = a.value(QStringLiteral("TiltOfs")).toFloat();
+    c.panZeroDir = a.value(QStringLiteral("PanZero")).toFloat();
+    c.lensDeg = a.value(QStringLiteral("Lens")).toFloat();
+    return c;
+}
+
+/* How far @p saved is from @p truth: pan and tilt together, degrees. */
+double offBy(const RigCalibration &saved, const RigCalibration &truth)
+{
+    const double dp = double(saved.panOffsetDeg - truth.panOffsetDeg);
+    const double dt = double(saved.tiltOffsetDeg - truth.tiltOffsetDeg);
+    return std::sqrt(dp * dp + dt * dt);
 }
 }
 
@@ -116,7 +150,10 @@ void VenueCorrections::setShowFile(const QString &showFile, bool opened)
         if (!load())
             return;
         // The venue it was focused for, applied again.
-        const QString wanted = m_active;
+        QString wanted = m_active;
+        // A practice left applied: the show opens on the venue it came from.
+        if (hasVenue(wanted) && venue(wanted).practice.on)
+            wanted = venue(wanted).practice.from;
         m_active.clear();
         if (!wanted.isEmpty() && hasVenue(wanted))
         {
@@ -350,6 +387,34 @@ QByteArray VenueCorrections::toXml() const
             w.writeAttribute(QStringLiteral("Z"), num(it.value().z(), 3));
             w.writeEndElement();
         }
+        // Who checked what, and the dead lights (Q134, Q140).
+        for (auto it = v.checks.constBegin(); it != v.checks.constEnd(); ++it)
+        {
+            w.writeStartElement(QStringLiteral("Check"));
+            w.writeAttribute(QStringLiteral("ID"), QString::number(it.key()));
+            if (it.value().when.isValid())
+                w.writeAttribute(QStringLiteral("When"), it.value().when.toString(Qt::ISODate));
+            if (!it.value().by.isEmpty())
+                w.writeAttribute(QStringLiteral("By"), it.value().by);
+            if (it.value().dead)
+                w.writeAttribute(QStringLiteral("Dead"), QStringLiteral("1"));
+            w.writeEndElement();
+        }
+        if (v.practice.on)
+        {
+            const Practice &p = v.practice;
+            w.writeStartElement(QStringLiteral("Practice"));
+            if (!p.from.isEmpty())
+                w.writeAttribute(QStringLiteral("From"), p.from);
+            if (p.started.isValid())
+                w.writeAttribute(QStringLiteral("Started"), p.started.toString(Qt::ISODateWithMs));
+            if (p.lastSave.isValid())
+                w.writeAttribute(QStringLiteral("LastSave"), p.lastSave.toString(Qt::ISODateWithMs));
+            w.writeAttribute(QStringLiteral("Saves"), QString::number(p.saves));
+            for (auto it = p.truth.constBegin(); it != p.truth.constEnd(); ++it)
+                writeTruth(w, it.key(), it.value());
+            w.writeEndElement();
+        }
         w.writeEndElement();
     }
     w.writeEndElement();
@@ -415,6 +480,43 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
                 const quint32 id = r.attributes().value(QStringLiteral("Truss")).toUInt(&ok);
                 if (ok)
                     v.trims.insert(id, r.attributes().value(QStringLiteral("Z")).toFloat());
+            }
+            else if (r.name() == QLatin1String("Check"))
+            {
+                bool ok = false;
+                const QXmlStreamAttributes a = r.attributes();
+                const quint32 id = a.value(QStringLiteral("ID")).toUInt(&ok);
+                if (ok)
+                {
+                    Check c;
+                    c.when = QDateTime::fromString(a.value(QStringLiteral("When")).toString(), Qt::ISODate);
+                    c.by = a.value(QStringLiteral("By")).toString();
+                    c.dead = a.value(QStringLiteral("Dead")) == QLatin1String("1");
+                    v.checks.insert(id, c);
+                }
+            }
+            else if (r.name() == QLatin1String("Practice"))
+            {
+                const QXmlStreamAttributes a = r.attributes();
+                v.practice.on = true;
+                v.practice.from = a.value(QStringLiteral("From")).toString();
+                v.practice.started = QDateTime::fromString(a.value(QStringLiteral("Started")).toString(),
+                                                           Qt::ISODateWithMs);
+                v.practice.lastSave = QDateTime::fromString(a.value(QStringLiteral("LastSave")).toString(),
+                                                            Qt::ISODateWithMs);
+                v.practice.saves = a.value(QStringLiteral("Saves")).toInt();
+                while (r.readNextStartElement())
+                {
+                    if (r.name() == QLatin1String("Truth"))
+                    {
+                        bool ok = false;
+                        const quint32 id = r.attributes().value(QStringLiteral("ID")).toUInt(&ok);
+                        if (ok)
+                            v.practice.truth.insert(id, readTruth(r.attributes()));
+                    }
+                    r.skipCurrentElement();
+                }
+                continue;   // its end element is read
             }
             else if (r.name() == QLatin1String("Target"))
             {
@@ -706,6 +808,16 @@ QList<quint32> VenueCorrections::orphaned() const
     return out;
 }
 
+bool VenueCorrections::isSwapped(const QString &name, quint32 fid) const
+{
+    const Venue v = venue(name);
+    if (!v.models.contains(fid) || m_doc->fixture(fid) == nullptr)
+        return false;
+    QString maker, model, mode;
+    identify(fid, maker, model, mode);
+    return v.makers.value(fid) != maker || v.models.value(fid) != model || v.modes.value(fid) != mode;
+}
+
 QString VenueCorrections::correctedAs(quint32 fid) const
 {
     const Venue v = venue(m_active);
@@ -958,4 +1070,275 @@ void VenueCorrections::reset()
     if (had)
         emit activeVenueChanged(QString());
     emit venuesChanged();
+}
+
+/*****************************************************************************
+ * A new venue from the last one (board Q140)
+ *****************************************************************************/
+
+QString VenueCorrections::addVenueFrom(const QString &name, const QString &from)
+{
+    if (!hasVenue(from))
+        return QString();
+    if (!name.trimmed().isEmpty() && hasVenue(name.trimmed()))
+        return name.trimmed();
+    const Venue src = venue(from);
+    const QString n = addVenue(name);
+    for (Venue &v : m_venues)
+    {
+        if (v.name != n)
+            continue;
+        // What the rig was there; nothing has been checked here yet.
+        v.fixtures = src.fixtures;
+        v.names = src.names;
+        v.makers = src.makers;
+        v.models = src.models;
+        v.modes = src.modes;
+        v.trims = src.trims;
+        v.targets = src.targets;
+    }
+    save();
+    emit venuesChanged();
+    return n;
+}
+
+QString VenueCorrections::lastVenue() const
+{
+    QString out;
+    QDateTime newest;
+    for (const Venue &v : m_venues)
+    {
+        if (v.practice.on)
+            continue;
+        const QDateTime when = v.modified.isValid() ? v.modified : v.created;
+        if (out.isEmpty() || (when.isValid() && (!newest.isValid() || when > newest)))
+        {
+            out = v.name;
+            newest = when;
+        }
+    }
+    return out;
+}
+
+/*****************************************************************************
+ * Checks and dead lights (board Q134, Q140)
+ *****************************************************************************/
+
+bool VenueCorrections::markChecked(const QList<quint32> &fids)
+{
+    if (!isActive() || fids.isEmpty())
+        return false;
+    const QDateTime now = QDateTime::currentDateTime();
+    for (Venue &v : m_venues)
+    {
+        if (v.name != m_active)
+            continue;
+        for (quint32 fid : fids)
+        {
+            Check &c = v.checks[fid];
+            c.when = now;
+            c.by = m_checkedBy;
+        }
+        if (v.practice.on)
+        {
+            ++v.practice.saves;
+            v.practice.lastSave = now;
+        }
+        v.modified = now;
+    }
+    emit correctionsChanged();
+    return save();
+}
+
+bool VenueCorrections::isChecked(quint32 fid) const
+{
+    return isActive() && venue(m_active).checks.value(fid).when.isValid();
+}
+
+VenueCorrections::Check VenueCorrections::check(quint32 fid) const
+{
+    return isActive() ? venue(m_active).checks.value(fid) : Check();
+}
+
+bool VenueCorrections::setDead(quint32 fid, bool dead)
+{
+    if (!isActive())
+        return false;
+    for (Venue &v : m_venues)
+    {
+        if (v.name != m_active)
+            continue;
+        Check c = v.checks.value(fid);
+        if (c.dead == dead)
+            return true;
+        c.dead = dead;
+        if (!c.dead && !c.when.isValid())
+            v.checks.remove(fid);
+        else
+            v.checks.insert(fid, c);
+        v.modified = QDateTime::currentDateTime();
+    }
+    emit correctionsChanged();
+    return save();
+}
+
+bool VenueCorrections::isDead(quint32 fid) const
+{
+    return isActive() && venue(m_active).checks.value(fid).dead;
+}
+
+QList<quint32> VenueCorrections::deadLights() const
+{
+    QList<quint32> out;
+    if (!isActive())
+        return out;
+    const Venue v = venue(m_active);
+    for (auto it = v.checks.constBegin(); it != v.checks.constEnd(); ++it)
+        if (it.value().dead)
+            out << it.key();
+    return out;
+}
+
+/*****************************************************************************
+ * Scramble practice
+ *****************************************************************************/
+
+QString VenueCorrections::startPractice(const QList<quint32> &fids, quint32 seed, float minDeg,
+                                        float maxDeg, QString *why)
+{
+    if (filePath().isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("Save the show first: a practice venue is kept beside it, like any venue.");
+        return QString();
+    }
+    if (isPracticeActive())
+    {
+        if (why != nullptr)
+            *why = tr("A practice is applied already: end it first.");
+        return QString();
+    }
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<quint32> lights;
+    for (quint32 fid : fids)
+        if (m_doc->fixture(fid) != nullptr && !lights.contains(fid))
+            lights << fid;
+    if (lights.isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("None of these lights can be scrambled: practice moves the moving heads.");
+        return QString();
+    }
+
+    QString name = tr("Practice %1").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
+    {
+        const QString stem = name;
+        for (int i = 2; hasVenue(name); ++i)
+            name = QStringLiteral("%1 (%2)").arg(stem).arg(i);
+    }
+    Venue v;
+    v.name = name;
+    v.created = v.modified = QDateTime::currentDateTime();
+    v.practice.on = true;
+    v.practice.from = m_active;
+    v.practice.started = v.created;
+    QRandomGenerator gen(seed);
+    const float lo = qMax(0.0f, qMin(minDeg, maxDeg));
+    const float hi = qMax(minDeg, maxDeg);
+    auto off = [&gen, lo, hi]() {
+        const float mag = lo + float(gen.generateDouble()) * (hi - lo);
+        const float rounded = float(qRound(double(mag) * 10.0) / 10.0);
+        return gen.bounded(2) == 0 ? -rounded : rounded;
+    };
+    for (quint32 fid : lights)
+    {
+        // Right is where it is right now: this room's, else the show's.
+        const RigCalibration truth = RigCalibration::of(props->fixtureRigProps(fid));
+        RigCalibration scrambled = truth;
+        scrambled.panOffsetDeg = truth.panOffsetDeg + off();
+        scrambled.tiltOffsetDeg = truth.tiltOffsetDeg + off();
+        v.practice.truth.insert(fid, truth);
+        v.fixtures.insert(fid, scrambled);
+        if (const Fixture *fx = m_doc->fixture(fid))
+            v.names.insert(fid, fx->name());
+        QString maker, model, mode;
+        identify(fid, maker, model, mode);
+        v.makers.insert(fid, maker);
+        v.models.insert(fid, model);
+        v.modes.insert(fid, mode);
+    }
+    // The targets and trims as the room has them now.
+    if (isActive())
+    {
+        const Venue cur = venue(m_active);
+        v.trims = cur.trims;
+        v.targets = cur.targets;
+    }
+    m_venues << v;
+    emit venuesChanged();
+    if (!setActiveVenue(name))
+        return QString();
+    return name;
+}
+
+bool VenueCorrections::isPracticeActive() const
+{
+    return isActive() && venue(m_active).practice.on;
+}
+
+bool VenueCorrections::practiceTruth(quint32 fid, RigCalibration &truth) const
+{
+    if (!isPracticeActive())
+        return false;
+    const Venue v = venue(m_active);
+    if (!v.practice.truth.contains(fid))
+        return false;
+    truth = v.practice.truth.value(fid);
+    return true;
+}
+
+double VenueCorrections::practiceError(const QString &name, quint32 fid) const
+{
+    const Venue v = venue(name);
+    if (!v.practice.on || !v.practice.truth.contains(fid))
+        return -1.0;
+    // A light focused exactly back to the show's own has no correction left.
+    const RigCalibration saved = v.fixtures.contains(fid) ? v.fixtures.value(fid) : baseOf(fid);
+    return offBy(saved, v.practice.truth.value(fid));
+}
+
+VenueCorrections::Score VenueCorrections::practiceScore(const QString &name) const
+{
+    Score sc;
+    const Venue v = venue(name);
+    if (!v.practice.on)
+        return sc;
+    double sum = 0.0;
+    for (auto it = v.practice.truth.constBegin(); it != v.practice.truth.constEnd(); ++it)
+    {
+        if (m_doc->fixture(it.key()) == nullptr)
+            continue;
+        const double e = practiceError(name, it.key());
+        sc.errors.insert(it.key(), e);
+        ++sc.lights;
+        sum += e;
+        sc.worstError = qMax(sc.worstError, e);
+        if (e <= 1.0 + 1e-6)
+            ++sc.withinOne;
+        if (v.checks.value(it.key()).when.isValid())
+            ++sc.checked;
+    }
+    sc.meanError = sc.lights > 0 ? sum / sc.lights : 0.0;
+    sc.saves = v.practice.saves;
+    if (v.practice.started.isValid() && v.practice.lastSave.isValid())
+        sc.seconds = qMax<qint64>(0, v.practice.started.msecsTo(v.practice.lastSave)) / 1000.0;
+    return sc;
+}
+
+bool VenueCorrections::endPractice()
+{
+    if (!isPracticeActive())
+        return false;
+    const QString from = venue(m_active).practice.from;
+    return setActiveVenue(hasVenue(from) ? from : QString());
 }

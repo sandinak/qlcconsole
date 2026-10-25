@@ -649,6 +649,8 @@ void App::init()
         new OperatorAnnouncer(pc, OperatorVoice::create(this), this);
         // Feedback: Lights / Voice / Both, this computer's choice.
         pc->setOperatorFeedback(ControllerScheme::Feedback(OperatorFeedbackCombo::savedFeedback()));
+        // Who focuses on this computer, for the focus report (Q134).
+        pc->venueCorrections()->setCheckedBy(QSettings().value(QStringLiteral("focusCalls/checkedBy")).toString());
         connect(pc, &ProgrammerController::operatorFeedbackChanged, this, [](ControllerScheme::Feedback f) {
             OperatorFeedbackCombo::saveFeedback(int(f));
         });

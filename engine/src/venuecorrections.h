@@ -63,6 +63,33 @@ public:
     explicit VenueCorrections(Doc *doc, QObject *parent = nullptr);
     ~VenueCorrections() override;
 
+    /** Board Q134: a light looked at in a venue -- saved with A in Focus
+     *  mode or the focus calls -- by whom and when, and whether it was
+     *  marked dead (Q140: it needs a lamp or a repair, not a focus). For
+     *  the focus report. */
+    struct Check
+    {
+        QDateTime when;
+        QString by;
+        bool dead = false;
+    };
+
+    /** Scramble practice (FOCUS_REFINE_DESIGN.md section 13): a practice
+     *  venue's lights were put off by a known amount; this is where they
+     *  are really right, and how the student did. */
+    struct Practice
+    {
+        bool on = false;
+        /** The venue it was scrambled from (empty: the show's own), put
+         *  back when the practice ends. */
+        QString from;
+        /** fixture id -> its right calibration (what it was scrambled from) */
+        QMap<quint32, RigCalibration> truth;
+        QDateTime started;
+        QDateTime lastSave;
+        int saves = 0;
+    };
+
     /** One venue's corrections. */
     struct Venue
     {
@@ -81,6 +108,9 @@ public:
          *  and stage target id -> this venue's position (metres). */
         QMap<quint32, float> trims;
         QMap<quint32, QVector3D> targets;
+        /** fixture id -> when it was checked here (Q134), dead or not. */
+        QMap<quint32, Check> checks;
+        Practice practice;
     };
 
     /*********************************************************************
@@ -139,6 +169,13 @@ public:
     /** Add a venue called @p name (empty: defaultVenueName(), made unique)
      *  and return the name it got; an existing name is returned as is. */
     QString addVenue(const QString &name = QString());
+    /** Board Q140: a new venue starting from @p from's corrections, trims
+     *  and targets (not its checks: nothing is checked in a new room). The
+     *  name it got, as addVenue(); empty when @p from is not a venue. */
+    QString addVenueFrom(const QString &name, const QString &from);
+    /** The real venue (not a practice one) changed most recently, else
+     *  empty: what a new venue starts from on a tour. */
+    QString lastVenue() const;
     bool renameVenue(const QString &from, const QString &to);
     /** Remove a venue (un-applying it first if it is active). */
     bool removeVenue(const QString &name);
@@ -217,8 +254,71 @@ public:
     /** Corrections in the applied venue for fixtures no longer in the show:
      *  kept (the fixture may come back), listed. */
     QList<quint32> orphaned() const;
+    /** @p fid is not the fixture venue @p name focused (another definition
+     *  or mode now): swapped, in the focus report (Q134). */
+    bool isSwapped(const QString &name, quint32 fid) const;
     /** "Spot 3 (Robe Robin 600, 16 bit)" -- how the venue remembers @p fid. */
     QString correctedAs(quint32 fid) const;
+
+    /*********************************************************************
+     * Checks and dead lights (board Q134, Q140)
+     *********************************************************************/
+public:
+    /** Who is focusing ("Sam"), written with every check from now on. */
+    void setCheckedBy(const QString &name) { m_checkedBy = name.trimmed(); }
+    QString checkedBy() const { return m_checkedBy; }
+    /** @p fid was saved in the active venue now (by checkedBy()): kept for
+     *  the report, the sidecar written. A practice venue also counts the
+     *  save. False with no venue applied. */
+    bool markChecked(const QList<quint32> &fids);
+    bool isChecked(quint32 fid) const;
+    Check check(quint32 fid) const;
+    /** Board Q140: mark @p fid dead in the active venue (or not). False
+     *  with no venue applied. */
+    bool setDead(quint32 fid, bool dead);
+    bool isDead(quint32 fid) const;
+    QList<quint32> deadLights() const;
+
+    /*********************************************************************
+     * Scramble practice (FOCUS_REFINE_DESIGN.md section 13)
+     *********************************************************************/
+public:
+    /** Make and apply a practice venue: each of @p fids (the moving heads
+     *  among them) put off its right calibration -- the active venue's,
+     *  else the show's -- by a random pan and tilt of between @p minDeg and
+     *  @p maxDeg each way (@p seed makes it repeatable). The venue that was
+     *  applied is not changed, and comes back when endPractice() is called.
+     *  The practice venue's name, or empty when none of @p fids can be
+     *  scrambled or there is no show file. */
+    QString startPractice(const QList<quint32> &fids, quint32 seed, float minDeg = 2.0f,
+                          float maxDeg = 8.0f, QString *why = nullptr);
+    /** The applied venue is a practice one. */
+    bool isPracticeActive() const;
+    static bool isPractice(const Venue &v) { return v.practice.on; }
+    /** A practice venue applied: @p fid's right calibration (the views draw
+     *  where a scrambled light really lands from it). */
+    bool practiceTruth(quint32 fid, RigCalibration &truth) const;
+    /** How a practice went: for each scrambled light, how far its saved
+     *  calibration is from the right one (degrees, pan and tilt together),
+     *  the time from the start to the last save, and the saves. */
+    struct Score
+    {
+        int lights = 0;
+        int checked = 0;          ///< lights saved at least once
+        int withinOne = 0;        ///< lights within 1 degree
+        double meanError = 0.0;   ///< degrees
+        double worstError = 0.0;
+        double seconds = 0.0;
+        int saves = 0;
+        QMap<quint32, double> errors;
+    };
+    Score practiceScore(const QString &name) const;
+    /** The error left on @p fid in practice venue @p name, degrees; -1 when
+     *  it was not scrambled. */
+    double practiceError(const QString &name, quint32 fid) const;
+    /** Put back the venue the practice was scrambled from (its results
+     *  stay in the practice venue, for the report). */
+    bool endPractice();
 
     /** The doc was cleared: forget everything without touching the rig. */
     void reset();
@@ -255,6 +355,7 @@ private:
     bool m_confirmed = false;
     QSet<quint32> m_held;
     QList<quint32> m_needsFocus;
+    QString m_checkedBy;
     /** What @p fid is now: its definition and mode. */
     void identify(quint32 fid, QString &maker, QString &model, QString &mode) const;
 };

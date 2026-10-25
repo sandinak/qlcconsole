@@ -48,6 +48,7 @@
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "focuscalls.h"
+#include "focusreport.h"
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "monitorgraphicsview.h"
@@ -752,3 +753,54 @@ void FocusCallsUi_Test::oneCorrectionIsSeenAndCleared()
 }
 
 QTEST_MAIN(FocusCallsUi_Test)
+
+void FocusCallsUi_Test::theFocusReportIsExported()
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));
+    FocusCall call;
+    call.groups << m_group;
+    call.target.kind = FocusSession::Reference::Target;
+    call.target.id = m_target;
+    m_doc->programmer()->focusCalls()->setCalls({ call });
+
+    FocusCallsDialog d(m_doc);
+    QLineEdit *by = d.findChild<QLineEdit *>("fcCheckedBy");
+    QPushButton *report = d.findChild<QPushButton *>("fcReport");
+    QVERIFY(by != nullptr && report != nullptr);
+    QVERIFY(report->isEnabled());
+    by->clear();
+    QTest::keyClicks(by, "Sam");
+    QCOMPARE(venues->checkedBy(), QString("Sam"));
+    QCOMPARE(QSettings().value("focusCalls/checkedBy").toString(), QString("Sam"));
+    QVERIFY(venues->markChecked({ m_spots.first() }));
+
+    // None picked: no venue, no report.
+    QComboBox *combo = d.findChild<QComboBox *>("fcVenue");
+    combo->setCurrentIndex(0);
+    QVERIFY(!report->isEnabled());
+
+    const QString pdf = m_dir->filePath("report.pdf");
+    const QString html = m_dir->filePath("report.html");
+    const QString csv = m_dir->filePath("report.csv");
+    QString why;
+    QVERIFY2(FocusCallsDialog::writeReport(m_doc, "Lincoln HS", pdf, &why), qPrintable(why));
+    QVERIFY(FocusCallsDialog::writeReport(m_doc, "Lincoln HS", html, &why));
+    QVERIFY(FocusCallsDialog::writeReport(m_doc, "Lincoln HS", csv, &why));
+    QVERIFY(!FocusCallsDialog::writeReport(m_doc, "Nowhere", csv, &why));
+    QVERIFY(why.contains("Nowhere"));
+    auto read = [](const QString &path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    QVERIFY(read(pdf).startsWith("%PDF"));
+    QVERIFY(read(pdf).size() > 1000);
+    const QByteArray page = read(html);
+    QVERIFY(page.contains("Focus report: Lincoln HS"));
+    QVERIFY(page.contains("Show: Spring"));
+    QVERIFY(page.contains("Focused by: Sam"));
+    const QByteArray table = read(csv);
+    QVERIFY(table.startsWith(FocusReport::csvColumns().join(',').toUtf8()));
+    QCOMPARE(table.count("\r\n"), 1 + 3);    // the header and the three spots
+}
