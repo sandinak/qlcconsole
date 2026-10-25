@@ -47,6 +47,28 @@ circuits and subs.
   (Blackout, Grand Master at zero, no output) is said. Help pages
   `focus-calls.md` and `refine.md`.
 
+- **The focus report, practice, and the last pad moves** (board Q134,
+  Q139, Q140; FOCUS_REFINE_DESIGN.md section 13). `FocusReport`: a venue's
+  focus per light and call -- target with its stage-marks position,
+  correction, lens, checked by and when (`VenueCorrections::Check`, every
+  save), notes, dead / swapped / needs-focus -- as HTML, PDF
+  (`QPdfWriter`) or a Lightwright-style CSV, from the venue manager.
+  Scramble practice (`VenueCorrections::startPractice()`): a practice
+  venue with every moving head put off by a random amount, the real venue
+  untouched and put back at the end, the views drawing where the
+  scrambled lights land (`practiceViewProps()`), scored on error, time and
+  saves, the score in the report. Hold B puts back every unsaved light as
+  one undo step. Both stick clicks hold every light
+  (`ProgrammerController::setHolding()`, H); View + X (D) marks a light
+  dead; spot down / flood out / sharper / softer on the map and in the
+  voice (`ControllerScheme::crewWord()`); calls say the target's place
+  ("SL 2, US 1"); a light clicked on the plot is jumped to; the focus look
+  also takes gobo, prism and frost out (`FocusSession::openBeamValue()`);
+  a new venue can start from the last one (`addVenueFrom()`). On macOS
+  the HID plugin reads DualShock 4 / DualSense pads through
+  GameController into the Xbox layout (`GamepadLayout::PlayStation`,
+  `playstation.qxhid`), so their light bar follows the save lamp.
+
 - **Input devices follow their device** (Bluetooth pads asleep and awake):
   an input patch on a plugin whose lines are hardware (HID, MIDI) remembers
   its line's name (`InputPatch::inputUID()`: maker, model and serial). When

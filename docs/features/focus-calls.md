@@ -45,7 +45,11 @@ What you correct in a venue belongs to that room, not to the show. Choose
 the **Venue** before you start:
 
 - **New venue…** — type its name ("Lincoln HS"), or leave it empty and it
-  is named with the date and time ("Venue 2026-10-23 19:04").
+  is named with the date and time ("Venue 2026-10-23 19:04"). On a tour,
+  **Start from Lincoln HS** (ticked by default, naming the venue changed
+  last) copies that room's corrections, trims and targets into the new
+  one: a yoke bolted a little round is still round in the next room.
+  Untick it to start from the show's own.
 - **An existing venue** — its corrections are put back on the rig, and you
   carry on from them.
 - **None** — saves go into the show's own calibration, as Focus mode
@@ -100,9 +104,9 @@ target (in the Lighting Studio, or with the target page below) goes into
 the venue's file, never the show's. **None** puts the show's own back.
 
 **Seeing and clearing one.** **Corrections…** beside the venue lists the
-applied venue's corrections: each light (needs focus, or no longer in the
-show, marked), each trim and target. **Clear** puts the one you pick back
-to the show's own.
+applied venue's corrections: each light (needs focus, dead, or no longer
+in the show, marked), each trim and target. **Clear** puts the one you
+pick back to the show's own (a dead light: not dead).
 
 **The file travels.** **File → Collect for Transfer…** copies the venue
 file with the show. When you open a show that has no venue file of its
@@ -130,8 +134,8 @@ fixture, the scope, and where saves go.
 | Next / previous fixture | RB / LB | ] / [ |
 | One fixture / the whole call (scope) | Y | G |
 | Nudge (coarse, fine) | Left stick, right stick | Arrows (⇧: 1°) |
-| Zoom in / out | D-pad up / down | , / . |
-| Focus tighter / looser | D-pad right / left | ' / ; |
+| Spot down / flood out (zoom) | D-pad up / down | , / . |
+| Sharper / softer (focus) | D-pad right / left | ' / ; |
 | Save for this venue | A | Return |
 | Back to what was saved | B | Backspace |
 | Zero | X | 0 |
@@ -141,8 +145,11 @@ fixture, the scope, and where saves go.
 | Say the light | RS (right stick click) | W |
 | Feedback: lights / voice / both | RS held | ⇧W |
 | Save every light not saved | A held | ⇧Return |
-| This light back to its last save | B held | ⇧Backspace |
+| Every light not saved back to its last save | B held | ⇧Backspace |
 | The next light not saved | LB + RB together | U |
+| Mark this light dead (or not) | View + X | D |
+| Hold every light where it is (again: release) | Both stick clicks | H |
+| Go to a light | Click it on the plot | |
 | Leave | Menu | Esc |
 
 Held, a D-pad arm keeps zooming or focusing until you let go; the
@@ -153,6 +160,34 @@ many are not saved) does not undo.
 
 **X** puts a light back to the show's own calibration while a venue is
 applied ("Back to the show's calibration."), not to zero.
+
+**B held** puts back every light not saved, in any call ("3 lights back
+to their last save."). It is one step: **View** brings them all back,
+still not saved. **A held** is its mirror: every light saved.
+
+**Spot down, flood out, sharper, softer.** The D-pad speaks the crew's
+words: up spots the beam down (narrower), down floods it out, right
+sharpens the edge, left softens it. The voice says the word once a press,
+where the light has a zoom or a focus.
+
+**The focus look** is the bare beam: open white, the shutter open, and
+the gobo, prism and frost out (where the fixture says which values do
+that), so the edge you focus is the beam's own.
+
+**Holding.** Click both sticks together and every light holds where it
+is: nothing on the controller moves anything, nothing blinks or breathes.
+The voice says "Holding."; the panel says HOLDING. Click both again (or
+press H) and it says "Released." Use it to walk to the light, talk to the
+crew, or hand the pad over. The left stick click (the target page) acts
+when you let it go, so the two clicks can be pressed together.
+
+**A dead light.** A lamp out, a light that will not move: **View + X**
+(or D) marks it **dead** in the venue ("Spot 3 marked dead."). The panel
+and the plot mark it, the Corrections list shows it, and the focus report
+lists it. Again marks it not dead.
+
+**Going to a light.** Click a light on the plot and the calls go to it:
+its call, that fixture.
 
 **The target page.** Press the left stick (or T) and the stick moves the
 call's **target** instead of the light: right is across the stage, up is
@@ -173,14 +208,61 @@ saved.") before the panel asks.
 saved is on its rim. While the light you are on is not saved, it
 "breathes" slowly on the rig (with lights feedback).
 
-**The pad's light bar** follows the panel's lamp. On a Mac this goes to pads the app reads through
-Apple's GameController framework; today that is Xbox pads, which have no
-coloured light, so you see it only on the panel (see FOCUS_REFINE_DESIGN.md
-§11).
+**The pad's light bar** follows the panel's lamp. On a Mac this goes to
+pads read through Apple's GameController framework: a PlayStation pad
+(DualShock 4 or DualSense) shows the lamp's colour on its light bar and
+buzzes on a save. An Xbox pad has no coloured light, so you see the lamp
+only on the panel. On a PlayStation pad, Cross is A, Circle B, Square X,
+Triangle Y, L1/R1 the bumpers, L2/R2 the triggers, Create View and
+Options Menu.
 
 **The whole call** (Y): a nudge moves every fixture of the call by the
 same amount — the truss came in a little low — and **A** saves them all,
 one undo step. A bumper picks one fixture again.
+
+## The focus report
+
+**Export focus report…** (beside the venue) writes what was focused in
+the venue picked, light by light and call by call:
+
+- the call, the fixture, its type and where it hangs;
+- where it focuses to, with the target's place from the stage marks
+  ("SL 2.4 · US 3.1");
+- the correction from the show's own calibration ("+1.3° pan, −0.4°
+  tilt"), and a lens set by hand;
+- who checked it and when (every save notes it), and the call's note;
+- the flags: **dead**, **swapped** (not the fixture focused there), and
+  **needs focus** (not checked here yet, or swapped).
+
+Type your name in **Focused by:** once; this computer remembers it.
+Choose the kind of file by its ending:
+
+- **PDF** to print or hand in (landscape, one table);
+- **Web page** (.html) to open in a browser;
+- **CSV for Lightwright**: one line a light, in Lightwright's column names
+  (Purpose, Position, Unit#, Instrument Type, Address, Focus…).
+
+The report also lists the lights corrected outside the calls, and the
+room's trims and targets.
+
+## Practice: scramble and focus back
+
+For the classroom. **Practice (scramble)…** asks how far off (easy 1–3°,
+medium 2–6°, hard 4–10°), then puts every moving head in the calls off
+its focus by a random pan and tilt and starts the calls. Focus each light
+back onto its target and save it.
+
+- It is a **practice venue** of its own ("Practice 2026-10-24 19:30"):
+  the real venues are not changed, and the one you were in comes back when
+  the calls end.
+- On the **real rig** the lights are really off. On the **visualiser**
+  the beams are drawn where the scrambled lights land, so the drill works
+  with no rig at all.
+- When the calls end you get the score: how many lights are within 1°,
+  the average and worst error, how many were saved, the saves, and the
+  time from the start to the last save. **Export the report…** gives the
+  focus report of the practice, with the score and each light's error:
+  the hand-in for the focus lesson.
 
 ## A focus-call cue (pre-show)
 
@@ -228,13 +310,15 @@ screen. Two things tell them where they are:
   dropped. **Voice to:** in
   the Focus calls dialog sends it to a chosen output (a Mac's audio
   interface for the headsets, say).
-  - stepping to a call: "Call 2 of 5, AT spots to Soloist DS. Fixture 1 of 4."
+  - stepping to a call, with where its target is from the stage marks:
+    "Call 2 of 5, AT spots to Soloist DS, SL 2, US 1. Fixture 1 of 4."
   - a fixture: "Fixture 3 of 8."
   - the whole call: "All 4, group."
   - A, B, X, View: "Saved." "Reverted." "Zeroed." "Undone."
+  - the D-pad: "Spot down." "Flood out." "Sharper." "Softer."
   - **Say the light** (right stick click, or W) says the light's name
     first and then where you are — "Spot 3. Call 2 of 5, AT spots to
-    DSC. Fixture 3 of 8." — and blinks it.
+    DSC, CL, US 3. Fixture 3 of 8." — and blinks it.
 
 **Feedback: lights, voice or both.** The **Feedback** setting on the panel
 (Focus mode, Focus calls and Refine share it; it is this computer's, not

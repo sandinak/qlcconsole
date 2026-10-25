@@ -41,6 +41,24 @@ their house lights, relays and subs.
   [Telling the operator](focus-calls.md#telling-the-operator-where-they-are).
 - **Venue files travel.** Collect for Transfer copies the venues, and a
   show saved under a new version offers the earlier version's venues.
+- **The focus report.** **Export focus report…** writes a venue's focus
+  light by light — the call, the target and its place from the stage
+  marks, the correction, the lens, who checked it and when, and the
+  dead, swapped and needs-focus flags — as a PDF or web page to print, or
+  a CSV for Lightwright. See [The focus report](focus-calls.md#the-focus-report).
+- **Practice.** **Practice (scramble)…** puts every moving head in the
+  calls off by a few degrees, in a practice venue of its own, for the crew
+  to focus back; it is scored on how close, how fast and how many saves,
+  and works on the visualiser too. See
+  [Practice](focus-calls.md#practice-scramble-and-focus-back).
+- **On the pad.** Hold B puts back every light not saved (one undo
+  step). Both stick clicks hold every light ("Holding."). View + X marks
+  a light dead. The D-pad speaks the crew's words: spot down, flood out,
+  sharper, softer. The calls say where the target is ("SL 2, US 1"), a
+  light clicked on the plot is the next one worked, the focus look takes
+  the gobo, prism and frost out, and a new venue starts from the last one.
+  On a Mac a **PlayStation pad** (DualShock 4, DualSense) works like an
+  Xbox pad, and its light bar shows the save lamp's colour.
 
 ### Build and the Workbench
 

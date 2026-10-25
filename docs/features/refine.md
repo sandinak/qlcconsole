@@ -66,8 +66,8 @@ scope picks the first fixture.
 | Next / previous fixture (or group) | RB / LB | ] / [ |
 | Scope: layer → group → fixture | Y | G |
 | Move (coarse, fine) | Left stick, right stick | Arrows (⇧: 5°) |
-| Zoom in / out | D-pad up / down | , / . |
-| Focus tighter / looser | D-pad right / left | ' / ; |
+| Spot down / flood out (zoom) | D-pad up / down | , / . |
+| Sharper / softer (focus) | D-pad right / left | ' / ; |
 | D-pad page: beam / colour / gobo | LS (left stick click) | P |
 | Keep in the cue | A | Return |
 | Back to the cue | B | Backspace |
@@ -78,10 +78,12 @@ scope picks the first fixture.
 | The next change not kept | LB + RB together | U |
 | How many are not kept | View + RS | — |
 | Feedback: lights / voice / both | RS held | ⇧W |
+| Hold everything where it is (again: release) | Both stick clicks | H |
 | Leave | Menu | Esc |
 
-Up is in, down is out; right tightens the focus and left loosens it,
-here as in Focus mode. Hold an arm and it keeps going: once, then after
+Up spots the beam down (narrower), down floods it out; right sharpens
+the edge and left softens it, here as in Focus mode, and the voice says
+the word once a press ("Spot down."). Hold an arm and it keeps going: once, then after
 a moment over and over until you let go. On the **colour** and **gobo** pages, D-pad right
 and left step forward and back through the show's colour or gobo palettes and say the name of each.
 
@@ -166,6 +168,9 @@ The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
 - **The voice.** "AT spots, layer." "AT spots, fixture 3 of 8."
   "DS wash, group 2 of 3." "AT spots kept in cue 4." "Back to the cue."
   **Say the light** adds the cue: "Cue 4, AT spots, fixture 3 of 8."
+- **Holding.** Both stick clicks (or H) hold everything where it is:
+  "Holding."; again, "Released." The left stick click (the D-pad page)
+  acts when you let it go, so the two can be pressed together.
 - **Warnings** are always spoken, with a slow blink and a long buzz: a
   refusal, a reusable layer, the controller lost ("Controller lost. Lights
   held."), nothing reaching the rig (Blackout, the Grand Master at zero).

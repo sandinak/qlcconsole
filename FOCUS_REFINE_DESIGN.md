@@ -1,7 +1,9 @@
 # Focus calls and Refine — design (board Q105–Q108)
 
 Branch `feat/focus-calls-refine`, 2026-10-23 (decisions Q109–Q113 built the same night; Q116–Q127 and
-the gaps review, Q128–Q136, on 2026-10-24). A design plus a working version. Not merged.
+the gaps review, Q128–Q136, on 2026-10-24), merged to main. The focus report (Q134), hold B and PS
+pads (Q139), the small ideas (Q140) and scramble practice (§13) on main on the night of 2026-10-24.
+**Feature freeze** for this area after Q140: bugs and the trial's findings only.
 
 ## Try this (about 10 minutes)
 
@@ -99,6 +101,28 @@ pad if you have one.
    - Save the show as `…-0.2`, delete its new `.venues.xml`, reopen: the
      earlier version's venues are offered. Collect for Transfer copies
      the venue file.
+10. **The report, practice and the last pad moves (Q134, Q139, Q140).**
+   - Type your name in **Focused by:**, save a few lights, then
+     **Export focus report…**: a PDF, a web page or a CSV (by the file's
+     ending). Each light: call, target and "SL 2.4 · US 3.1", the
+     correction, who checked it and when, and the flags.
+   - Nudge three lights without saving and **hold B**: "3 lights back to
+     their last save." **View**: all three back, still not saved.
+   - **View + X** (D): "Spot 3 marked dead."; the plot and Corrections…
+     show it, and so does the report.
+   - **Click both sticks** (H): "Holding." Nothing on the pad moves
+     anything. Again: "Released."
+   - The D-pad says "Spot down." / "Flood out." / "Sharper." / "Softer.";
+     entering a call says where its target is ("…to DSC, CL, US 3.").
+   - Click a light on the plot: the calls go to it.
+   - A new venue with **Start from …** ticked starts with the last venue's
+     corrections.
+   - **Practice (scramble)…**, Medium: every head is off by 2–6°. With no
+     rig, watch the beams on the plot land off their marks; focus them back
+     and save; press Menu: the score, and the real venue back.
+   - With a **DualShock 4 or DualSense** paired to the Mac: it drives the
+     tools like an Xbox pad, and its light bar shows the lamp's colour
+     (blue saved, yellow this light, orange another), buzzing on a save.
 
 ---
 
@@ -125,8 +149,9 @@ Contents:
 8. Mockups
 9. Code map
 10. Out of scope
-11. Decisions (Q109–Q113)
+11. Decisions (Q109–Q113, Q116–Q140)
 12. Status and next steps
+13. Scramble practice
 
 ---
 
@@ -168,21 +193,23 @@ does the same **kind** of thing in every tool:
 | **Y** | Cycle scope | One head ↔ all heads | **Fixture ↔ whole call** | **Layer → Group → Fixture** (Group only when the layer has more than one group) |
 | **Left stick** | Move / nudge (coarse) | Calibration pan/tilt, 8°/s | Calibration pan/tilt, 8°/s. A fixed light moves where it lands. | The cue's **position**, 8°/s |
 | **Right stick** | Fine | 1°/s | 1°/s | 1°/s |
-| **D-pad ↑ / ↓** | Zoom **in** (narrower) / **out** (wider): up is in, like a camera | Lens (hand zoom: saved) or zoom channel (live only) | same | The cue's **zoom** (on the colour/gobo pages: nothing) |
-| **D-pad → / ←** | Focus **tighter** (value up) / **looser** (value down): right is always the value up | Focus channel, live only | same | The cue's **focus**. On the colour/gobo pages: next / previous palette. |
+| **D-pad ↑ / ↓** | **Spot down** (zoom narrower) / **flood out** (wider): up is in, like a camera. Said once a press (Q140) | Lens (hand zoom: saved) or zoom channel (live only) | same | The cue's **zoom** (on the colour/gobo pages: nothing) |
+| **D-pad → / ←** | **Sharper** (focus value up) / **softer** (value down): right is always the value up. Said once a press | Focus channel, live only | same | The cue's **focus**. On the colour/gobo pages: next / previous palette. |
 | **A** | Keep | Save the head's offsets ("Spot 3 kept."; in a venue "Spot 3 kept for Lincoln HS."; the pad buzzes, twice if another light is still unsaved) | **Save for this venue** (sidecar, at once); on the target page: keep the target | **Keep in the cue** ("AT spots kept in cue 4."; one Show Tree step; a shared palette or a reusable layer asks first, Q116) |
 | **A held (1.0 s, Q132)** | Keep all | Every unsaved head saved ("3 lights kept.") | same | All pending kept ("All kept."). Never answers a warning: only a fresh press does |
 | **B** | Revert | Back to saved | Back to saved | **Back to the cue** (drops pending) |
-| **B held (0.6 s)** | Back to the last save | This light back to its last save, whatever the scope | same | Back to the cue |
+| **B held (0.6 s)** | Revert all (Q139) | **Every** unsaved light back to its last save, in any call, as one undo step (View brings them back, unsaved): "3 lights back to their last save." | same | Back to the cue |
 | **LB + RB** | Next unsaved | The next light not saved ("Spot 7, not saved."; "All saved.") | same, in any call | The next change not kept ("All kept.") |
 | **X** | Reset | Zero the offsets (in a venue: back to the show's calibration) | same | **Clear the exception** (Group/Fixture). At Layer scope it is the same as B. |
 | **View / Back** | Undo | Undo last save (a group save is one step) -- **on View's release** in every tool, and not after a chord | same | Show Tree (or Build) undo, on View's release |
 | **View + A** | Keep at the source | — | — | A tracked layer's change kept in the cue it tracks from (Q118); ⇧Return |
 | **View + RS** | How many | "2 not saved." (N) | same | "1 not kept." |
 | **Menu / Start** | Exit | Ask about unsaved, leave | same. **On an armed focus-call cue (no session yet): begins the calls** (§7) | Ask "Keep what is pending?", leave |
-| **LS click** | Alternate | Second reference | **Target page** (Q128): the stick moves the call's target, its heads follow; A keeps (venue), B back. T | **D-pad page**: beam → colour → gobo |
+| **LS click** | Alternate, **on release** (so it can chord with RS) | Second reference | **Target page** (Q128): the stick moves the call's target, its heads follow; A keeps (venue), B back. T | **D-pad page**: beam → colour → gobo |
 | **RS click** | Say the light | The light's name first, then where; flashed. Spoken whatever the feedback setting | same | same |
 | **RS held (0.6 s)** | Feedback | Lights → Voice → Both, said ("Feedback: voice only.") | same | same |
+| **LS + RS** (both stick clicks) | Hold (Q140) | Every light holds where it is: nothing on the pad moves anything, no breathing or blinks, "Holding."; again: "Released." H | same | same |
+| **View + X** | Mark dead (Q140) | The light being worked marked dead in the venue applied (again: not dead); said, on the panel, the plot's needs-focus marks, Corrections… and the report. Needs a venue. D | same | "Dead lights are marked in the focus calls." |
 | View + Menu held | — | Opens Focus mode (as before) | — | — |
 | Guide | — | unused | unused | unused |
 
@@ -220,7 +247,9 @@ truss trims a little low. A bumper goes back to one head.
 | Say the light | W |
 | Feedback (cycle) | ⇧W |
 | Save all (A held) | ⇧Return (Focus mode) |
-| This light back to its last save (B held) | ⇧Backspace |
+| Every unsaved light back to its last save (B held) | ⇧Backspace |
+| Hold every light / release (both stick clicks) | H |
+| Mark dead (View + X) | D |
 | Next unsaved (both bumpers) | U |
 | Keep at the source (View + A, Refine) | ⇧Return (Refine) |
 | Page (Refine) | P |
@@ -791,6 +820,7 @@ Engine (all unit-tested):
 | `engine/src/controllerscheme.{h,cpp}` | The one map: verbs, labels per tool, trigger-as-button |
 | `engine/src/focuscalls.{h,cpp}` | `FocusCall` / `FocusCalls`, XML, names |
 | `engine/src/venuecorrections.{h,cpp}` | Venues, sidecar, apply/unapply, record |
+| `engine/src/focusreport.{h,cpp}` | The focus report: rows, HTML, Lightwright CSV (Q134) |
 | `engine/src/focussession.{h,cpp}` | + calls, scope, flash, announce, venue saves, batch undo |
 | `engine/src/refinesession.{h,cpp}` | Refine |
 | `engine/src/truss.h` | `RigCalibration` |
@@ -802,7 +832,8 @@ UI (thin):
 
 | File | What |
 |---|---|
-| `ui/src/monitor/focuscallsdialog.{h,cpp}` | The calls and the venue, Start |
+| `ui/src/monitor/focuscallsdialog.{h,cpp}` | The calls and the venue, Start, the report (PDF), practice |
+| `plugins/hid/gamepadlayout.*`, `plugins/hid/macx/hidgamecontroller.mm` | The pad layout, PlayStation pads through GameController (Q139) |
 | `ui/src/monitor/focusmodepanel.cpp` | Call, note, scope and venue lines, new keys |
 | `ui/src/monitor/focuscontrolmap.{h,cpp}` | `setTool()`, labels from ControllerScheme, LT/RT/LS/RS callouts |
 | `ui/src/refinepanel.{h,cpp}` | Refine's panel |
@@ -898,13 +929,22 @@ step").
     - rumble through `GCController.haptics` and Core Haptics (macOS 11+);
     - the light through `GCController.light` (macOS 11+).
   - Built, but **not tried on a real pad.**
-- **What is missing for the light bar.** Our plugin claims only **Xbox** pads
-  through GameController, and an Xbox pad has no coloured light, so the
-  light bar is a no-op today. A DualShock 4 / DualSense is read through raw
-  HID (IOKit), not GameController. Two ways to reach its light bar:
-  1. **Claim PS pads through GameController as well.** Their element
-     names map onto `GamepadLayout` as the Xbox ones do. `GCDeviceLight`
-     then works as written. This is the smaller job.
+- **The light bar: PlayStation pads (Q139, built).** Option 1 below is
+  done: a DualShock 4 / DualSense (Sony 054C: 05C4, 09CC, 0BA0, 0CE6,
+  0DF2) is a `GamepadLayout::PlayStation` pad, claimed through
+  GameController by kind (`HIDGameController::claim(name,
+  PlayStationPad)`; an Xbox line never takes one), read into the Xbox
+  layout (Cross A, Circle B, Square X, Triangle Y, Create View, Options
+  Menu, PS guide, touchpad click Share), so `GCDeviceLight` takes the
+  lamp's colour and `GCDeviceHaptics` the buzzes. Without the framework
+  (QLC_HID_NO_GAMECONTROLLER, macOS before 11.3) its HID elements are
+  mapped by usage (buttons 1–14, Z/Rz the right stick, Rx/Ry the
+  triggers). `playstation.qxhid` (installed on macOS only) names the
+  controls with the Xbox profile's roles. **Not yet tried on a real pad**:
+  check the light bar's colour, the buzz, and every button's role in
+  Controller test. An Xbox pad still has no coloured light. The other way,
+  kept for Linux/Windows or a pad the framework does not claim:
+  1. (done) **Claim PS pads through GameController as well.**
   2. **Write the pad's output report over IOKit**
      (`IOHIDDeviceSetReport`).
      - DualShock 4: USB report 0x05, rumble bytes 4–5, RGB bytes 6–8;
@@ -920,9 +960,10 @@ step").
 
 **Smaller choices made on the way:**
 
-- **Hold B** in Focus mode reverts the light being worked even at group
-  scope, where B's press reverts the whole call. In fixture scope the hold
-  only adds the spoken confirmation.
+- **Hold B** was, until Q139, the light being worked only; it is now every
+  unsaved light (§2's table). B's press, which comes first, has already
+  put this light back: the hold counts it and takes it into its one undo
+  step.
 - **Both bumpers** jump from where the *first* bumper of the pair stepped
   from, so pressing LB then RB is not "previous, then next unsaved".
 - **The ghost** is drawn where the head would land with its *saved*
@@ -951,14 +992,39 @@ step").
 | Gap 10 | Accessible lamp: blue/yellow/orange, ✓ / !, the count; on the Refine panel; the unsaved light breathes; View + RS says how many. | `FocusStatusLamp`, `ControllerScheme::savedColour()` etc. |
 | Review | One word per tool saying where a change lands; X in a venue → the show's calibration; View timing the same everywhere (on release); a reusable layer warns first; nothing reaching the rig is said; see and clear one correction. | As listed in §2, §3; `rigOutputProblem()`, `FocusCallsDialog::showCorrections()`. |
 
-Hold B (Q-F1) is still open and unchanged.
+### Decisions Q134, Q139, Q140 (2026-10-24, built that night)
+
+| Q | Decision | Built |
+|---|---|---|
+| Q134 | The focus report, both forms: a printable page per venue and a Lightwright-style CSV, from the venue manager. It is the hand-in for lesson 3.6. | `FocusReport::rows()/html()/csv()`; `VenueCorrections::Check` (when, by, dead) written with every save in a venue (`markChecked()`, `<Check>` in the sidecar); "Focused by:" in the dialog (Settings `focusCalls/checkedBy`); **Export focus report…**: PDF (`QPdfWriter`, landscape Letter), .html or .csv by the file's ending (`FocusCallsDialog::writeReport()`). Flags: dead; swapped (`isSwapped()`); needs focus = not checked there, or swapped. Tests: `focusreport_test`, `focuscallsui_test theFocusReportIsExported`. |
+| Q139a | Hold B = revert **all** unsaved lights (mirrors hold A), said, one undo step. | `FocusSession::revertAllHeld()`; undo entries with `revert`; "Undone: the changes are back, not saved." Test: `holdBPutsEveryLightBack`. |
+| Q139b | Read PlayStation pads through GameController on macOS so the light bar follows the lamp; the HID path for other pads unchanged. | §11 "The light bar". Tests: `gamepadlayout_test playStationElements`, `matchesThePlayStationProfile`. Needs a real pad. |
+| Q139c | Rumble: keep as is. | Unchanged. |
+| Q140 | The small ideas, then freeze. | Spoken positions (`callPositionPhrase()`, SpokenOffset, on entering a call and Say the light); crew words (`ControllerScheme::crewWord()`, labels); freeze chord (`ProgrammerController::setHolding()`, LS on release, H); the focus look clears gobo/prism/frost (`FocusSession::openBeamValue()`); mark dead (**View + X**, chosen because View chords are the "about the light" layer and X alone is Reset; D); click on the plot (`FocusSession::jumpTo()` from `Monitor::slotMapSelectionChanged()`); new venue from the last (`addVenueFrom()`, `lastVenue()`, "Start from …" ticked). Test: `theSmallIdeas`, `aNewVenueStartsFromTheLast`. |
+| Practice | Scramble practice for teaching. | §13. |
+
+**Choices made on the way:**
+
+- A new venue from the **dialog** starts from the last venue by default
+  (ticked); the focus-call cue's spoken ask and the "Still at …?" dialog
+  still start from the show's own, as their text says. One or the other
+  could follow the dialog after the trial.
+- Positions are said on **entering** a call and with **Say the light**, not
+  on every fixture step, so stepping stays short.
+- Hold is safety, so "Holding." / "Released." are important lines (always
+  spoken) with one buzz; a tool that ends while holding lets go.
+- Crew words are said once a press, never on a held arm's repeats, and
+  only where the light has a zoom or focus to move.
+- The focus look's "open" value comes from the definition: a capability
+  named Open / Off / No …, or PrismEffectOff; a frost channel with none is
+  sent 0. Gobo index and prism rotation channels are left alone.
 
 ### Open questions (after Q116–Q127)
 
 | # | Question | What is built now |
 |---|---|---|
-| Q-F1 | Hold B: is "this light back to its last save" what was meant? In fixture scope it is the same as B. Or should hold B revert **all** unsaved lights, mirroring hold A? | This light only. |
-| Q-F2 | Light bar on PS pads: claim them through GameController (option 1 above)? | Not done; light bar is a no-op on the pads we read today. |
+| Q-F1 | Hold B: this light, or all unsaved? | **Answered (Q139a): all**, built. |
+| Q-F2 | Light bar on PS pads through GameController? | **Answered (Q139b): yes**, built; untried on a real pad. |
 | Q-F3 | Rumble strength and length (0.12 s at full, 0.22 s apart). | As stated; untested on a real pad. |
 
 ---
@@ -1010,16 +1076,62 @@ two pads, the review's consistency items, and "nothing reaching the rig".
 
 **Stubbed or not built:**
 
-- Rumble and the light bar beyond GameController pads (§11).
+- Rumble and the light bar beyond GameController pads (§11): Linux and
+  Windows; a PS pad on a Mac without the framework reads but neither lights
+  nor buzzes.
+- Practice scrambles moving heads only; a fixed light's aim is not
+  scrambled.
 - A voice output device on Linux and Windows.
 - A Lighting Studio undo snapshot restored while a venue is applied puts
   the show's own trims and targets back on the rig until the venue is
   applied again.
 
+**Built on the night of 2026-10-24:** the focus report (Q134), hold B for
+all and PlayStation pads (Q139), the small ideas (Q140) and scramble
+practice (§13). Then the freeze: nothing new here until the trial.
+
 **Next, in order:**
 
-1. Branson tries it ("Try this" at the top); then voice, rumble and
-   shutters (Q113), and the new questions in §11.
+1. Branson tries it ("Try this" at the top, step 10 for tonight's), with a
+   real PS pad for the light bar; then voice, rumble and shutters (Q113),
+   and the new questions in §11.
 2. A real-rig check on `ender`/the show VLAN: flash timing visible at
    distance, `say` audible over a hall, trigger thresholds on a worn
    controller.
+
+---
+
+## 13. Scramble practice
+
+For teaching (lesson 3.6): the crew learns to focus on a rig that is
+really off, and is scored, without anyone's real venue changing.
+
+- **Start.** Focus calls → **Practice (scramble)…** → how far off: easy
+  1–3°, medium 2–6°, hard 4–10° (pan and tilt each, either way).
+  `FocusCallsDialog::startPractice()` stores the calls and calls
+  `VenueCorrections::startPractice(movingHeads, seed, min, max)`.
+- **The practice venue.** A venue of its own, "Practice 2026-10-24 19:30",
+  flagged in the sidecar (`<Practice From= Started= LastSave= Saves=>` with
+  a `<Truth>` per light: its right calibration, which is the venue applied
+  when it started, else the show's). Each light's correction is the truth
+  plus the scramble; trims and targets are copied from the venue applied.
+  It is applied like any venue, so the real rig is really off, and the
+  venue it came from is untouched.
+- **The visualiser.** Focus mode normally draws the light being worked at
+  its intent (on its mark). With a practice applied the views draw every
+  scrambled light from its DMX with its **right** offsets
+  (`practiceViewProps()` in `fixtureAimDirection()` and the plot's gauges;
+  `focusIntentDirection()` answers false), so the beam lands where the
+  real light would, off its mark until focused back.
+- **Saves** go into the practice venue (`record()`), each one counted
+  (`markChecked()`: `saves`, `lastSave`).
+- **The end.** When the calls stop, `showPracticeResult()` shows the score
+  (`practiceScore()`: lights within 1°, mean and worst error in degrees,
+  lights saved, saves, seconds from the start to the last save) and
+  `endPractice()` puts the venue it came from back. A show opened with a
+  practice left applied opens on that venue instead.
+- **The report** of a practice venue has the score and an **Off by**
+  column (the CSV: "practice: 1.2° off" in the notes): the hand-in.
+- **Not done:** fixed lights are not scrambled; a class leaderboard (more
+  than one result at once) is the report files side by side.
+
