@@ -61,6 +61,7 @@ private slots:
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
+    void noTwoApplicationShortcutsShareAKey();
     /* P7: the Run tab -- the full-screen cue runner (⇧⌘9 in qlcconsole). */
     void theRunTabIsTheCueRunner();
     /** Q81: Edit ▸ Undo acts on the tab in front -- Build, the Show Tree,
@@ -147,6 +148,28 @@ private slots:
     void theReadinessChipIsGreyWithNoOutputs();
     /** Q92: GO in Design offers Operate once a session, in the notice bar. */
     void goInDesignOffersOperateOnce();
+    /** Q92: ...and GO in Design still plays: the list runs, its first
+     *  cue's level on the output. */
+    void goInDesignStillPlays();
+    /** Plain Esc is no playback action: in the main window, the Show Tree
+     *  and the Workbench it leaves a function and the main list running;
+     *  ⌘⇧Esc (Stop all) stops them. */
+    void plainEscIsNoPlaybackAction();
+    /** Q81 per tab: Build undoes the shared history's step; the Lighting
+     *  Studio and Fixtures undo one rig history either way round; Simple
+     *  Desk and Run say "Nothing to undo on this tab" and leave a Show
+     *  Tree step alone. */
+    void editUndoFollowsTheTabInFront();
+    /** Q81: renaming a fixture in the Fixtures tree (Return, type, Return)
+     *  is a rig undo step: Edit ▸ Undo puts the old name back. */
+    void renamingAFixtureInTheTreeIsARigStep();
+    /** Settings ▸ Advanced ▸ Output: when "On when not in use" fixtures
+     *  come on -- OK sets the show's choice (saved with it), Cancel leaves
+     *  it. */
+    void settingsAdvancedHoldsOnWhenNotInUse();
+    /** The Show Tree and Run tabs wear their own icons (a cue tree, a green
+     *  GO button), not the chaser's. */
+    void theShowTreeAndRunWearTheirOwnIcons();
     void aControllerComingAndGoingIsSaid();
     /** "resize still has problems": no qlcconsole page holds the window
      *  wide (a page narrower than it is cut off on the right). */

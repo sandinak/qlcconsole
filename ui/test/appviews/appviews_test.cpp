@@ -18,6 +18,7 @@
 */
 
 #include <QDockWidget>
+#include <QShortcut>
 #include <QtTest>
 #include <QMenu>
 #include <QMenuBar>
@@ -92,6 +93,19 @@
 #include "showstatus.h"
 #include "inputdevicenotices.h"
 #include "speedmastersfooter.h"
+#include "fixturetreewidget.h"
+#include "outputrulekeeper.h"
+#include "functionparent.h"
+#include "mastertimer.h"
+#include "showcontrol.h"
+#include "chaserstep.h"
+#include "paletteops.h"
+#include "itemicons.h"
+#include "universe.h"
+#include "chaser.h"
+#include "scene.h"
+#include <QBuffer>
+#include <QXmlStreamWriter>
 #undef protected
 #undef private
 
@@ -636,6 +650,35 @@ void AppViews_Test::theRunTabIsTheCueRunner()
     foreach (QAction *a, m_app->m_windowJumps)
         if (a->data().toString() == QLatin1String("Simple Desk"))
             QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+7"));
+}
+
+void AppViews_Test::noTwoApplicationShortcutsShareAKey()
+{
+    /* Two application-wide shortcuts on one key are ambiguous to Qt, and
+       then neither runs: ⌘↩ was both GO and "start the focus calls", so
+       GO did nothing. GO keeps it, and begins armed focus calls itself. */
+    QMultiHash<QKeySequence, QString> owners;
+    foreach (QAction *a, m_app->findChildren<QAction *>())
+        if (a->shortcutContext() == Qt::ApplicationShortcut)
+        {
+            // One action's own list may say a key twice (F1 and HelpContents).
+            QSet<QKeySequence> own;
+            foreach (const QKeySequence &k, a->shortcuts())
+                if (!k.isEmpty() && !own.contains(k))
+                {
+                    own.insert(k);
+                    owners.insert(k, a->objectName().isEmpty() ? a->text() : a->objectName());
+                }
+        }
+    foreach (QShortcut *sc, m_app->findChildren<QShortcut *>())
+        if (sc->context() == Qt::ApplicationShortcut && !sc->key().isEmpty())
+            owners.insert(sc->key(), QStringLiteral("QShortcut ") + sc->objectName());
+    QStringList clashes;
+    foreach (const QKeySequence &k, owners.uniqueKeys())
+        if (owners.count(k) > 1)
+            clashes << k.toString() + ": " + QStringList(owners.values(k)).join(" / ");
+    QVERIFY2(clashes.isEmpty(), qPrintable(clashes.join("; ")));
+    QCOMPARE(m_app->m_cueGoAction->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Return));
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
@@ -1338,6 +1381,360 @@ void AppViews_Test::goInDesignOffersOperateOnce()
     m_app->m_cueGoAction->trigger();
     QVERIFY(m_app->m_viewNotice->isHidden());
     m_app->m_doc->setMode(Doc::Design);
+}
+
+/* A one-channel dimmer at universe 1, address @a address, a scene putting
+   it at @a level, and (with @a list) a chaser of that scene, infinite hold,
+   as the show's main cue list. What it made goes in @a fixtures and
+   @a functions for the caller to take away. */
+static Scene *litScene(Doc *doc, quint32 address, uchar level, QList<quint32> *fixtures,
+                       QList<quint32> *functions, Chaser **list = nullptr)
+{
+    Fixture *fx = new Fixture(doc);
+    fx->setName(QStringLiteral("Lit %1").arg(address));
+    fx->setChannels(1);
+    fx->setUniverse(0);
+    fx->setAddress(address);
+    if (!doc->addFixture(fx))
+    {
+        delete fx;
+        return nullptr;
+    }
+    *fixtures << fx->id();
+    Scene *s = new Scene(doc);
+    s->setName(QStringLiteral("Lit %1 at %2").arg(address).arg(level));
+    s->setValue(fx->id(), 0, level);
+    doc->addFunction(s);
+    *functions << s->id();
+    if (list != nullptr)
+    {
+        Chaser *c = new Chaser(doc);
+        c->setName(QStringLiteral("Main list"));
+        c->setDurationMode(Chaser::Common);
+        c->setDuration(Function::infiniteSpeed());
+        doc->addFunction(c);
+        *functions << c->id();
+        c->addStep(ChaserStep(s->id()));
+        doc->showControl()->setMainCueList(c->id());
+        *list = c;
+    }
+    return s;
+}
+
+static void takeAway(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &functions)
+{
+    doc->masterTimer()->stopAllFunctions();
+    doc->showControl()->setMainCueList(Function::invalidId());
+    for (quint32 id : functions)
+        doc->deleteFunction(id);
+    for (quint32 id : fixtures)
+        doc->deleteFixture(id);
+}
+
+static uchar outputAt(Doc *doc, quint32 address)
+{
+    const QList<Universe *> unis = doc->inputOutputMap()->universes();
+    return unis.isEmpty() ? 0 : unis.first()->postGMValue(address);
+}
+
+/* CHANGELOG 0.2.2: "GO in Design offers Operate (Q92), once a session, in
+   the line at the top: GO still plays." */
+void AppViews_Test::goInDesignStillPlays()
+{
+    Doc *doc = m_app->m_doc;
+    QList<quint32> fixtures, functions;
+    auto tidy = qScopeGuard([&]() {
+        takeAway(doc, fixtures, functions);
+        m_app->hideViewNotice();
+    });
+    Chaser *list = nullptr;
+    QVERIFY(litScene(doc, 200, 170, &fixtures, &functions, &list) != nullptr);
+    doc->setMode(Doc::Design);
+    m_app->hideViewNotice();
+    m_app->m_operateOffered = false;
+    QCOMPARE(int(outputAt(doc, 200)), 0);
+
+    m_app->m_cueGoAction->trigger();
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Switch to Operate"));
+    QCOMPARE(doc->mode(), Doc::Design);                 // offered, not switched
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 200)), 170, 5000);
+}
+
+/* CHANGELOG 0.2.2, "Esc backs out": "plain Esc is no playback action (Stop
+   all is ⌘⇧Esc)". */
+void AppViews_Test::plainEscIsNoPlaybackAction()
+{
+    Doc *doc = m_app->m_doc;
+    QList<quint32> fixtures, functions;
+    auto tidy = qScopeGuard([&]() { takeAway(doc, fixtures, functions); });
+    Chaser *list = nullptr;
+    Scene *busk = litScene(doc, 210, 120, &fixtures, &functions);
+    QVERIFY(busk != nullptr);
+    QVERIFY(litScene(doc, 211, 200, &fixtures, &functions, &list) != nullptr);
+    m_app->show();
+    m_app->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(m_app));
+
+    busk->start(doc->masterTimer(), FunctionParent::master());
+    m_app->m_cueGoAction->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(busk->isRunning() && list->isRunning(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 211)), 200, 5000);
+    auto bothRunning = [&]() { return busk->isRunning() && list->isRunning(); };
+
+    // The main window.
+    m_app->showContext("Virtual Console");
+    QTest::keyClick(m_app, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    QVERIFY2(bothRunning(), "Esc in the main window stopped playback");
+
+    // The Show Tree.
+    m_app->showContext("Show Tree");
+    ShowTreeView *tree = ShowTreeView::instance();
+    QVERIFY(tree != nullptr);
+    QTest::keyClick(tree->tree(), Qt::Key_Escape);
+    QTest::keyClick(tree, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    QVERIFY2(bothRunning(), "Esc in the Show Tree stopped playback");
+
+    // The Workbench (Build's).
+    m_app->showContext("Build");
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr && pm->workbench() != nullptr);
+    QTest::keyClick(pm->workbench(), Qt::Key_Escape);
+    QTest::keyClick(pm->workbench(), Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    QVERIFY2(bothRunning(), "Esc in the Workbench stopped playback");
+    QCOMPARE(int(outputAt(doc, 211)), 200);
+
+    // ⌘⇧Esc: Stop all.
+    QCOMPARE(m_app->m_controlPanicAction->shortcut(), QKeySequence("CTRL+SHIFT+ESC"));
+    QTest::keyClick(m_app, Qt::Key_Escape, Qt::ControlModifier | Qt::ShiftModifier);
+    QTRY_VERIFY_WITH_TIMEOUT(!busk->isRunning() && !list->isRunning(), 5000);
+}
+
+/* CHANGELOG 0.2.2 (Q81): "it undoes the tab in front (Build, the Show
+   Tree, Fixtures and the Lighting Studio -- the last two share the rig's
+   history ...) and elsewhere reads "Nothing to undo on this tab", greyed.
+   It no longer undoes a Show Tree step from another tab." */
+void AppViews_Test::editUndoFollowsTheTabInFront()
+{
+    Doc *doc = m_app->m_doc;
+    QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
+    QVERIFY(undo != nullptr);
+    QMenu *edit = nullptr;
+    for (QAction *a : m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->menu()->actions().contains(undo))
+            edit = a->menu();
+    QVERIFY(edit != nullptr);
+    auto undoOn = [&](const QString &tab) {
+        m_app->showContext(tab);
+        emit edit->aboutToShow();
+        const QString text = undo->text();
+        undo->trigger();
+        return text;
+    };
+
+    // Build: the step on the shared history (a rename made through it).
+    Scene *s = new Scene(doc);
+    s->setName("Before");
+    doc->addFunction(s);
+    const quint32 sid = s->id();
+    auto tidyScene = qScopeGuard([doc, sid]() { doc->deleteFunction(sid); });
+    QVERIFY(doc->paletteOps()->functionStep("Rename Before", { sid }, [doc, sid](QList<quint32> &) {
+        doc->function(sid)->setName("After");
+        return true;
+    }));
+    QCOMPARE(doc->function(sid)->name(), QString("After"));
+    const QString build = undoOn("Build");
+    QVERIFY2(build.startsWith("Undo "), qPrintable(build));
+    QCOMPARE(doc->function(sid)->name(), QString("Before"));
+
+    // The rig's history: made on one tab, undone on the other, both ways.
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Rig A");
+    fx->setChannels(1);
+    QVERIFY(doc->addFixture(fx));
+    const quint32 fid = fx->id();
+    auto tidyFixture = qScopeGuard([doc, fid]() { doc->deleteFixture(fid); });
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    for (const QString &tab : { QStringLiteral("Lighting Studio"), QStringLiteral("Fixtures") })
+    {
+        const QByteArray before = mon->rigSnapshot();
+        doc->fixture(fid)->setName("Rig B");
+        mon->pushRigUndo(before);
+        const QString text = undoOn(tab);
+        QVERIFY2(text.startsWith("Undo "), qPrintable(tab + ": " + text));
+        QVERIFY(doc->fixture(fid) != nullptr);
+        QCOMPARE(doc->fixture(fid)->name(), QString("Rig A"));
+    }
+
+    // Simple Desk and Run: nothing of theirs, and a Show Tree step stays.
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("Stays"));
+    for (const QString &tab : { QStringLiteral("Simple Desk"), QStringLiteral("Run") })
+    {
+        const QString text = undoOn(tab);
+        QCOMPARE(text, QString("Nothing to undo on this tab"));
+        QVERIFY(!undo->isEnabled());
+        QVERIFY2(st->production(prod) != nullptr, qPrintable(tab));
+    }
+    // ...and the Show Tree's own Undo takes it.
+    undoOn("Show Tree");
+    QTRY_VERIFY(st->production(prod) == nullptr);
+}
+
+/* CHANGELOG 0.2.2 (Q81): "renaming a fixture in the tree is now a step of
+   it too". */
+void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
+{
+    Doc *doc = m_app->m_doc;
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Old name");
+    fx->setChannels(1);
+    fx->setUniverse(0);
+    fx->setAddress(300);
+    QVERIFY(doc->addFixture(fx));
+    const quint32 fid = fx->id();
+    auto tidy = qScopeGuard([doc, fid]() { doc->deleteFixture(fid); });
+
+    m_app->showContext("Fixtures");
+    FixtureManager *fm = FixtureManager::instance();
+    QVERIFY(fm != nullptr);
+    FixtureTreeWidget *tree = fm->m_fixtures_tree;
+    QVERIFY(tree != nullptr);
+    tree->updateTree();
+    QTreeWidgetItem *row = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, PROP_ID).isValid() && (*it)->data(0, PROP_ID).toUInt() == fid
+            && !(*it)->data(0, PROP_HEAD).isValid() && !(*it)->data(0, PROP_CHANNEL).isValid())
+            row = *it;
+    QVERIFY(row != nullptr);
+    tree->setCurrentItem(row);
+
+    // Return opens the name's editor; type, Return.
+    QTest::keyClick(tree, Qt::Key_Return);
+    QLineEdit *editor = nullptr;
+    QTRY_VERIFY((editor = tree->viewport()->findChild<QLineEdit *>()) != nullptr);
+    editor->selectAll();
+    QTest::keyClicks(editor, "New name");
+    QTest::keyClick(editor, Qt::Key_Return);
+    QTRY_COMPARE(doc->fixture(fid)->name(), QString("New name"));
+
+    QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
+    QMenu *edit = nullptr;
+    for (QAction *a : m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->menu()->actions().contains(undo))
+            edit = a->menu();
+    QVERIFY(edit != nullptr);
+    emit edit->aboutToShow();
+    QVERIFY2(undo->isEnabled() && undo->text().startsWith("Undo "), qPrintable(undo->text()));
+    undo->trigger();
+    QVERIFY(doc->fixture(fid) != nullptr);
+    QCOMPARE(doc->fixture(fid)->name(), QString("Old name"));
+}
+
+/* CHANGELOG 0.2.2, Output rules: "On when not in use (full whenever nothing
+   sets it, from the switch to Operate or when the show opens: Settings ▸
+   Advanced ▸ Output)". */
+void AppViews_Test::settingsAdvancedHoldsOnWhenNotInUse()
+{
+    Doc *doc = m_app->doc();
+    OutputRuleKeeper *keeper = doc->outputRuleKeeper();
+    QVERIFY(keeper != nullptr);
+    auto tidy = qScopeGuard([doc, keeper]() {
+        keeper->setOnAtOpenWhen(OutputRuleKeeper::OnAtOperate);
+        doc->resetModified();
+    });
+    QCOMPARE(keeper->onAtOpenWhen(), OutputRuleKeeper::OnAtOperate);
+    doc->resetModified();
+    auto savedXml = [doc]() {
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        doc->saveXML(&w);
+        w.writeEndDocument();
+        return QString::fromUtf8(buf.data());
+    };
+    QVERIFY(!savedXml().contains("OnAtOpen=\"ShowOpen\""));
+
+    auto pick = [](AppSettings &dlg, OutputRuleKeeper::OnAtOpenWhen when) {
+        QComboBox *combo = dlg.findChild<QComboBox *>(QStringLiteral("settingsOnAtOpenWhen"));
+        if (combo == nullptr)
+            return false;
+        const int i = combo->findData(int(when));
+        if (i < 0)
+            return false;
+        combo->setCurrentIndex(i);
+        return true;
+    };
+    {
+        AppSettings dlg(m_app);
+        QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
+        QVERIFY(tabs != nullptr);
+        QVERIFY(tabs->widget(2)->findChild<QComboBox *>(QStringLiteral("settingsOnAtOpenWhen")) != nullptr);
+        QVERIFY(pick(dlg, OutputRuleKeeper::OnAtShowOpen));
+        dlg.reject();                   // Cancel leaves it
+    }
+    QCOMPARE(keeper->onAtOpenWhen(), OutputRuleKeeper::OnAtOperate);
+    QVERIFY(!doc->isModified());
+    {
+        AppSettings dlg(m_app);
+        QVERIFY(pick(dlg, OutputRuleKeeper::OnAtShowOpen));
+        dlg.accept();
+    }
+    QCOMPARE(keeper->onAtOpenWhen(), OutputRuleKeeper::OnAtShowOpen);
+    QVERIFY(keeper->onAtOpenArmed());   // on now, with no switch to Operate
+    QVERIFY(doc->isModified());
+    QVERIFY2(savedXml().contains("OnAtOpen=\"ShowOpen\""), "not saved with the show");
+    {
+        AppSettings dlg(m_app);
+        QComboBox *combo = dlg.findChild<QComboBox *>(QStringLiteral("settingsOnAtOpenWhen"));
+        QVERIFY(combo != nullptr);
+        QCOMPARE(combo->currentData().toInt(), int(OutputRuleKeeper::OnAtShowOpen));
+    }
+}
+
+/* CHANGELOG 0.2.2: "Show Tree and Run have their own tab icons: a cue tree
+   and a green GO button, instead of both using the chaser icon." */
+void AppViews_Test::theShowTreeAndRunWearTheirOwnIcons()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    auto iconOf = [tabs](const QString &label) {
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->tabBar()->tabData(i).toString() == label)
+                return tabs->tabIcon(i);
+        return QIcon();
+    };
+    const QIcon tree = iconOf("Show Tree"), run = iconOf("Run");
+    QCOMPARE(tree.name(), QStringLiteral("tab:showtree"));
+    QCOMPARE(run.name(), QStringLiteral("tab:run"));
+    foreach (QAction *a, m_app->m_windowJumps)
+    {
+        if (a->data().toString() == QLatin1String("Show Tree"))
+            QCOMPARE(a->icon().name(), QStringLiteral("tab:showtree"));
+        if (a->data().toString() == QLatin1String("Run"))
+            QCOMPARE(a->icon().name(), QStringLiteral("tab:run"));
+    }
+    // Drawn, and not the chaser's picture.
+    const QImage chaser = QIcon(":/chaser.png").pixmap(QSize(16, 16)).toImage()
+                              .convertToFormat(QImage::Format_ARGB32);
+    const QImage treeImg = tree.pixmap(QSize(16, 16)).toImage().convertToFormat(QImage::Format_ARGB32);
+    const QImage runImg = run.pixmap(QSize(16, 16)).toImage().convertToFormat(QImage::Format_ARGB32);
+    QVERIFY(!treeImg.isNull() && !runImg.isNull());
+    QVERIFY(treeImg != chaser && runImg != chaser && treeImg != runImg);
+    int green = 0;
+    for (int y = 0; y < runImg.height(); ++y)
+        for (int x = 0; x < runImg.width(); ++x)
+        {
+            const QColor c = runImg.pixelColor(x, y);
+            if (c.alpha() > 200 && c.green() > 140 && c.red() < 90 && c.blue() < 120)
+                ++green;
+        }
+    QVERIFY2(green > runImg.width() * runImg.height() / 4, qPrintable(QString::number(green)));
 }
 
 void AppViews_Test::pagesSquashWithTheWindow()

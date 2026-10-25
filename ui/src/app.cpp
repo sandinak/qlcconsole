@@ -655,8 +655,8 @@ void App::init()
             OperatorFeedbackCombo::saveFeedback(int(f));
         });
         /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): the panel when
-           its calls begin; Cmd+Return begins them, as Start does; the
-           footer says it waits. */
+           its calls begin; Cmd+Return begins them, as Start does (GO's
+           own key: see m_cueGoAction); the footer says it waits. */
         connect(pc->focusCallCue(), &FocusCallCue::stateChanged, this, [this](FocusCallCue::State s) {
             if (s == FocusCallCue::Running)
                 FocusModePanel::attach(m_doc, this);
@@ -672,12 +672,6 @@ void App::init()
         // Said once: an old venue file applied without fixture types (Q133).
         connect(pc->venueCorrections(), &VenueCorrections::note, this, [this](const QString &text) {
             showViewNotice(text);
-        });
-        QShortcut *startCalls = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
-        startCalls->setContext(Qt::ApplicationShortcut);
-        connect(startCalls, &QShortcut::activated, this, [this]() {
-            if (m_doc->programmer()->focusCallCue()->isArmed())
-                m_doc->programmer()->focusCallCue()->start();
         });
         connect(pc, &ProgrammerController::dangleFixturesChanged, this,
                 [this](const QList<quint32> &fixtureIds) {
@@ -2019,6 +2013,15 @@ void App::initActions()
     m_cueGoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return));
     m_cueGoAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueGoAction, &QAction::triggered, this, [this]() {
+        /* With a focus-call cue armed, the next thing to do is begin its
+           calls, and ⌘↩ does that (as the controller's Start does). It
+           was a second shortcut on the same key, which made both
+           ambiguous: neither GO nor the calls ran. */
+        if (m_doc->programmer() != nullptr && m_doc->programmer()->focusCallCue()->isArmed())
+        {
+            m_doc->programmer()->focusCallCue()->start();
+            return;
+        }
         m_doc->showControl()->execute({ ShowControl::Go, QString(), QString() });
         offerOperateAfterGo();
     });

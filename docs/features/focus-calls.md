@@ -300,7 +300,8 @@ are one checklist:
    Press Start to begin." and the cue page, the Run tab and the footer say
    **Focus calls: waiting for the controller**.
 3. When the crew is ready, press **Start** (Menu) on the controller — or
-   **Start focus calls** on the Run tab, or **⌘↩**. The first call comes up,
+   **Start focus calls** on the Run tab, or **⌘↩** (GO's key: while the calls
+   wait, it begins them rather than going on). The first call comes up,
    blinking, as the voice says it. First the laptop confirms the venue
    (for a show that has been saved: a venue lives beside the show file): "Still at Lincoln HS? Answer on the laptop, or wait for a new
    venue." (with none applied: "Name this venue on the laptop, or wait

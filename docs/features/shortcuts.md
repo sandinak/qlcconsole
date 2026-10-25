@@ -14,7 +14,7 @@
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |
 | ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a hit; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
-| ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
+| ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)); with a [focus-call cue](focus-calls.md) waiting, ⌘↩ begins its calls instead |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
 | ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward the view's tabs, numbered as they are on screen (⇧⌘0 the tenth). qlcconsole: Connections, Fixtures, Lighting Studio, Build, Show Tree, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)). Classic QLC+: Fixtures, Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs. Everything: Connections, Fixtures, Lighting Studio, Functions, Build, Show Tree, Shows, Virtual Console, Simple Desk, Run. They renumber when the [view](getting-started.md#views) changes; a tab the view hides has no number in the Window menu, and choosing it switches to Everything |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
