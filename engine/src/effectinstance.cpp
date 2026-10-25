@@ -1911,11 +1911,14 @@ EffectInstance::parseIntents(const QJSValue &intents,
             kit.next();
             keys.append(qMakePair(kit.name(), kit.value()));
         }
-        auto iv = [&keys](const char *name) -> QJSValue {
+        /* By reference: a QJSValue copy is a persistent handle of the
+           engine's, taken and given back -- a dozen and more a head. */
+        static const QJSValue undefinedValue;
+        auto iv = [&keys](const char *name) -> const QJSValue & {
             for (const auto &k : keys)
                 if (k.first == QLatin1String(name))
                     return k.second;
-            return QJSValue();
+            return undefinedValue;
         };
 
         const EffectCell &cell = cells.at(i);
@@ -1952,8 +1955,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
         bool  havePan = false, haveTilt = false;
         float panDeg  = 0.0f,  tiltDeg  = 0.0f;
 
-        QJSValue axVal = iv("aimX");
-        QJSValue ayVal = iv("aimY");
+        const QJSValue &axVal = iv("aimX");
+        const QJSValue &ayVal = iv("aimY");
         if (!axVal.isUndefined() && !ayVal.isUndefined())
         {
             float az = iv("aimZ").isUndefined()
@@ -1967,9 +1970,9 @@ EffectInstance::parseIntents(const QJSValue &intents,
             }
         }
 
-        QJSValue panVal = iv("pan");
+        const QJSValue &panVal = iv("pan");
         if (!panVal.isUndefined())  { panDeg  = (float)panVal.toNumber();  havePan  = true; }
-        QJSValue tiltVal = iv("tilt");
+        const QJSValue &tiltVal = iv("tilt");
         if (!tiltVal.isUndefined()) { tiltDeg = (float)tiltVal.toNumber(); haveTilt = true; }
 
         // Pan
@@ -2009,7 +2012,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // Written REPLACE so the effect can dip the value BELOW the scene base
         // (HTP could only push it up).  Per-fixture phase (script `spread`) makes
         // fixtures flicker independently rather than in unison.
-        QJSValue dimVal = iv("dimmer");
+        const QJSValue &dimVal = iv("dimmer");
         // An intent that brings its own colour (a rainbow's hue) and a dimmer
         // on a fixture with no master dimmer: the dimmer dims THAT colour.
         // Scaling the emitters from the look's base instead put every one --
@@ -2129,7 +2132,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             return matched;
         };
         auto writeColour = [&](const char *prop, QLCChannel::PrimaryColour colour) -> bool {
-            QJSValue v = iv(prop);
+            const QJSValue &v = iv(prop);
             if (v.isUndefined()) return true; // nothing requested — not a "miss"
             uchar dmxVal = (uchar)qBound(0, v.toInt(), 255);
             return writeEmitter(colour, dmxVal);
@@ -2141,7 +2144,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // has headroom, so it carries the visible pulse while R/G add the hue.
         auto writeAsRGB = [&](const char *prop,
                               float rMix, float gMix, float bMix, float wMix) {
-            QJSValue v = iv(prop);
+            const QJSValue &v = iv(prop);
             if (v.isUndefined()) return;
             uchar amount = (uchar)qBound(0, v.toInt(), 255);
             writeEmitter(QLCChannel::Red,   (uchar)qBound(0, (int)qRound(amount * rMix), 255));
@@ -2168,7 +2171,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             // candle.  Instead express the amber pulse as a BRIGHTNESS flicker on
             // the master dimmer, written with REPLACE semantics so it drives the
             // full range (incl. downward) and the scene's warm colour flickers.
-            QJSValue av = iv("a");
+            const QJSValue &av = iv("a");
             quint32 miCh = fxi->masterIntensityChannel();
             if (!av.isUndefined() && miCh != QLCChannel::invalid())
             {
@@ -2239,8 +2242,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
 
         // Shutter channel: "shutterOpen" (0=closed, 1=open) or
         // "strobeRate" (0..1 normalized within the fixture's strobe capability range).
-        QJSValue shutterOpenVal = iv("shutterOpen");
-        QJSValue strobeRateVal  = iv("strobeRate");
+        const QJSValue &shutterOpenVal = iv("shutterOpen");
+        const QJSValue &strobeRateVal  = iv("strobeRate");
         if (!shutterOpenVal.isUndefined() || !strobeRateVal.isUndefined())
         {
             quint32 nCh = fxi->channels();
@@ -2314,11 +2317,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
         //   zoom   0..1  — BeamZoomSmallBig (or BigSmall inverted)
         //   iris   0..1  — ShutterIrisMinToMax (or MaxToMin inverted); in Shutter group
         //   gobo   int   — 0-based index into the GoboWheel's non-shake capabilities
-        QJSValue focusV = iv("focus");
-        QJSValue frostV = iv("frost");
-        QJSValue zoomV  = iv("zoom");
-        QJSValue irisV  = iv("iris");
-        QJSValue goboV  = iv("gobo");
+        const QJSValue &focusV = iv("focus");
+        const QJSValue &frostV = iv("frost");
+        const QJSValue &zoomV  = iv("zoom");
+        const QJSValue &irisV  = iv("iris");
+        const QJSValue &goboV  = iv("gobo");
 
         bool hasBeamIntent = !focusV.isUndefined() || !frostV.isUndefined()
                           || !zoomV.isUndefined()  || !irisV.isUndefined()
