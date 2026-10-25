@@ -59,6 +59,30 @@ private slots:
      *  highlight (it was the theme's orange on a light blue). */
     void theEditedRowReadsInEveryTheme();
 
+    /** Classic QLC+ lists none of the Show Tree's own functions (its layer
+     *  scenes, cue Collections and cue-list chasers) -- "Show the Show
+     *  Tree's own functions" lists them all; the other views list what is
+     *  visible, as QLC+ does. The user's own scenes are always there. */
+    void classicHidesTheShowTreesOwnFunctions();
+
+    /** The scene editor: General (fixtures, channel groups, looks) in the
+     *  top pane, the fixture tabs with their sliders below, a splitter
+     *  between; many channels scroll sideways. A saved split that hid a
+     *  pane, or one that isn't a split, is put right. */
+    void sceneEditorHasGeneralOverTheSliders();
+
+    /** A scene of looks on fixture groups (made in Build) lists them in
+     *  General, so it doesn't read as an empty scene. */
+    void sceneEditorListsAScenesLooks();
+
+    /** Shift + wheel over a fader scrolls the row sideways (and leaves the
+     *  fader alone); a drag on the space between faders pans it. */
+    void sliderRowsScrollSideways();
+
+    /** Settings ▸ Appearance ▸ Always show scroll bars: the app's style
+     *  never hides a scroll bar, saved, and off again restores the style. */
+    void alwaysShowScrollBarsSetting();
+
 private:
     App *m_app = nullptr;
     QTemporaryDir m_dir;

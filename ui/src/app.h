@@ -248,6 +248,11 @@ public:
 
     int theme() const;
     void setTheme(int theme);
+    /** Settings ▸ Appearance ▸ Always show scroll bars (this computer's,
+     *  workspace/alwaysShowScrollBars): AppUtil::setAlwaysShowScrollBars(),
+     *  then the theme again over the new style. */
+    bool alwaysShowScrollBars() const;
+    void setAlwaysShowScrollBars(bool on);
     void applyTheme();
     /** The palette @p theme gives, built on @p base (the native one for
      *  ThemeDefault) -- what applyTheme() sets; a test renders with it. */

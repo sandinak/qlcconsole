@@ -73,6 +73,7 @@ add_library(${module_name}
     functionwizard.cpp functionwizard.h functionwizard.ui
     grandmasterslider.cpp grandmasterslider.h
     groupsconsole.cpp groupsconsole.h
+    horizontalpan.cpp horizontalpan.h
     importselectiondialog.cpp importselectiondialog.h
     eosimportwizard.cpp eosimportwizard.h
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui

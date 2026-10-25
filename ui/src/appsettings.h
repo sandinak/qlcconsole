@@ -80,6 +80,7 @@ private:
     QMap<int, QCheckBox *> m_footerChecks;      ///< App::FooterChip -> its box
     QComboBox *m_beatStyleCombo = nullptr;
     QComboBox *m_beatWhenCombo = nullptr;
+    QCheckBox *m_scrollBarsCheck = nullptr;
     // Show controls: top bar or status bar (App::ShowControlsPlacement)
     QComboBox *m_showControlsCombo;
     QComboBox *m_scriptEditorCombo;

@@ -80,6 +80,20 @@ public:
     /** Restrict what updateTree() shows. Call before updateTree(). */
     void setDisplayFilter(DisplayFilter filter);
 
+    /** What the tree lists of the Show Tree's own functions (generated
+     *  layer scenes, cue Collections, cue-list chasers, and the originals
+     *  an Import in place keeps for Restore original):
+     *  ShowTreeStock -- what is visible, as everywhere (the default);
+     *  ShowTreeHidden -- none of them (the Classic QLC+ Functions tab);
+     *  ShowTreeAll -- all of them, the hidden ones too.
+     *  A show with no Show Tree lists the same in each. Call updateTree()
+     *  after. */
+    enum ShowTreeFunctions { ShowTreeStock = 0, ShowTreeHidden, ShowTreeAll };
+    void setShowTreeFunctions(ShowTreeFunctions mode) { m_showTreeFunctions = mode; }
+    ShowTreeFunctions showTreeFunctions() const { return m_showTreeFunctions; }
+    /** Whether @a function is listed, by visibility and the mode above. */
+    bool isListed(const Function *function) const;
+
     /** Order top-level TYPE categories by a fixed role rank (Show · Chaser ·
      *  Collection · RGB Matrix · EFX · Scene · …) instead of alphabetically.
      *  Off by default (classic A–Z); the Programming tab turns it on. */
@@ -177,6 +191,7 @@ private:
 
 private:
     Doc* m_doc;
+    ShowTreeFunctions m_showTreeFunctions = ShowTreeStock;
 
     /*********************************************************************
      * Tree folders

@@ -25,6 +25,7 @@
 #include <QMessageBox>
 #include <QToolButton>
 #include <QScrollArea>
+#include <QSplitter>
 #include <QTabWidget>
 #include <QComboBox>
 #include <QSettings>
@@ -36,6 +37,7 @@
 #include <QDebug>
 
 #include "genericdmxsource.h"
+#include "horizontalpan.h"
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
 #include "workbench.h"
@@ -43,6 +45,8 @@
 #include "groupsconsole.h"
 #include "qlcfixturedef.h"
 #include "channelsgroup.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
 #include "qlcclipboard.h"
 #include "positiontool.h"
 #include "sceneeditor.h"
@@ -58,9 +62,13 @@
 #define KColumnModel        2
 #define KColumnID           3
 
-#define KTabGeneral         0
+/* The fixture tabs below the General pane: none is current (no fixture in
+   the scene, or none picked). General is not a tab any more -- it is the top
+   pane, always shown, as in QLC+ the tree sits above the editor. */
+#define KNoTab              -1
 
 #define SETTINGS_CHASER "sceneeditor/chaser"
+#define SETTINGS_SPLITTER "sceneeditor/splitter"
 
 #define UI_STATE_TAB_INDEX "tabIndex"
 #define UI_STATE_TAB_MODE  "tabMode"
@@ -76,8 +84,8 @@ SceneEditor::SceneEditor(QWidget* parent, Scene* scene, Doc* doc, bool applyValu
     , m_initFinished(false)
     , m_speedDials(NULL)
     , m_channelGroupsTab(-1)
-    , m_currentTab(KTabGeneral)
-    , m_fixtureFirstTabIndex(1)
+    , m_currentTab(KNoTab)
+    , m_fixtureFirstTabIndex(0)
     , m_copyFromSelection(false)
 {
     qDebug() << Q_FUNC_INFO;
@@ -86,20 +94,20 @@ SceneEditor::SceneEditor(QWidget* parent, Scene* scene, Doc* doc, bool applyValu
     Q_ASSERT(scene != NULL);
 
     setupUi(this);
+    initPanes();
 
     init(applyValues);
 
-    // Start new (==empty) scenes from the first tab and ones with something in them
-    // on the first fixture page.
+    // Start new (==empty) scenes with no fixture tab, and ones with something
+    // in them on the fixture page they were left on.
     if (m_tab->count() == 0)
-        slotTabChanged(KTabGeneral);
+        slotTabChanged(KNoTab);
     else
     {
         QVariant tabIndex = scene->uiStateValue(UI_STATE_TAB_INDEX);
-        if (tabIndex.isValid())
-            m_tab->setCurrentIndex(tabIndex.toInt());
-        else
-            m_tab->setCurrentIndex(0);
+        const int idx = tabIndex.isValid() ? tabIndex.toInt() : 0;
+        m_tab->setCurrentIndex(idx >= 0 && idx < m_tab->count() ? idx : 0);
+        slotTabChanged(m_tab->currentIndex());
     }
 
     QVariant showDial = scene->uiStateValue(UI_STATE_SHOW_DIAL);
@@ -120,6 +128,88 @@ SceneEditor::~SceneEditor()
     QSettings settings;
     quint32 id = m_chaserCombo->itemData(m_chaserCombo->currentIndex()).toUInt();
     settings.setValue(SETTINGS_CHASER, id);
+    // Only a split both panes of which were shown: one saved while the
+    // scene had no fixture (the sliders' pane put away) says nothing.
+    if (m_panesSized && !m_tab->isHidden())
+        settings.setValue(SETTINGS_SPLITTER, m_splitter->saveState());
+}
+
+void SceneEditor::initPanes()
+{
+    // QLC+'s .ui has General as the first tab, before the fixtures'. Here
+    // it is the top pane -- the fixtures used, the channel groups used and
+    // the looks, each list scrolling on its own -- and the fixture (and
+    // channel group) tabs with their sliders are the bottom one, scrolling
+    // sideways for many channels. A splitter between them.
+    m_tab->removeTab(m_tab->indexOf(General));
+    m_splitter = new QSplitter(Qt::Vertical, this);
+    m_splitter->setObjectName(QStringLiteral("sceneEditorSplitter"));
+    m_splitter->setChildrenCollapsible(false);
+    layout()->removeWidget(m_tab);
+    m_splitter->addWidget(General);
+    m_splitter->addWidget(m_tab);
+    m_splitter->setStretchFactor(0, 1);
+    m_splitter->setStretchFactor(1, 2);
+    layout()->addWidget(m_splitter);
+    // Taken out of the tab widget's stack, which may have hidden it.
+    General->show();
+    General->setMinimumHeight(80);
+    m_tab->setMinimumHeight(120);
+}
+
+void SceneEditor::showEvent(QShowEvent *ev)
+{
+    QWidget::showEvent(ev);
+    sizePanes();
+}
+
+void SceneEditor::sizePanes()
+{
+    if (m_panesSized || m_tab->isHidden() || !isVisible())
+        return;
+    m_panesSized = true;
+
+    // The saved split, if it is one: two panes, vertical, neither at no
+    // height. Otherwise a third for General, the rest for the sliders.
+    // Collapsible while restoring, so a pane saved at no height reads as 0
+    // and not as its minimum.
+    QSettings settings;
+    const QVariant var = settings.value(SETTINGS_SPLITTER);
+    m_splitter->setChildrenCollapsible(true);
+    bool restored = false;
+    if (var.isValid() && m_splitter->restoreState(var.toByteArray())
+        && m_splitter->orientation() == Qt::Vertical && m_splitter->count() == 2)
+    {
+        const QList<int> sizes = m_splitter->sizes();
+        restored = sizes.value(0) > 0 && sizes.value(1) > 0;
+    }
+    m_splitter->setChildrenCollapsible(false);
+    if (restored)
+        return;
+    m_splitter->setOrientation(Qt::Vertical);
+    const int h = qMax(m_splitter->height(), 300);
+    m_splitter->setSizes(QList<int>() << h / 3 << h - h / 3);
+}
+
+void SceneEditor::updatePanes()
+{
+    // No fixture, no channel group: no sliders, and General has it all.
+    const bool any = m_tab->count() > 0;
+    if (m_tab->isHidden() == any)
+    {
+        m_tab->setVisible(any);
+        if (any)
+            sizePanes();
+    }
+}
+
+void SceneEditor::enablePanning(QScrollArea *area)
+{
+    // Many channels: the row of sliders scrolls sideways (Shift + wheel,
+    // a sideways swipe, or a drag on the space between the faders).
+    area->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    area->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    HorizontalPan::enable(area);
 }
 
 void SceneEditor::slotFunctionManagerActive(bool active)
@@ -342,8 +432,11 @@ void SceneEditor::init(bool applyValues)
     updateChannelsGroupsTab();
 
     // Group-look authoring (palettes/targets) and fixture-group drag/drop
-    // live in the Programming tab now; the classic scene editor stays
-    // focused on per-fixture/per-channel values.
+    // live in Build; the classic scene editor stays focused on per-fixture/
+    // per-channel values. What a scene plays from Build is listed, though:
+    // a scene of looks on fixture groups has no channel values of its own,
+    // and without this list it reads as an empty scene.
+    initLooksList();
 
     // Apply any mode related change
     slotModeChanged(m_doc->mode());
@@ -387,6 +480,45 @@ void SceneEditor::init(bool applyValues)
         slotViewModeChanged(false, applyValues);
 }
 
+void SceneEditor::initLooksList()
+{
+    const QList<quint32> groups = m_scene->fixtureGroups();
+    const QList<quint32> looks = m_scene->palettes();
+    if (groups.isEmpty() && looks.isEmpty())
+        return;
+
+    m_looksTree = new QTreeWidget(General);
+    m_looksTree->setObjectName(QStringLiteral("sceneLooksTree"));
+    m_looksTree->setHeaderLabel(tr("Fixture groups and looks in this scene"));
+    m_looksTree->setRootIsDecorated(true);
+    m_looksTree->setSelectionMode(QAbstractItemView::NoSelection);
+    m_looksTree->setToolTip(tr("This scene plays these looks (palettes) on these fixture "
+                               "groups. They are set in Build, not with the sliders below, "
+                               "which hold only the scene's own channel values."));
+
+    QTreeWidgetItem *groupsItem = new QTreeWidgetItem(m_looksTree, QStringList(tr("Fixture groups")));
+    for (quint32 id : groups)
+    {
+        FixtureGroup *grp = m_doc->fixtureGroup(id);
+        new QTreeWidgetItem(groupsItem, QStringList(grp != NULL ? grp->name()
+                                                                : tr("(deleted group %1)").arg(id)));
+    }
+    QTreeWidgetItem *looksItem = new QTreeWidgetItem(m_looksTree, QStringList(tr("Looks")));
+    for (quint32 id : looks)
+    {
+        QLCPalette *pal = m_doc->palette(id);
+        new QTreeWidgetItem(looksItem, QStringList(pal != NULL
+                ? QStringLiteral("%1 (%2)").arg(pal->name(), QLCPalette::typeToString(pal->type()))
+                : tr("(deleted look %1)").arg(id)));
+    }
+    m_looksTree->expandAll();
+    groupsItem->setHidden(groups.isEmpty());
+    looksItem->setHidden(looks.isEmpty());
+
+    // Beside the channel groups, the full height of the lists.
+    gridLayout->addWidget(m_looksTree, 7, 4, 7, 1);
+}
+
 void SceneEditor::setSceneValue(const SceneValue& scv)
 {
     FixtureConsole* fc;
@@ -417,7 +549,7 @@ void SceneEditor::slotTabChanged(int tab)
 
     m_scene->setUiStateValue(UI_STATE_TAB_INDEX, tab);
 
-    if (tab == KTabGeneral)
+    if (tab < 0)
     {
         m_enableCurrentAction->setEnabled(false);
         m_disableCurrentAction->setEnabled(false);
@@ -924,6 +1056,7 @@ void SceneEditor::slotViewModeChanged(bool tabbed, bool applyValues)
             QScrollArea* scrollArea = new QScrollArea(m_tab);
 
             scrollArea->setWidgetResizable(true);
+            enablePanning(scrollArea);
             int tIdx = m_tab->addTab(scrollArea, tr("All fixtures"));
             m_tab->setTabToolTip(tIdx, tr("All fixtures"));
 
@@ -997,19 +1130,20 @@ void SceneEditor::slotViewModeChanged(bool tabbed, bool applyValues)
 
     if (m_tab->count() == 0)
     {
-        slotTabChanged(KTabGeneral);
+        slotTabChanged(KNoTab);
     }
     else
     {
         QVariant tabIndex = m_scene->uiStateValue(UI_STATE_TAB_INDEX);
         int prevTabIdx = tabIndex.isValid() ? tabIndex.toInt() : 0;
-        if (prevTabIdx > m_tab->count())
-            m_tab->setCurrentIndex(m_fixtureFirstTabIndex);
+        if (prevTabIdx < 0 || prevTabIdx >= m_tab->count())
+            m_tab->setCurrentIndex(qMin(m_fixtureFirstTabIndex, m_tab->count() - 1));
         else
             m_tab->setCurrentIndex(prevTabIdx);
     }
 
     m_scene->setUiStateValue(UI_STATE_TAB_INDEX, m_tab->currentIndex());
+    updatePanes();
 }
 
 void SceneEditor::slotRecord()
@@ -1438,7 +1572,7 @@ void SceneEditor::updateChannelsGroupsTab()
 
     if (m_channelGroupsTree->topLevelItemCount() == 0)
     {
-        m_fixtureFirstTabIndex = 1;
+        m_fixtureFirstTabIndex = 0;
         return;
     }
 
@@ -1452,9 +1586,11 @@ void SceneEditor::updateChannelsGroupsTab()
         delete tmpGrpConsole;
         if (ids.count() == 0)
         {
-            m_tab->removeTab(1);
+            m_tab->removeTab(m_channelGroupsTab);
+            delete scrollArea;
             m_channelGroupsTab = -1;
-            m_fixtureFirstTabIndex = 1;
+            m_fixtureFirstTabIndex = 0;
+            updatePanes();
             return;
         }
     }
@@ -1463,6 +1599,7 @@ void SceneEditor::updateChannelsGroupsTab()
         if (ids.count() == 0)
             return;
         scrollArea = new QScrollArea(m_tab);
+        enablePanning(scrollArea);
     }
 
     QList<uchar>levels = m_scene->channelGroupsLevels();
@@ -1471,19 +1608,20 @@ void SceneEditor::updateChannelsGroupsTab()
     scrollArea->setWidgetResizable(true);
     if (m_channelGroupsTab == -1)
     {
-        m_tab->insertTab(1, scrollArea, tr("Channels Groups"));
-        m_tab->setTabToolTip(1, tr("Channels Groups"));
+        m_tab->insertTab(0, scrollArea, tr("Channels Groups"));
+        m_tab->setTabToolTip(0, tr("Channels Groups"));
     }
 
-    m_channelGroupsTab = 1;
-    m_fixtureFirstTabIndex = 2;
+    m_channelGroupsTab = 0;
+    m_fixtureFirstTabIndex = 1;
+    updatePanes();
     connect(console, SIGNAL(groupValueChanged(quint32,uchar)),
             this, SLOT(slotGroupValueChanged(quint32,uchar)));
 }
 
 GroupsConsole *SceneEditor::groupConsoleTab(int tab)
 {
-    if (tab != m_channelGroupsTab)
+    if (tab < 0 || tab != m_channelGroupsTab)
         return NULL;
 
     QScrollArea* area = qobject_cast<QScrollArea*> (m_tab->widget(tab));
@@ -1536,6 +1674,7 @@ void SceneEditor::addFixtureTab(Fixture* fixture, quint32 channel)
     /* Put the console inside a scroll area */
     QScrollArea* scrollArea = new QScrollArea(m_tab);
     scrollArea->setWidgetResizable(true);
+    enablePanning(scrollArea);
 
     FixtureConsole* console = new FixtureConsole(scrollArea, m_doc);
     console->setFixture(fixture->id());
@@ -1554,6 +1693,7 @@ void SceneEditor::addFixtureTab(Fixture* fixture, quint32 channel)
 
     if (channel != QLCChannel::invalid())
         console->setChecked(true, channel);
+    updatePanes();
 }
 
 void SceneEditor::removeFixtureTab(quint32 fixtureID)
@@ -1575,11 +1715,12 @@ void SceneEditor::removeFixtureTab(quint32 fixtureID)
             break;
         }
     }
+    updatePanes();
 }
 
 FixtureConsole* SceneEditor::fixtureConsoleTab(int tab)
 {
-    if (tab >= m_tab->count() || tab <= 0)
+    if (tab >= m_tab->count() || tab < 0)
         return NULL;
 
     QScrollArea* area = qobject_cast<QScrollArea*> (m_tab->widget(tab));
@@ -1639,6 +1780,8 @@ void SceneEditor::slotChecked(quint32 fxi, quint32 channel, bool state)
 
 void SceneEditor::slotGoToNextTab()
 {
+    if (m_tab->count() == 0)
+        return;
     m_currentTab++;
     if (m_currentTab == m_tab->count())
         m_currentTab = 0;
@@ -1647,7 +1790,9 @@ void SceneEditor::slotGoToNextTab()
 
 void SceneEditor::slotGoToPreviousTab()
 {
-    if (m_currentTab == 0)
+    if (m_tab->count() == 0)
+        return;
+    if (m_currentTab <= 0)
         m_currentTab = m_tab->count() - 1;
     else
         m_currentTab--;

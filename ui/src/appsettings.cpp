@@ -105,6 +105,16 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                            "icons and text, icons only (tooltips name them) "
                                            "or text only."));
         winForm->addRow(tr("Toolbar style:"), m_tabLabelModeCombo);
+        m_scrollBarsCheck = new QCheckBox(tr("Always show scroll bars"), winGroup);
+        m_scrollBarsCheck->setObjectName(QStringLiteral("settingsAlwaysShowScrollBars"));
+        m_scrollBarsCheck->setChecked(m_app->alwaysShowScrollBars());
+        m_scrollBarsCheck->setToolTip(tr("Draw every scroll bar all the time, not only while "
+                                         "scrolling (macOS hides them when the system's "
+                                         "\"Show scroll bars\" is automatic or when "
+                                         "scrolling). A long row of faders also scrolls "
+                                         "sideways with Shift + the wheel, or a drag on the "
+                                         "space between them."));
+        winForm->addRow(QString(), m_scrollBarsCheck);
         lookLayout->addWidget(winGroup);
 
         QGroupBox *footGroup = new QGroupBox(tr("Footer"), appearancePage);
@@ -582,6 +592,8 @@ void AppSettings::accept()
     const int theme = m_themeCombo->currentData().toInt();
     if (theme != m_app->theme())
         m_app->setTheme(theme);
+    if (m_scrollBarsCheck->isChecked() != m_app->alwaysShowScrollBars())
+        m_app->setAlwaysShowScrollBars(m_scrollBarsCheck->isChecked());
     for (auto it = m_footerChecks.constBegin(); it != m_footerChecks.constEnd(); ++it)
         if (it.value()->isChecked() != m_app->footerChipShown(App::FooterChip(it.key())))
             m_app->setFooterChipShown(App::FooterChip(it.key()), it.value()->isChecked());

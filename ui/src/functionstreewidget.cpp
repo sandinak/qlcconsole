@@ -235,6 +235,22 @@ void FunctionsTreeWidget::filterByText(const QString &text)
         applyFilter(topLevelItem(i));
 }
 
+bool FunctionsTreeWidget::isListed(const Function *function) const
+{
+    if (function == NULL)
+        return false;
+    switch (m_showTreeFunctions)
+    {
+        case ShowTreeHidden:
+            return function->isVisible() && !m_doc->showTree()->isLocked(function->id());
+        case ShowTreeAll:
+            return function->isVisible() || m_doc->showTree()->isGenerated(function->id());
+        case ShowTreeStock:
+        default:
+            return function->isVisible();
+    }
+}
+
 void FunctionsTreeWidget::updateTree()
 {
     blockSignals(true);
@@ -252,7 +268,7 @@ void FunctionsTreeWidget::updateTree()
     {
         foreach (Function* function, m_doc->functions())
         {
-            if (function->isVisible())
+            if (isListed(function))
                 updateFunctionItem(new QTreeWidgetItem(parentItem(function)), function);
         }
     }
@@ -306,7 +322,7 @@ void FunctionsTreeWidget::functionNameChanged(quint32 fid)
 QTreeWidgetItem *FunctionsTreeWidget::addFunction(quint32 fid)
 {
     Function* function = m_doc->function(fid);
-    if (function == NULL || function->isVisible() == false)
+    if (function == NULL || isListed(function) == false)
         return NULL;
 
     QTreeWidgetItem* item = functionItem(function);
@@ -390,7 +406,7 @@ QTreeWidgetItem* FunctionsTreeWidget::parentItem(const Function* function)
 {
     Q_ASSERT(function != NULL);
 
-    if (function->isVisible() == false)
+    if (isListed(function) == false)
         return NULL;
 
     QString basePath = Function::typeToString(function->type());
@@ -449,7 +465,7 @@ QTreeWidgetItem* FunctionsTreeWidget::functionItem(const Function* function)
 {
     Q_ASSERT(function != NULL);
 
-    if (function->isVisible() == false)
+    if (isListed(function) == false)
         return NULL;
 
     QTreeWidgetItem* parent = parentItem(function);

@@ -40,6 +40,10 @@ class QAction;
 class Chaser;
 class Doc;
 class SceneUiState;
+class QScrollArea;
+class QShowEvent;
+class QSplitter;
+class QTreeWidget;
 
 /** @addtogroup ui_functions
  * @{
@@ -72,13 +76,34 @@ private:
     Scene* m_scene; // The Scene that is being edited
     GenericDMXSource* m_source;
 
+protected:
+    /** @reimp: the first show sizes the General and slider panes. */
+    void showEvent(QShowEvent *ev) override;
+
 private:
+    /** General as the top pane, the fixture tabs below (QLC+ had General as
+     *  the first tab); a splitter between them. */
+    void initPanes();
+    /** The saved split, else a third for General: once, on first show. */
+    void sizePanes();
+    /** The sliders' pane is put away when there is nothing in it. */
+    void updatePanes();
+    /** A slider tab's scroll area: Shift + wheel, a sideways swipe and a
+     *  drag on empty space scroll it sideways (HorizontalPan). */
+    void enablePanning(QScrollArea *area);
+    /** The fixture groups and looks the scene plays (made in Build): a
+     *  read-only list in General, shown only when there are some. */
+    void initLooksList();
+
     void init(bool applyValues);
     void setSceneValue(const SceneValue& scv);
     SceneUiState * sceneUiState();
 
 private:
     bool m_initFinished;
+    QSplitter *m_splitter = nullptr;
+    QTreeWidget *m_looksTree = nullptr;
+    bool m_panesSized = false;
 
     /*********************************************************************
      * Common

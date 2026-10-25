@@ -71,6 +71,14 @@ public:
      *  to drag it into the open collection or chaser). */
     void setOpenOnSelect(bool open);
 
+    /** "Show the Show Tree's own functions" (the tree's right-click menu,
+     *  functionmanager/showShowTreeFunctions): off, Classic QLC+ lists none
+     *  of the functions the Show Tree generates or keeps (they are edited in
+     *  the Show Tree), and the other views list what is visible, as QLC+
+     *  does; on, every view lists all of them. */
+    void setShowTreeFunctionsShown(bool shown);
+    bool showTreeFunctionsShown() const;
+
 signals:
     /** Emitted when the FunctionManager's tab is de/activated */
     void functionManagerActive(bool active);
@@ -111,6 +119,11 @@ private:
     /** Init function tree view */
     void initTree();
 
+    /** Rebuild the tree, keeping what is selected (and so the editor). */
+    void refreshTree();
+    /** The tree's ShowTreeFunctions for the view and the setting above. */
+    void applyShowTreeFilter();
+
     /** Delete all currently selected functions */
     void deleteSelectedFunctions();
 
@@ -129,6 +142,9 @@ private:
     QSplitter* m_hsplitter;
     QSplitter* m_vsplitter;
     FunctionsTreeWidget* m_tree;
+    bool m_classic = false;
+    QAction *m_showTreeFunctionsAction = nullptr;
+    QTimer *m_refreshTimer = nullptr;
 
     /*********************************************************************
      * Menus, toolbar & actions

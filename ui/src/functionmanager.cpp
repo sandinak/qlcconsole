@@ -79,6 +79,7 @@
 #define COL_PATH 1
 
 #define SETTINGS_SPLITTER "functionmanager/splitter"
+#define SETTINGS_SHOWTREE_FUNCTIONS "functionmanager/showShowTreeFunctions"
 
 FunctionManager* FunctionManager::s_instance = NULL;
 
@@ -129,7 +130,22 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     updateActionStatus();
 
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
+    applyShowTreeFilter();
     m_tree->updateTree();
+
+    // What the Show Tree makes is marked its own only after Doc has added
+    // it: a bake lists it, or not, again (once per burst of edits).
+    m_refreshTimer = new QTimer(this);
+    m_refreshTimer->setSingleShot(true);
+    m_refreshTimer->setInterval(0);
+    connect(m_refreshTimer, &QTimer::timeout, this, [this]() {
+        if (isVisible())
+            refreshTree();
+    });
+    connect(m_doc->showTree(), &ShowTreeController::changed, this, [this]() {
+        if (m_tree->showTreeFunctions() != FunctionsTreeWidget::ShowTreeStock)
+            m_refreshTimer->start();
+    });
 
     connect(m_doc, SIGNAL(clearing()), this, SLOT(slotDocClearing()));
     connect(m_doc, SIGNAL(loading()), this, SLOT(slotDocLoading()));
@@ -216,8 +232,16 @@ void FunctionManager::showEvent(QShowEvent* ev)
 {
     qDebug() << Q_FUNC_INFO;
     // Pick up folder moves made elsewhere (the Programming tab files functions
-    // into folders by drag). Rebuild quietly and keep the selection, so the
-    // open editor isn't torn down.
+    // into folders by drag).
+    refreshTree();
+    emit functionManagerActive(true);
+    QWidget::showEvent(ev);
+}
+
+void FunctionManager::refreshTree()
+{
+    // Rebuild quietly and keep the selection, so the open editor isn't torn
+    // down.
     if (m_tree != NULL)
     {
         QList<quint32> selected;
@@ -237,8 +261,6 @@ void FunctionManager::showEvent(QShowEvent* ev)
         }
         m_tree->blockSignals(wasBlocked);
     }
-    emit functionManagerActive(true);
-    QWidget::showEvent(ev);
 }
 
 void FunctionManager::hideEvent(QHideEvent* ev)
@@ -342,6 +364,17 @@ void FunctionManager::initActions()
         "shutter) for dynamic group scenes"));
     connect(m_paletteManagerAction, SIGNAL(triggered(bool)),
             this, SLOT(slotPaletteManager()));
+
+    m_showTreeFunctionsAction = new QAction(tr("Show the Show Tree's own functions"), this);
+    m_showTreeFunctionsAction->setObjectName(QStringLiteral("fmShowTreeFunctions"));
+    m_showTreeFunctionsAction->setCheckable(true);
+    m_showTreeFunctionsAction->setChecked(showTreeFunctionsShown());
+    m_showTreeFunctionsAction->setToolTip(tr(
+        "List the scenes, collections and chasers the Show Tree makes for its "
+        "cues (and the originals an import keeps). They are edited in the Show "
+        "Tree; Classic QLC+ leaves them out unless this is on."));
+    connect(m_showTreeFunctionsAction, &QAction::toggled,
+            this, &FunctionManager::setShowTreeFunctionsShown);
 
     // Create a new palette directly in the tree (under the "Palettes"
     // category / currently-selected palette folder).
@@ -448,6 +481,12 @@ void FunctionManager::initToolbar()
 void FunctionManager::setClassicToolbar(bool classic)
 {
     setOpenOnSelect(classic);
+    if (m_classic != classic)
+    {
+        m_classic = classic;
+        applyShowTreeFilter();
+        refreshTree();
+    }
     for (QAction *a : m_classicToolbarActions)
         a->setVisible(classic);
     if (m_addButtonAction != nullptr)
@@ -1146,6 +1185,33 @@ void FunctionManager::setOpenOnSelect(bool open)
     m_openOnSelect = open;
 }
 
+bool FunctionManager::showTreeFunctionsShown() const
+{
+    return QSettings().value(SETTINGS_SHOWTREE_FUNCTIONS, false).toBool();
+}
+
+void FunctionManager::setShowTreeFunctionsShown(bool shown)
+{
+    QSettings().setValue(SETTINGS_SHOWTREE_FUNCTIONS, shown);
+    if (m_showTreeFunctionsAction != nullptr && m_showTreeFunctionsAction->isChecked() != shown)
+        m_showTreeFunctionsAction->setChecked(shown);
+    applyShowTreeFilter();
+    refreshTree();
+}
+
+void FunctionManager::applyShowTreeFilter()
+{
+    // The Show Tree's layer scenes, cue Collections and cue-list chasers are
+    // made and named by it, and edited there: in Classic QLC+ they would only
+    // fill the tree with functions nobody made here.
+    if (showTreeFunctionsShown())
+        m_tree->setShowTreeFunctions(FunctionsTreeWidget::ShowTreeAll);
+    else if (m_classic)
+        m_tree->setShowTreeFunctions(FunctionsTreeWidget::ShowTreeHidden);
+    else
+        m_tree->setShowTreeFunctions(FunctionsTreeWidget::ShowTreeStock);
+}
+
 void FunctionManager::slotTreeSelectionChanged()
 {
     updateActionStatus();
@@ -1218,6 +1284,8 @@ void FunctionManager::slotTreeContextMenuRequested()
     menu.addAction(m_addPaletteAction);
     menu.addAction(m_wizardAction);
     menu.addAction(m_paletteManagerAction);
+    menu.addSeparator();
+    menu.addAction(m_showTreeFunctionsAction);
 
     updateActionStatus();
 

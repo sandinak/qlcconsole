@@ -32,12 +32,24 @@
 #define private public
 #define protected public
 #include "app.h"
+#include "appsettings.h"
 #include "functionmanager.h"
 #include "functionstreewidget.h"
+#include "sceneeditor.h"
 #undef protected
 #undef private
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QStyle>
+#include <QCheckBox>
+#include <QSlider>
+#include "apputil.h"
+#include "horizontalpan.h"
+#include "fixtureconsole.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
+#include "fixture.h"
 #include "showtreecontroller.h"
-#include "sceneeditor.h"
 #include "chasereditor.h"
 #include "efxeditor.h"
 #include "chaser.h"
@@ -326,6 +338,8 @@ void ViewLayout_Test::classicFunctionsUncollapsesTheTree()
 
 void ViewLayout_Test::aShowTreeSceneOpensGreyedUnderItsBanner()
 {
+    // Classic QLC+ lists the tree's own functions only when asked to.
+    FunctionManager::instance()->setShowTreeFunctionsShown(true);
     ShowTreeController *st = m_app->doc()->showTree();
     quint32 made = Function::invalidId();
     for (Function *f : m_app->doc()->functions())
@@ -364,6 +378,7 @@ void ViewLayout_Test::aShowTreeSceneOpensGreyedUnderItsBanner()
         QCoreApplication::processEvents();
         QVERIFY(fm->m_lockedBanner == nullptr);
     }
+    FunctionManager::instance()->setShowTreeFunctionsShown(false);
 }
 
 /* WCAG relative luminance and contrast. */
@@ -414,6 +429,338 @@ void ViewLayout_Test::theEditedRowReadsInEveryTheme()
         QCOMPARE(item->data(0, Qt::ForegroundRole), own);
     }
     m_app->setTheme(was);
+}
+
+static quint32 idOfFunction(Doc *doc, const QString &name)
+{
+    for (Function *f : doc->functions())
+        if (f->name() == name)
+            return f->id();
+    return Function::invalidId();
+}
+
+void ViewLayout_Test::classicHidesTheShowTreesOwnFunctions()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    FunctionManager *fm = FunctionManager::instance();
+    fm->setShowTreeFunctionsShown(false);
+
+    // The course show's tree made layer scenes (hidden) and a cue list's
+    // chaser (visible, as QLC+ would list it).
+    QList<quint32> made, madeVisible;
+    for (Function *f : doc->functions())
+        if (st->isGenerated(f->id()))
+        {
+            made << f->id();
+            if (f->isVisible())
+                madeVisible << f->id();
+        }
+    QVERIFY2(!made.isEmpty(), "the course show's tree made functions");
+    QVERIFY2(!madeVisible.isEmpty(), "and one of them (a cue list's chaser) is visible");
+    const quint32 plain = idOfFunction(doc, "Plain scene");
+    QVERIFY(plain != Function::invalidId());
+
+    auto listed = [&](quint32 fid) {
+        return fm->m_tree->functionItem(doc->function(fid)) != nullptr;
+    };
+
+    m_app->setWorkspaceView(App::ClassicView, false);
+    m_app->showContext("Functions");
+    QCoreApplication::processEvents();
+    QCOMPARE(fm->m_tree->showTreeFunctions(), FunctionsTreeWidget::ShowTreeHidden);
+    for (quint32 fid : made)
+        QVERIFY2(!listed(fid), qPrintable(doc->function(fid)->name()));
+    QVERIFY(listed(plain));
+
+    // An edit in the tree bakes again: still none listed.
+    QVERIFY(!st->productions().isEmpty());
+    st->bake();
+    emit st->changed();
+    QTRY_VERIFY(!fm->m_refreshTimer->isActive());
+    for (Function *f : doc->functions())
+        if (st->isGenerated(f->id()))
+            QVERIFY2(!listed(f->id()), qPrintable(f->name()));
+
+    // The toggle: every one of them, the hidden layer scenes too.
+    fm->setShowTreeFunctionsShown(true);
+    QVERIFY(fm->m_showTreeFunctionsAction->isChecked());
+    QCOMPARE(fm->m_tree->showTreeFunctions(), FunctionsTreeWidget::ShowTreeAll);
+    for (quint32 fid : made)
+        QVERIFY2(listed(fid), qPrintable(doc->function(fid)->name()));
+    QVERIFY(listed(plain));
+    fm->setShowTreeFunctionsShown(false);
+    QVERIFY(!fm->m_showTreeFunctionsAction->isChecked());
+
+    // Elsewhere, what is visible, as QLC+ lists it.
+    m_app->setWorkspaceView(App::EverythingView, false);
+    m_app->showContext("Functions");
+    QCoreApplication::processEvents();
+    QCOMPARE(fm->m_tree->showTreeFunctions(), FunctionsTreeWidget::ShowTreeStock);
+    for (quint32 fid : made)
+        QCOMPARE(listed(fid), doc->function(fid)->isVisible());
+    QVERIFY(listed(plain));
+    m_app->setWorkspaceView(App::ClassicView, false);
+}
+
+/* A plain dimmer pack of @a channels channels, patched where universe 0 has
+   room, and a scene with it, its values set. */
+static quint32 manyChannelScene(Doc *doc, const QString &name, int channels)
+{
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name + QStringLiteral(" pack"));
+    fxi->setChannels(channels);
+    // The first free run of addresses in universe 0.
+    bool added = false;
+    for (quint32 addr = 0; !added && addr + channels <= 512; addr += 16)
+    {
+        fxi->setUniverse(0);
+        fxi->setAddress(addr);
+        added = doc->addFixture(fxi);
+    }
+    if (!added)
+    {
+        delete fxi;
+        return Function::invalidId();
+    }
+    Scene *scene = new Scene(doc);
+    scene->setName(name);
+    scene->addFixture(fxi->id());
+    for (int c = 0; c < channels; ++c)
+        scene->setValue(fxi->id(), c, 128);
+    if (!doc->addFunction(scene))
+        return Function::invalidId();
+    return scene->id();
+}
+
+static SceneEditor *openSceneEditor(App *app, quint32 fid)
+{
+    app->setWorkspaceView(App::ClassicView, false);
+    app->showContext("Functions");
+    QCoreApplication::processEvents();
+    FunctionManager *fm = FunctionManager::instance();
+    fm->editFunction(nullptr);
+    // The last editor goes with deleteLater(): gone before the next opens.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    pick(fm, fid);
+    QTest::qWait(20);
+    return qobject_cast<SceneEditor *>(fm->m_scene_editor);
+}
+
+void ViewLayout_Test::sceneEditorHasGeneralOverTheSliders()
+{
+    Doc *doc = m_app->doc();
+    m_app->resize(1280, 800);
+    quint32 fid = idOfFunction(doc, "Wide scene");
+    if (fid == Function::invalidId())
+        fid = manyChannelScene(doc, "Wide scene", 96);
+    QVERIFY(fid != Function::invalidId());
+
+    // Two saved states no split should come back as: the sliders' pane at
+    // no height, and a horizontal split.
+    QSplitter bad(Qt::Vertical);
+    bad.addWidget(new QWidget);
+    bad.addWidget(new QWidget);
+    bad.resize(400, 600);
+    bad.setSizes({ 600, 0 });
+    QSplitter sideways(Qt::Horizontal);
+    sideways.addWidget(new QWidget);
+    sideways.addWidget(new QWidget);
+    const QList<QVariant> states = { QVariant(), QVariant(bad.saveState()),
+                                     QVariant(sideways.saveState()), QVariant(QByteArray("junk")) };
+    for (const QVariant &state : states)
+    {
+        if (state.isValid())
+            QSettings().setValue("sceneeditor/splitter", state);
+        else
+            QSettings().remove("sceneeditor/splitter");
+        SceneEditor *ed = openSceneEditor(m_app, fid);
+        QVERIFY(ed != nullptr);
+        QVERIFY(ed->isVisible());
+
+        QSplitter *sp = ed->m_splitter;
+        QVERIFY(sp != nullptr);
+        QCOMPARE(sp->objectName(), QString("sceneEditorSplitter"));
+        QCOMPARE(sp->orientation(), Qt::Vertical);
+        QCOMPARE(sp->count(), 2);
+        QCOMPARE(sp->widget(0), ed->General);
+        QCOMPARE(sp->widget(1), static_cast<QWidget *>(ed->m_tab));
+        // General is not a tab any more; the fixture is.
+        QCOMPARE(ed->m_tab->indexOf(ed->General), -1);
+        QVERIFY(ed->m_tab->count() >= 1);
+        QVERIFY(ed->General->isAncestorOf(ed->m_tree));
+        QVERIFY(ed->General->isAncestorOf(ed->m_channelGroupsTree));
+
+        // Both shown, General above the sliders, each a usable height.
+        QVERIFY(ed->General->isVisible() && ed->m_tab->isVisible());
+        const QList<int> sizes = sp->sizes();
+        QVERIFY2(sizes.value(0) >= 60 && sizes.value(1) >= 120,
+                 qPrintable(QString("state %1: %2 / %3 of %4 (editor %5, Functions %6)")
+                            .arg(states.indexOf(state)).arg(sizes.value(0)).arg(sizes.value(1))
+                            .arg(sp->height()).arg(ed->height())
+                            .arg(FunctionManager::instance()->height())));
+        QVERIFY2(sizes.value(1) > sizes.value(0),
+                 qPrintable(QString("state %1: %2 / %3").arg(states.indexOf(state))
+                            .arg(sizes.value(0)).arg(sizes.value(1))));
+        QVERIFY(ed->General->geometry().bottom() < ed->m_tab->geometry().top());
+
+        // The lists scroll up and down; the sliders sideways.
+        QVERIFY(ed->m_tree->verticalScrollBarPolicy() != Qt::ScrollBarAlwaysOff);
+        QVERIFY(ed->m_channelGroupsTree->verticalScrollBarPolicy() != Qt::ScrollBarAlwaysOff);
+        QScrollArea *area = qobject_cast<QScrollArea *>(ed->m_tab->currentWidget());
+        QVERIFY(area != nullptr);
+        QVERIFY(HorizontalPan::isEnabled(area));
+        QVERIFY(area->horizontalScrollBarPolicy() != Qt::ScrollBarAlwaysOff);
+        QVERIFY2(area->horizontalScrollBar()->maximum() > 0,
+                 qPrintable(QString("96 channels in %1 px").arg(area->viewport()->width())));
+
+        const QStringList problems = layoutProblems(FunctionManager::instance());
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1Char('\n'))));
+        FunctionManager::instance()->editFunction(nullptr);
+        QCoreApplication::processEvents();
+    }
+
+    // A scene with nothing in it: no sliders' pane, General has it all.
+    const quint32 plain = idOfFunction(doc, "Plain scene");
+    SceneEditor *ed = openSceneEditor(m_app, plain);
+    QVERIFY(ed != nullptr);
+    QCOMPARE(ed->m_tab->count(), 0);
+    QVERIFY(ed->m_tab->isHidden());
+    QVERIFY(ed->General->isVisible());
+    QVERIFY(ed->General->height() > ed->height() / 2);
+    FunctionManager::instance()->editFunction(nullptr);
+    QSettings().remove("sceneeditor/splitter");
+}
+
+void ViewLayout_Test::sceneEditorListsAScenesLooks()
+{
+    Doc *doc = m_app->doc();
+    QVERIFY(!doc->fixtureGroups().isEmpty());
+    QVERIFY(!doc->palettes().isEmpty());
+    FixtureGroup *grp = doc->fixtureGroups().first();
+    QLCPalette *pal = doc->palettes().first();
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Looks scene");
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(pal->id());
+    QVERIFY(doc->addFunction(scene));
+
+    SceneEditor *ed = openSceneEditor(m_app, scene->id());
+    QVERIFY(ed != nullptr);
+    QTreeWidget *looks = ed->findChild<QTreeWidget *>("sceneLooksTree");
+    QVERIFY(looks != nullptr);
+    QVERIFY(looks->isVisible());
+    QVERIFY(ed->General->isAncestorOf(looks));
+    QStringList texts;
+    for (QTreeWidgetItemIterator it(looks); *it; ++it)
+        texts << (*it)->text(0);
+    QVERIFY2(texts.contains(grp->name()), qPrintable(texts.join(", ")));
+    QVERIFY2(texts.join("\n").contains(pal->name()), qPrintable(texts.join(", ")));
+    FunctionManager::instance()->editFunction(nullptr);
+
+    // A plain scene has no such list.
+    ed = openSceneEditor(m_app, idOfFunction(doc, "Plain scene"));
+    QVERIFY(ed != nullptr);
+    QVERIFY(ed->findChild<QTreeWidget *>("sceneLooksTree") == nullptr);
+    FunctionManager::instance()->editFunction(nullptr);
+}
+
+void ViewLayout_Test::sliderRowsScrollSideways()
+{
+    Doc *doc = m_app->doc();
+    m_app->resize(1280, 800);
+    quint32 fid = idOfFunction(doc, "Wide scene");
+    if (fid == Function::invalidId())
+        fid = manyChannelScene(doc, "Wide scene", 96);
+    SceneEditor *ed = openSceneEditor(m_app, fid);
+    QVERIFY(ed != nullptr);
+    QScrollArea *area = qobject_cast<QScrollArea *>(ed->m_tab->currentWidget());
+    QVERIFY(area != nullptr);
+    QScrollBar *bar = area->horizontalScrollBar();
+    QVERIFY(bar->maximum() > 0);
+    bar->setValue(0);
+
+    // Shift + a wheel turn over a fader: the row moves, the fader doesn't.
+    QSlider *fader = area->widget()->findChild<QSlider *>();
+    QVERIFY(fader != nullptr);
+    const int level = fader->value();
+    const QPointF at(fader->width() / 2.0, fader->height() / 2.0);
+    QWheelEvent shiftWheel(at, fader->mapToGlobal(at), QPoint(), QPoint(0, -120),
+                           Qt::NoButton, Qt::ShiftModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(fader, &shiftWheel);
+    QVERIFY2(bar->value() > 0, "Shift + wheel scrolled the row");
+    QCOMPARE(fader->value(), level);
+    const int afterShift = bar->value();
+
+    // A sideways swipe, no Shift: the same.
+    QWheelEvent swipe(at, fader->mapToGlobal(at), QPoint(-40, 0), QPoint(-120, 0),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(fader, &swipe);
+    QVERIFY(bar->value() > afterShift);
+    QCOMPARE(fader->value(), level);
+
+    // A plain wheel turn is still the fader's.
+    QWheelEvent plain(at, fader->mapToGlobal(at), QPoint(), QPoint(0, 120),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    const int beforePlain = bar->value();
+    QApplication::sendEvent(fader, &plain);
+    QCOMPARE(bar->value(), beforePlain);
+
+    // A drag on the space between the faders pans (to the left: the row
+    // moves with the pointer, so it shows what was to the left).
+    bar->setValue(bar->maximum() / 2);
+    const int start = bar->value();
+    FixtureConsole *console = qobject_cast<FixtureConsole *>(area->widget());
+    QVERIFY(console != nullptr);
+    // Its own background: below the last of its children, or at its edge.
+    QPoint spot(2, console->height() - 2);
+    QVERIFY2(console->childAt(spot) == nullptr, "a spot of the console with no control on it");
+    const QPoint g0 = console->mapToGlobal(spot);
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(spot), QPointF(g0), Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(console, &press);
+    const QPoint g1 = g0 + QPoint(150, 0);
+    QMouseEvent move(QEvent::MouseMove, QPointF(spot + QPoint(150, 0)), QPointF(g1), Qt::NoButton,
+                     Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(console, &move);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(spot + QPoint(150, 0)), QPointF(g1),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(console, &release);
+    QCOMPARE(bar->value(), qMax(0, start - 150));
+    QVERIFY(QApplication::overrideCursor() == nullptr);
+    FunctionManager::instance()->editFunction(nullptr);
+}
+
+void ViewLayout_Test::alwaysShowScrollBarsSetting()
+{
+    const QString base = AppUtil::styleName();
+    QVERIFY(!base.isEmpty());
+    QVERIFY(!m_app->alwaysShowScrollBars());
+
+    // Through Settings ▸ Appearance, as a user sets it.
+    {
+        AppSettings dlg(m_app, m_app);
+        QCheckBox *box = dlg.findChild<QCheckBox *>("settingsAlwaysShowScrollBars");
+        QVERIFY(box != nullptr);
+        QVERIFY(!box->isChecked());
+        box->setChecked(true);
+        dlg.accept();
+    }
+    QVERIFY(m_app->alwaysShowScrollBars());
+    QVERIFY(QSettings().value("workspace/alwaysShowScrollBars").toBool());
+    QCOMPARE(QApplication::style()->styleHint(QStyle::SH_ScrollBar_Transient), 0);
+    QScrollArea probe;
+    QCOMPARE(probe.style()->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, probe.horizontalScrollBar()), 0);
+    // Still the same style underneath (the theme's tweaks key on it).
+    QCOMPARE(AppUtil::styleName(), base);
+    QCoreApplication::processEvents();
+
+    m_app->setAlwaysShowScrollBars(false);
+    QVERIFY(!m_app->alwaysShowScrollBars());
+    QVERIFY(!QSettings().value("workspace/alwaysShowScrollBars").toBool());
+    QCOMPARE(AppUtil::styleName(), base);
+    QSettings().remove("workspace/alwaysShowScrollBars");
 }
 
 QTEST_MAIN(ViewLayout_Test)

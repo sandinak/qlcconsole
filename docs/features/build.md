@@ -351,6 +351,43 @@ list, not them ([Upgrade this show](show-tree.md#upgrade-this-show)). A
 scene the list plays as it is opens to edit as usual. Build's Workbench
 does the same.
 
+**Classic QLC+** doesn't list the Show Tree's own functions at all: the
+scenes, collections and chasers it makes for its cues (and the originals an
+upgrade keeps for Restore original) are edited in the Show Tree, and in the
+tree they were only clutter. Right-click the tree and tick **Show the Show
+Tree's own functions** to list every one of them, in any view (the cue
+scenes, which QLC+ would hide, too). Untick it and Classic QLC+ leaves them
+out again; the other views then list what QLC+ would. A show with no Show
+Tree is listed exactly as in QLC+.
+
+Scenes are coloured by what is in them: **grey**, channel values (a QLC+
+scene); **blue**, looks on fixture groups, made in Build, with no channel
+values of their own; **purple**, both. A blue scene is not empty: its scene
+editor lists them under **Fixture groups and looks in this scene**.
+
+#### The scene editor
+
+As in QLC+, but with **General** on top instead of in a tab: the fixtures
+in the scene, the channel groups in it and, for a scene made in Build, its
+fixture groups and looks, each list scrolling up and down on its own.
+Below it are the tabs, one per fixture (and **Channels Groups**), with the
+sliders. Drag the bar between them to give either more room; the split is
+remembered. A scene with no fixtures has no sliders to show, so General
+fills the editor.
+
+A fixture with many channels makes a long row of sliders. To scroll it
+sideways:
+
+- **Shift + scroll wheel**, or a sideways swipe on a trackpad, anywhere on
+  the row, over a slider too. A plain wheel turn over a slider still moves
+  that slider.
+- **Drag the space between the sliders** (not a slider, a button or a
+  value box), or drag anywhere on the row with the **middle button**.
+
+To see the scroll bars all the time, not only while scrolling, turn on
+**Settings ▸ Appearance ▸ Always show scroll bars** ([Appearance
+settings](other-improvements.md#appearance-settings)).
+
 Most of what the Function Manager did is also here in Build:
 
 | Functions tab | Build |

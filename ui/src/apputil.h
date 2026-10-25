@@ -111,6 +111,20 @@ namespace AppUtil
      */
     QStyle* saneStyle();
 
+    /************************************************************************
+     * Scroll bars
+     ************************************************************************/
+    /** Settings ▸ Appearance ▸ "Always show scroll bars": macOS draws
+     *  scroll bars only while scrolling (when the system says so); with this
+     *  on, every scroll bar in the app is drawn all the time, wherever there
+     *  is something to scroll. Off macOS (Fusion) they always are, and this
+     *  changes nothing. Applies at once; App re-applies the theme after. */
+    void setAlwaysShowScrollBars(bool on);
+    bool alwaysShowScrollBars();
+    /** The app style's name ("fusion", "macos"), under the scroll-bar
+     *  style setAlwaysShowScrollBars() puts over it. */
+    QString styleName();
+
     /*********************************************************************
      * Stylesheets
      *********************************************************************/

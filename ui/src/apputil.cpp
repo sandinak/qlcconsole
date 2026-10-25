@@ -30,6 +30,7 @@
 #include <QScreen>
 #include <QDebug>
 #include <QStyle>
+#include <QProxyStyle>
 #include <QRect>
 #include <QFile>
 #include <QDir>
@@ -190,10 +191,65 @@ QStyle* AppUtil::saneStyle()
         if (keys.contains(var.toString()) == true)
             s_saneStyle = QStyleFactory::create(var.toString());
         else
-            s_saneStyle = QApplication::style();
+            s_saneStyle = QStyleFactory::create(AppUtil::styleName());
+        // The app's style can be replaced (setAlwaysShowScrollBars()), and
+        // widgets keep the pointer this returns: never hand that one out.
+        if (s_saneStyle == NULL)
+            s_saneStyle = QStyleFactory::create(QStringLiteral("Fusion"));
     }
 
     return s_saneStyle;
+}
+
+/*****************************************************************************
+ * Scroll bars
+ *****************************************************************************/
+
+/* The app's own style, but scroll bars that never hide: macOS overlay
+   ("transient") scroll bars are a style hint. A proxy over the style, not a
+   style sheet: a QScrollBar rule would redraw every scroll bar the sheet's
+   way, and only on what the sheet reaches. */
+class PersistentScrollBarStyle final : public QProxyStyle
+{
+public:
+    explicit PersistentScrollBarStyle(QStyle *base) : QProxyStyle(base) {}
+
+    int styleHint(StyleHint hint, const QStyleOption *option, const QWidget *widget,
+                  QStyleHintReturn *returnData) const override
+    {
+        if (hint == QStyle::SH_ScrollBar_Transient)
+            return 0;
+        return QProxyStyle::styleHint(hint, option, widget, returnData);
+    }
+};
+
+bool AppUtil::alwaysShowScrollBars()
+{
+    return dynamic_cast<PersistentScrollBarStyle *>(QApplication::style()) != nullptr;
+}
+
+QString AppUtil::styleName()
+{
+    QStyle *style = QApplication::style();
+    QProxyStyle *proxy = qobject_cast<QProxyStyle *>(style);
+    if (proxy != nullptr && proxy->baseStyle() != nullptr)
+        style = proxy->baseStyle();
+    return style != nullptr ? style->name() : QString();
+}
+
+void AppUtil::setAlwaysShowScrollBars(bool on)
+{
+    if (on == alwaysShowScrollBars())
+        return;
+    // A new style of the same kind each way: the old one goes with
+    // QApplication::setStyle(). saneStyle() is its own instance, not this.
+    QStyle *base = QStyleFactory::create(styleName());
+    if (base == nullptr)
+        return;
+    if (on)
+        QApplication::setStyle(new PersistentScrollBarStyle(base));
+    else
+        QApplication::setStyle(base);
 }
 
 /*********************************************************************

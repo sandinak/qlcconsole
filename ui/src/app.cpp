@@ -167,6 +167,7 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_AUTOSAVE_INTERVAL QStringLiteral("workspace/autosave/interval")
 #define SETTINGS_TAB_LABEL_MODE    QStringLiteral("workspace/tabLabelMode")
 #define SETTINGS_THEME             QStringLiteral("workspace/theme")
+#define SETTINGS_SCROLLBARS        QStringLiteral("workspace/alwaysShowScrollBars")
 #define SETTINGS_SHOW_FOOTER_LOAD  QStringLiteral("workspace/showFooterLoad")
 #define SETTINGS_SHOW_FOOTER_POWER QStringLiteral("workspace/showFooterPower")
 #define SETTINGS_SHOW_FOOTER_GM    QStringLiteral("workspace/showFooterGM")
@@ -351,6 +352,8 @@ void App::startup(const QString &workspaceFile)
     // instead of flashing the native palette for the length of boot.
     QSettings settings;
     m_theme = settings.value(SETTINGS_THEME, ThemeDefault).toInt();
+    // The style first: the theme's palette goes over it.
+    AppUtil::setAlwaysShowScrollBars(settings.value(SETTINGS_SCROLLBARS, false).toBool());
     applyTheme();
 
     if (m_noGui == false)
@@ -5415,6 +5418,21 @@ void App::setTheme(int theme)
 
 void App::applyTheme()
 {
+bool App::alwaysShowScrollBars() const
+{
+    return AppUtil::alwaysShowScrollBars();
+}
+
+void App::setAlwaysShowScrollBars(bool on)
+{
+    QSettings().setValue(SETTINGS_SCROLLBARS, on);
+    if (on == AppUtil::alwaysShowScrollBars())
+        return;
+    AppUtil::setAlwaysShowScrollBars(on);
+    // A new application style can bring its own palette: the theme's again.
+    applyTheme();
+}
+
     // Backstage color themes: warm/cool low-glare palettes, the kind
     // lighting consoles traditionally offer so the screen doesn't spill
     // light or wreck night vision. QPalette (not per-theme stylesheets) is
@@ -5556,7 +5574,7 @@ QPalette App::themePalette(int theme, const QPalette &base)
        the accent the theme's highlight rather than the system accent colour.
        The native macOS style is left exactly as it was. */
     if (theme != ThemeDefault
-        && QApplication::style()->name().compare(QLatin1String("fusion"), Qt::CaseInsensitive) == 0)
+        && AppUtil::styleName().compare(QLatin1String("fusion"), Qt::CaseInsensitive) == 0)
     {
         const QPalette derived(pal.color(QPalette::Button), pal.color(QPalette::Window));
         const QPalette::ColorRole shades[] = { QPalette::Light, QPalette::Midlight,
