@@ -70,7 +70,7 @@ virtual copy of a show choir stage.
 The lessons are checked against the app: `ui/test/courseshow` opens the
 teaching show offscreen, does every step of Lessons 0.2 and 1.1–1.5 with
 the mouse (and 1.1 typed), plays them with GO in the Run tab, runs Level
-3's written lessons (3.3, 3.7, 3.10) through the app's own code, and checks
+3's written lessons (3.3, 3.6, 3.7, 3.10) through the app's own code, and checks
 the shows can't send DMX. It runs with
 the rest of the app's tests. If the app changes so a lesson step stops
 working, that test fails. The pictures are taken by the same test (see

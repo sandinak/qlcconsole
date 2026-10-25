@@ -78,6 +78,15 @@
 #include "qlcpalette.h"
 #include "cuerunner.h"
 #include "outputrulesdialog.h"
+#include "focuscallsdialog.h"
+#include "monitorgraphicsview.h"
+#include "focusmodepanel.h"
+#include "venuecorrections.h"
+#include "programmercontroller.h"
+#include "focussession.h"
+#include "focuscalls.h"
+#include "refinepanel.h"
+#include "refinesession.h"
 #include "eosimportwizard.h"
 #include "eosimporter.h"
 #include "qxwimporter.h"
@@ -2358,6 +2367,258 @@ HelpShots::Frame showTreeFrame(App *app, ShowTreeView *v)
     f.crop = r;
     return f;
 }
+}
+
+void CourseShow_Test::lessonFocusAndCalibration()
+{
+    // Get ready: the classroom show, saved as the student's own (a venue
+    // lives in a file beside the show, never beside the course's).
+    QTemporaryDir home;
+    QVERIFY(home.isValid());
+    const QString mine = home.filePath(QStringLiteral("Lesson3-6-Sam.qlcc"));
+    QVERIFY(open(kClassroom));
+    QCOMPARE(m_app->saveXML(mine), QFile::NoError);
+    Doc *doc = m_app->doc();
+    MonitorProperties *props = doc->monitorProperties();
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    QCOMPARE(QFileInfo(venues->filePath()).absolutePath(), QFileInfo(mine).absolutePath());
+    const QString shots = qEnvironmentVariable("COURSE_SHOTS");
+    const QString dir = shots.isEmpty() ? QString() : shots + QStringLiteral("/lesson-3-6");
+    if (!dir.isEmpty())
+    {
+        m_app->setTheme(App::ThemeBlue);
+        m_app->resize(1280, 800);
+    }
+
+    // Part A: Show ▸ Stage marks, by the names the handout uses.
+    Monitor *studio = Monitor::instance();
+    QVERIFY(studio != nullptr);
+    QMap<QString, QAction *> marks;
+    for (QAction *a : studio->findChildren<QAction *>())
+        if (a->objectName().startsWith(QLatin1String("stageMark")))
+            marks[a->text()] = a;
+    for (const QString &name : { QStringLiteral("Centre mark (DSC)"), QStringLiteral("Curtain line"),
+                                 QStringLiteral("Number line"), QStringLiteral("Target positions") })
+        QVERIFY2(marks.contains(name), qPrintable(name));
+    QVERIFY(marks["Target positions"]->isChecked());       // on already
+    for (const QString &name : { QStringLiteral("Centre mark (DSC)"), QStringLiteral("Curtain line"),
+                                 QStringLiteral("Number line") })
+        if (!marks[name]->isChecked())
+            marks[name]->trigger();
+    settle(50);
+    QVERIFY(props->stageMarkVisible(MonitorProperties::CurtainLineFlag));
+    QVERIFY(props->stageMarkVisible(MonitorProperties::NumberLineFlag));
+    QMap<QString, quint32> target;
+    for (const StageTarget *t : props->stageTargets())
+    {
+        target[t->name()] = t->id();
+        qInfo().noquote() << "[3.6]" << t->name() << "reads" << props->stagePositionText(t->position())
+                          << "/ said" << props->stagePositionText(t->position(), MonitorProperties::SpokenOffset);
+    }
+    QVERIFY(target.contains("Center") && target.contains("Soloist DS"));
+    // As the handout reads them off the plot, and as a call says them.
+    QCOMPARE(props->stagePositionText(props->stageTarget(target["Soloist DS"])->position()),
+             QString::fromUtf8("SL 1' \302\267 DS 1' 1\""));
+    QCOMPARE(props->stagePositionText(props->stageTarget(target["Center"])->position()),
+             QString::fromUtf8("SL 1' \302\267 US 6' \302\267 \342\206\221 1' 4\""));
+    QCOMPARE(props->stagePositionText(props->stageTarget(target["Soloist DS"])->position(),
+                                      MonitorProperties::SpokenOffset), QStringLiteral("SL 1, DS 1"));
+    qInfo().noquote() << "[3.6] apron" << props->apronDepth() << "m";
+    if (!dir.isEmpty())
+    {
+        // The plot as the student sees it, with the marks and the readouts.
+        QWidget *w = studio;
+        while (w != nullptr && m_app->m_tab->indexOf(w) < 0)
+            w = w->parentWidget();
+        if (w != nullptr)
+            m_app->m_tab->setCurrentWidget(w);
+        settle(400);
+        studio->updateView();
+        settle(400);
+        QVERIFY(save(studio->m_graphicsView->grab().toImage(), dir, "stage-marks"));
+    }
+
+    // Part B: three focus calls and a venue, in the Focus calls dialog.
+    QMap<QString, quint32> group;
+    for (const FixtureGroup *g : doc->fixtureGroups())
+        group[g->name()] = g->id();
+    {
+        FocusCallsDialog d(doc, m_app);
+        QPushButton *add = d.findChild<QPushButton *>("fcAdd");
+        QListWidget *groups = d.findChild<QListWidget *>("fcGroups");
+        QComboBox *to = d.findChild<QComboBox *>("fcTarget");
+        QLineEdit *note = d.findChild<QLineEdit *>("fcNote");
+        QVERIFY(add != nullptr && groups != nullptr && to != nullptr);
+        const struct { const char *group; const char *target; const char *note; } calls[] = {
+            { "Truss-Spots", "Center", "" },
+            { "AT-Spots", "Soloist DS", "Off the proscenium" },
+            { "AT-W-ALL", "Center", "" },
+        };
+        int row = 0;
+        for (const auto &c : calls)
+        {
+            add->click();
+            for (int i = 0; i < groups->count(); ++i)
+                groups->item(i)->setCheckState(groups->item(i)->text() == QLatin1String(c.group)
+                                               ? Qt::Checked : Qt::Unchecked);
+            QVERIFY2(to->findText(c.target) >= 0, c.target);
+            to->setCurrentIndex(to->findText(c.target));
+            if (note != nullptr && *c.note)
+            {
+                note->clear();
+                QTest::keyClicks(note, QString::fromUtf8(c.note));
+            }
+            QCOMPARE(d.callList()->item(row)->text(),
+                     QString::fromUtf8("%1. %2 \342\206\222 %3").arg(row + 1).arg(c.group, c.target));
+            ++row;
+        }
+        d.setVenueChoice(QStringLiteral("Classroom"));
+        QLineEdit *by = d.findChild<QLineEdit *>("fcCheckedBy");
+        QVERIFY(by != nullptr);
+        by->clear();
+        QTest::keyClicks(by, "Sam");
+        if (!dir.isEmpty())
+        {
+            d.resize(980, 560);
+            d.show();
+            settle(100);
+            HelpShots::Frame f;
+            f.grab = &d;
+            f.callouts << mark(d.findChild<QWidget *>("fcCalls"), 1) << mark(groups, 2)
+                       << mark(to, 3, HelpShots::Above)
+                       << mark(d.findChild<QWidget *>("fcVenue"), 4, HelpShots::Above)
+                       << mark(by, 5, HelpShots::Above)
+                       << mark(d.findChild<QWidget *>("fcStart"), 6);
+            QVERIFY(save(HelpShots::annotate(d.grab().toImage(), f), dir, "focus-calls"));
+        }
+        QVERIFY(d.apply());
+        QCOMPARE(doc->programmer()->focusCalls()->count(), 3);
+        QCOMPARE(venues->activeVenue(), QStringLiteral("Classroom"));
+        QVERIFY(QFile::exists(home.filePath(QStringLiteral("Lesson3-6-Sam.venues.xml"))));
+    }
+
+    // Part C: run them on the keys.
+    FocusSession *fs = doc->programmer()->focusSession();
+    fs->setFlashEnabled(false);
+    {
+        FocusSession::Options o;
+        o.calls = doc->programmer()->focusCalls()->sessionCalls();
+        o.others = FocusSession::OthersDim;
+        QString why;
+        FocusModePanel *panel = FocusModePanel::startWith(doc, m_app, o, &why, int(FocusSession::KeyboardInput));
+        QVERIFY2(panel != nullptr, qPrintable(why));
+        QCOMPARE(fs->count(), 4);                               // the four truss spots
+        const quint32 first = fs->currentFixture();
+        QTest::keyClick(panel, Qt::Key_BracketRight);           // the next spot
+        QVERIFY(fs->currentFixture() != first);
+        const quint32 spot = fs->currentFixture();
+        QTest::keyClick(panel, Qt::Key_Right, Qt::ShiftModifier);   // 1° of pan
+        QTest::keyClick(panel, Qt::Key_Return);                 // kept for Classroom
+        QVERIFY(venues->hasCorrection(spot));
+        QVERIFY(qAbs(venues->correction(spot).panOffsetDeg - 1.0f) < 0.01f);
+        QTest::keyClick(panel, Qt::Key_G);                      // the whole call
+        QCOMPARE(fs->scope(), FocusSession::GroupScope);
+        QTest::keyClick(panel, Qt::Key_PageDown);               // call 2: the AT spots
+        QCOMPARE(fs->count(), 2);
+        QTest::keyClick(panel, Qt::Key_Comma);                  // spot down
+        QTest::keyClick(panel, Qt::Key_Apostrophe);             // sharper
+        fs->stop();
+        settle(50);
+        if (FocusModePanel *p = FocusModePanel::instance())
+            delete p;
+    }
+
+    // Part D: the scramble, easy, focused back, scored, and the report.
+    {
+        FocusCallsDialog d(doc, m_app);
+        QString why;
+        QVERIFY2(d.startPractice(1.0f, 3.0f, 36, &why), qPrintable(why));
+        QVERIFY(venues->isPracticeActive());
+        const VenueCorrections::Venue pv = venues->venue(venues->activeVenue());
+        QCOMPARE(pv.practice.truth.size(), 10);                 // 4 truss spots, 2 AT spots, 4 AT washes
+        FocusSession::Options o;
+        o.calls = doc->programmer()->focusCalls()->sessionCalls();
+        FocusModePanel *panel = FocusModePanel::startWith(doc, m_app, o, &why, int(FocusSession::KeyboardInput));
+        QVERIFY2(panel != nullptr, qPrintable(why));
+        // Each light back on its mark (but the last, a little off), call by call.
+        for (int call = 0; call < 3; ++call)
+        {
+            for (int i = 0; i < fs->count(); ++i)
+            {
+                const quint32 fid = fs->currentFixture();
+                const RigCalibration truth = pv.practice.truth.value(fid);
+                const FixtureRigProps rp = props->fixtureRigProps(fid);
+                const float miss = (call == 2 && i == fs->count() - 1) ? 1.8f : 0.2f;
+                fs->nudge(truth.panOffsetDeg - rp.panOffsetDeg + miss, truth.tiltOffsetDeg - rp.tiltOffsetDeg);
+                QTest::keyClick(panel, Qt::Key_Return);
+                QTest::keyClick(panel, Qt::Key_BracketRight);
+            }
+            QTest::keyClick(panel, Qt::Key_PageDown);
+        }
+        fs->stop();
+        settle(50);
+        if (FocusModePanel *p = FocusModePanel::instance())
+            delete p;
+        const QString practice = venues->activeVenue();
+        const VenueCorrections::Score sc = venues->practiceScore(practice);
+        qInfo().noquote() << "[3.6] practice:" << sc.withinOne << "of" << sc.lights << "within 1°, mean"
+                          << sc.meanError << "worst" << sc.worstError << "saves" << sc.saves;
+        QCOMPARE(sc.lights, 10);
+        QCOMPARE(sc.withinOne, 9);
+        QCOMPARE(sc.checked, 10);
+        const QString pdf = home.filePath(QStringLiteral("Classroom practice focus report.pdf"));
+        QVERIFY2(FocusCallsDialog::writeReport(doc, practice, pdf, &why), qPrintable(why));
+        QVERIFY(QFileInfo(pdf).size() > 1000);
+        QDialog *result = FocusCallsDialog::showPracticeResult(doc, m_app);
+        QVERIFY(result != nullptr);
+        QLabel *text = result->findChild<QLabel *>("practiceResultText");
+        QVERIFY2(text->text().contains("9 of 10 lights within 1"), qPrintable(text->text()));
+        QVERIFY2(text->text().contains("Classroom is back on the rig"), qPrintable(text->text()));
+        QCOMPARE(venues->activeVenue(), QStringLiteral("Classroom"));
+        if (!dir.isEmpty())
+        {
+            result->resize(620, result->sizeHint().height());
+            result->show();
+            settle(100);
+            HelpShots::Frame f;
+            f.grab = result;
+            f.callouts << mark(text, 1) << mark(result->findChild<QWidget *>("practiceResultReport"), 2);
+            QVERIFY(save(HelpShots::annotate(result->grab().toImage(), f), dir, "practice-score"));
+        }
+        delete result;
+    }
+
+    // Part E: Refine on a typed solo cue.
+    ShowTreeView *view = showTree();
+    for (const QString &cmd : { QStringLiteral("production \"Spring Show\""), QStringLiteral("list \"Solo\""),
+                                QStringLiteral("cue + \"Solo\""),
+                                QStringLiteral("AT-Spots colour White dimmer Full aim \"Soloist DS\"") })
+        QVERIFY2(view->runCommand(cmd), qPrintable(cmd + ": " + view->commandMessage()));
+    qInfo().noquote() << "[3.6]" << describe(doc).join(" | ");
+    const quint32 solo = cueNumbered(doc, "1");
+    QVERIFY(view->selectNode(solo));
+    settle(50);
+    {
+        RefinePanel *panel = RefinePanel::open(doc, m_app, solo, 0xFFFFFFFF);
+        QVERIFY(panel != nullptr);
+        RefineSession *r = doc->programmer()->refineSession();
+        r->setFlashEnabled(false);
+        QCOMPARE(r->scope(), RefineSession::LayerScope);
+        QVERIFY(r->nudgeZoom(-3.0f));                           // spot down, the whole layer
+        QString why;
+        QVERIFY2(r->keep(&why), qPrintable(why));
+        // An aimed layer can't be moved as a whole; one spot can.
+        QVERIFY(!r->nudgePosition(2.0f, 0.0f));
+        r->setScope(RefineSession::FixtureScope);
+        QVERIFY(r->nudgePosition(2.0f, 0.0f));
+        QVERIFY2(r->keep(&why), qPrintable(why));
+        qInfo().noquote() << "[3.6] after Refine:" << describe(doc).join(" | ");
+        r->stop();
+        settle(50);
+        if (RefinePanel *p = RefinePanel::instance())
+            delete p;
+    }
+    doc->resetModified();
 }
 
 void CourseShow_Test::lessonPictures()

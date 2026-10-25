@@ -67,5 +67,8 @@ would save:
    python3 tools/png-colour-chunks.py docs/course/images   # from the repo root
    ```
 
+   Lesson 3.6's pictures (`images/lesson-3-6/`) are taken by its own test,
+   `lessonFocusAndCalibration`, with the same `COURSE_SHOTS` set.
+
 Nothing here touches your settings or your fixture folder: the test runs
 with a home folder and settings of its own.

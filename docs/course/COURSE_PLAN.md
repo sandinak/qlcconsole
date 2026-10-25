@@ -9,9 +9,11 @@ nav_order: 2
 and the Level 1 check — each with teacher guide, handout, slides outline,
 exit ticket and at-home page, every app step checked by the course test,
 now on the 0.2.2 release candidate. Level 2 is an outline. Level 3 has
-three short lessons written for 0.2.2's features — 3.3 plot symbols, 3.7
-house lights, work lights and power, 3.10 coming from Eos — checked by the
-course test without pictures yet; the rest of Level 3 is an outline. Volunteers start at
+four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
+calls on the controller, venues, the scramble practice and its focus
+report, Refine; with pictures), 3.7 house lights, work lights and power,
+3.10 coming from Eos — each checked by the course test; the rest of Level
+3 is an outline. Volunteers start at
 [For volunteers](VOLUNTEER.md); new lessons start from `_template/`.*
 
 The Show Tree is the main tool for this year's show. This course takes a
@@ -110,7 +112,7 @@ here.*
 | 3.3 | **Reading the plot: symbols** *(written)* | A plot and its symbol key. The Lighting Studio plot's **Show ▸ Show Auto fixtures as their closest plot symbol**; **Plot Symbol ▸** to correct the guesses (AT-W-ALL: *Moving head round wash*); the Lanterns as **practicals**. A symbol is only the picture. |
 | 3.4 | **Building the rig** | Lighting Studio: structures (walls with a door, towers, booms, stands; copy and paste them), mounting fixtures (a group Shift-dropped on a truss all hangs; **Mount on** for the selection), a fixed light's **Pan** / **Tilt** in **Aim & Mount**, layers, stage targets and lines; why the rig must match the room for aims to work. |
 | 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC in, MIDI Show Control in and MIDI timecode, each a row in **Connections ▸ Devices**. |
-| 3.6 | **Focus and calibration** | Test orientation, Locate, the Step Test Pattern; **Focus mode**: the real movers on the real targets, and fixed lights too (a figure stands where each one lands at head height; move it with the sticks, D-pad or arrows to where the real beam lands); a beam's zoom (spot down / flood out: D-pad up/down, **,** **.**) and edge (sharper / softer: D-pad right/left, **'** **;**); **Practice (scramble)**: a practice venue with every head a few degrees off, focused back and scored on error, time and saves. Hand-in: the practice's **focus report** (PDF). |
+| 3.6 | **Focus and calibration** *(written)* | How a focus call runs: the electrician at the light, the designer at the point (back to the light), the words (hot spot, home, sharp and soft, spot down and flood out, "lock it"), the laptop's voice on the headsets. **Stage marks**: the curtain line, the number line, the apron; reading "SL 1' · DS 1' 1"" off the plot. **Focus calls** (Truss-Spots → Center, AT-Spots → Soloist DS, AT-W-ALL → Center) run on the controller or the keys, corrections kept for the venue *Classroom* in a file beside the show; touring: house rig and tour package, outputs per venue. Scored: **Practice (scramble)** on Easy. Hand-in: its **focus report** (PDF). **Refine** on a typed solo cue: spot down kept in the cue, one spot as an exception. On the real rig (Part 3): Focus mode's fixed lights, holds, dead lamps, the real report. |
 | 3.7 | **House lights, work lights and power** *(written)* | Three generic dimmers (House Lights, Work Lights, Stage Power); **Output Rules…**: Ignore Blackout, Ignore the Grand Master, Switch (relay), On when not in use; Settings ▸ Advanced ▸ Output; a preshow list typed; Blackout, the GM slider and Blind. Part 3 on the theatre's own house and work lights. |
 | 3.8 | **Running a real show** | Operate mode (it locks editing), the panic button, the preshow checklist, power. |
 | 3.9 | **Troubleshooting** | The Not ready list, a light that won't come on, a cue that looks wrong, Undo and backups. **Capstone** (below). |

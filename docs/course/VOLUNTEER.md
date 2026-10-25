@@ -206,7 +206,7 @@ Branson reviews it, checks the steps on the app, and merges it.
 | [Course plan](COURSE_PLAN.md), [teaching show](rig.md), [install](install.md), [glossary](GLOSSARY.md) | written |
 | [Level 0](level-0/index.md): 0.1 *What light does*, 0.2 *The virtual stage* (with the Level 0 check) | written |
 | [Level 1](level-1/index.md): 1.1–1.5, the [Level 1 check and rubric](level-1/lesson-05/level-check.md) | written |
-| [Level 3](level-3/index.md): 3.3 *Reading the plot: symbols*, 3.7 *House lights, work lights and power*, 3.10 *Coming from Eos* (optional) | written, no pictures yet |
+| [Level 3](level-3/index.md): 3.3 *Reading the plot: symbols*, 3.6 *Focus and calibration* (with pictures), 3.7 *House lights, work lights and power*, 3.10 *Coming from Eos* (optional) | written; 3.3, 3.7 and 3.10 have no pictures yet |
 | Level 2 (7 lessons), the rest of Level 3 | planned: outlines in the [course plan](COURSE_PLAN.md#2-levels-and-lessons) |
 | Slide decks made from the slide outlines | to make |
 

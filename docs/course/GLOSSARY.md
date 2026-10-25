@@ -27,6 +27,9 @@ brackets.
 | **Practical** | A light that is part of the set and is seen as a light by the audience: a hanging lantern, a lamp on a table, a light-up staff. Our **Lanterns** are practicals. [3.3] |
 | **House lights** | The lights over the audience. Up before the show and at intermission, out when the show starts. [3.7] |
 | **Work lights** | Plain bright lights for working on stage when there's no show: rigging, rehearsal set-up, cleaning. [3.7] |
+| **Curtain line** | Where the main curtain hangs, across the stage: the line up- and downstage distances are measured from (the plaster line). [3.6] |
+| **Number line** | A line across the front of the stage, numbered in feet out from the centre line (**CL**), so the crew can say how far left or right something is: "SL 4". [3.6] |
+| **Apron** | The part of the stage in front of the curtain line. [3.6] |
 | **Stage manager (SM)** | Runs the show during performance and **calls** every cue. [1.5] |
 | **Board operator (board op)** | Runs the lighting console, taking each cue when the SM calls it. [1.5] |
 
@@ -108,5 +111,18 @@ brackets.
 | **Blackout** | A switch that takes every light to zero at once, whatever is running; press it again to bring them back. [3.7] |
 | **Blind** | Building without the real lights showing it: the rig is muted while the screen preview stays live. Design mode only. [3.7] |
 | **Output rules** | Per-fixture rules for circuits that aren't show lights: ignore Blackout, ignore the Grand Master, switch like a relay, on when not in use. [3.7] |
+| **Focus** (the rig) | Pointing, sizing and sharpening each light so it lands where the design says, once per room, before the cues run. [3.6] |
+| **Focus call** | A step of the focus: some lights and the point they focus to ("Truss-Spots → Center"). The show keeps its calls in order; run them from the controller. [3.6] |
+| **Hot spot** | The brightest part of a beam, usually its centre. "Hot spot on me": the centre of the beam on the designer's face. [3.6] |
+| **Home** | Where a moving light points with no position given: pan and tilt at the middle of their travel. [3.6] |
+| **Spot down / flood out** | Make a beam narrower / wider (its zoom). [3.6] |
+| **Sharp / soft** | A crisp / blurred edge on a beam (the focus of its lens). [3.6] |
+| **Correction** | How far a light is off in one room (pan and tilt, in degrees), kept so the cues still land on their marks. [3.6] |
+| **Venue** | One room the show plays in. Its corrections, truss heights, target positions, house rig and outputs are kept in a file beside the show (`Show.venues.xml`), never in the show. [3.6] |
+| **House rig / tour package** | The lights a room already has / the lights that travel with the show. [3.6] |
+| **Owner** | Whose a light is: **Tour** (travels with the show; the default), **Rental** (hired, travels too) or **House** (the room's own, saved with that venue). [3.6] |
+| **Focus report** | The record of a focus: every light, its point, its correction, who checked it and when, and any dead lamp. [3.6] |
+| **Scramble** | A practice: every moving light is put off its mark by a few degrees, and you focus them back for a score. [3.6] |
+| **Refine** | Changing a cue's own values (position, zoom, focus, colour, gobo) from the stage with the controller. Focusing fixes the rig for a room; Refine changes the cue for every room. [3.6] |
 | **Special circuit** | On an Eos desk, a channel that isn't a stage light: a relay, house lights, work lights, backstage blues. [3.10] |
 | **Sub (submaster)** | On an Eos desk, a fader that brings up a set of levels by hand. An imported sub becomes a Virtual Console fader. [3.10] |

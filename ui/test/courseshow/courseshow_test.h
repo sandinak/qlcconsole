@@ -115,6 +115,15 @@ private slots:
      *  Master, and the relay comes on at Operate. */
     void lessonHouseLights();
 
+    /** Lesson 3.6, focus and calibration, on the classroom show saved as a
+     *  student's own: the stage marks and where Soloist DS and Center read,
+     *  three focus calls and a venue, the calls run on the keys (a nudge, a
+     *  save for the venue, the whole call, the next call, spot down), the
+     *  scramble practice focused back and scored, the focus report written,
+     *  and Refine on a typed solo cue (spot down kept in the cue; one spot
+     *  moved as an exception). With COURSE_SHOTS, the lesson's pictures. */
+    void lessonFocusAndCalibration();
+
     /** Lesson 3.10, from Eos: the course's Eos sample through the import
      *  wizard's special circuits, into a new show: groups, rules, the cue
      *  list in the Show Tree and the sub as a Virtual Console fader. */
