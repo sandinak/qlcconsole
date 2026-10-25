@@ -458,7 +458,6 @@ Findings that are not marked as bugs:
 | M488 | One connection window | A port another universe sends to is refused and nothing changes | **ConnectionsTree_Test::connectionEditorRefusesATakenPortAndChangesNothing** (new) | none | covered | high | — |
 | M489 | One connection window | A universe's right-click has one Edit connection… and none of the editing entries it replaces; an unpatched one too | **ConnectionsTree_Test::aUniversesMenuHasOneEditConnection** (new); ConnectionsTree_Test::repatchAsksTheInterfaceAgain | none | covered | med | — |
 
-
 ## Changed
 
 | ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
@@ -547,17 +546,17 @@ Findings that are not marked as bugs:
 | M388 | Auto-open shutters off for QLC+ 4.x | The saved setting wins over the creator | ShutterAutoOpen_Test::theSavedSettingWinsOverTheCreator | covered | covered | high |  |
 | M389 | Auto-open shutters off for QLC+ 4.x | New shows are on; a show always saves the setting, on or off, and reloads the same | ShutterAutoOpen_Test::aNewShowSavesItOnAndReloadsOn, ::itIsSavedWithTheShow; AppViews_Test::autoOpenFollowsWhoSavedTheShow | covered | covered | high | A UI save/reload with it off is engine-only (itIsSavedWithTheShow); the App round trip only checks on. Minor. |
 | M390 | Settings, tooltip and menu text | Output Rules dialog names Settings ▸ Advanced ▸ Output; MIB tooltips say "Build → Move in black"; "Fade 10 / 30 seconds and stop" | none | none | none | low | No text assertions. MainBar_Test::fadeOneSecondAndStopFadesTheLightOut could also check the menu texts. |
+| M492 | Classic Functions leaves out the Show Tree's own | Classic QLC+ lists none of the tree's layer scenes, cue Collections or chasers (also after a bake); the toggle lists all of them, hidden ones too; Everything lists what is visible | **ViewLayout_Test::classicHidesTheShowTreesOwnFunctions** (new, ui/test/viewlayout) | none | covered | med | Originals kept for Restore original are hidden by the same rule (`isLocked()`) but no course show has one. |
+| M493 | Scene editor: General on top | General (fixtures, channel groups) is the top pane, the fixture tabs the bottom one, a vertical splitter; bad saved states (a pane at 0, horizontal, junk) fall back; a scene with no fixture hides the sliders' pane | **ViewLayout_Test::sceneEditorHasGeneralOverTheSliders** (new) | none | covered | med | — |
+| M494 | Scene editor lists a scene's looks | A scene of looks on fixture groups lists them in General; a plain scene has no such list | **ViewLayout_Test::sceneEditorListsAScenesLooks** (new) | none | covered | low | — |
+| M495 | Long fader rows scroll sideways | Shift + wheel and a sideways swipe scroll the row and leave the fader; a plain wheel is the fader's; a drag on empty space pans | **ViewLayout_Test::sliderRowsScrollSideways** (new) | none | covered | med | Middle-button drag not driven. |
+| M496 | Always show scroll bars | Settings ▸ Appearance checkbox sets it, saved; the app style then never hides a scroll bar; off restores the same base style | **ViewLayout_Test::alwaysShowScrollBarsSetting** (new) | none | covered | med | Offscreen is Fusion, which never hides them: the macOS overlay look itself is not seen by a test. |
 
 ## Fixed (part 1)
 
 | ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
 |---|---|---|---|---|---|---|---|
 | M391 | Re-patch pluginless input | An input unpatched by name (`setInputPatch(u,"","",0)`) keeps a patch with no plugin; patching it again must not dereference the null plugin (both Beats checks guarded) | InputOutputMap_Test::repatchAfterUnpatchByName (engine/test/inputoutputmap/inputoutputmap_test.h) | covered | covered | high | Unpatches, re-patches (the step that crashed before), then checks the plugin is the stub. Commit 99a18e674. |
-| M492 | Classic Functions leaves out the Show Tree's own | Classic QLC+ lists none of the tree's layer scenes, cue Collections or chasers (also after a bake); the toggle lists all of them, hidden ones too; Everything lists what is visible | **ViewLayout_Test::classicHidesTheShowTreesOwnFunctions** (new, ui/test/viewlayout) | none | covered | med | Originals kept for Restore original are hidden by the same rule (`isLocked()`) but no course show has one. |
-| M493 | Scene editor: General on top | General (fixtures, channel groups) is the top pane, the fixture tabs the bottom one, a vertical splitter; bad saved states (a pane at 0, horizontal, junk) fall back; a scene with no fixture hides the sliders' pane | **ViewLayout_Test::sceneEditorHasGeneralOverTheSliders** (new) | none | covered | med | — |
-| M494 | Scene editor lists a scene's looks | A scene of looks on fixture groups lists them in General; a plain scene has no such list | **ViewLayout_Test::sceneEditorListsAScenesLooks** (new) | none | covered | low | — |
-| M495 | Long fader rows scroll sideways | Shift + wheel and a sideways swipe scroll the row and leave the fader; a plain wheel is the fader's; a drag on empty space pans | **ViewLayout_Test::sliderRowsScrollSideways** (new) | none | covered | med | Middle-button drag not driven. |
-| M496 | Always show scroll bars | Settings ▸ Appearance checkbox sets it, saved; the app style then never hides a scroll bar; off restores the same base style | **ViewLayout_Test::alwaysShowScrollBarsSetting** (new) | none | covered | med | Offscreen is Fusion, which never hides them: the macOS overlay look itself is not seen by a test. |
 | M392 | Upgraded show's originals | `originalFor()` names the in-place chaser and the scenes/collections only it plays as originals, with the cue that stands for each; still an original after being filed elsewhere | ShowTree_Test::originalsKeptForRestoreAreViewOnly (engine/test/showtree/showtree_test.h) | covered | covered | high | The "filed elsewhere" case is `setPath("Spots")`. No real Eos/Preshow show is used, but the logic does not depend on the folder. |
 | M393 | Upgraded show's originals | A scene that Capture into palettes takes out of the list becomes an original; Undo reverts that | ShowTree_Test::originalsKeptForRestoreAreViewOnly | covered | covered | high | — |
 | M394 | Upgraded show's originals | A scene the list plays as it is (▣ layer), or that something else plays too, stays editable (not locked, no text) | ShowTree_Test::originalsKeptForRestoreAreViewOnly; ShowTreeView_Test::originalsOpenViewOnlyElsewhere (ui/test/showtreeview/showtreeview_test.h) | covered | covered | med | — |
@@ -657,7 +656,6 @@ Findings that are not marked as bugs:
 | M483 | Track intensity | A saved 50% plays at 50% after load | ShowRunner_Test::aTrackIntensityIsSavedAndPlaysAfterLoad | covered | covered | high | — |
 | M490 | Fixture Properties for every fixture | Double-click and Fixture Properties… open the dialog for every fixture of every course show and test workspace, on the plot or not; off the plot its X, Y and rotation are greyed | **ShowFiles_Test::fixturePropertiesOpensForEveryFixture** (new, ui/test/showfiles/showfiles_test.cpp) | none | covered | high | — |
 | M491 | Double-click a universe | A double-click on a universe row (By universe and wiring view, patched or not) opens its connection window, not a rename | **ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection** (new) | none | covered | med | — |
-
 
 ## Data safety across features (old shows, file formats)
 

@@ -351,6 +351,40 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
 
 ### Changed
 
+- **Classic QLC+ Functions leaves out the Show Tree's own functions.** The
+  layer scenes, cue Collections and cue-list chasers the tree makes, and the
+  originals an Import in place keeps for Restore original
+  (`ShowTreeController::isLocked()`), are no longer listed in the Classic
+  QLC+ Functions tab: they are edited in the Show Tree and only crowded the
+  tree. **Show the Show Tree's own functions** (the tree's right-click menu,
+  `functionmanager/showShowTreeFunctions`) lists all of them in every view,
+  the hidden layer scenes too; off, the other views list what is visible,
+  as QLC+ does (`FunctionsTreeWidget::setShowTreeFunctions()`). A bake
+  re-files the list. A show with no Show Tree lists exactly what QLC+ does.
+  The blue scenes reported as "empty" in 0.3 RC1 are not the tree's: they
+  are the user's own scenes of looks on fixture groups (blue = dynamic: no
+  channel values of their own), which the scene editor now lists (below).
+- **Scene editor: General on top, the sliders below.** General is no longer
+  the first tab: it is the top pane (the fixtures used, the channel groups
+  used and, for a scene of looks made in Build, a read-only **Fixture groups
+  and looks in this scene** list, each scrolling on its own), and the
+  fixture and channel-group tabs with their sliders are the bottom pane,
+  scrolling sideways for many channels, with a splitter between them
+  (`sceneeditor/splitter`; a saved state that isn't a vertical split of two
+  shown panes falls back to a third / two thirds). A scene with no fixture
+  puts the sliders' pane away. The same editor serves Classic QLC+, the
+  Everything view, Shows and Build's sequence editor.
+- **Long rows of faders scroll sideways** (`HorizontalPan`): **Shift +
+  wheel** or a sideways trackpad swipe scrolls a scene's slider row, over a
+  fader too (a plain wheel turn still moves the fader); a drag that starts
+  on the space between the faders pans the row, as does a middle-button
+  drag anywhere on it.
+- **Settings ▸ Appearance ▸ Always show scroll bars** (this computer's,
+  `workspace/alwaysShowScrollBars`): every scroll bar is drawn all the
+  time instead of macOS's overlay bars that appear only while scrolling (a
+  `QProxyStyle` over the app style turning off `SH_ScrollBar_Transient`;
+  Fusion off macOS never hid them). `AppUtil::saneStyle()` no longer hands
+  out the app's own style, which this setting can replace.
 - **Connections opens where you'd look for it**: in Classic QLC+ on its
   **Universes** sub-tab (QLC+'s own Inputs/Outputs page, was "Detailed"),
   in the other views on **Devices**.
@@ -386,40 +420,6 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
 - **No Window ▸ Effects** (Q97): Build ▸ Effects is their home.
 - **A group set dropped on a Build scene adds its groups** (board Q86):
   *Towers* onto a scene adds *SL* and *SR*, and the drag says so ("Add
-- **Classic QLC+ Functions leaves out the Show Tree's own functions.** The
-  layer scenes, cue Collections and cue-list chasers the tree makes, and the
-  originals an Import in place keeps for Restore original
-  (`ShowTreeController::isLocked()`), are no longer listed in the Classic
-  QLC+ Functions tab: they are edited in the Show Tree and only crowded the
-  tree. **Show the Show Tree's own functions** (the tree's right-click menu,
-  `functionmanager/showShowTreeFunctions`) lists all of them in every view,
-  the hidden layer scenes too; off, the other views list what is visible,
-  as QLC+ does (`FunctionsTreeWidget::setShowTreeFunctions()`). A bake
-  re-files the list. A show with no Show Tree lists exactly what QLC+ does.
-  The blue scenes reported as "empty" in 0.3 RC1 are not the tree's: they
-  are the user's own scenes of looks on fixture groups (blue = dynamic: no
-  channel values of their own), which the scene editor now lists (below).
-- **Scene editor: General on top, the sliders below.** General is no longer
-  the first tab: it is the top pane (the fixtures used, the channel groups
-  used and, for a scene of looks made in Build, a read-only **Fixture groups
-  and looks in this scene** list, each scrolling on its own), and the
-  fixture and channel-group tabs with their sliders are the bottom pane,
-  scrolling sideways for many channels, with a splitter between them
-  (`sceneeditor/splitter`; a saved state that isn't a vertical split of two
-  shown panes falls back to a third / two thirds). A scene with no fixture
-  puts the sliders' pane away. The same editor serves Classic QLC+, the
-  Everything view, Shows and Build's sequence editor.
-- **Long rows of faders scroll sideways** (`HorizontalPan`): **Shift +
-  wheel** or a sideways trackpad swipe scrolls a scene's slider row, over a
-  fader too (a plain wheel turn still moves the fader); a drag that starts
-  on the space between the faders pans the row, as does a middle-button
-  drag anywhere on it.
-- **Settings ▸ Appearance ▸ Always show scroll bars** (this computer's,
-  `workspace/alwaysShowScrollBars`): every scroll bar is drawn all the
-  time instead of macOS's overlay bars that appear only while scrolling (a
-  `QProxyStyle` over the app style turning off `SH_ScrollBar_Transient`;
-  Fusion off macOS never hid them). `AppUtil::saneStyle()` no longer hands
-  out the app's own style, which this setting can replace.
   the groups of “Towers” (SL, SR) to “Base”"). It was refused without a
   word; a scene holds fixture groups, not the Show Tree's sets.
 - **Show Tree and Run have their own tab icons**: a cue tree and a green

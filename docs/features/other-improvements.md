@@ -770,6 +770,14 @@ there carry over.
   speed masters show their beat (**Speed master beat**: Blink, Bar across
   each beat or No beat; **Show the beat**: Always, or Only while something
   on it plays). See [Speed masters](effects.md#speed-masters).
+- **Always show scroll bars**: draw every scroll bar all the time. macOS
+  normally shows them only while you scroll (when **System Settings ▸
+  Appearance ▸ Show scroll bars** is *Automatically* or *When scrolling*),
+  which hides that a long list or a row of sliders goes on past the edge.
+  On Windows and Linux they are always shown and this changes nothing. A
+  scene's slider row also scrolls sideways with **Shift + wheel** or a drag
+  on the space between the sliders ([The scene
+  editor](build.md#the-scene-editor)).
 
 They apply when you press **OK**.
 
@@ -795,14 +803,6 @@ With **Auto-open shutters** on, qlcconsole works like a lighting console's
   edit that sets the shutter to Closed, Strobe or anything else keeps it
   there.
 - **A Shutter look sends what it says.** *Closed* closes the shutter,
-- **Always show scroll bars**: draw every scroll bar all the time. macOS
-  normally shows them only while you scroll (when **System Settings ▸
-  Appearance ▸ Show scroll bars** is *Automatically* or *When scrolling*),
-  which hides that a long list or a row of sliders goes on past the edge.
-  On Windows and Linux they are always shown and this changes nothing. A
-  scene's slider row also scrolls sideways with **Shift + wheel** or a drag
-  on the space between the sliders ([The scene
-  editor](build.md#the-scene-editor)).
   *Strobe* strobes it, *Open* opens it — also on a spot whose shutter has
   an Open capability, which a Closed look used to open anyway. A Shutter
   look with no value (or 0, as every look made before Closed could be

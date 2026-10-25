@@ -5416,8 +5416,6 @@ void App::setTheme(int theme)
     applyTheme();
 }
 
-void App::applyTheme()
-{
 bool App::alwaysShowScrollBars() const
 {
     return AppUtil::alwaysShowScrollBars();
@@ -5433,6 +5431,8 @@ void App::setAlwaysShowScrollBars(bool on)
     applyTheme();
 }
 
+void App::applyTheme()
+{
     // Backstage color themes: warm/cool low-glare palettes, the kind
     // lighting consoles traditionally offer so the screen doesn't spill
     // light or wreck night vision. QPalette (not per-theme stylesheets) is

@@ -237,6 +237,16 @@ their house lights, relays and subs.
   Tree made (an Eos show's cue scenes) opens greyed under a line saying
   where to edit it. Elsewhere a double-click opens one, as before. See
   [Coming from the Functions window](build.md#coming-from-the-functions-window).
+- **Classic QLC+ Functions lists your functions, not the Show Tree's.** The
+  scenes, collections and chasers the Show Tree makes for its cues are left
+  out; right-click → **Show the Show Tree's own functions** lists them.
+- **The scene editor has General on top and the sliders below**, with a
+  bar between them to drag, and a scene of looks made in Build lists its
+  fixture groups and looks instead of looking empty. A long row of sliders
+  scrolls sideways with **Shift + wheel** or a drag on the space between
+  them. See [The scene editor](build.md#the-scene-editor).
+- **Always show scroll bars** in Settings ▸ Appearance, for macOS's
+  scroll bars that otherwise show only while scrolling.
 
 ### Show Tree
 
@@ -248,16 +258,6 @@ their house lights, relays and subs.
   level 1, 2, 3… (or from a start, in steps), point cues and sub-cues
   following. Each is one undo step. See
   [Reordering and numbering](show-tree.md#reordering-and-numbering).
-- **Classic QLC+ Functions lists your functions, not the Show Tree's.** The
-  scenes, collections and chasers the Show Tree makes for its cues are left
-  out; right-click → **Show the Show Tree's own functions** lists them.
-- **The scene editor has General on top and the sliders below**, with a
-  bar between them to drag, and a scene of looks made in Build lists its
-  fixture groups and looks instead of looking empty. A long row of sliders
-  scrolls sideways with **Shift + wheel** or a drag on the space between
-  them. See [The scene editor](build.md#the-scene-editor).
-- **Always show scroll bars** in Settings ▸ Appearance, for macOS's
-  scroll bars that otherwise show only while scrolling.
 - **A cue in the Workbench.** Double-click a cue, a layer or a hit, press
   **✎ Workbench** or type `wb`: the cue opens in the Workbench in place of
   the page, its own layers opened up a row per attribute, what tracks in
