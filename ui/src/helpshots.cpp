@@ -891,14 +891,14 @@ QList<HelpShots::Shot> HelpShots::shots()
         Frame f;
         FocusCallsDialog *d = new FocusCallsDialog(doc, app);
         d->setObjectName(QStringLiteral("helpShotFocusCalls"));
-        d->resize(820, 520);
+        d->resize(980, 540);
         d->show();
         settle();
         f.grab = d;
         Callout target = mark(named(d, "fcTarget"), 3);
         target.place = Right;
         Callout venue = mark(named(d, "fcVenue"), 4);
-        venue.place = Right;
+        venue.place = Above;
         f.callouts << mark(named(d, "fcCalls"), 1) << mark(named(d, "fcGroups"), 2)
                    << target << venue << mark(named(d, "fcStart"), 5);
         return f;
@@ -1160,6 +1160,67 @@ QList<HelpShots::Shot> HelpShots::shots()
     }, [=]() {
         doc->programmer()->focusSession()->stop();
         doc->resetModified();
+        settle();
+    } };
+
+    /* Focus mode's own maps (lighting-studio.md, The controller map): the
+       demo's movers aimed at Centre, RB held and the left stick pushed up
+       and to the right; then the keyboard with Shift and Up held. */
+    auto startFocusMode = [doc, app](FocusModePanel **out) {
+        FocusSession::Options o;
+        for (const FixtureGroup *g : doc->fixtureGroups())
+            if (g->name() == QLatin1String("Movers"))
+                o.fixtures = g->fixtureList();
+        if (MonitorProperties *props = doc->monitorProperties())
+            for (const StageTarget *t : props->stageTargets())
+            {
+                o.first.kind = FocusSession::Reference::Target;
+                o.first.id = t->id();
+            }
+        o.others = FocusSession::OthersDim;
+        QString why;
+        *out = FocusModePanel::startWith(doc, app, o, &why, int(FocusSession::KeyboardInput));
+        if (*out == nullptr)
+            fprintf(stderr, "[HELPSHOT] Focus mode did not start: %s\n", qPrintable(why));
+    };
+    list << Shot{ QStringLiteral("focus-mode-controller-map"), [=]() {
+        Frame f;
+        FocusModePanel *panel = nullptr;
+        startFocusMode(&panel);
+        if (panel == nullptr)
+            return f;
+        panel->resize(700, 720);
+        FocusControlMap *map = panel->controlMap();
+        map->setMode(FocusControlMap::ControllerMap);
+        xboxMap(map);
+        map->setControlValue(GamepadRole::RB, 1.0f);
+        map->setControlValue(GamepadRole::LeftX, 0.85f);
+        map->setControlValue(GamepadRole::LeftY, 0.27f);
+        settle();
+        f.grab = map;
+        return f;
+    }, [=]() {
+        doc->programmer()->focusSession()->stop();
+        settle();
+    } };
+    list << Shot{ QStringLiteral("focus-mode-keyboard-map"), [=]() {
+        Frame f;
+        FocusModePanel *panel = nullptr;
+        startFocusMode(&panel);
+        if (panel == nullptr)
+            return f;
+        panel->resize(700, 720);
+        FocusControlMap *map = panel->controlMap();
+        map->setMode(FocusControlMap::KeyboardMap);
+        map->setKeyDown(Qt::Key_Shift, true);
+        map->setKeyDown(Qt::Key_Up, true);
+        settle();
+        f.grab = map;
+        return f;
+    }, [=]() {
+        if (FocusModePanel *p = FocusModePanel::instance())
+            p->controlMap()->clearInput();
+        doc->programmer()->focusSession()->stop();
         settle();
     } };
 
