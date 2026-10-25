@@ -38,6 +38,8 @@
 #include "controllertestdialog.h"
 #include "controllerkeepalive.h"
 #include "focuscontrolmap.h"
+#include "venuecorrections.h"
+#include "operatorvoice.h"
 #include "focusmodepanel.h"
 #include "programmercontroller.h"
 #include "monitorproperties.h"
@@ -95,6 +97,19 @@ void FocusStatusLamp::setState(State state)
     update();
 }
 
+void FocusStatusLamp::setCount(int count)
+{
+    if (count == m_count)
+        return;
+    m_count = count;
+    update();
+}
+
+QString FocusStatusLamp::symbol() const
+{
+    return (m_flashing || m_state == AllSaved) ? QString::fromUtf8("\u2713") : QStringLiteral("!");
+}
+
 void FocusStatusLamp::flash()
 {
     m_flashing = true;
@@ -112,29 +127,29 @@ void FocusStatusLamp::flash()
 QColor FocusStatusLamp::ringColor() const
 {
     if (m_flashing)
-        return greenColor();
+        return savedColor();
     switch (m_state)
     {
-        case ThisUnsaved:   return yellowColor();
+        case ThisUnsaved:   return thisColor();
         case OthersUnsaved:
-        case BothUnsaved:   return redColor();
+        case BothUnsaved:   return othersColor();
         case AllSaved:      break;
     }
-    return greenColor();
+    return savedColor();
 }
 
 QColor FocusStatusLamp::centreColor() const
 {
     if (m_flashing)
-        return greenColor();
+        return savedColor();
     switch (m_state)
     {
         case ThisUnsaved:
-        case BothUnsaved:   return yellowColor();
-        case OthersUnsaved: return redColor();
+        case BothUnsaved:   return thisColor();
+        case OthersUnsaved: return othersColor();
         case AllSaved:      break;
     }
-    return greenColor();
+    return savedColor();
 }
 
 void FocusStatusLamp::paintEvent(QPaintEvent *)
@@ -156,6 +171,28 @@ void FocusStatusLamp::paintEvent(QPaintEvent *)
         p.setPen(QPen(QColor(20, 20, 22), 1.5));
         p.setBrush(centreColor());
         p.drawEllipse(c, inner, inner);
+    }
+    /* Not by colour alone (gap 10): a tick or a "!" in the middle, and how
+       many are not saved on the rim. */
+    {
+        QFont f = font();
+        f.setBold(true);
+        f.setPixelSize(int(d * 0.42));
+        p.setFont(f);
+        p.setPen(m_state == ThisUnsaved && !m_flashing ? QColor(20, 20, 22) : QColor(255, 255, 255));
+        p.drawText(outer, Qt::AlignCenter, symbol());
+        if (m_count > 0 && !m_flashing)
+        {
+            const qreal r = d * 0.2;
+            const QPointF at(outer.right() - r * 0.7, outer.bottom() - r * 0.7);
+            p.setPen(QPen(QColor(20, 20, 22), 1.5));
+            p.setBrush(QColor(250, 250, 250));
+            p.drawEllipse(at, r, r);
+            f.setPixelSize(int(r * 1.3));
+            p.setFont(f);
+            p.setPen(QColor(20, 20, 22));
+            p.drawText(QRectF(at.x() - r, at.y() - r, 2 * r, 2 * r), Qt::AlignCenter, QString::number(m_count));
+        }
     }
     // The glass: a soft highlight up and to the left.
     QRadialGradient gloss(c - QPointF(d * 0.18, d * 0.2), d * 0.45);
@@ -463,6 +500,29 @@ FocusModePanel *FocusModePanel::startWith(Doc *doc, QWidget *parent,
     return panel;
 }
 
+FocusModePanel *FocusModePanel::attach(Doc *doc, QWidget *parent)
+{
+    FocusSession *s = doc->programmer()->focusSession();
+    if (!s->isActive())
+        return nullptr;
+    if (s_instance != nullptr)
+    {
+        s_instance->refresh();
+        s_instance->show();
+        s_instance->raise();
+        return s_instance.data();
+    }
+    FocusModePanel *panel = new FocusModePanel(doc, parent);
+    s_instance = panel;
+    panel->setInputDevice(defaultInput(doc), false);
+    panel->refreshController();
+    panel->refresh();
+    panel->showHighlight(s->currentFixture());
+    panel->show();
+    panel->raise();
+    return panel;
+}
+
 FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     : QWidget(parent, Qt::Tool)
     , m_doc(doc)
@@ -482,6 +542,19 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
 
     m_titleLabel = new QLabel(this);
     m_titleLabel->setObjectName(QStringLiteral("focusTitle"));
+    m_callLabel = new QLabel(this);
+    m_callLabel->setObjectName(QStringLiteral("focusCall"));
+    m_callLabel->setWordWrap(true);
+    {
+        QFont cf = m_callLabel->font();
+        cf.setPointSizeF(cf.pointSizeF() * 1.25);
+        cf.setBold(true);
+        m_callLabel->setFont(cf);
+    }
+    m_callLabel->hide();
+    m_scopeLabel = new QLabel(this);
+    m_scopeLabel->setObjectName(QStringLiteral("focusScope"));
+    m_scopeLabel->setWordWrap(true);
     m_nameLabel = new QLabel(this);
     m_nameLabel->setObjectName(QStringLiteral("focusFixture"));
     QFont big = m_nameLabel->font();
@@ -515,6 +588,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_progressLabel->setObjectName(QStringLiteral("focusProgress"));
 
     vl->addWidget(m_titleLabel);
+    vl->addWidget(m_callLabel);
     vl->addWidget(m_nameLabel);
     QHBoxLayout *lampRow = new QHBoxLayout;
     lampRow->addWidget(m_lamp);
@@ -522,8 +596,14 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     vl->addLayout(lampRow);
     vl->addWidget(m_referenceLabel);
     vl->addWidget(m_offsetLabel);
+    // What changed since the save, in degrees (Q126), and a ghost on the plot.
+    m_deltaLabel = new QLabel(this);
+    m_deltaLabel->setObjectName(QStringLiteral("focusDelta"));
+    m_deltaLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+    vl->addWidget(m_deltaLabel);
     vl->addWidget(m_beamLabel);
     vl->addWidget(m_savedLabel);
+    vl->addWidget(m_scopeLabel);
     QHBoxLayout *meta = new QHBoxLayout;
     meta->addWidget(m_stepLabel);
     meta->addStretch();
@@ -559,6 +639,9 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     });
     m_deviceLabel = new QLabel(this);
     m_deviceLabel->setObjectName(QStringLiteral("focusDevice"));
+    // Feedback: lights, voice or both (shared with Refine).
+    use->addWidget(new QLabel(tr("Feedback:"), this));
+    use->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
     m_deviceLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
     use->addWidget(m_deviceLabel, 1);
     vl->addLayout(use);
@@ -626,6 +709,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     connect(m_session, &FocusSession::unsavedChanged, this, &FocusModePanel::refreshSaveStatus);
     connect(m_session, &FocusSession::headSaved, m_lamp, &FocusStatusLamp::flash);
     connect(m_session, &FocusSession::referenceChanged, this, &FocusModePanel::refresh);
+    connect(m_session, &FocusSession::callChanged, this, &FocusModePanel::refresh);
+    connect(m_session, &FocusSession::scopeChanged, this, &FocusModePanel::refresh);
     connect(m_session, &FocusSession::exitRequested, this, [this]() { requestExit(); });
     // Ended under it -- into Perform, say: close without asking.
     connect(m_session, &FocusSession::stopped, this, [this]() {
@@ -678,11 +763,54 @@ void FocusModePanel::refresh()
         }
     }
     refreshSaveStatus();
-    m_titleLabel->setText(tr("Focus \342\200\224 head %1 of %2")
-                          .arg(m_session->index() + 1).arg(m_session->count()));
+    m_titleLabel->setText(m_session->isRunningCalls()
+                          ? tr("Focus calls \342\200\224 fixture %1 of %2")
+                            .arg(m_session->index() + 1).arg(m_session->count())
+                          : tr("Focus \342\200\224 head %1 of %2")
+                            .arg(m_session->index() + 1).arg(m_session->count()));
+    // One layout, in this tool's words (ControllerScheme).
+    m_map->setTool(m_session->isRunningCalls() ? ControllerScheme::FocusCallsTool
+                                               : ControllerScheme::FocusTool);
+    if (m_session->isRunningCalls())
+    {
+        const FocusSession::Call call = m_session->currentCall();
+        m_callLabel->setText(tr("Call %1 of %2: %3%4").arg(m_session->callIndex() + 1)
+                             .arg(m_session->callCount()).arg(call.name,
+                                  call.note.isEmpty() ? QString()
+                                                      : QStringLiteral("\n") + call.note));
+        m_callLabel->show();
+    }
+    else
+        m_callLabel->hide();
+    {
+        VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+        const QString where = m_session->savesToVenue()
+            ? tr("Saves to venue \342\200\234%1\342\200\235 (not the show file)").arg(venues->activeVenue())
+            : tr("Saves to the show's own calibration");
+        m_scopeLabel->setText(tr("%1 \342\200\224 %2.  Y switches.  %3")
+                              .arg(m_session->scope() == FocusSession::GroupScope
+                                   ? tr("The whole %1 (%2)").arg(m_session->isRunningCalls()
+                                                                 ? tr("call") : tr("list"))
+                                     .arg(m_session->order().size())
+                                   : tr("One fixture"),
+                                   m_session->scope() == FocusSession::GroupScope
+                                   ? tr("nudges, saves and reverts all of them")
+                                   : tr("bumpers step fixtures"),
+                                   where));
+    }
     m_nameLabel->setText(fx != nullptr ? tr("%1  (ID %2)").arg(fx->name()).arg(fid) : QString());
+    {
+        // Q133: its venue correction was skipped -- another fixture type now.
+        VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+        if (fx != nullptr && venues->needsFocus(fid))
+            m_nameLabel->setText(m_nameLabel->text()
+                                 + tr("\n! Needs focus: not the fixture focused in %1 (%2)")
+                                   .arg(venues->activeVenue(), venues->correctedAs(fid)));
+    }
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
-        m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
+        m_session->isTargetPage()
+            ? tr("  \u2014 target page: the stick moves it (A keeps, B puts it back)")
+            : m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
     const FocusSession::Offset live = m_session->liveOffset(fid);
     const FocusSession::Offset saved = m_session->savedOffset(fid);
     m_offsetLabel->setText(tr("Pan %1    Tilt %2").arg(signedDegrees(live.pan), signedDegrees(live.tilt)));
@@ -734,6 +862,29 @@ QString FocusModePanel::saveStatusText() const
                               : tr("Unsaved: %1 other lights (%2)").arg(others.size()).arg(names);
 }
 
+void FocusModePanel::refreshDelta()
+{
+    if (!m_session->isActive())
+        return;
+    const quint32 fid = m_session->currentFixture();
+    const QString delta = m_session->deltaText(fid);
+    m_deltaLabel->setText(delta.isEmpty() ? QString() : tr("Since the save: %1").arg(delta));
+    m_deltaLabel->setVisible(!delta.isEmpty());
+    QVector3D ghost;
+    Monitor *mon = Monitor::instance();
+    if (mon == nullptr)
+        return;
+    if (m_session->savedGhost(fid, ghost))
+        mon->showFocusGhost(fid, ghost, delta);
+    else
+        mon->showFocusGhost(fid, QVector3D(), QString(), false);
+}
+
+QString FocusModePanel::deltaLine() const
+{
+    return m_deltaLabel->isHidden() ? QString() : m_deltaLabel->text();
+}
+
 void FocusModePanel::refreshSaveStatus()
 {
     if (!m_session->isActive())
@@ -747,13 +898,15 @@ void FocusModePanel::refreshSaveStatus()
                                        : here ? FocusStatusLamp::ThisUnsaved
                                               : FocusStatusLamp::AllSaved;
     m_lamp->setState(state);
+    m_lamp->setCount(unsaved.size());
     m_statusLabel->setText(saveStatusText());
     // The words in the lamp's colour -- the darker yellow reads on a light theme.
-    m_statusLabel->setStyleSheet(elsewhere ? QStringLiteral("color: #d03a30;")
-                                 : here ? QStringLiteral("color: #d08a1c;")
-                                        : QStringLiteral("color: #3a9a4a;"));
+    m_statusLabel->setStyleSheet(elsewhere ? QStringLiteral("color: #c05a00;")
+                                 : here ? QStringLiteral("color: #b08a10;")
+                                        : QStringLiteral("color: #0072b2;"));
     if (Monitor *mon = Monitor::instance())
         mon->showFocusUnsaved(unsaved);
+    refreshDelta();
 }
 
 void FocusModePanel::setInputDevice(FocusSession::InputDevice device, bool remember)
@@ -800,7 +953,9 @@ void FocusModePanel::refreshController()
     m_useController->setEnabled(pad.present);
     m_useController->setToolTip(pad.present ? tr("Nudge from %1").arg(pad.name)
                                             : tr("No controller Focus mode can use is connected"));
-    m_deviceLabel->setText(pad.present ? pad.name : tr("No controller connected"));
+    const QString owner = m_doc->programmer()->controllerOwnerName();
+    m_deviceLabel->setText(!owner.isEmpty() ? tr("%1 has it (any other is ignored)").arg(owner)
+                           : pad.present ? pad.name : tr("No controller connected"));
 
     if (!pad.present && m_session->inputDevice() == FocusSession::ControllerInput)
     {
@@ -859,12 +1014,43 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Tab:      m_session->next(); break;
         case Qt::Key_BracketLeft:
         case Qt::Key_Backtab:  m_session->previous(); break;
+        // Shift: as A or B held -- save all; this light back to its last save.
         case Qt::Key_Return:
-        case Qt::Key_Enter:    m_session->save(); break;
+        case Qt::Key_Enter:
+            if (modifiers & Qt::ShiftModifier)
+                m_session->saveAllHeld();
+            else
+                m_session->save();
+            break;
         case Qt::Key_Backspace:
-        case Qt::Key_Delete:   m_session->revert(); break;
+        case Qt::Key_Delete:
+            if (modifiers & Qt::ShiftModifier)
+                m_session->revertLight();
+            else
+                m_session->revert();
+            break;
+        // Both bumpers: the next light not saved.
+        case Qt::Key_U:        m_session->nextUnsaved(); break;
+        // View + RS on the controller: how many are not saved.
+        case Qt::Key_N:
+            emit m_doc->programmer()->operatorAnnounce(m_session->unsavedCountPhrase(),
+                                                       ControllerScheme::ConfirmPriority);
+            break;
         case Qt::Key_0:        m_session->zero(); break;
-        case Qt::Key_R:        m_session->toggleReference(); break;
+        // R: the second reference; in focus calls, the target page (Q128).
+        case Qt::Key_R:
+        case Qt::Key_T:        m_session->apply(FocusSession::ToggleReference); break;
+        // Focus calls and the scope (the triggers and Y on the controller).
+        case Qt::Key_PageDown: m_session->nextCall(); break;
+        case Qt::Key_PageUp:   m_session->previousCall(); break;
+        case Qt::Key_G:        m_session->cycleScope(); break;
+        case Qt::Key_W:
+            // Say the light; with Shift, the feedback changes (as RS held).
+            if (modifiers & Qt::ShiftModifier)
+                m_doc->programmer()->cycleOperatorFeedback();
+            else
+                m_session->whereAmI();
+            break;
         // The beam (Q103): narrower, wider; ⇧ for 5°.
         case Qt::Key_Comma:
         case Qt::Key_Less:     m_session->nudgeBeam(shift ? -5.0f : -1.0f); refresh(); break;
@@ -952,7 +1138,7 @@ bool FocusModePanel::requestExit()
             m_session->saveAll();
     }
     m_finishing = true;
-    m_session->stop();
+    m_session->finish();
     finish();
     close();
     return true;
@@ -961,6 +1147,8 @@ bool FocusModePanel::requestExit()
 void FocusModePanel::finish()
 {
     showHighlight(0xFFFFFFFF);
+    if (Monitor *mon = Monitor::instance())
+        mon->showFocusGhost(0xFFFFFFFF, QVector3D(), QString(), false);
     if (Monitor *mon = Monitor::instance())
         mon->showFocusUnsaved(QList<quint32>());
     /* Everything this session saved is one step on the Lighting Studio's

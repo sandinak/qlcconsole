@@ -74,6 +74,16 @@ namespace HIDGameController
 
     /** "Xbox Wireless Controller (Xbox One)". */
     QString describe(int handle);
+
+    /** The pad's light (GCDeviceLight: a DualShock 4 / DualSense light bar)
+     *  in r, g, b 0..1. False where the claimed pad has none -- an Xbox pad
+     *  has no coloured light. Any thread. */
+    bool setLight(int handle, float r, float g, float b);
+    /** @p pulses buzzes of @p lengthMs each (GCDeviceHaptics, Core
+     *  Haptics; macOS 11+): 120 ms for a keep, one of 700 ms for
+     *  something important.
+     *  False where the pad has no haptics. Any thread. */
+    bool rumble(int handle, int pulses, int lengthMs = 120);
 }
 
 #endif

@@ -97,6 +97,10 @@
 #include "eosimporter.h"
 #include "lastlookeffect.h"
 #include "focusmodepanel.h"
+#include "venuecorrections.h"
+#include "operatorvoice.h"
+#include "focuscallcue.h"
+#include "focuscallsdialog.h"
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -640,6 +644,39 @@ void App::init()
     {
         // View + Menu on the controller.
         connect(pc, &ProgrammerController::focusModeRequested, this, &App::slotFocusMode);
+        /* Focus calls and Refine say where the controller is, from the
+           laptop, to whoever holds it on stage (board Q107). */
+        new OperatorAnnouncer(pc, OperatorVoice::create(this), this);
+        // Feedback: Lights / Voice / Both, this computer's choice.
+        pc->setOperatorFeedback(ControllerScheme::Feedback(OperatorFeedbackCombo::savedFeedback()));
+        connect(pc, &ProgrammerController::operatorFeedbackChanged, this, [](ControllerScheme::Feedback f) {
+            OperatorFeedbackCombo::saveFeedback(int(f));
+        });
+        /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): the panel when
+           its calls begin; Cmd+Return begins them, as Start does; the
+           footer says it waits. */
+        connect(pc->focusCallCue(), &FocusCallCue::stateChanged, this, [this](FocusCallCue::State s) {
+            if (s == FocusCallCue::Running)
+                FocusModePanel::attach(m_doc, this);
+            slotUpdateStandby();
+        });
+        connect(pc->focusCallCue(), &FocusCallCue::venueNeeded, this,
+                [this](const QString &fallback, int timeoutMs, const QString &current) {
+            FocusCallsDialog::askVenue(m_doc, this, fallback, timeoutMs, current);
+        });
+        // The venue applied, in the footer (board Q129).
+        connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged,
+                this, &App::updateVenueFooter);
+        // Said once: an old venue file applied without fixture types (Q133).
+        connect(pc->venueCorrections(), &VenueCorrections::note, this, [this](const QString &text) {
+            showViewNotice(text);
+        });
+        QShortcut *startCalls = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
+        startCalls->setContext(Qt::ApplicationShortcut);
+        connect(startCalls, &QShortcut::activated, this, [this]() {
+            if (m_doc->programmer()->focusCallCue()->isArmed())
+                m_doc->programmer()->focusCallCue()->start();
+        });
         connect(pc, &ProgrammerController::dangleFixturesChanged, this,
                 [this](const QList<quint32> &fixtureIds) {
             if (m_statusDangleLabel == NULL)
@@ -3338,7 +3375,16 @@ void App::slotFileCollectForTransfer()
         return;
     }
     QStringList written;
-    const bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    // The venues travel with it (gap 8): the room's focus corrections.
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    if (!venues->venueNames().isEmpty())
+    {
+        if (venues->writeSidecarFor(show))
+            written << VenueCorrections::sidecarPath(show);
+        else
+            ok = false;
+    }
     if (!ok)
         QMessageBox::warning(this, tr("Collect for Transfer"),
             tr("The show is in %1, but some of the files it uses could not be written there.")
@@ -4731,6 +4777,21 @@ QFile::FileError App::loadXML(const QString& fileName)
         else
         {
             setFileName(fileName);
+            /* The venue it was last focused for, from the file beside it:
+               applied over the show's own calibration, never into it. */
+            m_doc->programmer()->venueCorrections()->setShowFile(fileName, true);
+            updateVenueFooter();
+            /* Last changed over a day ago: "Still at <venue>?", New venue
+               the default (board Q129). Not modal, so it never holds up a
+               show opened from the command line. */
+            if (m_noGui == false)
+                QTimer::singleShot(0, this, [this, fileName]() {
+                    /* No venue file of its own, but one beside it for the
+                       same show (an earlier version, a Finder copy): offered
+                       (gap 8); else, an old venue confirmed. */
+                    if (FocusCallsDialog::offerVenueImport(m_doc, this, fileName) == nullptr)
+                        FocusCallsDialog::confirmVenue(m_doc, this);
+                });
             m_doc->resetModified();
             retval = QFile::NoError;
             cacheShowDefinitions();     // the next run of it needs nothing remote
@@ -5041,6 +5102,8 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
         /* Set the file name for the current Doc instance and
            set it also in an unmodified state. */
         setFileName(fileName);
+        // Saved under a new name: its venues go with it.
+        m_doc->programmer()->venueCorrections()->setShowFile(fileName, false);
         m_doc->resetModified();
         cacheShowDefinitions();     // what it uses, kept on this computer
     }
@@ -5714,6 +5777,24 @@ void App::removeAutosaveFile()
  * Status Bar
  *****************************************************************************/
 
+void App::updateVenueFooter()
+{
+    if (m_statusVenueLabel == nullptr || m_doc == nullptr || m_doc->programmer() == nullptr)
+        return;
+    const QString venue = m_doc->programmer()->venueCorrections()->activeVenue();
+    m_statusVenueLabel->setText(venue.isEmpty() ? QString() : tr("Venue: %1").arg(venue));
+    m_statusVenueLabel->setToolTip(tr("Focus corrections for this venue are applied over the show's "
+                                      "own calibration (from the .venues.xml beside the show). "
+                                      "Focus calls changes it."));
+    m_statusVenueLabel->setVisible(!venue.isEmpty());
+}
+
+QString App::venueFooterText() const
+{
+    return m_statusVenueLabel != nullptr && !m_statusVenueLabel->isHidden()
+           ? m_statusVenueLabel->text() : QString();
+}
+
 void App::initStatusBar()
 {
     QStatusBar* sb = statusBar();
@@ -5725,6 +5806,14 @@ void App::initStatusBar()
     m_statusModeLabel->setMinimumWidth(160);
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
+
+    // The venue the focus corrections come from (board Q129): "Venue:
+    // Lincoln HS", beside the readiness chip; hidden with none applied.
+    m_statusVenueLabel = new QLabel(this);
+    m_statusVenueLabel->setObjectName("footerVenue");
+    m_statusVenueLabel->setProperty("helpTopic", QStringLiteral("focus-calls.md"));
+    m_statusVenueLabel->hide();
+    sb->addWidget(m_statusVenueLabel, 0);
 
     // Rig network gate (InputOutputMap::transmitGateStatus()), right beside
     // the readiness chip: "Output held — not on the rig network". Hidden
@@ -6640,6 +6729,17 @@ void App::slotUpdateStandby()
         m_statusStandby->hide();
         return;
     }
+    // A focus-call cue armed: the footer says what it waits for.
+    if (const FocusCallCue *fcc = m_doc->programmer() != NULL ? m_doc->programmer()->focusCallCue() : NULL)
+        if (fcc->state() != FocusCallCue::Idle)
+        {
+            m_statusStandby->setText(fcc->isArmed() ? tr("Focus calls: waiting for the controller (Start)")
+                                     : fcc->state() == FocusCallCue::NamingVenue
+                                       ? tr("Focus calls: name the venue on the laptop")
+                                       : tr("Focus calls running (Menu ends them)"));
+            m_statusStandby->show();
+            return;
+        }
     ShowControl *sc = m_doc->showControl();
     Chaser *list = sc->cueList(QString());
     if (list == NULL)

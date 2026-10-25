@@ -686,6 +686,9 @@ bool PaletteOps::undo()
     if (!st.scenesBefore.isEmpty())
     {
         applyScenes(st.scenesBefore, st.scenesAfter);
+        // A step of scenes and palette values together (sceneValueStep()).
+        if (!st.before.isEmpty())
+            apply(st.before, st.foldersBefore);
         m_redo << st;
         emit changed();
         return true;
@@ -718,6 +721,8 @@ bool PaletteOps::redo()
     if (!st.scenesAfter.isEmpty())
     {
         applyScenes(st.scenesAfter, st.scenesBefore);
+        if (!st.after.isEmpty())
+            apply(st.after, st.foldersAfter);
         m_undo << st;
         emit changed();
         return true;
@@ -882,6 +887,66 @@ bool PaletteOps::recordSceneStep(const QString &label, const QList<QSharedPointe
     m_redo.clear();
     if (ShowTreeController *tree = m_doc->showTree())
         tree->clearRedo();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+bool PaletteOps::sceneValueStep(const QString &label, const QList<quint32> &sceneIds,
+                                const QList<quint32> &paletteIds, const std::function<bool()> &change)
+{
+    QList<QPair<quint32, QSharedPointer<Scene>>> scenesBefore;
+    for (quint32 id : sceneIds)
+    {
+        QSharedPointer<Scene> s = sceneSnapshot(id);
+        if (!s.isNull())
+            scenesBefore << qMakePair(id, s);
+    }
+    QList<State> before;
+    for (quint32 pid : paletteIds)
+        if (m_doc->palette(pid) != nullptr)
+        {
+            State s = capture(pid);
+            s.value = true;
+            before << s;
+        }
+    if (!change())
+        return false;
+
+    Step st;
+    st.label = label;
+    for (const QPair<quint32, QSharedPointer<Scene>> &b : scenesBefore)
+    {
+        QSharedPointer<Scene> after = sceneSnapshot(b.first);
+        if (after.isNull() || sceneSignature(b.second.data()) == sceneSignature(after.data()))
+            continue;
+        st.scenesBefore << b;
+        st.scenesAfter << qMakePair(b.first, after);
+    }
+    for (const State &b : before)
+    {
+        State a = capture(b.id);
+        a.value = true;
+        if (a.values == b.values && a.name == b.name)
+            continue;
+        st.before << b;
+        st.after << a;
+    }
+    if (st.scenesBefore.isEmpty() && st.before.isEmpty())
+        return false;
+    // A palette alone still undoes through the scene branch: keep one scene.
+    if (st.scenesBefore.isEmpty() && !scenesBefore.isEmpty())
+    {
+        st.scenesBefore << scenesBefore.first();
+        st.scenesAfter << qMakePair(scenesBefore.first().first, sceneSnapshot(scenesBefore.first().first));
+    }
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.mergeAt = QDateTime::currentMSecsSinceEpoch();
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
     m_doc->setModified();
     emit changed();
     return true;

@@ -1023,14 +1023,40 @@ and jump as you nudged.)
 | Save this head | A | Return |
 | Back to what was saved | B | Backspace |
 | Zero the offsets | X | 0 |
-| The other reference | Y | R |
-| Undo the last save | View | ⌘Z |
+| This head / all of them (scope) | Y | G |
+| The other reference | LS (left stick click) | R |
+| Say the light (its name, then where you are) | RS (right stick click) | W |
+| Feedback: lights / voice / both | RS held | ⇧W |
+| Save every light not saved | A held | ⇧Return |
+| This light back to its last save | B held | ⇧Backspace |
+| The next light not saved | LB + RB together | U |
+| Next / previous focus call | RT / LT | PgDn / PgUp |
+| Undo the last save | View (on release) | ⌘Z |
+| How many are not saved | View + RS | N |
 | Leave | Menu | Esc |
+
+Hold **A** a full second to save every light; a press saves this one. In
+a venue, a save says where it went ("Spot 3 kept for Lincoln HS.") and
+**X** goes back to the show's own calibration. The save lamp is blue
+(all saved, a tick), yellow (this light, "!") or orange (another), with
+the number not saved on it, and the light you are on breathes slowly on
+the rig until it is saved. If the controller drops out, everything it
+held is let go and the laptop says "Controller lost. Lights held."; with
+two pads, the first to press a button has the controls.
+
+The layout is the one every on-stage tool uses — Focus mode,
+[Focus calls](focus-calls.md) and [Refine](refine.md): the triggers step
+the big unit, the bumpers the fixture, **Y** the scope, **A** keeps, **B**
+goes back. **Y** works on the whole list at once (a truss trimmed a little
+low: one nudge for every head on it); a bumper picks one head again. On a
+change of head or scope the head(s) picked blink three times and the
+laptop says where you are ("Fixture 3 of 8"): see
+[Telling the operator where they are](focus-calls.md#telling-the-operator-where-they-are).
 
 ### The controller map
 
 The panel draws the device it is using, with each control labelled by what
-it does in Focus mode — **Next head** on RB, **Save** on A, **Nudge** on the
+it does in Focus mode — **Next fixture** on RB, **Save** on A, **Nudge** on the
 left stick, **Fine nudge** on the right, zoom and focus on the D-pad — and,
 under each, the controller's own name for it. Here RB is held and the left
 stick pushed up and to the right:
@@ -1044,8 +1070,12 @@ stick pushed up and to the right:
   controller profile's roles (see **Controllers** below), not from a fixed
   picture: another make of pad is drawn the same way with its own names
   (Cross, Circle, R1, Options…), and a control its profile does not have is
-  greyed and marked *not on this controller*. The triggers, the stick clicks
-  and the Guide button are not used and are always grey.
+  greyed and marked *not on this controller*. The Guide button is not
+  used. The triggers step focus calls (they say so when calls are being
+  run), the left stick click is the second reference (in focus calls, the
+  target page: the stick moves the call's target) and the right stick
+  click is **Say the light** (held: the feedback setting, see
+  [Focus calls](focus-calls.md#telling-the-operator-where-they-are)).
 - **Click a control** on the map to do what pressing it would.
 
 ### Controller or keyboard
@@ -1075,8 +1105,11 @@ picks which device drives the nudges and which map is shown.
 
 A nudge changes the head live but is not an edit until you save it (A or
 Return): then it is the head's offset, marks the show changed, and **File →
-Save** keeps it. The panel says **Unsaved** while a head differs from what
-was saved, and counts the heads you have checked.
+Save** keeps it. With a **venue** applied (see
+[Venues](focus-calls.md#venues-corrections-that-stay-with-the-room)) a save
+goes to that venue's corrections, in a file beside the show, at once —
+the show file is not changed. The panel says **Unsaved** while a head
+differs from what was saved, and counts the heads you have checked.
 
 **The status lamp**, at the top of the panel, is big enough to read from
 the stage:
@@ -1096,7 +1129,10 @@ save, revert, zero and undo.
 
 **A save shows on the rig.** When A keeps a light, the lamp flashes green
 and the real fixture dips to dark and back twice, quickly, so whoever is
-standing on stage sees it was kept. A revert (B) doesn't blink.
+standing on stage sees it was kept. A revert (B) doesn't blink. With
+**Feedback: Voice only** (see
+[Focus calls](focus-calls.md#telling-the-operator-where-they-are)) the
+fixture doesn't blink; the lamp still shows it.
 
 **On the plot and in the Rig Overview** every light with unsaved changes
 has a dashed yellow ring and a yellow badge; the light you're on keeps its

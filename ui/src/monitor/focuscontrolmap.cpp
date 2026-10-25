@@ -203,45 +203,39 @@ void FocusControlMap::clearInput()
     update();
 }
 
+void FocusControlMap::setTool(ControllerScheme::Tool tool)
+{
+    if (tool == m_tool)
+        return;
+    m_tool = tool;
+    update();
+}
+
 QString FocusControlMap::actionText(int role) const
 {
     switch (role)
     {
         case R::LeftX: case R::LeftY:
-            return tr("Nudge");
+            return ControllerScheme::stickLabel(m_tool, false);
         case R::RightX: case R::RightY:
-            return tr("Fine nudge");
+            return ControllerScheme::stickLabel(m_tool, true);
+        case R::DpadUp:
+            // The D-pad's one callout reads its up arm: say all four.
+            /* Up is in, down is out; right tightens the focus, left loosens
+               (in Refine, LS's own label says the D-pad also pages through
+               colour and gobo: here it would crowd the pad off the map). */
+            return tr("Zoom \342\226\262in \342\226\274out  Focus \342\227\200looser tighter\342\226\266");
+        case R::DpadDown:
+            return tr("Wider beam");
+        case R::DpadLeft:
+            return tr("Focus looser");
+        case R::DpadRight:
+            return tr("Focus tighter");
         default:
             break;
     }
-    switch (FocusSession::controlFor(GamepadRole::Role(role)))
-    {
-        case FocusSession::Next:            return tr("Next head");
-        case FocusSession::Previous:        return tr("Previous head");
-        case FocusSession::Save:            return tr("Save");
-        case FocusSession::Revert:          return tr("Revert");
-        case FocusSession::Zero:            return tr("Zero");
-        case FocusSession::ToggleReference: return tr("Second reference");
-        case FocusSession::UndoSave:        return tr("Undo save");
-        case FocusSession::Exit:            return tr("Exit");
-        case FocusSession::StepPanUp:
-        case FocusSession::StepPanDown:
-        case FocusSession::StepTiltUp:
-        case FocusSession::StepTiltDown:
-            return tr("%1\302\260 step").arg(double(m_step), 0, 'g', 3);
-        case FocusSession::ZoomNarrower:
-            // The D-pad's one callout reads its up arm: say all four.
-            return tr("Zoom \342\226\262in \342\226\274out  Focus \342\227\200looser tighter\342\226\266");
-        case FocusSession::ZoomWider:
-            return tr("Wider beam");
-        case FocusSession::FocusNearer:
-            return tr("Focus looser");
-        case FocusSession::FocusFarther:
-            return tr("Focus tighter");
-        case FocusSession::NoControl:
-            break;
-    }
-    return QString();
+    // Everything else: the one layout, in this tool's words.
+    return ControllerScheme::label(m_tool, ControllerScheme::verbFor(GamepadRole::Role(role)));
 }
 
 QString FocusControlMap::controlName(int role) const
@@ -402,12 +396,15 @@ void FocusControlMap::paintController(QPainter &p)
     const qreal fb = 28.0;   // face-button spacing
 
     QList<Callout> callouts;
-    callouts << callout({ R::LB }, QPointF(258, 94), QPointF(), 80, true)
+    callouts << callout({ R::LeftTrigger }, QPointF(270, 60), QPointF(), 48, true)
+             << callout({ R::LB }, QPointF(258, 94), QPointF(), 80, true)
              << callout({ R::Back }, view - QPointF(0, 6), QPointF(372, 116), 116, true)
              << callout({ R::LeftX, R::LeftY }, ls - QPointF(30, 0), QPointF(), 165, true,
                         stickName(R::LeftX, tr("Left stick")))
              << callout({ R::DpadUp, R::DpadDown, R::DpadLeft, R::DpadRight },
                         dpad - QPointF(30, 0), QPointF(), 248, true, dpadName)
+             << callout({ R::LS }, ls + QPointF(0, 22), QPointF(305, 206), 206, true)
+             << callout({ R::RightTrigger }, QPointF(530, 60), QPointF(), 48, false)
              << callout({ R::RB }, QPointF(542, 94), QPointF(), 80, false)
              << callout({ R::Start }, menu - QPointF(0, 6), QPointF(428, 108), 108, false)
              << callout({ R::Y }, abxy + QPointF(13, -fb), QPointF(), 140, false)
@@ -415,7 +412,8 @@ void FocusControlMap::paintController(QPainter &p)
              << callout({ R::A }, abxy + QPointF(13, fb), QPointF(), 204, false)
              << callout({ R::X }, abxy + QPointF(-fb, 13), QPointF(abxy.x() - fb, 226), 236, false)
              << callout({ R::RightX, R::RightY }, rs + QPointF(24, 16), QPointF(), 270, false,
-                        stickName(R::RightX, tr("Right stick")));
+                        stickName(R::RightX, tr("Right stick")))
+             << callout({ R::RS }, rs + QPointF(0, 22), QPointF(428, 302), 302, false);
 
     // Room for the label columns, then the pad as large as fits between.
     qreal leftW = 0, rightW = 0;

@@ -88,6 +88,12 @@ public:
     /** Say the problems changed, as a real plugin would */
     void emitTargetProblemsChanged() { emit targetProblemsChanged(); }
 
+    /** @reimp what a tool sent back to the input (a gamepad's light bar and
+     *  buzzes, board Q126), kept in m_feedbackParams */
+    void sendFeedBack(quint32 universe, quint32 inputLine, quint32 channel, uchar value,
+                      const QVariant &params) override
+    { Q_UNUSED(universe) Q_UNUSED(inputLine) Q_UNUSED(channel) Q_UNUSED(value) m_feedbackParams << params; }
+
     /** @reimp m_channelRoles for @p channel, whatever the line */
     QString inputChannelRole(quint32 input, quint32 channel) const override
     { Q_UNUSED(input) return m_channelRoles.value(channel); }
@@ -118,6 +124,8 @@ public:
     QMap<quint32, QStringList> m_outputProblems;
     /** What inputChannelRole() reports, by channel ("a", "lb", "rx"...) */
     QMap<quint32, QString> m_channelRoles;
+    /** What sendFeedBack() was given, in order */
+    QList<QVariant> m_feedbackParams;
     /** What inputChannelName() reports, by channel ("Cross", "L1"...) */
     QMap<quint32, QString> m_channelNames;
     /** What inputConnectionInfo() / inputProblem() report, by input line */

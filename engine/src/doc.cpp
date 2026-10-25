@@ -73,6 +73,7 @@
 #include "fixturegroup.h"
 #include "programmercontroller.h"
 #include "parkeffect.h"
+#include "focuscalls.h"
 #include "markeffect.h"
 #include "markplanner.h"
 #include "lastlookeffect.h"
@@ -2445,6 +2446,13 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             else
                 doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLQLCFocusCalls)
+        {
+            if (m_programmer != NULL)
+                m_programmer->loadFocusCallsXML(doc);
+            else
+                doc.skipCurrentElement();
+        }
         else if (doc.name() == KXMLQLCMark)
         {
             if (m_programmer != NULL)
@@ -2580,6 +2588,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     if (m_programmer != NULL)
         m_programmer->saveMarkXML(doc);
+
+    if (m_programmer != NULL)
+        m_programmer->saveFocusCallsXML(doc);
 
     if (m_programmer != NULL)
         m_programmer->saveMoveInBlackXML(doc);

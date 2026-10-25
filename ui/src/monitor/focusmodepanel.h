@@ -24,6 +24,8 @@
 #include <QDialog>
 #include <QWidget>
 
+#include "controllerscheme.h"
+
 #include "focussession.h"
 
 class FocusControlMap;
@@ -75,10 +77,11 @@ private:
 };
 
 /**
- * Focus mode's save status, as a lamp big enough to read from the stage:
- * green, all saved; yellow, the light being focused is unsaved; red, some
- * OTHER light is. With both, a red ring round a yellow centre -- red is
- * what cannot be missed. flash() shows green for a moment (a save).
+ * Focus mode's (and Refine's) save status, as a lamp big enough to read
+ * from the stage, colour-blind safe (gap 10): blue with a tick, all saved;
+ * yellow with "!", the light being focused is unsaved; orange, some OTHER
+ * light is. With both, an orange ring round a yellow centre. The number of
+ * unsaved lights is on it too. flash() shows blue for a moment (a save).
  */
 class FocusStatusLamp final : public QWidget
 {
@@ -91,15 +94,20 @@ public:
 
     State state() const { return m_state; }
     void setState(State state);
-    /** Green for kFlashMs, whatever the state. */
+    /** How many lights (Refine: changes) are not saved, shown on it. */
+    void setCount(int count);
+    int count() const { return m_count; }
+    /** The shape in its middle: a tick, or "!". */
+    QString symbol() const;
+    /** Saved's colour for kFlashMs, whatever the state. */
     void flash();
     bool isFlashing() const { return m_flashing; }
     static constexpr int kFlashMs = 600;
 
     /** The colours it lights in: a state's centre and ring. */
-    static QColor greenColor() { return QColor(60, 190, 85); }
-    static QColor yellowColor() { return QColor(245, 200, 40); }
-    static QColor redColor() { return QColor(225, 50, 45); }
+    static QColor savedColor() { return ControllerScheme::savedColour(); }
+    static QColor thisColor() { return ControllerScheme::thisUnsavedColour(); }
+    static QColor othersColor() { return ControllerScheme::othersUnsavedColour(); }
     /** What it shows now: the ring, and the centre. */
     QColor ringColor() const;
     QColor centreColor() const;
@@ -112,6 +120,7 @@ protected:
 
 private:
     State m_state = AllSaved;
+    int m_count = 0;
     bool m_flashing = false;
     int m_flashSerial = 0;
 };
@@ -145,6 +154,9 @@ public:
     static void rememberInput(FocusSession::InputDevice device);
     /** The running panel, if any. */
     static FocusModePanel *instance();
+    /** The panel for a session something else started (a focus-call cue):
+     *  shown, or raised if it is up. Null when no session runs. */
+    static FocusModePanel *attach(Doc *doc, QWidget *parent);
 
     ~FocusModePanel() override;
 
@@ -156,6 +168,8 @@ public:
      *  was the user's choice, kept for next time. */
     void setInputDevice(FocusSession::InputDevice device, bool remember = true);
     FocusControlMap *controlMap() const { return m_map; }
+    /** "Since the save: ..." as shown; empty when nothing changed. */
+    QString deltaLine() const;
     FocusStatusLamp *statusLamp() const { return m_lamp; }
     /** "All saved", "Unsaved: this light", "Unsaved: 2 other lights
      *  (Spot 3, Spot 7)"... as the panel shows it. */
@@ -172,6 +186,8 @@ private:
     void refresh();
     /** The lamp and its words, and the plot's unsaved marks. */
     void refreshSaveStatus();
+    /** The change since the save, here and as a ghost on the plot. */
+    void refreshDelta();
     void showHighlight(quint32 fid);
     void finish();
     /** The controller came, went or changed: the map, the choice, and the
@@ -190,10 +206,16 @@ private:
     bool m_finishing = false;
 
     QLabel *m_titleLabel;
+    /** The focus call being run, and its note (Focus calls only). */
+    QLabel *m_callLabel = nullptr;
+    /** Group or fixture (Y), and where saves go (the venue, or the show). */
+    QLabel *m_scopeLabel = nullptr;
     QLabel *m_nameLabel;
     QLabel *m_referenceLabel;
     QLabel *m_offsetLabel;
-    QLabel *m_beamLabel = nullptr;   ///< the beam, where it can change (Q103)
+    QLabel *m_beamLabel = nullptr;
+    /** "Since the save: +2.5° pan, −1.0° tilt" (Q126). */
+    QLabel *m_deltaLabel = nullptr;   ///< the beam, where it can change (Q103)
     QLabel *m_savedLabel;
     FocusStatusLamp *m_lamp;
     QLabel *m_statusLabel;

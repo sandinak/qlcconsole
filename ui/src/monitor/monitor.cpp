@@ -91,6 +91,7 @@
 #include <QMutexLocker>
 #include <memory>
 #include "monitorfixtureitem.h"
+#include "focuscallsdialog.h"
 #include "focusmodepanel.h"
 #include "aimsolver.h"
 #include "powerdistribution.h"
@@ -163,6 +164,7 @@
 #include "apputil.h"
 #include "doc.h"
 #include "programmercontroller.h"
+#include "venuecorrections.h"
 #include "focussession.h"
 
 #include <QTimer>
@@ -431,6 +433,12 @@ void Monitor::initGraphicsView()
     viewGrid->setSpacing(0);
 
     m_graphicsView = new MonitorGraphicsView(m_doc, this);
+    // Lights whose venue correction was skipped: badged on the plot (Q133).
+    if (ProgrammerController *pc = m_doc->programmer())
+    {
+        connect(pc->venueCorrections(), &VenueCorrections::correctionsChanged, this, &Monitor::refreshNeedsFocus);
+        connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged, this, &Monitor::refreshNeedsFocus);
+    }
     m_graphicsView->setRigRestorer([this](const QByteArray &snap) { restoreRig(snap); });
     m_graphicsView->setRigSnapshotter([this]() { return rigSnapshot(); });
     if (m_undoAction != nullptr)
@@ -1759,6 +1767,13 @@ void Monitor::updateView()
     fillDMXView();
     fillGraphicsView();
     showCurrentView();
+    refreshNeedsFocus();
+}
+
+void Monitor::refreshNeedsFocus()
+{
+    if (m_graphicsView != NULL && m_doc->programmer() != nullptr)
+        m_graphicsView->markNeedsFocusFixtures(m_doc->programmer()->venueCorrections()->needsFocus());
 }
 
 void Monitor::highlightFixtures(const QList<quint32> &ids)
@@ -1776,6 +1791,13 @@ void Monitor::showFocusFixture(quint32 fid)
         m_graphicsView->highlightFixtures(ids);
     if (m_overviewView != NULL)
         m_overviewView->setHighlight(ids);
+}
+
+void Monitor::showFocusGhost(quint32 fid, const QVector3D &point, const QString &label, bool on)
+{
+    Q_UNUSED(fid)
+    if (m_graphicsView != NULL)
+        m_graphicsView->setFocusGhost(on, point, label);
 }
 
 void Monitor::showFocusUnsaved(const QList<quint32> &ids)
@@ -2135,6 +2157,15 @@ void Monitor::initGraphicsToolbar()
                             "nudge its calibration offsets until it lands there "
                             "(controller: View + Menu)"));
     connect(focusAct, &QAction::triggered, this, &Monitor::openFocusMode);
+    /* Focus calls: the show's own order of focus, saved with it, run on
+       the controller and saved per venue (FOCUS_REFINE_DESIGN.md). */
+    QAction *callsAct = m_graphicsToolBar->addAction(QIcon(":/target.png"), tr("Focus calls"));
+    callsAct->setObjectName(QStringLiteral("focusCallsAction"));
+    callsAct->setToolTip(tr("Focus calls: the show's focus, group by group to its point, "
+                            "corrections saved for this venue (not the show)"));
+    connect(callsAct, &QAction::triggered, this, [this]() {
+        FocusCallsDialog::run(m_doc, window());
+    });
 
     m_moreBtn = new QToolButton(this);
     QToolButton *moreBtn = m_moreBtn;

@@ -19,6 +19,34 @@ circuits and subs.
 
 ### Added
 
+- **Focus calls, per-venue corrections and Refine** (FOCUS_REFINE_DESIGN.md,
+  board Q105-Q136). One controller map (`ControllerScheme`) shared by Focus
+  mode, Focus calls and Refine, with the on-screen map labelled per tool.
+  *Focus calls* (`FocusCalls`, saved in the show; Lighting Studio ▸ Focus
+  calls) run the show's focus in order on the controller: triggers step the
+  calls, bumpers the fixtures, the stick nudges, A saves, group scope saves
+  and undoes as one. *Venues* (`VenueCorrections`): corrections, truss trims
+  and target positions go to a sidecar file beside the show, written on every
+  keep and re-applied on open; the show file never takes them
+  (`MonitorProperties::setCalibrationBase()`); a venue manager (apply now,
+  rename, delete), "Still at <venue>?" on open, the fixture-type check (a
+  swapped light needs focus), the pad's target page, and Collect for Transfer
+  copying the venue files. *Refine* (`RefineSession`, `RefinePanel`): the
+  same controller on a Show Tree cue's own values or a Build scene --
+  position, zoom, focus, colour and gobo at Layer, Group or Fixture scope,
+  previewed on the rig and kept by A as one Show Tree step (an inline
+  palette, or a child layer for an exception); from the Show Tree's cue page
+  and layer menu, the Workbench header's **Refine…** and its rows' menus;
+  quiet in Operate. A *focus-call cue* arms on GO and starts on the
+  controller's Start. Operator feedback: lights, voice or both (`say`,
+  `spd-say`, Qt TextToSpeech, with a queue that never drops a confirmation
+  and important lines always spoken), Say the light, the pad's light bar and
+  rumble, an accessible save lamp, a held D-pad repeating, hold A for one
+  second. Safety: a controller lost freezes everything it held, two pads --
+  the first to press Start owns the tools -- and "nothing reaching the rig"
+  (Blackout, Grand Master at zero, no output) is said. Help pages
+  `focus-calls.md` and `refine.md`.
+
 - **Input devices follow their device** (Bluetooth pads asleep and awake):
   an input patch on a plugin whose lines are hardware (HID, MIDI) remembers
   its line's name (`InputPatch::inputUID()`: maker, model and serial). When
@@ -419,6 +447,9 @@ circuits and subs.
 
 ### Fixed
 
+- **Re-patching an input left with no plugin no longer crashes.** An input
+  unpatched by name with a valid line kept an `InputPatch` with no plugin,
+  and patching it again dereferenced that null plugin.
 - **An upgraded show's originals no longer say "Made by the Show Tree".**
   The chaser Import in place keeps for Restore original, and the scenes and
   collections only it plays that its cue list doesn't play as they are --

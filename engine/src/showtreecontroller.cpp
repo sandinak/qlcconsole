@@ -345,6 +345,7 @@ static void normalizeLooks(QList<Production> &ps)
                 c.includes.clear();
                 c.skip = false;                 // a look is fired, not GOne through
                 c.noMoveInBlack = false;        // ... nor looked ahead to
+                c.focusCall = false;            // ... nor a pre-show step
             }
             l.moveInBlack = MoveInBlack::Show;
         }
@@ -954,6 +955,33 @@ bool ShowTreeController::isCueNoMoveInBlack(quint32 cueId) const
 {
     const Cue *c = cue(cueId);
     return c != nullptr && c->noMoveInBlack;
+}
+
+bool ShowTreeController::setCuesFocusCall(const QList<quint32> &cueIds, bool on)
+{
+    const QString label = on ? (cueIds.count() == 1 ? tr("Make cue a focus call")
+                                                    : tr("Make %1 cues focus calls").arg(cueIds.count()))
+                             : (cueIds.count() == 1 ? tr("Cue no longer a focus call")
+                                                    : tr("%1 cues no longer focus calls").arg(cueIds.count()));
+    return edit(label, [&](QList<Production> &ps) {
+        bool changed = false;
+        for (quint32 cueId : cueIds)
+        {
+            CueList *l = nullptr;
+            Cue *c = cueIn(ps, cueId, &l);
+            if (c == nullptr || l->looks || c->focusCall == on)
+                continue;
+            c->focusCall = on;
+            changed = true;
+        }
+        return changed;
+    });
+}
+
+bool ShowTreeController::isCueFocusCall(quint32 cueId) const
+{
+    const Cue *c = cue(cueId);
+    return c != nullptr && c->focusCall;
 }
 
 bool ShowTreeController::showMoveInBlack() const

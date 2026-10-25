@@ -214,6 +214,12 @@ public:
     /** Focus mode's lights with unsaved changes: marked on the plot and in
      *  the Rig Overview. Empty clears them. */
     void showFocusUnsaved(const QList<quint32> &ids);
+    /** Focus mode (Q126): where head @p fid would land with its saved
+     *  calibration, a dashed ghost on the plot labelled @p label; @p on
+     *  false takes it away. */
+    void showFocusGhost(quint32 fid, const QVector3D &point, const QString &label, bool on = true);
+    /** Badge the lights that need focus in the venue applied (Q133). */
+    void refreshNeedsFocus();
     /** Open Focus mode (FocusModePanel) on the selected scene and the heads
      *  selected on the plot or in the programmer. */
     void openFocusMode();

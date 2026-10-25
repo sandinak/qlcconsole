@@ -693,6 +693,7 @@ private slots:
     void slotCueMixToggled(bool on);
     void slotCueSkipToggled(bool on);
     void slotCueNoMibToggled(bool on);
+    void refreshFocusCallState();
     void slotListMibChanged(int index);
     void slotLayerReleaseToggled(bool on);
     void slotCommandEntered();
@@ -835,6 +836,9 @@ private:
     QCheckBox *m_cueSkip = nullptr;
     /** Q38: "Don't move in black into this cue"; the list's Move in black. */
     QCheckBox *m_cueNoMib = nullptr;
+    QCheckBox *m_cueFocusCall = nullptr;
+    /** "Focus calls: waiting for the controller" on an armed focus-call cue. */
+    class QLabel *m_cueFocusState = nullptr;
     QComboBox *m_listMib = nullptr;
     /** The pages' Text colour buttons (Colour ▸ menus). */
     QToolButton *m_cueColour = nullptr;

@@ -373,6 +373,11 @@ public:
     ShowTree::MoveInBlack listMoveInBlack(quint32 listId) const;
     bool setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool no);
     bool isCueNoMoveInBlack(quint32 cueId) const;
+    /** A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): GO arms the
+     *  show's focus calls, the controller's Start begins them. One undo
+     *  step; false when nothing changed (a Looks section has none). */
+    bool setCuesFocusCall(const QList<quint32> &cueIds, bool on);
+    bool isCueFocusCall(quint32 cueId) const;
     /** The show's own setting, read from Doc's programmer (false: none). */
     bool showMoveInBlack() const;
     /** Whether heads move in black into cue @a cueId: the cue's flag, else

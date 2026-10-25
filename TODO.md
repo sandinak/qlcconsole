@@ -20,6 +20,13 @@ Two jobs, being designed on the board (Q105-Q108), built after the freeze:
   (layer / group / fixture), with feedback to the operator on stage (the
   selection flashing, spoken status from the laptop, rumble).
 
+**Status (2026-10-24):** built and merged to `main` (board Q105-Q136):
+focus calls, venues, Refine in the Show Tree and Build, the focus-call
+cue, the venue manager, feedback and voice, the gaps-review fixes. See
+[FOCUS_REFINE_DESIGN.md](FOCUS_REFINE_DESIGN.md) section 12 for what is
+stubbed and next: Branson's "Try this" with a real pad, then a real-rig
+check on the show VLAN.
+
 ## Focus mode: shutters on profiles (future, asked 2026-10-23)
 
 Framing shutters on a profile/ellipsoidal (and a par with barn doors): how

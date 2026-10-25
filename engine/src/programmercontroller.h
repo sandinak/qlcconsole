@@ -34,12 +34,17 @@
 #include <QElapsedTimer>
 #include <QVector3D>
 
+#include "controllerscheme.h"
 #include "scenevalue.h"
 #include "doc.h"
 
 class ProgrammerFlasher;
 class HighlightEffect;
 class FocusSession;
+class FocusCalls;
+class FocusCallCue;
+class RefineSession;
+class VenueCorrections;
 class ControllerKeepAlive;
 class ParkEffect;
 class MarkEffect;
@@ -173,6 +178,47 @@ public:
      *  by gamepad role. Never null. */
     FocusSession *focusSession() const { return m_focusSession; }
 
+    /** The show's focus calls (saved with it). Never null. */
+    FocusCalls *focusCalls() const { return m_focusCalls; }
+    /** The venue corrections beside the show file (board Q105). Never null. */
+    VenueCorrections *venueCorrections() const { return m_venues; }
+    /** A focus-call cue in a playing list: armed, Start begins the calls.
+     *  Never null. */
+    FocusCallCue *focusCallCue() const { return m_focusCallCue; }
+
+    /** How Focus mode, Focus calls and Refine tell the operator where they
+     *  are: the rig's blinks, the voice, or both (the operator's choice, kept
+     *  by the UI in Settings, not in the show). Lights only: nothing is said
+     *  but what Say the light is asked for. */
+    ControllerScheme::Feedback operatorFeedback() const { return m_feedback; }
+    void setOperatorFeedback(ControllerScheme::Feedback feedback);
+    /** The next one, said ("Feedback: lights only."): RS held, or Shift+W. */
+    void cycleOperatorFeedback();
+
+    /** The pad itself (board Q126): its light bar in the status lamp's colour
+     *  (an invalid colour: back to its own), and buzzes. Sent to the
+     *  controller's plugin as feedback (QLCIOPlugin::sendFeedBack(), params
+     *  {"gamepad": "light", "rgb": "#rrggbb"} or {"gamepad": "rumble",
+     *  "pulses": n}); a plugin or pad that cannot do it ignores it. */
+    void setPadLight(const QColor &colour);
+    void padRumble(int pulses, int lengthMs = ControllerScheme::rumbleShortMs());
+    /** Something important for the operator on stage (board Q131): said
+     *  in every feedback setting, the selection's slow long blink, one
+     *  long buzz. Warnings, refusals, the controller lost or back, the
+     *  venue asked. */
+    void warnOperator(const QString &text);
+    /** Speak @p text at @p priority (ControllerScheme::Priority): where
+     *  and confirmations follow the Feedback setting; important lines go
+     *  through warnOperator(). */
+    void tellOperator(const QString &text, int priority);
+    QColor padLight() const { return m_padLight; }
+    int padRumbles() const { return m_padRumbles; }
+    /** Refine: the controller on a Show Tree cue's own values. Never null. */
+    RefineSession *refineSession() const { return m_refineSession; }
+
+    bool saveFocusCallsXML(QXmlStreamWriter *doc) const;
+    bool loadFocusCallsXML(QXmlStreamReader &root);
+
     /** Keeps the controller read while Focus mode or the follow spot uses
      *  it (no App Nap), and says when it is paused and why. Never null. */
     ControllerKeepAlive *controllerKeepAlive() const { return m_keepAlive; }
@@ -194,6 +240,21 @@ public:
         QMap<int, QString> controls;
     };
     FocusController focusController() const;
+    /** Board Q135, two pads: the universe of the pad that owns the
+     *  controller tools now -- the first to press Start (or, for a tool
+     *  started on the laptop, any button); invalid while none does. Every
+     *  other pad is ignored, and told so ("Another controller is in use."). */
+    quint32 controllerOwner() const { return m_ownerUniverse; }
+    /** The owning pad's name, empty with no owner. */
+    QString controllerOwnerName() const;
+
+    /** Why light @p fid (invalid: any) would not show what a controller
+     *  tool sends -- Blackout on, the Grand Master at zero, its universe
+     *  with no output -- in words; empty when nothing is in the way. */
+    QString rigOutputProblem(quint32 fid) const;
+
+    /** The controller went away while a tool used it, and is not back. */
+    bool isControllerLost() const { return m_padLost; }
 
     /*********************************************************************
      * Park (hold fixtures out of cue output)
@@ -458,9 +519,18 @@ signals:
     /** View + Menu (Back + Start) held together on the controller while
      *  Focus mode is off: the UI opens it. */
     void focusModeRequested();
+    /** Focus mode, Focus calls or Refine has something to say to the
+     *  operator on stage (the UI's voice reads it). */
+    void operatorAnnounce(const QString &text, int priority = ControllerScheme::WherePriority);
+    void operatorFeedbackChanged(ControllerScheme::Feedback feedback);
+    void padLightChanged(const QColor &colour);
+    void padRumbled(int pulses, int lengthMs);
     /** A controller came or went, or its profile changed: ask
      *  focusController() again. */
     void focusControllerChanged();
+    /** The controller the tools read went away mid-tool (true) or came
+     *  back (false). */
+    void controllerLost(bool lost);
     /** While Focus mode runs on the controller: a control by gamepad role
      *  moved -- 0 or 1 for a button, 0..1 (0.5 centred) for a stick axis --
      *  so the panel can show it. */
@@ -609,6 +679,43 @@ private:
     bool m_highlightActive = false;
     /** Focus mode: see focusSession(). */
     FocusSession *m_focusSession = nullptr;
+    FocusCalls *m_focusCalls = nullptr;
+    FocusCallCue *m_focusCallCue = nullptr;
+    ControllerScheme::Feedback m_feedback = ControllerScheme::BothFeedback;
+    /** RS: a tap says the light, a hold changes the feedback. */
+    ControllerScheme::LongPress m_sayHold;
+    /** Refine: A went down while View was held (View + A, Q118). */
+    bool m_viewChord = false;
+    /** RS went down with View held (View + RS: how many are not saved). */
+    bool m_rsChord = false;
+    /** Hold A: save all / keep; hold B: back to the last save (Q126). */
+    ControllerScheme::LongPress m_holdA { ControllerScheme::keepAllHoldSeconds() };
+    /** The head the first bumper of a pair stepped from (both bumpers). */
+    quint32 m_bumperFrom = 0xFFFFFFFF;
+    ControllerScheme::LongPress m_holdB;
+    QColor m_padLight;
+    int m_padRumbles = 0;
+    void sendPadFeedback(const QVariantMap &params);
+    void refreshPadLight();
+    /** A hold came round on the controller tick. */
+    void heldTick(double dt);
+    /** Safety (the gaps review): the controller the tools read is gone or
+     *  back. Gone: freezeController(), and "Controller lost. Lights held.";
+     *  back: "Controller back." -- both important (always said). */
+    void checkControllerPresence();
+    /** Let go of everything the controller held: the sticks centred, the
+     *  A/B/RS holds and a D-pad repeat reset, no button held. */
+    void freezeController();
+    bool m_padPresent = false;
+    quint32 m_ownerUniverse = 0xFFFFFFFF;
+    /** Nobody is using the controller tools (nothing running or armed). */
+    void releaseOwnerIfIdle();
+    /** Said once until it changes: what keeps the rig from showing it. */
+    QString m_lastRigProblem;
+    void checkRigOutput(quint32 fid);
+    bool m_padLost = false;
+    VenueCorrections *m_venues = nullptr;
+    RefineSession *m_refineSession = nullptr;
     /** See controllerKeepAlive(). */
     ControllerKeepAlive *m_keepAlive = nullptr;
     /** Asks the controller how it is while it is wanted: a plugin does not

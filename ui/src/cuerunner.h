@@ -79,6 +79,10 @@ public:
     CueRunner(Doc *doc, Size size, QWidget *parent = nullptr);
     ~CueRunner();
 
+    /** "Focus calls: waiting for the controller" while a focus-call cue is
+     *  armed (running: that it runs); empty otherwise. */
+    QString focusArmedText() const;
+
     Size runnerSize() const { return m_size; }
     void setRunnerSize(Size size);
 
@@ -288,6 +292,11 @@ private:
     int m_flags = 0;
     /** A handle's drag: the height or share it started from. */
     int m_dragFrom = 0;
+private:
+    void refreshFocusArmed();
+    QWidget *m_focusArmed = nullptr;
+    QLabel *m_focusArmedLabel = nullptr;
+    QToolButton *m_focusStart = nullptr;
 };
 
 /** @} */

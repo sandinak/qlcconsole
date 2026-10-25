@@ -20,19 +20,24 @@
 #ifndef FOCUSSESSION_H
 #define FOCUSSESSION_H
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QMutex>
 #include <QSet>
 #include <QHash>
+#include <functional>
 #include <QList>
 #include <QPair>
 #include <QVector3D>
 #include <QTimer>
 
 #include "qlcengine_export.h"
+#include "controllerscheme.h"
 #include "gamepadrole.h"
 #include "outputlayer.h"
 
+class VenueCorrections;
+class QTimer;
 class Doc;
 struct FixtureRigProps;
 
@@ -84,15 +89,41 @@ public:
     /** Which way round the list is stepped through. */
     enum Order { ByStagePosition, AsGiven };
 
+    /** One focus call, as it is run (FocusCalls makes these from the
+     *  show's): these fixtures, to this target. FOCUS_REFINE_DESIGN.md. */
+    struct Call
+    {
+        QString name;              ///< "DH Tspots -> DSC", for the panel
+        QString who;               ///< "DH Tspots", for the voice
+        QString targetName;        ///< "DSC", for the voice
+        QList<quint32> fixtures;
+        Reference target;
+        QString note;
+    };
+
+    /** What the controller works on: the one fixture, or all of the
+     *  current call (all of the list, without calls). Y switches. */
+    enum Scope { FixtureScope, GroupScope };
+
     struct Options
     {
         QList<quint32> fixtures;
+        /** Focus calls: when not empty, these are run call by call (and
+         *  fixtures, first and second are not used). */
+        QList<Call> calls;
         Order order = ByStagePosition;
         Reference first;
         Reference second;          ///< optional: Y toggles to it
         Others others = OthersDark;
         float level = 0.8f;        ///< the focused head's intensity, 0..1
         float dimLevel = 0.15f;    ///< the others', with OthersDim
+        /** Run in Operate too (a focus-call cue in a running list), and
+         *  going into Operate does not end it. */
+        bool allowOperate = false;
+        /** RT on the last call asks to leave (exitRequested()) instead of
+         *  going round to the first: a focus-call cue goes on to the next
+         *  cue when the calls are done. */
+        bool endAfterLastCall = false;
     };
 
     /** A head's calibration offsets, degrees. */
@@ -114,7 +145,10 @@ public:
         UndoSave,
         Exit,
         StepPanUp, StepPanDown, StepTiltUp, StepTiltDown,
-        ZoomWider, ZoomNarrower, FocusNearer, FocusFarther
+        ZoomWider, ZoomNarrower, FocusNearer, FocusFarther,
+        PreviousCall, NextCall,
+        CycleScope,
+        WhereAmI
     };
 
     /** The stick a reading came from. */
@@ -137,10 +171,19 @@ public:
      *  reference to aim at. Restarting replaces a running session after
      *  discarding its unsaved offsets. */
     bool start(const Options &options, QString *why = nullptr);
+    /** Asked before a start: false, with the reason, while another
+     *  controller tool -- or this one -- has unsaved work a start would
+     *  throw away (gap 5: never silently discarded). */
+    void setStartGuard(const std::function<bool(QString *)> &guard) { m_startGuard = guard; }
 
     /** Stop, discarding any unsaved offsets (saveAll() first to keep them).
      *  Lets go of the heads. */
     void stop();
+    /** The operator leaves (Menu, the panel's Exit, RT past the last
+     *  call): stop(), with endedByOperator() true while stopped() is
+     *  emitted. Anything else that stops it is "from outside". */
+    void finish();
+    bool endedByOperator() const { return m_endedByOperator; }
 
     bool isActive() const { return m_active; }
     const Options &options() const { return m_options; }
@@ -175,10 +218,9 @@ public:
     bool beamAngle(quint32 fid, double &deg, double &lo, double &hi) const;
     /** Widen (+) or narrow (-) the current head's beam by @p dDeg. */
     void nudgeBeam(float dDeg);
-    /** The triggers, 0 (released) .. 1: LT narrows, RT widens. */
+    /** The triggers, 0 (released) .. 1, read as buttons: LT the previous
+     *  focus call, RT the next (ControllerScheme). */
     void setTrigger(int side, float norm);
-    /** Degrees a second at a full trigger. */
-    static constexpr float beamRate() { return 10.0f; }
 
     /** Focus (the beam's edge), where a light has a focus channel: moved
      *  while focusing, to see the edge, not saved (cues own it). */
@@ -205,6 +247,87 @@ public:
     void next();
     void previous();
     void setIndex(int index);
+
+    /*********************************************************************
+     * Focus calls and scope
+     *********************************************************************/
+public:
+    /** Running the show's focus calls (Options::calls), not a list. */
+    bool isRunningCalls() const { return !m_calls.isEmpty(); }
+    int callCount() const { return m_calls.size(); }
+    int callIndex() const { return m_callIndex; }
+    /** The call being focused (an empty one without calls). */
+    Call currentCall() const;
+    void nextCall();
+    void previousCall();
+    void setCallIndex(int index);
+    /** Every head in the session, all calls, each once. */
+    QList<quint32> allFixtures() const { return m_all; }
+
+    Scope scope() const { return m_scope; }
+    void setScope(Scope scope);
+    void cycleScope();
+    /** What the controller works on now: the current fixture, or all of the
+     *  current call (list). */
+    QList<quint32> scopeFixtures() const;
+
+    /*********************************************************************
+     * Telling the operator where they are (FOCUS_REFINE_DESIGN.md s.3)
+     *********************************************************************/
+public:
+    /** What is said on stepping to a call, a fixture or a scope, and for
+     *  Where am I? -- the phrases the design lists. */
+    QString wherePhrase() const;
+    /** "Say the light" (RS): the light's name first, then where it is --
+     *  "Spot 3. Call 2 of 5, AT spots to DSC. Fixture 3 of 8." -- said
+     *  (sayLight(), whatever the feedback setting: it was asked for) and
+     *  what is selected flashed. */
+    void whereAmI();
+    QString lightPhrase() const;
+    /** The rig blinks (Feedback: Lights or Both); off: Voice only. */
+    void setLightsFeedback(bool on) { m_lightsFeedback = on; }
+
+    /** The flash that shows what is selected: three blinks, flashOnMs()
+     *  lit and flashOffMs() dark, then steady. */
+    static constexpr int flashOnMs() { return 120; }
+    static constexpr int flashOffMs() { return 120; }
+    static constexpr int flashBlinks() { return 3; }
+    static constexpr int flashDurationMs() { return flashBlinks() * (flashOnMs() + flashOffMs()); }
+    /** Lit @p ms into a flash (steady once it is over). */
+    static bool flashLit(qint64 ms);
+    /** Something important (a warning, a refusal, the controller lost --
+     *  board Q131): one slow, long blink -- dark for warnDarkMs(), then
+     *  lit -- unlike the selection's three quick ones and a save's double. */
+    static constexpr int warnDarkMs() { return 800; }
+    static bool warnLit(qint64 ms) { return ms < 0 || ms >= warnDarkMs(); }
+    /** Gap 10: the light being focused, while it is not saved, "breathes"
+     *  on the rig -- slowly between breathLow() and full, once every
+     *  breathPeriodMs() -- so the crew sees it is not saved yet (lights
+     *  feedback only). The share of its focus level at @p ms. */
+    static constexpr int breathPeriodMs() { return 2400; }
+    static constexpr float breathLow() { return 0.45f; }
+    static float breathLevel(qint64 ms);
+    bool isBreathing() const;
+    /** The selection's slow long blink (lights feedback only). */
+    void flashWarning();
+    bool isWarningFlash() const { return m_warnFlash && isFlashing(); }
+    /** Start the flash on what is selected now. */
+    void flashSelection();
+    bool isFlashing() const;
+    /** Flash the selection on a change (on; a test of steady output turns
+     *  it off). */
+    void setFlashEnabled(bool on) { m_flashEnabled = on; }
+
+    /*********************************************************************
+     * Venue (board Q105)
+     *********************************************************************/
+public:
+    /** Where saves go: with a venue applied, to its corrections (the sidecar
+     *  file), never the show; without one, the show's calibration. */
+    void setVenues(VenueCorrections *venues) { m_venues = venues; }
+    VenueCorrections *venues() const { return m_venues; }
+    /** True when saves go to a venue rather than the show. */
+    bool savesToVenue() const;
 
     /** True while the second reference is the one aimed at. */
     bool usingSecondReference() const { return m_useSecond; }
@@ -293,6 +416,39 @@ public:
 
     /** Save every head with unsaved offsets (one undo step each). */
     void saveAll();
+
+    /*********************************************************************
+     * Where things stand (board Q126)
+     *********************************************************************/
+public:
+    /** The status lamp's (and the pad's light bar's) colour. */
+    enum SaveStatus { AllSaved, ThisUnsaved, OthersUnsaved, BothUnsaved };
+    SaveStatus saveStatus() const;
+
+    /** Hold A: every unsaved head saved, said ("3 lights kept."). */
+    void saveAllHeld();
+    /** Hold B: the light being worked back to its last save, whatever the
+     *  scope, said ("Spot 3 back to its last save."). */
+    void revertLight();
+    /** Both bumpers: on to the next head with unsaved changes, in any call
+     *  ("Spot 7, not saved."); "All saved." when there is none. From the
+     *  head @p after (invalid: the one being worked) -- the head the first
+     *  bumper of the pair stepped from. */
+    bool nextUnsaved(quint32 after = 0xFFFFFFFF);
+    /** View + RS (or N): how many lights are not saved -- "2 not saved.",
+     *  "All saved." -- said whatever the feedback: it was asked for. */
+    QString unsavedCountPhrase() const;
+    /** Where a save lands, for the voice (the review: one word per tool,
+     *  saying where): " for Lincoln HS" in a venue, else nothing. */
+    QString keptWhere() const;
+
+    /** Where head @p fid would land with its SAVED calibration, as its
+     *  live one lands on the reference (the plot's ghost while nudging);
+     *  false when they are the same, or for another head. */
+    bool savedGhost(quint32 fid, QVector3D &point) const;
+    /** What has changed since the save: "+2.5° pan, −1.0° tilt", or for a
+     *  fixed light "0.50 m stage left, 0.25 m upstage"; empty: nothing. */
+    QString deltaText(quint32 fid) const;
     /** Put every head back to its saved offsets. */
     void discardAll();
 
@@ -313,8 +469,8 @@ public:
      *  Anything else is apply()ed once on the press. */
     void press(Control control, bool down);
     static bool repeats(Control control);
-    static constexpr double kRepeatDelay = 0.4;
-    static constexpr double kRepeatInterval = 0.08;
+    static constexpr double kRepeatDelay = ControllerScheme::HoldRepeat::delay();
+    static constexpr double kRepeatInterval = ControllerScheme::HoldRepeat::interval();
 
     /** The follow spot's stick response (followspot.js axisVelocity()): a
      *  normalised axis reading @p norm (0..1, 0.5 centred) as a velocity,
@@ -335,6 +491,27 @@ public:
      *  keyboard centres the sticks. Kept across sessions. */
     InputDevice inputDevice() const { return m_input; }
     void setInputDevice(InputDevice device);
+    /** The controller went away (a pad asleep, unplugged): whatever it
+     *  held is let go -- both sticks centred, a held D-pad arm and the
+     *  triggers released -- so nothing moves until it is touched again. */
+    void releaseControls();
+
+    /** Board Q128, the target page (focus calls; LS click, or T): the
+     *  sticks move the TARGET of the current call on the floor and every
+     *  head aimed at it follows, like an Eos focus palette. A keeps the
+     *  target -- into the venue applied (its sidecar), else the show -- B
+     *  puts it back. Leaving the page, or stepping calls, with a move not
+     *  kept is refused. False (said) when the call has no target. */
+    bool toggleTargetPage();
+    bool isTargetPage() const { return m_targetPage; }
+    /** The target moved and not yet kept. */
+    bool targetMoved() const;
+    /** Move the call's target @p dx, @p dy metres (on the target page). */
+    void nudgeTarget(float dx, float dy);
+    bool keepTarget();
+    void revertTarget();
+    /** A stick or key "degree" on the target page, in metres. */
+    static constexpr float targetMetresPerDegree() { return 0.1f; }
 
     static constexpr float coarseRate() { return 8.0f; }
     static constexpr float fineRate() { return 1.0f; }
@@ -361,6 +538,13 @@ signals:
     /** Exit was pressed: the UI asks about unsaved offsets, then stop()s. */
     void exitRequested();
     void inputDeviceChanged(FocusSession::InputDevice device);
+    /** Stepped to another focus call. */
+    void callChanged(int index);
+    void scopeChanged(FocusSession::Scope scope);
+    /** Something to say to the operator on stage (the voice reads it). */
+    void announce(const QString &text, int priority = ControllerScheme::WherePriority);
+    /** Said because the operator asked (Say the light): always spoken. */
+    void sayLight(const QString &text);
 
 private:
     struct Head
@@ -395,7 +579,24 @@ private:
         QVector3D landBefore;
         bool wasOriginal = false;
         float lensBefore = 0.0f;
+        int batch = 0;            ///< entries saved together undo together
     };
+    /** A call as it runs: its heads in order and the point each focuses to. */
+    struct CallState
+    {
+        Call call;
+        QList<quint32> order;
+        QHash<quint32, QVector3D> points;
+    };
+    void enterCall(int index);
+    void nudgeHead(quint32 fid, float dPan, float dTilt);
+    void nudgeBeamOf(quint32 fid, float dDeg);
+    void nudgeFocusOf(quint32 fid, float d);
+    /** Make @p fid's live state its saved one (an undo entry in @p batch). */
+    bool saveHead(quint32 fid, int batch);
+    /** A head's saved state has changed: into the venue, or the show. */
+    void savedChanged(const QList<quint32> &fids);
+    void onFlashTick();
     /** Write a lens-set-by-hand angle into the rig. */
     void applyLens(quint32 fid, float deg);
     /** A fixed light's landing point from its rig, at head height. */
@@ -433,11 +634,33 @@ private:
     QList<UndoEntry> m_undo;
     float m_step = 0.1f;
     InputDevice m_input = ControllerInput;
-    float m_trigger[2] = { 0.0f, 0.0f };
-    float m_carryBeam = 0.0f;
-    /** The held D-pad arm that repeats, and how long until it next does. */
-    Control m_held = NoControl;
-    double m_heldWait = 0.0;
+    ControllerScheme::TriggerButton m_trigger[2];
+    /** The held D-pad arm that repeats (ControllerScheme::HoldRepeat, as
+     *  Refine's): its key is the Control. */
+    ControllerScheme::HoldRepeat m_hold;
+
+    QList<CallState> m_calls;
+    int m_callIndex = -1;
+    QList<quint32> m_all;
+    Scope m_scope = FixtureScope;
+    int m_batch = 0;
+    VenueCorrections *m_venues = nullptr;
+    QTimer *m_flashTimer = nullptr;
+    bool m_flashEnabled = true;
+    bool m_warnFlash = false;
+    QTimer *m_breathTimer = nullptr;
+    QElapsedTimer m_breathClock;
+    std::function<bool(QString *)> m_startGuard;
+    bool m_endedByOperator = false;
+    bool m_targetPage = false;
+    quint32 m_targetId = 0xFFFFFFFF;
+    QVector3D m_targetKept;
+    /** Re-aim the current call's heads at its target where it is now. */
+    void reresolveCall();
+    /** On the target page with a move not kept: said, true (refused). */
+    bool targetBlocks();
+    bool m_lightsFeedback = true;
+    QElapsedTimer m_flashClock;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };
     float m_deadzone = 0.05f;

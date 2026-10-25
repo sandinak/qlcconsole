@@ -125,6 +125,8 @@ QPair<uchar, uchar> solvedDmx(Doc *doc, quint32 fid, const QVector3D &point)
 void FocusSession_Test::init()
 {
     m_doc = new Doc(this);
+    // Steady light to read: the selection's flash is focuscalls_test's.
+    m_doc->programmer()->focusSession()->setFlashEnabled(false);
 }
 
 void FocusSession_Test::cleanup()
@@ -638,7 +640,10 @@ void FocusSession_Test::buttonsByRole()
     QCOMPARE(FocusSession::controlFor(GamepadRole::A), FocusSession::Save);
     QCOMPARE(FocusSession::controlFor(GamepadRole::B), FocusSession::Revert);
     QCOMPARE(FocusSession::controlFor(GamepadRole::X), FocusSession::Zero);
-    QCOMPARE(FocusSession::controlFor(GamepadRole::Y), FocusSession::ToggleReference);
+    // Y is the scope in every on-stage tool (ControllerScheme); the second
+    // reference is a left-stick click.
+    QCOMPARE(FocusSession::controlFor(GamepadRole::Y), FocusSession::CycleScope);
+    QCOMPARE(FocusSession::controlFor(GamepadRole::LS), FocusSession::ToggleReference);
     QCOMPARE(FocusSession::controlFor(GamepadRole::Back), FocusSession::UndoSave);
     QCOMPARE(FocusSession::controlFor(GamepadRole::Start), FocusSession::Exit);
     // The D-pad is zoom (up, down) and focus (left, right): Q103.

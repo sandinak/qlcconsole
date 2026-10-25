@@ -52,6 +52,7 @@
 #include "showtreeview.h"
 #include "effectdesigner.h"
 #include "treecuestack.h"
+#include "refinepanel.h"
 #include "chasereditor.h"
 #include "sceneeditor.h"
 #include "sequence.h"
@@ -181,6 +182,8 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
     connect(m_rows, &ProgrammingOutline::layersEdited, this, &Workbench::layersChanged);
     connect(m_rows, &ProgrammingOutline::openRequested, this, &Workbench::open);
     connect(m_rows, &ProgrammingOutline::editGroupLayoutRequested, this, &Workbench::showGroupLayout);
+    connect(m_rows, &ProgrammingOutline::refineRequested, this,
+            [this](quint32 scene, quint32 group, quint32 fixture) { openRefine(scene, group, fixture); });
     connect(m_rows, &ProgrammingOutline::revealPaletteRequested, this, &Workbench::revealPaletteRequested);
     connect(m_rows, &ProgrammingOutline::hintChanged, this, [this, rowsWhat](const QString &text) {
         m_rowsHint->setText(text.isEmpty() ? rowsWhat : text);
@@ -289,6 +292,34 @@ Workbench::~Workbench()
  * Building
  ****************************************************************************/
 
+QList<quint32> Workbench::refineScenes() const
+{
+    QList<quint32> out;
+    if (qobject_cast<FunctionStack *>(m_stack) == nullptr || !m_stack->readOnlyReason().isEmpty())
+        return out;
+    for (const WorkbenchStack::Layer &l : m_stack->layers())
+        if (l.kind == WorkbenchStack::Layer::SceneLayer
+                && qobject_cast<Scene *>(m_doc->function(l.functionId)) != nullptr)
+            out << l.functionId;
+    return out;
+}
+
+bool Workbench::openRefine(quint32 sceneId, quint32 groupId, quint32 fixtureId)
+{
+    if (TreeCueStack *tree = qobject_cast<TreeCueStack *>(m_stack))
+    {
+        const int at = selectedLayer();
+        const quint32 layer = at >= 0 ? tree->layerIdAt(at) : 0xFFFFFFFF;
+        return RefinePanel::open(m_doc, window(), tree->cueId(), layer) != nullptr;
+    }
+    const QList<quint32> scenes = refineScenes();
+    if (scenes.isEmpty())
+        return false;
+    if (sceneId == 0xFFFFFFFF)
+        sceneId = scenes.contains(m_currentScene) ? m_currentScene : scenes.first();
+    return RefinePanel::openScene(m_doc, window(), scenes, sceneId, groupId, fixtureId) != nullptr;
+}
+
 void Workbench::buildHeader(QWidget *column)
 {
     QVBoxLayout *col = qobject_cast<QVBoxLayout *>(column->layout());
@@ -336,6 +367,18 @@ void Workbench::buildHeader(QWidget *column)
             emit sendToShowTreeRequested(id);
     });
     titleRow->addWidget(m_sendToTreeBtn);
+    /* Refine (FOCUS_REFINE_DESIGN.md 6B): what is loaded, from the stage,
+       on the controller -- a Show Tree cue as the tree does, a scene as
+       its own looks and exceptions. */
+    m_refineBtn = new QToolButton(head);
+    m_refineBtn->setObjectName(QStringLiteral("workbenchRefine"));
+    m_refineBtn->setText(tr("Refine\342\200\246"));
+    m_refineBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_refineBtn->setToolTip(tr("Refine on the controller: move, zoom, focus and recolour this from the "
+                               "stage -- triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+    m_refineBtn->hide();
+    connect(m_refineBtn, &QToolButton::clicked, this, [this]() { openRefine(); });
+    titleRow->addWidget(m_refineBtn);
     m_headerLayout->addLayout(titleRow);
 
     m_info = new QLabel(head);
@@ -892,6 +935,10 @@ void Workbench::updateHeader()
         // An original Import in place kept for Restore original (Q141):
         // looked at, greyed, under the banner -- what plays is the list.
         m_page->setEnabled(m_doc->showTree()->originalFor(id) == Function::invalidId());
+        // Refine edits what is loaded: not offered on a read-only stack
+        // (an original, or one the Show Tree made) -- refineScenes() is empty.
+        m_refineBtn->setVisible(qobject_cast<TreeCueStack *>(m_stack) != nullptr
+                                || !refineScenes().isEmpty());
     }
     if (m_stack == nullptr)
     {

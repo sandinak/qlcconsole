@@ -144,9 +144,11 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
     doc->writeStartElement(KXMLStageTarget);
     doc->writeAttribute(KXMLStageTargetID,    QString::number(m_id));
     doc->writeAttribute(KXMLStageTargetName,  m_name);
-    doc->writeAttribute(KXMLStageTargetX,     QString::number(double(m_position.x()), 'f', 3));
-    doc->writeAttribute(KXMLStageTargetY,     QString::number(double(m_position.y()), 'f', 3));
-    doc->writeAttribute(KXMLStageTargetZ,     QString::number(double(m_position.z()), 'f', 3));
+    // A venue's position is the venue's (Q128): the show keeps its own.
+    const QVector3D saved = m_hasBase ? m_base : position();
+    doc->writeAttribute(KXMLStageTargetX,     QString::number(double(saved.x()), 'f', 3));
+    doc->writeAttribute(KXMLStageTargetY,     QString::number(double(saved.y()), 'f', 3));
+    doc->writeAttribute(KXMLStageTargetZ,     QString::number(double(saved.z()), 'f', 3));
     if (m_color.isValid())
         doc->writeAttribute(KXMLStageTargetColor, m_color.name());
     if (m_locked)

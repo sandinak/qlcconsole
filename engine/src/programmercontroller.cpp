@@ -34,7 +34,11 @@
 
 #include "programmercontroller.h"
 #include "controllerkeepalive.h"
+#include "venuecorrections.h"
+#include "refinesession.h"
 #include "focussession.h"
+#include "focuscalls.h"
+#include "focuscallcue.h"
 #include "gamepadrole.h"
 
 #include "doc.h"
@@ -86,20 +90,125 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);
     m_focusSession = new FocusSession(m_doc, this);
+    /* Focus calls and per-venue corrections (FOCUS_REFINE_DESIGN.md): the
+       show's calls, the venue's corrections beside the show file, and
+       Refine -- the same controller on a cue's own values. */
+    m_venues = new VenueCorrections(m_doc, this);
+    m_focusSession->setVenues(m_venues);
+    m_focusCalls = new FocusCalls(m_doc, this);
+    m_refineSession = new RefineSession(m_doc, this);
+    m_focusCallCue = new FocusCallCue(m_doc, m_focusSession, m_focusCalls, this);
+    /* Gap 5: one controller tool at a time, and a start never throws away
+       another's (or its own) unsaved work: it is refused, saying what to
+       do first. */
+    auto busy = [this](QString *why) {
+        QString reason;
+        if (m_focusSession->isActive() && m_focusSession->hasUnsaved())
+        {
+            const int n = m_focusSession->unsavedFixtures().size();
+            reason = (n == 1 ? tr("Focus mode has 1 light not saved") : tr("Focus mode has %1 lights not saved").arg(n))
+                     + tr(": save it (A) or put it back (B) first.");
+        }
+        else if (m_refineSession->isActive() && m_refineSession->hasPending())
+        {
+            const int n = m_refineSession->pendingCount();
+            reason = (n == 1 ? tr("Refine has 1 change not kept") : tr("Refine has %1 changes not kept").arg(n))
+                     + tr(": keep it (A) or go back to the cue (B) first.");
+        }
+        if (reason.isEmpty())
+            return true;
+        if (why != nullptr)
+            *why = reason;
+        return false;
+    };
+    m_focusSession->setStartGuard(busy);
+    m_refineSession->setStartGuard(busy);
+    /* Spoken unless the operator chose lights only -- except what is
+       important, which is always said (Q131). */
+    connect(m_focusCallCue, &FocusCallCue::announce, this, &ProgrammerController::tellOperator);
+    connect(m_focusCallCue, &FocusCallCue::stateChanged, this, [this]() {
+        // Armed: the controller is read for Start, even with nothing else on.
+        if (m_focusCallCue->isArmed())
+            connectControllerInput();
+        releaseOwnerIfIdle();
+    });
+    connect(m_focusSession, &FocusSession::announce, this, &ProgrammerController::tellOperator);
+    connect(m_refineSession, &RefineSession::announce, this, &ProgrammerController::tellOperator);
+    /* The pad (Q126): its light bar follows the status lamp, and it buzzes
+       on a keep -- twice when another light is still unsaved. */
+    connect(m_focusSession, &FocusSession::unsavedChanged, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::currentChanged, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::started, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::stopped, this, &ProgrammerController::refreshPadLight);
+    connect(m_focusSession, &FocusSession::headSaved, this, [this]() {
+        padRumble(m_focusSession->saveStatus() == FocusSession::AllSaved ? 1 : 2);
+    });
+    connect(m_refineSession, &RefineSession::changed, this, &ProgrammerController::refreshPadLight);
+    connect(m_refineSession, &RefineSession::started, this, &ProgrammerController::refreshPadLight);
+    connect(m_refineSession, &RefineSession::stopped, this, &ProgrammerController::refreshPadLight);
+    connect(m_refineSession, &RefineSession::kept, this, [this]() { padRumble(1); });
+    /* Nothing reaching the rig (Blackout, the Grand Master at zero, a
+       universe with no output): said, not a cheerful "fixture 3 of 8". */
+    connect(m_focusSession, &FocusSession::started, this, [this]() {
+        m_lastRigProblem.clear();
+        checkRigOutput(m_focusSession->currentFixture());
+    });
+    connect(m_focusSession, &FocusSession::currentChanged, this, [this](quint32 fid) { checkRigOutput(fid); });
+    connect(m_refineSession, &RefineSession::started, this, [this]() {
+        m_lastRigProblem.clear();
+        checkRigOutput(m_refineSession->scopeFixtures().value(0, 0xFFFFFFFF));
+    });
+    connect(m_refineSession, &RefineSession::changed, this, [this]() {
+        if (m_refineSession->isActive())
+            checkRigOutput(m_refineSession->scopeFixtures().value(0, 0xFFFFFFFF));
+    });
+    // Say the light: asked for, so always said.
+    connect(m_focusSession, &FocusSession::sayLight, this, [this](const QString &text) {
+        emit operatorAnnounce(text, ControllerScheme::ConfirmPriority);
+    });
+    connect(m_refineSession, &RefineSession::sayLight, this, [this](const QString &text) {
+        emit operatorAnnounce(text, ControllerScheme::ConfirmPriority);
+    });
+    connect(m_doc, &Doc::clearing, this, [this]() {
+        m_refineSession->stop();
+        m_venues->reset();
+        m_focusCalls->clear();
+    });
+    connect(m_refineSession, &RefineSession::started, this, [this]() {
+        if (m_focusSession->isActive())
+            m_focusSession->stop();
+        connectControllerInput();
+        m_fineNormX = m_fineNormY = 0.5f;
+        m_refineSession->setStick(RefineSession::Coarse, 0.5f, 0.5f);
+        m_joyTickClock.invalidate();
+        refreshControllerKeepAlive();
+        m_padPresent = focusController().present;
+        m_padLost = false;
+    });
+    connect(m_refineSession, &RefineSession::stopped, this, [this]() {
+        refreshControllerKeepAlive();
+        releaseOwnerIfIdle();
+    });
     /* Focus mode takes the stick from the follow spot's data channel while it
        runs (a free-flying follow spot must not fly while its stick is
        aligning the rig), and gives it back as it stands when it stops. */
     connect(m_focusSession, &FocusSession::started, this, [this]() {
+        // One tool owns the controller at a time.
+        if (m_refineSession != nullptr && m_refineSession->isActive())
+            m_refineSession->stop();
         connectControllerInput();    // even with no follow-spot axes bound
         m_fineNormX = m_fineNormY = 0.5f;
         m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
         emit joystickUpdated(0.5f, 0.5f);
         m_joyTickClock.invalidate();
         refreshControllerKeepAlive();
+        m_padPresent = focusController().present;
+        m_padLost = false;
     });
     connect(m_focusSession, &FocusSession::stopped, this, [this]() {
         emit joystickUpdated(m_panNorm, m_tiltNorm);
         refreshControllerKeepAlive();
+        releaseOwnerIfIdle();
     });
     /* While Focus mode or the follow spot reads a controller, keep the app
        out of App Nap and say when the controller is paused. */
@@ -110,6 +219,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
             this, &ProgrammerController::refreshControllerKeepAlive);
     connect(this, &ProgrammerController::focusControllerChanged,
             this, &ProgrammerController::refreshControllerKeepAlive);
+    connect(this, &ProgrammerController::focusControllerChanged,
+            this, &ProgrammerController::checkControllerPresence);
     connect(this, &ProgrammerController::axisBindingChanged,
             this, &ProgrammerController::refreshControllerKeepAlive);
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
@@ -1349,6 +1460,245 @@ bool ProgrammerController::hasParkedFixtures() const
     return m_parkEffect != nullptr && !m_parkEffect->isEmpty();
 }
 
+void ProgrammerController::setOperatorFeedback(ControllerScheme::Feedback feedback)
+{
+    const bool lights = feedback != ControllerScheme::VoiceFeedback;
+    m_focusSession->setLightsFeedback(lights);
+    m_focusSession->setRigFeedback(lights);     // the save blink; the lamp stays
+    m_refineSession->setLightsFeedback(lights);
+    if (feedback == m_feedback)
+        return;
+    m_feedback = feedback;
+    emit operatorFeedbackChanged(feedback);
+}
+
+void ProgrammerController::refreshPadLight()
+{
+    // The lamp's colours: blue all saved, yellow this light, orange another.
+    QColor c;
+    if (m_focusSession->isActive())
+    {
+        switch (m_focusSession->saveStatus())
+        {
+            case FocusSession::AllSaved:      c = ControllerScheme::savedColour(); break;
+            case FocusSession::ThisUnsaved:   c = ControllerScheme::thisUnsavedColour(); break;
+            case FocusSession::OthersUnsaved:
+            case FocusSession::BothUnsaved:   c = ControllerScheme::othersUnsavedColour(); break;
+        }
+    }
+    else if (m_refineSession->isActive())
+        c = !m_refineSession->hasPending() ? ControllerScheme::savedColour()
+            : m_refineSession->hasPendingHere() ? ControllerScheme::thisUnsavedColour()
+                                                : ControllerScheme::othersUnsavedColour();
+    setPadLight(c);
+}
+
+void ProgrammerController::setPadLight(const QColor &colour)
+{
+    if (colour == m_padLight)
+        return;
+    m_padLight = colour;
+    QVariantMap p;
+    p.insert(QStringLiteral("gamepad"), QStringLiteral("light"));
+    p.insert(QStringLiteral("rgb"), colour.isValid() ? colour.name() : QString());
+    sendPadFeedback(p);
+    emit padLightChanged(colour);
+}
+
+void ProgrammerController::padRumble(int pulses, int lengthMs)
+{
+    if (pulses <= 0)
+        return;
+    ++m_padRumbles;
+    QVariantMap p;
+    p.insert(QStringLiteral("gamepad"), QStringLiteral("rumble"));
+    p.insert(QStringLiteral("pulses"), pulses);
+    p.insert(QStringLiteral("ms"), lengthMs);
+    sendPadFeedback(p);
+    emit padRumbled(pulses, lengthMs);
+}
+
+void ProgrammerController::tellOperator(const QString &text, int priority)
+{
+    if (priority >= ControllerScheme::ImportantPriority)
+        warnOperator(text);
+    else if (m_feedback != ControllerScheme::LightsFeedback)
+        emit operatorAnnounce(text, priority);
+}
+
+void ProgrammerController::warnOperator(const QString &text)
+{
+    // Said whatever the feedback; the rig and the pad each say "listen".
+    emit operatorAnnounce(text, ControllerScheme::ImportantPriority);
+    if (m_focusSession->isActive())
+        m_focusSession->flashWarning();
+    else if (m_refineSession->isActive())
+        m_refineSession->flashWarning();
+    padRumble(1, ControllerScheme::rumbleLongMs());
+}
+
+void ProgrammerController::sendPadFeedback(const QVariantMap &params)
+{
+    // The controller the tools read: its own plugin, its own line.
+    const FocusController pad = focusController();
+    if (!pad.present || m_doc->inputOutputMap() == nullptr)
+        return;
+    InputPatch *ip = m_doc->inputOutputMap()->inputPatch(pad.universe);
+    if (ip == nullptr || ip->plugin() == nullptr)
+        return;
+    ip->plugin()->sendFeedBack(pad.universe, ip->input(), 0, 0, params);
+}
+
+void ProgrammerController::heldTick(double dt)
+{
+    const bool refine = m_refineSession->isActive();
+    if (m_holdA.due(dt))
+    {
+        if (refine)
+        {
+            /* Board Q132: a hold never answers a warning (a shared
+               palette's "press A again"): only a fresh press does. */
+            if (m_refineSession->hasWarningPending())
+            {
+                // Left waiting for that press.
+            }
+            // Everything pending is kept by A already: say it is.
+            else if (m_refineSession->hasPending())
+                m_refineSession->keep();
+            else
+                emit operatorAnnounce(tr("All kept."), ControllerScheme::ConfirmPriority);
+        }
+        else
+            m_focusSession->saveAllHeld();
+    }
+    if (m_holdB.due(dt))
+    {
+        if (refine)
+            m_refineSession->revert();
+        else
+            m_focusSession->revertLight();
+    }
+}
+
+void ProgrammerController::freezeController()
+{
+    m_panNorm = m_tiltNorm = 0.5f;
+    m_fineNormX = m_fineNormY = 0.5f;
+    m_holdA.reset();
+    m_holdB.reset();
+    m_sayHold.reset();
+    m_heldRoles.clear();
+    m_viewChord = false;
+    m_rsChord = false;
+    m_bumperFrom = 0xFFFFFFFF;
+    m_focusSession->releaseControls();
+    m_refineSession->releaseControls();
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
+}
+
+QString ProgrammerController::rigOutputProblem(quint32 fid) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return QString();
+    if (iom->blackout())
+        return tr("Blackout is on: the rig shows nothing.");
+    if (iom->grandMasterValue() == 0)
+        return tr("The Grand Master is at zero: the rig shows nothing.");
+    /* Its universe with no output, where others have one -- a laptop with
+       no outputs at all is previewing, as the footer says, not a problem. */
+    const Fixture *fx = fid != 0xFFFFFFFF ? m_doc->fixture(fid) : nullptr;
+    bool anyOutput = false;
+    for (quint32 u = 0; u < iom->universesCount() && !anyOutput; ++u)
+        anyOutput = iom->outputPatchesCount(u) > 0;
+    if (anyOutput && fx != nullptr && fx->universe() < iom->universesCount()
+        && iom->outputPatchesCount(fx->universe()) == 0)
+        return tr("%1's universe has no output: it shows nothing.").arg(fx->name());
+    return QString();
+}
+
+void ProgrammerController::checkRigOutput(quint32 fid)
+{
+    if (!m_focusSession->isActive() && !m_refineSession->isActive())
+    {
+        m_lastRigProblem.clear();
+        return;
+    }
+    const QString problem = rigOutputProblem(fid);
+    if (problem == m_lastRigProblem)
+        return;
+    m_lastRigProblem = problem;
+    if (!problem.isEmpty())
+        warnOperator(problem);
+}
+
+QString ProgrammerController::controllerOwnerName() const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = (m_ownerUniverse != 0xFFFFFFFF && iom != nullptr) ? iom->inputPatch(m_ownerUniverse) : nullptr;
+    return ip != nullptr && ip->plugin() != nullptr ? ip->inputName() : QString();
+}
+
+void ProgrammerController::releaseOwnerIfIdle()
+{
+    if (!m_focusSession->isActive() && !m_refineSession->isActive()
+        && m_focusCallCue->state() == FocusCallCue::Idle)
+        m_ownerUniverse = 0xFFFFFFFF;
+}
+
+void ProgrammerController::checkControllerPresence()
+{
+    const bool present = focusController().present;
+    const bool tool = m_focusSession->isActive() || m_refineSession->isActive();
+    if (m_padPresent && !present)
+    {
+        /* Mid-move or mid-hold, the pad sends no "let go": everything it
+           held is let go here, so no light drifts and no hold fires. */
+        freezeController();
+        // The owner gone: the next pad to press takes it.
+        m_ownerUniverse = 0xFFFFFFFF;
+        if (tool)
+        {
+            m_padLost = true;
+            warnOperator(tr("Controller lost. Lights held."));
+            emit controllerLost(true);
+        }
+    }
+    else if (!m_padPresent && present && m_padLost)
+    {
+        m_padLost = false;
+        if (tool)
+        {
+            warnOperator(tr("Controller back."));
+            emit controllerLost(false);
+        }
+    }
+    m_padPresent = present;
+}
+
+void ProgrammerController::cycleOperatorFeedback()
+{
+    setOperatorFeedback(ControllerScheme::nextFeedback(m_feedback));
+    // Said whatever it now is: it was asked for.
+    emit operatorAnnounce(tr("Feedback: %1.").arg(ControllerScheme::feedbackName(m_feedback)),
+                          ControllerScheme::ConfirmPriority);
+}
+
+bool ProgrammerController::saveFocusCallsXML(QXmlStreamWriter *doc) const
+{
+    return m_focusCalls != nullptr ? m_focusCalls->saveXML(doc) : true;
+}
+
+bool ProgrammerController::loadFocusCallsXML(QXmlStreamReader &root)
+{
+    if (m_focusCalls == nullptr)
+    {
+        root.skipCurrentElement();
+        return false;
+    }
+    return m_focusCalls->loadXML(root);
+}
+
 bool ProgrammerController::saveParkXML(QXmlStreamWriter *doc) const
 {
     return m_parkEffect != nullptr ? m_parkEffect->saveXML(doc) : true;
@@ -1699,7 +2049,8 @@ void ProgrammerController::autoBindFromProfile()
 
 void ProgrammerController::refreshControllerKeepAlive()
 {
-    const bool focus = m_focusSession->isActive();
+    const bool focus = m_focusSession->isActive()
+                       || (m_refineSession != nullptr && m_refineSession->isActive());
     const bool followSpot = hasFollowSpotInput();
     m_keepAlive->setFocusActive(focus);
     m_keepAlive->setFollowSpotActive(followSpot);
@@ -1733,6 +2084,18 @@ void ProgrammerController::connectControllerInput()
     /* A pad kept offline coming back (or going) on the retry tick. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
             this, &ProgrammerController::focusControllerChanged);
+    // A device gone or back (main 88409a2a7): at once, not at the next tick.
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceDisconnected,
+            this, &ProgrammerController::focusControllerChanged);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceConnected,
+            this, &ProgrammerController::focusControllerChanged);
+    // Blackout or the Grand Master to zero mid-session: said.
+    auto recheck = [this]() {
+        checkRigOutput(m_focusSession->isActive() ? m_focusSession->currentFixture()
+                       : m_refineSession->scopeFixtures().value(0, 0xFFFFFFFF));
+    };
+    connect(m_doc->inputOutputMap(), &InputOutputMap::blackoutChanged, this, recheck);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged, this, recheck);
     m_controllerInputConnected = true;
 }
 
@@ -2015,7 +2378,9 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
         if (used == 0)
             continue;
         // Most of what Focus mode uses wins; the follow spot's breaks a tie.
-        const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0);
+        // The pad that owns the tools (Q135) is the one, though.
+        const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0)
+                          + (u == m_ownerUniverse ? 1000 : 0);
         if (score > bestScore)
         {
             bestScore = score;
@@ -2030,7 +2395,8 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
 bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
 {
     const float norm = value / 255.0f;
-    const bool active = m_focusSession->isActive();
+    const bool refine = m_refineSession->isActive();
+    const bool active = m_focusSession->isActive() || refine;
     const bool isPan = m_panBound && universe == m_panUniverse && channel == m_panChannel;
     const bool isTilt = m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel;
     /* The bound pan/tilt pair is the follow spot's stick: when Focus mode is
@@ -2042,12 +2408,45 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     if (role == GamepadRole::None && !active)
         return false;
 
+    /* Board Q135, two pads: the first to press Start (a tool started on the
+       laptop: any button) owns it; another is ignored, and told so. */
+    if ((active || m_focusCallCue->isArmed()) && (role != GamepadRole::None || isPan || isTilt))
+    {
+        const bool press = value > 0 && !GamepadRole::isAxis(role) && !isPan && !isTilt;
+        if (m_ownerUniverse == 0xFFFFFFFF)
+        {
+            if (press && (active || role == FocusCallCue::startRole()))
+            {
+                m_ownerUniverse = universe;
+                emit focusControllerChanged();     // the panels name it
+            }
+        }
+        else if (universe != m_ownerUniverse)
+        {
+            if (press)
+                warnOperator(tr("Another controller is in use."));
+            return true;
+        }
+    }
+
     if (!GamepadRole::isAxis(role) && role != GamepadRole::None)
     {
         if (value > 0)
+        {
+            // Anything pressed with View held makes a chord: View then does not undo.
+            if (role != GamepadRole::Back && m_heldRoles.contains(GamepadRole::Back))
+                m_viewChord = true;
             m_heldRoles.insert(role);
+        }
         else
             m_heldRoles.remove(role);
+        // A focus-call cue armed: Start (Menu) begins the calls.
+        if (!active && value > 0 && role == FocusCallCue::startRole() && m_focusCallCue->isArmed()
+            && !m_heldRoles.contains(GamepadRole::Back))
+        {
+            m_focusCallCue->start();
+            return true;
+        }
         // View + Menu together: ask for Focus mode.
         if (!active && value > 0 && m_heldRoles.contains(GamepadRole::Back)
             && m_heldRoles.contains(GamepadRole::Start))
@@ -2061,7 +2460,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
 
     /* On the keyboard the controller is ignored -- but still kept from the
        follow spot and the rest -- so a resting stick cannot drift a head. */
-    if (m_focusSession->inputDevice() == FocusSession::KeyboardInput)
+    if (!refine && m_focusSession->inputDevice() == FocusSession::KeyboardInput)
         return true;
 
     // What the panel lights: the stick by its role even when it is only bound.
@@ -2071,8 +2470,113 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
                                                                         : (value > 0 ? 1.0f : 0.0f));
 
+    /* A and B held (Q126): the press does its own thing below; held to
+       holdFor(), save all / back to the last save (heldTick()). */
+    if (role == GamepadRole::A)
+        value > 0 ? m_holdA.press() : void(m_holdA.release());
+    else if (role == GamepadRole::B)
+        value > 0 ? m_holdB.press() : void(m_holdB.release());
+
+    /* Both bumpers (Q126): the second one down, with the first held, jumps
+       to the next unsaved light (Refine: the next pending change). */
+    if ((role == GamepadRole::LB || role == GamepadRole::RB) && value > 0
+        && m_heldRoles.contains(role == GamepadRole::LB ? GamepadRole::RB : GamepadRole::LB))
+    {
+        // From where the first bumper of the pair stepped from.
+        if (refine)
+            m_refineSession->nextPending();
+        else
+            m_focusSession->nextUnsaved(m_bumperFrom);
+        return true;
+    }
+    if ((role == GamepadRole::LB || role == GamepadRole::RB) && value > 0 && !refine)
+        m_bumperFrom = m_focusSession->currentFixture();
+
+    /* RS, in every tool: a tap says the light, a hold (the controller
+       tick, LongPress::holdFor()) changes the feedback. */
+    /* View (Back) is the same in every tool (the gaps review): it undoes on
+       its RELEASE, unless another control was pressed while it was held --
+       View + A (Refine: keep at the source), View + RS (how many are not
+       saved). */
+    if (role == GamepadRole::Back)
+    {
+        if (value > 0)
+            m_viewChord = false;
+        else if (!m_viewChord)
+        {
+            if (refine)
+                m_refineSession->apply(ControllerScheme::Undo);
+            else
+                m_focusSession->apply(FocusSession::UndoSave);
+        }
+        return true;
+    }
+    if (role == GamepadRole::RS && value > 0 && m_heldRoles.contains(GamepadRole::Back))
+    {
+        // View + RS: "2 not saved." -- asked for, so said whatever the feedback.
+        m_viewChord = true;
+        m_rsChord = true;
+        emit operatorAnnounce(refine ? m_refineSession->pendingCountPhrase()
+                                     : m_focusSession->unsavedCountPhrase(),
+                              ControllerScheme::ConfirmPriority);
+        return true;
+    }
+    if (role == GamepadRole::RS && value == 0 && m_rsChord)
+    {
+        m_rsChord = false;
+        return true;
+    }
+    if (role == GamepadRole::RS)
+    {
+        if (value > 0)
+            m_sayHold.press();
+        else if (m_sayHold.release())
+        {
+            if (refine)
+                m_refineSession->whereAmI();
+            else
+                m_focusSession->whereAmI();
+        }
+        return true;
+    }
+
+    // Refine: the same controller on the cue's own values (ControllerScheme).
+    if (refine)
+    {
+        if (isPan || role == GamepadRole::LeftX)
+            m_panNorm = norm;
+        else if (isTilt || role == GamepadRole::LeftY)
+            m_tiltNorm = norm;
+        else if (role == GamepadRole::RightX)
+            m_fineNormX = norm;
+        else if (role == GamepadRole::RightY)
+            m_fineNormY = norm;
+        else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
+            m_refineSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
+        /* View + A (board Q118): keep at the source cue (View itself is
+           handled above, on its release). */
+        else if (role == GamepadRole::A && value > 0 && m_heldRoles.contains(GamepadRole::Back))
+        {
+            m_viewChord = true;
+            m_refineSession->keepAtSource();
+        }
+        else if (ControllerScheme::verbFor(role) != ControllerScheme::NoVerb)
+        {
+            // Down applies (a held D-pad arm repeats); up stops it.
+            m_refineSession->press(ControllerScheme::verbFor(role), value > 0);
+        }
+        m_refineSession->setStick(RefineSession::Coarse, m_panNorm, m_tiltNorm);
+        m_refineSession->setStick(RefineSession::Fine, m_fineNormX, m_fineNormY);
+        return true;
+    }
+
     // Focus mode owns the controller: everything stops here.
-    if (isPan || role == GamepadRole::LeftX)
+    if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
+    {
+        // The triggers step the focus calls.
+        m_focusSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
+    }
+    else if (isPan || role == GamepadRole::LeftX)
     {
         m_panNorm = norm;
         m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
@@ -2114,7 +2618,26 @@ void ProgrammerController::applyDesignJoystick()
             dt = qBound(nominal, m_joyTickClock.restart() / 1000.0, qMax(nominal, 0.1));
         else
             m_joyTickClock.start();
+        if (m_sayHold.due(dt))
+            cycleOperatorFeedback();
+        heldTick(dt);
         m_focusSession->tick(dt);
+        return;
+    }
+    if (m_refineSession != nullptr && m_refineSession->isActive())
+    {
+        m_refineSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
+        const double nominal = m_designJoyTimer != nullptr
+                               ? m_designJoyTimer->interval() / 1000.0 : 0.02;
+        double dt = nominal;
+        if (m_joyTickClock.isValid())
+            dt = qBound(nominal, m_joyTickClock.restart() / 1000.0, qMax(nominal, 0.1));
+        else
+            m_joyTickClock.start();
+        if (m_sayHold.due(dt))
+            cycleOperatorFeedback();
+        heldTick(dt);
+        m_refineSession->tick(dt);
         return;
     }
 

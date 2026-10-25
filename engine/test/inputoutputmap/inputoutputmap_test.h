@@ -91,6 +91,9 @@ private slots:
     void universe();
     void profiles();
     void setInputPatch();
+    /** Unpatched by name (no plugin, a valid line), then patched again:
+     *  the patch left with no plugin is not dereferenced. */
+    void repatchAfterUnpatchByName();
     void setOutputPatch();
     void setMultipleOutputPatches();
     void slotValueChanged();

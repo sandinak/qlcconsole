@@ -1061,8 +1061,19 @@ private:
     QVector3D fixtureBasePosition(quint32 fid) const;
 public:
 
+    /** A venue's corrections are applied (VenueCorrections): @p fid's rig
+     *  props carry them, and @p base is the show's own calibration, which
+     *  saveXML() writes in their place -- so the show file never takes a
+     *  venue's corrections. */
+    void setCalibrationBase(quint32 fid, const RigCalibration &base) { m_calibrationBase[fid] = base; }
+    void clearCalibrationBase(quint32 fid) { m_calibrationBase.remove(fid); }
+    bool hasCalibrationBase(quint32 fid) const { return m_calibrationBase.contains(fid); }
+    RigCalibration calibrationBase(quint32 fid) const { return m_calibrationBase.value(fid); }
+    QList<quint32> calibrationBaseFixtures() const { return m_calibrationBase.keys(); }
+
 private:
     QMap<quint32, FixtureRigProps> m_rigProps;
+    QHash<quint32, RigCalibration> m_calibrationBase;
 
     /********************************************************************
      * Gobo swaps

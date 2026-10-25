@@ -6161,9 +6161,13 @@ void ShowTreeView_Test::originalsOpenViewOnlyElsewhere()
         QLabel *text = wb->m_lockedBanner->findChild<QLabel *>("stLockedText");
         QVERIFY(text != nullptr && text->text().contains(original.toHtmlEscaped()) && text->text().contains(edit));
         QVERIFY(!wb->m_page->isEnabled());
+        // Refine edits what is loaded: not offered on an original.
+        QVERIFY(wb->m_refineBtn->isHidden());
+        QVERIFY(!wb->openRefine());
         wb->load(haze->id());
         QVERIFY(wb->m_lockedBanner == nullptr);
         QVERIFY(wb->m_page->isEnabled());
+        QVERIFY(!wb->m_refineBtn->isHidden());
     }
     QVERIFY(st->whyNotSend(chaser->id()).startsWith("Upgraded already"));
 }

@@ -206,6 +206,12 @@ public:
     /** Run @a change over scenes @a sceneIds as one step (recordSceneStep). */
     bool sceneStep(const QString &label, const QList<quint32> &sceneIds,
                    const std::function<bool()> &change);
+    /** Run @a change over scenes @a sceneIds AND palette values @a paletteIds
+     *  as ONE step (board Q117: Refine on a Build scene that moves a palette
+     *  and the scene's own values at once). Undo puts back both. Nothing
+     *  changed: no step (false). */
+    bool sceneValueStep(const QString &label, const QList<quint32> &sceneIds,
+                        const QList<quint32> &paletteIds, const std::function<bool()> &change);
 
     /************************************************************************
      * Value steps: the Look Editor's edits to a palette's value -- and the
