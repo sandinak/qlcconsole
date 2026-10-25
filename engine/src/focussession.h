@@ -194,6 +194,11 @@ public:
     static QList<quint32> focusable(Doc *doc, const QList<quint32> &fixtures);
     /** The moving heads among focusable(). */
     static QList<quint32> movingHeads(Doc *doc, const QList<quint32> &fixtures);
+    /** Board Q140: the value that takes @p ch out of the beam for a focus
+     *  -- a gobo wheel's open slot, the prism out, no frost -- from its
+     *  capabilities; false for any other channel (an index or rotation,
+     *  colour, intensity). */
+    static bool openBeamValue(const class QLCChannel *ch, uchar &value);
     /** The FIXED lights among them (board Q102): one head, no pan or tilt,
      *  a light, placed on the plot. Focus mode moves where such a light lands
      *  (at head height) and sets its Pan and Tilt (FixtureRigProps::fixedAim)
@@ -261,6 +266,13 @@ public:
     void nextCall();
     void previousCall();
     void setCallIndex(int index);
+    /** Board Q140: go to @p fid (a light clicked on the plot) -- into the
+     *  call that has it, at fixture scope -- and say it. False when it is
+     *  not in the session, or a moved target is not kept yet. */
+    bool jumpTo(quint32 fid);
+    /** Board Q140, View + X (D): mark the light being worked dead in the
+     *  venue applied, or not dead again; said. Needs a venue. */
+    bool toggleDead();
     /** Every head in the session, all calls, each once. */
     QList<quint32> allFixtures() const { return m_all; }
 
@@ -277,7 +289,11 @@ public:
 public:
     /** What is said on stepping to a call, a fixture or a scope, and for
      *  Where am I? -- the phrases the design lists. */
-    QString wherePhrase() const;
+    QString wherePhrase(bool withPosition = false) const;
+    /** Board Q140: where the current call's target is from the stage marks,
+     *  spoken ("SL 2, US 1"); empty when it has no target. Said on entering
+     *  a call and with Say the light. */
+    QString callPositionPhrase() const;
     /** "Say the light" (RS): the light's name first, then where it is --
      *  "Spot 3. Call 2 of 5, AT spots to DSC. Fixture 3 of 8." -- said
      *  (sayLight(), whatever the feedback setting: it was asked for) and
@@ -308,6 +324,10 @@ public:
     static constexpr float breathLow() { return 0.45f; }
     static float breathLevel(qint64 ms);
     bool isBreathing() const;
+    /** Board Q140, the freeze chord: hold every light as it is -- no
+     *  breathing, no blinks -- until released. */
+    void setHolding(bool on);
+    bool isHolding() const { return m_holding; }
     /** The selection's slow long blink (lights feedback only). */
     void flashWarning();
     bool isWarningFlash() const { return m_warnFlash && isFlashing(); }
@@ -676,6 +696,7 @@ private:
     /** On the target page with a move not kept: said, true (refused). */
     bool targetBlocks();
     bool m_lightsFeedback = true;
+    bool m_holding = false;
     QElapsedTimer m_flashClock;
 
     float m_stick[2][2] = { { 0.5f, 0.5f }, { 0.5f, 0.5f } };

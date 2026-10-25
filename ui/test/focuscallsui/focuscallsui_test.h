@@ -79,6 +79,9 @@ private slots:
     /** Q134: the venue manager exports the focus report -- PDF, web page
      *  or CSV, by the file's ending -- with who focused, typed once. */
     void theFocusReportIsExported();
+    /** Q140: a new venue starts from the last venue's corrections (the
+     *  box ticked), or from the show's own. */
+    void aNewVenueStartsFromTheLast();
 
 private:
     Doc *m_doc = nullptr;

@@ -482,7 +482,7 @@ void RefineSession::cyclePage()
     emit changed();
     switch (m_page)
     {
-        case BeamPage:   confirm(tr("Beam page: zoom and focus.")); break;
+        case BeamPage:   confirm(tr("Beam page: spot down, flood out, sharper, softer.")); break;
         case ColourPage: confirm(tr("Colour page.")); break;
         case GoboPage:   confirm(tr("Gobo page.")); break;
     }
@@ -667,7 +667,7 @@ RefineSession::Edit &RefineSession::edit()
 
 bool RefineSession::nudgePosition(float dPan, float dTilt)
 {
-    if (!m_active || (dPan == 0.0f && dTilt == 0.0f))
+    if (!m_active || m_holding || (dPan == 0.0f && dTilt == 0.0f))
         return false;
     const QList<quint32> fixtures = scopeFixtures();
     if (fixtures.isEmpty())
@@ -1402,7 +1402,7 @@ void RefineSession::setLightsFeedback(bool on)
 void RefineSession::flashSelection()
 {
     // Q130: in Operate, quiet -- the audience sees the show, not a blink.
-    if (!m_active || !m_flashEnabled || !m_lightsFeedback || isQuiet())
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback || isQuiet() || m_holding)
         return;
     m_warnFlash = false;
     m_flashClock.start();
@@ -1452,7 +1452,7 @@ void RefineSession::checkRunning()
 
 void RefineSession::flashWarning()
 {
-    if (!m_active || !m_flashEnabled || !m_lightsFeedback || isQuiet())
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback || isQuiet() || m_holding)
         return;
     m_warnFlash = true;
     m_flashClock.start();
@@ -1481,9 +1481,20 @@ void RefineSession::onFlashTick()
  * Controller
  *****************************************************************************/
 
+void RefineSession::setHolding(bool on)
+{
+    if (on == m_holding)
+        return;
+    m_holding = on;
+    m_flashClock.invalidate();
+    m_flashTimer->stop();
+    m_hold.reset();
+    rebuildWrites();
+}
+
 void RefineSession::apply(ControllerScheme::Verb verb)
 {
-    if (!m_active)
+    if (!m_active || m_holding)
         return;
     switch (verb)
     {
@@ -1541,7 +1552,19 @@ void RefineSession::press(ControllerScheme::Verb verb, bool down)
         m_hold.release(int(verb));
         return;
     }
+    if (m_holding)
+        return;
     m_hold.press(int(verb), repeats(verb));
+    // The crew's word for a beam press (Q140): said once, not on repeats.
+    if (m_page == BeamPage && !ControllerScheme::crewWord(verb).isEmpty())
+    {
+        const bool zoom = verb == ControllerScheme::ZoomWider || verb == ControllerScheme::ZoomNarrower;
+        const bool ok = zoom ? nudgeZoom(verb == ControllerScheme::ZoomWider ? 1.0f : -1.0f)
+                             : nudgeFocus(verb == ControllerScheme::FocusFarther ? 5 : -5);
+        if (ok)
+            say(ControllerScheme::crewWord(verb));
+        return;
+    }
     apply(verb);
 }
 

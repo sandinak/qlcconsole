@@ -147,6 +147,18 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_refineSession, &RefineSession::started, this, &ProgrammerController::refreshPadLight);
     connect(m_refineSession, &RefineSession::stopped, this, &ProgrammerController::refreshPadLight);
     connect(m_refineSession, &RefineSession::kept, this, [this]() { padRumble(1); });
+    // A tool that ends while holding (Q140) leaves nothing held for the next.
+    auto letGo = [this]() {
+        if (m_holding && !m_focusSession->isActive() && !m_refineSession->isActive())
+        {
+            m_holding = false;
+            m_focusSession->setHolding(false);
+            m_refineSession->setHolding(false);
+            emit holdingChanged(false);
+        }
+    };
+    connect(m_focusSession, &FocusSession::stopped, this, letGo);
+    connect(m_refineSession, &RefineSession::stopped, this, letGo);
     /* Nothing reaching the rig (Blackout, the Grand Master at zero, a
        universe with no output): said, not a cheerful "fixture 3 of 8". */
     connect(m_focusSession, &FocusSession::started, this, [this]() {
@@ -1537,6 +1549,27 @@ void ProgrammerController::warnOperator(const QString &text)
     padRumble(1, ControllerScheme::rumbleLongMs());
 }
 
+void ProgrammerController::setHolding(bool on)
+{
+    if (on == m_holding)
+        return;
+    m_holding = on;
+    // Let go of the sticks and holds: nothing creeps on while held or after.
+    m_panNorm = m_tiltNorm = 0.5f;
+    m_fineNormX = m_fineNormY = 0.5f;
+    m_holdA.reset();
+    m_holdB.reset();
+    m_focusSession->releaseControls();
+    m_refineSession->releaseControls();
+    m_focusSession->setHolding(on);
+    m_refineSession->setHolding(on);
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
+    // Said whatever the feedback: the crew must know the rig will not move.
+    emit operatorAnnounce(on ? tr("Holding.") : tr("Released."), ControllerScheme::ImportantPriority);
+    padRumble(1, on ? ControllerScheme::rumbleLongMs() : 120);
+    emit holdingChanged(on);
+}
+
 void ProgrammerController::sendPadFeedback(const QVariantMap &params)
 {
     // The controller the tools read: its own plugin, its own line.
@@ -1551,6 +1584,8 @@ void ProgrammerController::sendPadFeedback(const QVariantMap &params)
 
 void ProgrammerController::heldTick(double dt)
 {
+    if (m_holding)
+        return;
     const bool refine = m_refineSession->isActive();
     if (m_holdA.due(dt))
     {
@@ -1590,6 +1625,7 @@ void ProgrammerController::freezeController()
     m_heldRoles.clear();
     m_viewChord = false;
     m_rsChord = false;
+    m_stickChord = false;
     m_bumperFrom = 0xFFFFFFFF;
     m_focusSession->releaseControls();
     m_refineSession->releaseControls();
@@ -2470,6 +2506,58 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
                                                                         : (value > 0 ? 1.0f : 0.0f));
 
+    /* Both stick clicks (Q140): the freeze chord. The second click down,
+       with the other held, holds every light (or releases them); neither
+       click then does its own thing on release. */
+    if ((role == GamepadRole::LS || role == GamepadRole::RS) && value > 0
+        && m_heldRoles.contains(role == GamepadRole::LS ? GamepadRole::RS : GamepadRole::LS))
+    {
+        m_stickChord = true;
+        m_sayHold.reset();
+        toggleHolding();
+        return true;
+    }
+    if ((role == GamepadRole::LS || role == GamepadRole::RS) && value == 0 && m_stickChord)
+    {
+        if (!m_heldRoles.contains(GamepadRole::LS) && !m_heldRoles.contains(GamepadRole::RS))
+            m_stickChord = false;
+        if (role == GamepadRole::RS)
+            m_sayHold.reset();
+        return true;
+    }
+    // Holding: nothing on the controller moves anything until released.
+    if (m_holding)
+        return true;
+    /* LS acts on its release (so both clicks can make the freeze chord
+       without LS's page turning first). */
+    if (role == GamepadRole::LS)
+    {
+        if (value == 0)
+        {
+            if (refine)
+            {
+                m_refineSession->press(ControllerScheme::Alternate, true);
+                m_refineSession->press(ControllerScheme::Alternate, false);
+            }
+            else
+            {
+                m_focusSession->press(FocusSession::ToggleReference, true);
+                m_focusSession->press(FocusSession::ToggleReference, false);
+            }
+        }
+        return true;
+    }
+    /* View + X (Q140): mark the light being worked dead in the venue, or
+       not dead again (the focus tools; Refine says where it is done). */
+    if (role == GamepadRole::X && value > 0 && m_heldRoles.contains(GamepadRole::Back))
+    {
+        m_viewChord = true;
+        if (refine)
+            tellOperator(tr("Dead lights are marked in the focus calls."), ControllerScheme::ConfirmPriority);
+        else
+            m_focusSession->toggleDead();
+        return true;
+    }
     /* A and B held (Q126): the press does its own thing below; held to
        holdFor(), save all / back to the last save (heldTick()). */
     if (role == GamepadRole::A)

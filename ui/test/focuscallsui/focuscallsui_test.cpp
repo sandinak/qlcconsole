@@ -22,6 +22,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QSettings>
 #include <QPointer>
@@ -803,4 +804,36 @@ void FocusCallsUi_Test::theFocusReportIsExported()
     const QByteArray table = read(csv);
     QVERIFY(table.startsWith(FocusReport::csvColumns().join(',').toUtf8()));
     QCOMPARE(table.count("\r\n"), 1 + 3);    // the header and the three spots
+}
+
+void FocusCallsUi_Test::aNewVenueStartsFromTheLast()
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    MonitorProperties *props = m_doc->monitorProperties();
+    venues->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    {
+        FocusCallsDialog d(m_doc);
+        QCheckBox *from = d.findChild<QCheckBox *>("fcFromLast");
+        QVERIFY(from != nullptr);
+        QVERIFY(from->isHidden());                  // no venue yet to start from
+    }
+    QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));
+    FixtureRigProps rp = props->fixtureRigProps(m_spots.first());
+    rp.panOffsetDeg = 4.0f;
+    props->setFixtureRigProps(m_spots.first(), rp);
+
+    FocusCallsDialog d(m_doc);
+    QCheckBox *from = d.findChild<QCheckBox *>("fcFromLast");
+    d.setVenueChoice("Jefferson MS");
+    QVERIFY(!from->isHidden());
+    QVERIFY(from->isChecked());
+    QCOMPARE(from->text(), QString("Start from Lincoln HS"));
+    QVERIFY(d.switchVenue("Jefferson MS"));
+    QCOMPARE(venues->activeVenue(), QString("Jefferson MS"));
+    QCOMPARE(props->fixtureRigProps(m_spots.first()).panOffsetDeg, 4.0f);
+    // Unticked: the show's own.
+    d.setVenueChoice("Kennedy");
+    from->setChecked(false);
+    QVERIFY(d.switchVenue("Kennedy"));
+    QCOMPARE(props->fixtureRigProps(m_spots.first()).panOffsetDeg, 0.0f);
 }

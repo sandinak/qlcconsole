@@ -220,6 +220,7 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     controls();
     connect(pc, &ProgrammerController::focusControllerChanged, this, controls);
     connect(pc, &ProgrammerController::controllerLost, this, controls);
+    connect(pc, &ProgrammerController::holdingChanged, this, &RefinePanel::refresh);
     connect(pc, &ProgrammerController::focusControllerInput, this, [this](int role, float value) {
         m_map->setControlValue(role, value);
     });
@@ -286,6 +287,9 @@ void RefinePanel::refresh()
                          .arg(cue != nullptr ? cue->number : QString(),
                               cue != nullptr ? cue->name : QString())
                          .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
+    // The freeze chord (Q140): say so where it is seen first.
+    if (m_doc->programmer()->isHolding())
+        m_title->setText(tr("HOLDING â click both sticks (or H) to go on.  ") + m_title->text());
     m_layer->setText(m_session->wherePhrase());
     QString scope;
     switch (m_session->scope())
@@ -312,7 +316,7 @@ void RefinePanel::refresh()
             break;
         }
     }
-    const QString page = m_session->page() == RefineSession::BeamPage ? tr("beam (zoom, focus)")
+    const QString page = m_session->page() == RefineSession::BeamPage ? tr("beam (spot down / flood out, sharper / softer)")
                        : m_session->page() == RefineSession::ColourPage ? tr("colour palettes")
                                                                         : tr("gobo palettes");
     m_scope->setText(tr("%1  Y changes the scope.  D-pad: %2 (LS click changes it).").arg(scope, page));
@@ -397,6 +401,14 @@ bool RefinePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
     // The keyboard does what the controller does (Help: refine.md).
     const float step = (modifiers & Qt::ShiftModifier) ? 5.0f : 1.0f;
     using CS = ControllerScheme::Verb;
+    // H: the freeze chord's key; while holding, nothing else.
+    if (key == Qt::Key_H)
+    {
+        m_doc->programmer()->toggleHolding();
+        return true;
+    }
+    if (m_doc->programmer()->isHolding())
+        return true;
     switch (key)
     {
         case Qt::Key_Left:     m_session->nudgePosition(-step, 0.0f); break;

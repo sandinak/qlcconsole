@@ -19,6 +19,7 @@
 
 #include <QDialogButtonBox>
 #include <QListWidget>
+#include <QCheckBox>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QFormLayout>
@@ -135,6 +136,13 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_newVenue->setObjectName(QStringLiteral("fcNewVenue"));
     m_newVenue->setPlaceholderText(VenueCorrections::defaultVenueName());
     venueRow->addWidget(m_newVenue, 1);
+    // A tour (Q140): a new room starts from the last one's corrections.
+    m_fromLast = new QCheckBox(this);
+    m_fromLast->setObjectName(QStringLiteral("fcFromLast"));
+    m_fromLast->setChecked(true);
+    m_fromLast->setToolTip(tr("Copy the last venue's corrections, trims and targets into the new one, "
+                              "rather than starting from the show's own"));
+    venueRow->addWidget(m_fromLast);
     // The venue manager: apply now, rename, delete (the engine's own).
     m_applyVenue = new QPushButton(tr("Apply now"), this);
     m_applyVenue->setObjectName(QStringLiteral("fcApplyVenue"));
@@ -702,7 +710,7 @@ bool FocusCallsDialog::switchVenue(const QString &name, QString *why)
             *why = tr("Leave Focus mode first: its heads are being worked on.");
         return false;
     }
-    const QString target = name.isEmpty() ? QString() : venues->addVenue(name);
+    const QString target = name.isEmpty() ? QString() : makeVenue(name);
     if (!venues->setActiveVenue(target))
         return false;
     fillVenues(target);
@@ -732,6 +740,11 @@ void FocusCallsDialog::refreshVenue()
 {
     const int kind = m_venue->currentData().toInt();
     m_newVenue->setVisible(kind == kNewVenue);
+    {
+        const QString last = m_doc->programmer()->venueCorrections()->lastVenue();
+        m_fromLast->setText(tr("Start from %1").arg(last));
+        m_fromLast->setVisible(kind == kNewVenue && !last.isEmpty());
+    }
     m_renameVenue->setEnabled(kind == 0);
     m_deleteVenue->setEnabled(kind == 0);
     m_corrections->setEnabled(m_doc->programmer()->venueCorrections()->isActive());
@@ -783,7 +796,17 @@ bool FocusCallsDialog::apply(QString *why)
             *why = tr("Save the show first: a venue's corrections are kept in a file beside it.");
         return false;
     }
-    return venues->setActiveVenue(venues->addVenue(venue));
+    return venues->setActiveVenue(makeVenue(venue));
+}
+
+QString FocusCallsDialog::makeVenue(const QString &name)
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    const QString last = venues->lastVenue();
+    if (!venues->hasVenue(name.trimmed()) && !m_fromLast->isHidden() && m_fromLast->isChecked()
+        && !last.isEmpty())
+        return venues->addVenueFrom(name, last);
+    return venues->addVenue(name);
 }
 
 bool FocusCallsDialog::writeReport(Doc *doc, const QString &venue, const QString &path, QString *why)

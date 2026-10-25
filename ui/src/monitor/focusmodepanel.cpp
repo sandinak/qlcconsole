@@ -694,6 +694,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     ProgrammerController *pc = m_doc->programmer();
     connect(pc, &ProgrammerController::focusControllerChanged,
             this, &FocusModePanel::refreshController);
+    connect(pc, &ProgrammerController::holdingChanged, this, &FocusModePanel::refresh);
     connect(pc->controllerKeepAlive(), &ControllerKeepAlive::pausedChanged,
             this, &FocusModePanel::refreshPaused);
     connect(pc, &ProgrammerController::focusControllerInput, this, [this](int role, float value) {
@@ -746,9 +747,9 @@ void FocusModePanel::refresh()
         {
             m_beamLabel->setText((m_session->beamKind(fid) == FocusSession::LensSetByHand
                                   ? tr("Beam %1\302\260 (lens %2\342\200\223%3\302\260, set by hand)  "
-                                       "D-pad \342\206\225 or , .")
+                                       "D-pad \342\206\221 spot down \342\206\223 flood out, or , .")
                                   : tr("Beam %1\302\260 (zoom %2\342\200\223%3\302\260, while focusing)  "
-                                       "D-pad \342\206\225 or , ."))
+                                       "D-pad \342\206\221 spot down \342\206\223 flood out, or , ."))
                                  .arg(deg, 0, 'f', 1).arg(lo, 0, 'f', 0).arg(hi, 0, 'f', 0));
             m_beamLabel->show();
         }
@@ -758,7 +759,7 @@ void FocusModePanel::refresh()
         if (m_session->focusLevel(fid, focus))
         {
             m_beamLabel->setText((m_beamLabel->isHidden() ? QString() : m_beamLabel->text() + QStringLiteral("\n"))
-                                 + tr("Focus %1%  D-pad \342\206\224 or ; '").arg(qRound(focus * 100.0)));
+                                 + tr("Focus %1%  D-pad \342\206\222 sharper \342\206\220 softer, or ' ;").arg(qRound(focus * 100.0)));
             m_beamLabel->show();
         }
     }
@@ -768,6 +769,10 @@ void FocusModePanel::refresh()
                             .arg(m_session->index() + 1).arg(m_session->count())
                           : tr("Focus \342\200\224 head %1 of %2")
                             .arg(m_session->index() + 1).arg(m_session->count()));
+    // The freeze chord (Q140): say so where it is seen first.
+    if (m_doc->programmer()->isHolding())
+        m_titleLabel->setText(tr("HOLDING â click both sticks (or H) to go on.  ")
+                              + m_titleLabel->text());
     // One layout, in this tool's words (ControllerScheme).
     m_map->setTool(m_session->isRunningCalls() ? ControllerScheme::FocusCallsTool
                                                : ControllerScheme::FocusTool);
@@ -806,6 +811,11 @@ void FocusModePanel::refresh()
             m_nameLabel->setText(m_nameLabel->text()
                                  + tr("\n! Needs focus: not the fixture focused in %1 (%2)")
                                    .arg(venues->activeVenue(), venues->correctedAs(fid)));
+        // Q140: marked dead from the pad (View + X) or D.
+        if (fx != nullptr && venues->isDead(fid))
+            m_nameLabel->setText(m_nameLabel->text()
+                                 + tr("\n\342\234\225 Marked dead in %1 (View + X or D again to clear)")
+                                   .arg(venues->activeVenue()));
     }
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
         m_session->isTargetPage()
@@ -1004,6 +1014,14 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
 {
     const bool shift = modifiers & Qt::ShiftModifier;
     const float step = shift ? 1.0f : m_session->stepDegrees();
+    // H: the freeze chord's key (Q140); while holding, nothing else.
+    if (key == Qt::Key_H)
+    {
+        m_doc->programmer()->toggleHolding();
+        return true;
+    }
+    if (m_doc->programmer()->isHolding())
+        return true;
     switch (key)
     {
         case Qt::Key_Left:  m_session->nudge(-step, 0.0f); break;
@@ -1031,6 +1049,8 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
             break;
         // Both bumpers: the next light not saved.
         case Qt::Key_U:        m_session->nextUnsaved(); break;
+        // View + X on the controller: this light dead (or not) in the venue.
+        case Qt::Key_D:        m_session->toggleDead(); break;
         // View + RS on the controller: how many are not saved.
         case Qt::Key_N:
             emit m_doc->programmer()->operatorAnnounce(m_session->unsavedCountPhrase(),

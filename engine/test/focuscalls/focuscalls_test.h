@@ -122,6 +122,11 @@ private slots:
     /** Board Q139: hold B puts EVERY unsaved light back (B's press already
      *  put this one back), said; View brings them all back in one step. */
     void holdBPutsEveryLightBack();
+    /** Board Q140: the calls say where the target is; the crew's words
+     *  for zoom and focus; both stick clicks hold every light; View + X
+     *  marks a light dead; a light picked on the plot is jumped to; the
+     *  focus look takes gobo, prism and frost out. */
+    void theSmallIdeas();
 
 private:
     Doc *m_doc = nullptr;

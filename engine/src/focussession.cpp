@@ -92,8 +92,57 @@ float FocusSession::breathLevel(qint64 ms)
 
 bool FocusSession::isBreathing() const
 {
-    return m_active && m_flashEnabled && m_lightsFeedback && m_rigFeedback
+    return m_active && m_flashEnabled && m_lightsFeedback && m_rigFeedback && !m_holding
         && m_scope == FixtureScope && !m_targetPage && isDirty(currentFixture());
+}
+
+void FocusSession::setHolding(bool on)
+{
+    if (on == m_holding)
+        return;
+    m_holding = on;
+    // Every light as it is: no blink, no breath, until released.
+    m_flashClock.invalidate();
+    if (m_flashTimer != nullptr)
+        m_flashTimer->stop();
+    m_hold.reset();
+    rebuildWrites();
+}
+
+bool FocusSession::openBeamValue(const QLCChannel *ch, uchar &value)
+{
+    if (ch == nullptr)
+        return false;
+    const QLCChannel::Group g = ch->group();
+    const bool frost = ch->name().contains(QLatin1String("frost"), Qt::CaseInsensitive);
+    // An index or a rotation is not in the beam's way; colour and intensity are the look's.
+    if (g == QLCChannel::Gobo && (ch->preset() == QLCChannel::GoboIndex || ch->preset() == QLCChannel::GoboIndexFine))
+        return false;
+    if (g == QLCChannel::Prism && (ch->preset() == QLCChannel::PrismRotationSlowFast
+                                   || ch->preset() == QLCChannel::PrismRotationFastSlow
+                                   || ch->name().contains(QLatin1String("rot"), Qt::CaseInsensitive)))
+        return false;
+    if (g != QLCChannel::Gobo && g != QLCChannel::Prism && !(frost && g != QLCChannel::Intensity
+                                                              && g != QLCChannel::Colour))
+        return false;
+    for (const QLCCapability *cap : ch->capabilities())
+    {
+        const QString n = cap->name().trimmed().toLower();
+        const bool open = n.startsWith(QLatin1String("open")) || n == QLatin1String("off")
+                          || n.startsWith(QLatin1String("no ")) || cap->preset() == QLCCapability::PrismEffectOff;
+        if (open)
+        {
+            value = uchar((int(cap->min()) + int(cap->max())) / 2);
+            return true;
+        }
+    }
+    // A plain frost (0 none .. 255 full): none.
+    if (frost && g != QLCChannel::Gobo && g != QLCChannel::Prism)
+    {
+        value = 0;
+        return true;
+    }
+    return false;
 }
 
 FocusSession::~FocusSession()
@@ -428,7 +477,46 @@ void FocusSession::enterCall(int index)
     emit callChanged(m_callIndex);
     emit currentChanged(currentFixture());
     flashSelection();
-    emit announce(wherePhrase());
+    emit announce(wherePhrase(true));
+}
+
+bool FocusSession::jumpTo(quint32 fid)
+{
+    if (!m_active || m_holding || !m_all.contains(fid) || targetBlocks())
+        return false;
+    if (fid == currentFixture() && m_scope == FixtureScope)
+        return true;
+    m_targetPage = false;
+    if (isRunningCalls() && !m_order.contains(fid))
+        for (int c = 0; c < m_calls.size(); ++c)
+            if (m_calls.at(c).order.contains(fid))
+            {
+                enterCall(c);
+                break;
+            }
+    m_scope = FixtureScope;
+    setIndex(m_order.indexOf(fid));
+    return true;
+}
+
+bool FocusSession::toggleDead()
+{
+    const quint32 fid = currentFixture();
+    const Fixture *fx = m_doc->fixture(fid);
+    if (!m_active || fx == nullptr)
+        return false;
+    if (!savesToVenue())
+    {
+        emit announce(tr("Apply a venue to mark a light dead."), ControllerScheme::ImportantPriority);
+        return false;
+    }
+    const bool dead = !m_venues->isDead(fid);
+    if (!m_venues->setDead(fid, dead))
+        return false;
+    emit announce(dead ? tr("%1 marked dead.").arg(fx->name()) : tr("%1 not dead.").arg(fx->name()),
+                  ControllerScheme::ConfirmPriority);
+    emit offsetChanged(fid);
+    return true;
 }
 
 FocusSession::Call FocusSession::currentCall() const
@@ -492,7 +580,18 @@ QList<quint32> FocusSession::scopeFixtures() const
     return fid == 0xFFFFFFFF ? QList<quint32>() : QList<quint32>{ fid };
 }
 
-QString FocusSession::wherePhrase() const
+QString FocusSession::callPositionPhrase() const
+{
+    const Call c = currentCall();
+    if (c.target.kind != Reference::Target || m_doc == nullptr || m_doc->monitorProperties() == nullptr)
+        return QString();
+    const StageTarget *t = m_doc->monitorProperties()->stageTarget(c.target.id);
+    if (t == nullptr)
+        return QString();
+    return m_doc->monitorProperties()->stagePositionText(t->position(), MonitorProperties::SpokenOffset);
+}
+
+QString FocusSession::wherePhrase(bool withPosition) const
 {
     if (!m_active)
         return QString();
@@ -500,10 +599,12 @@ QString FocusSession::wherePhrase() const
     if (isRunningCalls())
     {
         const Call c = currentCall();
-        // "Call 2 of 5, AT spots to Soloist DS."
-        parts << tr("Call %1 of %2, %3 to %4.").arg(m_callIndex + 1).arg(m_calls.size())
+        // "Call 2 of 5, AT spots to Soloist DS." -- with where that is: ", SL 2, US 1."
+        const QString where = withPosition ? callPositionPhrase() : QString();
+        parts << tr("Call %1 of %2, %3 to %4%5.").arg(m_callIndex + 1).arg(m_calls.size())
                      .arg(c.who.isEmpty() ? c.name : c.who,
-                          c.targetName.isEmpty() ? referenceName() : c.targetName);
+                          c.targetName.isEmpty() ? referenceName() : c.targetName,
+                          where.isEmpty() ? QString() : QStringLiteral(", ") + where);
     }
     if (m_scope == GroupScope)
         parts << (isRunningCalls() ? tr("All %1, group.").arg(m_order.size())
@@ -514,6 +615,8 @@ QString FocusSession::wherePhrase() const
         // Its venue correction was skipped: another fixture type now (Q133).
         if (m_venues != nullptr && m_venues->needsFocus(currentFixture()))
             parts << tr("Needs focus: the fixture changed.");
+        if (m_venues != nullptr && m_venues->isDead(currentFixture()))
+            parts << tr("Marked dead.");
     }
     return parts.join(QLatin1Char(' '));
 }
@@ -529,7 +632,7 @@ QString FocusSession::lightPhrase() const
                                                                  : tr("All %1").arg(m_order.size());
     else if (const Fixture *fx = m_doc->fixture(currentFixture()))
         light = fx->name();
-    return light.isEmpty() ? wherePhrase() : tr("%1. %2").arg(light, wherePhrase());
+    return light.isEmpty() ? wherePhrase(true) : tr("%1. %2").arg(light, wherePhrase(true));
 }
 
 void FocusSession::whereAmI()
@@ -549,7 +652,7 @@ bool FocusSession::flashLit(qint64 ms)
 
 void FocusSession::flashSelection()
 {
-    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback || m_holding)
         return;
     m_warnFlash = false;
     m_flashClock.start();
@@ -560,7 +663,7 @@ void FocusSession::flashSelection()
 
 void FocusSession::flashWarning()
 {
-    if (!m_active || !m_flashEnabled || !m_lightsFeedback)
+    if (!m_active || !m_flashEnabled || !m_lightsFeedback || m_holding)
         return;
     m_warnFlash = true;
     m_flashClock.start();
@@ -902,6 +1005,8 @@ void FocusSession::applyOffset(quint32 fid, const Offset &offset)
 
 void FocusSession::nudge(float dPan, float dTilt)
 {
+    if (m_holding)
+        return;
     if (m_targetPage)
     {
         // Right is across the stage, up is upstage.
@@ -1688,7 +1793,8 @@ FocusSession::Control FocusSession::controlFor(GamepadRole::Role role)
 
 void FocusSession::apply(Control control)
 {
-    if (!m_active)
+    // Holding (the freeze chord): nothing moves until it is released.
+    if (!m_active || m_holding)
         return;
     // Only a hold that follows B's press takes what the press put back.
     if (control != Revert)
@@ -1749,6 +1855,15 @@ void FocusSession::press(Control control, bool down)
     }
     m_hold.press(int(control), repeats(control));
     apply(control);
+    // The crew's word for a beam press (Q140), once, where the light has it.
+    const quint32 fid = currentFixture();
+    const bool zoom = control == ZoomWider || control == ZoomNarrower;
+    const bool edge = control == FocusNearer || control == FocusFarther;
+    if ((zoom && beamKind(fid) != NoBeamControl) || (edge && hasFocusControl(fid)))
+        emit announce(ControllerScheme::crewWord(zoom ? (control == ZoomWider ? ControllerScheme::ZoomWider
+                                                                              : ControllerScheme::ZoomNarrower)
+                                                      : (control == FocusFarther ? ControllerScheme::FocusFarther
+                                                                                 : ControllerScheme::FocusNearer)));
 }
 
 float FocusSession::stickVelocity(float norm, float deadzone)
@@ -1803,7 +1918,7 @@ void FocusSession::releaseControls()
 
 void FocusSession::tick(double dt)
 {
-    if (!m_active || m_input == KeyboardInput)
+    if (!m_active || m_input == KeyboardInput || m_holding)
         return;
     // A held D-pad arm repeats (press()).
     for (int n = m_hold.due(dt); n > 0 && m_hold.held() >= 0; --n)
@@ -1874,6 +1989,11 @@ void FocusSession::rebuildWrites()
                         default:
                             break;
                     }
+                }
+                else if (uchar open = 0; openBeamValue(ch, open))
+                {
+                    // Gobo, prism and frost out (Q140): the bare beam to focus.
+                    put(fx, c, open);
                 }
                 else if (ch->group() == QLCChannel::Shutter)
                 {

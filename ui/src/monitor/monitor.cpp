@@ -1773,7 +1773,15 @@ void Monitor::updateView()
 void Monitor::refreshNeedsFocus()
 {
     if (m_graphicsView != NULL && m_doc->programmer() != nullptr)
-        m_graphicsView->markNeedsFocusFixtures(m_doc->programmer()->venueCorrections()->needsFocus());
+    {
+        // Swapped lights (Q133) and the ones marked dead (Q140) alike.
+        VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+        QList<quint32> marks = venues->needsFocus();
+        for (quint32 fid : venues->deadLights())
+            if (!marks.contains(fid))
+                marks << fid;
+        m_graphicsView->markNeedsFocusFixtures(marks);
+    }
 }
 
 void Monitor::highlightFixtures(const QList<quint32> &ids)
@@ -3092,6 +3100,11 @@ void Monitor::slotMapSelectionChanged()
         m_groupAction->setEnabled(m_graphicsView->selectionGroupable());
     if (m_ungroupAction != NULL)
         m_ungroupAction->setEnabled(m_graphicsView->selectionHasGroup());
+    /* Focus calls running (Q140): a light clicked on the plot is the one
+       the controller works next -- its call, at fixture scope. */
+    FocusSession *fs = m_doc->programmer() != nullptr ? m_doc->programmer()->focusSession() : nullptr;
+    if (fs != nullptr && fs->isActive() && m_graphicsView->selectedFixtureCount() == 1)
+        fs->jumpTo(m_graphicsView->selectedFixtureID());
 }
 
 void Monitor::updatePlotLockAppearance(bool locked)

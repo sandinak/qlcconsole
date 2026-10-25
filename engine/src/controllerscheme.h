@@ -74,6 +74,10 @@ namespace ControllerScheme
     /** What @p verb is called in @p tool, for the on-screen map ("Next focus
      *  call", "Next layer"...); empty when the tool does not use it. */
     QLC_ENGINE_EXPORT QString label(Tool tool, Verb verb);
+    /** Board Q140, what the voice says on a D-pad press, in the crew's
+     *  words: "Spot down." / "Flood out." (zoom), "Sharper." / "Softer."
+     *  (focus); empty for any other verb. */
+    QLC_ENGINE_EXPORT QString crewWord(Verb verb);
 
     /** What a stick does in @p tool ("Nudge aim", "Move"...). */
     QLC_ENGINE_EXPORT QString stickLabel(Tool tool, bool fine);

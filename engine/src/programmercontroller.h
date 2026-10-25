@@ -211,6 +211,12 @@ public:
      *  and confirmations follow the Feedback setting; important lines go
      *  through warnOperator(). */
     void tellOperator(const QString &text, int priority);
+    /** Board Q140, the freeze chord (both stick clicks, or H): every light
+     *  holds where it is -- nothing on the controller moves anything, the
+     *  breathing and blinks stop -- "Holding."; again: "Released." */
+    bool isHolding() const { return m_holding; }
+    void setHolding(bool on);
+    void toggleHolding() { setHolding(!m_holding); }
     QColor padLight() const { return m_padLight; }
     int padRumbles() const { return m_padRumbles; }
     /** Refine: the controller on a Show Tree cue's own values. Never null. */
@@ -531,6 +537,8 @@ signals:
     /** The controller the tools read went away mid-tool (true) or came
      *  back (false). */
     void controllerLost(bool lost);
+    /** The freeze chord: holding (true) or released. */
+    void holdingChanged(bool holding);
     /** While Focus mode runs on the controller: a control by gamepad role
      *  moved -- 0 or 1 for a button, 0..1 (0.5 centred) for a stick axis --
      *  so the panel can show it. */
@@ -688,6 +696,10 @@ private:
     bool m_viewChord = false;
     /** RS went down with View held (View + RS: how many are not saved). */
     bool m_rsChord = false;
+    /** Both stick clicks (the freeze chord, Q140): LS acts on its release
+     *  unless RS came while it was held, and the other way round. */
+    bool m_stickChord = false;
+    bool m_holding = false;
     /** Hold A: save all / keep; hold B: back to the last save (Q126). */
     ControllerScheme::LongPress m_holdA { ControllerScheme::keepAllHoldSeconds() };
     /** The head the first bumper of a pair stepped from (both bumpers). */

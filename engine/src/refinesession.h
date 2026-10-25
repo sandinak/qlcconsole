@@ -279,6 +279,10 @@ public:
     /** The controller went away: both sticks centred, a held D-pad arm
      *  and the triggers released, so nothing moves. */
     void releaseControls();
+    /** Board Q140, the freeze chord: nothing moves, nothing blinks, until
+     *  released. */
+    void setHolding(bool on);
+    bool isHolding() const { return m_holding; }
     void tick(double dt);
     static constexpr float coarseRate() { return 8.0f; }
     static constexpr float fineRate() { return 1.0f; }
@@ -395,6 +399,7 @@ private:
     QTimer *m_flashTimer = nullptr;
     QElapsedTimer m_flashClock;
     bool m_flashEnabled = true;
+    bool m_holding = false;
     bool m_warnFlash = false;
     std::function<quint32(quint32)> m_runningProbe;
     std::function<bool(QString *)> m_startGuard;

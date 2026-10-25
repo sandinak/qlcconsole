@@ -44,6 +44,7 @@
 #include "qlcpalette.h"
 #include "showtreecontroller.h"
 #include "qlcchannel.h"
+#include "qlccapability.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -164,8 +165,16 @@ void FocusCalls_Test::theControllerSchemeIsOneMap()
     QCOMPARE(verbFor(GamepadRole::DpadDown), ZoomWider);
     QCOMPARE(verbFor(GamepadRole::DpadRight), FocusFarther);
     QCOMPARE(verbFor(GamepadRole::DpadLeft), FocusNearer);
-    QCOMPARE(label(RefineTool, FocusFarther), QString("Focus tighter"));
-    QCOMPARE(label(FocusCallsTool, ZoomNarrower), QString("Zoom in (narrower beam)"));
+    // The crew's words (Q140).
+    QCOMPARE(label(RefineTool, FocusFarther), QString("Sharper (focus)"));
+    QCOMPARE(label(RefineTool, FocusNearer), QString("Softer (focus)"));
+    QCOMPARE(label(FocusCallsTool, ZoomNarrower), QString("Spot down (zoom narrower)"));
+    QCOMPARE(label(FocusTool, ZoomWider), QString("Flood out (zoom wider)"));
+    QCOMPARE(crewWord(ZoomNarrower), QString("Spot down."));
+    QCOMPARE(crewWord(ZoomWider), QString("Flood out."));
+    QCOMPARE(crewWord(FocusFarther), QString("Sharper."));
+    QCOMPARE(crewWord(FocusNearer), QString("Softer."));
+    QVERIFY(crewWord(Keep).isEmpty());
     QCOMPARE(verbFor(GamepadRole::LeftX), NoVerb);
     // Every verb has its control, and back again.
     for (Verb v : verbs())
@@ -481,19 +490,26 @@ void FocusCalls_Test::theOperatorIsToldWhereTheyAre()
     o.calls = m_doc->programmer()->focusCalls()->sessionCalls();
     o.order = FocusSession::AsGiven;
     QVERIFY(s->start(o));
-    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. Fixture 1 of 2."));
+    // Entering a call says where its target is, from the stage marks (Q140).
+    const QString atDsc = m_doc->monitorProperties()->stagePositionText(dsc->position(),
+                                                                        MonitorProperties::SpokenOffset);
+    const QString atSolo = m_doc->monitorProperties()->stagePositionText(solo->position(),
+                                                                         MonitorProperties::SpokenOffset);
+    QVERIFY(atDsc.startsWith("S") || atDsc.startsWith("CL"));
+    QCOMPARE(s->callPositionPhrase(), atDsc);
+    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC, %1. Fixture 1 of 2.").arg(atDsc));
     s->next();
     QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. Fixture 2 of 2."));
     s->cycleScope();
     QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. All 2, group."));
     s->nextCall();
-    QCOMPARE(said.last().at(0).toString(), QString("Call 2 of 2, AT spots to Soloist DS. All 1, group."));
+    QCOMPARE(said.last().at(0).toString(), QString("Call 2 of 2, AT spots to Soloist DS, %1. All 1, group.").arg(atSolo));
     // Say the light: the light (here the whole call, by its groups) first.
     s->apply(FocusSession::WhereAmI);
-    QCOMPARE(said.last().at(0).toString(), QString("AT spots. Call 2 of 2, AT spots to Soloist DS. All 1, group."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT spots. Call 2 of 2, AT spots to Soloist DS, %1. All 1, group.").arg(atSolo));
     s->setScope(FocusSession::FixtureScope);
     s->whereAmI();
-    QCOMPARE(said.last().at(0).toString(), QString("C. Call 2 of 2, AT spots to Soloist DS. Fixture 1 of 1."));
+    QCOMPARE(said.last().at(0).toString(), QString("C. Call 2 of 2, AT spots to Soloist DS, %1. Fixture 1 of 1.").arg(atSolo));
     s->save();
     QCOMPARE(said.last().at(0).toString(), QString("C kept."));
     s->apply(FocusSession::UndoSave);
@@ -772,7 +788,8 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     QCOMPARE(fcc->state(), FocusCallCue::Running);
     QVERIFY(s->isActive());
     QVERIFY(s->isRunningCalls());
-    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. Fixture 1 of 2."));
+    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC, %1. Fixture 1 of 2.")
+             .arg(m_doc->monitorProperties()->stagePositionText(dsc->position(), MonitorProperties::SpokenOffset)));
     // Step: the next call.
     s->setTrigger(1, 1.0f);
     s->setTrigger(1, 0.0f);
@@ -911,7 +928,8 @@ void FocusCalls_Test::aFocusCallCueAsksForTheVenue()
     QVERIFY(fcc->useVenue("Lincoln HS"));
     QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
     QCOMPARE(v->venueNames().size(), venues);
-    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 1, DH Tspots to DSC. Fixture 1 of 1."));
+    QVERIFY(said.last().at(0).toString().startsWith("Call 1 of 1, DH Tspots to DSC, "));
+    QVERIFY(said.last().at(0).toString().endsWith(". Fixture 1 of 1."));
     s->stop();
     // ...and nobody answering is a new venue, never the old one.
     fcc->setVenueAskTimeout(50);
@@ -1793,5 +1811,172 @@ void FocusCalls_Test::holdBPutsEveryLightBack()
     s->revertAllHeld();
     QCOMPARE(said.last().at(0).toString(), QString("Nothing to put back: all saved."));
     s->stop();
+    iom->setInputPatch(0, QString(), QString(), 0);
+}
+
+void FocusCalls_Test::theSmallIdeas()
+{
+    // The bare beam to focus: gobo open, prism out, no frost.
+    {
+        QLCChannel gobo;
+        gobo.setGroup(QLCChannel::Gobo);
+        gobo.addCapability(new QLCCapability(0, 9, "Open"));
+        gobo.addCapability(new QLCCapability(10, 20, "Gobo 1"));
+        uchar v = 99;
+        QVERIFY(FocusSession::openBeamValue(&gobo, v));
+        QCOMPARE(int(v), 4);
+        QLCChannel prism;
+        prism.setName("Prism");
+        prism.setGroup(QLCChannel::Prism);
+        prism.addCapability(new QLCCapability(0, 127, "Open"));
+        prism.addCapability(new QLCCapability(128, 255, "Prism"));
+        QVERIFY(FocusSession::openBeamValue(&prism, v));
+        QCOMPARE(int(v), 63);
+        QLCChannel frost;
+        frost.setName("Frost");
+        frost.setGroup(QLCChannel::Beam);
+        QVERIFY(FocusSession::openBeamValue(&frost, v));
+        QCOMPARE(int(v), 0);
+        QLCChannel index;
+        index.setGroup(QLCChannel::Gobo);
+        index.setPreset(QLCChannel::GoboIndex);
+        QVERIFY(!FocusSession::openBeamValue(&index, v));
+        QLCChannel zoom;
+        zoom.setName("Zoom");
+        zoom.setGroup(QLCChannel::Beam);
+        QVERIFY(!FocusSession::openBeamValue(&zoom, v));
+    }
+
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
+                             { 10, "a" }, { 11, "b" }, { 12, "x" }, { 14, "lb" }, { 15, "rb" },
+                             { 16, "back" }, { 17, "start" }, { 18, "rs" }, { 19, "ls" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto down = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 255, QString()); };
+    auto up = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 0, QString()); };
+    auto axis = [iom](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    auto held = [pc](int ticks) {
+        for (int i = 0; i < ticks; ++i)
+            pc->applyDesignJoystick();
+    };
+
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
+    Fixture *c = makeSpot(m_doc, "Spot 9", 6.0f, 2.0f);
+    FixtureGroup *dh = makeGroup(m_doc, "Movers", { a, b });
+    FixtureGroup *at = makeGroup(m_doc, "AT spots", { c });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    StageTarget *solo = makeTarget(m_doc, "Soloist", QVector3D(1.0f, 7.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << dh->id();
+    c1.target = targetRef(dsc->id());
+    FocusCall c2;
+    c2.groups << at->id();
+    c2.target = targetRef(solo->id());
+    m_doc->programmer()->focusCalls()->setCalls({ c1, c2 });
+    VenueCorrections *v = pc->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.calls = pc->focusCalls()->sessionCalls();
+    o.order = FocusSession::AsGiven;
+    QVERIFY(s->start(o));
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // View + X with no venue: refused, and said.
+    down(16);
+    down(12);
+    up(12);
+    up(16);
+    QCOMPARE(said.last().at(0).toString(), QString("Apply a venue to mark a light dead."));
+    QVERIFY(!s->canUndo());
+    s->stop();
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    QVERIFY(s->start(o));
+    // View + X: dead, and the View release does not undo.
+    down(16);
+    down(12);
+    up(12);
+    up(16);
+    QVERIFY(v->isDead(a->id()));
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 marked dead."));
+    QVERIFY(s->wherePhrase().endsWith("Marked dead."));
+    // ...and again: not dead.
+    QVERIFY(s->toggleDead());
+    QVERIFY(!v->isDead(a->id()));
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 not dead."));
+
+    // A light picked on the plot: its call, at fixture scope.
+    s->cycleScope();
+    QVERIFY(s->jumpTo(c->id()));
+    QCOMPARE(s->callIndex(), 1);
+    QCOMPARE(s->currentFixture(), c->id());
+    QCOMPARE(s->scope(), FocusSession::FixtureScope);
+    QVERIFY(s->jumpTo(b->id()));
+    QCOMPARE(s->callIndex(), 0);
+    QCOMPARE(s->currentFixture(), b->id());
+    QVERIFY(!s->jumpTo(0xFFFF));
+
+    // LS alone: on its release, the target page (the stick clicks can chord).
+    down(19);
+    QVERIFY(!s->isTargetPage());
+    up(19);
+    QVERIFY(s->isTargetPage());
+    down(19);
+    up(19);
+    QVERIFY(!s->isTargetPage());
+
+    // Both stick clicks: every light holds.
+    const FocusSession::Offset before = s->liveOffset(b->id());
+    QSignalSpy holding(pc, &ProgrammerController::holdingChanged);
+    down(18);
+    down(19);
+    QVERIFY(pc->isHolding());
+    QVERIFY(s->isHolding());
+    QCOMPARE(holding.count(), 1);
+    QCOMPARE(said.last().at(0).toString(), QString("Holding."));
+    up(19);
+    up(18);
+    // No feedback cycle from RS's hold, no target page from LS.
+    QCOMPARE(pc->operatorFeedback(), ControllerScheme::BothFeedback);
+    QVERIFY(!s->isTargetPage());
+    // The stick, A, the bumpers: nothing moves.
+    axis(0, 255);
+    held(25);
+    axis(0, 128);
+    down(10);
+    up(10);
+    down(15);
+    up(15);
+    QCOMPARE(s->liveOffset(b->id()), before);
+    QCOMPARE(s->currentFixture(), b->id());
+    QVERIFY(!s->isBreathing());
+    // Again: released.
+    down(19);
+    down(18);
+    QVERIFY(!pc->isHolding());
+    QVERIFY(!s->isHolding());
+    QCOMPARE(said.last().at(0).toString(), QString("Released."));
+    up(18);
+    up(19);
+    axis(0, 255);
+    held(10);
+    axis(0, 128);
+    QVERIFY(s->liveOffset(b->id()) != before);
+    // A tool that ends while holding leaves nothing held.
+    pc->setHolding(true);
+    s->discardAll();
+    s->stop();
+    QVERIFY(!pc->isHolding());
     iom->setInputPatch(0, QString(), QString(), 0);
 }

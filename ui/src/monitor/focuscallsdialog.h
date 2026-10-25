@@ -25,6 +25,7 @@
 #include "focuscalls.h"
 
 class QListWidget;
+class QCheckBox;
 class QPlainTextEdit;
 class QPushButton;
 class QComboBox;
@@ -139,6 +140,11 @@ private:
     QPushButton *m_corrections = nullptr;
     QPushButton *m_report = nullptr;
     QLineEdit *m_checkedBy = nullptr;
+    /** New venue: start from the last venue's corrections (Q140). */
+    QCheckBox *m_fromLast = nullptr;
+    QPushButton *m_practice = nullptr;
+    /** The venue a new one is made as: from the last venue when ticked. */
+    QString makeVenue(const QString &name);
 };
 
 /** @} */

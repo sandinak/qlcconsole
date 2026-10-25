@@ -118,13 +118,14 @@ QString ControllerScheme::label(Tool tool, Verb verb)
         case Exit:
             return tr("Exit");
         case ZoomWider:
-            return tr("Zoom out (wider beam)");
+            // The crew's words (Q140): a spot is narrower, a flood wider.
+            return tr("Flood out (zoom wider)");
         case ZoomNarrower:
-            return tr("Zoom in (narrower beam)");
+            return tr("Spot down (zoom narrower)");
         case FocusNearer:
-            return tr("Focus looser");
+            return tr("Softer (focus)");
         case FocusFarther:
-            return tr("Focus tighter");
+            return tr("Sharper (focus)");
         case Alternate:
             return tool == RefineTool ? tr("D-pad page: beam / colour / gobo")
                  : tool == FocusCallsTool ? tr("Target page: move the call's target")
@@ -133,6 +134,19 @@ QString ControllerScheme::label(Tool tool, Verb verb)
             return tr("Say the light (hold: feedback)");
         case NoVerb:
             break;
+    }
+    return QString();
+}
+
+QString ControllerScheme::crewWord(Verb verb)
+{
+    switch (verb)
+    {
+        case ZoomNarrower: return tr("Spot down.");
+        case ZoomWider:    return tr("Flood out.");
+        case FocusFarther: return tr("Sharper.");
+        case FocusNearer:  return tr("Softer.");
+        default:           break;
     }
     return QString();
 }

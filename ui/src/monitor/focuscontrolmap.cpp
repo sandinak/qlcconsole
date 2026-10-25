@@ -224,13 +224,13 @@ QString FocusControlMap::actionText(int role) const
             /* Up is in, down is out; right tightens the focus, left loosens
                (in Refine, LS's own label says the D-pad also pages through
                colour and gobo: here it would crowd the pad off the map). */
-            return tr("Zoom \342\226\262in \342\226\274out  Focus \342\227\200looser tighter\342\226\266");
+            return tr("\342\226\262Spot down \342\226\274Flood out  \342\227\200Softer Sharper\342\226\266");
         case R::DpadDown:
-            return tr("Wider beam");
+            return tr("Flood out");
         case R::DpadLeft:
-            return tr("Focus looser");
+            return tr("Softer");
         case R::DpadRight:
-            return tr("Focus tighter");
+            return tr("Sharper");
         default:
             break;
     }
@@ -276,10 +276,12 @@ QString FocusControlMap::keyAction(int key) const
         case Qt::Key_Control:
         case Qt::Key_Z:            return tr("Undo save");
         case Qt::Key_Return:       return tr("Save");
-        case Qt::Key_Comma:        return tr("Narrower beam");
-        case Qt::Key_Period:       return tr("Wider beam");
-        case Qt::Key_Semicolon:
-        case Qt::Key_Apostrophe:   return tr("Focus");
+        case Qt::Key_D:            return tr("Mark dead");
+        case Qt::Key_H:            return tr("Hold every light");
+        case Qt::Key_Comma:        return tr("Spot down");
+        case Qt::Key_Period:       return tr("Flood out");
+        case Qt::Key_Semicolon:    return tr("Softer");
+        case Qt::Key_Apostrophe:   return tr("Sharper");
         case Qt::Key_Up:
         case Qt::Key_Down:
         case Qt::Key_Left:

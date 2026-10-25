@@ -229,7 +229,7 @@ void FocusMode_Test::theMapShowsTheProfilesBindings()
     QCOMPARE(map->actionText(R::Start), QString("Exit"));
     QCOMPARE(map->actionText(R::LeftX), QString("Nudge"));
     QCOMPARE(map->actionText(R::RightX), QString("Fine nudge"));
-    QVERIFY2(map->actionText(R::DpadUp).startsWith("Zoom"), qPrintable(map->actionText(R::DpadUp)));   // Q103
+    QVERIFY2(map->actionText(R::DpadUp).contains("Spot down"), qPrintable(map->actionText(R::DpadUp)));   // Q103
     // Named by role only: the usual name.
     QCOMPARE(map->controlName(R::DpadLeft), QString("D-pad left"));
 
