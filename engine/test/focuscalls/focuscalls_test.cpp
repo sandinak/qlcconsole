@@ -1718,3 +1718,80 @@ void FocusCalls_Test::nothingReachingTheRigIsSaid()
 }
 
 QTEST_GUILESS_MAIN(FocusCalls_Test)
+
+void FocusCalls_Test::holdBPutsEveryLightBack()
+{
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
+                             { 10, "a" }, { 11, "b" }, { 14, "lb" }, { 15, "rb" },
+                             { 16, "back" }, { 17, "start" }, { 18, "rs" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto down = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 255, QString()); };
+    auto up = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 0, QString()); };
+    auto held = [pc](int ticks) {
+        for (int i = 0; i < ticks; ++i)
+            pc->applyDesignJoystick();
+    };
+
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
+    Fixture *c = makeSpot(m_doc, "Spot 9", 6.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id(), c->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // A saved, then nudged again; B and C nudged, never saved.
+    s->nudge(1.0f, 0.0f);
+    s->save();
+    s->nudge(0.5f, 0.0f);
+    s->next();
+    s->nudge(2.0f, 1.0f);
+    s->next();
+    s->nudge(-1.0f, 0.0f);
+    s->setIndex(0);
+    QCOMPARE(s->unsavedFixtures().size(), 3);
+    const FocusSession::Offset liveB = s->liveOffset(b->id());
+
+    // B held: the press puts this one back, the hold every other one.
+    down(11);
+    QVERIFY(!s->isDirty(a->id()));
+    QVERIFY(s->isDirty(b->id()));
+    held(40);
+    up(11);
+    QVERIFY(!s->hasUnsaved());
+    QCOMPARE(said.last().at(0).toString(), QString("3 lights back to their last save."));
+    QCOMPARE(s->liveOffset(a->id()).pan, 1.0f);          // its save, not zero
+    QCOMPARE(s->liveOffset(b->id()).pan, 0.0f);
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(b->id()).panOffsetDeg, 0.0f);
+
+    // View: all three back, still not saved -- one step.
+    down(16);
+    up(16);
+    QCOMPARE(s->unsavedFixtures().size(), 3);
+    QCOMPARE(s->liveOffset(b->id()), liveB);
+    QCOMPARE(s->liveOffset(a->id()).pan, 1.5f);
+    QCOMPARE(said.last().at(0).toString(), QString("Undone: the changes are back, not saved."));
+    // The save before it is still there to undo.
+    QVERIFY(s->canUndo());
+
+    // Nothing unsaved: said so.
+    s->saveAll();
+    s->revertAllHeld();
+    QCOMPARE(said.last().at(0).toString(), QString("Nothing to put back: all saved."));
+    s->stop();
+    iom->setInputPatch(0, QString(), QString(), 0);
+}

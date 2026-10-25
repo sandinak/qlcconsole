@@ -1000,6 +1000,54 @@ void FocusSession::saveAllHeld()
                   ControllerScheme::ConfirmPriority);
 }
 
+void FocusSession::revertAllHeld()
+{
+    if (!m_active)
+        return;
+    QList<quint32> unsaved = unsavedFixtures();
+    // B's press, just before the hold, put this light back already.
+    const QList<UndoEntry> pressed = m_pressReverted;
+    m_pressReverted.clear();
+    QList<quint32> back;
+    for (const UndoEntry &e : pressed)
+        back << e.fid;
+    if (unsaved.isEmpty() && back.isEmpty())
+    {
+        emit announce(tr("Nothing to put back: all saved."), ControllerScheme::ConfirmPriority);
+        return;
+    }
+    // One step: View brings every one of them back, unsaved, as it was.
+    const int batch = ++m_batch;
+    for (UndoEntry e : pressed)
+    {
+        e.batch = batch;
+        m_undo.append(e);
+    }
+    for (quint32 fid : unsaved)
+        if (!back.contains(fid))
+            back << fid;
+    unsaved = back;
+    for (quint32 fid : unsavedFixtures())
+    {
+        Head &h = m_heads[fid];
+        m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved,
+                        batch, true, h.live, h.first, h.lensLive });
+        backToSaved(fid, h);
+        emit offsetChanged(fid);
+    }
+    rebuildWrites();
+    if (unsaved.size() == 1)
+    {
+        const Fixture *fx = m_doc->fixture(unsaved.first());
+        emit announce(fx != nullptr ? tr("%1 back to its last save.").arg(fx->name())
+                                    : tr("1 light back to its last save."),
+                      ControllerScheme::ConfirmPriority);
+    }
+    else
+        emit announce(tr("%1 lights back to their last save.").arg(unsaved.size()),
+                      ControllerScheme::ConfirmPriority);
+}
+
 void FocusSession::revertLight()
 {
     const quint32 fid = currentFixture();
@@ -1122,7 +1170,8 @@ bool FocusSession::saveHead(quint32 fid, int batch)
     if (!m_heads.contains(fid))
         return false;
     Head &h = m_heads[fid];
-    m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved, batch });
+    m_undo.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal, h.lensSaved, batch,
+                    false, h.live, h.first, h.lensLive });
     if (h.fixed)
     {
         if (h.first != h.landSaved || !h.savedIsOriginal)
@@ -1330,6 +1379,7 @@ void FocusSession::revert()
         return;
     }
     bool any = false;
+    m_pressReverted.clear();
     for (quint32 fid : scopeFixtures())
     {
         if (!m_heads.contains(fid))
@@ -1337,6 +1387,8 @@ void FocusSession::revert()
         Head &h = m_heads[fid];
         if (!h.dirty())
             continue;
+        m_pressReverted.append({ fid, h.saved, m_checked.contains(fid), h.landSaved, h.savedIsOriginal,
+                                 h.lensSaved, 0, true, h.live, h.first, h.lensLive });
         backToSaved(fid, h);
         any = true;
         emit offsetChanged(fid);
@@ -1395,12 +1447,35 @@ bool FocusSession::undoSave()
     // A save of a whole group is undone as one.
     const int batch = m_undo.last().batch;
     QList<quint32> undone;
+    bool reverted = false;
     while (!m_undo.isEmpty() && m_undo.last().batch == batch)
     {
         const UndoEntry e = m_undo.takeLast();
         if (!m_heads.contains(e.fid))
             continue;
         Head &h = m_heads[e.fid];
+        if (e.revert)
+        {
+            // Hold B undone: the unsaved change back, still unsaved.
+            reverted = true;
+            if (h.beam == LensSetByHand && h.lensLive != e.lensLiveBefore)
+            {
+                h.lensLive = e.lensLiveBefore;
+                applyLens(e.fid, h.lensLive);
+            }
+            if (h.fixed)
+            {
+                h.first = e.firstBefore;
+                applyLanding(e.fid, h, false);
+            }
+            else
+            {
+                h.live = e.liveBefore;
+                applyOffset(e.fid, h.live);
+            }
+            emit offsetChanged(e.fid);
+            continue;
+        }
         h.saved = e.before;
         h.live = e.before;
         h.landSaved = e.landBefore;
@@ -1411,6 +1486,12 @@ bool FocusSession::undoSave()
         backToSaved(e.fid, h);
         undone << e.fid;
         emit offsetChanged(e.fid);
+    }
+    if (reverted)
+    {
+        rebuildWrites();
+        emit announce(tr("Undone: the changes are back, not saved."), ControllerScheme::ConfirmPriority);
+        return true;
     }
     if (undone.isEmpty())
         return false;
@@ -1609,6 +1690,9 @@ void FocusSession::apply(Control control)
 {
     if (!m_active)
         return;
+    // Only a hold that follows B's press takes what the press put back.
+    if (control != Revert)
+        m_pressReverted.clear();
     switch (control)
     {
         // A bumper picks a fixture: from the whole group, that one.

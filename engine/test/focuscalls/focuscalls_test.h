@@ -119,6 +119,9 @@ private slots:
      *  let go, nothing moves, no keep-all fires; said, and said when back.
      *  In Focus mode (and focus calls) and in Refine. */
     void theControllerLostFreezesEverything();
+    /** Board Q139: hold B puts EVERY unsaved light back (B's press already
+     *  put this one back), said; View brings them all back in one step. */
+    void holdBPutsEveryLightBack();
 
 private:
     Doc *m_doc = nullptr;

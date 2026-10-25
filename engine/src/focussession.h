@@ -427,8 +427,13 @@ public:
 
     /** Hold A: every unsaved head saved, said ("3 lights kept."). */
     void saveAllHeld();
-    /** Hold B: the light being worked back to its last save, whatever the
-     *  scope, said ("Spot 3 back to its last save."). */
+    /** Hold B (board Q139, mirroring hold A's save all): EVERY unsaved
+     *  light back to its last save, in any call, said ("3 lights back to
+     *  their last save."; "Nothing to put back."). One undo step: View
+     *  brings all of them back as they were. */
+    void revertAllHeld();
+    /** The light being worked back to its last save, whatever the scope,
+     *  said ("Spot 3 back to its last save."). */
     void revertLight();
     /** Both bumpers: on to the next head with unsaved changes, in any call
      *  ("Spot 7, not saved."); "All saved." when there is none. From the
@@ -580,7 +585,16 @@ private:
         bool wasOriginal = false;
         float lensBefore = 0.0f;
         int batch = 0;            ///< entries saved together undo together
+        /** Hold B put this light back (Q139): undoing it brings back what
+         *  was live -- the unsaved nudge -- not a save. */
+        bool revert = false;
+        Offset liveBefore;
+        QVector3D firstBefore;
+        float lensLiveBefore = 0.0f;
     };
+    /** What B's press just put back (revert()): a hold that follows it
+     *  takes these into its one undo step and its count. */
+    QList<UndoEntry> m_pressReverted;
     /** A call as it runs: its heads in order and the point each focuses to. */
     struct CallState
     {

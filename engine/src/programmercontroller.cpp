@@ -1576,7 +1576,7 @@ void ProgrammerController::heldTick(double dt)
         if (refine)
             m_refineSession->revert();
         else
-            m_focusSession->revertLight();
+            m_focusSession->revertAllHeld();   // Q139: every unsaved light
     }
 }
 

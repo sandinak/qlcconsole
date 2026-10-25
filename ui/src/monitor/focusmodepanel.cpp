@@ -1014,7 +1014,7 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Tab:      m_session->next(); break;
         case Qt::Key_BracketLeft:
         case Qt::Key_Backtab:  m_session->previous(); break;
-        // Shift: as A or B held -- save all; this light back to its last save.
+        // Shift: as A or B held -- save all; every unsaved light back (Q139).
         case Qt::Key_Return:
         case Qt::Key_Enter:
             if (modifiers & Qt::ShiftModifier)
@@ -1025,7 +1025,7 @@ bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
         case Qt::Key_Backspace:
         case Qt::Key_Delete:
             if (modifiers & Qt::ShiftModifier)
-                m_session->revertLight();
+                m_session->revertAllHeld();
             else
                 m_session->revert();
             break;
