@@ -2075,6 +2075,62 @@ void FocusCalls_Test::theSmallIdeas()
     iom->setInputPatch(0, QString(), QString(), 0);
 }
 
+/* CHANGELOG [0.2.2] "Crew words": the D-pad's beam presses are spoken in
+   the words the crew uses -- up "Spot down.", down "Flood out.", right
+   "Sharper.", left "Softer." -- once per press, and only where the light
+   has the zoom or focus to move. */
+void FocusCalls_Test::theDpadSaysTheCrewsWords()
+{
+    IOPluginStub *stub = plugInStubPad(m_doc, { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" },
+                                                { 14, "lb" }, { 15, "rb" },
+                                                { 16, "back" }, { 17, "start" },
+                                                { 20, "dpad_up" }, { 21, "dpad_down" },
+                                                { 22, "dpad_left" }, { 23, "dpad_right" } });
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ProgrammerController *pc = m_doc->programmer();
+    auto press = [iom](quint32 ch) {
+        emit iom->inputValueChanged(0, ch, 255, QString());
+        emit iom->inputValueChanged(0, ch, 0, QString());
+    };
+
+    Fixture *z = makeZoomSpot(m_doc, "Spot 5", 2.0f, 2.0f, 100);
+    Fixture *plain = makeSpot(m_doc, "Spot 8", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.fixtures = { z->id(), plain->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QCOMPARE(s->currentFixture(), z->id());
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    const struct { quint32 ch; const char *word; } presses[] = {
+        { 20, "Spot down." }, { 21, "Flood out." }, { 23, "Sharper." }, { 22, "Softer." } };
+    for (const auto &p : presses)
+    {
+        const int before = said.count();
+        press(p.ch);
+        QCOMPARE(said.count(), before + 1);         // once, not per repeat
+        QCOMPARE(said.last().at(0).toString(), QString(p.word));
+    }
+
+    // A light with no zoom or focus: the arms say nothing.
+    press(15);                                      // RB: the next light
+    QCOMPARE(s->currentFixture(), plain->id());
+    said.clear();
+    for (const auto &p : presses)
+        press(p.ch);
+    const QStringList words = { "Spot down.", "Flood out.", "Sharper.", "Softer." };
+    for (int i = 0; i < said.count(); ++i)
+        QVERIFY2(!words.contains(said.at(i).at(0).toString()), qPrintable(said.at(i).at(0).toString()));
+
+    s->stop();
+    iom->setInputPatch(0, QString(), QString(), 0);
+}
+
 /* The changelog: "A focus-call cue arms on GO and starts on the
    controller's Start" -- here through real playback: ShowControl's GO, the
    cue list's chaser stepped by the MasterTimer, FocusCallCue watching it

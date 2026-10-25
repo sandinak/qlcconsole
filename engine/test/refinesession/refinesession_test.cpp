@@ -36,6 +36,7 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
+#include "qlccapability.h"
 #include "refinesession.h"
 #include "focussession.h"
 #include "fixturegroup.h"
@@ -106,6 +107,41 @@ Fixture *makeSpot(Doc *doc, const QString &name, float x)
     fxi->setAddress(quint32(doc->fixtures().size() * kChannels));
     doc->addFixture(fxi);
     doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(x * 1000.0f, 2000.0f, 5.0f));
+    return fxi;
+}
+
+/* A spot with a gobo wheel (Open, Dots, Star) and a dimmer, at @p address. */
+Fixture *makeGoboSpot(Doc *doc, const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Refine Gobo Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim);
+    mode->insertChannel(dim, 0);
+    QLCChannel *gobo = new QLCChannel();
+    gobo->setName("Gobo");
+    gobo->setGroup(QLCChannel::Gobo);
+    gobo->addCapability(new QLCCapability(0, 9, "Open"));
+    gobo->addCapability(new QLCCapability(10, 19, "Dots"));
+    gobo->addCapability(new QLCCapability(20, 29, "Star"));
+    def->addChannel(gobo);
+    mode->insertChannel(gobo, 1);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(address);
+    doc->addFixture(fxi);
     return fxi;
 }
 
@@ -972,6 +1008,81 @@ void RefineSession_Test::aReusableLayerWarnsFirst()
     QVERIFY(!r->hasWarningPending());
     QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
              QVariantList({ 273, 135 }));
+    r->stop();
+}
+
+/* CHANGELOG [0.2.2] Refine: "position, zoom, focus, colour and gobo at
+   Layer, Group or Fixture scope, previewed on the rig and kept by A as one
+   Show Tree step". The gobo page at Layer scope: D-pad right picks the
+   show's first gobo palette by name, every light of the layer shows it at
+   once, the cue has it only after A, and one undo takes it back. */
+void RefineSession_Test::aGoboAtLayerScopeIsPreviewedAndKept()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 base = quint32(m_doc->fixtures().size() * kChannels) + 20;
+    Fixture *g1 = makeGoboSpot(m_doc, "Gobo 1", base);
+    Fixture *g2 = makeGoboSpot(m_doc, "Gobo 2", base + 2);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Gobo spots");
+    grp->setSize(QSize(2, 1));
+    grp->assignFixture(g1->id(), QLCPoint(0, 0));
+    grp->assignFixture(g2->id(), QLCPoint(1, 0));
+    m_doc->addFixtureGroup(grp);
+    QLCPalette *star = new QLCPalette(QLCPalette::Gobo);
+    star->setName("Star");
+    star->setGoboName("Star");
+    m_doc->addPalette(star);
+    QLCPalette *dots = new QLCPalette(QLCPalette::Gobo);
+    dots->setName("Dots");
+    dots->setGoboName("Dots");
+    m_doc->addPalette(dots);
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+
+    const quint32 cue = st->addCue(st->addCueList(st->addProduction("Gobos"), "Main"), -1, "Gobo cue");
+    Target t;
+    t.groups << grp->id();
+    const quint32 layer = st->addLayer(cue, t);
+    QVERIFY(st->setLayerLook(cue, layer, lookOf(KeyDimmer, { full->id() })));
+    QVERIFY(st->cue(cue)->layers.first().look(KeyGobo) == nullptr);
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QVERIFY(r->start(cue));
+    QCOMPARE(r->scope(), RefineSession::LayerScope);
+    r->apply(ControllerScheme::Alternate);          // colour page
+    r->apply(ControllerScheme::Alternate);          // gobo page
+    QCOMPARE(r->page(), RefineSession::GoboPage);
+
+    r->press(ControllerScheme::FocusFarther, true);  // D-pad right
+    r->press(ControllerScheme::FocusFarther, false);
+    QVERIFY(r->hasPending());
+    QCOMPARE(said.last().at(0).toString(), QString("Dots"));    // first by name
+    // On the rig at once, on both lights of the layer: the Dots slot.
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    for (Fixture *fx : { g1, g2 })
+    {
+        const QPair<int, int> at(0, int(fx->address()) + 1);
+        QVERIFY2(w.contains(at), qPrintable(fx->name()));
+        QVERIFY(w.value(at) >= 10 && w.value(at) <= 19);
+    }
+    // Not in the cue yet.
+    QVERIFY(st->cue(cue)->layers.first().look(KeyGobo) == nullptr);
+
+    r->apply(ControllerScheme::Keep);               // A
+    QVERIFY(!r->hasPending());
+    QVERIFY(r->pendingWrites().isEmpty());
+    const Look *gobo = st->cue(cue)->layers.first().look(KeyGobo);
+    QVERIFY(gobo != nullptr);
+    QCOMPARE(gobo->palettes, QList<quint32>({ dots->id() }));
+    QCOMPARE(st->cue(cue)->layers.size(), 1);       // the layer's own, no exception
+
+    // One Show Tree step: one undo, and the gobo is gone, the dimmer stays.
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(cue)->layers.first().look(KeyGobo) == nullptr);
+    QVERIFY(st->cue(cue)->layers.first().look(KeyDimmer) != nullptr);
     r->stop();
 }
 

@@ -83,6 +83,9 @@ private slots:
     void operateIsQuietOnARunningList();
     /** Holding (Q140): no stick, no button; released, it moves again. */
     void holdingTakesNoStick();
+    /** The gobo page: a gobo picked at Layer scope is seen on the rig at
+     *  once, kept by A as one Show Tree step on the layer's Gobo look. */
+    void aGoboAtLayerScopeIsPreviewedAndKept();
 
 private:
     Doc *m_doc = nullptr;

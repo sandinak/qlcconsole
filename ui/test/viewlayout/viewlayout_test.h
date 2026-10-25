@@ -46,6 +46,9 @@ private slots:
      *  tab opens its editor beside the tree, as in QLC+ -- even from a saved
      *  splitter state that had the editor collapsed. */
     void classicFunctionsOpensWhatIsPicked();
+    /** The same from a saved state that collapsed the tree: picking a
+     *  function shows both panes at a usable width. */
+    void classicFunctionsUncollapsesTheTree();
 
     /** A scene the Show Tree made opens in its editor too (greyed, the
      *  banner saying why above it), not a banner at the foot of an empty

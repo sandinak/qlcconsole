@@ -60,6 +60,17 @@ static QByteArray collapsedEditorState()
     return sp.saveState();
 }
 
+/* The same, as a session that dragged the tree away (pane 0 at no width). */
+static QByteArray collapsedTreeState()
+{
+    QSplitter sp(Qt::Horizontal);
+    sp.addWidget(new QWidget);
+    sp.addWidget(new QWidget);
+    sp.resize(1000, 600);
+    sp.setSizes({ 0, 1000 });
+    return sp.saveState();
+}
+
 void ViewLayout_Test::initTestCase()
 {
     QVERIFY(m_dir.isValid());
@@ -269,6 +280,47 @@ void ViewLayout_Test::classicFunctionsOpensWhatIsPicked()
     QCoreApplication::processEvents();
     QVERIFY(fm->m_editor == nullptr && fm->m_scene_editor == nullptr);
     QVERIFY(!fm->m_hsplitter->widget(1)->isVisible());
+    fm->m_tree->clearSelection();
+}
+
+/* CHANGELOG [0.2.2]: in Classic QLC+ the editor opens beside the tree "even
+   from a saved splitter state that had a pane collapsed" -- here the tree.
+   The state is restored as FunctionManager's constructor restores
+   functionmanager/splitter; picking a function must bring the tree back. */
+void ViewLayout_Test::classicFunctionsUncollapsesTheTree()
+{
+    m_app->setWorkspaceView(App::ClassicView, false);
+    m_app->showContext("Functions");
+    QCoreApplication::processEvents();
+    FunctionManager *fm = FunctionManager::instance();
+    QVERIFY(fm != nullptr);
+    auto idOf = [this](const char *name) {
+        for (Function *f : m_app->doc()->functions())
+            if (f->name() == QLatin1String(name))
+                return f->id();
+        return Function::invalidId();
+    };
+    const quint32 scene = idOf("Plain scene"), chaser = idOf("Plain chaser");
+    QVERIFY(scene != Function::invalidId() && chaser != Function::invalidId());
+
+    // An editor open, then the tree dragged away to nothing (as the saved
+    // functionmanager/splitter state restores it).
+    pick(fm, scene);
+    QVERIFY(openEditor(fm) != nullptr);
+    QVERIFY(fm->m_hsplitter->restoreState(collapsedTreeState()));
+    QCoreApplication::processEvents();
+    QCOMPARE(fm->m_hsplitter->sizes().value(0), 0);
+
+    pick(fm, chaser);
+    QWidget *ed = openEditor(fm);       // both panes at least a quarter wide
+    QVERIFY2(ed != nullptr, qPrintable(QString("tree %1, pane %2 of %3")
+                                       .arg(fm->m_tree->width())
+                                       .arg(fm->m_hsplitter->widget(1)->width()).arg(fm->width())));
+    QVERIFY(ed->inherits("ChaserEditor"));
+    QVERIFY(fm->m_tree->width() >= fm->width() / 4);
+    const QStringList bad = layoutProblems(fm);
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QLatin1Char('\n'))));
+    fm->editFunction(nullptr);
     fm->m_tree->clearSelection();
 }
 

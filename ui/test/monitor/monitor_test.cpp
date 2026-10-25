@@ -98,6 +98,7 @@
 #include "gobowheelsdialog.h"
 #undef private
 #include "standitem.h"
+#include "pipeitem.h"
 #include "toweritem.h"
 #include "scenery.h"
 #include "networktopology.h"
@@ -128,6 +129,10 @@
 #include "createfixturegroup.h"
 #include "headlayout.h"
 #include "tower.h"
+#include "pipe.h"
+#include "stand.h"
+#include "venuecorrections.h"
+#include "rigowner.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -1580,9 +1585,148 @@ void Monitor_Test::aGroupDroppedOnATrussAllHang()
         if (a->text() == QLatin1String("SecondBar"))
             mountOnSecond = a;
     QVERIFY(mountOnSecond != nullptr);
+    // The menu says how many it moves.
+    QMenu *trussMenu = qobject_cast<QMenu *>(mountOnSecond->parent());
+    QVERIFY(trussMenu != nullptr);
+    QCOMPARE(trussMenu->title(), QString("Truss (2 fixtures)"));
     mountOnSecond->trigger();
     QCOMPARE(props->fixtureRigProps(rig.fxi->id()).trussId, t2->id());
     QCOMPARE(props->fixtureRigProps(other->id()).trussId, t2->id());
+    // "each keeps its place along": 2 m and 3.5 m on the second bar too.
+    QVERIFY2(qAbs(props->fixtureRigProps(rig.fxi->id()).trussOffset - 2.0f) < 0.1f,
+             qPrintable(QString::number(props->fixtureRigProps(rig.fxi->id()).trussOffset)));
+    QVERIFY2(qAbs(props->fixtureRigProps(other->id()).trussOffset - 3.5f) < 0.1f,
+             qPrintable(QString::number(props->fixtureRigProps(other->id()).trussOffset)));
+}
+
+/* "Mount on ▸ acts on the selection": Boom and Tower too, not only Truss --
+   every selected fixture when the right-clicked one is among them, the menu
+   saying how many, each keeping its place up the boom; the right-clicked
+   one alone when it is not among them. */
+void Monitor_Test::mountOnABoomOrATowerTakesTheWholeSelection()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    MonitorProperties *props = m_doc->monitorProperties();
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(6500, 2000, 0));
+    rig.gv->addFixture(other->id(), QPointF(6500, 2000));
+    MonitorFixtureItem *second = rig.gv->m_fixtures.value(other->id(), nullptr);
+    QVERIFY(second != nullptr);
+
+    Pipe *boomL = props->addPipe();
+    boomL->setName("Boom L");
+    boomL->setOrientation(Pipe::Vertical);
+    boomL->setOriginX(2.0f);
+    boomL->setOriginY(2.0f);
+    boomL->setLength(4.0f);
+    Pipe *boomR = props->addPipe();
+    boomR->setName("Boom R");
+    boomR->setOrientation(Pipe::Vertical);
+    boomR->setOriginX(12.0f);
+    boomR->setOriginY(2.0f);
+    boomR->setLength(4.0f);
+    Tower *tw = props->addTower();
+    tw->setName("Tower M");
+    tw->setOriginX(8.0f);
+    tw->setOriginY(8.0f);
+    tw->setHeight(4.0f);
+    tw->setShelves({ 1.5f, 3.0f });
+    const quint32 boomLId = boomL->id(), boomRId = boomR->id(), towerId = tw->id();
+    auto dropStructures = qScopeGuard([&]() {
+        props->removePipe(boomLId);
+        props->removePipe(boomRId);
+        props->removeTower(towerId);
+    });
+    rig.gv->updatePlatforms();
+
+    // Both on Boom L, at different heights up it.
+    const QList<QPair<quint32, float> > heights = { { rig.fxi->id(), 1.2f }, { other->id(), 2.6f } };
+    for (const auto &h : heights)
+    {
+        FixtureRigProps rp = props->fixtureRigProps(h.first);
+        rp.clearMounts();
+        rp.pipeId = boomLId;
+        rp.pipeOffset = h.second;
+        props->setFixtureRigProps(h.first, rp);
+        rig.gv->updateFixture(h.first);
+    }
+
+    auto subMenu = [](QMenu *root, const QString &title) -> QMenu * {
+        for (QMenu *m : root->findChildren<QMenu *>())
+            if (m->title() == title)
+                return m;
+        return nullptr;
+    };
+    auto actionIn = [](QMenu *m, const QString &text) -> QAction * {
+        if (m == nullptr)
+            return nullptr;
+        for (QAction *a : m->actions())
+            if (a->text() == text)
+                return a;
+        return nullptr;
+    };
+
+    // Mount on ▸ Boom (2 fixtures) ▸ Boom R: both, each at its own height.
+    rig.gv->scene()->clearSelection();
+    rig.item->setSelected(true);
+    second->setSelected(true);
+    {
+        QMenu menu;
+        rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), QPointF(), false);
+        QMenu *boomMenu = subMenu(&menu, "Boom (2 fixtures)");
+        QVERIFY2(boomMenu != nullptr, "the Boom menu does not say it moves 2 fixtures");
+        QVERIFY(subMenu(&menu, "Tower (2 fixtures)") != nullptr);
+        QAction *toR = actionIn(boomMenu, "Boom R");
+        QVERIFY(toR != nullptr);
+        toR->trigger();
+    }
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).pipeId, boomRId);
+    QCOMPARE(props->fixtureRigProps(other->id()).pipeId, boomRId);
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).pipeOffset, 1.2f);
+    QCOMPARE(props->fixtureRigProps(other->id()).pipeOffset, 2.6f);
+
+    // Mount on ▸ Tower (2 fixtures) ▸ Tower M ▸ Shelf 2: both, off the boom.
+    rig.gv->scene()->clearSelection();
+    rig.item->setSelected(true);
+    second->setSelected(true);
+    {
+        QMenu menu;
+        rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), other->id(), QPointF(), false);
+        QMenu *towerMenu = subMenu(&menu, "Tower (2 fixtures)");
+        QVERIFY2(towerMenu != nullptr, "the Tower menu does not say it moves 2 fixtures");
+        QAction *shelf2 = actionIn(subMenu(towerMenu, "Tower M"), "Shelf 2");
+        QVERIFY(shelf2 != nullptr);
+        shelf2->trigger();
+    }
+    for (quint32 fid : { rig.fxi->id(), other->id() })
+    {
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        QCOMPARE(rp.towerId, towerId);
+        QCOMPARE(rp.towerMountSide, int(FixtureRigProps::TowerShelf));
+        QCOMPARE(rp.towerShelf, 1);
+        QCOMPARE(rp.pipeId, quint32(UINT_MAX));
+    }
+
+    // Right-clicked outside the selection: just it, and the menu says no count.
+    rig.gv->scene()->clearSelection();
+    second->setSelected(true);
+    {
+        QMenu menu;
+        rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), QPointF(), false);
+        QVERIFY(subMenu(&menu, "Boom (2 fixtures)") == nullptr);
+        QAction *toL = actionIn(subMenu(&menu, "Boom"), "Boom L");
+        QVERIFY(toL != nullptr);
+        toL->trigger();
+    }
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).pipeId, boomLId);
+    QCOMPARE(props->fixtureRigProps(other->id()).towerId, towerId);
 }
 
 /* "when I select several fixtures and edit fixture properties .. should
@@ -1628,6 +1772,76 @@ void Monitor_Test::aDoubleClickEditsTheWholeSelection()
                     Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(rig.gv->viewport(), &dbl);
     QCOMPARE(selectedThen, 2);
+}
+
+/* "Fixture Properties edits every selected fixture: double-clicking one of
+   several selected fixtures, on the plot ... opens the editor for all of
+   them": two fixtures hung on a truss, both selected, a real double-click on
+   one -- the editor says 2 fixtures and its OK changes both. */
+void Monitor_Test::aDoubleClickOnTwoHungOnATrussEditsBoth()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(6000, 6000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("EditPairBar");
+    const quint32 barId = t->id();
+    auto dropTruss = qScopeGuard([&]() { props->removeTruss(barId); });
+    t->setOrigin(QVector3D(4.0f, 6.0f, 5.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(8.0f);
+    t->setWidth(0.3f);
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(9000, 6000, 0));
+    rig.gv->addFixture(other->id(), QPointF(9000, 6000));
+    MonitorFixtureItem *second = rig.gv->m_fixtures.value(other->id(), nullptr);
+    QVERIFY(second != nullptr);
+    rig.parent.resize(1230, 760);
+    rig.parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    rig.gv->updateTrusses();
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.gv->updateFixture(other->id());
+    rig.gv->attachFixtureToTruss(rig.fxi->id(), barId);
+    rig.gv->attachFixtureToTruss(other->id(), barId);
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).trussId, barId);
+    QCOMPARE(props->fixtureRigProps(other->id()).trussId, barId);
+    QVERIFY(!props->fixtureRigProps(rig.fxi->id()).fixedAim);
+    QVERIFY(!props->fixtureRigProps(other->id()).fixedAim);
+
+    rig.gv->scene()->clearSelection();
+    rig.item->setSelected(true);
+    second->setSelected(true);
+
+    QString title;
+    driveDialog([&title](QWidget *dlg) {
+        title = dlg->windowTitle();
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        if (down == nullptr)
+            return false;
+        down->setValue(35.0);
+        return true;
+    });
+    const QPoint at = rig.gv->mapFromScene(rig.item->iconCentreScene());
+    QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QTest::mouseRelease(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(at), rig.gv->viewport()->mapToGlobal(QPointF(at)),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &dbl);
+    QVERIFY2(title.contains("2 fixtures"), qPrintable(title));
+    QVERIFY(props->fixtureRigProps(rig.fxi->id()).fixedAim);
+    QVERIFY(props->fixtureRigProps(other->id()).fixedAim);
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).aimDown, 35.0f);
+    QCOMPARE(props->fixtureRigProps(other->id()).aimDown, 35.0f);
+    // Still hung where they were.
+    QCOMPARE(props->fixtureRigProps(rig.fxi->id()).trussId, barId);
+    QCOMPARE(props->fixtureRigProps(other->id()).trussId, barId);
 }
 
 void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
@@ -1907,17 +2121,91 @@ void Monitor_Test::stageFeaturesCopyAndPaste()
     tw->setName("Tower A");
     tw->setOriginX(5.0f);
     tw->setOriginY(5.0f);
+    tw->setHeight(4.5f);
+    tw->setShelves({ 1.5f, 3.0f });
+    // A boom and a stand (CHANGELOG 0.3: "scenery, towers, booms and
+    // stands: each a new object loaded from the copy, offset and named").
+    Pipe *boom = props->addPipe();
+    boom->setName("Boom SL");
+    boom->setOrientation(Pipe::Vertical);
+    boom->setOriginX(7.0f);
+    boom->setOriginY(2.0f);
+    boom->setLength(3.5f);
+    boom->setDiameter(0.06f);
+    boom->setBaseRadius(0.4f);
+    Stand *stand = props->addStand();
+    stand->setName("Stand DSR");
+    stand->setOriginX(9.0f);
+    stand->setOriginY(1.0f);
+    stand->setHeight(2.2f);
+    stand->setBaseRadius(0.6f);
+    stand->setRotation(30.0f);
+    stand->setColor(QColor(10, 200, 30));
+    auto dropStructures = qScopeGuard([&]() {
+        for (Pipe *pp : props->pipes())
+            if (pp->name().startsWith("Boom SL"))
+                props->removePipe(pp->id());
+        for (Stand *st : props->stands())
+            if (st->name().startsWith("Stand DSR"))
+                props->removeStand(st->id());
+        for (Tower *t : props->towers())
+            if (t->name() == QLatin1String("Tower A copy"))
+                props->removeTower(t->id());
+        for (Scenery *sc : props->sceneries())
+            if (sc->name() == QLatin1String("Side wall copy"))
+                props->removeScenery(sc->id());
+    });
     rig.gv->updatePlatforms();
     const int sceneries = props->sceneries().size(), towers = props->towers().size();
+    const int pipes = props->pipes().size(), stands = props->stands().size();
     rig.gv->scene()->clearSelection();
     QVERIFY(rig.gv->m_sceneryItems.contains(wall->id()) && rig.gv->m_towerItems.contains(tw->id()));
+    QVERIFY(rig.gv->m_pipeItems.contains(boom->id()) && rig.gv->m_standItems.contains(stand->id()));
     rig.gv->m_sceneryItems.value(wall->id())->setSelected(true);
     rig.gv->m_towerItems.value(tw->id())->setSelected(true);
+    rig.gv->m_pipeItems.value(boom->id())->setSelected(true);
+    rig.gv->m_standItems.value(stand->id())->setSelected(true);
     rig.mon->slotCopySelected();
     QVERIFY(rig.mon->clipboardHasFeatures());
     QVERIFY(rig.mon->pasteClipboard(1.0f, 0.5f));
     QCOMPARE(props->sceneries().size(), sceneries + 1);
     QCOMPARE(props->towers().size(), towers + 1);
+    QCOMPARE(props->pipes().size(), pipes + 1);
+    QCOMPARE(props->stands().size(), stands + 1);
+
+    // The tower: named "... copy", offset by the paste, its shelves with it.
+    Tower *towerCopy = nullptr;
+    for (Tower *t : props->towers())
+        if (t->name() == QLatin1String("Tower A copy"))
+            towerCopy = t;
+    QVERIFY(towerCopy != nullptr && towerCopy->id() != tw->id());
+    QVERIFY(qAbs(towerCopy->originX() - 6.0f) < 0.01f && qAbs(towerCopy->originY() - 5.5f) < 0.01f);
+    QCOMPARE(towerCopy->height(), 4.5f);
+    QCOMPARE(towerCopy->shelfCount(), 2);
+    // The boom: everything it had.
+    Pipe *boomCopy = nullptr;
+    for (Pipe *pp : props->pipes())
+        if (pp->name() == QLatin1String("Boom SL copy"))
+            boomCopy = pp;
+    QVERIFY(boomCopy != nullptr && boomCopy->id() != boom->id());
+    QVERIFY(qAbs(boomCopy->originX() - 8.0f) < 0.01f && qAbs(boomCopy->originY() - 2.5f) < 0.01f);
+    QVERIFY(boomCopy->isVertical());
+    QCOMPARE(boomCopy->length(), 3.5f);
+    QCOMPARE(boomCopy->diameter(), 0.06f);
+    QCOMPARE(boomCopy->baseRadius(), 0.4f);
+    // The stand: everything it had.
+    Stand *standCopy = nullptr;
+    for (Stand *st : props->stands())
+        if (st->name() == QLatin1String("Stand DSR copy"))
+            standCopy = st;
+    QVERIFY(standCopy != nullptr && standCopy->id() != stand->id());
+    QVERIFY(qAbs(standCopy->originX() - 10.0f) < 0.01f && qAbs(standCopy->originY() - 1.5f) < 0.01f);
+    QCOMPARE(standCopy->height(), 2.2f);
+    QCOMPARE(standCopy->baseRadius(), 0.6f);
+    QCOMPARE(standCopy->rotation(), 30.0f);
+    QCOMPARE(standCopy->color(), QColor(10, 200, 30));
+    // The originals are where they were.
+    QVERIFY(qAbs(boom->originX() - 7.0f) < 0.01f && qAbs(stand->originX() - 9.0f) < 0.01f);
     Scenery *copy = nullptr;
     for (Scenery *sc : props->sceneries())
         if (sc->name() == QLatin1String("Side wall copy"))
@@ -1930,6 +2218,8 @@ void Monitor_Test::stageFeaturesCopyAndPaste()
     rig.mon->undo();
     QCOMPARE(props->sceneries().size(), sceneries);
     QCOMPARE(props->towers().size(), towers);
+    QCOMPARE(props->pipes().size(), pipes);
+    QCOMPARE(props->stands().size(), stands);
     props->removeScenery(wall->id());
     props->removeTower(tw->id());
 }
@@ -24185,4 +24475,334 @@ void Monitor_Test::aLockedFolderHoldsItsMembersAndItsSubFolders()
                  "an unlocked member did not move: the drag is not reaching it");
     }
     delete doc;
+}
+
+/* "A pasted truss brings its fixtures ... the same through Duplicate
+   selected": the canvas menu's Duplicate selected on a truss with two
+   fixtures makes the copy with copies of both, at the same places along it,
+   asks what they get as ⌘C/⌘V does, and one ⌘Z takes it all away. */
+void Monitor_Test::duplicateSelectedBringsATrussesFixtures()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("LX1");
+    bar->setOrigin(QVector3D(1.0f, 3.0f, 5.0f));
+    bar->setLength(6.0f);
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("LX1-%1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = bar->id();
+        rp.trussOffset = 1.0f + 3.0f * i;
+        props->setFixtureRigProps(f->id(), rp);
+    }
+    auto onTruss = [doc, props](quint32 tid) {
+        QList<Fixture *> out;
+        for (Fixture *f : doc->fixtures())
+            if (props->fixtureRigProps(f->id()).trussId == tid)
+                out << f;
+        return out;
+    };
+
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    MonitorGraphicsView *gv = mon.m_graphicsView;
+    gv->setLayoutLocked(false);
+    gv->updateTrusses();
+    TrussItem *ti = gv->m_trussItems.value(bar->id());
+    QVERIFY(ti != nullptr);
+    gv->scene()->clearSelection();
+    ti->setSelected(true);
+    int asked = -1;
+    mon.setPasteFixturesAsk([&asked](int n) { asked = n; return Monitor::PasteUnpatched; });
+    const int fixturesBefore = doc->fixtures().size();
+
+    // The canvas menu, answered from the event loop: Duplicate selected.
+    QStringList seen;
+    bool picked = false;
+    auto attempts = std::make_shared<int>(0);
+    auto poll = std::make_shared<std::function<void()> >();
+    *poll = [&seen, &picked, attempts, poll]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+        {
+            if (++*attempts < 200)
+                QTimer::singleShot(10, *poll);
+            return;
+        }
+        QAction *dup = nullptr;
+        for (QAction *a : menu->actions())
+        {
+            seen << a->text();
+            if (a->text() == QLatin1String("Duplicate selected"))
+                dup = a;
+        }
+        if (dup == nullptr)
+        {
+            menu->close();
+            return;
+        }
+        picked = true;
+        menu->setActiveAction(dup);
+        QTest::keyClick(menu, Qt::Key_Return);
+    };
+    QTimer::singleShot(0, *poll);
+    mon.slotCanvasContextMenu(QPointF(100, 100));
+    QVERIFY2(picked, qPrintable(seen.join(" | ")));
+
+    QCOMPARE(asked, 2);                                 // "Paste 2 fixtures with the truss"
+    QCOMPARE(props->trusses().size(), 2);
+    Truss *dup = nullptr;
+    for (Truss *t : props->trusses())
+        if (t != bar)
+            dup = t;
+    QVERIFY(dup != nullptr);
+    QCOMPARE(dup->name(), QString("LX1 copy"));
+    const quint32 dupId = dup->id();
+    const QVector3D off = dup->origin() - bar->origin();
+    QVERIFY2(qAbs(off.x() - 0.5f) < 1e-4f && qAbs(off.y() - 0.5f) < 1e-4f,
+             qPrintable(QString("duplicated %1, %2 off").arg(off.x()).arg(off.y())));
+    QCOMPARE(doc->fixtures().size(), fixturesBefore + 2);
+    QCOMPARE(onTruss(bar->id()).size(), 2);             // the original keeps its own
+    QList<float> offsets;
+    QStringList names;
+    for (Fixture *f : onTruss(dupId))
+    {
+        QVERIFY(!f->isPatched());
+        QVERIFY(gv->m_fixtures.contains(f->id()));
+        offsets << props->fixtureRigProps(f->id()).trussOffset;
+        names << f->name();
+    }
+    std::sort(offsets.begin(), offsets.end());
+    QCOMPARE(offsets, QList<float>({ 1.0f, 4.0f }));
+    names.sort();
+    QCOMPARE(names, QStringList({ "LX1-1 #2", "LX1-2 #2" }));
+
+    // One ⌘Z: the copy and its fixtures go.
+    mon.undo();
+    QCOMPARE(props->trusses().size(), 1);
+    QCOMPARE(onTruss(dupId).size(), 0);
+    QCOMPARE(doc->fixtures().size(), fixturesBefore);
+}
+
+/* "UI: Owner in ... Fixture Properties": the Owner combo set to House on a
+   fixture with a venue applied puts it in the venue's house rig (out of the
+   show file); Tour brings it back; the first entry, picked, follows the
+   group into the venue, and then names the group's owner ("From FOH wash:
+   House"). */
+void Monitor_Test::theOwnerInFixturePropertiesMovesItIntoTheVenue()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    venues->setShowFile(dir.filePath("Tour.qlcc"), false);
+    {
+        DropRig rig;
+        QVERIFY(rig.build(doc, QVector3D(5000, 5000, 0)));
+        const quint32 fid = rig.fxi->id();
+        rig.fxi->setOwner(RigOwner::Tour);              // its own: the group says House
+        FixtureGroup *foh = new FixtureGroup(doc);
+        foh->setName("FOH wash");
+        foh->setOwner(RigOwner::House);
+        QVERIFY(doc->addFixtureGroup(foh));
+        foh->assignFixture(fid);
+        QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));
+        QVERIFY(!venues->isVenueFixture(fid));
+
+        auto pick = [&](RigOwner::Owner want, QString *fromText, int *shownBefore) {
+            driveDialog([want, fromText, shownBefore](QWidget *dlg) {
+                QComboBox *owner = dlg->findChild<QComboBox *>("fixtureOwner");
+                if (owner == nullptr || owner->count() < 4)
+                    return false;
+                *fromText = owner->itemText(0);
+                *shownBefore = owner->currentData(Qt::UserRole).toInt();
+                const int at = owner->findData(int(want), Qt::UserRole);
+                if (at < 0)
+                    return false;
+                owner->setCurrentIndex(at);
+                return true;
+            });
+            rig.mon->showFixtureItemEditor(fid);
+        };
+
+        QString fromText;
+        int shown = -1;
+        pick(RigOwner::House, &fromText, &shown);
+        // It has an owner of its own: the first entry is the plain "From its group".
+        QCOMPARE(fromText, QString("From its group"));
+        QCOMPARE(shown, int(RigOwner::Tour));
+        QCOMPARE(doc->fixture(fid)->owner(), RigOwner::House);
+        QVERIFY2(venues->isVenueFixture(fid), "set to House with a venue applied, it stays the show's");
+        QVERIFY(doc->isVenueFixture(fid));
+
+        pick(RigOwner::Tour, &fromText, &shown);
+        QCOMPARE(shown, int(RigOwner::House));
+        QCOMPARE(doc->fixture(fid)->owner(), RigOwner::Tour);
+        QVERIFY2(!venues->isVenueFixture(fid), "set back to Tour, it stays in the venue");
+        QVERIFY(!doc->isVenueFixture(fid));
+
+        // "From FOH wash: House": it follows the group, into the venue.
+        pick(RigOwner::Unset, &fromText, &shown);
+        QCOMPARE(doc->fixture(fid)->owner(), RigOwner::Unset);
+        QVERIFY(venues->isVenueFixture(fid));
+        int again = -1;
+        QString text;
+        driveDialog([&again, &text](QWidget *dlg) {
+            QComboBox *owner = dlg->findChild<QComboBox *>("fixtureOwner");
+            if (owner == nullptr)
+                return false;
+            again = owner->currentIndex();
+            text = owner->currentText();
+            return true;
+        }, false);
+        rig.mon->showFixtureItemEditor(fid);
+        QCOMPARE(again, 0);
+        QCOMPARE(text, QString("From FOH wash: House"));
+    }
+}
+
+/* Scramble practice: "the views draw where the scrambled lights land
+   (practiceViewProps())". A head aimed at its mark with the right
+   calibration: in a practice its applied offsets are off by 8-12 degrees,
+   but the plot's pool stays where the light really lands (on the mark);
+   drawn from the scrambled offsets it would be a metre off. After
+   endPractice it is still there. */
+void Monitor_Test::aPracticeDrawsTheScrambledHeadsPoolWhereItLands()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    venues->setShowFile(dir.filePath("Tour.qlcc"), false);
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(1.0f, 2.0f, 5.0f));
+    bar->setLength(8.0f);
+    Fixture *spot = makeMover(doc, 10.0, 0, "Practised", QVector3D(3.0f, 2.0f, 5.0f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 2.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    const QVector3D mark(7.0f, 6.0f, 0.0f);
+    AimSolver::Solution sol;
+    QVERIFY(AimSolver::reach(doc, spot->id(), mark, sol));
+    QVERIFY(sol.reachable());
+    const QLCPhysical phy = spot->fixtureMode()->physical();
+    QByteArray v(512, char(0));
+    v[int(spot->address())] = char(uchar(qRound(sol.panDeg * 255.0f / float(phy.focusPanMax()))));
+    v[int(spot->address() + 1)] = char(uchar(qRound(sol.tiltDeg * 255.0f / float(phy.focusTiltMax()))));
+    v[int(spot->address() + 2)] = char(255);
+    spot->setChannelValues(v);
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 8));
+    view.updateTrusses();
+    view.addFixture(spot->id(), QPointF(3000.0, 2000.0));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+    auto poolOff = [&]() {
+        const QPolygonF poly = view.fixtureProjection(spot->id());
+        if (poly.size() < 3)
+            return -1.0;
+        const QPointF want = view.realPositionToPixels(double(mark.x()) * 1000.0,
+                                                       double(mark.y()) * 1000.0);
+        return QLineF(poly.boundingRect().center(), want).length() / view.m_cellPixels;
+    };
+    const double before = poolOff();
+    QVERIFY2(before >= 0.0 && before < 0.5, qPrintable(QString("before: %1 m off").arg(before)));
+
+    QString why;
+    QVERIFY2(!venues->startPractice({ spot->id() }, 7, 8.0f, 12.0f, &why).isEmpty(), qPrintable(why));
+    QVERIFY(venues->isPracticeActive());
+    const FixtureRigProps scrambled = props->fixtureRigProps(spot->id());
+    QVERIFY(qAbs(scrambled.panOffsetDeg) >= 7.9f && qAbs(scrambled.tiltOffsetDeg) >= 7.9f);
+    const double during = poolOff();
+    QVERIFY2(during >= 0.0 && during < 0.5,
+             qPrintable(QString("in practice the pool is drawn %1 m off where the light lands").arg(during)));
+
+    QVERIFY(venues->endPractice());
+    QVERIFY(!venues->isPracticeActive());
+    QCOMPARE(props->fixtureRigProps(spot->id()).panOffsetDeg, 0.0f);
+    const double after = poolOff();
+    QVERIFY2(after >= 0.0 && after < 0.5, qPrintable(QString("after: %1 m off").arg(after)));
+
+    // What the view would draw from the scrambled offsets: well off the mark.
+    props->setFixtureRigProps(spot->id(), scrambled);
+    const double fromScrambled = poolOff();
+    QVERIFY2(fromScrambled < 0.0 || fromScrambled > 0.8,
+             qPrintable(QString("the scrambled offsets alone put the pool only %1 m off").arg(fromScrambled)));
+}
+
+/* "A fixed light aimed by Pan/Tilt (Q100): the beam, landing point and
+   occlusion follow the aim (no more straight-down)". A par 6 m up: unaimed,
+   its pool is under it; aimed 45 degrees down toward downstage, the plot's
+   pool lands 6 m downstage; turned to stage right, 6 m that way. The Rig
+   Overview's beam leaves it the same way. */
+void Monitor_Test::aFixedLightAimedByPanAndTiltThrowsItsPoolThere()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *par = new Fixture(doc);
+    par->setName("Aimed par");
+    par->setChannels(1);
+    QVERIFY(doc->addFixture(par));
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(8000, 8000, 6));   // X/Y mm, Z m
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(20, 20));
+    view.addFixture(par->id(), QPointF(8000.0, 8000.0));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+    const QVector3D apex = fixtureWorldCentre(doc, par->id());
+    QVERIFY2(qAbs(apex.z() - 6.0f) < 0.3f, qPrintable(QString("hung at %1 m").arg(apex.z())));
+    auto poolAt = [&](const QPointF &m) {
+        const QPolygonF poly = view.fixtureProjection(par->id());
+        if (poly.size() < 3)
+            return -1.0;
+        const QPointF want = view.realPositionToPixels(m.x() * 1000.0, m.y() * 1000.0);
+        return QLineF(poly.boundingRect().center(), want).length() / view.m_cellPixels;
+    };
+    const QPointF under(apex.x(), apex.y());
+    const double unaimed = poolAt(under);
+    QVERIFY2(unaimed >= 0.0 && unaimed < 0.3, qPrintable(QString("unaimed: %1 m from under it").arg(unaimed)));
+
+    FixtureRigProps rp = props->fixtureRigProps(par->id());
+    rp.fixedAim = true;
+    rp.panZeroDir = 0.0f;              // downstage (+Y)
+    rp.aimDown = 45.0f;
+    props->setFixtureRigProps(par->id(), rp);
+    const double h = double(apex.z());
+    const double down = poolAt(under + QPointF(0.0, h));
+    QVERIFY2(down >= 0.0 && down < 0.6, qPrintable(QString("aimed downstage: %1 m off").arg(down)));
+    QVERIFY2(poolAt(under) > 4.0, "aimed downstage, the pool is still under it");
+
+    rp.panZeroDir = 90.0f;             // stage right (-X)
+    props->setFixtureRigProps(par->id(), rp);
+    const double right = poolAt(under + QPointF(-h, 0.0));
+    QVERIFY2(right >= 0.0 && right < 0.6, qPrintable(QString("aimed stage right: %1 m off").arg(right)));
+
+    // The Rig Overview: its beam leaves the way it is aimed, not straight down.
+    StructureStudioView studio(doc, StructureStudioView::StageKind, 0);
+    QVector3D dir;
+    QVERIFY(studio.emitDirection(par, rp, classifyFixture(par), dir));
+    const QVector3D want = QVector3D(-1.0f, 0.0f, -1.0f).normalized();
+    QVERIFY2((dir.normalized() - want).length() < 0.02f,
+             qPrintable(QString("the rig view's beam goes %1,%2,%3").arg(dir.x()).arg(dir.y()).arg(dir.z())));
 }

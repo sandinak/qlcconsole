@@ -35,6 +35,10 @@ private slots:
     void computeAlpha();
     void computeAlpha_data();
 
+    /** M076: in a practice the plot item draws a scrambled head's gauges
+     *  where the light really points */
+    void aPracticeDrawsTheGaugesWhereTheLightPoints();
+
 private:
     Doc* m_doc;
 };

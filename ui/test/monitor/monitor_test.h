@@ -87,6 +87,9 @@ private slots:
      *  where it landed along it, not only the one over it. */
     void aGroupDroppedOnATrussAllHang();
     void aDoubleClickEditsTheWholeSelection();
+    /** M414: the same for two fixtures hung on a truss -- the editor says
+     *  2 fixtures and its OK changes both */
+    void aDoubleClickOnTwoHungOnATrussEditsBoth();
     /** ...and the same in Plot layers: a double-click on one of two selected
      *  fixture rows opens Fixture Properties for both, and OK sets both. */
     void aLayersDoubleClickEditsTheWholeSelection();
@@ -812,6 +815,21 @@ private slots:
     /** A folder's position lock refuses moving a member, and a folder
      *  inside it is held by it too */
     void aLockedFolderHoldsItsMembersAndItsSubFolders();
+
+    /** M417: Mount on ▸ Boom / Tower acts on the whole selection, says how
+     *  many, each keeping its place up the boom */
+    void mountOnABoomOrATowerTakesTheWholeSelection();
+    /** M432: Duplicate selected on a truss brings its fixtures, as ⌘C/⌘V */
+    void duplicateSelectedBringsATrussesFixtures();
+    /** M022: Fixture Properties' Owner combo moves a fixture into the
+     *  applied venue (House) and back (Tour); "From <group>: <owner>" */
+    void theOwnerInFixturePropertiesMovesItIntoTheVenue();
+    /** M076: in a practice the plot draws a scrambled head's pool where the
+     *  light really lands */
+    void aPracticeDrawsTheScrambledHeadsPoolWhereItLands();
+    /** M163: an aimed fixed light's pool (plot) and beam (rig view) follow
+     *  its aim, not straight down */
+    void aFixedLightAimedByPanAndTiltThrowsItsPoolThere();
 
 private:
     Doc* m_doc;

@@ -19,6 +19,10 @@
 
 #include <QLabel>
 #include <QtTest>
+#include <QImage>
+#include <QPainter>
+#include <QTemporaryDir>
+#include <QStyleOptionGraphicsItem>
 
 #define protected public
 #define private public
@@ -31,6 +35,14 @@
 #include "qlcfixturedef.h"
 #include "qlcfile.h"
 #include "qlcmacros.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "monitorproperties.h"
+#include "programmercontroller.h"
+#include "venuecorrections.h"
+#include "truss.h"
 #include "doc.h"
 
 #include "../../../engine/test/common/resource_paths.h"
@@ -290,6 +302,106 @@ void MonitorFixtureItem_Test::computeAlpha_data()
         << QLCChannel::invalid()
         << QLCChannel::invalid()
         << QLCChannel::invalid();
+}
+
+/* Scramble practice: "the views draw where the scrambled lights land
+   (practiceViewProps())". The 2D plot's own item draws a moving head's
+   pan and tilt gauges from its DMX with the calibration taken out; in a
+   practice that is the light's RIGHT calibration (where it really points),
+   not the scrambled one applied -- so the gauges look as they did before
+   the practice, and as they do after it. Drawn from the scrambled offsets
+   they would look different. */
+void MonitorFixtureItem_Test::aPracticeDrawsTheGaugesWhereTheLightPoints()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(dir.filePath("Tour.qlcc"), false);
+    auto noShow = qScopeGuard([venues]() { venues->setShowFile(QString(), false); });
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Practice Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    const char *names[] = { "Pan", "Tilt", "Dimmer" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    // The fixture does not own its definition; like the other tests, it outlives the Doc.
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Practised");
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(fid, 0, 0, QVector3D(3000, 2000, 5));
+    FixtureRigProps right = props->fixtureRigProps(fid);
+    right.panOffsetDeg = 0.0f;
+    right.tiltOffsetDeg = 0.0f;
+    props->setFixtureRigProps(fid, right);
+
+    QScopedPointer<MonitorFixtureItem> mfi(new MonitorFixtureItem(m_doc, fid));
+    mfi->setSize(QSize(40, 40));
+    QVERIFY(!mfi->m_heads.isEmpty());
+    FixtureHead *h = mfi->m_heads.first();
+    QVERIFY(h->m_panChannel != UINT_MAX && h->m_tiltChannel != UINT_MAX);
+    // The head pointed well off centre, so the gauges' arcs are long.
+    h->m_panDegrees = 120.0;
+    h->m_tiltDegrees = 60.0;
+
+    // Drawn ten times up, so a few degrees of arc are many pixels.
+    auto render = [&]() {
+        QImage img(800, 800, QImage::Format_ARGB32);
+        img.fill(Qt::black);
+        QPainter p(&img);
+        p.setRenderHint(QPainter::Antialiasing, false);
+        p.translate(200, 200);
+        p.scale(10.0, 10.0);
+        QStyleOptionGraphicsItem opt;
+        mfi->paint(&p, &opt, nullptr);
+        p.end();
+        return img;
+    };
+    const QImage before = render();
+
+    QString why;
+    QVERIFY2(!venues->startPractice({ fid }, 7, 8.0f, 12.0f, &why).isEmpty(), qPrintable(why));
+    QVERIFY(venues->isPracticeActive());
+    const FixtureRigProps scrambled = props->fixtureRigProps(fid);
+    QVERIFY(qAbs(scrambled.panOffsetDeg) >= 7.9f && qAbs(scrambled.tiltOffsetDeg) >= 7.9f);
+    const QImage during = render();
+    QVERIFY2(during == before, "in practice the gauges are drawn from the scrambled calibration");
+
+    QVERIFY(venues->endPractice());
+    QVERIFY(!venues->isPracticeActive());
+    QVERIFY(render() == before);
+
+    // The same head with the scrambled offsets applied for real (no practice):
+    // its gauges are drawn differently, so the comparison above can tell.
+    props->setFixtureRigProps(fid, scrambled);
+    QVERIFY2(render() != before, "the gauges do not show the calibration at all");
+    mfi.reset();
+    m_doc->deleteFixture(fid);
 }
 
 QTEST_MAIN(MonitorFixtureItem_Test)

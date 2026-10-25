@@ -171,6 +171,14 @@ private slots:
     /** Renumber this level asks first while OSC / MSC is listening: No
      *  changes nothing, Yes renumbers; not listening, no question. */
     void renumberThisLevelAsksFirstWhileShowControlListens();
+    /** One word per idea p2: the menus say Copy to a hit and Adopt as a
+     *  hit (no "look"), and each makes a hit. */
+    void theHitMenusSayHit();
+    /** The MIB button reads "MIB · n" while n heads are pre-positioned. */
+    void theMibButtonCountsWhatItPrePositions();
+    /** Q104: each flag column names itself on hover; right-click the
+     *  header hides one; in a narrow pane they fold before the names. */
+    void theFlagColumnsNameThemselvesHideAndFold();
 
 private:
     quint32 dimmer(int level, const QString &name);

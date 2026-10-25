@@ -164,4 +164,23 @@ void InputDeviceNotices_Test::onlyDeviceInputsCount()
     QCOMPARE(InputDeviceNotices::kindName("MIDI"), QString("MIDI device"));
 }
 
+void InputDeviceNotices_Test::theDefaultSettleIsTwoAndAHalfSeconds()
+{
+    /* CHANGELOG [0.2.2]: the notice is "debounced 2.5 s so a Bluetooth
+       flap says nothing". Out of the box (no setSettleTime) a pad gone for
+       a moment says nothing, and the wait is 2.5 s. */
+    InputDeviceNotices notices(m_doc);
+    QCOMPARE(notices.settleTime(), 2500);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+
+    rescanned(m_stub, QStringList() << "Keyboard");
+    QTest::qWait(200);                  // well inside the default settle
+    QCOMPARE(said.count(), 0);
+    rescanned(m_stub, QStringList() << "Keyboard" << kPad);
+    notices.settleNow();                // back before it settled: a flap
+    QCOMPARE(said.count(), 0);
+    QVERIFY(footerEntry().key.isEmpty());
+}
+
 QTEST_MAIN(InputDeviceNotices_Test)

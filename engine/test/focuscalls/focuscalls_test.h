@@ -127,6 +127,7 @@ private slots:
      *  marks a light dead; a light picked on the plot is jumped to; the
      *  focus look takes gobo, prism and frost out. */
     void theSmallIdeas();
+    void theDpadSaysTheCrewsWords();
 
     /** A focus-call cue through real playback: GO arms it (said once),
      *  Start on the controller begins the calls, leaving them GOes on with

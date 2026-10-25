@@ -37,6 +37,7 @@ private slots:
     void aFlapIsNotSaid();
     void absentWhenTheShowOpensIsSaid();
     void onlyDeviceInputsCount();
+    void theDefaultSettleIsTwoAndAHalfSeconds();
 
 private:
     Doc *m_doc = nullptr;

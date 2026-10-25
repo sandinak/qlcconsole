@@ -7327,6 +7327,261 @@ void ShowTreeView_Test::renumberThisLevelAsksFirstWhileShowControlListens()
     QCOMPARE(numbers(), QStringList({ "10", "20", "30" }));
 }
 
+/* CHANGELOG [0.2.2] "One word per idea, part 2": the busking Looks are now
+   Hits -- "+ Hit, the Hits section, Adopt as a hit, Copy to a hit". A cue's
+   right-click says Copy to a hit, a Library scene's says Adopt as a hit,
+   neither says "look", and each one makes a hit. */
+void ShowTreeView_Test::theHitMenusSayHit()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    Scene *old = new Scene(m_doc);
+    old->setName("Old Busk");
+    old->addFixtureGroup(towers->id());
+    old->addPalette(full);
+    m_doc->addFunction(old);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L", ListMode::Tracking);
+    const quint32 one = st->addCue(list, -1, "One");
+    QVERIFY(st->setLayerLook(one, st->addLayer(one, groupTarget(towers->id())), st->lookForPalette(full)));
+    auto hits = [st, prod]() {
+        QList<quint32> out;
+        if (const CueList *l = st->cueList(st->looksSection(prod)))
+            for (const Cue &c : l->cues)
+                out << c.id;
+        return out;
+    };
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.setConfirm([](const QString &, const QString &, const QString &) { return true; });
+
+    // Right-click: the action with @p name, its text read and triggered.
+    auto viaMenu = [](const char *slot, QObject *target, const QPoint &pos, const QString &name) {
+        QString text;
+        QStringList all;
+        ModalCloser closer([&](QWidget *w) {
+            QMenu *menu = qobject_cast<QMenu *>(w);
+            if (menu == nullptr)
+                return false;
+            for (QAction *a : menu->actions())
+                all << a->text();
+            for (QAction *a : menu->actions())
+                if (a->objectName() == name)
+                {
+                    text = a->text();
+                    menu->close();
+                    a->trigger();
+                    return true;
+                }
+            menu->close();
+            return true;
+        });
+        QMetaObject::invokeMethod(target, slot, Q_ARG(QPoint, pos));
+        return text.isEmpty() ? QStringLiteral("(none of: %1)").arg(all.join(" | ")) : text;
+    };
+
+    // A cue: Copy to a hit.
+    view.tree()->expandAll();
+    QTreeWidgetItem *row = cueRow(view.tree(), one);
+    QVERIFY(row != nullptr);
+    view.tree()->scrollToItem(row);
+    QVERIFY(view.selectNode(one));
+    const QList<quint32> before = hits();
+    const QString copy = viaMenu("slotTreeContextMenu", &view,
+                                 view.tree()->visualItemRect(row).center(), "stCopyToLook");
+    QCOMPARE(copy, QString("Copy to a hit"));
+    QVERIFY(!copy.contains("look", Qt::CaseInsensitive));
+    const QList<quint32> afterCopy = hits();
+    QCOMPARE(afterCopy.count(), before.count() + 1);
+    QCOMPARE(st->cue(afterCopy.last())->name, QString("One"));
+
+    // A scene in the Library: Adopt as a hit.
+    QTreeWidgetItem *sceneRow = nullptr;
+    for (QTreeWidgetItemIterator it(view.library()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibFunction
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == old->id())
+            sceneRow = *it;
+    QVERIFY(sceneRow != nullptr);
+    for (QTreeWidgetItem *p = sceneRow->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    view.library()->scrollToItem(sceneRow);
+    const QString adopt = viaMenu("slotLibraryContextMenu", &view,
+                                  view.library()->visualItemRect(sceneRow).center(), "stAdoptAsLook");
+    QCOMPARE(adopt, QString("Adopt as a hit"));
+    QVERIFY(!adopt.contains("look", Qt::CaseInsensitive));
+    const QList<quint32> afterAdopt = hits();
+    QCOMPARE(afterAdopt.count(), afterCopy.count() + 1);
+    QCOMPARE(st->cue(afterAdopt.last())->name, QString("Old Busk"));
+}
+
+/* CHANGELOG [0.2.2] Move in black: the show's switch is the Show Tree's MIB
+   button, "MIB · n while pre-positioning". A running chaser whose next step
+   lights a dark mover, the show's MIB on: the button reads "MIB · 1"; off,
+   nothing pre-positioned, plain "MIB". */
+void ShowTreeView_Test::theMibButtonCountsWhatItPrePositions()
+{
+    // A mover: Pan and a master Dimmer.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("MIB Mover");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    for (const auto &c : { qMakePair(QString("Pan"), QLCChannel::Pan),
+                           qMakePair(QString("Dimmer"), QLCChannel::Intensity) })
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(c.first);
+        ch->setGroup(c.second);
+        def->addChannel(ch);
+        mode->insertChannel(ch, def->channels().size() - 1);
+    }
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *mover = new Fixture(m_doc);
+    mover->setFixtureDefinition(def, mode);
+    mover->setUniverse(0);
+    mover->setAddress(100);
+    m_doc->addFixture(mover);
+
+    // A chaser on its first (empty) step; the next lights the mover.
+    Scene *current = new Scene(m_doc);
+    current->setName("Current");
+    m_doc->addFunction(current);
+    Scene *next = new Scene(m_doc);
+    next->setName("Next");
+    next->setValue(mover->id(), 1, 200);
+    next->setValue(mover->id(), 0, 128);
+    m_doc->addFunction(next);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setDuration(MasterTimer::tick() * 10);
+    chaser->addStep(current->id());
+    chaser->addStep(next->id());
+    m_doc->addFunction(chaser);
+    MasterTimer timer(m_doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 0);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    MoveInBlackButton *mib = view.moveInBlackButton();
+    QVERIFY(mib != nullptr);
+    ProgrammerController *pc = m_doc->programmer();
+    pc->setMoveInBlackDarkGapMs(0);         // any lead time will do
+    QCOMPARE(mib->text(), QString("MIB"));
+
+    mib->click();                           // the show's MIB on
+    QVERIFY(pc->isAutoMoveInBlack());
+    QCOMPARE(mib->text(), QString::fromUtf8("MIB · 1"));
+    QVERIFY2(mib->toolTip().contains("Pre-positioning 1 head"), qPrintable(mib->toolTip()));
+
+    mib->click();                           // off: let go
+    QVERIFY(!pc->isAutoMoveInBlack());
+    QCOMPARE(mib->text(), QString("MIB"));
+
+    chaser->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+/* CHANGELOG [0.2.2] "The Show Tree's flags in columns" (Q104): S, T, R, M
+   and F, "each header naming itself on hover ... Right-click the header to
+   hide any; in a narrow pane they fold away before the names do." */
+void ShowTreeView_Test::theFlagColumnsNameThemselvesHideAndFold()
+{
+    QSettings().remove("showtree/hiddenColumns");
+    auto settingsBack = qScopeGuard([] { QSettings().remove("showtree/hiddenColumns"); });
+    ShowTreeController *st = m_doc->showTree();
+    st->addCue(st->addCueList(st->addProduction("P"), "L", ListMode::Tracking), -1, "A cue with a long enough name");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1600, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QHeaderView *header = tree->header();
+    QSplitter *split = view.findChild<QSplitter *>("stSplitter");
+    QVERIFY(split != nullptr && split->widget(1) == tree);
+    split->setSizes({ 150, 1000, 450 });
+    QTRY_VERIFY(tree->viewport()->width() > 900);
+
+    // On hover: what the header view shows is the model's tooltip.
+    const struct { int col; const char *starts; } names[] = {
+        { ShowTreeView::SetsCol, "S — Sets." }, { ShowTreeView::TracksCol, "T — Tracks in." },
+        { ShowTreeView::ReleasesCol, "R — Releases." }, { ShowTreeView::ModeCol, "M — Mode." },
+        { ShowTreeView::FlagsCol, "F — Flags." } };
+    for (const auto &n : names)
+    {
+        const QString tip = tree->model()->headerData(n.col, Qt::Horizontal, Qt::ToolTipRole).toString();
+        QVERIFY2(tip.startsWith(QString::fromUtf8(n.starts)), qPrintable(tip));
+        QVERIFY2(!header->isSectionHidden(n.col),       // a wide pane: all of them
+                 qPrintable(QString("column %1 hidden at %2 px").arg(n.col).arg(tree->viewport()->width())));
+    }
+
+    // Right-click the header, untick "S — Sets": that column goes, and
+    // stays gone in the next view.
+    auto headerMenu = [&](const QString &entry, QStringList *seen) {
+        ModalCloser closer([&](QWidget *w) {
+            QMenu *menu = qobject_cast<QMenu *>(w);
+            if (menu == nullptr)
+                return false;
+            for (QAction *a : menu->actions())
+                *seen << a->text();
+            for (QAction *a : menu->actions())
+                if (a->text() == entry)
+                {
+                    menu->close();
+                    a->trigger();
+                    return true;
+                }
+            menu->close();
+            return true;
+        });
+        emit header->customContextMenuRequested(QPoint(header->sectionViewportPosition(ShowTreeView::SetsCol) + 2,
+                                                       header->height() / 2));
+    };
+    QStringList seen;
+    headerMenu(QString::fromUtf8("S — Sets"), &seen);
+    QCOMPARE(seen.count(), ShowTreeView::TreeColumnCount - ShowTreeView::SetsCol);
+    QVERIFY2(seen.contains(QString::fromUtf8("F — Flags")), qPrintable(seen.join(" | ")));
+    QVERIFY(header->isSectionHidden(ShowTreeView::SetsCol));
+    QVERIFY(!header->isSectionHidden(ShowTreeView::TracksCol));
+    {
+        ShowTreeView again(nullptr, m_doc);
+        again.resize(1600, 600);
+        again.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&again));
+        QVERIFY(again.tree()->header()->isSectionHidden(ShowTreeView::SetsCol));
+    }
+    seen.clear();
+    headerMenu(QString::fromUtf8("S — Sets"), &seen);        // ticked again: back
+    QVERIFY(!header->isSectionHidden(ShowTreeView::SetsCol));
+
+    // A narrow tree pane: flag columns fold away, the names keep the room.
+    QList<int> sizes = split->sizes();
+    const int all = sizes.value(0) + sizes.value(1) + sizes.value(2);
+    sizes[1] = 300;
+    sizes[0] = (all - 300) / 2;
+    sizes[2] = all - 300 - sizes[0];
+    split->setSizes(sizes);
+    QTRY_VERIFY(tree->viewport()->width() <= 320);
+    int hidden = 0;
+    for (int c = ShowTreeView::SetsCol; c < ShowTreeView::TreeColumnCount; ++c)
+        if (header->isSectionHidden(c))
+            ++hidden;
+    QVERIFY2(hidden > 0, "every flag column still shown in a 300 px pane");
+    const int room = tree->viewport()->width();
+    QVERIFY2(header->sectionSize(ShowTreeView::NameCol) >= room / 2,
+             qPrintable(QString("names %1 of %2").arg(header->sectionSize(ShowTreeView::NameCol)).arg(room)));
+    // Wide again: they are all back.
+    split->setSizes({ 150, 1000, 450 });
+    QTRY_VERIFY(tree->viewport()->width() > 900);
+    for (int c = ShowTreeView::SetsCol; c < ShowTreeView::TreeColumnCount; ++c)
+        QVERIFY2(!header->isSectionHidden(c), qPrintable(QString::number(c)));
+}
+
 QTEST_MAIN(ShowTreeView_Test)
 
 void ShowTreeView_Test::pickersDockInTheWindow()
