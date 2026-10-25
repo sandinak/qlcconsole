@@ -278,6 +278,10 @@ void VenueRigUi_Test::aClashingVenueAsksBeforeItIsApplied()
     // Start focus calls into it asks the same (it went live unchecked).
     QPushButton *start = d.findChild<QPushButton *>(QStringLiteral("fcStart"));
     QVERIFY(start != nullptr);
+    QPushButton *addCall = d.findChild<QPushButton *>(QStringLiteral("fcAdd"));
+    QVERIFY(addCall != nullptr);
+    addCall->click();                           // a call to start
+    QVERIFY(start->isEnabled());
     answer(false);
     start->click();
     QCOMPARE(asked.size(), 2);

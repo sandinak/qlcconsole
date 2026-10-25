@@ -187,6 +187,33 @@ void FocusCallsUi_Test::theDialogEditsCallsAndPicksTheVenue()
     QCOMPARE(d2.venueChoice(), QString("Lincoln HS"));   // the one applied is offered
 }
 
+void FocusCallsUi_Test::theNewVenueNameHasRoom()
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));   // "Start from" shows too
+    QVERIFY(venues->setActiveVenue(QString()));
+    FocusCallsDialog d(m_doc);
+    QComboBox *venue = d.findChild<QComboBox *>("fcVenue");
+    QLineEdit *name = d.findChild<QLineEdit *>("fcNewVenue");
+    QVERIFY(venue != nullptr && name != nullptr);
+    venue->setCurrentIndex(venue->count() - 1);                      // New venue...
+    d.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&d));
+    QVERIFY(name->isVisible());
+    const int room = name->fontMetrics().horizontalAdvance(QStringLiteral("Lincoln High School"));
+    QVERIFY2(name->width() >= room, qPrintable(QString("%1 px for the name, %2 wanted, dialog %3 px")
+                                               .arg(name->width()).arg(room).arg(d.width())));
+    for (const char *id : { "fcApplyVenue", "fcRenameVenue", "fcDeleteVenue", "fcCorrections", "fcVenueRig" })
+    {
+        QPushButton *b = d.findChild<QPushButton *>(id);
+        QVERIFY(b != nullptr);
+        QVERIFY2(b->width() >= b->minimumSizeHint().width(),
+                 qPrintable(QString("%1: %2 < %3").arg(id).arg(b->width()).arg(b->minimumSizeHint().width())));
+        QVERIFY2(QRect(QPoint(0, 0), d.size()).contains(QRect(b->mapTo(&d, QPoint(0, 0)), b->size())), id);
+    }
+}
+
 void FocusCallsUi_Test::theVenueManager()
 {
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();

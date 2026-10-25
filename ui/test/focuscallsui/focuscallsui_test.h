@@ -41,6 +41,9 @@ private slots:
     /** The venue manager: switch, rename and delete, the rig and the file
      *  following. */
     void theVenueManager();
+    /** At its own size, picking New venue leaves room for the name, and no
+     *  venue button is squeezed below what it needs. */
+    void theNewVenueNameHasRoom();
     /** A venue needs the show saved first. */
     void aVenueNeedsASavedShow();
     /** Running calls, the panel says the call, the scope and where saves go,

@@ -137,6 +137,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_newVenue = new QLineEdit(this);
     m_newVenue->setObjectName(QStringLiteral("fcNewVenue"));
     m_newVenue->setPlaceholderText(VenueCorrections::defaultVenueName());
+    m_newVenue->setMinimumWidth(m_newVenue->fontMetrics().horizontalAdvance(QLatin1Char('M')) * 14);
     venueRow->addWidget(m_newVenue, 1);
     // A tour (Q140): a new room starts from the last one's corrections.
     m_fromLast = new QCheckBox(this);
@@ -157,19 +158,24 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_corrections = new QPushButton(tr("Corrections\342\200\246"), this);
     m_corrections->setObjectName(QStringLiteral("fcCorrections"));
     m_corrections->setToolTip(tr("See and clear the applied venue's corrections, one light at a time"));
+    /* The buttons on a line of their own: with Rig and universes too, one
+       line at the dialog's width squeezed the new venue's name to nothing. */
+    vl->addLayout(venueRow);
+    QHBoxLayout *venueButtons = new QHBoxLayout;
+    venueButtons->addStretch(1);
     for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue, m_corrections })
-        venueRow->addWidget(b);
+        venueButtons->addWidget(b);
     /* What the venue owns (board Q137/Q138, VENUES.md): its house rig, the
        patch of every universe in this room, what is not ours. */
     QPushButton *venueRig = new QPushButton(tr("Rig and universes\342\200\246"), this);
     venueRig->setObjectName(QStringLiteral("fcVenueRig"));
     venueRig->setToolTip(tr("This venue's house rig, its outputs for each universe, the channels it keeps, "
                             "and the clash check"));
-    venueRow->addWidget(venueRig);
+    venueButtons->addWidget(venueRig);
     connect(venueRig, &QPushButton::clicked, this, [this]() {
         VenueRigDialog::open(m_doc, this, venueAt(m_venue->currentIndex()));
     });
-    vl->addLayout(venueRow);
+    vl->addLayout(venueButtons);
     // Who is focusing, for the report (Q134), and the report itself.
     QHBoxLayout *reportRow = new QHBoxLayout;
     reportRow->addWidget(new QLabel(tr("Focused by:"), this));
@@ -300,6 +306,9 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
         m_doc->programmer()->focusCalls()->setCalls(m_calls);
     });
     connect(bb, &QDialogButtonBox::accepted, this, [this]() {
+        // Into a venue: its clashes first, as Apply now asks (Q138).
+        if (!VenueRigDialog::confirmClashes(m_doc, this, venueChoice()))
+            return;
         QString why;
         if (!apply(&why))
         {
