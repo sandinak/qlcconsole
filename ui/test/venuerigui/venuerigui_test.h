@@ -41,6 +41,8 @@ private slots:
     void theVenuePageShowsTheUniverses();
     /** The Focus calls dialog's venue manager opens it. */
     void theVenueManagerOpensIt();
+    /** The Connections toolbar's Slot picker sets the universe's slot. */
+    void theConnectionsSlotPicker();
 
 private:
     Doc *m_doc = nullptr;

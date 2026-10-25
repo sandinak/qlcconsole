@@ -31,6 +31,7 @@
 #include "fixturegroupeditor.h"
 #include "venuecorrections.h"
 #include "focuscallsdialog.h"
+#include "inputoutputmanager.h"
 #include "inputoutputmap.h"
 #include "venuerigdialog.h"
 #include "fixturegroup.h"
@@ -191,6 +192,20 @@ void VenueRigUi_Test::theVenueManagerOpensIt()
     QCOMPARE(page->venue(), venue);
     page->close();
     QTRY_VERIFY(page.isNull());
+}
+
+void VenueRigUi_Test::theConnectionsSlotPicker()
+{
+    InputOutputManager mgr(nullptr, m_doc);
+    QComboBox *slot = mgr.findChild<QComboBox *>(QStringLiteral("uniSlotOwner"));
+    QVERIFY(slot != nullptr);
+    QCOMPARE(slot->count(), 2);
+    QCOMPARE(slot->currentData().toInt(), int(RigOwner::Tour));
+    m_doc->resetModified();
+    slot->setCurrentIndex(slot->findData(int(RigOwner::House)));
+    QCOMPARE(m_doc->inputOutputMap()->universeSlotOwner(0), RigOwner::House);
+    QVERIFY(m_doc->isModified());
+    QCOMPARE(m_doc->inputOutputMap()->universeSlotOwner(1), RigOwner::Tour);
 }
 
 QTEST_MAIN(VenueRigUi_Test)
