@@ -259,6 +259,13 @@ venue patch applied and restored, the show file clean) and
    every slot**, not only the one changed.
 6. **Raw values on a house fixture** (classic scenes, EFX) are not carried to
    another venue's rig; only groups are.
+7. **Any venue applied holds the show's patch aside**, so an output changed
+   on the Connections tab while *any* venue is applied (even one made only
+   for focus corrections) is that venue's from then on. A venue that never
+   had an output changed plays the show's patch, as before.
+8. **A focus practice** (scramble) started in a venue takes that venue's
+   house rig with it, so the room's lights stay up; the practice's house
+   movers are scrambled and scored like the tour's.
 
 ## 12. Not done
 
