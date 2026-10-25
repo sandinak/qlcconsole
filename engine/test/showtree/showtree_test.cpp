@@ -49,6 +49,9 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "showfunction.h"
+#include "track.h"
+#include "show.h"
 #include "scene.h"
 #include "doc.h"
 
@@ -3066,6 +3069,60 @@ void ShowTree_Test::restoreOriginalPutsTheShowBack()
 /* The link and the filing save with the show; an older build, which reads
    neither, still loads the list and plays it, and keeps the originals
    where they were filed. */
+/* CHANGELOG 0.2.2, Upgrade This Show: Import in place "moves VC widgets,
+   timelines and show control to the list". A Shows timeline item that
+   played the chaser plays the list's chaser, at the same place on its
+   track; Undo and Restore original point it back at the chaser. */
+void ShowTree_Test::importInPlaceMovesTimelinesToTheList()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    Scene *sA = groupScene(m_doc, "TowersFull", towers->id(), { dimmer(255, "Full") });
+    Collection *one = collection(m_doc, "0.0.1-One", { sA->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id(), 0, Function::infiniteSpeed(), 0));
+
+    Show *show = new Show(m_doc);
+    show->setName("Timeline");
+    QVERIFY(m_doc->addFunction(show));
+    Track *track = new Track(Function::invalidId(), show);
+    track->setName("Cues");
+    QVERIFY(show->addTrack(track));
+    ShowFunction *sf = track->createShowFunction(chaser->id());
+    sf->setStartTime(2000);
+    sf->setDuration(5000);
+    const quint32 sfId = sf->id();
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importInPlace(chaser->id());
+    QVERIFY(rep.list != invalidId());
+    const quint32 listChaser = st->cueList(rep.list)->chaser;
+    QVERIFY(listChaser != Function::invalidId());
+    QVERIFY(listChaser != chaser->id());
+    QCOMPARE(rep.timelines, QStringList() << "Timeline");
+    QCOMPARE(st->lastTimelines(), QList<quint32>() << show->id());
+
+    auto item = [&]() { return show->showFunction(sfId); };
+    QVERIFY(item() != nullptr);
+    QCOMPARE(item()->functionID(), listChaser);
+    QCOMPARE(item()->startTime(), quint32(2000));
+    QCOMPARE(item()->duration(), quint32(5000));
+
+    // Undo: the timeline plays the chaser again; Redo: the list.
+    QVERIFY(st->undo());
+    QCOMPARE(item()->functionID(), chaser->id());
+    QVERIFY(st->redo());
+    QCOMPARE(item()->functionID(), st->cueList(rep.list)->chaser);
+
+    // Restore original: the chaser again, and its Undo the list.
+    QVERIFY(st->restoreOriginal(rep.list));
+    QCOMPARE(item()->functionID(), chaser->id());
+    QCOMPARE(item()->startTime(), quint32(2000));
+    QVERIFY(st->undo());
+    QCOMPARE(item()->functionID(), st->cueList(rep.list)->chaser);
+}
+
 void ShowTree_Test::theBridgeLinkSavesAndAnOlderReaderSkipsIt()
 {
     FixtureGroup *towers = group("Towers", { m_fixtures[0] });
@@ -7721,6 +7778,77 @@ void ShowTree_Test::lookCommands()
     QCOMPARE(cmd.complete("adopt Old", ctx), QString("adopt Old Busk "));
     for (const char *w : { "look", "vcpage", "adopt", "palette" })
         QVERIFY2(ShowTreeCommand::helpText(w).contains(QString("<b>%1</b>").arg(w)), w);
+}
+
+/* CHANGELOG 0.2.2 (Q77): the busking Looks are now Hits -- `hit "name"`
+   selects or makes a hit, `look` still works -- and the hit plays as its
+   layers say. */
+void ShowTree_Test::hitCommandMakesAndPlaysAHit()
+{
+    group("Towers", { m_fixtures[0] });
+    dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand::Context ctx;
+    ShowTreeCommand cmd(m_doc, st);
+    ctx.production = st->addProduction("P");
+
+    ShowTreeCommand::Result r = cmd.run("hit \"Blast\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const quint32 hit = r.context.cue;
+    QVERIFY(st->isLook(hit));
+    QCOMPARE(st->cue(hit)->name, QString("Blast"));
+    // Made in a new section, named Hits.
+    QCOMPARE(st->cueList(st->looksSection(ctx.production))->name, QString("Hits"));
+    r = cmd.run("Towers dimmer Full", r.context);
+    QVERIFY2(r.ok, qPrintable(r.message));
+
+    // hit and look name the same one.
+    QCOMPARE(cmd.run("hit Blast", ctx).context.cue, hit);
+    QCOMPARE(cmd.run("look \"Blast\"", ctx).context.cue, hit);
+    QCOMPARE(st->cueList(st->looksSection(ctx.production))->cues.count(), 1);
+
+    // Fired as a VC button fires it: Towers at full.
+    const quint32 fired = st->lookFunction(hit);
+    QVERIFY(m_doc->function(fired) != nullptr);
+    stopAll();
+    QCOMPARE(settle(5).value(0), uchar(0));
+    m_doc->function(fired)->start(m_doc->masterTimer(), FunctionParent::master());
+    QCOMPARE(settle(10).value(0), uchar(255));
+    stopAll();
+}
+
+/* CHANGELOG 0.2.2 (Q77): "New sections are named Hits; older shows open as
+   they were": a section an older build saved as "Looks" keeps that name
+   through a load and a save. */
+void ShowTree_Test::anOlderLooksSectionKeepsItsName()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    QVERIFY(st->addLook(prod, "Blast") != invalidId());
+    const quint32 section = st->looksSection(prod);
+    QCOMPARE(st->cueList(section)->name, QString("Hits"));
+    // As an older build wrote it.
+    QByteArray xml = engineXml(m_doc);
+    const QByteArray hits = QByteArray("<Looks ID=\"") + QByteArray::number(section) + "\" Name=\"Hits\"";
+    QVERIFY2(xml.contains(hits), xml.constData());
+    xml.replace(hits, QByteArray("<Looks ID=\"") + QByteArray::number(section) + "\" Name=\"Looks\"");
+
+    QScopedPointer<Doc> other(new Doc(this));
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    ShowTreeController *ost = other->showTree();
+    QCOMPARE(ost->looksSection(prod), section);
+    QCOMPARE(ost->cueList(section)->name, QString("Looks"));
+    QCOMPARE(ost->cueList(section)->cues.count(), 1);
+    // A new hit goes in it, under its old name.
+    QVERIFY(ost->addLook(prod, "Second") != invalidId());
+    QCOMPARE(ost->looksSection(prod), section);
+    QCOMPARE(ost->cueList(section)->name, QString("Looks"));
+    // Saved again as it was.
+    const QByteArray again = engineXml(other.data());
+    QVERIFY(again.contains(QByteArray("<Looks ID=\"") + QByteArray::number(section) + "\" Name=\"Looks\""));
+    QVERIFY(!again.contains("Name=\"Hits\""));
 }
 
 /* A cue list's text colour reaches its cues (and their sub-cues) that have

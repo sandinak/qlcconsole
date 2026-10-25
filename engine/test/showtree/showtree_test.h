@@ -114,6 +114,7 @@ private slots:
     void importInPlaceFilesTheOriginals();
     void originalsKeptForRestoreAreViewOnly();
     void restoreOriginalPutsTheShowBack();
+    void importInPlaceMovesTimelinesToTheList();
     void theBridgeLinkSavesAndAnOlderReaderSkipsIt();
     void captureARawSceneIntoPalettes();
     void bridgeDanceHysteria();
@@ -202,6 +203,8 @@ private slots:
     void adoptASceneAsALook();
     void recordLitTakesARunningLooksLayers();
     void lookCommands();
+    void hitCommandMakesAndPlaysAHit();
+    void anOlderLooksSectionKeepsItsName();
 
     // Answers 12-20 (2026-10-18)
     void oneRuleUpAndDownTheChain();

@@ -129,4 +129,27 @@ void ShowManager_Test::undoKeepsEveryTracksSettings()
     QVERIFY(t->showFunctions().first()->isLocked());
 }
 
+/* CHANGELOG 0.2.2 Fixed, "Shows timeline: Undo keeps each track's
+   settings": any Undo used to reset Solo on every track. */
+void ShowManager_Test::undoKeepsATracksSolo()
+{
+    Track *other = new Track();
+    other->setName("Sound");
+    QVERIFY(m_show->addTrack(other));
+    other->createShowFunction(m_sceneB)->setDuration(1000);
+    Track *t = m_show->tracks().first();
+    t->setSolo(true);
+    QVERIFY(!other->isSolo());
+
+    m_manager->slotFunctionDropped(m_sceneB, 5000, t);
+    m_manager->slotUndo();
+
+    QCOMPARE(m_show->tracks().count(), 2);
+    t = m_show->tracks().first();
+    QCOMPARE(t->name(), QStringLiteral("Lights"));
+    QCOMPARE(t->showFunctions().count(), 1);
+    QVERIFY(t->isSolo());
+    QVERIFY(!m_show->tracks().last()->isSolo());
+}
+
 QTEST_MAIN(ShowManager_Test)

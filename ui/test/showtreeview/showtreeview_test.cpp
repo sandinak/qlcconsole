@@ -65,6 +65,7 @@
 #include <QSpinBox>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScopeGuard>
 #include <QBuffer>
 #include <QStackedWidget>
 #include <QRegularExpression>
@@ -100,6 +101,7 @@
 #include "qlcchannel.h"
 #include "qlcfixturemode.h"
 #include "showtreeview.h"
+#include "showcontrollistener.h"
 #include "moveinblackbutton.h"
 #include "programmercontroller.h"
 #include "linespreadpreview.h"
@@ -7203,6 +7205,126 @@ void ShowTreeView_Test::aCuesRightClickIsShort()
     // Empty space: + Production.
     const QStringList empty = menuOn(QPoint(10, tree->viewport()->height() - 5));
     QVERIFY2(empty.contains(QString::fromUtf8("+ Production…")), qPrintable(empty.join(" | ")));
+}
+
+/* CHANGELOG 0.2.2 (Q75), "One production, nothing to choose": no Current,
+   switcher or "· main" with a single production, and GO plays its list. */
+void ShowTreeView_Test::oneProductionHasNothingToChooseAndGoPlaysIt()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    st->setLayerLook(c1, st->addLayer(c1, t), st->lookForPalette(full));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(chaser != nullptr);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QPushButton *current = view.findChild<QPushButton *>("stProdCurrent");
+    QVERIFY(current != nullptr);
+    QVERIFY(view.selectNode(prod));
+    QVERIFY(!current->isVisible());
+    for (const QString &row : treeText(view.tree()))
+        QVERIFY2(!row.contains("current") && !row.contains(QString::fromUtf8("· main")), qPrintable(row));
+
+    // GO (show control's, as ⌘↩ and the Run tab send it): its list plays.
+    view.selectNode(list);                                  // no preview of the cue
+    QVERIFY(m_doc->showControl()->execute({ ShowControl::Go, QString(), QString() }));
+    const QHash<quint32, uchar> v = settleDmx(m_doc);         // the timer, stepped by hand
+    QVERIFY(chaser->isRunning());
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 255);
+    chaser->stop(FunctionParent::master());
+    settleDmx(m_doc);
+
+    // A second production: Current is back on the page.
+    const quint32 prod2 = st->addProduction("Spring");
+    st->addCueList(prod2, "Opener", ListMode::Tracking);
+    QVERIFY(view.selectNode(prod));
+    QVERIFY(current->isVisible());
+    view.hide();
+}
+
+/* CHANGELOG 0.2.2: "Renumber this level… numbers a level ... and asks first
+   while OSC/MSC is listening". */
+void ShowTreeView_Test::renumberThisLevelAsksFirstWhileShowControlListens()
+{
+    const bool oscWas = ShowControlListener::oscEnabled(), mscWas = ShowControlListener::mscEnabled();
+    const int portWas = ShowControlListener::oscPort(), deviceWas = ShowControlListener::mscDeviceId();
+    auto restore = qScopeGuard([=]() { ShowControlListener::setSettings(oscWas, portWas, mscWas, deviceWas); });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    st->addCue(list, 0, "Two");
+    st->addCue(list, 1, "Three");
+    auto numbers = [st, list]() {
+        QStringList out;
+        const CueList *l = st->cueList(list);
+        for (int i = 0; i < l->cues.count(); ++i)
+            out << st->cueNumber(*l, i);
+        return out;
+    };
+    const QStringList before = numbers();
+    QCOMPARE(before, QStringList({ "1", "2", "3" }));
+    ShowTreeView view(nullptr, m_doc);
+
+    // The dialog: from 10 in tens, OK; the question after it: @a yes.
+    auto answer = [](bool yes) {
+        return [yes](QWidget *w) {
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+            {
+                mb->button(yes ? QMessageBox::Yes : QMessageBox::No)->click();
+                return true;
+            }
+            QSpinBox *from = w->findChild<QSpinBox *>("stRenumberStart");
+            QSpinBox *by = w->findChild<QSpinBox *>("stRenumberStep");
+            QDialog *dlg = qobject_cast<QDialog *>(w);
+            if (from == nullptr || by == nullptr || dlg == nullptr)
+                return false;
+            from->setValue(10);
+            by->setValue(10);
+            dlg->accept();
+            return true;
+        };
+    };
+
+    // OSC on: asked, and No changes nothing (not even an undo step).
+    ShowControlListener::setSettings(true, portWas, false, deviceWas);
+    const QString undoBefore = st->undoText();
+    {
+        ModalCloser no(answer(false));
+        QVERIFY(!view.renumberLevel(c1));
+        QCOMPARE(no.seen.count(), 2);
+        QVERIFY2(no.seen.last().contains("Show control (OSC / MSC) is listening"), qPrintable(no.seen.last()));
+        QVERIFY2(no.seen.last().contains(QString::fromUtf8("1 → 10")), qPrintable(no.seen.last()));
+    }
+    QCOMPARE(numbers(), before);
+    QCOMPARE(st->undoText(), undoBefore);
+
+    // MSC on: asked too; Yes renumbers.
+    ShowControlListener::setSettings(false, portWas, true, deviceWas);
+    {
+        ModalCloser yes(answer(true));
+        QVERIFY(view.renumberLevel(c1));
+        QCOMPARE(yes.seen.count(), 2);
+    }
+    QCOMPARE(numbers(), QStringList({ "10", "20", "30" }));
+    QVERIFY(st->undo());
+
+    // Nothing listening: the dialog only.
+    ShowControlListener::setSettings(false, portWas, false, deviceWas);
+    {
+        ModalCloser quiet(answer(true));
+        QVERIFY(view.renumberLevel(c1));
+        QCOMPARE(quiet.seen.count(), 1);
+    }
+    QCOMPARE(numbers(), QStringList({ "10", "20", "30" }));
 }
 
 QTEST_MAIN(ShowTreeView_Test)

@@ -49,6 +49,17 @@
 #include "fixture.h"
 #include "chaser.h"
 #include "scene.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "focussession.h"
+#include "focusmodepanel.h"
+#include <QPointer>
+#include <QVector3D>
 
 #define private public
 #define protected public
@@ -496,6 +507,86 @@ void MainBar_Test::operateLocksProgrammingNotTheGrandMaster()
     QVERIFY(shows->m_showview->isEditable());
 }
 
+/* CHANGELOG 0.2.2 (Q80): "Operate locks programmer faders on the Virtual
+   Console ... a console Grand Master fader now works in Operate". */
+void MainBar_Test::anOperateConsolesProgrammerFaderChangesNothing()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    InputOutputMap *io = doc->inputOutputMap();
+    Universe *uni = universeAt(doc, 2);
+    QVERIFY(uni != nullptr);
+    // Two one-channel dimmers: one the programmer's selection, one on a
+    // stock Level fader (the witness that the console is writing).
+    auto dimmer = [this, doc](const QString &name, quint32 address) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setUniverse(2);
+        f->setAddress(address);
+        if (!doc->addFixture(f))
+        {
+            delete f;
+            return Fixture::invalidId();
+        }
+        m_addedFixtures << f->id();
+        return f->id();
+    };
+    const quint32 picked = dimmer("Picked", 20), witness = dimmer("Witness", 30);
+    QVERIFY(picked != Fixture::invalidId() && witness != Fixture::invalidId());
+    doc->setProgrammerSelection({ picked });
+
+    VirtualConsole *vc = VirtualConsole::instance();
+    QVERIFY(vc != nullptr);
+    VCSlider *param = new VCSlider(vc->contents(), doc);
+    param->setSliderMode(VCSlider::Parameter);
+    param->setParameterRole(VCSlider::RoleDimmer);
+    VCSlider *level = new VCSlider(vc->contents(), doc);
+    level->setSliderMode(VCSlider::Level);
+    level->addLevelChannel(witness, 0);
+    VCSlider *gm = new VCSlider(vc->contents(), doc);
+    gm->setSliderMode(VCSlider::GrandMaster);
+    auto sliders = qScopeGuard([param, level, gm, io, doc]() {
+        doc->setMode(Doc::Design);
+        delete param;
+        delete level;
+        delete gm;
+        io->setGrandMasterValue(255);
+        doc->setProgrammerSelection({});
+        doc->clearProgrammerValues();
+    });
+    io->setGrandMasterValue(255);
+    // Moved by hand: held, moved, let go.
+    auto drag = [](VCSlider *slider, int value) {
+        slider->m_slider->setSliderDown(true);
+        slider->m_slider->setValue(value);
+        slider->m_slider->setSliderDown(false);
+    };
+
+    doc->setMode(Doc::Operate);
+    QVERIFY(doc->isShowLocked());
+    QCOMPARE(int(uni->postGMValue(20)), 0);
+    drag(param, 200);
+    drag(level, 150);
+    // Once the witness is lit, a tick has gone by with both moved.
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(30)), 150, 5000);
+    QCOMPARE(int(uni->postGMValue(20)), 0);                  // the programmer fader: nothing
+    QVERIFY(doc->programmerValues().isEmpty());
+
+    // The Grand Master fader works in Operate (and dims the witness).
+    drag(gm, 127);
+    QCOMPARE(int(io->grandMasterValue()), 127);
+    QTRY_VERIFY_WITH_TIMEOUT(uni->postGMValue(30) < 150, 5000);
+    QCOMPARE(int(uni->postGMValue(20)), 0);
+
+    // The check on the test itself: with the lock lifted the same fader
+    // lights its selection (so the zero above was the lock, not the setup).
+    drag(gm, 255);
+    doc->setShowLocked(false);
+    drag(param, 180);
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(20)), 180, 5000);
+}
+
 void MainBar_Test::oneChipListsAndClearsOverrides()
 {
     Doc *doc = m_app->doc();
@@ -521,6 +612,111 @@ void MainBar_Test::oneChipListsAndClearsOverrides()
     QVERIFY(!doc->inputOutputMap()->outputInhibited());
     QVERIFY(m_app->activeOverrides().isEmpty());
     QTRY_VERIFY(chip->isHidden());
+}
+
+/* A 540/270 spot -- pan, tilt, dimmer -- at (x, 2) metres, hung at 5 m: one
+   Focus mode can aim. */
+static Fixture *focusSpot(Doc *doc, const QString &name, float x, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Overrides Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    const char *names[] = { "Pan", "Tilt", "Dimmer" };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    head.addChannel(1);
+    head.addChannel(2);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(address);
+    if (!doc->addFixture(fxi))
+    {
+        delete fxi;
+        return nullptr;
+    }
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(x * 1000.0f, 2000.0f, 5.0f));
+    return fxi;
+}
+
+/* CHANGELOG 0.2.2 (Q80): the footer's one chip lists what holds the rig
+   over the show and one click lets go of all of it -- Highlight and Focus
+   mode among them (App::activeOverrides / clearOverrides). */
+void MainBar_Test::theOverridesChipLetsGoOfHighlightAndFocusMode()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    ProgrammerController *pc = doc->programmer();
+    QToolButton *chip = m_app->m_statusOverridesChip;
+    QVERIFY(chip != nullptr);
+    QVERIFY(m_app->activeOverrides().isEmpty());
+
+    Fixture *a = focusSpot(doc, "A", 2.0f, 400);
+    Fixture *b = focusSpot(doc, "B", 4.0f, 410);
+    QVERIFY(a != nullptr && b != nullptr);
+    m_addedFixtures << a->id() << b->id();
+    StageTarget *target = doc->monitorProperties()->addStageTarget();
+    target->setName(QStringLiteral("Centre"));
+    target->setPosition(QVector3D(3.0f, 5.0f, 0.0f));
+    const quint32 targetId = target->id();
+    auto noTarget = qScopeGuard([doc, targetId]() { doc->monitorProperties()->removeStageTarget(targetId); });
+
+    // Highlight on the selection.
+    doc->setProgrammerSelection({ a->id() });
+    pc->setHighlightActive(true);
+    QVERIFY(pc->isHighlightActive());
+    // Focus mode on both heads.
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = targetId;
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(doc, m_app, o, &why);
+    QVERIFY2(!panel.isNull(), qPrintable(why));
+    auto noFocus = qScopeGuard([&panel, pc]() {
+        if (!panel.isNull())
+        {
+            pc->focusSession()->discardAll();
+            panel->requestExit();
+        }
+    });
+
+    const QStringList now = m_app->activeOverrides();
+    QVERIFY2(now.contains("Highlight") && now.contains("Focus mode"), qPrintable(now.join(", ")));
+    QTRY_VERIFY(!chip->isHidden());
+    QVERIFY2(chip->text().contains("Highlight") && chip->text().contains("Focus mode"),
+             qPrintable(chip->text()));
+
+    // One click: both let go.
+    chip->click();
+    QVERIFY(!pc->isHighlightActive());
+    QTRY_VERIFY(panel.isNull());
+    QVERIFY(FocusModePanel::instance() == nullptr);
+    QVERIFY(!pc->focusSession()->isActive());
+    QVERIFY(m_app->activeOverrides().isEmpty());
+    QTRY_VERIFY(chip->isHidden());
+    doc->setProgrammerSelection({});
 }
 
 /* A cue list of two scenes, infinite hold, as the show's main cue list. */

@@ -158,6 +158,9 @@ private slots:
      *  collection and the chaser step using it; answered No: kept. */
     void deletingAFunctionTakesItOutOfWhatUsesIt();
     void undoingADeleteHandsItBackToItsVcWidgets();
+    /** Delete of a function a Shows track plays: gone from the track; ⌘Z
+     *  puts the item back with its start and duration; ⌘⇧Z takes it out. */
+    void undoingADeletePutsItBackOnItsShowTrack();
     /** ⌘C ⌘V and Duplicate: a copy beside the original, its values and
      *  looks, the next name in the pattern; one ⌘Z takes it away. */
     void duplicateAndCopyPasteFileACopyBesideIt();

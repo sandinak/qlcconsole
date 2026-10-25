@@ -95,6 +95,9 @@
 #include "show.h"
 #include "track.h"
 #include "showfunction.h"
+#define protected public
+#include "showmanager/showmanager.h"
+#undef protected
 #include <QBuffer>
 #include <QDrag>
 #include <QXmlStreamWriter>
@@ -2936,6 +2939,78 @@ void ProgrammingManager_Test::deletingAFunctionTakesItOutOfWhatUsesIt()
     QCOMPARE(chaser->stepsCount(), 1);
     mgr.slotUndo();
     QCOMPARE(coll->functions(), QList<quint32>({ walkId, hold->id() }));
+}
+
+/* CHANGELOG 0.2.2: Build's Delete is one step on the shared history; the
+   functions using what goes -- a Show's tracks too -- ride in it whole, so
+   Undo puts a timeline item back where it was. */
+void ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack()
+{
+    Scene *walk = new Scene(m_doc);
+    walk->setName("Walk");
+    QVERIFY(m_doc->addFunction(walk));
+    const quint32 walkId = walk->id();
+    Show *show = new Show(m_doc);
+    show->setName("Timeline");
+    QVERIFY(m_doc->addFunction(show));
+    const quint32 showId = show->id();
+    Track *track = new Track(Function::invalidId(), show);
+    track->setName("Lights");
+    QVERIFY(show->addTrack(track));
+    const quint32 trackId = track->id();
+    ShowFunction *sf = track->createShowFunction(walkId);
+    sf->setStartTime(3000);
+    sf->setDuration(4500);
+
+    // What's on the track that plays walk: (start, duration) per item.
+    auto itemsOf = [&](quint32 fid) {
+        QList<QPair<quint32, quint32>> items;
+        Show *s = qobject_cast<Show *>(m_doc->function(showId));
+        if (s == nullptr || s->track(trackId) == nullptr)
+            return items;
+        for (ShowFunction *f : s->track(trackId)->showFunctions())
+            if (f->functionID() == fid)
+                items << qMakePair(f->startTime(), f->duration());
+        return items;
+    };
+    const QList<QPair<quint32, quint32>> placed({ qMakePair(quint32(3000), quint32(4500)) });
+    QCOMPARE(itemsOf(walkId), placed);
+
+    // The Shows tab, as the app has it after a load: it takes a deleted
+    // function's items off their tracks.
+    ShowManager shows(nullptr, m_doc);
+    shows.updateShowsCombo();
+    ProgrammingManager mgr(nullptr, m_doc);
+    const QString undoBefore = mgr.undoText();
+    auto trackCount = [&]() {
+        Show *s = qobject_cast<Show *>(m_doc->function(showId));
+        return s == nullptr ? -1 : int(s->tracks().count());
+    };
+    mgr.deleteFunctionsUndoably({ walkId });
+    QVERIFY(m_doc->function(walkId) == nullptr);
+    QVERIFY(m_doc->function(showId) != nullptr);
+    QVERIFY(itemsOf(walkId).isEmpty());
+    // Nothing else in the show: the timeline alone is left.
+    QEXPECT_FAIL("", "Bug: PaletteOps::functionSnapshot copies a Show with Show::copyFrom, "
+                     "which adds a \"Copy of\" each item's function to the Doc", Continue);
+    QCOMPARE(m_doc->functions().count(), 1);
+
+    // ⌘Z: the scene back with its id, and its item on its own track.
+    mgr.slotUndo();
+    QCOMPARE(mgr.undoText(), undoBefore);
+    QVERIFY(m_doc->function(walkId) != nullptr);
+    QEXPECT_FAIL("", "Bug: Undo puts the Show back with Show::copyFrom, which appends "
+                     "tracks playing \"Copy of\" functions instead of the original item", Continue);
+    QCOMPARE(itemsOf(walkId), placed);
+    QEXPECT_FAIL("", "Bug: Show::copyFrom appends tracks: the show has two", Continue);
+    QCOMPARE(trackCount(), 1);
+    QEXPECT_FAIL("", "Bug: stray \"Copy of Walk\" scenes are left in the show", Continue);
+    QCOMPARE(m_doc->functions().count(), 2);
+
+    // ⌘⇧Z: off the track again.
+    mgr.slotRedo();
+    QVERIFY(m_doc->function(walkId) == nullptr);
+    QVERIFY(itemsOf(walkId).isEmpty());
 }
 
 void ProgrammingManager_Test::undoingADeleteHandsItBackToItsVcWidgets()

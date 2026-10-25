@@ -69,10 +69,17 @@ private slots:
      *  parameter faders, while a console GM fader still works; Design
      *  gives it all back */
     void operateLocksProgrammingNotTheGrandMaster();
+    /** Q80 on the output: in Operate a console fader in Parameter
+     *  (programmer) mode moved over a selected dimmer leaves it dark, while
+     *  a Level fader beside it and the Grand Master fader still work */
+    void anOperateConsolesProgrammerFaderChangesNothing();
     /** Q80: one footer chip lists what holds the rig over the show (Park,
      *  Hold at end, Blind...), hidden when nothing does; a click lets go of
      *  all of it */
     void oneChipListsAndClearsOverrides();
+    /** ...Highlight and Focus mode too: listed while they hold the rig, and
+     *  the one click lets go of them as well */
+    void theOverridesChipLetsGoOfHighlightAndFocusMode();
     /** GO / Back (Ctrl+Return, Ctrl+Shift+Return) from anywhere, in the
      *  Control menu: they step the main cue list 1, 2, back to 1 */
     void goAndBackStepTheMainCueList();

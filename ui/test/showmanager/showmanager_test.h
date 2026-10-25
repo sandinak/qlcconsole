@@ -38,6 +38,8 @@ private slots:
     /** Undo of one edit leaves every track as it was set: hold last look,
      *  solo-safe, priority, intensity and a locked item survive the rebuild. */
     void undoKeepsEveryTracksSettings();
+    /** Undo keeps which track is soloed (and which isn't) */
+    void undoKeepsATracksSolo();
 
 private:
     Doc *m_doc = nullptr;

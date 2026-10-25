@@ -165,6 +165,12 @@ private slots:
     /** Q93: a cue's right-click keeps what acts on a selection; + Production
      *  only on a production or empty space. */
     void aCuesRightClickIsShort();
+    /** Q75: a show with one production has no Current on its page, and GO
+     *  plays its list; a second production brings Current back. */
+    void oneProductionHasNothingToChooseAndGoPlaysIt();
+    /** Renumber this level asks first while OSC / MSC is listening: No
+     *  changes nothing, Yes renumbers; not listening, no question. */
+    void renumberThisLevelAsksFirstWhileShowControlListens();
 
 private:
     quint32 dimmer(int level, const QString &name);
