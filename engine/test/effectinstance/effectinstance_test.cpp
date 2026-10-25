@@ -2515,6 +2515,18 @@ MatrixLayout matrixLayout(const QString &name)
             }
         l.cols = 16; l.rows = 8;
     }
+    else if (name == "ragged")
+    {
+        // Cells past the grid the heads claim: a 15 x 2 box on a 10 x 1
+        // grid (a layout edited under a running effect, or a host's slip).
+        for (int h = 0; h < 30; ++h)
+        {
+            MatrixHead m;
+            m.id = 1; m.head = h; m.col = h % 15; m.row = h / 15;
+            l.heads << m;
+        }
+        l.cols = 10; l.rows = 1;
+    }
     else
     {
         // Sixteen single-head lights in a row: the effect browser's preview.
@@ -2611,6 +2623,34 @@ bool headLit(const QString &intent)
             return true;
     return p.at(4) != "-" && p.at(4).toDouble() > 0;
 }
+}
+
+/* Heads past the grid they claim: every matrix effect, in every scope,
+   still answers each head (Lissajous threw on them: "Cannot read property
+   'r' of undefined"), and Lissajous lights the ones its figure crosses. */
+void EffectInstance_Test::matrixEffectsTakeCellsOffTheGrid()
+{
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    const MatrixLayout l = matrixLayout("ragged");
+    const QList<double> times = { 0.0, 0.37, 0.71, 1.1, 1.9, 2.6, 3.3, 4.05 };
+    for (const QString &file : kMatrixScripts)
+    {
+        EffectScript es;
+        QVERIFY2(es.load(dir + file), qPrintable(file + ": " + es.lastError()));
+        bool offGridLit = false;
+        for (int scope = 0; scope < 3; ++scope)
+            for (double t : times)
+            {
+                const QStringList f = matrixFrame(es, l, t, 0, { { "scope", scope } });
+                QVERIFY2(f.size() == l.heads.size(),
+                         qPrintable(QString("%1 scope %2 t %3: no frame").arg(file).arg(scope).arg(t)));
+                for (int i = 0; i < l.heads.size(); ++i)
+                    if (l.heads.at(i).col >= l.cols || l.heads.at(i).row >= l.rows)
+                        offGridLit = offGridLit || headLit(f.at(i));
+            }
+        if (file == "matrix-lissajous.js")
+            QVERIFY2(offGridLit, "Lissajous: no head off the grid ever lit");
+    }
 }
 
 void EffectInstance_Test::matrixEffectsAreRepeatableAndKeepTheirWhites()

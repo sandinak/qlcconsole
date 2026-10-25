@@ -33,6 +33,8 @@ private slots:
      *  heads): moving, repeatable, in range, white pixels doing what the
      *  white setting says; and still frames that must not drift. */
     void matrixEffectsAreRepeatableAndKeepTheirWhites();
+    /** Heads past the grid they claim: every matrix effect answers them. */
+    void matrixEffectsTakeCellsOffTheGrid();
     /** The second set of matrix effects: the look's colours, speed scaling
      *  their time, the beat clock deciding where they are. */
     void matrixEffectsTakeTheLooksColoursAndKeepTime();

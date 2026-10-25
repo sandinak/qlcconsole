@@ -106,8 +106,31 @@
                 return last;
             }
 
+            // A head off its area's grid (past the columns it claims, or
+            // between cells) worked out on its own, as fieldOf() would:
+            // [level, along, accent].
+            function alone(w, h, px, py) {
+                var pts = pathOf(w, h), half = lw / 2 + 0.5, best = 0, along = 0;
+                for (var i = 0; i + 1 < pts.length; i++) {
+                    var seg = MATRIX.segment(px, py, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+                    var c = half - seg.d;
+                    if (!(c > 0)) continue;
+                    var u = pts[i].u + (pts[i + 1].u - pts[i].u) * seg.t;
+                    var lvl = (c > 1 ? 1 : c) * (trail > 0 ? Math.pow(1 - u, 1.4) : 1);
+                    if (lvl > best) { best = lvl; along = u; }
+                }
+                var hx = pts[0].x, hy = pts[0].y;
+                var acc = MATRIX.cover(Math.sqrt((px - hx) * (px - hx) + (py - hy) * (py - hy)), lw * 1.2) * 0.9;
+                return [best, along, acc];
+            }
+
             return fixtures.map(function(f) {
                 var p = MATRIX.point(f, cv, perBox);
+                if (!(p.x >= 0 && p.x < p.w && p.y >= 0 && p.y < p.h
+                      && Math.floor(p.x) === p.x && Math.floor(p.y) === p.y)) {
+                    var o = alone(p.w, p.h, p.x, p.y);
+                    return MATRIX.out(f, cv, MATRIX.ramp(C, Math.min(1, o[1] * 2), false), o[0], o[2], params);
+                }
                 var fl = fieldOf(p.w, p.h), k = p.y * p.w + p.x;
                 // Along the trail through the look's colours: the head the
                 // first (once a pixel of the area: every box's is the same).
