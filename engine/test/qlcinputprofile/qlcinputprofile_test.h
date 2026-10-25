@@ -42,6 +42,7 @@ private slots:
     void loadNoProfile();
     void loader();
     void save();
+    void saveFlushesOnlyItsFile();
 };
 
 #endif

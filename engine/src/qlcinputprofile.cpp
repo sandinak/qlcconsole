@@ -19,7 +19,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
-#include <unistd.h>
+#include <QSaveFile>
 #include <QString>
 #include <QDebug>
 #include <QMap>
@@ -570,7 +570,13 @@ bool QLCInputProfile::loadXML(QXmlStreamReader& doc)
 
 bool QLCInputProfile::saveXML(const QString& fileName)
 {
-    QFile file(fileName);
+    /* Written whole or not at all, and only THIS file flushed to disk.
+       A global sync() used to follow (since the original import), which
+       flushes every mounted volume -- an external disk, a network share,
+       another build's output -- and blocked for half a minute and more on a
+       busy machine (the save test took 29 s of a 40-56 s run under the
+       gate). Same fix as QLCFixtureDefCache::storeFixtureDef(). */
+    QSaveFile file(fileName);
     if (file.open(QIODevice::WriteOnly) == false)
     {
         qWarning() << Q_FUNC_INFO << "Unable to write to" << fileName;
@@ -633,14 +639,15 @@ bool QLCInputProfile::saveXML(const QString& fileName)
         doc.writeEndElement();
     }
 
-    m_path = fileName;
-
     /* End the document and close all the open elements */
     doc.writeEndDocument();
-    file.close();
-#ifdef Q_OS_UNIX
-    sync();
-#endif
+    if (doc.hasError() || file.commit() == false)
+    {
+        qWarning() << Q_FUNC_INFO << "Unable to write to" << fileName;
+        return false;
+    }
+
+    m_path = fileName;
     return true;
 }
 

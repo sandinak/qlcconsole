@@ -363,6 +363,43 @@ void QLCInputProfile_Test::loader()
     QCOMPARE(prof->channels().size(), 256);
 }
 
+/* saveXML() used to end in a global sync(), which flushes every mounted
+   volume's dirty buffers, and on a busy machine (a build next door, an
+   external disk) one save blocked for 30 s and more. Twenty saves of a
+   full 512-channel profile, each flushing only its own file, take well under
+   a second; the budget is generous so that a loaded machine can't fail it,
+   while a global flush per save can. */
+void QLCInputProfile_Test::saveFlushesOnlyItsFile()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("big.qxi");
+
+    QLCInputProfile ip;
+    ip.setManufacturer("TestManufacturer");
+    ip.setModel("Big");
+    for (quint32 i = 0; i < 512; i++)
+    {
+        QLCInputChannel *ich = new QLCInputChannel();
+        ich->setName(QString("Channel %1").arg(i + 1));
+        ip.insertChannel(i, ich);
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+    for (int i = 0; i < 20; i++)
+        QVERIFY(ip.saveXML(path));
+    const qint64 ms = timer.elapsed();
+    QVERIFY2(ms < 10000, qPrintable(QString("20 saves took %1 ms").arg(ms)));
+
+    /* Written whole, under its own name, nothing left beside it */
+    QCOMPARE(QDir(dir.path()).entryList(QDir::Files), QStringList() << "big.qxi");
+    QLCInputProfile *prof = QLCInputProfile::loader(path);
+    QVERIFY(prof != NULL);
+    QCOMPARE(prof->channels().size(), 512);
+    delete prof;
+}
+
 void QLCInputProfile_Test::save()
 {
     QLCInputProfile ip;
