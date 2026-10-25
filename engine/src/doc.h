@@ -776,6 +776,11 @@ public:
 
     bool addFixture(Fixture* fixture, quint32 id = Fixture::invalidId(), bool crossUniverse = false);
 
+    /** VENUES.md: @p id is a house fixture of the venue applied -- the show
+     *  file does not take it (nor its plot place, nor its group heads). A
+     *  thin forwarder to ProgrammerController's VenueCorrections. */
+    bool isVenueFixture(quint32 id) const;
+
     /**
      * Delete the given fixture instance from Doc
      *

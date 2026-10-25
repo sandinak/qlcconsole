@@ -30,6 +30,7 @@
 
 #include "qlcengine_export.h"
 #include "truss.h"
+#include "venuerig.h"
 
 class Doc;
 
@@ -108,6 +109,9 @@ public:
          *  and stage target id -> this venue's position (metres). */
         QMap<quint32, float> trims;
         QMap<quint32, QVector3D> targets;
+        /** Board Q137/Q138 (VENUES.md): the room's house rig, its patch,
+         *  what is not ours. Empty: the venue behaves as before. */
+        VenueRig::Data rig;
         /** fixture id -> when it was checked here (Q134), dead or not. */
         QMap<quint32, Check> checks;
         Practice practice;
@@ -320,6 +324,42 @@ public:
      *  stay in the practice venue, for the report). */
     bool endPractice();
 
+    /*********************************************************************
+     * What the venue owns (board Q137/Q138, VENUES.md): its house rig, the
+     * patch of every slot in this room, the channels that are not ours.
+     *********************************************************************/
+public:
+    VenueRig *rig() const { return m_rig; }
+    /** @p id is a house fixture of the venue applied: the show file does
+     *  not take it. */
+    bool isVenueFixture(quint32 id) const { return m_rig->isVenueFixture(id); }
+    /** A house fixture of some venue uses @p id: a new show fixture skips it. */
+    bool isReservedFixtureId(quint32 id) const { return m_rig->isReservedId(id); }
+    /** @p address (zero-based) in @p universe is kept by the venue applied. */
+    bool isNotOurs(quint32 universe, quint32 address) const;
+
+    /** The house rig as it is now into the venue applied, written when it
+     *  changed. True when nothing needed writing or it was written. */
+    bool recordRig(QString *why = nullptr);
+    /** Take the show's House fixtures (set House with no venue applied)
+     *  into the venue applied; how many moved. */
+    int moveShowHouseIn();
+
+    /** The output patch on the rig now becomes the venue applied's, for
+     *  every slot (a patch changed while it is applied does this too). */
+    bool keepPatch(QString *why = nullptr);
+    /** The venue applied forgets its patch: the show's own goes back on. */
+    bool forgetPatch(QString *why = nullptr);
+    bool hasPatch(const QString &name) const { return !venue(name).rig.patch.isEmpty(); }
+
+    /** What @p name keeps for the room; applied at once if it is on. */
+    bool setNotOurs(const QString &name, const QList<VenueRig::NotOurs> &notOurs, QString *why = nullptr);
+    QList<VenueRig::NotOurs> notOurs(const QString &name) const { return venue(name).rig.notOurs; }
+
+    /** What going live with @p name would clash on (VENUES.md section 6):
+     *  a dry run unless it is the venue applied. */
+    QList<VenueRig::Clash> clashes(const QString &name) const;
+
     /** The doc was cleared: forget everything without touching the rig. */
     void reset();
 
@@ -337,6 +377,8 @@ signals:
     /** Something the operator should read once, about the venue applied
      *  (a file from before definitions were kept). */
     void note(const QString &text);
+    /** The house rig, the patch or what is not ours changed. */
+    void houseRigChanged();
 
 private:
     void apply();
@@ -358,6 +400,11 @@ private:
     QString m_checkedBy;
     /** What @p fid is now: its definition and mode. */
     void identify(quint32 fid, QString &maker, QString &model, QString &mode) const;
+    Venue *activeVenueData();
+    void updateReserved();
+
+    VenueRig *m_rig = nullptr;
+    class QTimer *m_rigTimer = nullptr;
 };
 
 /** @} */

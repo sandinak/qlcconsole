@@ -230,6 +230,11 @@ public:
      */
     void setUniversePassthrough(int index, bool enable);
 
+    /** The slot the universe at @p index is in the show: Tour or House
+     *  (VENUES.md section 5). */
+    void setUniverseSlotOwner(int index, RigOwner::Owner owner);
+    RigOwner::Owner universeSlotOwner(int index) const;
+
     /**
      * Retrieve the passthrough mode of the universe at the given index
      * @param index The universe index
@@ -460,6 +465,11 @@ public:
      * it resolves. It is never silently dropped.
      */
     void loadPatch(quint32 universe, const Universe::OfflinePatch &patch);
+
+    /** A venue's patch on (or the show's back): every output patch of
+     *  @p universe -- live, pending, kept -- replaced by @p patches, each
+     *  applied as loadPatch() applies one from a file. */
+    void replaceOutputPatches(quint32 universe, const QList<Universe::OfflinePatch> &patches);
 
     /** Try every kept (offline/pending) patch again; returns how many
      *  reconnected. Runs by itself every few seconds while any exist. */

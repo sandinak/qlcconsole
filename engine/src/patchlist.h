@@ -64,6 +64,7 @@ public:
         QString output;                  //!< where its universe goes, in words
 
         QString mountedOn;               //!< MonitorProperties::mountDescription()
+        QString owner;                   //!< "House", "Rental"; empty for the tour's (VENUES.md)
         bool    onPlot = false;
         QVector3D position;              //!< metres, when onPlot (fixtureRigPosition())
 
@@ -100,6 +101,8 @@ public:
 private:
     QList<Row> m_rows;
     bool m_feet = false;
+    /** Some fixture is not the tour's: the list says whose each one is. */
+    bool m_owners = false;
 };
 
 /** @} */

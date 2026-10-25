@@ -866,6 +866,15 @@ void Fixture::setStageLook(StageLook look)
     emit changed(m_id);
 }
 
+void Fixture::setOwner(RigOwner::Owner owner)
+{
+    if (int(owner) < int(RigOwner::Unset) || int(owner) > int(RigOwner::Rental))
+        owner = RigOwner::Unset;
+    if (m_owner.exchange(int(owner), std::memory_order_relaxed) == int(owner))
+        return;
+    emit changed(m_id);
+}
+
 QList<Fixture::StageLook> Fixture::stageLooks()
 {
     return { AutoLook,
@@ -1542,6 +1551,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         {
             outputRules = stringToOutputRules(xmlDoc.readElementText());
         }
+        else if (xmlDoc.name() == KXMLFixtureOwner)
+        {
+            m_owner.store(int(RigOwner::fromXmlName(xmlDoc.readElementText())), std::memory_order_relaxed);
+        }
         else if (xmlDoc.name() == KXMLFixtureChannelModifier)
         {
             QXmlStreamAttributes attrs = xmlDoc.attributes();
@@ -1760,6 +1773,10 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
        still opens there; Auto writes nothing, so a show without is unchanged. */
     if (stageLook() != AutoLook)
         doc->writeTextElement(KXMLFixtureStageLook, stageLookToString(stageLook()));
+    /* Who it belongs to (VENUES.md): only when set, so a show that never
+       says is byte-identical. */
+    if (owner() != RigOwner::Unset)
+        doc->writeTextElement(KXMLFixtureOwner, RigOwner::xmlName(owner()));
     /* Channel count */
     doc->writeTextElement(KXMLFixtureChannels, QString::number(channels()));
 

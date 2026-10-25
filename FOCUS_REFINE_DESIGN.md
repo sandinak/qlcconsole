@@ -455,6 +455,10 @@ the same in every venue. Only the corrections are per venue.
 
 ## 5. Per-venue corrections: the sidecar file
 
+> What a venue *owns* besides corrections (its house rig, the patch of every
+> universe in the room, the channels that are not ours, board Q137–Q138) is
+> designed in [VENUES.md](VENUES.md); it is kept in this same sidecar.
+
 The sidecar is handled by `engine/src/venuecorrections.{h,cpp}`
 (`VenueCorrections`, owned by `ProgrammerController`).
 

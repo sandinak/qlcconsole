@@ -36,6 +36,7 @@
 #include "inputpatch.h"
 #include "qlcchannel.h"
 #include "fixturepower.h"
+#include "rigowner.h"
 #include <QMutex>
 #include <QHash>
 #include <QPair>
@@ -61,6 +62,7 @@ class Doc;
 #define KXMLQLCUniverseName         QStringLiteral("Name")
 #define KXMLQLCUniverseID           QStringLiteral("ID")
 #define KXMLQLCUniversePassthrough  QStringLiteral("Passthrough")
+#define KXMLQLCUniverseOwner        QStringLiteral("Owner")
 
 #define KXMLQLCUniverseInputPatch    QStringLiteral("Input")
 #define KXMLQLCUniverseOutputPatch   QStringLiteral("Output")
@@ -880,8 +882,42 @@ public:
     /** Drop every kept patch of @p tag (the user re-patched/unpatched it). */
     void clearOfflinePatches(PatchTagType tag);
 
+    /*********************************************************************
+     * Venues (VENUES.md section 5)
+     *********************************************************************/
+    /** The slot this universe is in the show: Tour (default) or House --
+     *  which kind of fixture the show means to put in it. Saved in the show. */
+    RigOwner::Owner slotOwner() const { return m_slotOwner; }
+    void setSlotOwner(RigOwner::Owner owner);
+
+    /** Every output patch as saveXML() would write it now: the live ones,
+     *  the pending ones and the kept (offline) ones. */
+    QList<OfflinePatch> outputPatchDescriptions() const;
+    /** A venue's patch is on: the show's own, held so saveXML() writes it
+     *  and not the venue's. */
+    void setShowOutputBase(const QList<OfflinePatch> &patches);
+    bool hasShowOutputBase() const { return m_hasShowOutputBase; }
+    QList<OfflinePatch> showOutputBase() const { return m_showOutputBase; }
+    void clearShowOutputBase();
+
+    /** "Not ours" (the venue's house desk keeps it): @p whole -- nothing at
+     *  all is sent to this universe's outputs -- or @p ranges of channels
+     *  (zero-based, first..last inclusive), which go out as zero in every
+     *  frame whatever asks for them. Not saved: the venue applies it. */
+    void setNotOurs(bool whole, const QList<QPair<int, int>> &ranges);
+    bool notOursWhole() const { return m_notOursWhole.load(std::memory_order_relaxed); }
+    QList<QPair<int, int>> notOursRanges() const;
+    /** @p channel (zero-based) is not ours, the whole universe included. */
+    bool isNotOurs(int channel) const;
+
 private:
     QList<OfflinePatch> m_offlinePatches;
+    RigOwner::Owner m_slotOwner = RigOwner::Tour;
+    bool m_hasShowOutputBase = false;
+    QList<OfflinePatch> m_showOutputBase;
+    std::atomic<bool> m_notOursWhole { false };
+    mutable QMutex m_notOursMutex;
+    QList<QPair<int, int>> m_notOursRanges;
 
 public:
 

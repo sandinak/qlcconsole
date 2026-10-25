@@ -72,6 +72,7 @@
 #include "qlcphysical.h"
 #include "fixturegroup.h"
 #include "programmercontroller.h"
+#include "venuecorrections.h"
 #include "parkeffect.h"
 #include "focuscalls.h"
 #include "markeffect.h"
@@ -1167,13 +1168,23 @@ quint32 Doc::createFixtureId()
     /* This results in an endless loop if there are UINT_MAX-1 fixtures. That,
        however, seems a bit unlikely. Are there even 4294967295-1 fixtures in
        total in the whole world? */
+    /* An id a venue's house fixture uses (VENUES.md) is skipped too: a
+       house light of one venue never shares an id with a tour light. */
+    VenueCorrections *venues = m_programmer != NULL ? m_programmer->venueCorrections() : NULL;
     while (m_fixtures.contains(m_latestFixtureId) == true ||
-           m_latestFixtureId == Fixture::invalidId())
+           m_latestFixtureId == Fixture::invalidId() ||
+           (venues != NULL && venues->isReservedFixtureId(m_latestFixtureId)))
     {
         m_latestFixtureId++;
     }
 
     return m_latestFixtureId;
+}
+
+bool Doc::isVenueFixture(quint32 id) const
+{
+    return m_programmer != NULL && m_programmer->venueCorrections() != NULL
+           && m_programmer->venueCorrections()->isVenueFixture(id);
 }
 
 bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
@@ -1332,6 +1343,14 @@ bool Doc::canPatchFixtures(const QList<FixturePatch> &patches, QString *why,
             return refuse(QStringLiteral("%1 (%2 ch) does not fit at universe %3, address %4")
                               .arg(fxi->name()).arg(n).arg(p.universe + 1).arg(p.address + 1));
         const quint32 base = (p.universe << 9) | p.address;
+        /* Channels the venue applied keeps for itself (VENUES.md section 5):
+           nothing of ours is sent there, so nothing is patched there. */
+        VenueCorrections *venues = m_programmer != NULL ? m_programmer->venueCorrections() : NULL;
+        for (quint32 i = 0; venues != NULL && i < n; i++)
+            if (venues->isNotOurs(p.universe, p.address + i))
+                return refuse(QStringLiteral("%1 at universe %2, address %3 is on channels %4 keeps (not ours)")
+                                  .arg(fxi->name()).arg(p.universe + 1).arg(p.address + i + 1)
+                                  .arg(venues->activeVenue()));
         for (quint32 i = base; i < base + n; i++)
         {
             if (claimed.contains(i))
@@ -1566,6 +1585,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setIPAddress(fixture->ipAddress());
         newFixture->setTransport(fixture->transport());
         newFixture->setStageLook(fixture->stageLook());
+        newFixture->setOwner(fixture->owner());
         newFixture->setPowerProfile(fixture->powerProfile());
         newFixture->setOutputRules(fixture->outputRules());
 
@@ -2530,6 +2550,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
     {
         Fixture *fxi(fxit.next());
         Q_ASSERT(fxi != NULL);
+        // A venue's house fixture is in the venue's file (VENUES.md).
+        if (isVenueFixture(fxi->id()))
+            continue;
         fxi->saveXML(doc);
     }
 
@@ -2598,7 +2621,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
     if (m_monitorProps != NULL)
     {
         m_monitorProps->keepPatternsWithShow(this);
-        m_monitorProps->saveXML(doc, this);
+        m_monitorProps->saveXML(doc, this, true);
     }
 
     /* End the <Engine> tag */

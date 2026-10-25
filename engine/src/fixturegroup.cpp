@@ -31,6 +31,7 @@
 #define KXMLQLCFixtureGroupSize QStringLiteral("Size")
 #define KXMLQLCFixtureGroupName QStringLiteral("Name")
 #define KXMLQLCFixtureGroupPath QStringLiteral("Path")
+#define KXMLQLCFixtureGroupOwner QStringLiteral("Owner")
 
 /****************************************************************************
  * Initialization
@@ -55,6 +56,7 @@ void FixtureGroup::copyFrom(const FixtureGroup* grp)
 {
     // Don't copy ID
     m_name = grp->name();
+    m_owner = grp->owner();
     m_size = grp->size();
     m_heads = grp->headsMap();
 }
@@ -107,6 +109,14 @@ void FixtureGroup::setPath(const QString& path)
     if (m_path == path)
         return;
     m_path = path;
+    emit changed(this->id());
+}
+
+void FixtureGroup::setOwner(RigOwner::Owner owner)
+{
+    if (m_owner == owner)
+        return;
+    m_owner = owner;
     emit changed(this->id());
 }
 
@@ -415,6 +425,10 @@ bool FixtureGroup::loadXML(QXmlStreamReader &xmlDoc)
         {
             m_path = xmlDoc.readElementText();
         }
+        else if (xmlDoc.name() == KXMLQLCFixtureGroupOwner)
+        {
+            m_owner = RigOwner::fromXmlName(xmlDoc.readElementText());
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown fixture group tag:" << xmlDoc.name();
@@ -439,6 +453,10 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
     if (m_path.isEmpty() == false)
         doc->writeTextElement(KXMLQLCFixtureGroupPath, m_path);
 
+    // Only when set: a show that never says is byte-identical.
+    if (m_owner != RigOwner::Unset)
+        doc->writeTextElement(KXMLQLCFixtureGroupOwner, RigOwner::xmlName(m_owner));
+
     /* Matrix size */
     doc->writeStartElement(KXMLQLCFixtureGroupSize);
     doc->writeAttribute("X", QString::number(size().width()));
@@ -452,6 +470,10 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
     {
         QLCPoint pt = it.key();
         GroupHead head = it.value();
+        /* A venue's house fixture fills the group only in that venue: its
+           head is in the venue's file, not the show's (VENUES.md section 4). */
+        if (this->doc() != NULL && this->doc()->isVenueFixture(head.fxi))
+            continue;
         doc->writeStartElement(KXMLQLCFixtureGroupHead);
         doc->writeAttribute("X", QString::number(pt.x()));
         doc->writeAttribute("Y", QString::number(pt.y()));

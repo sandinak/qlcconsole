@@ -3573,8 +3573,12 @@ void MonitorProperties::repairMountPlane(FixtureRigProps &rp) const
     rp.studioMount = plane;
 }
 
-bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) const
+bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, bool showFile) const
 {
+    // A venue's house fixture is in the venue's file, not the show's.
+    auto venueOnly = [showFile, mainDocument](quint32 fid) {
+        return showFile && mainDocument != NULL && mainDocument->isVenueFixture(fid);
+    };
     Q_ASSERT(doc != NULL);
 
     /* Create the master Monitor node */
@@ -3674,6 +3678,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
 
     foreach (quint32 fid, fixtureItemsID())
     {
+        if (venueOnly(fid))
+            continue;
         foreach (quint32 subID, fixtureIDList(fid))
         {
             quint16 headIndex = fixtureHeadIndex(subID);
@@ -3940,6 +3946,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     for (auto fit = m_goboSwaps.constBegin(); fit != m_goboSwaps.constEnd(); ++fit)
         for (auto sit = fit.value().constBegin(); sit != fit.value().constEnd(); ++sit)
         {
+            if (venueOnly(fit.key()))
+                continue;
             doc->writeStartElement(QStringLiteral("GoboSwap"));
             doc->writeAttribute(QStringLiteral("Fixture"), QString::number(fit.key()));
             doc->writeAttribute(QStringLiteral("Channel"), QString::number(sit.key().first));
@@ -3971,6 +3979,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     // Fixture rig props (only write entries that differ from defaults)
     for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
     {
+        if (venueOnly(it.key()))
+            continue;
         /* A venue's corrections are not the show's: with a venue applied,
            the show's own calibration is what goes in the file. */
         FixtureRigProps rp = it.value();

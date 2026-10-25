@@ -1073,6 +1073,11 @@ OutputPatch *Universe::feedbackPatch() const
 
 void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
 {
+    /* A universe the venue's house desk keeps (VENUES.md section 5): nothing
+       of ours goes out on it at all -- not Blind's, not Blackout's. */
+    if (m_notOursWhole.load(std::memory_order_relaxed))
+        return;
+
     // Fork Blind: hold the physical rig dark while the preview keeps running.
     // processFaders() still emits universeWritten() (the 2D monitor source),
     // so the look is visible on screen but never reaches the output plugins.
@@ -1086,7 +1091,13 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
     {
         if (blindHoldsExempt() == false || hasBlackoutExempt(data.size()) == false)
             return;
-        const QByteArray frame = blackoutFrame(data);
+        QByteArray frame = blackoutFrame(data);
+        {
+            QMutexLocker locker(&m_notOursMutex);
+            for (const QPair<int, int> &r : m_notOursRanges)
+                for (int c = qMax(0, r.first); c <= r.second && c < frame.size(); ++c)
+                    frame[c] = 0;
+        }
         foreach (OutputPatch *op, m_outputPatchList)
         {
             if (m_totalChannelsChanged == true)
@@ -1100,15 +1111,30 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
     if (m_outputPatchList.count() == 0)
         return;
 
+    /* Not ours (VENUES.md section 5): a range is zero in every frame we
+       send, whatever asked for it. */
+    QByteArray masked;
+    {
+        QMutexLocker locker(&m_notOursMutex);
+        if (!m_notOursRanges.isEmpty())
+        {
+            masked = data;
+            for (const QPair<int, int> &r : m_notOursRanges)
+                for (int c = qMax(0, r.first); c <= r.second && c < masked.size(); ++c)
+                    masked[c] = 0;
+        }
+    }
+    const QByteArray &frame = masked.isNull() ? data : masked;
+
     foreach (OutputPatch *op, m_outputPatchList)
     {
         if (m_totalChannelsChanged == true)
             op->setPluginParameter(PLUGIN_UNIVERSECHANNELS, m_totalChannels);
 
         if (op->blackout())
-            op->dump(m_id, blackoutFrame(data), dataChanged);
+            op->dump(m_id, blackoutFrame(frame), dataChanged);
         else
-            op->dump(m_id, data, dataChanged);
+            op->dump(m_id, frame, dataChanged);
     }
     m_totalChannelsChanged = false;
 }
@@ -1532,6 +1558,8 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
     if (attrs.hasAttribute(KXMLQLCUniverseName))
         setName(attrs.value(KXMLQLCUniverseName).toString());
 
+    setSlotOwner(RigOwner::fromXmlName(attrs.value(KXMLQLCUniverseOwner).toString()));
+
     if (attrs.hasAttribute(KXMLQLCUniversePassthrough))
     {
         if (attrs.value(KXMLQLCUniversePassthrough).toString() == KXMLQLCTrue ||
@@ -1597,6 +1625,79 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
     }
 
     return true;
+}
+
+void Universe::setSlotOwner(RigOwner::Owner owner)
+{
+    m_slotOwner = owner == RigOwner::House ? RigOwner::House : RigOwner::Tour;
+}
+
+QList<Universe::OfflinePatch> Universe::outputPatchDescriptions() const
+{
+    QList<OfflinePatch> out;
+    foreach (OutputPatch *op, m_outputPatchList)
+    {
+        OfflinePatch p;
+        p.tag = OutputPatchTag;
+        p.plugin = op->pluginName();
+        p.uid = op->outputName();
+        p.profile = QString();
+        p.params = op->getPluginParameters();
+        if (op->isPending())
+        {
+            // Pending: the same UID, line and network it was loaded with.
+            p.line = op->pendingLine();
+            p.network = op->pendingNetwork();
+        }
+        else
+        {
+            p.line = op->output();
+            p.network = NetworkRoute::networkForLine(op->outputName());
+        }
+        out << p;
+    }
+    foreach (const OfflinePatch &p, m_offlinePatches)
+        if (p.tag == OutputPatchTag)
+            out << p;
+    return out;
+}
+
+void Universe::setShowOutputBase(const QList<OfflinePatch> &patches)
+{
+    m_showOutputBase = patches;
+    m_hasShowOutputBase = true;
+}
+
+void Universe::clearShowOutputBase()
+{
+    m_showOutputBase.clear();
+    m_hasShowOutputBase = false;
+}
+
+void Universe::setNotOurs(bool whole, const QList<QPair<int, int>> &ranges)
+{
+    {
+        QMutexLocker locker(&m_notOursMutex);
+        m_notOursRanges = ranges;
+    }
+    m_notOursWhole.store(whole, std::memory_order_relaxed);
+}
+
+QList<QPair<int, int>> Universe::notOursRanges() const
+{
+    QMutexLocker locker(&m_notOursMutex);
+    return m_notOursRanges;
+}
+
+bool Universe::isNotOurs(int channel) const
+{
+    if (notOursWhole())
+        return true;
+    QMutexLocker locker(&m_notOursMutex);
+    for (const QPair<int, int> &r : m_notOursRanges)
+        if (channel >= r.first && channel <= r.second)
+            return true;
+    return false;
 }
 
 QList<Universe::OfflinePatch> Universe::offlinePatches() const
@@ -1668,6 +1769,9 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
 
     if (passthrough() == true)
         doc->writeAttribute(KXMLQLCUniversePassthrough, KXMLQLCTrue);
+    // Only a House slot says so: a show that never uses slots is unchanged.
+    if (m_slotOwner == RigOwner::House)
+        doc->writeAttribute(KXMLQLCUniverseOwner, RigOwner::xmlName(m_slotOwner));
 
     /* A kept (offline) patch is written back exactly as it was loaded --
        a show saved on a machine away from its network must not lose a
@@ -1693,20 +1797,12 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
     {
         saveOffline(InputPatchTag, KXMLQLCUniverseInputPatch);
     }
-    foreach (OutputPatch *op, m_outputPatchList)
-    {
-        if (op->isPending())
-        {
-            // Pending: the same UID, line and network it was loaded with.
-            savePatchXML(doc, KXMLQLCUniverseOutputPatch, op->pluginName(), op->outputName(),
-                op->pendingLine(), "", op->getPluginParameters(), QString(), op->pendingNetwork());
-            continue;
-        }
-        savePatchXML(doc, KXMLQLCUniverseOutputPatch, op->pluginName(), op->outputName(),
-            op->output(), "", op->getPluginParameters(), QString(),
-            NetworkRoute::networkForLine(op->outputName()));
-    }
-    saveOffline(OutputPatchTag, KXMLQLCUniverseOutputPatch);
+    /* A venue's patch is on: the show keeps its own (VENUES.md section 5). */
+    const QList<OfflinePatch> outputs = m_hasShowOutputBase ? m_showOutputBase
+                                                            : outputPatchDescriptions();
+    foreach (const OfflinePatch &p, outputs)
+        savePatchXML(doc, KXMLQLCUniverseOutputPatch, p.plugin, p.uid, p.line, p.profile,
+                     p.params, p.hidProfile, p.network);
     if (feedbackPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseFeedbackPatch, feedbackPatch()->pluginName(), feedbackPatch()->outputName(),

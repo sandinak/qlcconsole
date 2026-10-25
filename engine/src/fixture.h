@@ -32,6 +32,7 @@
 #include "qlcchannel.h"
 #include "fixturepower.h"
 #include "qlcfixturedef.h"
+#include "rigowner.h"
 
 class QString;
 
@@ -66,6 +67,7 @@ class Doc;
 #define KXMLFixtureForcedLTP        QStringLiteral("ForcedLTP")
 #define KXMLFixtureStageLook        QStringLiteral("StageLook")
 #define KXMLFixtureOutputRules      QStringLiteral("OutputRules")
+#define KXMLFixtureOwner            QStringLiteral("Owner")
 
 #define KXMLFixtureChannelModifier  QStringLiteral("Modifier")
 #define KXMLFixtureChannelIndex     QStringLiteral("Channel")
@@ -630,6 +632,19 @@ protected:
      *  generic dimmer channel, an ellipsoidal. */
     std::atomic<int> m_autoStageLook { EllipsoidalLook };
     StageLook computeAutoStageLook() const;
+
+    /*********************************************************************
+     * Owner (board Q137, VENUES.md)
+     *********************************************************************/
+public:
+    /** Who it belongs to, as set on the fixture itself: Tour, House or
+     *  Rental, or Unset (default) = from its group (RigOwner::effective()). */
+    RigOwner::Owner owner() const { return RigOwner::Owner(m_owner.load(std::memory_order_relaxed)); }
+    /** Set it; emits changed() when it differs. */
+    void setOwner(RigOwner::Owner owner);
+
+protected:
+    std::atomic<int> m_owner { RigOwner::Unset };
 
 public:
     QRectF degreesRange(int head) const;

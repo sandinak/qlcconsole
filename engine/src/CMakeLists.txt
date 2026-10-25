@@ -125,6 +125,8 @@ add_library(${module_name} SHARED
     focuscalls.cpp focuscalls.h
     focuscallcue.cpp focuscallcue.h
     venuecorrections.cpp venuecorrections.h
+    venuerig.cpp venuerig.h
+    rigowner.cpp rigowner.h
     focusreport.cpp focusreport.h
     controllerscheme.cpp controllerscheme.h
     refinesession.cpp refinesession.h

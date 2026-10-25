@@ -29,6 +29,7 @@
 #include "grouphead.h"
 #include "qlcpoint.h"
 #include "fixture.h"
+#include "rigowner.h"
 
 class QXmlStreamReader;
 class Doc;
@@ -95,12 +96,19 @@ public:
     void setPath(const QString& path);
     QString path() const;
 
+    /** Who the group's fixtures belong to (board Q137, VENUES.md): set it
+     *  and every fixture in it that does not say otherwise follows. Unset by
+     *  default (its fixtures are Tour). Emits changed() when it differs. */
+    void setOwner(RigOwner::Owner owner);
+    RigOwner::Owner owner() const { return m_owner; }
+
 signals:
     void nameChanged();
 
 private:
     QString m_name;
     QString m_path;
+    RigOwner::Owner m_owner = RigOwner::Unset;
 
     /************************************************************************
      * Fixtures

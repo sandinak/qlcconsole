@@ -314,6 +314,20 @@ void InputOutputMap::setUniverseName(int index, QString name)
     m_universeArray.at(index)->setName(name);
 }
 
+void InputOutputMap::setUniverseSlotOwner(int index, RigOwner::Owner owner)
+{
+    if (index < 0 || index >= m_universeArray.count())
+        return;
+    m_universeArray.at(index)->setSlotOwner(owner);
+}
+
+RigOwner::Owner InputOutputMap::universeSlotOwner(int index) const
+{
+    if (index < 0 || index >= m_universeArray.count())
+        return RigOwner::Tour;
+    return m_universeArray.at(index)->slotOwner();
+}
+
 void InputOutputMap::setUniversePassthrough(int index, bool enable)
 {
     if (index < 0 || index >= m_universeArray.count())
@@ -922,6 +936,23 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
         }
         break;
     }
+}
+
+void InputOutputMap::replaceOutputPatches(quint32 universe, const QList<Universe::OfflinePatch> &patches)
+{
+    if (universe >= universesCount())
+        return;
+    Universe *uni = m_universeArray.at(universe);
+    for (int i = uni->outputPatchesCount() - 1; i >= 0; --i)
+        setOutputPatch(universe, KOutputNone, QString(), QLCIOPlugin::invalidLine(), false, i);
+    uni->clearOfflinePatches(Universe::OutputPatchTag);
+    for (const Universe::OfflinePatch &p : patches)
+    {
+        Universe::OfflinePatch out = p;
+        out.tag = Universe::OutputPatchTag;
+        loadPatch(universe, out);
+    }
+    emit offlinePatchesChanged();
 }
 
 bool InputOutputMap::hasOfflinePatches() const

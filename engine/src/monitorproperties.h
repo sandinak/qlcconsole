@@ -1185,7 +1185,10 @@ public:
      *  when the show is saved, not for undo snapshots. */
     void keepPatternsWithShow(const Doc *mainDocument);
 
-    bool saveXML(QXmlStreamWriter *doc, const Doc * mainDocument) const;
+    /** @p showFile: writing the show file itself (Doc::saveXML), which
+     *  leaves out a venue's house fixtures -- they are in the venue's file
+     *  (VENUES.md). Undo snapshots keep everything. */
+    bool saveXML(QXmlStreamWriter *doc, const Doc * mainDocument, bool showFile = false) const;
 };
 
 /** @} */

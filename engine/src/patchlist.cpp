@@ -34,6 +34,7 @@
 #include "qlcfixturedef.h"
 #include "outputpatch.h"
 #include "patchlist.h"
+#include "rigowner.h"
 #include "universe.h"
 #include "fixture.h"
 #include "doc.h"
@@ -178,6 +179,12 @@ PatchList PatchList::build(Doc *doc, const QList<quint32> &ids)
         }
 
         r.mountedOn = mp->mountDescription(r.id);
+        const RigOwner::Owner owner = RigOwner::effective(doc, r.id);
+        if (owner != RigOwner::Tour)
+        {
+            r.owner = RigOwner::displayName(owner);
+            list.m_owners = true;
+        }
         r.onPlot = plotted.contains(r.id) || mp->hasFixtureRigProps(r.id);
         if (r.onPlot)
             r.position = mp->fixtureRigPosition(r.id);
@@ -239,6 +246,9 @@ QString PatchList::toCsv() const
                     QStringLiteral("Mounted on"),
                     QStringLiteral("X (%1)").arg(unit), QStringLiteral("Y (%1)").arg(unit),
                     QStringLiteral("Z (%1)").arg(unit), QStringLiteral("Note") });
+    // An Owner column only when some fixture is not the tour's: unchanged otherwise.
+    if (m_owners)
+        out.last() += QStringLiteral(",Owner");
     foreach (const Row &r, m_rows)
     {
         const bool at = r.patched || r.clash;
@@ -255,6 +265,8 @@ QString PatchList::toCsv() const
                         r.onPlot ? coord(r.position.z(), m_feet) : QString(),
                         r.clash ? QStringLiteral("address clash: not output")
                                 : (r.patched ? QString() : QStringLiteral("in the inventory")) });
+        if (m_owners)
+            out.last() += QLatin1Char(',') + csv(r.owner.isEmpty() ? RigOwner::displayName(RigOwner::Tour) : r.owner);
     }
     return out.join(QLatin1Char('\n')) + QLatin1Char('\n');
 }
@@ -331,7 +343,10 @@ QString PatchList::toHtml(const QString &title) const
                                                     coord(r.position.z(), m_feet), unit);
         h += QStringLiteral("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td>"
                             "<td>%6</td><td>%7</td><td>%8</td></tr>")
-                 .arg(addr, r.name.toHtmlEscaped(), make.toHtmlEscaped(), r.mode.toHtmlEscaped(),
+                 .arg(addr, r.owner.isEmpty() ? r.name.toHtmlEscaped()
+                                              : QStringLiteral("%1 <i>(%2)</i>").arg(r.name.toHtmlEscaped(),
+                                                                                     r.owner.toHtmlEscaped()),
+                      make.toHtmlEscaped(), r.mode.toHtmlEscaped(),
                       QString::number(r.channels), conn.toHtmlEscaped(),
                       r.mountedOn.toHtmlEscaped(), pos);
     }

@@ -23,6 +23,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QFileInfo>
+#include <QTimer>
 #include <QFile>
 #include <QDir>
 
@@ -33,6 +34,7 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "stagetarget.h"
+#include "inputoutputmap.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -84,6 +86,27 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
     : QObject(parent)
     , m_doc(doc)
 {
+    m_rig = new VenueRig(doc, this);
+    /* The house rig changed while a venue is applied: into its file. A
+       burst (a house fixture dragged on the plot) is written once it ends. */
+    m_rigTimer = new QTimer(this);
+    m_rigTimer->setSingleShot(true);
+    m_rigTimer->setInterval(400);
+    connect(m_rigTimer, &QTimer::timeout, this, [this]() { recordRig(); });
+    connect(m_rig, &VenueRig::rigChanged, this, [this](bool soon) {
+        if (m_writing)
+            return;
+        if (soon)
+            m_rigTimer->start();
+        else
+            recordRig();
+    });
+    // A patch changed while a venue is applied is that room's (Q138).
+    connect(m_rig, &VenueRig::patchEdited, this, [this]() {
+        if (!m_writing)
+            keepPatch();
+    });
+
     /* Board Q111: with a venue applied, a calibration changed anywhere --
        the fixture dialog, the Lighting Studio -- is that venue's, and goes
        into its file, not the show's. */
@@ -109,6 +132,9 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
 void VenueCorrections::onRigPropsChanged(quint32 fid)
 {
     if (!isActive() || m_writing || m_held.contains(fid) || m_doc->fixture(fid) == nullptr)
+        return;
+    // A house fixture's calibration is part of its house-rig entry.
+    if (m_rig->isVenueFixture(fid))
         return;
     MonitorProperties *props = m_doc->monitorProperties();
     const RigCalibration now = RigCalibration::of(props->fixtureRigProps(fid));
@@ -163,6 +189,14 @@ void VenueCorrections::setShowFile(const QString &showFile, bool opened)
         }
         emit venuesChanged();
         return;
+    }
+    // The show saved: what the house rig is now goes into its venue too.
+    if (isActive() && activeVenueData() != nullptr)
+    {
+        m_rigTimer->stop();
+        recordRig();
+        if (m_rig->patchChanged(activeVenueData()->rig))
+            keepPatch();
     }
     if (showFile == m_showFile)
         return;
@@ -323,7 +357,12 @@ QByteArray VenueCorrections::toXml() const
     w.setAutoFormattingIndent(1);
     w.writeStartDocument();
     w.writeStartElement(kRoot);
-    w.writeAttribute(QStringLiteral("Version"), QString::number(kVersion));
+    /* Version 2 only when a venue owns more than corrections (VENUES.md
+       section 7): a file without is written as it always was. */
+    bool owns = false;
+    for (const Venue &v : m_venues)
+        owns = owns || !v.rig.isEmpty();
+    w.writeAttribute(QStringLiteral("Version"), QString::number(owns ? 2 : kVersion));
     if (!m_showFile.isEmpty())
         w.writeAttribute(QStringLiteral("Show"), QFileInfo(m_showFile).fileName());
     if (!m_active.isEmpty())
@@ -387,6 +426,7 @@ QByteArray VenueCorrections::toXml() const
             w.writeAttribute(QStringLiteral("Z"), num(it.value().z(), 3));
             w.writeEndElement();
         }
+        VenueRig::writeXml(w, v.rig);
         // Who checked what, and the dead lights (Q134, Q140).
         for (auto it = v.checks.constBegin(); it != v.checks.constEnd(); ++it)
         {
@@ -447,6 +487,9 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
         v.modified = QDateTime::fromString(va.value(QStringLiteral("Modified")).toString(), Qt::ISODate);
         while (r.readNextStartElement())
         {
+            // The house rig, the patch, what is not ours (read whole).
+            if (VenueRig::readXml(r, v.rig))
+                continue;
             if (r.name() == kFixture)
             {
                 const QXmlStreamAttributes a = r.attributes();
@@ -541,7 +584,133 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
     }
     m_venues = venues;
     m_active = hasVenue(active) ? active : QString();
+    updateReserved();
     return true;
+}
+
+void VenueCorrections::updateReserved()
+{
+    QSet<quint32> ids;
+    for (const Venue &v : m_venues)
+        ids += v.rig.fixtureIds();
+    m_rig->setReservedIds(ids);
+}
+
+VenueCorrections::Venue *VenueCorrections::activeVenueData()
+{
+    for (Venue &v : m_venues)
+        if (v.name == m_active)
+            return &v;
+    return nullptr;
+}
+
+bool VenueCorrections::isNotOurs(quint32 universe, quint32 address) const
+{
+    if (m_doc == nullptr || !isActive())
+        return false;
+    const QList<Universe *> unis = m_doc->inputOutputMap()->universes();
+    return universe < quint32(unis.size()) && unis.at(int(universe))->isNotOurs(int(address));
+}
+
+bool VenueCorrections::recordRig(QString *why)
+{
+    Venue *v = activeVenueData();
+    if (v == nullptr || !m_rig->isApplied())
+        return true;
+    bool changed = m_rig->capture(v->rig);
+    /* A fixture now the venue's: its calibration is in its house-rig entry,
+       not a correction. One now the show's: its calibration as it is, the
+       show's own. */
+    for (quint32 fid : m_rig->venueFixtures())
+        if (v->fixtures.remove(fid) > 0)
+        {
+            v->names.remove(fid);
+            v->makers.remove(fid);
+            v->models.remove(fid);
+            v->modes.remove(fid);
+            changed = true;
+        }
+    for (const Fixture *fx : m_doc->fixtures())
+        if (!m_rig->isVenueFixture(fx->id()))
+            ensureBase(fx->id());
+    if (!changed)
+        return true;
+    v->modified = QDateTime::currentDateTime();
+    updateReserved();
+    emit houseRigChanged();
+    return save(why);
+}
+
+int VenueCorrections::moveShowHouseIn()
+{
+    const int n = m_rig->moveShowHouseIn();
+    if (n > 0)
+        recordRig();
+    return n;
+}
+
+bool VenueCorrections::keepPatch(QString *why)
+{
+    Venue *v = activeVenueData();
+    if (v == nullptr)
+    {
+        if (why != nullptr)
+            *why = tr("No venue is applied.");
+        return false;
+    }
+    v->rig.patch = m_rig->currentPatch();
+    v->modified = QDateTime::currentDateTime();
+    emit houseRigChanged();
+    return save(why);
+}
+
+bool VenueCorrections::forgetPatch(QString *why)
+{
+    Venue *v = activeVenueData();
+    if (v == nullptr)
+    {
+        if (why != nullptr)
+            *why = tr("No venue is applied.");
+        return false;
+    }
+    v->rig.patch.clear();
+    const bool was = m_writing;
+    m_writing = true;
+    m_rig->restoreShowPatch();
+    m_writing = was;
+    v->modified = QDateTime::currentDateTime();
+    emit houseRigChanged();
+    return save(why);
+}
+
+bool VenueCorrections::setNotOurs(const QString &name, const QList<VenueRig::NotOurs> &notOurs, QString *why)
+{
+    bool found = false;
+    for (Venue &v : m_venues)
+        if (v.name == name)
+        {
+            v.rig.notOurs = notOurs;
+            v.modified = QDateTime::currentDateTime();
+            found = true;
+        }
+    if (!found)
+    {
+        if (why != nullptr)
+            *why = tr("There is no venue called %1.").arg(name);
+        return false;
+    }
+    if (name == m_active && isActive())
+        m_rig->applyNotOurs(notOurs);
+    emit houseRigChanged();
+    return save(why);
+}
+
+QList<VenueRig::Clash> VenueCorrections::clashes(const QString &name) const
+{
+    if (!hasVenue(name))
+        return QList<VenueRig::Clash>();
+    const bool applied = isActive() && name == m_active;
+    return m_rig->clashes(venue(name).rig, applied);
 }
 
 /*****************************************************************************
@@ -679,7 +848,7 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
 void VenueCorrections::ensureBase(quint32 fid)
 {
     MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
-    if (props == nullptr || !isActive() || props->hasCalibrationBase(fid))
+    if (props == nullptr || !isActive() || props->hasCalibrationBase(fid) || m_rig->isVenueFixture(fid))
         return;
     props->setCalibrationBase(fid, RigCalibration::of(props->fixtureRigProps(fid)));
 }
@@ -696,6 +865,26 @@ void VenueCorrections::apply()
 {
     if (!isActive() || m_doc == nullptr || m_doc->monitorProperties() == nullptr)
         return;
+    /* What the room owns first (VENUES.md): its house fixtures, their
+       places and heads in the groups, its patch, what is not ours. */
+    if (Venue *own = activeVenueData())
+    {
+        const bool was = m_writing;
+        m_writing = true;
+        m_rig->apply(own->rig);
+        m_writing = was;
+        // Renumbered on the way in (a show fixture took an id): written so.
+        if (m_rig->capture(own->rig))
+        {
+            updateReserved();
+            save();
+        }
+        QStringList lines;
+        for (const VenueRig::Clash &c : m_rig->clashes(own->rig, true))
+            lines << c.text;
+        if (!lines.isEmpty())
+            emit note(tr("%1 clashes with the show:\n%2").arg(m_active, lines.join(QLatin1Char('\n'))));
+    }
     /* The show's calibration of every fixture is held from here on, so
        nothing done to it while the venue is applied reaches the show file
        -- not only what the venue corrects now. */
@@ -737,7 +926,8 @@ void VenueCorrections::apply()
     for (auto it = v.fixtures.constBegin(); it != v.fixtures.constEnd(); ++it)
     {
         // A fixture removed from the show since: kept, listed (orphaned()).
-        if (m_doc->fixture(it.key()) == nullptr)
+        // A house fixture's calibration is part of its house-rig entry.
+        if (m_doc->fixture(it.key()) == nullptr || m_rig->isVenueFixture(it.key()))
             continue;
         /* Board Q133: focused as another fixture (definition or mode
            changed, a lamp swapped for a mover): its correction would aim
@@ -833,6 +1023,12 @@ void VenueCorrections::unapply()
     m_needsFocus.clear();
     if (props == nullptr)
         return;
+    // The house rig as it is now goes with its venue before it comes off.
+    if (m_rig->isApplied())
+    {
+        m_rigTimer->stop();
+        recordRig();
+    }
     {
         const bool was = m_writing;
         m_writing = true;
@@ -865,6 +1061,10 @@ void VenueCorrections::unapply()
             writeRig(fid, props->calibrationBase(fid));
         props->clearCalibrationBase(fid);
     }
+    const bool was = m_writing;
+    m_writing = true;
+    m_rig->unapply();
+    m_writing = was;
 }
 
 bool VenueCorrections::record(quint32 fid, QString *why)
@@ -875,6 +1075,9 @@ bool VenueCorrections::record(quint32 fid, QString *why)
             *why = tr("No venue is applied.");
         return false;
     }
+    // A house fixture's calibration is part of its house-rig entry.
+    if (m_rig->isVenueFixture(fid))
+        return recordRig(why);
     MonitorProperties *props = m_doc->monitorProperties();
     ensureBase(fid);
     const RigCalibration now = RigCalibration::of(props->fixtureRigProps(fid));
@@ -1063,6 +1266,9 @@ void VenueCorrections::reset()
         for (quint32 fid : m_doc->monitorProperties()->calibrationBaseFixtures())
             m_doc->monitorProperties()->clearCalibrationBase(fid);
     const bool had = isActive();
+    m_rigTimer->stop();
+    m_rig->forget();
+    m_rig->setReservedIds(QSet<quint32>());
     m_venues.clear();
     m_active.clear();
     m_needsFocus.clear();
