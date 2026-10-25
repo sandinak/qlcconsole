@@ -17,6 +17,7 @@
 #include <QFont>
 #include <QMenu>
 
+#include "itemlock.h"
 #include "toweritem.h"
 #include "tower.h"
 #include "monitorproperties.h"
@@ -91,7 +92,7 @@ void TowerItem::paint(QPainter *painter,
     QColor base = m_tower->color();
     if (!base.isValid())
         base = QColor(90, 100, 120);
-    QColor border = m_tower->locked() ? QColor(200, 60, 60)
+    QColor border = ItemLock::drawnLocked(this, m_tower->locked()) ? QColor(200, 60, 60)
                                      : base.darker(selected ? 150 : 120);
     QColor fill = base; fill.setAlpha(selected ? 150 : 90);
 

@@ -15,6 +15,7 @@
 #include <QPainter>
 #include <QCursor>
 
+#include "itemlock.h"
 #include "sceneryitem.h"
 #include "scenery.h"
 #include "apputil.h"
@@ -128,7 +129,7 @@ void SceneryItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     // Masking black on a dark plot: lift it enough to be seen.
     if (cloth.lightness() < 60)
         cloth = cloth.lighter(260);
-    const QColor edge = m_scenery->locked() ? QColor(200, 60, 60)
+    const QColor edge = ItemLock::drawnLocked(this, m_scenery->locked()) ? QColor(200, 60, 60)
                                             : cloth.darker(selected ? 190 : 150).lighter(selected ? 160 : 100);
     // Flown out: only where it hangs from, dashed.
     if (m_flown)

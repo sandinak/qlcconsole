@@ -61,6 +61,11 @@ public:
     /** A row's name is being typed in. */
     bool isEditing() const { return state() == QAbstractItemView::EditingState; }
 
+    /** Where scroll bars float over the list (macOS overlay scroll bars),
+     *  keep a strip the width of one clear on the right, so the bar never
+     *  lies over a layer's eye and lock buttons. */
+    void reserveScrollBarRoom();
+
 signals:
     /** Emitted on drop: the dragged rows and the row they were dropped onto
      *  (nullptr if dropped on empty space). */
@@ -74,6 +79,8 @@ signals:
     void dragFinished();
 
 protected:
+    void changeEvent(QEvent *e) override;
+
     // Let the base handle drag-move so the drop INDICATOR is drawn, then force
     // acceptance so a drop is allowed anywhere in the tree.
     void dragEnterEvent(QDragEnterEvent *e) override { QTreeWidget::dragEnterEvent(e); e->acceptProposedAction(); }
@@ -179,9 +186,23 @@ private:
     bool wasNodeCollapsed(NodeType type, quint32 id) const;
     /** Expand or collapse a node and all of its descendants. */
     static void setSubtreeExpanded(QTreeWidgetItem *node, bool expanded);
-    /** Hide tree rows that don't match @p text (matches keep their ancestors +
-     *  descendants visible); empty shows everything. */
+    /** Hide tree rows that don't match @p text (matches keep their ancestors
+     *  visible); empty shows everything. Applies "Selected only" too. */
     void filterTree(const QString &text);
+    /** The search box and "Selected only", together, on the rows as built. */
+    void applyFilters();
+    /** What is hung on what, as a tree: within one layer, a row moves under
+     *  the row of what it is mounted on -- a lantern under its hanger, the
+     *  hanger under its tower or truss, a bar under its truss or stand, a
+     *  crossbar under its boom. Rows under a fixture group stay there. */
+    void nestByMounts(QTreeWidgetItem *layerNode);
+    /** "kind:id" of what @p kind / @p id is mounted on, or empty. */
+    QString mountParentKey(const QString &kind, quint32 id) const;
+    /** A row's lock badge: a padlock when the object is locked on its own. */
+    QString lockBadge(const QString &kind, quint32 id) const;
+    /** A new empty folder on @p layerId (inside @p parentGroupId when not 0),
+     *  its name ready to type. */
+    void addFolder(quint32 layerId, quint32 parentGroupId);
     /** Create a lighting Fixture Group (prompted name) from the given fixtures —
      *  the explicit "make a control group" action (distinct from map Folders). */
     void createFixtureGroupFrom(const QList<quint32> &fixtureIds);
@@ -252,6 +273,8 @@ private:
 
     LayersTreeWidget *m_tree;
     class QLineEdit *m_search = nullptr;   //!< filter box above the tree
+    /** "Selected only": the list shows the selection and what holds it. */
+    QToolButton *m_selectedOnlyBtn = nullptr;
     QToolButton *m_addBtn;
     QToolButton *m_removeBtn;
     QToolButton *m_upBtn;

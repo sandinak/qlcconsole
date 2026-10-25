@@ -26,6 +26,7 @@
 #include "scene.h"
 #include "monitorproperties.h"
 #include "targetitem.h"
+#include "itemlock.h"
 #include "stagemarklabel.h"
 #include "stagetarget.h"
 #include "humanfigure.h"
@@ -335,10 +336,12 @@ void TargetItem::paint(QPainter *painter,
     painter->setRenderHint(QPainter::Antialiasing, true);
 
     const bool selected = option->state & QStyle::State_Selected;
-    QColor col = m_target->color().isValid() ? m_target->color() : QColor(255, 180, 0);
-    // A locked target is drawn red so the frozen state reads at a glance.
-    if (m_target->locked())
-        col = QColor(200, 60, 60);
+    /* Always its own colour -- the one set in Edit Target. Locked (its own
+       lock or its layer's) is said by a red ring round the mark, the way
+       every other locked thing is outlined red: painting the whole target
+       red lost the colour, and a line drawn red read as the wrong colour. */
+    const QColor col = m_target->color().isValid() ? m_target->color() : QColor(255, 180, 0);
+    const bool locked = ItemLock::drawnLocked(this, m_target->locked());
 
     /* The ground it covers, under everything else: tinted so the stage under
        it still reads, outlined so its edge is exact. */
@@ -450,6 +453,16 @@ void TargetItem::paint(QPainter *painter,
     painter->drawLine(QPointF( gap, 0), QPointF( arm, 0));
     painter->drawLine(QPointF(0, -arm), QPointF(0, -gap));
     painter->drawLine(QPointF(0,  gap), QPointF(0,  arm));
+
+    // Locked: a red dashed ring outside the mark.
+    if (locked)
+    {
+        QPen lockPen(QColor(200, 60, 60), 2.0);
+        lockPen.setStyle(Qt::DashLine);
+        painter->setPen(lockPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawEllipse(QPointF(0, 0), double(kRadius) + 6.0, double(kRadius) + 6.0);
+    }
 
     // Selection glow ring
     if (selected)

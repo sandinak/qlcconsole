@@ -376,6 +376,21 @@ their house lights, relays and subs.
 
 ### Fixtures and the plot
 
+- **Plot layers follows the plot.** Pick on the plot and Plot layers picks
+  the same rows, opens just their branches and scrolls to them. The
+  **Selected only** funnel shows only the selection and what holds it.
+  What hangs on what is a tree — Tower ▸ Hanger ▸ Lantern, Truss ▸ Bar ▸
+  Spot — and right-click a layer for **New Folder**. See
+  [Plot layers](lighting-studio.md#plot-layers).
+- **Two locks: an object's and its layer's.** **Lock Position** holds one
+  thing (still selectable, a padlock on its row); **Lock Layer** holds the
+  layer. A 0.2 show's **"Locked"** layer is taken apart when it opens, its
+  objects back on their layers and still locked. New things never land on
+  a locked layer. See [Locks](lighting-studio.md#locks).
+- **Line targets** draw in their own colour (a red ring when locked), and
+  their handles snap to the grid. See
+  [Line targets](stage-targets.md#line-targets).
+
 - **Snap takes the whole rig.** With **Snap** on, trusses, towers,
   stands, pipes and scenery land on the grid too, not only fixtures and
   platforms. See [Selecting and undo on the plot](lighting-studio.md#selecting-and-undo-on-the-plot).

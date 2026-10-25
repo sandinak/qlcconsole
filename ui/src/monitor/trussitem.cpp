@@ -27,6 +27,7 @@
 #include <QCursor>
 #include <QPixmap>
 
+#include "itemlock.h"
 #include "trussitem.h"
 
 static QCursor smallOpenHandCursor()
@@ -158,7 +159,7 @@ void TrussItem::paint(QPainter *painter,
     painter->setRenderHint(QPainter::Antialiasing, true);
 
     const bool selected = option->state & QStyle::State_Selected;
-    const bool locked   = m_truss->locked();
+    const bool locked   = ItemLock::drawnLocked(this, m_truss->locked());
 
     // Silver palette — nearly transparent fill so the background shows through,
     // with solid chord and web lines for structural clarity.

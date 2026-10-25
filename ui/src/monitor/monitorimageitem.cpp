@@ -14,6 +14,7 @@
 #include <QPainter>
 #include <QtMath>
 
+#include "itemlock.h"
 #include "monitorimageitem.h"
 #include "monitorproperties.h"
 #include "doc.h"
@@ -95,7 +96,7 @@ void MonitorImageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *
         painter->drawText(r, Qt::AlignCenter, QObject::tr("(image not found)"));
     }
 
-    const bool locked = m_doc->monitorProperties()->image(m_id).locked;
+    const bool locked = ItemLock::drawnLocked(this, m_doc->monitorProperties()->image(m_id).locked);
     const bool selected = option->state & QStyle::State_Selected;
     if (selected)
         painter->setPen(QPen(QColor(80, 170, 255), 2));

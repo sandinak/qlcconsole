@@ -46,6 +46,7 @@
 #include <QDialog>
 #include <QDockWidget>
 #include <QTreeWidget>
+#include <QProxyStyle>
 #include <QSettings>
 
 #define protected public
@@ -17020,7 +17021,7 @@ static int lockRedPixels(QGraphicsScene *scene, const QRectF &area)
     return n;
 }
 
-void Monitor_Test::aLockIsItsLayersAndDrawsRed()
+void Monitor_Test::anObjectAndItsLayerEachHaveALock()
 {
     Doc *doc = new Doc(this);
     MonitorProperties *props = doc->monitorProperties();
@@ -17062,18 +17063,34 @@ void Monitor_Test::aLockIsItsLayersAndDrawsRed()
         QVERIFY(fi != nullptr);
         const int redBefore = lockRedPixels(view.m_scene, fi->sceneBoundingRect());
 
-        // The menu offers the LAYER, by name.
+        // The menu offers both locks: the stand's own, and its LAYER's by name.
         QMenu menu;
         view.buildItemMenu(&menu, "stand", stand->id(), MonitorGraphicsView::MenuPlace());
         QVERIFY2(menuPaths(&menu).join("|").contains(QString::fromUtf8("Lock Layer “Rig”")),
                  qPrintable(menuPaths(&menu).join(" | ")));
+        QVERIFY2(menuPaths(&menu).contains("Lock Position"), qPrintable(menuPaths(&menu).join(" | ")));
 
-        // Locking the stand locks Rig, and so everything on Rig.
+        // Its own lock: the stand alone, still selectable, drawn red.
+        const int standRedBefore = lockRedPixels(view.m_scene, view.m_standItems.value(stand->id())->sceneBoundingRect());
         view.setItemLocked("stand", stand->id(), true);
+        QVERIFY(stand->locked());
+        QVERIFY(!props->layer(rig).locked);
+        QVERIFY(!t->locked());
+        QVERIFY(view.itemLocked("stand", stand->id()));
+        QVERIFY(!view.itemLocked("truss", t->id()));
+        QVERIFY(!(view.m_standItems.value(stand->id())->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY(view.m_standItems.value(stand->id())->flags() & QGraphicsItem::ItemIsSelectable);
+        QVERIFY(view.m_trussItems.value(t->id())->flags() & QGraphicsItem::ItemIsMovable);
+        QVERIFY(lockRedPixels(view.m_scene, view.m_standItems.value(stand->id())->sceneBoundingRect()) > standRedBefore + 4);
+        QMenu ownMenu;
+        view.buildItemMenu(&ownMenu, "stand", stand->id(), MonitorGraphicsView::MenuPlace());
+        QVERIFY(menuPaths(&ownMenu).contains("Unlock Position"));
+
+        // Its layer's lock: everything on Rig, the stand's own lock aside.
+        view.setItemLayerLocked("stand", stand->id(), true);
         QVERIFY(props->layer(rig).locked);
         QVERIFY(!props->layer(MonitorProperties::defaultLayerId).locked);
-        QVERIFY(stand->locked() && t->locked());
-        QVERIFY(doc->powerDistribution()->sources().first().locked);
+        QVERIFY(!t->locked());                          // its own flag is its own
         QVERIFY(!other->locked());
         QVERIFY(view.itemLocked("truss", t->id()));
         QVERIFY(view.itemLocked("fixture", spot->id()));
@@ -17083,6 +17100,7 @@ void Monitor_Test::aLockIsItsLayersAndDrawsRed()
         QVERIFY(!view.itemLocked("fixture", 999));
         QVERIFY(!(view.m_standItems.value(stand->id())->flags() & QGraphicsItem::ItemIsMovable));
         QVERIFY(view.m_standItems.value(other->id())->flags() & QGraphicsItem::ItemIsMovable);
+        QVERIFY(!(view.m_trussItems.value(t->id())->flags() & QGraphicsItem::ItemIsSelectable));
         QVERIFY(!(fi->flags() & QGraphicsItem::ItemIsMovable));
         QVERIFY(fi->isGhosted());
 
@@ -17095,29 +17113,37 @@ void Monitor_Test::aLockIsItsLayersAndDrawsRed()
         view.buildItemMenu(&menu2, "truss", t->id(), MonitorGraphicsView::MenuPlace());
         QVERIFY2(menuPaths(&menu2).join("|").contains(QString::fromUtf8("Unlock Layer “Rig”")),
                  qPrintable(menuPaths(&menu2).join(" | ")));
+        QVERIFY(menuPaths(&menu2).contains("Lock Position"));
 
         // Asking for an object that isn't there changes nothing.
-        view.setItemLocked("stand", 999, false);
+        view.setItemLayerLocked("stand", 999, false);
         QVERIFY(props->layer(rig).locked);
-        view.setItemLocked("truss", 999, true);
+        view.setItemLayerLocked("truss", 999, true);
         QVERIFY(!props->layer(MonitorProperties::defaultLayerId).locked);
+        view.setItemLocked("truss", 999, true);
 
-        // The power source's own toggle is the same lock.
-        view.slotPowerSourceLockToggled(0);
+        // Unlocking the layer leaves the stand held by its own lock.
+        view.setItemLayerLocked("truss", t->id(), false);
         QVERIFY(!props->layer(rig).locked);
-        QVERIFY(!stand->locked() && !t->locked());
+        QVERIFY(view.itemLocked("stand", stand->id()));
+        QVERIFY(!view.itemLocked("truss", t->id()));
         QVERIFY(!fi->isGhosted());
         QVERIFY(fi->flags() & QGraphicsItem::ItemIsMovable);
-        view.slotPowerSourceLockToggled(0);
-        QVERIFY(props->layer(rig).locked);
-        view.slotPowerSourceLockToggled(7);             // no such source: ignored
-        QVERIFY(props->layer(rig).locked);
+        QVERIFY(lockRedPixels(view.m_scene, view.m_trussItems.value(t->id())->sceneBoundingRect()) <= 4);
 
-        // A lock set straight on an object (an old habit) doesn't survive:
-        // its layer says what it is.
+        // The power source's own toggle is its own lock.
+        view.slotPowerSourceLockToggled(0);
+        QVERIFY(doc->powerDistribution()->sources().first().locked);
+        QVERIFY(!props->layer(rig).locked);
+        view.slotPowerSourceLockToggled(0);
+        QVERIFY(!doc->powerDistribution()->sources().first().locked);
+        view.slotPowerSourceLockToggled(7);             // no such source: ignored
+
+        // An object's own lock survives every refresh.
         other->setLocked(true);
         view.refreshItemLayerState();
-        QVERIFY(!other->locked());
+        QVERIFY(other->locked());
+        QVERIFY(!(view.m_standItems.value(other->id())->flags() & QGraphicsItem::ItemIsMovable));
     }
     delete doc;
 }
@@ -17923,19 +17949,21 @@ void Monitor_Test::networkNodesJoinLayersGroupsLocksAndRenames()
     QVERIFY(!view.itemsUnderGroup(gid).contains(itemB));
 
     /* Lock / unlock, from the plot, the Layers list and the node's own menu.
-       A lock is the LAYER's: locking node 1 locks its layer, and with it
-       every other object on that layer, while node 0 (elsewhere) stays free. */
+       A node's lock is its own: locking node 1 holds node 1, and its layer
+       (and everything else on it) stays as it was. Its layer has a lock of
+       its own as well. */
     const quint32 rack = props->addLayer("Rack");
     view.setItemLayer(itemB, rack);
     QVERIFY(!view.itemLocked("network", 1));
     view.setItemLocked("network", 1, true);
-    QVERIFY(props->layer(rack).locked);
-    QVERIFY(!props->layer(layer).locked);
+    QVERIFY(!props->layer(rack).locked);
     QVERIFY(m_doc->networkTopology()->nodes().at(1).locked);
     QVERIFY(!m_doc->networkTopology()->nodes().at(0).locked);
     QVERIFY(view.itemLocked("network", 1));
+    QVERIFY(view.itemOwnLocked("network", 1));
     QVERIFY(!view.itemLocked("network", 0));
     QVERIFY(!(view.m_networkNodeItems.at(1)->flags() & QGraphicsItem::ItemIsMovable));
+    QVERIFY(view.m_networkNodeItems.at(1)->flags() & QGraphicsItem::ItemIsSelectable);
     QVERIFY(view.m_networkNodeItems.at(0)->flags() & QGraphicsItem::ItemIsMovable);
     view.setItemLocked("network", 99, true);             // no such node: ignored
     QVERIFY(!props->layer(MonitorProperties::defaultLayerId).locked);
@@ -17944,12 +17972,19 @@ void Monitor_Test::networkNodesJoinLayersGroupsLocksAndRenames()
     QVERIFY(panel.kindLockable("network"));
     QVERIFY(panel.objectLocked("network", 1));
     panel.setObjectLocked("network", 1, false);
-    QVERIFY(!props->layer(rack).locked);
     QVERIFY(!m_doc->networkTopology()->nodes().at(1).locked);
     QVERIFY(!panel.objectLocked("network", 99));
     emit view.m_networkNodeItems.at(1)->lockToggleRequested(1);
-    QVERIFY(props->layer(rack).locked);
+    QVERIFY(!props->layer(rack).locked);
     QVERIFY(m_doc->networkTopology()->nodes().at(1).locked);
+    // The layer's lock: the node is held by it, and unselectable.
+    view.setItemLocked("network", 1, false);
+    view.setItemLayerLocked("network", 1, true);
+    QVERIFY(props->layer(rack).locked);
+    QVERIFY(!m_doc->networkTopology()->nodes().at(1).locked);
+    QVERIFY(view.itemLocked("network", 1));
+    QVERIFY(!(view.m_networkNodeItems.at(1)->flags() & QGraphicsItem::ItemIsSelectable));
+    view.setItemLayerLocked("network", 1, false);
     view.slotNetworkNodeLockToggled(99);                 // ignored
     view.setItemLocked("network", 1, false);
 
@@ -25298,4 +25333,736 @@ void Monitor_Test::aFixedLightAimedByPanAndTiltThrowsItsPoolThere()
     const QVector3D want = QVector3D(-1.0f, 0.0f, -1.0f).normalized();
     QVERIFY2((dir.normalized() - want).length() < 0.02f,
              qPrintable(QString("the rig view's beam goes %1,%2,%3").arg(dir.x()).arg(dir.y()).arg(dir.z())));
+}
+
+namespace
+{
+/* The top-level Plot layers row named @p name. */
+QTreeWidgetItem *layerRowNamed(MonitorLayersPanel &panel, const QString &name)
+{
+    for (int i = 0; i < panel.m_tree->topLevelItemCount(); ++i)
+        if (panel.m_tree->topLevelItem(i)->text(0) == name)
+            return panel.m_tree->topLevelItem(i);
+    return nullptr;
+}
+
+/* A row's name, without what the list adds after it. */
+QString rowName(const QTreeWidgetItem *row)
+{
+    return row == nullptr ? QString() : row->text(0).section(QStringLiteral("  "), 0, 0).trimmed();
+}
+
+/* The top-level row a row is in. */
+QTreeWidgetItem *topOf(QTreeWidgetItem *row)
+{
+    while (row != nullptr && row->parent() != nullptr)
+        row = row->parent();
+    return row;
+}
+
+Fixture *plainFixture(Doc *doc, const QString &name, quint32 addr)
+{
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setChannels(1);
+    f->setAddress(addr);
+    doc->addFixture(f);
+    return f;
+}
+
+/* Save @p doc and load it into @p into; @p edit may change the XML first. */
+bool saveAndLoad(Doc *doc, Doc *into, const std::function<void(QByteArray &)> &edit)
+{
+    QByteArray ws;
+    QXmlStreamWriter ww(&ws);
+    ww.writeStartDocument();
+    if (!doc->saveXML(&ww))
+        return false;
+    ww.writeEndDocument();
+    if (edit)
+        edit(ws);
+    QXmlStreamReader rr(ws);
+    while (rr.readNextStartElement() && rr.name() != QStringLiteral("Engine"))
+        ;
+    return into->loadXML(rr);
+}
+
+class OverlayScrollStyle final : public QProxyStyle
+{
+public:
+    int styleHint(StyleHint hint, const QStyleOption *opt = nullptr, const QWidget *w = nullptr,
+                  QStyleHintReturn *ret = nullptr) const override
+    {
+        if (hint == QStyle::SH_ScrollBar_Transient)
+            return 1;
+        return QProxyStyle::styleHint(hint, opt, w, ret);
+    }
+};
+} // namespace
+
+void Monitor_Test::plotSelectionOpensOnlyItsBranchesInLayers()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 rig = props->addLayer("Rig");
+    const quint32 floorLayer = props->addLayer("Floor");
+    Truss *t = props->addTruss();
+    t->setName("FOH Truss");
+    t->setOrigin(QVector3D(2.0f, 2.0f, 6.0f));
+    t->setLength(6.0f);
+    t->setLayerId(rig);
+    Fixture *onTruss = plainFixture(doc, "FOH Wash", 0);
+    QList<Fixture *> floor;
+    for (int i = 0; i < 30; ++i)
+        floor << plainFixture(doc, QString("Floor %1").arg(i + 1, 2, 10, QChar('0')), 10 + i);
+    // A fixture group across both layers: its fixtures are listed again under it.
+    FixtureGroup *across = new FixtureGroup(doc);
+    across->setName("Across");
+    QVERIFY(doc->addFixtureGroup(across));
+    across->assignFixture(onTruss->id());
+    across->assignFixture(floor.at(25)->id());
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTrusses();
+        view.ensureFixtureOnPlot(onTruss->id());
+        view.attachFixtureToTruss(onTruss->id(), t->id());
+        props->setFixtureLayer(onTruss->id(), rig);
+        foreach (Fixture *f, floor)
+        {
+            view.ensureFixtureOnPlot(f->id());
+            props->setFixtureLayer(f->id(), floorLayer);
+        }
+        MonitorLayersPanel panel(doc, &view);
+        panel.resize(300, 320);
+        panel.show();
+        panel.reload();
+        QCoreApplication::processEvents();
+        QTreeWidgetItem *rigRow = layerRowNamed(panel, "Rig");
+        QVERIFY(rigRow != nullptr);
+        rigRow->setExpanded(false);
+
+        // One: its row, its branch opened, Rig left closed, in view.
+        view.selectMapItem("fixture", floor.at(20)->id());
+        QList<QTreeWidgetItem *> sel = panel.m_tree->selectedItems();
+        QCOMPARE(sel.size(), 1);
+        QCOMPARE(rowName(sel.first()), QString("Floor 21"));
+        for (QTreeWidgetItem *up = sel.first()->parent(); up != nullptr; up = up->parent())
+            QVERIFY(up->isExpanded());
+        QVERIFY(!rigRow->isExpanded());
+        QVERIFY(panel.m_tree->viewport()->rect().intersects(panel.m_tree->visualItemRect(sel.first())));
+
+        // Several: one row each, where they are -- not again under "Across".
+        view.selectMapItems({ qMakePair(QString("fixture"), onTruss->id()),
+                              qMakePair(QString("fixture"), floor.at(25)->id()) });
+        sel = panel.m_tree->selectedItems();
+        QCOMPARE(sel.size(), view.selectedMapObjects().size());
+        QStringList names;
+        foreach (QTreeWidgetItem *row, sel)
+        {
+            names << rowName(row);
+            QVERIFY2(rowName(topOf(row)) != QString("Fixture Groups"), qPrintable(rowName(row)));
+            for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+                QVERIFY(up->isExpanded());
+        }
+        QVERIFY(names.contains("FOH Wash") && names.contains("Floor 26"));
+        QVERIFY(rigRow->isExpanded());
+        QTreeWidgetItem *acrossRow = layersRow(panel, "Across");
+        QVERIFY(acrossRow != nullptr);
+        QVERIFY2(!acrossRow->isExpanded(), "the fixture group listing them again was opened");
+        QTreeWidgetItem *first = nullptr;
+        for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr && first == nullptr; ++it)
+            if ((*it)->isSelected())
+                first = *it;
+        QVERIFY(panel.m_tree->viewport()->rect().intersects(panel.m_tree->visualItemRect(first)));
+        // ...and the list did not hand anything back to the plot.
+        QCOMPARE(view.selectedMapObjects().size(), sel.size());
+    }
+}
+
+void Monitor_Test::selectedOnlyShowsTheSelectionAndWhatHoldsIt()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 rig = props->addLayer("Rig");
+    Truss *t = props->addTruss();
+    t->setName("FOH Truss");
+    t->setOrigin(QVector3D(2.0f, 2.0f, 6.0f));
+    t->setLength(6.0f);
+    t->setLayerId(rig);
+    Fixture *onTruss = plainFixture(doc, "FOH Wash", 0);
+    Fixture *loose = plainFixture(doc, "Floor Par", 10);
+    Fixture *other = plainFixture(doc, "Side Par", 20);
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTrusses();
+        view.ensureFixtureOnPlot(onTruss->id());
+        view.attachFixtureToTruss(onTruss->id(), t->id());
+        view.ensureFixtureOnPlot(loose->id());
+        view.ensureFixtureOnPlot(other->id());
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+        QToolButton *only = panel.findChild<QToolButton *>("layersSelectedOnly");
+        QVERIFY(only != nullptr);
+        QVERIFY(only->isCheckable());
+        QVERIFY2(!only->isChecked(), "Selected only is on by default");
+
+        auto shown = [&panel]() {
+            QStringList out;
+            for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr; ++it)
+            {
+                bool hidden = false;
+                for (QTreeWidgetItem *r = *it; r != nullptr; r = r->parent())
+                    hidden = hidden || r->isHidden();
+                if (!hidden)
+                    out << rowName(*it);
+            }
+            return out;
+        };
+        const int everything = shown().size();
+
+        view.selectMapItem("fixture", loose->id());
+        QCOMPARE(shown().size(), everything);         // off: nothing hidden
+        only->setChecked(true);
+        QStringList now = shown();
+        QVERIFY2(now.contains("Floor Par"), qPrintable(now.join(", ")));
+        QVERIFY2(!now.contains("Side Par") && !now.contains("FOH Wash") && !now.contains("Rig"),
+                 qPrintable(now.join(", ")));
+        // What holds it: its layer.
+        QTreeWidgetItem *looseRow = panel.m_tree->selectedItems().value(0);
+        QVERIFY(looseRow != nullptr);
+        for (QTreeWidgetItem *up = looseRow->parent(); up != nullptr; up = up->parent())
+            QVERIFY(now.contains(rowName(up)));
+
+        // It follows the plot -- and survives a rebuild.
+        view.selectMapItem("fixture", onTruss->id());
+        panel.reload();
+        now = shown();
+        QVERIFY2(now.contains("FOH Wash") && now.contains("FOH Truss") && now.contains("Rig"),
+                 qPrintable(now.join(", ")));
+        QVERIFY2(!now.contains("Floor Par") && !now.contains("Side Par"), qPrintable(now.join(", ")));
+
+        // Off: everything again.
+        only->setChecked(false);
+        QCOMPARE(shown().size(), everything);
+    }
+}
+
+void Monitor_Test::targetsFollowTheirLayersEyeAndLock()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 marks = props->addLayer("Marks");
+    StageTarget *a = props->addStageTarget();
+    a->setName("Mark A");
+    a->setPosition(QVector3D(3.0f, 3.0f, 0.0f));
+    a->setLayerId(marks);
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.updateTargets();
+        auto item = [&]() { return view.m_targetItems.value(a->id(), nullptr); };
+        auto movable = [&]() { return bool(item()->flags() & QGraphicsItem::ItemIsMovable); };
+        auto selectable = [&]() { return bool(item()->flags() & QGraphicsItem::ItemIsSelectable); };
+        QVERIFY(item() != nullptr);
+        QVERIFY(item()->isVisible() && movable() && selectable());
+
+        // The layer's eye.
+        props->setLayerVisible(marks, false);
+        view.refreshItemLayerState();
+        QVERIFY(!item()->isVisible());
+        props->setLayerVisible(marks, true);
+        view.refreshItemLayerState();
+        QVERIFY(item()->isVisible());
+
+        // The layer's lock: held, and not picked.
+        props->setLayerLocked(marks, true);
+        view.refreshItemLayerState();
+        QVERIFY(!movable() && !selectable());
+        QVERIFY(view.itemLocked("target", a->id()));
+        // From the front as well (an elevation used to ignore the layer).
+        view.setViewPOV(MonitorGraphicsView::PovFront);
+        view.updateTargets();
+        QVERIFY(!movable());
+        props->setLayerLocked(marks, false);
+        view.refreshItemLayerState();
+        QVERIFY(movable() && selectable());
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.updateTargets();
+
+        // Its own lock: held, still picked, and listed with a padlock.
+        view.setItemLocked("target", a->id(), true);
+        QVERIFY(a->locked());
+        QVERIFY(!props->layer(marks).locked);
+        QVERIFY(!movable() && selectable());
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+        QTreeWidgetItem *row = layersRow(panel, "Mark A");
+        QVERIFY(row != nullptr);
+        QVERIFY2(row->text(0).contains(QString::fromUtf8("\xF0\x9F\x94\x92")), qPrintable(row->text(0)));
+        QCOMPARE(rowName(topOf(row)), QString("Marks"));
+        view.setItemLocked("target", a->id(), false);
+        QVERIFY(movable());
+    }
+}
+
+void Monitor_Test::aLineTargetKeepsItsColourLocksAndSnaps()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+
+    // Placed while the active layer is locked: on the first unlocked one.
+    const quint32 marks = props->addLayer("Marks");
+    props->setLayerLocked(MonitorProperties::defaultLayerId, true);
+    QCOMPARE(props->placementLayerId(), marks);
+    props->setLayerLocked(MonitorProperties::defaultLayerId, false);
+    QCOMPARE(props->placementLayerId(), quint32(MonitorProperties::defaultLayerId));
+
+    StageTarget *line = props->addStageTarget();
+    line->setName("Line 1");
+    line->setPosition(QVector3D(5.0f, 3.0f, 0.0f));
+    line->makeLine();                              // (3,3) .. (7,3)
+    line->setColor(QColor("#FFB400"));
+    line->setLayerId(marks);
+    auto world = [&]() { return props->targetLinePoints(line); };
+    auto near = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 0.03f; };
+    auto str = [](const QVector3D &v) {
+        return QString("(%1, %2, %3)").arg(double(v.x()), 0, 'f', 2)
+                                      .arg(double(v.y()), 0, 'f', 2).arg(double(v.z()), 0, 'f', 2);
+    };
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 7));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+    view.updateTargets();
+    view.show();
+    QCoreApplication::processEvents();
+    auto vpOf = [&](float x, float y) {
+        return view.mapFromScene(view.projectMm(double(x) * 1000.0, double(y) * 1000.0, 0.0));
+    };
+    auto send = [&](QEvent::Type type, const QPoint &vp) {
+        const Qt::MouseButton b = (type == QEvent::MouseMove) ? Qt::NoButton : Qt::LeftButton;
+        const Qt::MouseButtons held = (type == QEvent::MouseButtonRelease) ? Qt::NoButton : Qt::LeftButton;
+        QMouseEvent ev(type, vp, view.viewport()->mapToGlobal(vp), b, held, Qt::NoModifier);
+        QApplication::sendEvent(view.viewport(), &ev);
+    };
+    auto drag = [&](const QPoint &from, const QPoint &to) {
+        send(QEvent::MouseButtonPress, from);
+        send(QEvent::MouseMove, from + (to - from) / 2);
+        send(QEvent::MouseMove, to);
+        send(QEvent::MouseButtonRelease, to);
+        QCoreApplication::processEvents();
+    };
+    auto amberPixels = [&](TargetItem *ti) {
+        const QRectF area = ti->sceneBoundingRect();
+        QImage img(area.size().toSize() + QSize(4, 4), QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        view.m_scene->render(&p, QRectF(2, 2, area.width(), area.height()), area);
+        p.end();
+        int n = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.red() > 225 && qAbs(c.green() - 180) < 35 && c.blue() < 70)
+                    n++;
+            }
+        return n;
+    };
+
+    TargetItem *ti = view.m_targetItems.value(line->id(), nullptr);
+    QVERIFY(ti != nullptr && ti->isLine());
+    QVERIFY(ti->flags() & QGraphicsItem::ItemIsMovable);
+    // Its colour, not red.
+    const int amber = amberPixels(ti);
+    QVERIFY2(amber > 200, qPrintable(QString("%1 amber pixels").arg(amber)));
+    QVERIFY2(lockRedPixels(view.m_scene, ti->sceneBoundingRect()) < 10, "an unlocked line drew red");
+
+    // Locked: still its colour, a red ring, and the handles hold.
+    view.setItemLocked("target", line->id(), true);
+    QVERIFY(amberPixels(ti) > amber / 2);
+    QVERIFY2(lockRedPixels(view.m_scene, ti->sceneBoundingRect()) > 20, "a locked line shows no red ring");
+    const QVector<QVector3D> held = line->linePoints();
+    drag(vpOf(7.0f, 3.0f), vpOf(8.0f, 4.0f));
+    QCOMPARE(line->linePoints(), held);
+    view.setItemLocked("target", line->id(), false);
+
+    // An end handle, snapped to the grid: that end moves, one undo step.
+    view.setSnapDivisions(1);
+    const int undoBefore = view.m_moveUndo.size();
+    drag(vpOf(7.0f, 3.0f), vpOf(8.3f, 4.2f));
+    const QVector3D end = world().last();
+    const QPointF endPx = view.projectMm(double(end.x()) * 1000.0, double(end.y()) * 1000.0, 0.0);
+    QVERIFY2(QLineF(view.snapScenePos(endPx), endPx).length() < 0.5,
+             qPrintable("the end is off the grid: " + str(end)));
+    QVERIFY2(!near(end, QVector3D(8.3f, 4.2f, 0)) && (end - QVector3D(8.3f, 4.2f, 0)).length() < 1.0f,
+             qPrintable(str(end)));
+    QVERIFY2(near(world().first(), QVector3D(3, 3, 0)), qPrintable(str(world().first())));
+    QCOMPARE(view.m_moveUndo.size(), undoBefore + 1);
+    view.undoLastMove();
+    QVERIFY2(near(world().last(), QVector3D(7, 3, 0)), qPrintable(str(world().last())));
+    QCOMPARE(view.m_moveUndo.size(), undoBefore);
+
+    // The body moves the whole line, on the grid too.
+    view.m_scene->clearSelection();
+    drag(vpOf(5.0f, 3.0f), vpOf(5.0f, 5.2f));
+    const QVector3D c = line->position();
+    const QPointF cPx = view.projectMm(double(c.x()) * 1000.0, double(c.y()) * 1000.0, 0.0);
+    QVERIFY2(QLineF(view.snapScenePos(cPx), cPx).length() < 0.5, qPrintable("off the grid: " + str(c)));
+    QVERIFY2(qAbs(c.y() - 5.2f) < 0.6f && qAbs(c.x() - 5.0f) < 0.6f, qPrintable(str(c)));
+    QVERIFY(near(world().first() - c, QVector3D(-2, 0, 0)) && near(world().last() - c, QVector3D(2, 0, 0)));
+    view.undoLastMove();
+    QVERIFY(near(line->position(), QVector3D(5, 3, 0)));
+}
+
+void Monitor_Test::aStructureMovedToALayerTakesItsMountsWithIt()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 trusses = props->addLayer("Trusses");
+    const quint32 parked = props->addLayer("Parked");
+
+    Truss *t2 = props->addTruss();
+    t2->setName("T-2");
+    t2->setType(Truss::Vertical);
+    t2->setOrigin(QVector3D(6.0f, 3.5f, 0.0f));
+    t2->setLength(3.0f);
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 6");
+    bar->setParentTrussId(t2->id());
+    bar->setParentOffset(2.8f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+    props->recomputeChildTrusses();
+    Hanger *hook = props->addHanger(Hanger::OnTruss, t2->id());
+    hook->setName("Hanger 4");
+    hook->setAlong(2.5f);
+    props->recomputeHangers();
+    Fixture *onTruss = plainFixture(doc, "T2 Spot", 0);
+    Fixture *onBar = plainFixture(doc, "T2 Bar Spot", 10);
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, "T-2", parked, 0);
+    foreach (Truss *t, QList<Truss *>() << t2 << bar)
+    {
+        t->setGroupId(gid);
+        t->setLayerId(parked);
+    }
+    hook->setLayerId(parked);
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(14, 8));
+        view.updateTrusses();
+        view.ensureFixtureOnPlot(onTruss->id());
+        view.ensureFixtureOnPlot(onBar->id());
+        view.attachFixtureToTruss(onTruss->id(), t2->id());
+        view.attachFixtureToTruss(onBar->id(), bar->id());
+        view.ensureGroupRegistry();
+        QCOMPARE(t2->groupId(), gid);
+        QCOMPARE(props->fixtureGroup(onTruss->id()), gid);
+
+        // Move to Layer on the truss: the truss and all it carries.
+        view.reparentToLayer({ qMakePair(QString("truss"), t2->id()) }, trusses);
+        QCOMPARE(t2->layerId(), trusses);
+        QCOMPARE(t2->groupId(), gid);
+        QCOMPARE(props->group(gid).layerId, trusses);
+        QCOMPARE(bar->layerId(), trusses);
+        QCOMPARE(hook->layerId(), trusses);
+        QCOMPARE(props->fixtureLayer(onTruss->id()), trusses);
+        QCOMPARE(props->fixtureLayer(onBar->id()), trusses);
+        // The same with its whole selection, as the plot's menu passes it.
+        view.selectMapItem("truss", t2->id());
+        view.reparentToLayer(view.selectedMapObjects() << qMakePair(QString("fixture"), onTruss->id()), parked);
+        QCOMPARE(t2->groupId(), gid);
+        QCOMPARE(props->fixtureGroup(onTruss->id()), gid);
+        QCOMPARE(props->fixtureLayer(onTruss->id()), parked);
+        view.reparentToLayer({ qMakePair(QString("truss"), t2->id()) }, trusses);
+
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+        QTreeWidgetItem *spot = layersRow(panel, "T2 Spot");
+        QVERIFY(spot != nullptr);
+        QCOMPARE(rowName(topOf(spot)), QString("Trusses"));
+        QCOMPARE(rowName(spot->parent()), QString("T-2"));
+    }
+
+    // An old show: T-1 moved alone onto a locked "Locked" layer, its folder
+    // left on Trusses. Loaded, it is back on Trusses, locked on its own.
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setOrigin(QVector3D(3.0f, 3.5f, 0.0f));
+    t1->setLength(4.0f);
+    const quint32 lockedLayer = props->addLayer("Locked");
+    props->setLayerLocked(lockedLayer, true);
+    const quint32 g1 = props->nextGroupId();
+    props->createGroup(g1, "T-1", trusses, 0);
+    props->setGroupAnchor(g1, QStringLiteral("truss"), t1->id());
+    t1->setGroupId(g1);
+    t1->setLayerId(lockedLayer);
+    t1->setLocked(true);
+    Fixture *loose = plainFixture(doc, "Spare Spot", 20);
+    props->setFixturePosition(loose->id(), 0, 0, QVector3D(1000.0f, 6000.0f, 0.0f));
+    props->setFixtureLayer(loose->id(), trusses);
+
+    QScopedPointer<Doc> loadedOwner(new Doc(this));
+    Doc *loaded = loadedOwner.data();
+    QVERIFY(saveAndLoad(doc, loaded, [](QByteArray &xml) { xml.replace(" ItemLocks=\"1\"", ""); }));
+    MonitorProperties *lp = loaded->monitorProperties();
+    QVERIFY(!lp->hasLayer(lockedLayer));            // emptied, so gone
+    QCOMPARE(lp->truss(t1->id())->layerId(), trusses);
+    QVERIFY(lp->truss(t1->id())->locked());
+    {
+        MonitorGraphicsView view(loaded);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(14, 8));
+        view.updateTrusses();
+        view.addFixture(loose->id(), QPointF(1000.0, 6000.0));
+        view.ensureGroupRegistry();
+        // Locked on its own: held, but still picked (so it can be unlocked).
+        TrussItem *ti = view.m_trussItems.value(t1->id());
+        QVERIFY(ti != nullptr);
+        QVERIFY(!(ti->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY(ti->flags() & QGraphicsItem::ItemIsSelectable);
+
+        MonitorLayersPanel panel(loaded, &view);
+        panel.reload();
+        QVERIFY(layerRowNamed(panel, "Locked") == nullptr);
+        QTreeWidgetItem *t1Row = layersRow(panel, "T-1");
+        QVERIFY(t1Row != nullptr);
+        QCOMPARE(rowName(topOf(t1Row)), QString("Trusses"));
+        // A fixture dropped on it goes back onto the truss.
+        QTreeWidgetItem *spareRow = layersRow(panel, "Spare Spot");
+        QVERIFY(spareRow != nullptr);
+        panel.handleTreeDrop({ spareRow }, t1Row);
+        QCoreApplication::processEvents();
+        QCOMPARE(lp->fixtureRigProps(loose->id()).trussId, t1->id());
+        panel.reload();
+        spareRow = layersRow(panel, "Spare Spot");
+        QVERIFY(spareRow != nullptr);
+        QCOMPARE(rowName(spareRow->parent()), QString("T-1"));
+    }
+}
+
+void Monitor_Test::theScrollBarLeavesTheLockButtonsClear()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    for (int i = 1; i <= 25; ++i)
+        props->addLayer(QString("L%1").arg(i));
+    {
+        MonitorGraphicsView view(doc);
+        MonitorLayersPanel panel(doc, &view);
+        OverlayScrollStyle *overlay = new OverlayScrollStyle;
+        overlay->setParent(&panel);
+        panel.m_tree->setStyle(overlay);
+        panel.m_tree->verticalScrollBar()->setStyle(overlay);
+        panel.m_tree->horizontalScrollBar()->setStyle(overlay);
+        panel.m_tree->reserveScrollBarRoom();
+        panel.resize(320, 300);
+        panel.show();
+        panel.reload();
+        QCoreApplication::processEvents();
+
+        QScrollBar *bar = panel.m_tree->verticalScrollBar();
+        QVERIFY2(bar->maximum() > 0, "the list does not scroll");
+        const QRect barRect(bar->mapTo(panel.m_tree, QPoint(0, 0)), bar->size());
+        QWidget *vp = panel.m_tree->viewport();
+        const QRect vpRect(vp->mapTo(panel.m_tree, QPoint(0, 0)), vp->size());
+        QVERIFY2(!vpRect.intersects(barRect),
+                 qPrintable(QString("the list runs under the scroll bar: list right %1, bar left %2")
+                            .arg(vpRect.right()).arg(barRect.left())));
+        int checked = 0;
+        for (int i = 0; i < panel.m_tree->topLevelItemCount(); ++i)
+        {
+            QTreeWidgetItem *row = panel.m_tree->topLevelItem(i);
+            QWidget *w = panel.m_tree->itemWidget(row, 1);
+            if (w == nullptr || !vp->rect().intersects(panel.m_tree->visualItemRect(row)))
+                continue;
+            const QList<QToolButton *> buttons = w->findChildren<QToolButton *>();
+            QVERIFY(!buttons.isEmpty());
+            QToolButton *lock = buttons.last();
+            const QRect r(lock->mapTo(panel.m_tree, QPoint(0, 0)), lock->size());
+            QVERIFY2(!r.intersects(barRect), qPrintable(row->text(0)));
+            QVERIFY2(vpRect.contains(r), qPrintable(row->text(0) + " lock cut off"));
+            checked++;
+        }
+        QVERIFY(checked > 3);
+    }
+}
+
+void Monitor_Test::newFolderFromALayersMenu()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 rig = props->addLayer("Rig");
+    {
+        MonitorGraphicsView view(doc);
+        MonitorLayersPanel panel(doc, &view);
+        panel.resize(320, 400);
+        panel.show();
+        panel.reload();
+        QCoreApplication::processEvents();
+        QTreeWidgetItem *rigRow = layerRowNamed(panel, "Rig");
+        QVERIFY(rigRow != nullptr);
+
+        QMenu menu;
+        panel.buildContextMenu(&menu, rigRow);
+        QVERIFY(menuPaths(&menu).contains("New Layer"));
+        QAction *folder = menu.findChild<QAction *>("layersNewFolder");
+        QVERIFY(folder != nullptr);
+        const int before = props->groups().size();
+        folder->trigger();
+        QCOMPARE(props->groups().size(), before + 1);
+        MonitorProperties::MonitorGroup made;
+        foreach (const MonitorProperties::MonitorGroup &g, props->groups())
+            if (g.name == QStringLiteral("New Folder"))
+                made = g;
+        QVERIFY(made.id != 0);
+        QCOMPARE(made.layerId, rig);
+        QCOMPARE(made.parentGroupId, quint32(0));
+        // Its name is open to type: typed and Return.
+        QVERIFY(panel.m_tree->isEditing());
+        QLineEdit *edit = panel.m_tree->findChild<QLineEdit *>();
+        QVERIFY(edit != nullptr);
+        edit->setText("Specials");
+        QTest::keyClick(edit, Qt::Key_Return);
+        QCoreApplication::processEvents();
+        QVERIFY(!panel.m_tree->isEditing());
+        QCOMPARE(props->group(made.id).name, QString("Specials"));
+        QTreeWidgetItem *folderRow = layersRow(panel, "Specials");
+        QVERIFY(folderRow != nullptr);
+        QCOMPARE(rowName(topOf(folderRow)), QString("Rig"));
+
+        // A folder inside it.
+        QMenu menu2;
+        panel.buildContextMenu(&menu2, folderRow);
+        QAction *inside = menu2.findChild<QAction *>("layersNewSubFolder");
+        QVERIFY(inside != nullptr);
+        inside->trigger();
+        QVERIFY(panel.m_tree->isEditing());
+        QLineEdit *edit2 = panel.m_tree->findChild<QLineEdit *>();
+        QVERIFY(edit2 != nullptr);
+        QTest::keyClick(edit2, Qt::Key_Escape);
+        QCoreApplication::processEvents();
+        QCOMPARE(props->childGroups(made.id).size(), 1);
+        QCOMPARE(props->childGroups(made.id).first().layerId, rig);
+    }
+}
+
+void Monitor_Test::mountsNestInPlotLayers()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+
+    Tower *tower = props->addTower();
+    tower->setName("SL Tower");
+    tower->setOriginX(2.0f);
+    tower->setOriginY(3.0f);
+    Hanger *hook = props->addHanger(Hanger::OnTower, tower->id());
+    hook->setName("Hook 1");
+    hook->setAlong(2.0f);
+
+    Truss *foh = props->addTruss();
+    foh->setName("FOH Pipe");
+    foh->setOrigin(QVector3D(1.0f, 1.0f, 6.0f));
+    foh->setLength(8.0f);
+    Truss *bar = props->addTruss();
+    bar->setName("Ladder Bar");
+    bar->setParentTrussId(foh->id());
+    bar->setParentOffset(4.0f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+
+    Stand *stand = props->addStand();
+    stand->setName("Stand A");
+    stand->setOriginX(9.0f);
+    stand->setOriginY(5.0f);
+    Truss *standBar = props->addTruss();
+    standBar->setName("Stand Bar");
+    standBar->setStandId(stand->id());
+    standBar->setLength(1.2f);
+
+    Pipe *boom = props->addPipe();
+    boom->setName("Boom SR");
+    Pipe *cross = props->addPipe();
+    cross->setName("Crossbar");
+    cross->setParentPipeId(boom->id());
+
+    props->recomputeChildTrusses();
+    props->recomputeHangers();
+
+    Fixture *lantern = plainFixture(doc, "Lantern A", 0);
+    Fixture *spot = plainFixture(doc, "Bar Spot", 10);
+    Fixture *spare = plainFixture(doc, "Spare Lantern", 20);
+    Fixture *spare2 = plainFixture(doc, "Spare Spot", 30);
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTrusses();
+        view.updatePlatforms();
+        view.attachFixtureToHanger(lantern->id(), hook->id());
+        view.ensureFixtureOnPlot(spot->id());
+        view.attachFixtureToTruss(spot->id(), bar->id());
+        view.ensureFixtureOnPlot(spare->id());
+        view.ensureFixtureOnPlot(spare2->id());
+        view.ensureGroupRegistry();
+        QVERIFY(props->fixtureRigProps(lantern->id()).onHanger());
+
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+        auto chain = [&panel](const QString &name) {
+            QStringList out;
+            for (QTreeWidgetItem *r = layersRow(panel, name); r != nullptr; r = r->parent())
+                out.prepend(rowName(r));
+            return out.join(" > ");
+        };
+        QVERIFY2(chain("Lantern A").endsWith("SL Tower > Hook 1 > Lantern A"), qPrintable(chain("Lantern A")));
+        QVERIFY2(chain("Bar Spot").endsWith("FOH Pipe > Ladder Bar > Bar Spot"), qPrintable(chain("Bar Spot")));
+        QVERIFY2(chain("Stand Bar").endsWith("Stand A > Stand Bar"), qPrintable(chain("Stand Bar")));
+        QVERIFY2(chain("Crossbar").endsWith("Boom SR > Crossbar"), qPrintable(chain("Crossbar")));
+        // Each is listed once.
+        int lanterns = 0;
+        for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr; ++it)
+            if (rowName(*it) == QString("Lantern A"))
+                lanterns++;
+        QCOMPARE(lanterns, 1);
+
+        // Dropped on the hanger's row: hung on it.
+        panel.handleTreeDrop({ layersRow(panel, "Spare Lantern") }, layersRow(panel, "Hook 1"));
+        QCoreApplication::processEvents();
+        QCOMPARE(props->fixtureOnHanger(hook->id()), spare->id());
+        // Dropped on a fixture hung on the bar: onto the bar.
+        panel.reload();
+        panel.handleTreeDrop({ layersRow(panel, "Spare Spot") }, layersRow(panel, "Bar Spot"));
+        QCoreApplication::processEvents();
+        QCOMPARE(props->fixtureRigProps(spare2->id()).trussId, bar->id());
+        panel.reload();
+        QVERIFY2(chain("Spare Lantern").endsWith("SL Tower > Hook 1 > Spare Lantern"), qPrintable(chain("Spare Lantern")));
+        QVERIFY2(chain("Spare Spot").endsWith("FOH Pipe > Ladder Bar > Spare Spot"), qPrintable(chain("Spare Spot")));
+    }
 }

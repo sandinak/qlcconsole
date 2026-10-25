@@ -18,6 +18,7 @@
 #include <QMenu>
 #include <QtMath>
 
+#include "itemlock.h"
 #include "standitem.h"
 #include "stand.h"
 #include "monitorproperties.h"
@@ -91,7 +92,7 @@ void StandItem::paint(QPainter *painter,
     QColor base = m_stand->color();
     if (!base.isValid())
         base = QColor(120, 120, 130);
-    QColor border = m_stand->locked() ? QColor(200, 60, 60)
+    QColor border = ItemLock::drawnLocked(this, m_stand->locked()) ? QColor(200, 60, 60)
                                       : base.darker(selected ? 160 : 130);
 
     if (m_elevation)

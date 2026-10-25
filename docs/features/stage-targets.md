@@ -87,6 +87,13 @@ choosing **Line** as its Subject in the Edit Target dialog.
 | **⇧-drag** a handle | Keeps the drag level or upright on screen |
 | ⌘Z | Undoes the last of any of these |
 
+With **Snap** on, a dragged handle and a dragged target land on the grid.
+A line is drawn in the colour set in Edit Target; locked (its own lock,
+from its right-click menu, or its layer's) it gets a red ring and its
+handles don't drag -- unlock it to shape it. A target is shown, hidden and
+locked with its layer like everything else, and a new one never lands on
+a locked layer (see [Locks](lighting-studio.md#locks)).
+
 From above, a handle keeps its height above whatever is under it; the
 **Front** and **Side** views drag it up and down — so between the views a
 line can curve in any direction. Double-click the centre crosshair (or

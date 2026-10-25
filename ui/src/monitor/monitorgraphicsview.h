@@ -700,9 +700,17 @@ public:
     /** The layer an object is on (fixture included); @p found says whether
      *  the object exists at all (an unknown one reports layer 0). */
     quint32 objectLayerId(const QString &kind, quint32 id, bool *found = nullptr) const;
-    /** Whether @p kind / @p id is held in place: its LAYER is locked. */
+    /** Whether @p kind / @p id is held in place: its own lock or its
+     *  layer's is on. */
     bool itemLocked(const QString &kind, quint32 id) const;
+    /** The object's OWN lock (not its layer's). A fixture has none. */
+    bool itemOwnLocked(const QString &kind, quint32 id) const;
+    /** Whether the object's kind has a lock of its own. */
+    static bool kindHasOwnLock(const QString &kind);
+    /** Lock or unlock the object itself; its layer is left as it is. */
     void setItemLocked(const QString &kind, quint32 id, bool locked);
+    /** Lock or unlock the layer the object is on -- everything on it. */
+    void setItemLayerLocked(const QString &kind, quint32 id, bool locked);
 
     /** Delete an item the way its own menu does, asking first where it asks. */
     void requestDeleteItem(const QString &kind, quint32 id);

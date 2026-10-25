@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <functional>
 #include <QSignalSpy>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -1139,163 +1140,165 @@ void MonitorProperties_Test::aNewlyPlacedFixtureSavesNoJunk()
     QVERIFY2(xml.contains("Hidden") == false, qPrintable(xml));
 }
 
-void MonitorProperties_Test::itemLocksFoldIntoALockedLayer()
+/* Save @p doc and load it back into @p into; @p edit may change the XML
+   between (to make it look like an older show). */
+static bool roundTrip(Doc &doc, Doc &into, const std::function<void(QByteArray &)> &edit = nullptr)
 {
-    Doc doc(this);
-    MonitorProperties *mp = doc.monitorProperties();
-    PowerDistribution *pd = doc.powerDistribution();
-    NetworkTopology *nt = doc.networkTopology();
-
-    // Nothing pinned: nothing moves, and no "Locked" layer appears.
-    Truss *free = mp->addTruss();
-    QCOMPARE(mp->foldItemLocksIntoLayers(pd, nt), 0);
-    QCOMPARE(mp->layers().size(), 1);
-
-    // One of each kind, pinned on its own on the (unlocked) Default layer.
-    Truss *t = mp->addTruss();
-    t->setLocked(true);
-    StagePlatform *deck = mp->addPlatform();
-    deck->setLocked(true);
-    Pipe *pipe = mp->addPipe();
-    pipe->setLocked(true);
-    Stand *stand = mp->addStand();
-    stand->setLocked(true);
-    Tower *tower = mp->addTower();
-    tower->setLocked(true);
-    StageTarget *mark = mp->addStageTarget();
-    mark->setLocked(true);
-    Scenery *cyc = mp->addScenery();
-    cyc->setLocked(true);
-    const quint32 imgId = mp->addImage("plan.png");
-    MonitorProperties::MonitorImage img = mp->image(imgId);
-    img.locked = true;
-    mp->setImage(img);
-    PowerSource ps;
-    ps.locked = true;
-    pd->sources() << ps;
-    NetworkNode node;
-    node.locked = true;
-    nt->nodes() << node;
-
-    // Already on a locked layer: that lock already says it, so it stays.
-    const quint32 held = mp->addLayer("Held");
-    mp->setLayerLocked(held, true);
-    Stand *heldStand = mp->addStand();
-    heldStand->setLayerId(held);
-    heldStand->setLocked(true);
-
-    QCOMPARE(mp->foldItemLocksIntoLayers(pd, nt), 10);
-    quint32 locked = 0;
-    int named = 0;
-    foreach (const MonitorProperties::MonitorLayer &l, mp->layers())
-        if (l.name == QStringLiteral("Locked"))
-        {
-            locked = l.id;
-            named++;
-        }
-    QCOMPARE(named, 1);
-    QVERIFY(mp->layer(locked).locked);
-    QCOMPARE(t->layerId(), locked);
-    QCOMPARE(deck->layerId(), locked);
-    QCOMPARE(pipe->layerId(), locked);
-    QCOMPARE(stand->layerId(), locked);
-    QCOMPARE(tower->layerId(), locked);
-    QCOMPARE(mark->layerId(), locked);
-    QCOMPARE(cyc->layerId(), locked);
-    QCOMPARE(mp->image(imgId).layerId, locked);
-    QCOMPARE(pd->sources().first().layerId, locked);
-    QCOMPARE(nt->nodes().first().layerId, locked);
-    QCOMPARE(free->layerId(), quint32(MonitorProperties::defaultLayerId));
-    QCOMPARE(heldStand->layerId(), held);
-    QVERIFY(!mp->layer(MonitorProperties::defaultLayerId).locked);
-
-    // Run again (the next load): already folded, and the layer is reused.
-    Truss *later = mp->addTruss();
-    later->setLocked(true);
-    QCOMPARE(mp->foldItemLocksIntoLayers(pd, nt), 1);
-    QCOMPARE(later->layerId(), locked);
-    QCOMPARE(mp->layers().size(), 3);
-
-    // Without power or network, the rest still folds.
-    Pipe *p2 = mp->addPipe();
-    p2->setLocked(true);
-    QCOMPARE(mp->foldItemLocksIntoLayers(nullptr, nullptr), 1);
-    QCOMPARE(p2->layerId(), locked);
-
-    // Loading a workspace does the fold: an old show's pinned truss lands
-    // on the locked layer, and the unpinned one does not.
-    Doc old(this);
-    Truss *pinned = old.monitorProperties()->addTruss();
-    pinned->setName("T-1");
-    pinned->setLocked(true);
-    Truss *loose = old.monitorProperties()->addTruss();
-    loose->setName("T-2");
     QByteArray ws;
     QXmlStreamWriter ww(&ws);
     ww.writeStartDocument();
-    QVERIFY(old.saveXML(&ww));
+    if (!doc.saveXML(&ww))
+        return false;
     ww.writeEndDocument();
-    Doc reloaded(this);
+    if (edit)
+        edit(ws);
     QXmlStreamReader rr(ws);
     while (rr.readNextStartElement() && rr.name() != QStringLiteral("Engine"))
         ;
-    QVERIFY(reloaded.loadXML(rr));
-    MonitorProperties *rp = reloaded.monitorProperties();
-    const Truss *rt1 = rp->truss(pinned->id());
-    const Truss *rt2 = rp->truss(loose->id());
-    QVERIFY(rt1 != nullptr && rt2 != nullptr);
-    QVERIFY(rt1->layerId() != MonitorProperties::defaultLayerId);
-    QCOMPARE(rp->layer(rt1->layerId()).name, QString("Locked"));
-    QVERIFY(rp->layer(rt1->layerId()).locked);
-    QVERIFY(rt1->locked());
-    QCOMPARE(rt2->layerId(), quint32(MonitorProperties::defaultLayerId));
-    QVERIFY(!rt2->locked());
+    return into.loadXML(rr);
 }
 
-void MonitorProperties_Test::itemLockFlagsMirrorTheirLayer()
+void MonitorProperties_Test::anObjectsLockIsItsOwn()
+{
+    Doc doc(this);
+    MonitorProperties *mp = doc.monitorProperties();
+    const quint32 rig = mp->addLayer("Rig");
+    Truss *pinned = mp->addTruss();
+    pinned->setName("Pinned");
+    pinned->setLayerId(rig);
+    pinned->setLocked(true);
+    Truss *loose = mp->addTruss();
+    loose->setName("Loose");
+    loose->setLayerId(rig);
+    Stand *onDefault = mp->addStand();
+    onDefault->setLocked(true);
+    mp->setLayerLocked(rig, true);
+
+    // Saved and loaded: the layer's lock and each object's own, apart.
+    Doc reloaded(this);
+    QVERIFY(roundTrip(doc, reloaded));
+    MonitorProperties *rp = reloaded.monitorProperties();
+    QVERIFY(rp->itemLocksAreOwn());
+    QVERIFY(rp->layer(rig).locked);
+    QVERIFY(rp->truss(pinned->id())->locked());
+    QVERIFY(!rp->truss(loose->id())->locked());
+    QVERIFY(rp->stand(onDefault->id())->locked());
+    QCOMPARE(rp->stand(onDefault->id())->layerId(), quint32(MonitorProperties::defaultLayerId));
+    // No layer is made for a lock: an object stays where it is.
+    QCOMPARE(rp->layers().size(), mp->layers().size());
+
+    // Unlocking the layer leaves the pinned one pinned.
+    rp->setLayerLocked(rig, false);
+    QVERIFY(rp->truss(pinned->id())->locked());
+    QCOMPARE(rp->migrateLegacyLocks(nullptr, nullptr), 0);   // nothing to do
+    QVERIFY(rp->truss(pinned->id())->locked());
+}
+
+void MonitorProperties_Test::legacyLockedLayerIsTakenApart()
 {
     Doc doc(this);
     MonitorProperties *mp = doc.monitorProperties();
     PowerDistribution *pd = doc.powerDistribution();
-    NetworkTopology *nt = doc.networkTopology();
-    const quint32 rig = mp->addLayer("Rig");
+    const quint32 rig = mp->addLayer("Trusses");
+    const quint32 held = mp->addLayer("Stage Lights");
+    mp->setLayerLocked(held, true);
+    const quint32 locked = mp->addLayer("Locked");
+    mp->setLayerLocked(locked, true);
 
-    Truss *onRig = mp->addTruss();
-    onRig->setLayerId(rig);
-    Truss *elsewhere = mp->addTruss();
-    elsewhere->setLocked(true);                       // stale: its layer is not
-    Scenery *cyc = mp->addScenery();
-    cyc->setLayerId(rig);
-    const quint32 imgId = mp->addImage("plan.png");
-    MonitorProperties::MonitorImage img = mp->image(imgId);
-    img.layerId = rig;
-    mp->setImage(img);
+    // T-1's folder stayed on Trusses when the old load moved T-1 alone.
+    Truss *t1 = mp->addTruss();
+    t1->setName("T-1");
+    const quint32 gid = mp->nextGroupId();
+    mp->createGroup(gid, "T-1", rig, 0);
+    t1->setGroupId(gid);
+    t1->setLayerId(locked);
+    t1->setLocked(true);
+    // Its bar has no folder: it goes where its truss goes.
+    Truss *bar = mp->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    bar->setLayerId(locked);
+    bar->setLocked(true);
+    // A hanger on T-1 follows it.
+    Hanger *hanger = mp->addHanger(Hanger::OnTruss, t1->id());
+    hanger->setLayerId(locked);
+    // A boom whose fixture is on Trusses.
+    Pipe *boom = mp->addPipe();
+    boom->setLayerId(locked);
+    boom->setLocked(true);
+    Fixture *onBoom = new Fixture(&doc);
+    onBoom->setChannels(4);
+    QVERIFY(doc.addFixture(onBoom));
+    mp->setFixturePosition(onBoom->id(), 0, 0, QVector3D(1, 1, 0));
+    mp->setFixtureLayer(onBoom->id(), rig);
+    FixtureRigProps rpBoom;
+    rpBoom.pipeId = boom->id();
+    mp->setFixtureRigProps(onBoom->id(), rpBoom);
+    // Nothing says where this stand was: it stays, still held.
+    Stand *stand = mp->addStand();
+    stand->setLayerId(locked);
+    stand->setLocked(true);
+    // Mirrored locks on a locked layer, from when an object's lock was a copy.
+    StagePlatform *deck = mp->addPlatform();
+    deck->setLayerId(held);
+    deck->setLocked(true);
     PowerSource ps;
-    ps.layerId = rig;
+    ps.layerId = held;
+    ps.locked = true;
     pd->sources() << ps;
-    NetworkNode node;
-    node.locked = false;
-    node.layerId = rig;
-    nt->nodes() << node;
+    // Locked on its own on an unlocked layer (an old show): stays as it is.
+    Tower *tower = mp->addTower();
+    tower->setLocked(true);
 
-    mp->setLayerLocked(rig, true);
-    mp->syncItemLocksToLayers(pd, nt);
-    QVERIFY(onRig->locked());
-    QVERIFY(!elsewhere->locked());
-    QVERIFY(cyc->locked());
-    QVERIFY(mp->image(imgId).locked);
-    QVERIFY(pd->sources().first().locked);
-    QVERIFY(nt->nodes().first().locked);
+    // As a show saved before 0.3: no ItemLocks mark.
+    auto older = [](QByteArray &xml) {
+        xml.replace(" ItemLocks=\"1\"", "");
+        QVERIFY(!xml.contains("ItemLocks"));
+    };
+    Doc reloaded(this);
+    QVERIFY(roundTrip(doc, reloaded, older));
+    MonitorProperties *r = reloaded.monitorProperties();
+    QVERIFY(r->itemLocksAreOwn());
 
-    mp->setLayerLocked(rig, false);
-    mp->syncItemLocksToLayers(nullptr, nullptr);      // no power/network: skipped
-    QVERIFY(!onRig->locked());
-    QVERIFY(!cyc->locked());
-    QVERIFY(!mp->image(imgId).locked);
-    QVERIFY(pd->sources().first().locked);
-    mp->syncItemLocksToLayers(pd, nt);
-    QVERIFY(!pd->sources().first().locked);
-    QVERIFY(!nt->nodes().first().locked);
+    QCOMPARE(r->truss(t1->id())->layerId(), rig);
+    QVERIFY(r->truss(t1->id())->locked());
+    QCOMPARE(r->truss(bar->id())->layerId(), rig);
+    QVERIFY(r->truss(bar->id())->locked());
+    QCOMPARE(r->hanger(hanger->id())->layerId(), rig);
+    QCOMPARE(r->pipe(boom->id())->layerId(), rig);
+    QVERIFY(r->pipe(boom->id())->locked());
+    QCOMPARE(r->stand(stand->id())->layerId(), locked);
+    QVERIFY(r->stand(stand->id())->locked());
+    // The layer stays for the stand, unlocked: the stand's lock is its own.
+    QVERIFY(r->hasLayer(locked));
+    QVERIFY(!r->layer(locked).locked);
+    // The mirrored locks are gone; the layer still holds them.
+    QVERIFY(!r->platform(deck->id())->locked());
+    QVERIFY(!reloaded.powerDistribution()->sources().first().locked);
+    QVERIFY(r->layer(held).locked);
+    QVERIFY(r->tower(tower->id())->locked());
+    QCOMPARE(r->tower(tower->id())->layerId(), quint32(MonitorProperties::defaultLayerId));
+
+    // Once put right and saved, it is not done again.
+    Doc again(this);
+    QVERIFY(roundTrip(reloaded, again));
+    QVERIFY(again.monitorProperties()->hasLayer(locked));
+    QCOMPARE(again.monitorProperties()->stand(stand->id())->layerId(), locked);
+
+    // With the stand placed too, nothing is left on it and it goes.
+    stand->setLayerId(rig);
+    Doc emptied(this);
+    QVERIFY(roundTrip(doc, emptied, older));
+    QVERIFY(!emptied.monitorProperties()->hasLayer(locked));
+    QCOMPARE(emptied.monitorProperties()->truss(t1->id())->layerId(), rig);
+
+    // A show that already has own locks keeps a layer named "Locked" as is.
+    Doc current(this);
+    QVERIFY(roundTrip(doc, current));
+    QVERIFY(current.monitorProperties()->hasLayer(locked));
+    QVERIFY(current.monitorProperties()->layer(locked).locked);
+    QCOMPARE(current.monitorProperties()->truss(t1->id())->layerId(), locked);
+    QVERIFY(current.monitorProperties()->platform(deck->id())->locked());
 }
 
 void MonitorProperties_Test::goboSwapsAreKeptPerFixtureAndSaved()

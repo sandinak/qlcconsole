@@ -624,16 +624,24 @@ public:
      *  an item referencing a deleted layer still renders (as Default). */
     MonitorLayer layer(quint32 id) const;
 
-    /** Locking is by LAYER: an object is locked exactly when its layer is.
-     *  Shows saved before that carried per-object locks; each object locked on
-     *  an unlocked layer is moved onto a locked "Locked" layer (made if there
-     *  is none), so nothing that was pinned becomes movable by surprise.
-     *  Returns how many were moved. Called once a workspace has loaded. */
-    int foldItemLocksIntoLayers(class PowerDistribution *pd, class NetworkTopology *nt);
-    /** Set every object's own lock flag from its layer's lock -- the one
-     *  source of truth -- so the views that read an object's lock (drag,
-     *  red outline) follow the layer. */
-    void syncItemLocksToLayers(class PowerDistribution *pd, class NetworkTopology *nt);
+    /** Locks are per object AND per layer: an object is held still when its
+     *  own lock is on or its layer's is. Each object's own Locked flag is
+     *  its own again (between 2026-09-25 and 0.3 it only mirrored the layer,
+     *  and a show loaded then had every object locked on its own moved onto
+     *  a locked layer named "Locked").
+     *
+     *  Run once a workspace has loaded. A show saved before own locks came
+     *  back (no ItemLocks mark): an object's lock that only repeats its
+     *  locked layer's is cleared -- the layer still holds it -- and the
+     *  "Locked" layer is taken apart: its objects keep their lock as their
+     *  own, each goes back to the layer its folder, mount or fixtures are on
+     *  where that says, and the layer goes when nothing is left on it (else
+     *  it stays, as an ordinary unlocked layer). Returns how many objects
+     *  went back to another layer. */
+    int migrateLegacyLocks(class PowerDistribution *pd, class NetworkTopology *nt);
+    /** False for a show loaded from before own locks came back, until
+     *  migrateLegacyLocks() has run. */
+    bool itemLocksAreOwn() const { return m_itemLocksOwn; }
 
     /** True if a layer with this id currently exists. */
     bool hasLayer(quint32 id) const { return m_layers.contains(id); }
@@ -656,6 +664,11 @@ public:
      *  Default if set to an unknown id. Persisted with the workspace. */
     quint32 activeLayerId() const { return m_activeLayerId; }
     void setActiveLayerId(quint32 id) { m_activeLayerId = hasLayer(id) ? id : defaultLayerId; }
+    /** Where a NEW object lands: the active layer -- unless it is locked,
+     *  where a new object could not be touched (not selected, not moved,
+     *  not edited) the moment it was placed; then the first unlocked layer
+     *  in list order, never the stage pieces' own. All locked: the active. */
+    quint32 placementLayerId() const;
 
     /** Next unused layer id. */
     quint32 nextLayerId() const;
@@ -666,6 +679,7 @@ private:
 
     QMap<quint32, MonitorLayer> m_layers;
     quint32 m_activeLayerId = defaultLayerId;
+    bool m_itemLocksOwn = true;   ///< see migrateLegacyLocks()
 
     /********************************************************************
      * Groups (2D map: named, layer-scoped, nestable collections)

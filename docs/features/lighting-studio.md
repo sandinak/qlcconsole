@@ -713,21 +713,34 @@ them).
 
 ## Locks
 
-There is **one** lock for objects: the **layer's**. Locking anything locks
-its whole layer, and everything on it:
+Two locks hold things still: the **object's own**, and its **layer's**.
+Either one is enough.
 
 | Lock | Set from | Freezes |
 |---|---|---|
-| **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), the Plot layers panel, or a power/network node's own toggle | Everything on that layer |
+| **Object lock** | An object's right-click menu → **Lock Position** / **Unlock Position** (**Lock Their Positions** for several), or a power source's or network node's own toggle | That one object. It stays selectable, so you can unlock it again; its Plot layers row shows a padlock |
+| **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), or the layer's padlock in the Plot layers panel | Everything on that layer, which can't be selected either |
 | **Folder ("group") position lock** | The Plot layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
 | **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, still selectable |
 
-**Locked draws red**, always: every locked object, and every fixture on a
-locked layer, gets a red outline.
+Unlocking a layer leaves the objects on it that are locked on their own
+still locked. **Locked draws red**, always: every locked object, and
+every fixture on a locked layer, gets a red outline (a target keeps its
+own colour and gets a red ring).
 
-An older workspace that had locks on individual objects has them moved onto
-a locked layer named **"Locked"** when it loads, so nothing that was held
-comes loose. Unlock that layer to move them.
+A new object never lands on a locked layer: when the active layer is
+locked, it goes on the first unlocked layer in the list (where it could
+not even be picked, it would be no use).
+
+**Shows from 0.2 with a "Locked" layer.** For a while an object's lock was
+its layer's, and opening a show that had objects locked on their own moved
+them onto a locked layer named **"Locked"** -- which is where that layer came
+from. Opening such a show now takes it apart: each object on it keeps its
+lock as its own, and goes back to the layer its folder, its fixtures or what
+it is mounted on are on. When nothing is left on "Locked" it is removed;
+when the show doesn't say where something came from, it stays there, on an
+ordinary unlocked layer you can rename or empty. Locks that only repeated a
+locked layer's are dropped (the layer still holds those objects).
 
 Fixtures don't carry a lock of their own — a fixture's movability comes
 from its layer and whatever it's mounted on. **Locking a truss's layer
@@ -796,8 +809,33 @@ of, and doesn't override, the real locks above.
   same fixtures laid out the same way.
 - Selecting on the plot selects the same objects in Plot layers, and vice
   versa; clicking a fixture group's row selects its fixtures on the plot.
+  See [Plot layers](#plot-layers) below.
 - Count badges follow their structure through drags and undo, and keep one
   screen size at any zoom, so zooming in uncovers what's under them.
+
+## Plot layers
+
+![Plot layers: Selected only, a fixture picked on the plot, a bar under its truss and a hanger under its tower, a layer's lock](../images/lighting-studio-plot-layers.png)
+
+1. **Selected only** (the funnel; off to start with): the list shows just
+   what is selected and what holds it -- its layer, its structure, its
+   folder -- and follows the plot as you pick.
+2. **Picked on the plot, picked here.** The list opens only the branches
+   holding what you picked and scrolls to the first; a fixture is picked
+   where it hangs, not again under each fixture group that lists it.
+3. **What hangs on what is a tree:** a bar under its truss or stand, a
+   crossbar under its boom, a fixture under the bar, hanger, tower or boom
+   it is on.
+4. **Tower ▸ Hanger ▸ Lantern:** a hanger under its tower or truss, the
+   lantern on it under the hanger. Drag a fixture onto a hanger's, bar's,
+   tower's or boom's row -- or onto a fixture already hung there -- to hang
+   it there.
+5. **A layer's lock** (and its eye and labels). The list keeps clear of an
+   overlay scroll bar, so the bar never covers these.
+
+Right-click a layer for **New Folder** (named in place) or **New Layer**;
+right-click a folder for **New Folder Inside**. **Move to Layer** on a
+truss, tower or riser that carries things moves it with everything on it.
 
 ## Beams, footprint, and coverage
 

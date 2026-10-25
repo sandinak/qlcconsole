@@ -64,6 +64,10 @@
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
+#include "monitorlayerspanel.h"
+#include "hanger.h"
+#include "tower.h"
+#include "truss.h"
 #include "focuscallsdialog.h"
 #include "venuerigdialog.h"
 #include "venuecorrections.h"
@@ -774,6 +778,96 @@ QList<HelpShots::Shot> HelpShots::shots()
             mon->m_props->removePlatform(mon->property("helpShotDeck").toUInt());
         mon->setProperty("helpShotDeck", QVariant());
         mon->m_graphicsView->updatePlatforms();
+    } };
+
+    // Plot layers: what hangs on what, the plot's pick followed, Selected only.
+    list << Shot{ QStringLiteral("lighting-studio-plot-layers"), [=]() {
+        window();
+        Frame f;
+        Monitor *mon = studio(MonitorGraphicsView::PovTop);
+        if (mon == NULL || mon->m_layersPanel == NULL)
+            return f;
+        MonitorProperties *p = mon->m_props;
+        const float u = p->gridUnitMetres();
+        /* For this picture only: a tower with a hanger, and a bar on the US
+           truss -- the demo has neither. */
+        Truss *us = NULL;
+        foreach (Truss *t, p->trusses())
+            if (t->name() == QLatin1String("US Truss"))
+                us = t;
+        if (us == NULL)
+        {
+            fprintf(stderr, "[HELPSHOT] no US Truss\n");
+            return f;
+        }
+        Tower *tw = p->addTower();
+        tw->setName(QStringLiteral("SL Tower"));
+        tw->setOriginX(0.5f * u);
+        tw->setOriginY(1.0f * u);
+        Hanger *h = p->addHanger(Hanger::OnTower, tw->id());
+        h->setName(QStringLiteral("Hook 1"));
+        h->setAlong(1.5f);
+        Truss *bar = p->addTruss();
+        bar->setName(QStringLiteral("Ladder Bar"));
+        bar->setParentTrussId(us->id());
+        bar->setParentOffset(us->length() * 0.5f);
+        bar->setBarFace(Truss::FaceDownstage);
+        bar->setBarRun(Truss::RunAcross);
+        bar->setLength(1.0f);
+        p->recomputeChildTrusses();
+        p->recomputeHangers();
+        mon->setProperty("helpShotTower", tw->id());
+        mon->setProperty("helpShotBar", bar->id());
+        mon->m_graphicsView->updateTrusses();
+        mon->m_graphicsView->updatePlatforms();
+        mon->m_graphicsView->updateHangers();
+        mon->m_layersPanel->reload();
+        // A fixture on the US truss picked on the plot: picked in the list.
+        quint32 pick = Fixture::invalidId();
+        foreach (quint32 fid, p->fixtureItemsID())
+            if (p->fixtureRigProps(fid).trussId == us->id() && pick == Fixture::invalidId())
+                pick = fid;
+        if (pick != Fixture::invalidId())
+            mon->m_graphicsView->selectMapItem(QStringLiteral("fixture"), pick);
+        settle();
+        MonitorLayersPanel *panel = mon->m_layersPanel;
+        f.grab = panel;
+        QTreeWidget *tree = panel->findChild<QTreeWidget *>();
+        f.callouts << mark(named(panel, "layersSelectedOnly"), 1);
+        QTreeWidgetItem *picked = tree != NULL ? tree->selectedItems().value(0) : NULL;
+        QTreeWidgetItem *hook = NULL;
+        QTreeWidgetItem *barRow = NULL;
+        if (tree != NULL)
+            for (QTreeWidgetItemIterator it(tree); *it != NULL; ++it)
+            {
+                if ((*it)->text(0).startsWith(QLatin1String("Hook 1")))
+                    hook = *it;
+                if ((*it)->text(0).startsWith(QLatin1String("Ladder Bar")))
+                    barRow = *it;
+            }
+        if (picked == NULL || hook == NULL || barRow == NULL)
+            fprintf(stderr, "[HELPSHOT] plot layers rows missing\n");
+        f.callouts << markRow(tree, picked, panel, 2);
+        f.callouts << markRow(tree, barRow, panel, 3);
+        f.callouts << markRow(tree, hook, panel, 4);
+        f.callouts << mark(named(panel, "layerLock"), 5);
+        return f;
+    }, [=]() {
+        Monitor *mon = Monitor::instance();
+        if (mon == NULL)
+            return;
+        if (mon->property("helpShotTower").isValid())
+            mon->m_props->removeTower(mon->property("helpShotTower").toUInt());
+        if (mon->property("helpShotBar").isValid())
+            mon->m_props->removeTruss(mon->property("helpShotBar").toUInt());
+        mon->setProperty("helpShotTower", QVariant());
+        mon->setProperty("helpShotBar", QVariant());
+        mon->m_graphicsView->scene()->clearSelection();
+        mon->m_graphicsView->updateTrusses();
+        mon->m_graphicsView->updatePlatforms();
+        mon->m_graphicsView->updateHangers();
+        if (mon->m_layersPanel != NULL)
+            mon->m_layersPanel->reload();
     } };
 
     list << Shot{ QStringLiteral("lighting-studio-front-view-badges"), [=]() {

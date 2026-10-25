@@ -18,6 +18,7 @@
 #include <QMenu>
 #include <QtMath>
 
+#include "itemlock.h"
 #include "pipeitem.h"
 #include "pipe.h"
 #include "monitorproperties.h"
@@ -129,7 +130,7 @@ void PipeItem::paint(QPainter *painter,
     QColor base = m_pipe->color();
     if (!base.isValid())
         base = QColor(150, 150, 160);
-    QColor border = m_pipe->locked() ? QColor(200, 60, 60)
+    QColor border = ItemLock::drawnLocked(this, m_pipe->locked()) ? QColor(200, 60, 60)
                                      : base.darker(selected ? 160 : 130);
 
     // Horizontal run (electric / free bar): a thick line from (0,0) to the end,

@@ -18,6 +18,7 @@
 #include <QMenu>
 
 #include <QtMath>
+#include "itemlock.h"
 #include "networknodeitem.h"
 #include "networktopology.h"
 #include "apputil.h"
@@ -79,7 +80,7 @@ void NetworkNodeItem::paint(QPainter *painter,
     const bool selected = option->state & QStyle::State_Selected;
 
     QColor fill = transportColor(m_transport);
-    QColor border = m_locked ? QColor(200, 60, 60)   // red border when locked
+    QColor border = ItemLock::drawnLocked(this, m_locked) ? QColor(200, 60, 60)   // red border when locked
                              : fill.darker(160);
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setPen(QPen(border, selected ? 2.0 : 1.5));

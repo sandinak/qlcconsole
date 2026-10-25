@@ -97,11 +97,14 @@ private slots:
      *  was never given: no fixed zoom, and not hidden. */
     void aNewlyPlacedFixtureSavesNoJunk();
 
-    /** Locks are per LAYER: an object locked on its own (older workspaces)
-     *  moves onto a locked "Locked" layer on load, and every object's own
-     *  flag then mirrors its layer's. */
-    void itemLocksFoldIntoALockedLayer();
-    void itemLockFlagsMirrorTheirLayer();
+    /** Locks are per object AND per layer: an object's own lock is its own,
+     *  saved as such, and survives its layer being locked and unlocked. */
+    void anObjectsLockIsItsOwn();
+    /** A show from when an object's lock only mirrored its layer: the
+     *  mirrored locks are cleared and the "Locked" layer the old load made
+     *  is taken apart -- its objects stay locked, go back to the layer their
+     *  folder or mount is on, and the layer goes when it is empty. */
+    void legacyLockedLayerIsTakenApart();
 
     /** A gobo slot of one unit fitted with other glass: kept per fixture,
      *  saved with the workspace, dropped when the fixture is deleted. */

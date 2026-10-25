@@ -406,7 +406,42 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   an unpatched universe is Edit connection… too. Classic QLC+'s Universes
   page is unchanged. Devices vs Overview: docs/CONNECTIONS_CLEANUP.md.
 
+- **Plot layers follows the plot, and shows what hangs on what** (RC2,
+  Branson's testing 2026-10-25). Picking on the plot picks one row per
+  object in Plot layers -- where it is, not again under each fixture group
+  listing it -- opens only the branches holding them and scrolls to the
+  first. A **Selected only** funnel (off by default) shows just the
+  selection and what holds it. Rows nest by mount
+  (`MonitorLayersPanel::nestByMounts()`): Tower ▸ Hanger ▸ Lantern, Truss ▸
+  Bar ▸ Spot, Stand ▸ Truss, Boom ▸ Crossbar, a fixture under its bar,
+  hanger, tower, boom or riser; a fixture dropped on a hanger's or bar's
+  row, or on a fixture hung there, is hung there. Right-click a layer for
+  **New Folder** (named in place), a folder for **New Folder Inside**.
+  Tower shelves are not rows of their own.
+
 ### Changed
+
+- **Locks are per object and per layer again** (RC2). An object's own lock
+  (**Lock Position** in its menu, a power source's or node's toggle) holds
+  that object and leaves it selectable, with a padlock on its Plot layers
+  row; **Lock Layer** holds everything on the layer. Each object's
+  `Locked` is its own again, not a copy of its layer's (the 2026-09-25
+  "one lock" change); shows save `ItemLocks="1"` on the Monitor element.
+  A show without it is put right on load (`MonitorProperties::
+  migrateLegacyLocks()`): locks that only repeated a locked layer's are
+  dropped, and the **"Locked" layer** the old load made for objects locked
+  on their own is taken apart -- its objects keep their lock as their own,
+  go back to the layer their folder, mount or fixtures are on, and the
+  layer is removed when empty (else left as an ordinary unlocked layer).
+- **A new object never lands on a locked layer**
+  (`MonitorProperties::placementLayerId()`): with the active layer locked,
+  it goes on the first unlocked one. A target placed on a locked active
+  layer could not be picked, moved or edited at all.
+- **Move to Layer on a structure moves what it carries.** A truss, tower or
+  riser shown as its folder goes to the layer with its folder, bars,
+  hangers and fixtures; it used to leave its folder, after which its
+  fixtures never showed as on it again. Hangers follow their truss or
+  tower's layer.
 
 - **Classic QLC+ Functions leaves out the Show Tree's own functions.** The
   layer scenes, cue Collections and cue-list chasers the tree makes, and the
@@ -608,6 +643,17 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+
+- **Line targets keep their colour, edit, and snap.** A target is drawn in
+  the colour set in Edit Target whether locked or not (a red ring says
+  locked; it used to turn wholly red). Targets follow their layer's lock in
+  the Front and Side views too, and a dragged target or line handle lands on
+  the grid with Snap on (one undo step). The release after a handle drag no
+  longer re-snaps the line's centre.
+- **The scroll bar no longer covers the layer buttons.** With overlay
+  scroll bars (macOS) Plot layers stops a bar's width short of its edge, so
+  the bar never lies over a layer's lock.
+- **Hangers are picked from Plot layers** (and in a multi-pick).
 
 - **Update All and the show definitions' results are a window** (`BulkResultDialog`),
   not an alert that grew off the screen with nothing to scroll and no Close.

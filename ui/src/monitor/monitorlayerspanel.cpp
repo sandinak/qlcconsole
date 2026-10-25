@@ -68,6 +68,7 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 
 #include "monitorlayerspanel.h"
 #include "monitorgraphicsview.h"
+#include "hanger.h"
 #include "monitorproperties.h"
 #include "truss.h"
 #include "doc.h"
@@ -88,6 +89,42 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "fixture.h"
 #include "doc.h"
 #include "itemicons.h"
+
+// A funnel, for "Selected only" (no font has one everywhere).
+static QIcon funnelIcon(const QColor &c)
+{
+    QPixmap pm(32, 32);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen);
+    p.setBrush(c);
+    QPolygonF f;
+    f << QPointF(4, 6) << QPointF(28, 6) << QPointF(18.5, 17) << QPointF(18.5, 27)
+      << QPointF(13.5, 24) << QPointF(13.5, 17);
+    p.drawPolygon(f);
+    pm.setDevicePixelRatio(2.0);
+    return QIcon(pm);
+}
+
+void LayersTreeWidget::reserveScrollBarRoom()
+{
+    /* Overlay scroll bars are drawn on top of the list, at its right edge --
+       which is where a layer's eye and lock buttons are ("the scroll bar
+       draws over the lock button"). The list stops a scroll bar's width
+       short of the edge; the bar floats over the gap. */
+    QScrollBar *bar = verticalScrollBar();
+    const bool overlay = bar->style()->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, bar) != 0;
+    const int room = overlay ? bar->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, bar) : 0;
+    setViewportMargins(0, 0, room, 0);
+}
+
+void LayersTreeWidget::changeEvent(QEvent *e)
+{
+    QTreeWidget::changeEvent(e);
+    if (e->type() == QEvent::StyleChange)
+        reserveScrollBarRoom();
+}
 
 // Row-widget glyphs. Emoji render fine on the macOS Qt5 build this fork targets.
 static const char *kEyeShown  = "\xF0\x9F\x91\x81";   // 👁
@@ -192,6 +229,18 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     connect(collapseBtn, &QToolButton::clicked, this, [this]() { m_tree->collapseAll(); });
     titleRow->addWidget(collapseBtn);
 
+    /* Selected only: the list shows what is selected, and what holds it
+       (its layer, its structure, its folder) -- off by default. */
+    m_selectedOnlyBtn = new QToolButton(this);
+    m_selectedOnlyBtn->setObjectName(QStringLiteral("layersSelectedOnly"));
+    m_selectedOnlyBtn->setIcon(funnelIcon(palette().color(QPalette::WindowText)));
+    m_selectedOnlyBtn->setCheckable(true);
+    m_selectedOnlyBtn->setChecked(false);
+    m_selectedOnlyBtn->setAutoRaise(true);
+    m_selectedOnlyBtn->setToolTip(tr("Selected only: show just what is selected, and what it is on"));
+    connect(m_selectedOnlyBtn, &QToolButton::toggled, this, [this]() { applyFilters(); });
+    titleRow->addWidget(m_selectedOnlyBtn);
+
     titleRow->addStretch(1);
     m_hideBtn = new QToolButton(this);
     m_hideBtn->setText("\xC3\x97"); // ×
@@ -236,6 +285,7 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
 
     // Search / filter box — find things in a deep tree by name.
     m_search = new QLineEdit(this);
+    m_search->setObjectName(QStringLiteral("layersSearch"));
     m_search->setPlaceholderText(tr("Search the tree…"));
     m_search->setClearButtonEnabled(true);
     connect(m_search, &QLineEdit::textChanged, this, &MonitorLayersPanel::filterTree);
@@ -256,6 +306,7 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setDropIndicatorShown(true);
+    m_tree->reserveScrollBarRoom();
     m_tree->installEventFilter(this);   // Enter-to-rename only
     m_tree->viewport()->installEventFilter(this);   // the selection a double-click starts from
     LayersNameDelegate *names = new LayersNameDelegate(m_tree);
@@ -311,6 +362,8 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
         m_syncingSelection = true;
         m_view->selectMapItems(selectedObjects());
         m_syncingSelection = false;
+        if (m_selectedOnlyBtn != nullptr && m_selectedOnlyBtn->isChecked())
+            applyFilters();
     });
     connect(m_tree, &QWidget::customContextMenuRequested, this, &MonitorLayersPanel::slotContextMenu);
 
@@ -574,26 +627,36 @@ void MonitorLayersPanel::setSubtreeExpanded(QTreeWidgetItem *node, bool expanded
         setSubtreeExpanded(node->child(i), expanded);
 }
 
-static bool applyTreeFilter(QTreeWidgetItem *node, const QString &t)
+/* A row shows when it matches the search and, with "Selected only" on, is
+   selected -- or when something under it shows (its layer, its structure,
+   its folder). */
+static bool applyTreeFilter(QTreeWidgetItem *node, const QString &t, bool selectedOnly)
 {
     bool childVisible = false;
     for (int i = 0; i < node->childCount(); ++i)
-        childVisible = applyTreeFilter(node->child(i), t) || childVisible;
-    const bool selfMatch = t.isEmpty() || node->text(0).contains(t, Qt::CaseInsensitive);
+        childVisible = applyTreeFilter(node->child(i), t, selectedOnly) || childVisible;
+    const bool selfMatch = (t.isEmpty() || node->text(0).contains(t, Qt::CaseInsensitive))
+                           && (!selectedOnly || node->isSelected());
     const bool visible = selfMatch || childVisible;
     node->setHidden(!visible);
-    if (!t.isEmpty() && visible)
+    if ((!t.isEmpty() || selectedOnly) && childVisible)
         node->setExpanded(true);   // reveal matches inside collapsed branches
     return visible;
 }
 
-void MonitorLayersPanel::filterTree(const QString &text)
+void MonitorLayersPanel::filterTree(const QString &)
+{
+    applyFilters();
+}
+
+void MonitorLayersPanel::applyFilters()
 {
     if (m_tree == nullptr)
         return;
-    const QString t = text.trimmed();
+    const QString t = m_search != nullptr ? m_search->text().trimmed() : QString();
+    const bool selectedOnly = m_selectedOnlyBtn != nullptr && m_selectedOnlyBtn->isChecked();
     for (int i = 0; i < m_tree->topLevelItemCount(); ++i)
-        applyTreeFilter(m_tree->topLevelItem(i), t);
+        applyTreeFilter(m_tree->topLevelItem(i), t, selectedOnly);
 }
 
 QTreeWidgetItem *MonitorLayersPanel::addFixtureGroupNode(QTreeWidgetItem *host, FixtureGroup *fg)
@@ -653,10 +716,17 @@ void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds
         reload();
 }
 
+QString MonitorLayersPanel::lockBadge(const QString &kind, quint32 id) const
+{
+    // A padlock after the name: this one is locked on its own.
+    return (m_view != nullptr && m_view->itemOwnLocked(kind, id))
+           ? QString::fromUtf8("  \xF0\x9F\x94\x92") : QString();
+}
+
 void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
 {
     QTreeWidgetItem *node = new QTreeWidgetItem(parent);
-    node->setText(0, d.name);
+    setNodeLabel(node, d.name, lockBadge(d.kind, d.id));
     node->setToolTip(0, d.name);
     node->setFirstColumnSpanned(true);   // full-width name (no eye/lock column)
     node->setData(0, NodeTypeRole, int(NodeItem));
@@ -777,6 +847,10 @@ void MonitorLayersPanel::collectCollapsedNodes(QTreeWidgetItem *item, QSet<QStri
        for a closed folder. */
     if (type == NodeFixtureGroup && item->isExpanded())
         out.insert(QString("open:%1:%2").arg(type).arg(item->data(0, NodeIdRole).toUInt()));
+    // A structure with things on it (a bar, a hanger, a tower) closed by hand.
+    if (type == NodeItem && item->childCount() > 0 && !item->isExpanded())
+        out.insert(QStringLiteral("item:%1:%2").arg(item->data(0, NodeKindRole).toString())
+                                               .arg(item->data(0, NodeIdRole).toUInt()));
 
     for (int i = 0; i < item->childCount(); i++)
         collectCollapsedNodes(item->child(i), out);
@@ -813,17 +887,17 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
     QTreeWidgetItem *node = new QTreeWidgetItem(parent);
     if (anchored && anchorKind == QStringLiteral("truss"))
     {
-        setNodeLabel(node, anchorName, tr("  \xc2\xb7 on truss"));
+        setNodeLabel(node, anchorName, lockBadge(anchorKind, anchorId) + tr("  \xc2\xb7 on truss"));
         node->setIcon(0, kindIcon(anchorKind, anchorColor));
     }
     else if (anchored && anchorKind == QStringLiteral("platform"))
     {
-        setNodeLabel(node, anchorName, tr("  \xc2\xb7 on riser"));
+        setNodeLabel(node, anchorName, lockBadge(anchorKind, anchorId) + tr("  \xc2\xb7 on riser"));
         node->setIcon(0, swatchIcon(anchorColor));      // riser colour swatch
     }
     else if (anchored && anchorKind == QStringLiteral("tower"))
     {
-        setNodeLabel(node, anchorName, tr("  \xc2\xb7 on tower"));
+        setNodeLabel(node, anchorName, lockBadge(anchorKind, anchorId) + tr("  \xc2\xb7 on tower"));
         node->setIcon(0, kindIcon(anchorKind, anchorColor));
     }
     else if (anchored && anchorKind == QStringLiteral("pipe"))
@@ -831,7 +905,7 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
         // A standing, vertical pipe is a boom; anything else a pipe.
         const Pipe *pp = m_props->pipe(anchorId);
         const bool boom = pp != nullptr && pp->isVertical();
-        setNodeLabel(node, anchorName, boom ? tr("  \xc2\xb7 on boom") : tr("  \xc2\xb7 on pipe"));
+        setNodeLabel(node, anchorName, lockBadge(anchorKind, anchorId) + (boom ? tr("  \xc2\xb7 on boom") : tr("  \xc2\xb7 on pipe")));
         node->setIcon(0, kindIcon(anchorKind, anchorColor));
     }
     else if (g.hasFrame)
@@ -914,14 +988,14 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
         if (bt == nullptr || bt->isChildBar() == false)
             continue;
         QTreeWidgetItem *bn = new QTreeWidgetItem(node);
-        setNodeLabel(bn, d.name, tr("  \xc2\xb7 bar"));
+        setNodeLabel(bn, d.name, lockBadge(d.kind, d.id) + tr("  \xc2\xb7 bar"));
         bn->setIcon(0, kindIcon(QStringLiteral("truss"), QColor()));
         bn->setToolTip(0, bn->text(0));
         bn->setFirstColumnSpanned(true);
         bn->setData(0, NodeTypeRole, int(NodeItem));
         bn->setData(0, NodeIdRole, d.id);
         bn->setData(0, NodeKindRole, d.kind);
-        bn->setExpanded(!wasNodeCollapsed(NodeGroup, d.id));
+        bn->setExpanded(!m_collapsedKeys.contains(QStringLiteral("item:truss:%1").arg(d.id)));
         barNode.insert(d.id, bn);
     }
     if (!barNode.isEmpty())
@@ -962,14 +1036,14 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
             || fixtureHost.key(key, UINT_MAX) == UINT_MAX)
             continue;
         QTreeWidgetItem *tn = new QTreeWidgetItem(node);
-        setNodeLabel(tn, d.name, QString());
+        setNodeLabel(tn, d.name, lockBadge(d.kind, d.id));
         tn->setIcon(0, kindIcon(d.kind, d.color));
         tn->setToolTip(0, tn->text(0));
         tn->setFirstColumnSpanned(true);
         tn->setData(0, NodeTypeRole, int(NodeItem));
         tn->setData(0, NodeIdRole, d.id);
         tn->setData(0, NodeKindRole, d.kind);
-        tn->setExpanded(true);
+        tn->setExpanded(!m_collapsedKeys.contains(QStringLiteral("item:%1:%2").arg(d.kind).arg(d.id)));
         hostNode.insert(key, tn);
     }
     // A structure that is not in this group (the fixture was grouped by
@@ -1022,6 +1096,169 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
     }
 
     node->setExpanded(!wasNodeCollapsed(NodeGroup, groupId));
+}
+
+QString MonitorLayersPanel::mountParentKey(const QString &kind, quint32 id) const
+{
+    auto key = [](const char *k, quint32 i) { return QString::fromLatin1(k) + QLatin1Char(':') + QString::number(i); };
+    if (kind == QLatin1String("fixture"))
+    {
+        const FixtureRigProps rp = m_props->fixtureRigProps(id);
+        if (rp.onHanger())
+            return key("hanger", rp.hangerId);
+        if (rp.trussId != Truss::invalidId())
+            return key("truss", rp.trussId);
+        if (rp.onTower())
+            return key("tower", rp.towerId);
+        if (rp.onPipe())
+            return key("pipe", rp.pipeId);
+        if (rp.onRiser())
+            return key("platform", rp.riserPlatformId);
+        return QString();
+    }
+    if (kind == QLatin1String("hanger"))
+    {
+        const Hanger *h = m_props->hanger(id);
+        if (h == nullptr)
+            return QString();
+        return key(h->parentKind() == Hanger::OnTower ? "tower" : "truss", h->parentId());
+    }
+    if (kind == QLatin1String("truss"))
+    {
+        const Truss *t = m_props->truss(id);
+        if (t != nullptr && t->isChildBar())
+            return key("truss", t->parentTrussId());
+        if (t != nullptr && t->isStandMounted())
+            return key("stand", t->standId());
+        return QString();
+    }
+    if (kind == QLatin1String("pipe"))
+    {
+        const Pipe *p = m_props->pipe(id);
+        if (p != nullptr && p->isBarOnPipe())
+            return key("pipe", p->parentPipeId());
+        return QString();
+    }
+    return QString();
+}
+
+void MonitorLayersPanel::nestByMounts(QTreeWidgetItem *layerNode)
+{
+    if (layerNode == nullptr)
+        return;
+    /* Every row in this layer that stands for an object, by "kind:id": a
+       leaf or container, or a structure shown as its folder ("T-1 · on
+       truss"). The first one found is where things hung on it go. */
+    auto rowKey = [this](QTreeWidgetItem *row) {
+        const int type = row->data(0, NodeTypeRole).toInt();
+        if (type == NodeItem)
+            return row->data(0, NodeKindRole).toString() + QLatin1Char(':')
+                   + QString::number(row->data(0, NodeIdRole).toUInt());
+        if (type == NodeGroup)
+        {
+            const MonitorProperties::MonitorGroup g = m_props->group(row->data(0, NodeIdRole).toUInt());
+            if (!g.anchorKind.isEmpty())
+                return g.anchorKind + QLatin1Char(':') + QString::number(g.anchorId);
+        }
+        return QString();
+    };
+    QHash<QString, QTreeWidgetItem *> rowOf;
+    QList<QTreeWidgetItem *> rows;
+    QList<QTreeWidgetItem *> stack;
+    for (int i = layerNode->childCount() - 1; i >= 0; --i)
+        stack << layerNode->child(i);
+    while (!stack.isEmpty())
+    {
+        QTreeWidgetItem *row = stack.takeLast();
+        const QString k = rowKey(row);
+        if (!k.isEmpty())
+        {
+            if (!rowOf.contains(k))
+                rowOf.insert(k, row);
+            rows << row;
+        }
+        for (int i = row->childCount() - 1; i >= 0; --i)
+            stack << row->child(i);
+    }
+
+    bool movedAny = false;
+    foreach (QTreeWidgetItem *row, rows)
+    {
+        QTreeWidgetItem *up = row->parent();
+        if (up == nullptr || up->data(0, NodeTypeRole).toInt() == NodeFixtureGroup)
+            continue;       // listed under a fixture group: that is where it reads
+        QString kind;
+        quint32 id = 0;
+        if (row->data(0, NodeTypeRole).toInt() == NodeItem)
+        {
+            kind = row->data(0, NodeKindRole).toString();
+            id = row->data(0, NodeIdRole).toUInt();
+        }
+        else
+        {
+            const MonitorProperties::MonitorGroup g = m_props->group(row->data(0, NodeIdRole).toUInt());
+            kind = g.anchorKind;
+            id = g.anchorId;
+        }
+        QTreeWidgetItem *host = rowOf.value(mountParentKey(kind, id), nullptr);
+        if (host == nullptr || host == up || host == row)
+            continue;
+        bool inside = false;     // never under itself
+        for (QTreeWidgetItem *a = host; a != nullptr; a = a->parent())
+            if (a == row) { inside = true; break; }
+        if (inside)
+            continue;
+        up->removeChild(row);
+        host->addChild(row);
+        movedAny = true;
+    }
+    if (!movedAny)
+        return;
+
+    /* A row taken out and put back comes back closed: open every container
+       again unless it was closed by hand. */
+    for (QTreeWidgetItemIterator it(layerNode->treeWidget()); *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        bool mine = false;
+        for (QTreeWidgetItem *a = row; a != nullptr; a = a->parent())
+            if (a == layerNode) { mine = true; break; }
+        if (!mine || row->childCount() == 0)
+            continue;
+        const int type = row->data(0, NodeTypeRole).toInt();
+        if (type == NodeItem)
+            row->setExpanded(!m_collapsedKeys.contains(QStringLiteral("item:%1:%2")
+                                                       .arg(row->data(0, NodeKindRole).toString())
+                                                       .arg(row->data(0, NodeIdRole).toUInt())));
+        else if (type == NodeGroup)
+            row->setExpanded(!wasNodeCollapsed(NodeGroup, row->data(0, NodeIdRole).toUInt()));
+        else if (type == NodeFixtureGroup)
+            row->setExpanded(m_collapsedKeys.contains(QString("open:%1:%2").arg(type)
+                                                      .arg(row->data(0, NodeIdRole).toUInt())));
+    }
+}
+
+void MonitorLayersPanel::addFolder(quint32 layerId, quint32 parentGroupId)
+{
+    if (!m_editable || !m_props->hasLayer(layerId))
+        return;
+    const quint32 gid = m_props->nextGroupId();
+    m_props->createGroup(gid, tr("New Folder"), layerId, parentGroupId);
+    m_doc->setModified();
+    reload();
+    // Its name, ready to type.
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        if (row->data(0, NodeTypeRole).toInt() != NodeGroup || row->data(0, NodeIdRole).toUInt() != gid)
+            continue;
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+            up->setExpanded(true);
+        m_tree->setCurrentItem(row);
+        m_tree->scrollToItem(row);
+        m_tree->editItem(row, 0);
+        break;
+    }
 }
 
 void MonitorLayersPanel::reload()
@@ -1134,6 +1371,7 @@ void MonitorLayersPanel::reload()
         });
 
         QToolButton *eye = new QToolButton(row);
+        eye->setObjectName(QStringLiteral("layerEye"));
         eye->setCheckable(true);
         eye->setChecked(lyr.visible);
         eye->setToolTip(lyr.visible ? tr("Visible — click to hide")
@@ -1158,6 +1396,7 @@ void MonitorLayersPanel::reload()
         h->addWidget(lbl);
 
         QToolButton *lock = new QToolButton(row);
+        lock->setObjectName(QStringLiteral("layerLock"));
         lock->setCheckable(true);
         lock->setChecked(lyr.locked);
         lock->setToolTip(lyr.locked ? tr("Locked — click to unlock")
@@ -1211,6 +1450,8 @@ void MonitorLayersPanel::reload()
                 }
                 addItemLeaf(layerNode, d);
             }
+        // What is hung on what, within this layer.
+        nestByMounts(layerNode);
         layerNodes.insert(lyr.id, layerNode);
 
         layerNode->setExpanded(!wasNodeCollapsed(NodeLayer, lyr.id));
@@ -1297,9 +1538,8 @@ void MonitorLayersPanel::reload()
 
     updateButtons();
 
-    // Re-apply the active search filter to the freshly-rebuilt rows.
-    if (m_search != nullptr && !m_search->text().trimmed().isEmpty())
-        filterTree(m_search->text());
+    // Re-apply the search and "Selected only" to the freshly-rebuilt rows.
+    applyFilters();
 }
 
 bool MonitorLayersPanel::eventFilter(QObject *obj, QEvent *event)
@@ -1424,14 +1664,27 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
     // it to that layer, not attach it, until this was added.
     QString directAttachKind;
     quint32 directAttachId = 0;
+    auto mountKind = [](const QString &k) {
+        return k == QStringLiteral("truss") || k == QStringLiteral("pipe")
+            || k == QStringLiteral("tower") || k == QStringLiteral("hanger");
+    };
     if (target != nullptr && target->data(0, NodeTypeRole).toInt() == NodeItem)
     {
         const QString k = target->data(0, NodeKindRole).toString();
-        if (k == QStringLiteral("truss") || k == QStringLiteral("pipe")
-            || k == QStringLiteral("tower"))
+        QTreeWidgetItem *up = target->parent();
+        if (mountKind(k))
         {
             directAttachKind = k;
             directAttachId = target->data(0, NodeIdRole).toUInt();
+        }
+        /* Onto a row hung on a bar, hanger, tower or boom shown as its own
+           row: onto that mount, as dropping in a truss's folder is onto
+           the truss. */
+        else if (up != nullptr && up->data(0, NodeTypeRole).toInt() == NodeItem
+                 && mountKind(up->data(0, NodeKindRole).toString()))
+        {
+            directAttachKind = up->data(0, NodeKindRole).toString();
+            directAttachId = up->data(0, NodeIdRole).toUInt();
         }
     }
 
@@ -1488,6 +1741,8 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
                     m_view->attachFixtureToPipe(lf.second, attachId);
                 else if (attachKind == QStringLiteral("tower"))
                     m_view->attachFixtureToTower(lf.second, attachId);
+                else if (attachKind == QStringLiteral("hanger"))
+                    m_view->attachFixtureToHanger(lf.second, attachId);
             }
             if (!nonFixtures.isEmpty())
             {
@@ -1914,6 +2169,10 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
                            this, [this, id]() {
                 if (m_view) m_view->ungroupById(id);
             });
+            QAction *sub = menu.addAction(tr("New Folder Inside"), this, [this, id]() {
+                addFolder(m_props->group(id).layerId, id);
+            });
+            sub->setObjectName(QStringLiteral("layersNewSubFolder"));
         }
     }
     else if (type == NodeFixtureGroup && m_doc->fixtureGroup(id) != nullptr)
@@ -2033,7 +2292,10 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
             m_tree->editItem(item, 0);
         });
         menu.addAction(tr("New Layer"), this, &MonitorLayersPanel::slotAddLayer);
-        if (id != MonitorProperties::defaultLayerId)
+        // A folder to file things into, on this layer.
+        QAction *folder = menu.addAction(tr("New Folder"), this, [this, id]() { addFolder(id, 0); });
+        folder->setObjectName(QStringLiteral("layersNewFolder"));
+        if (id != MonitorProperties::defaultLayerId && id != m_props->stageLayerId())
             menu.addAction(tr("Delete Layer"), this, &MonitorLayersPanel::slotRemoveLayer);
     }
 
@@ -2107,9 +2369,24 @@ void MonitorLayersPanel::followMapSelection(const QList<QPair<QString, quint32> 
     for (const QPair<QString, quint32> &o : objects)
         want.insert(o.first + QLatin1Char(':') + QString::number(o.second));
 
-    m_syncingSelection = true;
-    m_tree->clearSelection();
-    QTreeWidgetItem *first = nullptr;
+    /* One row per object: where it is on the plot (its layer, what it hangs
+       on), not each fixture group listing it besides -- or every group a
+       fixture is in opened up too. A row under a fixture group only when
+       that is the only place it is. */
+    auto rank = [](QTreeWidgetItem *row) {
+        int r = 0;
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+        {
+            const int t = up->data(0, NodeTypeRole).toInt();
+            if (t == NodeFixtureGroup)
+                r += 1;
+            else if (t != NodeLayer && t != NodeGroup && t != NodeItem)
+                r += 10;                // the "Fixture Groups" section
+        }
+        return r;
+    };
+    QHash<QString, QTreeWidgetItem *> best;
+    QList<QString> order;
     for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
     {
         QTreeWidgetItem *row = *it;
@@ -2127,12 +2404,32 @@ void MonitorLayersPanel::followMapSelection(const QList<QPair<QString, quint32> 
         }
         if (key.isEmpty() || !want.contains(key))
             continue;
+        if (!best.contains(key))
+        {
+            best.insert(key, row);
+            order << key;
+        }
+        else if (rank(row) < rank(best.value(key)))
+        {
+            best.insert(key, row);
+        }
+    }
+
+    m_syncingSelection = true;
+    m_tree->clearSelection();
+    QTreeWidgetItem *first = nullptr;
+    foreach (const QString &key, order)
+    {
+        QTreeWidgetItem *row = best.value(key);
+        // Open only the branches that hold it.
         for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
             up->setExpanded(true);
         row->setSelected(true);
         if (first == nullptr)
             first = row;
     }
+    if (m_selectedOnlyBtn != nullptr && m_selectedOnlyBtn->isChecked())
+        applyFilters();
     if (first != nullptr)
         m_tree->scrollToItem(first);
     m_syncingSelection = false;

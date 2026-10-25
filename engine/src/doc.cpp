@@ -2555,13 +2555,11 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
 
     postLoad();
 
-    /* Locks are by layer now: objects pinned on their own move onto a locked
-       layer, and every object's lock then follows its layer. */
+    /* An object's lock is its own again, beside its layer's: a show from
+       when it only mirrored the layer is put right, and its "Locked" layer
+       taken apart (MonitorProperties::migrateLegacyLocks()). */
     if (m_monitorProps != NULL)
-    {
-        m_monitorProps->foldItemLocksIntoLayers(powerDistribution(), networkTopology());
-        m_monitorProps->syncItemLocksToLayers(powerDistribution(), networkTopology());
-    }
+        m_monitorProps->migrateLegacyLocks(powerDistribution(), networkTopology());
 
     /* A timecode source naming no universe of this show is as good as none:
        "any", as before it was saved. */

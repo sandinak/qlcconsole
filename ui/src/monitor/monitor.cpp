@@ -3170,7 +3170,7 @@ void Monitor::slotAddFixture()
             m_graphicsView->addFixture(fid, mm);
             m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
             m_props->setFixtureFlags(fid, 0, 0, 0);
-            m_props->setFixtureLayer(fid, m_props->activeLayerId());  // land on the selected layer
+            m_props->setFixtureLayer(fid, m_props->placementLayerId());  // land on the selected layer
             m_doc->setModified();
         }
     }
@@ -3496,7 +3496,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         t->setWidth(c.width);
         t->setProfile(Truss::Profile(c.profile));
         t->setLocked(false);   // a duplicate must be movable, even if the source was locked
-        t->setLayerId(m_props->activeLayerId());
+        t->setLayerId(m_props->placementLayerId());
         newTrussIds.append(t->id());
     }
 
@@ -3534,7 +3534,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         m_props->setFixtureRigProps(fid, rp);
         FixturePreviewItem item = c.item;
         item.m_baseItem.m_position += QVector3D(dxM * 1000.0f, dyM * 1000.0f, 0.0f);
-        item.m_baseItem.m_layerId = m_props->activeLayerId();
+        item.m_baseItem.m_layerId = m_props->placementLayerId();
         item.m_baseItem.m_groupId = 0;      // the original's map group isn't the copy's
         m_props->setFixtureProperties(fid, item);
         const QVector3D at = item.m_baseItem.m_position;
@@ -3555,7 +3555,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         p->setRotation(c.rotation);
         p->setFrontCurve(c.frontCurve);
         p->setColor(c.color);
-        p->setLayerId(m_props->activeLayerId());
+        p->setLayerId(m_props->placementLayerId());
         newPlatformIds.append(p->id());
     }
 
@@ -3600,7 +3600,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
             obj->setName(obj->name() + tr(" copy"));
             obj->setOriginX(obj->originX() + dxM);
             obj->setOriginY(obj->originY() + dyM);
-            obj->setLayerId(m_props->activeLayerId());
+            obj->setLayerId(m_props->placementLayerId());
         };
         switch (c.kind)
         {
@@ -5777,7 +5777,7 @@ void Monitor::slotAddImage()
 
     const quint32 id = m_props->addImage(file);
     MonitorProperties::MonitorImage img = m_props->image(id);
-    img.layerId = m_props->activeLayerId();
+    img.layerId = m_props->placementLayerId();
     // Default a Floor decal at a sensible size.
     img.plane   = MonitorProperties::MonitorImage::Floor;
     img.width   = qMin(3.0f, float(m_props->gridSize().x()));
@@ -5834,7 +5834,7 @@ void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scen
         m_graphicsView->addFixture(fid, mm);
         m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
         m_props->setFixtureFlags(fid, 0, 0, 0);
-        m_props->setFixtureLayer(fid, m_props->activeLayerId());
+        m_props->setFixtureLayer(fid, m_props->placementLayerId());
         m_graphicsView->finishFixtureDrop(fid);
         n++;
     }
@@ -6067,7 +6067,7 @@ void Monitor::slotAddNetworkNode()
     node.placed = true;
     node.posX = xSpin->value() * fromDisp;
     node.posY = ySpin->value() * fromDisp;
-    node.layerId = m_props->activeLayerId();   // land on the selected layer
+    node.layerId = m_props->placementLayerId();   // land on the selected layer
     nt->nodes().append(node);
 
     m_graphicsView->updateNetworkNodes();
@@ -6190,7 +6190,7 @@ void Monitor::addTarget(bool line)
     // Sit on whatever solid platform it was dropped over, not at deck level --
     // same rule a drag follows, so placing and moving agree.
     t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));
-    t->setLayerId(m_props->activeLayerId());   // land on the selected layer
+    t->setLayerId(m_props->placementLayerId());   // land on the selected layer
 
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();
@@ -6249,7 +6249,7 @@ void Monitor::slotAddPerson()
     t->setX(float(mm.x() / 1000.0));
     t->setY(float(mm.y() / 1000.0));
     t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));   // stand on the deck
-    t->setLayerId(m_props->activeLayerId());
+    t->setLayerId(m_props->placementLayerId());
 
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();
@@ -6500,7 +6500,7 @@ void Monitor::slotAddPipe()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     b->setOriginX(float(mm.x() / 1000.0));
     b->setOriginY(float(mm.y() / 1000.0));
-    b->setLayerId(m_props->activeLayerId());
+    b->setLayerId(m_props->placementLayerId());
 
     m_graphicsView->updatePlatforms();   // rebuilds platforms + pipes
     if (m_layersPanel) m_layersPanel->reload();
@@ -6517,7 +6517,7 @@ void Monitor::slotAddStand()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     s->setOriginX(float(mm.x() / 1000.0));
     s->setOriginY(float(mm.y() / 1000.0));
-    s->setLayerId(m_props->activeLayerId());
+    s->setLayerId(m_props->placementLayerId());
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
@@ -6650,7 +6650,7 @@ void Monitor::slotAddScenery(int kind)
         s->setOriginY(float(atClick ? click.y() : y));
         s->setWidth(fullW);
         s->setHeight(6.0f);
-        s->setLayerId(m_props->activeLayerId());
+        s->setLayerId(m_props->placementLayerId());
         return s;
     };
     Scenery *s = nullptr;
@@ -6808,7 +6808,7 @@ void Monitor::slotAddFountain()
     const float base = float(baseSpin->value() * fromDisp);
     const float t = float(thickSpin->value() * fromDisp), gap = float(gapSpin->value() * fromDisp);
     const float back = float(centre.y()) - D / 2.0f;
-    const quint32 layer = m_props->activeLayerId();
+    const quint32 layer = m_props->placementLayerId();
     const quint32 gid = m_props->nextGroupId();
     const int n = gid;
     m_props->createGroup(gid, tr("Fountain %1").arg(n), layer, 0);
@@ -7177,7 +7177,7 @@ void Monitor::slotAddTower()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     t->setOriginX(float(mm.x() / 1000.0));
     t->setOriginY(float(mm.y() / 1000.0));
-    t->setLayerId(m_props->activeLayerId());
+    t->setLayerId(m_props->placementLayerId());
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
@@ -7488,7 +7488,7 @@ void Monitor::slotAddElectric()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     b->setOriginX(float(mm.x() / 1000.0));
     b->setOriginY(float(mm.y() / 1000.0));
-    b->setLayerId(m_props->activeLayerId());
+    b->setLayerId(m_props->placementLayerId());
 
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
@@ -7508,7 +7508,7 @@ void Monitor::slotAddPlatform()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     p->setOriginX(float(mm.x() / 1000.0));
     p->setOriginY(float(mm.y() / 1000.0));
-    p->setLayerId(m_props->activeLayerId());   // land on the selected layer
+    p->setLayerId(m_props->placementLayerId());   // land on the selected layer
 
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
@@ -7531,7 +7531,7 @@ void Monitor::slotAddSteps()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     p->setOriginX(float(mm.x() / 1000.0));
     p->setOriginY(float(mm.y() / 1000.0));
-    p->setLayerId(m_props->activeLayerId());
+    p->setLayerId(m_props->placementLayerId());
 
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
@@ -9696,7 +9696,7 @@ void Monitor::slotAddTruss()
     t->setDirection(QPointF(qCos(radians), qSin(radians)));
     t->setLength(length->value() * fromDisp_a);
     t->setWidth(width->value() * fromDisp_a);
-    t->setLayerId(m_props->activeLayerId());   // land on the selected layer
+    t->setLayerId(m_props->placementLayerId());   // land on the selected layer
 
     m_graphicsView->updateTrusses();
     if (m_layersPanel) m_layersPanel->reload();

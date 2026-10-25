@@ -29,6 +29,7 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <functional>
 #include <cmath>
 
 #include <QLocale>
@@ -71,6 +72,7 @@
 #define KXMLQLCMonitorCurtainLineY  QStringLiteral("CurtainLineY")
 #define KXMLQLCMonitorNumberLineY   QStringLiteral("NumberLineY")
 #define KXMLQLCMonitorTargetPositions QStringLiteral("TargetPositions")
+#define KXMLQLCMonitorItemLocks     QStringLiteral("ItemLocks")
 #define KXMLQLCMonitorStagePieces   QStringLiteral("StagePieces")
 #define KXMLQLCMonitorStagePiece    QStringLiteral("StagePiece")
 
@@ -951,6 +953,7 @@ void MonitorProperties::reset()
     m_centreParts = CentreMarkFlag;
     m_stagePieceLocks = 0;
     m_stageLayerId = defaultLayerId;
+    m_itemLocksOwn = true;
     m_apronAuto = true;
     m_apronDepth = 0.0f;
     m_apronFrontCurve = 0.0f;
@@ -1525,6 +1528,16 @@ quint32 MonitorProperties::addLayer(const QString &name)
     l.order = maxOrder + 1;
     m_layers.insert(l.id, l);
     return l.id;
+}
+
+quint32 MonitorProperties::placementLayerId() const
+{
+    if (!layer(m_activeLayerId).locked)
+        return m_activeLayerId;
+    foreach (const MonitorLayer &l, layers())
+        if (!l.locked && l.id != m_stageLayerId)
+            return l.id;
+    return m_activeLayerId;
 }
 
 void MonitorProperties::removeLayer(quint32 id)
@@ -2146,84 +2159,229 @@ quint32 MonitorProperties::nextStandId() const
     return id;
 }
 
-int MonitorProperties::foldItemLocksIntoLayers(PowerDistribution *pd, NetworkTopology *nt)
+int MonitorProperties::migrateLegacyLocks(PowerDistribution *pd, NetworkTopology *nt)
 {
-    quint32 lockedLayer = 0;
-    bool haveLayer = false;
-    int moved = 0;
-    auto target = [&]() -> quint32 {
-        if (!haveLayer)
-        {
-            foreach (const MonitorLayer &l, layers())
-                if (l.name == QStringLiteral("Locked"))
-                {
-                    lockedLayer = l.id;
-                    haveLayer = true;
-                    break;
-                }
-            if (!haveLayer)
-            {
-                lockedLayer = addLayer(QStringLiteral("Locked"));
-                haveLayer = true;
-            }
-            setLayerLocked(lockedLayer, true);
-        }
-        return lockedLayer;
-    };
-    // An object pinned on its own, on a layer that is not: that is the case
-    // layer-only locking cannot express, so it moves to a layer that can.
-    auto pinnedAlone = [this](bool locked, quint32 layerId) {
-        return locked && !layer(layerId).locked;
-    };
+    if (m_itemLocksOwn)
+        return 0;
+    m_itemLocksOwn = true;
 
-    foreach (Truss *t, m_trusses)
-        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
-    foreach (StagePlatform *p, m_platforms)
-        if (pinnedAlone(p->locked(), p->layerId())) { p->setLayerId(target()); moved++; }
-    foreach (Pipe *p, m_pipes)
-        if (pinnedAlone(p->locked(), p->layerId())) { p->setLayerId(target()); moved++; }
-    foreach (Stand *s, m_stands)
-        if (pinnedAlone(s->locked(), s->layerId())) { s->setLayerId(target()); moved++; }
-    foreach (Tower *t, m_towers)
-        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
-    foreach (StageTarget *t, m_stageTargets)
-        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
-    foreach (Scenery *s, m_sceneries)
-        if (pinnedAlone(s->locked(), s->layerId())) { s->setLayerId(target()); moved++; }
+    /* Saved while an object's own flag only mirrored its layer: a lock that
+       repeats a locked layer is that layer's, not the object's. Cleared, so
+       unlocking the layer frees it as it did when the show was saved. */
+    auto mirrored = [this](bool locked, quint32 layerId) {
+        return locked && layer(layerId).locked;
+    };
+    foreach (Truss *t, m_trusses)            if (mirrored(t->locked(), t->layerId())) t->setLocked(false);
+    foreach (StagePlatform *p, m_platforms)  if (mirrored(p->locked(), p->layerId())) p->setLocked(false);
+    foreach (Pipe *p, m_pipes)               if (mirrored(p->locked(), p->layerId())) p->setLocked(false);
+    foreach (Stand *s, m_stands)             if (mirrored(s->locked(), s->layerId())) s->setLocked(false);
+    foreach (Tower *t, m_towers)             if (mirrored(t->locked(), t->layerId())) t->setLocked(false);
+    foreach (StageTarget *t, m_stageTargets) if (mirrored(t->locked(), t->layerId())) t->setLocked(false);
+    foreach (Scenery *s, m_sceneries)        if (mirrored(s->locked(), s->layerId())) s->setLocked(false);
     foreach (MonitorImage img, m_images)
-        if (pinnedAlone(img.locked, img.layerId)) { img.layerId = target(); setImage(img); moved++; }
-    if (pd != nullptr)
-        for (int i = 0; i < pd->sources().size(); ++i)
-            if (pinnedAlone(pd->sources().at(i).locked, pd->sources().at(i).layerId))
-            { pd->sources()[i].layerId = target(); moved++; }
-    if (nt != nullptr)
-        for (int i = 0; i < nt->nodes().size(); ++i)
-            if (pinnedAlone(nt->nodes().at(i).locked, nt->nodes().at(i).layerId))
-            { nt->nodes()[i].layerId = target(); moved++; }
-    return moved;
-}
-
-void MonitorProperties::syncItemLocksToLayers(PowerDistribution *pd, NetworkTopology *nt)
-{
-    foreach (Truss *t, m_trusses)            t->setLocked(layer(t->layerId()).locked);
-    foreach (StagePlatform *p, m_platforms)  p->setLocked(layer(p->layerId()).locked);
-    foreach (Pipe *p, m_pipes)               p->setLocked(layer(p->layerId()).locked);
-    foreach (Stand *s, m_stands)             s->setLocked(layer(s->layerId()).locked);
-    foreach (Tower *t, m_towers)             t->setLocked(layer(t->layerId()).locked);
-    foreach (StageTarget *t, m_stageTargets) t->setLocked(layer(t->layerId()).locked);
-    foreach (Scenery *s, m_sceneries)        s->setLocked(layer(s->layerId()).locked);
-    foreach (MonitorImage img, m_images)
-        if (img.locked != layer(img.layerId).locked)
+        if (mirrored(img.locked, img.layerId))
         {
-            img.locked = layer(img.layerId).locked;
+            img.locked = false;
             setImage(img);
         }
     if (pd != nullptr)
         for (int i = 0; i < pd->sources().size(); ++i)
-            pd->sources()[i].locked = layer(pd->sources().at(i).layerId).locked;
+            if (mirrored(pd->sources().at(i).locked, pd->sources().at(i).layerId))
+                pd->sources()[i].locked = false;
     if (nt != nullptr)
         for (int i = 0; i < nt->nodes().size(); ++i)
-            nt->nodes()[i].locked = layer(nt->nodes().at(i).layerId).locked;
+            if (mirrored(nt->nodes().at(i).locked, nt->nodes().at(i).layerId))
+                nt->nodes()[i].locked = false;
+
+    /* The layer the old load made for objects locked on their own. */
+    quint32 L = defaultLayerId;
+    bool found = false;
+    foreach (const MonitorLayer &l, layers())
+        if (l.id != defaultLayerId && l.id != m_stageLayerId && l.name == QStringLiteral("Locked"))
+        {
+            L = l.id;
+            found = true;
+            break;
+        }
+    if (!found)
+        return 0;
+
+    // Whatever it held keeps that hold, as its own lock.
+    const bool held = layer(L).locked;
+    if (held)
+    {
+        foreach (Truss *t, m_trusses)            if (t->layerId() == L) t->setLocked(true);
+        foreach (StagePlatform *p, m_platforms)  if (p->layerId() == L) p->setLocked(true);
+        foreach (Pipe *p, m_pipes)               if (p->layerId() == L) p->setLocked(true);
+        foreach (Stand *s, m_stands)             if (s->layerId() == L) s->setLocked(true);
+        foreach (Tower *t, m_towers)             if (t->layerId() == L) t->setLocked(true);
+        foreach (StageTarget *t, m_stageTargets) if (t->layerId() == L) t->setLocked(true);
+        foreach (Scenery *s, m_sceneries)        if (s->layerId() == L) s->setLocked(true);
+        foreach (MonitorImage img, m_images)
+            if (img.layerId == L && !img.locked)
+            {
+                img.locked = true;
+                setImage(img);
+            }
+        if (pd != nullptr)
+            for (int i = 0; i < pd->sources().size(); ++i)
+                if (pd->sources().at(i).layerId == L)
+                    pd->sources()[i].locked = true;
+        if (nt != nullptr)
+            for (int i = 0; i < nt->nodes().size(); ++i)
+                if (nt->nodes().at(i).layerId == L)
+                    nt->nodes()[i].locked = true;
+        setLayerLocked(L, false);
+    }
+
+    /* Where each one came from, where the show still says: the old load
+       moved the object alone, so its folder, what it is mounted on and what
+       is mounted on it stayed on the layer it was on. Unknown stays put. */
+    auto groupLayer = [this, L](quint32 gid) -> quint32 {
+        if (gid != 0 && m_groups.contains(gid) && m_groups.value(gid).layerId != L
+            && m_layers.contains(m_groups.value(gid).layerId))
+            return m_groups.value(gid).layerId;
+        return L;
+    };
+    auto fixturesLayer = [this, L](const std::function<bool(const FixtureRigProps &)> &on) -> quint32 {
+        for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
+        {
+            if (!on(it.value()) || !m_fixtureItems.contains(it.key()))
+                continue;
+            const quint32 fl = fixtureLayer(it.key());
+            if (fl != L && m_layers.contains(fl))
+                return fl;
+        }
+        return L;
+    };
+    auto layerOfTruss = [this](quint32 id) { return m_trusses.contains(id) ? m_trusses.value(id)->layerId() : UINT_MAX; };
+    int moved = 0;
+    for (int pass = 0; pass < 3; ++pass)        // a bar follows its truss home
+    {
+        foreach (Truss *t, m_trusses)
+        {
+            if (t->layerId() != L)
+                continue;
+            quint32 to = groupLayer(t->groupId());
+            const quint32 tid = t->id();
+            if (to == L)
+                to = fixturesLayer([tid](const FixtureRigProps &r) { return r.trussId == tid; });
+            if (to == L && t->isChildBar() && layerOfTruss(t->parentTrussId()) != L
+                && m_layers.contains(layerOfTruss(t->parentTrussId())))
+                to = layerOfTruss(t->parentTrussId());
+            if (to == L && t->isStandMounted() && m_stands.contains(t->standId())
+                && m_stands.value(t->standId())->layerId() != L)
+                to = m_stands.value(t->standId())->layerId();
+            if (to != L) { t->setLayerId(to); moved++; }
+        }
+        foreach (StagePlatform *p, m_platforms)
+        {
+            if (p->layerId() != L)
+                continue;
+            quint32 to = groupLayer(p->groupId());
+            const quint32 pid = p->id();
+            if (to == L)
+                to = fixturesLayer([pid](const FixtureRigProps &r) { return r.riserPlatformId == pid || r.deckPlatformId == pid; });
+            if (to != L) { p->setLayerId(to); moved++; }
+        }
+        foreach (Pipe *p, m_pipes)
+        {
+            if (p->layerId() != L)
+                continue;
+            quint32 to = groupLayer(p->groupId());
+            const quint32 pid = p->id();
+            if (to == L)
+                to = fixturesLayer([pid](const FixtureRigProps &r) { return r.pipeId == pid; });
+            if (to == L && p->isBarOnPipe() && m_pipes.contains(p->parentPipeId())
+                && m_pipes.value(p->parentPipeId())->layerId() != L)
+                to = m_pipes.value(p->parentPipeId())->layerId();
+            if (to != L) { p->setLayerId(to); moved++; }
+        }
+        foreach (Tower *t, m_towers)
+        {
+            if (t->layerId() != L)
+                continue;
+            quint32 to = groupLayer(t->groupId());
+            const quint32 tid = t->id();
+            if (to == L)
+                to = fixturesLayer([tid](const FixtureRigProps &r) { return r.towerId == tid; });
+            if (to != L) { t->setLayerId(to); moved++; }
+        }
+        foreach (Stand *s, m_stands)
+        {
+            if (s->layerId() != L)
+                continue;
+            quint32 to = groupLayer(s->groupId());
+            if (to == L)
+            {
+                foreach (Truss *t, m_trusses)
+                {
+                    if (t->standId() == s->id() && t->layerId() != L)
+                    {
+                        to = t->layerId();
+                        break;
+                    }
+                }
+            }
+            if (to != L) { s->setLayerId(to); moved++; }
+        }
+    }
+    foreach (StageTarget *t, m_stageTargets)
+        if (t->layerId() == L && groupLayer(t->groupId()) != L) { t->setLayerId(groupLayer(t->groupId())); moved++; }
+    foreach (Scenery *s, m_sceneries)
+        if (s->layerId() == L && groupLayer(s->groupId()) != L) { s->setLayerId(groupLayer(s->groupId())); moved++; }
+    foreach (MonitorImage img, m_images)
+        if (img.layerId == L && groupLayer(img.groupId) != L)
+        {
+            img.layerId = groupLayer(img.groupId);
+            setImage(img);
+            moved++;
+        }
+    if (pd != nullptr)
+        for (int i = 0; i < pd->sources().size(); ++i)
+            if (pd->sources().at(i).layerId == L && groupLayer(pd->sources().at(i).groupId) != L)
+            { pd->sources()[i].layerId = groupLayer(pd->sources().at(i).groupId); moved++; }
+    if (nt != nullptr)
+        for (int i = 0; i < nt->nodes().size(); ++i)
+            if (nt->nodes().at(i).layerId == L && groupLayer(nt->nodes().at(i).groupId) != L)
+            { nt->nodes()[i].layerId = groupLayer(nt->nodes().at(i).groupId); moved++; }
+    // A hanger goes with what it hangs off.
+    foreach (Hanger *h, m_hangers)
+    {
+        if (h->layerId() != L)
+            continue;
+        quint32 to = L;
+        if (h->parentKind() == Hanger::OnTruss && m_trusses.contains(h->parentId()))
+            to = m_trusses.value(h->parentId())->layerId();
+        else if (h->parentKind() == Hanger::OnTower && m_towers.contains(h->parentId()))
+            to = m_towers.value(h->parentId())->layerId();
+        if (to != L) h->setLayerId(to);
+    }
+
+    // Nothing left on it: it goes. Otherwise it is a layer like any other.
+    bool used = false;
+    foreach (Truss *t, m_trusses)            used = used || t->layerId() == L;
+    foreach (StagePlatform *p, m_platforms)  used = used || p->layerId() == L;
+    foreach (Pipe *p, m_pipes)               used = used || p->layerId() == L;
+    foreach (Stand *s, m_stands)             used = used || s->layerId() == L;
+    foreach (Tower *t, m_towers)             used = used || t->layerId() == L;
+    foreach (StageTarget *t, m_stageTargets) used = used || t->layerId() == L;
+    foreach (Scenery *s, m_sceneries)        used = used || s->layerId() == L;
+    foreach (Hanger *h, m_hangers)           used = used || h->layerId() == L;
+    foreach (const MonitorImage &img, m_images) used = used || img.layerId == L;
+    foreach (const MonitorGroup &g, m_groups)   used = used || g.layerId == L;
+    foreach (quint32 fid, m_fixtureItems.keys()) used = used || fixtureLayer(fid) == L;
+    if (pd != nullptr)
+    {
+        foreach (const PowerSource &ps, pd->sources()) used = used || ps.layerId == L;
+    }
+    if (nt != nullptr)
+    {
+        foreach (const NetworkNode &n, nt->nodes()) used = used || n.layerId == L;
+    }
+    if (!used)
+        removeLayer(L);
+    return moved;
 }
 
 quint32 MonitorProperties::nextSceneryId() const
@@ -3044,6 +3202,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         setNumberLineY(QLocale::c().toFloat(attrs.value(KXMLQLCMonitorNumberLineY).toString()));
     if (attrs.hasAttribute(KXMLQLCMonitorTargetPositions))
         setTargetPositionsVisible(attrs.value(KXMLQLCMonitorTargetPositions).toString().toInt() != 0);
+    // An object's own lock is its own (migrateLegacyLocks()).
+    m_itemLocksOwn = attrs.value(KXMLQLCMonitorItemLocks).toString().toInt() != 0;
 
     while (root.readNextStartElement())
     {
@@ -3966,6 +4126,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
     // The stage pieces are a StagePieces element below; this is a view setting.
     if (!targetPositionsVisible())
         doc->writeAttribute(KXMLQLCMonitorTargetPositions, QStringLiteral("0"));
+    // Each object's Locked is its own, not a copy of its layer's.
+    doc->writeAttribute(KXMLQLCMonitorItemLocks, QStringLiteral("1"));
 
     /* Font */
     doc->writeTextElement(KXMLQLCMonitorFont, font().toString());

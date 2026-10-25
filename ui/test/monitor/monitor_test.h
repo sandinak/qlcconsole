@@ -508,11 +508,11 @@ private slots:
      *  still centred on its structure. */
     void aCountBubbleKeepsItsScreenSizeWhenZoomed();
     void oneUndoPutsBackAWholeMixedDrag();
-    /** One lock, the LAYER's: locking any object locks its layer (and
-     *  everything on it), the menu says so, a power source's own toggle
-     *  goes through it too, and every locked thing -- fixtures included --
-     *  draws red and won't drag. */
-    void aLockIsItsLayersAndDrawsRed();
+    /** Two locks: an object's own (held, still selectable) and its layer's
+     *  (everything on it, unselectable); the menu offers both, a power
+     *  source's toggle is its own, and every locked thing -- fixtures on a
+     *  locked layer included -- draws red and won't drag. */
+    void anObjectAndItsLayerEachHaveALock();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();
@@ -846,6 +846,35 @@ private slots:
     /** M163: an aimed fixed light's pool (plot) and beam (rig view) follow
      *  its aim, not straight down */
     void aFixedLightAimedByPanAndTiltThrowsItsPoolThere();
+
+    /** Picked on the plot, picked in Plot layers: one row per object (where
+     *  it is, not each fixture group listing it besides), only the branches
+     *  holding them opened, the first scrolled into view */
+    void plotSelectionOpensOnlyItsBranchesInLayers();
+    /** Plot layers' "Selected only" (off by default): the selection and
+     *  what holds it, following the plot */
+    void selectedOnlyShowsTheSelectionAndWhatHoldsIt();
+    /** A target is shown, hidden and locked by its layer like everything
+     *  else -- in an elevation too -- and has a lock of its own */
+    void targetsFollowTheirLayersEyeAndLock();
+    /** A line target draws in its own colour, locked or not (a red ring
+     *  says locked); a new one never lands on a locked layer; its end
+     *  handle drags that end on the grid, one undo step; its body moves */
+    void aLineTargetKeepsItsColourLocksAndSnaps();
+    /** A truss moved to a layer takes its folder, bars, hangers and
+     *  fixtures with it; an old show's "Locked" layer is taken apart on
+     *  load and a fixture can be dropped back onto its truss */
+    void aStructureMovedToALayerTakesItsMountsWithIt();
+    /** With overlay scroll bars, the list stops short of the bar: it never
+     *  lies over a layer's lock button */
+    void theScrollBarLeavesTheLockButtonsClear();
+    /** Right-click a layer: New Folder (named in place), and New Folder
+     *  Inside on a folder; New Layer still there */
+    void newFolderFromALayersMenu();
+    /** What hangs on what is a tree in Plot layers: Tower > Hanger >
+     *  Lantern, Truss > Bar > Spot, Stand > Truss, Boom > Crossbar; a
+     *  fixture dropped on a hanger or a bar's row is hung there */
+    void mountsNestInPlotLayers();
 
 private:
     Doc* m_doc;

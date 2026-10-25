@@ -592,13 +592,15 @@ riser*, *on pipe*, *frame*, *fixture group* — so double-clicking one
 reliably opens the right editor instead of guessing between four
 visually-similar folder kinds.
 
-- **One lock: the layer's.** Locking anything — from its right-click menu
-  ("Lock Layer “Rig”"), the Plot layers panel, or a power source's or network
-  node's own toggle — locks its whole layer, and everything locked is
-  outlined in red. (Older shows' per-object locks move onto a locked layer
-  called "Locked" when opened, so nothing that was held comes loose.) A
-  folder's own "Lock Folder Position" still holds a folder still while
-  leaving it selectable.
+- **Two locks: the object's and the layer's.** An object's right-click menu
+  has **Lock Position** (that object; it stays selectable and its row shows
+  a padlock) and **Lock Layer “Rig”** (everything on the layer). Everything
+  locked is outlined in red. A folder's own "Lock Folder Position" still
+  holds a folder still while leaving it selectable. See
+  [Locks](lighting-studio.md#locks) -- including what happens to a 0.2
+  show's "Locked" layer.
+- **What hangs on what is a tree**, **Selected only**, **New Folder** --
+  see [Plot layers](lighting-studio.md#plot-layers).
 - **Rename any row** — select it and press Enter (or F2), fixture groups
   included. The editor starts from the bare name, without the "· on truss"
   label, and a rename shows everywhere the fixture appears.

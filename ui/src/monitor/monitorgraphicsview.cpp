@@ -50,6 +50,7 @@
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
+#include "itemlock.h"
 #include "stagemarklabel.h"
 #include "stagepieceitem.h"
 #include "righeads.h"
@@ -1279,7 +1280,16 @@ void MonitorGraphicsView::setItemLayer(QGraphicsItem *gi, quint32 layerId)
     if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
         props->setFixtureLayer(mfi->fixtureID(), layerId);
     else if (auto *ti = dynamic_cast<TrussItem *>(gi))
-    { if (Truss *t = ti->truss()) t->setLayerId(layerId); }
+    {
+        if (Truss *t = ti->truss())
+        {
+            t->setLayerId(layerId);
+            // Its hangers go with it.
+            foreach (Hanger *h, props->hangers())
+                if (h->parentKind() == Hanger::OnTruss && h->parentId() == t->id())
+                    h->setLayerId(layerId);
+        }
+    }
     else if (auto *pi = dynamic_cast<PlatformItem *>(gi))
     { if (StagePlatform *p = pi->platform()) p->setLayerId(layerId); }
     else if (auto *tg = dynamic_cast<TargetItem *>(gi))
@@ -1303,7 +1313,15 @@ void MonitorGraphicsView::setItemLayer(QGraphicsItem *gi, quint32 layerId)
     else if (auto *sc = dynamic_cast<SceneryItem *>(gi))
     { if (Scenery *s = sc->scenery()) s->setLayerId(layerId); }
     else if (auto *twi = dynamic_cast<TowerItem *>(gi))
-    { if (Tower *t = twi->tower()) t->setLayerId(layerId); }
+    {
+        if (Tower *t = twi->tower())
+        {
+            t->setLayerId(layerId);
+            foreach (Hanger *h, props->hangers())
+                if (h->parentKind() == Hanger::OnTower && h->parentId() == t->id())
+                    h->setLayerId(layerId);
+        }
+    }
     else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
     {
         MonitorProperties::MonitorImage img = props->image(ii->imageId());
@@ -2423,6 +2441,8 @@ void MonitorGraphicsView::selectMapItem(const QString &kind, quint32 id)
         target = (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
     else if (kind == QStringLiteral("image"))
         target = m_imageItems.value(id, nullptr);
+    else if (kind == QStringLiteral("hanger"))
+        target = m_hangerItems.value(id, nullptr);
     else if (kind == QStringLiteral("stage"))
     {
         StagePieceItem *spi = m_stagePieceItems.value(int(id), nullptr);
@@ -2486,6 +2506,7 @@ void MonitorGraphicsView::selectMapItems(const QList<QPair<QString, quint32> > &
         else if (kind == QStringLiteral("network"))
             target = (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
         else if (kind == QStringLiteral("image"))    target = m_imageItems.value(id, nullptr);
+        else if (kind == QStringLiteral("hanger"))   target = m_hangerItems.value(id, nullptr);
         if (target)
             target->setSelected(true);
     }
@@ -2514,11 +2535,32 @@ QGraphicsItem *MonitorGraphicsView::itemFor(const QString &kind, quint32 id) con
 
 void MonitorGraphicsView::reparentToLayer(const QList<QPair<QString, quint32> > &items, quint32 layerId)
 {
-    int n = 0;
+    MonitorProperties *props = m_doc->monitorProperties();
+    /* A structure carrying things -- a truss shown as "T-2 · on truss" --
+       moves with everything on it: its own folder goes to the layer whole.
+       Pulling the truss out of its folder left its bars, hangers and
+       fixtures behind in a folder that no longer stood for it, and they
+       never showed as on the truss again. */
+    QSet<quint32> wholeGroups;
     for (const QPair<QString, quint32> &it : items)
     {
         QGraphicsItem *gi = itemFor(it.first, it.second);
-        if (gi == nullptr)
+        const quint32 g = gi != nullptr ? itemGroupId(gi) : 0;
+        if (g != 0 && props->hasGroup(g) && props->group(g).anchorKind == it.first
+            && props->group(g).anchorId == it.second)
+            wholeGroups.insert(g);
+    }
+    int n = 0;
+    foreach (quint32 g, wholeGroups)
+    {
+        props->setGroupParent(g, 0);
+        setGroupSubtreeLayer(g, layerId);
+        n++;
+    }
+    for (const QPair<QString, quint32> &it : items)
+    {
+        QGraphicsItem *gi = itemFor(it.first, it.second);
+        if (gi == nullptr || wholeGroups.contains(itemGroupId(gi)))
             continue;
         setItemGroupId(gi, 0);        // pulled out of any group
         setItemLayer(gi, layerId);
@@ -2687,13 +2729,13 @@ void MonitorGraphicsView::refreshItemLayerState()
     MonitorProperties *props = m_doc->monitorProperties();
     if (props == nullptr)
         return;
-    // One lock: every object's own flag follows its layer (drag, red outline).
-    props->syncItemLocksToLayers(m_doc->powerDistribution(), m_doc->networkTopology());
     auto repaintAll = qScopeGuard([this]() { if (m_scene) m_scene->update(); });
 
     // What holds an item still, by SOURCE:
-    //   • LAYER lock (the only lock an object has; its own flag mirrors it)
-    //     → the item can't be moved AND can't be selected, and draws red.
+    //   • LAYER lock → the item can't be moved AND can't be selected, and
+    //     draws red (told to the item: ItemLock::LayerLockedKey).
+    //   • its OWN lock → can't be moved, draws red, but CAN still be selected
+    //     (so it can be unlocked from its menu).
     //   • folder lock / global "Edit Plot" lock → can't be moved, but CAN
     //     still be selected (so it can be inspected / rubber-banded).
     // A helper keeps ItemIsSelectable in sync and drops a stale selection when an
@@ -2702,6 +2744,12 @@ void MonitorGraphicsView::refreshItemLayerState()
         gi->setFlag(QGraphicsItem::ItemIsSelectable, selectable);
         if (!selectable && gi->isSelected())
             gi->setSelected(false);
+        // Its layer's lock, for drawing it red: the inverse of selectable.
+        if (gi->data(ItemLock::LayerLockedKey).toBool() == selectable)
+        {
+            gi->setData(ItemLock::LayerLockedKey, !selectable);
+            gi->update();
+        }
     };
 
     // Fixtures (no per-item lock): layer drives visibility + selectability;
@@ -2872,8 +2920,10 @@ void MonitorGraphicsView::refreshItemLayerState()
         foreach (TrussItem *i, m_trussItems)
         {
             Truss *t = i->truss();
-            const bool locked = (t != nullptr && t->locked()) || m_layoutLocked;
-            i->setMovable(elevationBarDraggable(t) || !locked);
+            const bool locked = (t != nullptr && t->locked()) || m_layoutLocked
+                              || props->layer(t ? t->layerId() : 0).locked;
+            // A tower crossbar, a free truss: either drags here unless held.
+            i->setMovable(!locked);
         }
         foreach (PlatformItem *i, m_platformItems)       i->setMovable(false);
         foreach (PowerSourceItem *i, m_powerSourceItems) i->setMovable(false);
@@ -2884,7 +2934,9 @@ void MonitorGraphicsView::refreshItemLayerState()
         foreach (TargetItem *i, m_targetItems)
         {
             StageTarget *t = i->target();
-            i->setMovable(m_doc->mode() == Doc::Design && !(t && t->locked()));
+            i->setMovable(m_doc->mode() == Doc::Design && !(t && t->locked())
+                          && !props->layer(t ? t->layerId() : 0).locked
+                          && !props->groupChainLocked(t ? t->groupId() : 0));
         }
         foreach (PipeItem *i, m_pipeItems)               i->setMovable(false);
         foreach (StandItem *i, m_standItems)             i->setMovable(false);
@@ -2903,8 +2955,14 @@ void MonitorGraphicsView::refreshItemLayerState()
             fit.value()->setVisible(fixtureItemShouldBeVisible(fit.key()));
     foreach (HangerItem *hgi, m_hangerItems)
     {
+        // Shown with what it hangs off (Plot layers lists it there too).
         Hanger *h = props->hanger(hgi->hangerId());
-        hgi->setVisible(props->layer(h ? h->layerId() : 0).visible);
+        quint32 lid = h ? h->layerId() : 0;
+        if (h != nullptr && h->parentKind() == Hanger::OnTruss && props->truss(h->parentId()) != nullptr)
+            lid = props->truss(h->parentId())->layerId();
+        else if (h != nullptr && h->parentKind() == Hanger::OnTower && props->tower(h->parentId()) != nullptr)
+            lid = props->tower(h->parentId())->layerId();
+        hgi->setVisible(props->layer(lid).visible && props->layer(h ? h->layerId() : 0).visible);
     }
     updateStageMarks();         // the stage pieces, on their own layer
     emit layerStateChanged();   // the rig view follows what is shown here
@@ -5207,9 +5265,9 @@ void MonitorGraphicsView::slotPowerSourceLockToggled(int sourceIndex)
     PowerDistribution *pd = m_doc->powerDistribution();
     if (sourceIndex < 0 || sourceIndex >= pd->sources().size())
         return;
-    // Locks are by layer: this locks (or unlocks) the source's layer.
+    // The source's own lock.
     setItemLocked(QStringLiteral("power"), quint32(sourceIndex),
-                  !itemLocked(QStringLiteral("power"), quint32(sourceIndex)));
+                  !itemOwnLocked(QStringLiteral("power"), quint32(sourceIndex)));
 }
 
 void MonitorGraphicsView::setPowerSourceColors(const QHash<QString, QColor> &circuitColors)
@@ -5492,9 +5550,9 @@ void MonitorGraphicsView::slotNetworkNodeLockToggled(int nodeIndex)
     NetworkTopology *nt = m_doc->networkTopology();
     if (nodeIndex < 0 || nodeIndex >= nt->nodes().size())
         return;
-    // Locks are by layer: this locks (or unlocks) the node's layer.
+    // The node's own lock.
     setItemLocked(QStringLiteral("network"), quint32(nodeIndex),
-                  !itemLocked(QStringLiteral("network"), quint32(nodeIndex)));
+                  !itemOwnLocked(QStringLiteral("network"), quint32(nodeIndex)));
 }
 
 void MonitorGraphicsView::slotNetworkNodeMoved(NetworkNodeItem *item)
@@ -5713,6 +5771,27 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
 
+    /* Snap the dropped target, shift the rest by the same -- only when it
+       was dragged: a line's handle drag ends here too (the release sweep),
+       and snapping its new centre would shift the whole line. */
+    auto drawnAt = [this](TargetItem *ti) {
+        MonitorProperties *mp = m_doc->monitorProperties();
+        StageTarget *t = ti->target();
+        const QVector3D at = (t != nullptr && t->isLine()) ? mp->targetAimPoint(t)
+                                                          : (t != nullptr ? t->position() : QVector3D());
+        return projectMm(at.x() * 1000.0, at.y() * 1000.0, at.z() * 1000.0);
+    };
+    if (m_snapDivisions > 0 && m_cellPixels > 0 && item != nullptr && item->target() != nullptr
+        && QLineF(drawnAt(item), item->pos()).length() > 0.5)
+    {
+        const QPointF delta = snapScenePos(item->pos()) - item->pos();
+        if (!delta.isNull())
+        {
+            foreach (TargetItem *ti, moved)
+                ti->setPos(ti->pos() + delta);
+        }
+    }
+
     UndoEntry e; e.type = UndoEntry::TargetMove;
     foreach (TargetItem *ti, moved)
     {
@@ -5891,6 +5970,8 @@ void MonitorGraphicsView::slotLineHandleMoved(TargetItem *item, int index, QPoin
         else
             sp.setX(m_lineDrag.startScene.x());
     }
+    // On the grid, when snap is on, as any other drag.
+    sp = snapScenePos(sp);
 
     QVector3D w = unprojectMm(sp, startW * 1000.0f) / 1000.0f;
     /* From above, height is not something the drag can say: keep the handle
@@ -8173,19 +8254,17 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
     // Several at once: one object's lock is in its own section.
     QList<QPair<QString, quint32> > lockable;
     for (const auto &o : objects)
-        if (o.first != QLatin1String("fixture"))
+        if (kindHasOwnLock(o.first))
             lockable << o;
     if (lockable.size() >= 2)
     {
-        menu->addAction(tr("Lock Their Layers"), this, [this, lockable]() {
+        menu->addAction(tr("Lock Their Positions"), this, [this, lockable]() {
             for (const auto &o : lockable)
                 setItemLocked(o.first, o.second, true);
-            emit mapStructureChanged();
         });
-        menu->addAction(tr("Unlock Their Layers"), this, [this, lockable]() {
+        menu->addAction(tr("Unlock Their Positions"), this, [this, lockable]() {
             for (const auto &o : lockable)
                 setItemLocked(o.first, o.second, false);
-            emit mapStructureChanged();
         });
     }
 }
@@ -8363,12 +8442,22 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         }
 
         menu->addSeparator();
-        const bool locked = itemLocked(kind, id);
+        /* Two locks: this one thing, and the layer it is on. */
+        if (kindHasOwnLock(kind))
+        {
+            const bool own = itemOwnLocked(kind, id);
+            QAction *lk = menu->addAction(own ? tr("Unlock Position") : tr("Lock Position"),
+                                          this, [this, kind, id, own]() {
+                setItemLocked(kind, id, !own);
+            });
+            lk->setObjectName(QStringLiteral("itemLock"));
+        }
+        const bool layerLocked = m_doc->monitorProperties()->layer(objectLayerId(kind, id)).locked;
         const QString layerName = m_doc->monitorProperties()->layer(objectLayerId(kind, id)).name;
-        menu->addAction(locked ? tr("Unlock Layer “%1”").arg(layerName)
-                               : tr("Lock Layer “%1”").arg(layerName),
-                        this, [this, kind, id, locked]() {
-            setItemLocked(kind, id, !locked);
+        menu->addAction(layerLocked ? tr("Unlock Layer “%1”").arg(layerName)
+                                    : tr("Lock Layer “%1”").arg(layerName),
+                        this, [this, kind, id, layerLocked]() {
+            setItemLayerLocked(kind, id, !layerLocked);
         });
 
         if (withRemoval)
@@ -8781,13 +8870,105 @@ quint32 MonitorGraphicsView::objectLayerId(const QString &kind, quint32 id, bool
 
 bool MonitorGraphicsView::itemLocked(const QString &kind, quint32 id) const
 {
-    // Locked is its LAYER's lock -- there is no other.
+    // Held by its own lock or by its layer's.
     bool found = false;
     const quint32 lid = objectLayerId(kind, id, &found);
-    return found && m_doc->monitorProperties()->layer(lid).locked;
+    return found && (m_doc->monitorProperties()->layer(lid).locked || itemOwnLocked(kind, id));
+}
+
+bool MonitorGraphicsView::kindHasOwnLock(const QString &kind)
+{
+    return kind == QLatin1String("truss") || kind == QLatin1String("platform")
+        || kind == QLatin1String("pipe") || kind == QLatin1String("stand")
+        || kind == QLatin1String("tower") || kind == QLatin1String("target")
+        || kind == QLatin1String("scenery") || kind == QLatin1String("image")
+        || kind == QLatin1String("power") || kind == QLatin1String("network");
+}
+
+bool MonitorGraphicsView::itemOwnLocked(const QString &kind, quint32 id) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (kind == QLatin1String("truss"))    { const Truss *t = props->truss(id); return t != nullptr && t->locked(); }
+    if (kind == QLatin1String("platform")) { const StagePlatform *p = props->platform(id); return p != nullptr && p->locked(); }
+    if (kind == QLatin1String("pipe"))     { const Pipe *p = props->pipe(id); return p != nullptr && p->locked(); }
+    if (kind == QLatin1String("stand"))    { const Stand *s = props->stand(id); return s != nullptr && s->locked(); }
+    if (kind == QLatin1String("tower"))    { const Tower *t = props->tower(id); return t != nullptr && t->locked(); }
+    if (kind == QLatin1String("target"))   { const StageTarget *t = props->stageTarget(id); return t != nullptr && t->locked(); }
+    if (kind == QLatin1String("scenery"))  { const Scenery *s = props->scenery(id); return s != nullptr && s->locked(); }
+    if (kind == QLatin1String("image"))    return props->hasImage(id) && props->image(id).locked;
+    if (kind == QLatin1String("power"))
+    {
+        PowerDistribution *pd = m_doc->powerDistribution();
+        return int(id) < pd->sources().size() && pd->sources().at(int(id)).locked;
+    }
+    if (kind == QLatin1String("network"))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        return int(id) < nt->nodes().size() && nt->nodes().at(int(id)).locked;
+    }
+    return false;
 }
 
 void MonitorGraphicsView::setItemLocked(const QString &kind, quint32 id, bool locked)
+{
+    /* The object itself: held where it is, still selectable (so it can be
+       unlocked again), drawn red. Its layer is not touched. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (!kindHasOwnLock(kind) || itemOwnLocked(kind, id) == locked)
+        return;
+    bool done = true;
+    if (kind == QLatin1String("truss"))         { if (Truss *t = props->truss(id)) t->setLocked(locked); else done = false; }
+    else if (kind == QLatin1String("platform")) { if (StagePlatform *p = props->platform(id)) p->setLocked(locked); else done = false; }
+    else if (kind == QLatin1String("pipe"))     { if (Pipe *p = props->pipe(id)) p->setLocked(locked); else done = false; }
+    else if (kind == QLatin1String("stand"))    { if (Stand *st = props->stand(id)) st->setLocked(locked); else done = false; }
+    else if (kind == QLatin1String("tower"))    { if (Tower *t = props->tower(id)) t->setLocked(locked); else done = false; }
+    else if (kind == QLatin1String("target"))   { if (StageTarget *t = props->stageTarget(id)) t->setLocked(locked); else done = false; }
+    else if (kind == QLatin1String("scenery"))  { if (Scenery *sc = props->scenery(id)) sc->setLocked(locked); else done = false; }
+    else if (kind == QLatin1String("image"))
+    {
+        if (props->hasImage(id))
+        {
+            MonitorProperties::MonitorImage img = props->image(id);
+            img.locked = locked;
+            props->setImage(img);
+        }
+        else
+        {
+            done = false;
+        }
+    }
+    else if (kind == QLatin1String("power"))
+    {
+        PowerDistribution *pd = m_doc->powerDistribution();
+        if (int(id) < pd->sources().size())
+            pd->sources()[int(id)].locked = locked;
+        else
+            done = false;
+    }
+    else if (kind == QLatin1String("network"))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        if (int(id) < nt->nodes().size())
+            nt->nodes()[int(id)].locked = locked;
+        else
+            done = false;
+    }
+    if (!done)
+        return;
+    m_doc->setModified();
+    // The power and network items carry their lock: rebuilt with it.
+    if (kind == QLatin1String("power"))
+        updatePowerSources();
+    else if (kind == QLatin1String("network"))
+        updateNetworkNodes();
+    refreshItemLayerState();
+    if (QGraphicsItem *gi = itemFor(kind, id))
+        gi->update();
+    m_scene->update();
+    emit mapStructureChanged();
+}
+
+void MonitorGraphicsView::setItemLayerLocked(const QString &kind, quint32 id, bool locked)
 {
     /* Lock or unlock the layer it is on: everything on that layer with it.
        An unknown object is ignored -- it must not fall through to layer 0
@@ -8800,9 +8981,6 @@ void MonitorGraphicsView::setItemLocked(const QString &kind, quint32 id, bool lo
     props->setLayerLocked(lid, locked);
     m_doc->setModified();
     refreshItemLayerState();
-    updateTargets();
-    updatePowerSources();
-    updateNetworkNodes();
     m_scene->update();
     emit mapStructureChanged();
 }
@@ -8872,7 +9050,7 @@ void MonitorGraphicsView::ensureFixtureOnPlot(quint32 fid)
     const QPointF mm(double(w.x()) * 1000.0, double(w.y()) * 1000.0);
     addFixture(fid, mm);
     props->setFixturePosition(fid, 0, 0, QVector3D(float(mm.x()), float(mm.y()), w.z()));
-    props->setFixtureLayer(fid, props->activeLayerId());
+    props->setFixtureLayer(fid, props->placementLayerId());
     refreshFixtureLabels();
     m_doc->setModified();
 }

@@ -21,6 +21,7 @@
 #include <QFont>
 #include <QMenu>
 
+#include "itemlock.h"
 #include "platformitem.h"
 #include "stageplatform.h"
 #include "monitorproperties.h"
@@ -106,7 +107,7 @@ void PlatformItem::paint(QPainter *painter,
     border.setAlpha(selected ? 255 : 180);
 
     // A locked platform gets a red border so the frozen state reads at a glance.
-    if (m_platform->locked())
+    if (ItemLock::drawnLocked(this, m_platform->locked()))
         border = QColor(200, 60, 60, selected ? 255 : 200);
 
     if (m_platform->isSteps())
