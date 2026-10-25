@@ -560,6 +560,7 @@ Findings that are not marked as bugs:
 | M494 | Scene editor lists a scene's looks | A scene of looks on fixture groups lists them in General; a plain scene has no such list | **ViewLayout_Test::sceneEditorListsAScenesLooks** (new) | none | covered | low | — |
 | M495 | Long fader rows scroll sideways | Shift + wheel and a sideways swipe scroll the row and leave the fader; a plain wheel is the fader's; a drag on empty space pans | **ViewLayout_Test::sliderRowsScrollSideways** (new) | none | covered | med | Middle-button drag not driven. |
 | M496 | Always show scroll bars | Settings ▸ Appearance checkbox sets it, saved; the app style then never hides a scroll bar; off restores the same base style | **ViewLayout_Test::alwaysShowScrollBarsSetting** (new) | none | covered | med | Offscreen is Fusion, which never hides them: the macOS overlay look itself is not seen by a test. |
+| M506 | Matrix effects cost less a tick | Balls, Kaleidoscope, Lissajous and Starfield (and the library) keep time on eight boxes, each box and staggered | EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes | partial | partial | med | Same frames as the old scripts was checked by hand at commit time (ead57dc60, 9300760f6), not by a kept test |
 
 ## Fixed (part 1)
 
@@ -665,6 +666,10 @@ Findings that are not marked as bugs:
 | M483 | Track intensity | A saved 50% plays at 50% after load | ShowRunner_Test::aTrackIntensityIsSavedAndPlaysAfterLoad | covered | covered | high | — |
 | M490 | Fixture Properties for every fixture | Double-click and Fixture Properties… open the dialog for every fixture of every course show and test workspace, on the plot or not; off the plot its X, Y and rotation are greyed | **ShowFiles_Test::fixturePropertiesOpensForEveryFixture** (new, ui/test/showfiles/showfiles_test.cpp) | none | covered | high | — |
 | M491 | Double-click a universe | A double-click on a universe row (By universe and wiring view, patched or not) opens its connection window, not a rename | **ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection** (new) | none | covered | med | — |
+| M507 | Matrix Lissajous off the grid | A head past its area's grid gets a level and colour; every Matrix effect answers heads off the grid in every scope | **EffectInstance_Test::matrixEffectsTakeCellsOffTheGrid** | none | covered | med | — |
+| M508 | Old "Locked" layer, a structure's folder | A structure shown as its folder goes home with the folder and what is in it | MonitorProperties_Test::legacyLockedLayerIsTakenApart | none | covered | med | — |
+| M509 | A controller asleep is never silent | Started with no pad: said (panel and voice); a woken pad says "Controller back." and takes over unless the keys nudge or Keyboard was chosen; the setup with no pad remembers nothing | FocusMode_Test::aPadAsleepAtTheStartIsSaidAndTakesOverWhenWoken, ::theKeysNudgingHoldTheTakeoverABeat, ::aChosenKeyboardIsKeptAndSaysWhatToPress, ::theSetupWithNoPadIsNotAChoice; FocusCalls_Test::aToolStartedWithNoControllerSaysSoAndTheWokenPadIsBack; InputDeviceNotices_Test::aPadAsleepWhileIdleIsSaidAndRepatchedWhenWoken | none | covered | high | — |
+| M510 | HID pad gone and back (macOS) | A framework-read Xbox or DualSense pad disconnecting and reconnecting reads as gone, then is claimed again | HIDGameController_Test::aPadComingAndGoingIsAnnounced, ::aPadThatGoesReadsAsGoneAndItsWokenSelfIsClaimed, ::aPlayStationPadIsFollowedTheSameWay | none | covered | med | macOS only |
 
 ## Data safety across features (old shows, file formats)
 

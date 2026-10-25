@@ -22,6 +22,15 @@ Eos shows imported with their special circuits and subs; skip cues, cue
 colours and move in black on the Show Tree. Developed as 0.2.2: notes and
 tests that cite "CHANGELOG 0.2.2" mean this section.
 
+Release candidate 2 adds, from testing RC1: the Stage layer (stage marks
+and the apron as pieces of their own) and the Rig Overview footer; the
+Focus menu, its reasons and names, and Voice detail; one connection window
+in Connections; a controller asleep or woken never failing silently; Plot
+layers following the plot and nesting by mount, with locks per object and
+per layer; the Classic QLC+ Functions tab without the Show Tree's own and
+the scene editor's General above its sliders; Classic QLC+ saying when a
+show plays Show Tree content; and faster Matrix effects.
+
 ### Added
 
 - **House rig, tour package and universes per venue** (VENUES.md, board
@@ -433,6 +442,14 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
 
 ### Changed
 
+- **Matrix effects cost less a tick** (RC2; the same frames). Bouncing
+  Balls, Kaleidoscope, Lissajous and Starfield draw only the pixels a
+  point can light and keep what does not change from tick to tick, and the
+  Matrix library's `out()`, `point()` and `canvas()` do less per head; an
+  effect's intents are read by reference (`EffectInstance::parseIntents`).
+  On a Raspberry Pi 5, eight XL-450s, those four went from 12.6-14.0 ms of
+  CPU a tick (staggered) to 6.2-7.8 ms; the output is the same frame for
+  frame against the old scripts.
 - **Locks are per object and per layer again** (RC2). An object's own lock
   (**Lock Position** in its menu, a power source's or node's toggle) holds
   that object and leaves it selectable, with a padlock on its Plot layers
@@ -666,6 +683,13 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   scroll bars (macOS) Plot layers stops a bar's width short of its edge, so
   the bar never lies over a layer's lock.
 - **Hangers are picked from Plot layers** (and in a multi-pick).
+- **A structure leaving the old "Locked" layer takes its folder** (RC2):
+  a truss, tower, riser or boom shown as its folder goes back with the
+  folder and everything in it, not alone (`migrateLegacyLocks()`).
+- **Matrix Lissajous lights heads off its grid** (RC2). A head past the
+  columns or rows its area's grid claims threw in the script ("Cannot
+  read property 'r' of undefined") and blanked the whole tick; it now gets
+  its own point's level and colour, as Bouncing Balls does.
 
 - **Update All and the show definitions' results are a window** (`BulkResultDialog`),
   not an alert that grew off the screen with nothing to scroll and no Close.

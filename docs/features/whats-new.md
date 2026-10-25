@@ -528,6 +528,10 @@ their house lights, relays and subs.
   and an **Each box, staggered** scope that rolls the same picture from
   box to box. See [Matrix effects](effects.md#matrix-effects) and
   [Pictures and GIFs](effects.md#pictures-and-gifs).
+- **Matrix effects are lighter.** Bouncing Balls, Kaleidoscope, Lissajous
+  and Starfield take about half the processor they did, with the same
+  picture, so eight pixel boxes staggered keep time on a Raspberry Pi 5.
+  Lissajous lights heads that sit off its grid instead of going dark.
 - **A Closed shutter look closes.** *Closed* used to open the shutter on
   any spot with an Open capability; now *Closed* closes, *Strobe* strobes
   and *Open* opens. See
