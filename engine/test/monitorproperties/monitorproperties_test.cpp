@@ -1234,6 +1234,31 @@ void MonitorProperties_Test::legacyLockedLayerIsTakenApart()
     FixtureRigProps rpBoom;
     rpBoom.pipeId = boom->id();
     mp->setFixtureRigProps(onBoom->id(), rpBoom);
+    // T-3 and its folder both on "Locked", one of its fixtures on Trusses:
+    // the folder and everything in it go there with it.
+    Truss *t3 = mp->addTruss();
+    t3->setName("T-3");
+    const quint32 g3 = mp->nextGroupId();
+    mp->createGroup(g3, "T-3", locked, 0);
+    mp->setGroupAnchor(g3, QStringLiteral("truss"), t3->id());
+    t3->setGroupId(g3);
+    t3->setLayerId(locked);
+    Fixture *onT3 = new Fixture(&doc);
+    onT3->setChannels(4);
+    onT3->setAddress(20);
+    QVERIFY(doc.addFixture(onT3));
+    mp->setFixturePosition(onT3->id(), 0, 0, QVector3D(2, 1, 0));
+    mp->setFixtureLayer(onT3->id(), rig);
+    FixtureRigProps rpT3;
+    rpT3.trussId = t3->id();
+    mp->setFixtureRigProps(onT3->id(), rpT3);
+    Fixture *alsoOnT3 = new Fixture(&doc);
+    alsoOnT3->setChannels(4);
+    alsoOnT3->setAddress(30);
+    QVERIFY(doc.addFixture(alsoOnT3));
+    mp->setFixturePosition(alsoOnT3->id(), 0, 0, QVector3D(3, 1, 0));
+    mp->setFixtureLayer(alsoOnT3->id(), locked);
+    mp->setFixtureGroup(alsoOnT3->id(), g3);
     // Nothing says where this stand was: it stays, still held.
     Stand *stand = mp->addStand();
     stand->setLayerId(locked);
@@ -1267,6 +1292,9 @@ void MonitorProperties_Test::legacyLockedLayerIsTakenApart()
     QCOMPARE(r->hanger(hanger->id())->layerId(), rig);
     QCOMPARE(r->pipe(boom->id())->layerId(), rig);
     QVERIFY(r->pipe(boom->id())->locked());
+    QCOMPARE(r->truss(t3->id())->layerId(), rig);
+    QCOMPARE(r->group(g3).layerId, rig);
+    QCOMPARE(r->fixtureLayer(alsoOnT3->id()), rig);
     QCOMPARE(r->stand(stand->id())->layerId(), locked);
     QVERIFY(r->stand(stand->id())->locked());
     // The layer stays for the stand, unlocked: the stand's lock is its own.

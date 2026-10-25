@@ -2256,6 +2256,32 @@ int MonitorProperties::migrateLegacyLocks(PowerDistribution *pd, NetworkTopology
     };
     auto layerOfTruss = [this](quint32 id) { return m_trusses.contains(id) ? m_trusses.value(id)->layerId() : UINT_MAX; };
     int moved = 0;
+    /* A structure shown as its folder ("T-2 · on truss") whose folder is on
+       "Locked" too: the folder and all in it go with the structure. */
+    std::function<void(quint32, quint32)> carryGroup = [&](quint32 gid, quint32 to) {
+        if (!m_groups.contains(gid) || m_groups.value(gid).layerId != L)
+            return;
+        m_groups[gid].layerId = to;
+        foreach (Truss *t, m_trusses)            if (t->groupId() == gid && t->layerId() == L) { t->setLayerId(to); moved++; }
+        foreach (StagePlatform *p, m_platforms)  if (p->groupId() == gid && p->layerId() == L) { p->setLayerId(to); moved++; }
+        foreach (Pipe *p, m_pipes)               if (p->groupId() == gid && p->layerId() == L) { p->setLayerId(to); moved++; }
+        foreach (Stand *st, m_stands)            if (st->groupId() == gid && st->layerId() == L) { st->setLayerId(to); moved++; }
+        foreach (Tower *t, m_towers)             if (t->groupId() == gid && t->layerId() == L) { t->setLayerId(to); moved++; }
+        foreach (StageTarget *t, m_stageTargets) if (t->groupId() == gid && t->layerId() == L) { t->setLayerId(to); moved++; }
+        foreach (Scenery *sc, m_sceneries)       if (sc->groupId() == gid && sc->layerId() == L) { sc->setLayerId(to); moved++; }
+        foreach (quint32 fid, m_fixtureItems.keys())
+        {
+            if (fixtureGroup(fid) == gid && fixtureLayer(fid) == L)
+                setFixtureLayer(fid, to);
+        }
+        foreach (const MonitorGroup &c, childGroups(gid))
+            carryGroup(c.id, to);
+    };
+    auto carry = [&](const QString &kind, quint32 id, quint32 gid, quint32 to) {
+        if (gid != 0 && m_groups.contains(gid) && m_groups.value(gid).anchorKind == kind
+            && m_groups.value(gid).anchorId == id)
+            carryGroup(gid, to);
+    };
     for (int pass = 0; pass < 3; ++pass)        // a bar follows its truss home
     {
         foreach (Truss *t, m_trusses)
@@ -2272,7 +2298,7 @@ int MonitorProperties::migrateLegacyLocks(PowerDistribution *pd, NetworkTopology
             if (to == L && t->isStandMounted() && m_stands.contains(t->standId())
                 && m_stands.value(t->standId())->layerId() != L)
                 to = m_stands.value(t->standId())->layerId();
-            if (to != L) { t->setLayerId(to); moved++; }
+            if (to != L) { t->setLayerId(to); moved++; carry(QStringLiteral("truss"), tid, t->groupId(), to); }
         }
         foreach (StagePlatform *p, m_platforms)
         {
@@ -2282,7 +2308,7 @@ int MonitorProperties::migrateLegacyLocks(PowerDistribution *pd, NetworkTopology
             const quint32 pid = p->id();
             if (to == L)
                 to = fixturesLayer([pid](const FixtureRigProps &r) { return r.riserPlatformId == pid || r.deckPlatformId == pid; });
-            if (to != L) { p->setLayerId(to); moved++; }
+            if (to != L) { p->setLayerId(to); moved++; carry(QStringLiteral("platform"), pid, p->groupId(), to); }
         }
         foreach (Pipe *p, m_pipes)
         {
@@ -2295,7 +2321,7 @@ int MonitorProperties::migrateLegacyLocks(PowerDistribution *pd, NetworkTopology
             if (to == L && p->isBarOnPipe() && m_pipes.contains(p->parentPipeId())
                 && m_pipes.value(p->parentPipeId())->layerId() != L)
                 to = m_pipes.value(p->parentPipeId())->layerId();
-            if (to != L) { p->setLayerId(to); moved++; }
+            if (to != L) { p->setLayerId(to); moved++; carry(QStringLiteral("pipe"), pid, p->groupId(), to); }
         }
         foreach (Tower *t, m_towers)
         {
@@ -2305,7 +2331,7 @@ int MonitorProperties::migrateLegacyLocks(PowerDistribution *pd, NetworkTopology
             const quint32 tid = t->id();
             if (to == L)
                 to = fixturesLayer([tid](const FixtureRigProps &r) { return r.towerId == tid; });
-            if (to != L) { t->setLayerId(to); moved++; }
+            if (to != L) { t->setLayerId(to); moved++; carry(QStringLiteral("tower"), tid, t->groupId(), to); }
         }
         foreach (Stand *s, m_stands)
         {
