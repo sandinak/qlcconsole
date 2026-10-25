@@ -517,7 +517,41 @@ void FocusMode_Test::pressingLightsTheControl()
     QTest::keyRelease(panel, Qt::Key_Up, Qt::ShiftModifier);
     QVERIFY(!map->isKeyLit(Qt::Key_Up));
     QCOMPARE(map->keyAction(Qt::Key_Escape), QString("Exit"));
-    QCOMPARE(map->keyAction(Qt::Key_BracketRight), QString("Next head"));
+    // The keyboard says what the controller says: one table, the tool's words.
+    using CS = ControllerScheme::Verb;
+    const QList<QPair<int, CS> > verbKeys = {
+        { Qt::Key_BracketLeft, CS::PreviousItem }, { Qt::Key_BracketRight, CS::NextItem },
+        { Qt::Key_PageUp, CS::PreviousGroup }, { Qt::Key_PageDown, CS::NextGroup },
+        { Qt::Key_G, CS::CycleScope }, { Qt::Key_Return, CS::Keep }, { Qt::Key_Backspace, CS::Revert },
+        { Qt::Key_0, CS::Reset }, { Qt::Key_Z, CS::Undo }, { Qt::Key_Escape, CS::Exit },
+        { Qt::Key_R, CS::Alternate }, { Qt::Key_T, CS::Alternate }, { Qt::Key_W, CS::WhereAmI },
+        { Qt::Key_Comma, CS::ZoomNarrower }, { Qt::Key_Period, CS::ZoomWider },
+        { Qt::Key_Semicolon, CS::FocusNearer }, { Qt::Key_Apostrophe, CS::FocusFarther } };
+    for (ControllerScheme::Tool tool : { ControllerScheme::FocusTool, ControllerScheme::FocusCallsTool })
+    {
+        map->setTool(tool);
+        for (const auto &kv : verbKeys)
+            QCOMPARE(map->keyAction(kv.first), ControllerScheme::label(tool, kv.second));
+        for (int k : { Qt::Key_U, Qt::Key_N, Qt::Key_D, Qt::Key_H, Qt::Key_Minus, Qt::Key_Plus })
+            QVERIFY2(!map->keyAction(k).isEmpty(), qPrintable(QKeySequence(k).toString()));
+        // Every key the panel takes is on the map, as a key to click.
+        QImage img(map->sizeHint(), QImage::Format_ARGB32);
+        map->resize(map->sizeHint());
+        map->render(&img);
+        const QList<int> drawn = map->clickable();
+        for (int k : { int(Qt::Key_PageUp), int(Qt::Key_PageDown), int(Qt::Key_G), int(Qt::Key_R),
+                       int(Qt::Key_W), int(Qt::Key_U), int(Qt::Key_N), int(Qt::Key_D), int(Qt::Key_H),
+                       int(Qt::Key_Comma), int(Qt::Key_Period), int(Qt::Key_Semicolon),
+                       int(Qt::Key_Apostrophe), int(Qt::Key_Return) })
+            if (!map->keyAction(k).isEmpty())
+                QVERIFY2(drawn.contains(k), qPrintable(QKeySequence(k).toString()));
+    }
+    map->setTool(ControllerScheme::FocusCallsTool);
+    QCOMPARE(map->keyAction(Qt::Key_R), QString("Target page: move the call's target"));
+    QCOMPARE(map->keyAction(Qt::Key_Return), QString("Save for this venue"));
+    map->setTool(ControllerScheme::FocusTool);
+    QCOMPARE(map->keyAction(Qt::Key_R), QString("Second reference"));
+    QCOMPARE(map->keyAction(Qt::Key_BracketRight), QString("Next fixture"));
     QVERIFY(map->keyAction(Qt::Key_F).isEmpty());
     QVERIFY(map->grab().width() > 0);
 }

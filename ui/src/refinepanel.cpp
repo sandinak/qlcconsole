@@ -289,7 +289,7 @@ void RefinePanel::refresh()
                          .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
     // The freeze chord (Q140): say so where it is seen first.
     if (m_doc->programmer()->isHolding())
-        m_title->setText(tr("HOLDING â click both sticks (or H) to go on.  ") + m_title->text());
+        m_title->setText(tr("HOLDING \342\200\224 click both sticks (or H) to go on.  ") + m_title->text());
     m_layer->setText(m_session->wherePhrase());
     QString scope;
     switch (m_session->scope())

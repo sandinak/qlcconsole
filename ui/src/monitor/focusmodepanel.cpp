@@ -771,7 +771,7 @@ void FocusModePanel::refresh()
                             .arg(m_session->index() + 1).arg(m_session->count()));
     // The freeze chord (Q140): say so where it is seen first.
     if (m_doc->programmer()->isHolding())
-        m_titleLabel->setText(tr("HOLDING â click both sticks (or H) to go on.  ")
+        m_titleLabel->setText(tr("HOLDING \342\200\224 click both sticks (or H) to go on.  ")
                               + m_titleLabel->text());
     // One layout, in this tool's words (ControllerScheme).
     m_map->setTool(m_session->isRunningCalls() ? ControllerScheme::FocusCallsTool

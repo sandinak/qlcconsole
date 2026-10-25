@@ -90,6 +90,8 @@ public:
     /** The action a key is labelled with; empty for a key not on the map. */
     QString keyAction(int key) const;
     bool isKeyLit(int key) const;
+    /** The controls or keys the last paint drew to be clicked. */
+    QList<int> clickable() const;
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;

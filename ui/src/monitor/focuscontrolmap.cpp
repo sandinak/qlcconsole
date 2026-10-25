@@ -33,7 +33,7 @@ using R = GamepadRole::Role;
    between the two columns of labels. */
 const QRectF kPad(240, 36, 320, 290);
 /* The keyboard: one box, everything in it (labels too) scaled together. */
-const QRectF kKeys(0, 0, 600, 214);
+const QRectF kKeys(0, 0, 724, 290);
 
 const qreal kStickTravel = 11.0;
 
@@ -178,6 +178,11 @@ int FocusControlMap::canonicalKey(int key)
         case Qt::Key_Backtab:   return Qt::Key_BracketLeft;
         case Qt::Key_Equal:     return Qt::Key_Plus;
         case Qt::Key_Underscore: return Qt::Key_Minus;
+        case Qt::Key_T:         return Qt::Key_R;      // the target page, as R
+        case Qt::Key_Less:      return Qt::Key_Comma;
+        case Qt::Key_Greater:   return Qt::Key_Period;
+        case Qt::Key_Colon:     return Qt::Key_Semicolon;
+        case Qt::Key_QuoteDbl:  return Qt::Key_Apostrophe;
         default:                return key;
     }
 }
@@ -260,28 +265,49 @@ QPointF FocusControlMap::stickDeflection(bool fine) const
     return QPointF((m_axis[i] - 0.5) * 2.0, (m_axis[i + 1] - 0.5) * 2.0);
 }
 
+/* The keys that are a controller verb, so the keyboard map says what the
+   controller map says, in the tool's words (ControllerScheme::label()). */
+static ControllerScheme::Verb keyVerb(int key)
+{
+    using V = ControllerScheme::Verb;
+    switch (key)
+    {
+        case Qt::Key_BracketLeft:  return V::PreviousItem;
+        case Qt::Key_BracketRight: return V::NextItem;
+        case Qt::Key_PageUp:       return V::PreviousGroup;
+        case Qt::Key_PageDown:     return V::NextGroup;
+        case Qt::Key_G:            return V::CycleScope;
+        case Qt::Key_Return:       return V::Keep;
+        case Qt::Key_Backspace:    return V::Revert;
+        case Qt::Key_0:            return V::Reset;
+        case Qt::Key_Control:
+        case Qt::Key_Z:            return V::Undo;
+        case Qt::Key_Escape:       return V::Exit;
+        case Qt::Key_R:            return V::Alternate;
+        case Qt::Key_W:            return V::WhereAmI;
+        case Qt::Key_Comma:        return V::ZoomNarrower;
+        case Qt::Key_Period:       return V::ZoomWider;
+        case Qt::Key_Semicolon:    return V::FocusNearer;
+        case Qt::Key_Apostrophe:   return V::FocusFarther;
+        default:                   return V::NoVerb;
+    }
+}
+
 QString FocusControlMap::keyAction(int key) const
 {
-    switch (canonicalKey(key))
+    key = canonicalKey(key);
+    const ControllerScheme::Verb verb = keyVerb(key);
+    if (verb != ControllerScheme::NoVerb)
+        return ControllerScheme::label(m_tool, verb);
+    switch (key)
     {
-        case Qt::Key_Escape:       return tr("Exit");
-        case Qt::Key_BracketLeft:  return tr("Previous head");
-        case Qt::Key_BracketRight: return tr("Next head");
-        case Qt::Key_R:            return tr("Second reference");
-        case Qt::Key_0:            return tr("Zero");
         case Qt::Key_Minus:        return tr("Step \303\26710");
         case Qt::Key_Plus:         return tr("Step \303\22710");
-        case Qt::Key_Backspace:    return tr("Revert");
         case Qt::Key_Shift:        return tr("With arrows: 1\302\260");
-        case Qt::Key_Control:
-        case Qt::Key_Z:            return tr("Undo save");
-        case Qt::Key_Return:       return tr("Save");
         case Qt::Key_D:            return tr("Mark dead");
         case Qt::Key_H:            return tr("Hold every light");
-        case Qt::Key_Comma:        return tr("Spot down");
-        case Qt::Key_Period:       return tr("Flood out");
-        case Qt::Key_Semicolon:    return tr("Softer");
-        case Qt::Key_Apostrophe:   return tr("Sharper");
+        case Qt::Key_U:            return tr("Next unsaved light");
+        case Qt::Key_N:            return tr("Say how many are unsaved");
         case Qt::Key_Up:
         case Qt::Key_Down:
         case Qt::Key_Left:
@@ -292,6 +318,15 @@ QString FocusControlMap::keyAction(int key) const
     }
 }
 
+QList<int> FocusControlMap::clickable() const
+{
+    QList<int> ids;
+    for (const Hit &h : m_hits)
+        if (h.id != -1)
+            ids << h.id;
+    return ids;
+}
+
 bool FocusControlMap::isKeyLit(int key) const
 {
     return m_keys.contains(canonicalKey(key));
@@ -299,12 +334,12 @@ bool FocusControlMap::isKeyLit(int key) const
 
 QSize FocusControlMap::sizeHint() const
 {
-    return m_mode == ControllerMap ? QSize(640, 340) : QSize(620, 230);
+    return m_mode == ControllerMap ? QSize(640, 340) : QSize(700, 280);
 }
 
 QSize FocusControlMap::minimumSizeHint() const
 {
-    return m_mode == ControllerMap ? QSize(520, 280) : QSize(420, 160);
+    return m_mode == ControllerMap ? QSize(520, 280) : QSize(470, 190);
 }
 
 void FocusControlMap::changeEvent(QEvent *event)
@@ -710,84 +745,106 @@ void FocusControlMap::paintKeyboard(QPainter &p)
     QFont capFont = font();
     capFont.setPixelSize(15);
     capFont.setBold(true);
+    QFont smallCapFont = capFont;
+    smallCapFont.setPixelSize(12);
     QFont labelFont = font();
-    labelFont.setPixelSize(12);
+    labelFont.setPixelSize(11);
+    const QFontMetricsF lfm(labelFont);
 
     const qreal kh = 38;
     auto key = [&](qreal x, qreal y, qreal w, int k, const QString &cap) {
         const QRectF r(x, y, w, kh);
         const bool lit = isKeyLit(k);
+        const bool used = !keyAction(k).isEmpty();
         // A keycap: a shadow edge under the face.
         p.setPen(Qt::NoPen);
         p.setBrush(withAlpha(text, 50));
         p.drawRoundedRect(r.translated(0, 2), 6, 6);
         p.setBrush(lit ? hi : keyFill);
-        p.setPen(QPen(lit ? hi.darker(130) : withAlpha(text, m_hover == k ? 230 : 140), 1.2));
+        p.setPen(QPen(lit ? hi.darker(130) : withAlpha(used ? text : dim, m_hover == k ? 230 : 140), 1.2));
         p.drawRoundedRect(r, 6, 6);
-        p.setFont(capFont);
-        p.setPen(lit ? hiText : text);
+        p.setFont(cap.size() > 2 ? smallCapFont : capFont);
+        p.setPen(lit ? hiText : (used ? text : dim));
         p.drawText(r, Qt::AlignCenter, cap);
-        QPainterPath hp;
-        hp.addRoundedRect(r, 6, 6);
-        m_hits << Hit{ t.map(hp), k, keyAction(k) };
+        if (used)
+        {
+            QPainterPath hp;
+            hp.addRoundedRect(r, 6, 6);
+            m_hits << Hit{ t.map(hp), k, keyAction(k) };
+        }
         return r;
     };
-    auto label = [&](const QRectF &under, const QString &txt, bool lit) {
-        const QRectF lr(under.center().x() - 70, under.bottom() + 5, 140, 16);
+    /* Under a key (or keys): what it does, wrapped to the room it has. */
+    const qreal lh = 3 * lfm.height();
+    auto label = [&](const QRectF &under, qreal room, const QString &txt, bool lit) {
+        if (txt.isEmpty())
+            return;
+        const QRectF lr(under.center().x() - room / 2.0, under.bottom() + 4, room, lh);
         p.setFont(labelFont);
+        const QRectF used = lfm.boundingRect(lr, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, txt);
         if (lit)
         {
-            const qreal w = QFontMetricsF(labelFont).horizontalAdvance(txt) + 8;
             p.setPen(Qt::NoPen);
             p.setBrush(withAlpha(hi, 70));
-            p.drawRoundedRect(QRectF(lr.center().x() - w / 2, lr.top(), w, lr.height()), 4, 4);
+            p.drawRoundedRect(used.adjusted(-4, -1, 4, 1), 4, 4);
         }
         p.setPen(text);
-        p.drawText(lr, Qt::AlignHCenter | Qt::AlignTop, txt);
+        p.drawText(lr, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, txt);
+    };
+    const qreal pitch = 70, room = pitch - 4;
+    auto single = [&](qreal x, qreal y, qreal w, int k, const QString &cap) {
+        const QRectF r = key(x, y, w, k, cap);
+        label(r, qMax(room, w + 8), keyAction(k), isKeyLit(k));
+        return r;
     };
 
-    // Top row: leave, step through, check, zero, step size, revert.
+    // The top row: leave, step through, the second reference, zero, step size, revert.
     const qreal y1 = 6;
-    const QRectF esc = key(6, y1, 50, Qt::Key_Escape, tr("Esc"));
-    label(esc, keyAction(Qt::Key_Escape), isKeyLit(Qt::Key_Escape));
-    const QRectF lb = key(80, y1, 42, Qt::Key_BracketLeft, QStringLiteral("["));
-    const QRectF rb = key(136, y1, 42, Qt::Key_BracketRight, QStringLiteral("]"));
-    label(lb, tr("Previous"), isKeyLit(Qt::Key_BracketLeft));
-    label(rb, tr("Next"), isKeyLit(Qt::Key_BracketRight));
-    const QRectF rk = key(204, y1, 42, Qt::Key_R, QStringLiteral("R"));
-    label(rk, tr("2nd reference"), isKeyLit(Qt::Key_R));
-    const QRectF zk = key(272, y1, 42, Qt::Key_0, QStringLiteral("0"));
-    label(zk, keyAction(Qt::Key_0), isKeyLit(Qt::Key_0));
-    const QRectF mk = key(344, y1, 42, Qt::Key_Minus, QString::fromUtf8("\342\210\222"));
-    const QRectF pk = key(390, y1, 42, Qt::Key_Plus, QStringLiteral("+"));
-    label(mk.united(pk), tr("Step \303\26710 / \303\22710"),
-          isKeyLit(Qt::Key_Minus) || isKeyLit(Qt::Key_Plus));
-    const QRectF bk = key(470, y1, 72, Qt::Key_Backspace, QString::fromUtf8("\342\214\253"));
-    label(bk, keyAction(Qt::Key_Backspace), isKeyLit(Qt::Key_Backspace));
+    single(6, y1, 52, Qt::Key_Escape, tr("Esc"));
+    single(6 + pitch, y1, 42, Qt::Key_BracketLeft, QStringLiteral("["));
+    single(6 + 2 * pitch, y1, 42, Qt::Key_BracketRight, QStringLiteral("]"));
+    single(6 + 3 * pitch, y1, 42, Qt::Key_R, tr("R / T"));
+    single(6 + 4 * pitch, y1, 42, Qt::Key_0, QStringLiteral("0"));
+    single(6 + 5 * pitch, y1, 42, Qt::Key_Minus, QString::fromUtf8("\342\210\222"));
+    single(6 + 6 * pitch, y1, 42, Qt::Key_Plus, QStringLiteral("+"));
+    single(6 + 7 * pitch, y1, 60, Qt::Key_Backspace, QString::fromUtf8("\342\214\253"));
 
-    // Second row: shift, undo, save.
-    const qreal y2 = 92;
-    const QRectF sk = key(6, y2, 96, Qt::Key_Shift, QString::fromUtf8("\342\207\247"));
-    label(sk, keyAction(Qt::Key_Shift), isKeyLit(Qt::Key_Shift));
-    const QRectF ck = key(140, y2, 48, Qt::Key_Control, ctrlKeyName());
-    const QRectF zz = key(192, y2, 42, Qt::Key_Z, QStringLiteral("Z"));
-    label(ck.united(zz), keyAction(Qt::Key_Z), isKeyLit(Qt::Key_Control) && isKeyLit(Qt::Key_Z));
-    const QRectF ret = key(268, y2, 96, Qt::Key_Return, QString::fromUtf8("Return \342\217\216"));
-    label(ret, keyAction(Qt::Key_Return), isKeyLit(Qt::Key_Return));
+    // The second: the calls and the scope, and the session's own keys.
+    const qreal y2 = 94;
+    single(6, y2, 54, Qt::Key_PageUp, tr("PgUp"));
+    single(6 + pitch, y2, 54, Qt::Key_PageDown, tr("PgDn"));
+    single(6 + 2 * pitch, y2, 42, Qt::Key_G, QStringLiteral("G"));
+    single(6 + 3 * pitch, y2, 42, Qt::Key_W, QStringLiteral("W"));
+    single(6 + 4 * pitch, y2, 42, Qt::Key_U, QStringLiteral("U"));
+    single(6 + 5 * pitch, y2, 42, Qt::Key_N, QStringLiteral("N"));
+    single(6 + 6 * pitch, y2, 42, Qt::Key_D, QStringLiteral("D"));
+    single(6 + 7 * pitch, y2, 42, Qt::Key_H, QStringLiteral("H"));
 
-    // The arrows, as on a keyboard: an inverted T.
-    const qreal ax = 452, aw = 44;
-    const QRectF up = key(ax + aw + 4, y2 - 2, aw, Qt::Key_Up, QString::fromUtf8("\342\206\221"));
-    const QRectF lf = key(ax, y2 + kh + 2, aw, Qt::Key_Left, QString::fromUtf8("\342\206\220"));
-    const QRectF dn = key(ax + aw + 4, y2 + kh + 2, aw, Qt::Key_Down, QString::fromUtf8("\342\206\223"));
-    const QRectF rt = key(ax + 2 * (aw + 4), y2 + kh + 2, aw, Qt::Key_Right, QString::fromUtf8("\342\206\222"));
-    Q_UNUSED(up)
-    label(lf.united(dn).united(rt), keyAction(Qt::Key_Up),
+    // The third: shift, undo, save; the beam and the focus.
+    const qreal y3 = 182;
+    single(6, y3, 66, Qt::Key_Shift, QString::fromUtf8("\342\207\247"));
+    const QRectF ck = key(6 + pitch + 6, y3, 44, Qt::Key_Control, ctrlKeyName());
+    const QRectF zz = key(6 + pitch + 54, y3, 40, Qt::Key_Z, QStringLiteral("Z"));
+    label(ck.united(zz), 2 * room, keyAction(Qt::Key_Z), isKeyLit(Qt::Key_Control) && isKeyLit(Qt::Key_Z));
+    const QRectF ret = key(6 + 3 * pitch - 6, y3, 80, Qt::Key_Return, QString::fromUtf8("\342\217\216"));
+    label(ret, qMax(room, 88.0), keyAction(Qt::Key_Return), isKeyLit(Qt::Key_Return));
+    single(6 + 4 * pitch + 12, y3, 40, Qt::Key_Comma, QStringLiteral(","));
+    single(6 + 5 * pitch + 12, y3, 40, Qt::Key_Period, QStringLiteral("."));
+    single(6 + 6 * pitch + 12, y3, 40, Qt::Key_Semicolon, QStringLiteral(";"));
+    single(6 + 7 * pitch + 12, y3, 40, Qt::Key_Apostrophe, QStringLiteral("'"));
+
+    // The arrows, as on a keyboard: an inverted T, at the right.
+    const qreal ax = 600, aw = 38;
+    key(ax + aw + 4, y3 - kh - 4, aw, Qt::Key_Up, QString::fromUtf8("\342\206\221"));
+    const QRectF lf = key(ax, y3, aw, Qt::Key_Left, QString::fromUtf8("\342\206\220"));
+    const QRectF dn = key(ax + aw + 4, y3, aw, Qt::Key_Down, QString::fromUtf8("\342\206\223"));
+    const QRectF rt = key(ax + 2 * (aw + 4), y3, aw, Qt::Key_Right, QString::fromUtf8("\342\206\222"));
+    label(lf.united(dn).united(rt), 3 * aw + 8, keyAction(Qt::Key_Up),
           isKeyLit(Qt::Key_Up) || isKeyLit(Qt::Key_Down) || isKeyLit(Qt::Key_Left) || isKeyLit(Qt::Key_Right));
 
     p.setFont(labelFont);
     p.setPen(dim);
-    p.drawText(QRectF(6, 196, 420, 16), Qt::AlignLeft | Qt::AlignVCenter,
+    p.drawText(QRectF(6, kKeys.height() - 18, 600, 16), Qt::AlignLeft | Qt::AlignVCenter,
                tr("The keys work whichever device is chosen."));
     p.resetTransform();
 }
