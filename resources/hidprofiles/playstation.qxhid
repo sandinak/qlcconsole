@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE HIDProfile>
+<HIDProfile>
+  <Name>Sony PlayStation Controller</Name>
+  <!-- The DualShock 4 and the DualSense, wired and Bluetooth (board Q139).
+       On a Mac the HID plugin reads them through Apple's GameController
+       framework (else their HID elements) into the same layout as an Xbox
+       pad, so the channels and roles below are the Xbox profile's: Cross is
+       A, Circle B, Square X, Triangle Y. The light bar follows the focus
+       tools' status lamp. macOS only: other systems list these pads' own
+       order, which this profile does not describe. -->
+  <Vendor id="0x054C" name="Sony"/>
+  <Settings sensitivity="1.00" deadzone="0.060"/>
+  <Products>
+    <Product id="0x05C4" name="DualShock 4"/>
+    <Product id="0x09CC" name="DualShock 4 (second model)"/>
+    <Product id="0x0BA0" name="DualShock 4 USB Wireless Adaptor"/>
+    <Product id="0x0CE6" name="DualSense"/>
+    <Product id="0x0DF2" name="DualSense Edge"/>
+  </Products>
+  <Axes>
+    <Axis index="0" slot="pan" role="lx">Left Stick X</Axis>
+    <Axis index="1" slot="tilt" role="ly">Left Stick Y</Axis>
+    <Axis index="2" role="lt">L2</Axis>
+    <Axis index="3" role="rx">Right Stick X</Axis>
+    <Axis index="4" role="ry">Right Stick Y</Axis>
+    <Axis index="5" role="rt">R2</Axis>
+  </Axes>
+  <Buttons>
+    <Button index="0" action="chaser_step_forward" role="a">Cross</Button>
+    <Button index="1" action="chaser_step_back" role="b">Circle</Button>
+    <Button index="2" role="x">Square</Button>
+    <Button index="3" role="y">Triangle</Button>
+    <Button index="4" role="lb">L1</Button>
+    <Button index="5" role="rb">R1</Button>
+    <Button index="6" role="back">Create / Share</Button>
+    <Button index="7" role="start">Options</Button>
+    <Button index="8" role="ls">L3</Button>
+    <Button index="9" role="rs">R3</Button>
+    <Button index="10" action="followspot_toggle" role="guide">PS</Button>
+    <Button index="11" role="dpad_up">D-pad Up</Button>
+    <Button index="12" role="dpad_down">D-pad Down</Button>
+    <Button index="13" role="dpad_left">D-pad Left</Button>
+    <Button index="14" role="dpad_right">D-pad Right</Button>
+    <Button index="15">Touchpad</Button>
+  </Buttons>
+</HIDProfile>

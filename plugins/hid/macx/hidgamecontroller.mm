@@ -88,6 +88,17 @@ GCControllerButtonInput *shareButton(GCExtendedGamepad *g)
         if ([g isKindOfClass:[GCXboxGamepad class]])
             return ((GCXboxGamepad *)g).buttonShare;
     }
+    // A PlayStation pad's touchpad click takes the Share place (Q139).
+    if (@available(macOS 11.3, *))
+    {
+        if ([g isKindOfClass:[GCDualSenseGamepad class]])
+            return ((GCDualSenseGamepad *)g).touchpadButton;
+    }
+    if (@available(macOS 11.0, *))
+    {
+        if ([g isKindOfClass:[GCDualShockGamepad class]])
+            return ((GCDualShockGamepad *)g).touchpadButton;
+    }
     return nil;
 }
 
@@ -181,6 +192,30 @@ bool isXbox(GCController *c)
         || (vendor != nil && [vendor rangeOfString:@"Xbox" options:NSCaseInsensitiveSearch].location != NSNotFound);
 }
 
+/* A DualShock 4 or DualSense (board Q139): the framework names their
+   elements as it does an Xbox pad's -- Cross is buttonA, Options buttonMenu,
+   Create/Share buttonOptions, PS buttonHome -- and has their light bar. */
+bool isPlayStation(GCController *c)
+{
+    GCExtendedGamepad *g = c.extendedGamepad;
+    if (g == nil)
+        return false;
+    if (@available(macOS 11.3, *))
+    {
+        if ([g isKindOfClass:[GCDualSenseGamepad class]])
+            return true;
+    }
+    if (@available(macOS 11.0, *))
+    {
+        if ([g isKindOfClass:[GCDualShockGamepad class]])
+            return true;
+    }
+    NSString *category = c.productCategory;
+    return category != nil
+           && ([category rangeOfString:@"DualShock" options:NSCaseInsensitiveSearch].location != NSNotFound
+               || [category rangeOfString:@"DualSense" options:NSCaseInsensitiveSearch].location != NSNotFound);
+}
+
 bool isClaimed(GCController *c)
 {
     for (const auto &it : g_claims)
@@ -263,7 +298,7 @@ void stopMonitoring()
     g_disconnectObserver = nil;
 }
 
-int claim(const QString &preferredName)
+int claim(const QString &preferredName, Kind kind)
 {
     if (!available())
         return 0;
@@ -276,7 +311,8 @@ int claim(const QString &preferredName)
     NSString *preferred = preferredName.toNSString();
     for (GCController *c in g_controllers)
     {
-        if (!isXbox(c) || isClaimed(c))
+        const bool wanted = kind == PlayStationPad ? isPlayStation(c) : isXbox(c);
+        if (!wanted || isClaimed(c))
             continue;
         if (chosen == nil)
             chosen = c;

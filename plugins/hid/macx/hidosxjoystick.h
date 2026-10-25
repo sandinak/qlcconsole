@@ -43,8 +43,9 @@ typedef struct
 /**
  * A joystick or gamepad on a Mac.
  *
- * An Xbox pad (Microsoft's vendor ID) is read into ONE layout whatever its
- * model and connection -- the one the Xbox profile names (GamepadLayout):
+ * An Xbox pad (Microsoft's vendor ID), and a DualShock 4 or DualSense
+ * (Sony's, board Q139), is read into ONE layout whatever its model and
+ * connection -- the one the Xbox profile names (GamepadLayout):
  * through Apple's GameController framework when it has the pad, else
  * through IOKit, by the report layout its model and firmware use (the USB
  * GIP report, or the Bluetooth HID elements, mapped by usage). Any other

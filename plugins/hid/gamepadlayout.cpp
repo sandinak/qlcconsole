@@ -73,8 +73,25 @@ const ModelEntry kModels[] =
     { 0x0B22, "Xbox Elite Series 2 Controller",       BluetoothLE, XboxBtModern },
 };
 
+/* Sony's (as SDL's table lists them): the same ID over USB and Bluetooth. */
+const ModelEntry kSonyModels[] =
+{
+    { 0x05C4, "DualShock 4",                 UnknownTransport, PlayStation },
+    { 0x09CC, "DualShock 4 (second model)",  UnknownTransport, PlayStation },
+    { 0x0BA0, "DualShock 4 USB Wireless Adaptor", Usb,         PlayStation },
+    { 0x0CE6, "DualSense",                   UnknownTransport, PlayStation },
+    { 0x0DF2, "DualSense Edge",              UnknownTransport, PlayStation },
+};
+
 const ModelEntry *findModel(quint16 vendorId, quint16 productId)
 {
+    if (vendorId == kSonyVendorId)
+    {
+        for (const ModelEntry &m : kSonyModels)
+            if (m.productId == productId)
+                return &m;
+        return nullptr;
+    }
     if (vendorId != kMicrosoftVendorId)
         return nullptr;
     for (const ModelEntry &m : kModels)
@@ -138,10 +155,18 @@ Transport transportOfProduct(quint16 vendorId, quint16 productId)
     return m != nullptr ? m->transport : UnknownTransport;
 }
 
+bool isPlayStation(quint16 vendorId, quint16 productId)
+{
+    const ModelEntry *m = vendorId == kSonyVendorId ? findModel(vendorId, productId) : nullptr;
+    return m != nullptr && m->family == PlayStation;
+}
+
 Family family(quint16 vendorId, quint16 productId, Transport transport,
               bool hasStandardElements, int maxButtonUsage, bool hasSimulationTriggers)
 {
     Q_UNUSED(transport)
+    if (isPlayStation(vendorId, productId))
+        return PlayStation;
     if (vendorId != kMicrosoftVendorId)
         return NotXbox;
     const ModelEntry *m = findModel(vendorId, productId);
@@ -171,12 +196,39 @@ QString familyName(Family family)
         case XboxGip:       return QStringLiteral("Xbox USB report (GIP)");
         case XboxBtClassic: return QStringLiteral("Xbox Bluetooth layout (first firmware)");
         case XboxBtModern:  return QStringLiteral("Xbox Bluetooth layout");
+        case PlayStation:   return QStringLiteral("PlayStation HID layout");
     }
     return QString();
 }
 
 Mapping mapElement(Family family, quint32 usagePage, quint32 usage)
 {
+    if (family == PlayStation)
+    {
+        if (usagePage == kPageGenericDesktop)
+        {
+            switch (usage)
+            {
+                case kGDX:   return axis(LeftX);
+                case kGDY:   return axis(LeftY);
+                case kGDZ:   return axis(RightX);
+                case kGDRz:  return axis(RightY);
+                case kGDRx:  return axis(LeftTrigger);
+                case kGDRy:  return axis(RightTrigger);
+                case kGDHat: return hat();
+                default:     break;
+            }
+        }
+        else if (usagePage == kPageButton)
+        {
+            /* L2/R2 (7, 8) are the triggers' digital half: the triggers
+               are read from Rx/Ry, so they are not buttons here. */
+            static const int ps[14] = { X, A, B, Y, LB, RB, -1, -1, View, Menu, LS, RS, Guide, Share };
+            if (usage >= 1 && usage <= 14 && ps[usage - 1] >= 0)
+                return button(ps[usage - 1]);
+        }
+        return Mapping();
+    }
     if (family != XboxBtClassic && family != XboxBtModern)
         return Mapping();
     const bool modern = family == XboxBtModern;

@@ -135,8 +135,14 @@ void GamepadLayout_Test::families_data()
     // Not ours to re-order.
     QTest::newRow("Xbox 360") << 0x045E << 0x028E << Usb << true << 15 << false
                               << NotXbox << "Xbox 360 Controller";
+    // Board Q139: a DualShock 4 or DualSense goes into the same layout.
     QTest::newRow("DualShock 4") << 0x054C << 0x09CC << Bluetooth << true << 14 << false
-                                 << NotXbox << "";
+                                 << PlayStation << "DualShock 4 (second model)";
+    QTest::newRow("DualSense") << 0x054C << 0x0CE6 << Usb << true << 15 << false
+                               << PlayStation << "DualSense";
+    // A Sony pad it does not know (a PS3 SIXAXIS) keeps its own order.
+    QTest::newRow("SIXAXIS") << 0x054C << 0x0268 << Usb << true << 19 << false
+                             << NotXbox << "";
 }
 
 void GamepadLayout_Test::families()
@@ -307,6 +313,59 @@ void GamepadLayout_Test::gipReport()
     QVERIFY(!parse(gip(0x10, 0, 0, 0, 0, 0, 0, 0).left(17), &s));
     QVERIFY(!s.buttons[A]);
     QCOMPARE(int(s.axes[LeftX]), int(before.axes[LeftX]));
+}
+
+void GamepadLayout_Test::playStationElements()
+{
+    // Cross is A, Circle B, Square X, Triangle Y; Create is View, Options Menu.
+    QCOMPARE(roleOf(PlayStation, BTN, 1), QString("x"));
+    QCOMPARE(roleOf(PlayStation, BTN, 2), QString("a"));
+    QCOMPARE(roleOf(PlayStation, BTN, 3), QString("b"));
+    QCOMPARE(roleOf(PlayStation, BTN, 4), QString("y"));
+    QCOMPARE(roleOf(PlayStation, BTN, 5), QString("lb"));
+    QCOMPARE(roleOf(PlayStation, BTN, 6), QString("rb"));
+    QVERIFY(roleOf(PlayStation, BTN, 7).isEmpty());       // L2's click: the trigger is the axis
+    QVERIFY(roleOf(PlayStation, BTN, 8).isEmpty());
+    QCOMPARE(roleOf(PlayStation, BTN, 9), QString("back"));
+    QCOMPARE(roleOf(PlayStation, BTN, 10), QString("start"));
+    QCOMPARE(roleOf(PlayStation, BTN, 11), QString("ls"));
+    QCOMPARE(roleOf(PlayStation, BTN, 12), QString("rs"));
+    QCOMPARE(roleOf(PlayStation, BTN, 13), QString("guide"));
+    QCOMPARE(mapElement(PlayStation, BTN, 14).index, int(Share));
+    QCOMPARE(roleOf(PlayStation, GD, 0x30), QString("lx"));
+    QCOMPARE(roleOf(PlayStation, GD, 0x31), QString("ly"));
+    QCOMPARE(roleOf(PlayStation, GD, 0x32), QString("rx"));
+    QCOMPARE(roleOf(PlayStation, GD, 0x35), QString("ry"));
+    QCOMPARE(roleOf(PlayStation, GD, 0x33), QString("lt"));
+    QCOMPARE(roleOf(PlayStation, GD, 0x34), QString("rt"));
+    QCOMPARE(mapElement(PlayStation, GD, 0x39).kind, HatElement);
+    QVERIFY(isPlayStation(kSonyVendorId, 0x05C4));
+    QVERIFY(!isPlayStation(kSonyVendorId, 0x0268));
+    QVERIFY(!isPlayStation(kMicrosoftVendorId, 0x05C4));
+    QCOMPARE(familyName(PlayStation), QString("PlayStation HID layout"));
+}
+
+void GamepadLayout_Test::matchesThePlayStationProfile()
+{
+    const QString path = QString(QLC_TEST_RESOURCE_ROOT) + "hidprofiles/playstation.qxhid";
+    HIDProfile *p = HIDProfile::load(path);
+    QVERIFY2(p != nullptr, qPrintable(path));
+    // The same channels, roles and all, under PlayStation names.
+    for (int a = 0; a < AxisCount; ++a)
+        QCOMPARE(p->axisRole(a), axisRole(a));
+    for (int b = 0; b < ButtonCount; ++b)
+    {
+        QCOMPARE(p->buttonRole(b), buttonRole(b));
+        QVERIFY(!p->buttonName(b).isEmpty());
+    }
+    QCOMPARE(p->buttonName(A), QString("Cross"));
+    for (quint16 pid : { 0x05C4, 0x09CC, 0x0BA0, 0x0CE6, 0x0DF2 })
+    {
+        QVERIFY(p->matchesDevice(kSonyVendorId, pid));
+        QVERIFY(isPlayStation(kSonyVendorId, pid));
+    }
+    QVERIFY(!p->matchesDevice(kSonyVendorId, 0x0268));
+    delete p;
 }
 
 void GamepadLayout_Test::matchesTheXboxProfile()

@@ -25,7 +25,8 @@
 #include "gamepadlayout.h"
 
 /**
- * Apple's GameController framework, as a source for an Xbox pad's input.
+ * Apple's GameController framework, as a source for an Xbox or PlayStation
+ * pad's input.
  *
  * It names every element itself (buttonA, leftShoulder, dpad,
  * leftThumbstick...) for every Xbox model, firmware and connection -- USB,
@@ -52,10 +53,14 @@ namespace HIDGameController
     /** Main thread: stop watching. Claims stay valid. */
     void stopMonitoring();
 
-    /** Claim a connected Xbox controller nobody has claimed; one named
-     *  @p preferredName (the HID product string) first. A handle (> 0), or
-     *  0 when there is none. Any thread. */
-    int claim(const QString &preferredName);
+    /** Which pads a claim is for. */
+    enum Kind { XboxPad, PlayStationPad };
+    /** Claim a connected controller of @p kind nobody has claimed (an Xbox
+     *  pad, or a DualShock 4 / DualSense -- board Q139: their light bar
+     *  then follows the status lamp); one named @p preferredName (the HID
+     *  product string) first. A handle (> 0), or 0 when there is none. Any
+     *  thread. */
+    int claim(const QString &preferredName, Kind kind = XboxPad);
     /** Let it go. Any thread. */
     void release(int handle);
 

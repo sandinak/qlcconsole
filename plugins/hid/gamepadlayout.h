@@ -49,6 +49,11 @@
 namespace GamepadLayout
 {
     const quint16 kMicrosoftVendorId = 0x045E;
+    /** Sony: the DualShock 4 and DualSense (board Q139) are read into the
+     *  same layout -- Cross is A, Circle B, Square X, Triangle Y, L1/R1
+     *  the bumpers, Create (Share) View, Options Menu, PS the guide button,
+     *  the touchpad click Share -- so every tool sees one pad. */
+    const quint16 kSonyVendorId = 0x054C;
 
     enum Axis { LeftX = 0, LeftY, LeftTrigger, RightX, RightY, RightTrigger, AxisCount };
 
@@ -72,7 +77,10 @@ namespace GamepadLayout
         NotXbox,        ///< not a Microsoft pad: its elements in the order it lists them
         XboxGip,        ///< USB through Apple's driver: the GIP report 0x20
         XboxBtClassic,  ///< Xbox One S, first Bluetooth firmware
-        XboxBtModern    ///< every later Bluetooth / Bluetooth LE firmware
+        XboxBtModern,   ///< every later Bluetooth / Bluetooth LE firmware
+        /** A DualShock 4 or DualSense: through Apple's GameController
+         *  framework (its light bar too), else its HID elements by usage. */
+        PlayStation
     };
 
     /** A transport as IOKit names it ("USB", "Bluetooth", "Bluetooth Low
@@ -81,6 +89,9 @@ namespace GamepadLayout
     /** The transport in a macOS hidapi path ("<transport>_<vid>_<pid>_<location>"). */
     Transport transportFromPath(const QString &path);
     QString transportName(Transport transport);
+
+    /** A Sony pad this layout knows (DualShock 4, DualSense). */
+    bool isPlayStation(quint16 vendorId, quint16 productId);
 
     /** The model's name ("Xbox Series X|S"), empty for one not in the table. */
     QString modelName(quint16 vendorId, quint16 productId);
@@ -107,7 +118,10 @@ namespace GamepadLayout
     };
 
     /** Where HID element (@p usagePage, @p usage) goes on a pad of @p family
-     *  (not NotXbox, which keeps its own order). */
+     *  (not NotXbox, which keeps its own order). A PlayStation pad's: buttons
+     *  1-14 are Square, Cross, Circle, Triangle, L1, R1, L2, R2, Create,
+     *  Options, L3, R3, PS, touchpad (L2/R2 also come as Rx/Ry, which are
+     *  the triggers here); the right stick is Z/Rz. */
     Mapping mapElement(Family family, quint32 usagePage, quint32 usage);
 
     /** The D-pad a hat switch's @p value says, as up/down/left/right. Eight

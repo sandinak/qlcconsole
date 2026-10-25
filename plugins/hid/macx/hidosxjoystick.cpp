@@ -653,7 +653,8 @@ void HIDOSXJoystick::run()
         return;
     }
 
-    /* An Xbox pad: through the GameController framework when it has it (it
+    /* An Xbox or PlayStation pad: through the GameController framework when
+       it has it (it
        may only report the pad a moment after the app starts, so keep
        asking), else through IOKit, event by event. */
     centre(&m_state);
@@ -670,7 +671,9 @@ void HIDOSXJoystick::run()
         {
             asked = true;
             sinceAsked.restart();
-            const int handle = HIDGameController::claim(m_productName);
+            const int handle = HIDGameController::claim(m_productName, m_family == PlayStation
+                                                        ? HIDGameController::PlayStationPad
+                                                        : HIDGameController::XboxPad);
             if (handle != 0)
             {
                 if (scheduled)

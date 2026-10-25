@@ -3,6 +3,10 @@ project(hidprofiles)
 set(PROFILE_FILES
     xbox.qxhid
 )
+# A PlayStation pad is read into the Xbox layout on a Mac only (board Q139).
+if(APPLE)
+    list(APPEND PROFILE_FILES playstation.qxhid)
+endif()
 
 install(FILES ${PROFILE_FILES} DESTINATION ${INSTALLROOT}/${HIDPROFILEDIR})
 

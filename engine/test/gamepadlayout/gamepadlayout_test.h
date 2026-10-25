@@ -44,6 +44,10 @@ private slots:
     /** The layout is the shipped Xbox profile's, and the profile matches
      *  every model, wired and wireless. */
     void matchesTheXboxProfile();
+    /** Board Q139: a DualShock 4 / DualSense's HID elements, by usage. */
+    void playStationElements();
+    /** ...and the profile names them, with the same roles. */
+    void matchesThePlayStationProfile();
 };
 
 #endif
