@@ -12,7 +12,7 @@ SHELL := /bin/bash
 DEV_APP ?= $(HOME)/Applications/qlcconsole-dev.app
 export DEV_APP
 
-.PHONY: help test run check quick dmg beta release attach publish
+.PHONY: help test run check quick pool pool-status dmg beta release attach publish
 
 help:
 	@v=$$(cat VERSION); \
@@ -32,6 +32,9 @@ help:
 	echo "  make quick      Iterate: ./check-all.sh --quick -- the Qt6 leg only (build-qt6/),"; \
 	echo "                  testing just the test dirs your change touches since origin/main"; \
 	echo "                  (its own tests, tests that #include a changed header). Not the gate."; \
+	echo "  make pool       The full gate of a committed REV (default HEAD) on whichever Mac"; \
+	echo "                  of platforms/macos/gate-hosts.conf is idle (HOST=name to pick);"; \
+	echo "                  ends with gate=N host=... qt=... rev=...  make pool-status: who's free."; \
 	echo "  make dmg        The signed release DMG of a committed HEAD: universal Release build"; \
 	echo "                  (build-universal/), Developer ID sign, notarize (qlc-notary), staple;"; \
 	echo "                  dist/qlcconsole-$$v-universal-<date>-<rev>.dmg + dist/SHA256SUMS."; \
@@ -66,6 +69,12 @@ check:
 
 quick:
 	./check-all.sh --quick
+
+pool:
+	./check-all.sh --remote $(or $(HOST),auto) $(if $(REV),--rev $(REV))
+
+pool-status:
+	@platforms/macos/gate-pool.sh --status
 
 dmg:
 	@platforms/macos/make-release.sh

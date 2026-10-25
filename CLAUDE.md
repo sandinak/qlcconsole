@@ -44,6 +44,20 @@ header, a plugin's test; everything if CMake files or the runner changed.
 It is not the gate — run the full one before pushing. One test dir by hand:
 `QLC_TEST_ONLY="ui/test/workbench" ./check-all.sh --quick`.
 
+**The gate pool** runs the full gate of a *committed* SHA on whichever Mac is
+idle: `./check-all.sh --remote auto [--rev SHA]` (= `make pool`;
+`platforms/macos/gate-pool.sh`, hosts in `platforms/macos/gate-hosts.conf`:
+ender local, newaudio, dink, val). `auto` skips hosts that are unreachable,
+lack their Qt, or already run a gate, and weighs load over perf cores by the
+host's typical gate time; nothing free → this Mac. `--remote NAME` picks one;
+`make pool-status` shows what auto sees. It `git archive`s the SHA to
+`~/gates/<sha>-<time>` there (never the host's own checkout), runs detached
+(survives ssh drops), streams progress, removes the copy, and keeps
+`~/gates/<id>.log` + `.summary.txt` (+ `.logs/` on failure). Every gate's
+result line names where and with what it ran — **`gate=N host=NAME qt=6.x.y
+rev=SHA`** — so read the host and Qt, not just `gate=0`; then push that exact
+SHA: `git push origin <sha>:main`. Host notes: memory `remote-gate-hosts`.
+
 CI (`.github/workflows/build.yml`) runs macOS + Linux + Linux-coverage on every
 push. It had never executed before 2026-08-25; if runs stop appearing, check
 Settings → Actions → General rather than assuming the workflow is wrong.

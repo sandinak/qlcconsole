@@ -9,9 +9,15 @@
 #   ./check-all.sh --leg Qt6-Release [--leg ...]   just those legs
 #   ./check-all.sh --spread   run the Release and Werror legs on other Macs
 #                             over SSH (GATE_SPREAD) while this one runs Qt6
+#   ./check-all.sh --remote auto|NAME [--rev REV]   the whole gate of commit
+#                             REV (default HEAD) on whichever Mac of the pool
+#                             is idle, or that one (platforms/macos/
+#                             gate-pool.sh, hosts in gate-hosts.conf there)
 #
-# The last lines are the summary, and its first line is gate=N (0 = passed);
-# the same block is kept in build-gate-logs/summary.txt with each leg's full
+# The last lines are the summary, and its first line is the result,
+#     gate=N host=NAME qt=6.x.y rev=SHA
+# (N = 0 passed; host: GATE_HOST or this Mac's name; rev: GATE_REV, or HEAD
+# with -dirty for uncommitted changes); the same block is kept in build-gate-logs/summary.txt with each leg's full
 # log beside it. Environment: QT6_PREFIX (where Qt 6 is; default: brew
 # --prefix qt6, then /opt/homebrew/opt/qt6), ALLOW_SKIP=1 (a leg that can't
 # run -- no Qt there -- doesn't fail the gate), NO_CCACHE=1, GATE_JOBS (the
@@ -57,16 +63,29 @@ export PATH
 QUICK=0
 SPREAD=0
 ONLY_LEGS=""
+REMOTE=""
+POOL_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
-        --quick)  QUICK=1 ;;
+        --quick)  QUICK=1; POOL_ARGS+=(--quick) ;;
         --spread) SPREAD=1 ;;
-        --leg)    shift; ONLY_LEGS="$ONLY_LEGS ${1:-}" ;;
-        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+        --leg)    shift; ONLY_LEGS="$ONLY_LEGS ${1:-}"; POOL_ARGS+=(--leg "${1:-}") ;;
+        --remote) shift; REMOTE="${1:-auto}" ;;
+        --rev)    shift; REMOTE_REV="${1:?--rev needs a commit}" ;;
+        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
         *) echo >&2 "check-all.sh: unknown option '$1' (try --help)"; exit 2 ;;
     esac
     shift
 done
+
+# --remote: the pool runs this script on the host it picks, on a git archive
+# of the commit; exec, so this process is the pool's (a check-all.sh still
+# running here would mark this Mac busy to the pool's own probe).
+if [ -n "$REMOTE" ]; then
+    [ "$SPREAD" = 1 ] && { echo >&2 "check-all.sh: --remote runs the whole gate elsewhere; not with --spread"; exit 2; }
+    exec "$REPO/platforms/macos/gate-pool.sh" --host "$REMOTE" --rev "${REMOTE_REV:-HEAD}" -- ${POOL_ARGS[@]+"${POOL_ARGS[@]}"}
+fi
+[ -n "${REMOTE_REV:-}" ] && { echo >&2 "check-all.sh: --rev goes with --remote (here, the gate tests the tree as it is)"; exit 2; }
 
 # Performance cores only, not hw.ncpu -- on Apple Silicon that also counts
 # efficiency cores, which saturating slows down everything else on the
@@ -85,6 +104,18 @@ if [ -z "$QT6" ] && command -v brew >/dev/null 2>&1; then
 fi
 [ -n "$QT6" ] || QT6=/opt/homebrew/opt/qt6
 export QTDIR="$QT6"
+QT_VERSION=$(sed -n 's/^set(PACKAGE_VERSION "\([0-9.]*\)")$/\1/p' \
+    "$QT6/lib/cmake/Qt6/Qt6ConfigVersionImpl.cmake" "$QT6/lib/cmake/Qt6/Qt6ConfigVersion.cmake" 2>/dev/null | head -n 1)
+QT_VERSION="${QT_VERSION:-none}"
+
+# What the result line names: the pool's name for this Mac, else its own; the
+# commit, else HEAD here (-dirty: tracked files differ from it).
+GATE_HOST="${GATE_HOST:-$(hostname -s 2>/dev/null || hostname)}"
+if [ -z "${GATE_REV:-}" ] && [ "$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" = "$REPO" ] \
+   && GATE_REV=$(git -C "$REPO" rev-parse HEAD 2>/dev/null); then
+    git -C "$REPO" diff --quiet HEAD -- 2>/dev/null || GATE_REV="$GATE_REV-dirty"
+fi
+GATE_REV="${GATE_REV:-unknown}"
 
 LAUNCHER=()
 if [ -z "${NO_CCACHE:-}" ] && command -v ccache >/dev/null 2>&1; then
@@ -177,7 +208,7 @@ if [ ! -d "$QT6" ]; then
     done
 fi
 
-echo "Gate in $REPO: $JOBS cores, Qt at $QT6, $CCACHE_STATE; logs in $LOGS"
+echo "Gate in $REPO on $GATE_HOST: $JOBS cores, Qt $QT_VERSION at $QT6, $CCACHE_STATE; logs in $LOGS"
 
 #############################################################################
 # --spread: the remote legs start first and run on their own
@@ -241,6 +272,13 @@ MK="$LOGS/build.mk"
             $i "$REPO/${LEG_DIR[i]}" "$(log_of $i)" "$LOGS/${LEG_NAME[i]}.build"
     done
 } > "$MK"
+# ccache's hits and misses over the build (the whole Mac's: a build next
+# door counts too), for the summary: a warm rebuild should be nearly all hits.
+cc_stats() { ccache --print-stats 2>/dev/null | awk -F'\t' '
+    $1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" { h += $2 }
+    $1 == "cache_miss" { m += $2 } END { print h + 0, m + 0 }'; }
+CC_BEFORE=""
+[ "${#LAUNCHER[@]}" -gt 0 ] && [ "$CCACHE_STATE" != "no ccache" ] && CC_BEFORE=$(cc_stats)
 if grep -q '^leg' "$MK"; then
     say "building: $(for ((i = 0; i < NLEGS; i++)); do [ "${STATE[i]}" = local ] && printf '%s ' "${LEG_NAME[i]}"; done)(-j$JOBS shared)"
     make -s -j"$JOBS" -f "$MK" all
@@ -255,6 +293,14 @@ if grep -q '^leg' "$MK"; then
             say "${LEG_NAME[i]}: BUILD FAILED"
         fi
     done
+fi
+
+CC_LINE=""
+if [ -n "$CC_BEFORE" ]; then
+    read h0 m0 <<< "$CC_BEFORE"; read h1 m1 <<< "$(cc_stats)"
+    h=$((h1 - h0)); m=$((m1 - m0))
+    [ $((h + m)) -gt 0 ] && CC_LINE="ccache: $h hits, $m misses ($(( 100 * h / (h + m) ))% hits) over the build"
+    [ -n "$CC_LINE" ] && say "$CC_LINE"
 fi
 
 #############################################################################
@@ -447,7 +493,8 @@ done
 [ "$NRUN" -eq 0 ] && GATE=1
 
 {
-    echo "gate=$GATE"
+    # Short hashes, as git shows them: twelve digits, plus -dirty.
+    echo "gate=$GATE host=$GATE_HOST qt=$QT_VERSION rev=$(echo "$GATE_REV" | sed -E 's/^([0-9a-f]{12})[0-9a-f]*/\1/')"
     echo "Timings ($JOBS cores, $CCACHE_STATE$([ "$QUICK" = 1 ] && echo ", QUICK"); the legs overlap, so the columns don't add up):"
     for ((i = 0; i < NLEGS; i++)); do
         [ -n "${RESULT[i]}" ] || continue
@@ -461,6 +508,7 @@ done
         fi
     done
     echo "  whole gate $(( $(date +%s) - GATE_START ))s"
+    [ -n "$CC_LINE" ] && echo "  $CC_LINE"
     [ "$QUICK" = 1 ] && echo "QUICK: the Qt6 leg only$([ -n "$QUICK_TESTS" ] && [ "$QUICK_TESTS" != ALL ] && echo ", tests: $QUICK_TESTS") -- not the gate."
     [ -n "$SKIPPED" ] && echo "SKIPPED:$SKIPPED (Qt not at $QT6)$([ -n "${ALLOW_SKIP:-}" ] && echo " -- allowed by ALLOW_SKIP" || echo " -- a skipped leg fails the gate; ALLOW_SKIP=1 to accept")"
     if [ -n "$FAILED" ]; then
