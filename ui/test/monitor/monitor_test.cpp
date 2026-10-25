@@ -1200,6 +1200,51 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
                          qPrintable(QString("%1: %2 -> %3").arg(where, QColor(was).name(), QColor(is).name())));
             }
         }
+
+        /* At 45 degrees a figure standing near centre has its position
+           readout at its feet, right where the apron's dimension is written:
+           the dimension steps aside (or, with nowhere clear, goes) rather
+           than sit on the readout. */
+        {
+            StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+            view.resize(640, 480);
+            view.setPlane(StructureStudioView::Angled);
+            props->setStageMarks(MonitorProperties::CurtainLineFlag);
+            props->setCurtainLineAuto();
+            QImage img(view.size(), QImage::Format_ARGB32);
+            const QString apronText("Apron 1.5 m");
+            soloist->setX(1.5f);                    // well away from it
+            soloist->setY(1.0f);
+            img.fill(Qt::black);
+            view.render(&img);
+            const int home = view.m_stageMarkLabels.indexOf(apronText);
+            QVERIFY(home >= 0);
+            const QRectF homeRect = view.m_stageMarkRects.at(home);
+            int clashedAtHome = 0;
+            for (float x = 4.0f; x <= 7.5f; x += 0.25f)
+                for (float y = 4.75f; y <= 6.5f; y += 0.25f)
+                {
+                    soloist->setX(x);
+                    soloist->setY(y);
+                    img.fill(Qt::black);
+                    view.render(&img);
+                    const auto readouts = view.m_targetReadoutsDrawn;
+                    QCOMPARE(readouts.size(), 1);
+                    if (readouts.first().second.intersects(homeRect))
+                        ++clashedAtHome;
+                    const int i = view.m_stageMarkLabels.indexOf(apronText);
+                    if (i < 0)
+                        continue;
+                    QVERIFY2(!readouts.first().second.intersects(view.m_stageMarkRects.at(i)),
+                             qPrintable(QString("figure at %1, %2: \"%3\" on the apron's label (%4 vs %5)")
+                                        .arg(x).arg(y).arg(readouts.first().first)
+                                        .arg(QDebug::toString(readouts.first().second),
+                                             QDebug::toString(view.m_stageMarkRects.at(i)))));
+                }
+            QVERIFY2(clashedAtHome > 0, "no figure position reached the apron label's place");
+            soloist->setX(7.4f);
+            soloist->setY(4.9f);
+        }
         props->setStageMarks(MonitorProperties::NoStageMarks);
         props->removeTruss(fohOver->id());
     }

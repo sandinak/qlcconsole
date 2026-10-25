@@ -1713,6 +1713,7 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     m_stageMarkLabels.clear();
+    m_stageMarkRects.clear();
     if (m_kind != StageKind || (m_plane != Top && m_plane != Angled) || props == nullptr
         || props->stageMarks() == MonitorProperties::NoStageMarks)
         return;
@@ -1730,11 +1731,16 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
     };
     QFont f = p.font();
     f.setPointSizeF(9.0);
-    auto label = [&](const QString &text, const QPointF &at, const QColor &c) {
+    auto labelRect = [&](const QString &text, const QPointF &at) {
         const QFontMetricsF fm(f);
         QRectF r(0, 0, fm.horizontalAdvance(text) + 6.0, fm.height() + 2.0);
         r.moveCenter(at);
+        return r;
+    };
+    auto label = [&](const QString &text, const QPointF &at, const QColor &c) {
+        const QRectF r = labelRect(text, at);
         m_stageMarkLabels << text;
+        m_stageMarkRects << r;
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(0, 0, 0, 150));
         p.drawRoundedRect(r, 3.0, 3.0);
@@ -1829,7 +1835,33 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
                 const QString text = tr("Apron %1").arg(MonitorProperties::formatStageDistance(float(apron),
                                                                                              props->gridUnits()));
                 const QPointF mid = (w2s(floorAt(ax, y)) + w2s(floorAt(ax, dsY))) / 2.0;
-                label(text, mid + QPointF(fm.horizontalAdvance(text) / 2.0 + 8.0, 0), curtainColour);
+                /* Beside the dimension line, just off centre -- where a
+                   figure standing near centre has its position readout
+                   (drawTargetPositions()). Not on top of one: the other
+                   side of the line, then a line's height up or down; with
+                   no clear place, the line and its ticks say enough. */
+                const double side = fm.horizontalAdvance(text) / 2.0 + 8.0;
+                const double rise = fm.height() + 4.0;
+                QList<QRectF> readouts;
+                foreach (const auto &ro, targetReadouts(p.font()))
+                    readouts << ro.second.adjusted(-2, -2, 2, 2);
+                const QList<QPointF> tries = QList<QPointF>()
+                    << QPointF(side, 0) << QPointF(-side, 0)
+                    << QPointF(side, -rise) << QPointF(-side, -rise)
+                    << QPointF(side, rise) << QPointF(-side, rise);
+                foreach (const QPointF &off, tries)
+                {
+                    const QRectF r = labelRect(text, mid + off);
+                    bool clear = true;
+                    foreach (const QRectF &o, readouts)
+                        if (o.intersects(r))
+                            clear = false;
+                    if (clear)
+                    {
+                        label(text, mid + off, curtainColour);
+                        break;
+                    }
+                }
             }
         }
 
@@ -1892,12 +1924,12 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
     p.restore();
 }
 
-void StructureStudioView::drawTargetPositions(QPainter &p) const
+QList<QPair<QString, QRectF> > StructureStudioView::targetReadouts(const QFont &base) const
 {
+    QList<QPair<QString, QRectF> > out;
     MonitorProperties *props = m_doc->monitorProperties();
     if (m_kind != StageKind || m_plane != Angled || props == nullptr || !props->targetPositionsVisible())
-        return;
-
+        return out;
     /* Where each one stands: the deck under a person or an area, the aim
        point of anything else. */
     QList<QVector3D> spots;
@@ -1923,23 +1955,39 @@ void StructureStudioView::drawTargetPositions(QPainter &p) const
             spots << QVector3D(at.x(), at.y(), props->platformHeightAt(at.x(), at.y()));
     }
     if (spots.isEmpty())
-        return;
+        return out;
 
-    p.save();
-    QFont f = p.font();
+    QFont f = base;
     f.setPointSizeF(8.5);
-    p.setFont(f);
     const QFontMetricsF fm(f);
     foreach (const QVector3D &at, spots)
     {
         const QString text = props->stagePositionText(at);
         QRectF r(0, 0, fm.horizontalAdvance(text) + 6.0, fm.height() + 2.0);
         r.moveCenter(w2s(at) + QPointF(0, fm.height()));     // just in front of the feet
+        out << qMakePair(text, r);
+    }
+    return out;
+}
+
+void StructureStudioView::drawTargetPositions(QPainter &p) const
+{
+    const QList<QPair<QString, QRectF> > readouts = targetReadouts(p.font());
+    m_targetReadoutsDrawn = readouts;
+    if (readouts.isEmpty())
+        return;
+
+    p.save();
+    QFont f = p.font();
+    f.setPointSizeF(8.5);
+    p.setFont(f);
+    foreach (const auto &ro, readouts)
+    {
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(0, 0, 0, 150));
-        p.drawRoundedRect(r, 3.0, 3.0);
+        p.drawRoundedRect(ro.second, 3.0, 3.0);
         p.setPen(QColor(225, 230, 240));
-        p.drawText(r, Qt::AlignCenter, text);
+        p.drawText(ro.second, Qt::AlignCenter, ro.first);
     }
     p.restore();
 }

@@ -364,6 +364,12 @@ private:
      *  labelled, as the plot does. */
     void drawStageMarks(QPainter &p) const;
     mutable QStringList m_stageMarkLabels;  ///< the words drawStageMarks() drew last (tests)
+    mutable QList<QRectF> m_stageMarkRects; ///< and where, on screen, in the same order
+    /** What drawTargetPositions() writes and where, on screen: the words
+     *  and their box (@p base is the painter's font). Empty when it draws
+     *  none. */
+    QList<QPair<QString, QRectF> > targetReadouts(const QFont &base) const;
+    mutable QList<QPair<QString, QRectF> > m_targetReadoutsDrawn;   ///< the last paint's (tests)
     /** Beside each stage figure and target the overview draws -- and Focus
      *  mode's figure where a fixed light lands -- where it is against the
      *  stage marks (MonitorProperties::stagePositionText()). */
