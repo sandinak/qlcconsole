@@ -798,8 +798,8 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_snapToggle->setText(tr("Snap"));
     m_snapToggle->setCheckable(true);
     m_snapToggle->setChecked(m_props->snapDivisions() > 0);
-    m_snapToggle->setToolTip(tr("Snap fixtures to the grid while moving them — "
-                                "the arrow picks the division"));
+    m_snapToggle->setToolTip(tr("Snap what you move to the grid: fixtures, trusses, towers, pipes, decks, "
+                                "scenery and power and network gear; the arrow picks the division"));
     m_snapToggle->setPopupMode(QToolButton::MenuButtonPopup);
     fl->addWidget(m_snapToggle);
 
