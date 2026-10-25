@@ -103,7 +103,8 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
     });
     // A patch changed while a venue is applied is that room's (Q138).
     connect(m_rig, &VenueRig::patchEdited, this, [this]() {
-        if (!m_writing)
+        // Only a real change (a kept patch reconnecting is not one).
+        if (!m_writing && activeVenueData() != nullptr && m_rig->patchChanged(activeVenueData()->rig))
             keepPatch();
     });
 
