@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Guidance for working in this repo. This is a **fork of QLC+ 4.14.2** (Q Light
-Controller Plus) — the Qt5 **widgets** desktop UI, not the QML UI. The fork adds
+Controller Plus) — the Qt6 **widgets** desktop UI, not the QML UI. The fork adds
 a *programmer-mode* workflow and a dedicated **Build** tab (was Programming) for building
 scenes/"looks".
 
@@ -28,8 +28,10 @@ separate build dirs. The Release leg is not redundant: one shipped bug
 `-O2` and was invisible to every default-build check.
 
 The gate builds the three legs together (one shared `-j` of performance
-cores, ccache when installed), runs each leg's test programs concurrently
-(`platforms/linux/unittest.sh`: `QLC_TEST_JOBS`, default perf cores − 2), then
+cores, `GATE_JOBS` to change it; ccache when installed), then runs the
+three legs' tests at the same time, splitting the cores between them: each
+leg runs (cores − 2) ÷ legs test programs at once, rounded up
+(`platforms/linux/unittest.sh`; `QLC_TEST_JOBS` sets the per-leg count), then
 runs the wall-clock-sensitive tests listed in
 `platforms/linux/unittest-serial.txt` alone at the end. Its last block starts
 with `gate=N` (also in `build-gate-logs/summary.txt`, next to each leg's full
@@ -154,7 +156,7 @@ QLC+ splits into an **engine** (no UI) and a Qt widgets **ui** layer.
 
 - Scene/collection names follow `SS-PP.II-Description`; when duplicating, learn
   the pattern from siblings — don't hard-code (memory: show-naming-convention).
-- Match surrounding QLC+ style (it's stock Qt5/C++; existing files set the bar
+- Match surrounding QLC+ style (it's stock Qt6/C++; existing files set the bar
   for naming, comment density, license header).
 - Engine code touched by live preview must be thread-safe: `Scene::write`
   fader-map build is guarded with `m_valueListMutex` (race vs `resetRuntime`).

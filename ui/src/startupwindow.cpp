@@ -56,7 +56,7 @@ StartupWindow::StartupWindow(int totalSteps, QWidget *parent)
 
     QVBoxLayout *titleBox = new QVBoxLayout;
     // The release, as --version and the About box give it: "qlcconsole
-    // 0.2.2" -- what a user quotes when asking for help.
+    // 0.3.0" -- what a user quotes when asking for help.
     QLabel *name = new QLabel(QStringLiteral(APPNAME " " QLCCONSOLE_VERSION), this);
     name->setObjectName(QStringLiteral("startupVersion"));
     name->setAlignment(Qt::AlignHCenter);

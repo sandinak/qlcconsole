@@ -10,18 +10,18 @@ need for your first day: the app, the teaching show, where the files are,
 how a lesson is laid out, and how to send your changes. **Ask Branson about
 anything at all.** No question is too small.
 
-## 1. Install qlcconsole 0.2.0 on the Mac
+## 1. Install qlcconsole 0.3.0 on the Mac
 
 Branson will give you a Mac with qlcconsole on it. If it isn't installed
 yet, or you want it on another Mac:
 
-1. Open the qlcconsole 0.2.0 disk image: a file whose name starts with
+1. Open the qlcconsole 0.3.0 disk image: a file whose name starts with
    `qlcconsole` and ends in **`.dmg`** (from Branson, or from the
    [Releases page](https://github.com/sandinak/qlcconsole/releases)).
 2. In the window that opens, drag **qlcconsole** onto **Applications**.
 3. Open **Applications → qlcconsole**. If macOS asks whether to open it,
    click **Open**.
-4. Check the version: **qlcconsole → About qlcconsole** says **0.2.0**.
+4. Check the version: **qlcconsole → About qlcconsole** says **0.3.0**.
 
 Good to know:
 

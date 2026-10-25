@@ -10,12 +10,16 @@ active work in [TODO.md](TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
-## [0.2.2] - Unreleased
+## [0.3.0] - 2026-10-25
 
-The 0.2.2 release candidate: the Build tab and its Workbench, the
-Classic QLC+ / qlcconsole / Everything views, Upgrade This Show, plot
-symbols and output rules on fixtures, and Eos shows with their special
-circuits and subs.
+qlcconsole 0.3.0: the Build tab and its Workbench (scenes, collections and
+chasers edited as layers, shared with the Show Tree); the Classic QLC+ /
+qlcconsole / Everything views and Upgrade This Show for older QLC+ shows;
+house rigs, focus calls, per-venue corrections, Refine and stage marks for
+touring a show between rooms; plot symbols and output rules on fixtures;
+Eos shows imported with their special circuits and subs; skip cues, cue
+colours and move in black on the Show Tree. Developed as 0.2.2: notes and
+tests that cite "CHANGELOG 0.2.2" mean this section.
 
 ### Added
 

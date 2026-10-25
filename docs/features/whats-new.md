@@ -2,7 +2,7 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
-## 0.2.2 (next update)
+## 0.3.0 (October 2026)
 
 The Programming tab is now **Build**, with a Workbench that edits scenes,
 collections and chasers as layers; the Show Tree and Build share it. Old
@@ -515,7 +515,7 @@ their house lights, relays and subs.
 - **Auto-open shutters.** A spot whose shutter rests closed now lights
   from a level alone: give it White at Full and it opens its shutter, as a
   lighting console does. A shutter look (Closed, Strobe...) still wins, and
-  a light with no level stays as it is. It is on for new shows (0.2.2:
+  a light with no level stays as it is. It is on for new shows (0.3.0:
   off for a show saved by QLC+), saved with the show, and turned off in the new **Settings → Advanced** tab,
   which also now holds the effect script editor choice and the Show control
   (QLab) button. See [Auto-open shutters](other-improvements.md#auto-open-shutters).
@@ -1196,7 +1196,7 @@ their house lights, relays and subs.
   the same for the view in front, and the Window menu can turn the
   Shift-click off. ([Window menu](other-improvements.md#window-menu))
 - **Functions has no tab** — **Window → Functions** (⇧⌘4) opens it
-  (since 0.2.2, the stock Functions tab). ([Window menu](other-improvements.md#window-menu))
+  (since 0.3.0, the stock Functions tab). ([Window menu](other-improvements.md#window-menu))
 - The **Window** menu lists every view, wherever it is, and puts
   broken-out ones back.
 - **Connections**' Devices header is one row; the list gets the height.

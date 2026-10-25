@@ -8,7 +8,7 @@ nav_order: 2
 *Status (2026-10-22): Level 0 and Level 1 are written — 0.1, 0.2, 1.1–1.5
 and the Level 1 check — each with teacher guide, handout, slides outline,
 exit ticket and at-home page, every app step checked by the course test,
-now on the 0.2.2 release candidate. Level 2 is an outline. Level 3 has
+now on 0.3.0. Level 2 is an outline. Level 3 has
 four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
 report, Refine; with pictures), 3.7 house lights, work lights and power,
@@ -287,7 +287,7 @@ and into this branch), and the course updated to match:
 
 1. ~~**A new production isn't the one GO plays.**~~ **Done.** A new
    production becomes current by itself when nothing else has GO. The
-   handout's "Make current" step and its picture are gone. Since 0.2.2
+   handout's "Make current" step and its picture are gone. Since 0.3.0
    (board Q75) a show with one production has no **Current** button or
    production switcher at all: GO plays its list, and Lesson 1.1 just
    says so.
@@ -359,7 +359,7 @@ worked around in the course and checked by the course test.
    the current production changes, and both shows' productions had the
    same id. Every course file uses *Spring Show*, so students won't meet
    it; the course test takes the 0.1 pictures (the *Qualities* production)
-   last. **Fixed in 0.2.2:** the box is refilled on every Show Tree change,
+   last. **Fixed in 0.3.0:** the box is refilled on every Show Tree change,
    opening a show included, and compares the names, not only the ids
    (`cuerunner_test` `theBoxNamesTheOpenedShowsProduction`).
 10. **The command line's last message carries over to the next show** (the
@@ -376,7 +376,7 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 (Lesson 1.3's first picture), and the aims still land.
 
 
-### Found writing Level 3's lessons (on the 0.2.2 release candidate)
+### Found writing Level 3's lessons (on 0.3.0 before release, then numbered 0.2.2)
 
 12. **A Grand Master move briefly drops an "On when not in use" relay.**
     In the course test, Stage Power (Switch, Ignore the Grand Master, On
