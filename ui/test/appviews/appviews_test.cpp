@@ -663,6 +663,12 @@ void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
     QVERIFY2(m_app->minimumSizeHint().width() < 1000,
              qPrintable(QString::number(m_app->minimumSizeHint().width())));
     QPointer<QDockWidget> dock = mon->m_overviewDlg;
+    // Told to stop floating (the title's float button, a double-click on the
+    // title), it had no dock area to go to and painted over the main window.
+    QVERIFY(!(dock->features() & QDockWidget::DockWidgetFloatable));
+    dock->setFloating(false);
+    QTRY_VERIFY(dock->isFloating());
+    QVERIFY(dock->isWindow());
     mon->m_overviewDlg->close();
     QTRY_VERIFY(dock.isNull());
 }
@@ -1811,6 +1817,12 @@ void AppViews_Test::windowShortcutsFollowTheView()
 
 void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
 {
+    // A tab the view hasn't got (indexOf() gave -1): nothing to break out.
+    const int tabsBefore = m_app->m_tab->count();
+    m_app->slotDetachContext(-1);
+    m_app->slotDetachContext(tabsBefore);
+    QCOMPARE(m_app->m_tab->count(), tabsBefore);
+
     QTabWidget *tabs = m_app->m_tab;
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     auto windowOf = [this](QWidget *w) -> DetachedContext * {

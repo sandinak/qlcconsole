@@ -4316,6 +4316,8 @@ void App::slotDetachContext(int index)
 {
     /* Get the widget that has been shift-clicked */
     QWidget *context = m_tab->widget(index);
+    if (context == nullptr)         // no such tab (-1: a view without it)
+        return;
     context->setProperty("tabIndex", index);
     context->setProperty("tabIcon", QVariant::fromValue(m_tab->tabIcon(index)));
     // m_tab->tabText() is empty under Icons-Only tab-label mode; tabData

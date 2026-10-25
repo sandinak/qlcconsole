@@ -2826,9 +2826,17 @@ void Monitor::showStageOverview()
         m_overviewView = NULL;
     });
     dock->setAttribute(Qt::WA_DeleteOnClose);
-    dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable
-                      | QDockWidget::DockWidgetFloatable);
+    /* Not DockWidgetFloatable: with it, the title bar's float button and a
+       double-click on the title "docked" the panel -- into no dock area, so
+       it stayed a plain child of the main window, painted over the tabs. A
+       floating panel without the feature can still be moved and closed, and
+       anything else that docks it is undone. */
+    dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
     dock->setAllowedAreas(Qt::NoDockWidgetArea);
+    connect(dock, &QDockWidget::topLevelChanged, dock, [dock](bool floating) {
+        if (!floating)
+            dock->setFloating(true);
+    }, Qt::QueuedConnection);
     dock->setProperty("helpTopic", QStringLiteral("lighting-studio.md#angled--the-free-3d-view"));
     QWidget *dlgPtr = new QWidget(dock);
     QWidget &dlg = *dlgPtr;
