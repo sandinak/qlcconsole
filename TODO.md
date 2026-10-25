@@ -37,6 +37,22 @@ VENUES.md section 11; the Rig Overview (3D) owner filter; the focus
 report's owner column; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
 
+## Show Review: an auditor for the show's design (post-0.3, asked 2026-10-25)
+
+Design in [docs/SHOW_REVIEW.md](docs/SHOW_REVIEW.md); nothing built, after
+the freeze. Reads the saved show (patch, plot, palettes, cues, hits, VC,
+venues, power, files) and lists design problems by severity (blocker /
+warning / note), each fixed or **accepted with a note saved in the show**
+(who, when, why; reopens when what it was about changes). Runtime problems
+stay in the footer; the footer's design-time items are folded in under
+catalog IDs. 120 checks in 12 groups (moves in light and sweeps, conflicting
+palettes, tracking across songs, hit collisions in a scope, venue clashes,
+not on the plot, unaimable focus lights, missing definitions, matrices too
+heavy for a Pi, circuit overload, strobe over 3 Hz, media outside the
+folder, naming); a v1 of 52. An engine registry runnable headless, a
+`qlcconsole --review show.qlcc` CLI for CI and the course, a Review panel
+and footer chip on top. Open questions in its section 8.
+
 ## Focus mode: shutters on profiles (future, asked 2026-10-23)
 
 Framing shutters on a profile/ellipsoidal (and a par with barn doors): how
