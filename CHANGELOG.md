@@ -19,6 +19,22 @@ circuits and subs.
 
 ### Added
 
+- **House rig, tour package and universes per venue** (VENUES.md, board
+  Q137-Q138). Fixtures and fixture groups have an owner (`RigOwner`: Tour,
+  House, Rental; a fixture follows its group unless it says otherwise),
+  saved only when set. With a venue applied, House fixtures live in that
+  venue's sidecar (`VenueRig`: the fixtures, their plot data, and which of
+  them fill the show's groups), so switching venue swaps the house rig and
+  leaves the tour package alone; a cue on a group plays on each venue's
+  house rig; house ids are reserved and renumbered on a collision. Each
+  universe is a Tour or House slot; a venue keeps the output patch of every
+  slot (the show file keeps its own, `Universe::setShowOutputBase()`) and
+  can mark universes or ranges not ours (`Universe::setNotOurs()`: nothing
+  sent, a range zeroed; patching there refused). A clash check (overlaps,
+  not ours, slots) runs before Apply now, on open and in the Patch dialog.
+  UI: Owner in the group editor and Fixture Properties, Slot on the
+  Connections toolbar, the venue page (Focus calls ▸ Rig and universes…),
+  the plot's Owner overlay, owners in the Inventory and the patch list.
 - **Focus calls, per-venue corrections and Refine** (FOCUS_REFINE_DESIGN.md,
   board Q105-Q136). One controller map (`ControllerScheme`) shared by Focus
   mode, Focus calls and Refine, with the on-screen map labelled per tool.

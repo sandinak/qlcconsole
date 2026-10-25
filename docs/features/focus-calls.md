@@ -115,6 +115,11 @@ earlier version: `DanceHysteria-0.5.venues.xml` beside
 `DanceHysteria-0.6.qlcc`, or a Finder copy), the laptop offers to use its
 venues. The other file is not changed.
 
+**What the room owns.** A venue can also keep the room's own lights (its
+house rig), the outputs of each universe in that room, and the channels
+the house desk keeps for itself. See [House rig and tour
+package](venues.md).
+
 ## Running them
 
 **Start focus calls** brings up the first call: its fixtures aimed at

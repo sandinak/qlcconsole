@@ -27,6 +27,16 @@ cue, the venue manager, feedback and voice, the gaps-review fixes. See
 stubbed and next: Branson's "Try this" with a real pad, then a real-rig
 check on the show VLAN.
 
+## House rig, tour package and universes per venue (board Q137-Q138, 2026-10-24)
+
+**Status:** built on `main` (VENUES.md): owners on fixtures and groups,
+house rigs kept in the venue sidecar and swapped with the venue, group
+fills, Tour/House slots, the venue's output patch, "not ours", the clash
+check, the venue page, the plot's Owner overlay. Open: Branson confirms
+VENUES.md section 11; the Rig Overview (3D) owner filter; the focus
+report's owner column; a real-rig check that a not-ours universe stays
+silent on Art-Net/sACN.
+
 ## Focus mode: shutters on profiles (future, asked 2026-10-23)
 
 Framing shutters on a profile/ellipsoidal (and a par with barn doors): how

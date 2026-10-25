@@ -10,6 +10,27 @@ QLC+ shows open in a **Classic QLC+** view and can be upgraded in one
 step. Fixtures get plot symbols and output rules, and Eos shows import with
 their house lights, relays and subs.
 
+### House rig and tour package
+
+- **Owner: Tour, House or Rental.** Set it on a fixture group (beside its
+  name in the Fixture Manager) and its fixtures follow; one fixture can
+  say otherwise in Fixture Properties.
+- **The house rig lives in the venue.** With a venue applied, House
+  fixtures are saved in that venue's file, with their plot places and
+  the groups they fill. Applying another venue swaps the house rig; the
+  tour package is not touched.
+- **Cues on groups play on any room's rig.** A cue on "FOH wash" plays
+  on whichever house fixtures fill FOH wash in the venue applied.
+- **Universes per room.** Each universe is a **Tour** or **House** slot
+  (Connections, beside its name). A venue keeps the room's outputs for
+  every universe (an output changed while it is applied is the venue's),
+  and can mark universes or ranges **not ours**: nothing is sent there.
+- **The clash check.** Apply now lists a house fixture on a tour
+  fixture's addresses, anything on channels that are not ours, and
+  fixtures in the other kind's slot, before the venue goes live. The
+  venue page (Focus calls ▸ **Rig and universes…**) has it all; the plot
+  has an **Owner** overlay. See [House rig and tour package](venues.md).
+
 ### Focus calls and Refine: the controller on stage
 
 - **Focus calls.** The show keeps its focus in order — "DH Tspots →
