@@ -88,8 +88,10 @@ StagePieceDialog::StagePieceDialog(MonitorProperties *props, int piece, QWidget 
                                   &m_auto, &m_words);
             connect(m_auto, &QCheckBox::toggled, this, [this](bool on) {
                 if (m_syncing) return;
-                if (on) m_props->setCurtainLineAuto();
-                else m_props->setCurtainLineY(m_props->curtainLineY());
+                if (on)
+                    m_props->setCurtainLineAuto();
+                else
+                    m_props->setCurtainLineY(m_props->curtainLineY());
                 emit changed();
                 sync();
             });
@@ -107,8 +109,10 @@ StagePieceDialog::StagePieceDialog(MonitorProperties *props, int piece, QWidget 
                                   &m_auto, &m_words);
             connect(m_auto, &QCheckBox::toggled, this, [this](bool on) {
                 if (m_syncing) return;
-                if (on) m_props->setNumberLineAuto();
-                else m_props->setNumberLineY(m_props->numberLineY());
+                if (on)
+                    m_props->setNumberLineAuto();
+                else
+                    m_props->setNumberLineY(m_props->numberLineY());
                 emit changed();
                 sync();
             });
