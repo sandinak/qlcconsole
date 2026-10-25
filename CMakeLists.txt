@@ -216,15 +216,19 @@ add_custom_target(lcov
     DEPENDS coverage
 )
 
-# Translations
+# Translations, with the lrelease of the Qt this tree is configured with --
+# not whichever one is first on PATH (val's gate, on an official Qt with
+# Homebrew's unlinked, found none at all).
+set(QLC_LINGUIST_ENV ${CMAKE_COMMAND} -E env
+    "LRELEASE=$<TARGET_FILE:Qt6::lrelease>" "LUPDATE=$<TARGET_FILE:Qt6::lupdate>")
 if (qmlui)
   add_custom_target(translations ALL
-    COMMAND ./translate.sh release qmlui
+    COMMAND ${QLC_LINGUIST_ENV} ./translate.sh release qmlui
     COMMENT "Translating qmlui translations..."
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 else ()
   add_custom_target(translations ALL
-    COMMAND ./translate.sh release ui
+    COMMAND ${QLC_LINGUIST_ENV} ./translate.sh release ui
     COMMENT "Translating ui translations..."
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()

@@ -24,8 +24,9 @@ which_qt() {
   done
   return 0
 }
-LRELEASE="$(which_qt lrelease)"
-LUPDATE="$(which_qt lupdate)"
+# The build passes its own Qt's tools (CMakeLists.txt); by hand, PATH's.
+LRELEASE="${LRELEASE:-$(which_qt lrelease)}"
+LUPDATE="${LUPDATE:-$(which_qt lupdate)}"
 : "${LRELEASE:?lrelease not found}"
 : "${LUPDATE:?lupdate not found}"
 
