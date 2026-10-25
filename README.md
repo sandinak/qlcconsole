@@ -6,8 +6,8 @@
 <p align="center"><em>A console-first fork of QLC+, for macOS.</em></p>
 <p align="center">
   <strong>Lighting control built around running a show live</strong> —
-  mouse, joystick, and MIDI control surfaces (OpenDeck PMJ Black 1 today;
-  APC40 mk2 and Xbox controller planned).<br/>
+  mouse, joystick, game controllers (Xbox, PlayStation) and MIDI control
+  surfaces (OpenDeck PMJ Black 1 today; APC40 mk2 planned).<br/>
   Not affiliated with, and not a replacement for, the upstream QLC+ project.
 </p>
 
@@ -36,8 +36,10 @@ controller with a large community and an active forum, use
 qlcconsole exists because I wanted a **programmer-mode workflow** for
 building and running looks live from a console, driven by a mouse, a
 joystick, and a MIDI control surface — not primarily from a
-patched-together virtual console. It adds a dedicated **Programming** tab
-(palettes → looks → group scenes, with live preview), an explicit show-length
+patched-together virtual console. It adds the **Show Tree** (the whole show
+as cue lists, cues and layers, with tracking, run from a Run tab), a
+**Build** tab (palettes → looks → scenes in a Workbench, with live
+preview), an explicit show-length
 model, an effect-scripting system, and Fixture Manager tooling for building
 fixture groups quickly. The **Connections** tab is a full rework of QLC+'s
 I/O manager into a strict, hierarchical device tree (host → protocol →
@@ -65,6 +67,14 @@ Beyond programming, it's built for **designing the rig** before the show:
 - **A footer that says what isn't ready** — unpatched fixtures, address
   clashes, universes with no output, unreadable definitions, devices not
   answering — and fixes each from the list.
+- **Focus and venues, from the stage** — the show's focus calls run on a
+  game controller, call by call, with the laptop saying each light aloud;
+  the corrections, trims, target positions, house rig and outputs of each
+  room are kept with that venue, never in the show. **Refine** changes a
+  cue from the stage with the same controller. A scramble practice and a
+  printable focus report make it teachable.
+- **Stage marks** — the curtain line, the number line and the apron on the
+  plot, and every target's place in crew terms ("SL 2.4 · US 3.1 m").
 - **Safe with cloud storage** — never hangs waiting on an online-only file,
   keeps every definition a show uses on this computer, and never loses a
   fixture's real identity when its definition is missing.
@@ -72,16 +82,16 @@ Beyond programming, it's built for **designing the rig** before the show:
 See [CHANGELOG.md](CHANGELOG.md) for a user-facing summary of what's
 changed, or [DONE.md](DONE.md)/[TODO.md](TODO.md) for the detailed
 development log. For a guided tour of the fork's features — the rig-design
-**Lighting Studio** view, the palette-driven **Programming** tab, the
+**Lighting Studio** view, the **Show Tree**, the palette-driven **Build** tab, the
 **Fixture Manager**'s group folders and head-layout grid, and **Stage
 Targets**/aim-solving — with screenshots and step-by-step workflows, see the
 [feature guide](docs/features/README.md); new to it, start with
 [Getting started](docs/features/getting-started.md). The same guides are
 built into the app: **F1** opens the one for whatever you're looking at.
 
-**Platform support:** macOS first. The upstream QLC+ codebase this is forked
-from supports Linux and Windows too, but qlcconsole's own testing, packaging,
-and releases currently target macOS only — see [RELEASE.md](RELEASE.md).
+**Platform support:** macOS first: a signed, notarized universal app. Each
+release also carries a Windows installer (not code-signed) and a Linux
+x86_64 AppImage, built by CI — see [RELEASE.md](RELEASE.md).
 
 ## Building qlcconsole
 

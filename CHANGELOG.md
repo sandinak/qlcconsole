@@ -130,6 +130,17 @@ circuits and subs.
   (Top and 45°). Saved with the show only when used (`StageMarks`,
   `CurtainLineY`, `NumberLineY` on `Monitor`), so older shows are unchanged
   and open with them off.
+- **Snap takes the whole rig**: with the plot's **Snap** on, a dragged
+  truss, tower, stand, pipe or scenery piece lands on the grid (it stayed
+  where the mouse let go; platforms, power and nodes already snapped), and
+  a grouped selection moves by the same delta.
+- **Course lesson 3.6, Focus and calibration**: focus-call etiquette, the
+  stage marks, focus calls on the controller with a venue, the scored
+  scramble and its focus report as the hand-in, Refine; a touring piece in
+  the teacher guide. Checked step by step by `courseshow_test`
+  (`lessonFocusAndCalibration`), which also takes its pictures. Help
+  pictures of the venue page, the focus report and the practice score;
+  Focus mode's controller map and save lamp now taken by `help-shots.sh`.
 - **Target positions in crew terms**: a readout beside each stage target on
   the plot, each figure/area in the Rig Overview and Focus mode's fixed-light
   figure ("SL 2.4 · US 3.1 m", "SR 7' 11\" · US 10'", "↑ 0.9 m" on a deck),
