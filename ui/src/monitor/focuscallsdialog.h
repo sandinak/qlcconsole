@@ -52,8 +52,23 @@ class FocusCallsDialog final : public QDialog
 public:
     FocusCallsDialog(Doc *doc, QWidget *parent = nullptr);
 
-    /** Open it; Start runs the calls in Focus mode. */
+    /** Open it; Start runs the calls (Venue focus). */
     static void run(Doc *doc, QWidget *parent);
+    /** Focus ▾ Venue focus: with a venue applied, the calls run for it
+     *  at once; with none, the dialog, to name the room first. */
+    static void startVenueFocus(Doc *doc, QWidget *parent);
+    /** Run the show's stored calls; @p practice: on the practice venue
+     *  just made (the score when they end). False, said, when they cannot. */
+    static bool beginCalls(Doc *doc, QWidget *parent, bool practice);
+    /** Focus ▾ Practice (scramble): what a scramble is, how far off,
+     *  then the calls on a practice venue. */
+    static void practice(Doc *doc, QWidget *parent);
+    /** What a scramble is, in plain words (the Practice dialogs). */
+    static QString practiceExplanation();
+    /** Ask how far off; false when cancelled. */
+    static bool askPracticeLevel(QWidget *parent, float &minDeg, float &maxDeg);
+    /** Focus ▾ Focus report: the applied venue's (else the one, else ask). */
+    static void exportAppliedReport(Doc *doc, QWidget *parent);
 
     /** A focus-call cue's Start with no venue applied (Q120): ask for the
      *  venue's name, showing how long until today's date is used; closes
@@ -107,6 +122,10 @@ public:
      *  venues as they are. Start then runs the calls on it. False, with
      *  @p why, when it cannot. */
     bool startPractice(float minDeg, float maxDeg, quint32 seed, QString *why = nullptr);
+    /** The same for @p calls, without the dialog: the practice venue's
+     *  name, or empty (with @p why). */
+    static QString startPracticeFor(Doc *doc, const QList<FocusCall> &calls, float minDeg, float maxDeg,
+                                    quint32 seed, QString *why = nullptr);
     /** A practice was started from this dialog. */
     bool isPractice() const { return m_practiceStarted; }
     /** The calls on a practice venue ended: the real venue back, and the

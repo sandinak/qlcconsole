@@ -652,6 +652,11 @@ void App::init()
         new OperatorAnnouncer(pc, OperatorVoice::create(this), this);
         // Feedback: Lights / Voice / Both, this computer's choice.
         pc->setOperatorFeedback(ControllerScheme::Feedback(OperatorFeedbackCombo::savedFeedback()));
+        // Voice detail beside it (Terse / Standard / Verbose), kept the same way.
+        pc->setVoiceDetail(ControllerScheme::VoiceDetail(VoiceDetailCombo::savedDetail()));
+        connect(pc, &ProgrammerController::voiceDetailChanged, this, [](ControllerScheme::VoiceDetail d) {
+            VoiceDetailCombo::saveDetail(int(d));
+        });
         // Who focuses on this computer, for the focus report (Q134).
         pc->venueCorrections()->setCheckedBy(QSettings().value(QStringLiteral("focusCalls/checkedBy")).toString());
         connect(pc, &ProgrammerController::operatorFeedbackChanged, this, [](ControllerScheme::Feedback f) {
@@ -2486,13 +2491,14 @@ void App::initMenuBar()
     m_rigOverviewAction->setToolTip(tr("An angled, read-only view of the whole rig"));
     connect(m_rigOverviewAction, &QAction::triggered, this, &App::slotRigOverview);
 
-    /* Focus mode: aligning the rig before a show (FOCUS_MODE_DESIGN.md). The
-       Lighting Studio and the Rig Overview have it on their bars; this is the
-       same thing from anywhere, and View + Menu on the controller asks too. */
-    QAction *focusAct = viewMenu->addAction(tr("Focus Mode…"));
+    /* Quick focus: aligning the rig before a show (FOCUS_MODE_DESIGN.md). The
+       Lighting Studio (Focus ▾) and the Rig Overview have it on their bars;
+       this is the same thing from anywhere, and View + Menu on the controller
+       asks too. */
+    QAction *focusAct = viewMenu->addAction(tr("Quick Focus…"));
     focusAct->setObjectName(QStringLiteral("focusModeMenuAction"));
     focusAct->setShortcut(QKeySequence("CTRL+ALT+F"));
-    focusAct->setToolTip(tr("Aim each moving head at its reference and nudge its calibration offsets"));
+    focusAct->setToolTip(tr("Quick focus: aim each light at its reference and nudge its calibration until it lands there"));
     connect(focusAct, &QAction::triggered, this, &App::slotFocusMode);
 
     /* Appearance -- theme, toolbar style, which chips the footer shows and
@@ -3722,7 +3728,8 @@ QStringList App::activeOverrides() const
     if (m_doc->lastLook() != nullptr && m_doc->lastLook()->isActive())
         out << tr("Hold at end");
     if (FocusModePanel::instance() != nullptr)
-        out << tr("Focus mode");
+        out << (m_doc->programmer() != nullptr && m_doc->programmer()->focusSession()->isRunningCalls()
+                ? tr("Venue focus") : tr("Quick focus"));
     if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited())
         out << tr("Blind");
     return out;
@@ -5810,7 +5817,7 @@ void App::updateVenueFooter()
     m_statusVenueLabel->setText(venue.isEmpty() ? QString() : tr("Venue: %1").arg(venue));
     m_statusVenueLabel->setToolTip(tr("Focus corrections for this venue are applied over the show's "
                                       "own calibration (from the .venues.xml beside the show). "
-                                      "Focus calls changes it."));
+                                      "Focus ▸ Venues in the Lighting Studio changes it."));
     m_statusVenueLabel->setVisible(!venue.isEmpty());
 }
 
@@ -6758,10 +6765,10 @@ void App::slotUpdateStandby()
     if (const FocusCallCue *fcc = m_doc->programmer() != NULL ? m_doc->programmer()->focusCallCue() : NULL)
         if (fcc->state() != FocusCallCue::Idle)
         {
-            m_statusStandby->setText(fcc->isArmed() ? tr("Focus calls: waiting for the controller (Start)")
+            m_statusStandby->setText(fcc->isArmed() ? tr("Venue focus: waiting for the controller (Start)")
                                      : fcc->state() == FocusCallCue::NamingVenue
-                                       ? tr("Focus calls: name the venue on the laptop")
-                                       : tr("Focus calls running (Menu ends them)"));
+                                       ? tr("Venue focus: name the venue on the laptop")
+                                       : tr("Venue focus running (Menu ends it)"));
             m_statusStandby->show();
             return;
         }

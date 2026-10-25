@@ -297,7 +297,7 @@ bool FocusSession::start(const Options &options, QString *why)
         return refuse(tr("There is no rig to focus."));
     /* A Design-mode tool: in Perform the rig belongs to the show. */
     if (m_doc->mode() == Doc::Operate && !options.allowOperate)
-        return refuse(tr("Focus mode works in Design mode only: switch out of Operate first."));
+        return refuse(tr("Quick focus works in Design mode only: switch out of Operate first."));
     QString busy;
     if (m_startGuard && !m_startGuard(&busy))
         return refuse(busy);
@@ -595,23 +595,25 @@ QString FocusSession::wherePhrase(bool withPosition) const
 {
     if (!m_active)
         return QString();
+    /* Worded by the phrase table at the Voice detail chosen. The call is
+       said on entering it (@p withPosition), and at Verbose on every step,
+       with where its target is when entering. */
     QStringList parts;
-    if (isRunningCalls())
+    if (isRunningCalls() && (withPosition || m_voiceDetail == ControllerScheme::VerboseVoice))
     {
         const Call c = currentCall();
-        // "Call 2 of 5, AT spots to Soloist DS." -- with where that is: ", SL 2, US 1."
         const QString where = withPosition ? callPositionPhrase() : QString();
-        parts << tr("Call %1 of %2, %3 to %4%5.").arg(m_callIndex + 1).arg(m_calls.size())
-                     .arg(c.who.isEmpty() ? c.name : c.who,
-                          c.targetName.isEmpty() ? referenceName() : c.targetName,
-                          where.isEmpty() ? QString() : QStringLiteral(", ") + where);
+        parts << ControllerScheme::callPhrase(m_voiceDetail, m_callIndex + 1, int(m_calls.size()),
+                                              c.who.isEmpty() ? c.name : c.who,
+                                              c.targetName.isEmpty() ? referenceName() : c.targetName, where);
     }
     if (m_scope == GroupScope)
         parts << (isRunningCalls() ? tr("All %1, group.").arg(m_order.size())
                                    : tr("All %1 fixtures.").arg(m_order.size()));
     else
     {
-        parts << tr("Fixture %1 of %2.").arg(m_index + 1).arg(m_order.size());
+        parts << ControllerScheme::stepPhrase(m_voiceDetail, m_index + 1, int(m_order.size()),
+                                              lightName(currentFixture()));
         // Its venue correction was skipped: another fixture type now (Q133).
         if (m_venues != nullptr && m_venues->needsFocus(currentFixture()))
             parts << tr("Needs focus: the fixture changed.");
@@ -625,14 +627,24 @@ QString FocusSession::lightPhrase() const
 {
     if (!m_active)
         return QString();
-    // The light first and briefly; the whole call, by its groups.
+    // The light first, by name, always; then where, at the detail chosen.
     QString light;
     if (m_scope == GroupScope)
         light = isRunningCalls() && !currentCall().who.isEmpty() ? currentCall().who
                                                                  : tr("All %1").arg(m_order.size());
-    else if (const Fixture *fx = m_doc->fixture(currentFixture()))
-        light = fx->name();
-    return light.isEmpty() ? wherePhrase(true) : tr("%1. %2").arg(light, wherePhrase(true));
+    else
+        light = lightName(currentFixture());
+    if (m_voiceDetail == ControllerScheme::TerseVoice && !light.isEmpty())
+        return tr("%1.").arg(light);
+    QString where = wherePhrase(true);
+    if (m_scope != GroupScope && !light.isEmpty())
+    {
+        // Its name is said first: the step part without it.
+        const QString named = ControllerScheme::stepPhrase(m_voiceDetail, m_index + 1, int(m_order.size()), light);
+        where.replace(named, ControllerScheme::stepPhrase(m_voiceDetail, m_index + 1, int(m_order.size()),
+                                                          QString()));
+    }
+    return light.isEmpty() ? where : tr("%1. %2").arg(light, where);
 }
 
 void FocusSession::whereAmI()
@@ -1075,15 +1087,14 @@ void FocusSession::save()
         if (saveHead(fid, batch))
             saved << fid;
     savedChanged(saved);
-    // "Spot 3 kept." -- or how many, for a whole call.
+    // "Saved fixture 1." -- or how many, for a whole call (the phrase table).
     if (saved.size() == 1)
-    {
-        const Fixture *fx = m_doc->fixture(saved.first());
-        emit announce(fx != nullptr ? tr("%1 kept%2.").arg(fx->name(), keptWhere()) : tr("Kept%1.").arg(keptWhere()),
+        emit announce(ControllerScheme::savedPhrase(m_voiceDetail, voiceIndex(saved.first()),
+                                                    lightName(saved.first()), savedVenue()),
                       ControllerScheme::ConfirmPriority);
-    }
     else if (!saved.isEmpty())
-        emit announce(tr("%1 lights kept%2.").arg(saved.size()).arg(keptWhere()), ControllerScheme::ConfirmPriority);
+        emit announce(ControllerScheme::savedSomePhrase(m_voiceDetail, int(saved.size()), savedVenue()),
+                      ControllerScheme::ConfirmPriority);
 }
 
 FocusSession::SaveStatus FocusSession::saveStatus() const
@@ -1098,11 +1109,11 @@ void FocusSession::saveAllHeld()
 {
     if (!m_active)
         return;
-    const int n = unsavedFixtures().size();
     saveAll();
-    emit announce(n == 0 ? tr("All saved.") : n == 1 ? tr("1 light kept%1.").arg(keptWhere())
-                                            : tr("%1 lights kept%2.").arg(n).arg(keptWhere()),
-                  ControllerScheme::ConfirmPriority);
+    /* Confirmed, every time (Branson's test, 2026-10-25): "All saved, 6
+       lights." -- every light worked here is saved now, said with the
+       venue they are saved to. Said and shown on the panel alike. */
+    emit announce(saveAllPhrase(), ControllerScheme::ConfirmPriority);
 }
 
 void FocusSession::revertAllHeld()
@@ -1142,14 +1153,11 @@ void FocusSession::revertAllHeld()
     }
     rebuildWrites();
     if (unsaved.size() == 1)
-    {
-        const Fixture *fx = m_doc->fixture(unsaved.first());
-        emit announce(fx != nullptr ? tr("%1 back to its last save.").arg(fx->name())
-                                    : tr("1 light back to its last save."),
+        emit announce(ControllerScheme::revertedPhrase(m_voiceDetail, voiceIndex(unsaved.first()),
+                                                       lightName(unsaved.first())),
                       ControllerScheme::ConfirmPriority);
-    }
     else
-        emit announce(tr("%1 lights back to their last save.").arg(unsaved.size()),
+        emit announce(ControllerScheme::revertedAllPhrase(m_voiceDetail, int(unsaved.size())),
                       ControllerScheme::ConfirmPriority);
 }
 
@@ -1165,8 +1173,9 @@ void FocusSession::revertLight()
         rebuildWrites();
         emit offsetChanged(fid);
     }
-    if (const Fixture *fx = m_doc->fixture(fid))
-        emit announce(tr("%1 back to its last save.").arg(fx->name()), ControllerScheme::ConfirmPriority);
+    if (m_doc->fixture(fid) != nullptr)
+        emit announce(ControllerScheme::revertedPhrase(m_voiceDetail, voiceIndex(fid), lightName(fid)),
+                      ControllerScheme::ConfirmPriority);
 }
 
 bool FocusSession::nextUnsaved(quint32 after)
@@ -1517,7 +1526,10 @@ void FocusSession::revert()
     if (!any)
         return;
     rebuildWrites();
-    emit announce(tr("Reverted."), ControllerScheme::ConfirmPriority);
+    emit announce(m_scope == GroupScope ? tr("Reverted.")
+                  : ControllerScheme::revertedPhrase(m_voiceDetail, voiceIndex(currentFixture()),
+                                                     lightName(currentFixture())),
+                  ControllerScheme::ConfirmPriority);
 }
 
 void FocusSession::zero()
@@ -1636,9 +1648,25 @@ void FocusSession::saveAll()
     savedChanged(saved);
 }
 
-QString FocusSession::keptWhere() const
+QString FocusSession::saveAllPhrase() const
 {
-    return savesToVenue() ? tr(" for %1").arg(m_venues->activeVenue()) : QString();
+    return ControllerScheme::savedAllPhrase(m_voiceDetail, int(m_all.size()), savedVenue());
+}
+
+QString FocusSession::savedVenue() const
+{
+    return savesToVenue() ? m_venues->activeVenue() : QString();
+}
+
+int FocusSession::voiceIndex(quint32 fid) const
+{
+    return int(m_order.indexOf(fid)) + 1;
+}
+
+QString FocusSession::lightName(quint32 fid) const
+{
+    const Fixture *fx = m_doc->fixture(fid);
+    return fx != nullptr ? fx->name() : QString();
 }
 
 QString FocusSession::unsavedCountPhrase() const

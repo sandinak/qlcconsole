@@ -794,9 +794,16 @@ bool VenueCorrections::renameVenue(const QString &from, const QString &to)
     const QString n = to.trimmed();
     if (n.isEmpty() || hasVenue(n) || !hasVenue(from))
         return false;
+    /* A name inside the one sidecar: its corrections, trims, targets and
+       house rig go with it. A practice scrambled from it still goes back
+       to it when it ends (and its report says where it came from). */
     for (Venue &v : m_venues)
+    {
         if (v.name == from)
             v.name = n;
+        if (v.practice.on && v.practice.from == from)
+            v.practice.from = n;
+    }
     if (m_active == from)
     {
         m_active = n;

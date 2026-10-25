@@ -194,6 +194,10 @@ public:
     void setOperatorFeedback(ControllerScheme::Feedback feedback);
     /** The next one, said ("Feedback: lights only."): RS held, or Shift+W. */
     void cycleOperatorFeedback();
+    /** Voice detail: Terse, Standard or Verbose, for all three tools
+     *  (ControllerScheme's phrase table); this computer's, beside Feedback. */
+    ControllerScheme::VoiceDetail voiceDetail() const { return m_voiceDetail; }
+    void setVoiceDetail(ControllerScheme::VoiceDetail detail);
 
     /** The pad itself (board Q126): its light bar in the status lamp's colour
      *  (an invalid colour: back to its own), and buzzes. Sent to the
@@ -529,6 +533,7 @@ signals:
      *  operator on stage (the UI's voice reads it). */
     void operatorAnnounce(const QString &text, int priority = ControllerScheme::WherePriority);
     void operatorFeedbackChanged(ControllerScheme::Feedback feedback);
+    void voiceDetailChanged(ControllerScheme::VoiceDetail detail);
     void padLightChanged(const QColor &colour);
     void padRumbled(int pulses, int lengthMs);
     /** A controller came or went, or its profile changed: ask
@@ -690,6 +695,7 @@ private:
     FocusCalls *m_focusCalls = nullptr;
     FocusCallCue *m_focusCallCue = nullptr;
     ControllerScheme::Feedback m_feedback = ControllerScheme::BothFeedback;
+    ControllerScheme::VoiceDetail m_voiceDetail = ControllerScheme::StandardVoice;
     /** RS: a tap says the light, a hold changes the feedback. */
     ControllerScheme::LongPress m_sayHold;
     /** Refine: A went down while View was held (View + A, Q118). */

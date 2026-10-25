@@ -222,7 +222,7 @@ void ControllerTestDialog::refreshStatus()
     ControllerKeepAlive *keep = m_doc->programmer()->controllerKeepAlive();
     QStringList status;
     status << (keep->isHeld() ? tr("Kept awake for the controller (no App Nap).")
-                              : tr("Not being kept awake: Focus mode and the follow spot are off."));
+                              : tr("Not being kept awake: Quick focus, Venue focus and the follow spot are off."));
     const ControllerKeepAlive::Permission perm = keep->inputMonitoring();
     switch (perm)
     {

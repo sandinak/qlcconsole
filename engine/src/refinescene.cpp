@@ -98,7 +98,7 @@ bool RefineSession::startScene(const QList<quint32> &sceneIds, quint32 first, QS
         if (qobject_cast<Scene *>(m_doc->function(sid)) != nullptr && !scenes.contains(sid))
             scenes << sid;
     if (scenes.isEmpty())
-        return refuse(tr("Choose a scene to refine."));
+        return refuse(tr("Choose a scene to focus."));
     QString busy;
     if (m_startGuard && !m_startGuard(&busy))
         return refuse(busy);
@@ -117,7 +117,7 @@ bool RefineSession::startScene(const QList<quint32> &sceneIds, quint32 first, QS
         m_sceneMode = false;
         m_layers.clear();
         m_layerIndex = -1;
-        return refuse(tr("This scene lights no fixtures to refine."));
+        return refuse(tr("This scene lights no fixtures to focus."));
     }
     m_cue = kInvalid;
     m_layerIndex = qMax(0, scenes.indexOf(first));
@@ -133,7 +133,7 @@ bool RefineSession::startScene(const QList<quint32> &sceneIds, quint32 first, QS
     emit started();
     emit changed();
     flashSelection();
-    say(tr("Refine, scene %1. %2").arg(layerName(currentLayer()), wherePhrase()));
+    say(tr("Focusing scene %1. %2").arg(layerName(currentLayer()), wherePhrase()));
     return true;
 }
 
@@ -322,7 +322,7 @@ bool RefineSession::sceneKeep(QString *why)
             pids << ip.pid;
 
     // Board Q117: everything A keeps -- palettes and the scene -- one step.
-    const bool ok = ops->sceneValueStep(tr("Refine %1").arg(s->name()), { sid }, pids, [&]() {
+    const bool ok = ops->sceneValueStep(tr("Focus this look: %1").arg(s->name()), { sid }, pids, [&]() {
         for (const InPlace &ip : inPlace)
         {
             QLCPalette *p = m_doc->palette(ip.pid);
@@ -473,7 +473,7 @@ bool RefineSession::sceneClearException()
         warn(tr("No exception here."));
         return false;
     }
-    ops->sceneStep(tr("Refine %1: clear exception").arg(s->name()), { s->id() }, [&]() {
+    ops->sceneStep(tr("Focus this look: %1: clear exception").arg(s->name()), { s->id() }, [&]() {
         for (const QString &k : keys)
         {
             const QList<int> types = typesFor(k);

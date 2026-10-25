@@ -294,6 +294,9 @@ private:
     int m_dragFrom = 0;
 private:
     void refreshFocusArmed();
+    /** The Venue focus button: greyed, with why, with nothing to focus. */
+    void refreshFocusCalls();
+    QToolButton *m_focusCallsBtn = nullptr;
     QWidget *m_focusArmed = nullptr;
     QLabel *m_focusArmedLabel = nullptr;
     QToolButton *m_focusStart = nullptr;

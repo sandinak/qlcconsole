@@ -53,6 +53,7 @@
 #include "effectdesigner.h"
 #include "treecuestack.h"
 #include "refinepanel.h"
+#include "focusmenu.h"
 #include "chasereditor.h"
 #include "sceneeditor.h"
 #include "sequence.h"
@@ -320,6 +321,35 @@ bool Workbench::openRefine(quint32 sceneId, quint32 groupId, quint32 fixtureId)
     return RefinePanel::openScene(m_doc, window(), scenes, sceneId, groupId, fixtureId) != nullptr;
 }
 
+void Workbench::fillFocusMenu(QMenu *m)
+{
+    m->clear();
+    TreeCueStack *tree = qobject_cast<TreeCueStack *>(m_stack);
+    QAction *self = m->addAction(tree != nullptr ? tr("Focus this cue\342\200\246") : tr("Focus this look\342\200\246"),
+                                 this, [this]() { openRefine(); });
+    self->setObjectName(QStringLiteral("workbenchRefine"));
+    FocusMenu::setAvailable(self, FocusMenu::focusCueBlocked(m_doc),
+                            tr("Move, zoom, focus and recolour this from the stage with the controller -- "
+                               "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+    if (tree == nullptr)
+        return;
+    const quint32 cueId = tree->cueId();
+    const ShowTree::Cue *cue = m_doc->showTree()->cue(cueId);
+    const ShowTree::CueList *list = cue != nullptr ? m_doc->showTree()->listOfCue(cueId) : nullptr;
+    if (list == nullptr || list->looks)
+        return;
+    QAction *make = m->addAction(tr("Make this a venue focus cue"));
+    make->setObjectName(QStringLiteral("workbenchFocusCue"));
+    make->setCheckable(true);
+    make->setChecked(cue->focusCall);
+    FocusMenu::setAvailable(make, cue->focusCall ? QString() : FocusMenu::venueFocusCueBlocked(m_doc),
+                            tr("Pre-show: GO onto this cue arms the show's focus calls; Start on the "
+                               "controller begins them"));
+    connect(make, &QAction::toggled, this, [this, cueId](bool on) {
+        m_doc->showTree()->setCuesFocusCall({ cueId }, on);
+    });
+}
+
 void Workbench::buildHeader(QWidget *column)
 {
     QVBoxLayout *col = qobject_cast<QVBoxLayout *>(column->layout());
@@ -367,17 +397,25 @@ void Workbench::buildHeader(QWidget *column)
             emit sendToShowTreeRequested(id);
     });
     titleRow->addWidget(m_sendToTreeBtn);
-    /* Refine (FOCUS_REFINE_DESIGN.md 6B): what is loaded, from the stage,
-       on the controller -- a Show Tree cue as the tree does, a scene as
-       its own looks and exceptions. */
+    /* Focus ▾ (board Q149; FOCUS_REFINE_DESIGN.md 6B): what is loaded,
+       from the stage, on the controller -- Focus this cue (a Show Tree cue,
+       as the tree does) or Focus this look (a scene, as its own looks and
+       exceptions); a cue can be made the venue focus cue here too. */
     m_refineBtn = new QToolButton(head);
-    m_refineBtn->setObjectName(QStringLiteral("workbenchRefine"));
-    m_refineBtn->setText(tr("Refine\342\200\246"));
+    m_refineBtn->setObjectName(QStringLiteral("workbenchFocusMenu"));
+    m_refineBtn->setText(tr("Focus"));
     m_refineBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    m_refineBtn->setToolTip(tr("Refine on the controller: move, zoom, focus and recolour this from the "
-                               "stage -- triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+    m_refineBtn->setPopupMode(QToolButton::InstantPopup);
+    m_refineBtn->setToolTip(tr("Focus what is loaded from the stage, with the controller"));
     m_refineBtn->hide();
-    connect(m_refineBtn, &QToolButton::clicked, this, [this]() { openRefine(); });
+    {
+        QMenu *m = new QMenu(m_refineBtn);
+        m->setObjectName(QStringLiteral("workbenchFocusPopup"));
+        m->setToolTipsVisible(true);
+        connect(m, &QMenu::aboutToShow, this, [this, m]() { fillFocusMenu(m); });
+        m_refineBtn->setMenu(m);
+        fillFocusMenu(m);
+    }
     titleRow->addWidget(m_refineBtn);
     m_headerLayout->addLayout(titleRow);
 

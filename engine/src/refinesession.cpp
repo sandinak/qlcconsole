@@ -84,7 +84,7 @@ RefineSession::RefineSession(Doc *doc, QObject *parent)
             // Into Operate on a cue that is not running: blind (Q130), said.
             m_wasRunning = cueIsRunning();
             if (!m_wasRunning)
-                warn(tr("In Operate only the cue running is refined: cue %1 is not running, "
+                warn(tr("In Operate only the cue running is focused: cue %1 is not running, "
                         "so nothing is sent.").arg(cueNumber()));
             rebuildWrites();
         });
@@ -107,7 +107,7 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     };
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
     if (st == nullptr || st->cue(cueId) == nullptr)
-        return refuse(tr("Choose a cue to refine."));
+        return refuse(tr("Choose a cue to focus."));
     QString busy;
     if (m_startGuard && !m_startGuard(&busy))
         return refuse(busy);
@@ -121,8 +121,8 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
         if (running != cueId)
         {
             const ShowTree::Cue *c = st->cue(cueId);
-            return refuse(tr("In Operate only the cue running can be refined: cue %1 is not running. "
-                             "GO to it, or refine it in Design.")
+            return refuse(tr("In Operate only the cue running can be focused: cue %1 is not running. "
+                             "GO to it, or focus it in Design.")
                           .arg(c->number.isEmpty() ? c->name : c->number));
         }
     }
@@ -158,7 +158,7 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     emit changed();
     flashSelection();
     const ShowTree::Cue *c = cue();
-    say(tr("Refine, cue %1. %2").arg(c->number.isEmpty() ? c->name : c->number, wherePhrase()));
+    say(tr("Focusing cue %1. %2").arg(c->number.isEmpty() ? c->name : c->number, wherePhrase()));
     return true;
 }
 
@@ -238,7 +238,7 @@ QList<quint32> RefineSession::findLayers(QString *why) const
             }
     }
     if (layers.isEmpty() && why != nullptr)
-        *why = tr("This cue has no layer on fixtures to refine.");
+        *why = tr("This cue has no layer on fixtures to focus.");
     return layers;
 }
 
@@ -685,7 +685,7 @@ bool RefineSession::nudgePosition(float dPan, float dTilt)
                     if (!isPositionType(p->type()))
                     {
                         if (!m_edits.contains(editKey()))
-                            warn(tr("This layer is aimed at a target. Refine a fixture, or move the target."));
+                            warn(tr("This layer is aimed at a target. Focus a fixture, or move the target."));
                         return false;
                     }
         Edit &e = edit();
@@ -968,7 +968,7 @@ bool RefineSession::keep(QString *why)
     const QString light = keptLight();
     const ShowTree::Target trackedTarget = wasTracked ? layer(currentLayer())->target : ShowTree::Target();
 
-    st->beginBatch(tr("Refine"));
+    st->beginBatch(tr("Focus this cue"));
     bool ok = true;
     for (const QString &k : order)
     {
@@ -1123,6 +1123,8 @@ bool RefineSession::keep(QString *why)
     emit kept();
     if (wasTracked)
         confirm(toSource ? tr("Kept in the cue it tracks from.") : tr("Kept in this cue."));
+    else if (m_voiceDetail == ControllerScheme::TerseVoice)
+        confirm(m_doc->mode() == Doc::Operate ? tr("Kept. It plays next time it runs.") : tr("Kept."));
     else
         confirm(m_doc->mode() == Doc::Operate
                 ? tr("%1 kept in cue %2. It plays next time it runs.").arg(light, cueNumber())
@@ -1243,7 +1245,7 @@ bool RefineSession::clearException()
     if (child == nullptr)
     {
         ShowTreeController *st = m_doc->showTree();
-        st->beginBatch(tr("Refine: clear exception"));
+        st->beginBatch(tr("Focus this cue: clear exception"));
         for (quint32 id : fixtureChildren)
         {
             ShowTree::Look empty;
@@ -1266,7 +1268,7 @@ bool RefineSession::clearException()
     else
         keys << (m_page == ColourPage ? ShowTree::KeyColour : ShowTree::KeyGobo);
     ShowTreeController *st = m_doc->showTree();
-    st->beginBatch(tr("Refine: clear exception"));
+    st->beginBatch(tr("Focus this cue: clear exception"));
     for (const QString &k : keys)
         if (child != nullptr && child->look(k) != nullptr)
         {
@@ -1326,11 +1328,12 @@ QString RefineSession::layerName(quint32 layerId) const
     return l->name.isEmpty() ? targetName(l->target) : l->name;
 }
 
-QString RefineSession::wherePhrase() const
+QString RefineSession::wherePhrase(ControllerScheme::VoiceDetail detail) const
 {
     if (!m_active)
         return QString();
-    // "AT spots, layer." / "DS wash, group." / "AT spots, fixture 3 of 8."
+    // "AT spots, layer." / "DS wash, group." / a light at the Voice detail:
+    // "F3 Spot 3." / "Fixture 3, Spot 3." / "AT spots, fixture 3 of 8, Spot 3."
     const QString name = layerName(currentLayer());
     switch (m_scope)
     {
@@ -1348,8 +1351,17 @@ QString RefineSession::wherePhrase() const
             return tr("%1, group %2 of %3.").arg(targetName(scopeTarget()))
                     .arg(m_groupIndex + 1).arg(groups().size());
         case FixtureScope:
-            return tr("%1, fixture %2 of %3.").arg(name).arg(m_fixtureIndex + 1)
-                    .arg(layerFixtures().size());
+        {
+            const int count = int(layerFixtures().size());
+            const Fixture *fx = m_doc->fixture(currentFixture());
+            const QString step = ControllerScheme::stepPhrase(detail, m_fixtureIndex + 1, count,
+                                                              fx != nullptr ? fx->name() : QString());
+            if (detail != ControllerScheme::VerboseVoice)
+                return step;
+            QString lower = step;
+            lower[0] = lower.at(0).toLower();
+            return tr("%1, %2").arg(name, lower);
+        }
     }
     return QString();
 }
@@ -1358,26 +1370,42 @@ QString RefineSession::lightPhrase() const
 {
     if (!m_active)
         return QString();
-    QString where;
-    if (m_sceneMode)
-        where = tr("Scene %1, %2").arg(layerName(currentLayer()), wherePhrase());
-    else
-    {
-        const ShowTree::Cue *c = cue();
-        where = tr("Cue %1, %2").arg(c != nullptr ? (c->number.isEmpty() ? c->name : c->number) : QString(),
-                                     wherePhrase());
-    }
-    // The light first and briefly: the fixture, else what is picked.
+    // The light first, by name, always; then where, at the Voice detail.
     QString light;
+    QString here = wherePhrase();
     if (m_scope == FixtureScope)
     {
-        if (const Fixture *fx = m_doc->fixture(currentFixture()))
-            light = fx->name();
+        const Fixture *fx = m_doc->fixture(currentFixture());
+        light = fx != nullptr ? fx->name() : QString();
+        if (m_voiceDetail == ControllerScheme::TerseVoice && !light.isEmpty())
+            return tr("%1.").arg(light);
+        // Its name is said first: where without it ("AT spots, fixture 3 of 8.").
+        const int count = int(layerFixtures().size());
+        const QString named = ControllerScheme::stepPhrase(m_voiceDetail, m_fixtureIndex + 1, count, light);
+        QString bare = ControllerScheme::stepPhrase(m_voiceDetail, m_fixtureIndex + 1, count, QString());
+        if (m_voiceDetail == ControllerScheme::VerboseVoice)
+        {
+            QString lower = named, lowerBare = bare;
+            lower[0] = lower.at(0).toLower();
+            lowerBare[0] = lowerBare.at(0).toLower();
+            here.replace(lower, lowerBare);
+        }
+        else
+            here = tr("%1, %2").arg(layerName(currentLayer()), bare.at(0).toLower() + bare.mid(1));
     }
     else if (m_scope == GroupScope)
         light = targetName(scopeTarget());
     else
         light = layerName(currentLayer());
+    QString where;
+    if (m_sceneMode)
+        where = tr("Scene %1, %2").arg(layerName(currentLayer()), here);
+    else
+    {
+        const ShowTree::Cue *c = cue();
+        where = tr("Cue %1, %2").arg(c != nullptr ? (c->number.isEmpty() ? c->name : c->number) : QString(),
+                                     here);
+    }
     return light.isEmpty() ? where : tr("%1. %2").arg(light, where);
 }
 

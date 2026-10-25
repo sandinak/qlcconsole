@@ -1039,7 +1039,7 @@ void AppViews_Test::theViewMenuIsOnlyViews()
         if (!a->isSeparator())
             items << a->text();
     QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "Rig Overview…"
-                                  << "Focus Mode…");
+                                  << "Quick Focus…");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()

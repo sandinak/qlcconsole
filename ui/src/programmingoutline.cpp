@@ -36,6 +36,7 @@
 #include <algorithm>
 
 #include "programmingoutline.h"
+#include "focusmenu.h"
 #include "itemicons.h"
 #include "workbenchstack.h"
 #include "scenegrouplooks.h"
@@ -561,6 +562,13 @@ void ProgrammingOutline::addSceneRows(QTreeWidgetItem *sceneItem, Scene *scene)
             effect = p;
         }
     }
+}
+
+QString ProgrammingOutline::focusThisText() const
+{
+    // A Show Tree cue on the Workbench is a cue; anything from Build, a look.
+    return m_stack != nullptr && m_stack->inherits("TreeCueStack") ? tr("Focus this cue\342\200\246")
+                                                                   : tr("Focus this look\342\200\246");
 }
 
 void ProgrammingOutline::setStack(WorkbenchStack *stack)
@@ -2075,23 +2083,27 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         }
         if (parts.size() == 1 && at.kind == GroupRow)
             menu.addAction(tr("Edit the group's layout"), this, [this, at]() { emit editGroupLayoutRequested(at.id); });
-        // Refine (FOCUS_REFINE_DESIGN.md 6B): this row from the stage.
+        // Focus this look (FOCUS_REFINE_DESIGN.md 6B): this row from the stage.
         if (parts.size() == 1 && m_mode == Stack && (at.kind == GroupRow || at.kind == FixtureRow))
         {
-            QAction *refine = menu.addAction(tr("Refine on the controller\342\200\246"), this, [this, at]() {
+            QAction *refine = menu.addAction(focusThisText(), this, [this, at]() {
                 emit refineRequested(at.scene, at.kind == GroupRow ? at.id : 0xFFFFFFFF,
                                      at.kind == FixtureRow ? at.id : 0xFFFFFFFF);
             });
             refine->setObjectName(QStringLiteral("outlineRefine"));
+            FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
+                                    tr("Move, zoom, focus and recolour this from the stage with the controller"));
         }
         menu.addSeparator();
     }
     if (at.kind == SceneRow && m_mode == Stack && clicked != nullptr && !readOnly)
     {
-        QAction *refine = menu.addAction(tr("Refine on the controller\342\200\246"), this, [this, at]() {
+        QAction *refine = menu.addAction(focusThisText(), this, [this, at]() {
             emit refineRequested(at.id, 0xFFFFFFFF, 0xFFFFFFFF);
         });
         refine->setObjectName(QStringLiteral("outlineRefine"));
+        FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
+                                tr("Move, zoom, focus and recolour this from the stage with the controller"));
     }
     if (!scenes.isEmpty() && m_mode == Navigator)
     {

@@ -228,9 +228,13 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     , m_sceneId(sceneId)
     , m_selection(FocusSession::focusable(doc, selection))
 {
-    setWindowTitle(tr("Focus Mode"));
+    // What was selected but cannot be focused: said at Start, not dropped silently.
+    for (quint32 fid : selection)
+        if (!m_selection.contains(fid) && doc->fixture(fid) != nullptr && !m_unfocusable.contains(fid))
+            m_unfocusable << fid;
+    setWindowTitle(tr("Quick Focus"));
     setObjectName(QStringLiteral("focusModeSetup"));
-    setProperty("helpTopic", QStringLiteral("lighting-studio.md#focus-mode"));
+    setProperty("helpTopic", QStringLiteral("lighting-studio.md#quick-focus"));
 
     QVBoxLayout *vl = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("Align the rig: each head in turn is aimed at its reference "
@@ -258,12 +262,15 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     {
         if (QStandardItemModel *m = qobject_cast<QStandardItemModel *>(m_whichCombo->model()))
             m->item(0)->setEnabled(false);
-        m_whichCombo->setItemData(0, tr("Select fixtures on the plot first"), Qt::ToolTipRole);
+        m_whichCombo->setItemData(0, m_unfocusable.isEmpty() ? tr("Select fixtures on the plot first")
+                                     : tr("None of the selected lights can be aimed: no pan and tilt, "
+                                          "and not a fixed light placed on the plot"), Qt::ToolTipRole);
     }
     m_whichCombo->addItem(tr("Every moving head on the plot (%1)").arg(allCount), 1);
     m_whichCombo->addItem(tr("Every fixed light on the plot (%1)").arg(fixedCount), 2);
+    // Nothing selected: the moving heads, or the fixed lights when there are none.
     if (m_selection.isEmpty())
-        m_whichCombo->setCurrentIndex(1);
+        m_whichCombo->setCurrentIndex(allCount == 0 && fixedCount > 0 ? 2 : 1);
     form->addRow(tr("Heads:"), m_whichCombo);
 
     m_orderCombo = new QComboBox(this);
@@ -276,7 +283,26 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     m_firstCombo = new QComboBox(this);
     m_firstCombo->setObjectName(QStringLiteral("focusReference"));
     fillReferences(m_firstCombo, false);
-    form->addRow(tr("Aim at:"), m_firstCombo);
+    /* No stage target (board Q146): the combo says so rather than standing
+       blank, and Add a target makes one in the Lighting Studio. */
+    m_addTargetBtn = new QPushButton(tr("Add a target\342\200\246"), this);
+    m_addTargetBtn->setObjectName(QStringLiteral("focusAddTarget"));
+    m_addTargetBtn->setAutoDefault(false);
+    m_addTargetBtn->setToolTip(tr("Place a stage target in the Lighting Studio for the heads to aim at"));
+    m_addTargetBtn->hide();
+    connect(m_addTargetBtn, &QPushButton::clicked, this, [this]() {
+        if (!m_addTarget || !m_addTarget())
+            return;
+        m_firstCombo->clear();
+        fillReferences(m_firstCombo, false);
+        m_secondCombo->clear();
+        fillReferences(m_secondCombo, true);
+        updateStart();
+    });
+    QHBoxLayout *aimRow = new QHBoxLayout;
+    aimRow->addWidget(m_firstCombo, 1);
+    aimRow->addWidget(m_addTargetBtn);
+    form->addRow(tr("Aim at:"), aimRow);
 
     m_secondCombo = new QComboBox(this);
     m_secondCombo->setObjectName(QStringLiteral("focusSecondReference"));
@@ -338,7 +364,7 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     const int running = m_doc->masterTimer() != nullptr ? m_doc->masterTimer()->runningFunctions() : 0;
     if (running > 0)
     {
-        QLabel *warn = new QLabel(tr("%n function(s) running. Focus mode takes over the heads it "
+        QLabel *warn = new QLabel(tr("%n function(s) running. Quick focus takes over the heads it "
                                      "focuses; everything else keeps playing.", "", running), this);
         warn->setObjectName(QStringLiteral("focusRunningWarning"));
         warn->setWordWrap(true);
@@ -346,22 +372,98 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
         vl->addWidget(warn);
     }
 
+    /* Why Start is greyed (board Q146), said where it is greyed. */
+    m_reasonLabel = new QLabel(this);
+    m_reasonLabel->setObjectName(QStringLiteral("focusStartReason"));
+    m_reasonLabel->setWordWrap(true);
+    m_reasonLabel->setStyleSheet(QStringLiteral("color: #d08a1c;"));
+    m_reasonLabel->hide();
+    vl->addWidget(m_reasonLabel);
+
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    bb->button(QDialogButtonBox::Ok)->setText(tr("Start"));
-    /* Fixed lights need nothing to aim at (they are moved to where they
-       land), so they can start with no scene aim or target in the show. */
-    auto updateStart = [this, bb]() {
-        const QList<quint32> fx = options().fixtures;
-        const bool allFixed = !fx.isEmpty()
-            && FocusSession::fixedLights(m_doc, fx).size() == FocusSession::focusable(m_doc, fx).size();
-        bb->button(QDialogButtonBox::Ok)->setEnabled(m_firstCombo->count() > 0 || allFixed);
-    };
+    m_startBtn = bb->button(QDialogButtonBox::Ok);
+    m_startBtn->setText(tr("Start"));
+    m_startBtn->setObjectName(QStringLiteral("focusStart"));
     updateStart();
     connect(m_whichCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [updateStart](int) { updateStart(); });
-    connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
+            [this](int) { updateStart(); });
+    connect(bb, &QDialogButtonBox::accepted, this, [this]() {
+        if (confirmExclusions())
+            accept();
+    });
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     vl->addWidget(bb);
+}
+
+QList<quint32> FocusModeSetupDialog::unfocusable() const
+{
+    // Only As selected takes the selection; the others are lights that can be focused.
+    return m_whichCombo->currentData().toInt() == 0 ? m_unfocusable : QList<quint32>();
+}
+
+QString FocusModeSetupDialog::exclusionText() const
+{
+    QStringList names;
+    for (quint32 fid : unfocusable())
+        if (const Fixture *fx = m_doc->fixture(fid))
+            names << fx->name();
+    return tr("%n selected light(s) cannot be aimed -- no pan and tilt, and not a fixed light placed on "
+              "the plot: %1. Leave them out and focus the rest?", "", int(names.size()))
+           .arg(names.join(QStringLiteral(", ")));
+}
+
+bool FocusModeSetupDialog::confirmExclusions()
+{
+    if (unfocusable().isEmpty())
+        return true;
+    QMessageBox box(QMessageBox::Warning, windowTitle(), exclusionText(), QMessageBox::Cancel, this);
+    box.setObjectName(QStringLiteral("focusExcludeBox"));
+    QPushButton *exclude = box.addButton(tr("Exclude them"), QMessageBox::AcceptRole);
+    exclude->setObjectName(QStringLiteral("focusExclude"));
+    box.setDefaultButton(exclude);
+    box.exec();
+    return box.clickedButton() == exclude;
+}
+
+void FocusModeSetupDialog::setAddTarget(const std::function<bool()> &addTarget)
+{
+    m_addTarget = addTarget;
+    updateStart();
+}
+
+QString FocusModeSetupDialog::startBlocked() const
+{
+    const QList<quint32> fx = options().fixtures;
+    const int which = m_whichCombo->currentData().toInt();
+    if (fx.isEmpty())
+    {
+        if (which == 1)
+            return tr("No moving heads are placed on the plot. Place them in the Lighting Studio, "
+                      "or choose Fixed lights.");
+        if (which == 2)
+            return tr("No fixed lights are placed on the plot. Place them in the Lighting Studio, "
+                      "or choose moving heads.");
+        return tr("Nothing that can be focused is selected. Select lights on the plot, or choose "
+                  "every moving head or fixed light.");
+    }
+    /* Fixed lights need nothing to aim at (they are moved to where they
+       land), so they can start with no scene aim or target in the show. */
+    const bool allFixed = FocusSession::fixedLights(m_doc, fx).size()
+                          == FocusSession::focusable(m_doc, fx).size();
+    if (!allFixed && !referenceOf(m_firstCombo).isValid())
+        return tr("No stage target to aim at. Add one with Add \342\226\270 Add Target Position.");
+    return QString();
+}
+
+void FocusModeSetupDialog::updateStart()
+{
+    const bool noTarget = !referenceOf(m_firstCombo).isValid();
+    m_addTargetBtn->setVisible(noTarget && m_addTarget);
+    const QString why = startBlocked();
+    m_startBtn->setEnabled(why.isEmpty());
+    m_startBtn->setToolTip(why);
+    m_reasonLabel->setText(why);
+    m_reasonLabel->setVisible(!why.isEmpty());
 }
 
 void FocusModeSetupDialog::fillReferences(QComboBox *combo, bool optional)
@@ -381,6 +483,12 @@ void FocusModeSetupDialog::fillReferences(QComboBox *combo, bool optional)
     for (const StageTarget *t : targets)
         combo->addItem(t->isLine() ? tr("%1 (line)").arg(t->name()) : t->name(),
                        QVariantList({ int(FocusSession::Reference::Target), t->id() }));
+    // Never a blank box: say there is nothing to aim at.
+    if (combo->count() == 0)
+    {
+        combo->addItem(tr("No stage target yet"), QVariantList({ int(FocusSession::Reference::None), 0 }));
+        combo->setItemData(0, tr("Add one with Add \342\226\270 Add Target Position in the Lighting Studio"), Qt::ToolTipRole);
+    }
 }
 
 FocusSession::Reference FocusModeSetupDialog::referenceOf(const QComboBox *combo)
@@ -432,7 +540,8 @@ FocusModePanel *FocusModePanel::instance()
 }
 
 FocusModePanel *FocusModePanel::open(Doc *doc, QWidget *parent, quint32 sceneId,
-                                     const QList<quint32> &selection)
+                                     const QList<quint32> &selection,
+                                     const std::function<bool()> &addTarget)
 {
     if (doc == nullptr || doc->programmer() == nullptr)
         return nullptr;
@@ -445,6 +554,7 @@ FocusModePanel *FocusModePanel::open(Doc *doc, QWidget *parent, quint32 sceneId,
     }
 
     FocusModeSetupDialog setup(doc, sceneId, selection, parent);
+    setup.setAddTarget(addTarget);
     if (setup.exec() != QDialog::Accepted)
         return nullptr;
 
@@ -453,7 +563,7 @@ FocusModePanel *FocusModePanel::open(Doc *doc, QWidget *parent, quint32 sceneId,
     QString why;
     FocusModePanel *panel = startWith(doc, parent, setup.options(), &why, int(setup.inputDevice()));
     if (panel == nullptr)
-        QMessageBox::warning(parent, tr("Focus Mode"), why);
+        QMessageBox::warning(parent, tr("Quick Focus"), why);
     return panel;
 }
 
@@ -534,8 +644,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
        -- and the controller -- were still on. Keep it on screen. */
     setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     setObjectName(QStringLiteral("focusModePanel"));
-    setWindowTitle(tr("Focus Mode"));
-    setProperty("helpTopic", QStringLiteral("lighting-studio.md#focus-mode"));
+    setWindowTitle(m_session->isRunningCalls() ? tr("Venue Focus") : tr("Quick Focus"));
+    setProperty("helpTopic", QStringLiteral("lighting-studio.md#quick-focus"));
     setFocusPolicy(Qt::StrongFocus);
 
     QVBoxLayout *vl = new QVBoxLayout(this);
@@ -601,6 +711,16 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_deltaLabel->setObjectName(QStringLiteral("focusDelta"));
     m_deltaLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
     vl->addWidget(m_deltaLabel);
+    /* What was just confirmed -- "Spot 3 kept for Lincoln HS.", "All
+       saved, 6 lights." -- shown as the voice says it. */
+    QLabel *said = new QLabel(this);
+    said->setObjectName(QStringLiteral("focusConfirmed"));
+    said->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    connect(m_session, &FocusSession::announce, said, [said](const QString &text, int priority) {
+        if (priority >= ControllerScheme::ConfirmPriority)
+            said->setText(text);
+    });
+    vl->addWidget(said);
     vl->addWidget(m_beamLabel);
     vl->addWidget(m_savedLabel);
     vl->addWidget(m_scopeLabel);
@@ -642,6 +762,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     // Feedback: lights, voice or both (shared with Refine).
     use->addWidget(new QLabel(tr("Feedback:"), this));
     use->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
+    use->addWidget(new QLabel(tr("Voice:"), this));
+    use->addWidget(new VoiceDetailCombo(doc->programmer(), this));
     m_deviceLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
     use->addWidget(m_deviceLabel, 1);
     vl->addLayout(use);
@@ -765,9 +887,9 @@ void FocusModePanel::refresh()
     }
     refreshSaveStatus();
     m_titleLabel->setText(m_session->isRunningCalls()
-                          ? tr("Focus calls \342\200\224 fixture %1 of %2")
+                          ? tr("Venue focus \342\200\224 fixture %1 of %2")
                             .arg(m_session->index() + 1).arg(m_session->count())
-                          : tr("Focus \342\200\224 head %1 of %2")
+                          : tr("Quick focus \342\200\224 head %1 of %2")
                             .arg(m_session->index() + 1).arg(m_session->count()));
     // The freeze chord (Q140): say so where it is seen first.
     if (m_doc->programmer()->isHolding())
@@ -962,7 +1084,7 @@ void FocusModePanel::refreshController()
     m_map->setControls(pad.controls);
     m_useController->setEnabled(pad.present);
     m_useController->setToolTip(pad.present ? tr("Nudge from %1").arg(pad.name)
-                                            : tr("No controller Focus mode can use is connected"));
+                                            : tr("No controller that can focus is connected"));
     const QString owner = m_doc->programmer()->controllerOwnerName();
     m_deviceLabel->setText(!owner.isEmpty() ? tr("%1 has it (any other is ignored)").arg(owner)
                            : pad.present ? pad.name : tr("No controller connected"));
@@ -1142,7 +1264,7 @@ bool FocusModePanel::requestExit()
     {
         const QList<quint32> unsaved = m_session->unsavedFixtures();
         const QString names = lightNames(m_doc, unsaved, 8);
-        QMessageBox box(QMessageBox::Question, tr("Focus Mode"),
+        QMessageBox box(QMessageBox::Question, windowTitle(),
                         unsaved.size() == 1
                             ? tr("%1 has changes you have not saved.").arg(names)
                             : tr("%1 have changes you have not saved: %2.")

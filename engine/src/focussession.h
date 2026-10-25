@@ -337,6 +337,9 @@ public:
     /** Flash the selection on a change (on; a test of steady output turns
      *  it off). */
     void setFlashEnabled(bool on) { m_flashEnabled = on; }
+    /** How much the voice says (ProgrammerController sets it for every tool). */
+    void setVoiceDetail(ControllerScheme::VoiceDetail detail) { m_voiceDetail = detail; }
+    ControllerScheme::VoiceDetail voiceDetail() const { return m_voiceDetail; }
 
     /*********************************************************************
      * Venue (board Q105)
@@ -462,10 +465,15 @@ public:
     bool nextUnsaved(quint32 after = 0xFFFFFFFF);
     /** View + RS (or N): how many lights are not saved -- "2 not saved.",
      *  "All saved." -- said whatever the feedback: it was asked for. */
+    /** What a held A says once every light is saved: "All saved, 6
+     *  lights." ("All saved to Lincoln HS, 6 lights." in a venue). */
+    QString saveAllPhrase() const;
+    /** The venue a save goes to, said (empty: the show). */
+    QString savedVenue() const;
+    /** @p fid's place in the list, 1-based (0: not in it), and its name. */
+    int voiceIndex(quint32 fid) const;
+    QString lightName(quint32 fid) const;
     QString unsavedCountPhrase() const;
-    /** Where a save lands, for the voice (the review: one word per tool,
-     *  saying where): " for Lincoln HS" in a venue, else nothing. */
-    QString keptWhere() const;
 
     /** Where head @p fid would land with its SAVED calibration, as its
      *  live one lands on the reference (the plot's ghost while nudging);
@@ -614,6 +622,7 @@ private:
     };
     /** What B's press just put back (revert()): a hold that follows it
      *  takes these into its one undo step and its count. */
+    ControllerScheme::VoiceDetail m_voiceDetail = ControllerScheme::StandardVoice;
     QList<UndoEntry> m_pressReverted;
     /** A call as it runs: its heads in order and the point each focuses to. */
     struct CallState

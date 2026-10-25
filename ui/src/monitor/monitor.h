@@ -341,6 +341,9 @@ public:
     /** The show's stage marks (MonitorProperties::stageMarks()) or their
      *  positions changed: redraw them on the plot and the Rig Overview. */
     void stageMarksChanged();
+    /** A stage piece's properties (MonitorProperties::StagePiece), from a
+     *  double-click on it, its menu or its row in Plot layers. */
+    void editStagePiece(int piece);
 
 protected:
 
@@ -353,6 +356,8 @@ private:
     /** The overview's renderer, so the active scene can reach it too --
      *  it shows the same aim the studio draws as dashed lines. */
     class StructureStudioView *m_overviewView = NULL;
+    /** A stage piece's properties while they are open (editStagePiece()). */
+    class StagePieceDialog *m_stagePieceDialog = NULL;
     quint32 m_activeSceneId = 0xFFFFFFFF;   ///< mirrors the graphics view's
 
 public:
@@ -614,6 +619,7 @@ protected:
      *  style doesn't reach them) — restyled explicitly in applyToolbarLabelMode(). */
     QToolButton* m_addBtn = nullptr;
     QToolButton* m_moreBtn = nullptr;
+    QToolButton* m_focusBtn = nullptr;
     QSplitter* m_splitter;
     /** Scene-space position of the last canvas right-click; used to place new
      *  fixtures/trusses at the cursor location. */

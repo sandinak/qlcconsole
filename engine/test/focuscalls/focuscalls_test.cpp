@@ -337,7 +337,7 @@ void FocusCalls_Test::feedbackIsLightsVoiceOrBoth()
     o.first = targetRef(dsc->id());
     QVERIFY(s->start(o));
     QVERIFY(s->isFlashing());
-    QCOMPARE(said.last().at(0).toString(), QString("Fixture 1 of 1."));
+    QCOMPARE(said.last().at(0).toString(), QString("Fixture 1, Spot 3."));
 
     // Lights only: no voice, but Say the light still speaks (asked for).
     pc->cycleOperatorFeedback();
@@ -348,7 +348,7 @@ void FocusCalls_Test::feedbackIsLightsVoiceOrBoth()
     s->zero();
     QCOMPARE(said.count(), count);
     s->whereAmI();
-    QCOMPARE(said.last().at(0).toString(), QString("Spot 3. Fixture 1 of 1."));
+    QCOMPARE(said.last().at(0).toString(), QString("Spot 3. Fixture 1."));
     QVERIFY(s->isFlashing());
 
     // Voice only: no blinks on the rig.
@@ -574,6 +574,8 @@ void FocusCalls_Test::theOperatorIsToldWhereTheyAre()
 
     FocusSession *s = m_doc->programmer()->focusSession();
     QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
+    // Verbose: the call and where its target is, on every step.
+    m_doc->programmer()->setVoiceDetail(ControllerScheme::VerboseVoice);
     FocusSession::Options o;
     o.calls = m_doc->programmer()->focusCalls()->sessionCalls();
     o.order = FocusSession::AsGiven;
@@ -585,9 +587,9 @@ void FocusCalls_Test::theOperatorIsToldWhereTheyAre()
                                                                          MonitorProperties::SpokenOffset);
     QVERIFY(atDsc.startsWith("S") || atDsc.startsWith("CL"));
     QCOMPARE(s->callPositionPhrase(), atDsc);
-    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC, %1. Fixture 1 of 2.").arg(atDsc));
+    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC, %1. Fixture 1 of 2, A.").arg(atDsc));
     s->next();
-    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. Fixture 2 of 2."));
+    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. Fixture 2 of 2, B."));
     s->cycleScope();
     QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC. All 2, group."));
     s->nextCall();
@@ -599,7 +601,7 @@ void FocusCalls_Test::theOperatorIsToldWhereTheyAre()
     s->whereAmI();
     QCOMPARE(said.last().at(0).toString(), QString("C. Call 2 of 2, AT spots to Soloist DS, %1. Fixture 1 of 1.").arg(atSolo));
     s->save();
-    QCOMPARE(said.last().at(0).toString(), QString("C kept."));
+    QCOMPARE(said.last().at(0).toString(), QString("Saved C."));
     s->apply(FocusSession::UndoSave);
     QCOMPARE(said.last().at(0).toString(), QString("Undone."));
     s->apply(FocusSession::UndoSave);
@@ -850,7 +852,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     const quint32 house = st->addCue(list, 0, "House to half");
     QVERIFY(st->setCuesFocusCall({ focus }, true));
     QVERIFY(st->isCueFocusCall(focus));
-    QCOMPARE(st->undoText(), QString("Make cue a focus call"));
+    QCOMPARE(st->undoText(), QString("Make cue a venue focus cue"));
     QVERIFY(!st->isCueFocusCall(house));
 
     FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
@@ -864,7 +866,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     // GO onto it: armed, said once, nothing running yet.
     fcc->cueCurrent(list, focus);
     QCOMPARE(fcc->state(), FocusCallCue::Armed);
-    QCOMPARE(said.last().at(0).toString(), QString("Focus calls ready. Press Start to begin."));
+    QCOMPARE(said.last().at(0).toString(), QString("Venue focus ready. Press Start to begin."));
     const int saidOnce = said.count();
     fcc->cueCurrent(list, focus);           // the same cue again: no repeat
     QCOMPARE(said.count(), saidOnce);
@@ -876,8 +878,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     QCOMPARE(fcc->state(), FocusCallCue::Running);
     QVERIFY(s->isActive());
     QVERIFY(s->isRunningCalls());
-    QCOMPARE(said.last().at(0).toString(), QString("Call 1 of 2, DH Tspots to DSC, %1. Fixture 1 of 2.")
-             .arg(m_doc->monitorProperties()->stagePositionText(dsc->position(), MonitorProperties::SpokenOffset)));
+    QCOMPARE(said.last().at(0).toString(), QString("Call 1, DH Tspots to DSC. Fixture 1, A."));
     // Step: the next call.
     s->setTrigger(1, 1.0f);
     s->setTrigger(1, 0.0f);
@@ -911,7 +912,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     QVERIFY(fcc->start());
     s->stop();
     QCOMPARE(goOn.count(), 1);
-    QCOMPARE(said.last().at(0).toString(), QString("Focus calls ended."));
+    QCOMPARE(said.last().at(0).toString(), QString("Venue focus ended."));
     QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
     fcc->cueCurrent(list, house);
 
@@ -933,7 +934,7 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     fcc->cueCurrent(list, house);
     m_doc->programmer()->setOperatorFeedback(ControllerScheme::VoiceFeedback);
     fcc->cueCurrent(list, focus);
-    QCOMPARE(said.last().at(0).toString(), QString("Focus calls ready. Press Start to begin."));
+    QCOMPARE(said.last().at(0).toString(), QString("Venue focus ready. Press Start to begin."));
     m_doc->programmer()->setOperatorFeedback(ControllerScheme::BothFeedback);
     fcc->cueCurrent(list, house);
 
@@ -1016,8 +1017,8 @@ void FocusCalls_Test::aFocusCallCueAsksForTheVenue()
     QVERIFY(fcc->useVenue("Lincoln HS"));
     QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
     QCOMPARE(v->venueNames().size(), venues);
-    QVERIFY(said.last().at(0).toString().startsWith("Call 1 of 1, DH Tspots to DSC, "));
-    QVERIFY(said.last().at(0).toString().endsWith(". Fixture 1 of 1."));
+    QVERIFY(said.last().at(0).toString().startsWith("Call 1, DH Tspots to DSC. "));
+    QVERIFY(said.last().at(0).toString().contains(" Fixture 1, "));
     s->stop();
     // ...and nobody answering is a new venue, never the old one.
     fcc->setVenueAskTimeout(50);
@@ -1075,7 +1076,7 @@ void FocusCalls_Test::thePadAndTheVoiceTellYouMore()
     // 2 + 3. A save buzzes twice (another light is still unsaved), and says it.
     s->save();
     QCOMPARE(buzz.last().at(0).toInt(), 2);
-    QCOMPARE(said.last().at(0).toString(), QString("Spot 7 kept."));
+    QCOMPARE(said.last().at(0).toString(), QString("Saved fixture 2."));
     QVERIFY(s->deltaText(b->id()).isEmpty());
 
     // 6. Both bumpers: to the next light not saved, said.
@@ -1091,13 +1092,13 @@ void FocusCalls_Test::thePadAndTheVoiceTellYouMore()
 
     // 5. Hold B: this light back to its last save; hold A: all saved.
     s->revertLight();
-    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 back to its last save."));
+    QCOMPARE(said.last().at(0).toString(), QString("Fixture 1 reverted."));
     QVERIFY(!s->isDirty(a->id()));
     s->nudge(0.5f, 0.0f);
     s->next();
     s->nudge(0.5f, 0.0f);
     s->saveAllHeld();
-    QCOMPARE(said.last().at(0).toString(), QString("2 lights kept."));
+    QCOMPARE(said.last().at(0).toString(), QString("Saved all, 2 lights."));
     QVERIFY(!s->hasUnsaved());
     QCOMPARE(pc->padLight(), green);
     QVERIFY(!s->nextUnsaved());
@@ -1173,7 +1174,7 @@ void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
     held(25);
     up(10);
     QVERIFY(!s->hasUnsaved());
-    QCOMPARE(said.last().at(0).toString(), QString("1 light kept."));
+    QCOMPARE(said.last().at(0).toString(), QString("Saved all, 2 lights."));
     fb = stub->m_feedbackParams.last().toMap();          // ... and the buzz went out
     bool buzzed = false;
     for (const QVariant &v : stub->m_feedbackParams)
@@ -1185,7 +1186,7 @@ void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
     down(11);
     held(40);
     up(11);
-    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 back to its last save."));
+    QCOMPARE(said.last().at(0).toString(), QString("Fixture 1 reverted."));
 
     // RS: a tap says the light; held, the feedback changes.
     down(18);
@@ -1435,7 +1436,7 @@ void FocusCalls_Test::unsavedWorkIsNeverDiscarded()
     // Refine refused while Focus mode has a light not saved; Focus kept.
     QString why;
     QVERIFY(!r->start(cue, 0xFFFFFFFF, &why));
-    QCOMPARE(why, QString("Focus mode has 1 light not saved: save it (A) or put it back (B) first."));
+    QCOMPARE(why, QString("Quick focus has 1 light not saved: save it (A) or put it back (B) first."));
     QVERIFY(s->isActive());
     QVERIFY(s->isDirty(a->id()));
     // Focus mode itself again: refused too.
@@ -1448,7 +1449,7 @@ void FocusCalls_Test::unsavedWorkIsNeverDiscarded()
     // Refine with a change pending: Focus mode refused, Refine kept.
     QVERIFY(r->nudgePosition(2.0f, 0.0f));
     QVERIFY(!s->start(o, &why));
-    QCOMPARE(why, QString("Refine has 1 change not kept: keep it (A) or go back to the cue (B) first."));
+    QCOMPARE(why, QString("Focus this cue has 1 change not kept: keep it (A) or go back to the cue (B) first."));
     QVERIFY(r->isActive());
     QVERIFY(r->hasPending());
     r->revert();
@@ -1780,7 +1781,15 @@ void FocusCalls_Test::inAVenueKeptSaysWhereAndXIsTheShows()
     QVERIFY(s->start(o));
     s->nudge(1.0f, 0.0f);
     s->save();
-    QCOMPARE(said.last().at(0).toString(), QString("Spot 3 kept for Lincoln HS."));
+    QCOMPARE(said.last().at(0).toString(), QString("Saved fixture 1 to Lincoln HS."));
+    // Never the sidecar's name: the venue's.
+    for (const QList<QVariant> &l : said)
+        QVERIFY2(!l.at(0).toString().contains("venues.xml") && !l.at(0).toString().contains("Spring"),
+                 qPrintable(l.at(0).toString()));
+    // Hold A in a venue: confirmed, with where they went.
+    s->nudge(0.5f, 0.0f);
+    s->saveAllHeld();
+    QCOMPARE(said.last().at(0).toString(), QString("Saved all to Lincoln HS, 1 light."));
     s->zero();
     QCOMPARE(s->liveOffset(a->id()).pan, 2.0f);               // the show's, not 0
     QCOMPARE(said.last().at(0).toString(), QString("Back to the show's calibration."));
@@ -1884,7 +1893,7 @@ void FocusCalls_Test::holdBPutsEveryLightBack()
     held(40);
     up(11);
     QVERIFY(!s->hasUnsaved());
-    QCOMPARE(said.last().at(0).toString(), QString("3 lights back to their last save."));
+    QCOMPARE(said.last().at(0).toString(), QString("Reverted all, 3 lights."));
     QCOMPARE(s->liveOffset(a->id()).pan, 1.0f);          // its save, not zero
     QCOMPARE(s->liveOffset(b->id()).pan, 0.0f);
     QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(b->id()).panOffsetDeg, 0.0f);
@@ -2472,4 +2481,195 @@ void FocusCalls_Test::callsComeBackWithTheWholeShow()
     QVERIFY(!callsOf(xml).isEmpty());
     QCOMPARE(callsOf(again), callsOf(xml));
     delete other;
+}
+
+void FocusCalls_Test::holdingAOnThePadSaysAllSaved()
+{
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
+                             { 10, "a" }, { 11, "b" }, { 14, "lb" }, { 15, "rb" },
+                             { 16, "back" }, { 17, "start" }, { 18, "rs" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->autoBindFromProfile();
+    auto value = [iom](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    auto held = [pc](int ticks) {
+        for (int i = 0; i < ticks; ++i)
+            pc->applyDesignJoystick();
+    };
+
+    QList<Fixture *> spots;
+    for (int i = 0; i < 6; ++i)
+        spots << makeSpot(m_doc, QString("Spot %1").arg(i + 1), 1.0f + i, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    for (Fixture *f : spots)
+        o.fixtures << f->id();
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    for (int i = 0; i < 3; ++i)
+    {
+        s->nudge(0.5f, 0.0f);
+        s->next();
+    }
+    QCOMPARE(s->unsavedFixtures().size(), 3);
+    // A held a full second on the pad: every light saved, and said so.
+    value(10, 255);
+    held(80);
+    value(10, 0);
+    held(2);
+    QVERIFY(!s->hasUnsaved());
+    QStringList lines;
+    for (const QList<QVariant> &l : said)
+        lines << l.at(0).toString();
+    QVERIFY2(lines.contains("Saved all, 6 lights."), qPrintable(lines.join(" | ")));
+    s->stop();
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
+void FocusCalls_Test::theVoiceSaysTheLightsName()
+{
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "DS Wash L", 4.0f, 2.0f);
+    FixtureGroup *g = makeGroup(m_doc, "Spots", { a, b });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    VenueCorrections *v = pc->venueCorrections();
+    v->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    FocusCall c1;
+    c1.groups << g->id();
+    c1.target = targetRef(dsc->id());
+    pc->focusCalls()->setCalls({ c1 });
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    auto last = [&said]() { return said.last().at(0).toString(); };
+    FocusSession::Options o;
+    o.calls = pc->focusCalls()->sessionCalls();
+    o.order = FocusSession::AsGiven;
+
+    struct Level
+    {
+        ControllerScheme::VoiceDetail detail;
+        QString call, step2, saved, savedAll, reverted, revertedAll, light;
+    };
+    const QString at = m_doc->monitorProperties()->stagePositionText(dsc->position(), MonitorProperties::SpokenOffset);
+    const QList<Level> levels = {
+        { ControllerScheme::TerseVoice, "Call 1. F1 Spot 3.", "F2 DS Wash L.", "Saved.", "Saved all.",
+          "Reverted.", "Reverted all.", "DS Wash L." },
+        { ControllerScheme::StandardVoice, "Call 1, Spots to DSC. Fixture 1, Spot 3.", "Fixture 2, DS Wash L.",
+          "Saved fixture 2 to Lincoln HS.", "Saved all to Lincoln HS, 2 lights.", "Fixture 2 reverted.",
+          "Reverted all, 2 lights.", "DS Wash L. Call 1, Spots to DSC. Fixture 2." },
+        { ControllerScheme::VerboseVoice, QString("Call 1 of 1, Spots to DSC, %1. Fixture 1 of 2, Spot 3.").arg(at),
+          "Call 1 of 1, Spots to DSC. Fixture 2 of 2, DS Wash L.", "Saved DS Wash L to Lincoln HS.",
+          "Saved all to Lincoln HS, 2 lights.", "DS Wash L back to its last save.",
+          "2 lights back to their last save.", QString("DS Wash L. Call 1 of 1, Spots to DSC, %1. Fixture 2 of 2.").arg(at) },
+    };
+    for (const Level &l : levels)
+    {
+        const QByteArray tag = ControllerScheme::voiceDetailKey(l.detail).toUtf8();
+        pc->setVoiceDetail(l.detail);
+        QVERIFY(s->start(o));
+        QCOMPARE(last(), l.call);
+        s->next();
+        QCOMPARE(last(), l.step2);
+        s->nudge(0.5f, 0.0f);
+        s->save();
+        QCOMPARE(last(), l.saved);
+        s->nudge(0.5f, 0.0f);
+        s->revertLight();
+        QCOMPARE(last(), l.reverted);
+        s->previous();
+        s->nudge(0.5f, 0.0f);
+        s->next();
+        s->nudge(0.5f, 0.0f);
+        s->revertAllHeld();
+        QCOMPARE(last(), l.revertedAll);
+        s->saveAllHeld();
+        QCOMPARE(last(), l.savedAll);
+        // Say the light: always the name, first.
+        s->whereAmI();
+        QVERIFY2(last() == l.light, qPrintable(tag + ": " + last()));
+        // Warnings are never shortened.
+        s->nudge(0.5f, 0.0f);
+        s->apply(FocusSession::Exit);
+        QCOMPARE(last(), QString("DS Wash L not saved."));
+        s->discardAll();
+        s->stop();
+        // Never "of 2" but at Verbose; never the sidecar's name.
+        for (const QList<QVariant> &line : said)
+        {
+            const QString text = line.at(0).toString();
+            QVERIFY2(!text.contains("venues.xml"), qPrintable(text));
+            if (l.detail != ControllerScheme::VerboseVoice)
+                QVERIFY2(!text.contains(" of 2"), qPrintable(text));
+        }
+        said.clear();
+    }
+    pc->setVoiceDetail(ControllerScheme::StandardVoice);
+}
+
+void FocusCalls_Test::renamingAVenueKeepsEverything()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *truss = props->addTruss();
+    truss->setName("LX1");
+    truss->setOrigin(QVector3D(0.0f, 3.0f, 6.0f));
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    // Named with the date, as an unnamed new venue is, and worked in.
+    const QString dated = v->addVenue();
+    QVERIFY(dated.startsWith("Venue "));
+    QVERIFY(v->setActiveVenue(dated));
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 1.5f;
+    props->setFixtureRigProps(a->id(), rp);
+    QVERIFY(v->record(a->id()));
+    QVector3D o2 = truss->origin();
+    o2.setZ(5.5f);
+    truss->setOrigin(o2);
+    QVERIFY(v->recordTrim(truss->id()));
+    dsc->setPosition(QVector3D(6.0f, 6.5f, 0.0f));
+    QVERIFY(v->recordTarget(dsc->id()));
+    const VenueCorrections::Venue before = v->venue(dated);
+    // A practice scrambled from it, too.
+    const QString practice = v->startPractice({ a->id() }, 7, 2.0f, 4.0f);
+    QVERIFY(!practice.isEmpty());
+    QCOMPARE(v->venue(practice).practice.from, dated);
+
+    QVERIFY(v->renameVenue(dated, "Lincoln HS"));
+    QVERIFY(!v->hasVenue(dated));
+    QCOMPARE(v->venueNames().count("Lincoln HS"), 1);
+    QCOMPARE(v->venueNames().size(), 2);                       // nothing duplicated
+    const VenueCorrections::Venue after = v->venue("Lincoln HS");
+    QCOMPARE(after.fixtures.size(), before.fixtures.size());
+    QCOMPARE(after.fixtures.value(a->id()).panOffsetDeg, 1.5f);
+    QCOMPARE(after.trims.size(), before.trims.size());
+    QCOMPARE(after.targets.size(), before.targets.size());
+    QCOMPARE(v->venue(practice).practice.from, QString("Lincoln HS"));
+    // The practice ends back on the renamed venue, its corrections on.
+    QVERIFY(v->endPractice());
+    QCOMPARE(v->activeVenue(), QString("Lincoln HS"));
+    QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 1.5f);
+    QCOMPARE(truss->origin().z(), 5.5f);
+    // One sidecar, with the new name and not the old.
+    QFile side(v->filePath());
+    QVERIFY(side.open(QIODevice::ReadOnly));
+    const QByteArray xml = side.readAll();
+    QVERIFY(xml.contains("Lincoln HS"));
+    QVERIFY(!xml.contains(dated.toUtf8() + "\""));
+    QCOMPARE(QDir(m_dir->path()).entryList({ "*.venues.xml" }).size(), 1);
 }

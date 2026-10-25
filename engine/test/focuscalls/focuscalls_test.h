@@ -139,6 +139,17 @@ private slots:
     void aLostControllerFreezesTheRigOutput();
     /** The calls through the whole show's save and load, in order. */
     void callsComeBackWithTheWholeShow();
+    /** Branson's test: A held on the pad saves every light and says so,
+     *  "All saved, 6 lights." */
+    void holdingAOnThePadSaysAllSaved();
+    /** Voice detail: each level's lines -- a call, a step, a save, a save
+     *  all, a revert, a revert all, Say the light -- from the one phrase
+     *  table, in a venue; warnings never shortened. */
+    void theVoiceSaysTheLightsName();
+    /** Renaming a venue (a dated one, worked in) keeps its corrections,
+     *  trims and targets, a practice from it goes back to it, and the one
+     *  sidecar has the new name only. */
+    void renamingAVenueKeepsEverything();
 
 private:
     Doc *m_doc = nullptr;

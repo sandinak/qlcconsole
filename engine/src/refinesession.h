@@ -246,7 +246,9 @@ public:
      * Telling the operator (the same as Focus calls)
      *********************************************************************/
 public:
-    QString wherePhrase() const;
+    QString wherePhrase() const { return wherePhrase(m_voiceDetail); }
+    /** The same at @p detail (the panel shows it at Verbose, whatever is said). */
+    QString wherePhrase(ControllerScheme::VoiceDetail detail) const;
     /** "Say the light" (RS): the light's name first -- "Mover 3. Cue 4,
      *  Movers, fixture 3 of 8." -- said whatever the feedback setting. */
     QString lightPhrase() const;
@@ -257,6 +259,8 @@ public:
     /** Something important: the selection's slow long blink (Q131). */
     void flashWarning();
     void setFlashEnabled(bool on) { m_flashEnabled = on; }
+    /** How much the voice says (ProgrammerController sets it for every tool). */
+    void setVoiceDetail(ControllerScheme::VoiceDetail detail) { m_voiceDetail = detail; }
     bool isFlashing() const;
     /** Out-of-scope fixtures of the layer are dimmed to this, 0..1. */
     static constexpr float dimLevel() { return 0.15f; }
@@ -398,6 +402,7 @@ private:
 
     QTimer *m_flashTimer = nullptr;
     QElapsedTimer m_flashClock;
+    ControllerScheme::VoiceDetail m_voiceDetail = ControllerScheme::StandardVoice;
     bool m_flashEnabled = true;
     bool m_holding = false;
     bool m_warnFlash = false;

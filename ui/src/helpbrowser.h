@@ -61,6 +61,9 @@ public:
     /** A heading's anchor, as GitHub writes it ("Connections & patch" ->
      *  "connections--patch"), so links written for the repository work here. */
     static QString headingSlug(const QString &heading);
+    /** A renamed heading's new slug for an old link to @p file#@p fragment
+     *  (else @p fragment). */
+    static QString movedHeading(const QString &file, const QString &fragment);
     /** The guides are written with the Mac's key symbols (⇧⌘R, ⌥←, ⌘-click).
      *  Off a Mac they are spelled the way the keyboard there says them:
      *  "Ctrl+Shift+R", "Alt+←", "Ctrl-click". @p mac true returns @p text

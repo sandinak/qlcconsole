@@ -837,6 +837,9 @@ private:
     /** Q38: "Don't move in black into this cue"; the list's Move in black. */
     QCheckBox *m_cueNoMib = nullptr;
     QCheckBox *m_cueFocusCall = nullptr;
+    QPushButton *m_cueRefine = nullptr;
+    /** The cue page's Focus ▾ (board Q149), filled as it opens. */
+    void fillCueFocusMenu(QMenu *menu);
     /** "Focus calls: waiting for the controller" on an armed focus-call cue. */
     class QLabel *m_cueFocusState = nullptr;
     QComboBox *m_listMib = nullptr;

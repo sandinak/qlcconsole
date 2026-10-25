@@ -32,6 +32,7 @@ class WorkbenchStack;
 class SceneGroupLooks;
 class FixtureConsole;
 class QStackedWidget;
+class QMenu;
 class QKeyEvent;
 class QScrollArea;
 class QToolButton;
@@ -431,7 +432,9 @@ private:
     /** Host the factory's @a pane under @a heading. */
     void hostEffectPane(QWidget *pane, const QString &heading, bool bench);
     QToolButton *m_sendToTreeBtn = nullptr;
+    /** The header's Focus ▾ (board Q149). */
     QToolButton *m_refineBtn = nullptr;
+    void fillFocusMenu(QMenu *menu);
 };
 
 /** @} */

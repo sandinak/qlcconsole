@@ -58,7 +58,7 @@ RefinePanel *RefinePanel::open(Doc *doc, QWidget *parent, quint32 cueId, quint32
         if (why != nullptr)
             *why = reason;
         else
-            QMessageBox::information(parent, tr("Refine"), reason);
+            QMessageBox::information(parent, tr("Focus This Cue"), reason);
         return nullptr;
     }
     return showPanel(doc, parent);
@@ -74,7 +74,7 @@ RefinePanel *RefinePanel::openScene(Doc *doc, QWidget *parent, const QList<quint
         if (why != nullptr)
             *why = reason;
         else
-            QMessageBox::information(parent, tr("Refine"), reason);
+            QMessageBox::information(parent, tr("Focus This Look"), reason);
         return nullptr;
     }
     // From a row: that group or fixture, as the Show Tree's layer menu does.
@@ -111,7 +111,7 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     setAttribute(Qt::WA_DeleteOnClose);
     setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     setObjectName(QStringLiteral("refinePanel"));
-    setWindowTitle(tr("Refine"));
+    setWindowTitle(tr("Focus This Cue"));
     setProperty("helpTopic", QStringLiteral("refine.md"));
     setFocusPolicy(Qt::StrongFocus);
 
@@ -189,6 +189,8 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     // Feedback: lights, voice or both (shared with Focus mode).
     bottom->addWidget(new QLabel(tr("Feedback:"), this));
     bottom->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
+    bottom->addWidget(new QLabel(tr("Voice:"), this));
+    bottom->addWidget(new VoiceDetailCombo(doc->programmer(), this));
     QPushButton *keep = new QPushButton(tr("Keep (A)"), this);
     keep->setObjectName(QStringLiteral("refineKeep"));
     QPushButton *back = new QPushButton(tr("Back to the cue (B)"), this);
@@ -275,22 +277,23 @@ void RefinePanel::refresh()
     if (!m_session->isActive())
         return;
     const ShowTree::Cue *cue = m_doc->showTree()->cue(m_session->cueId());
+    setWindowTitle(m_session->isSceneMode() ? tr("Focus This Look") : tr("Focus This Cue"));
     if (m_session->isSceneMode())
     {
         const Function *f = m_doc->function(m_session->currentLayer());
-        m_title->setText(tr("Refine \342\200\224 scene %1  \302\267  %2 of %3 (Build)")
+        m_title->setText(tr("Focus this look \342\200\224 scene %1  \302\267  %2 of %3 (Build)")
                          .arg(f != nullptr ? f->name() : QString())
                          .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
     }
     else
-        m_title->setText(tr("Refine \342\200\224 cue %1 %2  \302\267  layer %3 of %4")
+        m_title->setText(tr("Focus this cue \342\200\224 cue %1 %2  \302\267  layer %3 of %4")
                          .arg(cue != nullptr ? cue->number : QString(),
                               cue != nullptr ? cue->name : QString())
                          .arg(m_session->layerIndex() + 1).arg(m_session->layers().size()));
     // The freeze chord (Q140): say so where it is seen first.
     if (m_doc->programmer()->isHolding())
         m_title->setText(tr("HOLDING \342\200\224 click both sticks (or H) to go on.  ") + m_title->text());
-    m_layer->setText(m_session->wherePhrase());
+    m_layer->setText(m_session->wherePhrase(ControllerScheme::VerboseVoice));
     QString scope;
     switch (m_session->scope())
     {
@@ -373,7 +376,7 @@ bool RefinePanel::requestExit()
     if (m_session->hasPending())
     {
         const QMessageBox::StandardButton b = QMessageBox::question(
-            this, tr("Refine"), tr("Keep what is pending in the cue?"),
+            this, windowTitle(), tr("Keep what is pending in the cue?"),
             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
         if (b == QMessageBox::Cancel)
             return false;

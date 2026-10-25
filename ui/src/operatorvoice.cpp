@@ -35,6 +35,7 @@ namespace
 const QString kEnabledSetting = QStringLiteral("operatorVoice/enabled");
 const QString kDeviceSetting = QStringLiteral("operatorVoice/device");
 const QString kFeedbackSetting = QStringLiteral("controllerTools/feedback");
+const QString kVoiceDetailSetting = QStringLiteral("controllerTools/voiceDetail");
 
 #ifdef QLC_HAVE_TEXTTOSPEECH
 /** Qt's own: whatever engine this platform's Qt TextToSpeech has. */
@@ -311,4 +312,45 @@ int OperatorFeedbackCombo::savedFeedback()
 void OperatorFeedbackCombo::saveFeedback(int feedback)
 {
     QSettings().setValue(kFeedbackSetting, ControllerScheme::feedbackKey(ControllerScheme::Feedback(feedback)));
+}
+
+/*****************************************************************************
+ * VoiceDetailCombo
+ *****************************************************************************/
+
+VoiceDetailCombo::VoiceDetailCombo(ProgrammerController *pc, QWidget *parent)
+    : QComboBox(parent)
+    , m_pc(pc)
+{
+    setObjectName(QStringLiteral("voiceDetail"));
+    setFocusPolicy(Qt::NoFocus);
+    for (ControllerScheme::VoiceDetail d : { ControllerScheme::TerseVoice, ControllerScheme::StandardVoice,
+                                             ControllerScheme::VerboseVoice })
+        addItem(ControllerScheme::voiceDetailName(d), int(d));
+    setToolTip(tr("How much the voice says. Terse: \"F1 Spot 3\", \"Saved\". Standard: \"Fixture 1, "
+                  "Spot 3\", \"Saved fixture 1\". Verbose: \"Fixture 1 of 8, Spot 3\", \"Saved Spot 3\", "
+                  "and each call's target and where it is. Warnings are always said in full."));
+    sync();
+    connect(this, &QComboBox::currentIndexChanged, this, [this]() {
+        m_pc->setVoiceDetail(ControllerScheme::VoiceDetail(currentData().toInt()));
+    });
+    connect(m_pc, &ProgrammerController::voiceDetailChanged, this, &VoiceDetailCombo::sync);
+}
+
+void VoiceDetailCombo::sync()
+{
+    const bool was = blockSignals(true);
+    setCurrentIndex(findData(int(m_pc->voiceDetail())));
+    blockSignals(was);
+}
+
+int VoiceDetailCombo::savedDetail()
+{
+    return int(ControllerScheme::voiceDetailFromKey(QSettings().value(kVoiceDetailSetting).toString()));
+}
+
+void VoiceDetailCombo::saveDetail(int detail)
+{
+    QSettings().setValue(kVoiceDetailSetting,
+                         ControllerScheme::voiceDetailKey(ControllerScheme::VoiceDetail(detail)));
 }

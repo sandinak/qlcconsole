@@ -200,6 +200,128 @@ ControllerScheme::Feedback ControllerScheme::feedbackFromKey(const QString &key)
     return BothFeedback;
 }
 
+QString ControllerScheme::voiceDetailName(VoiceDetail detail)
+{
+    switch (detail)
+    {
+        case TerseVoice:    return tr("Terse");
+        case VerboseVoice:  return tr("Verbose");
+        case StandardVoice: break;
+    }
+    return tr("Standard");
+}
+
+QString ControllerScheme::voiceDetailKey(VoiceDetail detail)
+{
+    switch (detail)
+    {
+        case TerseVoice:    return QStringLiteral("terse");
+        case VerboseVoice:  return QStringLiteral("verbose");
+        case StandardVoice: break;
+    }
+    return QStringLiteral("standard");
+}
+
+ControllerScheme::VoiceDetail ControllerScheme::voiceDetailFromKey(const QString &key)
+{
+    if (key == QLatin1String("terse"))
+        return TerseVoice;
+    if (key == QLatin1String("verbose"))
+        return VerboseVoice;
+    return StandardVoice;
+}
+
+QString ControllerScheme::stepPhrase(VoiceDetail detail, int index, int count, const QString &name)
+{
+    switch (detail)
+    {
+        case TerseVoice:
+            return name.isEmpty() ? tr("F%1.").arg(index) : tr("F%1 %2.").arg(index).arg(name);
+        case VerboseVoice:
+            return name.isEmpty() ? tr("Fixture %1 of %2.").arg(index).arg(count)
+                                  : tr("Fixture %1 of %2, %3.").arg(index).arg(count).arg(name);
+        case StandardVoice:
+            break;
+    }
+    return name.isEmpty() ? tr("Fixture %1.").arg(index) : tr("Fixture %1, %2.").arg(index).arg(name);
+}
+
+QString ControllerScheme::savedPhrase(VoiceDetail detail, int index, const QString &name, const QString &venue)
+{
+    if (detail == TerseVoice)
+        return tr("Saved.");
+    // Standard says the fixture's number; Verbose (or one not in the list) its name.
+    const QString what = (detail == VerboseVoice || index <= 0) && !name.isEmpty() ? name
+                                                                                  : tr("fixture %1").arg(index);
+    return venue.isEmpty() ? tr("Saved %1.").arg(what) : tr("Saved %1 to %2.").arg(what, venue);
+}
+
+QString ControllerScheme::savedSomePhrase(VoiceDetail detail, int lights, const QString &venue)
+{
+    if (detail == TerseVoice)
+        return tr("Saved.");
+    return venue.isEmpty() ? tr("Saved %1 lights.").arg(lights) : tr("Saved %1 lights to %2.").arg(lights).arg(venue);
+}
+
+QString ControllerScheme::savedAllPhrase(VoiceDetail detail, int lights, const QString &venue)
+{
+    if (detail == TerseVoice)
+        return tr("Saved all.");
+    if (venue.isEmpty())
+        return lights == 1 ? tr("Saved all, 1 light.") : tr("Saved all, %1 lights.").arg(lights);
+    return lights == 1 ? tr("Saved all to %1, 1 light.").arg(venue)
+                       : tr("Saved all to %1, %2 lights.").arg(venue).arg(lights);
+}
+
+QString ControllerScheme::revertedPhrase(VoiceDetail detail, int index, const QString &name)
+{
+    switch (detail)
+    {
+        case TerseVoice:
+            return tr("Reverted.");
+        case VerboseVoice:
+            if (!name.isEmpty())
+                return tr("%1 back to its last save.").arg(name);
+            break;
+        case StandardVoice:
+            if (index <= 0 && !name.isEmpty())
+                return tr("%1 reverted.").arg(name);
+            break;
+    }
+    return tr("Fixture %1 reverted.").arg(index);
+}
+
+QString ControllerScheme::revertedAllPhrase(VoiceDetail detail, int lights)
+{
+    switch (detail)
+    {
+        case TerseVoice:
+            return tr("Reverted all.");
+        case VerboseVoice:
+            return lights == 1 ? tr("1 light back to its last save.")
+                               : tr("%1 lights back to their last save.").arg(lights);
+        case StandardVoice:
+            break;
+    }
+    return lights == 1 ? tr("Reverted all, 1 light.") : tr("Reverted all, %1 lights.").arg(lights);
+}
+
+QString ControllerScheme::callPhrase(VoiceDetail detail, int index, int count, const QString &who,
+                                     const QString &target, const QString &where)
+{
+    switch (detail)
+    {
+        case TerseVoice:
+            return tr("Call %1.").arg(index);
+        case VerboseVoice:
+            return tr("Call %1 of %2, %3 to %4%5.").arg(index).arg(count)
+                   .arg(who, target, where.isEmpty() ? QString() : QStringLiteral(", ") + where);
+        case StandardVoice:
+            break;
+    }
+    return tr("Call %1, %2 to %3.").arg(index).arg(who, target);
+}
+
 bool ControllerScheme::repeats(Verb verb)
 {
     return verb == ZoomWider || verb == ZoomNarrower || verb == FocusNearer || verb == FocusFarther;

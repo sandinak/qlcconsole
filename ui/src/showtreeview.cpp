@@ -81,6 +81,8 @@
 #include "effectdesigner.h"
 #include "focuscallcue.h"
 #include "refinepanel.h"
+#include "focuscallsdialog.h"
+#include "focusmenu.h"
 #include "showtreeview.h"
 #include "itemicons.h"
 #include "workbench.h"
@@ -811,6 +813,14 @@ public:
     }
 };
 
+/* What a venue focus cue does, said on its tick box and menu entry. */
+QString venueFocusCueTip()
+{
+    return ShowTreeView::tr("Pre-show: GO onto this cue plays its looks as a preset and waits; the "
+                            "voice says \"Venue focus ready\". Start (Menu) on the controller, or "
+                            "\u2318\u21a9, begins the show's focus calls; Menu, or past the last "
+                            "call, goes on to the next cue.");
+}
 } // namespace
 
 /****************************************************************************
@@ -1228,7 +1238,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             tr("M \u2014 Mode. B: Block (starts from nothing). C: Cue-only (its changes don't pass on). "
                "Blank: it tracks."),
             tr("F \u2014 Flags. base: the list's base cue. skip: GO passes over it. no MIB: no move in "
-               "black into it. focus: a focus-call cue (GO arms the focus calls). \u2295 includes, "
+               "black into it. focus: a venue focus cue (GO arms Venue focus). \u2295 includes, "
                "\u00d7 reusable uses, mix, VC buttons that fire it.") };
         for (int c = 0; c < tips.size(); ++c)
             if (!tips.at(c).isEmpty())
@@ -1508,6 +1518,25 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueHold->setObjectName("stCueHold");
         m_cueHold->setRange(-1, 36000);
         m_cueHold->setSpecialValueText(tr("∞ — waits for GO"));
+        /* Focus ▾ (board Q149): this cue from the stage, and making it the
+           show's venue focus cue -- in the header, where it is seen. */
+        {
+            QToolButton *focus = new QToolButton(inner);
+            focus->setObjectName("stCueFocusMenu");
+            focus->setText(tr("Focus"));
+            focus->setToolTip(tr("Focus this cue from the stage, or make it the show's venue focus cue"));
+            focus->setPopupMode(QToolButton::InstantPopup);
+            focus->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            QMenu *m = new QMenu(focus);
+            m->setObjectName("stCueFocusMenuPopup");
+            m->setToolTipsVisible(true);
+            connect(m, &QMenu::aboutToShow, this, [this, m]() { fillCueFocusMenu(m); });
+            focus->setMenu(m);
+            QHBoxLayout *head = new QHBoxLayout();
+            head->addStretch(1);
+            head->addWidget(focus);
+            f->addRow(head);
+        }
         f->addRow(tr("Number"), m_cueNumber);
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
@@ -1572,12 +1601,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(QString(), m_cueNoMib);
         /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): GO arms the
            show's focus calls; the controller's Start begins them. */
-        m_cueFocusCall = new QCheckBox(tr("Focus call: GO arms the focus calls, Start begins them"), inner);
+        m_cueFocusCall = new QCheckBox(tr("Make this a venue focus cue"), inner);
         m_cueFocusCall->setObjectName("stCueFocusCall");
-        m_cueFocusCall->setToolTip(tr("Pre-show: GO onto this cue plays its looks as a preset and waits; the "
-                                      "voice says \"Focus calls ready\". Start (Menu) on the controller, or "
-                                      "\u2318\u21a9, begins the show's focus calls; Menu, or past the last "
-                                      "call, goes on to the next cue."));
+        m_cueFocusCall->setToolTip(venueFocusCueTip());
         f->addRow(QString(), m_cueFocusCall);
         connect(m_cueFocusCall, &QCheckBox::toggled, this, [this](bool on) {
             if (m_inspectorUpdating || m_pageCue == invalidId())
@@ -1591,10 +1617,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(QString(), m_cueFocusState);
         if (FocusCallCue *fcc = m_doc->programmer()->focusCallCue())
             connect(fcc, &FocusCallCue::stateChanged, this, &ShowTreeView::refreshFocusCallState);
-        /* Refine (FOCUS_REFINE_DESIGN.md): this cue's own values from the
-           stage, with the controller. */
-        QPushButton *refine = new QPushButton(tr("Refine on the controller\342\200\246"), inner);
+        /* Focus this cue (FOCUS_REFINE_DESIGN.md): this cue's own values
+           from the stage, with the controller. */
+        QPushButton *refine = new QPushButton(tr("Focus this cue\342\200\246"), inner);
         refine->setObjectName("stCueRefine");
+        m_cueRefine = refine;
         refine->setToolTip(tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
                               "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
         connect(refine, &QPushButton::clicked, this, [this]() {
@@ -2670,8 +2697,8 @@ void ShowTreeView::buildTree()
                 if (!list.looks && cue.focusCall)
                 {
                     badges << tr("focus");
-                    badgeTip = QStringList({ badgeTip, tr("Focus call: GO arms the show's focus calls; Start "
-                                                          "on the controller begins them.") })
+                    badgeTip = QStringList({ badgeTip, tr("Venue focus cue: GO arms the show's focus calls; "
+                                                          "Start on the controller begins them.") })
                                .join(QStringLiteral("\n\n")).trimmed();
                 }
                 // Q38: a cue that says no move in black where its list
@@ -3589,7 +3616,13 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     {
         QSignalBlocker block(m_cueFocusCall);
         m_cueFocusCall->setChecked(cue.focusCall);
+        // No calls to run: greyed with why -- but one ticked can always be unticked.
+        FocusMenu::setAvailable(m_cueFocusCall, cue.focusCall ? QString() : FocusMenu::venueFocusCueBlocked(m_doc),
+                                venueFocusCueTip());
     }
+    FocusMenu::setAvailable(m_cueRefine, FocusMenu::focusCueBlocked(m_doc),
+                            tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
+                               "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
     refreshFocusCallState();
     m_cueReuse->setText(reuseLine(cue.id, invalidId()));
 
@@ -4914,6 +4947,42 @@ void ShowTreeView::slotCueSkipToggled(bool on)
     setCuesSkipped({ m_pageCue }, on);
 }
 
+void ShowTreeView::fillCueFocusMenu(QMenu *m)
+{
+    m->clear();
+    const quint32 cueId = m_pageCue;
+    const ShowTree::Cue *cue = cueId != invalidId() ? m_st->cue(cueId) : nullptr;
+    const ShowTree::CueList *list = cue != nullptr ? m_st->listOfCue(cueId) : nullptr;
+    QAction *self = m->addAction(tr("Focus this cue\342\200\246"), this, [this, cueId]() {
+        if (cueId != invalidId())
+            RefinePanel::open(m_doc, window(), cueId);
+    });
+    self->setObjectName("stCueFocusThis");
+    FocusMenu::setAvailable(self, cue == nullptr ? tr("Choose a cue first.") : FocusMenu::focusCueBlocked(m_doc),
+                            tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
+                               "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+    // A look list's looks are fired from the VC, never GO'd onto: no venue focus cue.
+    if (list != nullptr && !list->looks)
+    {
+        QAction *make = m->addAction(tr("Make this a venue focus cue"));
+        make->setObjectName("stCueFocusVenueCue");
+        make->setCheckable(true);
+        make->setChecked(cue->focusCall);
+        FocusMenu::setAvailable(make, cue->focusCall ? QString() : FocusMenu::venueFocusCueBlocked(m_doc),
+                                venueFocusCueTip());
+        connect(make, &QAction::toggled, this, [this, cueId](bool on) {
+            m_st->setCuesFocusCall({ cueId }, on);
+        });
+    }
+    m->addSeparator();
+    QAction *venue = m->addAction(tr("Venue focus\342\200\246"), this, [this]() {
+        FocusCallsDialog::startVenueFocus(m_doc, window());
+    });
+    venue->setObjectName("stCueVenueFocus");
+    FocusMenu::setAvailable(venue, FocusMenu::venueFocusBlocked(m_doc),
+                            tr("Run the show's focus calls now, for the venue applied"));
+}
+
 void ShowTreeView::refreshFocusCallState()
 {
     if (m_cueFocusState == nullptr)
@@ -4921,11 +4990,11 @@ void ShowTreeView::refreshFocusCallState()
     FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
     const bool mine = fcc != nullptr && m_pageCue != invalidId() && fcc->cueId() == m_pageCue;
     if (mine && fcc->state() == FocusCallCue::Armed)
-        m_cueFocusState->setText(tr("Focus calls: waiting for the controller (Start, or \u2318\u21a9)"));
+        m_cueFocusState->setText(tr("Venue focus: waiting for the controller (Start, or \u2318\u21a9)"));
     else if (mine && fcc->state() == FocusCallCue::NamingVenue)
-        m_cueFocusState->setText(tr("Focus calls: name the venue on the laptop"));
+        m_cueFocusState->setText(tr("Venue focus: name the venue on the laptop"));
     else if (mine && fcc->state() == FocusCallCue::Running)
-        m_cueFocusState->setText(tr("Focus calls running: Menu ends them and goes on"));
+        m_cueFocusState->setText(tr("Venue focus running: Menu ends it and goes on"));
     m_cueFocusState->setVisible(mine && fcc->state() != FocusCallCue::Idle);
 }
 
@@ -6860,15 +6929,16 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 split->setEnabled(l != nullptr && l->pieces().count() > 1);
                 split->setToolTip(tr("One layer per group (and one on its fixtures), each with these looks; "
                                      "it keeps tracking as before"));
-                /* Refine (FOCUS_REFINE_DESIGN.md): this cue's own values from
-                   the stage, on the controller, starting on this layer. */
-                QAction *refine = menu.addAction(tr("Refine on the controller\342\200\246"), this,
+                /* Focus this cue (FOCUS_REFINE_DESIGN.md): this cue's own values
+                   from the stage, on the controller, starting on this layer. */
+                QAction *refine = menu.addAction(tr("Focus this cue\342\200\246"), this,
                                                  [this, cueId, layerId]() {
                     RefinePanel::open(m_doc, window(), cueId, layerId);
                 });
                 refine->setObjectName("stRefineLayer");
-                refine->setToolTip(tr("Move, zoom, focus and recolour this cue from the stage with the "
-                                      "controller: the layer as a whole, or one fixture as an exception"));
+                FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
+                                        tr("Move, zoom, focus and recolour this cue from the stage with the "
+                                           "controller: the layer as a whole, or one fixture as an exception"));
                 quint32 selCue = invalidId();
                 const QList<quint32> sel = selectedLayers(&selCue);
                 QAction *merge = menu.addAction(sel.count() > 1 ? tr("Merge %1 layers").arg(sel.count())

@@ -106,13 +106,15 @@ ProgrammerController::ProgrammerController(Doc *doc)
         if (m_focusSession->isActive() && m_focusSession->hasUnsaved())
         {
             const int n = m_focusSession->unsavedFixtures().size();
-            reason = (n == 1 ? tr("Focus mode has 1 light not saved") : tr("Focus mode has %1 lights not saved").arg(n))
+            const QString tool = m_focusSession->isRunningCalls() ? tr("Venue focus") : tr("Quick focus");
+            reason = (n == 1 ? tr("%1 has 1 light not saved").arg(tool) : tr("%1 has %2 lights not saved").arg(tool).arg(n))
                      + tr(": save it (A) or put it back (B) first.");
         }
         else if (m_refineSession->isActive() && m_refineSession->hasPending())
         {
             const int n = m_refineSession->pendingCount();
-            reason = (n == 1 ? tr("Refine has 1 change not kept") : tr("Refine has %1 changes not kept").arg(n))
+            const QString tool = m_refineSession->isSceneMode() ? tr("Focus this look") : tr("Focus this cue");
+            reason = (n == 1 ? tr("%1 has 1 change not kept").arg(tool) : tr("%1 has %2 changes not kept").arg(tool).arg(n))
                      + tr(": keep it (A) or go back to the cue (B) first.");
         }
         if (reason.isEmpty())
@@ -1482,6 +1484,16 @@ void ProgrammerController::setOperatorFeedback(ControllerScheme::Feedback feedba
         return;
     m_feedback = feedback;
     emit operatorFeedbackChanged(feedback);
+}
+
+void ProgrammerController::setVoiceDetail(ControllerScheme::VoiceDetail detail)
+{
+    m_focusSession->setVoiceDetail(detail);
+    m_refineSession->setVoiceDetail(detail);
+    if (detail == m_voiceDetail)
+        return;
+    m_voiceDetail = detail;
+    emit voiceDetailChanged(detail);
 }
 
 void ProgrammerController::refreshPadLight()

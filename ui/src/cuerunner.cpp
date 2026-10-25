@@ -43,6 +43,9 @@
 #include "timecodesource.h"
 #include "chaserrunner.h"
 #include "focuscallsdialog.h"
+#include "venuecorrections.h"
+#include "focuscalls.h"
+#include "focusmenu.h"
 #include "programmercontroller.h"
 #include "focuscallcue.h"
 #include "cuerunner.h"
@@ -457,17 +460,20 @@ void CueRunner::buildFullLayout()
     m_timecode->setFont(big);
     m_timecode->setToolTip(tr("The timecode the current production follows (its source, else the show's)"));
     head->addWidget(m_timecode);
-    /* Pre-show: the show's focus calls on the controller, corrections
-       saved for this venue (FOCUS_REFINE_DESIGN.md). */
-    QToolButton *calls = new QToolButton(this);
-    calls->setObjectName(QStringLiteral("crFocusCalls"));
-    calls->setText(tr("Focus calls\342\200\246"));
-    calls->setToolTip(tr("Pre-show: focus the rig for this venue, call by call, on the controller "
-                         "(Design mode)"));
-    connect(calls, &QToolButton::clicked, this, [this]() {
-        FocusCallsDialog::run(m_doc, window());
+    /* Pre-show: Venue focus -- the show's focus calls on the controller,
+       corrections saved for this venue (FOCUS_REFINE_DESIGN.md). Greyed,
+       with why, while there is nothing to focus (board Q146). */
+    m_focusCallsBtn = new QToolButton(this);
+    m_focusCallsBtn->setObjectName(QStringLiteral("crFocusCalls"));
+    m_focusCallsBtn->setText(tr("Venue focus\342\200\246"));
+    connect(m_focusCallsBtn, &QToolButton::clicked, this, [this]() {
+        FocusCallsDialog::startVenueFocus(m_doc, window());
     });
-    head->addWidget(calls);
+    head->addWidget(m_focusCallsBtn);
+    connect(m_doc->programmer()->focusCalls(), &FocusCalls::changed, this, &CueRunner::refreshFocusCalls);
+    connect(m_doc->programmer()->venueCorrections(), &VenueCorrections::activeVenueChanged,
+            this, &CueRunner::refreshFocusCalls);
+    refreshFocusCalls();
     m_mode = new QLabel(this);
     m_mode->setObjectName(QStringLiteral("crMode"));
     m_mode->setFont(hf);
@@ -527,8 +533,8 @@ void CueRunner::buildFullLayout()
         fh->addWidget(m_focusArmedLabel, 1);
         m_focusStart = new QToolButton(m_focusArmed);
         m_focusStart->setObjectName(QStringLiteral("crFocusStart"));
-        m_focusStart->setText(tr("Start focus calls"));
-        m_focusStart->setToolTip(tr("Begin the focus calls (Start on the controller, or \u2318\u21a9)"));
+        m_focusStart->setText(tr("Start venue focus"));
+        m_focusStart->setToolTip(tr("Begin venue focus (Start on the controller, or \u2318\u21a9)"));
         connect(m_focusStart, &QToolButton::clicked, this, [this]() {
             m_doc->programmer()->focusCallCue()->start();
         });
@@ -1015,6 +1021,15 @@ bool CueRunner::execute(ShowControl::Command command, const QString &cue)
     return ok;
 }
 
+void CueRunner::refreshFocusCalls()
+{
+    if (m_focusCallsBtn == nullptr)
+        return;
+    FocusMenu::setAvailable(m_focusCallsBtn, FocusMenu::venueFocusBlocked(m_doc),
+                            tr("Pre-show: focus the rig for this venue, call by call, on the controller "
+                               "(Design mode)"));
+}
+
 void CueRunner::refreshFocusArmed()
 {
     if (m_focusArmed == nullptr)
@@ -1023,15 +1038,15 @@ void CueRunner::refreshFocusArmed()
     switch (fcc->state())
     {
         case FocusCallCue::Armed:
-            m_focusArmedLabel->setText(tr("Focus calls: waiting for the controller \u2014 press Start"));
+            m_focusArmedLabel->setText(tr("Venue focus: waiting for the controller \u2014 press Start"));
             m_focusStart->show();
             break;
         case FocusCallCue::Running:
-            m_focusArmedLabel->setText(tr("Focus calls running \u2014 Menu ends them and goes on"));
+            m_focusArmedLabel->setText(tr("Venue focus running \u2014 Menu ends it and goes on"));
             m_focusStart->hide();
             break;
         case FocusCallCue::NamingVenue:
-            m_focusArmedLabel->setText(tr("Focus calls: name the venue on the laptop"));
+            m_focusArmedLabel->setText(tr("Venue focus: name the venue on the laptop"));
             m_focusStart->hide();
             break;
         case FocusCallCue::Idle:
@@ -1129,6 +1144,7 @@ void CueRunner::showEvent(QShowEvent *ev)
     QWidget::showEvent(ev);
     m_timer->start();
     refresh();
+    refreshFocusCalls();    // lights placed on the plot since
 }
 
 void CueRunner::hideEvent(QHideEvent *ev)

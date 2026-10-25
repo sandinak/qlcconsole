@@ -57,9 +57,16 @@
 #include "fixturevisualtraits.h"
 #include "cuerunner.h"
 #include "controllerscheme.h"
+#include "showtreeview.h"
+#include "focusmenu.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+
+#include <QMenu>
+#include <QMessageBox>
+#include <QApplication>
+#include <QTimer>
 
 namespace
 {
@@ -371,14 +378,21 @@ void FocusCallsUi_Test::refineFromTheWorkbench()
     QVERIFY(m_doc->addFunction(s));
 
     Workbench wb(m_doc);
-    QToolButton *btn = wb.findChild<QToolButton *>("workbenchRefine");
+    QToolButton *btn = wb.findChild<QToolButton *>("workbenchFocusMenu");
     QVERIFY(btn != nullptr);
     wb.load(s->id());
     QCOMPARE(wb.refineScenes(), QList<quint32>({ s->id() }));
     QVERIFY(!btn->isHidden());
+    QCOMPARE(btn->text(), QString("Focus"));
 
-    // The header's Refine: the scene, as a layer, on the same controller.
-    btn->click();
+    // The header's Focus > Focus this look: the scene, as a layer, on the same controller.
+    emit btn->menu()->aboutToShow();
+    QAction *self = btn->menu()->findChild<QAction *>("workbenchRefine");
+    QVERIFY(self != nullptr && self->isEnabled());
+    QCOMPARE(self->text(), QString("Focus this look\342\200\246"));
+    // A Build scene is not a cue: no venue focus cue to make.
+    QVERIFY(btn->menu()->findChild<QAction *>("workbenchFocusCue") == nullptr);
+    self->trigger();
     RefineSession *r = m_doc->programmer()->refineSession();
     QVERIFY(r->isSceneMode());
     QPointer<RefinePanel> panel = RefinePanel::instance();
@@ -433,14 +447,14 @@ void FocusCallsUi_Test::aFocusCallCueWaitsForTheController()
     fcc->setRunningCueProbe([cue](quint32) { return cue; });   // the list plays it
     m_doc->setMode(Doc::Operate);
     fcc->cueCurrent(list, cue);
-    QCOMPARE(runner.focusArmedText(), QString("Focus calls: waiting for the controller \u2014 press Start"));
+    QCOMPARE(runner.focusArmedText(), QString("Venue focus: waiting for the controller \u2014 press Start"));
     QToolButton *start = runner.findChild<QToolButton *>("crFocusStart");
     QVERIFY(start != nullptr && !start->isHidden());
 
     // The Run tab's button does what Start does; the panel comes up on it.
     start->click();
     QCOMPARE(fcc->state(), FocusCallCue::Running);
-    QVERIFY(runner.focusArmedText().startsWith("Focus calls running"));
+    QVERIFY(runner.focusArmedText().startsWith("Venue focus running"));
     QPointer<FocusModePanel> panel = FocusModePanel::attach(m_doc, nullptr);
     QVERIFY(panel != nullptr);
     QVERIFY(panel->findChild<QLabel *>("focusCall")->text().startsWith("Call 1 of 1"));
@@ -480,7 +494,7 @@ void FocusCallsUi_Test::feedbackIsOneSettingOnEveryPanel()
     QCOMPARE(combo->currentData().toInt(), int(ControllerScheme::BothFeedback));
     // W: Say the light.
     QTest::keyClick(panel, Qt::Key_W);
-    QCOMPARE(said.last().at(0).toString(), QString("T1. Fixture 1 of 3."));
+    QCOMPARE(said.last().at(0).toString(), QString("T1. Fixture 1."));
     OperatorFeedbackCombo::saveFeedback(int(ControllerScheme::LightsFeedback));
     QCOMPARE(OperatorFeedbackCombo::savedFeedback(), int(ControllerScheme::LightsFeedback));
     QSettings().remove("controllerTools/feedback");
@@ -629,10 +643,10 @@ void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
     o.first.kind = FocusSession::Reference::Target;
     o.first.id = m_target;
     QVERIFY(m_doc->programmer()->focusSession()->start(o));
-    QCOMPARE(silent->said().last(), QString("Fixture 1 of 3."));
+    QCOMPARE(silent->said().last(), QString("Fixture 1, T1."));
     m_doc->programmer()->focusSession()->next();
-    QCOMPARE(silent->said().last(), QString("Fixture 2 of 3."));
-    QCOMPARE(announcer.lastSaid(), QString("Fixture 2 of 3."));
+    QCOMPARE(silent->said().last(), QString("Fixture 2, T2."));
+    QCOMPARE(announcer.lastSaid(), QString("Fixture 2, T2."));
 
     // Never over a line being said: the newest waits, stale ones go.
     silent->setSlow(true);
@@ -655,7 +669,7 @@ void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
     const int count = silent->said().size();
     m_doc->programmer()->focusSession()->next();
     QCOMPARE(silent->said().size(), count);
-    QCOMPARE(announcer.lastSaid(), QString("Fixture 3 of 3."));
+    QCOMPARE(announcer.lastSaid(), QString("Fixture 3, T3."));
     OperatorVoice::setEnabled(was);
     m_doc->programmer()->focusSession()->stop();
     delete voice;
@@ -913,4 +927,288 @@ void FocusCallsUi_Test::practiceScramblesAndScores()
     delete result.data();
     // Nothing to show with no practice applied.
     QVERIFY(FocusCallsDialog::showPracticeResult(m_doc, nullptr) == nullptr);
+}
+
+namespace
+{
+QAction *menuAction(QMenu *menu, const char *name)
+{
+    QAction *a = menu->findChild<QAction *>(QString::fromLatin1(name));
+    if (a == nullptr)
+        for (QAction *any : menu->actions())
+            if (any->objectName() == QLatin1String(name))
+                return any;
+    return a;
+}
+}
+
+void FocusCallsUi_Test::quickFocusSaysWhyStartIsGreyed()
+{
+    // No lights at all, no target: why, and never a blank box.
+    Doc empty(this);
+    {
+        FocusModeSetupDialog d(&empty, 0xFFFFFFFF, {});
+        QPushButton *start = d.findChild<QPushButton *>("focusStart");
+        QLabel *reason = d.findChild<QLabel *>("focusStartReason");
+        QComboBox *aim = d.findChild<QComboBox *>("focusReference");
+        QVERIFY(start != nullptr && reason != nullptr && aim != nullptr);
+        QVERIFY(!start->isEnabled());
+        QCOMPARE(d.startBlocked(), QString("No moving heads are placed on the plot. Place them in the "
+                                           "Lighting Studio, or choose Fixed lights."));
+        QVERIFY(!reason->isHidden());
+        QCOMPARE(reason->text(), d.startBlocked());
+        QCOMPARE(start->toolTip(), d.startBlocked());
+        QCOMPARE(aim->count(), 1);
+        QCOMPARE(aim->currentText(), QString("No stage target yet"));
+        // No way to place one from here (not opened from the Lighting Studio).
+        QVERIFY(d.findChild<QPushButton *>("focusAddTarget")->isHidden());
+    }
+
+    // Moving heads on the plot but no target: that is the reason, and
+    // Add a target (the Lighting Studio's) makes one: Start comes on.
+    m_doc->monitorProperties()->removeStageTarget(m_target);
+    FocusModeSetupDialog d(m_doc, 0xFFFFFFFF, {});
+    QPushButton *start = d.findChild<QPushButton *>("focusStart");
+    QPushButton *add = d.findChild<QPushButton *>("focusAddTarget");
+    QComboBox *aim = d.findChild<QComboBox *>("focusReference");
+    QVERIFY(!start->isEnabled());
+    QCOMPARE(d.startBlocked(), QString("No stage target to aim at. Add one with Add \342\226\270 Add Target Position."));
+    QCOMPARE(aim->currentText(), QString("No stage target yet"));
+    int asked = 0;
+    d.setAddTarget([this, &asked]() {
+        ++asked;
+        StageTarget *t = m_doc->monitorProperties()->addStageTarget();
+        t->setName("Centre");
+        return true;
+    });
+    QVERIFY(!add->isHidden());
+    add->click();
+    QCOMPARE(asked, 1);
+    QCOMPARE(aim->currentText(), QString("Centre"));
+    QVERIFY(d.startBlocked().isEmpty());
+    QVERIFY(start->isEnabled());
+    QVERIFY(d.findChild<QLabel *>("focusStartReason")->isHidden());
+    QVERIFY(add->isHidden());
+}
+
+void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
+{
+    QWidget parent;
+    QMenu menu;
+    int quick = 0;
+    Doc empty(this);
+    FocusMenu::fill(&menu, &empty, &parent, [&quick]() { ++quick; });
+    QStringList texts;
+    for (QAction *a : menu.actions())
+        if (!a->isSeparator())
+            texts << a->text();
+    QCOMPARE(texts, QStringList({ "Quick focus\342\200\246", "Venue focus\342\200\246", "Edit focus calls\342\200\246",
+                                  "Venues", "Practice (scramble)\342\200\246", "Focus report\342\200\246" }));
+    QVERIFY(menu.toolTipsVisible());
+
+    // Nothing to focus: greyed, each with its reason as the tooltip.
+    QAction *q = menuAction(&menu, "focusQuick");
+    QVERIFY(!q->isEnabled());
+    QCOMPARE(q->toolTip(), QString("No lights are placed on the plot. Place them in the Lighting Studio first."));
+    QAction *v = menuAction(&menu, "focusVenue");
+    QVERIFY(!v->isEnabled());
+    QCOMPARE(v->toolTip(), QString("No focus calls yet. Add them with Focus \342\226\270 Edit focus calls\342\200\246"));
+    QVERIFY(menuAction(&menu, "focusEditCalls")->isEnabled());   // always: that is where calls are made
+    QVERIFY(!menuAction(&menu, "focusPractice")->isEnabled());
+    QVERIFY(menuAction(&menu, "focusPractice")->toolTip().startsWith("No focus calls yet"));
+    QVERIFY(!menuAction(&menu, "focusReport")->isEnabled());
+    QVERIFY(menuAction(&menu, "focusReport")->toolTip().startsWith("No venue yet"));
+    QMenu *venues = menuAction(&menu, "focusVenues")->menu();
+    QVERIFY(venues != nullptr);
+    QStringList vt;
+    for (QAction *a : venues->actions())
+        vt << a->text();
+    QCOMPARE(vt, QStringList({ "Apply", "New venue\342\200\246", "Rig and universes\342\200\246" }));
+    QAction *newVenue = menuAction(venues, "focusVenueNew");
+    QVERIFY(!newVenue->isEnabled());
+    QCOMPARE(newVenue->toolTip(), QString("Save the show first: a venue's corrections are kept in a file beside it."));
+    QVERIFY(!menuAction(venues, "focusVenueApply")->isEnabled());
+    QVERIFY(!menuAction(venues, "focusVenueRig")->isEnabled());
+
+    // The rig placed, calls made, the show saved, a venue applied: all on.
+    VenueCorrections *vc = m_doc->programmer()->venueCorrections();
+    vc->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    FocusCall call;
+    call.groups << m_group;
+    call.target.kind = FocusSession::Reference::Target;
+    call.target.id = m_target;
+    m_doc->programmer()->focusCalls()->setCalls({ call });
+    QVERIFY(vc->setActiveVenue(vc->addVenue("Lincoln HS")));
+    FocusMenu::fill(&menu, m_doc, &parent, [&quick]() { ++quick; });
+    for (const char *name : { "focusQuick", "focusVenue", "focusEditCalls", "focusPractice", "focusReport" })
+        QVERIFY2(menuAction(&menu, name)->isEnabled(), name);
+    QVERIFY(menuAction(&menu, "focusVenue")->toolTip().contains("Lincoln HS"));
+    QVERIFY(menuAction(&menu, "focusPractice")->toolTip().contains("never touched"));
+    venues = menuAction(&menu, "focusVenues")->menu();
+    QVERIFY(menuAction(venues, "focusVenueNew")->isEnabled());
+    QVERIFY(menuAction(venues, "focusVenueRig")->isEnabled());
+    QAction *apply = menuAction(venues, "focusVenueApply");
+    QVERIFY(apply->isEnabled());
+    QStringList at;
+    for (QAction *a : apply->menu()->actions())
+        at << QString("%1%2").arg(a->text(), a->isChecked() ? "*" : "");
+    QCOMPARE(at, QStringList({ "None (the show's own calibration)", "Lincoln HS*" }));
+    // Apply > None: the show's own, at once.
+    apply->menu()->actions().first()->trigger();
+    QVERIFY(!vc->isActive());
+
+    // Quick focus is the Lighting Studio's own (its selection and scene).
+    menuAction(&menu, "focusQuick")->trigger();
+    QCOMPARE(quick, 1);
+}
+
+void FocusCallsUi_Test::focusEntriesElsewhereSayWhy()
+{
+    // The Run tab: Venue focus, greyed with why until there are calls.
+    CueRunner runner(m_doc, CueRunner::Full);
+    QToolButton *venue = runner.findChild<QToolButton *>("crFocusCalls");
+    QVERIFY(venue != nullptr);
+    QCOMPARE(venue->text(), QString("Venue focus\342\200\246"));
+    QVERIFY(!venue->isEnabled());
+    QVERIFY(venue->toolTip().startsWith("No focus calls yet"));
+    FocusCall call;
+    call.groups << m_group;
+    call.target.kind = FocusSession::Reference::Target;
+    call.target.id = m_target;
+    m_doc->programmer()->focusCalls()->setCalls({ call });
+    QVERIFY(venue->isEnabled());
+    QVERIFY(venue->toolTip().startsWith("Pre-show"));
+    m_doc->programmer()->focusCalls()->setCalls({});
+    QVERIFY(!venue->isEnabled());
+
+    // The Show Tree cue page: Focus in its header, the tick box renamed.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Main");
+    const quint32 cue = st->addCue(list, -1, "Top");
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.selectNode(cue));
+    QToolButton *focus = view.findChild<QToolButton *>("stCueFocusMenu");
+    QVERIFY(focus != nullptr);
+    QCOMPARE(focus->text(), QString("Focus"));
+    QCheckBox *tick = view.findChild<QCheckBox *>("stCueFocusCall");
+    QCOMPARE(tick->text(), QString("Make this a venue focus cue"));
+    QVERIFY(!tick->isEnabled());     // no calls for it to run
+    QVERIFY(tick->toolTip().startsWith("No focus calls yet"));
+    QMenu *m = focus->menu();
+    emit m->aboutToShow();
+    QStringList texts;
+    for (QAction *a : m->actions())
+        if (!a->isSeparator())
+            texts << a->text();
+    QCOMPARE(texts, QStringList({ "Focus this cue\342\200\246", "Make this a venue focus cue", "Venue focus\342\200\246" }));
+    QVERIFY(menuAction(m, "stCueFocusThis")->isEnabled());
+    QVERIFY(!menuAction(m, "stCueFocusVenueCue")->isEnabled());
+    QVERIFY(!menuAction(m, "stCueVenueFocus")->isEnabled());
+    // With calls: it can be made the venue focus cue from the header.
+    m_doc->programmer()->focusCalls()->setCalls({ call });
+    emit m->aboutToShow();
+    QAction *make = menuAction(m, "stCueFocusVenueCue");
+    QVERIFY(make->isEnabled() && !make->isChecked());
+    make->trigger();
+    QVERIFY(st->cue(cue)->focusCall);
+    QCOMPARE(st->undoText(), QString("Make cue a venue focus cue"));
+
+    // No lights in the show: Focus this cue says why.
+    Doc empty(this);
+    ShowTreeController *est = empty.showTree();
+    const quint32 eList = est->addCueList(est->addProduction("Spring"), "Main");
+    const quint32 eCue = est->addCue(eList, -1, "Top");
+    ShowTreeView eview(nullptr, &empty);
+    QVERIFY(eview.selectNode(eCue));
+    QMenu *em = eview.findChild<QToolButton *>("stCueFocusMenu")->menu();
+    emit em->aboutToShow();
+    QAction *self = menuAction(em, "stCueFocusThis");
+    QVERIFY(!self->isEnabled());
+    QCOMPARE(self->toolTip(), QString("No lights in the show yet to focus. Add fixtures first."));
+}
+
+void FocusCallsUi_Test::practiceExplainsTheScramble()
+{
+    const QString text = FocusCallsDialog::practiceExplanation();
+    for (const char *says : { "knocks every moving head", "off its target by a random amount",
+                              "focus them back", "degrees off", "how long it takes", "saves",
+                              "real venues are never touched" })
+        QVERIFY2(text.contains(QLatin1String(says)), says);
+    FocusCallsDialog d(m_doc);
+    QCOMPARE(d.windowTitle(), QString("Venue Focus"));
+    QCOMPARE(d.findChild<QPushButton *>("fcPractice")->toolTip(), text);
+    QCOMPARE(d.findChild<QPushButton *>("fcStart")->text(), QString("Start venue focus"));
+}
+
+void FocusCallsUi_Test::voiceDetailIsOneSettingOnEveryPanel()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession::Options o;
+    o.fixtures = m_spots;
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = m_target;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(m_doc, nullptr, o);
+    QVERIFY(panel != nullptr);
+    QComboBox *detail = panel->findChild<QComboBox *>("voiceDetail");
+    QVERIFY(detail != nullptr);
+    QCOMPARE(detail->count(), 3);
+    QCOMPARE(detail->currentData().toInt(), int(ControllerScheme::StandardVoice));
+    detail->setCurrentIndex(detail->findData(int(ControllerScheme::TerseVoice)));
+    QCOMPARE(pc->voiceDetail(), ControllerScheme::TerseVoice);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    pc->focusSession()->next();
+    QCOMPARE(said.last().at(0).toString(), QString("F2 T2."));
+    // The panel's line shows what was confirmed, as it is said.
+    pc->focusSession()->nudge(0.5f, 0.0f);
+    pc->focusSession()->saveAllHeld();
+    QCOMPARE(panel->findChild<QLabel *>("focusConfirmed")->text(), QString("Saved all."));
+    pc->setVoiceDetail(ControllerScheme::VerboseVoice);
+    QCOMPARE(detail->currentData().toInt(), int(ControllerScheme::VerboseVoice));
+    // Kept with Feedback, this computer's.
+    VoiceDetailCombo::saveDetail(int(ControllerScheme::VerboseVoice));
+    QCOMPARE(VoiceDetailCombo::savedDetail(), int(ControllerScheme::VerboseVoice));
+    VoiceDetailCombo::saveDetail(int(ControllerScheme::StandardVoice));
+    pc->setVoiceDetail(ControllerScheme::StandardVoice);
+}
+
+void FocusCallsUi_Test::lightsThatCannotBeAimedAreListed()
+{
+    // A plain dimmer selected with the spots: listed at Start, left out by default.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("UI Calls Dimmer");
+    def->setType(QLCFixtureDef::Dimmer);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer");
+    ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    Fixture *dim = new Fixture(m_doc);
+    dim->setName("Worklight");
+    dim->setFixtureDefinition(def, mode);
+    dim->setUniverse(0);
+    dim->setAddress(100);
+    m_doc->addFixture(dim);
+
+    FocusModeSetupDialog d(m_doc, 0xFFFFFFFF, { m_spots.first(), dim->id() });
+    QCOMPARE(d.unfocusable(), QList<quint32>({ dim->id() }));
+    QVERIFY(d.exclusionText().contains("Worklight"));
+    QVERIFY(d.exclusionText().contains("cannot be aimed"));
+    QCOMPARE(d.options().fixtures, QList<quint32>({ m_spots.first() }));
+    // Start: the warning, Exclude them the default.
+    QTimer::singleShot(0, &d, []() {
+        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QVERIFY(box != nullptr);
+        QCOMPARE(box->objectName(), QString("focusExcludeBox"));
+        QCOMPARE(box->defaultButton()->objectName(), QString("focusExclude"));
+        box->defaultButton()->click();
+    });
+    QVERIFY(d.confirmExclusions());
+    QTimer::singleShot(0, &d, []() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            box->button(QMessageBox::Cancel)->click();
+    });
+    QVERIFY(!d.confirmExclusions());
 }

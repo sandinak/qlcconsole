@@ -24,6 +24,7 @@
 #include <QTextDocument>
 #include <QTextBlock>
 #include <QTextDocumentFragment>
+#include <QHash>
 #include <QTimer>
 #include <QImageReader>
 #include <QScrollArea>
@@ -208,8 +209,23 @@ void HelpBrowser::showTopic(const QString &topic)
     load(file, topic.section(QLatin1Char('#'), 1), true);
 }
 
-void HelpBrowser::load(const QString &file, const QString &fragment, bool record)
+QString HelpBrowser::movedHeading(const QString &file, const QString &fragment)
 {
+    /* Headings renamed with the focus tools (board Q149): an old link
+       (a bookmark, a course page) still lands on the heading. */
+    static const QHash<QString, QString> moved = {
+        { QStringLiteral("lighting-studio.md#focus-mode"), QStringLiteral("quick-focus") },
+        { QStringLiteral("focus-calls.md#running-them"), QStringLiteral("running-venue-focus") },
+        { QStringLiteral("focus-calls.md#a-focus-call-cue-pre-show"), QStringLiteral("a-venue-focus-cue-pre-show") },
+        { QStringLiteral("refine.md#on-a-build-scene"), QStringLiteral("focus-this-look-on-a-build-scene") },
+        { QStringLiteral("refine.md#refine-during-the-show"), QStringLiteral("focusing-during-the-show") },
+    };
+    return moved.value(file + QLatin1Char('#') + fragment, fragment);
+}
+
+void HelpBrowser::load(const QString &file, const QString &wanted, bool record)
+{
+    const QString fragment = movedHeading(file, wanted);
     if (file != m_file)
     {
         QTextDocument *doc = m_browser->document();

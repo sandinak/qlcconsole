@@ -93,6 +93,7 @@
 #include "monitorfixtureitem.h"
 #include "focuscallsdialog.h"
 #include "focusmodepanel.h"
+#include "focusmenu.h"
 #include "aimsolver.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
@@ -1849,7 +1850,18 @@ void Monitor::openFocusMode()
     }
     if (selection.isEmpty() && m_doc->programmer() != NULL)
         selection = m_doc->programmer()->programmerSelection();
-    FocusModePanel::open(m_doc, window(), m_activeSceneId, selection);
+    /* No stage target to aim at: Add a target places one here, mid-view,
+       through the same dialog as Add > Target (with its Aim palette). */
+    auto placeTarget = [this]() {
+        if (m_graphicsView == NULL)
+            return false;
+        const int before = m_props->stageTargets().size();
+        m_pendingAddScenePos = m_graphicsView->mapToScene(m_graphicsView->viewport()->rect().center());
+        addTarget(false);
+        m_pendingAddScenePos = QPointF();
+        return m_props->stageTargets().size() > before;
+    };
+    FocusModePanel::open(m_doc, window(), m_activeSceneId, selection, placeTarget);
 }
 
 void Monitor::setActiveScene(quint32 sceneId)
@@ -2178,24 +2190,26 @@ void Monitor::initGraphicsToolbar()
 
     // "More" popup — the secondary view/edit tools, folded off the toolbar to
     // keep it lean. (Most also have shortcuts and/or a right-click equivalent.)
-    /* Focus mode: align the rig before a show, a head at a time
-       (FOCUS_MODE_DESIGN.md). Also View > Focus Mode, the Rig Overview, and
-       View + Menu on the controller. */
-    QAction *focusAct = m_graphicsToolBar->addAction(QIcon(":/target.png"), tr("Focus"));
-    focusAct->setObjectName(QStringLiteral("focusModeAction"));
-    focusAct->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
-                            "nudge its calibration offsets until it lands there "
-                            "(controller: View + Menu)"));
-    connect(focusAct, &QAction::triggered, this, &Monitor::openFocusMode);
-    /* Focus calls: the show's own order of focus, saved with it, run on
-       the controller and saved per venue (FOCUS_REFINE_DESIGN.md). */
-    QAction *callsAct = m_graphicsToolBar->addAction(QIcon(":/target.png"), tr("Focus calls"));
-    callsAct->setObjectName(QStringLiteral("focusCallsAction"));
-    callsAct->setToolTip(tr("Focus calls: the show's focus, group by group to its point, "
-                            "corrections saved for this venue (not the show)"));
-    connect(callsAct, &QAction::triggered, this, [this]() {
-        FocusCallsDialog::run(m_doc, window());
-    });
+    /* Focus ▾ (board Q148): every focus tool in one drop-down, like
+       Add -- Quick focus (FOCUS_MODE_DESIGN.md), Venue focus and its calls,
+       the venues, practice and the report (FOCUS_REFINE_DESIGN.md). Filled
+       as it opens, so what cannot be used yet is greyed with the reason. */
+    m_focusBtn = new QToolButton(this);
+    m_focusBtn->setObjectName(QStringLiteral("focusMenuButton"));
+    m_focusBtn->setIcon(QIcon(":/target.png"));
+    m_focusBtn->setText(tr("Focus"));
+    m_focusBtn->setToolTip(tr("Quick focus, Venue focus and its calls, venues, practice and the focus report"));
+    m_focusBtn->setPopupMode(QToolButton::InstantPopup);
+    {
+        QMenu *focusMenu = new QMenu(m_focusBtn);
+        focusMenu->setObjectName(QStringLiteral("focusMenu"));
+        connect(focusMenu, &QMenu::aboutToShow, this, [this, focusMenu]() {
+            FocusMenu::fill(focusMenu, m_doc, window(), [this]() { openFocusMode(); });
+        });
+        FocusMenu::fill(focusMenu, m_doc, window(), [this]() { openFocusMode(); });
+        m_focusBtn->setMenu(focusMenu);
+    }
+    m_graphicsToolBar->addWidget(m_focusBtn);
 
     m_moreBtn = new QToolButton(this);
     QToolButton *moreBtn = m_moreBtn;
@@ -2304,6 +2318,7 @@ void Monitor::applyToolbarLabelMode()
     // Custom buttons added via addWidget don't inherit the toolbar style.
     if (m_addBtn)          m_addBtn->setToolButtonStyle(style);
     if (m_moreBtn)         m_moreBtn->setToolButtonStyle(style);
+    if (m_focusBtn)        m_focusBtn->setToolButtonStyle(style);
 }
 
 void Monitor::slotChooseFont()
@@ -10456,7 +10471,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     lensSpin->setSuffix(QString::fromUtf8("°"));
     lensSpin->setDecimals(1);
     lensSpin->setToolTip(tr("The beam angle its lens is zoomed to by hand, within what the "
-                            "definition gives. Focus mode sets it too."));
+                            "definition gives. Quick focus sets it too."));
     rigForm->addRow(tr("Beam (lens set to):"), lensSpin);
 
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;

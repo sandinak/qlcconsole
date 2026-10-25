@@ -101,6 +101,8 @@ public:
     /** Stack mode: show @a stack's layers (null: nothing loaded). The
      *  outline doesn't own it. */
     void setStack(WorkbenchStack *stack);
+    /** "Focus this cue…" on a Show Tree cue, else "Focus this look…". */
+    QString focusThisText() const;
     WorkbenchStack *stack() const { return m_stack; }
     Mode mode() const { return m_mode; }
     /** Stack mode: the layer @a item is or is in (-1: none). */

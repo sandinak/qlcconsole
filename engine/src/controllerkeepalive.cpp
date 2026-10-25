@@ -155,7 +155,7 @@ void ControllerKeepAlive::updateHeld()
         return;
     m_held = want;
     if (want)
-        m_backend->beginActivity(m_focus ? QStringLiteral("Focus mode is reading a game controller")
+        m_backend->beginActivity(m_focus ? QStringLiteral("Focusing: reading a game controller")
                                          : QStringLiteral("The follow spot is reading a game controller"));
     else
         m_backend->endActivity();

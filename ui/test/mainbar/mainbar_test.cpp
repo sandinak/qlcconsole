@@ -703,9 +703,9 @@ void MainBar_Test::theOverridesChipLetsGoOfHighlightAndFocusMode()
     });
 
     const QStringList now = m_app->activeOverrides();
-    QVERIFY2(now.contains("Highlight") && now.contains("Focus mode"), qPrintable(now.join(", ")));
+    QVERIFY2(now.contains("Highlight") && now.contains("Quick focus"), qPrintable(now.join(", ")));
     QTRY_VERIFY(!chip->isHidden());
-    QVERIFY2(chip->text().contains("Highlight") && chip->text().contains("Focus mode"),
+    QVERIFY2(chip->text().contains("Highlight") && chip->text().contains("Quick focus"),
              qPrintable(chip->text()));
 
     // One click: both let go.

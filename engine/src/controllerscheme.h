@@ -98,6 +98,44 @@ namespace ControllerScheme
     QLC_ENGINE_EXPORT QString feedbackKey(Feedback feedback);
     QLC_ENGINE_EXPORT Feedback feedbackFromKey(const QString &key);
 
+    /** How much the voice says (Branson, 2026-10-25): one setting beside
+     *  Feedback, this computer's, for Quick focus, Venue focus and Focus
+     *  this cue alike. Safety and warning lines are never shortened. */
+    enum VoiceDetail { TerseVoice, StandardVoice, VerboseVoice };
+    /** "Terse", "Standard", "Verbose". */
+    QLC_ENGINE_EXPORT QString voiceDetailName(VoiceDetail detail);
+    /** As kept: "terse", "standard", "verbose" (anything else: Standard). */
+    QLC_ENGINE_EXPORT QString voiceDetailKey(VoiceDetail detail);
+    QLC_ENGINE_EXPORT VoiceDetail voiceDetailFromKey(const QString &key);
+
+    /* The phrase table: every line that changes with the detail, worded
+       here only. @p index is 1-based; @p name the light's (may be empty);
+       @p venue the venue saved to (empty: the show). */
+    /** Stepping to a light: "F1 Spot 3." / "Fixture 1, Spot 3." /
+     *  "Fixture 1 of 8, Spot 3." (no name: "F1." / "Fixture 1." / "Fixture
+     *  1 of 8."). */
+    QLC_ENGINE_EXPORT QString stepPhrase(VoiceDetail detail, int index, int count, const QString &name);
+    /** A light saved: "Saved." / "Saved fixture 1." / "Saved Spot 3." --
+     *  with " to Lincoln HS" in a venue, but for Terse. */
+    QLC_ENGINE_EXPORT QString savedPhrase(VoiceDetail detail, int index, const QString &name,
+                                          const QString &venue);
+    /** Several saved at once (a whole call): "Saved." / "Saved 4 lights." (+ venue). */
+    QLC_ENGINE_EXPORT QString savedSomePhrase(VoiceDetail detail, int lights, const QString &venue);
+    /** Every light saved (A held): "Saved all." / "Saved all, 6 lights." /
+     *  "Saved all to Lincoln HS, 6 lights." */
+    QLC_ENGINE_EXPORT QString savedAllPhrase(VoiceDetail detail, int lights, const QString &venue);
+    /** A light back to its last save: "Reverted." / "Fixture 1 reverted." /
+     *  "Spot 3 back to its last save." */
+    QLC_ENGINE_EXPORT QString revertedPhrase(VoiceDetail detail, int index, const QString &name);
+    /** Every light not saved put back (B held): "Reverted all." /
+     *  "Reverted all, 3 lights." / "3 lights back to their last save." */
+    QLC_ENGINE_EXPORT QString revertedAllPhrase(VoiceDetail detail, int lights);
+    /** Entering a call: "Call 2." / "Call 2, AT spots to Soloist DS." /
+     *  "Call 2 of 5, AT spots to Soloist DS, SL 2, US 1." (@p where: the
+     *  target's place, Verbose only). */
+    QLC_ENGINE_EXPORT QString callPhrase(VoiceDetail detail, int index, int count, const QString &who,
+                                         const QString &target, const QString &where);
+
     /** How much a spoken line matters (board Q131, gap 9):
      *  - Where: "fixture 3 of 8", the start line, a palette's name. Only the
      *    newest waits; a newer one replaces it (stepping through fixtures

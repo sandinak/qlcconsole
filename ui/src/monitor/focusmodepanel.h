@@ -22,6 +22,7 @@
 
 #include <QPointer>
 #include <QDialog>
+#include <functional>
 #include <QWidget>
 
 #include "controllerscheme.h"
@@ -59,8 +60,21 @@ public:
     /** The device chosen to drive the nudges. */
     FocusSession::InputDevice inputDevice() const;
 
+    /** What Add a target does (the Lighting Studio places one): true when
+     *  one was made. Unset, the button is not shown. */
+    void setAddTarget(const std::function<bool()> &addTarget);
+    /** Why Start is greyed (shown under the form), or empty. */
+    QString startBlocked() const;
+    /** Selected lights that cannot be aimed (As selected only): Start
+     *  lists them and offers to exclude them (the default) or cancel. */
+    QList<quint32> unfocusable() const;
+    QString exclusionText() const;
+    /** Ask, when there are any; true to go on without them. */
+    bool confirmExclusions();
+
 private:
     void fillReferences(QComboBox *combo, bool optional);
+    void updateStart();
     static FocusSession::Reference referenceOf(const QComboBox *combo);
 
 private:
@@ -74,6 +88,11 @@ private:
     QComboBox *m_othersCombo;
     QDoubleSpinBox *m_levelSpin;
     QComboBox *m_inputCombo;
+    QList<quint32> m_unfocusable;
+    QPushButton *m_addTargetBtn = nullptr;
+    QPushButton *m_startBtn = nullptr;
+    QLabel *m_reasonLabel = nullptr;
+    std::function<bool()> m_addTarget;
 };
 
 /**
@@ -139,7 +158,8 @@ public:
      *  panel if it is running. Returns the panel, or null if it was cancelled
      *  or refused (the reason is shown). */
     static FocusModePanel *open(Doc *doc, QWidget *parent, quint32 sceneId,
-                                const QList<quint32> &selection);
+                                const QList<quint32> &selection,
+                                const std::function<bool()> &addTarget = {});
     /** Start Focus mode on @p options without asking (open() after its
      *  setup dialog; a test). Null, with @p why, if the session refused. */
     static FocusModePanel *startWith(Doc *doc, QWidget *parent,

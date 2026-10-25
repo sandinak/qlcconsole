@@ -191,6 +191,23 @@ private:
     class ProgrammerController *m_pc;
 };
 
+/** Voice detail: Terse, Standard, Verbose -- beside Feedback on every
+ *  focus panel, one setting for all three tools, kept with Feedback. */
+class VoiceDetailCombo final : public QComboBox
+{
+    Q_OBJECT
+public:
+    VoiceDetailCombo(class ProgrammerController *pc, QWidget *parent = nullptr);
+
+    /** Settings: what this computer last chose (Standard when nothing). */
+    static int savedDetail();
+    static void saveDetail(int detail);
+
+private:
+    void sync();
+    class ProgrammerController *m_pc;
+};
+
 /** @} */
 
 #endif

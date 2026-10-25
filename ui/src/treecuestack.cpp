@@ -26,6 +26,7 @@
 #include <QSet>
 
 #include "refinepanel.h"
+#include "focusmenu.h"
 #include "treecuestack.h"
 #include "showtreecontroller.h"
 #include "functionparent.h"
@@ -611,14 +612,17 @@ bool TreeCueStack::showMenu(int layer, int attribute, const QPoint &globalPos)
 
     QMenu menu(m_view);
     menu.setToolTipsVisible(true);
-    // Refine (FOCUS_REFINE_DESIGN.md): this layer from the stage.
+    // Focus this cue (FOCUS_REFINE_DESIGN.md): this layer from the stage.
     {
         const quint32 cue = m_cue;
-        QAction *refine = menu.addAction(tr("Refine on the controller\342\200\246"), &menu,
+        QAction *refine = menu.addAction(tr("Focus this cue\342\200\246"), &menu,
                                          [this, cue, lid]() {
             RefinePanel::open(m_doc, m_view->window(), cue, lid);
         });
         refine->setObjectName(QStringLiteral("cueStackRefine"));
+        FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
+                                tr("Move, zoom, focus and recolour this cue from the stage with the controller, "
+                                   "starting on this layer"));
         menu.addSeparator();
     }
     QAction *solo = menu.addAction(tr("Solo this layer"));

@@ -73,7 +73,7 @@ FocusCallCue::~FocusCallCue()
 
 QString FocusCallCue::armedPhrase()
 {
-    return tr("Focus calls ready. Press Start to begin.");
+    return tr("Venue focus ready. Press Start to begin.");
 }
 
 quint32 FocusCallCue::chaserOf(quint32 listId) const
@@ -247,7 +247,7 @@ void FocusCallCue::sessionStopped()
        the list is left where it is. */
     if (!asked)
     {
-        emit announce(tr("Focus calls ended."), ControllerScheme::ImportantPriority);
+        emit announce(tr("Venue focus ended."), ControllerScheme::ImportantPriority);
         return;
     }
     /* Done: on with the list -- only if it is still on this cue. Moved on

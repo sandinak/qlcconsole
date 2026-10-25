@@ -959,10 +959,10 @@ bool ShowTreeController::isCueNoMoveInBlack(quint32 cueId) const
 
 bool ShowTreeController::setCuesFocusCall(const QList<quint32> &cueIds, bool on)
 {
-    const QString label = on ? (cueIds.count() == 1 ? tr("Make cue a focus call")
-                                                    : tr("Make %1 cues focus calls").arg(cueIds.count()))
-                             : (cueIds.count() == 1 ? tr("Cue no longer a focus call")
-                                                    : tr("%1 cues no longer focus calls").arg(cueIds.count()));
+    const QString label = on ? (cueIds.count() == 1 ? tr("Make cue a venue focus cue")
+                                                    : tr("Make %1 cues venue focus cues").arg(cueIds.count()))
+                             : (cueIds.count() == 1 ? tr("Cue no longer a venue focus cue")
+                                                    : tr("%1 cues no longer venue focus cues").arg(cueIds.count()));
     return edit(label, [&](QList<Production> &ps) {
         bool changed = false;
         for (quint32 cueId : cueIds)

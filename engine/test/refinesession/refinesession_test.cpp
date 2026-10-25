@@ -506,15 +506,27 @@ void RefineSession_Test::theOperatorIsToldWhereTheyAre()
     RefineSession *r = m_doc->programmer()->refineSession();
     QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
     QVERIFY(r->start(m_cue));
-    QCOMPARE(said.last().at(0).toString(), QString("Refine, cue 1. AT spots, layer."));
+    QCOMPARE(said.last().at(0).toString(), QString("Focusing cue 1. AT spots, layer."));
     r->cycleScope();
-    QCOMPARE(said.last().at(0).toString(), QString("AT spots, fixture 1 of 4."));
+    QCOMPARE(said.last().at(0).toString(), QString("Fixture 1, AT 1."));
     r->nextItem();
     r->nextItem();
-    QCOMPARE(said.last().at(0).toString(), QString("AT spots, fixture 3 of 4."));
+    QCOMPARE(said.last().at(0).toString(), QString("Fixture 3, AT 3."));
     // Say the light: its name first.
     r->apply(ControllerScheme::WhereAmI);
-    QCOMPARE(said.last().at(0).toString(), QString("AT 3. Cue 1, AT spots, fixture 3 of 4."));
+    QCOMPARE(said.last().at(0).toString(), QString("AT 3. Cue 1, AT spots, fixture 3."));
+    // Voice detail: Verbose says the layer and how many; Terse, the name.
+    m_doc->programmer()->setVoiceDetail(ControllerScheme::VerboseVoice);
+    r->nextItem();
+    QCOMPARE(said.last().at(0).toString(), QString("AT spots, fixture 4 of 4, AT 4."));
+    r->apply(ControllerScheme::WhereAmI);
+    QCOMPARE(said.last().at(0).toString(), QString("AT 4. Cue 1, AT spots, fixture 4 of 4."));
+    m_doc->programmer()->setVoiceDetail(ControllerScheme::TerseVoice);
+    r->previousItem();
+    QCOMPARE(said.last().at(0).toString(), QString("F3 AT 3."));
+    r->apply(ControllerScheme::WhereAmI);
+    QCOMPARE(said.last().at(0).toString(), QString("AT 3."));
+    m_doc->programmer()->setVoiceDetail(ControllerScheme::StandardVoice);
 
     // Only the fixture picked is at the cue's level: the rest of the layer dim.
     const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
@@ -579,7 +591,7 @@ void RefineSession_Test::operateHoldsWhatIsKept()
     r->setRunningCueProbe([&running](quint32) { return running; });
     QString why;
     QVERIFY(!r->start(m_cue, invalidId(), &why));
-    QVERIFY2(why.startsWith("In Operate only the cue running can be refined"), qPrintable(why));
+    QVERIFY2(why.startsWith("In Operate only the cue running can be focused"), qPrintable(why));
     running = m_cue;
     QVERIFY2(r->start(m_cue, invalidId(), &why), qPrintable(why));
     // The show runs on: Refine does not preview the cue in Operate...
@@ -842,7 +854,7 @@ void RefineSession_Test::aBuildSceneIsRefinedTheSameWay()
     QString why;
     QVERIFY2(r->startScene({ s->id() }, s->id(), &why), qPrintable(why));
     QVERIFY(r->isSceneMode());
-    QCOMPARE(said.last().at(0).toString(), QString("Refine, scene Ballad look. Ballad look, layer."));
+    QCOMPARE(said.last().at(0).toString(), QString("Focusing scene Ballad look. Ballad look, layer."));
     QCOMPARE(r->layers(), QList<quint32>({ s->id() }));
     QCOMPARE(r->layerFixtures(), m_spots);
     float pan = 0.0f, tilt = 0.0f;

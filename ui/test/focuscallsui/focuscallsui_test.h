@@ -89,6 +89,25 @@ private slots:
      *  where the lights really land, the score at the end and the real
      *  venue back, untouched. */
     void practiceScramblesAndScores();
+    /** Q146: Quick focus says why Start is greyed -- no moving heads on
+     *  the plot, no stage target -- and never shows a blank Aim at; Add a
+     *  target makes one and Start comes on. */
+    void quickFocusSaysWhyStartIsGreyed();
+    /** Q148: the Lighting Studio's Focus menu -- its entries, in order,
+     *  greyed with the reason while there is nothing to focus, and on once
+     *  there is. */
+    void theFocusMenuGreysWhatCannotBeUsed();
+    /** Q146/Q149: the Run tab's Venue focus, the Show Tree cue page's and
+     *  the Workbench's Focus menus, under their new names, greyed with why. */
+    void focusEntriesElsewhereSayWhy();
+    /** Q143: the Practice dialogs say plainly what a scramble is. */
+    void practiceExplainsTheScramble();
+    /** Voice detail beside Feedback on the panel: one setting, kept; the
+     *  panel shows the line confirmed. */
+    void voiceDetailIsOneSettingOnEveryPanel();
+    /** Quick focus lists selected lights that cannot be aimed, and leaves
+     *  them out (the default) or cancels. */
+    void lightsThatCannotBeAimedAreListed();
 
 private:
     Doc *m_doc = nullptr;

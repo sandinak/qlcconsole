@@ -71,7 +71,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     , m_doc(doc)
 {
     setObjectName(QStringLiteral("focusCallsDialog"));
-    setWindowTitle(tr("Focus Calls"));
+    setWindowTitle(tr("Venue Focus"));
     setProperty("helpTopic", QStringLiteral("focus-calls.md"));
 
     QVBoxLayout *vl = new QVBoxLayout(this);
@@ -199,22 +199,11 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     // Teaching: a scrambled copy of the room to focus back (never a real venue).
     m_practice = new QPushButton(tr("Practice (scramble)\342\200\246"), this);
     m_practice->setObjectName(QStringLiteral("fcPractice"));
-    m_practice->setToolTip(tr("Put every moving head in the calls off by a few degrees, in a practice "
-                              "venue, and focus them back: scored on how close, how fast and how "
-                              "many saves. The real venues are not changed."));
+    m_practice->setToolTip(practiceExplanation());
     connect(m_practice, &QPushButton::clicked, this, [this]() {
-        const QStringList levels = { tr("Easy: 1\342\200\2233\302\260 off"),
-                                     tr("Medium: 2\342\200\2236\302\260 off"),
-                                     tr("Hard: 4\342\200\22310\302\260 off") };
-        bool ok = false;
-        const QString level = QInputDialog::getItem(this, tr("Practice"),
-            tr("Each moving head in the calls is put off its focus by a random amount. Focus them "
-               "back to their targets and save. How far off?"), levels, 1, false, &ok);
-        if (!ok)
+        float lo = 0.0f, hi = 0.0f;
+        if (!askPracticeLevel(this, lo, hi))
             return;
-        const int at = int(levels.indexOf(level));
-        const float lo = at == 0 ? 1.0f : at == 1 ? 2.0f : 4.0f;
-        const float hi = at == 0 ? 3.0f : at == 1 ? 6.0f : 10.0f;
         QString why;
         if (!startPractice(lo, hi, quint32(QDateTime::currentMSecsSinceEpoch()), &why))
         {
@@ -254,7 +243,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     vl->addWidget(m_venueNote);
 
     QDialogButtonBox *bb = new QDialogButtonBox(this);
-    m_start = bb->addButton(tr("Start focus calls"), QDialogButtonBox::AcceptRole);
+    m_start = bb->addButton(tr("Start venue focus"), QDialogButtonBox::AcceptRole);
     m_start->setObjectName(QStringLiteral("fcStart"));
     QPushButton *save = bb->addButton(tr("Save calls"), QDialogButtonBox::ApplyRole);
     save->setObjectName(QStringLiteral("fcSave"));
@@ -329,7 +318,11 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
     FocusCallsDialog d(doc, parent);
     if (d.exec() != QDialog::Accepted)
         return;
-    const bool practice = d.isPractice();
+    beginCalls(doc, parent, d.isPractice());
+}
+
+bool FocusCallsDialog::beginCalls(Doc *doc, QWidget *parent, bool practice)
+{
     FocusSession::Options o;
     o.calls = doc->programmer()->focusCalls()->sessionCalls();
     o.order = FocusSession::ByStagePosition;
@@ -341,8 +334,8 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
     {
         if (practice)
             doc->programmer()->venueCorrections()->endPractice();
-        QMessageBox::warning(parent, tr("Focus Calls"), why);
-        return;
+        QMessageBox::warning(parent, tr("Venue Focus"), why);
+        return false;
     }
     // A practice: when the calls end, the score, and the real venue back.
     if (practice)
@@ -353,30 +346,111 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
             showPracticeResult(doc, owner.data());
         }, Qt::SingleShotConnection);
     }
+    return true;
+}
+
+void FocusCallsDialog::startVenueFocus(Doc *doc, QWidget *parent)
+{
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    /* A venue applied: straight to the calls, for that room. None applied:
+       the dialog, to say which room this is first -- saves into the show's
+       own calibration are never made without asking. */
+    if (!venues->isActive() || venues->isPracticeActive())
+    {
+        run(doc, parent);
+        return;
+    }
+    beginCalls(doc, parent, false);
+}
+
+bool FocusCallsDialog::askPracticeLevel(QWidget *parent, float &minDeg, float &maxDeg)
+{
+    const QStringList levels = { tr("Easy: 1\342\200\2233\302\260 off"),
+                                 tr("Medium: 2\342\200\2236\302\260 off"),
+                                 tr("Hard: 4\342\200\22310\302\260 off") };
+    bool ok = false;
+    const QString level = QInputDialog::getItem(parent, tr("Practice (scramble)"), practiceExplanation()
+                                                + QStringLiteral("\n\n") + tr("How far off?"),
+                                                levels, 1, false, &ok);
+    if (!ok)
+        return false;
+    const int at = int(levels.indexOf(level));
+    minDeg = at == 0 ? 1.0f : at == 1 ? 2.0f : 4.0f;
+    maxDeg = at == 0 ? 3.0f : at == 1 ? 6.0f : 10.0f;
+    return true;
+}
+
+QString FocusCallsDialog::practiceExplanation()
+{
+    return tr("A scramble knocks every moving head in the focus calls off its target by a random "
+              "amount. You focus them back, call by call, as you would in a new room. You are scored "
+              "on how many degrees off each light ends up, how long it takes and how many saves you "
+              "make. Your real venues are never touched: the practice is a venue of its own, and the "
+              "one you had applied comes back when you finish.");
+}
+
+void FocusCallsDialog::practice(Doc *doc, QWidget *parent)
+{
+    float lo = 0.0f, hi = 0.0f;
+    if (!askPracticeLevel(parent, lo, hi))
+        return;
+    QString why;
+    if (startPracticeFor(doc, doc->programmer()->focusCalls()->calls(), lo, hi,
+                         quint32(QDateTime::currentMSecsSinceEpoch()), &why).isEmpty())
+    {
+        QMessageBox::information(parent, tr("Practice (scramble)"), why);
+        return;
+    }
+    beginCalls(doc, parent, true);
+}
+
+void FocusCallsDialog::exportAppliedReport(Doc *doc, QWidget *parent)
+{
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    QString venue = venues->activeVenue();
+    const QStringList names = venues->venueNames();
+    if (venue.isEmpty() && names.size() == 1)
+        venue = names.first();
+    else if (venue.isEmpty())
+    {
+        bool ok = false;
+        const QString last = venues->lastVenue();
+        venue = QInputDialog::getItem(parent, tr("Focus report"), tr("The focus report for which venue?"),
+                                      names, qMax(0, int(names.indexOf(last))), false, &ok);
+        if (!ok)
+            return;
+    }
+    exportReport(doc, parent, venue);
 }
 
 bool FocusCallsDialog::startPractice(float minDeg, float maxDeg, quint32 seed, QString *why)
 {
     storeCall();
     m_doc->programmer()->focusCalls()->setCalls(m_calls);
-    QList<quint32> fids;
-    for (const FocusCall &c : m_calls)
-        for (quint32 fid : FocusCalls::fixturesOf(m_doc, c))
-            if (!fids.contains(fid))
-                fids << fid;
-    fids = FocusSession::movingHeads(m_doc, fids);
-    if (m_doc->programmer()->focusSession()->isActive())
-    {
-        if (why != nullptr)
-            *why = tr("Leave Focus mode first: its heads are being worked on.");
-        return false;
-    }
-    const QString name = m_doc->programmer()->venueCorrections()->startPractice(fids, seed, minDeg, maxDeg, why);
+    const QString name = startPracticeFor(m_doc, m_calls, minDeg, maxDeg, seed, why);
     if (name.isEmpty())
         return false;
     m_practiceStarted = true;
     fillVenues(name);
     return true;
+}
+
+QString FocusCallsDialog::startPracticeFor(Doc *doc, const QList<FocusCall> &calls,
+                                           float minDeg, float maxDeg, quint32 seed, QString *why)
+{
+    QList<quint32> fids;
+    for (const FocusCall &c : calls)
+        for (quint32 fid : FocusCalls::fixturesOf(doc, c))
+            if (!fids.contains(fid))
+                fids << fid;
+    fids = FocusSession::movingHeads(doc, fids);
+    if (doc->programmer()->focusSession()->isActive())
+    {
+        if (why != nullptr)
+            *why = tr("Leave Quick focus first: its heads are being worked on.");
+        return QString();
+    }
+    return doc->programmer()->venueCorrections()->startPractice(fids, seed, minDeg, maxDeg, why);
 }
 
 QDialog *FocusCallsDialog::showPracticeResult(Doc *doc, QWidget *parent)
@@ -390,7 +464,7 @@ QDialog *FocusCallsDialog::showPracticeResult(Doc *doc, QWidget *parent)
     QDialog *d = new QDialog(parent);
     d->setObjectName(QStringLiteral("practiceResult"));
     d->setAttribute(Qt::WA_DeleteOnClose);
-    d->setWindowTitle(tr("Practice"));
+    d->setWindowTitle(tr("Practice (scramble)"));
     d->setProperty("helpTopic", QStringLiteral("focus-calls.md#practice-scramble-and-focus-back"));
     QVBoxLayout *vl = new QVBoxLayout(d);
     const int secs = int(sc.seconds);
@@ -856,7 +930,7 @@ bool FocusCallsDialog::switchVenue(const QString &name, QString *why)
     if (m_doc->programmer()->focusSession()->isActive())
     {
         if (why != nullptr)
-            *why = tr("Leave Focus mode first: its heads are being worked on.");
+            *why = tr("Leave Quick focus first: its heads are being worked on.");
         return false;
     }
     const QString target = name.isEmpty() ? QString() : makeVenue(name);
@@ -901,7 +975,7 @@ void FocusCallsDialog::refreshVenue()
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();
     const QString file = venues->filePath();
     if (kind == kNoVenue)
-        m_venueNote->setText(tr("Saves go into the show's own calibration, as Focus mode does."));
+        m_venueNote->setText(tr("Saves go into the show's own calibration, as Quick focus does."));
     else if (file.isEmpty())
         m_venueNote->setText(tr("Save the show first: a venue's corrections are kept in a file beside it."));
     else if (kind == kNewVenue && venues->needsConfirm())
