@@ -63,23 +63,37 @@
 
             // The figure drawn into a w x h area once, segment by segment,
             // touching only the pixels near each: { level, along, accent } a pixel.
-            var fields = {};
+            var fields = {}, lastW = -1, lastH = -1, last = null;
             function fieldOf(w, h) {
+                if (w === lastW && h === lastH) return last;   // the one the last pixel had
                 var key = w + "x" + h;
-                if (fields[key]) return fields[key];
+                lastW = w; lastH = h;
+                if (fields[key]) return (last = fields[key]);
                 var pts = pathOf(w, h);
                 var n = w * h, L = new Array(n), U = new Array(n), A = new Array(n), i, x, y;
                 for (i = 0; i < n; i++) { L[i] = 0; U[i] = 0; A[i] = 0; }
-                var R = lw / 2 + 1;
+                var half = lw / 2 + 0.5;
                 for (i = 0; i + 1 < pts.length; i++) {
                     var a = pts[i], b = pts[i + 1];
-                    var x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - R)), x1 = Math.min(w - 1, Math.ceil(Math.max(a.x, b.x) + R));
-                    var y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - R)), y1 = Math.min(h - 1, Math.ceil(Math.max(a.y, b.y) + R));
+                    var ax = a.x, ay = a.y, bx = b.x, by = b.y, au = a.u, du = b.u - a.u;
+                    // Only a pixel nearer the segment than half lights (see c
+                    // below), so no further out than that from its ends.
+                    var x0 = Math.max(0, Math.floor(Math.min(ax, bx) - half)), x1 = Math.min(w - 1, Math.ceil(Math.max(ax, bx) + half));
+                    var y0 = Math.max(0, Math.floor(Math.min(ay, by) - half)), y1 = Math.min(h - 1, Math.ceil(Math.max(ay, by) + half));
+                    // MATRIX.segment() and MATRIX.cover(), written out.
+                    var vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
                     for (y = y0; y <= y1; y++)
                         for (x = x0; x <= x1; x++) {
-                            var seg = MATRIX.segment(x, y, a.x, a.y, b.x, b.y);
-                            var u = a.u + (b.u - a.u) * seg.t;          // 0 = head, 1 = end of the trail
-                            var lvl = MATRIX.cover(seg.d, lw) * (trail > 0 ? Math.pow(1 - u, 1.4) : 1);
+                            var t = 0;
+                            if (l2 > 0) {
+                                t = ((x - ax) * vx + (y - ay) * vy) / l2;
+                                t = t < 0 ? 0 : (t > 1 ? 1 : t);
+                            }
+                            var dx = x - (ax + vx * t), dy = y - (ay + vy * t);
+                            var c = half - Math.sqrt(dx * dx + dy * dy);
+                            if (!(c > 0)) continue;                     // covers none of it: lvl 0
+                            var u = au + du * t;                        // 0 = head, 1 = end of the trail
+                            var lvl = (c > 1 ? 1 : c) * (trail > 0 ? Math.pow(1 - u, 1.4) : 1);
                             var k = y * w + x;
                             if (lvl > L[k]) { L[k] = lvl; U[k] = u; }
                         }
@@ -88,15 +102,18 @@
                 for (y = Math.max(0, Math.floor(hy - HR)); y <= Math.min(h - 1, Math.ceil(hy + HR)); y++)
                     for (x = Math.max(0, Math.floor(hx - HR)); x <= Math.min(w - 1, Math.ceil(hx + HR)); x++)
                         A[y * w + x] = MATRIX.cover(Math.sqrt((x - hx) * (x - hx) + (y - hy) * (y - hy)), lw * 1.2) * 0.9;
-                fields[key] = { L: L, U: U, A: A };
-                return fields[key];
+                fields[key] = last = { L: L, U: U, A: A, K: new Array(n) };
+                return last;
             }
 
             return fixtures.map(function(f) {
                 var p = MATRIX.point(f, cv, perBox);
                 var fl = fieldOf(p.w, p.h), k = p.y * p.w + p.x;
-                // Along the trail through the look's colours: the head the first.
-                return MATRIX.out(f, cv, MATRIX.ramp(C, Math.min(1, fl.U[k] * 2), false), fl.L[k], fl.A[k], params);
+                // Along the trail through the look's colours: the head the
+                // first (once a pixel of the area: every box's is the same).
+                var c = fl.K[k];
+                if (c === undefined) c = fl.K[k] = MATRIX.ramp(C, Math.min(1, fl.U[k] * 2), false);
+                return MATRIX.out(f, cv, c, fl.L[k], fl.A[k], params);
             });
         });
     };

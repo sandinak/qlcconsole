@@ -78,32 +78,52 @@
 
             // The stars drawn into a w x h area once, each touching only the
             // pixels near it: { level, colour, accent } a pixel.
-            var drawn = {};
+            var drawn = {}, lastW = -1, lastH = -1, last = null;
             function fieldOf(w, h) {
+                if (w === lastW && h === lastH) return last;   // the one the last pixel had
                 var key = w + "x" + h;
-                if (drawn[key]) return drawn[key];
+                lastW = w; lastH = h;
+                if (drawn[key]) return (last = drawn[key]);
                 var stars = starsOf(w, h);
                 var n = w * h, L = new Array(n), K = new Array(n), A = new Array(n), i, x, y;
                 for (i = 0; i < n; i++) { L[i] = 0; K[i] = null; A[i] = 0; }
                 for (i = 0; i < stars.length; i++) {
                     var s = stars[i];
-                    var x0 = Math.max(0, Math.floor(s.x0)), x1 = Math.min(w - 1, Math.ceil(s.x1));
-                    var y0 = Math.max(0, Math.floor(s.y0)), y1 = Math.min(h - 1, Math.ceil(s.y1));
                     var glow = MATRIX.smooth(0.45, 0.95, s.age) * 0.8;
+                    // MATRIX.segment() (tail to head) and MATRIX.cover(),
+                    // written out; a pixel neither covers gets nothing from it.
+                    var ax = s.tx, ay = s.ty, hx = s.hx, hy = s.hy, sb = s.b, sc = s.c;
+                    var vx = hx - ax, vy = hy - ay, l2 = vx * vx + vy * vy;
+                    var half = s.w / 2 + 0.5, glowHalf = s.w * 0.8 / 2 + 0.5;
+                    // Only a pixel nearer the streak than half lights (the
+                    // head's glow reaches less far), so within s.x0..s.x1 no
+                    // further out than that from its ends.
+                    var x0 = Math.max(0, Math.floor(s.x0), Math.floor(Math.min(ax, hx) - half));
+                    var x1 = Math.min(w - 1, Math.ceil(s.x1), Math.ceil(Math.max(ax, hx) + half));
+                    var y0 = Math.max(0, Math.floor(s.y0), Math.floor(Math.min(ay, hy) - half));
+                    var y1 = Math.min(h - 1, Math.ceil(s.y1), Math.ceil(Math.max(ay, hy) + half));
                     for (y = y0; y <= y1; y++)
                         for (x = x0; x <= x1; x++) {
-                            var seg = MATRIX.segment(x, y, s.tx, s.ty, s.hx, s.hy);
-                            var lvl = MATRIX.cover(seg.d, s.w) * s.b * (0.2 + 0.8 * seg.t);
+                            var t = 0;
+                            if (l2 > 0) {
+                                t = ((x - ax) * vx + (y - ay) * vy) / l2;
+                                t = t < 0 ? 0 : (t > 1 ? 1 : t);
+                            }
+                            var dx = x - (ax + vx * t), dy = y - (ay + vy * t);
+                            var c = half - Math.sqrt(dx * dx + dy * dy);
                             var k = y * w + x;
-                            if (lvl > L[k]) { L[k] = lvl; K[k] = s.c; }
+                            if (c > 0) {
+                                var lvl = (c > 1 ? 1 : c) * sb * (0.2 + 0.8 * t);
+                                if (lvl > L[k]) { L[k] = lvl; K[k] = sc; }
+                            }
                             if (glow > 0) {
-                                var dh = Math.sqrt((x - s.hx) * (x - s.hx) + (y - s.hy) * (y - s.hy));
-                                A[k] = Math.max(A[k], MATRIX.cover(dh, s.w * 0.8) * glow);
+                                var gc = glowHalf - Math.sqrt((x - hx) * (x - hx) + (y - hy) * (y - hy));
+                                if (!(gc <= 0)) A[k] = Math.max(A[k], (gc > 1 ? 1 : gc) * glow);
                             }
                         }
                 }
-                drawn[key] = { L: L, K: K, A: A };
-                return drawn[key];
+                drawn[key] = last = { L: L, K: K, A: A };
+                return last;
             }
 
             return fixtures.map(function(f) {
