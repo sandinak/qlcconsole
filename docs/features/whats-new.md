@@ -527,6 +527,9 @@ their house lights, relays and subs.
   line, it is patched again by itself — **Controller '…' connected** —
   and Quick focus, the follow spot and focus calls carry on with it. A
   show opened with the pad off picks it up the moment it is switched on.
+  Quick focus started with the pad asleep says "No controller connected.
+  Using the keyboard.", and the pad takes over by itself when you wake it:
+  "Controller back."
   See [Controllers and MIDI devices coming and going](other-improvements.md#controllers-and-midi-devices-coming-and-going).
 
 ### Connections

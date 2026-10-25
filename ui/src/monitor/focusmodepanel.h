@@ -20,6 +20,7 @@
 #ifndef FOCUSMODEPANEL_H
 #define FOCUSMODEPANEL_H
 
+#include <QElapsedTimer>
 #include <QPointer>
 #include <QDialog>
 #include <functional>
@@ -36,6 +37,7 @@ class QToolButton;
 class QComboBox;
 class QCheckBox;
 class QLabel;
+class QTimer;
 class Doc;
 
 /** @addtogroup ui UI
@@ -59,6 +61,9 @@ public:
     FocusSession::Options options() const;
     /** The device chosen to drive the nudges. */
     FocusSession::InputDevice inputDevice() const;
+    /** False when there was no choice: no controller was connected, so only
+     *  the keyboard was offered (not remembered as a choice). */
+    bool inputChosen() const;
 
     /** What Add a target does (the Lighting Studio places one): true when
      *  one was made. Unset, the button is not shown. */
@@ -172,6 +177,8 @@ public:
     static FocusSession::InputDevice defaultInput(Doc *doc);
     /** Remember @p device as this machine's choice. */
     static void rememberInput(FocusSession::InputDevice device);
+    /** The keyboard was this machine's last choice. */
+    static bool keyboardChosen();
     /** The running panel, if any. */
     static FocusModePanel *instance();
     /** The panel for a session something else started (a focus-call cue):
@@ -218,6 +225,12 @@ private:
     void refreshPaused();
     /** What a key does here; false for a key Focus mode does not use. */
     bool handleKey(int key, Qt::KeyboardModifiers modifiers);
+    /** On the keyboard for want of a controller and one is here: take it
+     *  -- unless another pad has the tools, or the keys are nudging (then
+     *  once they stop) -- and say so. */
+    void takeOverIfFree();
+    QString noControllerNote() const;
+    QString disconnectedNote() const;
 
 private:
     Doc *m_doc;
@@ -249,9 +262,16 @@ private:
     QLabel *m_pausedLabel;
     QPushButton *m_backButton;
     FocusControlMap *m_map;
-    /** Switched to the keyboard because the controller went: offer it
-     *  back when it returns. */
+    /** On the keyboard for want of a controller (it went, or none was
+     *  connected at the start): it takes over when one connects. */
     bool m_fellBack = false;
+    /** A controller was there at some point (the note says "disconnected"
+     *  rather than "none connected"). */
+    bool m_padSeen = false;
+    bool m_padWasPresent = false;
+    /** The last key handled: a controller back waits for the keys to stop. */
+    QElapsedTimer m_lastKey;
+    QTimer *m_takeoverTimer = nullptr;
 
     static QPointer<FocusModePanel> s_instance;
 };

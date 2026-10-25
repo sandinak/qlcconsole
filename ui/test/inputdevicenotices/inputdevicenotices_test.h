@@ -33,6 +33,7 @@ private slots:
     void cleanup();
 
     void aDisconnectIsSaidOnceSettled();
+    void aPadAsleepWhileIdleIsSaidAndRepatchedWhenWoken();
     void aReconnectIsSaidAndClearsTheFooter();
     void aFlapIsNotSaid();
     void absentWhenTheShowOpensIsSaid();

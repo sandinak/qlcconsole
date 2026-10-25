@@ -21,6 +21,7 @@
 #include "inputdevicenotices_test.h"
 #include "inputdevicenotices.h"
 #include "inputoutputmap.h"
+#include "inputpatch.h"
 #include "ioplugincache.h"
 #include "iopluginstub.h"
 #include "showstatus.h"
@@ -101,6 +102,42 @@ void InputDeviceNotices_Test::aDisconnectIsSaidOnceSettled()
     // Nothing more said while nothing changes.
     notices.settleNow();
     QCOMPARE(said.count(), 1);
+}
+
+void InputDeviceNotices_Test::aPadAsleepWhileIdleIsSaidAndRepatchedWhenWoken()
+{
+    /* RC2: an Xbox pad left idle switches itself off -- no tool running,
+       the only device on its plugin, so its plugin's list goes empty. Said
+       in amber and on the footer, and patched again when it wakes. */
+    const QString xbox = QStringLiteral("Xbox Wireless Controller (0b13)");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setInputPatch(1, KInputNone, QString(), QLCIOPlugin::invalidLine());
+    rescanned(m_stub, QStringList() << xbox);
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 0));
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(50);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+    QSignalSpy gone(iom, &InputOutputMap::inputDeviceDisconnected);
+    QSignalSpy back(iom, &InputOutputMap::inputDeviceConnected);
+
+    m_stub->m_lineCount = 0;
+    rescanned(m_stub, QStringList());          // asleep: nothing listed
+    m_stub->m_lineCount = 4;
+    QCOMPARE(gone.count(), 1);
+    QVERIFY(iom->inputPatch(1) == nullptr);
+    QTRY_COMPARE(said.count(), 1);
+    QCOMPARE(said.at(0).at(0).toString(),
+             QString("Input device '%1' disconnected — universe 2").arg(xbox));
+    QCOMPARE(said.at(0).at(1).toBool(), true);  // the amber kind
+    QCOMPARE(footerEntry().severity, ShowStatus::Warning);
+
+    rescanned(m_stub, QStringList() << xbox);   // woken
+    QCOMPARE(back.count(), 1);
+    QVERIFY(iom->inputPatch(1) != nullptr);
+    QCOMPARE(iom->inputPatch(1)->input(), quint32(0));
+    QTRY_COMPARE(said.count(), 2);
+    QVERIFY(footerEntry().key.isEmpty());
 }
 
 void InputDeviceNotices_Test::aReconnectIsSaidAndClearsTheFooter()

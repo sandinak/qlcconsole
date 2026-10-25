@@ -198,6 +198,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
         refreshControllerKeepAlive();
         m_padPresent = focusController().present;
         m_padLost = false;
+        sayNoController();
     });
     connect(m_refineSession, &RefineSession::stopped, this, [this]() {
         refreshControllerKeepAlive();
@@ -219,6 +220,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
         m_padPresent = focusController().present;
         m_padLost = false;
     });
+    /* Said before the first where line, so "fixture 1 of 8" (or the call)
+       is the last thing heard. */
+    connect(m_focusSession, &FocusSession::starting, this, &ProgrammerController::sayNoController);
     connect(m_focusSession, &FocusSession::stopped, this, [this]() {
         emit joystickUpdated(m_panNorm, m_tiltNorm);
         refreshControllerKeepAlive();
@@ -1712,16 +1716,29 @@ void ProgrammerController::checkControllerPresence()
             emit controllerLost(true);
         }
     }
-    else if (!m_padPresent && present && m_padLost)
+    /* Back -- or here at last, for a tool started with none (a pad asleep
+       when Focus mode began): said either way, so a pad woken mid-session
+       is never taken up in silence. */
+    else if (!m_padPresent && present && (m_padLost || tool))
     {
+        const bool wasLost = m_padLost;
         m_padLost = false;
         if (tool)
-        {
             warnOperator(tr("Controller back."));
+        if (wasLost)
             emit controllerLost(false);
-        }
     }
     m_padPresent = present;
+}
+
+void ProgrammerController::sayNoController()
+{
+    /* A tool started with no controller to read (asleep, switched off, not
+       paired): said whatever the feedback, as the loss would be (Q131),
+       not left to a grey label nobody reads. */
+    if (!focusController().present)
+        emit operatorAnnounce(tr("No controller connected. Using the keyboard."),
+                              ControllerScheme::ImportantPriority);
 }
 
 void ProgrammerController::cycleOperatorFeedback()

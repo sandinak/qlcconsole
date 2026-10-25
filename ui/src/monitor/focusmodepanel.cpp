@@ -209,7 +209,10 @@ void FocusStatusLamp::paintEvent(QPaintEvent *)
 
 namespace
 {
-const char kInputSetting[] = "focusmode/input";
+/* "focusmode/input" was also written when the setup dialog offered only
+   the keyboard (no controller connected), so a pad asleep once made every
+   later session start on the keyboard, the pad ignored. Read afresh. */
+const char kInputSetting[] = "focusmode/inputDevice";
 
 QString signedDegrees(float v)
 {
@@ -333,7 +336,9 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     m_inputCombo->addItem(pad.present ? tr("Controller \342\200\224 %1").arg(pad.name)
                                       : tr("Controller (none connected)"),
                           int(FocusSession::ControllerInput));
-    m_inputCombo->addItem(tr("Keyboard"), int(FocusSession::KeyboardInput));
+    m_inputCombo->addItem(pad.present ? tr("Keyboard")
+                                      : tr("Keyboard (a controller takes over when it connects)"),
+                          int(FocusSession::KeyboardInput));
     if (!pad.present)
     {
         // Not choosable without one.
@@ -508,6 +513,13 @@ FocusSession::InputDevice FocusModeSetupDialog::inputDevice() const
     return FocusSession::InputDevice(m_inputCombo->currentData().toInt());
 }
 
+bool FocusModeSetupDialog::inputChosen() const
+{
+    // The controller entry is greyed when there was none to choose.
+    const QStandardItemModel *m = qobject_cast<const QStandardItemModel *>(m_inputCombo->model());
+    return m == nullptr || m->item(0) == nullptr || m->item(0)->isEnabled();
+}
+
 FocusSession::Options FocusModeSetupDialog::options() const
 {
     FocusSession::Options o;
@@ -558,10 +570,15 @@ FocusModePanel *FocusModePanel::open(Doc *doc, QWidget *parent, quint32 sceneId,
     if (setup.exec() != QDialog::Accepted)
         return nullptr;
 
-    // The choice made here is this machine's from now on.
-    rememberInput(setup.inputDevice());
+    /* The choice made here is this machine's from now on -- when it was
+       one: with no controller connected the keyboard is all there was, and
+       the controller takes over when it connects. */
+    const bool chosen = setup.inputChosen();
+    if (chosen)
+        rememberInput(setup.inputDevice());
     QString why;
-    FocusModePanel *panel = startWith(doc, parent, setup.options(), &why, int(setup.inputDevice()));
+    FocusModePanel *panel = startWith(doc, parent, setup.options(), &why,
+                                      chosen ? int(setup.inputDevice()) : -1);
     if (panel == nullptr)
         QMessageBox::warning(parent, tr("Quick Focus"), why);
     return panel;
@@ -576,6 +593,11 @@ FocusSession::InputDevice FocusModePanel::defaultInput(Doc *doc)
         && doc->programmer()->focusController().present)
         return FocusSession::ControllerInput;
     return FocusSession::KeyboardInput;
+}
+
+bool FocusModePanel::keyboardChosen()
+{
+    return QSettings().value(kInputSetting).toString() == QLatin1String("keyboard");
 }
 
 void FocusModePanel::rememberInput(FocusSession::InputDevice device)
@@ -600,7 +622,12 @@ FocusModePanel *FocusModePanel::startWith(Doc *doc, QWidget *parent,
     FocusModePanel *panel = new FocusModePanel(doc, parent);
     panel->m_rigBefore = before;
     s_instance = panel;
-    panel->setInputDevice(input < 0 ? defaultInput(doc) : FocusSession::InputDevice(input), false);
+    /* The controller unless the keyboard was chosen: with none connected
+       that is the keyboard, said so, and the controller takes over when it
+       connects (setInputDevice()). */
+    panel->setInputDevice(input >= 0 ? FocusSession::InputDevice(input)
+                          : keyboardChosen() ? FocusSession::KeyboardInput
+                                             : FocusSession::ControllerInput, false);
     panel->refreshController();
     panel->refresh();
     panel->showHighlight(panel->m_session->currentFixture());
@@ -624,7 +651,8 @@ FocusModePanel *FocusModePanel::attach(Doc *doc, QWidget *parent)
     }
     FocusModePanel *panel = new FocusModePanel(doc, parent);
     s_instance = panel;
-    panel->setInputDevice(defaultInput(doc), false);
+    panel->setInputDevice(keyboardChosen() ? FocusSession::KeyboardInput
+                                           : FocusSession::ControllerInput, false);
     panel->refreshController();
     panel->refresh();
     panel->showHighlight(s->currentFixture());
@@ -813,7 +841,14 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     bottom->addWidget(exitBtn);
     vl->addLayout(bottom);
 
+    /* A controller back while the keys are nudging waits for them to stop
+       (takeOverIfFree()), then takes over by itself. */
+    m_takeoverTimer = new QTimer(this);
+    m_takeoverTimer->setSingleShot(true);
+    connect(m_takeoverTimer, &QTimer::timeout, this, &FocusModePanel::takeOverIfFree);
+
     ProgrammerController *pc = m_doc->programmer();
+    m_padWasPresent = m_padSeen = pc->focusController().present;
     connect(pc, &ProgrammerController::focusControllerChanged,
             this, &FocusModePanel::refreshController);
     connect(pc, &ProgrammerController::holdingChanged, this, &FocusModePanel::refresh);
@@ -1044,11 +1079,13 @@ void FocusModePanel::refreshSaveStatus()
 void FocusModePanel::setInputDevice(FocusSession::InputDevice device, bool remember)
 {
     // No controller to have: the keyboard, but not as anyone's choice.
+    bool noPad = false;
     if (device == FocusSession::ControllerInput
         && !m_doc->programmer()->focusController().present)
     {
         device = FocusSession::KeyboardInput;
         remember = false;
+        noPad = true;
     }
     m_session->setInputDevice(device);
     if (remember)
@@ -1058,11 +1095,23 @@ void FocusModePanel::setInputDevice(FocusSession::InputDevice device, bool remem
     }
     if (device == FocusSession::ControllerInput)
         m_fellBack = false;
-    if (!m_fellBack)
+    if (noPad)
+    {
+        /* Said, not left to the grey "No controller connected": the pad
+           asleep, Focus mode is on the keys -- and a pad that connects
+           takes over (refreshController()). */
+        m_fellBack = true;
+        m_noteLabel->setText(m_padSeen ? disconnectedNote() : noControllerNote());
+        m_noteLabel->show();
+        m_backButton->hide();
+    }
+    else if (!m_fellBack)
     {
         m_noteLabel->hide();
         m_backButton->hide();
     }
+    if (device == FocusSession::ControllerInput)
+        m_takeoverTimer->stop();
     m_useController->setChecked(device == FocusSession::ControllerInput);
     m_useKeyboard->setChecked(device == FocusSession::KeyboardInput);
     refreshPaused();
@@ -1089,29 +1138,103 @@ void FocusModePanel::refreshController()
     m_deviceLabel->setText(!owner.isEmpty() ? tr("%1 has it (any other is ignored)").arg(owner)
                            : pad.present ? pad.name : tr("No controller connected"));
 
+    const bool arrived = pad.present && !m_padWasPresent;
+    m_padWasPresent = pad.present;
+    if (pad.present)
+        m_padSeen = true;
+
     if (!pad.present && m_session->inputDevice() == FocusSession::ControllerInput)
     {
         // Gone mid-session: the keyboard has it now, and nothing drifts.
         m_fellBack = true;
         setInputDevice(FocusSession::KeyboardInput, false);
-        m_noteLabel->setText(tr("Controller paused: the controller disconnected. "
-                                "Switched to the keyboard."));
+        m_noteLabel->setText(disconnectedNote());
         m_noteLabel->show();
         m_backButton->hide();
     }
     else if (pad.present && m_fellBack && m_session->inputDevice() == FocusSession::KeyboardInput)
     {
-        m_noteLabel->setText(tr("Controller connected: %1 is back.").arg(pad.name));
-        m_noteLabel->show();
-        m_backButton->show();
+        // Woken, plugged in, back in range: it takes over by itself.
+        takeOverIfFree();
     }
     else if (!pad.present && m_fellBack)
     {
-        m_noteLabel->setText(tr("Controller paused: the controller disconnected. "
-                                "Switched to the keyboard."));
+        m_takeoverTimer->stop();
+        m_noteLabel->setText(m_padSeen ? disconnectedNote() : noControllerNote());
+        m_noteLabel->show();
         m_backButton->hide();
     }
+    else if (arrived && m_session->inputDevice() == FocusSession::KeyboardInput)
+    {
+        /* The keyboard was chosen: the controller is not forced on anyone.
+           Said what to press to use it. */
+        const QString text = tr("Controller connected: %1. The keyboard is in use, as chosen; "
+                                "click Use the controller to nudge with it.").arg(pad.name);
+        m_noteLabel->setText(text);
+        m_noteLabel->show();
+        m_backButton->show();
+        emit m_doc->programmer()->operatorAnnounce(
+            tr("Keyboard in use. Click Use the controller to switch."),
+            ControllerScheme::ImportantPriority);
+    }
     refreshPaused();
+}
+
+QString FocusModePanel::noControllerNote() const
+{
+    return tr("No controller connected: using the keyboard. A controller takes over "
+              "as soon as it connects (switch it on, or press its Xbox / PS button).");
+}
+
+QString FocusModePanel::disconnectedNote() const
+{
+    return tr("Controller paused: the controller disconnected. Switched to the keyboard; "
+              "it takes over again when it reconnects (press its Xbox / PS button).");
+}
+
+void FocusModePanel::takeOverIfFree()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    const ProgrammerController::FocusController pad = pc->focusController();
+    if (!pad.present || !m_fellBack || !m_session->isActive()
+        || m_session->inputDevice() != FocusSession::KeyboardInput)
+        return;
+
+    // Another pad holds the tools (two pads, Q135): not taken from it.
+    const quint32 owner = pc->controllerOwner();
+    if (owner != 0xFFFFFFFF && owner != pad.universe)
+    {
+        m_noteLabel->setText(tr("Controller connected: %1, but %2 has the tools. "
+                                "Click Use the controller to nudge with %1.")
+                             .arg(pad.name, pc->controllerOwnerName()));
+        m_noteLabel->show();
+        m_backButton->show();
+        emit pc->operatorAnnounce(tr("Another controller has the tools. Click Use the controller to switch."),
+                                  ControllerScheme::ImportantPriority);
+        return;
+    }
+
+    /* The keys nudging right now: not snatched from under them. It takes
+       over once they have been still a moment (or at once on the button). */
+    const qint64 quietMs = 1000;
+    if (m_lastKey.isValid() && m_lastKey.elapsed() < quietMs)
+    {
+        m_noteLabel->setText(tr("Controller back: %1 takes over when the keys stop. "
+                                "Click Use the controller to switch now.").arg(pad.name));
+        m_noteLabel->show();
+        m_backButton->show();
+        m_takeoverTimer->start(int(quietMs - m_lastKey.elapsed()) + 50);
+        return;
+    }
+
+    setInputDevice(FocusSession::ControllerInput, false);
+    const QString text = tr("Controller back: nudging with %1.").arg(pad.name);
+    m_noteLabel->setText(text);
+    m_noteLabel->show();
+    QTimer::singleShot(6000, this, [this, text]() {
+        if (!m_fellBack && m_noteLabel->text() == text)
+            m_noteLabel->hide();
+    });
 }
 
 void FocusModePanel::refreshPaused()
@@ -1134,6 +1257,8 @@ void FocusModePanel::showHighlight(quint32 fid)
 
 bool FocusModePanel::handleKey(int key, Qt::KeyboardModifiers modifiers)
 {
+    // A controller back now waits for the keys to stop (takeOverIfFree()).
+    m_lastKey.restart();
     const bool shift = modifiers & Qt::ShiftModifier;
     const float step = shift ? 1.0f : m_session->stepDegrees();
     // H: the freeze chord's key (Q140); while holding, nothing else.

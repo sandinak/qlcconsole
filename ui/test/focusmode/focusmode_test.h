@@ -54,6 +54,10 @@ private slots:
      *  it is offered back when it returns. */
     void aDisconnectFallsBackToTheKeyboard();
     void aPadThatSleepsIsPickedUpAgain();
+    void aPadAsleepAtTheStartIsSaidAndTakesOverWhenWoken();
+    void theKeysNudgingHoldTheTakeoverABeat();
+    void aChosenKeyboardIsKeptAndSaysWhatToPress();
+    void theSetupWithNoPadIsNotAChoice();
     /** A paused controller is said, with why -- not silence -- and the
      *  panel stays up when another app is in front. */
     void aPausedControllerSaysWhy();

@@ -724,6 +724,9 @@ private:
     /** Let go of everything the controller held: the sticks centred, the
      *  A/B/RS holds and a D-pad repeat reset, no button held. */
     void freezeController();
+    /** A tool just started: "No controller connected. Using the keyboard."
+     *  when there is none (important: said in every feedback setting). */
+    void sayNoController();
     bool m_padPresent = false;
     quint32 m_ownerUniverse = 0xFFFFFFFF;
     /** Nobody is using the controller tools (nothing running or armed). */

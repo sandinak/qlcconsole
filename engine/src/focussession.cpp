@@ -415,6 +415,7 @@ bool FocusSession::start(const Options &options, QString *why)
         if (m_venues != nullptr)
             m_venues->setHeld(m_all);
         m_callIndex = -1;
+        emit starting();
         enterCall(0);
         emit started();
         return true;
@@ -442,6 +443,7 @@ bool FocusSession::start(const Options &options, QString *why)
     if (m_venues != nullptr)
         m_venues->setHeld(m_all);
     rebuildWrites();
+    emit starting();
     emit started();
     emit currentChanged(currentFixture());
     flashSelection();

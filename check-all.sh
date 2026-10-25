@@ -430,6 +430,7 @@ fi
 # its programs did: "the tests passed" means nothing about tests not run.
 EXPECTED=$(cd "$REPO" && { ls engine/test/*/test.sh ui/test/*/test.sh
     ls plugins/{enttecwing,midi,artnet,E1.31,wled}/test/test.sh
+    [ "$(uname)" = Darwin ] && ls plugins/hid/test/test.sh
     [ "$(uname)" = Darwin ] || ls plugins/velleman/test/test.sh; } 2>/dev/null | wc -l | tr -d ' ')
 for ((i = 0; i < NLEGS; i++)); do
     if [ "${STATE[i]}" = done ]; then

@@ -214,6 +214,8 @@ private:
     bool isPatchedInput(quint32 line) const;
 
     QTimer *m_rescanTimer = nullptr;
+    /** Asks every few seconds whether a device has gone unannounced. */
+    QTimer *m_staleTimer = nullptr;
     HIDOSXHotplug *m_osxHotplug = nullptr;
     int m_diagnostics = 0;
     /** Devices started only for diagnostics. */

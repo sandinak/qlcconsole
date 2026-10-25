@@ -558,6 +558,9 @@ public:
     QHash<QPair<int, int>, uchar> pendingWrites() const;
 
 signals:
+    /** A start was accepted: emitted before the first where line is said
+     *  (what must be said first -- no controller -- is said then). */
+    void starting();
     void started();
     void stopped();
     void currentChanged(quint32 fid);

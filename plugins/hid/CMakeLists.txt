@@ -103,3 +103,8 @@ install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${PLUGINDIR}
     RUNTIME DESTINATION ${INSTALLROOT}/${PLUGINDIR}
 )
+
+# The GameController framework side (a pad's auto-off and wake), macOS only.
+if(APPLE)
+    add_subdirectory(test)
+endif()

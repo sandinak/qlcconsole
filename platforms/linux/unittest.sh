@@ -255,6 +255,9 @@ list_tests()
     echo plugins/artnet/test
     echo plugins/E1.31/test
     echo plugins/wled/test
+    # The HID plugin's GameController side: a Mac's framework only.
+    [[ "$OSTYPE" == "darwin"* ]] && echo plugins/hid/test
+    return 0
 }
 
 ALL_TESTS=$(list_tests)

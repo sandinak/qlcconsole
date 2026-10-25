@@ -194,9 +194,14 @@ show was opened without it:
   patched to it again by itself, within a moment of the computer seeing it,
   and the notice says **Controller '…' connected — universe 2**, then goes.
   Quick focus, the follow spot and focus calls carry on with it without a
-  restart; Quick focus's panel says **Controller connected** and offers
-  **Use the controller** (see
-  [Controller or keyboard](lighting-studio.md#controller-or-keyboard)).
+  restart: Quick focus takes it back by itself and says **Controller back**
+  (see [Controller or keyboard](lighting-studio.md#controller-or-keyboard)).
+- **A pad's own auto-off** (an Xbox pad left idle switches itself off
+  after about 15 minutes) is the same: said, kept, and back when you press
+  its Xbox button. On a Mac this is seen whichever way the pad is read —
+  through Apple's GameController framework (Xbox, DualShock 4, DualSense)
+  or through IOKit — and, should the system not announce it, within a few
+  seconds anyway.
 - **A quick drop is not news.** A pad that drops out and is back within
   a couple of seconds (Bluetooth waking, reconnecting) is not mentioned.
 - **Two of the same pad** are told apart by their serial number, where the

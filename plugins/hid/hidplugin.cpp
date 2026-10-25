@@ -68,14 +68,41 @@ void HIDPlugin::init()
 #if defined (__APPLE__) || defined(Q_OS_MACOS)
     /* The app's hotplug monitor sees USB only: a Bluetooth pad switched off
        and on again, or back after the Mac slept, was never picked up again.
-       Rescan when one comes or goes, and after a wake -- when it takes a
+       Rescan when one comes or goes -- an IOKit device, or a pad the
+       GameController framework connects or disconnects (an Xbox pad's
+       auto-off, a Bluetooth drop) -- now and once more a moment later: the
+       HID list can still hold a pad that just went, or not yet one that
+       just came, and nothing else would ask again. After a wake it takes a
        few seconds to reconnect, so twice. */
-    m_osxHotplug = new HIDOSXHotplug([this]() { scheduleRescan(); },
+    m_osxHotplug = new HIDOSXHotplug([this]() {
+                                         scheduleRescan();
+                                         QTimer::singleShot(2500, this, [this]() { scheduleRescan(0); });
+                                     },
                                      [this]() {
                                          scheduleRescan(1500);
                                          QTimer::singleShot(6000, this, [this]() { scheduleRescan(0); });
                                      });
-#elif defined(Q_OS_LINUX)
+#endif
+
+    /* And whatever any notification missed (a Mac asleep through it, App
+       Nap): a device whose system entry is gone (isStale()) rescans, so a
+       controller that went is never left patched and silent. */
+    m_staleTimer = new QTimer(this);
+    m_staleTimer->setInterval(3000);
+    connect(m_staleTimer, &QTimer::timeout, this, [this]() {
+        for (HIDDevice *dev : std::as_const(m_devices))
+        {
+            if (dev->isStale())
+            {
+                qDebug() << Q_FUNC_INFO << dev->name() << "is gone: rescanning";
+                scheduleRescan(0);
+                break;
+            }
+        }
+    });
+    m_staleTimer->start();
+
+#if defined(Q_OS_LINUX)
     /* The app's hotplug monitor watches the USB subsystem only, so a
        Bluetooth pad coming and going was never seen here either. Its
        joystick node (/dev/input/jsN) appearing or going is. */
@@ -533,6 +560,14 @@ static HIDDevice *makeJoystick(HIDPlugin *plugin, quint32 line, struct hid_devic
         delete dev;
         dev = NULL;
     }
+    /* Listed, but already gone from the system (the HID list a moment
+       behind a pad switching off): not a device, or the stale check would
+       make and drop it on every rescan. */
+    if (dev != NULL && dev->isStale())
+    {
+        delete dev;
+        dev = NULL;
+    }
     return dev;
 }
 
@@ -574,10 +609,12 @@ void HIDPlugin::rescanDevices()
                The old one reads nothing any more. Replace it where it is, so
                the input line -- and the patch on it -- stays the same; the
                configurationChanged() below reopens it. */
-            destroyList.removeAll(dev);
             HIDDevice *fresh = makeJoystick(this, dev->line(), cur_dev);
+            /* No device to read there now: it goes with the others not
+               found (below), not kept listed, patched and silent. */
             if (fresh != NULL)
             {
+                destroyList.removeAll(dev);
                 qDebug() << Q_FUNC_INFO << "reconnected:" << fresh->name();
                 const int index = m_devices.indexOf(dev);
                 m_devices[index] = fresh;

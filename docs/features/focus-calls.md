@@ -411,9 +411,11 @@ double blink and a short buzz):
   flat), everything it held is let go — the sticks, a held button — so no
   light drifts and no hold fires: "Controller lost. Lights held." The
   panel switches to the keyboard. When the pad is back the voice says
-  "Controller back.", but in Quick focus and Venue focus it drives nothing
-  until someone presses **Use the controller** on the panel; Focus this
-  cue takes it back at once. The keys work all the while;
+  "Controller back." and it drives again by itself (in Quick focus and
+  Venue focus, once the keys are still; with Keyboard chosen, the panel
+  says to click **Use the controller**). Focus this cue takes it back at once.
+  A tool started with no pad at all says "No controller connected. Using
+  the keyboard." The keys work all the while;
 - **nothing reaching the rig**: Blackout on, the Grand Master at zero, or
   the light's universe with no output ("Spot 3's universe has no output:
   it shows nothing.");

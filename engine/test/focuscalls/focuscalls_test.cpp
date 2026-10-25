@@ -1371,6 +1371,60 @@ void FocusCalls_Test::theControllerLostFreezesEverything()
     iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
 }
 
+void FocusCalls_Test::aToolStartedWithNoControllerSaysSoAndTheWokenPadIsBack()
+{
+    /* RC2: the pad asleep when Focus mode began -- nothing said, and when it
+       woke nothing said either (only a pad lost mid-session was "back"). */
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    ProgrammerController *pc = m_doc->programmer();
+    // Important: said with Feedback on lights only too (Q131).
+    const ControllerScheme::Feedback feedback = pc->operatorFeedback();
+    pc->setOperatorFeedback(ControllerScheme::LightsFeedback);
+    QVERIFY(!pc->focusController().present);
+
+    Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.fixtures = { a->id() };
+    o.first = targetRef(dsc->id());
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QVERIFY(s->start(o));
+    auto saidLine = [&said](const QString &text) {
+        for (const QList<QVariant> &l : said)
+            if (l.at(0).toString() == text)
+                return l.at(1).toInt() == int(ControllerScheme::ImportantPriority);
+        return false;
+    };
+    QVERIFY(saidLine("No controller connected. Using the keyboard."));
+
+    // Woken: said, as a pad lost and back would be.
+    said.clear();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    emit iom->inputDeviceConnected(0, stub->name(), QString("Stub pad"));
+    QVERIFY(pc->focusController().present);
+    QVERIFY(saidLine("Controller back."));
+    QVERIFY(!pc->isControllerLost());
+    s->stop();
+
+    // A pad there at the start: no such line.
+    said.clear();
+    QVERIFY(s->start(o));
+    QVERIFY(!saidLine("No controller connected. Using the keyboard."));
+    s->stop();
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    pc->setOperatorFeedback(feedback);
+}
+
 void FocusCalls_Test::anOldVenueIsConfirmed()
 {
     makeSpot(m_doc, "A", 2.0f, 2.0f);

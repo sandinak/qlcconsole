@@ -630,6 +630,28 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
 - **A double-click on a universe in Connections opens its connection**
   instead of starting a rename (a click on the selected row, or F2, still
   renames).
+- **A controller asleep is never a silent failure** (RC2: an Xbox pad's
+  auto-off, then Quick focus started: no message, and the woken pad drove
+  nothing). Quick focus started with no controller says so on the panel and
+  aloud ("No controller connected. Using the keyboard.", important, so in
+  every Feedback setting; said before the first where line, on the new
+  `FocusSession::starting()`); a pad that connects during a tool says
+  "Controller back." whether it was lost mid-session or never there; and
+  Quick focus takes the woken pad over by itself (`FocusModePanel::
+  takeOverIfFree()`) unless the keys are nudging (then once they are still
+  a second) or the keyboard was chosen (then the panel and voice say to
+  click **Use the controller**). The setup dialog no longer remembers
+  "Keyboard" when it was the only entry (no pad connected) -- that made
+  every later session start on the keyboard with the pad ignored; the
+  setting is read from a new key (`focusmode/inputDevice`), so a value left
+  by that bug is not. The HID plugin rescans once more 2.5 s after any
+  device or GameController-framework connect/disconnect, checks every 3 s
+  for a device whose system entry is gone (`isStale()`), and drops a
+  same-path device it cannot reopen instead of keeping it listed, patched
+  and dead. Tests: `focusmode_test` (asleep at the start, woken mid-move,
+  keys nudging, keyboard chosen), `focuscalls_test`, `inputdevicenotices_test`,
+  and a new macOS `plugins/hid/test` (`hidgamecontroller_test`: a
+  framework-read Xbox or DualSense pad disconnecting and reconnecting).
 - **Re-patching an input left with no plugin no longer crashes.** An input
   unpatched by name with a valid line kept an `InputPatch` with no plugin,
   and patching it again dereferenced that null plugin.

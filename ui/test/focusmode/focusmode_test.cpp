@@ -130,6 +130,7 @@ void FocusMode_Test::initTestCase()
 void FocusMode_Test::init()
 {
     QSettings().remove(QStringLiteral("focusmode/input"));
+    QSettings().remove(QStringLiteral("focusmode/inputDevice"));
     m_doc->programmer()->focusSession()->setStepDegrees(0.1f);   // + in a test before
     unplugPad();
 }
@@ -295,7 +296,7 @@ void FocusMode_Test::theDefaultFollowsTheDevice()
     panel->findChild<QToolButton *>("focusUseKeyboard")->click();
     QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
     QCOMPARE(panel->controlMap()->mode(), FocusControlMap::KeyboardMap);
-    QCOMPARE(QSettings().value("focusmode/input").toString(), QString("keyboard"));
+    QCOMPARE(QSettings().value("focusmode/inputDevice").toString(), QString("keyboard"));
     QCOMPARE(FocusModePanel::defaultInput(m_doc), FocusSession::KeyboardInput);
     panel->findChild<QToolButton *>("focusUseController")->click();
     QCOMPARE(FocusModePanel::defaultInput(m_doc), FocusSession::ControllerInput);
@@ -579,18 +580,17 @@ void FocusMode_Test::aDisconnectFallsBackToTheKeyboard()
     QVERIFY2(note->text().contains("disconnected"), qPrintable(note->text()));
     QVERIFY(!back->isVisible());
     QVERIFY(!panel->findChild<QToolButton *>("focusUseController")->isEnabled());
-    QVERIFY(QSettings().value("focusmode/input").toString().isEmpty());
+    QVERIFY(QSettings().value("focusmode/inputDevice").toString().isEmpty());
 
-    // Back: offered, not taken.
+    /* Back: it takes over by itself (RC2: "Use the controller" was the only
+       way back, and nobody saw it), and says so. */
     plugInPad();
-    QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
-    QVERIFY(back->isVisible());
-    QVERIFY2(note->text().contains("back"), qPrintable(note->text()));
-    back->click();
     QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
     QCOMPARE(panel->controlMap()->mode(), FocusControlMap::ControllerMap);
-    QVERIFY(!note->isVisible());
+    QVERIFY(note->isVisible());
+    QVERIFY2(note->text().startsWith("Controller back"), qPrintable(note->text()));
     QVERIFY(!back->isVisible());
+    QVERIFY(QSettings().value("focusmode/inputDevice").toString().isEmpty());
 }
 
 void FocusMode_Test::aPadThatSleepsIsPickedUpAgain()
@@ -623,15 +623,157 @@ void FocusMode_Test::aPadThatSleepsIsPickedUpAgain()
     QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
     QVERIFY2(note->text().contains("disconnected"), qPrintable(note->text()));
 
+    QSignalSpy said(m_doc->programmer(), &ProgrammerController::operatorAnnounce);
     m_stub->m_lineCount = 4;            // awake
     m_stub->configure();
     QVERIFY(m_doc->inputOutputMap()->inputPatch(0) != nullptr);
     QVERIFY(m_doc->programmer()->focusController().present);
-    QVERIFY2(note->text().contains("Controller connected"), qPrintable(note->text()));
+    // Taken up at once, and said -- no button to find.
+    QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
+    QVERIFY2(note->text().startsWith("Controller back"), qPrintable(note->text()));
+    QVERIFY(!back->isVisible());
+    QVERIFY(!said.isEmpty());
+    QCOMPARE(said.last().at(0).toString(), QString("Controller back."));
+    QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
+
+    // And the stick moves the light: the DMX the session sends changes.
+    ProgrammerController *pc = m_doc->programmer();
+    const quint32 cur = s->currentFixture();
+    const QHash<QPair<int, int>, uchar> before = s->pendingWrites();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, LX, 255, QString());
+    for (int i = 0; i < 10; ++i)
+        pc->applyDesignJoystick();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, LX, 128, QString());
+    QVERIFY(s->liveOffset(cur).pan > 0.0f);
+    QVERIFY(s->pendingWrites() != before);
+    s->discardAll();
+    panel->close();
+}
+
+void FocusMode_Test::aPadAsleepAtTheStartIsSaidAndTakesOverWhenWoken()
+{
+    /* RC2: the pad asleep (Xbox auto-off), Focus mode started: it ran on the
+       keyboard with only a grey "No controller connected", said nothing,
+       and the pad, woken, was ignored. */
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    // Said in every feedback setting (Q131): lights only too.
+    const ControllerScheme::Feedback feedback = pc->operatorFeedback();
+    pc->setOperatorFeedback(ControllerScheme::LightsFeedback);
+    auto restore = qScopeGuard([pc, feedback]() { pc->setOperatorFeedback(feedback); });
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    panel->show();
+    QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
+    QLabel *note = panel->findChild<QLabel *>("focusInputNote");
+    QPushButton *back = panel->findChild<QPushButton *>("focusControllerBack");
+    QVERIFY(note->isVisible());
+    QVERIFY2(note->text().startsWith("No controller connected: using the keyboard"),
+             qPrintable(note->text()));
+    QVERIFY(!back->isVisible());
+    bool spoken = false;
+    for (const QList<QVariant> &l : said)
+        if (l.at(0).toString() == QLatin1String("No controller connected. Using the keyboard."))
+            spoken = l.at(1).toInt() == int(ControllerScheme::ImportantPriority);
+    QVERIFY2(spoken, "the start with no controller was not said, with Feedback on lights only");
+
+    // Woken: it takes over, said, and moves the light.
+    said.clear();
+    plugInPad();
+    QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
+    QCOMPARE(panel->controlMap()->mode(), FocusControlMap::ControllerMap);
+    QVERIFY2(note->text().startsWith("Controller back"), qPrintable(note->text()));
+    QVERIFY(!said.isEmpty());
+    QCOMPARE(said.last().at(0).toString(), QString("Controller back."));
+    // Not remembered: it was nobody's choice.
+    QVERIFY(QSettings().value("focusmode/inputDevice").toString().isEmpty());
+
+    const quint32 cur = s->currentFixture();
+    const QHash<QPair<int, int>, uchar> before = s->pendingWrites();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, LX, 255, QString());
+    for (int i = 0; i < 10; ++i)
+        pc->applyDesignJoystick();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, LX, 128, QString());
+    QVERIFY(s->liveOffset(cur).pan > 0.0f);
+    QVERIFY(s->pendingWrites() != before);
+    s->discardAll();
+}
+
+void FocusMode_Test::theKeysNudgingHoldTheTakeoverABeat()
+{
+    // Woken while the keys are nudging: not snatched -- once they stop.
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    panel->show();
+    QLabel *note = panel->findChild<QLabel *>("focusInputNote");
+    QPushButton *back = panel->findChild<QPushButton *>("focusControllerBack");
+    QTest::keyClick(panel, Qt::Key_Right);
+    plugInPad();
+    QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
+    QVERIFY2(note->text().contains("takes over when the keys stop"), qPrintable(note->text()));
+    QVERIFY2(note->text().contains("Use the controller"), qPrintable(note->text()));
     QVERIFY(back->isVisible());
+    QTRY_COMPARE_WITH_TIMEOUT(s->inputDevice(), FocusSession::ControllerInput, 3000);
+    QVERIFY2(note->text().startsWith("Controller back"), qPrintable(note->text()));
+    QVERIFY(!back->isVisible());
+    s->discardAll();
+}
+
+void FocusMode_Test::aChosenKeyboardIsKeptAndSaysWhatToPress()
+{
+    // The keyboard chosen: a pad that connects is not forced on anyone.
+    FocusModePanel::rememberInput(FocusSession::KeyboardInput);
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    panel->show();
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    plugInPad();
+    QCOMPARE(s->inputDevice(), FocusSession::KeyboardInput);
+    QLabel *note = panel->findChild<QLabel *>("focusInputNote");
+    QPushButton *back = panel->findChild<QPushButton *>("focusControllerBack");
+    QVERIFY(note->isVisible());
+    QVERIFY2(note->text().contains("click Use the controller"), qPrintable(note->text()));
+    QVERIFY(back->isVisible());
+    QStringList lines;
+    for (const QList<QVariant> &l : said)
+        lines << l.at(0).toString();
+    QVERIFY2(lines.contains("Keyboard in use. Click Use the controller to switch."),
+             qPrintable(lines.join(" | ")));
     back->click();
     QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
-    panel->close();
+}
+
+void FocusMode_Test::theSetupWithNoPadIsNotAChoice()
+{
+    /* With no controller the setup offers only the keyboard: that is not
+       remembered (it was: a pad asleep once made every later session start
+       on the keyboard, the pad ignored), and says the pad takes over. */
+    {
+        FocusModeSetupDialog setup(m_doc, Function::invalidId(), m_heads);
+        QCOMPARE(setup.inputDevice(), FocusSession::KeyboardInput);
+        QVERIFY(!setup.inputChosen());
+        QComboBox *use = setup.findChild<QComboBox *>("focusInput");
+        QVERIFY2(use->currentText().contains("takes over when it connects"),
+                 qPrintable(use->currentText()));
+    }
+    plugInPad();
+    {
+        FocusModeSetupDialog setup(m_doc, Function::invalidId(), m_heads);
+        QVERIFY(setup.inputChosen());
+    }
+    // An old setting from before is not read: the controller, when there.
+    QSettings().setValue("focusmode/input", "keyboard");
+    QCOMPARE(FocusModePanel::defaultInput(m_doc), FocusSession::ControllerInput);
 }
 
 namespace

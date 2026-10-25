@@ -1164,7 +1164,13 @@ picks which device drives the nudges and which map is shown.
   connected (its profile names the buttons it needs), otherwise
   **Keyboard**. The choice you make is remembered on this computer: once
   you pick Keyboard, Quick focus starts on the keyboard until you pick the
-  controller again.
+  controller again. With no controller connected there is no choice to
+  make, so none is remembered.
+- **No controller connected** (switched off, asleep, not paired): Quick
+  focus starts on the keyboard and says so, on the panel and aloud — "No
+  controller connected. Using the keyboard." — whatever the Feedback
+  setting. Switch the pad on (press its Xbox or PS button) and it takes
+  over by itself: "Controller back."
 - **On the keyboard,** the map shows the keys Quick focus uses, each
   labelled with its action, and each lights while it is pressed (below,
   ⇧ and ↑). A controller that is also connected is **ignored** — its
@@ -1172,9 +1178,14 @@ picks which device drives the nudges and which map is shown.
   cannot drift a head.
 - **The keys work either way.** With the controller chosen, every keyboard
   shortcut in the table above still works.
-- **If the controller disconnects** in the middle of a session, Quick focus
-  switches to the keyboard and says so. When it comes back, the panel
-  offers **Use the controller**; it does not switch back on its own.
+- **If the controller disconnects** in the middle of a session (unplugged,
+  out of range, its own auto-off), Quick focus switches to the keyboard and
+  says so: "Controller lost. Lights held." When it comes back it takes over
+  again by itself and says "Controller back." — unless you are nudging
+  with the keys at that moment (then once they have been still for a
+  second; **Use the controller** switches at once), or you chose
+  **Keyboard** (then the panel and the voice say to click **Use the
+  controller**; the controller is not forced on you).
 
 ![Quick focus's keyboard map, with Shift and Up held](../images/focus-mode-keyboard-map.png)
 
