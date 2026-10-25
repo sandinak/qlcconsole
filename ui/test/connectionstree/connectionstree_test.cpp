@@ -2277,10 +2277,22 @@ struct EditorSpy
 /* A double-click as a hand makes one: press, release, then the second press
    arriving as the double-click, and its release -- sent straight to the
    list, so nothing in between makes a second double-click of it. */
-void doubleClickRow(ConnectionsTree &tree, QTreeWidgetItem *row)
+bool doubleClickRow(ConnectionsTree &tree, QTreeWidgetItem *row)
 {
+    /* On screen first: laid out, scrolled to, and really the row under
+       the point clicked -- a runner's offscreen screen lays the list out
+       later than a desktop's. */
+    tree.m_tree->scrollToItem(row);
+    QApplication::processEvents();
+    tree.m_tree->doItemsLayout();
     QWidget *vp = tree.m_tree->viewport();
     const QPoint at = tree.m_tree->visualItemRect(row).center();
+    if (tree.m_tree->itemAt(at) != row)
+    {
+        qWarning() << "row" << row->text(0) << "is not under" << at
+                   << tree.m_tree->visualItemRect(row) << vp->size();
+        return false;
+    }
     const QPointF global = vp->mapToGlobal(QPointF(at));
     auto send = [vp, at, global](QEvent::Type type, Qt::MouseButtons held) {
         QMouseEvent ev(type, QPointF(at), global, Qt::LeftButton, held, Qt::NoModifier);
@@ -2292,6 +2304,7 @@ void doubleClickRow(ConnectionsTree &tree, QTreeWidgetItem *row)
     send(QEvent::MouseButtonDblClick, Qt::LeftButton);
     send(QEvent::MouseButtonRelease, Qt::NoButton);
     QApplication::processEvents();
+    return true;
 }
 
 QString settingsPage(ConnectionEditor &ed)
@@ -2316,13 +2329,17 @@ void ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection()
     QVERIFY(iom->setOutputPatch(2, stub->name(), "", 0, false, 0));
     ConnectionsTree tree(m_doc);
     showUniverseList(tree);
+    /* The five-second rebuild replaces every row: on a slow runner it fired
+       between finding a row and clicking it, and the click landed on a row
+       that was no longer there (or collapsed). Not what this tests. */
+    tree.m_refreshTimer->stop();
 
     // A patched universe: its window, on its protocol.
     {
         EditorSpy spy;
         QTreeWidgetItem *row = universeRow(tree.m_tree, 2);
         QVERIFY(row != NULL);
-        doubleClickRow(tree, row);
+        QVERIFY(doubleClickRow(tree, row));
         QCOMPARE(spy.opened, 1);
         QCOMPARE(spy.universe, quint32(2));
         QCOMPARE(spy.protocol, QString("ArtNet"));
@@ -2336,7 +2353,7 @@ void ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection()
         EditorSpy spy;
         QTreeWidgetItem *row = universeRow(tree.m_tree, 5);
         QVERIFY(row != NULL);
-        doubleClickRow(tree, row);
+        QVERIFY(doubleClickRow(tree, row));
         QCOMPARE(spy.opened, 1);
         QCOMPARE(spy.universe, quint32(5));
         QCOMPARE(spy.protocol, QString());
@@ -2346,17 +2363,19 @@ void ConnectionsTree_Test::doubleClickingAUniverseOpensItsConnection()
     tree.m_byUniverse->setChecked(false);
     tree.refresh();
     QApplication::processEvents();
+    /* Its OUTPUT row (the first, if the tree lists it more than once),
+       its branches opened. */
     QTreeWidgetItem *wired = NULL;
     foreach (QTreeWidgetItem *it, itemsOfKind(tree.m_tree, KIND_UNIVERSE))
-        if (it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 2)
+        if (wired == NULL && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 2
+                && it->data(COL_NAME, ROLE_OUTPUT).toBool())
             wired = it;
     QVERIFY(wired != NULL);
     for (QTreeWidgetItem *p = wired->parent(); p != NULL; p = p->parent())
         p->setExpanded(true);
-    tree.m_tree->scrollToItem(wired);
     {
         EditorSpy spy;
-        doubleClickRow(tree, wired);
+        QVERIFY(doubleClickRow(tree, wired));
         QCOMPARE(spy.opened, 1);
         QCOMPARE(spy.universe, quint32(2));
     }
