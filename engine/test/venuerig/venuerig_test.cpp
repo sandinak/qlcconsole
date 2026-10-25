@@ -665,6 +665,22 @@ void VenueRig_Test::theClashCheck()
 
 void VenueRig_Test::notOursIsNeverSent()
 {
+    // How a range is typed: 1-based, a hyphen or an en dash, one address.
+    int from = 0, to = 0;
+    QVERIFY(VenueRig::parseRange(QStringLiteral("401-512"), from, to));
+    QCOMPARE(from, 400);
+    QCOMPARE(to, 511);
+    QVERIFY(VenueRig::parseRange(QStringLiteral(" 5 \u2013 8 "), from, to));
+    QCOMPARE(from, 4);
+    QCOMPARE(to, 7);
+    QVERIFY(VenueRig::parseRange(QStringLiteral("12"), from, to));
+    QCOMPARE(from, 11);
+    QCOMPARE(to, 11);
+    QVERIFY(!VenueRig::parseRange(QStringLiteral("0-4"), from, to));
+    QVERIFY(!VenueRig::parseRange(QStringLiteral("9-3"), from, to));
+    QVERIFY(!VenueRig::parseRange(QStringLiteral("500-513"), from, to));
+    QVERIFY(!VenueRig::parseRange(QStringLiteral("stage left"), from, to));
+
     VenueCorrections *v = venues(m_doc);
     InputOutputMap *iom = m_doc->inputOutputMap();
     IOPluginStub *plugin = stub(m_doc);

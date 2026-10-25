@@ -317,7 +317,7 @@ void VenueRigDialog::refresh()
     m_clashes->clear();
     for (const VenueRig::Clash &c : vc->clashes(m_venue))
     {
-        QListWidgetItem *it = new QListWidgetItem(QStringLiteral("%1 \342\200\224 %2")
+        QListWidgetItem *it = new QListWidgetItem(QStringLiteral("%1 — %2")
                                                   .arg(VenueRig::kindName(c.kind), c.text), m_clashes);
         it->setData(Qt::UserRole, int(c.kind));
     }

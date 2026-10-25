@@ -808,7 +808,7 @@ bool VenueRig::parseRange(const QString &text, int &from, int &to)
         from = to = -1;
         return true;
     }
-    static const QRegularExpression re(QStringLiteral("^(\\d+)\\s*(?:[-\342\200\223]\\s*(\\d+))?$"));
+    static const QRegularExpression re(QStringLiteral("^(\\d+)\\s*(?:[-–]\\s*(\\d+))?$"));
     const QRegularExpressionMatch m = re.match(t);
     if (!m.hasMatch())
         return false;
