@@ -394,7 +394,7 @@ void VirtualConsole::initActions()
 
     m_addCueRunnerAction = new QAction(QIcon(":/chaser.png"), tr("New Cue Runner"), this);
     m_addCueRunnerAction->setObjectName(QStringLiteral("vcAddCueRunner"));
-    m_addCueRunnerAction->setToolTip(tr("The Show Tree's cue runner: GO, Sub GO and what changes, for the current "
+    m_addCueRunnerAction->setToolTip(tr("A Cue Runner: the Show Tree's GO, Sub GO and what changes, for the current "
                                         "production or one cue list"));
     connect(m_addCueRunnerAction, SIGNAL(triggered(bool)), this, SLOT(slotAddCueRunner()), Qt::QueuedConnection);
 
@@ -1128,6 +1128,37 @@ void VirtualConsole::slotAddCueRunner()
     VCCueRunner* cr = new VCCueRunner(parent, m_doc);
     setupWidget(cr, parent);
     m_doc->setModified();
+}
+
+bool VirtualConsole::usesShowTree() const
+{
+    if (m_contents == NULL || m_doc == NULL)
+        return false;
+    const ShowTreeController *st = m_doc->showTree();
+    auto madeByTree = [st](quint32 fid) {
+        return st != nullptr && fid != Function::invalidId() && st->isLocked(fid);
+    };
+    foreach (VCWidget *w, m_contents->findChildren<VCWidget *>())
+    {
+        if (w->type() == VCWidget::CueRunnerWidget)
+            return true;
+        if (VCButton *b = qobject_cast<VCButton *>(w))
+        {
+            if (madeByTree(b->function()))
+                return true;
+        }
+        else if (VCCueList *cl = qobject_cast<VCCueList *>(w))
+        {
+            if (madeByTree(cl->chaserID()))
+                return true;
+        }
+        else if (VCSlider *sl = qobject_cast<VCSlider *>(w))
+        {
+            if (sl->sliderMode() == VCSlider::Playback && madeByTree(sl->playbackFunction()))
+                return true;
+        }
+    }
+    return false;
 }
 
 VCWidget *VirtualConsole::swapWidget(VCWidget *widget)

@@ -152,7 +152,7 @@ QString VCWidget::typeToString(int type)
         case AnimationWidget: return QString(tr("Animation"));
         case ClockWidget: return QString(tr("Clock"));
         case ShowControlWidget: return QString(tr("Show control"));
-        case CueRunnerWidget: return QString(tr("Cue runner"));
+        case CueRunnerWidget: return QString(tr("Cue Runner"));
         case UnknownWidget:
         default:
              return QString(tr("Unknown"));

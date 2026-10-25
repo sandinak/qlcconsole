@@ -342,6 +342,13 @@ their house lights, relays and subs.
   into palettes. **Upgrade** does the ticked parts as one undo step;
   **Restore original…** puts a chaser back. Nothing happens on its own.
   After an upgrade, a Classic QLC+ show is offered the qlcconsole view.
+- **Classic QLC+ says when a show uses the Show Tree.** A show whose
+  Virtual Console has a **Cue Runner**, or buttons that fire Show Tree
+  cue lists or hits, says so in the footer — *This show uses the Show
+  Tree. Open the qlcconsole view to edit it.* — with a button to switch.
+  It never switches for you, **×** puts it away until the show is next
+  opened, and the content still plays in Classic QLC+. See
+  [Views](getting-started.md#views).
   The **Run tab** of a show with no cue list says so and offers the same
   **Upgrade This Show…**; its GO is grey until there is something to play.
   See [Upgrade this show](show-tree.md#upgrade-this-show) and

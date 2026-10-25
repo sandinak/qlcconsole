@@ -1041,6 +1041,7 @@ void App::clearDocument()
     // A new show: the qlcconsole view (a loaded one sets its own, loadXML()).
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
+    m_showTreeNoticeDismissed = false;
     hideViewNotice();
     if (m_inputNotices != nullptr)
         m_inputNotices->reset();
@@ -4058,6 +4059,17 @@ void App::applyClassicChrome()
         m_statusStandby->hide();
     else
         slotUpdateStandby();
+    updateShowTreeNotice();
+}
+
+void App::updateShowTreeNotice()
+{
+    if (m_statusShowTreeNotice == nullptr)
+        return;
+    const bool show = m_workspaceView == ClassicView && !m_showTreeNoticeDismissed
+                      && VirtualConsole::instance() != NULL
+                      && VirtualConsole::instance()->usesShowTree();
+    m_statusShowTreeNotice->setVisible(show);
 }
 
 void App::updateWorkspaceViewActions()
@@ -4863,6 +4875,7 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     const QString viewKey = doc.attributes().value(KXMLQLCWorkspaceView).toString();
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
+    m_showTreeNoticeDismissed = false;      // P45: back each time the show opens
 
     while (doc.readNextStartElement())
     {
@@ -5003,6 +5016,7 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
 
     // Perform post-load operations
     VirtualConsole::instance()->postLoad();
+    updateShowTreeNotice();
 
     /* What went wrong loading it: in the footer with every other problem,
        where it stays until it is fixed -- not a dialog seen once and gone
@@ -5863,6 +5877,40 @@ void App::initStatusBar()
     m_statusUpdateLabel = new QLabel(this);
     m_statusUpdateLabel->hide();
     sb->addWidget(m_statusUpdateLabel, 0);
+
+    // P45, Classic QLC+ only: the Virtual Console plays Show Tree content
+    // (a Cue Runner, buttons on cue lists or hits), which only the
+    // qlcconsole view edits. Says so, offers the switch, never makes it.
+    {
+        m_statusShowTreeNotice = new QFrame(this);
+        m_statusShowTreeNotice->setObjectName(QStringLiteral("footerShowTreeNotice"));
+        m_statusShowTreeNotice->setProperty("helpTopic", QStringLiteral("getting-started.md#views"));
+        QHBoxLayout *row = new QHBoxLayout(m_statusShowTreeNotice);
+        row->setContentsMargins(4, 0, 0, 0);
+        row->setSpacing(4);
+        QLabel *text = new QLabel(tr("This show uses the Show Tree. Open the qlcconsole view to edit it."),
+                                  m_statusShowTreeNotice);
+        text->setObjectName(QStringLiteral("footerShowTreeNoticeText"));
+        row->addWidget(text);
+        m_statusShowTreeButton = new QPushButton(tr("Switch to the qlcconsole view"), m_statusShowTreeNotice);
+        m_statusShowTreeButton->setObjectName(QStringLiteral("footerShowTreeNoticeButton"));
+        row->addWidget(m_statusShowTreeButton);
+        QToolButton *close = new QToolButton(m_statusShowTreeNotice);
+        close->setObjectName(QStringLiteral("footerShowTreeNoticeClose"));
+        close->setText(QStringLiteral("×"));
+        close->setAutoRaise(true);
+        close->setToolTip(tr("Dismiss (it comes back when the show is next opened)"));
+        row->addWidget(close);
+        connect(m_statusShowTreeButton, &QPushButton::clicked, this, [this]() {
+            setWorkspaceView(ConsoleView);
+        });
+        connect(close, &QToolButton::clicked, this, [this]() {
+            m_showTreeNoticeDismissed = true;
+            updateShowTreeNotice();
+        });
+        m_statusShowTreeNotice->hide();
+        sb->addWidget(m_statusShowTreeNotice, 0);
+    }
     if (m_noGui == false)
     {
         m_updateManager = new UpdateManager(m_doc, this);

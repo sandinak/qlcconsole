@@ -73,6 +73,9 @@
 #define private public
 #define protected public
 #include "virtualconsole.h"
+#include "vcframe.h"
+#include "vcbutton.h"
+#include "vccuerunner.h"
 #include "fixturemanager.h"
 #include "inputoutputmanager.h"
 #include "timecodesource.h"
@@ -2440,6 +2443,117 @@ void AppViews_Test::upgradingAClassicShowOffersTheConsoleView()
     QVERIFY(!m_app->m_viewNotice->isVisible());
     view->setConverterRunner(nullptr);
     m_app->hide();
+    m_app->clearDocument();
+}
+
+void AppViews_Test::aShowTreeShowSaysSoInClassic()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ClassicView, false);
+    QWidget *notice = m_app->m_statusShowTreeNotice;
+    QPushButton *button = m_app->m_statusShowTreeButton;
+    QVERIFY(notice != nullptr);
+    QVERIFY(button != nullptr);
+    QToolButton *close = notice->findChild<QToolButton *>("footerShowTreeNoticeClose");
+    QVERIFY(close != nullptr);
+    QLabel *text = notice->findChild<QLabel *>("footerShowTreeNoticeText");
+    QVERIFY(text != nullptr);
+    QCOMPARE(text->text(), QString("This show uses the Show Tree. Open the qlcconsole view to edit it."));
+    QCOMPARE(button->text(), QString("Switch to the qlcconsole view"));
+
+    // Classic stays stock QLC+: no Show Tree or Run tab.
+    const QStringList classicTabs = App::workspaceViewTabs(App::ClassicView);
+    QVERIFY(!classicTabs.contains("Show Tree"));
+    QVERIFY(!classicTabs.contains("Run"));
+    QVERIFY(!classicTabs.contains("Build"));
+
+    // A plain QLC+ console: nothing to say.
+    VirtualConsole *vc = VirtualConsole::instance();
+    VCFrame *contents = vc->contents();
+    Scene *plain = new Scene(m_app->doc());
+    QVERIFY(m_app->doc()->addFunction(plain));
+    VCButton *button1 = new VCButton(contents, m_app->doc());
+    vc->placeWidget(button1, contents);
+    button1->setFunction(plain->id());
+    m_app->updateShowTreeNotice();
+    QVERIFY(notice->isHidden());
+    QVERIFY(!vc->usesShowTree());
+
+    // A button on a Show Tree cue list: said, in Classic only.
+    ShowTreeController *st = m_app->doc()->showTree();
+    const quint32 prod = st->addProduction("Spring Show");
+    const quint32 list = st->addCueList(prod, "Act 1");
+    st->addCue(list, -1, "Preset");
+    st->addCue(list, 0, "Lights up");
+    const quint32 chaserId = st->cueList(list)->chaser;
+    QVERIFY(st->isGenerated(chaserId));
+    VCButton *button2 = new VCButton(contents, m_app->doc());
+    vc->placeWidget(button2, contents);
+    button2->setFunction(chaserId);
+    QVERIFY(vc->usesShowTree());
+    m_app->updateShowTreeNotice();
+    QVERIFY(!notice->isHidden());
+    m_app->setWorkspaceView(App::EverythingView, false);
+    QVERIFY(notice->isHidden());
+    m_app->setWorkspaceView(App::ClassicView, false);
+    QVERIFY(!notice->isHidden());
+
+    // Saved and opened again: said on opening.
+    QTemporaryDir dir;
+    const QString path = dir.filePath("treeinclassic.qxw");
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    m_app->clearDocument();
+    QVERIFY(notice->isHidden());            // a new show: qlcconsole, no content
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+    QVERIFY(!notice->isHidden());
+
+    // ×: put away for this opening, through view changes ...
+    close->click();
+    QVERIFY(notice->isHidden());
+    m_app->setWorkspaceView(App::ConsoleView, false);
+    m_app->setWorkspaceView(App::ClassicView, false);
+    QVERIFY(notice->isHidden());
+    // ... and back the next time the show is opened.
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(!notice->isHidden());
+
+    // Without the buttons, a Cue Runner alone says it too.
+    st = m_app->doc()->showTree();
+    foreach (VCWidget *w, vc->contents()->findChildren<VCButton *>())
+        vc->removeWidget(w);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    m_app->updateShowTreeNotice();
+    QVERIFY(notice->isHidden());
+    VCCueRunner *runner = new VCCueRunner(vc->contents(), m_app->doc());
+    vc->placeWidget(runner, vc->contents());
+    quint32 loadedList = ShowTree::invalidId();
+    for (const ShowTree::Production &p : st->productions())
+        for (const ShowTree::CueList &l : p.lists)
+            if (l.name == "Act 1")
+                loadedList = l.id;
+    QVERIFY(loadedList != ShowTree::invalidId());
+    runner->setFollow(loadedList);
+    m_app->updateShowTreeNotice();
+    QVERIFY(!notice->isHidden());
+
+    // It still plays in Classic: GO runs the list's chaser.
+    Chaser *ch = runner->runner()->chaser();
+    QVERIFY(ch != nullptr);
+    QVERIFY(!ch->isRunning());
+    runner->trigger(VCCueRunner::Go);
+    QTRY_VERIFY(ch->isRunning());
+    runner->trigger(VCCueRunner::Stop);
+    QTRY_VERIFY(!ch->isRunning());
+    m_app->hideViewNotice();               // GO in Design offers Operate
+
+    // The button: the qlcconsole view, and the line goes.
+    button->click();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QVERIFY(notice->isHidden());
+    QVERIFY(m_app->tabInView("Show Tree"));
+
     m_app->clearDocument();
 }
 

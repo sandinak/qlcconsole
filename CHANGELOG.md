@@ -419,6 +419,18 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   **New Folder** (named in place), a folder for **New Folder Inside**.
   Tower shelves are not rows of their own.
 
+- **Classic QLC+ says when a show uses the Show Tree** (RC2, board P45).
+  A show whose Virtual Console plays Show Tree content -- a **Cue
+  Runner**, or a button, Cue List or slider on a function the Show Tree
+  made (a cue list, a hit; `VirtualConsole::usesShowTree()`) -- shows, in
+  the Classic QLC+ footer, *This show uses the Show Tree. Open the
+  qlcconsole view to edit it.* with **Switch to the qlcconsole view**
+  (`App::updateShowTreeNotice()`). Never forced; **×** puts it away until
+  the show is next opened. The content still plays in Classic QLC+, whose
+  tabs stay stock (no Show Tree or Run). The VC widget is called **Cue
+  Runner** everywhere (its type name read "Cue runner", the Add menu's
+  tooltip "the Show Tree's cue runner").
+
 ### Changed
 
 - **Locks are per object and per layer again** (RC2). An object's own lock

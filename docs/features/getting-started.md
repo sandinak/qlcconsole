@@ -126,6 +126,15 @@ puts it away instead of back on the tab bar. After **File ▸ Upgrade This
 Show…** gives a Classic QLC+ show a Show Tree, a line above the tabs
 offers the **qlcconsole** view, once.
 
+A show whose Virtual Console plays Show Tree content (a **Cue Runner**, or
+a button, Cue List or slider on a Show Tree cue list or hit) says so in the
+Classic QLC+ footer: *This show uses the Show Tree. Open the qlcconsole
+view to edit it.* Its **Switch to the qlcconsole view** button changes the
+view; nothing changes it for you. **×** puts the line away until the show
+is next opened. In Classic QLC+ that content still plays (GO on a Cue
+Runner, a hit's button); only editing it needs the qlcconsole view, where
+the Show Tree and Run tabs are.
+
 **Window** lists the view's tabs in their order, numbered as you see them:
 ⇧⌘1 is the first tab on screen, ⇧⌘2 the next, and so on (⇧⌘0 the tenth).
 Change the view and the numbers follow it; in the qlcconsole view

@@ -138,6 +138,12 @@ private slots:
     /** File ▸ Upgrade This Show… on a Classic show: offered (once) the
      *  qlcconsole view, as a quiet line with a button. */
     void upgradingAClassicShowOffersTheConsoleView();
+    /** P45: Classic QLC+ with Show Tree content on the Virtual Console (a
+     *  Cue Runner, a button on a Show Tree list): a footer line and a button
+     *  to the qlcconsole view; none without such content or in another
+     *  view; × puts it away until the show is next opened; it still plays,
+     *  and Classic's tabs stay stock. */
+    void aShowTreeShowSaysSoInClassic();
     /** Q63: auto-open shutters for a show saved without the setting: off
      *  for a QLC+ 4.x show, on for one qlcconsole saved, on for a new show. */
     void autoOpenFollowsWhoSavedTheShow();

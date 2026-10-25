@@ -462,6 +462,10 @@ Findings that are not marked as bugs:
 | M487 | One connection window | A USB widget: the device page, Configure… opens the plugin's own window | **ConnectionsTree_Test::connectionEditorPatchesAUsbWidget** (new) | none | covered | med | Stub plugin named DMX USB |
 | M488 | One connection window | A port another universe sends to is refused and nothing changes | **ConnectionsTree_Test::connectionEditorRefusesATakenPortAndChangesNothing** (new) | none | covered | high | — |
 | M489 | One connection window | A universe's right-click has one Edit connection… and none of the editing entries it replaces; an unpatched one too | **ConnectionsTree_Test::aUniversesMenuHasOneEditConnection** (new); ConnectionsTree_Test::repatchAsksTheInterfaceAgain | none | covered | med | — |
+| M502 | Classic says it uses the Show Tree (P45) | In Classic QLC+, a VC button on a Show Tree cue list (or a Cue Runner) shows the footer line and its button; a plain QLC+ console, or another view, doesn't | **AppViews_Test::aShowTreeShowSaysSoInClassic** | — | covered | med | — |
+| M503 | Classic says it uses the Show Tree (P45) | × puts it away through view changes; it is back when the show is opened again (saved and loaded) | **AppViews_Test::aShowTreeShowSaysSoInClassic** | — | covered | low | — |
+| M504 | Classic says it uses the Show Tree (P45) | The button switches to the qlcconsole view and the line goes; Classic's tabs have no Show Tree, Run or Build | **AppViews_Test::aShowTreeShowSaysSoInClassic** | — | covered | low | — |
+| M505 | Classic says it uses the Show Tree (P45) | A Cue Runner's GO still plays its list's chaser in Classic QLC+ | **AppViews_Test::aShowTreeShowSaysSoInClassic** | — | covered | high | Only GO and Stop; the Cue Runner's full actions are CueRunner_Test's |
 
 ## Changed
 

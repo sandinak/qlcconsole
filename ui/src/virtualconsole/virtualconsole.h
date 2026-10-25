@@ -364,6 +364,11 @@ public:
      *  Runner on it, a Cue Runner a Cue List of its chaser -- in place
      *  (geometry, page, caption). The new widget (null: not swappable). */
     VCWidget *swapWidget(VCWidget *widget);
+    /** Whether the console plays Show Tree content (P45): a Cue Runner, or a
+     *  button, Cue List or slider on a function the Show Tree made (a cue
+     *  list, a hit) -- what only the Show Tree edits. Classic QLC+ says so
+     *  in its footer. */
+    bool usesShowTree() const;
     /** Take @a widget (and its children) off the console as Delete does,
      *  without asking (the Show Tree's Make VC page, a look gone). */
     void removeWidget(VCWidget *widget);

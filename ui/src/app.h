@@ -186,6 +186,11 @@ public:
     /** After Upgrade This Show… on a Classic show that now has a Show Tree:
      *  offer (once per show) the qlcconsole view. True: offered. */
     bool offerConsoleViewAfterUpgrade();
+    /** P45: in Classic QLC+, a show whose Virtual Console plays Show Tree
+     *  content (VirtualConsole::usesShowTree()) says so in the footer, with
+     *  a button to the qlcconsole view. Never forced; × puts it away until
+     *  the show is next opened. Run on every view change and load. */
+    void updateShowTreeNotice();
     /** Q92: the first GO pressed in Design this session (Run tab or Control
      *  ▸ GO) offers Operate in the notice bar. Once a session. */
     void offerOperateAfterGo();
@@ -884,6 +889,11 @@ private:
     /** "Update available: 0.1.1" -- driven by m_updateManager, hidden while
      *  there is nothing to say; a click opens Software Update. */
     QLabel* m_statusUpdateLabel = nullptr;
+    /** updateShowTreeNotice(): the footer's "This show uses the Show Tree"
+     *  line, its button, and whether × put it away for this opening. */
+    class QFrame *m_statusShowTreeNotice = nullptr;
+    class QPushButton *m_statusShowTreeButton = nullptr;
+    bool m_showTreeNoticeDismissed = false;
     /** Persistent Design/Operate indicator — the toolbar's mode-toggle
      *  button/icon always shows the mode a click would switch TO, not the
      *  current one (standard play/pause-style affordance), so there was no
