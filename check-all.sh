@@ -115,7 +115,8 @@ if [ -z "${GATE_REV:-}" ] && [ "$(git -C "$REPO" rev-parse --show-toplevel 2>/de
    && GATE_REV=$(git -C "$REPO" rev-parse HEAD 2>/dev/null); then
     git -C "$REPO" diff --quiet HEAD -- 2>/dev/null || GATE_REV="$GATE_REV-dirty"
 fi
-GATE_REV="${GATE_REV:-unknown}"
+# Short hashes, as git shows them: twelve digits, plus -dirty.
+GATE_REV=$(echo "${GATE_REV:-unknown}" | sed -E 's/^([0-9a-f]{12})[0-9a-f]*/\1/')
 
 LAUNCHER=()
 if [ -z "${NO_CCACHE:-}" ] && command -v ccache >/dev/null 2>&1; then
@@ -206,6 +207,18 @@ if [ ! -d "$QT6" ]; then
             say "SKIP ${LEG_NAME[i]}: $QT6 not installed (set QT6_PREFIX)"
         fi
     done
+fi
+
+# The tests' staging checks every fixture definition with xmllint and with a
+# python3 that has lxml (resources/fixtures/scripts/). Without one, every leg
+# builds for minutes and then runs no tests at all -- say so now. (macOS's
+# /usr/bin/python3 has no lxml; an ssh session's PATH can find that one.)
+if ! command -v xmllint >/dev/null 2>&1 || ! python3 -c 'import lxml.etree' >/dev/null 2>&1; then
+    echo >&2 "check-all.sh: the fixture check needs xmllint and a python3 with lxml; here python3 is"
+    echo >&2 "  $(command -v python3 || echo missing)$(python3 -c 'import lxml' >/dev/null 2>&1 || echo ', without lxml') -- put one first on PATH (or: python3 -m pip install --user lxml)"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "No python3 with lxml (or no xmllint) on PATH: nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
 fi
 
 echo "Gate in $REPO on $GATE_HOST: $JOBS cores, Qt $QT_VERSION at $QT6, $CCACHE_STATE; logs in $LOGS"
@@ -493,8 +506,7 @@ done
 [ "$NRUN" -eq 0 ] && GATE=1
 
 {
-    # Short hashes, as git shows them: twelve digits, plus -dirty.
-    echo "gate=$GATE host=$GATE_HOST qt=$QT_VERSION rev=$(echo "$GATE_REV" | sed -E 's/^([0-9a-f]{12})[0-9a-f]*/\1/')"
+    echo "gate=$GATE host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
     echo "Timings ($JOBS cores, $CCACHE_STATE$([ "$QUICK" = 1 ] && echo ", QUICK"); the legs overlap, so the columns don't add up):"
     for ((i = 0; i < NLEGS; i++)); do
         [ -n "${RESULT[i]}" ] || continue
