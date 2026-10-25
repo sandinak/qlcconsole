@@ -679,6 +679,11 @@ void Updates_Test::checkOffline()
 
     UpdateChecker c;
     c.setApiUrl(QUrl(QStringLiteral("http://127.0.0.1:%1/releases").arg(port)));
+    // Qt 6.11 and later report the refusal at once. Qt 6.9 (the official
+    // Qt the release is built with) keeps trying until the transfer
+    // timeout -- 15 s by default, past this wait; on val's gate it never
+    // finished in time. Offline either way, so a short timeout here.
+    c.setTimeout(2000);
     QSignalSpy spy(&c, &UpdateChecker::checkFinished);
     c.check();
     QVERIFY(spy.wait(10000));

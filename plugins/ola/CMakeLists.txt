@@ -26,6 +26,14 @@ target_compile_definitions(${module_name} PRIVATE
     _LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR
     _LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION
 )
+# ...and they are still deprecated. Where OLA's headers are in the
+# compiler's own /usr/local/include (Homebrew on an Intel Mac: CMake drops it
+# from -isystem as an implicit dir), clang reports them as our code's, and
+# check-all.sh's Werror leg (-Werror=deprecated-declarations) failed inside
+# OLA. Warnings, not errors, for this plugin.
+target_compile_options(${module_name} PRIVATE
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-error=deprecated-declarations>
+)
 
 target_sources(${module_name} PRIVATE
     ../interfaces/qlcioplugin.cpp ../interfaces/qlcioplugin.h
