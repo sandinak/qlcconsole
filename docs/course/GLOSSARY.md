@@ -122,7 +122,9 @@ brackets.
 | **House rig / tour package** | The lights a room already has / the lights that travel with the show. [3.6] |
 | **Owner** | Whose a light is: **Tour** (travels with the show; the default), **Rental** (hired, travels too) or **House** (the room's own, saved with that venue). [3.6] |
 | **Focus report** | The record of a focus: every light, its point, its correction, who checked it and when, and any dead lamp. [3.6] |
-| **Scramble** | A practice: every moving light is put off its mark by a few degrees, and you focus them back for a score. [3.6] |
-| **Refine** | Changing a cue's own values (position, zoom, focus, colour, gobo) from the stage with the controller. Focusing fixes the rig for a room; Refine changes the cue for every room. [3.6] |
+| **Scramble** | A practice: every moving light is knocked off its target by a random amount, and you focus them back, scored on degrees off, time and saves. Your real venues are never touched. [3.6] |
+| **Focus this cue** | Changing a cue's own values (position, zoom, focus, colour, gobo) from the stage with the controller (on a Build scene: Focus this look). Venue focus fixes the rig for a room; Focus this cue changes the cue for every room. [3.6] |
+| **Quick focus** | Setting the rig's own calibration, a head at a time, into the show. [3.6] |
+| **Venue focus** | Running the show's focus calls in a new room, the corrections kept for that venue. [3.6] |
 | **Special circuit** | On an Eos desk, a channel that isn't a stage light: a relay, house lights, work lights, backstage blues. [3.10] |
 | **Sub (submaster)** | On an Eos desk, a fader that brings up a set of levels by hand. An imported sub becomes a Virtual Console fader. [3.10] |

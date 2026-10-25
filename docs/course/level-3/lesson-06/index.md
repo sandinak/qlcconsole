@@ -11,7 +11,7 @@ Before a show plays in a room, every light has to land where the design
 says. Students read the stage marks, write the show's focus calls, run
 them from the controller, and keep the corrections for the venue. The
 scored exercise is a scrambled rig focused back; the hand-in is its
-focus report. Refine closes the lesson: the same controller changing a
+focus report. Focus this cue closes the lesson: the same controller changing a
 cue instead of the rig.
 
 | For | File |

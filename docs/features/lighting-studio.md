@@ -66,25 +66,26 @@ So dragging a drape reads its centre line on the ruler.
 
 ### Stage marks: centre line, curtain line, number line
 
-![The plot with the stage marks on: the centre mark and dashed centre line, the curtain line with the apron tinted and dimensioned in front of it, the DS truss and the FOH truss labelled with their distance downstage of the curtain line, and the number line along the front of a rounded apron](../images/lighting-studio-stage-marks.png)
+![The plot with the stage pieces on: the centre mark and dashed centre line, the curtain line selected, the apron as its own rounded deck in front of it with its depth dimensioned, the FOH truss labelled with its distance downstage of the curtain line, and the number line along the front of the apron](../images/lighting-studio-stage-marks.png)
 
-The plot's **Show ▸ Stage marks** menu draws the marks a crew spikes and
-focuses by. Each one is a tick in the menu:
+The marks a crew spikes and focuses by are **stage pieces**: objects on
+the plot, on their own **Stage** layer in the Plot layers panel. Each one
+has a row there with its own eye (shown or hidden) and lock, and the
+layer's eye and lock work on all of them at once, like any layer. The
+Stage layer can be hidden and locked but not removed, and new things are
+never put on it.
 
-- **Centre mark (DSC):** a spike on the front edge of the stage at centre,
-  labelled **CL** straight over it. When the number line runs through the
-  spike, the number line's own **CL** labels it.
-- **Centre line, full depth:** the centre line, dashed, from the front of the
-  stage to the back. It takes the place of the teal centre cross's
-  up-and-down line, which isn't drawn while it's on; the cross's line across
-  the stage, at half the grid's depth, stays.
+- **Centre line / DSC mark:** a spike on the front edge of the stage at
+  centre, labelled **CL** straight over it, and, if you want it, the centre
+  line itself, dashed, from the front of the stage to the back. The full
+  line takes the place of the teal centre cross's up-and-down line, which
+  isn't drawn while it's on; the cross's line across the stage stays. When
+  the number line runs through the spike, the number line's own **CL**
+  labels it.
 - **Curtain line:** where the main curtain hangs, labelled **Curtain line**.
-  It's the stage's main reference (the plaster line). With it on, the plot
-  also shows the **apron**, the deck downstage of the curtain line, tinted,
-  with its depth at centre dimensioned from the curtain line to the front of
-  the stage (**Apron 1.8 m**). Every horizontal truss or pipe hung downstage of the
-  curtain line, like the FOH electric out over the audience, is labelled
-  with how far: **FOH · 4.2 m DS of curtain line**.
+  It's the stage's main reference (the plaster line). Every horizontal truss
+  or pipe hung downstage of it, like the FOH electric out over the audience,
+  is labelled with how far: **FOH · 4.2 m DS of curtain line**.
 - **Number line:** a line across the stage, ticked every foot or metre (the
   show's unit) and numbered out from centre, which is labelled **CL** (0 on
   the line), with **SR** on one end and **SL** on the other, so "SL 4 on the
@@ -93,45 +94,68 @@ focuses by. Each one is a tick in the menu:
   sits centred on its tick, the two sides mirror each other, and the long
   ticks fall only on numbered places: every 5 when every unit is numbered,
   otherwise on every number.
+- **Apron:** the stage downstage of the curtain line, as its own piece of
+  deck. See [The apron](#the-apron) below.
+
+**Selecting and dragging them.** Click a line on the plot to select it
+(a rubber band never picks them up, so dragging a selection box across the
+stage leaves them alone). Drag the **curtain line** or the **number line**
+up or downstage to move it; drag the **apron's front edge** to make it
+deeper or shallower. Each drag is one undo step. A locked piece, or one on a
+locked Stage layer, stays where it is. The centre line doesn't move: it's
+always the middle of the stage grid.
+
+**Properties.** Double-click a piece, or right-click it (on the plot or in
+Plot layers) and choose **Properties…**. Every distance is typed and shown in
+the show's unit, with what it means written under it:
+
+- **Curtain line:** **Auto**, or how far upstage of the front of the deck it
+  is. A negative distance puts it downstage of the front.
+- **Number line:** **Auto** (at the front of the stage), or how far
+  downstage of the curtain line it is (**1.5 m DS of curtain line**). A
+  negative distance puts it upstage of the curtain line.
+- **Apron:** **Auto**, or its **Depth** from the curtain line and its
+  **Front curve**.
+- **Centre line / DSC mark:** the mark, the full-depth line, or both.
+
+Each also has **Shown** and **Lock**. OK keeps the changes as one undo step;
+Cancel puts the stage back. The right-click menu has **Shown**, **Locked**
+and **Auto** as ticks too.
 
 **Where they go.** Centre is the middle of the stage grid, the same point
-as the teal centre lines. The **front of the stage** is the front of the
-deck at centre: the biggest platform across the centre line, plus an apron
-built as its own platform against its front, and the middle of a rounded
-front. A bare floor uses the front edge of the grid. The **curtain line**
-follows the most downstage **Main drape** across the centre line, or a
-**Proscenium** if there is no main drape. With neither, it sits 4 ft
-(1.2 m) upstage of the front of the stage. The **number line** sits at the
-front of the stage.
+as the teal centre lines. The **front of the deck** is the front of the main
+deck at centre: the biggest platform across the centre line, plus any
+platform butted against its front across the centre line, and the middle of
+a rounded front. A bare floor uses the front edge of the grid. The **front
+of the stage** is the front of the deck, or of the apron when it reaches
+further. On **Auto** the **curtain line** follows the most downstage **Main
+drape** across the centre line, or a **Proscenium** if there is no main
+drape; with neither, it sits 4 ft (1.2 m) upstage of the front of the deck.
+The **number line** sits at the front of the stage. A line you've set
+stays where it is on the plan: move a deck or the other line and it stays
+put, and the distance shown changes to match.
 
-**Moving them.** Below the ticks, **Curtain line** and **Number line** each
-have **Auto** and a distance, with what it means written under it. Untick
-**Auto** and type where the line goes, in the show's unit:
+#### The apron
 
-- **Curtain line:** how far upstage of the front of the stage it is. A
-  negative distance puts it downstage of the front.
-- **Number line:** how far downstage of the curtain line it is (**1.5 m DS of
-  curtain line**). A negative distance puts it upstage of the curtain line.
-  On **Auto** it sits at the front of the stage.
+![An apron's properties: Shown and Lock, Auto, its depth from the curtain line, and its front curve](../images/lighting-studio-apron-properties.png)
 
-Tick **Auto** again and the line goes back to following the stage. A line
-you've set stays where it is on the plan: move a deck or the curtain line
-and it stays put, and the distance shown changes to match. (Shows saved
-before the boxes took a distance keep their lines exactly where they were.)
+1. **Shown:** the apron and its deck, on the plot and in the Rig Overview.
+2. **Lock:** not dragged on the plot.
+3. **Auto:** the apron reaches the front of the main deck, with the deck's
+   own front curve.
+4. **Depth**, from the curtain line, in the show's unit.
+5. **Front curve:** how far the middle of its front reaches past its
+   corners; 0 is a straight front.
 
-**The apron.** The apron is whatever deck is downstage of the curtain line.
-To build one on a stage that has none, set **Apron depth** in the same menu
-to how deep it should be from the curtain line. That adds a platform in
-front of the main deck, as wide and as high as it, or resizes the one
-that's there; a depth the main deck already reaches without it takes the
-added platform away again. Each change is one undo step. You can also add
-the platform yourself: any platform whose back edge meets the deck's front
-(within 5 cm) across the centre line counts as part of the stage, so the
-front of the stage moves out to its front. If the curtain line has nothing
-to follow (no main drape or proscenium), setting the apron depth fixes it
-where it is first, so the curtain line doesn't move out with the new front.
-**Apron depth** is greyed out on a bare floor: there's no deck to build in
-front of.
+The apron is its own piece. It starts at the curtain line and runs
+downstage by its depth, as wide and as high as the main deck and in its
+colour (the stage grid's width, on the floor, with no deck), and its rounded
+front is right there at its front edge. It's real deck: drawn as deck on the
+plot, in every view, and in the Rig Overview from above, at 45° and in 3D
+whatever marks are on, and fixtures and figures stand on it. Move the curtain
+line and the apron moves with it, keeping its depth. It never borrows another
+platform: a riser butted against the front of the deck stays exactly as it
+is, whatever the apron's depth. Hiding the apron takes its deck away.
 
 **Where a target is, in crew terms.** Every stage target on the plot has a
 small readout under it giving where it is against these marks, in the show's
@@ -143,19 +167,21 @@ follows: **↑ 0.9 m**. Distances count from the number line, or from the
 curtain line when only the curtain line is shown. The readout is
 there whether or not the marks are shown, and it follows the target as you
 drag it. In the Rig Overview, the same readout sits at the feet of each
-figure and area, and under the person Focus mode stands where a fixed light
+figure and area, and under the person Quick focus stands where a fixed light
 lands, so it follows that spot as you nudge it. To hide the readouts, untick
-**Target positions** in **Show ▸ Stage marks**. It's on by default and
-saved with the show.
+**Show ▸ Target positions** on the plot's footer (or the Rig Overview's).
+It's on by default and saved with the show.
 
-They're drawn in the **Top** view, over the rig so they're never hidden
-and never in the way of a click. The **Rig Overview** draws them on its
-floor, from above and at 45°, at the height of the deck at the front of the
-stage, with the same apron tint and **Apron** dimension and the same
-**FOH · … DS of curtain line** labels by the trusses and pipes over the
-audience. In a small Rig Overview window it keeps the tint and the lines and
-leaves out those words, so they don't crowd the rig. They're saved with the
-show; an older show opens with them off.
+The lines are drawn in the **Top** view, over the rig so they're never
+hidden. The **Rig Overview** draws them on its floor, from above and at 45°,
+at the height of the deck at the front of the stage, with the same
+**Apron** dimension and the same **FOH · … DS of curtain line** labels by
+the trusses and pipes over the audience. In a small Rig Overview window it
+keeps the lines and leaves out those words, so they don't crowd the rig.
+Its **Plot layers** menu lists the pieces under **Stage**, each with a tick.
+They're saved with the show; an older show opens with them off, and a show
+saved with the old **Show ▸ Stage marks** menu opens with the same marks in
+the same places, the apron it tinted now its own deck on **Auto**.
 
 ### Front / Side — elevation, and count badges
 
@@ -183,10 +209,18 @@ the two coordinates that view has, the third shown as "—".
 
 ![Rig Overview: the whole rig in a free 45° 3D view](../images/lighting-studio-rig-overview-3d.png)
 
-Drag to swing the camera, shift-drag to pan, wheel to zoom. Toggle **Live**
-to shade fixtures by their actual current output, and **Beams** to draw
-light cones from anything currently emitting. This is the same rendering a
-per-structure editor's own Angled tab uses, just showing everything at once.
+Drag to swing the camera, shift-drag to pan, wheel to zoom; **Fit** puts
+the whole rig back in view. Toggle **Live** to shade fixtures by their
+actual current output, and **Beams** to draw light cones from anything
+currently emitting. This is the same rendering a per-structure editor's own
+Angled tab uses, just showing everything at once.
+
+**Its controls are along the foot**, in a footer bar like the Lighting
+Studio plot's: **Show** (with **Target positions**) and **Plot layers** on
+the left, then **Live**, **Beams**, **Room**, **Haze**, **Quality**,
+**GPU**, the frame rate, **Focus** and **Fit**, and **View** (Top, Front,
+Side, 45°) on the right, where the plot has its own View. The window's
+title bar moves and closes it as before.
 
 **It follows the Studio's layers.** Hide a layer in the Plot layers panel and
 everything on it — structures, scenery, stage figures and fixtures — leaves
@@ -214,7 +248,7 @@ pixels in those cells, and redraw as soon as it is saved. See
 the graphics card (Metal on a Mac, OpenGL elsewhere) when the machine has
 one; its **GPU** box turns that off, back to drawing on the processor —
 the same picture, slower, for a graphics driver that gets it wrong. The
-choice is remembered. The toolbar's **Quality** sets how sharply edges are
+choice is remembered. The footer's **Quality** sets how sharply edges are
 drawn: **Fast** draws at screen resolution, **Sharpest** at four times it
 each way (on the graphics card, as many samples a pixel as it offers) —
 on a 200-fixture show roughly 8 ms a frame at Fast against 14 ms at
@@ -889,7 +923,7 @@ block it.
 
 ### Haze
 
-The Rig Overview's toolbar has a **Haze** setting — **None / Light /
+The Rig Overview's footer bar has a **Haze** setting — **None / Light /
 Medium / Heavy** (click to cycle; Medium is the default). It sets how
 visible beams are *in the air*; where the light lands and what it lights
 don't change with it.
@@ -951,7 +985,7 @@ other light, and follow a mover's pan and tilt.
 ## Calibration offsets
 
 A moving head's **Pan offset** and **Tilt offset** (Fixture Properties →
-the rig box, or [Focus mode](#focus-mode)) correct the *physical* head: a
+the rig box, or [Quick focus](#quick-focus)) correct the *physical* head: a
 yoke bolted a few degrees round, a tilt that homes a little high. They are
 calibration, not design:
 
@@ -971,16 +1005,39 @@ use them.
 
 **Test orientation → Aim at target** in Fixture Properties points the head
 the way an Aim look would, offsets included, so you can set them by eye.
-For a whole rig, use Focus mode.
+For a whole rig, use Quick focus.
 
-## Focus mode
+## The Focus menu
+
+Every tool for focusing is on one drop-down on the Lighting Studio
+toolbar, **Focus ▾**, beside **Add ▾**:
+
+- **Quick focus…** — the rig, a head at a time, into the show's own
+  calibration ([below](#quick-focus)).
+- **Venue focus…** — the show's focus calls, for the venue applied
+  ([Venue focus](focus-calls.md#running-venue-focus)).
+- **Edit focus calls…** — the calls, in order, and the venue
+  ([Setting up the calls](focus-calls.md#setting-up-the-calls)).
+- **Venues ▸** — **Apply ▸** a venue (or None), **New venue…**, and **Rig
+  and universes…** for the venue applied ([Venues](focus-calls.md#venues-corrections-that-stay-with-the-room)).
+- **Practice (scramble)…** — knocks the moving heads in the calls off
+  their targets by a random amount for you to focus back, scored
+  ([Practice](focus-calls.md#practice-scramble-and-focus-back)).
+- **Focus report…** — the venue's focus, light by light
+  ([The focus report](focus-calls.md#the-focus-report)).
+
+An entry that cannot be used yet is greyed, and its tooltip says why: no
+lights placed on the plot, no focus calls yet, no venue yet, or a show
+not saved yet.
+
+## Quick focus
 
 Aligning the rig before a show, one head at a time, with the Xbox
 controller or the keyboard.
 
-**Start it** from **Focus** on the Lighting Studio toolbar, **Focus** on the
-Rig Overview's bar, **View → Focus Mode…** (⌘⌥F), or by holding **View +
-Menu** on the controller. Choose:
+**Start it** from **Focus ▸ Quick focus…** on the Lighting Studio toolbar,
+**Quick focus** on the Rig Overview's bar, **View → Quick Focus…** (⌘⌥F),
+or by holding **View + Menu** on the controller. Choose:
 
 - **Heads** — **As selected** (what is selected on the plot, or in the
   programmer; greyed until something is), every moving head on the plot,
@@ -990,12 +1047,26 @@ Menu** on the controller. Choose:
   or as selected (a group's own order).
 - **Aim at** — the selected scene's aim (each head its own point: on a
   line target every head has its own place on the line) or a stage target.
+  With none in the show it says **No stage target yet**, and **Add a
+  target…** beside it places one in the middle of the plot view.
 - **Then check at** — an optional second reference to check the same
   offsets somewhere else across the stage.
 - **The other heads** — dark, dimmed, or left as they are; and how bright
   to light the head being focused.
 - **Use** — **Controller** or **Keyboard**: which device nudges the heads
   (see [Controller or keyboard](#controller-or-keyboard) below).
+
+When **Start** is greyed, the dialog says why under the form: "No moving
+heads are placed on the plot. Place them in the Lighting Studio, or
+choose Fixed lights.", or "No stage target to aim at. Add one with Add ▸
+Add Target Position." Fixed lights need no target, so they start without
+one.
+
+**Lights that cannot be aimed.** With **As selected**, a selected light
+that cannot be focused — no pan and tilt, and not a fixed light placed on
+the plot (a dimmer, a hazer, a work light) — is not dropped silently:
+**Start** lists them by name, with **Exclude them** (the default) to
+focus the rest, or **Cancel**.
 
 It is a Design-mode tool: in Operate it refuses, and switching to Operate
 ends it (unsaved nudges go back). If functions are running it says so — it
@@ -1041,7 +1112,7 @@ and jump as you nudged.)
 | Leave | Menu | Esc |
 
 Hold **A** a full second to save every light; a press saves this one. In
-a venue, a save says where it went ("Spot 3 kept for Lincoln HS.") and
+a venue, a save says where it went ("Saved fixture 3 to Lincoln HS.") and
 **X** goes back to the show's own calibration. The save lamp is blue
 (all saved, a tick), yellow (this light, "!") or orange (another), with
 the number not saved on it, and the light you are on breathes slowly on
@@ -1049,24 +1120,25 @@ the rig until it is saved. If the controller drops out, everything it
 held is let go and the laptop says "Controller lost. Lights held."; with
 two pads, the first to press a button has the controls.
 
-The layout is the one every on-stage tool uses — Focus mode,
-[Focus calls](focus-calls.md) and [Refine](refine.md): the triggers step
+The layout is the one every on-stage tool uses — Quick focus,
+[Venue focus](focus-calls.md) and [Focus this cue](refine.md): the triggers step
 the big unit, the bumpers the fixture, **Y** the scope, **A** keeps, **B**
 goes back. **Y** works on the whole list at once (a truss trimmed a little
 low: one nudge for every head on it); a bumper picks one head again. On a
 change of head or scope the head(s) picked blink three times and the
-laptop says where you are ("Fixture 3 of 8"): see
+laptop says where you are ("Fixture 3, Spot 3"; how much it says is the
+panel's **Voice** setting): see
 [Telling the operator where they are](focus-calls.md#telling-the-operator-where-they-are).
 
 ### The controller map
 
 The panel draws the device it is using, with each control labelled by what
-it does in Focus mode — **Next fixture** on RB, **Save** on A, **Nudge** on the
+it does in Quick focus — **Next fixture** on RB, **Save** on A, **Nudge** on the
 left stick, **Fine nudge** on the right, zoom and focus on the D-pad — and,
 under each, the controller's own name for it. Here RB is held and the left
 stick pushed up and to the right:
 
-![Focus mode's controller map: each control labelled with its action](../images/focus-mode-controller-map.png)
+![Quick focus's controller map: each control labelled with its action](../images/focus-mode-controller-map.png)
 
 - **It is live.** A button lights while you hold it and a stick's cap
   follows the stick, so you can check on the real controller that each
@@ -1080,7 +1152,7 @@ stick pushed up and to the right:
   run), the left stick click is the second reference (in focus calls, the
   target page: the stick moves the call's target) and the right stick
   click is **Say the light** (held: the feedback setting, see
-  [Focus calls](focus-calls.md#telling-the-operator-where-they-are)).
+  [Venue focus](focus-calls.md#telling-the-operator-where-they-are)).
 - **Click a control** on the map to do what pressing it would.
 
 ### Controller or keyboard
@@ -1088,23 +1160,23 @@ stick pushed up and to the right:
 **Use: Controller | Keyboard**, in the setup and at the top of the panel,
 picks which device drives the nudges and which map is shown.
 
-- **The default** is **Controller** when a controller Focus mode can use is
+- **The default** is **Controller** when a controller that can focus is
   connected (its profile names the buttons it needs), otherwise
   **Keyboard**. The choice you make is remembered on this computer: once
-  you pick Keyboard, Focus mode starts on the keyboard until you pick the
+  you pick Keyboard, Quick focus starts on the keyboard until you pick the
   controller again.
-- **On the keyboard,** the map shows the keys Focus mode uses, each
+- **On the keyboard,** the map shows the keys Quick focus uses, each
   labelled with its action, and each lights while it is pressed (below,
   ⇧ and ↑). A controller that is also connected is **ignored** — its
   buttons and sticks do nothing — so a controller resting on the desk
   cannot drift a head.
 - **The keys work either way.** With the controller chosen, every keyboard
   shortcut in the table above still works.
-- **If the controller disconnects** in the middle of a session, Focus mode
+- **If the controller disconnects** in the middle of a session, Quick focus
   switches to the keyboard and says so. When it comes back, the panel
   offers **Use the controller**; it does not switch back on its own.
 
-![Focus mode's keyboard map, with Shift and Up held](../images/focus-mode-keyboard-map.png)
+![Quick focus's keyboard map, with Shift and Up held](../images/focus-mode-keyboard-map.png)
 
 ### Saving and the save status lamp
 
@@ -1139,7 +1211,7 @@ save, revert, zero and undo.
 and the real fixture dips to dark and back twice, quickly, so whoever is
 standing on stage sees it was kept. A revert (B) doesn't blink. With
 **Feedback: Voice only** (see
-[Focus calls](focus-calls.md#telling-the-operator-where-they-are)) the
+[Venue focus](focus-calls.md#telling-the-operator-where-they-are)) the
 fixture doesn't blink; the lamp still shows it.
 
 **On the plot and in the Rig Overview** every light with unsaved changes
@@ -1163,7 +1235,7 @@ can look mirrored on stage, and the numbers say which way it went.
 by number: a controller profile (`.qxhid`) can say so with `role="…"` on each
 axis and button, and one without roles still works if its controls have the
 usual names. The Xbox profile has roles, and the D-pad as buttons 11–14.
-While Focus mode is on it has the controller to itself: chaser stepping
+While Quick focus is on it has the controller to itself: chaser stepping
 and the follow spot wait.
 
 **Xbox controllers on a Mac.** Every Xbox One, Series X|S and Elite
@@ -1182,22 +1254,22 @@ The **Controller test** below shows which way your controller is read.
 
 ### Working in the background
 
-Focus mode — and the follow spot — keep reading the controller whatever is
+Quick focus — and the follow spot — keep reading the controller whatever is
 in front: another app, the screen saver, a locked screen.
 
-- **No App Nap.** While Focus mode or the follow spot has a controller,
+- **No App Nap.** While Quick focus or the follow spot has a controller,
   qlcconsole tells macOS it is doing user-initiated, latency-critical work.
   Without that, a Mac slows an app it thinks nobody is looking at (behind
   other windows, or with the display asleep) to a timer every few seconds,
   and a held stick all but stops. While it is on, the Mac also does not
-  idle itself to sleep (the display still can). It lets go when Focus mode
+  idle itself to sleep (the display still can). It lets go when Quick focus
   ends and the follow spot has no stick.
 - **The panel stays up** when you switch to another app; it used to vanish
   until you came back.
 - **Switched off and on again.** An Xbox controller switches itself off
   after 15 idle minutes, and a Bluetooth one reconnects after the Mac
   sleeps. Either way qlcconsole now finds it again by itself — press the
-  Xbox button to switch it on — and Focus mode carries on with it.
+  Xbox button to switch it on — and Quick focus carries on with it.
 - **Paused, said.** If the controller cannot be read, the panel says
   **Controller paused:** and why — the Mac is asleep, no controller is
   connected, it is being found again after a sleep (press a button on it),
@@ -1207,7 +1279,7 @@ in front: another app, the screen saver, a locked screen.
 
 ### Controller test
 
-**Controller test…**, next to **Use** in Focus mode's setup (and in
+**Controller test…**, next to **Use** in Quick focus's setup (and in
 **Settings → Advanced → Game controllers**), opens a window listing every
 input your controllers send, as it arrives, whether or not they are patched:
 
@@ -1220,7 +1292,7 @@ input your controllers send, as it arrives, whether or not they are patched:
 - its **raw** value, and the lowest and highest seen;
 - the **channel** it feeds and that channel's value (0–255), and what it
   **maps to**: the profile's name, its gamepad role, its action, and what
-  it does in Focus mode. *nothing* means the input is not in the layout.
+  it does in Quick focus. *nothing* means the input is not in the layout.
 
 Press every button once and move each stick and trigger all the way round;
 each input is one row. **Copy** puts the whole log — the devices, a row per
@@ -1236,7 +1308,7 @@ HID device, keyboards included, which is what makes macOS ask).
 
 macOS does have one, **Input Monitoring**, for apps that read input while
 another app is in front. If macOS refuses to let qlcconsole open the
-controller, Focus mode says **Controller paused: macOS is not letting
+controller, Quick focus says **Controller paused: macOS is not letting
 qlcconsole read the controller** instead of failing silently. The
 Controller test shows whether Input Monitoring is allowed, and offers
 **Ask macOS for Input Monitoring** (once, when it has not been asked) or
@@ -1266,7 +1338,7 @@ first.
 
 ### The beam
 
-Where a light's beam can change, Focus mode changes it too: **D-pad up**
+Where a light's beam can change, Quick focus changes it too: **D-pad up**
 spots it down (narrower), **down** floods it out (wider) (or **,** and **.**
 on the keyboard, ⇧ for 5°), always within the lens range its definition
 gives, and the panel shows the angle. Where it has a focus channel, **D-pad
@@ -1373,9 +1445,11 @@ Two small but load-bearing visual cues:
 | **Light footprint / coverage** | Everywhere a fixture's full pan/tilt range can reach — distinct from where it's currently pointed. |
 | **Shift-drop** | Holding Shift as you drop a fixture over a truss, pipe or deck, to hang or stand it there; a plain drop only moves it. |
 | **Beneath (faded)** | In the Top view, a fixture with a structure more than half a metre above it, drawn faded and dashed but still clickable. |
-| **Curtain line** | Where the main curtain hangs, across the stage (also called the setting line; the plaster line is the proscenium's). Show ▸ Stage marks. |
-| **Number line** | A line across the front of the stage numbered out from centre (CL), in feet or metres, for spiking and focusing. Show ▸ Stage marks. |
+| **Curtain line** | Where the main curtain hangs, across the stage (also called the setting line; the plaster line is the proscenium's). A stage piece on the Stage layer. |
+| **Number line** | A line across the front of the stage numbered out from centre (CL), in feet or metres, for spiking and focusing. A stage piece on the Stage layer. |
+| **Apron** | The stage downstage of the curtain line: its own piece of deck, from the curtain line out by its depth, with its front curve. A stage piece on the Stage layer. |
+| **Stage pieces** | The centre line / DSC mark, curtain line, number line and apron: objects on the plot's Stage layer, each shown, locked, dragged and set on its own. |
 | **DSC / CL** | Downstage centre: where the centre line (CL) meets the front of the stage. |
 | **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |
 | **Calibration offsets** | A head's pan/tilt offsets: in the DMX so the real light lands where intended, left out of every view so it shows the intended aim. |
-| **Focus mode** | Stepping through the heads, each aimed at its reference, to set their calibration offsets with the controller or keyboard. |
+| **Quick focus** | Stepping through the heads, each aimed at its reference, to set their calibration offsets with the controller or keyboard. |

@@ -1,43 +1,50 @@
-# Refine
+# Focus this cue
 
 Changing a cue from the stage, with the controller: where its lights
 point, their zoom, focus, colour and gobo — the cue's own values, seen on
-the real rig as you move them.
+the real rig as you move them. On a Build scene the same tool is **Focus
+this look**.
 
-Refine is not focusing. [Focus calls](focus-calls.md) correct the rig's
-calibration for a venue; Refine changes what a **cue** does. The
-controller is laid out the same way in both, so it only has to be learnt
-once.
+This is a cue's focus, not the rig's. [Quick
+focus](lighting-studio.md#quick-focus) and [Venue focus](focus-calls.md)
+correct the rig's calibration (for the show, or for a venue); Focus this
+cue changes what a **cue** does. The controller is laid out the same way
+in all of them, so it only has to be learnt once.
 
 ## Starting
 
 In the [Show Tree](show-tree.md), in Design or Operate:
 
-- a cue's page: **Refine on the controller…**, or
-- right-click a layer: **Refine on the controller…** (it starts on that
-  layer).
+- a cue's page: **Focus ▾ Focus this cue…** in its header, or **Focus
+  this cue…** on the page, or
+- right-click a layer: **Focus this cue…** (it starts on that layer).
 
 In Design the cue is previewed on the rig. In Operate the show carries on
-as it is running (see [Refine during the show](#refine-during-the-show)).
-The Refine panel shows the cue, the layer, the scope, what the D-pad sets,
+as it is running (see [Focusing during the show](#focusing-during-the-show)).
+The panel shows the cue, the layer, the scope, what the D-pad sets,
 and what is pending.
 
 In Build's [Workbench](build.md#the-workbench):
 
-- **Refine…** in the Workbench's header, for what is loaded: a Show Tree
-  cue (from its selected layer) or a Build scene, or
+- **Focus ▾** in the Workbench's header, for what is loaded: **Focus this
+  cue…** for a Show Tree cue (from its selected layer), **Focus this
+  look…** for a Build scene. For a cue, the same menu has **Make this a
+  venue focus cue** (see [A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)), or
 - right-click a cue's layer, a scene, or a scene's group or fixture row:
-  **Refine on the controller…** (it starts on that row).
+  **Focus this cue…** or **Focus this look…** (it starts on that row).
+
+Each is greyed, with the reason in its tooltip, while the show has no
+lights to focus.
 
 The controller works exactly the same on a Build scene; see
-[On a Build scene](#on-a-build-scene).
+[Focus this look: on a Build scene](#focus-this-look-on-a-build-scene).
 
-![Refine on a cue: one fixture picked, a move pending, the controller](../images/refine-panel.png)
+![Focus this cue: one fixture picked, a move pending, the controller](../images/refine-panel.png)
 
 1. Where you are: the layer, the group or the fixture (the voice says it too).
 2. The scope, and what the D-pad sets.
 3. What is pending: A keeps it in the cue, B goes back.
-4. The controller, labelled with what each control does in Refine.
+4. The controller, labelled with what each control does here.
 
 ## Scope: layer, group, fixture
 
@@ -82,7 +89,7 @@ scope picks the first fixture.
 | Leave | Menu | Esc |
 
 Up spots the beam down (narrower), down floods it out; right sharpens
-the edge and left softens it, here as in Focus mode, and the voice says
+the edge and left softens it, here as in Quick focus, and the voice says
 the word once a press ("Spot down."). On the beam page, hold an arm and
 it keeps going: once, then after a moment over and over until you let go.
 On the **colour** and **gobo** pages, D-pad right and left step forward
@@ -102,11 +109,11 @@ only says so ("Specials is reusable: it is also used in Main 4. Press A
 again to change it there too.") and the panel lists the other uses with
 **Change them all**; **A** again goes on, **B** drops it.
 
-The panel has Focus mode's lamp: blue with a tick, all kept; yellow, a
+The panel has Quick focus's lamp: blue with a tick, all kept; yellow, a
 change pending here; orange, pending elsewhere; with the count.
 
-Starting Refine while Focus mode (or Refine) has work not saved is
-refused, saying what to do first.
+Starting Focus this cue while Quick focus or Venue focus (or another Focus
+this cue) has work not saved is refused, saying what to do first.
 
 **X** at Group or Fixture scope takes the exception off: the child layer
 loses what it set on this page (position, zoom and focus on the beam
@@ -124,7 +131,7 @@ its own.
 ## A layer the cue only tracks
 
 A cue that sets nothing on a layer still plays it, tracked in from an
-earlier cue. Refine steps through those layers too, after the cue's own,
+earlier cue. Focus this cue steps through those layers too, after the cue's own,
 and the voice says so: "AT spots, tracked from 2. Keeps go into this cue."
 
 - **By default A keeps the change in this cue.** The layer becomes the
@@ -136,9 +143,9 @@ and the voice says so: "AT spots, tracked from 2. Keeps go into this cue."
 - A tracked layer is edited as a whole (Layer scope). Keep it in this
   cue first, and then Y picks a group or a fixture for an exception.
 
-## On a Build scene
+## Focus this look: on a Build scene
 
-A Build scene has no layers of its own, so Refine takes the nearest
+A Build scene has no layers of its own, so Focus this look takes the nearest
 thing to each part of a cue:
 
 - **The layer is the scene.** With a collection loaded, the triggers step
@@ -161,42 +168,46 @@ thing to each part of a cue:
 
 ## Telling you where you are
 
-The same as [Focus calls](focus-calls.md#telling-the-operator-where-they-are):
+The same as [Venue focus](focus-calls.md#telling-the-operator-where-they-are):
 
 - **The lights.** At Group or Fixture scope, what is picked keeps the
   cue's level and the rest of the layer dims to 15% — only the fixtures
   the cue has brighter than that; one already lower is never raised. On
   every change what is picked blinks three times.
-- **The voice.** "AT spots, layer." "AT spots, fixture 3 of 8."
+- **The voice.** "AT spots, layer." "Fixture 3, Spot 3."
   "DS wash, group 2 of 3." "AT spots kept in cue 4." "Back to the cue."
   **Say the light** says the light, then the cue: "Spot 3. Cue 4, AT
-  spots, fixture 3 of 8."
+  spots, fixture 3." The panel's **Voice** setting (terse, standard,
+  verbose) is shared with Venue focus: see [Voice
+  detail](focus-calls.md#telling-the-operator-where-they-are). Terse
+  says "F3 Spot 3." and "Kept."; verbose "AT spots, fixture 3 of 8, Spot
+  3."
 - **Holding.** Both stick clicks (or H) hold everything where it is:
   "Holding."; again, "Released." The left stick click (the D-pad page)
   acts when you let it go, so the two can be pressed together.
 - **Warnings** are always spoken, with a slow blink and a long buzz: a
   refusal, a reusable layer, the controller lost ("Controller lost. Lights
   held."), nothing reaching the rig (Blackout, the Grand Master at zero).
-  See [Focus calls](focus-calls.md#telling-the-operator-where-they-are).
+  See [Venue focus](focus-calls.md#telling-the-operator-where-they-are).
 
-## Refine during the show
+## Focusing during the show
 
-Refine works in Operate too, and switching between Design and Operate
-does not end it. In Operate the show is running, so Refine is quiet:
+Focus this cue works in Operate too, and switching between Design and
+Operate does not end it. In Operate the show is running, so it is quiet:
 
-- **Only the cue running.** Refine starts only on the cue its list is
-  playing now. Any other cue is refused: GO to it, or refine it in
+- **Only the cue running.** It starts only on the cue its list is
+  playing now. Any other cue is refused: GO to it, or focus it in
   Design.
 - **No blink, no dim.** What is picked does not blink, and the rest of
   the layer is not dimmed: the audience sees the show. The voice still
   says where you are.
 - **Kept, and held.** What you move shows on the rig at once, and **A**
   keeps it in the cue as in Design. The voice says "AT spots kept in cue
-  4. It plays next time it runs." Until then Refine holds what was kept
+  4. It plays next time it runs." Until then it holds what was kept
   on the rig.
 - **GO lets go.** When the list moves off the cue, the hold is released
-  and Refine sends nothing until that cue runs again. The voice says so:
+  and nothing is sent until that cue runs again. The voice says so:
   "Cue 4 has moved on: nothing is sent until it runs again."
 
-Leaving Refine lets go of the hold too. Back in Design, the cue is
+Leaving lets go of the hold too. Back in Design, the cue is
 previewed with everything kept.

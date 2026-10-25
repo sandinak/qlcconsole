@@ -99,5 +99,5 @@ Beside it is the **GM** (Grand Master) slider. In the middle, the footer
 names the production and the next cue: that is status only. GO is on the
 **Run** tab (or **Control → GO (Main Cue List)**, ⌘↩, from any tab). An amber
 **Overrides** chip shows up only while something holds the rig over the
-show (Blind, Park, Highlight, Focus mode, Hold at end); clicking it lets
+show (Blind, Park, Highlight, Quick focus, Hold at end); clicking it lets
 go of all of them.

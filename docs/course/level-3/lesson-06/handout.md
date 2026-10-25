@@ -16,7 +16,7 @@ nav_order: 2
   keeping the corrections for this **venue**;
 - focus a scrambled rig back onto its marks, for a score, and hand in
   the **focus report**;
-- change a cue from the stage with **Refine**, and say how that differs
+- change a cue from the stage with **Focus this cue**, and say how that differs
   from focusing.
 
 ## Words for today
@@ -36,8 +36,8 @@ nav_order: 2
 | **Number line** | A line across the front of the stage, numbered in feet out from centre (**CL**, the centre line), so a crew can say how far left or right something is. |
 | **Apron** | The part of the stage in front of the curtain line. |
 | **Focus report** | The record of a focus: every light, where it went, its correction, who checked it and when. |
-| **Scramble** | A practice: every moving light is put off its mark by a few degrees, and you focus them back. |
-| **Refine** | Changing a cue's own values from the stage with the controller. Focusing fixes the rig for a room; Refine changes what a cue does. |
+| **Scramble** | A practice: every moving light is knocked off its target by a random amount, and you focus them back. You are scored on how far off each light ends up, how long it takes and how many saves you make. Your real venues are never touched. |
+| **Focus this cue** | Changing a cue's own values from the stage with the controller. Venue focus fixes the rig for a room; Focus this cue changes what a cue does. |
 
 ## Part 1 — How a focus call runs (everyone, no computer)
 
@@ -84,9 +84,10 @@ controller?** Every step gives the keys too.
 
 ### A. Read the stage marks
 
-4. On the plot's bar, click **Show ▸ Stage marks** and tick **Centre mark
-   (DSC)**, **Curtain line** and **Number line**. (**Target positions** is
-   ticked already.)
+4. In the **Plot layers** panel on the left of the plot, find the **Stage**
+   layer. Click the eye on **Centre line / DSC mark**, **Curtain line** and
+   **Number line** to show them. (**Show ▸ Target positions**, on the plot's
+   bar, is ticked already.)
    - *You should see:* the **Curtain line** in red across the stage, at
      the main drape; the number line in yellow along the front of the
      risers, numbered 2, 4, 6… out from **CL** in the middle, **SR** at one
@@ -110,7 +111,8 @@ controller?** Every step gives the keys too.
 
 ### B. Write the focus calls
 
-6. Click **Focus calls** on the Lighting Studio's toolbar.
+6. On the Lighting Studio's toolbar click **Focus ▾**, then **Edit focus
+   calls…**.
 7. Click **+ Call**. Under **Groups** tick **Truss-Spots**; set **Focus
    to** **Center**.
    - *You should see:* **1. Truss-Spots → Center** in the list.
@@ -129,7 +131,7 @@ controller?** Every step gives the keys too.
 
 ### C. Run the calls
 
-12. Click **Start focus calls**. The venue Classroom is made now, and the
+12. Click **Start venue focus**. The venue Classroom is made now, and the
     calls begin.
     - *You should see:* the panel says **Call 1 of 3: Truss-Spots →
       Center**. On the stage the first truss spot comes up white, aimed at
@@ -165,8 +167,9 @@ controller?** Every step gives the keys too.
 
 ### D. The scramble (scored)
 
-17. Click **Focus calls**, then **Practice (scramble)…**. Choose **Easy:
-    1–3° off** (not the default, Medium), **OK**.
+17. Click **Focus ▾**, then **Practice (scramble)…**. The dialog says
+    what a scramble does. Choose **Easy: 1–3° off** (not the default,
+    Medium), **OK**.
     - *You should see:* the calls start again, in a practice venue named
       with today's date. On the plot and in the Rig Overview the beams no
       longer land on their marks.
@@ -190,7 +193,7 @@ controller?** Every step gives the keys too.
     Classroom comes back on the rig when the practice ends; the practice
     is kept as a venue of its own, for the report.
 
-### E. Refine: changing a cue, not the rig
+### E. Focus this cue: changing a cue, not the rig
 
 21. Click the **Show Tree** tab (⇧⌘5). Click the **Command** line and
     type each line, then **Return**:
@@ -204,12 +207,13 @@ controller?** Every step gives the keys too.
 
     - *You should see:* a cue **1 Solo** with a layer on **AT-Spots**:
       White, Full, Aim Soloist DS.
-22. On the cue's page click **Refine on the controller…**.
+22. On the cue's page click **Focus ▾** (top right), then **Focus this
+    cue…**.
 23. Press **,** twice (spot down), then **Return**.
     - *You should see:* the laptop says the change was kept in cue 1. The
       cue's AT-Spots layer now has a **Zoom** row. That is the cue's own
       value: focus didn't change.
-24. Press an arrow. Refine refuses: the layer is aimed at Soloist DS, and
+24. Press an arrow. It refuses: the layer is aimed at Soloist DS, and
     moving it by degrees would stop it following the target. Press **G**
     until the panel says **Fixture**, then **→** twice and **Return**.
     - *You should see:* a new row under the AT-Spots layer in the tree: an
@@ -220,12 +224,12 @@ controller?** Every step gives the keys too.
 
 | Problem | Try |
 |---|---|
-| "Save the show first" in Focus calls | Step 2: **File → Save As** under your own name. |
+| "Save the show first" in the focus calls | Step 2: **File → Save As** under your own name. |
 | Nothing blinks, nothing moves | **Blackout** is on, or the **GM** slider is down. The laptop says which. |
 | The keys do nothing | Click the Focus panel first so it has the keyboard. |
 | A light won't spot down | It has no zoom: the truss spots don't, the AT spots do. |
-| Refine says it can't move the layer | It's aimed at a target. Pick one spot (**G** until **Fixture**) or move the target. |
-| The score dialog closed | **Export focus report…** in Focus calls, with the practice venue picked. |
+| Focus this cue says it can't move the layer | It's aimed at a target. Pick one spot (**G** until **Fixture**) or move the target. |
+| The score dialog closed | **Focus ▸ Edit focus calls…**, pick the practice venue, **Export focus report…**. |
 
 ## Done early? (Extension)
 
@@ -234,7 +238,7 @@ controller?** Every step gives the keys too.
    loud load-in, and which during a rehearsal?
 2. **Medium.** Run the scramble again on **Medium: 2–6° off**. Compare
    the two reports: where did the time go?
-3. **Touring.** In Focus calls, choose **Classroom** and click **Rig and
-   universes…**. Read the page. If the show moved to the high school
+3. **Touring.** Click **Focus ▸ Venues ▸ Rig and universes…** (with
+   Classroom applied). Read the page. If the show moved to the high school
    auditorium next week, what would change in this file, and what would
    stay in the show?

@@ -20,8 +20,8 @@ Students can:
    line, centre line) and say it the way a call says it ("SL 1, DS 1");
 3. focus a scrambled rig back onto its marks from the controller, keep
    the corrections for the venue, and hand in the focus report;
-4. say the difference between focusing (the rig, for one room) and
-   Refine (a cue, for every room).
+4. say the difference between Venue focus (the rig, for one room) and
+   Focus this cue (a cue, for every room).
 
 ## Before class
 
@@ -31,7 +31,7 @@ Students can:
   (USB or Bluetooth). Without one, every step has keys.
 - [ ] Sound on the projector computer: the laptop's voice is part of the
   lesson. For Part 3, the voice into the headset system (**Voice to:** in
-  Focus calls picks the output).
+  the focus calls list, **Focus ▸ Edit focus calls…**, picks the output).
 - [ ] On the projector: the show saved as `Lesson3-6-demo.qlcc`, the
   **Lighting Studio** tab, **View → Rig Overview** beside it.
 - [ ] Print the [handout](handout.md) and the [exit ticket](exit-ticket.md).
@@ -41,7 +41,7 @@ Students can:
 **focus**, **hot spot**, **home**, **sharp / soft**, **spot down / flood
 out**, **focus call**, **curtain line**, **number line**, **apron**,
 **correction**, **venue**, **house rig / tour package**, **scramble**,
-**focus report**, **Refine**. Each is in the handout's word table and the
+**focus report**, **Focus this cue**. Each is in the handout's word table and the
 [Glossary](../../GLOSSARY.md).
 
 ## Timing
@@ -51,13 +51,13 @@ out**, **focus call**, **curtain line**, **number line**, **apron**,
 | 0–10 | **Design idea** (no computers) | A focus call, acted out: electrician, designer, the words |
 | 10–18 | **Teacher demo** (projector) | Stage marks; the three calls; one light locked; the voice |
 | 18–43 | **Hands-on** (triads, roles) | Handout Parts A–D: marks, calls, run, scramble and report |
-| 43–45 | **Refine** (projector) | Handout Part E shown, not done |
+| 43–45 | **Focus this cue** (projector) | Handout Part E shown, not done |
 | 45–50 | **Exit ticket** | On paper |
 
 **Over two periods** (recommended): period 1 is the design idea, the demo
 and Parts A–C, ending with a practice scramble on Easy that doesn't
 count; period 2 opens with the touring piece below, then the scored
-scramble (Part D), the report, and Refine (Part E) hands-on.
+scramble (Part D), the report, and Focus this cue (Part E) hands-on.
 
 ## 1. Design idea (10 min)
 
@@ -102,14 +102,17 @@ room, a new venue, then the focus calls*)
 
 ## 2. Teacher demo (8 min)
 
-1. **Lighting Studio**, **Show ▸ Stage marks**: curtain line, number
-   line, centre mark. Read Soloist DS aloud from the plot: "SL 1, DS 1."
+1. **Lighting Studio**, **Plot layers ▸ Stage**: show the curtain line,
+   number line and centre mark with their eyes. Drag the curtain line a
+   foot upstage and back (⌘Z) so they see the marks are objects you can
+   move. Read Soloist DS aloud from the plot: "SL 1, DS 1."
    Point out that DS here means downstage of the number line, and the ↑
    on Center is its height on the riser.
-2. **Focus calls**: build the three calls of the handout in front of
+2. **Focus ▸ Edit focus calls…** (the **Focus** drop-down on the
+   Lighting Studio toolbar holds every focus tool): build the three calls of the handout in front of
    the class. Name the venue `Classroom` and say why the show was saved
    first.
-3. **Start focus calls**. Let the class hear the voice. Step to the
+3. **Start venue focus**. Let the class hear the voice. Step to the
    second truss spot, nudge it, lock it with A. Open Finder beside the
    show: the `.venues.xml` file is there and the show file's date has
    not changed.
@@ -133,7 +136,7 @@ room, a new venue, then the focus calls*)
 | Students nudge with their eyes on the panel numbers | They aren't watching the stage | "The designer calls it from the stage. Eyes on the Rig Overview." |
 | A truss spot won't spot down | It has no zoom | "Right: only the AT spots have a zoom. Try call 2." |
 | The scramble score is poor and fast | Saving before the beam lands | "Locked means it's right. Look, then lock." |
-| Refine refuses to move the layer | The layer is aimed at a target | "Pick one spot (G), or move the target in the Studio." |
+| Focus this cue refuses to move the layer | The layer is aimed at a target | "Pick one spot (G), or move the target in the Studio." |
 
 ## 4. Check for understanding (while circulating)
 
@@ -190,7 +193,7 @@ Medium.
   (focus). 3 — 1 foot stage left of the centre line and 1 foot downstage
   of the number line. 4 — in the venue's file beside the show; the show
   file isn't changed, so the next room starts clean (or from this one).
-  5 — focusing corrects the rig for one room; Refine changes the cue
+  5 — Venue focus corrects the rig for one room; Focus this cue changes the cue
   itself, in the show, for every room.
 
 ## How this lesson was checked
@@ -199,13 +202,13 @@ The course test (`ui/test/courseshow`, `lessonFocusAndCalibration`) runs
 it offscreen on the real app, on the classroom show saved under a
 student's name: the four stage-mark items by their names, Soloist DS
 reading `SL 1' · DS 1' 1"` and Center `SL 1' · US 6' · ↑ 1' 4"` (and
-"SL 1, DS 1" spoken); the three calls built in the Focus calls dialog as
+"SL 1, DS 1" spoken); the three calls built in the Venue Focus dialog as
 the handout says, named "Truss-Spots → Center" and so on; the venue
 Classroom made beside the student's show; the calls run on the keys (],
 ⇧→ and Return keep a correction for Classroom, G the whole call, PgDn the
 AT spots, , and '); the Easy scramble of all 10 moving heads focused back
 and scored (9 of 10 within 1° when one is left 1.8° off), its PDF report
-written, Classroom back on the rig; and the typed Solo cue refined (spot
+written, Classroom back on the rig; and the typed Solo cue focused with Focus this cue (spot
 down kept in the cue; a move refused on the aimed layer and kept as a
 one-spot exception). It takes this lesson's pictures with `COURSE_SHOTS`
 set. It doesn't drive the difficulty picker or the file dialog.

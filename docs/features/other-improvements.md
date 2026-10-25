@@ -182,7 +182,7 @@ USB one unplugged, can go and come back at any time — including after the
 show was opened without it:
 
 - **While it is away,** the universe's input is kept, with its input
-  profile, its controller profile (the gamepad roles Focus mode, the
+  profile, its controller profile (the gamepad roles Quick focus, the
   follow spot and focus calls use) and its settings. **Connections ▸
   Devices** shows the device under its plugin, greyed: "input · not
   connected — kept, reconnects by itself", its universe under it. The
@@ -193,8 +193,8 @@ show was opened without it:
 - **When it comes back** — on whichever line it now appears — the input is
   patched to it again by itself, within a moment of the computer seeing it,
   and the notice says **Controller '…' connected — universe 2**, then goes.
-  Focus mode, the follow spot and focus calls carry on with it without a
-  restart; Focus mode's panel says **Controller connected** and offers
+  Quick focus, the follow spot and focus calls carry on with it without a
+  restart; Quick focus's panel says **Controller connected** and offers
   **Use the controller** (see
   [Controller or keyboard](lighting-studio.md#controller-or-keyboard)).
 - **A quick drop is not news.** A pad that drops out and is back within
@@ -484,8 +484,8 @@ the outline's right-click; see
 
 When something holds the rig over the show, the footer says so in one
 amber chip: **Overrides: Park (3), Hold at end · Clear**. It lists Park,
-Highlight, Hold at end, Focus mode and Blind, and is hidden when none of
-them is on. Click it to let go of all of them at once (Focus mode asks
+Highlight, Hold at end, Quick focus and Blind, and is hidden when none of
+them is on. Click it to let go of all of them at once (Quick focus asks
 first if it has unsaved offsets). If the rig looks wrong and you don't
 know why, look there first.
 

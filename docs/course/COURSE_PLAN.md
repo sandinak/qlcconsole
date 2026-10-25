@@ -11,7 +11,7 @@ exit ticket and at-home page, every app step checked by the course test,
 now on 0.3.0. Level 2 is an outline. Level 3 has
 four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
-report, Refine; with pictures), 3.7 house lights, work lights and power,
+report, Focus this cue; with pictures), 3.7 house lights, work lights and power,
 3.10 coming from Eos — each checked by the course test; the rest of Level
 3 is an outline. Volunteers start at
 [For volunteers](VOLUNTEER.md); new lessons start from `_template/`.*

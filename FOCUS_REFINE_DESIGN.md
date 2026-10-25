@@ -1,4 +1,12 @@
-# Focus calls and Refine — design (board Q105–Q108)
+# Venue focus and Focus this cue — design (board Q105–Q108; was "Focus calls and Refine")
+
+> **Names (board Q149, 2026-10-25).** In the app Focus mode is now **Quick
+> focus**, running the focus calls is **Venue focus**, and Refine is
+> **Focus this cue** (on a Build scene, **Focus this look**); a focus-call
+> cue is a **venue focus cue**. The classes and files keep their names
+> (`FocusSession`, `FocusCallsDialog`, `RefineSession`, `refine.md`...).
+> The individual steps are still **focus calls**. Every focus tool is on
+> the Lighting Studio's **Focus ▾** menu (section 14).
 
 Branch `feat/focus-calls-refine`, 2026-10-23 (decisions Q109–Q113 built the same night; Q116–Q127 and
 the gaps review, Q128–Q136, on 2026-10-24), merged to main. The focus report (Q134), hold B and PS
@@ -19,7 +27,7 @@ Save it once under a new name, because a venue's file lives beside the show.
 Keys are given in brackets for running without a controller. Plug in an Xbox
 pad if you have one.
 
-1. **Set up the focus calls.** Lighting Studio → **Focus calls**. Click
+1. **Set up the focus calls.** Lighting Studio → **Venue focus**. Click
    **+ Call**, tick **Movers**, and set Focus to **Centre**. Add another
    call for **Pars**, which focuses to "where they land". Venue: leave
    **New venue…** with the date. Click **Start focus calls**.
@@ -38,35 +46,35 @@ pad if you have one.
      panel.
 3. **Venue, not show.** Leave the calls with **Menu** (Esc). In Finder,
    look for `<show>.venues.xml` next to the show: it holds your offsets. The
-   show is not marked modified. Reopen Focus calls: **Rename…**, **Apply
+   show is not marked modified. Reopen Venue focus: **Rename…**, **Apply
    now** (None puts the show's own back), and **Delete** manage venues. Type
    a pan offset in a fixture's properties while a venue is applied: it goes
    into the venue too (Q111).
-4. **Refine a cue.**
+4. **Focus this cue a cue.**
    - In the Show Tree, add a cue with a layer on **Movers** and a position.
-   - On its cue page, click **Refine on the controller…**.
+   - On its cue page, click **Focus this cue on the controller…**.
    - Move with the stick (arrows) and the lights follow. **A** (Return)
      keeps the change: one undo step. **Y** (G) goes to one fixture; a move
      there is an exception, a child layer in the tree. **X** (0) clears it.
    - **D-pad**: up zooms in, down out; right tightens the focus, left
      loosens it. **LS click** (P) changes the D-pad to colour and then gobo
      palettes (right: the next, left: the one before).
-5. **A tracked layer.** Add a cue after it that sets nothing and Refine
+5. **A tracked layer.** Add a cue after it that sets nothing and Focus this cue
    that. The voice says "Movers, tracked from 1. Keeps go into this cue."
    **S** on the panel switches to keeping in cue 1.
-6. **From Build.** Load a scene in Build's Workbench and click **Refine…**
-   in its header, or right-click a group or fixture row → **Refine on the
+6. **From Build.** Load a scene in Build's Workbench and click **Focus this cue…**
+   in its header, or right-click a group or fixture row → **Focus this cue on the
    controller…**. The controller is the same; an exception is that fixture
    out of the palette, with the scene's own values.
 7. **A focus-call cue.**
    - Make a "Pre-show" list with a cue that sets the work light. Tick
      **Focus call** on its cue page (the F column says **focus**).
    - Go to Operate and **GO** to it. The light comes up, the voice says
-     "Focus calls ready. Press Start to begin.", and the Run tab and footer
+     "Venue focus ready. Press Start to begin.", and the Run tab and footer
      say it is waiting.
    - Press **Start/Menu** (⌘↩) to begin the calls. **Menu** (Esc) ends them
      and the list GOes to the next cue.
-8. **The voice on the headsets.** In Focus calls, **Voice to:** sends the
+8. **The voice on the headsets.** In Venue focus, **Voice to:** sends the
    voice to the output that feeds them. Step quickly through the fixtures:
    the voice never talks over itself, and only the fixture you stop on is
    read out. Hold a D-pad arm: zoom or focus keeps going until you let go.
@@ -92,9 +100,9 @@ pad if you have one.
      warning is still spoken, with a slow blink and one long buzz.
    - Hold A: a full second to save all. In Build, a shared palette's
      warning waits for a fresh A, never a hold.
-   - Refine in Operate a cue that is not running: refused. On the running
+   - Focus this cue in Operate a cue that is not running: refused. On the running
      one: no blink, no dim; GO lets go of what was held.
-   - The lamp: blue ✓ / yellow ! / orange, with a count; the Refine panel
+   - The lamp: blue ✓ / yellow ! / orange, with a count; the Focus this cue panel
      has it too. View + RS (N) says "2 not saved."
    - Swap a corrected fixture's definition: it is flagged **needs focus**
      (panel, plot "!", voice). **Corrections…** lists and clears one.
@@ -129,12 +137,12 @@ pad if you have one.
 **The idea.** Kids already know game controllers, so the controller is the
 star here. Two jobs on the stage use one controller layout:
 
-- **Focus calls** align the rig in a new venue. This is calibration, saved
+- **Venue focus** align the rig in a new venue. This is calibration, saved
   per venue.
-- **Refine** changes a cue's own values from the stage. This is
+- **Focus this cue** changes a cue's own values from the stage. This is
   programming, saved in the show.
 
-The layout is the same in both, and the same as plain Focus mode. A student
+The layout is the same in both, and the same as plain Quick focus. A student
 learns it once.
 
 Contents:
@@ -142,9 +150,9 @@ Contents:
 1. Decisions this builds on
 2. The controller, one map for both tools
 3. Telling the operator where they are (lights and voice)
-4. Focus calls: data model
+4. Venue focus: data model
 5. Per-venue corrections: the sidecar file
-6. Refine: scopes, and how each edit is stored in the cue
+6. Focus this cue: scopes, and how each edit is stored in the cue
 7. Entry points
 8. Mockups
 9. Code map
@@ -160,12 +168,12 @@ Contents:
 | Q | Decision | Where it lands |
 |---|---|---|
 | Q105 | Corrections are saved for this run **and** to disk, so a restart keeps them. They never overwrite the show file. They are kept **per venue** (a named venue, or a date when unnamed). | §5 |
-| Q106 | Refine's scope cycles **Layer → Group → Fixture** on one button. Layer edits the layer's look. Fixture makes a per-fixture exception. | §6 |
+| Q106 | Focus this cue's scope cycles **Layer → Group → Fixture** on one button. Layer edits the layer's look. Fixture makes a per-fixture exception. | §6 |
 | Q107 | Feedback to the operator on stage comes from **the lights** and **the laptop's voice**. On a change, what is selected flashes. Only the current scope stays at full. | §3 |
 | Q108 | Design both now and build them together. The controller layout is **the same** in both. | §2 |
 
 Already on main: Q100–Q104. These cover the fixed-light Pan/Tilt aim, Focus
-mode for fixed lights, beam/zoom/focus in Focus mode, and the Show Tree's
+mode for fixed lights, beam/zoom/focus in Quick focus, and the Show Tree's
 S/T/R/M/F columns.
 
 ---
@@ -177,7 +185,7 @@ S/T/R/M/F columns.
 - `ControllerScheme::verbFor(role)` maps each control to a **verb**.
 - `label(tool, verb)` gives each tool's words for that verb.
 
-Focus mode's `FocusSession::controlFor()`, Refine's `RefineSession::apply()`
+Quick focus's `FocusSession::controlFor()`, Focus this cue's `RefineSession::apply()`
 and the on-screen map (`FocusControlMap::setTool()`) all read it. A control
 does the same **kind** of thing in every tool:
 
@@ -186,7 +194,7 @@ does the same **kind** of thing in every tool:
 - Y sets how much you are working on;
 - A keeps, B goes back.
 
-| Control | Verb | Focus mode (as before) | **Focus calls** | **Refine** |
+| Control | Verb | Quick focus (as before) | **Venue focus** | **Focus this cue** |
 |---|---|---|---|---|
 | **RT / LT** (triggers) | Next / previous group | — | Next / previous **focus call** | Next / previous **layer** (always Layer scope) |
 | **RB / LB** (bumpers) | Next / previous item | Next / previous fixture | Next / previous **fixture** in the call | Next / previous **fixture**, or **group** at Group scope. At Layer scope a bumper picks the first fixture. |
@@ -210,7 +218,7 @@ does the same **kind** of thing in every tool:
 | **RS held (0.6 s)** | Feedback | Lights → Voice → Both, said ("Feedback: voice only.") | same | same |
 | **LS + RS** (both stick clicks) | Hold (Q140) | Every light holds where it is: nothing on the pad moves anything, no breathing or blinks, "Holding."; again: "Released." H | same | same |
 | **View + X** | Mark dead (Q140) | The light being worked marked dead in the venue applied (again: not dead); said, on the panel, the plot's needs-focus marks, Corrections… and the report. Needs a venue. D | same | "Dead lights are marked in the focus calls." |
-| View + Menu held | — | Opens Focus mode (as before) | — | — |
+| View + Menu held | — | Opens Quick focus (as before) | — | — |
 | Guide | — | unused | unused | unused |
 
 **A held D-pad arm repeats** (Branson: "when I hold a button on the dpad
@@ -219,10 +227,10 @@ it doesn't repeat"):
 - The zoom and focus arms step once on the press, again after 0.4 s, and
   then every 80 ms until released. This is `ControllerScheme::HoldRepeat`,
   driven by each tool's controller tick (`press(verb, down)` + `tick()`),
-  so Focus mode, Focus calls and Refine (Show Tree and Build) all behave
+  so Quick focus, Venue focus and Focus this cue (Show Tree and Build) all behave
   the same.
 - The bumpers, triggers and buttons step once a press.
-- On Refine's colour and gobo pages, left/right step palettes, so they do
+- On Focus this cue's colour and gobo pages, left/right step palettes, so they do
   not repeat either.
 
 **Triggers are read as buttons.** They press past 0.6 and release below
@@ -231,9 +239,9 @@ it doesn't repeat"):
 axes 2 and 5 (`role="lt"` and `role="rt"`). They were already declared;
 nothing in the profiles changed.
 
-**One change to plain Focus mode.** Y used to toggle the second reference.
+**One change to plain Quick focus.** Y used to toggle the second reference.
 Y is now the scope everywhere, so the second reference moved to the left
-stick click, and the keyboard keeps **R**. Plain Focus mode's Y now nudges
+stick click, and the keyboard keeps **R**. Plain Quick focus's Y now nudges
 and saves *every* head in the list at once. That is useful when a whole
 truss trims a little low. A bumper goes back to one head.
 
@@ -246,13 +254,13 @@ truss trims a little low. A bumper goes back to one head.
 | Scope | G |
 | Say the light | W |
 | Feedback (cycle) | ⇧W |
-| Save all (A held) | ⇧Return (Focus mode) |
+| Save all (A held) | ⇧Return (Quick focus) |
 | Every unsaved light back to its last save (B held) | ⇧Backspace |
 | Hold every light / release (both stick clicks) | H |
 | Mark dead (View + X) | D |
 | Next unsaved (both bumpers) | U |
-| Keep at the source (View + A, Refine) | ⇧Return (Refine) |
-| Page (Refine) | P |
+| Keep at the source (View + A, Focus this cue) | ⇧Return (Focus this cue) |
+| Page (Focus this cue) | P |
 | Target page (focus calls) | T (R too) |
 | How many not saved (View + RS) | N |
 | Keep | Return |
@@ -304,32 +312,32 @@ level), Lights/Both only.
 
 **Only the current scope stays at full:**
 
-- **Focus calls.**
+- **Venue focus.**
   - Fixture scope: the fixture being worked is at the focus level (80%),
-    and the rest of the call is dimmed (15%: Focus calls start with
+    and the rest of the call is dimmed (15%: Venue focus start with
     "others: dim").
   - Group scope: the whole call is at the focus level.
   - Fixtures of other calls are not driven.
-- **Refine.**
+- **Focus this cue.**
   - Layer scope: nothing is dimmed; the cue looks as it will.
   - Group or Fixture scope: the selected fixtures keep the **cue's own
     level**, and the rest of *that layer* is dimmed to 15% — only the
     fixtures the cue has brighter than that; one already lower is never
     raised (Q112b). The cue's level is read from its Dimmer look, else
-    from the output before Refine touched it.
+    from the output before Focus this cue touched it.
   - Other layers are left as the cue has them.
   - The flash darkens the selected fixtures in the "off" phase.
 
 ### Feedback: lights, voice or both
 
 Branson's ask: one setting, **Lights / Voice / Both** (default Both), shared
-by Focus mode, Focus calls and Refine. It lives in
+by Quick focus, Venue focus and Focus this cue. It lives in
 `ProgrammerController::operatorFeedback()`; the UI keeps it in Settings
 (`controllerTools/feedback`), not in the show. Each panel has it as a
 **Feedback:** choice.
 
 - **Lights:** the rig's blinks (selection flashes, the save's double
-  blink, Refine's dimming) plus the panel's status lamp (main 241e51c1c);
+  blink, Focus this cue's dimming) plus the panel's status lamp (main 241e51c1c);
   no voice.
 - **Voice:** spoken lines only; the rig is not blinked
   (`FocusSession::setRigFeedback(false)`, `setLightsFeedback(false)`). The
@@ -339,7 +347,7 @@ by Focus mode, Focus calls and Refine. It lives in
 **The console's setting is the authority** (Q127: "default to what's set
 on the console and follow that thru the entire operation"). It applies
 everywhere, the armed focus-call cue included: in Lights only that cue is
-silent, and in Voice or Both it says "Focus calls ready". Hold RS (or ⇧W)
+silent, and in Voice or Both it says "Venue focus ready". Hold RS (or ⇧W)
 is a deliberate override that changes that same setting, so there is
 always one current value.
 
@@ -370,7 +378,7 @@ together with the blink (owner, 2026-10-23):
 The engine emits text (`ProgrammerController::operatorAnnounce`). The UI
 speaks it (`ui/src/operatorvoice.{h,cpp}`).
 
-**Output device.** The Focus calls dialog's **Voice to:** picks the audio
+**Output device.** The Venue focus dialog's **Voice to:** picks the audio
 output, so the voice can go to the interface that feeds the headsets. On a
 Mac this is `say -a <device>`, and the device is kept in the setting
 `operatorVoice/device`. Linux and Windows: follow-up (spd-say has no
@@ -378,15 +386,15 @@ device choice; Qt TextToSpeech uses the system output).
 
 **Exact phrases:**
 
-| When | Focus calls | Refine |
+| When | Venue focus | Focus this cue |
 |---|---|---|
-| Start | "Call 1 of 5, DH Tspots to DSC. Fixture 1 of 4." | "Refine, cue 4. AT spots, layer." |
+| Start | "Call 1 of 5, DH Tspots to DSC. Fixture 1 of 4." | "Focus this cue, cue 4. AT spots, layer." |
 | Next call / layer | "Call 2 of 5, AT spots to Soloist DS. Fixture 1 of 3." | "DS wash, layer." |
 | Next fixture | "Fixture 3 of 8." (with the call prefix) | "AT spots, fixture 3 of 8." |
 | Scope to group | "… All 4, group." | "AT spots SL, group 1 of 2." |
 | Say the light (RS click) | "Spot 3. Call 2 of 5, AT spots to Soloist DS. Fixture 3 of 8." | "Mover 3. Cue 4, AT spots, fixture 3 of 8." |
 | A / B / X / View | "Saved." / "Saved 4." / "Reverted." / "Zeroed." / "Undone." / "Nothing to undo." | "Kept." / "Back to the cue." / "Exception cleared." / "Undone." |
-| Refusals | — | "This layer is aimed at a target. Refine a fixture, or move the target." / "No zoom here." / "No focus here." |
+| Refusals | — | "This layer is aimed at a target. Focus this cue a fixture, or move the target." / "No zoom here." / "No focus here." |
 | Page / palette | — | "Colour page." / "Gobo page." / "Beam page: zoom and focus." / the palette's name |
 
 **Voice back ends.** `OperatorVoice` is a small interface:
@@ -407,7 +415,7 @@ or QtTextToSpeech's SAPI engine.
 
 ---
 
-## 4. Focus calls: data model
+## 4. Venue focus: data model
 
 A focus call is defined in `engine/src/focuscalls.{h,cpp}`:
 
@@ -488,12 +496,12 @@ Each fixture holds a `RigCalibration` (new, in `truss.h`):
 
 The values are absolute (this venue's value), not deltas. Decided: absolute (Q110, §11).
 
-**Naming a venue.** The Focus calls dialog offers:
+**Naming a venue.** The Venue focus dialog offers:
 
 - the existing venues;
 - **New venue…**, which you name or leave empty to get "Venue
   yyyy-MM-dd HH:mm", made unique;
-- **None**, which saves into the show's own calibration as Focus mode always
+- **None**, which saves into the show's own calibration as Quick focus always
   did.
 
 **How the show file is kept clean.**
@@ -506,7 +514,7 @@ The values are absolute (this venue's value), not deltas. Decided: absolute (Q11
   uses the same XML.
 - Applying a venue holds the base for **every** fixture, so nothing done to
   calibration while it is applied reaches the show.
-- Focus mode no longer marks the show modified when it saves to a venue.
+- Quick focus no longer marks the show modified when it saves to a venue.
 
 **Load and apply.** `App::loadXML(file)` calls
 `venueCorrections()->setShowFile(file, true)`. That reads the sidecar and
@@ -532,9 +540,9 @@ corrections, the show's `FixtureRig` attributes are what they were before.
 
 ---
 
-## 6. Refine: scopes, and how each edit is stored in the cue
+## 6. Focus this cue: scopes, and how each edit is stored in the cue
 
-Refine lives in `engine/src/refinesession.{h,cpp}`. The Show Tree has no
+Focus this cue lives in `engine/src/refinesession.{h,cpp}`. The Show Tree has no
 raw DMX: a value is a **palette** on a layer's **look** (`ShowTree::Look`,
 by key: Position, Zoom, Beam.Beam, Colour, Beam.Gobo). A per-fixture value
 in a cue is a **child layer** (§3.5 of SHOW_TREE_DESIGN.md):
@@ -543,7 +551,7 @@ in a cue is a **child layer** (§3.5 of SHOW_TREE_DESIGN.md):
 - its own looks win on its fixtures;
 - the parent lights the rest of it.
 
-Refine uses exactly those. It adds nothing to the cue model.
+Focus this cue uses exactly those. It adds nothing to the cue model.
 
 | Scope | What a change edits | Stored as |
 |---|---|---|
@@ -554,7 +562,7 @@ Refine uses exactly those. It adds nothing to the cue model.
 **Pending until A.** Every nudge is pending and shown on the rig through an
 `OutputLayer` (Universe::Focus, Override), so the operator sees it at once.
 **A** keeps everything pending as **one** Show Tree step
-(`beginBatch("Refine")` … `endBatch`). The order is Layer, then Group, then
+(`beginBatch("Focus this cue")` … `endBatch`). The order is Layer, then Group, then
 Fixture, so the most specific wins. **B** drops it.
 
 **X** clears the exception at Group or Fixture scope:
@@ -581,16 +589,16 @@ Fixture, so the most specific wins. **B** drops it.
 - **Colour / gobo** (LS-click page) step through the show's named Colour /
   Gobo palettes, in name order. Keeping sets that palette on the look.
 
-**Mode (Q112a).** Refine works in Design and in Operate, and switching
+**Mode (Q112a).** Focus this cue works in Design and in Operate, and switching
 between them does not end it.
 
 - **Design:** it previews the cue (`ShowTreeController::previewCue`), and
   a kept edit re-bakes and shows at once.
-- **Operate:** the cue list runs on; Refine does not preview. A kept edit
+- **Operate:** the cue list runs on; Focus this cue does not preview. A kept edit
   is in the tree at once, but the running cue's generated scene only
-  changes at its next GO. Until then Refine **holds what was kept** on the
+  changes at its next GO. Until then Focus this cue **holds what was kept** on the
   rig through its OutputLayer, and says "Kept. It plays from the next GO."
-  Leaving Refine lets go. Going back to Design drops the hold and
+  Leaving Focus this cue lets go. Going back to Design drops the hold and
   previews the cue with the edit.
 
 **Layers listed.** The cue's **own top-level** layers on fixtures, then the
@@ -599,7 +607,7 @@ layers it only tracks in (§6C). Opaque function layers are not listed.
 ### 6C. A layer the cue only tracks
 
 Some layers a cue only inherits (tracked in from an earlier cue, not in
-`Cue::layers`). Refine now lists them after the cue's own layers:
+`Cue::layers`). Focus this cue now lists them after the cue's own layers:
 
 - **How they are listed.** `ShowTreeController::resolved()` gives every
   `ResolvedLayer` with `own == false` at depth 0. Each one gets a stand-in
@@ -611,7 +619,7 @@ Some layers a cue only inherits (tracked in from an earlier cue, not in
 - **Where A keeps the change.** It can go either to this cue or to the
   source cue:
   - **This cue: the default.** `setTargetLook()` makes the layer this cue's
-    own; the source cue is untouched. Refine then steps on from that own
+    own; the source cue is untouched. Focus this cue then steps on from that own
     layer.
   - **The source cue: the alternative.** `updateSource()` makes the change
     there, so every cue that tracks it plays it.
@@ -627,9 +635,9 @@ and here. This is Q-C1.
 
 Test: `refinesession_test aTrackedLayerKeepsHereOrAtItsSource`.
 
-### 6B. Refine on a Build scene (from the Workbench)
+### 6B. Focus this cue on a Build scene (from the Workbench)
 
-The owner asked for Refine "in the show-tree/builder" with the controller
+The owner asked for Focus this cue "in the show-tree/builder" with the controller
 "very consistent between the two". It is the same `RefineSession`, the same
 controller table, panel, flash and voice. Only what an edit is stored as
 changes (`engine/src/refinescene.cpp`). A Build scene has no layers, so each
@@ -646,15 +654,15 @@ part of a cue maps to its nearest equivalent:
 
 Entry points:
 
-- the Workbench header's **Refine…**, for a scene or a cue on loan from the
+- the Workbench header's **Focus this cue…**, for a scene or a cue on loan from the
   Show Tree;
-- **Refine on the controller…** on the right-click menu of a scene, group
+- **Focus this cue on the controller…** on the right-click menu of a scene, group
   or fixture row (Stack mode), and of a cue's layer row (`TreeCueStack`).
 
 **Not clean:**
 
 - Editing a shared palette in place is Build's rule, but it differs from
-  the Show Tree, where Refine makes a one-off. This is question Q-B1 in §11.
+  the Show Tree, where Focus this cue makes a one-off. This is question Q-B1 in §11.
   (Q116 made it warn first; a reusable Show Tree layer warns the same way.)
 - A Layer-scope keep that changes a palette and raw values is **one** undo
   step (Q117, `PaletteOps::sceneValueStep()`).
@@ -665,13 +673,13 @@ Entry points:
 
 | Where | What | v1 |
 |---|---|---|
-| Lighting Studio toolbar → **Focus calls** | Edit the calls, choose a venue, Start | ✅ |
-| **Run** tab header → **Focus calls…** | The same dialog, pre-show | ✅ |
-| Controller **View + Menu** | Plain Focus mode (as before) | ✅ (unchanged) |
-| Show Tree cue page → **Refine on the controller…** | Refine that cue, first layer | ✅ |
-| Show Tree layer right-click → **Refine on the controller…** | Refine starting on that layer | ✅ |
-| Build Workbench header → **Refine…** (a scene, or a cue on loan) | Refine what is loaded (§6B) | ✅ |
-| Build Workbench right-click on a scene, group, fixture or cue-layer row | Refine starting there | ✅ |
+| Lighting Studio toolbar → **Venue focus** | Edit the calls, choose a venue, Start | ✅ |
+| **Run** tab header → **Venue focus…** | The same dialog, pre-show | ✅ |
+| Controller **View + Menu** | Plain Quick focus (as before) | ✅ (unchanged) |
+| Show Tree cue page → **Focus this cue on the controller…** | Focus this cue that cue, first layer | ✅ |
+| Show Tree layer right-click → **Focus this cue on the controller…** | Focus this cue starting on that layer | ✅ |
+| Build Workbench header → **Focus this cue…** (a scene, or a cue on loan) | Focus this cue what is loaded (§6B) | ✅ |
+| Build Workbench right-click on a scene, group, fixture or cue-layer row | Focus this cue starting there | ✅ |
 | A **focus-call cue** in a cue list (cue page: **Focus call**; F column: **focus**) | Armed on GO; the controller's **Start** begins (below) | ✅ |
 
 ### A focus-call cue
@@ -700,8 +708,8 @@ onto a focus-call cue:
   call's fixtures parked at their point;
 - **arms** the focus calls. Nothing steps.
 
-The voice says once: **"Focus calls ready. Press Start to begin."** The cue
-page, the Run tab and the footer all say **"Focus calls: waiting for the
+The voice says once: **"Venue focus ready. Press Start to begin."** The cue
+page, the Run tab and the footer all say **"Venue focus: waiting for the
 controller"**. The Run tab also has a **Start focus calls** button.
 
 **Start begins them.**
@@ -715,7 +723,7 @@ controller"**. The Run tab also has a **Start focus calls** button.
 
 Starting:
 
-- runs Focus mode on the show's calls **in Operate** (`Options::allowOperate`),
+- runs Quick focus on the show's calls **in Operate** (`Options::allowOperate`),
   dimming the others;
 - uses a venue: the one applied. With none applied (and a show file to
   keep one beside), the laptop asks for its name first (Q120, state
@@ -726,7 +734,7 @@ Starting:
   as its blink begins.
 
 **Leaving continues the list.** Either of these asks about unsaved work, as
-Focus mode always does, then stops the session:
+Quick focus always does, then stops the session:
 
 - **Menu**;
 - **RT on the last call**, which says "Last call done." first
@@ -746,11 +754,11 @@ Tests:
 
 ## 8. Mockups
 
-### Focus calls panel (Focus mode's panel, running calls)
+### Venue focus panel (Quick focus's panel, running calls)
 
 ```
-┌ Focus Mode ─────────────────────────────────────────────────────────┐
-│ Focus calls — fixture 2 of 4                                        │
+┌ Quick Focus ─────────────────────────────────────────────────────────┐
+│ Venue focus — fixture 2 of 4                                        │
 │ Call 2 of 5: AT spots → Soloist DS                                  │
 │ Cut off the proscenium                                              │
 │ AT Spot 3  (ID 12)                                                  │
@@ -775,11 +783,11 @@ Tests:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Refine panel
+### Focus this cue panel
 
 ```
-┌ Refine ─────────────────────────────────────────────────────────────┐
-│ Refine — cue 4 Ballad  ·  layer 1 of 3                              │
+┌ Focus this cue ─────────────────────────────────────────────────────────────┐
+│ Focus this cue — cue 4 Ballad  ·  layer 1 of 3                              │
 │ AT spots, fixture 3 of 8.                                           │
 │ Fixture: an exception for AT Spot 3 alone (a child layer).          │
 │   Y changes the scope.  D-pad: beam (zoom, focus) (LS click …)      │
@@ -826,7 +834,7 @@ Engine (all unit-tested):
 | `engine/src/venuecorrections.{h,cpp}` | Venues, sidecar, apply/unapply, record |
 | `engine/src/focusreport.{h,cpp}` | The focus report: rows, HTML, Lightwright CSV (Q134) |
 | `engine/src/focussession.{h,cpp}` | + calls, scope, flash, announce, venue saves, batch undo |
-| `engine/src/refinesession.{h,cpp}` | Refine |
+| `engine/src/refinesession.{h,cpp}` | Focus this cue |
 | `engine/src/truss.h` | `RigCalibration` |
 | `engine/src/monitorproperties.{h,cpp}` | Calibration base, written by `saveXML()` |
 | `engine/src/programmercontroller.{h,cpp}` | Owns them, routes the controller (triggers too), `operatorAnnounce` |
@@ -840,7 +848,7 @@ UI (thin):
 | `plugins/hid/gamepadlayout.*`, `plugins/hid/macx/hidgamecontroller.mm` | The pad layout, PlayStation pads through GameController (Q139) |
 | `ui/src/monitor/focusmodepanel.cpp` | Call, note, scope and venue lines, new keys |
 | `ui/src/monitor/focuscontrolmap.{h,cpp}` | `setTool()`, labels from ControllerScheme, LT/RT/LS/RS callouts |
-| `ui/src/refinepanel.{h,cpp}` | Refine's panel |
+| `ui/src/refinepanel.{h,cpp}` | Focus this cue's panel |
 | `ui/src/operatorvoice.{h,cpp}` | Voice interface and back ends, announcer |
 | `ui/src/app.cpp`, `monitor.cpp`, `cuerunner.cpp`, `showtreeview.cpp` | Wiring and entry points |
 
@@ -852,7 +860,7 @@ Tests:
   steps, layer edit and undo, fixture exception and clear, zoom/focus/colour,
   Aim refusal, dimming and phrases, one tool at a time.
 - `engine/test/focussession`: updated for Y → scope.
-- `ui/test/focuscallsui` (7): dialog, venue, panel lines, Refine panel keys,
+- `ui/test/focuscallsui` (7): dialog, venue, panel lines, Focus this cue panel keys,
   voice.
 - `ui/test/focusmode`: updated labels.
 
@@ -860,7 +868,7 @@ Help:
 
 - `docs/features/focus-calls.md` and `refine.md`, both registered in
   `help.qrc` and `kTopics`;
-- `lighting-studio.md` Focus mode;
+- `lighting-studio.md` Quick focus;
 - `whats-new.md`.
 
 ---
@@ -872,7 +880,7 @@ Help:
   **conflicts** with triggers stepping calls. See §11.
 - Rumble on pads not read through GameController (Linux, Windows, PS pads
   over raw HID): see §11.
-- Refine of effects, and of intensity. The dimmer is deliberately not on the controller: the
+- Focus this cue of effects, and of intensity. The dimmer is deliberately not on the controller: the
   flash and dim feedback use it.
 - Two operators at once (one per side). Two pads are handled: the first
   to press Start owns it (Q135).
@@ -889,11 +897,11 @@ The open questions were answered on the board after the first version:
 
 | Q | Question | Decision | Done |
 |---|---|---|---|
-| Q109 | Y moved to scope in plain Focus mode (second reference on the left stick click)? | **Y is scope everywhere.** Keep as built. | As built |
+| Q109 | Y moved to scope in plain Quick focus (second reference on the left stick click)? | **Y is scope everywhere.** Keep as built. | As built |
 | Q110 | Absolute or delta corrections? Must a venue be named? | **Absolute** values; a **date-and-time** name is fine. Keep as built. | As built |
-| Q111 | A calibration typed in the fixture dialog while a venue is applied? | It goes **into the venue** and its `Show.venues.xml`, not the show. | `VenueCorrections` records any calibration change from `MonitorProperties::rigPropsChanged` while a venue is applied (only the calibration fields; a change of place or mount is not one). Focus mode's heads are *held* while it runs, so a live nudge is recorded only when saved with A, and a discarded one never. Typed back to the show's value, the correction goes. Test: `focuscalls_test anEditElsewhereGoesToTheVenue`. |
-| Q112a | Refine in Operate? | **Allowed.** | §6 Mode. Test: `refinesession_test operateHoldsWhatIsKept`. |
-| Q112b | Refine's dim raises a fixture below 15%? | **Dim only what is brighter** than 15%; never raise one the cue has lower. | `RefineSession::cueLevel()`. Test: `dimsOnlyWhatIsBrighter`. |
+| Q111 | A calibration typed in the fixture dialog while a venue is applied? | It goes **into the venue** and its `Show.venues.xml`, not the show. | `VenueCorrections` records any calibration change from `MonitorProperties::rigPropsChanged` while a venue is applied (only the calibration fields; a change of place or mount is not one). Quick focus's heads are *held* while it runs, so a live nudge is recorded only when saved with A, and a discarded one never. Typed back to the show's value, the correction goes. Test: `focuscalls_test anEditElsewhereGoesToTheVenue`. |
+| Q112a | Focus this cue in Operate? | **Allowed.** | §6 Mode. Test: `refinesession_test operateHoldsWhatIsKept`. |
+| Q112b | Focus this cue's dim raises a fixture below 15%? | **Dim only what is brighter** than 15%; never raise one the cue has lower. | `RefineSession::cueLevel()`. Test: `dimsOnlyWhatIsBrighter`. |
 | Q112c | A group exception collapses a fan? | **Keep the fan:** the change is an offset to each fixture's own position. | §6 table. Test: `groupScopeKeepsTheFan`. |
 | Q113 | Voice (rate, which voice, names, default), rumble, shutters? | **Wait** until he has tried it. Nothing changed. | — |
 
@@ -907,9 +915,9 @@ step").
 
 | Q | Decision | Built |
 |---|---|---|
-| Q116 | Refine in Build, Layer scope, a shared palette: edit in place, but **warn first**, naming the other scenes or cues by voice and on the panel; a second A (or the panel's **Change them all**) applies it. | `RefineSession::paletteUsers()`, `sharedWarning()`, `confirmShared()`; B drops it. |
+| Q116 | Focus this cue in Build, Layer scope, a shared palette: edit in place, but **warn first**, naming the other scenes or cues by voice and on the panel; a second A (or the panel's **Change them all**) applies it. | `RefineSession::paletteUsers()`, `sharedWarning()`, `confirmShared()`; B drops it. |
 | Q117 | A Build Layer-scope keep that changes a palette and raw values is **one** undo step. | `PaletteOps::sceneValueStep()`: scenes and palette values in one step; a whole Build keep is that one step. |
-| Q118 | Tracked layer: default stays "this cue"; **View + A** keeps at the source. | Refine's View undoes on release unless A came while held; ⇧Return. |
+| Q118 | Tracked layer: default stays "this cue"; **View + A** keeps at the source. | Focus this cue's View undoes on release unless A came while held; ⇧Return. |
 | Q119 | Start/Menu begins an armed focus-call cue. | As built. |
 | Q120 | No venue applied: **ask** on the laptop; 8 s without an answer, the dated name; said. | `FocusCallCue` state `NamingVenue`, `FocusCallsDialog::askVenue()`; typing holds the clock. |
 | Q121 | Finishing the calls GOes on automatically. | As built. |
@@ -982,7 +990,7 @@ step").
 |---|---|---|
 | Q128 | A venue also overrides truss trims and stage target positions; a pad **target page** moves the current call's target, its heads following (like Eos focus palettes). | `<Trim>`/`<Target>` in the sidecar; `Truss::setBaseTrim()`, `StageTarget::setBasePosition()` keep the show's own in the show file; `syncStructure()` records moves while a venue is applied. Target page = **LS click** in focus calls (T), A keeps, B back. Child bars follow their parent. |
 | Q129 | Confirm the venue: on open when last changed over ~a day ago ("Still at …?", New venue default); the focus-call cue ALWAYS confirms (voice + laptop, 8 s → new dated venue); footer "Venue: …"; the dialog no longer defaults to an old venue. | `needsConfirm()` (20 h), `FocusCallsDialog::confirmVenue()`, `askVenue(…, current)`, `App::updateVenueFooter()`. |
-| Q130 | Quiet Refine in Operate: the running cue only, no blink, no dim; the hold is released on GO; "It plays next time cue N runs". | `RefineSession::cueIsRunning()`, `isBlind()`; others refused. |
+| Q130 | Quiet Focus this cue in Operate: the running cue only, no blink, no dim; the hold is released on GO; "It plays next time cue N runs". | `RefineSession::cueIsRunning()`, `isBlind()`; others refused. |
 | Q131 | Important lines always speak (Lights only too) with a slow long blink and one long buzz. | `ControllerScheme::Priority`, `ProgrammerController::warnOperator()`, `flashWarning()`, `padRumble(1, 700)`. |
 | Q132 | Hold A is 1.0 s; a hold never confirms a warning. | `keepAllHoldSeconds()`, `RefineSession::hasWarningPending()`. |
 | Q133 | Corrections store the fixture's definition and mode; a mismatch is skipped and flagged "needs focus" (panel, plot badge, calls); a deleted fixture's correction is kept, listed as orphaned; old files apply with a one-time note. | `VenueCorrections::needsFocus()`, `orphaned()`, `note()`; plot `markNeedsFocusFixtures()`. |
@@ -990,10 +998,10 @@ step").
 | Q135 | Two pads: the first to press Start owns the session; others ignored and told; the panel names the owner. | `controllerOwner()`, `controllerOwnerName()`. |
 | Q136 | As recommended on the board. | — |
 | Safety | Controller lost: freeze everything, say so; "Controller back." | `freezeController()`, `controllerLost()`. |
-| Gap 5 | GO only if the list is still on the focus cue; a start never discards unsaved work; "Focus calls ended" when stopped from outside. | `FocusSession::finish()`, start guards. |
+| Gap 5 | GO only if the list is still on the focus cue; a start never discards unsaved work; "Venue focus ended" when stopped from outside. | `FocusSession::finish()`, start guards. |
 | Gap 8 | The venue file travels: Collect for Transfer copies it; a sibling's (versioned Save As, Finder copy) is offered on open. | `writeSidecarFor()`, `importCandidates()`, `importFrom()`. |
 | Gap 9 | The voice never drops confirmations. | `OperatorVoice` queue with priorities. |
-| Gap 10 | Accessible lamp: blue/yellow/orange, ✓ / !, the count; on the Refine panel; the unsaved light breathes; View + RS says how many. | `FocusStatusLamp`, `ControllerScheme::savedColour()` etc. |
+| Gap 10 | Accessible lamp: blue/yellow/orange, ✓ / !, the count; on the Focus this cue panel; the unsaved light breathes; View + RS says how many. | `FocusStatusLamp`, `ControllerScheme::savedColour()` etc. |
 | Review | One word per tool saying where a change lands; X in a venue → the show's calibration; View timing the same everywhere (on release); a reusable layer warns first; nothing reaching the rig is said; see and clear one correction. | As listed in §2, §3; `rigOutputProblem()`, `FocusCallsDialog::showCorrections()`. |
 
 ### Decisions Q134, Q139, Q140 (2026-10-24, built that night)
@@ -1037,10 +1045,10 @@ step").
 
 **Works (on this branch):**
 
-- The shared controller scheme, used by Focus mode, Focus calls and Refine.
+- The shared controller scheme, used by Quick focus, Venue focus and Focus this cue.
 - The on-screen map labelled per tool.
 - Triggers routed as buttons.
-- Focus calls:
+- Venue focus:
   - saved in the show;
   - edited in a dialog;
   - run with call and fixture stepping, group scope (nudge, save and undo
@@ -1050,7 +1058,7 @@ step").
   - re-applied on open;
   - switchable;
   - the show file never takes them (tested).
-- Refine:
+- Focus this cue:
   - Layer, Group and Fixture scopes;
   - position, zoom, focus, colour and gobo palettes;
   - pending preview on the rig;
@@ -1064,15 +1072,15 @@ step").
 
 Built on the night of 2026-10-23, at the owner's request:
 
-- Refine from Build's Workbench, on scenes and on cues (§6B).
+- Focus this cue from Build's Workbench, on scenes and on cues (§6B).
 - A focus-call cue that arms on GO and starts on the controller (§7).
-- Refine of a layer that is only tracked in (§6C).
+- Focus this cue of a layer that is only tracked in (§6C).
 - A venue manager: apply now, rename, delete.
 - A voice queue and output device.
 - Help pictures for the new panels.
 
 Built on 2026-10-24 from the gaps review (§11, Q128–Q136): venue
-confirm, the controller-lost freeze, quiet Refine in Operate, important
+confirm, the controller-lost freeze, quiet Focus this cue in Operate, important
 lines always spoken, hold A 1.0 s, the focus-call cue's robustness, the
 fixture-type check, per-venue trims and targets with the target page,
 the venue file travelling, the voice's priorities, the accessible lamp,
@@ -1110,7 +1118,7 @@ practice (§13). Then the freeze: nothing new here until the trial.
 For teaching (lesson 3.6): the crew learns to focus on a rig that is
 really off, and is scored, without anyone's real venue changing.
 
-- **Start.** Focus calls → **Practice (scramble)…** → how far off: easy
+- **Start.** Venue focus → **Practice (scramble)…** → how far off: easy
   1–3°, medium 2–6°, hard 4–10° (pan and tilt each, either way).
   `FocusCallsDialog::startPractice()` stores the calls and calls
   `VenueCorrections::startPractice(movingHeads, seed, min, max)`.
@@ -1121,7 +1129,7 @@ really off, and is scored, without anyone's real venue changing.
   plus the scramble; trims and targets are copied from the venue applied.
   It is applied like any venue, so the real rig is really off, and the
   venue it came from is untouched.
-- **The visualiser.** Focus mode normally draws the light being worked at
+- **The visualiser.** Quick focus normally draws the light being worked at
   its intent (on its mark). With a practice applied the views draw every
   scrambled light from its DMX with its **right** offsets
   (`practiceViewProps()` in `fixtureAimDirection()` and the plot's gauges;
@@ -1139,3 +1147,82 @@ really off, and is scored, without anyone's real venue changing.
 - **Not done:** fixed lights are not scrambled; a class leaderboard (more
   than one result at once) is the report files side by side.
 
+
+
+## 14. The Focus menu, the reasons, the names (board Q143, Q146, Q148, Q149)
+
+Built for 0.3.0 RC2 (2026-10-25).
+
+- **One Focus ▾** on the Lighting Studio toolbar (`FocusMenu::fill()`,
+  `ui/src/monitor/focusmenu.cpp`), filled as it opens: **Quick focus…**,
+  **Venue focus…** (with a venue applied the calls run for it at once;
+  with none, the list opens to name the room first:
+  `FocusCallsDialog::startVenueFocus()`), **Edit focus calls…**,
+  **Venues ▸** (Apply ▸ each venue or None, New venue…, Rig and
+  universes…), **Practice (scramble)…** and **Focus report…** (the
+  applied venue's; with none, the only one, else asked).
+- **Greyed with the reason** (Q146-2): each `FocusMenu::*Blocked()` is
+  empty when the entry can be used, else the sentence shown as its
+  tooltip — no lights placed on the plot, no focus calls yet, none with a
+  light on the plot, no moving head to scramble, a show not saved, no
+  venue. Used on the menu, the Run tab's Venue focus, the Rig Overview's
+  Quick focus, the Show Tree cue page (its Focus ▾ header, the tick box,
+  Focus this cue) and the Workbench header.
+- **Quick focus's setup says why** (Q146-1): under the form, "No moving
+  heads are placed on the plot. Place them in the Lighting Studio, or
+  choose Fixed lights." or "No stage target to aim at. Add one with Add ▸
+  Add Target Position." (the Add menu's own wording). Aim at is never
+  blank: "No stage target yet", and **Add a target…** places one in the
+  middle of the plot view through the Add Target dialog (with its Aim
+  palette). With no moving heads but fixed lights, the fixed lights are
+  chosen.
+- **Names** (Q149): see the note at the top. The cue page's tick box is
+  **Make this a venue focus cue** (the F column still says *focus*); the
+  cue page and the Workbench have a **Focus ▾** in their header (Focus
+  this cue / look, Make this a venue focus cue), and a layer's right-click
+  says **Focus this cue…**.
+- **Practice says what a scramble is** (Q143):
+  `FocusCallsDialog::practiceExplanation()` on the level picker and the
+  button's tooltip, and in focus-calls.md.
+- Help anchors renamed (`#quick-focus`, `#running-venue-focus`,
+  `#a-venue-focus-cue-pre-show`, `#focus-this-look-on-a-build-scene`,
+  `#focusing-during-the-show`); the old ones still land on the new
+  headings (`HelpBrowser`'s alias table).
+- Tests: `FocusCallsUi_Test::quickFocusSaysWhyStartIsGreyed`,
+  `theFocusMenuGreysWhatCannotBeUsed`, `focusEntriesElsewhereSayWhy`,
+  `practiceExplainsTheScramble`.
+
+### Voice detail, and Branson's other test findings (2026-10-25)
+
+- **Voice detail** (`ControllerScheme::VoiceDetail`: Terse, Standard —
+  the default — Verbose), one setting beside Feedback on every panel
+  (`VoiceDetailCombo`, QSettings `controllerTools/voiceDetail`), set on
+  both sessions by `ProgrammerController::setVoiceDetail()`. Every line
+  that changes with it comes from one phrase table in
+  `controllerscheme.cpp`: `stepPhrase()` ("F1 Spot 3." / "Fixture 1, Spot
+  3." / "Fixture 1 of 8, Spot 3."), `callPhrase()` ("Call 2." / "Call 2,
+  AT spots to Soloist DS." / "Call 2 of 5, AT spots to Soloist DS, SL 2,
+  US 1."), `savedPhrase()` ("Saved." / "Saved fixture 1 to Lincoln HS."
+  / "Saved Spot 3 to Lincoln HS."), `savedSomePhrase()`,
+  `savedAllPhrase()` ("Saved all." / "Saved all, 6 lights."),
+  `revertedPhrase()` and `revertedAllPhrase()`. At Terse and Standard the
+  call is said on entering it; at Verbose on every step, as before. Say
+  the light is always the name first (Terse: only the name). Warnings and
+  safety lines are not in the table and are never shortened. There is no
+  free controller gesture for it, so it is a panel setting only. The
+  tables in sections 2 and 3 above show the Verbose wording.
+- **Hold A confirms**: `FocusSession::saveAllHeld()` always says
+  `savedAllPhrase()` (every light of the session now saved), and the
+  panel shows the last confirmation (`focusConfirmed`).
+- **Lights that cannot be aimed**: Quick focus's setup keeps what was
+  selected but cannot be focused (`FocusModeSetupDialog::unfocusable()`)
+  and, at Start, lists them with **Exclude them** (the default) or
+  Cancel.
+- **Renaming a venue** renames it inside the one sidecar: corrections,
+  trims, targets and house rig go with it; a practice scrambled from it
+  now follows the new name back (`VenueCorrections::renameVenue()`).
+- Tests: `FocusCalls_Test::theVoiceSaysTheLightsName` (each level),
+  `holdingAOnThePadSaysAllSaved`, `renamingAVenueKeepsEverything`,
+  `RefineSession_Test::theOperatorIsToldWhereTheyAre`,
+  `FocusCallsUi_Test::voiceDetailIsOneSettingOnEveryPanel`,
+  `lightsThatCannotBeAimedAreListed`.

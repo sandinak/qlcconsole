@@ -59,7 +59,7 @@ be affected before you commit.
 its place from the stage marks ("SL 2.4 · US 3.1 m": left or right of the
 centre line, up or downstage of the number line), live while you drag
 it. The Rig Overview writes it too, and focus calls say it ("SL 2, US
-1"). **Show ▸ Stage marks ▸ Target positions** hides it. See
+1"). **Show ▸ Target positions** hides it. See
 [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 
 ## Line targets
@@ -174,7 +174,7 @@ The calibration offsets go into the DMX, after the geometry; every view
 takes them out again when it turns DMX back into a direction, so a beam is
 drawn on the target it is aimed at whatever the offsets are. See
 [Calibration offsets](lighting-studio.md#calibration-offsets), and
-[Focus mode](lighting-studio.md#focus-mode) for setting them.
+[Quick focus](lighting-studio.md#quick-focus) for setting them.
 
 Reachability is a question of pan/tilt range against the fixture's own
 calibrated limits. Whether anything *stands in the way* is a separate
@@ -283,8 +283,8 @@ with an Aim look:
   rig positions). Per-fixture "free-fly" from a joystick is only used when
   no Aim look is present at all.
 
-The follow spot's stick is also the stick [Focus mode](lighting-studio.md#focus-mode)
-uses: while Focus mode is on it nudges calibration offsets instead, with the
+The follow spot's stick is also the stick [Quick focus](lighting-studio.md#quick-focus)
+uses: while Quick focus is on it nudges calibration offsets instead, with the
 same deadzone and sensitivity.
 
 A beam does **not** stop at the point it's aimed at — it passes through and

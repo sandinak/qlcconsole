@@ -28,44 +28,57 @@ their house lights, relays and subs.
 - **The clash check.** Apply now lists a house fixture on a tour
   fixture's addresses, anything on channels that are not ours, and
   fixtures in the other kind's slot, before the venue goes live. The
-  venue page (Focus calls ▸ **Rig and universes…**) has it all; the plot
+  venue page (**Focus ▸ Venues ▸ Rig and universes…** in the Lighting Studio) has it all; the plot
   has an **Owner** overlay. See [House rig and tour package](venues.md).
 
-### Focus calls and Refine: the controller on stage
+### Quick focus, Venue focus and Focus this cue: the controller on stage
 
-- **Focus calls.** The show keeps its focus in order — "DH Tspots →
+- **One Focus menu.** The Lighting Studio toolbar's **Focus ▾** holds
+  every focus tool: Quick focus, Venue focus, Edit focus calls, Venues,
+  Practice (scramble) and the Focus report. What cannot be used yet is
+  greyed with the reason — no lights on the plot, no focus calls, no
+  venue — there, on the Run tab and in the Show Tree. Quick focus says
+  why its Start is greyed, and offers **Add a target…** when the show has
+  none to aim at. See [The Focus menu](lighting-studio.md#the-focus-menu).
+- **Venue focus.** The show keeps its focus in order — "DH Tspots →
   DSC", then "AT spots → Soloist DS" — and runs it on the controller:
   triggers step the calls, bumpers the fixtures, the stick nudges, A
   saves. Corrections are saved **for the venue**, in a file beside the
   show, the moment A is pressed; the show file never takes them. See
-  [Focus calls](focus-calls.md).
-- **Refine.** The same controller on a Show Tree cue's own values:
+  [Venue focus](focus-calls.md).
+- **Focus this cue.** The same controller on a Show Tree cue's own values:
   position, zoom, focus, colour, gobo — the layer as a whole, or one
-  fixture as an exception (a child layer). See [Refine](refine.md). It
-  works on a Build scene too, from the Workbench's **Refine…** (see
-  [On a Build scene](refine.md#on-a-build-scene)), and in Operate on the
-  running cue only, quietly (see
-  [Refine during the show](refine.md#refine-during-the-show)).
-- **A focus-call cue.** Tick **Focus call** on a pre-show cue: GO arms
-  the focus calls, and Start on the controller begins them. See
-  [A focus-call cue](focus-calls.md#a-focus-call-cue-pre-show).
+  fixture as an exception (a child layer). See [Focus this cue](refine.md).
+  It works on a Build scene too, as **Focus this look** from the
+  Workbench's **Focus ▾** (see
+  [On a Build scene](refine.md#focus-this-look-on-a-build-scene)), and in
+  Operate on the running cue only, quietly (see
+  [Focusing during the show](refine.md#focusing-during-the-show)).
+- **A venue focus cue.** Tick **Make this a venue focus cue** on a
+  pre-show cue (or pick it from the **Focus ▾** in the cue page's or the
+  Workbench's header): GO arms the focus calls, and Start on the
+  controller begins them. See
+  [A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show).
 - **Say the light.** The right stick click says the light's name and
   where you are; **Feedback** picks lights, voice or both (hold it to
   switch). What is picked blinks, and the laptop says it: "AT
-  spots, layer", "fixture 3 of 8".
-- **One layout.** Y is now the scope in Focus mode too (one head, or all
+  spots, layer", "Fixture 3, Spot 3". **Voice** beside Feedback sets how
+  much is said: terse ("F3 Spot 3", "Saved"), standard, or verbose
+  ("Fixture 3 of 8, Spot 3", and the call's target and where it is). A
+  held A says "Saved all, 6 lights."; a save in a venue names the venue.
+- **One layout.** Y is now the scope in Quick focus too (one head, or all
   of them); the second reference moved to the left stick click.
 - **Still at the venue?** A show whose venue was last changed over a day
-  ago asks on open, New venue being the default; a focus-call cue always
+  ago asks on open, New venue being the default; a venue focus cue always
   asks. The footer shows **Venue:** and its name. Venues also keep the
   room's truss trims and target positions, and the **target page** (left
-  stick click in focus calls) moves a call's target with every head on
+  stick click in Venue focus) moves a call's target with every head on
   it. See [Venues](focus-calls.md#venues-corrections-that-stay-with-the-room).
 - **Safe on stage.** A controller that drops out freezes everything it
   held ("Controller lost. Lights held."). Warnings are always spoken,
   with a slow blink and one long buzz. The first pad to press Start owns
   the tools. The save lamp is blue, yellow and orange with a tick or "!"
-  and a count, in Refine too. See
+  and a count, in Focus this cue too. See
   [Telling the operator](focus-calls.md#telling-the-operator-where-they-are).
 - **Venue files travel.** Collect for Transfer copies the venues, and a
   show saved under a new version offers the earlier version's venues.
@@ -74,10 +87,11 @@ their house lights, relays and subs.
   marks, the correction, the lens, who checked it and when, and the
   dead, swapped and needs-focus flags — as a PDF or web page to print, or
   a CSV for Lightwright. See [The focus report](focus-calls.md#the-focus-report).
-- **Practice.** **Practice (scramble)…** puts every moving head in the
-  calls off by a few degrees, in a practice venue of its own, for the crew
-  to focus back; it is scored on how close, how fast and how many saves,
-  and works on the visualiser too. See
+- **Practice.** **Practice (scramble)…** knocks every moving head in the
+  calls off its target by a random amount, in a practice venue of its
+  own; the crew focuses them back and is scored on degrees off, time and
+  saves. The real venues are never touched, and it works on the
+  visualiser too. See
   [Practice](focus-calls.md#practice-scramble-and-focus-back).
 - **On the pad.** Hold B puts back every light not saved (one undo
   step). Both stick clicks hold every light ("Holding."). View + X marks
@@ -181,7 +195,7 @@ their house lights, relays and subs.
   the footer shows and how the speed masters show their beat are in a new
   **Appearance** tab in Settings, out of the View menu; your choices carry
   over. **View** is now only what you look at: **Workspace**, **Address
-  Tool**, **Rig Overview…** and **Focus Mode…**. See
+  Tool**, **Rig Overview…** and **Quick Focus…**. See
   [Appearance settings](other-improvements.md#appearance-settings).
 - **File ▸ Import is a menu of file types**: **QLC+ / qlcconsole
   Workspace**, **ETC Eos Show (ASCII .asc)** and **QLC+ Fixtures List
@@ -395,7 +409,7 @@ their house lights, relays and subs.
   line replaces the teal centre cross's line along it. The Rig Overview
   draws them on its floor, the apron tint and the FOH labels included, and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **Where a target is, in crew terms.** Each stage target on the plot,
-  each figure in the Rig Overview, and the person Focus mode stands where a
+  each figure in the Rig Overview, and the person Quick focus stands where a
   fixed light lands has a small readout of where it is against the stage
   marks, for example **SL 2.4 · US 3.1 m**. It follows the target as it
   moves. Untick **Target positions** in **Show ▸ Stage marks** to hide it. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
@@ -445,12 +459,12 @@ their house lights, relays and subs.
   [Mounting a fixture](lighting-studio.md#mounting-a-fixture) and
   [Scenery](lighting-studio.md#scenery-cyc-walls-and-drapes).
 - **Fixed lights aimed and focused.** A par or profile has **Pan** and
-  **Tilt** in Aim &amp; Mount, and Focus mode steps through fixed lights
+  **Tilt** in Aim &amp; Mount, and Quick focus steps through fixed lights
   too, with a person standing where each lands. Where the beam can
   change, D-pad up zooms in and down zooms out (, and .), and right
   tightens the focus and left loosens it (' and ;). See [Fixed lights](lighting-studio.md#fixed-lights-pars-and-fixed-spots)
   and [The beam](lighting-studio.md#the-beam).
-- **Focus mode shows what is saved.** A big lamp in the panel, to read
+- **Quick focus shows what is saved.** A big lamp in the panel, to read
   from the stage: **green** all saved, **yellow** the light you're on has
   unsaved changes, **red** another light has, and a red ring round a
   yellow centre for both, with the names beside it ("Unsaved: 2 other
@@ -485,9 +499,9 @@ their house lights, relays and subs.
 
 ### Controllers
 
-- **Controller test** (Focus mode's setup; Settings ▸ Advanced ▸ Game
+- **Controller test** (Quick focus's setup; Settings ▸ Advanced ▸ Game
   controllers) lists every input a game controller sends as it arrives.
-  Focus mode says when the controller is paused, and why. A controller
+  Quick focus says when the controller is paused, and why. A controller
   keeps working with qlcconsole behind other windows, is found again when
   switched back on or after the Mac sleeps, and every Xbox model is read
   in the right layout. See [Controller test](lighting-studio.md#controller-test).
@@ -497,7 +511,7 @@ their house lights, relays and subs.
   shows it greyed, "not connected", and the notice line says **Controller
   '…' disconnected — universe 2** in amber. When it comes back, on whatever
   line, it is patched again by itself — **Controller '…' connected** —
-  and Focus mode, the follow spot and focus calls carry on with it. A
+  and Quick focus, the follow spot and focus calls carry on with it. A
   show opened with the pad off picks it up the moment it is switched on.
   See [Controllers and MIDI devices coming and going](other-improvements.md#controllers-and-midi-devices-coming-and-going).
 
@@ -516,9 +530,9 @@ their house lights, relays and subs.
 
 ## 0.2.1 (October 2026)
 
-### Focus mode: the controller on screen
+### Quick focus: the controller on screen
 
-- **A map of the controller.** The Focus mode panel now draws the
+- **A map of the controller.** The Quick focus panel now draws the
   controller, each control labelled with what it does there — Next head on
   RB, Save on A, Nudge on the left stick, Fine on the right, the step on the
   D-pad. Buttons light while held and the sticks show where they are, so
@@ -764,14 +778,14 @@ their house lights, relays and subs.
 
 ### Follow spot and aiming
 
-- **Focus mode: align the rig with the controller.** Step through the moving
+- **Quick focus: align the rig with the controller.** Step through the moving
   heads with the bumpers — each aimed at its reference (the scene's aim, a
   target, a line target's own point), lit and ringed in the views — nudge
   its calibration offsets with the sticks or D-pad until the light lands,
   and save with A (B reverts, X zeroes, Y checks a second reference). The
   keyboard does it all too. From the Lighting Studio, the Rig Overview,
-  View → Focus Mode… (⌘⌥F) or View + Menu on the controller. See
-  [Focus mode](lighting-studio.md#focus-mode).
+  View → Quick Focus… (⌘⌥F) or View + Menu on the controller. See
+  [Quick focus](lighting-studio.md#quick-focus).
 - **Calibration offsets stay out of the picture.** A head's pan/tilt
   offsets are in its DMX but no longer in the views: its beam is drawn on
   the target it is aimed at. See

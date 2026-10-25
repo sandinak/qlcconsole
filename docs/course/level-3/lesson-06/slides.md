@@ -38,11 +38,11 @@ teacher says. It can be turned into a deck as it is.*
 - **Apron**: the deck in front of the curtain line.
 - Picture: the classroom plot with the marks. "SL 1 · DS 1."
 
-## 5. Focus calls
+## 5. Venue focus: the focus calls
 
 - A call is some lights and their point: **Truss-Spots → Center**.
 - The show keeps the calls in order; every room is focused the same way.
-- Lighting Studio ▸ **Focus calls**.
+- Lighting Studio ▸ **Focus ▸ Edit focus calls…**, then **Start venue focus**.
 
 ## 6. The venue keeps the corrections
 
@@ -59,11 +59,13 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 8. The scramble
 
-- Every mover off by 1–3° (Easy). Focus them back.
+- Every mover knocked off its target by a random amount (Easy: 1–3°).
+  Focus them back.
+- Practice venue: your real venues are never touched.
 - Score: within 1°, average, worst, saves, time.
 - **Hand-in: the focus report (PDF).**
 
-## 9. Refine: the cue, not the rig
+## 9. Focus this cue: the cue, not the rig
 
 - Same controller, on a cue: spot down, keep in the cue.
 - An aimed layer follows its target; one spot can be an exception.

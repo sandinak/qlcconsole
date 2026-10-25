@@ -7,9 +7,10 @@ house rig is saved with that venue. When you move the show to the next
 room, apply that room's venue and its house rig comes in. The tour
 package stays exactly as it was.
 
-The venue is the one you pick in **Focus calls** (Lighting Studio ▸
-Focus calls), kept in the file next to the show with its focus
-corrections. See [Focus calls](focus-calls.md#venues-corrections-that-stay-with-the-room).
+The venue is the one you apply with **Focus ▸ Venues** on the Lighting
+Studio toolbar (or pick in **Focus ▸ Edit focus calls…**), kept in the
+file next to the show with its focus corrections. See [Venue
+focus](focus-calls.md#venues-corrections-that-stay-with-the-room).
 
 ## Owner: Tour, House or Rental
 
@@ -89,9 +90,10 @@ dialog marks it **CONFLICT**.
 
 ## The venue page
 
-**Focus calls ▸ Rig and universes…** opens the page of the venue chosen
-beside it (with **None** or **New venue…** chosen, it asks you to choose
-a venue first). Apply the venue first to change its house rig or its
+**Focus ▸ Venues ▸ Rig and universes…** (for the venue applied; greyed
+until one is), or **Rig and universes…** in the focus calls list (for the
+venue chosen beside it: with **None** or **New venue…** chosen, it asks
+you to choose a venue first), opens the venue page. Apply the venue first to change its house rig or its
 patch; **Not ours** and the clash check work either way.
 
 ![The venue page: the house rig, each universe's slot, output and channels not ours, and the clash check](../images/venue-rig-page.png)
@@ -114,8 +116,9 @@ patch; **Not ours** and the clash check work either way.
 
 ## The clash check
 
-**Apply now** (in Focus calls, beside the venue) first lists what
-clashes with the show, with **Apply anyway** or **Cancel** (the default).
+**Apply now** (in the focus calls list, beside the venue), or **Focus ▸
+Venues ▸ Apply**, first lists what clashes with the show, with **Apply
+anyway** or **Cancel** (the default).
 Starting the focus calls on a venue applies it without asking, so press
 Apply now first in a new room:
 

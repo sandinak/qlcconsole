@@ -70,8 +70,9 @@ Beyond programming, it's built for **designing the rig** before the show:
 - **Focus and venues, from the stage** — the show's focus calls run on a
   game controller, call by call, with the laptop saying each light aloud;
   the corrections, trims, target positions, house rig and outputs of each
-  room are kept with that venue, never in the show. **Refine** changes a
-  cue from the stage with the same controller. A scramble practice and a
+  room are kept with that venue, never in the show (**Venue focus**, with
+  **Quick focus** for the show's own calibration). **Focus this cue**
+  changes a cue from the stage with the same controller. A scramble practice and a
   printable focus report make it teachable.
 - **Stage marks** — the curtain line, the number line and the apron on the
   plot, and every target's place in crew terms ("SL 2.4 · US 3.1 m").

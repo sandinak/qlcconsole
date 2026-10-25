@@ -15,7 +15,8 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 qlcconsole 0.3.0: the Build tab and its Workbench (scenes, collections and
 chasers edited as layers, shared with the Show Tree); the Classic QLC+ /
 qlcconsole / Everything views and Upgrade This Show for older QLC+ shows;
-house rigs, focus calls, per-venue corrections, Refine and stage marks for
+house rigs, Quick focus, Venue focus and its per-venue corrections, Focus
+this cue and stage marks for
 touring a show between rooms; plot symbols and output rules on fixtures;
 Eos shows imported with their special circuits and subs; skip cues, cue
 colours and move in black on the Show Tree. Developed as 0.2.2: notes and
@@ -37,13 +38,42 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   sent, a range zeroed; patching there refused). A clash check (overlaps,
   not ours, slots) runs before Apply now, on open and in the Patch dialog.
   UI: Owner in the group editor and Fixture Properties, Slot on the
-  Connections toolbar, the venue page (Focus calls ▸ Rig and universes…),
+  Connections toolbar, the venue page (Focus ▸ Venues ▸ Rig and universes…),
   the plot's Owner overlay, owners in the Inventory and the patch list.
-- **Focus calls, per-venue corrections and Refine** (FOCUS_REFINE_DESIGN.md,
-  board Q105-Q136). One controller map (`ControllerScheme`) shared by Focus
-  mode, Focus calls and Refine, with the on-screen map labelled per tool.
-  *Focus calls* (`FocusCalls`, saved in the show; Lighting Studio ▸ Focus
-  calls) run the show's focus in order on the controller: triggers step the
+- **The Focus menu and the focus tools' names** (board Q143, Q146, Q148,
+  Q149). One **Focus ▾** drop-down on the Lighting Studio toolbar, like
+  Add: Quick focus, Venue focus, Edit focus calls, Venues ▸ (Apply, New
+  venue, Rig and universes), Practice (scramble) and Focus report
+  (`FocusMenu`). An entry that cannot be used is greyed with the reason in
+  its tooltip -- no lights placed on the plot, no focus calls, no venue, a
+  show not saved -- there, on the Run tab's Venue focus, the Rig
+  Overview's Quick focus and the Show Tree. Quick focus's setup says why
+  Start is greyed (no moving heads on the plot, no stage target), never
+  shows a blank Aim at ("No stage target yet") and offers **Add a
+  target…**. Quick focus is now **Quick focus**, Focus calls **Venue
+  focus**, Refine **Focus this cue** (in Build: **Focus this look**), and
+  the cue page's "Focus call" tick box **Make this a venue focus cue**;
+  the Show Tree cue page and the Workbench have a **Focus ▾** in their
+  header. The Practice dialogs say plainly what a scramble is.
+- **Voice detail** (Branson's testing, 2026-10-25): a **Voice** setting
+  beside Feedback on every focus panel -- Terse ("F1 Spot 3", "Saved",
+  "Saved all"), Standard, the default ("Fixture 1, Spot 3", "Saved
+  fixture 1 to Lincoln HS", "Saved all, 6 lights"), Verbose ("Fixture 1
+  of 8, Spot 3", "Saved Spot 3", the call's target and place) -- one
+  setting for Quick focus, Venue focus and Focus this cue, kept with
+  Feedback. Every stepping, call, save, save-all and revert line comes
+  from one phrase table (`ControllerScheme::stepPhrase()` and its
+  siblings); warnings and safety lines are never shortened. Holding A now
+  confirms how many lights it saved, said and shown on the panel. Quick
+  focus lists the selected lights that cannot be aimed and excludes them
+  (the default) or cancels, rather than dropping them silently.
+
+- **Venue focus, per-venue corrections and Focus this cue**
+  (FOCUS_REFINE_DESIGN.md, board Q105-Q136). One controller map
+  (`ControllerScheme`) shared by Quick focus, Venue focus and Focus this
+  cue, with the on-screen map labelled per tool. *Venue focus*
+  (`FocusCalls`, saved in the show; Lighting Studio ▸ Focus ▸ Venue focus)
+  runs the show's focus calls in order on the controller: triggers step the
   calls, bumpers the fixtures, the stick nudges, A saves, group scope saves
   and undoes as one. *Venues* (`VenueCorrections`): corrections, truss trims
   and target positions go to a sidecar file beside the show, written on every
@@ -51,13 +81,13 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   (`MonitorProperties::setCalibrationBase()`); a venue manager (apply now,
   rename, delete), "Still at <venue>?" on open, the fixture-type check (a
   swapped light needs focus), the pad's target page, and Collect for Transfer
-  copying the venue files. *Refine* (`RefineSession`, `RefinePanel`): the
+  copying the venue files. *Focus this cue* (`RefineSession`, `RefinePanel`): the
   same controller on a Show Tree cue's own values or a Build scene --
   position, zoom, focus, colour and gobo at Layer, Group or Fixture scope,
   previewed on the rig and kept by A as one Show Tree step (an inline
   palette, or a child layer for an exception); from the Show Tree's cue page
-  and layer menu, the Workbench header's **Refine…** and its rows' menus;
-  quiet in Operate. A *focus-call cue* arms on GO and starts on the
+  and layer menu, the Workbench header's **Focus ▾** and its rows' menus;
+  quiet in Operate. A *venue focus cue* arms on GO and starts on the
   controller's Start. Operator feedback: lights, voice or both (`say`,
   `spd-say`, Qt TextToSpeech, with a queue that never drops a confirmation
   and important lines always spoken), Say the light, the pad's light bar and
@@ -102,7 +132,7 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   line ("Controller '…' disconnected — universe 2", amber; "… connected"),
   debounced 2.5 s so a Bluetooth flap says nothing, and as the footer
   readiness entry `input.devices`. Connections ▸ Devices draws an absent
-  device as a greyed line, "not connected", with its universe; Focus mode
+  device as a greyed line, "not connected", with its universe; Quick focus
   says "Controller connected". On Linux the HID plugin now rescans when
   `/dev/input` changes, so a Bluetooth pad is noticed there too.
 - **Stage marks** in the Lighting Studio's **Show ▸ Stage marks**: the
@@ -127,26 +157,50 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   each number centred on its tick, long ticks only on numbered places, the
   same rule on the plot and the Rig Overview (`numberLineStride()`,
   `numberLineMajorTick()`, `numberLineLabel()`); the centre mark's own CL
-  sits straight over it, and gives way to the number line's when that runs
-  through it. With the full centre line on,
-  the teal centre cross's up-and-down arm isn't drawn (its arm across the
-  stage stays). Drawn on the plot's Top view and on the Rig Overview's floor
-  (Top and 45°). Saved with the show only when used (`StageMarks`,
-  `CurtainLineY`, `NumberLineY` on `Monitor`), so older shows are unchanged
-  and open with them off.
+  gives way to the number line's when that runs through it; with the full
+  centre line on, the teal centre cross's up-and-down arm isn't drawn.
+  Horizontal trusses and pipes downstage of the curtain line are labelled
+  "FOH · 4.2 m DS of curtain line" (`curtainLineOffsetText()`). The Rig
+  Overview draws the lines on its floor (Top and 45°, the words left out
+  while it's small) and lists the pieces under Stage in its Plot layers
+  menu. Saved as a `StagePieces` element on `Monitor` only once used; a show
+  saved with the earlier **Show ▸ Stage marks** attributes (`StageMarks`,
+  `CurtainLineY`, `NumberLineY`) loads as the same pieces in the same
+  places, the apron it tinted now the apron piece on Auto, and saves the
+  new way; an older show opens with none. The plot's **Show** menu keeps
+  only view toggles: **Target positions** is there now.
+- **The apron is its own piece** (Q147, Q146): it starts at the curtain line
+  and runs downstage by its depth (`setApronDepth()`, `setApronFrontCurve()`,
+  Auto to the main deck's front with its front curve), as wide and high as
+  the main deck and in its colour, and it is real deck: its own platform on
+  the Stage layer (`apronPlatform()`, kept to the curtain line by
+  `syncApron()`, saved with the apron rather than as a platform), drawn as
+  deck on the plot in every view and in the Rig Overview from above, at 45°
+  and in 3D whatever marks are on (it was only a tint while the curtain line
+  was on), stood on from the floor (`platformBaseZ()` 0), never the main
+  deck. It never borrows another platform: the old **Apron depth** resized
+  the platform butted to the deck's front, so on a stage with a centre riser
+  there it moved the riser; now nothing else moves.
+- **The Rig Overview's controls are in a footer bar** (Q145), like the
+  Lighting Studio plot's and built the same way (a dark bar in a
+  `ShrinkableBar`): **Show** (Target positions, shared with the plot) and
+  **Plot layers** on the left, Live, Beams, Room, Haze, Quality, GPU, the
+  frame rate, Focus and a new **Fit** (`StructureStudioView::fitToRig()`),
+  and **View** on the right where the plot has its own. The title bar is as
+  it was; the Close row under it is gone (⌘W and the title bar close it).
 - **Snap takes the whole rig**: with the plot's **Snap** on, a dragged
   truss, tower, stand, pipe or scenery piece lands on the grid (it stayed
   where the mouse let go; platforms, power and nodes already snapped), and
   a grouped selection moves by the same delta.
 - **Course lesson 3.6, Focus and calibration**: focus-call etiquette, the
   stage marks, focus calls on the controller with a venue, the scored
-  scramble and its focus report as the hand-in, Refine; a touring piece in
+  scramble and its focus report as the hand-in, Focus this cue; a touring piece in
   the teacher guide. Checked step by step by `courseshow_test`
   (`lessonFocusAndCalibration`), which also takes its pictures. Help
   pictures of the venue page, the focus report and the practice score;
-  Focus mode's controller map and save lamp now taken by `help-shots.sh`.
+  Quick focus's controller map and save lamp now taken by `help-shots.sh`.
 - **Target positions in crew terms**: a readout beside each stage target on
-  the plot, each figure/area in the Rig Overview and Focus mode's fixed-light
+  the plot, each figure/area in the Rig Overview and Quick focus's fixed-light
   figure ("SL 2.4 · US 3.1 m", "SR 7' 11\" · US 10'", "↑ 0.9 m" on a deck),
   measured from centre and the number line (the curtain line when only that
   is shown), live while dragged or nudged. One formatter,
@@ -154,7 +208,7 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   form ("SL 2, US 1") for calls and voice. **Show ▸ Stage marks ▸ Target
   positions** hides them; on by default, saved with the show only when off
   (`TargetPositions="0"` on `Monitor`), not an undo step.
-- **Focus mode save status**: a status lamp in the panel (`FocusStatusLamp`)
+- **Quick focus save status**: a status lamp in the panel (`FocusStatusLamp`)
   -- green all saved, yellow the current light unsaved, red another light
   unsaved, a red ring round a yellow centre for both -- with the unsaved
   lights named beside it, live through the new `FocusSession::unsavedChanged()`.
@@ -164,15 +218,15 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   blink off); a revert does not blink. Lights with unsaved changes get a
   dashed yellow ring and a badge on the plot and in the Rig Overview
   (`Monitor::showFocusUnsaved()`), and the Exit question names them.
-- **The beam in Focus mode** (Q103): D-pad up/down (or . and ,) widen and narrow
+- **The beam in Quick focus** (Q103): D-pad up/down (or . and ,) widen and narrow
   the beam within the definition's lens range, D-pad right/left (or ' and ;)
   a focus channel's edge while focusing. A lens zoomed by hand is set
   and saved with the light (also **Beam (lens set to)** in Fixture
   Properties) and the beam is drawn at it; a zoom channel is driven while
   focusing only. **As selected** is always offered, from what is selected
   on the plot.
-- **Focus mode for fixed lights** (board Q102): pars and fixed spots step
-  through Focus mode too. Each is lit and a person stands where it lands at
+- **Quick focus for fixed lights** (board Q102): pars and fixed spots step
+  through Quick focus too. Each is lit and a person stands where it lands at
   head height; move that spot (sticks, D-pad, arrows) to where the real
   light lands, and its Pan and Tilt are set from it. Save, revert and undo
   as for moving heads; it needs no target.
@@ -188,7 +242,7 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   door; the wall beside and above it stops it.
 
 - **One Overrides chip** (board Q80) in the footer: "Overrides: Park (3),
-  Hold at end · Clear" whenever Park, Highlight, Hold at end, Focus mode or
+  Hold at end · Clear" whenever Park, Highlight, Hold at end, Quick focus or
   Blind holds the rig; one click lets go of all of them.
 - **Build tab and the Workbench** (WORKFLOW_DESIGN.md W1–W4). The
   Programming tab is **Build**: **Palettes | Effects | Scenes** picks what
@@ -327,8 +381,8 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   show, with a diff, backups and undo.
 - **LED Layout…** for a multi-head fixture, saved to the show or as the
   model's default.
-- **Controller test** (Focus mode's setup; Settings ▸ Advanced ▸ Game
-  controllers), and Focus mode saying when the controller is paused and
+- **Controller test** (Quick focus's setup; Settings ▸ Advanced ▸ Game
+  controllers), and Quick focus saying when the controller is paused and
   why.
 
 - **One connection window** (`ConnectionEditor`, ui/src/connectioneditor.*).
@@ -552,6 +606,18 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
 
 ### Fixed
 
+- **Update All and the show definitions' results are a window** (`BulkResultDialog`),
+  not an alert that grew off the screen with nothing to scroll and no Close.
+  Definition Updates' Update All / Update from Current and Undo Last Update,
+  and Show Definitions' Use This Computer's / Install the Show's: a summary
+  ("Updated 14, unchanged 30, 2 errors"), the updated list (maker and model,
+  file, old → new version, the show's fixtures using it and what changed) and
+  the errors, each scrolling; sized to the screen, resizable, Close, Copy and
+  Save as Text. The questions before an update list the files the same way.
+- **Renaming a venue with a practice from it** (Branson's testing): the
+  practice's way back now follows the new name, so ending it puts the
+  renamed venue back on the rig; its corrections, trims, targets and
+  house rig always stayed with it (one name inside the one sidecar).
 - **Fixture Properties opens for every fixture.** A double-click or
   Fixture Properties… in the Fixture Manager did nothing for a fixture not
   on the plot (a staged one, another venue's house light, one never placed):
@@ -757,7 +823,7 @@ tests that cite "CHANGELOG 0.2.2" mean this section.
   you get to it.
 - **No "declares no light output" warning** for a curtain, a fan, a hazer
   or a smoke machine.
-- **Focus mode draws where the light should point** while you nudge, not
+- **Quick focus draws where the light should point** while you nudge, not
   the nudged DMX.
 - **Game controllers**: kept working with qlcconsole behind other windows
   (App Nap); found again when switched back on or after sleep; HID lines

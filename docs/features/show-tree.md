@@ -72,7 +72,7 @@ from the Library lands in the tree right beside it.
     layers it sets here, how many track into it, how many it lets go; on a
     layer, a **●** in the one that applies (a carried row's is under T).
   - **M** (Mode) — **B** for Block, **C** for Cue-only; blank when it tracks.
-  - **F** (Flags) — the rest, in words: **base**, **skip**, **no MIB**, **focus** (a [focus-call cue](focus-calls.md#a-focus-call-cue-pre-show)),
+  - **F** (Flags) — the rest, in words: **base**, **skip**, **no MIB**, **focus** (a [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)),
     **⊕ N** (includes N), **×N** (reusable, N uses), **mix**, **VC ×N**.
 
   Right-click the header to hide a column you don't need; it stays hidden.

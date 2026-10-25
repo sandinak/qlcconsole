@@ -26,9 +26,9 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Show Tree](show-tree.md) | Writing the show as one tree of cue lists, cues and layers: tracking, cue numbers and reordering, move in black, hits for busking, the Run tab and the cue runner |
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog, output rules (relays, house and work lights), plot symbols and icons |
 | [Definition updates](definition-updates.md) | Bringing old fixture definitions up to date, in your fixture folder and inside saved shows, with a way back |
-| [Focus calls](focus-calls.md) | Focusing the rig on the controller, call by call; venues and their corrections, the focus report, scramble practice, the focus-call cue, the laptop's voice |
+| [Venue focus](focus-calls.md) | Focusing the rig for a venue on the controller, call by call; the focus calls, venues and their corrections, the focus report, scramble practice, the venue focus cue, the laptop's voice |
 | [House rig and tour package](venues.md) | Owners (Tour, House, Rental), each venue's house rig, universes and outputs per venue, channels not ours, the clash check |
-| [Refine](refine.md) | Changing a cue or a Build scene from the stage with the controller: position, zoom, focus, colour and gobo |
+| [Focus this cue](refine.md) | Focus this cue / Focus this look: changing a cue or a Build scene from the stage with the controller: position, zoom, focus, colour and gobo |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Plot layers panel, Studio groups, Blind/Park/Highlight, and more |
 | [Shows (the timeline)](shows.md) | Tracks, items, sequences and cues, the show end, track flags, following timecode |

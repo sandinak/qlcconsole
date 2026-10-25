@@ -340,7 +340,7 @@ Steps, towers and booms usually come in sets that should all be the same:
   trying a list out; the first time you press it there in a session, a
   line at the top offers **Switch to Operate**.
 - **Overrides** — an amber footer chip lists anything holding the rig over
-  the show (Park, Highlight, Hold at end, Focus mode, Blind); click it to
+  the show (Park, Highlight, Hold at end, Quick focus, Blind); click it to
   clear them all.
 - **Stop all** (⌘⇧Esc), or its menu's **Fade and stop** (hold the button),
   is the panic button.

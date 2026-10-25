@@ -29,7 +29,7 @@ Name: ______________________
 
    ____________________________________________________________
 
-5. How is Refine different from a focus call?
+5. How is Focus this cue different from a focus call?
 
    ____________________________________________________________
 

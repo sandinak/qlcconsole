@@ -1,20 +1,21 @@
-# Focus calls
+# Venue focus
 
 Focusing the rig when the show moves into a new room, call by call, with
 the controller in your hand on the stage.
 
 A **focus call** is some fixture groups and the point they focus to —
 "DH Tspots → DSC", then "AT spots → Soloist DS". The show keeps its calls,
-in order, so every venue is focused the same way. Running them is Focus
-mode (see [Focus mode](lighting-studio.md#focus-mode)) a call at a time:
+in order, so every venue is focused the same way. **Venue focus** runs
+them: [Quick focus](lighting-studio.md#quick-focus) a call at a time:
 the lights of the call come up aimed at their point, you step through
 them and nudge each until it lands, and **A** saves the correction **for
 this venue** — never into the show.
 
 ## Setting up the calls
 
-**Focus calls** on the Lighting Studio's toolbar, or **Focus calls…** on
-the Run tab, opens the list.
+Everything for focusing is on the Lighting Studio toolbar's **Focus ▾**
+menu (see [The Focus menu](lighting-studio.md#the-focus-menu)). **Focus ▸ Edit
+focus calls…** opens the list.
 
 - **+ Call** adds one; **Up** / **Down** set the order they are run in;
   **Remove** takes one out.
@@ -31,7 +32,7 @@ the Run tab, opens the list.
 
 **Save calls** keeps them in the show (they are saved with it).
 
-![The Focus calls dialog: the calls in order, a call's groups and point, the venue](../images/focus-calls-dialog.png)
+![The Venue Focus dialog: the calls in order, a call's groups and point, the venue](../images/focus-calls-dialog.png)
 
 1. The calls, in the order they are run.
 2. The groups the selected call focuses.
@@ -52,11 +53,13 @@ the **Venue** before you start:
   Untick it to start from the show's own.
 - **An existing venue** — its corrections are put back on the rig, and you
   carry on from them.
-- **None** — saves go into the show's own calibration, as Focus mode
-  always did.
+- **None** — saves go into the show's own calibration, as Quick focus
+  does.
 
 **Apply now** puts the chosen venue on the rig without starting the calls
 (listing its clashes first: see [The clash check](venues.md#the-clash-check)).
+**Focus ▸ Venues** does the same from the toolbar: **Apply ▸** a venue (or
+None), **New venue…**, and **Rig and universes…** for the venue applied.
 **Rename…** and **Delete** rename or forget a venue and its corrections;
 the show is not changed. A venue needs a saved show: until the show has
 been saved, the dialog says "Save the show first".
@@ -72,7 +75,7 @@ applied again.
 **Any calibration change is the venue's while it is applied.** A pan or
 tilt offset typed in the fixture's properties, a fixed light's aim or a
 lens set by hand goes into the venue and its file at once, not into the
-show. (A Focus mode nudge goes in when it is saved with A.) Typed back to
+show. (A Quick focus nudge goes in when it is saved with A.) Typed back to
 the show's own value, the venue's correction for it goes. With **None**
 applied, those edits change the show as always. Choosing another venue (or None) takes one venue's
 corrections off and puts the other's on.
@@ -92,13 +95,13 @@ HS?":
 - **None**: the show's own calibration.
 
 The footer shows **Venue: Lincoln HS** while a venue is applied. The
-Focus calls dialog does not pick an old venue for you either: until it is
+Venue Focus dialog does not pick an old venue for you either: until it is
 confirmed, **New venue…** is chosen, with a note naming the old one.
 
 **A fixture that changed.** A correction remembers the fixture's type and
 mode. If the light is now another fixture (a lamp swapped for a mover,
 another mode), its correction is not applied: the light **needs focus**.
-Focus mode's panel says so on it, the plot shows an orange **!** on it,
+The focus panel says so on it, the plot shows an orange **!** on it,
 and the focus calls say "Needs focus: the fixture changed." Focus it and
 save: the venue then keeps it as it is now. A correction for a fixture
 deleted from the show is kept (it may come back) and listed. A venue
@@ -126,14 +129,21 @@ house rig), the outputs of each universe in that room, and the channels
 the house desk keeps for itself. See [House rig and tour
 package](venues.md).
 
-## Running them
+## Running venue focus
 
-**Start focus calls** brings up the first call: its fixtures aimed at
+**Focus ▸ Venue focus…** on the Lighting Studio toolbar, or **Venue
+focus…** on the Run tab, runs the calls for the venue applied. With no
+venue applied it opens the list first, so you say which room this is
+before anything is saved. In the list, **Start venue focus** runs them.
+Both are greyed until there is something to focus, and the tooltip says
+why: no focus calls yet, or none with a light placed on the plot.
+
+The first call comes up: its fixtures aimed at
 their point, the first one lit and the rest of the call dimmed. The panel
 says the call ("Call 2 of 5: AT spots → Soloist DS") and its note, which
 fixture, the scope, and where saves go.
 
-![Focus calls running: the call and its note, the scope, the controller](../images/focus-calls-panel.png)
+![Venue focus running: the call and its note, the scope, the controller](../images/focus-calls-panel.png)
 
 1. The call being focused, and its note for the crew.
 2. One fixture or the whole call (Y), and where saves go.
@@ -212,7 +222,7 @@ not kept is refused until you choose.
 **While you nudge,** the panel says what has changed since the light was
 last saved ("Since the save: +2.5° pan, −1.0° tilt") and the plot shows a
 dashed ghost where the saved focus lands. **A save** says the light
-and where it went ("Spot 3 kept for Lincoln HS.") and makes an Xbox pad
+and where it went ("Saved fixture 3 to Lincoln HS.") and makes an Xbox pad
 buzz — twice if another light is still unsaved. **Leaving** with lights unsaved says how many ("2 lights not
 saved.") before the panel asks.
 
@@ -235,8 +245,9 @@ one undo step. A bumper picks one fixture again.
 
 ## The focus report
 
-**Export focus report…** (below the venue, beside **Focused by:**) writes what was focused in
-the venue picked, light by light and call by call:
+**Focus ▸ Focus report…** (for the venue applied), or **Export focus
+report…** in the list (below the venue, beside **Focused by:**), writes
+what was focused in the venue, light by light and call by call:
 
 - the call, the fixture, its type, whose it is (Tour, House or Rental)
   and where it hangs;
@@ -263,10 +274,18 @@ room's trims and targets.
 
 ## Practice: scramble and focus back
 
-For the classroom. **Practice (scramble)…** asks how far off (easy 1–3°,
-medium 2–6°, the default; hard 4–10°), then puts every moving head in the calls off
-its focus by a random pan and tilt and starts the calls. Focus each light
-back onto its target and save it.
+For the classroom. A **scramble** knocks every moving head in the focus
+calls off its target by a random amount of pan and tilt. You focus them
+back, call by call, as you would in a new room, and you are scored on how
+many degrees off each light ends up, how long it takes and how many saves
+you make. Your real venues are never touched.
+
+**Focus ▸ Practice (scramble)…** (or **Practice (scramble)…** in the list)
+says this, asks how far off (easy 1–3°, medium 2–6°, the default; hard
+4–10°), then scrambles the heads and starts the calls. Focus each light
+back onto its target and save it. It is greyed, saying why, until the
+show has focus calls with moving heads placed on the plot, and has been
+saved.
 
 - It is a **practice venue** of its own ("Practice 2026-10-24 19:30"):
   the real venues are not changed, and the one you were in comes back when
@@ -287,20 +306,23 @@ back onto its target and save it.
   focus report of the practice, with the score and each light's error:
   the hand-in for the focus lesson.
 
-## A focus-call cue (pre-show)
+## A venue focus cue (pre-show)
 
 Put the focus at the top of a pre-show cue list, so the list and the focus
 are one checklist:
 
 1. Make a cue for it (its looks are the preset: work light, or the first
-   call's lights parked at their point) and tick **Focus call** on its
-   cue page. The F column says **focus**.
+   call's lights parked at their point) and tick **Make this a venue
+   focus cue** on its cue page (or choose it from the **Focus ▾** menu in
+   the cue page's header, or in the Workbench's header). The F column
+   says **focus**. It is greyed, saying why, until the show has focus
+   calls.
 2. **GO** onto it in Operate. The cue's looks play and the focus calls are
-   **armed**: nothing moves yet. The laptop says "Focus calls ready.
+   **armed**: nothing moves yet. The laptop says "Venue focus ready.
    Press Start to begin." and the cue page, the Run tab and the footer say
-   **Focus calls: waiting for the controller**.
+   **Venue focus: waiting for the controller**.
 3. When the crew is ready, press **Start** (Menu) on the controller — or
-   **Start focus calls** on the Run tab, or **⌘↩** (GO's key: while the calls
+   **Start venue focus** on the Run tab, or **⌘↩** (GO's key: while the calls
    wait, it begins them rather than going on). The first call comes up,
    blinking, as the voice says it. First the laptop confirms the venue
    (for a show that has been saved: a venue lives beside the show file): "Still at Lincoln HS? Answer on the laptop, or wait for a new
@@ -312,11 +334,12 @@ are one checklist:
 4. Work the calls as below. **Menu**, or **RT** on the last call, ends
    them (asking about anything unsaved) and the list goes on to the next
    cue — only if it is still on the focus cue. Ended any other way (say,
-   Refine started), the voice says "Focus calls ended." and the list stays
-   where it is.
+   Focus this cue started), the voice says "Venue focus ended." and the
+   list stays where it is.
 
-Starting Focus mode or Refine while another of them has work not saved is
-refused, saying what to do first; nothing is thrown away.
+Starting Quick focus, Venue focus or Focus this cue while another of them
+has work not saved is refused, saying what to do first; nothing is thrown
+away.
 
 ## Telling the operator where they are
 
@@ -330,24 +353,43 @@ screen. Two things tell them where they are:
   laptop's output to the crew's headsets and it is their cue: a line is
   never cut off or spoken over, and when you step quickly only the latest
   "where" line waits (the fixtures you passed are not read out).
-  Confirmations ("Spot 3 kept.") and warnings are queued and never
+  Confirmations ("Saved fixture 3.") and warnings are queued and never
   dropped. **Voice to:** in
-  the Focus calls dialog sends it to a chosen output (a Mac's audio
+  the Venue Focus dialog sends it to a chosen output (a Mac's audio
   interface for the headsets, say).
-  - stepping to a call, with where its target is from the stage marks:
-    "Call 2 of 5, AT spots to Soloist DS, SL 2, US 1. Fixture 1 of 4."
-  - a fixture: "Fixture 3 of 8."
+  - stepping to a call: "Call 2, AT spots to Soloist DS. Fixture 1,
+    Spot 5."
+  - a fixture: "Fixture 3, Spot 3."
   - the whole call: "All 4, group."
-  - A: "Spot 3 kept." (with a venue: "Spot 3 kept for Lincoln HS."); B:
-    "Reverted."; X: "Zeroed." (with a venue: "Back to the show's
-    calibration."); View: "Undone."
+  - A: "Saved fixture 3." (with a venue: "Saved fixture 3 to Lincoln
+    HS."); A held: "Saved all, 6 lights."; B: "Fixture 3 reverted.";
+    B held: "Reverted all, 3 lights."; X: "Zeroed." (with a venue: "Back
+    to the show's calibration."); View: "Undone."
   - the D-pad: "Spot down." "Flood out." "Sharper." "Softer."
   - **Say the light** (right stick click, or W) says the light's name
-    first and then where you are — "Spot 3. Call 2 of 5, AT spots to
-    DSC, CL, US 3. Fixture 3 of 8." — and blinks it.
+    first and then where you are — "Spot 3. Call 2, AT spots to DSC.
+    Fixture 3." — and blinks it.
+
+**Voice detail: terse, standard or verbose.** Beside **Feedback** on
+every panel, **Voice** sets how much is said (one setting for Quick focus,
+Venue focus and Focus this cue, kept with Feedback on this computer):
+
+| | Terse | Standard (the default) | Verbose |
+|---|---|---|---|
+| A fixture | "F1 Spot 3." | "Fixture 1, Spot 3." | "Fixture 1 of 8, Spot 3." (with the call) |
+| A call | "Call 2." | "Call 2, AT spots to Soloist DS." | "Call 2 of 5, AT spots to Soloist DS, SL 2, US 1." |
+| A save | "Saved." | "Saved fixture 1 to Lincoln HS." | "Saved Spot 3 to Lincoln HS." |
+| A held | "Saved all." | "Saved all, 6 lights." | "Saved all, 6 lights." |
+| B / B held | "Reverted." / "Reverted all." | "Fixture 1 reverted." / "Reverted all, 3 lights." | "Spot 3 back to its last save." / "3 lights back to their last save." |
+| Say the light | "Spot 3." | "Spot 3. Fixture 1." | "Spot 3. Call 2 of 5, AT spots to DSC, CL, US 3. Fixture 1 of 8." |
+
+Warnings and safety lines — the controller lost or back, holding, a
+light not saved, a refusal, nothing reaching the rig — are said in full
+at every level. The panel shows the last line confirmed ("Saved all, 6
+lights.") under the light's numbers.
 
 **Feedback: lights, voice or both.** The **Feedback** setting on the panel
-(Focus mode, Focus calls and Refine share it; it is this computer's, not
+(Quick focus, Venue focus and Focus this cue share it; it is this computer's, not
 the show's) picks how you are told:
 
 - **Lights and voice** (the default): the blinks and the voice.
@@ -369,9 +411,9 @@ double blink and a short buzz):
   flat), everything it held is let go — the sticks, a held button — so no
   light drifts and no hold fires: "Controller lost. Lights held." The
   panel switches to the keyboard. When the pad is back the voice says
-  "Controller back.", but in Focus mode and focus calls it drives nothing
-  until someone presses **Use the controller** on the panel; Refine takes
-  it back at once. The keys work all the while;
+  "Controller back.", but in Quick focus and Venue focus it drives nothing
+  until someone presses **Use the controller** on the panel; Focus this
+  cue takes it back at once. The keys work all the while;
 - **nothing reaching the rig**: Blackout on, the Grand Master at zero, or
   the light's universe with no output ("Spot 3's universe has no output:
   it shows nothing.");
@@ -381,4 +423,4 @@ double blink and a short buzz):
   pad that has it.
 
 The voice is the Mac's own (`say`); on Linux `spd-say`, elsewhere Qt's
-speech, if the computer has one. [Refine](refine.md) speaks the same way.
+speech, if the computer has one. [Focus this cue](refine.md) speaks the same way.

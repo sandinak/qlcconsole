@@ -16,7 +16,7 @@ Do **one** of these.
    steps again on
    [`ShowChoir-Classroom.qlcc`](../../shows/ShowChoir-Classroom.qlcc),
    saved under your own name first).
-3. **Lighting Studio → Focus calls → Practice (scramble)…** on **Medium:
+3. **Lighting Studio → Focus → Practice (scramble)…** on **Medium:
    2–6° off**. Focus every light back and end the calls.
 4. **Export the report…** as a PDF and bring it, with your Easy report
    from class. Under the score, write two lines: which call took
