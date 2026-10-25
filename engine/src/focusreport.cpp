@@ -30,6 +30,7 @@
 #include "qlcfixturedef.h"
 #include "focussession.h"
 #include "focusreport.h"
+#include "rigowner.h"
 #include "stagetarget.h"
 #include "focuscalls.h"
 #include "fixture.h"
@@ -77,6 +78,8 @@ QList<FocusReport::Row> FocusReport::rows(Doc *doc, const QString &venueName)
             if (const QLCFixtureMode *m = fx->fixtureMode())
                 r.mode = m->name();
             r.address = QStringLiteral("%1.%2").arg(fx->universe() + 1).arg(fx->address() + 1);
+            // Whose light it is: the tour's, the house's, a rental (Q137).
+            r.owner = RigOwner::displayName(RigOwner::effective(doc, fid));
             const FixtureRigProps rp = props->fixtureRigProps(fid);
             if (const Truss *t = props->truss(rp.trussId))
                 r.hung = t->name();
@@ -256,10 +259,10 @@ QString FocusReport::html(Doc *doc, const QString &venueName, const QString &sho
     }
 
     h += QStringLiteral("<table>\n<tr>");
-    QStringList heads = { tr("Fixture"), tr("Type"), tr("Hung"), tr("Focus to"), tr("Where"),
+    QStringList heads = { tr("Fixture"), tr("Type"), tr("Owner"), tr("Hung"), tr("Focus to"), tr("Where"),
                           tr("Correction"), tr("Lens"), tr("Checked"), tr("Flags"), tr("Notes") };
     if (v.practice.on)
-        heads.insert(6, tr("Off by"));
+        heads.insert(7, tr("Off by"));
     for (const QString &c : heads)
         h += QStringLiteral("<th>%1</th>").arg(esc(c));
     h += QStringLiteral("</tr>\n");
@@ -274,13 +277,13 @@ QString FocusReport::html(Doc *doc, const QString &venueName, const QString &sho
             h += QStringLiteral("<tr class=\"call\"><td colspan=\"%1\">%2</td></tr>\n")
                  .arg(heads.size()).arg(esc(title));
         }
-        QStringList cells = { r.fixture, r.type, r.hung, r.target, r.position,
+        QStringList cells = { r.fixture, r.type, r.owner, r.hung, r.target, r.position,
                               r.correction.isEmpty() ? QStringLiteral("—") : r.correction, r.lens,
                               r.checked ? (r.checkedBy.isEmpty() ? when(r.checkedAt)
                                                                  : tr("%1, %2").arg(r.checkedBy, when(r.checkedAt)))
                                         : QString() };
         if (v.practice.on)
-            cells.insert(6, r.practiceError >= 0.0 ? QStringLiteral("%1°").arg(r.practiceError, 0, 'f', 1)
+            cells.insert(7, r.practiceError >= 0.0 ? QStringLiteral("%1°").arg(r.practiceError, 0, 'f', 1)
                                                     : QString());
         h += QStringLiteral("<tr>");
         for (const QString &c : cells)
@@ -321,7 +324,8 @@ QStringList FocusReport::csvColumns()
              QStringLiteral("Instrument Type"), QStringLiteral("Address"), QStringLiteral("Focus"),
              QStringLiteral("Focus Position"), QStringLiteral("Correction"), QStringLiteral("Lens"),
              QStringLiteral("Checked By"), QStringLiteral("Checked At"), QStringLiteral("Flags"),
-             QStringLiteral("Notes"), QStringLiteral("Fixture"), QStringLiteral("Fixture ID") };
+             QStringLiteral("Notes"), QStringLiteral("Fixture"), QStringLiteral("Fixture ID"),
+             QStringLiteral("Owner") };
 }
 
 QString FocusReport::csvField(const QString &text)
@@ -351,7 +355,7 @@ QString FocusReport::csv(Doc *doc, const QString &venueName)
             r.call >= 0 ? tr("Call %1: %2").arg(r.call + 1).arg(r.callName) : QString(),
             r.hung, unit, r.type, r.address, r.target, r.position, r.correction, r.lens,
             r.checkedBy, r.checkedAt.isValid() ? r.checkedAt.toString(Qt::ISODate) : QString(),
-            flagText, notes, r.fixture, QString::number(r.fid) };
+            flagText, notes, r.fixture, QString::number(r.fid), r.owner };
         QStringList out;
         for (const QString &f : fields)
             out << csvField(f);

@@ -60,6 +60,7 @@ public:
         QString mode;
         QString address;            ///< "1.101" (universe.address, both 1-based)
         QString hung;               ///< the truss or pipe it hangs on, else empty
+        QString owner;              ///< Tour, House or Rental (RigOwner, VENUES.md)
         QString target;             ///< "DSC", or "where it lands"
         QString position;           ///< the target from the stage marks
         QString correction;         ///< "+1.3° pan, −0.4° tilt"; empty: none

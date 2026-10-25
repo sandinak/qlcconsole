@@ -29,6 +29,7 @@
 #include "fixturegroup.h"
 #include "focussession.h"
 #include "focusreport.h"
+#include "rigowner.h"
 #include "stagetarget.h"
 #include "qlcphysical.h"
 #include "focuscalls.h"
@@ -251,6 +252,8 @@ void FocusReport_Test::theReportListsEveryLight()
     QCOMPARE(rows.at(0).notes, QString("Cut off the pros"));
     QCOMPARE(rows.at(0).address, QString("1.1"));
     QCOMPARE(rows.at(0).type, QString("Test Report Spot Spot 1"));
+    // Whose light it is (VENUES.md): nobody said, so the tour's.
+    QCOMPARE(rows.at(0).owner, RigOwner::displayName(RigOwner::Tour));
     // B: not looked at -- it needs focus.
     QCOMPARE(rows.at(1).fid, b->id());
     QVERIFY(rows.at(1).correction.isEmpty());
@@ -273,6 +276,7 @@ void FocusReport_Test::theReportListsEveryLight()
     QCOMPARE(lines.size(), 5);
     QCOMPARE(lines.first(), FocusReport::csvColumns().join(','));
     QVERIFY(lines.first().startsWith("Purpose,Position,Unit#,Instrument Type"));
+    QVERIFY(lines.first().endsWith(",Owner"));
     // "Spot, 2" holds a comma: quoted.
     QVERIFY(lines.at(2).contains("\"Spot, 2\""));
     QVERIFY(lines.at(1).contains("Cut off the pros"));
@@ -289,6 +293,7 @@ void FocusReport_Test::theReportListsEveryLight()
     QVERIFY(html.contains("4 lights: 1 checked, 1 dead, 2 need focus."));
     QVERIFY(html.contains("Focused by: Sam"));
     QVERIFY(!html.contains("Practice score"));
+    QVERIFY(html.contains("<th>Owner</th>"));
 }
 
 void FocusReport_Test::aNewVenueStartsFromTheLastOne()
@@ -420,6 +425,25 @@ void FocusReport_Test::practiceScramblesAndScores()
         QCOMPARE(back.practice.truth.value(a->id()).panOffsetDeg, 1.0f);
     }
     QVERIFY(!v->endPractice());
+    /* The reader stops at <Practice>'s own end: an element written after it
+       in the same venue is still read. */
+    {
+        const QByteArray xml =
+            "<QlcVenues Version=\"1\"><Venue Name=\"P\">"
+            "<Practice From=\"Lincoln HS\" Saves=\"2\"><Truth ID=\"7\" PanOfs=\"1.00\" TiltOfs=\"0.00\"/></Practice>"
+            "<Check ID=\"7\" By=\"Sam\" Dead=\"1\"/>"
+            "<Fixture ID=\"7\" PanOfs=\"3.00\" TiltOfs=\"0.00\" PanZero=\"0.0\"/>"
+            "</Venue><Venue Name=\"Q\"/></QlcVenues>";
+        VenueCorrections r(m_doc);
+        QVERIFY(r.fromXml(xml));
+        const VenueCorrections::Venue p = r.venue("P");
+        QVERIFY(p.practice.on);
+        QCOMPARE(p.practice.saves, 2);
+        QCOMPARE(p.practice.truth.value(7).panOffsetDeg, 1.0f);
+        QVERIFY(p.checks.value(7).dead);
+        QCOMPARE(p.fixtures.value(7).panOffsetDeg, 3.0f);
+        QCOMPARE(r.venueNames(), QStringList({ "P", "Q" }));
+    }
     // The last real venue is never a practice one.
     QCOMPARE(v->lastVenue(), QString("Lincoln HS"));
 }
