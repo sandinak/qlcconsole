@@ -20,6 +20,7 @@
 #include <QDialogButtonBox>
 #include <QListWidget>
 #include <QCheckBox>
+#include <QPointer>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QFormLayout>
@@ -178,6 +179,34 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
         exportReport(m_doc, this, venueAt(m_venue->currentIndex()));
     });
     reportRow->addWidget(m_report);
+    // Teaching: a scrambled copy of the room to focus back (never a real venue).
+    m_practice = new QPushButton(tr("Practice (scramble)\342\200\246"), this);
+    m_practice->setObjectName(QStringLiteral("fcPractice"));
+    m_practice->setToolTip(tr("Put every moving head in the calls off by a few degrees, in a practice "
+                              "venue, and focus them back: scored on how close, how fast and how "
+                              "many saves. The real venues are not changed."));
+    connect(m_practice, &QPushButton::clicked, this, [this]() {
+        const QStringList levels = { tr("Easy: 1\342\200\2233\302\260 off"),
+                                     tr("Medium: 2\342\200\2236\302\260 off"),
+                                     tr("Hard: 4\342\200\22310\302\260 off") };
+        bool ok = false;
+        const QString level = QInputDialog::getItem(this, tr("Practice"),
+            tr("Each moving head in the calls is put off its focus by a random amount. Focus them "
+               "back to their targets and save. How far off?"), levels, 1, false, &ok);
+        if (!ok)
+            return;
+        const int at = int(levels.indexOf(level));
+        const float lo = at == 0 ? 1.0f : at == 1 ? 2.0f : 4.0f;
+        const float hi = at == 0 ? 3.0f : at == 1 ? 6.0f : 10.0f;
+        QString why;
+        if (!startPractice(lo, hi, quint32(QDateTime::currentMSecsSinceEpoch()), &why))
+        {
+            QMessageBox::information(this, windowTitle(), why);
+            return;
+        }
+        accept();
+    });
+    reportRow->addWidget(m_practice);
     vl->addLayout(reportRow);
     // The voice is the crew's cue: send it to the output that feeds the headsets.
     {
@@ -277,6 +306,7 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
     FocusCallsDialog d(doc, parent);
     if (d.exec() != QDialog::Accepted)
         return;
+    const bool practice = d.isPractice();
     FocusSession::Options o;
     o.calls = doc->programmer()->focusCalls()->sessionCalls();
     o.order = FocusSession::ByStagePosition;
@@ -285,7 +315,86 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
     o.others = FocusSession::OthersDim;
     QString why;
     if (FocusModePanel::startWith(doc, parent, o, &why) == nullptr)
+    {
+        if (practice)
+            doc->programmer()->venueCorrections()->endPractice();
         QMessageBox::warning(parent, tr("Focus Calls"), why);
+        return;
+    }
+    // A practice: when the calls end, the score, and the real venue back.
+    if (practice)
+    {
+        FocusSession *s = doc->programmer()->focusSession();
+        QPointer<QWidget> owner(parent);
+        QObject::connect(s, &FocusSession::stopped, doc, [doc, owner]() {
+            showPracticeResult(doc, owner.data());
+        }, Qt::SingleShotConnection);
+    }
+}
+
+bool FocusCallsDialog::startPractice(float minDeg, float maxDeg, quint32 seed, QString *why)
+{
+    storeCall();
+    m_doc->programmer()->focusCalls()->setCalls(m_calls);
+    QList<quint32> fids;
+    for (const FocusCall &c : m_calls)
+        for (quint32 fid : FocusCalls::fixturesOf(m_doc, c))
+            if (!fids.contains(fid))
+                fids << fid;
+    fids = FocusSession::movingHeads(m_doc, fids);
+    if (m_doc->programmer()->focusSession()->isActive())
+    {
+        if (why != nullptr)
+            *why = tr("Leave Focus mode first: its heads are being worked on.");
+        return false;
+    }
+    const QString name = m_doc->programmer()->venueCorrections()->startPractice(fids, seed, minDeg, maxDeg, why);
+    if (name.isEmpty())
+        return false;
+    m_practiceStarted = true;
+    fillVenues(name);
+    return true;
+}
+
+QDialog *FocusCallsDialog::showPracticeResult(Doc *doc, QWidget *parent)
+{
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    if (!venues->isPracticeActive())
+        return nullptr;
+    const QString practice = venues->activeVenue();
+    const VenueCorrections::Score sc = venues->practiceScore(practice);
+    venues->endPractice();
+    QDialog *d = new QDialog(parent);
+    d->setObjectName(QStringLiteral("practiceResult"));
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->setWindowTitle(tr("Practice"));
+    d->setProperty("helpTopic", QStringLiteral("focus-calls.md#practice-scramble-and-focus-back"));
+    QVBoxLayout *vl = new QVBoxLayout(d);
+    const int secs = int(sc.seconds);
+    QLabel *text = new QLabel(tr("<b>%1 of %2 lights within 1\302\260.</b><br>Average %3\302\260 off, worst "
+                                 "%4\302\260. %5 lights saved, %6 saves, %7.<br>%8 is back on the rig; "
+                                 "the practice is kept as a venue for the report.")
+                              .arg(sc.withinOne).arg(sc.lights)
+                              .arg(sc.meanError, 0, 'f', 1).arg(sc.worstError, 0, 'f', 1)
+                              .arg(sc.checked).arg(sc.saves)
+                              .arg(secs >= 60 ? tr("%1 min %2 s").arg(secs / 60).arg(secs % 60)
+                                              : tr("%1 s").arg(secs))
+                              .arg(venues->isActive() ? venues->activeVenue().toHtmlEscaped()
+                                                      : tr("The show's own calibration")), d);
+    text->setObjectName(QStringLiteral("practiceResultText"));
+    text->setWordWrap(true);
+    vl->addWidget(text);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, d);
+    QPushButton *report = bb->addButton(tr("Export the report\342\200\246"), QDialogButtonBox::ActionRole);
+    report->setObjectName(QStringLiteral("practiceResultReport"));
+    QObject::connect(report, &QPushButton::clicked, d, [doc, d, practice]() {
+        exportReport(doc, d, practice);
+    });
+    QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::close);
+    vl->addWidget(bb);
+    d->show();
+    d->raise();
+    return d;
 }
 
 QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fallback, int timeoutMs,
@@ -468,7 +577,7 @@ QDialog *FocusCallsDialog::showCorrections(Doc *doc, QWidget *parent)
     QListWidget *list = new QListWidget(d);
     list->setObjectName(QStringLiteral("venueCorrectionList"));
     vl->addWidget(list, 1);
-    enum Kind { LightKind = 1, TrimKind, TargetKind };
+    enum Kind { LightKind = 1, TrimKind, TargetKind, DeadKind };
     auto fill = [doc, venues, list]() {
         list->clear();
         const VenueCorrections::Venue v = venues->venue(venues->activeVenue());
@@ -484,9 +593,23 @@ QDialog *FocusCallsDialog::showCorrections(Doc *doc, QWidget *parent)
                 text += tr("  (no longer in the show: kept)");
             else if (venues->needsFocus(it.key()))
                 text += tr("  ! needs focus: not the fixture focused here");
+            if (venues->isDead(it.key()))
+                text += tr("  \342\234\225 dead");
             QListWidgetItem *item = new QListWidgetItem(text, list);
             item->setData(Qt::UserRole, int(LightKind));
             item->setData(Qt::UserRole + 1, it.key());
+        }
+        // Lights marked dead here (Q140) with no correction of their own.
+        for (quint32 fid : venues->deadLights())
+        {
+            if (v.fixtures.contains(fid))
+                continue;
+            const Fixture *fx = doc->fixture(fid);
+            QListWidgetItem *item = new QListWidgetItem(tr("%1: \342\234\225 dead (Clear: not dead)")
+                                                        .arg(fx != nullptr ? fx->name() : QString::number(fid)),
+                                                        list);
+            item->setData(Qt::UserRole, int(DeadKind));
+            item->setData(Qt::UserRole + 1, fid);
         }
         for (auto it = v.trims.constBegin(); it != v.trims.constEnd(); ++it)
         {
@@ -527,6 +650,7 @@ QDialog *FocusCallsDialog::showCorrections(Doc *doc, QWidget *parent)
             case LightKind:  venues->clearCorrection(id); break;
             case TrimKind:   venues->clearTrim(id); break;
             case TargetKind: venues->clearTarget(id); break;
+            case DeadKind:   venues->setDead(id, false); break;
             default:         return;
         }
         fill();
@@ -557,6 +681,8 @@ void FocusCallsDialog::fillCallList()
     m_list->setCurrentRow(qMin(row, m_list->count() - 1));
     m_list->blockSignals(was);
     m_start->setEnabled(!m_calls.isEmpty());
+    if (m_practice != nullptr)
+        m_practice->setEnabled(!m_calls.isEmpty());
 }
 
 void FocusCallsDialog::loadCall(int index)

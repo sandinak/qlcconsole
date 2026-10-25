@@ -36,6 +36,7 @@
 #include "monitorproperties.h"
 #include "programmercontroller.h"
 #include "focussession.h"
+#include "venuecorrections.h"
 #include "doc.h"
 #include <QVector3D>
 #include "qlcphysical.h"
@@ -1192,9 +1193,14 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
     /* The head Focus mode is aiming: where it is MEANT to point, not its DMX
        read back -- that carries the unsaved nudge, rounded to DMX steps, and
        the beam crept and jumped with every nudge while the real head moved. */
+    FixtureRigProps viewRp = rp;
     if (Doc *doc = qobject_cast<Doc *>(fx->parent()))
+    {
         if (focusIntentDirection(doc, fx->id(), dir))
             return true;
+        // Practice: drawn where the scrambled light really lands.
+        practiceViewProps(doc, fx->id(), viewRp);
+    }
 
     const QByteArray v = fx->channelValues();
 
@@ -1216,7 +1222,19 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
        offsets taken out, so every view draws the INTENDED aim: a head whose
        offset corrects a yoke bolted a few degrees round still draws its beam
        on its mark. */
-    return AimSolver::beamDirection(rp, degrees(panCh, panMax), degrees(tiltCh, tiltMax), dir);
+    return AimSolver::beamDirection(viewRp, degrees(panCh, panMax), degrees(tiltCh, tiltMax), dir);
+}
+
+bool practiceViewProps(Doc *doc, quint32 fid, FixtureRigProps &rp)
+{
+    if (doc == nullptr || doc->programmer() == nullptr)
+        return false;
+    RigCalibration truth;
+    if (!doc->programmer()->venueCorrections()->practiceTruth(fid, truth))
+        return false;
+    rp.panOffsetDeg = truth.panOffsetDeg;
+    rp.tiltOffsetDeg = truth.tiltOffsetDeg;
+    return true;
 }
 
 static FocusSession *aimingSession(Doc *doc)
@@ -1229,12 +1247,19 @@ static FocusSession *aimingSession(Doc *doc)
 
 bool focusIntentDirection(Doc *doc, quint32 fid, QVector3D &dir)
 {
+    // Practice: the scrambled light is drawn from its DMX, not its intent.
+    FixtureRigProps probe;
+    if (practiceViewProps(doc, fid, probe))
+        return false;
     FocusSession *s = aimingSession(doc);
     return s != nullptr && s->intendedDirection(fid, dir);
 }
 
 bool focusIntentAngles(Doc *doc, quint32 fid, double &panRelDeg, double &tiltRelDeg)
 {
+    FixtureRigProps probe;
+    if (practiceViewProps(doc, fid, probe))
+        return false;
     FocusSession *s = aimingSession(doc);
     return s != nullptr && s->intendedAngles(fid, panRelDeg, tiltRelDeg);
 }

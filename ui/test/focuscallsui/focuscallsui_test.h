@@ -82,6 +82,10 @@ private slots:
     /** Q140: a new venue starts from the last venue's corrections (the
      *  box ticked), or from the show's own. */
     void aNewVenueStartsFromTheLast();
+    /** Practice: a scrambled venue from the dialog, the views drawing
+     *  where the lights really land, the score at the end and the real
+     *  venue back, untouched. */
+    void practiceScramblesAndScores();
 
 private:
     Doc *m_doc = nullptr;

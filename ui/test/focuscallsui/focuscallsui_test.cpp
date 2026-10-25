@@ -54,6 +54,7 @@
 #include "workbench.h"
 #include "monitorgraphicsview.h"
 #include "focuscallcue.h"
+#include "fixturevisualtraits.h"
 #include "cuerunner.h"
 #include "controllerscheme.h"
 #include "fixture.h"
@@ -836,4 +837,53 @@ void FocusCallsUi_Test::aNewVenueStartsFromTheLast()
     from->setChecked(false);
     QVERIFY(d.switchVenue("Kennedy"));
     QCOMPARE(props->fixtureRigProps(m_spots.first()).panOffsetDeg, 0.0f);
+}
+
+void FocusCallsUi_Test::practiceScramblesAndScores()
+{
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    MonitorProperties *props = m_doc->monitorProperties();
+    venues->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));
+    FixtureRigProps rp = props->fixtureRigProps(m_spots.first());
+    rp.panOffsetDeg = 1.5f;
+    props->setFixtureRigProps(m_spots.first(), rp);
+    const VenueCorrections::Venue real = venues->venue("Lincoln HS");
+    FocusCall call;
+    call.groups << m_group;
+    call.target.kind = FocusSession::Reference::Target;
+    call.target.id = m_target;
+    m_doc->programmer()->focusCalls()->setCalls({ call });
+
+    FocusCallsDialog d(m_doc);
+    QPushButton *practice = d.findChild<QPushButton *>("fcPractice");
+    QVERIFY(practice != nullptr && practice->isEnabled());
+    QString why;
+    QVERIFY2(d.startPractice(2.0f, 6.0f, 7, &why), qPrintable(why));
+    QVERIFY(d.isPractice());
+    QVERIFY(venues->isPracticeActive());
+    QVERIFY(venues->activeVenue().startsWith("Practice "));
+    QCOMPARE(venues->venue(venues->activeVenue()).practice.truth.size(), 3);
+
+    // The views: the light's right offsets, so its beam lands off its mark.
+    FixtureRigProps view = props->fixtureRigProps(m_spots.first());
+    QVERIFY(qAbs(view.panOffsetDeg - 1.5f) >= 1.9f);
+    QVERIFY(practiceViewProps(m_doc, m_spots.first(), view));
+    QCOMPARE(view.panOffsetDeg, 1.5f);
+    QVector3D dir;
+    QVERIFY(!focusIntentDirection(m_doc, m_spots.first(), dir));
+
+    // The end: the score, and the real venue back as it was.
+    QPointer<QDialog> result = FocusCallsDialog::showPracticeResult(m_doc, nullptr);
+    QVERIFY(result != nullptr);
+    QLabel *text = result->findChild<QLabel *>("practiceResultText");
+    QVERIFY(text->text().contains("0 of 3 lights within 1"));
+    QVERIFY(text->text().contains("Lincoln HS is back on the rig"));
+    QCOMPARE(venues->activeVenue(), QString("Lincoln HS"));
+    QCOMPARE(props->fixtureRigProps(m_spots.first()).panOffsetDeg, 1.5f);
+    QCOMPARE(venues->venue("Lincoln HS").fixtures.size(), real.fixtures.size());
+    QVERIFY(!practiceViewProps(m_doc, m_spots.first(), view));
+    delete result.data();
+    // Nothing to show with no practice applied.
+    QVERIFY(FocusCallsDialog::showPracticeResult(m_doc, nullptr) == nullptr);
 }

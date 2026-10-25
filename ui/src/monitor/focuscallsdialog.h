@@ -101,6 +101,18 @@ public:
     /** Ask where, then writeReport(). */
     static void exportReport(Doc *doc, QWidget *parent, const QString &venue);
 
+    /** Scramble practice (FOCUS_REFINE_DESIGN.md section 13): store the
+     *  calls, then make and apply a practice venue -- every moving head in
+     *  them put off by @p minDeg..@p maxDeg each way -- leaving the real
+     *  venues as they are. Start then runs the calls on it. False, with
+     *  @p why, when it cannot. */
+    bool startPractice(float minDeg, float maxDeg, quint32 seed, QString *why = nullptr);
+    /** A practice was started from this dialog. */
+    bool isPractice() const { return m_practiceStarted; }
+    /** The calls on a practice venue ended: the real venue back, and the
+     *  score shown, with the report a click away. Null with no practice. */
+    static QDialog *showPracticeResult(Doc *doc, QWidget *parent);
+
     /* The venue manager (the buttons beside the venue). */
     /** Apply @p name now (made if new; empty: none). */
     bool switchVenue(const QString &name, QString *why = nullptr);
@@ -143,6 +155,7 @@ private:
     /** New venue: start from the last venue's corrections (Q140). */
     QCheckBox *m_fromLast = nullptr;
     QPushButton *m_practice = nullptr;
+    bool m_practiceStarted = false;
     /** The venue a new one is made as: from the last venue when ticked. */
     QString makeVenue(const QString &name);
 };

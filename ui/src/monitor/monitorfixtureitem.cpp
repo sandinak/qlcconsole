@@ -1250,8 +1250,10 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     /* The gauges say where the head is AIMED, so the calibration offsets come
        out (and the invert mirrors are undone) the same way every other view
        turns DMX back into a direction: AimSolver::intendedAngles(). */
-    const FixtureRigProps rigProps = m_doc->monitorProperties() != NULL
+    FixtureRigProps rigProps = m_doc->monitorProperties() != NULL
         ? m_doc->monitorProperties()->fixtureRigProps(m_fid) : FixtureRigProps();
+    // Practice: where the scrambled light really points.
+    practiceViewProps(m_doc, m_fid, rigProps);
     /* The head Focus mode is aiming reads where it is MEANT to point, not its
        nudged DMX, the same as its beam (focusIntentAngles()). */
     double focusPan = 0.0, focusTilt = 0.0;
