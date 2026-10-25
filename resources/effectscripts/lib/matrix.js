@@ -99,7 +99,7 @@ var MATRIX = (function() {
                 if (g.row < b.r0) b.r0 = g.row;
                 if (g.row > b.r1) b.r1 = g.row;
             }
-            if (M.isRGB(f)) cv.anyRGB = true;
+            if (f.headRGB !== undefined ? !!f.headRGB : (f.hasRGB !== false)) cv.anyRGB = true;   // M.isRGB(f)
             if (f.headWhite) cv.anyWhite = true;
         }
         // Left to right (then top to bottom): the order a box chase runs in.
@@ -136,15 +136,15 @@ var MATRIX = (function() {
     M.point = function(f, cv, perBox) {
         var g = f.grid || { col: 0, row: 0 };
         var b = cv.box[f.id];
-        var p = { box: b };
+        var x, y, w, h;
         if (perBox && b && b.w > 1 && b.h > 1) {
-            p.x = g.col - b.c0; p.y = g.row - b.r0; p.w = b.w; p.h = b.h;
+            x = g.col - b.c0; y = g.row - b.r0; w = b.w; h = b.h;
         } else {
-            p.x = g.col; p.y = g.row; p.w = cv.cols; p.h = cv.rows;
+            x = g.col; y = g.row; w = cv.cols; h = cv.rows;
         }
-        p.u = p.w > 1 ? p.x / (p.w - 1) : 0.5;
-        p.v = p.h > 1 ? p.y / (p.h - 1) : 0.5;
-        return p;
+        // One literal, not a property at a time: this runs for every head.
+        return { box: b, x: x, y: y, w: w, h: h,
+                 u: w > 1 ? x / (w - 1) : 0.5, v: h > 1 ? y / (h - 1) : 0.5 };
     };
 
     /** The look's colours ({r,g,b} 0..255), or @p defaults when it has none. */
@@ -232,17 +232,29 @@ var MATRIX = (function() {
         return M.DIVISION_STEPS[M.clamp(Math.round(num(division, 2)), 0, M.DIVISION_STEPS.length - 1)];
     };
 
+    // The white settings as out() last worked them out: the same for every
+    // head of a tick, so read once a tick, not once a head.
+    var outParams = null, outWhite, outWhiteLevel, outMode = 0, outWl = 1;
     /** A head's intent: colour @p c ({r,g,b} at full) at @p level 0..1,
      *  with @p accent 0..1 of white on top, by the white settings in
      *  @p params (see the top of this file). */
     M.out = function(f, cv, c, level, accent, params) {
-        var mode = Math.round(num(params.white, 0));
-        var wl = M.clamp(num(params.whiteLevel, 1), 0, 1);
-        level = M.clamp(num(level, 0), 0, 1);
-        accent = M.clamp(num(accent, 0), 0, 1);
+        var pw = params.white, pl = params.whiteLevel;
+        if (params !== outParams || pw !== outWhite || pl !== outWhiteLevel) {
+            outParams = params; outWhite = pw; outWhiteLevel = pl;
+            outMode = Math.round(num(pw, 0));
+            outWl = M.clamp(num(pl, 1), 0, 1);
+        }
+        var mode = outMode, wl = outWl;
+        // num() and clamp() written out: this runs for every head.
+        if (typeof level !== "number" || level !== level) level = num(level, 0);
+        level = level < 0 ? 0 : (level > 1 ? 1 : level);
+        if (typeof accent !== "number" || accent !== accent) accent = num(accent, 0);
+        accent = accent < 0 ? 0 : (accent > 1 ? 1 : accent);
         var r = c.r * level, g = c.g * level, b = c.b * level;
         var bright = Math.max(r, g, b) / 255;
-        var rgbHead = M.isRGB(f), whiteHead = !!f.headWhite;
+        var rgbHead = f.headRGB !== undefined ? !!f.headRGB : (f.hasRGB !== false);   // M.isRGB(f)
+        var whiteHead = !!f.headWhite;
         var lit = level > 0 || accent > 0;
         var o;
 
@@ -300,8 +312,8 @@ var MATRIX = (function() {
             var a = 255 * accent;
             r = Math.max(r, a); g = Math.max(g, a); b = Math.max(b, a);
         }
-        o = { r: Math.round(M.clamp(r, 0, 255)), g: Math.round(M.clamp(g, 0, 255)),
-              b: Math.round(M.clamp(b, 0, 255)) };
+        o = { r: Math.round(r < 0 ? 0 : (r > 255 ? 255 : r)), g: Math.round(g < 0 ? 0 : (g > 255 ? 255 : g)),
+              b: Math.round(b < 0 ? 0 : (b > 255 ? 255 : b)) };
         if (f.hasDimmer && lit) o.dimmer = 1;
         return o;
     };
