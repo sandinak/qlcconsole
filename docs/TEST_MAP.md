@@ -1,0 +1,1000 @@
+# Test map: 0.3
+
+Each user-facing change in CHANGELOG.md's **[0.2.2] - Unreleased** section
+(shipping as 0.3), including the Fixed entries, matched to the tests that
+check it. Use it to find the test to run, or to extend, when you change a
+feature. It was made in the overnight test audit of 2026-10-25. That audit
+also closed the high-risk gaps it found; the tests it added are shown in
+**bold** with *(new)*.
+
+The map has two parts:
+
+- **Part 1** is organised by changelog entry. It covers what ships in 0.3.
+- **[Part 2](#part-2-earlier-features-by-area)** is organised by area. It
+  covers features from before 0.2.2 and comes from the 0.2.x audit of
+  2026-10-22, which was TEST_COVERAGE.md. Its statuses date from that audit.
+  The bugs it found (B1–B9) are fixed, and their regression tests are listed
+  in Part 1's Fixed sections.
+
+## Keeping it current
+
+When a feature lands, add its rows to Part 1 (or to Part 2 if it
+changes an earlier feature).
+
+- **When a changelog entry is added**, add a row for each separate claim it
+  makes. The claims a test can check: what is output on the wire, what is
+  saved, what undo does, what a widget shows.
+- **When you add a test**, put `Suite::function` in its row. Use the test
+  class name and the private slot from the test's `*_test.h`.
+- **When you rename or remove a test**, fix its rows. Check with
+  `grep -rn "Suite::function" docs/TEST_MAP.md`.
+- Row IDs (M001…) are only for referring to rows. Don't renumber them; give
+  a new row the next number.
+
+**Status:**
+
+- **covered:** a test drives the behaviour the way a user does (real
+  widgets, actions, playback ticks, save and load) and asserts the result.
+- **partial:** the test asserts only part of the behaviour, only its
+  engine half, or only a getter.
+- **none:** no test reaches it.
+
+Tests that run only with an environment variable set (`COURSE_RIG`,
+`OFFICE_*`, `FM_DH_SHOW`, `QLC_TRACKBACK_SHOW` and the screenshot switches)
+are not counted. A row marked **(bug)** has a test with QEXPECT_FAIL: the
+test asserts what the changelog promises, and that check fails today.
+
+**Risk:**
+
+- **high:** safety, DMX output, playback, saving and loading, undo, crashes.
+- **med:** a feature a show relies on.
+- **low:** a UI convenience or a label.
+
+**Running a row's test:** `QLC_TEST_ONLY="ui/test/<dir>" ./check-all.sh --quick`.
+To run one function, go to the build dir and run the program with the
+function name as its argument. Set `QT_QPA_PLATFORM=offscreen` and add
+`-platform offscreen`. A test's `test.sh` does not set offscreen itself.
+
+# Part 1: the 0.3 changelog
+
+## Totals
+
+| | rows | covered | partial | none |
+|---|---|---|---|---|
+| All, before | 488 | 366 | 60 | 62 |
+| All, after | 488 | 416 | 42 | 30 |
+| High risk, before | 174 | 137 | 16 | 21 |
+| High risk, after | 174 | 170 | 4 | 0 |
+
+| Section | rows | covered before → after | partial before → after | none before → after |
+|---|---|---|---|---|
+| Added: house rig, venues, focus calls and Refine | 63 | 45 → 53 | 9 → 3 | 9 → 7 |
+| Added: focus report, practice, pad moves, input devices | 52 | 37 → 41 | 8 → 6 | 7 → 5 |
+| Added: stage marks to Upgrade This Show | 108 | 81 → 90 | 17 → 14 | 10 → 4 |
+| Added: skip cues to controller test | 83 | 73 → 76 | 5 → 4 | 5 → 3 |
+| Changed | 84 | 63 → 73 | 10 → 7 | 11 → 4 |
+| Fixed (part 1) | 42 | 28 → 31 | 7 → 6 | 7 → 5 |
+| Fixed (part 2) | 51 | 39 → 47 | 4 → 2 | 8 → 2 |
+| Data safety across features (old shows, file formats) | 5 | 0 → 5 | 0 → 0 | 5 → 0 |
+
+## What the 2026-10-25 audit found
+
+Each bug below has a test that asserts what the changelog promises. The
+failing check is marked `QEXPECT_FAIL`, so the test passes for now. When a
+bug is fixed, its check passes, QtTest reports an XPASS, and the test fails
+until the marker is removed.
+
+- **Not-ours channels can still be patched by two paths (M015).** The not-ours
+  check is only in `Doc::canPatchFixtures()`. `Doc::addFixture()` with an
+  address doesn't check it (the RGB panel, FixtureCreator and the plot's
+  adds use that path). Neither does `Fixture::setAddress()` on a patched
+  fixture (the fixture edit dialog). The output on those channels is still
+  zeroed, so nothing reaches the house desk. Test:
+  `VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay`.
+- **Build Delete → Undo garbles a Show (M438).** `PaletteOps::functionSnapshot`
+  copies the Show with `createCopy`, and the restore uses `copyFrom`.
+  `Show::copyFrom()` appends tracks instead of replacing them, and
+  deep-copies each item's function. Deleting a scene a Show track plays,
+  then pressing ⌘Z, leaves the Show with two tracks. The item then plays
+  "Copy of Copy of Walk", and a stray "Copy of Walk" is left in the show.
+  Test: `ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack`.
+- **The ColorSource CYC definition has no beam angle (M292).** It has
+  `<Lens DegreesMin="0" DegreesMax="0">`, so the definition checker warns
+  and the plot draws its beam at a guess. Test:
+  `FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean`.
+
+Findings that are not marked as bugs:
+
+- **The venue file keeps only what this build knows.** A venue file from a
+  newer build loads. Elements this build doesn't know are dropped on the
+  next save, except inside a house `<Fixture>`, which is kept whole.
+- **A clash found when a venue opens leaves only an overlap unpatched.** On
+  open, as when a venue is applied, an overlapping house light comes in
+  unpatched. A not-ours or slot clash is noted, but the light stays patched.
+- **A practice can add a `<FixtureRig>` entry to the show file.** It holds
+  default values, for a scrambled light that had no entry. The calibration
+  is unchanged.
+- **If ShowManager has never been shown, Build Delete leaves a dead Show
+  item.** `ShowManager::slotFunctionRemoved` returns early while its shows
+  list is empty. That happens for a Show made in this session before the
+  Shows tab was opened. The deleted function's item stays on its track,
+  pointing at an id that no longer exists.
+- **Two hold tests depended on machine load.** They counted wall-clock time
+  per joystick tick, so a loaded machine could save early. They now tick
+  at the nominal 20 ms:
+  `FocusCalls_Test::theControllerDoesItThroughTheProgrammer` and
+  `FocusSession_Test::theControllerReachesItThroughTheProgrammer`.
+- **A text element can't take a child element.** A newer build that put an
+  element inside a chaser's or collection's `<Step>id</Step>` would stop
+  this build's reader there. Everything else in the show reads past what it
+  doesn't know (`ShowFiles_Test::aShowFromANewerBuildOpens`).
+
+## Added: house rig, venues, focus calls and Refine
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M001 | House rig / venues | Fixture and group Owner (Tour/House/Rental) written to XML only when set, and read back | VenueRig_Test::ownersRoundTrip (engine/test/venuerig/venuerig_test.cpp) | covered | covered | high |  |
+| M002 | House rig / venues | A fixture follows its group's owner unless it sets its own; the lowest group id wins; no group means Tour | VenueRig_Test::groupOwnerIsInheritedAndOverridden | covered | covered | med |  |
+| M003 | House rig / venues | With a venue applied, House fixtures (plot data, group fills) live in the sidecar, not the show file; set back to Tour, they return to the show | VenueRig_Test::houseFixturesMoveIntoTheVenue | covered | covered | high |  |
+| M004 | House rig / venues | Switching venue swaps the house rig, leaves the tour package byte-identical, is not a show edit, and a reopen re-applies the last venue | VenueRig_Test::switchingVenuesSwapsTheHouseRig | covered | covered | high |  |
+| M005 | House rig / venues | A cue on a group plays (DMX) on each venue's house rig | VenueRig_Test::aGroupCuePlaysOnEachVenuesHouseRig | covered | covered | high |  |
+| M006 | House rig / venues | House ids are reserved: new show fixtures never take them; still reserved after sidecar reload | VenueRig_Test::newShowFixturesSkipHouseIds, VenueRig_Test::sidecarRoundTrip | covered | covered | high | Only Doc::addFixture is driven. The UI Add Fixture / Patch import paths are not (ui/test/addfixture or ui/test/patchinventorydialog with a venue applied). |
+| M007 | House rig / venues | On an id collision the house fixture is renumbered, keeping its head in the group and its plot position; the sidecar is rewritten | VenueRig_Test::aTakenIdIsRenumbered | covered | covered | high | That the renumbered id is saved to disk (capture() then save()) is not checked by re-reading the file. |
+| M008 | House rig / venues | Sidecar round trip (v2: House, Fill, NotOurs, Patch) is byte-stable; v1 files and old shows unchanged | VenueRig_Test::sidecarRoundTrip, VenueRig_Test::oldShowsAndVenuesAreUnchanged; **VenueRig_Test::aSidecarFromANewerBuildStillLoads** (new) | covered | covered | high | A sidecar from a newer build loads and saves with all it knows (new test). Unknown elements are dropped on save, except inside a house Fixture, which is kept whole. |
+| M009 | House rig / venues | Moving the show's existing House fixtures into the venue (moveShowHouseIn) | VenueRig_Test::moveTheShowsHouseFixturesIn | covered | covered | med |  |
+| M010 | House rig / venues | A practice session keeps the house rig | VenueRig_Test::aPracticeKeepsTheHouseRig | covered | covered | low |  |
+| M011 | House rig / venues | Universe slot owner (Tour/House) saved and loaded | VenueRig_Test::slotOwnerRoundTrip | covered | covered | high |  |
+| M012 | House rig / venues | The venue keeps every slot's output patch; the show file keeps its own (Universe::setShowOutputBase); restored on None; forgetPatch | VenueRig_Test::theVenuePatchIsAppliedAndRestored | covered | covered | high |  |
+| M013 | House rig / venues | A not-ours universe sends nothing (normal frame and Blind) | VenueRig_Test::notOursIsNeverSent | covered | covered | high | Not exercised through the real tick: InputOutputMap::dumpUniverses and the Grand Master path. The test calls dumpOutput directly. |
+| M014 | House rig / venues | A not-ours range is zeroed in every frame | VenueRig_Test::notOursIsNeverSent; **VenueRig_Test::notOursStaysZeroThroughBlindAndBlackout, VenueRig_Test::notOursOnTheRealTick** (new) | partial | covered | high |  |
+| M015 | House rig / venues | Patching onto not-ours channels is refused, with a reason | VenueRig_Test::notOursIsNeverSent; **VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay** (new) | partial | partial | high | (bug) Doc::addFixture() with an address, and Fixture::setAddress() on a patched fixture, are not refused (QEXPECT_FAIL). The output there is still zeroed. |
+| M016 | House rig / venues | Typed range parsing (1-based, en dash, single address, rejects bad input) | VenueRig_Test::notOursIsNeverSent, VenueRigUi_Test::theVenuePageShowsTheUniverses (ui/test/venuerigui/venuerigui_test.cpp) | covered | covered | med |  |
+| M017 | House rig / venues | Clash check finds overlaps, not-ours and slot clashes (dry run); going live anyway leaves the house fixture unpatched, with a note | VenueRig_Test::theClashCheck | covered | covered | high |  |
+| M018 | House rig / venues | Clash check runs before Apply (VenueRigDialog::confirmClashes, "Apply anyway" / Cancel) | **VenueRigUi_Test::aClashingVenueAsksBeforeItIsApplied** (new) | none | covered | high |  |
+| M019 | House rig / venues | Clash check runs on open (the note from VenueCorrections::apply) | VenueRig_Test::theClashCheck (note on setActiveVenue only); **VenueRig_Test::theClashCheckRunsOnOpen** (new) | partial | covered | high | On open, as on setActiveVenue, only an overlap leaves the house light unpatched; a not-ours or slot clash is noted and stays patched. |
+| M020 | House rig / venues | Clash check runs in the Patch dialog (summary line) | **PatchInventoryDialog_Test::aVenueClashIsNamedInTheSummary** (new) | none | covered | high |  |
+| M021 | House rig / venues | UI: Owner in the group editor; its fixtures follow into the venue | VenueRigUi_Test::aGroupsOwnerIsSetInItsEditor | covered | covered | med |  |
+| M022 | House rig / venues | UI: Owner in Fixture Properties (fixtureOwner combo, "From group" text) | none | none | none | med | Drive FixtureFields `fixtureOwner` in ui/test/monitor or ui/test/venuerigui. |
+| M023 | House rig / venues | UI: Slot on the Connections toolbar | VenueRigUi_Test::theConnectionsSlotPicker | covered | covered | med |  |
+| M024 | House rig / venues | UI: venue page (house list, universe table, slot, not-ours, clash list, keep/forget patch); opened from Focus calls ▸ Rig and universes | VenueRigUi_Test::theVenuePageShowsTheUniverses, VenueRigUi_Test::theVenueManagerOpensIt | covered | covered | med |  |
+| M025 | House rig / venues | UI: the plot's Owner overlay (ViewOwner colours) | none | none | none | low | ui/test/monitor: set m_overlayCombo to Owner and check the item colours. |
+| M026 | House rig / venues | Owners in the Inventory and the patch list | FocusReport_Test owner column only (engine/test/focusreport/focusreport_test.cpp) | none | none | low | PatchList m_owners column (engine/test/patchlist) and the MonitorInventoryPanel "[House]" label are untested. |
+| M027 | Focus calls / venues / Refine | One controller map shared by every tool; per-tool labels; crew words | FocusCalls_Test::theControllerSchemeIsOneMap (engine/test/focuscalls/focuscalls_test.cpp) | covered | covered | med |  |
+| M028 | Focus calls / venues / Refine | On-screen map labelled per tool (panels) | FocusCallsUi_Test::thePanelShowsTheCall, FocusCallsUi_Test::theRefinePanel (ui/test/focuscallsui/focuscallsui_test.cpp) | covered | covered | low |  |
+| M029 | Focus calls / venues / Refine | Focus calls saved in the show, in order; nothing written when empty; reorder | FocusCalls_Test::callsAreSavedWithTheShow; **FocusCalls_Test::callsComeBackWithTheWholeShow** (new) | partial | covered | high |  |
+| M030 | Focus calls / venues / Refine | Focus calls dialog edits calls and picks the venue | FocusCallsUi_Test::theDialogEditsCallsAndPicksTheVenue, FocusCallsUi_Test::aVenueNeedsASavedShow | covered | covered | low |  |
+| M031 | Focus calls / venues / Refine | Triggers step the calls, bumpers the fixtures, Y scope; a held trigger does not repeat | FocusCalls_Test::runningCallsStepsCallsAndFixtures, FocusCalls_Test::aTriggerPressesOnce | covered | covered | med |  |
+| M032 | Focus calls / venues / Refine | The stick nudges and A saves through the programmer input | FocusCalls_Test::theControllerDoesItThroughTheProgrammer | covered | covered | med |  |
+| M033 | Focus calls / venues / Refine | Group scope saves and undoes as one | FocusCalls_Test::groupScopeWorksTheWholeCall | covered | covered | high |  |
+| M034 | Focus calls / venues / Refine | Corrections go to the sidecar, written on every keep, re-applied on open; the show file never takes them (setCalibrationBase) | FocusCalls_Test::correctionsGoToTheVenueNotTheShow, FocusCalls_Test::anEditElsewhereGoesToTheVenue, FocusCalls_Test::switchingVenues | covered | covered | high |  |
+| M035 | Focus calls / venues / Refine | Truss trims and target positions per venue (sidecar only); the pad's target page | FocusCalls_Test::aVenueHasItsOwnTrimsAndTargets | covered | covered | high |  |
+| M036 | Focus calls / venues / Refine | Venue manager: apply now, rename, delete | FocusCallsUi_Test::theVenueManager | covered | covered | med |  |
+| M037 | Focus calls / venues / Refine | "Still at <venue>?" on open | FocusCalls_Test::anOldVenueIsConfirmed, FocusCallsUi_Test::anOldVenueIsAskedAbout, FocusCalls_Test::aFocusCallCueAsksForTheVenue | covered | covered | med | That App calls confirmVenue after opening a file is not tested. |
+| M038 | Focus calls / venues / Refine | Fixture-type check: a swapped light needs focus; a deleted one's correction is orphaned | FocusCalls_Test::aSwappedFixtureNeedsFocus | covered | covered | high |  |
+| M039 | Focus calls / venues / Refine | Collect for Transfer copies the venue files | FocusCalls_Test::theVenueFileTravels (writeSidecarFor only); **ShowFiles_Test::collectForTransferTakesTheVenues (ui/test/showfiles)** (new) | partial | covered | med |  |
+| M040 | Focus calls / venues / Refine | Refine on a Show Tree cue's own values: position/zoom/focus/colour at Layer/Group/Fixture scope, previewed on the rig | RefineSession_Test::scopesAndSteps, RefineSession_Test::layerScopeEditsTheLayerLook, RefineSession_Test::fixtureScopeMakesAnException, RefineSession_Test::zoomAndFocus, RefineSession_Test::groupScopeKeepsTheFan (engine/test/refinesession/refinesession_test.cpp) | covered | covered | high |  |
+| M041 | Focus calls / venues / Refine | Refine gobo | none | none | none | med | No gobo page / pendingGobo assertion. Add to refinesession. |
+| M042 | Focus calls / venues / Refine | Kept by A as one Show Tree step (inline palette, or a child layer for an exception), one undo | RefineSession_Test::layerScopeEditsTheLayerLook, RefineSession_Test::fixtureScopeMakesAnException | covered | covered | high |  |
+| M043 | Focus calls / venues / Refine | Refine a Build scene the same way | RefineSession_Test::aBuildSceneIsRefinedTheSameWay, FocusCallsUi_Test::refineFromTheWorkbench | covered | covered | med |  |
+| M044 | Focus calls / venues / Refine | Entry: Show Tree cue page (stCueRefine) and layer menus (stRefineLayer, cueStackRefine) | none | none | none | low | ui/test/showtreeview: click stCueRefine and trigger the layer menu action, then check RefinePanel::instance(). |
+| M045 | Focus calls / venues / Refine | Entry: Workbench header Refine… and its rows' menus | FocusCallsUi_Test::refineFromTheWorkbench, ShowTreeView_Test (hidden on originals; ui/test/showtreeview/showtreeview_test.cpp) | partial | partial | low | The row's menu action is not driven; openRefine(sid, …, fixture) is called directly. |
+| M046 | Focus calls / venues / Refine | Refine quiet in Operate: only the running cue, no preview/blink/dim, kept change held until the next GO, then blind | RefineSession_Test::operateHoldsWhatIsKept, RefineSession_Test::refusesWhatItCannotRefine; **RefineSession_Test::operateIsQuietOnARunningList** (new) | covered | covered | high | The new test uses a real running list in Operate. The move shows at once, as refine.md says; there is no preview, blink or dim. |
+| M047 | Focus calls / venues / Refine | Focus-call cue arms on GO (said once; disarms when the list moves) | FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController, FocusCallsUi_Test::aFocusCallCueWaitsForTheController; **FocusCalls_Test::aFocusCallCueArmsOnARealGo** (new) | partial | covered | high |  |
+| M048 | Focus calls / venues / Refine | Focus-call cue starts on the controller's Start (and the Run tab button) | FocusCalls_Test::theFirstPadOwnsIt (pad Start input), FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController, FocusCallsUi_Test::aFocusCallCueWaitsForTheController | covered | covered | high |  |
+| M049 | Focus calls / venues / Refine | Leaving the calls goes on with the list (no GO if moved by hand or stopped from outside) | FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController; **FocusCalls_Test::aFocusCallCueArmsOnARealGo** (new) | partial | covered | high | FocusCallCue::sessionStopped() runs the GO itself. |
+| M050 | Focus calls / venues / Refine | Feedback lights, voice or both (cycled by RS hold; one setting on every panel) | FocusCalls_Test::feedbackIsLightsVoiceOrBoth, FocusCallsUi_Test::feedbackIsOneSettingOnEveryPanel | covered | covered | med |  |
+| M051 | Focus calls / venues / Refine | Voice backends: `say`, `spd-say`, Qt TextToSpeech | FocusCallsUi_Test::theVoiceHearsTheAnnouncements (SilentVoice only) | none | none | low | OperatorVoice::create backend choice is untested. Needs a PATH / executable seam. |
+| M052 | Focus calls / venues / Refine | Voice queue never drops a confirmation; stale "where" lines replaced | FocusCallsUi_Test::theVoiceNeverDropsAConfirmation, FocusCallsUi_Test::theVoiceHearsTheAnnouncements | covered | covered | med |  |
+| M053 | Focus calls / venues / Refine | Important lines always spoken (even Lights only) with a long blink and buzz | FocusCalls_Test::importantLinesAlwaysSpeak | covered | covered | high |  |
+| M054 | Focus calls / venues / Refine | Say the light | FocusCalls_Test::feedbackIsLightsVoiceOrBoth, FocusCalls_Test::theOperatorIsToldWhereTheyAre, RefineSession_Test::theOperatorIsToldWhereTheyAre | covered | covered | low |  |
+| M055 | Focus calls / venues / Refine | Pad light bar and rumble (sent to the plugin) | FocusCalls_Test::thePadAndTheVoiceTellYouMore, FocusCalls_Test::theControllerDoesItThroughTheProgrammer | covered | covered | low |  |
+| M056 | Focus calls / venues / Refine | Accessible save lamp | FocusCallsUi_Test::theRefinePanelHasTheLamp | partial | partial | low | Lamp state and count are asserted; accessibleName/Description and the colour-blind palette on the widget are not. |
+| M057 | Focus calls / venues / Refine | A held D-pad repeats; nothing else does | FocusCalls_Test::aHeldArmRepeats, RefineSession_Test::zoomAndFocus | covered | covered | low |  |
+| M058 | Focus calls / venues / Refine | Hold A for one second saves all (not at 0.6 s) | FocusCalls_Test::theControllerDoesItThroughTheProgrammer, RefineSession_Test::aHeldANeverAnswersAWarning | covered | covered | high | FocusCalls_Test::theControllerDoesItThroughTheProgrammer and FocusSession_Test::theControllerReachesItThroughTheProgrammer now tick at a nominal 20 ms. Before, a loaded machine could save early. |
+| M059 | Focus calls / venues / Refine | Controller lost freezes everything it held (stick and A hold; no keep-all fires); said; "back" said; does not move until touched | FocusCalls_Test::theControllerLostFreezesEverything; **FocusCalls_Test::aLostControllerFreezesTheRigOutput** (new) | covered | covered | high | Now also asserted on the universe bytes, during a D-pad repeat and in a cue-launched run. |
+| M060 | Focus calls / venues / Refine | Two pads: the first to press Start owns the tools; the other is ignored and told so | FocusCalls_Test::theFirstPadOwnsIt | covered | covered | high |  |
+| M061 | Focus calls / venues / Refine | "Nothing reaching the rig" (Blackout, Grand Master at zero, no output) is said | FocusCalls_Test::nothingReachingTheRigIsSaid | covered | covered | high | The no-output case checks rigOutputProblem() text only; that it is said is not asserted. |
+| M062 | Focus calls / venues / Refine | Unsaved work is never discarded when switching controller tools | FocusCalls_Test::unsavedWorkIsNeverDiscarded, RefineSession_Test::oneToolOwnsTheController | covered | covered | high |  |
+| M063 | Focus calls / venues / Refine | Help pages focus-calls.md and refine.md | none | none | none | low | ui/test/helpbrowser: check both pages resolve. |
+
+## Added: focus report, practice, pad moves, input devices
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M064 | Focus report | Each light's row lists its call, target, stage-marks position, correction (from the show's calibration), checked by, notes, address, type and owner | FocusReport_Test::theReportListsEveryLight (engine/test/focusreport/focusreport_test.cpp) | covered | covered | med | Lens is not asserted on any row. Add a QCOMPARE on the row's lens in the same test. |
+| M065 | Focus report | The flags: dead, needs focus, swapped | FocusReport_Test::theReportListsEveryLight; **FocusReport_Test::aSwappedLightAndTheLensAreReported** (new) | partial | covered | med |  |
+| M066 | Focus report | `VenueCorrections::Check` (by, when) written on every save, even with no change | FocusReport_Test::aVenueRemembersChecksAndDeadLights | covered | covered | high |  |
+| M067 | Focus report | Checks and dead marks saved to the venue file XML and read back | FocusReport_Test::aVenueRemembersChecksAndDeadLights; FocusReport_Test::practiceScramblesAndScores (reader keeps reading after `<Practice>`) | covered | covered | high |  |
+| M068 | Focus report | With no venue applied, setDead/markChecked are refused | FocusReport_Test::aVenueRemembersChecksAndDeadLights | covered | covered | low |  |
+| M069 | Focus report | CSV (Lightwright columns, quoting) | FocusReport_Test::theReportListsEveryLight; FocusCallsUi_Test::theFocusReportIsExported (ui/test/focuscallsui/focuscallsui_test.cpp) | covered | covered | med |  |
+| M070 | Focus report | HTML (grouped by call, summary line, focused by) | FocusReport_Test::theReportListsEveryLight; FocusCallsUi_Test::theFocusReportIsExported | covered | covered | med |  |
+| M071 | Focus report | PDF through QPdfWriter | FocusCallsUi_Test::theFocusReportIsExported (only checks the file starts with `%PDF` and is over 1 KB) | partial | partial | low | Content is not checked. That is acceptable for a smoke test. |
+| M072 | Focus report | Exported from the venue manager (fcReport button, fcCheckedBy field) | FocusCallsUi_Test::theFocusReportIsExported | partial | partial | low | The checked-by field and the button's enabled state are tested. The button is never clicked: the test calls the static `FocusCallsDialog::writeReport` directly. Clicking it needs a seam for the file dialog. |
+| M073 | Practice | `startPractice` makes a "Practice …" venue with each mover off by min–max degrees on both axes; the truth is the real venue's | FocusReport_Test::practiceScramblesAndScores; FocusCallsUi_Test::practiceScramblesAndScores | covered | covered | high |  |
+| M074 | Practice | Refused with no show file, and refused on top of a running practice | FocusReport_Test::practiceScramblesAndScores | covered | covered | med |  |
+| M075 | Practice | The real venue is untouched and put back at endPractice (active venue, calibration, fixtures, no checks) | FocusReport_Test::practiceScramblesAndScores (compares the real venue's toXml before and after); FocusCallsUi_Test::practiceScramblesAndScores (showPracticeResult); VenueRig_Test::aPracticeKeepsTheHouseRig (engine/test/venuerig/venuerig_test.cpp; house fixtures stay); **VenueRig_Test::aPracticeNeverReachesTheShowFile** (new) | covered | covered | high | A practice can add a FixtureRig entry with default values to the show file for a light that had none. |
+| M076 | Practice | The views draw where the scrambled lights land (`practiceViewProps`) | FocusCallsUi_Test::practiceScramblesAndScores (calls practiceViewProps and focusIntentDirection directly) | partial | partial | med | The helper is tested. MonitorFixtureItem (ui/src/monitor/monitorfixtureitem.cpp:1256) and fixturevisualtraits.cpp:1202 are not. Add a check on the 2D item's beam angle in ui/test/monitorfixtureitem. |
+| M077 | Practice | Scored on error, time and saves; score shown in the report and kept in the XML | FocusReport_Test::practiceScramblesAndScores | covered | covered | med | `seconds` is only checked to be >= 0. |
+| M078 | Hold B | B's press reverts the current light; holding it reverts every unsaved light to its last save (not zero), and says so | FocusCalls_Test::holdBPutsEveryLightBack (engine/test/focuscalls/focuscalls_test.cpp) | covered | covered | high |  |
+| M079 | Hold B | View brings them all back as one undo step; the save before it can still be undone | FocusCalls_Test::holdBPutsEveryLightBack | covered | covered | high |  |
+| M080 | Hold B | "Nothing to put back" when everything is saved | FocusCalls_Test::holdBPutsEveryLightBack | covered | covered | low |  |
+| M081 | Holding | Both stick clicks toggle `ProgrammerController::setHolding`: sticks, A and bumpers do nothing; pressing again releases; holdingChanged fires; RS/LS side effects suppressed | FocusCalls_Test::theSmallIdeas | covered | covered | high |  |
+| M082 | Holding | A tool that ends while holding leaves nothing held | FocusCalls_Test::theSmallIdeas | covered | covered | med |  |
+| M083 | Holding | The H key in Focus mode | **FocusMode_Test::theKeysHoldZoomAndFocus** (new) | none | covered | med |  |
+| M084 | Holding | Holding in Refine (`RefineSession::setHolding`) | **RefineSession_Test::holdingTakesNoStick** (new) | none | covered | med |  |
+| M085 | Mark dead | View + X marks the current light dead; pressed again, not dead; said; wherePhrase shows it; View's release does not undo | FocusCalls_Test::theSmallIdeas | covered | covered | med |  |
+| M086 | Mark dead | Refused and said when no venue is applied | FocusCalls_Test::theSmallIdeas | covered | covered | low |  |
+| M087 | Crew words | `ControllerScheme::crewWord` and the labels: spot down, flood out, sharper, softer | FocusCalls_Test::theControllerSchemeIsOneMap | covered | covered | low |  |
+| M088 | Crew words | On the controller map | FocusMode_Test::theMapShowsTheProfilesBindings (ui/test/focusmode/focusmode_test.cpp, line 232: actionText(DpadUp) contains "Spot down") | covered | covered | low |  |
+| M089 | Crew words | Spoken in the voice when the D-pad is pressed | none | none | none | low | Nothing asserts an operatorAnnounce of "Spot down." after a D-pad press. Add one in FocusCalls_Test::theSmallIdeas. |
+| M090 | Call place | Entering a call says where its target is ("SL 2, US 1") | FocusCalls_Test::theOperatorIsToldWhereTheyAre; FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController; MonitorProperties_Test (formatStageOffset SpokenOffset, engine/test/monitorproperties) | covered | covered | low |  |
+| M091 | Plot jump | `FocusSession::jumpTo(fid)` goes to the light's call at fixture scope; an unknown id is refused | FocusCalls_Test::theSmallIdeas | partial | partial | low | Only the engine half. Clicking a light on the plot is never driven. Add it in ui/test/focusmode or monitor. |
+| M092 | Focus look | `FocusSession::openBeamValue` picks the open value for gobo, prism and frost; refuses gobo index and zoom | FocusCalls_Test::theSmallIdeas (static function only); **FocusSession_Test::theFocusLookTakesTheBeamOut** (new) | partial | covered | high |  |
+| M093 | New venue from last | `addVenueFrom` copies the corrections without the checks; does not overwrite an existing name; refuses an unknown source; the show's own calibration is untouched; lastVenue skips practices | FocusReport_Test::aNewVenueStartsFromTheLastOne; FocusReport_Test::practiceScramblesAndScores | covered | covered | med |  |
+| M094 | New venue from last | The "Start from <last>" checkbox in the venue manager; unticked gives the show's own calibration | FocusCallsUi_Test::aNewVenueStartsFromTheLast | covered | covered | low |  |
+| M095 | PlayStation | `GamepadLayout::PlayStation` maps Sony buttons, axes and hat to the Xbox roles; isPlayStation by VID/PID | GamepadLayout_Test::playStationElements; GamepadLayout_Test::families (engine/test/gamepadlayout/gamepadlayout_test.cpp) | covered | covered | med |  |
+| M096 | PlayStation | `playstation.qxhid` has the same roles as the reader under PlayStation names, and matches DS4/DualSense PIDs | GamepadLayout_Test::matchesThePlayStationProfile | covered | covered | med |  |
+| M097 | PlayStation | macOS reads them through GameController (plugins/hid/macx/hidgamecontroller) | none | none | none | med | plugins/hid has no test dir. Needs a seam: pull the GCController-to-PadState mapping out into a pure function, then test it in engine/test/gamepadlayout. |
+| M098 | PlayStation | The light bar follows the save lamp | none | none | none | low | Untested. Needs a seam that records the light-bar colour written to the device. |
+| M099 | Input follow | InputPatch remembers its line's name (`InputPatch::inputUID`, maker/model/serial) | InputOutputMap_Test::inputDeviceGoesAndComesBack (engine/test/inputoutputmap/inputoutputmap_test.cpp) | covered | covered | high |  |
+| M100 | Input follow | On rescan (configurationChanged), a patch whose device is gone becomes an offline patch with its profile, HID profile and parameters; it is not attached to whatever now holds its old line; it saves by name | InputOutputMap_Test::inputDeviceGoesAndComesBack | covered | covered | high |  |
+| M101 | Input follow | A device that moved to another line is reopened on the new line | InputOutputMap_Test::inputDeviceFollowedToANewLine | covered | covered | high |  |
+| M102 | Input follow | A kept patch is reattached at once on the rescan, not at the next 5 s tick (including a device absent when the show loads) | InputOutputMap_Test::inputDeviceGoesAndComesBack; InputOutputMap_Test::inputDeviceAbsentAtLoadAttachesWhenItAppears | covered | covered | high |  |
+| M103 | Input follow | `inputDeviceDisconnected` / `inputDeviceConnected` fire once with the universe, plugin and uid, and the retry tick does not repeat them | InputOutputMap_Test::inputDeviceGoesAndComesBack | covered | covered | med |  |
+| M104 | Input follow | Only plugins whose lines are hardware; network/protocol inputs are left alone | InputOutputMap_Test::inputOnANonDevicePluginIsLeftAlone | covered | covered | med |  |
+| M105 | Input follow | The real HID and MIDI plugins report lines as hardware and emit configurationChanged | none (only the stub's `m_linesAreHardware`) | partial | partial | med | No check that HIDPlugin/MIDIPlugin say their lines are hardware. Add a one-line assertion in plugins/midi/test; HID has no test dir. |
+| M106 | Notices | Disconnect said only after settling, once, warning severity, with the universe; "Controller" for HID | InputDeviceNotices_Test::aDisconnectIsSaidOnceSettled; InputDeviceNotices_Test::onlyDeviceInputsCount (ui/test/inputdevicenotices/inputdevicenotices_test.cpp) | covered | covered | med | The test uses the stub plugin, so the message reads "Input device '…'". The "Controller '…'" wording is only checked through kindName("HID"). |
+| M107 | Notices | Reconnect said ("connected") and the footer entry cleared | InputDeviceNotices_Test::aReconnectIsSaidAndClearsTheFooter | covered | covered | med |  |
+| M108 | Notices | A flap within the settle time says nothing | InputDeviceNotices_Test::aFlapIsNotSaid | covered | covered | med |  |
+| M109 | Notices | The settle time is 2.5 s by default | none (every test calls setSettleTime(50–300)) | partial | partial | low | Nothing checks the default (ui/src/inputdevicenotices.cpp:37). Add `QCOMPARE(InputDeviceNotices(m_doc).settleTime(), 2500)`. |
+| M110 | Notices | Footer readiness entry `input.devices` (warning while away) | InputDeviceNotices_Test::aDisconnectIsSaidOnceSettled | covered | covered | med |  |
+| M111 | Notices | Absent when the show opens is said ("not connected") | InputDeviceNotices_Test::absentWhenTheShowOpensIsSaid | covered | covered | med |  |
+| M112 | Notices | Shown in the notice line in amber (App wiring) | none | none | none | low | ui/src/app.cpp:782 connects the notice signal to the notice line, and nothing tests that. Could go in ui/test/mainbar or appviews. |
+| M113 | Devices tree | Connections ▸ Devices draws an absent device as a greyed line, "not connected", with its universe, and not listed as unpatched; a real line again when it is back | ConnectionsTree_Test::anAbsentInputDeviceIsShownNotConnected (ui/test/connectionstree/connectionstree_test.cpp) | covered | covered | low | Greyed (the foreground colour) is not asserted. |
+| M114 | Focus mode | "Controller connected" when the pad wakes; the panel falls back to the keyboard, then offers to go back | FocusMode_Test::aPadThatSleepsIsPickedUpAgain | covered | covered | med |  |
+| M115 | Linux HID | Rescan when `/dev/input` changes (QFileSystemWatcher) | none | none | none | low | plugins/hid/hidplugin.cpp:82 is untested, and plugins/hid has no test dir. Needs a seam such as an injectable watch path. |
+
+## Added: stage marks to Upgrade This Show
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M116 | Stage marks | Off by default; an older show opens with them off; StageMarks/CurtainLineY/NumberLineY written only when used; set and auto both survive a round trip; stray bits dropped | MonitorProperties_Test::stageMarksAreSavedWithTheShow (engine/test/monitorproperties/monitorproperties_test.cpp) | covered | covered | high | — |
+| M117 | Stage marks | Centre mark (DSC spike + "CL") at the front of the stage; optional dashed full centre line | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview (ui/test/monitor/monitor_test.cpp); MonitorProperties_Test::stageMarksFollowTheStage | covered | covered | low | The "dashed" pen style is not asserted. |
+| M118 | Stage marks | Auto curtain line: main drape or proscenium across centre, else 4 ft / 1.2 m upstage of the front | MonitorProperties_Test::stageMarksFollowTheStage | covered | covered | med | — |
+| M119 | Stage marks | Front of the deck = biggest platform across centre plus a butted apron (risers and side platforms ignored), else the grid's front edge | MonitorProperties_Test::stageMarksFollowTheStage | covered | covered | med | — |
+| M120 | Stage marks | Curtain line set as a distance upstage of the front, number line as a distance downstage of the curtain line (negative = the other way); both saved as plan Y; a set line stays put when the deck or the other line moves; older plan-Y shows read the same | MonitorProperties_Test::stageLinesAreSetFromTheFrontAndTheCurtainLine; Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview (menu spin boxes, Auto checkboxes, words) | covered | covered | high | — |
+| M121 | Stage marks | Apron tinted and dimensioned ("Apron N m") when the curtain line is on | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | low | — |
+| M122 | Stage marks | Apron depth resizes, adds or removes the apron platform; the main deck is never cut; an auto curtain line is pinned first | MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine | covered | covered | med | — |
+| M123 | Stage marks | Apron depth from the menu is one undo step | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview (apronSpin → mon.undo()); **Monitor_Test::apronDepthIsOneUndoStepAChange** (new) | partial | covered | high | The rig undo has no redo. |
+| M124 | Stage marks | Horizontal trusses/pipes downstage of the curtain line labelled "FOH · 4.2 m DS of curtain line"; ones upstage are not | MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine (curtainLineOffsetText, formatCurtainLineOffset); Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | low | — |
+| M125 | Stage marks | Rig Overview draws the apron and FOH labels on its floor, Top and 45°, and drops the words when small | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview (StructureStudioView m_stageMarkLabels at 640 and 360 px) | covered | covered | low | — |
+| M126 | Stage marks | Number-line numbering: CL not 0, stride, long ticks only on numbered places, mirrored | MonitorProperties_Test::theNumberLineReadsFromCentre; Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview (plot, at 5 zooms) | covered | covered | low | — |
+| M127 | Stage marks | The same numbering rule on the Rig Overview | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview (counts changed/yellow pixels only) | partial | partial | low | Only a pixel count is checked. Expose the overview's number labels (like m_stageMarkLabels) and assert CL, mirrored numbers and the stride in the same test. |
+| M128 | Stage marks | The centre mark's CL sits over the spike and gives way to the number line's CL when that line runs through it | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | low | — |
+| M129 | Stage marks | With the full centre line on, the teal cross's up-and-down arm is hidden and the across arm stays | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | low | — |
+| M130 | Stage marks | Drawn only in the plot's Top view (none in elevations); on the Overview in Top and 45° | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | low | — |
+| M131 | Stage marks | Show ▸ Stage marks menu ticks follow a show loaded later | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | low | No full file save/load through App; engine XML is covered. |
+| M132 | Target positions | formatStageOffset compact form (SL/SR/CL, US/DS, "on line", "↑ h", m and ft-in, rounding) | MonitorProperties_Test::aPositionIsWrittenAgainstTheStageMarks | covered | covered | med | — |
+| M133 | Target positions | Spoken form ("SL 2, US 1") used for calls and voice | MonitorProperties_Test::aPositionIsWrittenAgainstTheStageMarks; FocusCalls_Test (engine/test/focuscalls/focuscalls_test.cpp, stagePositionText at lines ~494 and ~792); FocusReport_Test (engine/test/focusreport) | covered | covered | med | — |
+| M134 | Target positions | Measured from the number line, or the curtain line when only that is shown | MonitorProperties_Test::aPositionIsWrittenAgainstTheStageMarks; Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | med | — |
+| M135 | Target positions | Readout beside each stage target on the plot, live while dragged, refreshed when the marks change | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview (TargetItem::positionReadout) | covered | covered | low | — |
+| M136 | Target positions | Readout live while nudged (arrow keys) | — | none | none | low | Only dragging (setPos) is tested. Add to ui/test/monitor: select a TargetItem, send Key_Right to MonitorGraphicsView, check positionReadout. |
+| M137 | Target positions | Readout on each figure/area in the Rig Overview | — | none | none | low | No test reads target labels in StructureStudioView. Add an exposed label list (like m_stageMarkLabels) and assert it in Monitor_Test. |
+| M138 | Target positions | Focus mode's fixed-light figure shows its position, with "↑ 0.9 m" on a deck | — | none | none | low | The engine height suffix is only tested with a hand-set StageOffset.height; stagePositionText for a point on a platform is never tested. Add an engine check in monitorproperties_test (point on a platform → "↑") and a focusmode panel/overview label check. |
+| M139 | Target positions | Target positions on by default; TargetPositions="0" saved only when off; back after load | MonitorProperties_Test::targetPositionsAreSavedOnlyWhenOff; MonitorProperties_Test::stageLinesAreSetFromTheFrontAndTheCurtainLine (older show → visible) | covered | covered | med | — |
+| M140 | Target positions | Menu toggle hides readouts, marks the show modified, is not an undo step | Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview | covered | covered | low | — |
+| M141 | Focus save status | Lamp states: all saved / this unsaved / other unsaved / both (ring + centre), with the unsaved lights named | FocusMode_Test::theLampSaysWhatIsUnsaved (ui/test/focusmode/focusmode_test.cpp); FocusCallsUi_Test (ui/test/focuscallsui/focuscallsui_test.cpp ~708) | covered | covered | med | The test asserts blue `#0072b2` plus a tick for "all saved", not green. The changelog's "green" is stale. |
+| M142 | Focus save status | FocusSession::unsavedChanged fires on every change (nudge, save, zero, revert, saveAll, undoSave, discardAll, stop) | FocusSession_Test::theUnsavedHeadsAreTold (engine/test/focussession/focussession_test.cpp) | covered | covered | med | — |
+| M143 | Focus save status | A save flashes the lamp; a revert does not | FocusMode_Test::theLampSaysWhatIsUnsaved | covered | covered | low | Only Return is driven; the "A" key / pad A goes through controlFor(A)=Save (FocusSession_Test::buttonsByRole). |
+| M144 | Focus save status | A save blinks the real fixture twice (dark/lit ×2), pan/tilt kept; a revert does not blink; stepped by advanceBlink; setRigFeedback(false) turns it off | FocusSession_Test::aSaveBlinksTheLightTwice | covered | covered | high | — |
+| M145 | Focus save status | 150 ms per blink phase | FocusSession_Test::aSaveBlinksTheLightTwice (QTRY ≤3000 ms only) | partial | partial | low | Assert the phase interval constant, or the timer interval, in the same test. |
+| M146 | Focus save status | Dashed yellow ring and badge on the plot for unsaved lights | Monitor_Test::focusModeRunsFromTheKeyboard (MonitorFixtureItem::isUnsaved) | partial | partial | low | Only the flag is checked, not the dashed ring or badge drawing. |
+| M147 | Focus save status | Unsaved marks in the Rig Overview (Monitor::showFocusUnsaved → StructureStudioView::setUnsavedMarks) | — | none | none | low | No test. Extend Monitor_Test::focusLightsAndRingsTheHeadInTheRigOverview: nudge, then assert the overview's unsaved-mark set. |
+| M148 | Focus save status | The Exit question names the unsaved lights | FocusMode_Test::exitNamesTheUnsavedLights; Monitor_Test::focusModeRunsFromTheKeyboard | covered | covered | med | — |
+| M149 | Beam in Focus mode | D-pad up/down = zoom narrower/wider; left/right = focus channel | FocusSession_Test::buttonsByRole; FocusSession_Test::theBeamIsSetWithinTheLensRange; FocusCalls_Test (verbFor) | covered | covered | med | — |
+| M150 | Beam in Focus mode | Keys . , (zoom) and ' ; (focus) | **FocusMode_Test::theKeysHoldZoomAndFocus** (new) | none | covered | low |  |
+| M151 | Beam in Focus mode | A hand-zoomed lens is held to the definition's range and saved with Save; revert clears it | FocusSession_Test::theBeamIsSetWithinTheLensRange | covered | covered | med | — |
+| M152 | Beam in Focus mode | Lens set by hand survives save/load of the show (`Lens=` on the fixture's rig props) | **MonitorProperties_Test::aLensSetByHandIsSavedWithTheLight** (new) | none | covered | high |  |
+| M153 | Beam in Focus mode | The beam is drawn at the hand-set lens | FocusSession_Test::theBeamIsSetWithinTheLensRange (RigHeads::beamAngle) | partial | partial | low | Engine angle only; no plot or overview beam width check. |
+| M154 | Beam in Focus mode | A zoom channel is driven while focusing only, not saved | FocusSession_Test::theBeamIsSetWithinTheLensRange | covered | covered | high | — |
+| M155 | Beam in Focus mode | Fixture Properties "Beam (lens set to)" sets the lens | **Monitor_Test::aLensSetInFixturePropertiesIsTheLights** (new) | none | covered | med |  |
+| M156 | Beam in Focus mode | "As selected" always offered, from the plot selection | Monitor_Test::focusModeSetupOffersTheSceneAimFirst (selection → options) | partial | partial | low | The combo entry and Monitor::openFocusMode's plot selection are not asserted. |
+| M157 | Focus fixed lights | Pars and fixed spots step through Focus mode with no target, each lit; reference = where it lands at head height | FocusSession_Test::aFixedLightIsFocusedByWhereItLands | covered | covered | med | — |
+| M158 | Focus fixed lights | Moving the spot sets Pan/Tilt (fixedAim, panZeroDir, aimDown); revert restores; save keeps it past the session | FocusSession_Test::aFixedLightIsFocusedByWhereItLands | covered | covered | high | — |
+| M159 | Focus fixed lights | Undo of a fixed light's save (undoSave / Studio undo) | **FocusSession_Test::aFixedLightsSaveIsUndone** (new) | none | covered | high |  |
+| M160 | Focus fixed lights | Sticks / D-pad / arrows move the fixed light's spot | FocusSession_Test::aFixedLightIsFocusedByWhereItLands (nudge() only) | partial | partial | low | No key or pad input is driven for a fixed light. |
+| M161 | Aim fixed light | Pan/Tilt give the aim direction; saved and loaded; an unaimed light writes nothing | MonitorProperties_Test::aFixedLightIsAimedByPanAndTilt | covered | covered | high | — |
+| M162 | Aim fixed light | Aim & Mount editor has Pan (° from downstage) and Tilt and sets them | Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt | covered | covered | med | Only Tilt is set through the UI; Pan only checks its label. |
+| M163 | Aim fixed light | The 3D beam, landing point and occlusion follow the aim (no more straight-down) | — | partial | partial | med | Engine direction only. No view test that an aimed par's beam or footprint moves in MonitorGraphicsView or StructureStudioView (both use fixedAimDirection). Add to Monitor_Test. |
+| M164 | Door in a wall | Wall/back wall editor shows Door width/height/at; other kinds don't | Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes | partial | partial | low | Shown or hidden only; the values typed into the editor are not checked. |
+| M165 | Door in a wall | Light passes through the door; the wall beside and above stops it; saved only when present | Scenery_Test::aDoorIsAnOpeningInAWall (engine/test/scenery/scenery_test.cpp); Monitor_Test::stageFeaturesCopyAndPaste (door copied) | covered | covered | med | Uses Scenery::rayHit; no BeamOcclusion_Test case with a door. |
+| M166 | Overrides chip | Chip lists Park (n), Hold at end, Blind; hidden when nothing holds | MainBar_Test::oneChipListsAndClearsOverrides (ui/test/mainbar/mainbar_test.cpp); **MainBar_Test::theOverridesChipLetsGoOfHighlightAndFocusMode** (new) | partial | covered | high |  |
+| M167 | Overrides chip | One click lets go of all of them | MainBar_Test::oneChipListsAndClearsOverrides; **MainBar_Test::theOverridesChipLetsGoOfHighlightAndFocusMode** (new) | partial | covered | high |  |
+| M168 | Build/Workbench | Build tab with Palettes / Effects / Scenes sections choosing what the navigator lists | Workbench_Test::theNavigatorDrivesTheWorkbench (ui/test/workbench/workbench_test.cpp) | covered | covered | low | — |
+| M169 | Build/Workbench | Groups & fixtures under each section | ProgrammingManager_Test::fixturesAndGroupsNarrowToASearch (ui/test/programmingmanager/programmingmanager_test.cpp) | partial | partial | low | Not checked under each section. |
+| M170 | Build/Workbench | A scene, collection, chaser or any function loads as layers | Workbench_Test::aSceneIsOneLayer; Workbench_Test::aCollectionsMembersAreLayers; WorkbenchChaser_Test::walkingAChasersSteps (ui/test/workbenchchaser/workbenchchaser_test.cpp); WorkbenchChaser_Test::aSequenceEditsInTheWorkbench | covered | covered | med | — |
+| M171 | Build/Workbench | Collection: + Scene, ⌫, ▲▼, drag scenes in, each one step on the shared history | Workbench_Test::layersAddRemoveReorderOnTheSharedHistory | covered | covered | high | — |
+| M172 | Build/Workbench | + Effect ▾ (EFX, RGB Matrix) on the selected layer; undo removes the function | Workbench_Test::newEffectsAreMadeOnTheSelectedLayer | covered | covered | med | — |
+| M173 | Build/Workbench | ▣ Open / ↩ keep the selection | Workbench_Test::openAndBackKeepTheSelection | covered | covered | low | — |
+| M174 | Build/Workbench | "also in N" and Own copy for shared members | Workbench_Test::sharedMembersSayWhereElse; WorkbenchChaser_Test::makeOwnCopySplitsASharedMember | covered | covered | med | — |
+| M175 | Build/Workbench | Editor pane hosts the Look Editor, channel console, timing and stock editors | Workbench_Test::aCollectionsMembersAreLayers (stock editor); ShowTreeWorkbench_Test::editorPane (ui/test/showtreeworkbench/showtreeworkbench_test.cpp) | partial | partial | low | The channel console is not asserted. |
+| M176 | Build/Workbench | Design mode previews what is loaded; Operate runs it; stops only its own | Workbench_Test::whatIsLoadedPlays; Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn; Workbench_Test::designPreviewLeavesAnotherRunAlone; Workbench_Test::theLowerLayerWinsAndFollowsAReorder | covered | covered | high | — |
+| M177 | Build/Workbench | No file format change; old QLC+ shows open as they are | WorkbenchChaser_Test::sampleShowsChasers (Sample.qxw loads and walks); **ShowFiles_Test::aShowSavedAndOpenedAgainIsTheSame** (new) | partial | partial | high | Old shows open, save and reopen unchanged (new test). Still open: saving after a Workbench edit writes only stock QLC+ XML. |
+| M178 | Scenes outline | Folders → scenes, collections, chasers; a scene opens into its targets and looks | ProgrammingOutline_Test::everySceneAndWhatIsInItIsARow (ui/test/programmingoutline/programmingoutline_test.cpp); ProgrammingManager_Test::collectionsAndChasersAreFullRows | covered | covered | low | — |
+| M179 | Scenes outline | ⊞ / ⊟ expand and collapse | ProgrammingOutline_Test::expandCollapseAndOptionClick | covered | covered | low | — |
+| M180 | Scenes outline | Badges with details on hover | ProgrammingOutline_Test::badgesSayWhatAndHoverSaysWhy | covered | covered | low | — |
+| M181 | Scenes outline | Drag rows between scenes; ⌥ copies | ProgrammingOutline_Test::rowsMoveBetweenScenesAndOptionCopies | covered | covered | med | — |
+| M182 | Scenes outline | F2 renames, one undo step | ProgrammingOutline_Test::editsAreStepsOnTheSharedHistory; ProgrammingManager_Test::aFolderRenamesWithWhatIsInIt | covered | covered | low | — |
+| M183 | Chasers in Workbench | Step walker ◀ ▶, step table, step's function as layers | WorkbenchChaser_Test::walkingAChasersSteps | covered | covered | med | — |
+| M184 | Chasers in Workbench | Step header edits fades, hold, cue number and note, one step each | WorkbenchChaser_Test::theStepHeaderEditsTheStep; WorkbenchChaser_Test::typedStepTimesGoToTheirStep; WorkbenchChaser_Test::theNoteOpensUpWhileTyped | covered | covered | high | — |
+| M185 | Chasers in Workbench | Chaser from selection; scenes dropped on a chaser become steps | WorkbenchChaser_Test::chaserFromSelectionAndDropsOnAChaser | covered | covered | med | — |
+| M186 | Chasers in Workbench | Make this step's own copy | WorkbenchChaser_Test::makeOwnCopySplitsASharedMember | covered | covered | med | — |
+| M187 | Chasers in Workbench | Editing a step's collection changes the chaser's DMX output; undo/redo | WorkbenchChaser_Test::editingAStepsCollectionChangesTheChasersOutput | covered | covered | high | — |
+| M188 | Effect designer | Effect browser plus settings plus own colour and dimmer; live preview on targets, Design mode and on screen only | EffectDesigner_Test::thePreviewPlaysOnlyInDesignOnScreen (ui/test/effectdesigner/effectdesigner_test.cpp); EffectDesigner_Test::theEffectsOwnColourIsKept | covered | covered | med | — |
+| M189 | Effect designer | Keep as a one-off / new palette / update | EffectDesigner_Test::keepOnALayerMakesAOneOff; EffectDesigner_Test::aNewEffectOnTheBenchSavesAsAPalette; EffectDesigner_Test::aNamedEffectIsACopyUntilUpdated; EffectDesigner_Test::aLayersOneOffIsEditedInPlace | covered | covered | med | — |
+| M190 | Effect designer | Opened from Design effect… on a Show Tree layer and from Build ▸ Effects (+ New ▾, right-click) | EffectDesigner_Test::theShowTreeOpensItOnALayer; EffectDesigner_Test::buildEffectsMakesAndDesignsEffects; EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow | covered | covered | low | — |
+| M191 | Effect designer | No separate Effects window | AppViews_Test::windowEffectsIsBuildEffects (ui/test/appviews/appviews_test.cpp) | covered | covered | low | — |
+| M192 | Effect designer | Make a layer into a cue, a scene, a picked scene or a new one; one undo step | EffectDesigner_Test::makeALayerIntoACue; EffectDesigner_Test::makeALayerIntoAScene; EffectDesigner_Test::makeALayerIntoANewScene; EffectDesigner_Test::makeALayerFromTheWorkbench | covered | covered | high | — |
+| M193 | Show Tree ↔ Workbench | A cue/hit/layer opens docked (double-click, ✎, Open in Workbench, `wb`) | ShowTreeWorkbench_Test::waysIn; ShowTreeWorkbench_Test::openShowsTheCue; ShowTreeView_Test::openLandsInTheWorkbench (ui/test/showtreeview/showtreeview_test.cpp) | covered | covered | low | — |
+| M194 | Show Tree ↔ Workbench | A row per attribute; tracked-in values grey and read-only | ShowTreeWorkbench_Test::openShowsTheCue; ShowTreeWorkbench_Test::trackedRowsReadOnly | covered | covered | high | — |
+| M195 | Show Tree ↔ Workbench | Edits go on the tree's undo; Solo; ↩ Show Tree keeps the selection | ShowTreeWorkbench_Test::editUndoRedo; ShowTreeWorkbench_Test::solo; ShowTreeWorkbench_Test::backKeepsSelection; ShowTreeWorkbench_Test::buildAfterHandBack | covered | covered | high | — |
+| M196 | Workspace views | Classic / qlcconsole / Everything tabs and order; Classic reads "Inputs/Outputs"; hidden tabs stay alive | AppViews_Test::eachWorkspaceViewShowsItsTabs | covered | covered | low | — |
+| M197 | Workspace views | `View=` attribute on Workspace, saved per show, read back; marks the show modified, not an undo step | AppViews_Test::theViewIsSavedWithTheShow | covered | covered | high | — |
+| M198 | Workspace views | Older builds ignore `View=` | AppViews_Test::theViewIsSavedWithTheShow (asserts it is an attribute, not an element) | partial | partial | med | No load with a stock QLC+ reader; it relies on attributes being skipped. Acceptable. |
+| M199 | Workspace views | No view saved: an old QLC+ show opens Classic; one with a Show Tree or saved by qlcconsole opens qlcconsole; a new show opens qlcconsole | AppViews_Test::aShowWithoutAViewOpensInItsDefault | covered | covered | med | — |
+| M200 | Workspace views | A Window-menu jump to a hidden tab switches to Everything with a "Back to …" line | AppViews_Test::aJumpToAHiddenTabShowsEverything | covered | covered | low | — |
+| M201 | Upgrade This Show | Offered from the File menu and the old-show banner | ShowTreeView_Test::anOldShowOpensWithABanner; ShowTreeView_Test::upgradeThisShow; AppViews_Test::upgradingAClassicShowOffersTheConsoleView | covered | covered | med | — |
+| M202 | Upgrade This Show | Classify each chaser: cue list (same-output check) / effect kept as a function / left alone; flatten collections | ShowTree_Test::bridgeTellsCueListsFromEffects (engine/test/showtree/showtree_test.cpp); ShowTree_Test::bridgeFlattensCollectionsThatAreNoStep; ShowTree_Test::bridgePlansWithoutChangingTheShow; ShowTree_Test::importChecksTheOutput; ShowTreeView_Test::upgradeThisShow | covered | covered | high | — |
+| M203 | Upgrade This Show | Capture into palettes for raw scenes | ShowTree_Test::captureARawSceneIntoPalettes; ShowTreeView_Test::upgradeThisShow; ShowTreeView_Test::captureFromTheOpaqueRow | covered | covered | high | — |
+| M204 | Upgrade This Show | The whole upgrade is one undo step (undo, redo, redo twice) | ShowTree_Test::upgradeAShowIsOneUndoStep; ShowTree_Test::upgradeTheSampleShowIsOneUndoStep; ShowTreeView_Test::upgradeThisShow | covered | covered | high | The engine tests rebuild the upgrade loop in a helper (upgradeAsOneStep) rather than calling the dialog's code. The UI test does drive the dialog. |
+| M205 | Upgrade This Show | Import in place links the list to its chaser and files the originals under Imported/… | ShowTree_Test::importInPlaceFilesTheOriginals; ShowTree_Test::originalsKeptForRestoreAreViewOnly | covered | covered | high | — |
+| M206 | Upgrade This Show | Moves VC widgets and show control (main cue list) to the list | ShowTreeView_Test::theImportSheetReadsAndRepoints; ShowTreeView_Test::theImportSheetCanUndoOrLeaveVcAlone | covered | covered | high | — |
+| M207 | Upgrade This Show | Moves timelines (Show functions) to the list | **ShowTree_Test::importInPlaceMovesTimelinesToTheList** (new) | none | covered | high |  |
+| M208 | Upgrade This Show | Restore original… undoes it (VC pointed back, originals unfiled, the XML equal to before), and is itself undoable | ShowTree_Test::restoreOriginalPutsTheShowBack; ShowTreeView_Test::restoreOriginalPointsVcBack; ShowTreeView_Test::upgradeThisShow | covered | covered | high | — |
+| M209 | Upgrade This Show | Older builds ignore the new XML (Source/InPlace/<Original>) | ShowTree_Test::theBridgeLinkSavesAndAnOlderReaderSkipsIt; **ShowFiles_Test::aShowFromANewerBuildOpens** (new) | partial | partial | high | The new test shows this build reads past elements and attributes it doesn't know, at every level that holds elements. A real older binary is not run. |
+| M210 | Cue-list sheet | Sheet: plays-the-same check, a row per cue, what plays as it is and why | ShowTreeView_Test::theImportSheetReadsAndRepoints; ShowTree_Test::importReadsScenesIncludesAndOpaqueFunctions; ShowTree_Test::importedListPlaysAsTheChaserDid | covered | covered | high | — |
+| M211 | Cue-list sheet | Offer (ticked) to move what fires the chaser to the new list; can leave VC alone | ShowTreeView_Test::theImportSheetReadsAndRepoints; ShowTreeView_Test::theImportSheetCanUndoOrLeaveVcAlone | covered | covered | high | — |
+| M212 | Cue-list sheet | What consecutive steps repeat is set once and tracks | ShowTree_Test::importTracksWhatRepeats | covered | covered | high | — |
+| M213 | Cue-list sheet | Send to Show Tree… opens Upgrade with just that chaser ticked | ShowTreeView_Test::sendToShowTreeFromBuild | covered | covered | low | — |
+| M214 | Cue-list sheet | A ▣ layer opens its function, with where else it plays | ShowTreeView_Test::openAnOpaqueLayer; Workbench_Test::sharedMembersSayWhereElse | partial | partial | low | The "where else" text is checked only in the Workbench, not from the Show Tree ▣ layer. |
+| M215 | Cue number order | A typed number (Number field) moves the cue to its place | ShowTree_Test::aRenumberedCueMovesToItsPlace; ShowTreeView_Test::cuesReorderAndRenumber | covered | covered | high | — |
+| M216 | Cue number order | F2 on the row as "number name" | ShowTreeView_Test::cuesReorderAndRenumber | covered | covered | low | — |
+| M217 | Cue number order | Refuses a taken number, a sub-cue's number, or a clash with the cue's own sub-cues | ShowTree_Test::aRenumberedCueMovesToItsPlace | covered | covered | high | — |
+| M218 | Cue number order | Dragging one or several cues numbers each by + Cue's rule (2–3 → 2.5) and renumbers nothing else | ShowTree_Test::aDraggedCueIsNumberedBetweenItsNeighbours; ShowTree_Test::numberBetweenRule; ShowTreeView_Test::cuesReorderAndRenumber | covered | covered | high | — |
+| M219 | Cue number order | Move up / Move down renumber the same way | ShowTree_Test::aDraggedCueIsNumberedBetweenItsNeighbours (moveCue) | covered | covered | med | Engine only; no UI button test. |
+| M220 | Cue number order | Renumber this level: from a start in steps, point cues and sub-cues following; show control fires the new numbers | ShowTree_Test::renumberThisLevel; ShowTreeView_Test::cuesReorderAndRenumber | covered | covered | high | — |
+| M221 | Cue number order | Renumber asks first while OSC/MSC is listening | **ShowTreeView_Test::renumberThisLevelAsksFirstWhileShowControlListens** (new) | none | covered | med |  |
+| M222 | Cue number order | One undo step each | ShowTree_Test::aRenumberedCueMovesToItsPlace; ShowTree_Test::aDraggedCueIsNumberedBetweenItsNeighbours; ShowTree_Test::renumberThisLevel | covered | covered | high | — |
+| M223 | Cue number order | Numbers save as typed; nothing re-sorted on load | ShowTree_Test::pointCuesRoundTripInXml | covered | covered | high | — |
+
+## Added: skip cues to controller test
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M224 | Skip cues | A skipped cue tracks as if deleted; the next cue tracks from the last cue that plays | ShowTree_Test::skippedCuesTrackAsIfNotThere (engine/test/showtree/showtree_test.h); TrackBack_Test::skippedCuesPlayAsIfDeleted (engine/test/trackback/trackback_test.h) | covered | covered | high |  |
+| M225 | Skip cues | GO and Back pass over a skipped cue in playback (DMX checked) | ShowTree_Test::skippedCuesBakeToSkippedSteps; ShowControl_Test::skippedStepsArePassedOver (engine/test/showcontrol/showcontrol_test.h) | covered | covered | high |  |
+| M226 | Skip cues | Auto-follow passes over skipped cues | ShowControl_Test::autoFollowPassesOverSkippedSteps; SubCues_Test::skippedSubCuesArePassedOver (engine/test/subcues/subcues_test.h) | covered | covered | high | Driven at chaser-step level; the baked-step path is shown in skippedCuesBakeToSkippedSteps |
+| M227 | Skip cues | A jump still plays a skipped cue; an include plays it | ShowTree_Test::skippedCuesBakeToSkippedSteps (ChaserSetStepIndex, DMX checked); ShowTree_Test::aSkippedCueStillPlaysWhenJumpedToAndIncluded | covered | covered | high |  |
+| M228 | Skip cues | Saved as `Skip="1"`, loads back, an older file means nothing skipped; undo/redo | ShowTree_Test::skippedCuesSaveLoadAndUndo | covered | covered | high |  |
+| M229 | Skip cues | Typed `skip` / `unskip` with a range, one undo step | ShowTree_Test::skipAndUnskipTyped | covered | covered | med |  |
+| M230 | Skip cues | Untick, ⌘/, right-click Skip cue, the cue page's Skip; strike-out, grey, tooltip | ShowTreeView_Test::skipCuesInTheTree (ui/test/showtreeview/showtreeview_test.h); AppViews_Test::aSkippedCueReadsInEveryTheme (ui/test/appviews/appviews_test.h) | covered | covered | low |  |
+| M231 | Skip cues | Import and convert keep the skip | ShowTree_Test::importAndConvertKeepTheSkip | covered | covered | med |  |
+| M232 | Skip cues | VC Cue List shows skips | VCCueList_Test::cuesSkipsAndNextAreShown (ui/test/vccuelist/vccuelist_test.h) | covered | covered | low |  |
+| M233 | Move in black | Per list On/Off/as the show and per-cue "Don't move in black" decide MIB (sub-cues follow their cue) | ShowTree_Test::moveInBlackPerListAndCue, ::moveInBlackDecisionMatrix | covered | covered | high |  |
+| M234 | Move in black | The planner actually pre-positions or releases per list/cue | MarkPlanner_Test::perListAndPerCueMoveInBlack (engine/test/markplanner/markplanner_test.h) | covered | covered | high |  |
+| M235 | Move in black | Saved as `MoveInBlack="…"` / `NoMoveInBlack="1"`; undo; older reader | ShowTree_Test::moveInBlackSaveLoadUndo; MarkPlanner_Test::theShowsMoveInBlackSavesLoadsAndResets | covered | covered | high |  |
+| M236 | Move in black | Typed `mib on/off/show [list]`, `nomib`, `allowmib`, completion | ShowTree_Test::moveInBlackTyped | covered | covered | med |  |
+| M237 | Move in black | ⊘ MIB / ▸ MIB / no MIB badges, list page combo, cue checkbox, right-click | ShowTreeView_Test::moveInBlackPerListAndCueInTheTree | covered | covered | low |  |
+| M238 | Move in black | The show's MIB button, lead time, Build's "Move in black ▾" / "· Auto" kept in sync | MainBar_Test::moveInBlackIsOneSettingInThreePlaces (ui/test/mainbar/mainbar_test.h) | covered | covered | med |  |
+| M239 | Move in black | "MIB · n" label while pre-positioning | MarkPlanner_Test::thePresetCountFollowsThePlanner (engine count and signal only) | partial | partial | low | Assert the MIB button text reads "MIB · 1" with a chaser lighting a fixture, in MainBar_Test |
+| M240 | Cue colours | List/cue colour inherits (sub-cue from its cue), saved, undo, older reader | ShowTree_Test::textColoursInheritSaveLoadAndUndo, ::textColoursAnOlderReaderIgnores | covered | covered | low |  |
+| M241 | Cue colours | Typed `textcolour` | ShowTree_Test::textColourTyped | covered | covered | low |  |
+| M242 | Cue colours | Colour ▸, the page's Text colour, tree rows, Workbench header | ShowTreeView_Test::textColoursInTheTreePagesAndWorkbench | covered | covered | low |  |
+| M243 | Cue colours | Run tab and VC Cue Runner lines | CueRunner_Test::textColoursOnEveryLine (ui/test/cuerunner/cuerunner_test.h) | covered | covered | low | Its PNG grabs are env-gated; the asserts are not |
+| M244 | Cue colours | VC Cue List | VCCueList_Test::showTreeTextColoursAreShown | covered | covered | low |  |
+| M245 | Cue colours | Kept readable on every theme (contrast at least 4.5) | ShowTree_Test::textColoursAreMadeReadable | covered | covered | low |  |
+| M246 | New here | ⇧⌘N in the Show Tree makes the next thing | ShowTreeView_Test::newHereMakesTheNextThing; ShowTreeWorkbench_Test::newHereInTheDockedWorkbench (ui/test/showtreeworkbench/showtreeworkbench_test.h) | covered | covered | low |  |
+| M247 | New here | ⇧⌘N in Build | ProgrammingManager_Test::newHereMakesASceneInTheFolder (ui/test/programmingmanager/programmingmanager_test.h); Workbench_Test::newHereMakesAStepOrALayer (ui/test/workbench/workbench_test.h) | covered | covered | low |  |
+| M248 | New here | ⇧⌘N in the Fixtures tab | FixtureManager_Test::newHereMakesAGroupInTheFolder (ui/test/fixturemanager/fixturemanager_test.h) | covered | covered | low |  |
+| M249 | New here | Edit ▸ New … names what it makes | — | none | none | low | Test the App `editNewHere` action label on aboutToShow per current tab (ui/src/app.cpp:2388), in MainBar_Test or AppViews_Test |
+| M250 | Notes | Cue note grows while typed, Shift+Return new line, Return commits, Esc reverts | ShowTreeView_Test::cueFieldsEditTheCue | covered | covered | low |  |
+| M251 | Notes | Chaser step note: grows to six lines, one undo step, table cell and Chaser editor | WorkbenchChaser_Test::theNoteOpensUpWhileTyped (ui/test/workbenchchaser/workbenchchaser_test.h) | covered | covered | low |  |
+| M252 | Group tools | Select All Similar in the Fixtures tab | FixtureManager_Test::similarFixturesAndGroupsFollowTheirRules, ::selectAllSimilarSelectsTheRowsAlike | covered | covered | low |  |
+| M253 | Group tools | Move to Folder ▸ (folders in use, New Folder…) in the Fixtures tab | FixtureManager_Test::moveToFolderMenuFilesGroups | covered | covered | low |  |
+| M254 | Group tools | Create Group(s) from Selection… starts in the selection's folder | FixtureManager_Test::createGroupFromSelectionStartsInTheCurrentFolder | covered | covered | low |  |
+| M255 | Group tools | Show Tree Library: Select all similar, Make set…, Move to folder | ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove; Monitor_Test::selectAllSimilarFindsLikeGroupsAndFixtures (ui/test/monitor/monitor_test.h) | covered | covered | low |  |
+| M256 | Group tools | Build's Groups & fixtures: the same tools | Only FixtureManager_Test::groupToolsOnARealShow (env-gated by FM_DH_SHOW) | none | none | low | Drive FixtureGroupSource::selectAllSimilar and the move/create menu on a synthetic Doc, in ui/test/programmingmanager or ui/test/fixturemanager |
+| M257 | Group tools | Return / F2 renames a group in the Fixtures tree | FixtureTreeWidget_Test::enterOnAGroupRowRenamesItInPlace, ::f2OnAGroupAndAnEmptyNameIsRejected (ui/test/fixturetreewidget/fixturetreewidget_test.h) | covered | covered | low |  |
+| M258 | Plot symbols | Sixteen symbols in five sections in Fixture Properties; sets every selected fixture; rig undo | Monitor_Test::fixturePropertiesSetsTheStageLook; Fixture_Test::stageLookKeys (engine/test/fixture/fixture_test.h; Curtain == 16) | covered | covered | low |  |
+| M259 | Plot symbols | Fixtures tab Plot Symbol ▸ sets the selection | Monitor_Test::theStageLookMenuSetsEveryFixtureSelected | covered | covered | low |  |
+| M260 | Plot symbols | Offered in Operate, changing only the picture | FixtureManager_Test::stageLookIsOfferedInOperate (menu presence only); **FixtureManager_Test::plotSymbolInOperateChangesOnlyThePicture** (new) | partial | covered | low | It is one rig undo step, by design. |
+| M261 | Plot symbols | The 2D plot draws each symbol | Monitor_Test::everyStageLookHasItsShape, ::aStageLookDecidesTheSilhouette, ::thePlotRedrawsAFixtureWhenItsLookChanges | covered | covered | low |  |
+| M262 | Plot symbols | Studio Top/Front/Side views draw it | Monitor_Test::theStudioDrawsAStageLook | covered | covered | low |  |
+| M263 | Plot symbols | A lantern glows all round; a staff is a pole wound with LED strip | Monitor_Test::aLanternIsAPracticalThatGlowsAllRound, ::aStaffIsAPoleWoundWithLedStrip, ::aLanternHangsOffATowerAndGlowsAllRound | covered | covered | low |  |
+| M264 | Plot symbols | Saved as `<StageLook>` only when not Auto; round trip | Fixture_Test::stageLookSaveLoad, ::stageLookUnknownKey | covered | covered | high |  |
+| M265 | Plot symbols | Show menu "Show Auto fixtures as their closest plot symbol", saved with the show, off by default | Monitor_Test::autoFixturesCanBeDrawnAsTheirClosestLook; MonitorProperties_Test::autoStageLooksIsSavedWithTheShow (engine/test/monitorproperties/monitorproperties_test.h) | covered | covered | med |  |
+| M266 | Curtain | Scenery section with Curtain in both pickers | FixtureManager_Test::stageLookMenuHasAScenerySectionWithCurtain; Monitor_Test::fixturePropertiesSetsTheStageLook | covered | covered | low |  |
+| M267 | Curtain | Saved as `<StageLook>Curtain</StageLook>`; back to Auto writes nothing | Fixture_Test::stageLookCurtainSaveLoad | covered | covered | high |  |
+| M268 | Curtain | A fixture marked Curtain is a curtain fixture; with no Open/Fly channel, master intensity (else first channel) opens it, 0 closed, 255 open | Scenery_Test::aFixtureMarkedCurtainIsACurtain, ::aDrivenCurtainOpensAsItsChannelMoves (engine/test/scenery/scenery_test.h); BeamOcclusion_Test::aDrivenCurtainBlocksAsItsFixtureHasIt (engine/test/beamocclusion/beamocclusion_test.h) | covered | covered | high |  |
+| M269 | Curtain | Listed as a drape's driver; driver saved | Monitor_Test::aFixtureMarkedCurtainIsDrawnAsItsDrape, ::aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves; Scenery_Test::theDriverIsSavedAndOldShowsAreUndriven | covered | covered | med |  |
+| M270 | Curtain | Drawn as the drape (item hidden, place kept), kept out of Inventory, ⌘Z restores it | Monitor_Test::aFixtureMarkedCurtainIsDrawnAsItsDrape | covered | covered | med |  |
+| M271 | Curtain | Curtain icon | ItemIcons_Test::aFixtureMarkedCurtainShowsAsACurtain, ::aCurtainShowsAsACurtain (ui/test/itemicons/itemicons_test.h) | covered | covered | low |  |
+| M272 | One icon per fixture | The same icon in the Fixture Manager, Build and the Library, with the output-rules badge | ItemIcons_Test::theSameIconEverywhere, ::aStageLookKeepsTheOutputRulesBadge, ::aGroupOfOneKindShowsIt, ::anAutoFixtureWearsItsClosestLookWhenTheShowSaysSo | covered | covered | low |  |
+| M273 | One icon per fixture | Dimmer pie, Shutter state, target bullseye/line, fixture kind | ItemIcons_Test::thePieIsTheLevel, ::aShutterLookShowsItsState, ::aTargetShowsItsKind, ::aFixtureShowsWhatItIs | covered | covered | low |  |
+| M274 | One icon per fixture | A Strobe look's rate | ItemIcons_Test::aShutterLookShowsItsState (strobe state only) | partial | partial | low | Assert a Strobe look's icon changes with its rate, in ItemIcons_Test |
+| M275 | Output rules | Ignore Blackout keeps the fixture live, also through Blind | OutputRules_Test::blackoutKeepsExemptLive, ::blindFollowsItsSetting (engine/test/outputrules/outputrules_test.h) | covered | covered | high |  |
+| M276 | Output rules | Ignore the Grand Master | OutputRules_Test::grandMasterLeavesExemptAlone, ::grandMasterAllChannelsMode | covered | covered | high |  |
+| M277 | Output rules | Switch: on at 50 % and over, never faded, GM can't switch it off; power limits leave it alone | OutputRules_Test::switchSnapsAtHalf, ::switchNeverFades, ::grandMasterCannotSwitchARelayOff, ::powerLimitsLeaveARelayAlone | covered | covered | high |  |
+| M278 | Output rules | On when not in use: at Operate or show open, yields to the show, GM never drops it | OutputRules_Test::onAtOpenFollowsItsSetting, ::onAtOpenYieldsToTheShow, ::grandMasterNeverDropsAnOnAtOpenRelay | covered | covered | high |  |
+| M279 | Output rules | "When" setting saved (`<OutputRuleSettings OnAtOpen>`) | OutputRules_Test::onAtOpenSettingIsSavedWithTheShow | covered | covered | high |  |
+| M280 | Output rules | Settings ▸ Advanced ▸ Output control sets it | **AppViews_Test::settingsAdvancedHoldsOnWhenNotInUse** (new) | none | covered | high |  |
+| M281 | Output rules | Saved as optional `<OutputRules>`, only when set; older readers skip it; text round trip | OutputRules_Test::savedOnlyWhenSetAndSkippedByOlderReaders, ::rulesRoundTripAsText, ::cloneAndCapabilityKeepTheRules | covered | covered | high |  |
+| M282 | Output rules | Output Rules… dialog (tri-state) in the Fixtures tab, Build and the Library | FixtureManager_Test::outputRulesForFixturesAndGroups; ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove (menu presence) | covered | covered | low | Build and Library only check the menu entry is there |
+| M283 | Output rules | One rig undo step; no step when nothing changed | Monitor_Test::outputRulesAreOneRigUndoStep | covered | covered | high |  |
+| M284 | Output rules | Amber badge | ItemIcons_Test::aStageLookKeepsTheOutputRulesBadge (badged != plain) | partial | partial | low | Colour not asserted |
+| M285 | Eos import | Circuits classified from Eos labels | EosImporter_Test::circuitClassifier (engine/test/eosimporter/eosimporter_test.h) | covered | covered | med |  |
+| M286 | Eos import | Special circuits page, changeable per row or selection | EosImportWizard_Test::specialCircuitsPage (ui/test/eosimportwizard/eosimportwizard_test.h) | covered | covered | med |  |
+| M287 | Eos import | `$$Options X` marks GM exempt; output rules applied per role | EosImporter_Test::specialCircuits (asserts each fixture's outputRules()); EosAsciiParser_Test::patchOptionsAndSubModes | covered | covered | high |  |
+| M288 | Eos import | Groups under Eos: Power relays, House & Work, Backstage | EosImporter_Test::specialCircuits | covered | covered | med |  |
+| M289 | Eos import | Each sub becomes a Playback fader in the VC frame "Eos subs" | EosImportWizard_Test::subFaders; EosImporter_Test::subsForTheConsole, ::presetsAndSubs | covered | covered | med |  |
+| M290 | Edit Fixture Definition for several | Offered for fixtures or a group sharing one definition; greyed with a reason when they don't | FixtureManager_Test::editDefinitionForFixturesSharingOne | partial | partial | low | Menu only; trigger it and assert the editor opens on the shared file |
+| M291 | ETC ColorSource | Eos `ColorSource_*_RGB` match exactly (PAR, Spot jr) | EosImporter_Test::mapperExactAndSuggested | covered | covered | med |  |
+| M292 | ETC ColorSource | Spot jr and CYC definitions load; Spot's Direct / 1-Channel / RGB modes; 5-Channel name kept | — (generic loading only via QLCFixtureDefCache_Test); **FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean** (new) | none | covered | med | (bug, data) ETC-ColorSource-CYC.qxf has no beam angle (Lens 0-0), so the checker warns (QEXPECT_FAIL on CYC). |
+| M293 | Palette names follow value | Only the part that names the value changes (colour, dimmer, strobe) | PaletteNaming_Test::followColour, ::followDimmer, ::followStrobe, ::followPart (engine/test/palettenaming/palettenaming_test.h) | covered | covered | med |  |
+| M294 | Palette names follow value | In the Look Editor, live; edit and rename are one undo step | LookEditor_Test::aLooksNameFollowsItsColour, ::aLevelInTheNameFollowsTheLevel (ui/test/lookeditor/lookeditor_test.h); PaletteNaming_Test::aValueStepUndoesTheNameWithIt | covered | covered | high |  |
+| M295 | Matrix effects | The twelve new scripts run on boxes and modes, repeatable, keep time | EffectInstance_Test::matrixEffectsRunOnBoxesAndTheirModes, ::matrixEffectsAreRepeatableAndKeepTheirWhites, ::matrixEffectsKeepTimeOnEightBoxes (engine/test/effectinstance/effectinstance_test.h) | covered | covered | med |  |
+| M296 | Matrix effects | "Each box, staggered" scope for every scoped effect | EffectInstance_Test::matrixEffectsStaggerBoxToBox | covered | covered | med |  |
+| M297 | Matrix effects | Image with GIFs kept in the show (save/load, DMX out) | EffectInstance_Test::matrixImagePlaysAGifKeptInTheShow | covered | covered | high |  |
+| M298 | Cue Runner VC | External Input tab: an input and a key per action | CueRunner_Test::vcActionsFromInputsAndKeys, ::vcPropertiesRoundTrip | covered | covered | med |  |
+| M299 | Cue Runner VC | Feedback | CueRunner_Test::vcFeedbackFollowsTheCue | covered | covered | med |  |
+| M300 | Cue Runner VC | Info-first layout; handles for button height and the GO / Sub GO split, saved | CueRunner_Test::vcHandlesSizeAndPersist, ::vcResizeGrowsTheInfo | covered | covered | low |  |
+| M301 | Definition updates | Older definitions in the user folder: diff, backup, undo | FixtureDefUpdates_Test::scanFindsOldCopiesUsedOrNot, ::theDiffSaysWhatChanges, ::updateKeepsABackupAndUndoes (engine/test/fixturedefupdates/fixturedefupdates_test.h); DefinitionUpdates_Test::listsUsedAndUnusedAndUpdatesWithUndo (ui/test/definitionupdates/definitionupdates_test.h) | covered | covered | high | Symlink cases QSKIP on some hosts |
+| M302 | Definition updates | File ▸ Show Definitions… for copies inside a show | DefinitionUpdates_Test::showDefinitionsListsEverythingAndUndoes; FixtureDefUpdates_Test::anOlderEmbeddedCopySwitchesAndUndoes, ::aNewerEmbeddedCopyCanBeInstalled | covered | covered | high |  |
+| M303 | LED Layout | Edit a multi-head fixture's layout; saved to the show or as the model's default | LedLayout_Test::saveToShowKeepsItInTheShowOnly, ::saveAsDefaultRoundTripsAndTheShowWins, ::theFixtureManagerOffersItForMultiHeadFixtures (ui/test/ledlayout/ledlayout_test.h) | covered | covered | med | theRealShowsXl450 is env-gated |
+| M304 | Controller test | The test lists each input and what it does (opened from Focus mode) | FocusMode_Test::theControllerTestListsEachInput (ui/test/focusmode/focusmode_test.h) | covered | covered | low |  |
+| M305 | Controller test | Opened from Settings ▸ Advanced ▸ Game controllers | — | none | none | low | Open ControllerTestDialog from the AppSettings button |
+| M306 | Controller test | Focus mode says when the controller is paused and why | FocusMode_Test::aPausedControllerSaysWhy; ControllerKeepAlive_Test::pausedSaysWhy (engine/test/controllerkeepalive/controllerkeepalive_test.h) | covered | covered | low |  |
+
+## Changed
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M307 | Connections opens where you'd look | Classic QLC+: Connections opens on the Universes sub-tab | AppViews_Test::classicLooksLikeQlcPlus (ui/test/appviews) | covered | covered | low |  |
+| M308 | Connections opens where you'd look | Other views: Connections opens on Devices | AppViews_Test::classicLooksLikeQlcPlus | covered | covered | low | Only qlcconsole is checked, not Everything. |
+| M309 | Copy/paste scenery, towers, booms, stands | Copying a wall and a tower pastes copies with everything they have (door too), offset, named "… copy" | Monitor_Test::stageFeaturesCopyAndPaste (ui/test/monitor) | partial | partial | med | Only the wall's name and offset are asserted; the tower copy's name and offset are not. Booms and stands are not driven at all. Extend this test to select a boom and a stand and check name, offset and properties. |
+| M310 | Copy/paste scenery… | Paste is one undo step | Monitor_Test::stageFeaturesCopyAndPaste | covered | covered | high |  |
+| M311 | Paste a truss without its fixtures | The paste question offers Truss only; it pastes a truss with no fixtures | Monitor_Test::pastingATrussAsksWhatItsFixturesGet | covered | covered | med | Uses the `setPasteFixturesAsk` hook. The real dialog's button text "Truss only" is not asserted. |
+| M312 | Quieter footer | Engine Load chip is off by default and turned on in Settings ▸ Appearance | AppViews_Test::settingsAppearanceHoldsHowTheWindowLooks (checkbox exists); AppViews_Test::classicLooksLikeQlcPlus (hidden in Classic) | partial | partial | low | Not asserted: the chip is hidden by default in the qlcconsole view, and ticking `settingsFooterLoad` shows `m_statusLoadLabel`. Add to AppViews_Test. |
+| M313 | Quieter footer | Power estimate shows only when the show's power is set up | MainBar_Test::thePowerChipNeedsPowerSetUp (ui/test/mainbar) | covered | covered | low |  |
+| M314 | Quieter footer | MTC chip shows only once a timecode source is picked, or code is heard | AppViews_Test::classicLooksLikeQlcPlus (`setSourceUniverse` 0/-1) | partial | partial | low | The "code is heard" path (TimecodeSource receiving frames with no source picked) is not driven. |
+| M315 | Move in Black one switch | The Show Tree's MIB button, Build's Move in black ▾ and the setting are one state; saved and loaded | MainBar_Test::moveInBlackIsOneSettingInThreePlaces | covered | covered | high |  |
+| M316 | Move in Black one switch | Control ▸ Auto Move in Black and the Settings row are gone | MainBar_Test::moveInBlackIsOneSettingInThreePlaces (`autoMoveInBlackAction` null, no `settingsMoveInBlack`) | covered | covered | low |  |
+| M317 | Show Tree header | + Production, + Sub-cue and Merge are under More ▾ | ShowTreeView_Test::theHeaderFoldsUnderMore (ui/test/showtreeview) | covered | covered | low |  |
+| M318 | Show Tree header | + Production is on the bar only while the show has no production | ShowTreeView_Test::theHeaderFoldsUnderMore | covered | covered | low |  |
+| M319 | Show Tree header | Upgrade This Show… shows only while there are chasers to upgrade | ShowTreeView_Test::theHeaderFoldsUnderMore; ShowTreeView_Test::upgradeListsWhatIsUpgradedAlready | covered | covered | low |  |
+| M320 | Upgrade says what's upgraded already | An upgraded chaser is a greyed row with the reason and its own Restore original… | ShowTreeView_Test::upgradeListsWhatIsUpgradedAlready | covered | covered | high | Restore and its undo are asserted. |
+| M321 | Upgrade says what's upgraded already | The Show Tree's own chasers are counted under the table, not listed | ShowTreeView_Test::upgradeListsWhatIsUpgradedAlready | covered | covered | low |  |
+| M322 | Upgrade says what's upgraded already | With nothing left it opens and says "Nothing left to upgrade" | ShowTreeView_Test::upgradeListsWhatIsUpgradedAlready | covered | covered | low |  |
+| M323 | Cue right-click shorter | No Duplicate cue; Make the base cue, Mode and Include cue are not on the menu; Duplicate stays | ShowTreeView_Test::aCuesRightClickIsShort | covered | covered | low |  |
+| M324 | Cue right-click shorter | + Production shows on a production or empty space | ShowTreeView_Test::aCuesRightClickIsShort | partial | partial | low | Only empty space is checked; a production row is not. |
+| M325 | One + Effect ▾ / Script ▾ | The Workbench has one + Effect ▾ with EFX and RGB Matrix | Workbench_Test::aCollectionsMembersAreLayers (ui/test/workbench) | covered | covered | low | Located by grep (`workbenchAddEffect`, line ~266). Confirm the function name before citing. |
+| M326 | One + Effect ▾ / Script ▾ | The Look Editor has one Script ▾ with New script… and Edit script… | LookEditor_Test::scriptsAreUnderOneScriptButton (ui/test/lookeditor) | covered | covered | low |  |
+| M327 | GO in Design offers Operate | GO in Design shows the Operate offer once a session, never in Operate | AppViews_Test::goInDesignOffersOperateOnce | covered | covered | med |  |
+| M328 | GO in Design offers Operate | GO still plays in Design | **AppViews_Test::goInDesignStillPlays** (new) | none | covered | high |  |
+| M329 | No Window ▸ Effects | Window ▸ Effects is gone; `showEffects` opens Build ▸ Effects | AppViews_Test::windowEffectsIsBuildEffects | covered | covered | low |  |
+| M330 | Group set dropped on a Build scene | A set dropped on a scene adds its member groups; the drag hint says so | ProgrammingOutline_Test::sourcesDropOntoAScene (ui/test/programmingoutline) | covered | covered | med |  |
+| M331 | Show Tree / Run tab icons | Show Tree has a cue-tree icon and Run a green GO icon, not the chaser icon | **AppViews_Test::theShowTreeAndRunWearTheirOwnIcons** (new) | none | covered | low |  |
+| M332 | Show control rows in Connections ▸ Devices | OSC in, MIDI Show Control in and MIDI timecode are rows with their state; clicking one shows its setup | ShowControlUi_Test::theRowsInConnectionsDevices (ui/test/showcontrol) | covered | covered | med | Built by hand (ConnectionsTree plus a page), not through InputOutputManager. |
+| M333 | Show control rows | The Show control & sync sub-tab, the Settings ▸ Advanced signpost and the QLab out box are gone | AppViews_Test::settingsAdvancedHoldsAutoOpen (no `settingsOpenShowControl`) | partial | partial | low | Not asserted: the sub-tab is absent from `InputOutputManager::m_ioTabs`, and the QLab box is absent from ShowControlSyncPage. |
+| M334 | One word per idea p2 (Hits) | + Hit, the Hits section, and the Hits section shown in the tree | ShowTreeView_Test::looksSectionInTheTree | covered | covered | low |  |
+| M335 | One word per idea p2 (Hits) | The `hit "name"` command works and `look` still works | ShowTree_Test (engine/test/showtree) runs `look "Hit 1"`; ShowTree_Test::everyCommandWordHasHelpAndItsExamplesParse probably parses the `hit` examples; **ShowTree_Test::hitCommandMakesAndPlaysAHit** (new) | partial | covered | med |  |
+| M336 | One word per idea p2 (Hits) | Adopt as a hit / Copy to a hit labels; older shows open as they were | **ShowTree_Test::anOlderLooksSectionKeepsItsName** (new) | none | partial | med | An older Looks section keeps its name (new test). The Adopt as a hit and Copy to a hit labels are not checked. |
+| M337 | One word per idea p2 (Hits) | No Save as preset… in the effect designer | EffectDesigner_Test::thereIsNoSaveAsPreset (ui/test/effectdesigner) | covered | covered | low | Existing presets staying in the browser is not tested. |
+| M338 | Run is where GO is | The footer's Next: has no menu; clicking it brings Run forward; ⌘↩ plays | MainBar_Test::theFootersNextIsStatusOnly | covered | covered | med |  |
+| M339 | Smaller qlcconsole view | Eight tabs in show order; Shows and Functions are in Everything | AppViews_Test::eachWorkspaceViewShowsItsTabs | covered | covered | med |  |
+| M340 | Smaller qlcconsole view | Rig Overview is its own floating window, never docked; the main window's minimum width stays small | AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio | covered | covered | low |  |
+| M341 | One Upgrade door | Build's Send to Show Tree… opens Upgrade with just that chaser ticked | ShowTreeView_Test::sendToShowTreeFromBuild | covered | covered | high |  |
+| M342 | One Upgrade door | The File menu opens it; the Run tab's empty state opens it | AppViews_Test::upgradingAClassicShowOffersTheConsoleView (`fileUpgradeShow`); CueRunner_Test::noMainListGreysGoAndOffersUpgrade (ui/test/cuerunner) | covered | covered | med |  |
+| M343 | One Upgrade door | The old Import chaser… and Convert an old show… entries are gone | none | none | none | low | Assert in AppViews_Test that no action has those texts. |
+| M344 | Classic QLC+ looks like QLC+ | Main toolbar, the Fixtures tab's 12 buttons and the Functions buttons are shown in Classic and hidden elsewhere | AppViews_Test::classicLooksLikeQlcPlus | covered | covered | low |  |
+| M345 | Classic QLC+ looks like QLC+ | The footer has only mode, Grand Master and Ready | AppViews_Test::classicLooksLikeQlcPlus | partial | partial | low | Only load, timecode and Next being hidden is asserted. Mode, GM and Ready being visible (and power and speed masters hidden) is not. |
+| M346 | Show-mode Lock is part of Operate | No Show-mode action or ⌘L | MainBar_Test::operateLocksProgrammingNotTheGrandMaster | covered | covered | med | Checks action text only. |
+| M347 | Show-mode Lock is part of Operate | Operate sets the show lock and the Shows timeline is read-only | MainBar_Test::operateLocksProgrammingNotTheGrandMaster | covered | covered | high | The editable flag is asserted. A refused drag/edit on the timeline is not driven. |
+| M348 | Show-mode Lock is part of Operate | Operate locks VC programmer faders (VCSlider Parameter writes are dropped) | **MainBar_Test::anOperateConsolesProgrammerFaderChangesNothing** (new) | none | covered | high |  |
+| M349 | Show-mode Lock is part of Operate | A VC Grand Master fader still works in Operate | MainBar_Test::operateLocksProgrammingNotTheGrandMaster | covered | covered | high |  |
+| M350 | Edit ▸ Undo says where it works | VC tab: "Nothing to undo on this tab", greyed; it does not undo a Show Tree step | AppViews_Test::editUndoSaysWhereItWorks | covered | covered | high | Only the VC tab is checked. Simple Desk, Run and the other tabs are not. |
+| M351 | Edit ▸ Undo says where it works | Show Tree tab undoes its own step | AppViews_Test::editUndoSaysWhereItWorks | covered | covered | high |  |
+| M352 | Edit ▸ Undo says where it works | Fixtures and Lighting Studio share the rig history | AppViews_Test::editUndoSaysWhereItWorks (Fixtures only); **AppViews_Test::editUndoFollowsTheTabInFront** (new) | partial | covered | high |  |
+| M353 | Edit ▸ Undo says where it works | Build tab undoes Build's history | **AppViews_Test::editUndoFollowsTheTabInFront** (new) | partial | covered | high |  |
+| M354 | Edit ▸ Undo says where it works | Renaming a fixture in the Fixtures tree is a rig undo step | **AppViews_Test::renamingAFixtureInTheTreeIsARigStep** (new) | none | covered | high |  |
+| M355 | Edit ▸ Undo says where it works | Connections: Undo Patch Change | AppViews_Test::editUndoOnConnectionsIsUndoPatchChange | covered | covered | high | The confirmation "No" is driven; "Yes" actually undoing is left to ConnectionsTree/PatchUndo tests. |
+| M356 | One production, nothing to choose | Run's production box is hidden with one production and comes back with a second | CueRunner_Test::oneListHasNothingToChoose | covered | covered | med |  |
+| M357 | One production, nothing to choose | Show Tree hides Current, the Production switcher and "· main"; GO plays its list | **ShowTreeView_Test::oneProductionHasNothingToChooseAndGoPlaysIt** (new) | none | covered | med |  |
+| M358 | Level…/Colour… docked | The picker opens in a strip inside the window; Apply/Return sets the value; Cancel/Esc leave it | ShowTreeView_Test::pickersDockInTheWindow (generic spin box); CourseShow_Test::lessonTwoColourPicker (Colour… through the real menu, value applied) | covered | covered | med | Level… through the real menu is only in CourseShow lessons. Cancel/Esc on a real Level/Colour picker leaving the value unchanged is not asserted. |
+| M359 | Help pictures | help-shots.sh loads only Loopback (QLC_IOPLUGIN_DIR override) | none | none | none | low | Add an engine IOPluginCache test that sets QLC_IOPLUGIN_DIR to the iopluginstub dir and checks only that plugin loads. |
+| M360 | "Classic" means stock QLC+ only | Build ▸ Scenes has no Folders/Classic switch | WorkbenchChaser_Test::scenesHasNoClassicArrangement (ui/test/workbenchchaser); AppViews_Test::windowFunctionsOpensTheFunctionsTab | covered | covered | low |  |
+| M361 | "Classic" means stock QLC+ only | Window ▸ Functions switches to Everything with a way back | AppViews_Test::windowFunctionsOpensTheFunctionsTab | covered | covered | low |  |
+| M362 | "Classic" means stock QLC+ only | A show saved with Functions in front does not switch view | AppViews_Test::windowFunctionsOpensTheFunctionsTab (`setActiveWindow`) | covered | covered | med | Simulated with `setActiveWindow`, not a real save and load. |
+| M363 | "Classic" means stock QLC+ only | The Build ▸ Effects heading reads "QLC+ effects" | EffectDesigner_Test (line ~498, probably theEffectsPageListsEveryEffect) | covered | covered | low | Confirm the function name. |
+| M364 | One word per idea (Q70) | Plot Symbol in the Fixtures right-click; "Show Auto fixtures as their closest plot symbol" | FixtureManager_Test::stageLookIsOfferedInOperate; CourseShow_Test::lessonStageLooks | covered | covered | low |  |
+| M365 | One word per idea (Q70) | Plot layers panel; "Operate" in Settings ▸ Show Tree; Hold at End / Clear Hold at End (Control menu, track menu, VC action) | none | none | none | low | No label assertions. A data-driven AppViews/MainBar test should look up these action texts. Saved names are unchanged, so the risk is labels only. |
+| M366 | File ▸ Import submenu | Grouped sources with their own filters, plus Any Supported File… | ImportMenu_Test::submenuHasTheSources, ::eachEntryRoutesToItsImporter, ::anySupportedFileDispatchesByExtension, ::cancelImportsNothing, ::entriesShowInEveryView (ui/test/importmenu) | covered | covered | med |  |
+| M367 | Esc backs out | A palette over Build's rows (↩ Back) returns to the page; the edit and the row selection are kept; Esc on a rename cancels only the rename | ShowTreeWorkbench_Test::escBacksOutOfAPaletteInBuild (ui/test/showtreeworkbench) | covered | covered | med |  |
+| M368 | Esc backs out | A group's layout and a ▣ opened layer | ShowTreeWorkbench_Test::escBacksOutOfALayoutAndAnOpenedLayer | covered | covered | med |  |
+| M369 | Esc backs out | Effect bench, asking first if the effect is not kept | EffectDesigner_Test::escLeavesTheBench | covered | covered | med |  |
+| M370 | Esc backs out | Docked Workbench and the Show Tree's Look Editor | ShowTreeWorkbench_Test::escBacksOutInTheShowTree | covered | covered | med |  |
+| M371 | Esc backs out | Plain Esc is no playback action; Stop all is ⌘⇧Esc | MainBar_Test::theShowControlsWorkInBothPlacements (`CTRL+SHIFT+ESC` shortcut); **AppViews_Test::plainEscIsNoPlaybackAction** (new) | partial | covered | high |  |
+| M372 | Command line folds its syntax | Syntax is hidden by default and shown by ?, ? typed first, or F1; the choice is remembered; an empty show says how to start | ShowTreeView_Test::commandSyntaxFoldsAwayAndIsRemembered | covered | covered | low |  |
+| M373 | Run tab with no main cue list | Says "This show has no cue list yet…", offers Upgrade This Show…, GO and the others are disabled and grey | CueRunner_Test::noMainListGreysGoAndOffersUpgrade | covered | covered | med |  |
+| M374 | Build hard-hat icon | Build tab icon is a hard hat | AppViews_Test::theBuildTabWearsAHardHat | covered | covered | low |  |
+| M375 | Fixtures tab | Plot Symbol ▸ is offered in Operate | FixtureManager_Test::stageLookIsOfferedInOperate (ui/test/fixturemanager) | covered | covered | low |  |
+| M376 | Fixtures tab | The toolbar's Properties opens Fixture Properties for several fixtures | **FixtureManager_Test::toolbarPropertiesEditsEverySelectedFixture** (new) | none | covered | med |  |
+| M377 | Dimmer Auto plot symbol | A dimmer's Auto symbol is Ellipsoidal / profile spot | Fixture_Test::stageLookAuto (engine/test/fixture); FixtureTreeWidget_Test::iconsFollowTheAutoLookSetting | covered | covered | low |  |
+| M378 | Boot window version | The boot window shows version, build and commit | AboutBox_Test::startupWindowShowsTheVersion (ui/test/aboutbox) | covered | covered | low |  |
+| M379 | Pixel heads on the plot | The plot draws heads where the LED layout puts them | LedLayout_Test::thePlotDrawsHeadsWhereTheLayoutSays (ui/test/ledlayout) | covered | covered | low |  |
+| M380 | Tab shortcuts follow the view | ⇧⌘1… number the current view's tabs (⇧⌘0 the tenth) and renumber on a view switch | AppViews_Test::windowShortcutsFollowTheView | covered | covered | med |  |
+| M381 | Tab shortcuts follow the view | The Window menu lists them, then the hidden tabs with no shortcut; Classic Fixtures is ⇧⌘1; qlcconsole Show Tree ⇧⌘5, Run ⇧⌘8 | AppViews_Test::windowShortcutsFollowTheView; AppViews_Test::theRunTabIsTheCueRunner; AppViews_Test::windowFunctionsOpensTheFunctionsTab | covered | covered | med | ⇧⌘1 triggering is checked in Classic only. |
+| M382 | Settings ▸ Appearance | Theme, toolbar style, the four footer chips and the beat moved there, applied on OK, same keys; Cancel keeps | AppViews_Test::settingsAppearanceHoldsHowTheWindowLooks | covered | covered | low | The Load and Power chip toggles are not applied in the test (GM only). |
+| M383 | Settings ▸ Appearance | View holds only Workspace, Address Tool, Rig Overview and Focus Mode | AppViews_Test::theViewMenuIsOnlyViews | covered | covered | low |  |
+| M384 | One switch each | Workspace view only in View ▸ Workspace; toolbar style only in Appearance | AppViews_Test::eachWorkspaceViewShowsItsTabs; AppViews_Test::settingsAppearanceHoldsHowTheWindowLooks | covered | covered | low |  |
+| M385 | No outputs: preview only | Grey "No outputs: preview only", "· N to check", red kept for a rig with outputs | AppViews_Test::theReadinessChipIsGreyWithNoOutputs | covered | covered | med | Clicking the chip to open Connections or the list is not driven (tooltip only). |
+| M386 | Auto-open shutters off for QLC+ 4.x | A QLC+ 4.x show (or no creator) without the setting loads off and sends the same DMX as QLC+ (closed spot stays at 0) | ShutterAutoOpen_Test::aQlcPlusShowLoadsWithItOff (engine/test/shutterautoopen); AppViews_Test::autoOpenFollowsWhoSavedTheShow (through `App::loadXML`, not modified) | covered | covered | high |  |
+| M387 | Auto-open shutters off for QLC+ 4.x | A qlcconsole-saved show without the setting loads on | ShutterAutoOpen_Test::aQlcconsoleShowWithoutItLoadsOn; AppViews_Test::autoOpenFollowsWhoSavedTheShow | covered | covered | high |  |
+| M388 | Auto-open shutters off for QLC+ 4.x | The saved setting wins over the creator | ShutterAutoOpen_Test::theSavedSettingWinsOverTheCreator | covered | covered | high |  |
+| M389 | Auto-open shutters off for QLC+ 4.x | New shows are on; a show always saves the setting, on or off, and reloads the same | ShutterAutoOpen_Test::aNewShowSavesItOnAndReloadsOn, ::itIsSavedWithTheShow; AppViews_Test::autoOpenFollowsWhoSavedTheShow | covered | covered | high | A UI save/reload with it off is engine-only (itIsSavedWithTheShow); the App round trip only checks on. Minor. |
+| M390 | Settings, tooltip and menu text | Output Rules dialog names Settings ▸ Advanced ▸ Output; MIB tooltips say "Build → Move in black"; "Fade 10 / 30 seconds and stop" | none | none | none | low | No text assertions. MainBar_Test::fadeOneSecondAndStopFadesTheLightOut could also check the menu texts. |
+
+## Fixed (part 1)
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M391 | Re-patch pluginless input | An input unpatched by name (`setInputPatch(u,"","",0)`) keeps a patch with no plugin; patching it again must not dereference the null plugin (both Beats checks guarded) | InputOutputMap_Test::repatchAfterUnpatchByName (engine/test/inputoutputmap/inputoutputmap_test.h) | covered | covered | high | Unpatches, re-patches (the step that crashed before), then checks the plugin is the stub. Commit 99a18e674. |
+| M392 | Upgraded show's originals | `originalFor()` names the in-place chaser and the scenes/collections only it plays as originals, with the cue that stands for each; still an original after being filed elsewhere | ShowTree_Test::originalsKeptForRestoreAreViewOnly (engine/test/showtree/showtree_test.h) | covered | covered | high | The "filed elsewhere" case is `setPath("Spots")`. No real Eos/Preshow show is used, but the logic does not depend on the folder. |
+| M393 | Upgraded show's originals | A scene that Capture into palettes takes out of the list becomes an original; Undo reverts that | ShowTree_Test::originalsKeptForRestoreAreViewOnly | covered | covered | high | — |
+| M394 | Upgraded show's originals | A scene the list plays as it is (▣ layer), or that something else plays too, stays editable (not locked, no text) | ShowTree_Test::originalsKeptForRestoreAreViewOnly; ShowTreeView_Test::originalsOpenViewOnlyElsewhere (ui/test/showtreeview/showtreeview_test.h) | covered | covered | med | — |
+| M395 | Upgraded show's originals | Generated functions keep "Made by the Show Tree"; the list's own chaser is not an original | ShowTree_Test::originalsKeptForRestoreAreViewOnly; ShowTreeView_Test::originalsOpenViewOnlyElsewhere | covered | covered | med | — |
+| M396 | Upgraded show's originals | `originalWhere()` / `lockedTextFor()` wording names the cue (or "edit it there" for the chaser); Restore original makes them the user's again | ShowTree_Test::originalsKeptForRestoreAreViewOnly | covered | covered | med | — |
+| M397 | Upgraded show's originals | Functions tab: tooltip and greyed editor under the original banner; Show in Show Tree goes to that cue | ShowTreeView_Test::originalsOpenViewOnlyElsewhere | covered | covered | med | Checks `stLockedText`, `stLockedReveal` → `currentId() == cue`, and that the editor is disabled. |
+| M398 | Upgraded show's originals | Build's Workbench greys an original (banner, no Refine); Send to Show Tree is refused | ShowTreeView_Test::originalsOpenViewOnlyElsewhere; ShowTree_Test::originalsKeptForRestoreAreViewOnly (`whyNotSend` "Upgraded already") | covered | covered | med | Checks FunctionStack `readOnlyReason`, `Workbench::m_lockedBanner`, `m_page` disabled. |
+| M399 | Classic Functions: editor beside tree | In Classic QLC+, picking one function (scene, chaser, EFX) opens its editor in the right pane; picking two opens none | ViewLayout_Test::classicFunctionsOpensWhatIsPicked (ui/test/viewlayout/viewlayout_test.h) | covered | covered | med | — |
+| M400 | Classic Functions: editor beside tree | The other views keep double-click: a click only selects | ViewLayout_Test::aShowTreeSceneOpensGreyedUnderItsBanner (Everything view: a click leaves `m_scene_editor` null) | partial | partial | low | Only Everything view and a generated scene are checked. Console view is not, and nothing checks that a click can start a drag into the open collection or chaser. Add to ui/test/viewlayout or ui/test/functionstreewidget: ConsoleView, `pick()` a plain scene, assert no editor. |
+| M401 | Classic Functions: editor beside tree | A saved `functionmanager/splitter` that collapsed the **editor** comes back about half and half (`showEditorPane()`), not a strip at minimum width | ViewLayout_Test::classicFunctionsOpensWhatIsPicked (initTestCase seeds `collapsedEditorState()`; asserts each pane is at least a quarter of the tab) | covered | covered | med | — |
+| M402 | Classic Functions: editor beside tree | The same when the saved state collapsed the **tree** | none | none | none | med | Only the editor-collapsed state is seeded. Add a ViewLayout_Test case that seeds a state with pane 0 at 0 width and asserts `m_tree->width() >= fm->width()/4` after `pick()`. |
+| M403 | Classic Functions: editor beside tree | A Show Tree scene opens in its editor, greyed, under the "Made by the Show Tree" banner above it (not a banner alone at the foot of an empty pane) | ViewLayout_Test::aShowTreeSceneOpensGreyedUnderItsBanner | covered | covered | med | — |
+| M404 | Classic Functions: editor beside tree | The edited row's tint reads in every theme (contrast ≥ 4.5), and its own colour comes back on close | ViewLayout_Test::theEditedRowReadsInEveryTheme | covered | covered | low | — |
+| M405 | Classic Functions: editor beside tree | Every tab of every view at 1280x800, 1920x1080 and 2560x1440 fills the window: no gap, no zero-width pane, no strip-only pane | ViewLayout_Test::everyTabFillsTheWindow | covered | covered | low | — |
+| M406 | Run tab STANDBY (Q115) | The state column fits "▷ STANDBY" at the Mac's 13 pt, on a sub-cue's row with its indent and bold | CueRunner_Test::clickLoadsDoubleClickJumps (ui/test/cuerunner/cuerunner_test.h) | covered | covered | low | — |
+| M407 | Plot layers group row | Clicking a fixture group's row in Plot layers selects its fixtures on the plot, and they are still selected 500 ms later | Monitor_Test::layersListsEveryGroupAFixtureIsIn (ui/test/monitor/monitor_test.h) | covered | covered | low | Commit 3e6d2f71f. |
+| M408 | Show Tree flag columns (Q104) | Sets/Tracks/Releases/Mode/Flags are separate columns: a count on a cue, a dot on a layer, B/C, flag words | ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover; ::trackedLayersShowGreyWithWhereTheyCameFrom; ::trackingControlsOnTheListAndCuePages; ::skipCuesInTheTree; ::moveInBlackPerListAndCueInTheTree | covered | covered | low | — |
+| M409 | Show Tree flag columns (Q104) | Each header names itself on hover; right-click the header to hide any column | none | none | none | low | No test reads the header tooltip or the header menu. Add to ShowTreeView_Test: check `headerItem()->toolTip(SetsCol)`, then trigger the header context menu action and assert `isSectionHidden`. |
+| M410 | Show Tree flag columns (Q104) | In a narrow pane the flag columns fold away before the names do | ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover (only checks the name column keeps ≥3/5 of the room) | partial | partial | low | Nothing narrows the view and asserts that flag sections are hidden while column 0 stays wide. Add a resize-to-narrow step in ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered. |
+| M411 | Shorter layer names | Fixtures that make up whole groups are named as those groups ("FOH + Pair"), with the rest by name | ShowTree_Test::aTargetIsNamedByItsWholeGroups | covered | covered | low | — |
+| M412 | Shorter layer names | Groups come largest first; a remainder over four is shown as its first three and a count | none | none | none | low | The test uses at most 4 fixtures and equal-size groups. Extend ShowTree_Test::aTargetIsNamedByItsWholeGroups with 6+ ungrouped fixtures, and with a larger group overlapping a smaller one. |
+| M413 | Shorter layer names | The short name is what "Next cue receives", the tree and menus show | none | none | none | low | Only `targetLabel()` is checked. A ShowTreeView_Test assertion on a layer row's text(0) would cover the UI. |
+| M414 | Fixture Properties edits every selected fixture | Double-click on one of several selected fixtures on the plot (in a studio group) edits all of them | Monitor_Test::aDoubleClickEditsTheWholeSelection | partial | partial | med | Only the studio-group case, and it only checks the selection size when the signal fires, not the editor's title or its fixtures. Fixtures on a truss are not driven. Add a truss-mounted pair to the same test and check the dialog title via `inspectModal` ("2 fixtures"). |
+| M415 | Fixture Properties edits every selected fixture | Double-click in Plot layers (the list) edits the selection from before the double-click's first click | **Monitor_Test::aLayersDoubleClickEditsTheWholeSelection** (new) | none | covered | med |  |
+| M416 | Fixture Properties edits every selected fixture | The truss editor's fixture list: double-click on one of several selected rows edits them all | Monitor_Test::aTrussEditorsDoubleClickEditsItsSelectedRows | covered | covered | med | — |
+| M417 | Mount on ▸ acts on selection | Mount on ▸ Truss with the right-clicked fixture among the selection mounts all of them | Monitor_Test::aGroupDroppedOnATrussAllHang (the tail of the test) | partial | partial | med | Only Truss is driven, not Boom/Hanger/Tower. Neither the menu's count text nor "each keeps its place along" (trussOffset after Mount) is checked. Extend that test, or add one for Boom/Tower, asserting the offsets and the menu label. |
+| M418 | Stage stays centred | After a resize, and after a paint-time refit, the stage grid is in the middle of the view even with a fixture far off the grid | Monitor_Test::theStageStaysCentredWithFixturesOffIt | covered | covered | low | — |
+| M419 | Stage stays centred | The "stage left / downstage" edge labels no longer smear when the plot scrolls (`scrollContentsBy` repaint) | none | none | none | low | Hard to assert without pixels. A Monitor_Test could grab the viewport before and after scrolling and compare the label region. |
+| M420 | Dragged together onto truss | Shift-drop of several selected fixtures hangs all of them on the truss, each at its own offset along it | Monitor_Test::aGroupDroppedOnATrussAllHang | covered | covered | med | — |
+| M421 | Dragged together onto truss | In Front and Side views every free fixture of a multi-selection keeps its drop and does not snap back (`persistElevationDrop`) | Monitor_Test::dropStaysPutFrontView, ::dropStaysPutSideView (one fixture only, older tests); **Monitor_Test::twoDroppedTogetherStayPutFrontView, Monitor_Test::twoDroppedTogetherStayPutSideView** (new) | partial | covered | med |  |
+| M422 | Pages squash | No qlcconsole page's minimum width holds the window wide | AppViews_Test::pagesSquashWithTheWindow (ui/test/appviews/appviews_test.h) | partial | partial | low | The limit asserted is ≤ 700 px, but the changelog says all are under 640. It runs in ConsoleView only and skips Simple Desk. Nothing checks that the bars scroll sideways (ShrinkableBar) rather than clip. Tighten to 640 and add a ShrinkableBar check (narrow it, assert the horizontal scroll bar shows). |
+| M423 | Rig view pictures (Q85) | A sock or tower-face picture from outside the show's folder is copied to images/ and saved relative; a same-name file gets -2; loading resolves it against the show's folder | MonitorProperties_Test::patternPicturesAreKeptWithTheShow (engine/test/monitorproperties/monitorproperties_test.h) | covered | covered | high | — |
+| M424 | Rig view pictures (Q85) | This happens "when the show is saved", through `Doc::saveXML` (doc.cpp:2623), and not for undo snapshots | **MonitorProperties_Test::savingTheShowKeepsItsPatternPictures** (new) | none | covered | high |  |
+| M425 | Typed fade/hold kept | A fade or hold typed on a cue is applied on Tab, a click on another cue, or the page moving on, to the cue it was typed for; Esc reverts; one undo step each | ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves | covered | covered | high | — |
+| M426 | Typed fade/hold kept | Workbench chaser step times go to the step they were typed for when you walk on; Esc reverts | WorkbenchChaser_Test::typedStepTimesGoToTheirStep (ui/test/workbenchchaser/workbenchchaser_test.h) | covered | covered | high | — |
+| M427 | Closed shutter closes | A Closed Shutter look sends closed (not the fixture's Open); Strobe strobes; auto-open defers to both; the output on the wire is checked with auto-open on and off | ShutterAutoOpen_Test::aShutterLookMeansWhatItSays, ::aShutterLookOnTheWire (data-driven), ::aShutterLookOnAMixedRig (engine/test/shutterautoopen/shutterautoopen_test.h); LookEditor_Test::aShutterLookOffersClosed (ui/test/lookeditor/lookeditor_test.h) | covered | covered | high | — |
+| M428 | Esc in colour picker | Esc inside the Look Editor's embedded QColorDialog no longer hides it; it backs out and the picker stays | ShowTreeWorkbench_Test::escBacksOutOfAPaletteInBuild (ui/test/showtreeworkbench/showtreeworkbench_test.h) | covered | covered | low | It also confirms that a bare QColorDialog does hide on Esc, so the test catches a regression. |
+| M429 | Playing scene follows group | A fixture that joins a playing scene's group gets the look on the next frames, and one that leaves is let go without a restart | LookStack_Test::aLookOnAGroupFollowsItsMembersLive (engine/test/lookstack/lookstack_test.h) | covered | covered | high | Commit f100896ab removed the two B8 QEXPECT_FAILs this test had. |
+| M430 | Playing scene follows group | A joiner fades in over the look's fade-in, a leaver fades out over the scene's fade-out (or goes at once with none), the rest are untouched, and a re-join works | LookStack_Test::aGroupMemberFadesByTheScenesFades; ::aLookOnAGroupFollowsItsMembersLive (the no-fade case); **LookStack_Test::aLeavingMembersOwnValuesStay** (new) | covered | covered | high |  |
+| M431 | Pasted truss brings fixtures | ⌘C/⌘V of a truss makes new fixtures with the same definition, own names ("LX1-1 #2"), unpatched, at the same offsets, with a status line; one Undo removes truss and fixtures | Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures; ::pastingATrussAsksWhatItsFixturesGet | covered | covered | high | Commit 2ee4c0200 removed the B5 QEXPECT_FAIL. |
+| M432 | Pasted truss brings fixtures | The same through Duplicate selected and Paste features here | Monitor_Test::pastingATrussAsksWhatItsFixturesGet (drives `slotPasteFeatures`) | partial | partial | med | Duplicate selected is never driven with a truss that has fixtures. Add it to Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures. (The changelog excerpt ends mid-bullet.) |
+
+## Fixed (part 2)
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M433 | Copy truss with fixtures | ⌘C/⌘V copies a truss and its fixtures, offset; copies arrive unpatched, the status line says so; one ⌘Z removes truss and copies | Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures (ui/test/monitor/monitor_test.cpp) | covered | covered | med | — |
+| M434 | Pasting a truss asks (Q55) | Patch at next free addresses (after the originals, first-fit, spills into the next universe) / Leave unpatched / Cancel (nothing pasted); one ⌘Z; status line says where | Monitor_Test::pastingATrussAsksWhatItsFixturesGet | covered | covered | med | — |
+| M435 | Hiding the Workbench stops only its own | Hiding the Workbench in Operate stops only its own run; a function started elsewhere (VC button) and then loaded keeps running | Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn (ui/test/workbench/workbench_test.cpp) | covered | covered | high | — |
+| M436 | Hiding the Workbench | The Design preview of a function already run from the Run tab lets go without stopping it | Workbench_Test::designPreviewLeavesAnotherRunAlone | covered | covered | high | A function started by a cue (Show Tree GO) is not exercised, only VC button and Run tab parents |
+| M437 | Build delete/duplicate undoable | Delete is one shared-history step; Undo brings it back with its id, in place in collection and chaser; Redo deletes again | ProgrammingManager_Test::deletingAFunctionTakesItOutOfWhatUsesIt (ui/test/programmingmanager/programmingmanager_test.cpp) | covered | covered | high | — |
+| M438 | Build delete undo | Undo puts the function back on its **show track** | **ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack** (new) | none | partial | high | (bug) The Undo snapshot copies the Show with Show::copyFrom(). That appends tracks and deep-copies each item's function, so after Undo there are two tracks and the item plays "Copy of Copy of Walk" (QEXPECT_FAIL). |
+| M439 | Build delete undo | Undo hands it back to VC buttons, cue lists, main cue list; Redo lets go again | ProgrammingManager_Test::undoingADeleteHandsItBackToItsVcWidgets | covered | covered | high | — |
+| M440 | Build duplicate undo | ⌘C⌘V / Duplicate: Undo removes the copy, Redo restores it with the same id | ProgrammingManager_Test::duplicateAndCopyPasteFileACopyBesideIt | covered | covered | med | — |
+| M441 | Build ▸ Effects Duplicate/Delete | EFX Duplicate/Delete each one step; Undo/Redo keep the id and collection membership | EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow (ui/test/effectdesigner/effectdesigner_test.cpp); **EffectDesigner_Test::buildEffectsRightClickOnAnRgbMatrix** (new) | partial | covered | med |  |
+| M442 | Park holds its dimmers | Park beats a running cue (higher or lower); let go, the cue comes back | OutputRules_Test::parkBeatsACueAboveIt (engine/test/outputrules/outputrules_test.cpp); ProgrammerController_Test::aParkedFixtureHoldsItsOutput (engine/test/programmercontroller/programmercontroller_test.cpp) | covered | covered | high | — |
+| M443 | Park | Park goes past the Grand Master | OutputRules_Test::parkIgnoresTheGrandMaster | covered | covered | high | — |
+| M444 | Park | Blackout still takes Park out | OutputRules_Test::blackoutTakesAParkOut | covered | covered | high | — |
+| M445 | Highlight holds | Highlight beats a running cue (intensity and LTP); Park is above Highlight | ProgrammerController_Test::highlightBeatsARunningCue, ::highlightDrivesTheSelectionToFull | covered | covered | high | — |
+| M446 | Highlight | Grand Master and Blackout apply to Highlight | **OutputRules_Test::theGrandMasterAndBlackoutApplyToAHighlight** (new) | none | covered | high |  |
+| M447 | Held last look | Hold is a base under the show: intensity HTP, a function takes LTP, the hold survives the frame | LastLookEffect_Test::holdIsABaseUnderTheShow, ::holdSurvivesTheUniverseFrame (engine/test/lastlookeffect/lastlookeffect_test.cpp) | covered | covered | high | — |
+| M448 | Held last look | A starting cue takes its fixtures from the hold | LastLookEffect_Test::aLaterCueTakesItsFixturesFromTheHold | covered | covered | high | — |
+| M449 | Held last look | A track's hold-last and the show-end parked look keep dimmers lit | ShowRunner_Test::holdLastKeepsTheLookThroughAGap, ::theShowStopsAtItsConfiguredEnd (engine/test/showrunner/showrunner_test.cpp) | covered | covered | high | — |
+| M450 | Flash | A flash shows over a running cue (up on a dim fixture, down on a bright one); the cue comes back after | ProgrammerController_Test::aFlashShowsOverARunningCue | covered | covered | high | — |
+| M451 | Focus | A focused head's light beats a running cue; on stop the cue comes back | FocusSession_Test::itsLightHoldsOverARunningCue (engine/test/focussession/focussession_test.cpp) | covered | covered | high | — |
+| M452 | Flash/Focus priority order | Flash and Focus sit between Highlight and Park (Park beats them, they beat Highlight); GM and Blackout apply to both | **OutputRules_Test::theGrandMasterAndBlackoutApplyToAFlash, OutputRules_Test::theGrandMasterAndBlackoutApplyToFocus, OutputRules_Test::parkBeatsFocusAndFlash, OutputRules_Test::focusAndFlashBeatHighlight, OutputRules_Test::highlightBeatsARunningCue, OutputRules_Test::aHeldLastLookIsUnderEverything** (new) | none | covered | high |  |
+| M453 | GM relay | A GM move recomputes postGM with the On-when-not-in-use floor; no frame at 0 (GM exempt and not) | OutputRules_Test::grandMasterNeverDropsAnOnAtOpenRelay | covered | covered | high | — |
+| M454 | Shows timeline Undo | Undo keeps Hold at end, Solo-safe, priority, intensity, track lock, locked items | ShowManager_Test::undoKeepsEveryTracksSettings (ui/test/showmanager/showmanager_test.cpp); **ShowManager_Test::undoKeepsATracksSolo** (new) | partial | covered | high |  |
+| M455 | Shows timeline Undo | A marker's cue-list link survives Undo | ShowManager_Test::undoPutsAMarkerBack | covered | covered | med | — |
+| M456 | Beat button after Tap | Tap updates the Beat button text and BPM | ProgrammingManager_Test::fourTapsHalfASecondApartShow120Bpm | covered | covered | low | Does not check that the tapped beat isn't restarted (slotBpmChanged held off) |
+| M457 | Closed shutter closes | shutterIntent reads the value: Closed / Strobe / Open / other; 0 or no value means Open; a strobe-only shutter stays open | ShutterAutoOpen_Test::aShutterLookMeansWhatItSays (engine/test/shutterautoopen/shutterautoopen_test.cpp) | covered | covered | high | — |
+| M458 | Closed shutter | Mixed rig: each fixture gets its own closed / open / strobe at the same rate | ShutterAutoOpen_Test::aShutterLookOnAMixedRig | covered | covered | high | — |
+| M459 | Closed shutter | On the wire, with auto-open on or off | ShutterAutoOpen_Test::aShutterLookOnTheWire (+_data) | covered | covered | high | — |
+| M460 | Closed shutter | The icon shows closed / strobe / open | ItemIcons_Test (shutter icon section, ui/test/itemicons/itemicons_test.cpp) | covered | covered | low | — |
+| M461 | Closed shutter | Look Editor shows Open, keeps a Closed at 0 as 1, no strobe-only source | LookEditor_Test::aShutterLookOffersClosed (ui/test/lookeditor/lookeditor_test.cpp) | covered | covered | low | — |
+| M462 | Move in black | A new show starts with it off at the default lead time; a loaded show brings its own back | MarkPlanner_Test::theShowsMoveInBlackSavesLoadsAndResets (engine/test/markplanner/markplanner_test.cpp); **MarkPlanner_Test::openingAShowWithoutMoveInBlackStartsItOff** (new) | partial | covered | med |  |
+| M463 | Imported raw-scene chaser | It plays as the chaser did (blend; Sample par chasers at full) | ShowTree_Test::importedRawScenesBlendAsTheChaserDid (engine/test/showtree/showtree_test.cpp) | covered | covered | high | — |
+| M464 | Imported chaser | Its cue-list number isn't copied onto the new list's chaser | — | none | none | low | No assert found. Add to the ShowTree_Test import tests |
+| M465 | Look-ahead static output | Scales a dimmerless fixture's colour by the look's dimmer | CueOutput_Test::aDimmerlessFixturesColourIsScaledByTheLooksDimmer (engine/test/cueoutput) | covered | covered | med | — |
+| M466 | Back then GO | Back or a jump restores the earlier cues' colours; the same whichever way you arrive | TrackBack_Test::backThenGoKeepsTheColourTheCuesBeforeSet, ::colourTracksTheSameWhicheverWayYouArrive (engine/test/trackback/trackback_test.cpp) | covered | covered | high | ::aRealShow is env-gated (QLC_TRACKBACK_SHOW) and doesn't count |
+| M467 | No light-output warning | No "No light output" warning for a curtain or a hazer | FixtureDefCheck_Test::onlyALightIsAskedForLightOutput (engine/test/fixturedefcheck); ProgrammingManager_Test::aCurtainIsNotAskedForLightOutput | partial | partial | low | **Fan** and **smoke machine** types are not checked. Add rows to the same test |
+| M468 | Focus mode draws the intent | Views draw where the light should point, not the nudged DMX | Monitor_Test::focusDrawsTheIntentNotTheNudge | covered | covered | low | — |
+| M469 | Game controllers: App Nap | Controller keeps being read in the background | ControllerKeepAlive_Test (engine/test/controllerkeepalive: ::theActivityFollowsWhoWantsIt etc.); FocusSession_Test::theSessionKeepsTheControllerAwake | covered | covered | med | — |
+| M470 | Game controllers: found again | Found again after sleep or switched back on | FocusMode_Test::aPadThatSleepsIsPickedUpAgain (ui/test/focusmode); InputOutputMap_Test::inputDeviceGoesAndComesBack, ::inputDeviceFollowedToANewLine (engine/test/inputoutputmap) | covered | covered | med | — |
+| M471 | Game controllers: Xbox layout | Every Xbox model is read in the right layout | GamepadLayout_Test::families, ::gipReport, ::matchesTheXboxProfile (engine/test/gamepadlayout) | covered | covered | med | — |
+| M472 | Game controllers: HID | HID lines numbered consistently; the plugin doesn't open every HID device or write a debug file | — | none | none | low | There is no plugins/hid/test. Needs a new plugin test on HIDPlugin enumeration |
+| M473 | Studio target items | Target items are dropped before a new or opened show deletes the targets | Monitor_Test::clearingTheShowDropsTargetItemsFirst | covered | covered | high | — |
+| M474 | LED layouts guard | The LED map isn't torn while a running matrix reads it | MonitorProperties_Test::anLedMapReadWhileItIsSetIsWhole (engine/test/monitorproperties) | covered | covered | high | A concurrent stress test, so it is probabilistic |
+| M475 | Override track wins dimmers | A lower Override level pulls a dimmer below a Normal track at full; its intensity scales it | ShowRunner_Test::anOverrideTrackPullsADimmerBelowANormalTrack, ::anOverrideTrackWinsAndABackgroundTrackYields | covered | covered | high | — |
+| M476 | Override track | It beats **a cue at full** running outside the show | **ShowRunner_Test::anOverrideTrackBeatsACueOutsideTheShow** (new) | none | covered | high |  |
+| M477 | Override track | Park beats it | ShowRunner_Test::aParkBeatsAnOverrideTrack | covered | covered | high | — |
+| M478 | Override track | Focus, Flash and Highlight beat it | **ShowRunner_Test::highlightAndFlashBeatAnOverrideTrack** (new) | none | covered | high | Focus against an Override track is not stacked directly. Focus beats Highlight (OutputRules_Test::focusAndFlashBeatHighlight). |
+| M479 | Override track | GM applies to it | ShowRunner_Test::anOverrideTrackPullsADimmerBelowANormalTrack | covered | covered | high | — |
+| M480 | Override track | Blackout applies to it | **ShowRunner_Test::blackoutTakesAnOverrideTrackOut** (new) | none | covered | high |  |
+| M481 | Override track | When its item ends, what plays underneath comes back; nothing is left over after the show stops | ShowRunner_Test::theNormalTrackReturnsWhenTheOverrideItemEnds | covered | covered | high | — |
+| M482 | Track intensity before Start | Fader and attribute are one value; the last one set plays from Start | ShowRunner_Test::theTrackFaderAndItsAttributeAreOneValue, ::aTrackAtHalfIntensityPlaysAtHalf | covered | covered | med | — |
+| M483 | Track intensity | A saved 50% plays at 50% after load | ShowRunner_Test::aTrackIntensityIsSavedAndPlaysAfterLoad | covered | covered | high | — |
+
+## Data safety across features (old shows, file formats)
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| D01 | Old shows | A stock QLC+ 4.x show, the bundled Sample.qxw and a qlcconsole 0.1 show open, save and open again with the same fixtures, groups, palettes, functions and their contents, universes, plot, Show Tree, VC and settings; a second save is byte-identical | **ShowFiles_Test::aShowSavedAndOpenedAgainIsTheSame (ui/test/showfiles; also any other .qxw/.qlcc found in test-workspaces/ on this computer)** (new) | none | covered | high |  |
+| D02 | Old shows | Opening a show and closing it without saving never writes the file or anything beside it | **ShowFiles_Test::openingAShowNeverWritesIt** (new) | none | covered | high |  |
+| D03 | Old shows | A QLC+ 4.x show opens with Auto-open shutters off, saves the setting, and opens off again | **ShowFiles_Test::aStockShowOpensWithAutoOpenOff** (new) | none | covered | high |  |
+| D04 | Newer files | A show written by a newer build (unknown elements and attributes at every level that holds elements) opens with everything this build knows intact | **ShowFiles_Test::aShowFromANewerBuildOpens** (new) | none | covered | high |  |
+| D05 | Collect for Transfer | File > Collect for Transfer writes the show and its venue file into the folder; the show opened from there has its venue applied; the open window keeps its own file | **ShowFiles_Test::collectForTransferTakesTheVenues** (new) | none | covered | high |  |
+
+# Part 2: earlier features, by area
+
+In this part, "Before" and "After" are the 0.2.x audit's own before and
+after. A test marked *(new)* was new in that audit. The bugs it found, B1
+to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
+
+## Patch/Fixtures
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Fixture tree: Groups / Inventory / Power / Universes sections, empty universes pre-built | FixtureTreeWidget_Test::inventoryRootIsAlwaysPresentInTheManager, ::treeCounts | partial | partial | low |
+| Inventory filed by manufacturer and model, with counts | FixtureTreeWidget_Test::inventoryIsOrganisedByManufacturerAndModel; FixtureManager_Test::deletingInventoryFixturesUpdatesTheFolderCounts | covered | covered | low |
+| Duplicate names root, Number the Duplicates, names kept unique | FixtureTreeWidget_Test::duplicateNamesAreListedAndARenameToATakenNameIsRefused; Doc_Test::fixtureNamesAreUnique; AddFixture_Test::aTakenNameIsRefusedWhenEditingAndNumberedWhenAdding; FixtureCreator_Test::aSingleAddWithATakenNameIsNumbered | covered | covered | med |
+| Address clashes root; "Patch the Clashing Fixtures…" | FixtureTreeWidget_Test::addressClashesGetTheirOwnRootAtTheTop; Inventory_Test::patchingAClashClearsIt; PatchInventoryDialog_Test::aClashSaysWhereItWantedToBe (menu path not driven) | partial | partial | med |
+| Right pane: info / grid editor / power / universe usage | FixtureManager_Test::selectingAGroupOpensItsLayoutEditor, ::aNetworkFixturesInfoStatesItsConnection; UniverseUsageWidget_Test::titleFollowsARename | partial | partial | low |
+| Rename universe / group / fixture in place (Return, F2); empty name refused | FixtureTreeWidget_Test::enterOnAUniverseRowRenamesIt, ::emptyUniverseEditIsRejected, ::enterOnAGroupRowRenamesItInPlace, ::f2OnAGroupAndAnEmptyNameIsRejected (fixture success path not driven) | covered | covered | low |
+| Group editor Name follows a tree rename; double-click opens editor | none | none | none | low |
+| Add to inventory (toolbar, root menu, quantity up to 999, "Add more X") | FixtureManager_Test::choosingAddToInventoryFromTheMenuStagesAFixture, ::addFixtureWithInventorySelectedStagesIt, ::theInventoryActionsFollowTheAddAction; AddFixture_Test::inventoryModeHidesAddressAndIgnoresOverlap, ::inventoryQuantityIsNotLimitedByAUniverse, ::addingMoreStartsOnTheSameModelAndMode | covered | covered | med |
+| Unpatched (staged) fixture sends no DMX and claims no address | Inventory_Test::unpatchedFixtureNeverReachesTheUniverse, ::unpatchedFixtureClaimsNoAddress; StagedOutput_Test (9) | covered | covered | high |
+| Patch dialog: proposal, live conflicts, Apply all-or-nothing, problems reported | PatchInventoryDialog_Test::opensOnAProposalForEveryStagedFixture, ::editingIntoACollisionFlagsItAndBlocksApply, ::applyPatchesTheFixtures, ::problemsDuringApplyAreReported; Inventory_Test::patchFixturesIsAllOrNothing | covered | covered | high |
+| Patch dialog: mode per row, universes by name, New universe N | PatchInventoryDialog_Test::aModeIsChosenFromTheDefinitionsModes, ::modesTheFixtureCannotMoveToAreOfferedButDisabled, ::universesArePickedByNameInNameOrder, ::newUniversesAndNotesAreSpelledOut | covered | covered | high |
+| Place by nearest node; first-fit packing; network fixture's own universe | Inventory_Test::eachNodeTakesTheFixturesNearIt, ::plannerPacksDmxFirstFitAroundPatchedFixtures, ::plannerGivesEachIpItsOwnUniverse; PatchInventoryDialog_Test::nearestNodeProposalsShowWhereTheyGoAndApply | covered | covered | high |
+| Addressing order: by name / movers first | PatchInventoryDialog_Test::theSameGroupLandsTheSameWayInNameOrder, ::moversFirstThenByKind | covered | covered | med |
+| Addressing order "as they hang"; order remembered | none | none | none | med |
+| Into free space, no-room flag, Carry on, Fit by changing modes; keep spacing / packed / one universe each | Inventory_Test::fitKeepsWhatIsThereAndFillsTheGaps, ::whatHasNoRoomIsFlaggedAndCanCarryOn, ::fitByChangingModesShrinksTheBiggestFirst, ::placeKeepsSpacingAsOneBlock | covered | covered | high |
+| Patch the others like [structure] | Inventory_Test::likeStructuresArePatchedAlike; PatchInventoryDialog_Test::likeStructuresAreMatched (Studio menu entry not driven) | partial | partial | med |
+| Patch Apply is one ⌘Z; moving a patched fixture is Design-only | Monitor_Test::aPatchCanBeUndone, ::aModeChangedByThePatchIsUndone; Inventory_Test::movingAPatchedFixtureIsDesignModeOnly | covered | covered | high |
+| Drop fixtures or a group on a universe opens the Patch dialog there | FixtureTreeWidget_Test::aDropOnAUniverseNamesItAndItsFixtures (mime only) | partial | partial | med |
+| Return to inventory (keeps groups/looks, Design only) | FixtureManager_Test::returningToInventoryReleasesTheAddress; Inventory_Test::unpatchReturnsAFixtureToTheInventory, ::unpatchRefusesInOperateModeAndForStagedFixtures | covered | covered | high |
+| Connection DMX / Art-Net / WLED per fixture; batch IPs; WLED gets the WLED output | AddFixture_Test::connectionAndIpAreReported; FixtureCreator_Test::aBatchOfNetworkFixturesGetsOneIpEach; Inventory_Test::aWledFixtureGetsTheWledOutputAimedAtIt | covered | covered | high |
+| Patch list (rows, one-based, clash, mount, IP), CSV / PDF / Copy, labels | PatchList_Test (all); PatchListDialog_Test (all); PatchLabels_Test (all) | covered | covered | low |
+| Grid editor: head-type tags, drag heads, arrow picker, marquee/Ctrl select, Move fixture | FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi (blocks only) | partial | partial | low |
+| Grid editor: add group as block, drag block with collision guard | FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi, ::draggingASubGroupBlockMovesItThroughTheRealDropPath | covered | covered | low |
+| Grid editor Ctrl+Z (50-deep group-layout undo) | none | none | none | med |
+| Folders: New Group… on a folder, drag groups between folders, folder rename updates sub-paths | none | none | none | low |
+| Move to Folder ▸, Select All Similar, ⇧⌘N new group here | FixtureManager_Test::moveToFolderMenuFilesGroups, ::selectAllSimilarSelectsTheRowsAlike, ::newHereMakesAGroupInTheFolder, ::createGroupFromSelectionStartsInTheCurrentFolder | covered | covered | low |
+| Create Group(s) from Selection (one / per head type / per fixture, preview, layout) | HeadTypeGroups_Test (all 13) | covered | covered | low |
+| LED Layout editor (rows, swap, grid, flip, preview order, save to show / default) | LedLayout_Test (all 17) | covered | covered | med |
+| Split by Head Type; Lay Out from the Stage | Monitor_Test::theSplitWizardMapsRowsAndMakesAGroupPerKind, ::aGroupIsLaidOutAgainFromTheStage | covered | covered | low |
+| Rebuild Composite from Members | none | none | none | med |
+| Change Definition (drop-in) | HeadTypeGroups_Test::aColourRingIsAHeadTypeOfItsOwn | covered | covered | high |
+| Output Rules dialog: tri-state, menus in Fixture Manager / Build / Show Tree Library | FixtureManager_Test::outputRulesForFixturesAndGroups; ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove | covered | covered | low |
+| Output Rules change is one rig undo step | Monitor_Test::outputRulesAreOneRigUndoStep (new; no redo exists) | none | covered | high |
+| Stage Look ▸ menu, Fixture Properties look, plot redraw | Monitor_Test::theStageLookMenuSetsEveryFixtureSelected, ::fixturePropertiesSetsTheStageLook; Fixture_Test::stageLookSaveLoad | covered | covered | low |
+| Universe row: Patch output / Change / Unpatch / several / Show in Connections | FixtureUniversePatch_Test (all 7) | covered | covered | high |
+| Definition source Included / Local; newest local wins; duplicate local defs footer | QLCFixtureDefCache_Test::aLocalDefinitionSaysItReplacesTheIncludedOne, ::ofTwoLocalCopiesTheNewestIsUsed; ProgrammingManager_Test::duplicateDefinitionsAreListedWithWhatIsUsed | covered | covered | med |
+| Fixture editor Repair view, Problems panel, Physical units | FixtureDefCheck_Test (16); FixtureEditorCheck_Test (4); EditPhysical_Test; MeasurementUnits_Test | covered | covered | med |
+| ETC ColorSource Spot / Spot jr / CYC definitions; Eos _RGB personalities resolve Exact | EosImporter_Test::colorSourceDefinitionsAndTheirRgbPersonalities (new) | partial | covered | med |
+| No "declares no light output" warning for curtain / hazer / fan | FixtureDefCheck_Test::onlyALightIsAskedForLightOutput; ProgrammingManager_Test::aCurtainIsNotAskedForLightOutput | covered | covered | low |
+| Readiness footer: unpatched, no output, clashes, duplicates, silent universes, load problems; fixes | ProgrammingManager_Test::unpatchedAndSilentFixturesAreInTheFooter, ::otherRigProblemsAreInTheFooter, ::loadProblemsAreInTheFooter, ::theReadinessDialogFixesWhatIsSelected | covered | covered | high |
+| Connections ⌘N / ⌘D add and delete a universe (undo) | ConnectionsTree_Test::ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack (new) | none | covered | med |
+| Definition updates: scan, diff, update / keep / ignore, backup, undo, links, open show follows | FixtureDefUpdates_Test (18); DefinitionUpdates_Test::listsUsedAndUnusedAndUpdatesWithUndo, ::aChangedLayoutIsAskedFirst, ::theFooterSaysSo | covered | covered | high |
+| "Also list customised copies" in the Definition Updates dialog | FixtureDefUpdates_Test::scanFindsOldCopiesUsedOrNot (engine only) | partial | partial | low |
+
+## Build/Workbench
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Section switch drives the navigator; Effects/Palettes rows load the Workbench | Workbench_Test::theNavigatorDrivesTheWorkbench | covered | covered | low |
+| Palette list: add by type, double-click to edit | ProgrammingManager_Test::undoHereReachesTheSharedHistory, ::aNewPanTiltIsTriedOnTheLookSoTheRigFollows | covered | covered | low |
+| Groups & fixtures search; right-click Select similar / Create group / Move to folder | ProgrammingManager_Test::fixturesAndGroupsNarrowToASearch; FixtureManager_Test::selectAllSimilarSelectsTheRowsAlike (Build-side menu only in an env-gated real-show test) | partial | partial | low |
+| Toolbar placement, detached tab, narrow-window » | MainBar_Test::everyTabsToolsAreInTheTopBar, ::aDetachedTabKeepsItsTools, ::aNarrowWindowFoldsTheTabsTools; ProgrammingManager_Test::theToolbarFitsWithItsMenus | covered | covered | low |
+| Highlight drives the selection to full over a cue | ProgrammerController_Test::highlightDrivesTheSelectionToFull (new), ::highlightBeatsARunningCue (new, B1 fix); StagedOutput_Test::highlightSkipsStagedFixtures | partial | covered | med |
+| Flash the selection | StagedOutput_Test::flashSkipsStagedFixtures (staged rule only) | partial | partial | med |
+| Park holds a fixture; saved with the show; Unpark all | ProgrammerController_Test::aParkIsSavedWithTheShow (new), ::aParkedFixtureHoldsItsOutput (new); OutputRules_Test::parkBeatsACueAboveIt, ::parkIgnoresTheGrandMaster, ::blackoutTakesAParkOut (new, B1 fix); StagedOutput_Test::parkSkipsStagedFixtures | partial | covered | high |
+| Beat menu: internal beat, BPM, button reads the tempo | ProgrammingManager_Test::theToolbarFitsWithItsMenus | covered | covered | med |
+| Tap sets tempo and beat; the Beat button shows the tapped tempo | ProgrammingManager_Test::fourTapsHalfASecondApartShow120Bpm (new; bug B6 fixed); MasterTimer_Test::tapSetsTheTempoAndTheBeat | partial | covered | med |
+| More ▸ Snapshot live output into the scene (one undo step) | ProgrammingManager_Test::snapshotBakesTheLiveOutputIntoTheScene (new) | none | covered | high |
+| Save Positions: two-click arm/confirm keeps Aim drags and nudges | ProgrammingManager_Test::savePositionsSavesOnlyOnTheSecondClick (new) | none | covered | high |
+| Resize handles never hide a pane; double-click resets | ProgrammingManager_Test::theHandlesMoveEdgesAndNeverHideAPanel (reset not driven) | covered | covered | low |
+| Workbench: a scene is one layer, a collection's members are layers; header info | Workbench_Test::aSceneIsOneLayer, ::aCollectionsMembersAreLayers, ::sharedMembersSayWhereElse, ::whatIsLoadedPlays | covered | covered | high |
+| Show Tree-generated functions locked with "Show in Show Tree" | ShowTreeView_Test::generatedFunctionsAreLockedElsewhere | covered | covered | med |
+| Editor pane follows the clicked row; ▣ Open and ↩ back | Workbench_Test::aCollectionsMembersAreLayers, ::openAndBackKeepTheSelection; ProgrammingOutline_Test::aClickedRowFillsThePage | covered | covered | med |
+| + Scene / + EFX / + RGB Matrix, drag in, reorder, remove | Workbench_Test::layersAddRemoveReorderOnTheSharedHistory, ::newEffectsAreMadeOnTheSelectedLayer | covered | covered | high |
+| The lower layer wins a shared channel; a reorder follows in the DMX | Workbench_Test::theLowerLayerWinsAndFollowsAReorder (new) | partial | covered | high |
+| Own copy / Make own copy | WorkbenchChaser_Test::makeOwnCopySplitsASharedMember | covered | covered | high |
+| Chaser walker, step header, step table, step's collection edits the chaser | WorkbenchChaser_Test::walkingAChasersSteps, ::theStepHeaderEditsTheStep, ::editingAStepsCollectionChangesTheChasersOutput, ::chaserFromSelectionAndDropsOnAChaser | covered | covered | high |
+| Notes grow while typed | WorkbenchChaser_Test::theNoteOpensUpWhileTyped | covered | covered | low |
+| Live preview in Design (loaded item plays, Stop/Play, leaving stops) | Workbench_Test::whatIsLoadedPlays | covered | covered | high |
+| Workbench in Operate: loaded function is show output; hiding stops only its own run | Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn (new; bug B3 fixed), ::designPreviewLeavesAnotherRunAlone (new) | none | covered | high |
+| One shared undo history (Build and Show Tree); new EFX/RGB undo | ProgrammingManager_Test::undoHereReachesTheSharedHistory; Workbench_Test::newEffectsAreMadeOnTheSelectedLayer; ProgrammingOutline_Test::editsAreStepsOnTheSharedHistory | covered | covered | high |
+| Build ▸ Effects: + New, design, Save as palette, Update | EffectDesigner_Test::buildEffectsMakesAndDesignsEffects, ::aNewEffectOnTheBenchSavesAsAPalette, ::aNamedEffectIsACopyUntilUpdated | covered | covered | med |
+| Build ▸ Effects right-click Duplicate / Rename / Move / Delete (asks, names uses) | EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow (new; EFX duplicate/delete undo: bug B2 fixed) | partial | covered | med |
+| Make a layer into a cue / scene / new scene; one-off kept while history plays it | EffectDesigner_Test::makeALayerIntoACue, ::makeALayerIntoAScene, ::makeALayerIntoANewScene, ::makeALayerFromTheWorkbench | covered | covered | high |
+| Effect designer: preview only in Design on screen, one-off, preset, Cancel | EffectDesigner_Test::thePreviewPlaysOnlyInDesignOnScreen, ::keepOnALayerMakesAOneOff, ::saveAsPresetListsIt, ::cancelLeavesNoTrace | covered | covered | med |
+| Outline rows, badges, Folders/Classic, Functions window → Build ▸ Classic | ProgrammingOutline_Test::everySceneAndWhatIsInItIsARow, ::badgesSayWhatAndHoverSaysWhy; WorkbenchChaser_Test::classicListsWhatTheFunctionManagerDoes; AppViews_Test::functionsOpensBuildScenesClassic | covered | covered | low |
+| New function ▸ every type, wizard, startup function, folders rename/delete | WorkbenchChaser_Test::functionsWindowToolsLiveInBuild; ProgrammingManager_Test::aFolderRenamesWithWhatIsInIt | covered | covered | med |
+| Duplicate / ⌘C ⌘V of functions | ProgrammingManager_Test::duplicateAndCopyPasteFileACopyBesideIt (new; undo + redo: bug B2 fixed) | none | covered | med |
+| Delete function(s): question names uses, deleted everywhere | ProgrammingManager_Test::deletingAFunctionTakesItOutOfWhatUsesIt (new; undo + redo: bug B2 fixed), ::undoingADeleteHandsItBackToItsVcWidgets (new) | partial | covered | high |
+| Outline drag and drop table, ⌫ several, F2 rename, expand/collapse | ProgrammingOutline_Test::rowsMoveBetweenScenesAndOptionCopies, ::sourcesDropOntoAScene, ::filterAndRemoveSeveral, ::expandCollapseAndOptionClick; ProgrammingManager_Test::scenesDragIntoAFolderAndBackOut | covered | covered | med |
+| ⌘A in the outline; Move up/down a look; Show in Palettes; Workbench remembers what is expanded | none | none | none | low |
+| ⇧⌘N New here (scene in folder, layer, chaser step) | ProgrammingManager_Test::newHereMakesASceneInTheFolder; Workbench_Test::newHereMakesAStepOrALayer | covered | covered | med |
+| Delete palette names uses and clears them; one ⌘Z restores | ProgrammingManager_Test::deletingAPaletteSaysWhereItIsUsed, ::deletingHereClearsTheShowTreesUses | covered | covered | high |
+| Palette folders hold any type; older per-type folders merge | QLCPalette_Test::olderShowsTypeFoldersBecomeSharedFolders; ProgrammingManager_Test::paletteFoldersHoldAnyTypeInBothViews | covered | covered | high |
+| Bundles: Save as bundle, stamp onto a scene in one undo step | ProgrammingManager_Test::aBundleSavedFromALookStampsInOneStep (new) | none | covered | high |
+| Unpatched targets flagged | ProgrammingManager_Test::unpatchedTargetsAreFlaggedInTheProgrammingView | covered | covered | med |
+| Transition UI on the scene page | ProgrammingManager_Test::aScenesTransitionsAreSetOnItsCanvas, ::aScenesTimingIsAllOnItsCanvas | covered | covered | med |
+| Look Editor: colour, aim, gobo/shutter, fades, name follows value, try on | LookEditor_Test (aLineLooksSpreadIsSetOnTheAimPage, aShutterLookOffersClosed, aLooksNameFollowsItsColour…); PaletteNaming_Test (all); Scene_Test::aTriedOnPalettePlaysButIsNotKept | covered | covered | med |
+| Look Editor: Dimmer capability bar, Beam and Strobe editors, Amber/UV visibility | none | none | none | low |
+| Effect browser: own window, tabs, search, Recent, previews, settings widgets | LookEditor_Test::theEffectPickerIsAWindowOfItsOwn, ::effectsArePickedFromABrowserWithWledsOwn, ::previewsShowWhatEachEffectDoes, ::anEffectsTextIsTypedIn | covered | covered | med |
+| Stack checker (⚠ on rows) | LookStack_Test::theCheckerSaysWhatWontWork; LooksDrop_Test::whatWontWorkIsMarkedInTheList | covered | covered | med |
+| Speed masters window and footer | SpeedMastersPanel_Test (all) | covered | covered | med |
+| Workspace views (Classic / qlcconsole / Everything) | AppViews_Test::eachWorkspaceViewShowsItsTabs, ::theViewIsSavedWithTheShow, ::aShowWithoutAViewOpensInItsDefault, ::upgradingAClassicShowOffersTheConsoleView | covered | covered | med |
+| Show Tree cue opened in the docked Workbench (W3) | ShowTreeWorkbench_Test (all 9) | covered | covered | high |
+| The clicked layer's scene is what a control surface addresses | Workbench_Test::aCollectionsMembersAreLayers (currentSceneId only) | partial | partial | med |
+| Workbench → 2D Monitor follows the scene being edited | Monitor_Test::editingALookUpdatesTheRigView (setActiveScene called directly) | partial | partial | med |
+| Designer In context / Solo; Try on ▾ groups remembered | none | none | none | low |
+
+## Show Tree
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Tree of Production → List → Cue → Layer, carried-in ⤳ rows, badges with hover, column widths remembered | ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers, ::trackedLayersShowGreyWithWhereTheyCameFrom, ::trackingIsABadgeWithDetailsOnHover, ::theTreeColumnsResizeAndAreRemembered | covered | covered | med |
+| "Changed: …" status after an edit (rebake chain) | ShowTree_Test::theRebakeChain, ::aBakeChangesOnlyTheChain | covered | covered | med |
+| Cue page fields (number, name, mode, fades, hold, note) | ShowTreeView_Test::cueFieldsEditTheCue | covered | covered | med |
+| Import chaser: steps become cues, same-output check, repeats tracked, HTP mixes | ShowTree_Test::importReadsScenesIncludesAndOpaqueFunctions, ::importChecksTheOutput, ::importTracksWhatRepeats, ::importListsHtpConflicts, ::importedRawScenesBlendAsTheChaserDid | covered | covered | high |
+| Import in place, Restore original, import sheet (repoint VC, Undo import) | ShowTree_Test::importInPlaceFilesTheOriginals, ::restoreOriginalPutsTheShowBack; ShowTreeView_Test::theImportSheetReadsAndRepoints, ::theImportSheetCanUndoOrLeaveVcAlone | covered | covered | high |
+| Converter / bridge, Capture into palettes, Upgrade this show (one undo step), old-show banner | ShowTree_Test::bridgeTellsCueListsFromEffects, ::captureARawSceneIntoPalettes, ::upgradeAShowIsOneUndoStep; ShowTreeView_Test::upgradeThisShow, ::anOldShowOpensWithABanner | covered | covered | high |
+| Send to Show Tree from Build | ShowTreeView_Test::sendToShowTreeFromBuild | covered | covered | med |
+| Groups dropped on a cue / layer; functions dropped as ▣ | ShowTreeView_Test::groupsDroppedOnACueBecomeLayers, ::groupsDroppedOnALayerJoinIt, ::dropsOnTheCuePage; ShowTree_Test::addingAGroupToATrackedLayer | covered | covered | high |
+| ▣ page "Also in:"; Library Pin / Unpin | none | none | none | low |
+| Remove a group from a layer | ShowTree_Test::addingAGroupToATrackedLayer; ShowTreeView_Test::namedLayersShowWhatTheyHold | covered | covered | med |
+| Remove a single fixture from a layer | ShowTree_Test::removingAFixtureFromALayerIsOneStepAndKeepsTracking (new) | none | covered | med |
+| Split / Merge layers; edit several layers; group sets; child layers | ShowTree_Test::splitALayerKeepsTracking, ::mergeLayersKeepsTracking, ::groupSetsAreOneTargetAndKeepTracking, ::childLayersExcludeTheirFixturesFromTheParent; ShowTreeView_Test::editSeveralLayersAtOnce | covered | covered | high |
+| Where layers overlap; who wins; None / Clear; cue looks reach own layers | ShowTree_Test::overlappingLayersLowerWins, ::oneRuleUpAndDownTheChain, ::noneStopsAnInheritedValue, ::cueLooksReachOnlyOwnLayers | covered | covered | high |
+| ⋯ menu "Set to / Set in this cue", recent palettes first | CourseShow_Test::lessonOneSetInThisCue, ::lessonsOneTwoToOneFourWithTheMouse (menu driven in the course) | partial | partial | low |
+| Typed / picked values reuse palettes; one-offs to Recent, dropped when unused | ShowTree_Test::aTypedValueReusesAPalette, ::anEditRebakesAndDropsWhatIsUnused; ShowTreeView_Test::oneOffValuesGoToRecentNotAll | covered | covered | med |
+| Colour rings, gobos by name, effects, line aims | ShowTree_Test::ringGroupsAreLayersOfTheirOwn, ::goboPalettesMatchByNamePerFixtureType, ::aCueEffectIsOneAcrossItsLayers, ::aCueAimIsOneFormationByPosition | covered | covered | high |
+| Tracking / Non-tracking lists; Track / Block / Cue-only; Release; base cue; includes | ShowTree_Test::trackingAcrossThreeCues_3_2, ::aBlockCue_3_3, ::cueOnlyAndAnInclude_3_4, ::includesAreCycleProof; ShowTreeView_Test::trackingControlsOnTheListAndCuePages | covered | covered | high |
+| However you arrive (GO, Back, jump) the cue looks the same | TrackBack_Test::backThenGoKeepsTheColourTheCuesBeforeSet, ::colourTracksTheSameWhicheverWayYouArrive | covered | covered | high |
+| Skip cues (tracking as if absent, jump still plays, saved, UI) | ShowTree_Test::skippedCuesTrackAsIfNotThere, ::skippedCuesSaveLoadAndUndo; TrackBack_Test::skippedCuesPlayAsIfDeleted; ShowTreeView_Test::skipCuesInTheTree | covered | covered | high |
+| Text colours | ShowTree_Test::textColoursInheritSaveLoadAndUndo; ShowTreeView_Test::textColoursInTheTreePagesAndWorkbench; CueRunner_Test::textColoursOnEveryLine | covered | covered | low |
+| Set in this cue vs Update cue X; Record as new cue; Duplicate; copy/paste; numbering | ShowTree_Test::updateCueWhereATrackedValueWasSet, ::recordTheRunningCueOrEverythingLit, ::duplicateACue, ::copyAndPasteCues, ::numbering | covered | covered | high |
+| Design preview = GO; preview over a running list; Operate is blind | ShowTree_Test::previewPlaysWhatGoPlays, ::inDesignTheEditWinsOverARunningList, ::noPreviewInLiveMode; ShowTreeView_Test::selectingACuePreviewsItOnTheRig | covered | covered | high |
+| App Blind mutes the preview too | MainBar_Test::theShowControlsWorkInBothPlacements; OutputRules_Test::blindFollowsItsSetting (no preview + Blind case) | partial | partial | med |
+| Command line: every word, one undo step, fails as a whole, help, Tab completion | ShowTree_Test::commandLine, ::commandLineFailsAsAWhole, ::everyCommandWordHasHelpAndItsExamplesParse, ::commandLineCompletesEveryWord | covered | covered | high |
+| Undo / redo; one history for tree and palettes | ShowTree_Test::undoAndRedo, ::oneHistoryForTreeAndPalettes; ShowTreeView_Test::everyActionIsOneUndoStep | covered | covered | high |
+| Undo capped at 200 steps | ShowTree_Test::undoKeepsTheLastTwoHundredSteps (new) | none | covered | med |
+| Library: filters, folders, palettes, group tools; deleting a palette clears every use | ShowTreeView_Test::theLibraryFilters, ::palettesInTheLibrary, ::libraryGroupToolsSelectSimilarAndMove; ShowTree_Test::deletingAPaletteClearsEveryUse | covered | covered | high |
+| Multi-select delete; ⇧⌘N New here; Detach to plain scene | ShowTreeView_Test::severalRowsSelectedDeleteAndDrag, ::newHereMakesTheNextThing; ShowTree_Test::detachIsOneUndoStep | covered | covered | high |
+| Right-click Move up / Move down a cue | not in scope (cue drag/renumber is owned by another agent) | none | excluded | med |
+| Reusable layers and cues; Convert to tracking; Detach to plain chaser | ShowTree_Test::reusableLayersAreLiveLinked, ::reusablesSaveLoadAndUndo, ::convertToTrackingPlaysTheSame, ::detachAListToAPlainChaser | covered | covered | high |
+| Looks (busking), Make VC page, Copy to / Adopt as look | ShowTree_Test::aLookBakesToACollectionOfItsOwn, ::looksNeverTrack, ::aLookPlaysOverARunningListHtpLtp; ShowTreeView_Test::makeVcPageAndAdoptAsLook | covered | covered | med |
+| Productions (current plays GO, main list, timecode source, saved) | ShowTreePlay_Test::theCurrentProductionIsWhatGoPlays, ::eachProductionHasItsTimecodeSource, ::productionsSaveAndLoad | covered | covered | high |
+| Show Tree sub-cues (tracking, Sub GO, auto-follow, saved) | ShowTreePlay_Test::subGoPlaysThemOnTheRig, ::autoFollowSubCuesGoOnByThemselves, ::subCuesSaveLoadUndoAndDelete | covered | covered | high |
+| Baking: deterministic, shared scenes; tree saves/loads; a show without a tree saves as before | ShowTree_Test::bakeIsDeterministic, ::identicalLayersShareOneScene, ::theTreeSavesAndLoadsWithTheShow, ::aShowWithoutATreeSavesAsBefore | covered | covered | high |
+| A Show Tree show opens and plays in an older build that skips <ShowTree> | ShowTree_Test::anOlderReaderPlaysTheBakedFunctions (new); ShowTree_Test::theBridgeLinkSavesAndAnOlderReaderSkipsIt | partial | covered | high |
+| Move in black per list / per cue, decision matrix, typed, saved, MIB button in three places | ShowTree_Test::moveInBlackDecisionMatrix, ::moveInBlackSaveLoadUndo; MarkPlanner_Test::perListAndPerCueMoveInBlack; MainBar_Test::moveInBlackIsOneSettingInThreePlaces | covered | covered | high |
+| Move in black lead time: a cue sooner than the lead time is not moved in black | MarkPlanner_Test::aCueTooSoonIsNotMovedInBlack (new) | none | covered | high |
+| Open the function a ▣ layer plays; Lighting Studio-style item icons (non-fixture) | ShowTreeView_Test::openAnOpaqueLayer, ::openLandsInTheWorkbench; ItemIcons_Test::thePieIsTheLevel, ::aTargetShowsItsKind | covered | covered | low |
+
+## Run/VC
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Run tab cue runner: GO / Sub GO / Back / Pause / Stop, what changes, click loads, double-click jumps, Space is GO | CueRunner_Test::goSubGoBackAndWhatChanges, ::clickLoadsDoubleClickJumps, ::spaceIsGoInTheRunTab, ::runnersAndShowControlMirrorOneState | covered | covered | high |
+| Cue Runner VC widget: inputs, keys, feedback, save/load, Swap Widget, handles | CueRunner_Test::vcActionsFromInputsAndKeys, ::vcFeedbackFollowsTheCue, ::theVcWidgetSavesLoadsAndCopies, ::swapWidgetOnAPage | covered | covered | high |
+| One top bar, » fold, Show Controls placement, Blackout/Blind colours, kiosk | MainBar_Test::everyTabsToolsAreInTheTopBar, ::thePlacementRoundTripsAndSwitchesLive, ::blackoutAndBlindLightUpInEveryTheme, ::kioskModeDropsTheBar | covered | covered | low |
+| Stop all / Blackout / Blind / Design-Operate buttons and shortcuts | MainBar_Test::theShowControlsWorkInBothPlacements; MasterTimer_Test::stopAllFunctions | covered | covered | high |
+| Blind is cleared and greyed in Operate | MainBar_Test::operateClearsBlindAndGreysIt (new) | none | covered | high |
+| Stop all ▸ Fade 1 s / 5 s … and stop | MainBar_Test::fadeOneSecondAndStopFadesTheLightOut (new) | none | covered | high |
+| Show-mode Lock ⌘L | MainBar_Test::showModeLockLocksAndUnlocks (new) | none | covered | high |
+| Global GO ⌘↩ / Back ⌘⇧↩ (Control menu) | MainBar_Test::goAndBackStepTheMainCueList (new) | partial | covered | high |
+| Footer Next: menu (GO, Back, Stop, Load ▸ sub-cues, Open the Cue List) and production prefix | MainBar_Test::theFootersNextMenuLoadsASubCue, ::theFooterNamesTheCurrentProduction (new); SubCuesUi_Test::theFooterSaysWhatSubGoPlays | partial | covered | med |
+| Footer Grand Master slider | MainBar_Test::theFooterGrandMasterDimsTheRig (new) | partial | covered | med |
+| Footer speed masters and load meter | SpeedMastersPanel_Test::theFooterShowsEachMastersTempo (load meter untested) | partial | partial | low |
+| Workspace view menus: Window menu, break-out, F1 help on what's in front | AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews, ::shiftClickBreaksATabOutDoubleClickDoesNot, ::helpOpensOnWhatIsInFront | covered | covered | low |
+| Design while cues run asks first (No stays LIVE, Yes stops and goes dark) | CourseShow_Test::lessonFiveDesignWhileRunningAsksFirst (new) | partial | covered | med |
+| Crash on quit with the Show Tree open (fix) | AppViews_Test::quittingWithTheShowTreeShowing | covered | covered | high |
+| Software updates: check, ETag, rate limit, verify, never during a show, policy | Updates_Test (30) | covered | covered | med |
+| Update installer copes with a stale DMG | Updates_Test::macHelperPrepare, ::macHelperInstall (no stale-attach case) | partial | partial | med |
+| Install updates automatically; Restart and Install reopens the show | Updates_Test::nothingInstallsDuringShow (signal only) | partial | partial | med |
+| VC Cue List: Cue column, Next:, skips, sub-cues nested | VCCueList_Test::cuesSkipsAndNextAreShown; SubCuesUi_Test::theCueListNestsAndHighlightsSubCues | covered | covered | med |
+| Shows timeline: per-track flags at playback (solo, solo-safe, hold last, priority, intensity) | same tests as Output/engine ▸ Shows timeline engine (new; bugs B7, B9 fixed) | partial | covered | high |
+| Shows timeline: Undo of an edit (keeps track settings and marker links) | ShowManager_Test::undoTakesBackADrop, ::undoPutsAMarkerBack, ::undoKeepsEveryTracksSettings (new suite; bug B4 fixed) | none | covered | high |
+| Shows timeline: ⌘T exact timing, scale cue timing, copy/paste, transport | EndHandle_Test (end handle only); ShowRunner_Test::stopRunner | none | none | med |
+| Shows timeline: end handle, markers, time division | EndHandle_Test (5); Show_Test::timeDivision, ::markers | partial | partial | low |
+| Control Map: learn a controller button to toggle a function | ProgrammerController_Test::aLearnedControlTogglesItsFunction (new; feedback not asserted) | none | covered | high |
+| Command-line -o / -p / -k / -w; a bare file name is not opened | untestable without moving parseArgs() out of main.cpp | none | none (untestable) | high |
+
+## Studio/Monitor
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Opening the Studio and Rig Overview (window, shortcut, centre stage, F1) | AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio; Monitor_Test::theRigOverviewShortcutTogglesIt, ::theAngledViewStandsOnCentreStage | covered | covered | low |
+| Four planes (Top/Front/Side editable, Angled view-only), rulers, count badges, crosshair | Monitor_Test::angledViewProjectsAndRefusesEdits, ::dropStaysPutTopView, ::fixturesThatBuryTheirStructureBecomeACount, ::theCrosshairsSayWhereThePointerIs | covered | covered | med |
+| Angled camera mouse controls; GPU box remembered; Quality combo | Monitor_Test::studioZoomAtKeepsCursorPointFixed, ::theGpuDrawsWhatTheCpuDraws | partial | partial | low |
+| Rig Overview follows the Studio's layers; Layers menu in any mode | Monitor_Test::theRigViewHidesWhatTheStudioHides, ::layersShowAndHideFromTheRigOverviewInAnyMode | covered | covered | med |
+| Stage structures: truss, bars, towers, pipes, stands, platforms, steps, rounded front, socks, faces, hangers | Monitor_Test (many: aBarShowsInItsParentTrusssOwnEditor, aMoverOnAShelfSitsOnItRatherThanInIt, theTrussEditorSpansTwoStands, hangersAreRiggingCopiedToEveryTower…); MonitorProperties_Test::stepsAreAFlightOfTreads, ::aTrussSockIsSavedWithItsColourAndStretch | covered | covered | med |
+| Platform stacking and no-overlap collision on drag | none | none | none | med |
+| Add Steps defaults; Shape Platform/Steps combo | MonitorProperties_Test::stepsAreAFlightOfTreads (model only) | partial | partial | med |
+| Scenery kinds, editor preview/Cancel, curtains open/fly, block light | Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes, ::theCycloramaEditorPreviewsAndCancelReverts; Scenery_Test (all); BeamOcclusion_Test::aDrapeBlocksClosedNotOpenOrFlown | covered | covered | med |
+| Curtains driven by a curtain fixture (and one marked with the Curtain stage look) | Scenery_Test::aDrivenCurtainOpensAsItsChannelMoves, ::aFixtureMarkedCurtainIsACurtain; Monitor_Test::aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves, ::aFixtureMarkedCurtainIsDrawnAsItsDrape; BeamOcclusion_Test::aDrivenCurtainBlocksAsItsFixtureHasIt | covered | covered | high |
+| Mounting: orientation, face, placement, inspector (DMX address, mixed), multi-drag, rotation handles, decks, Shift-drop attach | Monitor_Test::theInspectorMovesAFixturesDmxAddress, ::theInspectorShowsMixedAndSetsOnlyWhatIsSet, ::cmdClickBuildsASelectionThatDragsTogether, ::fixturesAreStoodOnTheDeckUnderThem, ::theAttachBorderShowsOnlyWithShift | covered | covered | high |
+| Every rig dialog: live, Cancel reverts, OK one undo | Monitor_Test::aRigDialogPreviewsCancelsAndUndoes, ::fixturePropertiesCancelAndUndoToo, ::anInspectorEditIsOneUndoStep | covered | covered | high |
+| Stage looks (set, shapes, practicals, Auto as closest look) | Monitor_Test::everyStageLookHasItsShape, ::aLanternIsAPracticalThatGlowsAllRound, ::autoFixturesCanBeDrawnAsTheirClosestLook; MonitorProperties_Test::autoStageLooksIsSavedWithTheShow | covered | covered | med |
+| Layer locks (old locks fold into a Locked layer) | Monitor_Test::aLockIsItsLayersAndDrawsRed; MonitorProperties_Test::itemLocksFoldIntoALockedLayer | covered | covered | high |
+| Folder (group) position lock, inherited by sub-folders | Monitor_Test::aLockedFolderHoldsItsMembersAndItsSubFolders (new) | none | covered | med |
+| Global "Edit Plot" layout lock refuses drags | Monitor_Test::aLockedPlotRefusesADrag (new), ::aDropOnALockedPlotIsRefused | partial | covered | med |
+| Select All / Similar, plot ↔ Layers sync, rotate selection, plot undo | Monitor_Test::selectAllTakesEverythingSelectable, ::selectAllSimilarFindsLikeGroupsAndFixtures, ::rotatingASelectionTurnsItAboutItsMiddle, ::oneUndoPutsBackAWholeMixedDrag | covered | covered | high |
+| ⌘C / ⌘V structures with their fixtures (and the patch / leave / cancel ask) | Monitor_Test::copyAndPasteDuplicatesATrussWithItsFixtures (new; bug B5 fixed), ::pastingATrussAsksWhatItsFixturesGet | none | covered | med |
+| Units are the user's, converted exactly | MeasurementUnits_Test (all); MonitorProperties_Test::gridUnitsConvertExactly; AppViews_Test::settingsChoosesTheUnits | covered | covered | high |
+| Beams, pools, gobos, prisms, footprint, reach overlay, washes, brightness, haze, rings, lasers | Monitor_Test (aBeamStopsAtWhatItLandsOn, aGoboPoolIsDrawnThroughItsMask, aSelectedHeadShowsEverywhereItCanHit, aFixturesLightFollowsWhatItsDefinitionPutsOut, ledsGlowInTheHaze, aColourRingIsFoundAndDrawn, lasersThrowStarsAndPencilBeams…) | covered | covered | med |
+| Calibration offsets in the DMX, out of the views | AimSolver_Test::calibrationIsInTheDmxAndOutOfThePicture; Monitor_Test::aCalibratedHeadsPoolLandsOnItsMark | covered | covered | high |
+| Fixture Properties Test orientation → Aim at target (was 180° out) | Monitor_Test::testOrientationAimsWhereTheSolverSays (new) | none | covered | med |
+| Focus mode (session, nudge, save/revert/zero/undo, views draw intent, keyboard/controller, map) | FocusSession_Test (all); FocusMode_Test (all); Monitor_Test::focusModeRunsFromTheKeyboard, ::focusDrawsTheIntentNotTheNudge | covered | covered | high |
+| Controller kept awake, paused-with-reason, controller test window | ControllerKeepAlive_Test (all); FocusMode_Test::theControllerTestListsEachInput | covered | covered | low |
+| HID hotplug / wake rescan / line numbers (plugins/hid has no test dir) | none; GamepadLayout_Test covers the Xbox mappings only | none | none | med |
+| Xbox mappings per model and transport | GamepadLayout_Test (all) | covered | covered | med |
+| Lanterns, light source / glass, WLED LED order | Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound, ::aWledLanternShowsItsEffectLedByLed; QLCPhysical_Test::aLanternBodyRoundTrips | covered | covered | med |
+| Network nodes, wireless receivers, cable runs, Network Report | Monitor_Test::addNetworkNodePlacesItWhereTheMenuWasOpened, ::theNetworkOverlayDrawsCableRunsInAddressOrder; NetworkTopology_Test; NetworkReport_Test; NetworkReportDialog_Test | covered | covered | low |
+| Layers panel bulk: Move to Layer, New Folder / Layer from Selection | none | none | none | med |
+| Studio groups: editor, Seed / Adopt, Create Studio Group from Selection | MonitorProperties_Test::studioFrameDerivation, ::studioFrameXmlRoundTrip (model only) | partial | partial | med |
+| DMX lens (universe colours, ⚠ clash) and Power lens | Monitor_Test::aStagedFixtureOnThePlotNeverClaimsAUniverse | partial | partial | med |
+| Stage targets: kinds, aim point, Target / Person Here, bound to structure | MonitorProperties_Test::targetKindsAndAimPoint, ::targetFollowsWhatItIsBoundTo; Monitor_Test::addTargetAccepted, ::addingAPersonStandsOneWhereYouClicked | covered | covered | high |
+| Delete target asks, naming scenes and palettes | none | none | none | med |
+| Line targets (spread, group, cross, edited in the studio) | LineTarget_Test (20); Monitor_Test::aLineTargetIsEditedInTheStudio, ::headsAimedAtALineGoToTheirOwnPoints | covered | covered | high |
+| Steps as aim surfaces (target on a tread) | MonitorProperties_Test::stepsAreAFlightOfTreads (treads only) | partial | partial | med |
+| LED Layout drawn in the plot and Rig Overview | LedLayout_Test::thePlotDrawsHeadsWhereTheLayoutSays; Monitor_Test::theRigViewDrawsHeadsWhereTheLedMapSays | covered | covered | med |
+
+## Output/engine
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Output rules: Ignore GM, Ignore Blackout (and Blind), Switch, power limits, bits follow moves | OutputRules_Test (grandMasterLeavesExemptAlone, blackoutKeepsExemptLive, blindFollowsItsSetting, switchSnapsAtHalf, switchNeverFades, powerLimitsLeaveARelayAlone, movedFixtureTakesItsBits…) | covered | covered | high |
+| Output rule On when not in use (armed at Operate or show open; saved) | OutputRules_Test::onAtOpenFollowsItsSetting, ::onAtOpenYieldsToTheShow, ::onAtOpenSettingIsSavedWithTheShow | covered | covered | high |
+| Look-ahead (MIB) scales a dimmerless fixture's colour as playback does | CueOutput_Test::aDimmerlessFixturesColourIsScaledByTheLooksDimmer (new) | none | covered | high |
+| How a look stacks (colour, dimmer, effects, dimmerless fixtures) | LookStack_Test (18); EffectInstance_Test::aSharedDimmerTakesItsBrightestHead, ::effectsOnOneChannelLayerAsADeskDoes | covered | covered | high |
+| A group target follows its membership live | LookStack_Test::aLookOnAGroupFollowsItsMembersLive (new; bug B8 fixed), ::aGroupMemberFadesByTheScenesFades (new); LookStack_Test::theSameOnAFixtureGroup | partial | covered | high |
+| Transitions: per-head delay, wipes, Edge, effects follow | Scene_Test::transitionTimingAndPlaces, ::aLookWipesInAndOutAcrossTheStage; EffectInstance_Test::anEffectArrivesByItsScenesTransition | covered | covered | high |
+| Transition ignored when the scene's tempo is Beats | Scene_Test::aTransitionIsIgnoredWhenTheTempoIsBeats (new) | none | covered | med |
+| Shutter looks (Closed closes) and Auto-open shutters | ShutterAutoOpen_Test (13); LookEditor_Test::aShutterLookOffersClosed | covered | covered | high |
+| Effects: big-rig cache, groups laid out on stage, WLED ports, matrix effects, Matrix Image, text, step test | EffectInstance_Test (aWholeRigOfPixelsTicksQuickly, groupsAreLaidAcrossTheStageWhereTheyStand, everyWledPortRuns, matrixEffectsRunOnBoxesAndTheirModes, matrixImagePlaysAGifKeptInTheShow, theTextEffectSpellsOnAGrid…) | covered | covered | high |
+| Individual colour / dimmer / position / pixel / beam effects' output | EffectInstance_Test::aRainbowWithALookColourSweepsThatColour; SpreadLayer_Test::everyScriptThatTakesItUsesIt (spread only) | partial | partial | med |
+| Audio Spectrum / VU and MIDI Keys / Flash / Comet / Puddles effects | none | none | none | med |
+| Movement effects run round the look's aim; follow spot fades near limits / when blocked; zoom lowers the aim | EffectInstance_Test::aMovementEffectMovesRoundWhereTheLookPoints, ::followSpotFadesAHeadThatCannotReach, ::followSpotZoomsToHoldSizeOnSubject; Monitor_Test::aWiderFollowSpotAimsLowerOnThePerson | covered | covered | high |
+| Follow spot moves the shared aim point (heads converge) | EffectInstance_Test::followSpotMovesEveryHeadToTheSamePoint (new) | partial | covered | high |
+| One beat clock; tap; external beat pulls gently | MasterTimer_Test::tapSetsTheTempoAndTheBeat, ::alignBeatPutsTheBeatNow, ::theBeatClockRunsAtTheTempo; EffectInstance_Test::effectsStartedApartAreOnTheSameBeat | covered | covered | high |
+| Spread; speed masters (engine) | SpreadLayer_Test (11); SpeedMasters_Test (all) | covered | covered | high |
+| Aim solver; line of sight; Dim lights that can't see | AimSolver_Test (9); BeamOcclusion_Test (14) | covered | covered | high |
+| Only transmit on the rig network | InputOutputMap_Test::rigNetworkHeldOffTheRigNetwork, ::rigNetworkSaveLoadRoundTrip; ArtNet_Test::rigNetworkGateHoldsEverySend; Wled_Test::rigNetworkGateIsDecidedOffTheSendTick | covered | covered | high |
+| Patches follow the network; offline patches kept and reconnect | InputOutputMap_Test::followsNetworkToAnotherMachine, ::offlinePatchIsInertAndListed, ::offlinePatchReconnectsWhenNetworkAppears | covered | covered | high |
+| Connections tree: devices, By universe, port picker, multi-patch, Undo Patch Change | ConnectionsTree_Test (59); PatchUndo_Test (17) | covered | covered | high |
+| Output trouble detection (Art-Net / E1.31), node IP setup | ArtNet_Test::sendHealth*, ::nodeWatch*, ::ipProgIsUnicastToAReachableNode; E131_Test::sustainedFailureIsReportedOnceAndRecovers | covered | covered | high |
+| WLED output, config check, backup lanterns | Wled_Test (all); WledConfigCheck_Test (4); WledDevices_Test (6) | covered | covered | high |
+| Power estimate, sources/circuits, max draw cap | PowerDistribution_Test; FixturePower_Test (6); Monitor_Test::measuringPowerDrivesEachStateAndKeepsTheReadings | covered | covered | high |
+| Power circuit Auto-assign and UPS runtime | none (logic lives in PowerDistributionWidget) | none | none | med |
+| Stop all ▸ fade and stop (engine) | MasterTimer_Test::fadeAndStopAllFadesTheOutputThenStops (new); MainBar_Test::fadeOneSecondAndStopFadesTheLightOut (new) | none | covered | high |
+| A last look held after a Show stops (Operate) | LastLookEffect_Test::holdSurvivesTheUniverseFrame, ::holdIsABaseUnderTheShow, ::aLaterCueTakesItsFixturesFromTheHold (new, B1 fix) | partial | covered | high |
+| A chaser deleted while the MasterTimer thread runs it | Chaser_Test::deletingAChaserWhileTheTimerRunsIsSafe (new), ::deletingARunningFunctionLetsGoOfItsChannels | partial | covered | high |
+| The show's LED maps read on the DMX thread while they are set | MonitorProperties_Test::anLedMapReadWhileItIsSetIsWhole (new) | none | covered | med |
+| Shows timeline engine: per-track intensity, solo / solo-safe, hold last, priority, show end | ShowRunner_Test::aSoloTrackPlaysAndTheOthersOnlyIfSoloSafe, ::holdLastKeepsTheLookThroughAGap, ::anOverrideTrackWinsAndABackgroundTrackYields, ::aTrackAtHalfIntensityPlaysAtHalf, ::anOverrideTrackPullsADimmerBelowANormalTrack, ::aParkBeatsAnOverrideTrack, ::theNormalTrackReturnsWhenTheOverrideItemEnds, ::theTrackFaderAndItsAttributeAreOneValue, ::aTrackIntensityIsSavedAndPlaysAfterLoad, ::theShowStopsAtItsConfiguredEnd (new; bugs B7, B9 fixed); Track_Test::newFlagsRoundTrip | partial | covered | high |
+| Show timecode follow, override, freeze | ShowRunner_Test::timecodeFollow, ::timecodeDriveAndFreeze; TimecodeSource_Test (all) | covered | covered | high |
+| GO on the beat / bar | SpeedMasters_Test::aGoLandsOnTheNextBeat, ::aGoOnTheBarWaitsForTheBar | covered | covered | high |
+| Chaser sub-cues | SubCues_Test (12) | covered | covered | high |
+
+## Import/Export
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Collect for Transfer | ShowEmbedding_Test::aCollectedFolderOpensCompleteAsQxw (App slot not driven) | partial | partial | med |
+| Eos import: wizard, mapper choices, cue lists into the Show Tree, magic sheets | EosImportWizard_Test::readsTheExport, ::choicesGoToTheMapper; EosImporter_Test::cueLists, ::realExportIntoShowTree, ::magicSheet | covered | covered | med |
+| Eos special circuits → output rules and Eos/ groups; $$Options X | EosImporter_Test::specialCircuits, ::circuitClassifier; EosImportWizard_Test::specialCircuitsPage; EosAsciiParser_Test::patchOptionsAndSubModes | covered | covered | high |
+| Eos subs become VC Playback sliders | EosImporter_Test::subsForTheConsole; EosImportWizard_Test::subFaders | covered | covered | med |
+| QXW import (palettes follow scenes) | QxwImporter_Test (all) | covered | covered | med |
+| Patch list CSV / PDF, labels | PatchList_Test; PatchListDialog_Test; PatchLabels_Test | covered | covered | low |
+| ⌘D dump DMX values into a function | DmxDumpFactoryProperties_Test (properties only) | partial | partial | med |
+
+## Show control
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| Cue numbers, main list, Renumber Cues (chaser editor), saved | ShowControl_Test::aStepsCueIsItsNumberOrItsPosition, ::cueNumbersAndTheMainListAreSaved; ShowControlUi_Test::theChaserEditorSetsCuesAndTheList | covered | covered | high |
+| Skip a step (playback); chaser editor skip UI | ShowControl_Test::skippedStepsArePassedOver, ::autoFollowPassesOverSkippedSteps (editor tick not driven) | partial | partial | med |
+| GO / LOAD / STOP / BACK / PAUSE / RESUME / RESET / ALL OFF | ShowControl_Test::goPlaysTheCueAndThenTheNext, ::loadPutsACueOnStandby, ::pauseResumeStopAndAllOff | covered | covered | high |
+| OSC decode / fire / listen settings; MSC decode, device, chosen input | ShowControl_Test::oscIsDecoded, ::oscFiresTheCue, ::mscIsDecoded, ::mscOnlyOnTheChosenInput; ShowControlUi_Test::oscFromTheNetworkFiresTheCue, ::editingThePageChangesTheListener | covered | covered | high |
+| Sub-cues from QLab (GO / LOAD / STOP 4.2, /subgo, /subback) | ShowControl_Test::aSubCueIsFoundByNumber, ::goASubCueByNumberPlaysItsCueFirst, ::oscSubGoAndSubBackStepTheCuePlaying, ::mscGoAndLoadASubCue | covered | covered | high |
+| Checking the hookup: last command, errors, port in use; timecode health | ShowControlUi_Test::aCommandReceivedShowsAsLast, ::aPortInUseShowsAnError, ::theTimecodeSourceAndHealth | covered | covered | med |
+| Auto Move in Black: one setting in three places; a new show resets it | MainBar_Test::moveInBlackIsOneSettingInThreePlaces; MarkPlanner_Test::theShowsMoveInBlackSavesLoadsAndResets | covered | covered | high |
+
+## Save/Load
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| .qlcc save / open round trip; .qxw opens; a missing file is an error | Autosave_Test::aQlccShowSavesAndOpensAgain, ::aMissingShowFileIsAnErrorNotAnEmptyShow; QxwImporter_Test | covered | covered | high |
+| Autosave writes a recovery copy that loads back; nothing when unmodified | Autosave_Test::aModifiedShowWritesARecoveryCopyThatLoadsBack, ::anUntitledShowsRecoveryCopyIsWhereStartUpLooks (new) | partial | covered | high |
+| Recovery offered at the next launch; saving / discarding removes the copy | Autosave_Test::aRecoveryFileIsKeptWhenThereIsNobodyToAsk, ::savingOrDiscardingRemovesTheRecoveryCopy (new); the prompt itself is untestable offscreen (seam needed) | none | partial | high |
+| Address clash loads unpatched and saves unchanged; inventory fields round-trip | Inventory_Test::aClashingFixtureLoadsUnpatchedAndSavesUnchanged, ::xmlRoundTripKeepsInventoryFields | covered | covered | high |
+| Output rules saved only when set; older readers skip them | OutputRules_Test::rulesRoundTripAsText, ::savedOnlyWhenSetAndSkippedByOlderReaders | covered | covered | high |
+| Park saved with the show, dropped by a new show, back on load | ProgrammerController_Test::aParkIsSavedWithTheShow (new) | none | covered | high |
+| Missing definition keeps make/model on save; show cache | Fixture_Test::aMissingDefinitionIsKeptNotLostOnSave, ::theShowCacheKeepsDefinitionsOnThisComputer; AppViews_Test::aShowsDefinitionsComeFromTheShowCache | covered | covered | high |
+| Saving with missing definitions asks first; footer Fetch Definitions gives them back | AppViews_Test::missingDefinitionsAreAskedAboutAndFetchedBack (new) | none | covered | high |
+| Online-only cloud files: noted not waited on; Download Now / Skip | QLCFile_Test::onlineOnlyFilesAreNotedNotWaitedOn; ProgrammingManager_Test::filesInCloudStorageNotHereAreAWarning (Download Now / Skip need a cloud stub) | partial | partial | high |
+| .qlcc embeds non-shipped files; another computer: same / different / Use This Computer's / Install / Undo | ShowEmbedding_Test (all); ShowDifferences_Test (all); DefinitionUpdates_Test::showDefinitionsListsEverythingAndUndoes | covered | covered | high |
+| Units: show stored exactly, the user's choice seeds from the first show | MeasurementUnits_Test::seedFromFirstShow, ::roundTripStoredMm; MonitorProperties_Test::gridSizeSavedWholeAndExact | covered | covered | high |
+| Stale deck Face corrected on load; hung fixtures straightened | MonitorProperties_Test::aChosenFaceSurvivesSaveAndRepair, ::aFixtureOnAHangerHangsStraight | covered | covered | high |
+| A course show built with the mouse saves, opens again and plays | CourseShow_Test::aMouseBuiltShowSavesOpensAndPlays (new) | partial | covered | high |
+| Track flags persist | Track_Test::newFlagsRoundTrip, ::garbageAttrsAreSafe | covered | covered | high |
+
+## Course
+
+| Feature | Test(s) | Before | After | Risk |
+|---|---|---|---|---|
+| L0.2 Rig Overview opens, Run tab GO ×3 | CourseShow_Test::lessonZeroTwoTheVirtualStage | covered | covered | low |
+| L0.2 room light and views actually switch the render | CourseShow_Test::lessonZeroTwoTheVirtualStage (lists the combos only) | partial | partial | low |
+| L1.1 production, list, cues, drops, Set in this cue, typed, plays in the Run tab | CourseShow_Test::lessonOneWithTheMouse, ::lessonOneSetInThisCue, ::lessonOneTyped, ::lessonOnePlaysInTheRunTab | covered | covered | high |
+| L1.2 Set to, Level one-off, Make reusable, undo/redo, cue looks, colour picker | CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse, ::lessonTwoColourPicker | covered | covered | high |
+| L1.3 aim, Block cue (⊘ badge, dark stage), auto-open spots, extensions | CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse (Block badge and dark stage now asserted), ::lessonThreeExtension | partial | covered | high |
+| L1.4 fades, hold, follow in the Run tab | CourseShow_Test::lessonFourPlaysTheFades | covered | covered | high |
+| L1.5 Operate, GO / Back / LOAD / jump / Stop; Design while running asks | CourseShow_Test::lessonFiveOperate, ::lessonFiveRunsTheShow, ::lessonFiveDesignWhileRunningAsksFirst (new) | partial | covered | high |
+| Every lesson's Save As keeps the student's show | CourseShow_Test::aMouseBuiltShowSavesOpensAndPlays (new) | partial | covered | high |
+| The teaching show is safe (no outputs, embedded definitions, groups / palettes / targets) | CourseShow_Test::theTeachingShowIsSafeAndComplete | covered | covered | high |
+
+## Part 2: not tested, and why
+
+- **Command line (`-o`, `-p`, `-k`, `-w`; a bare file name is not opened).**
+  `parseArgs()` lives in `main/main.cpp`, which no test links. The seam
+  needed: move it into the ui library as
+  `QLCArgs::parse(const QStringList &)`.
+- **The autosave recovery prompt.** `App::checkAutosaveRecovery()` returns
+  before asking on the offscreen and minimal platforms, whatever the
+  environment says. What is tested: the copy is written, kept with nobody to
+  ask, and removed by Save or Discard. The seam needed: a
+  `QLC_RECOVERY_ANSWER=yes|no` override checked before the platform test.
+  Removal of the copy at a clean quit (`~App`) would need a second App in
+  the process.
+- **Cloud storage Download Now / Skip.** These need a stand-in for an
+  online-only file provider. Only the "noted, not waited on" startup path is
+  tested.
+- **HID hotplug and line numbering.** `plugins/hid` has no test directory
+  and needs a stubbed device enumerator.
+- **The Lighting Studio's rig undo has no redo,** so there is nothing to test
+  there.
+- **Audio and MIDI effects** need a fake spectrum / note source. **Power
+  circuit Auto-assign** lives in `PowerDistributionWidget`; it would be
+  testable once its bin-packing moves into the engine.
+- **Low-risk UI conveniences** were left for after the release. These are the
+  rows marked *none* or *partial* with risk *low* above: the grid editor's
+  marquee and arrow picker, Library pins, ⌘A in the outline, Look Editor
+  sub-pages, outline contrast, and the Rig Overview camera mouse controls.
+
