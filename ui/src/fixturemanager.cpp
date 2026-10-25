@@ -65,6 +65,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "venuecorrections.h"
 #include "ledlayouteditor.h"
 #include "measurementunits.h"
 #include <QShortcut>
@@ -235,6 +236,11 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
 
     connect(m_doc, SIGNAL(loaded()),
             this, SLOT(slotDocLoaded()));
+
+    // Another venue's house rig came in, or went (VENUES.md): the tree follows.
+    if (m_doc->programmer() != NULL)
+        connect(m_doc->programmer()->venueCorrections(), &VenueCorrections::activeVenueChanged, this,
+                [this]() { updateView(); });
 
     slotModeChanged(m_doc->mode());
 

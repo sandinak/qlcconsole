@@ -30,6 +30,7 @@
 #include <QTabWidget>
 #include <QLineEdit>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QToolBar>
 #include <QAction>
 #include <QTimer>
@@ -43,6 +44,7 @@
 #include "universeitemwidget.h"
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
+#include "rigowner.h"
 #include "universe.h"
 #include "apputil.h"
 #include "inputoutputmap.h"
@@ -217,6 +219,31 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_uniPassthroughCheck->setLayoutDirection(Qt::RightToLeft);
     m_uniPassthroughCheck->setFont(font);
     m_toolbar->addWidget(m_uniPassthroughCheck);
+
+    /* The universe's slot in the show (board Q138, VENUES.md): Tour, or
+       House -- a venue fills it with its house rig. */
+    QLabel *slotLabel = new QLabel(tr("  Slot:"));
+    slotLabel->setFont(font);
+    m_toolbar->addWidget(slotLabel);
+    m_uniSlotCombo = new QComboBox(this);
+    m_uniSlotCombo->setObjectName(QStringLiteral("uniSlotOwner"));
+    m_uniSlotCombo->addItem(RigOwner::displayName(RigOwner::Tour), int(RigOwner::Tour));
+    m_uniSlotCombo->addItem(RigOwner::displayName(RigOwner::House), int(RigOwner::House));
+    m_uniSlotCombo->setToolTip(tr("Which kind of fixture the show means to put in this universe: the tour "
+                                  "package, or a venue's house rig. The clash check lists a fixture in the "
+                                  "other kind's slot. With a venue applied, an output changed here is "
+                                  "that venue's (its file), and the show keeps its own."));
+    m_toolbar->addWidget(m_uniSlotCombo);
+    connect(m_uniSlotCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (m_list->currentItem() == NULL)
+            return;
+        const int uniIdx = m_list->currentRow();
+        const RigOwner::Owner o = RigOwner::Owner(m_uniSlotCombo->currentData().toInt());
+        if (m_ioMap->universeSlotOwner(uniIdx) == o)
+            return;
+        m_ioMap->setUniverseSlotOwner(uniIdx, o);
+        m_doc->setModified();
+    });
 
     m_splitter->widget(0)->layout()->addWidget(m_toolbar);
 
@@ -400,6 +427,7 @@ void InputOutputManager::updateList()
         m_uniNameEdit->setEnabled(true);
         m_uniNameEdit->setText(m_ioMap->getUniverseNameByIndex(0));
         m_uniPassthroughCheck->setChecked(m_ioMap->getUniversePassthrough(0));
+        m_uniSlotCombo->setCurrentIndex(qMax(0, m_uniSlotCombo->findData(int(m_ioMap->universeSlotOwner(0)))));
     }
 }
 
@@ -554,6 +582,7 @@ void InputOutputManager::slotCurrentItemChanged()
     int uniIdx = m_list->currentRow();
     m_uniNameEdit->setText(m_ioMap->getUniverseNameByIndex(uniIdx));
     m_uniPassthroughCheck->setChecked(m_ioMap->getUniversePassthrough(uniIdx));
+    m_uniSlotCombo->setCurrentIndex(qMax(0, m_uniSlotCombo->findData(int(m_ioMap->universeSlotOwner(uniIdx)))));
 }
 
 void InputOutputManager::slotMappingChanged()

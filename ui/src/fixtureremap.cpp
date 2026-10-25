@@ -532,6 +532,7 @@ void FixtureRemap::slotCloneSourceFixture()
     tgtFix->setIPAddress(srcFix->ipAddress());
     tgtFix->setTransport(srcFix->transport());
     tgtFix->setStageLook(srcFix->stageLook());
+    tgtFix->setOwner(srcFix->owner());
     tgtFix->setName(srcFix->name());
 
     /* Set a fixture definition & mode if they were selected.

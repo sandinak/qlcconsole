@@ -152,6 +152,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "rigowner.h"
 #include "shrinkablebar.h"
 #include "patchplanner.h"
 #include "ledlayouteditor.h"
@@ -438,6 +439,26 @@ void Monitor::initGraphicsView()
     {
         connect(pc->venueCorrections(), &VenueCorrections::correctionsChanged, this, &Monitor::refreshNeedsFocus);
         connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged, this, &Monitor::refreshNeedsFocus);
+        /* Another venue's house rig came in (VENUES.md): its fixtures on the
+           plot where that venue has them, the overlay redone. */
+        connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged, this, [this]() {
+            if (m_graphicsView == NULL)
+                return;
+            foreach (quint32 fid, m_props->fixtureItemsID())
+            {
+                if (m_doc->fixture(fid) == NULL || m_graphicsView->fixtureItemForId(fid) != NULL)
+                    continue;
+                const PreviewItem item = m_props->fixtureItem(fid, 0, 0);
+                m_graphicsView->addFixture(fid, QPointF(item.m_position.x(), item.m_position.y()));
+                m_graphicsView->setFixtureGelColor(fid, item.m_color);
+                m_graphicsView->setFixtureRotation(fid, item.m_rotation.y());
+            }
+            applyMapView(m_mapView);
+        });
+        connect(pc->venueCorrections(), &VenueCorrections::houseRigChanged, this, [this]() {
+            if (m_graphicsView != NULL && m_mapView == ViewOwner)
+                applyMapView(m_mapView);
+        });
     }
     m_graphicsView->setRigRestorer([this](const QByteArray &snap) { restoreRig(snap); });
     m_graphicsView->setRigSnapshotter([this]() { return rigSnapshot(); });
@@ -1223,6 +1244,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_overlayCombo->addItem(tr("Power"),      ViewPower);
     m_overlayCombo->addItem(tr("DMX"),        ViewDMX);
     m_overlayCombo->addItem(tr("Network"),    ViewNet);
+    m_overlayCombo->addItem(tr("Owner"),      ViewOwner);
     m_overlayCombo->addItem(tr("Stage only"), ViewStage);
     m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(m_mapView)));
     m_overlayCombo->setToolTip(tr("Recolour / filter the plot — click to cycle, "
@@ -2674,6 +2696,32 @@ void Monitor::applyMapView(int view)
                 it->setToolTip(tr("%1 · Universe %2 · ⚠ no node port carries this universe -- "
                                   "no cable run reaches it").arg(t).arg(fx->universe() + 1));
             }
+        }
+        m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
+    }
+    else if (view == ViewOwner)
+    {
+        /* Who each fixture belongs to (board Q137, VENUES.md): the tour
+           package blue, the house rig amber, rentals violet. */
+        const QHash<quint32, RigOwner::Owner> owners = RigOwner::effectiveAll(m_doc);
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
+            if (it == NULL)
+                continue;
+            const RigOwner::Owner o = owners.value(fx->id(), RigOwner::Tour);
+            const QColor c = o == RigOwner::House ? QColor(235, 170, 50)
+                           : o == RigOwner::Rental ? QColor(170, 110, 230)
+                                                   : QColor(70, 140, 230);
+            it->setViewTint(c);
+            quint32 from = UINT_MAX;
+            RigOwner::effective(m_doc, fx->id(), &from);
+            const FixtureGroup *grp = from != UINT_MAX ? m_doc->fixtureGroup(from) : NULL;
+            QString tip = grp != NULL ? tr("%1 · %2 (from %3)").arg(fx->name(), RigOwner::displayName(o), grp->name())
+                                      : tr("%1 · %2").arg(fx->name(), RigOwner::displayName(o));
+            if (m_doc->isVenueFixture(fx->id()))
+                tip += tr(" · in %1's file").arg(m_doc->programmer()->venueCorrections()->activeVenue());
+            it->setToolTip(tip);
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
     }

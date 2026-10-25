@@ -32,6 +32,8 @@
 #include "universecombo.h"
 #include "networktopology.h"
 #include "inputoutputmap.h"
+#include "programmercontroller.h"
+#include "venuecorrections.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -830,6 +832,19 @@ void PatchInventoryDialog::refreshConflicts()
         for (quint32 i = 0; i < fx->channels(); i++)
             taken.insert(fx->universeAddress() + i, 0);
     }
+    /* Channels the venue applied keeps for itself (VENUES.md section 5):
+       nothing of ours goes there, so a row there is a conflict. */
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    if (venues->isActive())
+    {
+        foreach (const VenueRig::NotOurs &n, venues->notOurs(venues->activeVenue()))
+        {
+            const int from = n.whole() ? 0 : n.from;
+            const int to = n.whole() ? 511 : n.to;
+            for (int c = from; c <= to; c++)
+                taken.insert((n.universe << 9) | quint32(c), UINT_MAX);
+        }
+    }
 
     const QList<PatchPlanner::Assignment> plan = currentPlan();
     QSet<int> bad;
@@ -893,8 +908,23 @@ void PatchInventoryDialog::refreshConflicts()
             newUnis++;
         }
     }
-    m_summary->setText(tr("%1 fixture(s) to patch or move, %2 new universe(s), %3 conflict(s).")
-                           .arg(changes).arg(newUnis).arg(bad.size()));
+    QString summary = tr("%1 fixture(s) to patch or move, %2 new universe(s), %3 conflict(s).")
+                          .arg(changes).arg(newUnis).arg(bad.size());
+    // The venue's clashes with the show (VENUES.md section 6), as they are now.
+    if (venues->isActive())
+    {
+        const QList<VenueRig::Clash> clashes = venues->clashes(venues->activeVenue());
+        if (!clashes.isEmpty())
+        {
+            QStringList lines;
+            foreach (const VenueRig::Clash &c, clashes.mid(0, 4))
+                lines << c.text;
+            summary += QStringLiteral("\n") + tr("%1 clashes with the show: %2%3")
+                           .arg(venues->activeVenue(), lines.join(QStringLiteral("; ")),
+                                clashes.size() > 4 ? tr(" ... (%1 in all)").arg(clashes.size()) : QString());
+        }
+    }
+    m_summary->setText(summary);
     m_apply->setEnabled(bad.isEmpty() && changes > 0);
 }
 

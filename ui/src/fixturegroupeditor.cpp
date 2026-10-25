@@ -20,6 +20,8 @@
 #include <QTableWidgetItem>
 #include <QTableWidget>
 #include <QPushButton>
+#include <QComboBox>
+#include <QLabel>
 #include <QInputDialog>
 #include <QMenu>
 #include <QHeaderView>
@@ -41,9 +43,11 @@
 #include <QKeySequence>
 #include <QDrag>
 #include <QTimer>
+#include <QSignalBlocker>
 #include <climits>
 
 #include "fixturegroupeditor.h"
+#include "rigowner.h"
 #include "fixturetreewidget.h"
 #include "fixtureselection.h"
 #include "fixturegroup.h"
@@ -177,6 +181,38 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     addGroupBtn->setDefault(false);
     horizontalLayout->addWidget(addGroupBtn);
     connect(addGroupBtn, SIGNAL(clicked()), this, SLOT(slotAddGroupBlock()));
+
+    /* Who the group's fixtures belong to (board Q137, VENUES.md): the tour
+       package, or the house rig of the venue it is in. Each fixture follows
+       unless Fixture Properties says otherwise. */
+    QLabel *ownerLabel = new QLabel(tr("Owner:"), this);
+    horizontalLayout->addWidget(ownerLabel);
+    m_ownerCombo = new QComboBox(this);
+    m_ownerCombo->setObjectName(QStringLiteral("fgOwner"));
+    m_ownerCombo->addItem(tr("Not set (Tour)"), int(RigOwner::Unset));
+    foreach (RigOwner::Owner o, RigOwner::owners())
+        m_ownerCombo->addItem(RigOwner::displayName(o), int(o));
+    m_ownerCombo->setToolTip(tr("Tour and Rental fixtures travel with the show. House fixtures are the "
+                                "room's: with a venue applied they are kept in that venue's file, and "
+                                "switching venue swaps them. The group's fixtures follow it unless one "
+                                "says otherwise in Fixture Properties."));
+    m_ownerCombo->setCurrentIndex(qMax(0, m_ownerCombo->findData(int(m_grp->owner()))));
+    horizontalLayout->addWidget(m_ownerCombo);
+    connect(m_ownerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        const RigOwner::Owner o = RigOwner::Owner(m_ownerCombo->currentData().toInt());
+        if (o == m_grp->owner())
+            return;
+        m_grp->setOwner(o);
+        m_doc->setModified();
+    });
+    connect(m_grp, &FixtureGroup::changed, this, [this]() {
+        const int at = m_ownerCombo->findData(int(m_grp->owner()));
+        if (at >= 0 && at != m_ownerCombo->currentIndex())
+        {
+            const QSignalBlocker block(m_ownerCombo);
+            m_ownerCombo->setCurrentIndex(at);
+        }
+    });
 
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);

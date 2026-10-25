@@ -18,6 +18,7 @@
 #include <QPushButton>
 #include <QMessageBox>
 #include <QComboBox>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QLabel>
 #include <QStandardItemModel>
@@ -28,6 +29,8 @@
 #include "colourswatchbutton.h"
 #include "monitorproperties.h"
 #include "fixturefields.h"
+#include "rigowner.h"
+#include "fixturegroup.h"
 #include "apputil.h"
 #include "wledconfigcheck.h"
 #include "powerprofiledialog.h"
@@ -160,6 +163,27 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
         foreach (quint32 fid, m_fids)
             if (Fixture *fx = m_monitor->m_doc->fixture(fid))
                 fx->setStageLook(look);     // changed() -> the plot, the lists
+        finishEdit();
+    });
+
+    /* Who it belongs to (board Q137, VENUES.md): the tour package or the
+       venue's house rig. Not set follows its group. */
+    m_owner = new QComboBox(parent);
+    m_owner->setObjectName(QStringLiteral("fixtureOwner"));
+    m_owner->setToolTip(tr("Tour and Rental fixtures travel with the show. A House fixture is the room's: "
+                           "with a venue applied it is kept in that venue's file, and switching venue "
+                           "swaps it. \"From its group\" follows the owner set on its fixture group."));
+    form->addRow(tr("Owner:"), m_owner);
+    connect(m_owner, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (m_loading || m_fids.isEmpty() || comboIsMixed(m_owner))
+            return;
+        const QVariant v = m_owner->currentData(Qt::UserRole);
+        if (!v.isValid())
+            return;
+        emit aboutToEdit(QStringLiteral("owner"));
+        foreach (quint32 fid, m_fids)
+            if (Fixture *fx = m_monitor->m_doc->fixture(fid))
+                fx->setOwner(RigOwner::Owner(v.toInt()));
         finishEdit();
     });
 
@@ -531,7 +555,8 @@ void FixtureFields::row(QWidget *w, bool visible)
 
 void FixtureFields::hideAll()
 {
-    for (QWidget *w : { static_cast<QWidget *>(m_look), static_cast<QWidget *>(m_mountOn), static_cast<QWidget *>(m_towerPos),
+    for (QWidget *w : { static_cast<QWidget *>(m_look), static_cast<QWidget *>(m_owner),
+                        static_cast<QWidget *>(m_mountOn), static_cast<QWidget *>(m_towerPos),
                         static_cast<QWidget *>(m_colour), static_cast<QWidget *>(m_orientation),
                         static_cast<QWidget *>(m_face), static_cast<QWidget *>(m_placement),
                         static_cast<QWidget *>(m_angle), static_cast<QWidget *>(m_tilt),
@@ -652,6 +677,30 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
         return o != nullptr && o->stageLook() == fx->stageLook(); }));
     m_look->blockSignals(false);
     row(m_look, true);
+
+    // Owner: its own, or "From its group" saying what that gives.
+    {
+        const QSignalBlocker block(m_owner);
+        m_owner->clear();
+        const RigOwner::Owner own = fx->owner();
+        QString fromText = tr("From its group");
+        if (own == RigOwner::Unset)
+        {
+            quint32 from = UINT_MAX;
+            const RigOwner::Owner eff = RigOwner::effective(doc, m_shown, &from);
+            const FixtureGroup *grp = from != UINT_MAX ? doc->fixtureGroup(from) : nullptr;
+            fromText = grp != nullptr ? tr("From %1: %2").arg(grp->name(), RigOwner::displayName(eff))
+                                      : tr("From its group (%1)").arg(RigOwner::displayName(eff));
+        }
+        m_owner->addItem(fromText, int(RigOwner::Unset));
+        foreach (RigOwner::Owner o, RigOwner::owners())
+            m_owner->addItem(RigOwner::displayName(o), int(o));
+        m_owner->setCurrentIndex(qMax(0, m_owner->findData(int(own), Qt::UserRole)));
+        comboMixed(m_owner, differs([doc, fx](quint32 f) {
+            const Fixture *o = doc->fixture(f);
+            return o != nullptr && o->owner() == fx->owner(); }));
+    }
+    row(m_owner, true);
 
     m_mountOn->setText(many ? tr("%1 (and %n more)", "", m_fids.size() - 1)
                                   .arg(m_monitor->mountDescription(rp, m_shown))

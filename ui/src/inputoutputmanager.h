@@ -139,6 +139,7 @@ private:
     QAction* m_deleteUniverseAction;
     QLineEdit *m_uniNameEdit;
     QCheckBox *m_uniPassthroughCheck;
+    class QComboBox *m_uniSlotCombo = nullptr;  ///< the universe's slot: Tour or House
     QAction* m_rescanAction;
     QListWidget *m_list;
     QLabel *m_onboardingHint; //!< shown when no universe has any input/output patched

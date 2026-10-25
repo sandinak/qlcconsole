@@ -49,6 +49,7 @@
 #include <QTimer>
 
 #include "focuscallsdialog.h"
+#include "venuerigdialog.h"
 #include "focusreport.h"
 #include "operatorvoice.h"
 #include "focuscallcue.h"
@@ -158,6 +159,16 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_corrections->setToolTip(tr("See and clear the applied venue's corrections, one light at a time"));
     for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue, m_corrections })
         venueRow->addWidget(b);
+    /* What the venue owns (board Q137/Q138, VENUES.md): its house rig, the
+       patch of every universe in this room, what is not ours. */
+    QPushButton *venueRig = new QPushButton(tr("Rig and universes\342\200\246"), this);
+    venueRig->setObjectName(QStringLiteral("fcVenueRig"));
+    venueRig->setToolTip(tr("This venue's house rig, its outputs for each universe, the channels it keeps, "
+                            "and the clash check"));
+    venueRow->addWidget(venueRig);
+    connect(venueRig, &QPushButton::clicked, this, [this]() {
+        VenueRigDialog::open(m_doc, this, venueAt(m_venue->currentIndex()));
+    });
     vl->addLayout(venueRow);
     // Who is focusing, for the report (Q134), and the report itself.
     QHBoxLayout *reportRow = new QHBoxLayout;
@@ -246,6 +257,9 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
 
     fillVenues(QString());
     connect(m_applyVenue, &QPushButton::clicked, this, [this]() {
+        // Its clashes with the show first, before it goes live (VENUES.md section 6).
+        if (!VenueRigDialog::confirmClashes(m_doc, this, venueChoice()))
+            return;
         QString why;
         if (!switchVenue(venueChoice(), &why))
             QMessageBox::information(this, windowTitle(), why);

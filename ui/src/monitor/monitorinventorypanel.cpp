@@ -27,6 +27,7 @@
 #include "monitorgraphicsview.h"
 #include "qlcfixturedef.h"
 #include "fixture.h"
+#include "rigowner.h"
 #include "doc.h"
 #include "itemicons.h"
 
@@ -212,8 +213,13 @@ void MonitorInventoryPanel::reload()
             foreach (Fixture *fx, fxs)
             {
                 QTreeWidgetItem *leaf = new QTreeWidgetItem(dNode);
-                leaf->setText(0, fx->connection() == Fixture::Network
-                                     ? tr("%1  [network]").arg(fx->name()) : fx->name());
+                QString label = fx->connection() == Fixture::Network
+                                ? tr("%1  [network]").arg(fx->name()) : fx->name();
+                // Its owner when it is not the tour's (VENUES.md): "[House]".
+                const RigOwner::Owner owner = RigOwner::effective(m_doc, fx->id());
+                if (owner != RigOwner::Tour)
+                    label += QStringLiteral("  [%1]").arg(RigOwner::displayName(owner));
+                leaf->setText(0, label);
                 leaf->setIcon(0, ItemIcons::fixtureIcon(fx));
                 leaf->setData(0, ROLE_FID, fx->id());
                 leaf->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
