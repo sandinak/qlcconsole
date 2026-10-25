@@ -43,6 +43,9 @@ private slots:
     void theVenueManagerOpensIt();
     /** The Connections toolbar's Slot picker sets the universe's slot. */
     void theConnectionsSlotPicker();
+    /** Apply now on a venue that clashes asks first: Cancel leaves it off
+     *  and the patch alone; Apply anyway goes live, the clash unpatched. */
+    void aClashingVenueAsksBeforeItIsApplied();
 
 private:
     Doc *m_doc = nullptr;

@@ -78,6 +78,12 @@ private slots:
      *  a second A goes on (as Build's shared palette). */
     void aReusableLayerWarnsFirst();
 
+    /** Quiet in Operate on a real running list: no preview, no blink, no
+     *  dim; moved shows, kept holds; the cue takes it at its next GO. */
+    void operateIsQuietOnARunningList();
+    /** Holding (Q140): no stick, no button; released, it moves again. */
+    void holdingTakesNoStick();
+
 private:
     Doc *m_doc = nullptr;
     QList<quint32> m_spots;

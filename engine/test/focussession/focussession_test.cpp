@@ -19,13 +19,16 @@
 #include <QSignalSpy>
 #include <QtMath>
 
-#define private public                  // MasterTimer::timerTick()
-#include "mastertimer.h"
-#undef private
-#include "focussession_test.h"
+#include <QtCore>
 #define protected public                // Universe::processFaders()
 #include "universe.h"
 #undef protected
+#define private public                  // MasterTimer::timerTick(), the joystick tick's clock
+#include "mastertimer.h"
+#include "programmercontroller.h"
+#undef private
+#include "focussession_test.h"
+#include "qlccapability.h"
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "iopluginstub.h"
@@ -790,8 +793,13 @@ void FocusSession_Test::theControllerReachesItThroughTheProgrammer()
     // The right stick, finely.
     emit iom->inputValueChanged(0, 3, 0, QString());
     const float tiltBefore = s->liveOffset(b->id()).tilt;
+    /* Each tick its nominal 20 ms (the tick counts a late one as up to
+       0.1 s held), so the "finely" bound below holds on a loaded machine. */
     for (int i = 0; i < 10; ++i)
+    {
+        pc->m_joyTickClock.invalidate();
         pc->applyDesignJoystick();
+    }
     QVERIFY(s->liveOffset(b->id()).tilt > tiltBefore);
     QVERIFY(s->liveOffset(b->id()).tilt - tiltBefore < 0.25f);
 
@@ -1089,6 +1097,152 @@ void FocusSession_Test::theBeamIsSetWithinTheLensRange()
     QVERIFY(!FocusSession::repeats(FocusSession::controlFor(GamepadRole::RB)));
     s->stop();
     QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 25.0f);   // the saved one stays
+}
+
+/* The changelog (Q140): "the focus look also takes gobo, prism and frost
+   out" -- on the universe, over a running cue that has them in. */
+void FocusSession_Test::theFocusLookTakesTheBeamOut()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Focus Gobo Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity,
+                                         QLCChannel::Gobo, QLCChannel::Prism, QLCChannel::Beam };
+    const char *names[] = { "Pan", "Tilt", "Dimmer", "Gobo wheel", "Prism", "Frost" };
+    QList<QLCChannel *> chans;
+    QLCFixtureHead head;
+    for (int k = 0; k < 6; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+        chans << ch;
+    }
+    chans[3]->addCapability(new QLCCapability(0, 7, "Open"));
+    chans[3]->addCapability(new QLCCapability(8, 15, "Gobo 1"));
+    chans[3]->addCapability(new QLCCapability(16, 255, "Gobo 2"));
+    chans[4]->addCapability(new QLCCapability(0, 9, "No prism"));
+    chans[4]->addCapability(new QLCCapability(10, 255, "3-facet"));
+    // The frost: a plain 0 (none) .. 255 (full), no capabilities.
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Gobo spot");
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(0);
+    fx->setAddress(40);
+    QVERIFY(m_doc->addFixture(fx));
+    m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(2000.0f, 2000.0f, 5.0f));
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(4.0f, 6.0f, 0.0f));
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+
+    // A running cue with a gobo in, the prism in and full frost.
+    QSharedPointer<GenericFader> cue = uni->requestFader();
+    const QList<QPair<quint32, uchar>> cueHas = { { 3, 200 }, { 4, 150 }, { 5, 255 } };
+    for (const QPair<quint32, uchar> &c : cueHas)
+    {
+        GenericFader::ChannelRef fc = cue->getChannelFader(m_doc, uni, fx->id(), c.first);
+        fc->setStart(c.second);
+        fc->setCurrent(c.second);
+        fc->setTarget(c.second);
+    }
+    uni->processFaders();
+    QCOMPARE(int(uni->preGMValue(40 + 3)), 200);
+
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->start(optionsFor({ fx->id() }, mark->id())));
+    for (int i = 0; i < 3; ++i)
+    {
+        m_doc->masterTimer()->timerTick();
+        uni->processFaders();
+    }
+    // The bare beam: the gobo wheel open, no prism, no frost.
+    QCOMPARE(int(uni->preGMValue(40 + 3)), 3);       // the middle of "Open" 0-7
+    QCOMPARE(int(uni->preGMValue(40 + 4)), 4);       // the middle of "No prism" 0-9
+    QCOMPARE(int(uni->preGMValue(40 + 5)), 0);
+    QVERIFY(uni->preGMValue(40 + 2) > 0);            // and lit
+
+    // Stopped, the cue has its beam back.
+    s->stop();
+    m_doc->masterTimer()->timerTick();
+    uni->processFaders();
+    for (const QPair<quint32, uchar> &c : cueHas)
+        QCOMPARE(int(uni->preGMValue(40 + int(c.first))), int(c.second));
+    uni->dismissFader(cue);
+}
+
+/* A fixed light's Save is undone like a moving head's (the changelog's
+   Save/Undo for every light Focus mode works): back to the aim the save
+   replaced, then to the light as it was -- not aimed, not checked. */
+void FocusSession_Test::aFixedLightsSaveIsUndone()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Undo Par");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim); mode->insertChannel(dim, 0);
+    def->addMode(mode);
+    Fixture *par = new Fixture(m_doc);
+    par->setName("FOH 2");
+    par->setFixtureDefinition(def, mode);
+    par->setAddress(20);
+    QVERIFY(m_doc->addFixture(par));
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(4000, 0, 5));
+
+    FocusSession::Options o;
+    o.fixtures = { par->id() };
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->start(o));
+    QVERIFY(s->isFixedLight(par->id()));
+    QVERIFY(!s->canUndo());
+    m_doc->resetModified();
+
+    // First save: 2 m downstage.
+    for (int i = 0; i < 4; ++i)
+        s->nudge(0.0f, -1.0f);
+    s->save();
+    QVERIFY(m_doc->isModified());
+    QVERIFY(s->isChecked(par->id()));
+    const FixtureRigProps first = props->fixtureRigProps(par->id());
+    QVERIFY(first.fixedAim);
+    // Second save: 1 m toward stage left as well.
+    s->nudge(2.0f, 0.0f);
+    s->save();
+    const FixtureRigProps second = props->fixtureRigProps(par->id());
+    QVERIFY(qAbs(second.panZeroDir - first.panZeroDir) > 1.0f);
+    QVector3D at;
+
+    // Undo: the first save's aim, where it lands with it.
+    QVERIFY(s->undoSave());
+    FixtureRigProps rp = props->fixtureRigProps(par->id());
+    QVERIFY(rp.fixedAim);
+    QVERIFY2(qAbs(rp.panZeroDir - first.panZeroDir) < 0.01f, qPrintable(QString::number(rp.panZeroDir)));
+    QVERIFY(qAbs(rp.aimDown - first.aimDown) < 0.01);
+    QVERIFY(s->referencePoint(par->id(), at));
+    QVERIFY2(qAbs(at.x() - 4.0f) < 1e-2f && qAbs(at.y() - 2.0f) < 1e-2f,
+             qPrintable(QString("%1, %2").arg(at.x()).arg(at.y())));
+    QVERIFY(!s->isDirty(par->id()));
+    // Undo again: as it was before the session -- not aimed, not checked.
+    QVERIFY(s->undoSave());
+    QVERIFY(!props->fixtureRigProps(par->id()).fixedAim);
+    QVERIFY(!s->isChecked(par->id()));
+    QVERIFY(s->referencePoint(par->id(), at));
+    QVERIFY(qAbs(at.y()) < 1e-2f);                   // straight down again
+    QVERIFY(!s->undoSave());
+    s->stop();
+    QVERIFY(!props->fixtureRigProps(par->id()).fixedAim);
 }
 
 QTEST_MAIN(FocusSession_Test)

@@ -352,6 +352,126 @@ void FocusMode_Test::theKeyboardIgnoresTheController()
     QVERIFY(s->liveOffset(first).pan > 0.1f);
 }
 
+/* The changelog (Q140, Q103): H holds every light (and again lets go),
+   and on the keyboard , . spot down / flood out the zoom and ; ' make the
+   focus softer / sharper -- keys on the Focus mode panel. */
+void FocusMode_Test::theKeysHoldZoomAndFocus()
+{
+    // A wash with a 10-40 degree zoom channel and a focus channel.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Focus Map Zoom Wash");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("5ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity,
+                                         QLCChannel::Beam, QLCChannel::Beam };
+    const QLCChannel::Preset presets[] = { QLCChannel::Custom, QLCChannel::Custom, QLCChannel::Custom,
+                                           QLCChannel::BeamZoomSmallBig, QLCChannel::BeamFocusNearFar };
+    const char *names[] = { "Pan", "Tilt", "Dimmer", "Zoom", "Focus" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 5; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        if (presets[k] != QLCChannel::Custom)
+            ch->setPreset(presets[k]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(10.0);
+    ph.setLensDegreesMax(40.0);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *wash = new Fixture(m_doc);
+    wash->setName("Wash 1");
+    wash->setFixtureDefinition(def, mode);
+    wash->setUniverse(0);
+    wash->setAddress(200);
+    QVERIFY(m_doc->addFixture(wash));
+    const quint32 washId = wash->id();
+    m_doc->monitorProperties()->setFixturePosition(washId, 0, 0, QVector3D(3000.0f, 2000.0f, 5.0f));
+
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor({ washId }, m_target), &why, int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QCOMPARE(s->beamKind(washId), FocusSession::ZoomChannel);
+    QVERIFY(s->hasFocusControl(washId));
+
+    // The beam: , narrower (spot down), . wider (flood out).
+    double deg = 0.0, lo = 0.0, hi = 0.0;
+    QVERIFY(s->beamAngle(washId, deg, lo, hi));
+    const double startDeg = deg;
+    QTest::keyClick(panel, Qt::Key_Comma);
+    QVERIFY(s->beamAngle(washId, deg, lo, hi));
+    QCOMPARE(deg, startDeg - 1.0);
+    QTest::keyClick(panel, Qt::Key_Period);
+    QTest::keyClick(panel, Qt::Key_Period);
+    QVERIFY(s->beamAngle(washId, deg, lo, hi));
+    QCOMPARE(deg, startDeg + 1.0 > hi ? hi : startDeg + 1.0);
+    QTest::keyClick(panel, Qt::Key_Comma, Qt::ShiftModifier);      // 5 at a time
+    QVERIFY(s->beamAngle(washId, deg, lo, hi));
+    QVERIFY(deg < startDeg - 3.0);
+    const uchar zoomSent = s->pendingWrites().value(qMakePair(0, 203));
+    QCOMPARE(int(zoomSent), qRound((deg - lo) / (hi - lo) * 255.0));
+
+    // The focus: ' sharper, ; softer, from where it is.
+    double focus = 0.0;
+    QTest::keyClick(panel, Qt::Key_Apostrophe);
+    QVERIFY(s->focusLevel(washId, focus));
+    const double sharper = focus;
+    QTest::keyClick(panel, Qt::Key_Semicolon);
+    QTest::keyClick(panel, Qt::Key_Semicolon);
+    QVERIFY(s->focusLevel(washId, focus));
+    QVERIFY(qAbs(focus - (sharper - 0.04)) < 1e-6);
+    QCOMPARE(int(s->pendingWrites().value(qMakePair(0, 204))), qRound(focus * 255.0));
+
+    // H: every light holds -- the keys move nothing -- and H again lets go.
+    QSignalSpy holding(pc, &ProgrammerController::holdingChanged);
+    QTest::keyClick(panel, Qt::Key_H);
+    QVERIFY(pc->isHolding());
+    QVERIFY(s->isHolding());
+    QCOMPARE(holding.count(), 1);
+    // Said in the title, with a real dash (it was written twice-encoded:
+    // "HOLDING \u00e2\u0080\u0094 click...").
+    QString banner;
+    foreach (QLabel *l, panel->findChildren<QLabel *>())
+        if (l->text().startsWith(QLatin1String("HOLDING")))
+            banner = l->text();
+    QVERIFY2(banner.startsWith(QString::fromUtf8("HOLDING \u2014 click both sticks")), qPrintable(banner));
+    const FocusSession::Offset before = s->liveOffset(washId);
+    double heldDeg = 0.0, heldFocus = 0.0;
+    QVERIFY(s->beamAngle(washId, heldDeg, lo, hi));
+    QVERIFY(s->focusLevel(washId, heldFocus));
+    QTest::keyClick(panel, Qt::Key_Right);
+    QTest::keyClick(panel, Qt::Key_Period);
+    QTest::keyClick(panel, Qt::Key_Apostrophe);
+    QCOMPARE(s->liveOffset(washId), before);
+    QVERIFY(s->beamAngle(washId, deg, lo, hi));
+    QCOMPARE(deg, heldDeg);
+    QVERIFY(s->focusLevel(washId, focus));
+    QCOMPARE(focus, heldFocus);
+    QTest::keyClick(panel, Qt::Key_H);
+    QVERIFY(!pc->isHolding());
+    QVERIFY(!s->isHolding());
+    QTest::keyClick(panel, Qt::Key_Right);
+    QVERIFY(s->liveOffset(washId) != before);
+
+    s->discardAll();
+    panel->requestExit();
+    QTRY_VERIFY(panel.isNull());
+    QVERIFY(m_doc->deleteFixture(washId));
+}
+
 void FocusMode_Test::pressingLightsTheControl()
 {
     plugInPad();

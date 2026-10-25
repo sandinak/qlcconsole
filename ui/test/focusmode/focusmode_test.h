@@ -48,6 +48,8 @@ private slots:
     void theKeyboardIgnoresTheController();
     /** A button, a stick, a key: each lights its place on the map. */
     void pressingLightsTheControl();
+    /** H holds every light and lets go; , . the zoom; ; ' the focus. */
+    void theKeysHoldZoomAndFocus();
     /** The controller unplugged mid-session: the keyboard takes over, and
      *  it is offered back when it returns. */
     void aDisconnectFallsBackToTheKeyboard();

@@ -50,6 +50,10 @@ private slots:
      *  venue back; the score is in the report. */
     void practiceScramblesAndScores();
 
+    /** Q134: a swapped light is flagged (and needs focus); the lens set by
+     *  hand is its column -- rows, CSV and HTML. */
+    void aSwappedLightAndTheLensAreReported();
+
 private:
     Doc *m_doc = nullptr;
     QTemporaryDir *m_dir = nullptr;

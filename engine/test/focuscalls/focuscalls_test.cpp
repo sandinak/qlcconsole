@@ -21,8 +21,18 @@
 #include <QXmlStreamWriter>
 #include <QSignalSpy>
 #include <QtTest>
+#include <QtCore>
 
+#define protected public                // Universe::processFaders()
+#include "universe.h"
+#undef protected
+#define private public                  // MasterTimer::timerTick(), the joystick tick's clock
+#include "mastertimer.h"
+#include "programmercontroller.h"
+#undef private
 #include "focuscalls_test.h"
+#include "showcontrol.h"
+#include "chaser.h"
 #include "inputoutputmap.h"
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
@@ -116,6 +126,84 @@ FocusSession::Reference targetRef(quint32 id)
     r.kind = FocusSession::Reference::Target;
     r.id = id;
     return r;
+}
+
+/* A spot with a zoom (10-40 degrees) and a focus channel: pan, tilt,
+   dimmer, zoom, focus, at @p address. */
+Fixture *makeZoomSpot(Doc *doc, const QString &name, float x, float y, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Calls Zoom Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("5ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity,
+                                         QLCChannel::Beam, QLCChannel::Beam };
+    const QLCChannel::Preset presets[] = { QLCChannel::Custom, QLCChannel::Custom, QLCChannel::Custom,
+                                           QLCChannel::BeamZoomSmallBig, QLCChannel::BeamFocusNearFar };
+    const char *names[] = { "Pan", "Tilt", "Dimmer", "Zoom", "Focus" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 5; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        if (presets[k] != QLCChannel::Custom)
+            ch->setPreset(presets[k]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(10.0);
+    ph.setLensDegreesMax(40.0);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(address);
+    if (doc->addFixture(fxi) == false)
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0,
+                                                 QVector3D(x * 1000.0f, y * 1000.0f, 5.0f));
+    return fxi;
+}
+
+/* The controller's tick, @p ticks times, each exactly the timer's nominal
+   20 ms: the tick measures the time since the last one (a late tick moves
+   as far as the stick was held for), so without this a loaded machine
+   would count more time held than the test means. */
+void joyTicks(ProgrammerController *pc, int ticks)
+{
+    for (int i = 0; i < ticks; ++i)
+    {
+        pc->m_joyTickClock.invalidate();
+        pc->applyDesignJoystick();
+    }
+}
+
+/* The stub plugin as a pad on input universe 0, with @p roles. */
+IOPluginStub *plugInStubPad(Doc *doc, const QMap<quint32, QString> &roles)
+{
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    doc->ioPluginCache()->load(dir);
+    if (doc->ioPluginCache()->plugins().isEmpty())
+        return nullptr;
+    IOPluginStub *stub = static_cast<IOPluginStub *>(doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = roles;
+    if (!doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0))
+        return nullptr;
+    doc->programmer()->autoBindFromProfile();
+    return stub;
 }
 
 QByteArray saveDoc(Doc *doc)
@@ -1046,10 +1134,9 @@ void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
     pc->autoBindFromProfile();
     auto down = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 255, QString()); };
     auto up = [iom](quint32 ch) { emit iom->inputValueChanged(0, ch, 0, QString()); };
-    auto held = [pc](int ticks) {
-        for (int i = 0; i < ticks; ++i)
-            pc->applyDesignJoystick();
-    };
+    // Each tick its nominal 20 ms: "not yet at 0.6 s" must not depend on the
+    // machine's load (a late tick counts as up to 0.1 s held).
+    auto held = [pc](int ticks) { joyTicks(pc, ticks); };
 
     Fixture *a = makeSpot(m_doc, "Spot 3", 2.0f, 2.0f);
     Fixture *b = makeSpot(m_doc, "Spot 7", 4.0f, 2.0f);
@@ -1986,4 +2073,347 @@ void FocusCalls_Test::theSmallIdeas()
     s->stop();
     QVERIFY(!pc->isHolding());
     iom->setInputPatch(0, QString(), QString(), 0);
+}
+
+/* The changelog: "A focus-call cue arms on GO and starts on the
+   controller's Start" -- here through real playback: ShowControl's GO, the
+   cue list's chaser stepped by the MasterTimer, FocusCallCue watching it
+   (MasterTimer::functionStarted, Chaser::currentStepChanged). Leaving the
+   calls goes on with the list; a list moved on by hand lets it go; a
+   skipped focus-call cue is passed over by GO. */
+void FocusCalls_Test::aFocusCallCueArmsOnARealGo()
+{
+    IOPluginStub *stub = plugInStubPad(m_doc, { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" },
+                                                { 16, "back" }, { 17, "start" } });
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    auto press = [iom](quint32 ch) {
+        emit iom->inputValueChanged(0, ch, 255, QString());
+        emit iom->inputValueChanged(0, ch, 0, QString());
+    };
+    ProgrammerController *pc = m_doc->programmer();
+
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    FixtureGroup *dh = makeGroup(m_doc, "DH Tspots", { a, b });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << dh->id();
+    c1.target = targetRef(dsc->id());
+    pc->focusCalls()->setCalls({ c1 });
+
+    // Pre-show: House, the focus-call cue, then the show -- each with a look.
+    QLCPalette *half = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    half->setName("Half");
+    half->setValue(127);
+    m_doc->addPalette(half);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Pre-show");
+    const quint32 house = st->addCue(list, -1, "House");
+    const quint32 focus = st->addCue(list, 0, "Focus");
+    const quint32 show = st->addCue(list, 1, "Show");
+    ShowTree::Target t;
+    t.groups << dh->id();
+    for (quint32 c : { house, focus, show })
+        QVERIFY(st->setTargetLook(c, t, st->lookForPalette(half->id())));
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    const quint32 chaser = st->cueList(list)->chaser;
+    QVERIFY(qobject_cast<Chaser *>(m_doc->function(chaser)) != nullptr);
+
+    ShowControl *sc = m_doc->showControl();
+    auto command = [sc, chaser](ShowControl::Command c) {
+        ShowControl::Request r;
+        r.command = c;
+        r.chaser = chaser;
+        return sc->execute(r);
+    };
+    // The MasterTimer's ticks, and the main thread's queue (the watch is queued).
+    auto play = [this](int ticks) {
+        for (int i = 0; i < ticks; ++i)
+        {
+            m_doc->masterTimer()->timerTick();
+            QCoreApplication::processEvents();
+        }
+    };
+    FocusCallCue *fcc = pc->focusCallCue();
+    FocusSession *s = pc->focusSession();
+    QSignalSpy states(fcc, &FocusCallCue::stateChanged);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy goOn(fcc, &FocusCallCue::continueRequested);
+    auto readySaid = [&said]() {
+        int n = 0;
+        for (const QList<QVariant> &l : said)
+            n += l.at(0).toString() == FocusCallCue::armedPhrase() ? 1 : 0;
+        return n;
+    };
+    m_doc->setMode(Doc::Operate);
+
+    // GO: the house cue -- nothing armed.
+    QVERIFY(command(ShowControl::Go));
+    play(5);
+    QCOMPARE(st->runningCue(list), house);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    // GO onto the focus-call cue: armed, said once however long it plays.
+    QVERIFY(command(ShowControl::Go));
+    play(5);
+    QCOMPARE(st->runningCue(list), focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(fcc->cueId(), focus);
+    QCOMPARE(fcc->listId(), list);
+    play(50);
+    QCOMPARE(readySaid(), 1);
+    // Nothing starts until Start; the list waits on the cue.
+    QVERIFY(!s->isActive());
+    QCOMPARE(st->runningCue(list), focus);
+
+    // The controller's Start: the calls, in Operate.
+    press(17);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QVERIFY(s->isActive());
+    QVERIFY(s->isRunningCalls());
+    play(5);
+    QCOMPARE(st->runningCue(list), focus);
+    // RT on the last call asks to leave; leaving (the panel's finish) goes
+    // on with the list -- a real GO, the next cue playing.
+    QSignalSpy exit(s, &FocusSession::exitRequested);
+    s->setTrigger(1, 1.0f);
+    s->setTrigger(1, 0.0f);
+    QCOMPARE(exit.count(), 1);
+    s->finish();
+    QCOMPARE(goOn.count(), 1);
+    QCOMPARE(goOn.first().at(0).toUInt(), chaser);
+    play(5);
+    QCOMPARE(st->runningCue(list), show);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QCOMPARE(readySaid(), 1);                   // not armed again on the way off
+
+    // BACK onto it by hand: armed again; GO by hand before Start lets it go.
+    QVERIFY(command(ShowControl::Back));
+    play(5);
+    QCOMPARE(st->runningCue(list), focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QVERIFY(command(ShowControl::Go));
+    play(5);
+    QCOMPARE(st->runningCue(list), show);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QVERIFY(!s->isActive());
+
+    // Skipped, the focus-call cue is passed over by GO: never armed.
+    QVERIFY(st->setCuesSkipped({ focus }, true));
+    QVERIFY(command(ShowControl::Stop));
+    play(5);
+    states.clear();
+    QVERIFY(command(ShowControl::Go));
+    play(5);
+    QCOMPARE(st->runningCue(list), house);
+    QVERIFY(command(ShowControl::Go));
+    play(5);
+    QCOMPARE(st->runningCue(list), show);
+    for (const QList<QVariant> &l : states)
+        QVERIFY(l.at(0).value<FocusCallCue::State>() != FocusCallCue::Armed);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+
+    QVERIFY(command(ShowControl::Stop));
+    play(5);
+    m_doc->setMode(Doc::Design);
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
+/* The changelog's safety promise, "a controller lost freezes everything it
+   held", on the rig's output: the pad drops mid-move with the stick over
+   and a D-pad arm repeating -- the universe's bytes stay where they were,
+   in Focus mode and in a focus-call run a cue started. */
+void FocusCalls_Test::aLostControllerFreezesTheRigOutput()
+{
+    IOPluginStub *stub = plugInStubPad(m_doc, { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
+                                                { 10, "a" }, { 11, "b" }, { 16, "back" },
+                                                { 17, "start" }, { 21, "dpad_right" } });
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ProgrammerController *pc = m_doc->programmer();
+    auto value = [iom](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    auto drop = [iom, stub]() {
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        emit iom->inputDeviceDisconnected(0, stub->name(), QString("Stub pad"));
+    };
+    auto back = [iom, stub]() {
+        iom->setInputPatch(0, stub->name(), QString(), 0);
+        emit iom->inputDeviceConnected(0, stub->name(), QString("Stub pad"));
+    };
+    Universe *uni = iom->universes().at(0);
+    // A frame: the functions' tick (a cue list playing), then the universe.
+    auto frames = [this, uni](int n) {
+        for (int i = 0; i < n; ++i)
+        {
+            m_doc->masterTimer()->timerTick();
+            QCoreApplication::processEvents();
+            uni->processFaders();
+        }
+    };
+    auto bytes = [uni](Fixture *f) {
+        QByteArray out;
+        for (int c = 0; c < 5; ++c)
+            out.append(char(uni->preGMValue(int(f->address()) + c)));
+        return out;
+    };
+
+    Fixture *z = makeZoomSpot(m_doc, "Spot 5", 2.0f, 2.0f, 100);
+    Fixture *w = makeZoomSpot(m_doc, "Spot 6", 4.0f, 2.0f, 110);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = pc->focusSession();
+    s->setBlinkTimed(false);
+    FocusSession::Options o;
+    o.fixtures = { z->id(), w->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+    QVERIFY(s->start(o));
+    QCOMPARE(s->currentFixture(), z->id());
+    frames(2);
+    const QByteArray atStart = bytes(z);
+
+    // The left stick full over and the D-pad's right arm held (sharper):
+    // past the repeat delay, the focus goes on stepping.
+    value(0, 255);
+    value(21, 255);
+    joyTicks(pc, 30);                           // 0.6 s
+    frames(2);
+    double focusNow = 0.0;
+    QVERIFY(s->focusLevel(z->id(), focusNow));
+    QVERIFY2(focusNow > 0.53, qPrintable(QString::number(focusNow)));   // repeated, not just pressed
+    QVERIFY(bytes(z).at(0) != atStart.at(0));   // pan moved on the rig
+    QVERIFY(bytes(z).at(4) != atStart.at(4));   // and the focus channel
+
+    // The pad drops: what is on the rig stays, however long.
+    drop();
+    frames(2);
+    const QByteArray frozenZ = bytes(z), frozenW = bytes(w);
+    const FocusSession::Offset frozen = s->liveOffset(z->id());
+    double focusFrozen = 0.0;
+    QVERIFY(s->focusLevel(z->id(), focusFrozen));
+    joyTicks(pc, 100);                          // 2 s of ticks
+    frames(5);
+    QCOMPARE(bytes(z), frozenZ);
+    QCOMPARE(bytes(w), frozenW);
+    QCOMPARE(s->liveOffset(z->id()), frozen);
+    double focusAfter = 0.0;
+    QVERIFY(s->focusLevel(z->id(), focusAfter));
+    QCOMPARE(focusAfter, focusFrozen);
+    back();
+    value(0, 128);
+    value(21, 0);
+    s->discardAll();
+    s->stop();
+
+    // The same in a focus-call run a cue started (Operate).
+    FixtureGroup *g = makeGroup(m_doc, "Zoom spots", { z, w });
+    FocusCall c1;
+    c1.groups << g->id();
+    c1.target = targetRef(dsc->id());
+    pc->focusCalls()->setCalls({ c1 });
+    QLCPalette *half = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    half->setName("Half");
+    half->setValue(127);
+    m_doc->addPalette(half);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Pre-show");
+    const quint32 focus = st->addCue(list, -1, "Focus");
+    ShowTree::Target t;
+    t.groups << g->id();
+    QVERIFY(st->setTargetLook(focus, t, st->lookForPalette(half->id())));
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    m_doc->setMode(Doc::Operate);
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = st->cueList(list)->chaser;
+    QVERIFY(m_doc->showControl()->execute(go));
+    frames(5);
+    FocusCallCue *fcc = pc->focusCallCue();
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    value(17, 255);                             // Start
+    value(17, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    frames(2);
+    Fixture *cur = m_doc->fixture(s->currentFixture());
+    QVERIFY(cur != nullptr);
+    Fixture *other = cur == z ? w : z;
+    const QByteArray runStart = bytes(cur);
+    value(0, 255);
+    value(21, 255);
+    joyTicks(pc, 30);
+    frames(2);
+    QVERIFY(bytes(cur) != runStart);
+    drop();
+    frames(2);
+    const QByteArray runFrozen = bytes(cur), otherFrozen = bytes(other);
+    const FocusSession::Offset runOffset = s->liveOffset(cur->id());
+    joyTicks(pc, 100);
+    frames(5);
+    QCOMPARE(bytes(cur), runFrozen);
+    QCOMPARE(bytes(other), otherFrozen);
+    QCOMPARE(s->liveOffset(cur->id()), runOffset);
+    // The run is held, not ended; the list stays on its cue.
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(st->runningCue(list), focus);
+    back();
+    value(0, 128);
+    value(21, 0);
+    s->discardAll();
+    s->stop();
+    ShowControl::Request stop;
+    stop.command = ShowControl::Stop;
+    stop.chaser = go.chaser;
+    m_doc->showControl()->execute(stop);
+    frames(5);
+    m_doc->setMode(Doc::Design);
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
+/* The calls are the show's: through the whole show's save and load (Doc's
+   own dispatch, not FocusCalls::loadXML alone) they come back in order,
+   with their groups, fixtures, targets and notes. */
+void FocusCalls_Test::callsComeBackWithTheWholeShow()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    FixtureGroup *dh = makeGroup(m_doc, "DH Tspots", { a, b });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    StageTarget *solo = makeTarget(m_doc, "Soloist DS", QVector3D(3.0f, 7.0f, 0.0f));
+    FocusCall c1;
+    c1.groups << dh->id();
+    c1.target = targetRef(dsc->id());
+    c1.note = "Check the shutter cut";
+    FocusCall c2;
+    c2.name = "AT spots -> Soloist";
+    c2.fixtures << b->id();
+    c2.target = targetRef(solo->id());
+    FocusCall c3;
+    c3.name = "Last";
+    c3.fixtures << a->id();
+    c3.target = targetRef(dsc->id());
+    m_doc->programmer()->focusCalls()->setCalls({ c2, c1, c3 });
+    const QByteArray xml = saveDoc(m_doc);
+
+    Doc *other = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    FocusCalls *back = other->programmer()->focusCalls();
+    QCOMPARE(back->count(), 3);
+    QVERIFY(back->call(0) == c2);
+    QVERIFY(back->call(1) == c1);
+    QVERIFY(back->call(2) == c3);
+    QCOMPARE(back->call(1).groups, QList<quint32>({ dh->id() }));
+    QCOMPARE(back->call(1).note, QString("Check the shutter cut"));
+    QCOMPARE(back->call(0).fixtures, QList<quint32>({ b->id() }));
+    QCOMPARE(back->call(0).target.id, solo->id());
+    QVERIFY(other->fixtureGroup(dh->id()) != nullptr);
+    // A second save of the loaded show writes the same calls.
+    const QByteArray again = saveDoc(other);
+    const auto callsOf = [](const QByteArray &x) {
+        const int from = x.indexOf("<FocusCalls>");
+        return from < 0 ? QByteArray() : x.mid(from, x.indexOf("</FocusCalls>") - from);
+    };
+    QVERIFY(!callsOf(xml).isEmpty());
+    QCOMPARE(callsOf(again), callsOf(xml));
+    delete other;
 }

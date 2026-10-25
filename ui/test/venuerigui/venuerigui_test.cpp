@@ -24,6 +24,8 @@
 #include <QPointer>
 #include <QTimer>
 #include <QLabel>
+#include <QMessageBox>
+#include <QApplication>
 #include <QtTest>
 
 #include "venuerigui_test.h"
@@ -206,6 +208,95 @@ void VenueRigUi_Test::theConnectionsSlotPicker()
     QCOMPARE(m_doc->inputOutputMap()->universeSlotOwner(0), RigOwner::House);
     QVERIFY(m_doc->isModified());
     QCOMPARE(m_doc->inputOutputMap()->universeSlotOwner(1), RigOwner::Tour);
+}
+
+/* VENUES.md section 6 and the changelog: "A clash check ... runs before
+   Apply now". Switching to a venue whose house rig clashes with the show
+   asks first; Cancel leaves the venue off and the patch as it was; Apply
+   anyway goes live with the clashing house fixture unpatched. */
+void VenueRigUi_Test::aClashingVenueAsksBeforeItIsApplied()
+{
+    VenueCorrections *v = venues(m_doc);
+    const quint32 tour = dimmer(m_doc, QStringLiteral("Tour 1"), 0, 10);
+    const QString lincoln = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(lincoln));
+    const quint32 par = dimmer(m_doc, QStringLiteral("House par"), 0, 50);
+    m_doc->fixture(par)->setOwner(RigOwner::House);
+    QVERIFY(v->isVenueFixture(par));
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(m_doc->fixture(par) == nullptr);     // it went with its venue
+    // Meanwhile a tour fixture moved onto the house par's address.
+    QVERIFY(m_doc->patchFixtures({ Doc::FixturePatch{ tour, 0, 50 } }));
+    QCOMPARE(v->clashes(lincoln).size(), 1);
+
+    FocusCallsDialog d(m_doc, nullptr);
+    d.setVenueChoice(lincoln);
+    QPushButton *apply = d.findChild<QPushButton *>(QStringLiteral("fcApplyVenue"));
+    QVERIFY(apply != nullptr);
+
+    /* Each box answered from a timer, back in its own event loop: the
+       clash box by @p anyway, anything else accepted (and noted). */
+    QStringList asked, otherBoxes;
+    auto answer = [&](bool anyway) {
+        QTimer *t = new QTimer(&d);
+        t->setInterval(20);
+        connect(t, &QTimer::timeout, &d, [&asked, &otherBoxes, t, anyway]() {
+            QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            if (box == nullptr)
+                return;
+            if (box->objectName() != QLatin1String("vrClashConfirm"))
+            {
+                otherBoxes << box->text();
+                box->accept();
+                return;
+            }
+            asked << box->text() + QLatin1Char('\n') + box->informativeText();
+            QAbstractButton *pick = box->button(QMessageBox::Cancel);
+            if (anyway)
+                for (QAbstractButton *b : box->buttons())
+                    if (b->text() == QLatin1String("Apply anyway"))
+                        pick = b;
+            t->stop();
+            t->deleteLater();
+            pick->click();
+        });
+        t->start();
+    };
+
+    // Cancel: nothing changes.
+    answer(false);
+    apply->click();
+    QCOMPARE(asked.size(), 1);
+    QVERIFY2(asked.first().contains(QStringLiteral("Lincoln HS clashes with the show")), qPrintable(asked.first()));
+    QVERIFY2(asked.first().contains(QStringLiteral("House par")), qPrintable(asked.first()));
+    QVERIFY(otherBoxes.isEmpty());
+    QVERIFY(v->activeVenue().isEmpty());
+    QVERIFY(m_doc->fixture(par) == nullptr);
+    QVERIFY(m_doc->fixture(tour)->isPatched());
+    QCOMPARE(m_doc->fixture(tour)->address(), 50u);
+
+    // Start focus calls into it asks the same (it went live unchecked).
+    QPushButton *start = d.findChild<QPushButton *>(QStringLiteral("fcStart"));
+    QVERIFY(start != nullptr);
+    answer(false);
+    start->click();
+    QCOMPARE(asked.size(), 2);
+    QVERIFY(otherBoxes.isEmpty());
+    QVERIFY(v->activeVenue().isEmpty());
+    QVERIFY(m_doc->fixture(par) == nullptr);
+    QVERIFY(d.result() != QDialog::Accepted);
+
+    // Apply anyway: live, the house par in but unpatched; the tour's alone.
+    answer(true);
+    apply->click();
+    QCOMPARE(asked.size(), 3);
+    QVERIFY2(otherBoxes.isEmpty(), qPrintable(otherBoxes.join('\n')));
+    QCOMPARE(v->activeVenue(), lincoln);
+    QVERIFY(m_doc->fixture(par) != nullptr);
+    QVERIFY(!m_doc->fixture(par)->isPatched());
+    QCOMPARE(m_doc->fixture(par)->address(), 50u);
+    QVERIFY(m_doc->fixture(tour)->isPatched());
+    QCOMPARE(m_doc->fixture(tour)->address(), 50u);
 }
 
 QTEST_MAIN(VenueRigUi_Test)

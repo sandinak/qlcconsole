@@ -90,6 +90,12 @@ private slots:
      *  and a discard; nothing for any other head, or once it stops. */
     void theViewsAreToldTheIntentNotTheNudge();
 
+    /** Q140: the focus look takes gobo, prism and frost out, on the
+     *  universe, over a cue that has them in; the cue's back after. */
+    void theFocusLookTakesTheBeamOut();
+    /** A fixed light's save is undone: the aim before it, then as it was. */
+    void aFixedLightsSaveIsUndone();
+
 private:
     Doc *m_doc = nullptr;
 };

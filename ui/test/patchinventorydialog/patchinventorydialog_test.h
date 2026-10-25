@@ -71,6 +71,9 @@ private slots:
     void theSameGroupLandsTheSameWayInNameOrder();
     void moversFirstThenByKind();
 
+    /** With a venue applied that clashes, the summary line names it. */
+    void aVenueClashIsNamedInTheSummary();
+
 private:
     Doc *m_doc;
 };

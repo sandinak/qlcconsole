@@ -449,3 +449,104 @@ void FocusReport_Test::practiceScramblesAndScores()
 }
 
 QTEST_MAIN(FocusReport_Test)
+
+/* The changelog (Q134): the report gives each light's lens and flags a
+   swapped one -- its definition or mode no longer what the venue
+   recorded -- as swapped and needing focus, saying what it was focused
+   as; in the rows, the CSV (Lens and Flags columns) and the HTML. */
+void FocusReport_Test::aSwappedLightAndTheLensAreReported()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    Fixture *other = makeSpot(m_doc, "Other", 6.0f, 2.0f);
+    MonitorProperties *props = m_doc->monitorProperties();
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    // Corrected in the venue (Q111): A by a pan, B's lens set by hand.
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 1.5f;
+    props->setFixtureRigProps(a->id(), rp);
+    rp = props->fixtureRigProps(b->id());
+    rp.lensDeg = 19.0f;
+    props->setFixtureRigProps(b->id(), rp);
+    QVERIFY(v->hasCorrection(a->id()));
+    QVERIFY(v->hasCorrection(b->id()));
+
+    // A is swapped for another fixture type while the venue is off.
+    QVERIFY(v->setActiveVenue(QString()));
+    a->setFixtureDefinition(other->fixtureDef(), other->fixtureMode());
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QVERIFY(v->isSwapped("Lincoln HS", a->id()));
+    QVERIFY(!v->isSwapped("Lincoln HS", b->id()));
+
+    const QList<FocusReport::Row> rows = FocusReport::rows(m_doc, "Lincoln HS");
+    const FocusReport::Row *ra = nullptr, *rb = nullptr;
+    for (const FocusReport::Row &r : rows)
+    {
+        if (r.fid == a->id())
+            ra = &r;
+        else if (r.fid == b->id())
+            rb = &r;
+    }
+    QVERIFY(ra != nullptr && rb != nullptr);
+    QVERIFY(ra->swapped);
+    QVERIFY(ra->needsFocus);
+    QCOMPARE(FocusReport::flags(*ra), QString("swapped, needs focus"));
+    QVERIFY2(ra->notes.contains("Focused here as Test Report Spot A, 3ch"), qPrintable(ra->notes));
+    QVERIFY(!rb->swapped);
+    QCOMPARE(rb->lens, QString::fromUtf8("19.0°"));
+    QVERIFY(ra->lens.isEmpty());                 // no lens set by hand
+
+    // The CSV, by column.
+    auto fields = [](const QString &line) {
+        QStringList out;
+        QString cur;
+        bool quoted = false;
+        for (int i = 0; i < line.size(); ++i)
+        {
+            const QChar ch = line.at(i);
+            if (quoted && ch == '"' && i + 1 < line.size() && line.at(i + 1) == '"')
+            {
+                cur += '"';
+                ++i;
+            }
+            else if (ch == '"')
+                quoted = !quoted;
+            else if (ch == ',' && !quoted)
+            {
+                out << cur;
+                cur.clear();
+            }
+            else
+                cur += ch;
+        }
+        out << cur;
+        return out;
+    };
+    const QStringList cols = FocusReport::csvColumns();
+    const int lens = int(cols.indexOf("Lens")), flags = int(cols.indexOf("Flags")), id = int(cols.indexOf("Fixture ID"));
+    QVERIFY(lens >= 0 && flags >= 0 && id >= 0);
+    bool sawA = false, sawB = false;
+    for (const QString &line : FocusReport::csv(m_doc, "Lincoln HS").split("\r\n", Qt::SkipEmptyParts).mid(1))
+    {
+        const QStringList f = fields(line);
+        QCOMPARE(f.size(), cols.size());
+        if (f.at(id) == QString::number(a->id()))
+        {
+            sawA = true;
+            QCOMPARE(f.at(flags), QString("swapped, needs focus"));
+            QVERIFY(f.at(lens).isEmpty());
+        }
+        else if (f.at(id) == QString::number(b->id()))
+        {
+            sawB = true;
+            QCOMPARE(f.at(lens), QString::fromUtf8("19.0°"));
+        }
+    }
+    QVERIFY(sawA && sawB);
+    const QString html = FocusReport::html(m_doc, "Lincoln HS", "Tour");
+    QVERIFY(html.contains("<th>Lens</th>"));
+    QVERIFY(html.contains(QString::fromUtf8("<td>19.0°</td>")));
+    QVERIFY(html.contains("<td class=\"flag\">swapped, needs focus</td>"));
+}

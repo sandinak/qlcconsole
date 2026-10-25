@@ -19,8 +19,16 @@
 
 #include <QSignalSpy>
 #include <QtTest>
+#include <QtCore>
 
+#define protected public                // Universe::processFaders()
+#include "universe.h"
+#undef protected
+#define private public                  // MasterTimer::timerTick()
+#include "mastertimer.h"
+#undef private
 #include "refinesession_test.h"
+#include "showcontrol.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
@@ -968,3 +976,175 @@ void RefineSession_Test::aReusableLayerWarnsFirst()
 }
 
 QTEST_GUILESS_MAIN(RefineSession_Test)
+
+/* The changelog: Refine is "quiet in Operate" -- with a real cue list
+   running (ShowControl's GO, the MasterTimer playing it), Refine starts on
+   the running cue without previewing, never blinks or dims the rig, shows
+   what is moved, holds what A keeps; the cue's own playback takes the kept
+   change only at its next GO (refine.md, "Refine during the show"). */
+void RefineSession_Test::operateIsQuietOnARunningList()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->listOfCue(m_cue)->id;
+    QLCPalette *bright = new QLCPalette(QLCPalette::Dimmer);
+    bright->setName("Bright");
+    bright->setValue(200);
+    m_doc->addPalette(bright);
+    QLCPalette *away = new QLCPalette(QLCPalette::PanTilt);
+    away->setName("Away");
+    away->setValues({ 100, 100 });
+    m_doc->addPalette(away);
+    Target t;
+    t.groups << m_group;
+    QVERIFY(st->setTargetLook(m_cue, t, st->lookForPalette(bright->id())));
+    const quint32 next = st->addCue(list, 0, "Next");
+    QVERIFY(st->setTargetLook(next, t, st->lookForPalette(away->id())));
+    QVERIFY(st->setTargetLook(next, t, st->lookForPalette(bright->id())));
+    const quint32 chaser = st->cueList(list)->chaser;
+    ShowControl *sc = m_doc->showControl();
+    auto command = [sc, chaser](ShowControl::Command c) {
+        ShowControl::Request r;
+        r.command = c;
+        r.chaser = chaser;
+        return sc->execute(r);
+    };
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    auto frames = [this, uni](int n) {
+        for (int i = 0; i < n; ++i)
+        {
+            m_doc->masterTimer()->timerTick();
+            QCoreApplication::processEvents();
+            uni->processFaders();
+        }
+    };
+    auto rigPan = [this, uni](quint32 fid) {
+        Fixture *fx = m_doc->fixture(fid);
+        QHash<QPair<int, int>, uchar> w;
+        for (int c = 0; c < 4; ++c)
+            w.insert(qMakePair(0, int(fx->address()) + c), uchar(uni->preGMValue(int(fx->address()) + c)));
+        float pan = -1.0f, tilt = -1.0f;
+        sentDegrees(m_doc, w, fid, pan, tilt);
+        return pan;
+    };
+    auto dimmers = [this, uni]() {
+        QList<int> d;
+        for (quint32 fid : m_spots)
+            d << int(uni->preGMValue(int(m_doc->fixture(fid)->address()) + 4));
+        return d;
+    };
+    auto rig = [uni]() {
+        QByteArray all;
+        for (int c = 0; c < 4 * kChannels; ++c)
+            all.append(char(uni->preGMValue(c)));
+        return all;
+    };
+
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(command(ShowControl::Go));
+    frames(20);
+    QCOMPARE(st->runningCue(list), m_cue);
+    QVERIFY2(qAbs(rigPan(m_spots.at(2)) - 270.0f) < 0.05f, qPrintable(QString::number(rigPan(m_spots.at(2)))));
+    const QList<int> lit = dimmers();
+    QCOMPARE(lit, QList<int>({ 200, 200, 200, 200 }));
+    const QByteArray asPlayed = rig();
+
+    // Started on the running cue (no probe: the list as it plays), the rig
+    // is left as the show has it -- no preview, nothing sent.
+    RefineSession *r = m_doc->programmer()->refineSession();
+    r->setFlashEnabled(true);
+    QString why;
+    QVERIFY2(r->start(m_cue, invalidId(), &why), qPrintable(why));
+    QVERIFY(!r->isBlind());
+    QVERIFY(st->previewedCue() != m_cue);
+    frames(5);
+    QCOMPARE(rig(), asPlayed);
+    // A fixture picked: no blink on it, no dim on the rest.
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    r->whereAmI();
+    for (int i = 0; i < 10; ++i)
+    {
+        frames(1);
+        QCOMPARE(dimmers(), lit);
+    }
+    QVERIFY(!r->isFlashing());
+    QCOMPARE(rig(), asPlayed);
+
+    // What is moved shows at once; still no blink, no dim.
+    r->setScope(RefineSession::LayerScope);
+    QVERIFY(r->nudgePosition(4.0f, 0.0f));
+    frames(3);
+    QVERIFY(qAbs(rigPan(m_spots.at(2)) - 274.0f) < 0.05f);
+    QCOMPARE(dimmers(), lit);
+    // A keeps it: held on the rig.
+    QVERIFY(r->keep());
+    QVERIFY(!r->hasPending());
+    frames(3);
+    QVERIFY(qAbs(rigPan(m_spots.at(2)) - 274.0f) < 0.05f);
+    QCOMPARE(dimmers(), lit);
+    // Leaving Refine lets go of the hold: the cue plays as it was baked --
+    // the kept change is not in the running cue until its next GO.
+    r->stop();
+    frames(3);
+    QVERIFY2(qAbs(rigPan(m_spots.at(2)) - 270.0f) < 0.05f, qPrintable(QString::number(rigPan(m_spots.at(2)))));
+    QCOMPARE(rig(), asPlayed);
+
+    // GO: the next cue. BACK onto it: it runs again, with the kept change.
+    QVERIFY(command(ShowControl::Go));
+    frames(20);
+    QCOMPARE(st->runningCue(list), next);
+    QVERIFY(qAbs(rigPan(m_spots.at(2)) - 100.0f) < 0.05f);
+    QVERIFY(command(ShowControl::Back));
+    frames(20);
+    QCOMPARE(st->runningCue(list), m_cue);
+    QVERIFY2(qAbs(rigPan(m_spots.at(2)) - 274.0f) < 0.05f, qPrintable(QString::number(rigPan(m_spots.at(2)))));
+    QCOMPARE(dimmers(), lit);
+
+    QVERIFY(command(ShowControl::Stop));
+    frames(5);
+    m_doc->setMode(Doc::Design);
+}
+
+/* The changelog (Q140): both stick clicks hold every light
+   (setHolding()): a held Refine takes no stick and no button; released,
+   the stick moves it again. */
+void RefineSession_Test::holdingTakesNoStick()
+{
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setStick(RefineSession::Coarse, 1.0f, 0.5f);
+    r->setHolding(true);
+    QVERIFY(r->isHolding());
+    r->tick(0.5);
+    QVERIFY(!r->hasPending());
+    QVERIFY(r->pendingWrites().isEmpty());
+    // Nor a button: Y, the D-pad, a nudge by hand.
+    r->apply(ControllerScheme::CycleScope);
+    QCOMPARE(r->scope(), RefineSession::LayerScope);
+    r->apply(ControllerScheme::ZoomNarrower);
+    QVERIFY(!r->nudgePosition(2.0f, 0.0f));
+    QVERIFY(!r->hasPending());
+    // Released: the stick (still over) moves the layer.
+    r->setHolding(false);
+    QVERIFY(!r->isHolding());
+    r->tick(0.1);
+    QVERIFY(r->hasPending());
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(r->pendingPosition(m_spots.at(0), pan, tilt));
+    QVERIFY(pan > 270.0f);
+    // The programmer's hold (the chord, or H) reaches it too.
+    r->setStick(RefineSession::Coarse, 0.5f, 0.5f);
+    m_doc->programmer()->setHolding(true);
+    QVERIFY(r->isHolding());
+    float held = 0.0f;
+    QVERIFY(r->pendingPosition(m_spots.at(0), held, tilt));
+    r->setStick(RefineSession::Coarse, 1.0f, 0.5f);
+    r->tick(0.5);
+    float after = 0.0f;
+    QVERIFY(r->pendingPosition(m_spots.at(0), after, tilt));
+    QCOMPARE(after, held);
+    m_doc->programmer()->setHolding(false);
+    QVERIFY(!r->isHolding());
+    r->revert();
+    r->stop();
+}

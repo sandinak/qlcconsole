@@ -128,6 +128,17 @@ private slots:
      *  focus look takes gobo, prism and frost out. */
     void theSmallIdeas();
 
+    /** A focus-call cue through real playback: GO arms it (said once),
+     *  Start on the controller begins the calls, leaving them GOes on with
+     *  the list, a list moved on by hand lets it go, a skipped one is
+     *  passed over. */
+    void aFocusCallCueArmsOnARealGo();
+    /** A controller lost freezes the rig's output -- mid-move, with a D-pad
+     *  arm repeating -- in Focus mode and in a cue-started focus-call run. */
+    void aLostControllerFreezesTheRigOutput();
+    /** The calls through the whole show's save and load, in order. */
+    void callsComeBackWithTheWholeShow();
+
 private:
     Doc *m_doc = nullptr;
     QTemporaryDir *m_dir = nullptr;

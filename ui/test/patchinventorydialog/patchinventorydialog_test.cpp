@@ -45,7 +45,11 @@
 #include "qlcfixturehead.h"
 #include "fixture.h"
 #include "fixturegroup.h"
+#include "programmercontroller.h"
+#include "venuecorrections.h"
+#include "rigowner.h"
 #include "doc.h"
+#include <QTemporaryDir>
 
 #include "patchinventorydialog_test.h"
 
@@ -942,4 +946,46 @@ void PatchInventoryDialog_Test::moversFirstThenByKind()
     QCOMPARE(at[bar->id()], quint32(2));
     QCOMPARE(at[wash->id()], quint32(3));
     dlg.setAddressOrder(PatchPlanner::ByName);       // back, for the next test's dialog
+}
+
+/* The changelog: "A clash check (overlaps, not ours, slots) runs before
+   Apply now, on open and in the Patch dialog" -- with a venue applied
+   whose house fixture clashes with a tour fixture, the dialog's summary
+   line names the clash. */
+void PatchInventoryDialog_Test::aVenueClashIsNamedInTheSummary()
+{
+    QTemporaryDir dir;
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(dir.filePath("Tour.qlcc"), false);
+    Fixture *tour = new Fixture(m_doc);
+    tour->setName("Tour 1");
+    tour->setChannels(1);
+    tour->setAddress(10);
+    QVERIFY(m_doc->addFixture(tour));
+    const QString lincoln = v->addVenue("Lincoln HS");
+    QVERIFY(v->setActiveVenue(lincoln));
+    Fixture *par = new Fixture(m_doc);
+    par->setName("House par");
+    par->setChannels(1);
+    par->setAddress(50);
+    QVERIFY(m_doc->addFixture(par));
+    const quint32 parId = par->id();
+    par->setOwner(RigOwner::House);
+    QVERIFY(v->isVenueFixture(parId));
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(m_doc->patchFixtures({ Doc::FixturePatch{ tour->id(), 0, 50 } }));
+    QVERIFY(v->setActiveVenue(lincoln));        // applied anyway: the par unpatched
+    QVERIFY(!v->clashes(lincoln).isEmpty());
+    staged(m_doc, 8, "New");
+
+    PatchInventoryDialog dlg(m_doc);
+    const QString summary = dlg.m_summary->text();
+    QVERIFY2(summary.contains("Lincoln HS clashes with the show: "), qPrintable(summary));
+    QVERIFY2(summary.contains("House par"), qPrintable(summary));
+    QVERIFY2(summary.contains("Tour 1"), qPrintable(summary));
+
+    // No venue applied: no clash line.
+    QVERIFY(v->setActiveVenue(QString()));
+    PatchInventoryDialog off(m_doc);
+    QVERIFY2(!off.m_summary->text().contains("clashes"), qPrintable(off.m_summary->text()));
 }
