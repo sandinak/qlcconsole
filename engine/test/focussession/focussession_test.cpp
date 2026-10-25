@@ -741,6 +741,7 @@ void FocusSession_Test::theControllerReachesItThroughTheProgrammer()
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
     QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     /* A gamepad as its profile describes it: axes 0..3, then buttons. No
        pan/tilt slots here, so the left stick is found by its role. */
@@ -897,6 +898,7 @@ void FocusSession_Test::theSessionKeepsTheControllerAwake()
     dir.setFilter(QDir::Files);
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 14, "lb" }, { 15, "rb" } };
     stub->m_inputProblems = { { 0, "macOS is not letting qlcconsole read the controller." } };
@@ -959,6 +961,18 @@ void FocusSession_Test::aFixedLightIsFocusedByWhereItLands()
     const double down = qRadiansToDegrees(qAtan2(5.0 - FocusSession::subjectHeight(), 2.0));
     QVERIFY2(qAbs(rp.aimDown - down) < 0.1, qPrintable(QString::number(rp.aimDown)));
     QVERIFY(s->isDirty(par->id()));
+    // Since the save, in the show's units: a show in feet hears feet and
+    // inches, not metres.
+    QCOMPARE(s->deltaText(par->id()), QString("2.00 m downstage"));
+    props->setGridUnits(MonitorProperties::Feet);
+    QCOMPARE(s->deltaText(par->id()), QString("6' 7\" downstage"));
+    s->nudge(0.05f, 0.0f);                                      // 2.5 cm across
+    QCOMPARE(s->deltaText(par->id()), QString("1\" stage left, 6' 7\" downstage"));
+    s->nudge(-0.03f, 0.0f);                                     // 1 cm left of where it was
+    QCOMPARE(s->deltaText(par->id()), QString::fromUtf8("\u00BD\" stage left, 6' 7\" downstage"));
+    s->nudge(-0.02f, 0.0f);
+    props->setGridUnits(MonitorProperties::Meters);
+    QCOMPARE(s->deltaText(par->id()), QString("2.00 m downstage"));
 
     // Revert: the rig as it was before the session, not aimed.
     s->revert();

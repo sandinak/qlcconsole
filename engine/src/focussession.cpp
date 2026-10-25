@@ -1253,13 +1253,29 @@ QString FocusSession::deltaText(quint32 fid) const
     QStringList parts;
     if (h.fixed)
     {
+        /* In the show's units: a show laid out in feet reads a nudge in
+           inches (to the half inch), "4½\" stage left", "1' 2\" upstage". */
+        const MonitorProperties *props = m_doc->monitorProperties();
+        const bool feet = props != nullptr && props->gridUnits() == MonitorProperties::Feet;
+        auto distance = [feet](float metres) {
+            const double v = qAbs(double(metres));
+            if (!feet)
+                return tr("%1 m").arg(v, 0, 'f', 2);
+            const double halves = std::round(v / 0.0254 * 2.0);
+            if (halves >= 24.0)
+                return MonitorProperties::formatStageDistance(float(v), MonitorProperties::Feet);
+            const int whole = int(halves) / 2;
+            const bool half = (int(halves) % 2) != 0;
+            return QStringLiteral("%1%2\"").arg(whole > 0 || !half ? QString::number(whole) : QString(),
+                                                 half ? QStringLiteral("\u00BD") : QString());
+        };
         const QVector3D d = h.first - h.landSaved;
         if (qAbs(d.x()) >= 0.005f)
-            parts << tr("%1 m %2").arg(qAbs(d.x()), 0, 'f', 2)
-                     .arg(d.x() > 0 ? tr("stage left") : tr("stage right"));
+            parts << tr("%1 %2").arg(distance(d.x()),
+                                     d.x() > 0 ? tr("stage left") : tr("stage right"));
         if (qAbs(d.y()) >= 0.005f)
-            parts << tr("%1 m %2").arg(qAbs(d.y()), 0, 'f', 2)
-                     .arg(d.y() > 0 ? tr("downstage") : tr("upstage"));
+            parts << tr("%1 %2").arg(distance(d.y()),
+                                     d.y() > 0 ? tr("downstage") : tr("upstage"));
         return parts.join(QStringLiteral(", "));
     }
     const float dp = h.live.pan - h.saved.pan, dt = h.live.tilt - h.saved.tilt;

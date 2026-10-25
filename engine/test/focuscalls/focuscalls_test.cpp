@@ -1034,6 +1034,7 @@ void FocusCalls_Test::theControllerDoesItThroughTheProgrammer()
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
     QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
                              { 10, "a" }, { 11, "b" }, { 14, "lb" }, { 15, "rb" },
@@ -1180,6 +1181,7 @@ void FocusCalls_Test::theControllerLostFreezesEverything()
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
     QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
                              { 10, "a" }, { 11, "b" }, { 14, "lb" }, { 15, "rb" },
@@ -1560,6 +1562,7 @@ void FocusCalls_Test::theUnsavedLightBreathesAndViewRsCounts()
     dir.setFilter(QDir::Files);
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" },
                              { 16, "back" }, { 17, "start" }, { 18, "rs" } };
@@ -1615,6 +1618,7 @@ void FocusCalls_Test::theFirstPadOwnsIt()
     dir.setFilter(QDir::Files);
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 10, "a" }, { 11, "b" },
                              { 16, "back" }, { 17, "start" }, { 18, "rs" } };
@@ -1728,6 +1732,7 @@ void FocusCalls_Test::nothingReachingTheRigIsSaid()
     dir.setFilter(QDir::Files);
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     QVERIFY(iom->setOutputPatch(1, stub->name(), QString(), 0));
     QCOMPARE(pc->rigOutputProblem(a->id()), QString("Spot 3's universe has no output: it shows nothing."));
@@ -1744,6 +1749,7 @@ void FocusCalls_Test::holdBPutsEveryLightBack()
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
     QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
                              { 10, "a" }, { 11, "b" }, { 14, "lb" }, { 15, "rb" },
@@ -1852,6 +1858,7 @@ void FocusCalls_Test::theSmallIdeas()
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
     QVERIFY(m_doc->ioPluginCache()->plugins().size() > 0);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
     IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
     stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" },
                              { 10, "a" }, { 11, "b" }, { 12, "x" }, { 14, "lb" }, { 15, "rb" },
