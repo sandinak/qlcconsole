@@ -176,7 +176,13 @@ Where it runs:
 
 A house fixture that clashes when it is put in goes in **unpatched**, keeping
 the address it wants (as a fixture that clashes on load always has), so it
-never drives a tour fixture's channels.
+never drives a tour fixture's channels. That holds for every kind of clash
+(decided 2026-10-25, following Q138): an overlap, channels the venue keeps
+(not ours), or a Tour slot when the show has House slots. A tour fixture
+that clashes stays patched as the show has it: the venue never edits the
+show, and nothing is sent on not-ours channels anyway. Adding or moving a
+fixture onto not-ours channels is refused (`Doc::isOnNotOurs()`, used by
+`canPatchFixtures()`, `addFixture()` and a patched fixture's move).
 
 ## 7. The sidecar, extended
 
@@ -206,6 +212,11 @@ never drives a tour fixture's channels.
 - `NotOurs` addresses are 1-based, as on screen.
 - Version 2 only because there is more in it; version 1 files read as
   before (no house rig, no patch, nothing not ours).
+- A file from a newer build reads for what this build knows. Elements it
+  doesn't know -- between the venues, inside a `<Venue>`, `<House>` or
+  `<Practice>` -- are kept whole and written back on the next save (at the
+  end of their parent); a house `<Fixture>` is kept whole anyway. Unknown
+  attributes on known elements are not kept.
 
 ## 8. Old shows and old venue files
 

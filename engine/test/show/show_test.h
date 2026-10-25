@@ -33,6 +33,7 @@ private slots:
     void cleanupTestCase();
     void defaults();
     void copy();
+    void copyExactly();
     void timeDivision();
     void tracks();
     void duration();

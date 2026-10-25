@@ -1960,7 +1960,20 @@ void FixtureManager::slotAddRGBPanel()
             if (address + fxi->channels() > 512)
                 fxi->setCrossUniverse(rgb.crossUniverse());
             fxi->setAddress(address);
-            m_doc->addFixture(fxi, Fixture::invalidId(), rgb.crossUniverse());
+            if (!m_doc->addFixture(fxi, Fixture::invalidId(), rgb.crossUniverse()))
+            {
+                /* Refused there (another fixture, or channels the venue
+                   keeps): the row goes in unpatched, keeping the address it
+                   wanted, as a clashing fixture does on load. */
+                fxi->setPatched(false);
+                fxi->setAddressClash(true);
+                if (!m_doc->addFixture(fxi))
+                {
+                    delete fxi;
+                    currRow += rowInc;
+                    continue;
+                }
+            }
 
             address += fxi->channels();
             if (address >= 512 && rgb.crossUniverse())

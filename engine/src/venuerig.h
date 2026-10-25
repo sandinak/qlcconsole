@@ -113,6 +113,9 @@ public:
          *  recorded); empty: the show's patch. */
         QMap<quint32, QList<Universe::OfflinePatch>> patch;
         QList<NotOurs> notOurs;
+        /** Elements inside <House> this build doesn't know (a newer build's),
+         *  kept whole and written back. */
+        QList<QByteArray> houseUnknown;
 
         bool hasHouse() const { return !fixtures.isEmpty(); }
         bool isEmpty() const { return fixtures.isEmpty() && fills.isEmpty() && patch.isEmpty()
@@ -130,6 +133,12 @@ public:
      *  <House>, <Patch> or <NotOurs>) into @p d. False: not one of them
      *  (the reader is not moved). */
     static bool readXml(QXmlStreamReader &r, Data &d);
+
+    /** The element the reader is at, whole, as bytes; the reader is left
+     *  at its end. For keeping what a newer build wrote. */
+    static QByteArray keepElement(QXmlStreamReader &r);
+    /** keepElement()'s bytes, each written into @p w where it is. */
+    static void writeKept(QXmlStreamWriter &w, const QList<QByteArray> &kept);
 
     /*********************************************************************
      * On and off the rig
@@ -223,7 +232,11 @@ private:
     void sync();
     void watchUniverses();
     quint32 freeId(const QSet<quint32> &taken) const;
-    void putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap);
+    void putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap, const Data &d);
+    /** Whether a house fixture at its address clashes with what the venue
+        keeps (not ours) or with the show's slots (a Tour slot, when the show
+        has House slots at all). Overlaps are Doc::addFixture()'s to refuse. */
+    bool clashesOnPut(const Fixture *fx, const Data &d) const;
     void keepUnmodified(bool was);
 
 private:

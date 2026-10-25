@@ -661,7 +661,9 @@ void VCWidget_Test::saveAppearanceDefaultsImage()
         else if (xmlReader.name().toString() == "BackgroundImage")
         {
             bgimage++;
-            QCOMPARE(xmlReader.readElementText(), QString("../../../resources/icons/png/qlcconsole.png"));
+            // No workspace path: saved absolute (Doc::normalizeComponentPath)
+            QCOMPARE(xmlReader.readElementText(),
+                     QFileInfo("../../../resources/icons/png/qlcconsole.png").absoluteFilePath());
         }
         else if (xmlReader.name().toString() == "ForegroundColor")
         {

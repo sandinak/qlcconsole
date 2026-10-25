@@ -2943,9 +2943,19 @@ void ProgrammingManager_Test::deletingAFunctionTakesItOutOfWhatUsesIt()
 
 /* CHANGELOG 0.2.2: Build's Delete is one step on the shared history; the
    functions using what goes -- a Show's tracks too -- ride in it whole, so
-   Undo puts a timeline item back where it was. */
+   Undo puts a timeline item back where it was -- exactly: the same track,
+   playing the same scene, no "Copy of" made. Whether or not the Shows tab
+   was ever opened (its list of shows is empty until then). */
+void ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack_data()
+{
+    QTest::addColumn<bool>("tabOpened");
+    QTest::newRow("Shows tab opened") << true;
+    QTest::newRow("Shows tab never opened") << false;
+}
+
 void ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack()
 {
+    QFETCH(bool, tabOpened);
     Scene *walk = new Scene(m_doc);
     walk->setName("Walk");
     QVERIFY(m_doc->addFunction(walk));
@@ -2979,7 +2989,8 @@ void ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack()
     // The Shows tab, as the app has it after a load: it takes a deleted
     // function's items off their tracks.
     ShowManager shows(nullptr, m_doc);
-    shows.updateShowsCombo();
+    if (tabOpened)
+        shows.updateShowsCombo();
     ProgrammingManager mgr(nullptr, m_doc);
     const QString undoBefore = mgr.undoText();
     auto trackCount = [&]() {
@@ -2991,26 +3002,34 @@ void ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack()
     QVERIFY(m_doc->function(showId) != nullptr);
     QVERIFY(itemsOf(walkId).isEmpty());
     // Nothing else in the show: the timeline alone is left.
-    QEXPECT_FAIL("", "Bug: PaletteOps::functionSnapshot copies a Show with Show::copyFrom, "
-                     "which adds a \"Copy of\" each item's function to the Doc", Continue);
     QCOMPARE(m_doc->functions().count(), 1);
 
     // ⌘Z: the scene back with its id, and its item on its own track.
     mgr.slotUndo();
     QCOMPARE(mgr.undoText(), undoBefore);
     QVERIFY(m_doc->function(walkId) != nullptr);
-    QEXPECT_FAIL("", "Bug: Undo puts the Show back with Show::copyFrom, which appends "
-                     "tracks playing \"Copy of\" functions instead of the original item", Continue);
     QCOMPARE(itemsOf(walkId), placed);
-    QEXPECT_FAIL("", "Bug: Show::copyFrom appends tracks: the show has two", Continue);
     QCOMPARE(trackCount(), 1);
-    QEXPECT_FAIL("", "Bug: stray \"Copy of Walk\" scenes are left in the show", Continue);
     QCOMPARE(m_doc->functions().count(), 2);
+
+    {
+        Show *s = qobject_cast<Show *>(m_doc->function(showId));
+        QCOMPARE(s->track(trackId)->name(), QString("Lights"));
+        QCOMPARE(s->name(), QString("Timeline"));
+    }
 
     // ⌘⇧Z: off the track again.
     mgr.slotRedo();
     QVERIFY(m_doc->function(walkId) == nullptr);
     QVERIFY(itemsOf(walkId).isEmpty());
+    QCOMPARE(trackCount(), 1);
+    QCOMPARE(m_doc->functions().count(), 1);
+
+    // And back once more: still one track, one item.
+    mgr.slotUndo();
+    QCOMPARE(itemsOf(walkId), placed);
+    QCOMPARE(trackCount(), 1);
+    QCOMPARE(m_doc->functions().count(), 2);
 }
 
 void ProgrammingManager_Test::undoingADeleteHandsItBackToItsVcWidgets()

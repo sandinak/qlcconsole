@@ -711,6 +711,29 @@ circuits and subs.
   show's attribute for it are one value, so the level set last (and saved
   with the show) is the one that plays. A track saved at 50% used to start
   at full.
+- **Not-ours channels are refused every way a light gets an address.**
+  Adding a fixture with an address there (Add Fixture, an RGB panel, the
+  plot) and moving a patched one there (Fixture Properties) are refused now,
+  as the Patch dialog always refused them; the Add Fixture dialog says the
+  address is taken. One check (`Doc::isOnNotOurs`) serves them all.
+- **Deleting a scene a timeline plays, then Undo, puts the Show back as it
+  was**: one track, its item playing the scene. Undo used to add a second
+  track playing a new "Copy of Copy of Walk" and leave a stray "Copy of
+  Walk" in the show. Deleting it before the Shows tab was ever opened no
+  longer leaves a dead item on the track.
+- **ETC ColorSource CYC has a beam angle** (100°), so the plot no longer
+  draws it at a guess. ETC publishes none ("asymmetrical"); the value is
+  derived from its photometrics and noted in the definition.
+- **A sock or tower-face picture in a show not yet saved** keeps its full
+  path, whatever folder the app was started from.
+- **A venue file from a newer build keeps what this build doesn't know**
+  (elements between and inside venues, inside the house rig and a
+  practice) through the next save, instead of dropping it.
+- **A house light that clashes when a venue goes on goes in unpatched,
+  whatever the clash** (VENUES.md section 6): on channels the venue keeps,
+  or in a Tour slot, as well as on a tour light's channels. It keeps the
+  address it asked for and the clash list still names it. A tour light
+  that clashes stays as the show has it.
 
 ### Known issues
 

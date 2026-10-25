@@ -489,7 +489,5 @@ void FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean()
     foreach (const Issue &i, issues)
         (i.level == Issue::Error ? errors : warnings) << QString("%1: %2").arg(i.target, i.message);
     QVERIFY2(errors.isEmpty(), qPrintable(errors.join("; ")));
-    QEXPECT_FAIL("CYC", "Data gap: ETC-ColorSource-CYC.qxf has <Lens DegreesMin=\"0\" DegreesMax=\"0\">, "
-                 "so the checker warns 'No beam angle'", Continue);
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join("; ")));
 }

@@ -154,9 +154,20 @@ QSet<quint32> VenueRig::Data::fixtureIds() const
  * The sidecar
  *****************************************************************************/
 
+QByteArray VenueRig::keepElement(QXmlStreamReader &r)
+{
+    return captureElement(r);
+}
+
+void VenueRig::writeKept(QXmlStreamWriter &w, const QList<QByteArray> &kept)
+{
+    for (const QByteArray &xml : kept)
+        writeElement(w, xml);
+}
+
 void VenueRig::writeXml(QXmlStreamWriter &w, const Data &d)
 {
-    if (!d.fixtures.isEmpty() || !d.fills.isEmpty())
+    if (!d.fixtures.isEmpty() || !d.fills.isEmpty() || !d.houseUnknown.isEmpty())
     {
         w.writeStartElement(kHouse);
         for (const HouseFixture &hf : d.fixtures)
@@ -179,6 +190,7 @@ void VenueRig::writeXml(QXmlStreamWriter &w, const Data &d)
             }
             w.writeEndElement();
         }
+        writeKept(w, d.houseUnknown);
         w.writeEndElement();
     }
     for (auto it = d.patch.constBegin(); it != d.patch.constEnd(); ++it)
@@ -258,7 +270,7 @@ bool VenueRig::readXml(QXmlStreamReader &r, Data &d)
             }
             else
             {
-                r.skipCurrentElement();
+                d.houseUnknown << captureElement(r);     // a newer build's: kept
             }
         }
         return true;
@@ -345,7 +357,28 @@ quint32 VenueRig::freeId(const QSet<quint32> &taken) const
     return id;
 }
 
-void VenueRig::putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap)
+bool VenueRig::clashesOnPut(const Fixture *fx, const Data &d) const
+{
+    if (fx == nullptr || !fx->isPatched())
+        return false;
+    const quint32 from = fx->address();
+    const quint32 to = fx->address() + qMax(1u, fx->channels()) - 1;
+    for (const NotOurs &n : d.notOurs)
+    {
+        if (n.universe != fx->universe())
+            continue;
+        if (n.whole() || (from <= quint32(n.to) && to >= quint32(n.from)))
+            return true;
+    }
+    const QList<Universe *> unis = m_doc->inputOutputMap()->universes();
+    bool anyHouseSlot = false;
+    for (const Universe *u : unis)
+        anyHouseSlot = anyHouseSlot || u->slotOwner() == RigOwner::House;
+    return anyHouseSlot && fx->universe() < quint32(unis.size())
+           && unis.at(int(fx->universe()))->slotOwner() != RigOwner::House;
+}
+
+void VenueRig::putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap, const Data &d)
 {
     const quint32 id = remap.value(hf.id, hf.id);
     QXmlStreamReader r(hf.xml);
@@ -362,11 +395,16 @@ void VenueRig::putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap)
         m_unloaded.insert(hf.id);
         return;
     }
-    if (!m_doc->addFixture(fx, id, fx->crossUniverse()))
+    /* Any clash the check lists for it -- channels the venue keeps, or a
+       Tour slot -- puts it in unpatched, as an overlap does (VENUES.md
+       section 6, board Q138): the clash check still lists it, at the
+       address it asked for. */
+    if (clashesOnPut(fx, d) || !m_doc->addFixture(fx, id, fx->crossUniverse()))
     {
-        /* It wants channels a show fixture holds: in, unpatched, keeping
-           the address it asked for -- as a fixture clashing on load does --
-           so it never drives the tour's channels (VENUES.md section 6). */
+        /* It wants channels a show fixture holds (or the room's, or the
+           tour's slot): in, unpatched, keeping the address it asked for --
+           as a fixture clashing on load does -- so it never drives the
+           tour's channels (VENUES.md section 6). */
         fx->setPatched(false);
         fx->setAddressClash(true);
         if (!m_doc->addFixture(fx, id, fx->crossUniverse()))
@@ -426,7 +464,7 @@ void VenueRig::apply(Data &d)
         }
     }
     for (HouseFixture &hf : d.fixtures)
-        putFixture(hf, remap);
+        putFixture(hf, remap, d);
 
     // The fills: its heads in the show's groups.
     for (Fill &f : d.fills)

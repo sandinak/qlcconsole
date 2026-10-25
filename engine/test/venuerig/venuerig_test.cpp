@@ -1099,18 +1099,23 @@ void VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay()
     const bool in = m_doc->addFixture(added);
     if (!in)
         delete added;
-    QEXPECT_FAIL("", "Bug: Doc::addFixture() does not check the venue's not-ours channels "
-                     "(only Doc::canPatchFixtures() does): a fixture added with an address "
-                     "there is patched there", Continue);
-    QVERIFY(!in || !onNotOurs(m_doc->fixture(added->id())));
+    QVERIFY(!in);                                   // refused, as an overlap is
+    QVERIFY(m_doc->isOnNotOurs(0, 5, 1));
+    QVERIFY(!m_doc->isOnNotOurs(0, 8, 4));
 
     // A patched fixture's address changed onto them.
     const quint32 moved = dimmers(1, 0, 9, QStringLiteral("Moved"));
     QVERIFY(moved != Fixture::invalidId());
     m_doc->fixture(moved)->setAddress(6);
-    QEXPECT_FAIL("", "Bug: Fixture::setAddress() on a patched fixture (the fixture edit dialog's "
-                     "path) is not checked against the venue's not-ours channels", Continue);
     QVERIFY(!onNotOurs(m_doc->fixture(moved)));
+    QVERIFY(m_doc->fixture(moved)->isPatched());    // refused: it stays where it was
+    QCOMPARE(m_doc->fixture(moved)->address(), 9u);
+    QCOMPARE(m_doc->fixtureForAddress(9), moved);
+    QCOMPARE(m_doc->fixtureForAddress(6), Fixture::invalidId());
+    // Moved somewhere free, it goes.
+    m_doc->fixture(moved)->setAddress(12);
+    QCOMPARE(m_doc->fixture(moved)->address(), 12u);
+    QCOMPARE(m_doc->fixtureForAddress(12), moved);
 
     // The refused way, for contrast: still refused, with why.
     const quint32 other = dimmers(1, 0, 20, QStringLiteral("Other"));
@@ -1124,7 +1129,10 @@ void VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay()
    the Patch dialog"): the show reopened after it was edited elsewhere, its
    sidecar's venue applied again, says what clashes -- an overlap, a tour
    fixture on channels the venue keeps, a fixture in the other's slot -- and
-   a house fixture overlapping a tour one goes in unpatched. */
+   a house fixture that clashes goes in unpatched, whatever the clash
+   (VENUES.md section 6, Q138): overlapping a tour one, on channels the
+   venue keeps, or in a Tour slot. A tour fixture that clashes stays as the
+   show has it (nothing is sent on not-ours channels anyway). */
 void VenueRig_Test::theClashCheckRunsOnOpen()
 {
     VenueCorrections *v = venues(m_doc);
@@ -1146,10 +1154,17 @@ void VenueRig_Test::theClashCheckRunsOnOpen()
     QVERIFY(sidecar.contains("Active=\"Lincoln HS\""));
     QVERIFY(sidecar.contains("House par 1"));
 
-    enum Edit { MovedOntoTheHousePar, MovedOntoNotOurs, HouseSlot };
-    for (Edit edit : { MovedOntoTheHousePar, MovedOntoNotOurs, HouseSlot })
+    enum Edit { MovedOntoTheHousePar, MovedOntoNotOurs, HouseSlot, HouseParOnNotOurs };
+    for (Edit edit : { MovedOntoTheHousePar, MovedOntoNotOurs, HouseSlot, HouseParOnNotOurs })
     {
-        QVERIFY(writeFile(v->filePath(), sidecar));
+        QByteArray sc = sidecar;
+        if (edit == HouseParOnNotOurs)
+        {
+            // The venue file edited: the room now keeps the par's channel.
+            QVERIFY(sc.contains("From=\"61\" To=\"63\""));
+            sc.replace("From=\"61\" To=\"63\"", "From=\"51\" To=\"51\"");
+        }
+        QVERIFY(writeFile(v->filePath(), sc));
         Doc reopened(this);
         {
             QXmlStreamReader r(show);
@@ -1177,6 +1192,10 @@ void VenueRig_Test::theClashCheckRunsOnOpen()
                 kind = VenueRig::Clash::Slot;
                 words = QStringLiteral("House slot");
             break;
+            case HouseParOnNotOurs:
+                kind = VenueRig::Clash::NotOursKind;
+                words = QStringLiteral("not ours");
+            break;
         }
 
         VenueCorrections *rv = venues(&reopened);
@@ -1194,16 +1213,26 @@ void VenueRig_Test::theClashCheckRunsOnOpen()
         Fixture *hp = reopened.fixture(par);
         QVERIFY(hp != nullptr);
         QCOMPARE(hp->address(), 50u);
-        if (edit == MovedOntoTheHousePar)
+        if (edit == MovedOntoNotOurs)
         {
-            // In, unpatched, keeping its address: it never drives Tour 10.
-            QVERIFY(!hp->isPatched());
-            QVERIFY(hp->addressClash());
-            QCOMPARE(reopened.fixtureForAddress(50), tour + 9);
+            QVERIFY(hp->isPatched());               // nothing of its own clashes
+            // The tour fixture stays where the show has it.
+            QVERIFY(reopened.fixture(tour + 9)->isPatched());
+            QCOMPARE(reopened.fixture(tour + 9)->address(), 61u);
         }
         else
         {
-            QVERIFY(hp->isPatched());               // nothing of its own clashes
+            /* In, unpatched, keeping its address: it never drives Tour 10,
+               the room's channel, or the tour's slot (HouseSlot: universe 1
+               is now a House slot, so the par's universe 0 is a Tour one). */
+            QVERIFY2(!hp->isPatched(), qPrintable(QString("edit %1").arg(int(edit))));
+            QVERIFY(hp->addressClash());
+            QVERIFY(reopened.fixtureForAddress(50) != par);
+            if (edit == MovedOntoTheHousePar)
+                QCOMPARE(reopened.fixtureForAddress(50), tour + 9);
+            // Still listed at the address it asked for, and saved so.
+            QVERIFY(rv->recordRig());
+            QVERIFY(readFile(rv->filePath()).contains("House par 1"));
         }
     }
 }
@@ -1301,8 +1330,26 @@ void VenueRig_Test::aSidecarFromANewerBuildStillLoads()
     QString why;
     QVERIFY2(back.load(&why), qPrintable(why));
 
-    // Everything known, as this build would have written it.
-    QCOMPARE(back.toXml(), reference.toXml());
+    // Everything known, as this build would have written it, and what it
+    // doesn't know kept: take those out and it is the reference.
+    const QStringList kept({ QStringLiteral("<Rooms Count=\"3\">"), QStringLiteral("<Weather Rain=\"1\">"),
+                             QStringLiteral("<Haze Level=\"2\"/>"), QStringLiteral("<Rack Name=\"DSR\">"),
+                             QStringLiteral("<Coach Name=\"Ana\">"), QStringLiteral("<Trailer/>") });
+    auto withoutKept = [](QString xml) {
+        xml.remove(QRegularExpression(QStringLiteral("\\s*<Rooms [^>]*>\\s*<Room/>\\s*</Rooms>")));
+        xml.remove(QRegularExpression(QStringLiteral("\\s*<Weather [^>]*>\\s*<Forecast/>\\s*</Weather>")));
+        xml.remove(QRegularExpression(QStringLiteral("\\s*<Haze [^>]*/>")));
+        xml.remove(QRegularExpression(QStringLiteral("\\s*<Rack [^>]*>\\s*<Slot/>\\s*</Rack>")));
+        xml.remove(QRegularExpression(QStringLiteral("\\s*<Coach [^>]*>\\s*<Tip/>\\s*</Coach>")));
+        xml.remove(QRegularExpression(QStringLiteral("\\s*<Trailer/>")));
+        return xml;
+    };
+    {
+        const QString got = QString::fromUtf8(back.toXml());
+        for (const QString &k : kept)
+            QVERIFY2(got.contains(k), qPrintable(k));
+        QCOMPARE(withoutKept(got), QString::fromUtf8(reference.toXml()));
+    }
     QCOMPARE(back.activeVenue(), a);
     QCOMPARE(back.venueNames(), v->venueNames());
     const VenueCorrections::Venue lv = back.venue(a);
@@ -1326,15 +1373,18 @@ void VenueRig_Test::aSidecarFromANewerBuildStillLoads()
     QVERIFY(pv.practice.truth.contains(spot->id()));
     QVERIFY(back.isReservedFixtureId(par + 1));
 
-    // Saved back and read again: the same. (What this build does not know
-    // is not kept: it is skipped on read, so a save drops it.)
+    // Saved back and read again: the same, what it doesn't know included
+    // (kept through the round trip, not dropped on the next save).
     QVERIFY2(back.save(&why), qPrintable(why));
     const QByteArray saved = readFile(back.filePath());
     QVERIFY(saved.contains("Version=\"2\""));
+    for (const QString &k : kept)
+        QVERIFY2(saved.contains(k.toUtf8()), qPrintable(k));
     VenueCorrections again(&other);
     again.setShowFile(futureShow, false);
     QVERIFY2(again.load(&why), qPrintable(why));
-    QCOMPARE(again.toXml(), reference.toXml());
+    QCOMPARE(again.toXml(), back.toXml());
+    QCOMPARE(withoutKept(QString::fromUtf8(again.toXml())), QString::fromUtf8(reference.toXml()));
 }
 
 /* Scramble practice (FOCUS_REFINE_DESIGN.md section 13) moves the lights in

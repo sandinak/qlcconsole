@@ -160,6 +160,7 @@ private slots:
     void undoingADeleteHandsItBackToItsVcWidgets();
     /** Delete of a function a Shows track plays: gone from the track; ⌘Z
      *  puts the item back with its start and duration; ⌘⇧Z takes it out. */
+    void undoingADeletePutsItBackOnItsShowTrack_data();
     void undoingADeletePutsItBackOnItsShowTrack();
     /** ⌘C ⌘V and Duplicate: a copy beside the original, its values and
      *  looks, the next name in the pattern; one ⌘Z takes it away. */

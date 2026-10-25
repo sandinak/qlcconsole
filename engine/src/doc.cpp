@@ -416,7 +416,9 @@ QString Doc::normalizeComponentPath(const QString& filePath) const
 
     QFileInfo f(filePath);
 
-    if (f.absolutePath().startsWith(workspacePath()))
+    // No workspace path (an unsaved show): keep the absolute path, rather
+    // than one relative to whatever the current directory happens to be.
+    if (!workspacePath().isEmpty() && f.absolutePath().startsWith(workspacePath()))
     {
         return QDir(workspacePath()).relativeFilePath(f.absoluteFilePath());
     }
@@ -1218,6 +1220,13 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
                 return false;
             }
         }
+        /* Nor on channels the venue applied keeps for itself, as
+           canPatchFixtures() refuses (VENUES.md section 5). */
+        if (isOnNotOurs(fixture->universe(), fixture->address(), fixture->channels()))
+        {
+            qWarning() << Q_FUNC_INFO << "fixture" << id << "is on channels the venue keeps (not ours)";
+            return false;
+        }
     }
 
     fixture->setID(id);
@@ -1302,6 +1311,21 @@ bool Doc::patchFixture(quint32 id, quint32 universe, quint32 address)
     return patchFixtures({ FixturePatch{ id, universe, address } });
 }
 
+bool Doc::isOnNotOurs(quint32 universe, quint32 address, quint32 channels, quint32 *first) const
+{
+    VenueCorrections *venues = m_programmer != NULL ? m_programmer->venueCorrections() : NULL;
+    for (quint32 i = 0; venues != NULL && i < channels; i++)
+    {
+        if (venues->isNotOurs(universe, address + i))
+        {
+            if (first != NULL)
+                *first = address + i;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Doc::canPatchFixtures(const QList<FixturePatch> &patches, QString *why,
                            const QHash<quint32, quint32> &channels) const
 {
@@ -1345,12 +1369,11 @@ bool Doc::canPatchFixtures(const QList<FixturePatch> &patches, QString *why,
         const quint32 base = (p.universe << 9) | p.address;
         /* Channels the venue applied keeps for itself (VENUES.md section 5):
            nothing of ours is sent there, so nothing is patched there. */
-        VenueCorrections *venues = m_programmer != NULL ? m_programmer->venueCorrections() : NULL;
-        for (quint32 i = 0; venues != NULL && i < n; i++)
-            if (venues->isNotOurs(p.universe, p.address + i))
-                return refuse(QStringLiteral("%1 at universe %2, address %3 is on channels %4 keeps (not ours)")
-                                  .arg(fxi->name()).arg(p.universe + 1).arg(p.address + i + 1)
-                                  .arg(venues->activeVenue()));
+        quint32 at = 0;
+        if (isOnNotOurs(p.universe, p.address, n, &at))
+            return refuse(QStringLiteral("%1 at universe %2, address %3 is on channels %4 keeps (not ours)")
+                              .arg(fxi->name()).arg(p.universe + 1).arg(at + 1)
+                              .arg(m_programmer->venueCorrections()->activeVenue()));
         for (quint32 i = base; i < base + n; i++)
         {
             if (claimed.contains(i))
@@ -1762,6 +1785,7 @@ void Doc::slotFixtureChanged(quint32 id)
     Fixture* fxi = fixture(id);
 
     // remove it
+    quint32 oldBase = UINT_MAX;     // where it was, if it was patched
     QMutableHashIterator <uint,uint> it(m_addresses);
     while (it.hasNext() == true)
     {
@@ -1769,8 +1793,32 @@ void Doc::slotFixtureChanged(quint32 id)
         if (it.value() == id)
         {
             qDebug() << Q_FUNC_INFO << " remove: " << it.key() << " val: " << it.value();
+            oldBase = qMin(oldBase, quint32(it.key()));
             it.remove();
         }
+    }
+
+    /* A patched fixture moved onto channels the venue applied keeps (not
+       ours) is refused, as canPatchFixtures() refuses it: it goes back to
+       where it was. One that was nowhere goes in unpatched, keeping the
+       address it asked for, as a clash on load does. A fixture that was
+       already there (the venue came on after it) stays: it's the show's. */
+    if (fxi->isPatched() && fxi->universeAddress() != oldBase
+        && isOnNotOurs(fxi->universe(), fxi->address(), fxi->channels()))
+    {
+        qWarning() << Q_FUNC_INFO << "fixture" << id << "moved onto channels the venue keeps (not ours): refused";
+        fxi->blockSignals(true);
+        if (oldBase != UINT_MAX)
+        {
+            fxi->setUniverse(oldBase >> 9);
+            fxi->setAddress(oldBase & 0x01FF);
+        }
+        else
+        {
+            fxi->setPatched(false);
+            fxi->setAddressClash(true);
+        }
+        fxi->blockSignals(false);
     }
 
     // An inventory fixture claims nothing (its 0/0 is a placeholder).

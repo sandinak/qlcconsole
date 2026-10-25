@@ -1437,6 +1437,15 @@ void MonitorProperties_Test::patternPicturesAreKeptWithTheShow()
     QVERIFY(save().contains(picked.toUtf8()));
     QCOMPARE(t->sockPattern(), picked);
 
+    // ...and stays absolute whatever the current directory is (it used to
+    // come back relative to it when the picture lay under it).
+    const QString cwd = QDir::currentPath();
+    QDir::setCurrent(downloads.path());
+    const QByteArray unsaved = save();
+    QDir::setCurrent(cwd);
+    QVERIFY(unsaved.contains(QFileInfo(picked).absoluteFilePath().toUtf8()));
+    QCOMPARE(doc.normalizeComponentPath(picked), QFileInfo(picked).absoluteFilePath());
+
     // Saved into a folder: copied into images/, written relative, used from there.
     doc.setWorkspacePath(show.path());
     QByteArray xml = save();

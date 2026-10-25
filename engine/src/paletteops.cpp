@@ -27,6 +27,7 @@
 
 #include "showtreecontroller.h"
 #include "paletteops.h"
+#include "show.h"
 #include "function.h"
 #include "scene.h"
 #include "doc.h"
@@ -1020,12 +1021,39 @@ static QByteArray functionSignature(const Function *f)
     return xml;
 }
 
+/* A Show's own copy duplicates every item's function into the Doc and adds
+   its tracks to the show's: a snapshot and a restore want it exactly. */
+static Function *exactCopy(const Function *src, Doc *doc)
+{
+    if (const Show *show = qobject_cast<const Show *>(src))
+    {
+        Show *copy = new Show(doc);
+        if (!copy->copyExactlyFrom(show))
+        {
+            delete copy;
+            return nullptr;
+        }
+        return copy;
+    }
+    return const_cast<Function *>(src)->createCopy(doc, false);
+}
+
+static void restoreFrom(Function *dst, const Function *src)
+{
+    Show *show = qobject_cast<Show *>(dst);
+    const Show *from = qobject_cast<const Show *>(src);
+    if (show != nullptr && from != nullptr)
+        show->copyExactlyFrom(from);
+    else
+        dst->copyFrom(src);
+}
+
 QSharedPointer<Function> PaletteOps::functionSnapshot(quint32 id) const
 {
     Function *f = m_doc->function(id);
     if (f == nullptr)
         return QSharedPointer<Function>();
-    Function *snap = f->createCopy(m_doc, false);
+    Function *snap = exactCopy(f, m_doc);
     if (snap == nullptr)
         return QSharedPointer<Function>();
     // Owned by the pointer alone: the Doc would delete it a second time.
@@ -1103,7 +1131,7 @@ void PaletteOps::applyFunctions(const QList<QPair<quint32, QSharedPointer<Functi
     {
         if (s.second.isNull() || m_doc->function(s.first) != nullptr)
             continue;
-        Function *f = s.second->createCopy(m_doc, false);
+        Function *f = exactCopy(s.second.data(), m_doc);
         if (f == nullptr)
             continue;
         if (!m_doc->addFunction(f, s.first))
@@ -1118,7 +1146,7 @@ void PaletteOps::applyFunctions(const QList<QPair<quint32, QSharedPointer<Functi
             continue;
         if (functionSignature(f) == functionSignature(s.second.data()))
             continue;
-        f->copyFrom(s.second.data());
+        restoreFrom(f, s.second.data());
         if (Scene *scene = qobject_cast<Scene *>(f))
             if (scene->isRunning())
                 scene->resetRuntime();

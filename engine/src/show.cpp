@@ -178,6 +178,38 @@ bool Show::copyFrom(const Function* function)
     return Function::copyFrom(function);
 }
 
+bool Show::copyExactlyFrom(const Show *show)
+{
+    if (show == NULL || show == this)
+        return show != NULL;
+
+    /* Through the show's own XML: everything a track and an item hold,
+       ids included, the way it is saved and loaded. */
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        show->saveXML(&w);
+    }
+
+    {
+        QMutexLocker locker(&m_tracksMutex);
+        foreach (quint32 id, m_tracks.keys())
+            removeTrack(id);
+    }
+    m_markers.clear();
+    m_timecodeFollow = false;
+    m_timecodeOffset = 0;
+    m_configuredDuration = 0;
+
+    QXmlStreamReader r(xml);
+    if (!r.readNextStartElement() || !loadXML(r))
+        return false;
+    // Item ids are made as they load (they aren't saved): never reuse one.
+    m_latestTrackId = qMax(m_latestTrackId, show->m_latestTrackId);
+
+    return Function::copyFrom(show);
+}
+
 /*********************************************************************
  * Time division
  *********************************************************************/

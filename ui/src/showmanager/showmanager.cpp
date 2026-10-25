@@ -2721,8 +2721,10 @@ void ShowManager::slotDocLoaded()
 
 void ShowManager::slotFunctionRemoved(quint32 id)
 {
-    if (m_showsCombo->count() == 0)
-        return;
+    /* The combo is empty until the Shows tab is first shown, but the Doc's
+       shows are there all the same: a deleted function's items still come
+       off their tracks below (Build Delete before the tab was opened left
+       a dead item pointing at the id). */
 
     // check if ID is a Show
     for (int i = 0; i < m_showsCombo->count(); i++)

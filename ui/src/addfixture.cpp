@@ -543,6 +543,9 @@ void AddFixture::updateMaximumAmount()
 bool AddFixture::checkAddressAvailability(int value, int channels)
 {
     qDebug() << "Check availability for address: " << value;
+    // Not on channels the venue applied keeps for itself (not ours).
+    if (m_doc->isOnNotOurs(quint32(value) >> 9, quint32(value) & 0x01FF, quint32(qMax(0, channels))))
+        return false;
     for (int i = 0; i < channels; i++)
     {
         quint32 fid = m_doc->fixtureForAddress(value + i);

@@ -213,6 +213,7 @@ bool VenueCorrections::load(QString *why)
     if (path.isEmpty() || !QFile::exists(path))
     {
         m_venues.clear();
+        m_unknown.clear();
         m_active.clear();
         return true;
     }
@@ -454,10 +455,14 @@ QByteArray VenueCorrections::toXml() const
             w.writeAttribute(QStringLiteral("Saves"), QString::number(p.saves));
             for (auto it = p.truth.constBegin(); it != p.truth.constEnd(); ++it)
                 writeTruth(w, it.key(), it.value());
+            VenueRig::writeKept(w, p.unknown);
             w.writeEndElement();
         }
+        // What a newer build wrote that this one doesn't know: as it was.
+        VenueRig::writeKept(w, v.unknown);
         w.writeEndElement();
     }
+    VenueRig::writeKept(w, m_unknown);
     w.writeEndElement();
     w.writeEndDocument();
     return out;
@@ -473,12 +478,13 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
         return false;
     }
     QList<Venue> venues;
+    QList<QByteArray> unknown;
     const QString active = r.attributes().value(QStringLiteral("Active")).toString();
     while (r.readNextStartElement())
     {
         if (r.name() != kVenue)
         {
-            r.skipCurrentElement();
+            unknown << VenueRig::keepElement(r);   // a newer build's: kept
             continue;
         }
         Venue v;
@@ -557,8 +563,12 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
                         const quint32 id = r.attributes().value(QStringLiteral("ID")).toUInt(&ok);
                         if (ok)
                             v.practice.truth.insert(id, readTruth(r.attributes()));
+                        r.skipCurrentElement();
                     }
-                    r.skipCurrentElement();
+                    else
+                    {
+                        v.practice.unknown << VenueRig::keepElement(r);
+                    }
                 }
                 continue;   // its end element is read
             }
@@ -572,6 +582,11 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
                                                    a.value(QStringLiteral("Y")).toFloat(),
                                                    a.value(QStringLiteral("Z")).toFloat()));
             }
+            else
+            {
+                v.unknown << VenueRig::keepElement(r);     // a newer build's: kept
+                continue;   // its end element is read
+            }
             r.skipCurrentElement();
         }
         if (!v.name.isEmpty())
@@ -584,6 +599,7 @@ bool VenueCorrections::fromXml(const QByteArray &xml, QString *why)
         return false;
     }
     m_venues = venues;
+    m_unknown = unknown;
     m_active = hasVenue(active) ? active : QString();
     updateReserved();
     return true;
@@ -1279,6 +1295,7 @@ void VenueCorrections::reset()
     m_rig->forget();
     m_rig->setReservedIds(QSet<quint32>());
     m_venues.clear();
+    m_unknown.clear();
     m_active.clear();
     m_needsFocus.clear();
     m_showFile.clear();

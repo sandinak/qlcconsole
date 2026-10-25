@@ -85,8 +85,15 @@ public:
     /** @reimp */
     Function* createCopy(Doc* doc, bool addToDoc = true) override;
 
-    /** Copy the contents for this function from another function */
+    /** Copy the contents for this function from another function. The
+     *  copy is a duplicate: each item's function is copied into the Doc
+     *  ("Copy of ...") and the tracks are added to this show's own. */
     bool copyFrom(const Function* function) override;
+
+    /** Make this show exactly @p show, as an undo snapshot needs: its tracks
+     *  replace this show's, with the same track and item ids, and the items
+     *  play the same functions -- nothing is copied into the Doc. */
+    bool copyExactlyFrom(const Show *show);
 
     /*********************************************************************
      * Time division

@@ -98,6 +98,52 @@ void Show_Test::copy()
     QVERIFY(show.components().count() == 1);
 }
 
+/* An undo snapshot and its restore (PaletteOps): the same tracks with the
+   same ids, items playing the same functions, nothing added to the Doc,
+   and the show's own tracks replaced, not added to. */
+void Show_Test::copyExactly()
+{
+    Scene *scene = new Scene(m_doc);
+    QVERIFY(m_doc->addFunction(scene));
+    const int functions = m_doc->functions().count();
+
+    Show show(m_doc);
+    show.setTimeDivision(Show::BPM_3_4, 123);
+    show.setMarker(500, 900, "Intro");
+    Track *t = new Track(456, &show);
+    t->setName("Lights");
+    QVERIFY(show.addTrack(t));
+    ShowFunction *sf = t->createShowFunction(scene->id());
+    sf->setStartTime(1000);
+    sf->setDuration(2000);
+
+    Show copy(m_doc);
+    QVERIFY(copy.copyExactlyFrom(&show));
+    QCOMPARE(m_doc->functions().count(), functions);
+    QCOMPARE(copy.getTracksCount(), 1);
+    Track *ct = copy.track(t->id());
+    QVERIFY(ct != NULL);
+    QCOMPARE(ct->name(), QString("Lights"));
+    QCOMPARE(ct->getSceneID(), 456u);
+    QCOMPARE(ct->showFunctions().count(), 1);
+    QCOMPARE(ct->showFunctions().first()->functionID(), scene->id());
+    QCOMPARE(ct->showFunctions().first()->startTime(), 1000u);
+    QCOMPARE(copy.timeDivisionBPM(), 123);
+    QCOMPARE(copy.markers().count(), 1);
+
+    // Again, onto a show that has changed since: replaced, not appended.
+    ct->setName("Renamed");
+    Track *extra = new Track(Function::invalidId(), &copy);
+    QVERIFY(copy.addTrack(extra));
+    QVERIFY(copy.copyExactlyFrom(&show));
+    QCOMPARE(copy.getTracksCount(), 1);
+    QCOMPARE(copy.track(t->id())->name(), QString("Lights"));
+    QCOMPARE(copy.markers().count(), 1);
+    QCOMPARE(m_doc->functions().count(), functions);
+
+    QVERIFY(m_doc->deleteFunction(scene->id()));
+}
+
 void Show_Test::timeDivision()
 {
     Show s(m_doc);

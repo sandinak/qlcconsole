@@ -49,7 +49,11 @@
  <Physical>
   <Bulb Type="LED" Lumens="4117" ColourTemperature="0"/>
   <Dimensions Weight="4.67" Width="266" Height="304" Depth="221"/>
-  <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
+  <!-- ETC publishes no beam angle ("N/A (asymmetrical)", ColorSource CYC
+       data sheet Rev D 1/20). Its photometrics blend units 3.4 ft apart at
+       2 ft back, so the spread is at least 2*atan(1.7/2) = 80 degrees; a
+       100 degree flood is drawn. -->
+  <Lens Name="Other" DegreesMin="100" DegreesMax="100"/>
   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
   <Technical PowerConsumption="133" DmxConnector="5-pin"/>
  </Physical>

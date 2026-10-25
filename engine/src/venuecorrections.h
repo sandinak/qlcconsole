@@ -89,6 +89,8 @@ public:
         QDateTime started;
         QDateTime lastSave;
         int saves = 0;
+        /** Elements inside <Practice> this build doesn't know, kept. */
+        QList<QByteArray> unknown;
     };
 
     /** One venue's corrections. */
@@ -115,6 +117,9 @@ public:
         /** fixture id -> when it was checked here (Q134), dead or not. */
         QMap<quint32, Check> checks;
         Practice practice;
+        /** Elements inside <Venue> this build doesn't know (a newer
+         *  build's), kept whole and written back (VENUES.md section 7). */
+        QList<QByteArray> unknown;
     };
 
     /*********************************************************************
@@ -390,6 +395,8 @@ private:
     Doc *m_doc;
     QString m_showFile;
     QList<Venue> m_venues;
+    /** Elements between the venues this build doesn't know, kept. */
+    QList<QByteArray> m_unknown;
     QString m_active;
     bool m_writing = false;
     /** The applied venue was chosen, or said to be still the room, since

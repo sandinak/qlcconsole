@@ -753,6 +753,13 @@ public:
     bool canPatchFixtures(const QList<FixturePatch> &patches, QString *why = NULL,
                           const QHash<quint32, quint32> &channels = QHash<quint32, quint32>()) const;
 
+    /** Whether any of @p channels channels from @p address in @p universe is
+     *  one the venue applied keeps for itself (not ours, VENUES.md section
+     *  5); @p first gets the first such address. The one check behind
+     *  canPatchFixtures(), addFixture() and a patched fixture's move. */
+    bool isOnNotOurs(quint32 universe, quint32 address, quint32 channels,
+                     quint32 *first = NULL) const;
+
     /** Fixtures that loaded unpatched because their address clashed with
      *  another fixture's (see Fixture::addressClash()), in id order. */
     QList<quint32> addressClashes() const;

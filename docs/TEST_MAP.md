@@ -62,63 +62,60 @@ function name as its argument. Set `QT_QPA_PLATFORM=offscreen` and add
 | | rows | covered | partial | none |
 |---|---|---|---|---|
 | All, before | 488 | 366 | 60 | 62 |
-| All, after | 488 | 431 | 32 | 25 |
+| All, after | 488 | 433 | 30 | 25 |
 | High risk, before | 174 | 137 | 16 | 21 |
-| High risk, after | 174 | 170 | 4 | 0 |
+| High risk, after | 174 | 172 | 2 | 0 |
 
 | Section | rows | covered before → after | partial before → after | none before → after |
 |---|---|---|---|---|
-| Added: house rig, venues, focus calls and Refine | 63 | 45 → 55 | 9 → 3 | 9 → 5 |
+| Added: house rig, venues, focus calls and Refine | 63 | 45 → 56 | 9 → 2 | 9 → 5 |
 | Added: focus report, practice, pad moves, input devices | 52 | 37 → 44 | 8 → 4 | 7 → 4 |
 | Added: stage marks to Upgrade This Show | 108 | 81 → 91 | 17 → 13 | 10 → 4 |
 | Added: skip cues to controller test | 83 | 73 → 77 | 5 → 3 | 5 → 3 |
 | Changed | 84 | 63 → 75 | 10 → 5 | 11 → 4 |
 | Fixed (part 1) | 42 | 28 → 37 | 7 → 2 | 7 → 3 |
-| Fixed (part 2) | 51 | 39 → 47 | 4 → 2 | 8 → 2 |
+| Fixed (part 2) | 51 | 39 → 48 | 4 → 1 | 8 → 2 |
 | Data safety across features (old shows, file formats) | 5 | 0 → 5 | 0 → 0 | 5 → 0 |
 
 ## What the 2026-10-25 audit found
 
-Each bug below has a test that asserts what the changelog promises. The
-failing check is marked `QEXPECT_FAIL`, so the test passes for now. When a
-bug is fixed, its check passes, QtTest reports an XPASS, and the test fails
-until the marker is removed.
+The audit's bugs each had a test asserting what the changelog promises,
+with the failing check marked `QEXPECT_FAIL`. All three, and three of the
+findings below, were fixed the same night (CHANGELOG 0.3.0, Fixed); their
+checks now pass, with no `QEXPECT_FAIL` left:
 
-- **Not-ours channels can still be patched by two paths (M015).** The not-ours
-  check is only in `Doc::canPatchFixtures()`. `Doc::addFixture()` with an
-  address doesn't check it (the RGB panel, FixtureCreator and the plot's
-  adds use that path). Neither does `Fixture::setAddress()` on a patched
-  fixture (the fixture edit dialog). The output on those channels is still
-  zeroed, so nothing reaches the house desk. Test:
-  `VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay`.
-- **Build Delete → Undo garbles a Show (M438).** `PaletteOps::functionSnapshot`
-  copies the Show with `createCopy`, and the restore uses `copyFrom`.
-  `Show::copyFrom()` appends tracks instead of replacing them, and
-  deep-copies each item's function. Deleting a scene a Show track plays,
-  then pressing ⌘Z, leaves the Show with two tracks. The item then plays
-  "Copy of Copy of Walk", and a stray "Copy of Walk" is left in the show.
-  Test: `ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack`.
-- **The ColorSource CYC definition has no beam angle (M292).** It has
-  `<Lens DegreesMin="0" DegreesMax="0">`, so the definition checker warns
-  and the plot draws its beam at a guess. Test:
+- **Not-ours channels could still be patched by two paths (M015). Fixed.**
+  `Doc::addFixture()` with an address and a patched fixture's move
+  (`Fixture::setAddress()`, through `Doc::slotFixtureChanged`) now refuse
+  not-ours channels, through the same `Doc::isOnNotOurs()` that
+  `canPatchFixtures()` uses; the Add Fixture dialog marks the address taken.
+  Test: `VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay`.
+- **Build Delete → Undo garbled a Show (M438). Fixed.** The undo snapshot
+  and restore use `Show::copyExactlyFrom()` (same tracks and items, no
+  "Copy of" functions) instead of `Show::copyFrom()`. Tests:
+  `ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack` (both
+  with the Shows tab opened and never opened), `Show_Test::copyExactly`.
+- **The ColorSource CYC definition had no beam angle (M292). Fixed.** ETC
+  publishes none ("N/A (asymmetrical)"); 100° is derived from its
+  photometrics and noted in the file. Test:
   `FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean`.
 
 Findings that are not marked as bugs:
 
-- **The venue file keeps only what this build knows.** A venue file from a
-  newer build loads. Elements this build doesn't know are dropped on the
-  next save, except inside a house `<Fixture>`, which is kept whole.
-- **A clash found when a venue opens leaves only an overlap unpatched.** On
-  open, as when a venue is applied, an overlapping house light comes in
-  unpatched. A not-ours or slot clash is noted, but the light stays patched.
+- **The venue file kept only what this build knows. Fixed:** elements a
+  newer build wrote (between and inside venues, inside `<House>` and
+  `<Practice>`) are kept through the next save. Unknown attributes on known
+  elements are still dropped.
+- **A clash found when a venue opens left only an overlap unpatched. Fixed
+  (decision, following Q138):** a house light that clashes in any way
+  (overlap, not ours, a Tour slot) goes in unpatched, keeping its address.
+  A tour light that clashes stays patched as the show has it.
 - **A practice can add a `<FixtureRig>` entry to the show file.** It holds
   default values, for a scrambled light that had no entry. The calibration
   is unchanged.
-- **If ShowManager has never been shown, Build Delete leaves a dead Show
-  item.** `ShowManager::slotFunctionRemoved` returns early while its shows
-  list is empty. That happens for a Show made in this session before the
-  Shows tab was opened. The deleted function's item stays on its track,
-  pointing at an id that no longer exists.
+- **If ShowManager had never been shown, Build Delete left a dead Show
+  item. Fixed:** `ShowManager::slotFunctionRemoved` no longer returns early
+  while its shows list is empty.
 - **Two hold tests depended on machine load.** They counted wall-clock time
   per joystick tick, so a loaded machine could save early. They now tick
   at the nominal 20 ms:
@@ -140,18 +137,18 @@ Findings that are not marked as bugs:
 | M005 | House rig / venues | A cue on a group plays (DMX) on each venue's house rig | VenueRig_Test::aGroupCuePlaysOnEachVenuesHouseRig | covered | covered | high |  |
 | M006 | House rig / venues | House ids are reserved: new show fixtures never take them; still reserved after sidecar reload | VenueRig_Test::newShowFixturesSkipHouseIds, VenueRig_Test::sidecarRoundTrip | covered | covered | high | Only Doc::addFixture is driven. The UI Add Fixture / Patch import paths are not (ui/test/addfixture or ui/test/patchinventorydialog with a venue applied). |
 | M007 | House rig / venues | On an id collision the house fixture is renumbered, keeping its head in the group and its plot position; the sidecar is rewritten | VenueRig_Test::aTakenIdIsRenumbered | covered | covered | high | That the renumbered id is saved to disk (capture() then save()) is not checked by re-reading the file. |
-| M008 | House rig / venues | Sidecar round trip (v2: House, Fill, NotOurs, Patch) is byte-stable; v1 files and old shows unchanged | VenueRig_Test::sidecarRoundTrip, VenueRig_Test::oldShowsAndVenuesAreUnchanged; **VenueRig_Test::aSidecarFromANewerBuildStillLoads** (new) | covered | covered | high | A sidecar from a newer build loads and saves with all it knows (new test). Unknown elements are dropped on save, except inside a house Fixture, which is kept whole. |
+| M008 | House rig / venues | Sidecar round trip (v2: House, Fill, NotOurs, Patch) is byte-stable; v1 files and old shows unchanged | VenueRig_Test::sidecarRoundTrip, VenueRig_Test::oldShowsAndVenuesAreUnchanged; **VenueRig_Test::aSidecarFromANewerBuildStillLoads** (new) | covered | covered | high | A sidecar from a newer build loads and saves with all it knows (new test). Since 2026-10-25 unknown elements are kept through a save; unknown attributes are not. |
 | M009 | House rig / venues | Moving the show's existing House fixtures into the venue (moveShowHouseIn) | VenueRig_Test::moveTheShowsHouseFixturesIn | covered | covered | med |  |
 | M010 | House rig / venues | A practice session keeps the house rig | VenueRig_Test::aPracticeKeepsTheHouseRig | covered | covered | low |  |
 | M011 | House rig / venues | Universe slot owner (Tour/House) saved and loaded | VenueRig_Test::slotOwnerRoundTrip | covered | covered | high |  |
 | M012 | House rig / venues | The venue keeps every slot's output patch; the show file keeps its own (Universe::setShowOutputBase); restored on None; forgetPatch | VenueRig_Test::theVenuePatchIsAppliedAndRestored | covered | covered | high |  |
 | M013 | House rig / venues | A not-ours universe sends nothing (normal frame and Blind) | VenueRig_Test::notOursIsNeverSent | covered | covered | high | Not exercised through the real tick: InputOutputMap::dumpUniverses and the Grand Master path. The test calls dumpOutput directly. |
 | M014 | House rig / venues | A not-ours range is zeroed in every frame | VenueRig_Test::notOursIsNeverSent; **VenueRig_Test::notOursStaysZeroThroughBlindAndBlackout, VenueRig_Test::notOursOnTheRealTick** (new) | partial | covered | high |  |
-| M015 | House rig / venues | Patching onto not-ours channels is refused, with a reason | VenueRig_Test::notOursIsNeverSent; **VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay** (new) | partial | partial | high | (bug) Doc::addFixture() with an address, and Fixture::setAddress() on a patched fixture, are not refused (QEXPECT_FAIL). The output there is still zeroed. |
+| M015 | House rig / venues | Patching onto not-ours channels is refused, with a reason | VenueRig_Test::notOursIsNeverSent; **VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay** (new) | partial | covered | high | Fixed 2026-10-25: Doc::addFixture() with an address and a patched fixture's move are refused too (Doc::isOnNotOurs). |
 | M016 | House rig / venues | Typed range parsing (1-based, en dash, single address, rejects bad input) | VenueRig_Test::notOursIsNeverSent, VenueRigUi_Test::theVenuePageShowsTheUniverses (ui/test/venuerigui/venuerigui_test.cpp) | covered | covered | med |  |
 | M017 | House rig / venues | Clash check finds overlaps, not-ours and slot clashes (dry run); going live anyway leaves the house fixture unpatched, with a note | VenueRig_Test::theClashCheck | covered | covered | high |  |
 | M018 | House rig / venues | Clash check runs before Apply (VenueRigDialog::confirmClashes, "Apply anyway" / Cancel) | **VenueRigUi_Test::aClashingVenueAsksBeforeItIsApplied** (new) | none | covered | high |  |
-| M019 | House rig / venues | Clash check runs on open (the note from VenueCorrections::apply) | VenueRig_Test::theClashCheck (note on setActiveVenue only); **VenueRig_Test::theClashCheckRunsOnOpen** (new) | partial | covered | high | On open, as on setActiveVenue, only an overlap leaves the house light unpatched; a not-ours or slot clash is noted and stays patched. |
+| M019 | House rig / venues | Clash check runs on open (the note from VenueCorrections::apply) | VenueRig_Test::theClashCheck (note on setActiveVenue only); **VenueRig_Test::theClashCheckRunsOnOpen** (new) | partial | covered | high | Since 2026-10-25 any clash of a house light (overlap, not ours, Tour slot) leaves it unpatched; a tour light stays patched. |
 | M020 | House rig / venues | Clash check runs in the Patch dialog (summary line) | **PatchInventoryDialog_Test::aVenueClashIsNamedInTheSummary** (new) | none | covered | high |  |
 | M021 | House rig / venues | UI: Owner in the group editor; its fixtures follow into the venue | VenueRigUi_Test::aGroupsOwnerIsSetInItsEditor | covered | covered | med |  |
 | M022 | House rig / venues | UI: Owner in Fixture Properties (fixtureOwner combo, "From group" text) | **Monitor_Test::theOwnerInFixturePropertiesMovesItIntoTheVenue** (new) | none | covered | med | A fixture that has its own owner shows a plain "From its group"; only a fixture that follows its group sees the group's owner. |
@@ -439,7 +436,7 @@ Findings that are not marked as bugs:
 | M289 | Eos import | Each sub becomes a Playback fader in the VC frame "Eos subs" | EosImportWizard_Test::subFaders; EosImporter_Test::subsForTheConsole, ::presetsAndSubs | covered | covered | med |  |
 | M290 | Edit Fixture Definition for several | Offered for fixtures or a group sharing one definition; greyed with a reason when they don't | FixtureManager_Test::editDefinitionForFixturesSharingOne | partial | partial | low | Menu only; trigger it and assert the editor opens on the shared file |
 | M291 | ETC ColorSource | Eos `ColorSource_*_RGB` match exactly (PAR, Spot jr) | EosImporter_Test::mapperExactAndSuggested | covered | covered | med |  |
-| M292 | ETC ColorSource | Spot jr and CYC definitions load; Spot's Direct / 1-Channel / RGB modes; 5-Channel name kept | — (generic loading only via QLCFixtureDefCache_Test); **FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean** (new) | none | covered | med | (bug, data) ETC-ColorSource-CYC.qxf has no beam angle (Lens 0-0), so the checker warns (QEXPECT_FAIL on CYC). |
+| M292 | ETC ColorSource | Spot jr and CYC definitions load; Spot's Direct / 1-Channel / RGB modes; 5-Channel name kept | — (generic loading only via QLCFixtureDefCache_Test); **FixtureDefCheck_Test::theEtcColorSourceDefinitionsLoadClean** (new) | none | covered | med | Fixed 2026-10-25: CYC given a 100° lens (ETC publishes none; derived from its photometrics, noted in the file). |
 | M293 | Palette names follow value | Only the part that names the value changes (colour, dimmer, strobe) | PaletteNaming_Test::followColour, ::followDimmer, ::followStrobe, ::followPart (engine/test/palettenaming/palettenaming_test.h) | covered | covered | med |  |
 | M294 | Palette names follow value | In the Look Editor, live; edit and rename are one undo step | LookEditor_Test::aLooksNameFollowsItsColour, ::aLevelInTheNameFollowsTheLevel (ui/test/lookeditor/lookeditor_test.h); PaletteNaming_Test::aValueStepUndoesTheNameWithIt | covered | covered | high |  |
 | M295 | Matrix effects | The twelve new scripts run on boxes and modes, repeatable, keep time | EffectInstance_Test::matrixEffectsRunOnBoxesAndTheirModes, ::matrixEffectsAreRepeatableAndKeepTheirWhites, ::matrixEffectsKeepTimeOnEightBoxes (engine/test/effectinstance/effectinstance_test.h) | covered | covered | med |  |
@@ -580,7 +577,7 @@ Findings that are not marked as bugs:
 | M420 | Dragged together onto truss | Shift-drop of several selected fixtures hangs all of them on the truss, each at its own offset along it | Monitor_Test::aGroupDroppedOnATrussAllHang | covered | covered | med | — |
 | M421 | Dragged together onto truss | In Front and Side views every free fixture of a multi-selection keeps its drop and does not snap back (`persistElevationDrop`) | Monitor_Test::dropStaysPutFrontView, ::dropStaysPutSideView (one fixture only, older tests); **Monitor_Test::twoDroppedTogetherStayPutFrontView, Monitor_Test::twoDroppedTogetherStayPutSideView** (new) | partial | covered | med |  |
 | M422 | Pages squash | No qlcconsole page's minimum width holds the window wide | AppViews_Test::pagesSquashWithTheWindow (ui/test/appviews/appviews_test.h) | partial | partial | low | The limit asserted is ≤ 700 px, but the changelog says all are under 640. It runs in ConsoleView only and skips Simple Desk. Nothing checks that the bars scroll sideways (ShrinkableBar) rather than clip. Tighten to 640 and add a ShrinkableBar check (narrow it, assert the horizontal scroll bar shows). |
-| M423 | Rig view pictures (Q85) | A sock or tower-face picture from outside the show's folder is copied to images/ and saved relative; a same-name file gets -2; loading resolves it against the show's folder | MonitorProperties_Test::patternPicturesAreKeptWithTheShow (engine/test/monitorproperties/monitorproperties_test.h) | covered | covered | high | — |
+| M423 | Rig view pictures (Q85) | A sock or tower-face picture from outside the show's folder is copied to images/ and saved relative; a same-name file gets -2; loading resolves it against the show's folder | MonitorProperties_Test::patternPicturesAreKeptWithTheShow (engine/test/monitorproperties/monitorproperties_test.h) | covered | covered | high | Isolation fix 2026-10-25: Doc::normalizeComponentPath keeps an absolute path when there is no workspace path (it was made relative to the current directory); the test now checks it from inside the picture's folder. |
 | M424 | Rig view pictures (Q85) | This happens "when the show is saved", through `Doc::saveXML` (doc.cpp:2623), and not for undo snapshots | **MonitorProperties_Test::savingTheShowKeepsItsPatternPictures** (new) | none | covered | high |  |
 | M425 | Typed fade/hold kept | A fade or hold typed on a cue is applied on Tab, a click on another cue, or the page moving on, to the cue it was typed for; Esc reverts; one undo step each | ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves | covered | covered | high | — |
 | M426 | Typed fade/hold kept | Workbench chaser step times go to the step they were typed for when you walk on; Esc reverts | WorkbenchChaser_Test::typedStepTimesGoToTheirStep (ui/test/workbenchchaser/workbenchchaser_test.h) | covered | covered | high | — |
@@ -600,7 +597,7 @@ Findings that are not marked as bugs:
 | M435 | Hiding the Workbench stops only its own | Hiding the Workbench in Operate stops only its own run; a function started elsewhere (VC button) and then loaded keeps running | Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn (ui/test/workbench/workbench_test.cpp) | covered | covered | high | — |
 | M436 | Hiding the Workbench | The Design preview of a function already run from the Run tab lets go without stopping it | Workbench_Test::designPreviewLeavesAnotherRunAlone | covered | covered | high | A function started by a cue (Show Tree GO) is not exercised, only VC button and Run tab parents |
 | M437 | Build delete/duplicate undoable | Delete is one shared-history step; Undo brings it back with its id, in place in collection and chaser; Redo deletes again | ProgrammingManager_Test::deletingAFunctionTakesItOutOfWhatUsesIt (ui/test/programmingmanager/programmingmanager_test.cpp) | covered | covered | high | — |
-| M438 | Build delete undo | Undo puts the function back on its **show track** | **ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack** (new) | none | partial | high | (bug) The Undo snapshot copies the Show with Show::copyFrom(). That appends tracks and deep-copies each item's function, so after Undo there are two tracks and the item plays "Copy of Copy of Walk" (QEXPECT_FAIL). |
+| M438 | Build delete undo | Undo puts the function back on its **show track** | **ProgrammingManager_Test::undoingADeletePutsItBackOnItsShowTrack** (new, Shows tab opened / never opened); Show_Test::copyExactly | none | covered | high | Fixed 2026-10-25: snapshot and restore use Show::copyExactlyFrom(). |
 | M439 | Build delete undo | Undo hands it back to VC buttons, cue lists, main cue list; Redo lets go again | ProgrammingManager_Test::undoingADeleteHandsItBackToItsVcWidgets | covered | covered | high | — |
 | M440 | Build duplicate undo | ⌘C⌘V / Duplicate: Undo removes the copy, Redo restores it with the same id | ProgrammingManager_Test::duplicateAndCopyPasteFileACopyBesideIt | covered | covered | med | — |
 | M441 | Build ▸ Effects Duplicate/Delete | EFX Duplicate/Delete each one step; Undo/Redo keep the id and collection membership | EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow (ui/test/effectdesigner/effectdesigner_test.cpp); **EffectDesigner_Test::buildEffectsRightClickOnAnRgbMatrix** (new) | partial | covered | med |  |
