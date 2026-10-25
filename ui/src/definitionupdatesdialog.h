@@ -20,6 +20,7 @@
 
 #include <QDialog>
 #include <QStringList>
+#include <QHash>
 
 #include "fixturedefupdates.h"
 
@@ -75,7 +76,15 @@ private:
     QList<FixtureDefUpdates::Candidate> selectedCandidates() const;
     void runUpdate(const QList<FixtureDefUpdates::Candidate> &list);
     bool ask(const QString &title, const QString &text);
-    void tell(const QString &title, const QStringList &lines);
+    /** Ask over a list that may be long (BulkResultDialog). */
+    bool askList(const QString &title, const QString &intro, const QString &heading,
+                 const QStringList &items, const QString &question);
+    /** What an update or undo did: a summary, what was done (with what
+     *  changed, by @p details' first line), the errors, and the notes. */
+    void tell(const QString &title, const QString &summary, const QStringList &done,
+              const QString &doneHeading, const QStringList &failed,
+              const QStringList &notes,
+              const QHash<QString, QStringList> &details = QHash<QString, QStringList>());
 
     Doc *m_doc;
     QList<FixtureDefUpdates::Candidate> m_candidates;

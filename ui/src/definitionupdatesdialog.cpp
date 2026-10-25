@@ -29,6 +29,8 @@
 #include <QLabel>
 
 #include "definitionupdatesdialog.h"
+#include "bulkresultdialog.h"
+#include "fixture.h"
 #include "apputil.h"
 #include "doc.h"
 
@@ -132,12 +134,45 @@ bool DefinitionUpdatesDialog::ask(const QString &title, const QString &text)
                                 QMessageBox::Cancel) == QMessageBox::Yes;
 }
 
-void DefinitionUpdatesDialog::tell(const QString &title, const QStringList &lines)
+bool DefinitionUpdatesDialog::askList(const QString &title, const QString &intro,
+                                      const QString &heading, const QStringList &items,
+                                      const QString &question)
 {
-    m_report = lines;
-    if (s_autoAnswer >= 0 || lines.isEmpty())
+    if (s_autoAnswer >= 0)
+        return s_autoAnswer > 0;
+    return BulkResultDialog::confirm(this, title, intro, heading, items, question);
+}
+
+void DefinitionUpdatesDialog::tell(const QString &title, const QString &summary,
+                                   const QStringList &done, const QString &doneHeading,
+                                   const QStringList &failed, const QStringList &notes,
+                                   const QHash<QString, QStringList> &details)
+{
+    m_report = done;
+    if (!failed.isEmpty())
+        m_report << tr("Not updated:") << failed;
+    m_report << notes;
+    if (s_autoAnswer >= 0 || (done.isEmpty() && failed.isEmpty()))
         return;
-    QMessageBox::information(this, title, lines.join(QStringLiteral("\n\n")));
+    /* A proper window, not an alert: two hundred lines grew one off the
+       screen with nothing to scroll and no Close. */
+    QList<BulkResultDialog::Entry> doneEntries;
+    foreach (const QString &line, done)
+    {
+        BulkResultDialog::Entry e;
+        e.text = line;
+        for (QHash<QString, QStringList>::const_iterator it = details.constBegin();
+             it != details.constEnd(); ++it)
+        {
+            if (line.startsWith(it.key() + QLatin1Char(':')))
+                e.details = it.value();
+        }
+        doneEntries << e;
+    }
+    QList<QPair<QString, QList<BulkResultDialog::Entry> > > sections;
+    sections << qMakePair(doneHeading, doneEntries)
+             << qMakePair(tr("Errors"), BulkResultDialog::entries(failed));
+    BulkResultDialog::tell(this, title, summary, sections, notes);
 }
 
 void DefinitionUpdatesDialog::rescan()
@@ -319,25 +354,45 @@ void DefinitionUpdatesDialog::runUpdate(const QList<FixtureDefUpdates::Candidate
     bool confirmed = false;
     if (!confirm.isEmpty())
     {
-        if (!ask(tr("Update from Current"),
-                 tr("In the open show, these channels would do something else after the update:\n\n%1"
-                    "\n\nThe fixtures keep their addresses and modes; the functions listed keep their "
-                    "values, now on the new channels. Update anyway?").arg(confirm.join(QLatin1Char('\n')))))
+        if (!askList(tr("Update from Current"),
+                     tr("In the open show, these channels would do something else after the update."),
+                     tr("Channels"), confirm,
+                     tr("The fixtures keep their addresses and modes; the functions listed keep their "
+                        "values, now on the new channels. Update anyway?")))
             return;
         confirmed = true;
     }
-    else if (!ask(tr("Update from Current"),
-                  tr("Write the current version over:\n\n%1\n\nThe old files are kept, and Undo Last "
-                     "Update puts them back.").arg(names.join(QLatin1Char('\n')))))
+    else if (!askList(tr("Update from Current"), tr("Write the current version over these files."),
+                      tr("Definitions"), names,
+                      tr("The old files are kept, and Undo Last Update puts them back. Update them?")))
         return;
+
+    /* What each one changes, and which fixtures of the show use it, for
+       the report: asked before the update, which changes both. */
+    QHash<QString, QStringList> details;
+    for (const FixtureDefUpdates::Candidate &c : list)
+    {
+        QStringList d;
+        if (c.usedByShow && m_doc != nullptr)
+        {
+            QStringList fixtures;
+            foreach (Fixture *f, FixtureDefUpdates::impactOf(m_doc, c).fixtures)
+                if (f != nullptr)
+                    fixtures << f->name();
+            if (!fixtures.isEmpty())
+                d << tr("Fixtures: %1").arg(fixtures.join(QStringLiteral(", ")));
+        }
+        foreach (const FixtureDefUpdates::Change &ch, c.changes)
+            d << ch.text();
+        details.insert(c.mine.manufacturer + QLatin1Char(' ') + c.mine.model, d);
+    }
+    const int before = m_candidates.count();
 
     const FixtureDefUpdates::LinkMode mode = FixtureDefUpdates::LinkMode(m_linkMode->currentData().toInt());
     const FixtureDefUpdates::Result r = FixtureDefUpdates::update(m_doc, list, mode, confirmed);
-    QStringList lines = r.updated;
-    if (!r.failed.isEmpty())
-        lines << tr("Not updated:") << r.failed;
-    if (!r.backupFolder.isEmpty())
-        lines << tr("The old files are in %1.").arg(r.backupFolder);
+    QStringList notes;
+    if (!r.backupFolder.isEmpty() && !r.updated.isEmpty())
+        notes << tr("The old files are in %1.").arg(r.backupFolder);
     bool showUses = false;
     for (const FixtureDefUpdates::Candidate &c : list)
         showUses = showUses || c.usedByShow;
@@ -345,7 +400,10 @@ void DefinitionUpdatesDialog::runUpdate(const QList<FixtureDefUpdates::Candidate
         m_doc->setModified();     // a .qlcc carries the new version from the next save
     rescan();
     AppUtil::updateDefinitionUpdatesStatus(m_doc);
-    tell(tr("Update from Current"), lines);
+    const QString summary = tr("Updated %1, unchanged %2, %3")
+        .arg(r.updated.count()).arg(qMax(0, before - r.updated.count() - r.failed.count()))
+        .arg(r.failed.count() == 1 ? tr("1 error") : tr("%1 errors").arg(r.failed.count()));
+    tell(tr("Update from Current"), summary, r.updated, tr("Updated"), r.failed, notes, details);
 }
 
 void DefinitionUpdatesDialog::updateSelected()
@@ -386,10 +444,9 @@ void DefinitionUpdatesDialog::undoLast()
     if (!ask(tr("Undo Last Update"), tr("Put back the files the last update replaced (kept in %1)?").arg(folder)))
         return;
     const FixtureDefUpdates::Result r = FixtureDefUpdates::undo(m_doc, folder);
-    QStringList lines = r.updated;
-    if (!r.failed.isEmpty())
-        lines << tr("Not put back:") << r.failed;
     rescan();
     AppUtil::updateDefinitionUpdatesStatus(m_doc);
-    tell(tr("Undo Last Update"), lines);
+    const QString summary = tr("Put back %1, %2").arg(r.updated.count())
+        .arg(r.failed.count() == 1 ? tr("1 error") : tr("%1 errors").arg(r.failed.count()));
+    tell(tr("Undo Last Update"), summary, r.updated, tr("Put back"), r.failed, QStringList());
 }

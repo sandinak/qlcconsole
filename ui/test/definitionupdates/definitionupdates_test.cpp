@@ -16,11 +16,22 @@
 */
 
 #include <QtTest>
+#include <QApplication>
+#include <QClipboard>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QScrollBar>
+#include <QTreeWidget>
+#include <QScreen>
+#include <QLabel>
 #include <QSettings>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#define private public
 #include "definitionupdatesdialog.h"
+#undef private
+#include "bulkresultdialog.h"
 #include "showdifferencesdialog.h"
 #include "fixturedefupdates.h"
 #include "qlcfixturedefcache.h"
@@ -351,6 +362,79 @@ void DefinitionUpdates_Test::showDefinitionsListsEverythingAndUndoes()
     QCOMPARE(spot1->fixtureDef(), showDef);
     QCOMPARE(all.keys().size(), 2);
     delete doc;
+}
+
+void DefinitionUpdates_Test::aLargeResultFitsTheScreenAndScrolls()
+{
+    Doc doc(this);
+    DefinitionUpdatesDialog dlg(&doc);
+    QStringList done, failed;
+    QHash<QString, QStringList> details;
+    for (int i = 0; i < 200; i++)
+    {
+        const QString name = QStringLiteral("Maker Model %1").arg(i);
+        done << QStringLiteral("%1: model-%2.qxf updated (%3 → %4)").arg(name).arg(i).arg(kOld, kNew);
+        details.insert(name, QStringList() << QStringLiteral("Fixtures: Spot %1").arg(i)
+                                           << QStringLiteral("Channel “Pan”: coarse, not fine"));
+    }
+    for (int i = 0; i < 20; i++)
+        failed << QStringLiteral("Broken %1 (broken-%1.qxf): the current version does not load").arg(i);
+
+    struct Seen
+    {
+        bool opened = false, inside = false, scrolls = false, errorsScroll = false;
+        bool close = false, copy = false, save = false, details = false;
+        QString summary, copied;
+    } seen;
+    QTimer watch;
+    watch.setInterval(20);
+    connect(&watch, &QTimer::timeout, this, [&seen]() {
+        BulkResultDialog *d = qobject_cast<BulkResultDialog *>(QApplication::activeModalWidget());
+        if (d == nullptr || !d->isVisible())
+            return;
+        seen.opened = true;
+        const QRect avail = d->screen()->availableGeometry();
+        seen.inside = avail.contains(d->frameGeometry()) || avail.contains(d->geometry());
+        QList<QTreeWidget *> lists = d->findChildren<QTreeWidget *>();
+        if (lists.count() == 2)
+        {
+            seen.scrolls = lists.at(0)->topLevelItemCount() == 200
+                           && lists.at(0)->verticalScrollBar()->maximum() > 0;
+            seen.errorsScroll = lists.at(1)->topLevelItemCount() == 20;
+            seen.details = lists.at(0)->topLevelItem(5)->childCount() == 2;
+        }
+        QDialogButtonBox *box = d->findChild<QDialogButtonBox *>(QStringLiteral("bulkResultButtons"));
+        seen.close = box != nullptr && box->button(QDialogButtonBox::Close) != nullptr;
+        seen.copy = d->findChild<QPushButton *>(QStringLiteral("bulkResultCopy")) != nullptr;
+        seen.save = d->findChild<QPushButton *>(QStringLiteral("bulkResultSave")) != nullptr;
+        if (QLabel *s = d->findChild<QLabel *>(QStringLiteral("bulkResultSummary")))
+            seen.summary = s->text();
+        d->findChild<QPushButton *>(QStringLiteral("bulkResultCopy"))->click();
+        seen.copied = QApplication::clipboard()->text();
+        if (seen.close)
+            box->button(QDialogButtonBox::Close)->click();
+        else
+            d->reject();
+    });
+    watch.start();
+    DefinitionUpdatesDialog::setAutoAnswer(-1);
+    dlg.tell(QStringLiteral("Update from Current"), QStringLiteral("Updated 200, unchanged 30, 20 errors"),
+             done, QStringLiteral("Updated"), failed, QStringList() << QStringLiteral("The old files are in /tmp/x."),
+             details);
+    DefinitionUpdatesDialog::setAutoAnswer(1);
+    watch.stop();
+
+    QVERIFY2(seen.opened, "no result window opened");
+    QVERIFY2(seen.inside, "the result window is bigger than the screen");
+    QVERIFY2(seen.scrolls, "the updated list does not hold all 200 or does not scroll");
+    QVERIFY(seen.errorsScroll);
+    QVERIFY2(seen.details, "an entry's fixtures and changes are not under it");
+    QVERIFY(seen.close && seen.copy && seen.save);
+    QCOMPARE(seen.summary, QStringLiteral("Updated 200, unchanged 30, 20 errors"));
+    QVERIFY(seen.copied.contains(QStringLiteral("Maker Model 199")));
+    QVERIFY(seen.copied.contains(QStringLiteral("Broken 19")));
+    // What the tests read is still the whole report.
+    QCOMPARE(dlg.lastReport().count(), 200 + 1 + 20 + 1);
 }
 
 QTEST_MAIN(DefinitionUpdates_Test)

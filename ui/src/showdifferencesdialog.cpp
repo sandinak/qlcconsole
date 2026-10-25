@@ -26,6 +26,7 @@
 #include <QFile>
 
 #include "showdifferencesdialog.h"
+#include "bulkresultdialog.h"
 #include "fixturedefupdates.h"
 #include "showembedding.h"
 #include "doc.h"
@@ -50,10 +51,17 @@ bool ShowDifferencesDialog::ask(const QString &title, const QString &text)
                                 QMessageBox::Cancel) == QMessageBox::Yes;
 }
 
-void ShowDifferencesDialog::tell(const QString &title, const QString &text)
+void ShowDifferencesDialog::tell(const QString &title, int done, const QStringList &failed)
 {
-    if (s_autoAnswer < 0)
-        QMessageBox::warning(this, title, text);
+    if (s_autoAnswer >= 0 || failed.isEmpty())
+        return;
+    /* A window that scrolls and closes, not an alert growing off the screen. */
+    QList<QPair<QString, QList<BulkResultDialog::Entry> > > sections;
+    sections << qMakePair(tr("Errors"), BulkResultDialog::entries(failed));
+    BulkResultDialog::tell(this, title,
+                           tr("Done %1, %2").arg(done)
+                               .arg(failed.count() == 1 ? tr("1 error") : tr("%1 errors").arg(failed.count())),
+                           sections);
 }
 
 QString ShowDifferencesDialog::detailText() const
@@ -270,6 +278,7 @@ void ShowDifferencesDialog::useComputers()
 {
     ShowEmbedding *e = m_doc->showEmbedding();
     QStringList failed;
+    int done = 0;
     e->clearUndo();
     foreach (const QString &key, selectedKeys())
     {
@@ -285,16 +294,19 @@ void ShowDifferencesDialog::useComputers()
         QString error;
         if (!e->useComputers(key, &error))
             failed << error;
+        else
+            ++done;
     }
     updateButtons();
     if (!failed.isEmpty())
-        tell(tr("Use This Computer's"), failed.join(QStringLiteral("\n\n")));
+        tell(tr("Use This Computer's"), done, failed);
 }
 
 void ShowDifferencesDialog::useComputersForAllCompatible()
 {
     ShowEmbedding *e = m_doc->showEmbedding();
     QStringList failed;
+    int done = 0;
     e->clearUndo();
     foreach (const QString &key, keys())
     {
@@ -304,10 +316,12 @@ void ShowDifferencesDialog::useComputersForAllCompatible()
         QString error;
         if (!e->useComputers(key, &error))
             failed << error;
+        else
+            ++done;
     }
     updateButtons();
     if (!failed.isEmpty())
-        tell(tr("Use This Computer's"), failed.join(QStringLiteral("\n\n")));
+        tell(tr("Use This Computer's"), done, failed);
 }
 
 void ShowDifferencesDialog::undoChoices()
@@ -332,13 +346,17 @@ void ShowDifferencesDialog::installShows()
     foreach (const QString &key, keys)
         if (e->item(key).usingShow)
             names << e->item(key).displayName();
-    if (names.isEmpty()
-        || !ask(tr("Install the Show's"),
-                tr("Write the show's copy over this computer's for:\n\n%1\n\nThis computer's files go "
-                   "to the Trash, and every show opened here uses the show's version from now on.")
-                    .arg(names.join(QLatin1Char('\n')))))
+    if (names.isEmpty())
+        return;
+    if (s_autoAnswer >= 0 ? s_autoAnswer == 0
+        : !BulkResultDialog::confirm(this, tr("Install the Show's"),
+                                     tr("Write the show's copy over this computer's."),
+                                     tr("Definitions"), names,
+                                     tr("This computer's files go to the Trash, and every show opened "
+                                        "here uses the show's version from now on. Install them?")))
         return;
     QStringList failed;
+    int done = 0;
     foreach (const QString &key, keys)
     {
         if (!e->item(key).usingShow)
@@ -346,7 +364,9 @@ void ShowDifferencesDialog::installShows()
         QString error;
         if (!e->installShows(key, &error))
             failed << error;
+        else
+            ++done;
     }
     if (!failed.isEmpty())
-        tell(tr("Install the Show's"), failed.join(QStringLiteral("\n\n")));
+        tell(tr("Install the Show's"), done, failed);
 }

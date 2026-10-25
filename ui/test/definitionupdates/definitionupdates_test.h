@@ -39,6 +39,12 @@ private slots:
     void theFooterSaysSo();
     void showDefinitionsListsEverythingAndUndoes();
 
+    /** Update All's result (and Undo's, and the show definitions' errors)
+     *  is a window, not an alert: with 200 updated and 20 errors it stays
+     *  inside the screen, both lists scroll, and it has Close, Copy and
+     *  Save as Text. */
+    void aLargeResultFitsTheScreenAndScrolls();
+
 private:
     QByteArray m_realHome;
     QByteArray m_realProfile;

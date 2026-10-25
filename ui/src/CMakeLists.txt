@@ -81,6 +81,7 @@ add_library(${module_name}
     inputoutputmanager.cpp inputoutputmanager.h
     connectionstree.cpp connectionstree.h
     connectioneditor.cpp connectioneditor.h
+    bulkresultdialog.cpp bulkresultdialog.h
     universepatcher.cpp universepatcher.h
     powerprofiledialog.cpp powerprofiledialog.h
     outputrulesdialog.cpp outputrulesdialog.h

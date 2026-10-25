@@ -76,7 +76,9 @@ private slots:
 private:
     QStringList selectedKeys() const;
     bool ask(const QString &title, const QString &text);
-    void tell(const QString &title, const QString &text);
+    /** What a bulk action did, when something failed: @p done, and each
+     *  error, in a window that scrolls (BulkResultDialog). */
+    void tell(const QString &title, int done, const QStringList &failed);
 
     Doc *m_doc;
     bool m_everything;

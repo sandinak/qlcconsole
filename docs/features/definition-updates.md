@@ -45,6 +45,17 @@ The choices:
   one will be offered.
 - **Undo Last Update** — puts back the files the last update replaced.
 
+Before an update writes anything it asks, listing the files (or, for a
+definition the show uses, the channels that would do something else) in a
+list that scrolls. Afterwards a window says what happened: a summary line
+("Updated 14, unchanged 30, 2 errors"), the **Updated** list — each
+definition's maker and model, its file, the old → new version, and under it
+the show's fixtures that use it and what changed (channels and modes) — and
+an **Errors** list with the reason for each. It fits the screen, can be
+resized, and has **Copy** and **Save as Text…** beside **Close**. File ▸
+Show Definitions' **Use This Computer's** and **Install the Show's** report
+what failed the same way.
+
 ### How "older" is decided
 
 A copy is only called old when it really is an earlier version of the same
