@@ -130,6 +130,11 @@ if [ -z "${NO_CCACHE:-}" ] && command -v ccache >/dev/null 2>&1; then
     # compiled (its debug info then names the first copy's paths: harmless
     # for a gate).
     export CCACHE_BASEDIR="$REPO" CCACHE_NOHASHDIR=1
+    # rcc writes each resource's modification time into its qrc_*.cpp, and
+    # a git-archive copy's files are as new as their commit, or as the
+    # build that generated them: every qrc file missed, every gate. One
+    # fixed date (the gate's builds are never shipped) makes them the same.
+    export QT_RCC_SOURCE_DATE_OVERRIDE=1
     CCACHE_STATE="ccache $(ccache --version | head -n 1 | awk '{print $3}')"
 else
     LAUNCHER=(-DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER=)

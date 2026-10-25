@@ -304,6 +304,24 @@ add_subdirectory(platforms)
 # never installed.
 add_subdirectory(tools/artnetprobe)
 
+# Qt Test compiles each test's main() with its build dir's ABSOLUTE path
+# (QT_TESTCASE_BUILDDIR, for QFINDTESTDATA), so every test program's main
+# source was a ccache miss in every new copy of the tree -- the gate builds in
+# throwaway git-archive copies: about 190 compiles a leg. The tests run in their
+# build dir and their sources' paths are relative to it, which QFINDTESTDATA
+# finds without the macros.
+function(qlc_skip_testcase_dirs dir)
+    get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(t IN LISTS targets)
+        set_property(TARGET ${t} PROPERTY QT_SKIP_DEFAULT_TESTCASE_DIRS TRUE)
+    endforeach()
+    get_property(subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(d IN LISTS subdirs)
+        qlc_skip_testcase_dirs("${d}")
+    endforeach()
+endfunction()
+qlc_skip_testcase_dirs("${CMAKE_CURRENT_SOURCE_DIR}")
+
 # HELPER: PRINT ALL VARIABLES KNOWN BY CMAKE
 
 #message("QTDIR: ${QT_DIR}")
