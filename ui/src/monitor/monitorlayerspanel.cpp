@@ -31,6 +31,7 @@
 #include <QKeyEvent>
 #include <QDropEvent>
 #include <QScrollBar>
+#include <QScopedValueRollback>
 #include <QSet>
 #include <QMessageBox>
 #include <QPainter>
@@ -111,12 +112,33 @@ void LayersTreeWidget::reserveScrollBarRoom()
 {
     /* Overlay scroll bars are drawn on top of the list, at its right edge --
        which is where a layer's eye and lock buttons are ("the scroll bar
-       draws over the lock button"). The list stops a scroll bar's width
-       short of the edge; the bar floats over the gap. */
+       draws over the lock button"). How far the bar reaches over the list
+       is measured: which styles overlay it differs between styles and Qt
+       versions. Padding the buttons does not move the list or the bar, so
+       this settles at once. */
     QScrollBar *bar = verticalScrollBar();
-    const bool overlay = bar->style()->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, bar) != 0;
-    const int room = overlay ? bar->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, bar) : 0;
-    setViewportMargins(0, 0, room, 0);
+    int room = 0;
+    if (bar->isVisibleTo(this) && bar->width() > 0)
+    {
+        const int barLeft = bar->mapTo(this, QPoint(0, 0)).x();
+        room = qMax(0, viewport()->geometry().right() + 1 - barLeft);
+    }
+    if (room == m_scrollRoom)
+        return;
+    m_scrollRoom = room;
+    emit scrollRoomChanged();
+}
+
+void LayersTreeWidget::padRowWidget(QWidget *row) const
+{
+    if (row != nullptr && row->layout() != nullptr)
+        row->layout()->setContentsMargins(2, 1, 2 + m_scrollRoom, 1);
+}
+
+void LayersTreeWidget::updateGeometries()
+{
+    QTreeWidget::updateGeometries();
+    reserveScrollBarRoom();
 }
 
 void LayersTreeWidget::changeEvent(QEvent *e)
@@ -306,7 +328,16 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setDropIndicatorShown(true);
-    m_tree->reserveScrollBarRoom();
+    /* Rows already built get the new room when the scroll bar comes,
+       goes or changes kind; reload() pads each new one. Deferred: it changes
+       the column's width from inside a relayout. */
+    connect(m_tree, &LayersTreeWidget::scrollRoomChanged, this, [this]() {
+        QTimer::singleShot(0, this, [this]() {
+            for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+                m_tree->padRowWidget(m_tree->itemWidget(*it, 1));
+            m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
+        });
+    });
     m_tree->installEventFilter(this);   // Enter-to-rename only
     m_tree->viewport()->installEventFilter(this);   // the selection a double-click starts from
     LayersNameDelegate *names = new LayersNameDelegate(m_tree);
@@ -791,6 +822,7 @@ void MonitorLayersPanel::addStagePieceToggles(QTreeWidgetItem *node, MonitorProp
     style(lock, locked, QString::fromUtf8(locked ? kLockOn : kLockOff), "rgb(168,120,30)", "rgb(64,64,68)");
     h->addWidget(lock);
     h->addStretch(1);
+    m_tree->padRowWidget(row);
     m_tree->setItemWidget(node, 1, row);
 
     auto changed = [this]() {
@@ -1407,6 +1439,7 @@ void MonitorLayersPanel::reload()
                     "rgb(168,120,30)", "rgb(64,64,68)");
         h->addWidget(lock);
         row->setLayout(h);
+        m_tree->padRowWidget(row);
         m_tree->setItemWidget(layerNode, 1, row);
 
         const quint32 lid = lyr.id;

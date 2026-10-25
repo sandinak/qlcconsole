@@ -58,13 +58,24 @@ class LayersTreeWidget final : public QTreeWidget
 public:
     explicit LayersTreeWidget(QWidget *parent = nullptr) : QTreeWidget(parent) {}
 
+private:
+    int m_scrollRoom = 0;           ///< how far the bar lies over the list
+
+public:
+
     /** A row's name is being typed in. */
     bool isEditing() const { return state() == QAbstractItemView::EditingState; }
 
-    /** Where scroll bars float over the list (macOS overlay scroll bars),
-     *  keep a strip the width of one clear on the right, so the bar never
-     *  lies over a layer's eye and lock buttons. */
+    /** Where the vertical scroll bar lies over the list (macOS overlay
+     *  scroll bars), how far it reaches in: the room the row buttons keep
+     *  clear on the right (scrollRoom()), so the bar never covers a layer's
+     *  eye and lock. Measured from where Qt put the bar, not predicted from
+     *  the style: a bar laid out beside the list (Fusion, Windows) needs
+     *  none. (Not a viewport margin: QTreeView resets those.) */
     void reserveScrollBarRoom();
+    int scrollRoom() const { return m_scrollRoom; }
+    /** A row's buttons, padded clear of the bar. */
+    void padRowWidget(QWidget *row) const;
 
 signals:
     /** Emitted on drop: the dragged rows and the row they were dropped onto
@@ -77,9 +88,13 @@ signals:
      *  single reload on dragFinished. */
     void dragStarted();
     void dragFinished();
+    /** The bar now reaches a different distance into the list. */
+    void scrollRoomChanged();
 
 protected:
     void changeEvent(QEvent *e) override;
+    /** After every relayout: the bar may have come, gone or moved. */
+    void updateGeometries() override;
 
     // Let the base handle drag-move so the drop INDICATOR is drawn, then force
     // acceptance so a drop is allowed anywhere in the tree.

@@ -25397,6 +25397,13 @@ public:
             return 1;
         return QProxyStyle::styleHint(hint, opt, w, ret);
     }
+    // Laid over the list, as macOS does (Qt lays the bar out by this).
+    int pixelMetric(PixelMetric m, const QStyleOption *opt = nullptr, const QWidget *w = nullptr) const override
+    {
+        if (m == QStyle::PM_ScrollView_ScrollBarOverlap)
+            return QProxyStyle::pixelMetric(QStyle::PM_ScrollBarExtent, opt, w);
+        return QProxyStyle::pixelMetric(m, opt, w);
+    }
 };
 } // namespace
 
@@ -25869,44 +25876,62 @@ void Monitor_Test::theScrollBarLeavesTheLockButtonsClear()
     MonitorProperties *props = doc->monitorProperties();
     for (int i = 1; i <= 25; ++i)
         props->addLayer(QString("L%1").arg(i));
+    // Classic scroll bars beside the list (Fusion, Windows), then overlay
+    // ones laid over it (macOS).
+    for (int overlayBars = 0; overlayBars < 2; ++overlayBars)
     {
         MonitorGraphicsView view(doc);
         MonitorLayersPanel panel(doc, &view);
-        OverlayScrollStyle *overlay = new OverlayScrollStyle;
-        overlay->setParent(&panel);
-        panel.m_tree->setStyle(overlay);
-        panel.m_tree->verticalScrollBar()->setStyle(overlay);
-        panel.m_tree->horizontalScrollBar()->setStyle(overlay);
-        panel.m_tree->reserveScrollBarRoom();
-        panel.resize(320, 300);
+        if (overlayBars)
+        {
+            OverlayScrollStyle *overlay = new OverlayScrollStyle;
+            overlay->setParent(&panel);
+            panel.m_tree->setStyle(overlay);
+            panel.m_tree->verticalScrollBar()->setStyle(overlay);
+            panel.m_tree->horizontalScrollBar()->setStyle(overlay);
+        }
+        panel.resize(380, 300);
         panel.show();
         panel.reload();
-        QCoreApplication::processEvents();
+        for (int i = 0; i < 3; ++i)
+            QCoreApplication::processEvents();
+        const QString mode = overlayBars ? QStringLiteral("overlay bars: ") : QStringLiteral("classic bars: ");
 
         QScrollBar *bar = panel.m_tree->verticalScrollBar();
-        QVERIFY2(bar->maximum() > 0, "the list does not scroll");
+        QVERIFY2(bar->maximum() > 0, qPrintable(mode + "the list does not scroll"));
+        QVERIFY2(bar->isVisibleTo(panel.m_tree), qPrintable(mode + "no scroll bar"));
         const QRect barRect(bar->mapTo(panel.m_tree, QPoint(0, 0)), bar->size());
         QWidget *vp = panel.m_tree->viewport();
         const QRect vpRect(vp->mapTo(panel.m_tree, QPoint(0, 0)), vp->size());
-        QVERIFY2(!vpRect.intersects(barRect),
-                 qPrintable(QString("the list runs under the scroll bar: list right %1, bar left %2")
-                            .arg(vpRect.right()).arg(barRect.left())));
+        // Room kept only where the bar lies over the list: no double gap.
+        if (overlayBars)
+        {
+            QVERIFY2(panel.m_tree->scrollRoom() > 0, qPrintable(mode + "no room kept"));
+        }
+        else
+        {
+            QVERIFY2(panel.m_tree->scrollRoom() == 0 && !vpRect.intersects(barRect),
+                     qPrintable(mode + QString("room %1 beside a bar that is not over the list")
+                                .arg(panel.m_tree->scrollRoom())));
+        }
         int checked = 0;
         for (int i = 0; i < panel.m_tree->topLevelItemCount(); ++i)
         {
             QTreeWidgetItem *row = panel.m_tree->topLevelItem(i);
             QWidget *w = panel.m_tree->itemWidget(row, 1);
-            if (w == nullptr || !vp->rect().intersects(panel.m_tree->visualItemRect(row)))
-                continue;
+            if (w == nullptr || !vp->rect().contains(panel.m_tree->visualItemRect(row)))
+                continue;           // only rows wholly in view
             const QList<QToolButton *> buttons = w->findChildren<QToolButton *>();
             QVERIFY(!buttons.isEmpty());
             QToolButton *lock = buttons.last();
             const QRect r(lock->mapTo(panel.m_tree, QPoint(0, 0)), lock->size());
-            QVERIFY2(!r.intersects(barRect), qPrintable(row->text(0)));
-            QVERIFY2(vpRect.contains(r), qPrintable(row->text(0) + " lock cut off"));
+            QVERIFY2(!r.intersects(barRect), qPrintable(mode + row->text(0)));
+            QVERIFY2(vpRect.contains(r), qPrintable(mode + row->text(0) + QString(" lock cut off: lock %1,%2 %3x%4 list %5,%6 %7x%8 bar left %9")
+                                                    .arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())
+                                                    .arg(vpRect.x()).arg(vpRect.y()).arg(vpRect.width()).arg(vpRect.height()).arg(barRect.left())));
             checked++;
         }
-        QVERIFY(checked > 3);
+        QVERIFY2(checked > 3, qPrintable(mode + QString::number(checked)));
     }
 }
 
