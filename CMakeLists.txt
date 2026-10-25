@@ -219,8 +219,14 @@ add_custom_target(lcov
 # Translations, with the lrelease of the Qt this tree is configured with --
 # not whichever one is first on PATH (val's gate, on an official Qt with
 # Homebrew's unlinked, found none at all).
-set(QLC_LINGUIST_ENV ${CMAKE_COMMAND} -E env
-    "LRELEASE=$<TARGET_FILE:Qt6::lrelease>" "LUPDATE=$<TARGET_FILE:Qt6::lupdate>")
+# Not on Windows: there `cmake -E env` cannot start a shell script ("inappropriate
+# file type or format", CI's MSYS2 job), and its PATH has the one Qt anyway.
+if (WIN32)
+  set(QLC_LINGUIST_ENV "")
+else ()
+  set(QLC_LINGUIST_ENV ${CMAKE_COMMAND} -E env
+      "LRELEASE=$<TARGET_FILE:Qt6::lrelease>" "LUPDATE=$<TARGET_FILE:Qt6::lupdate>")
+endif ()
 if (qmlui)
   add_custom_target(translations ALL
     COMMAND ${QLC_LINGUIST_ENV} ./translate.sh release qmlui
