@@ -19,6 +19,8 @@
 
 #include <QDialogButtonBox>
 #include <QTreeWidget>
+#include <QColor>
+#include <QFont>
 #include <QTreeWidgetItemIterator>
 #include <QApplication>
 #include <QHeaderView>
@@ -162,6 +164,23 @@ PatchList::GroupBy PatchListDialog::groupBy() const
     return PatchList::GroupBy(m_groupBy->currentData().toInt());
 }
 
+/* What is missing, where the eye goes: the house amber chip (black on
+   #f5a623, as the status bar's warnings), which reads on every theme.
+   The labels still print "—" for its address. */
+void PatchListDialog::markUnpatched(QTreeWidgetItem *item)
+{
+    item->setText(PatchColumn, tr("— not patched"));
+    QFont italic = item->font(PatchColumn);
+    italic.setItalic(true);
+    item->setFont(PatchColumn, italic);
+    item->setBackground(PatchColumn, QColor(0xf5, 0xa6, 0x23));
+    item->setForeground(PatchColumn, QColor(Qt::black));
+    item->setToolTip(PatchColumn, tr("Not patched: this fixture has no DMX address yet, so it sends "
+                                     "nothing. Patch it in the Fixture Manager. Its label prints "
+                                     "\"—\" for the address."));
+    item->setData(PatchColumn, UnpatchedRole, true);
+}
+
 void PatchListDialog::setGroupBy(PatchList::GroupBy by)
 {
     m_groupBy->setCurrentIndex(qMax(0, m_groupBy->findData(int(by))));
@@ -257,6 +276,8 @@ void PatchListDialog::slotRefill()
             }
             if (!r.output.isEmpty())
                 item->setToolTip(GoesToColumn, r.output);
+            if (!r.patched && !r.clash)
+                markUnpatched(item);
             m_shown << r;
         }
     }

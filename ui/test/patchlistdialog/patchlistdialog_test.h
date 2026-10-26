@@ -57,6 +57,10 @@ private slots:
     void theLabelTemplateIsRememberedAndPreviewed();
     void labelsPrintToAPrinter();
     void theLabelsKnowTheShowUsesTwoUniverses();
+    void unpatchedRowsAreHighlighted();
+    void anInstalledBrotherPicksItsStockAndPrinter();
+    void aSavedStockWinsOverTheBrother();
+    void noBrotherNoPrinterPicked();
 
 private:
     Doc *m_doc = nullptr;

@@ -55,6 +55,9 @@ public:
      *  mode's name doesn't say it ("Open + Fly (2 ch)"). */
     enum { PatchColumn = 0, FixtureColumn, MakeColumn, ModeColumn, ConnectionColumn,
            GoesToColumn, MountedColumn, OwnerColumn, ColumnCount };
+    /** On the Patch cell: true for a fixture that is not patched (and is
+     *  highlighted, "— not patched"). */
+    enum { UnpatchedRole = Qt::UserRole + 1 };
 
     PatchListDialog(Doc *doc, QWidget *parent = NULL);
 
@@ -105,6 +108,8 @@ private slots:
 
 private:
     void openLabels(const QList<PatchList::Row> &selected);
+    /** Highlight @p item's Patch cell: amber, italic, "— not patched". */
+    static void markUnpatched(QTreeWidgetItem *item);
 
 private:
     PatchList m_list;

@@ -53,6 +53,24 @@ class PatchLabelsDialog : public QDialog
     Q_OBJECT
 
 public:
+    /** A printer installed on this computer, as QPrinterInfo has it. */
+    struct InstalledPrinter
+    {
+        QString name;           //!< the queue's name ("Brother_PT_P710BT")
+        QString description;    //!< what the system calls it ("Brother PT-P710BT")
+        QString model;          //!< make and model
+    };
+
+    /** The printers installed (QPrinterInfo::availablePrinters()), or
+     *  the ones a test stands in. */
+    static QList<InstalledPrinter> installedPrinters();
+    /** Tests: stand @p printers in for the system's (null: the system's).
+     *  Never the real ones in a test: a found Brother picks the stock. */
+    static void setInstalledPrintersForTest(const QList<InstalledPrinter> *printers);
+    /** The installed printer the Brother preset is for: "PT-P710BT" or
+     *  "PT-P710" in its name, description or model. Null if none. */
+    static const InstalledPrinter *brotherPrinter(const QList<InstalledPrinter> &printers);
+
     PatchLabelsDialog(const QList<PatchList::Row> &all, const QList<PatchList::Row> &selected,
                       const QString &title, const QString &suggestedFile, QWidget *parent = NULL);
 
@@ -87,6 +105,11 @@ public:
     /** Set @p printer up for the labels (page size, no margins) and the
      *  Brother preset's printer when it is there. */
     void setUpPrinter(QPrinter *printer) const;
+    /** The printer setUpPrinter() picks: the Brother found, for its preset;
+     *  empty for the system's choice. */
+    QString printerName() const;
+    /** The Brother PT-P710BT installed here (its queue name), or empty. */
+    QString brotherFound() const { return m_brother; }
     /** Print the labels on @p printer as it is set up. False (with @p error
      *  set) if it cannot. */
     bool print(QPrinter *printer, QString *error = NULL) const;
@@ -104,6 +127,7 @@ private:
     QString m_title;
     QString m_suggestedFile;
     bool m_multiUniverse = false;
+    QString m_brother;          //!< the Brother's queue, when it is installed
 
     QComboBox *m_sheet;
     QComboBox *m_tape;
@@ -113,6 +137,7 @@ private:
     QRadioButton *m_selectedRadio;
     QLabel *m_preview;
     QLabel *m_count;
+    QLabel *m_printerFound;
 };
 
 /** @} */

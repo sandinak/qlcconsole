@@ -48,6 +48,10 @@
 
 namespace
 {
+/* No printers: the Labels dialog never sees this computer's own (a Brother
+   installed here would pick its stock). Tests that want one set it. */
+const QList<PatchLabelsDialog::InstalledPrinter> kNoPrinters;
+
 /* Call @p act with the next modal widget of type T once it is up. */
 template <class T>
 void whenModal(const std::function<void(T *)> &act)
@@ -89,6 +93,7 @@ void PatchListDialog_Test::initTestCase()
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settingsDir.path());
     QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+    PatchLabelsDialog::setInstalledPrintersForTest(&kNoPrinters);
 }
 
 /* The fixture rows of the tree, top to bottom, by name. */
@@ -188,7 +193,7 @@ void PatchListDialog_Test::theTableIsInPatchOrder()
     QCOMPARE(t->topLevelItem(1)->text(1), QString("Back"));
     QCOMPARE(t->topLevelItem(1)->text(0), QString("1 · 21–24"));
     QCOMPARE(t->topLevelItem(2)->text(1), QString("Spare"));
-    QCOMPARE(t->topLevelItem(2)->text(0), QString("not patched"));
+    QCOMPARE(t->topLevelItem(2)->text(0), QString("— not patched"));
 }
 
 void PatchListDialog_Test::theColumnsHaveNoChannelCount()
@@ -625,6 +630,131 @@ void PatchListDialog_Test::theLabelsKnowTheShowUsesTwoUniverses()
     });
     dlg.slotPrintSelectedLabels();
     QCOMPARE(preview, QString("Spot 3 D2.101"));
+}
+
+/* What is missing stands out: the Patch cell of a fixture with no address
+   is amber and italic, "— not patched", with a tooltip saying why; a
+   patched row is left plain. Its label still prints "—". */
+void PatchListDialog_Test::unpatchedRowsAreHighlighted()
+{
+    PatchListDialog dlg(m_doc);
+    dlg.setGroupBy(PatchList::ByNone);
+    QTreeWidgetItem *spare = dlg.itemFor("Spare");
+    QTreeWidgetItem *front = dlg.itemFor("Front");
+    QVERIFY(spare != nullptr && front != nullptr);
+
+    const int col = PatchListDialog::PatchColumn;
+    QCOMPARE(spare->text(col), QString("— not patched"));
+    QVERIFY(spare->data(col, PatchListDialog::UnpatchedRole).toBool());
+    QVERIFY(spare->font(col).italic());
+    QCOMPARE(spare->background(col).color(), QColor(0xf5, 0xa6, 0x23));
+    // Black on amber: legible whatever the theme's own text colour is.
+    QCOMPARE(spare->foreground(col).color(), QColor(Qt::black));
+    QVERIFY(spare->toolTip(col).contains("no DMX address"));
+    // Only the Patch cell: the name reads as any other.
+    QVERIFY(!spare->font(PatchListDialog::FixtureColumn).italic());
+
+    QVERIFY(!front->data(col, PatchListDialog::UnpatchedRole).toBool());
+    QVERIFY(!front->font(col).italic());
+    QCOMPARE(front->background(col).style(), Qt::NoBrush);
+    QVERIFY(front->toolTip(col).isEmpty());
+
+    // The label: a dash, not the highlight's words.
+    PatchList::Row row;
+    foreach (const PatchList::Row &r, dlg.shownRows())
+    {
+        if (r.name == "Spare")
+            row = r;
+    }
+    QCOMPARE(PatchLabels::render("{name} D{address}", row, false), QString("Spare D—"));
+}
+
+/* A Brother PT-P710BT installed here (by its queue's name, what the system
+   calls it, or its model): with no stock chosen before, the dialog opens on
+   its preset with that printer, and says so. */
+void PatchListDialog_Test::anInstalledBrotherPicksItsStockAndPrinter()
+{
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+    const QList<PatchList::Row> all = PatchList::build(m_doc).rows();
+
+    const QList<PatchLabelsDialog::InstalledPrinter> byName = {
+        { "HP_LaserJet", "HP LaserJet", "HP LaserJet Pro" },
+        { "Brother_PT_P710BT", "Brother PT-P710BT", "Brother PT-P710BT" } };
+    PatchLabelsDialog::setInstalledPrintersForTest(&byName);
+    {
+        PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+        QCOMPARE(ld.sheetKey(), QString("ptp710bt"));
+        QCOMPARE(ld.brotherFound(), QString("Brother_PT_P710BT"));
+        QCOMPARE(ld.printerName(), QString("Brother_PT_P710BT"));
+        QLabel *found = ld.findChild<QLabel *>("labelPrinterFound");
+        QVERIFY(found != nullptr);
+        QVERIFY(!found->isHidden());
+        QCOMPARE(found->text(), QString("Brother PT-P710BT found: Brother PT-P710BT"));
+        // Opening it chose nothing: no stock is remembered from it.
+        QVERIFY(!QSettings().contains(SETTINGS_PATCH_LABEL_SHEET));
+    }
+
+    // The model alone says it (an older PT-P710, a queue named otherwise).
+    const QList<PatchLabelsDialog::InstalledPrinter> byModel = {
+        { "Label_Printer", "Label printer", "Brother PT-P710 CUPS" } };
+    PatchLabelsDialog::setInstalledPrintersForTest(&byModel);
+    {
+        PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+        QCOMPARE(ld.sheetKey(), QString("ptp710bt"));
+        QCOMPARE(ld.printerName(), QString("Label_Printer"));
+    }
+    PatchLabelsDialog::setInstalledPrintersForTest(&kNoPrinters);
+}
+
+/* A stock chosen before is what is in the printer: it wins, the Brother is
+   still mentioned, and the printer is the system's choice until its preset
+   is picked. A remembered stock that has gone away doesn't count. */
+void PatchListDialog_Test::aSavedStockWinsOverTheBrother()
+{
+    const QList<PatchList::Row> all = PatchList::build(m_doc).rows();
+    const QList<PatchLabelsDialog::InstalledPrinter> brother = {
+        { "Brother_PT_P710BT", "Brother PT-P710BT", "Brother PT-P710BT" } };
+    PatchLabelsDialog::setInstalledPrintersForTest(&brother);
+
+    QSettings().setValue(SETTINGS_PATCH_LABEL_SHEET, "roll62");
+    {
+        PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+        QCOMPARE(ld.sheetKey(), QString("roll62"));
+        QVERIFY(ld.printerName().isEmpty());
+        QVERIFY(!ld.findChild<QLabel *>("labelPrinterFound")->isHidden());
+        ld.setSheetKey("ptp710bt");
+        QCOMPARE(ld.printerName(), QString("Brother_PT_P710BT"));
+    }
+
+    QSettings().setValue(SETTINGS_PATCH_LABEL_SHEET, "no such stock");
+    {
+        PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+        QCOMPARE(ld.sheetKey(), QString("ptp710bt"));
+    }
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+    PatchLabelsDialog::setInstalledPrintersForTest(&kNoPrinters);
+}
+
+/* No Brother: the default stock, nothing said, and its preset (picked by
+   hand) leaves the printer to the system. */
+void PatchListDialog_Test::noBrotherNoPrinterPicked()
+{
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+    const QList<PatchList::Row> all = PatchList::build(m_doc).rows();
+    const QList<PatchLabelsDialog::InstalledPrinter> other = {
+        { "HP_LaserJet", "HP LaserJet", "HP LaserJet Pro" },
+        { "Brother_HL_L2350DW", "Brother HL-L2350DW", "Brother HL-L2350DW" } };
+    PatchLabelsDialog::setInstalledPrintersForTest(&other);
+    {
+        PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+        QCOMPARE(ld.sheetKey(), QString("tape"));
+        QVERIFY(ld.brotherFound().isEmpty());
+        QVERIFY(ld.findChild<QLabel *>("labelPrinterFound")->isHidden());
+        ld.setSheetKey("ptp710bt");
+        QVERIFY(ld.printerName().isEmpty());
+    }
+    PatchLabelsDialog::setInstalledPrintersForTest(&kNoPrinters);
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
 }
 
 QTEST_MAIN(PatchListDialog_Test)

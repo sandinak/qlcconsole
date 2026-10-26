@@ -39,6 +39,60 @@
 #include "patchlabelsdialog.h"
 #include "patchlabels.h"
 
+namespace
+{
+const QList<PatchLabelsDialog::InstalledPrinter> *s_testPrinters = nullptr;
+
+/* "Brother_PT_P710BT", "PT-P710BT", "pt p710" all say PTP710. */
+QString squeezed(const QString &text)
+{
+    QString out;
+    foreach (const QChar &c, text)
+    {
+        if (c.isLetterOrNumber())
+            out += c.toUpper();
+    }
+    return out;
+}
+} // namespace
+
+QList<PatchLabelsDialog::InstalledPrinter> PatchLabelsDialog::installedPrinters()
+{
+    if (s_testPrinters != nullptr)
+        return *s_testPrinters;
+    QList<InstalledPrinter> out;
+    foreach (const QPrinterInfo &info, QPrinterInfo::availablePrinters())
+    {
+        InstalledPrinter p;
+        p.name = info.printerName();
+        p.description = info.description();
+        p.model = info.makeAndModel();
+        out << p;
+    }
+    return out;
+}
+
+void PatchLabelsDialog::setInstalledPrintersForTest(const QList<InstalledPrinter> *printers)
+{
+    s_testPrinters = printers;
+}
+
+const PatchLabelsDialog::InstalledPrinter *
+PatchLabelsDialog::brotherPrinter(const QList<InstalledPrinter> &printers)
+{
+    static const QString model = QStringLiteral("PTP710");     // PT-P710BT, PT-P710
+    for (int i = 0; i < printers.size(); ++i)
+    {
+        const InstalledPrinter &p = printers.at(i);
+        if (squeezed(p.name).contains(model) || squeezed(p.description).contains(model)
+            || squeezed(p.model).contains(model))
+        {
+            return &printers.at(i);
+        }
+    }
+    return nullptr;
+}
+
 PatchLabelsDialog::PatchLabelsDialog(const QList<PatchList::Row> &all,
                                      const QList<PatchList::Row> &selected,
                                      const QString &title, const QString &suggestedFile,
@@ -126,6 +180,23 @@ PatchLabelsDialog::PatchLabelsDialog(const QList<PatchList::Row> &all,
     m_count->setObjectName(QStringLiteral("labelCount"));
     root->addWidget(m_count);
 
+    /* A Brother PT-P710BT on this computer: its preset and that printer. */
+    const QList<InstalledPrinter> printers = installedPrinters();
+    const InstalledPrinter *brother = brotherPrinter(printers);
+    m_printerFound = new QLabel(this);
+    m_printerFound->setObjectName(QStringLiteral("labelPrinterFound"));
+    if (brother != nullptr)
+    {
+        m_brother = brother->name;
+        m_printerFound->setText(tr("Brother PT-P710BT found: %1")
+                                    .arg(brother->description.isEmpty() ? brother->name
+                                                                        : brother->description));
+        m_printerFound->setToolTip(tr("Its stock is picked when you have not chosen another, and "
+                                      "Print... goes to it"));
+    }
+    m_printerFound->setVisible(brother != nullptr);
+    root->addWidget(m_printerFound);
+
     QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     QPushButton *save = btns->addButton(tr("Save PDF..."), QDialogButtonBox::ActionRole);
     save->setObjectName(QStringLiteral("saveLabelsPdf"));
@@ -138,7 +209,25 @@ PatchLabelsDialog::PatchLabelsDialog(const QList<PatchList::Row> &all,
 
     /* What was used last: what is in the printer. */
     QSettings settings;
-    setSheetKey(settings.value(SETTINGS_PATCH_LABEL_SHEET, PatchLabels::defaultSheetKey()).toString());
+    /* A stock chosen before wins; else the Brother's, when it is here. */
+    const QString saved = settings.value(SETTINGS_PATCH_LABEL_SHEET).toString();
+    QString stock = PatchLabels::defaultSheetKey();
+    if (!saved.isEmpty() && PatchLabels::sheet(saved).key == saved)
+    {
+        stock = saved;
+    }
+    else if (!m_brother.isEmpty())
+    {
+        foreach (const PatchLabels::Sheet &s, PatchLabels::sheets())
+        {
+            if (!s.printer.isEmpty())
+            {
+                stock = s.key;
+                break;
+            }
+        }
+    }
+    setSheetKey(stock);
     setTapeWidth(settings.value(SETTINGS_PATCH_LABEL_TAPE, 24).toInt());
     setLabelTemplate(settings.value(SETTINGS_PATCH_LABEL_TEMPLATE, PatchLabels::defaultTemplate()).toString());
     setCutGap(settings.value(SETTINGS_PATCH_LABEL_CUTGAP, 4.0).toDouble());
@@ -290,21 +379,20 @@ bool PatchLabelsDialog::savePdf(const QString &path, QString *error) const
                                  m_title, options(), error);
 }
 
+QString PatchLabelsDialog::printerName() const
+{
+    /* The Brother preset's hook: its printer, when it is there. */
+    if (sheet().printer.isEmpty())
+        return QString();
+    return m_brother;
+}
+
 void PatchLabelsDialog::setUpPrinter(QPrinter *printer) const
 {
     const PatchLabels::Sheet s = sheet();
-    /* The Brother preset's hook: its printer, when it is there. */
-    if (!s.printer.isEmpty())
-    {
-        foreach (const QString &name, QPrinterInfo::availablePrinterNames())
-        {
-            if (name.contains(s.printer, Qt::CaseInsensitive))
-            {
-                printer->setPrinterName(name);
-                break;
-            }
-        }
-    }
+    const QString name = printerName();
+    if (!name.isEmpty())
+        printer->setPrinterName(name);
     printer->setDocName(m_title);
     printer->setPageLayout(PatchLabels::pageLayout(s));
     printer->setFullPage(true);
