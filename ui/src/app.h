@@ -712,10 +712,19 @@ public:
     /**
      * Load workspace contents from a file with the given name.
      *
+     * A file cut short or not well formed opens as far as it can be read
+     * (NoError), says so, and is never saved over by a plain Save:
+     * see damagedFile().
+     *
      * @param fileName The name of the file to load from.
      * @return QFile::NoError if successful.
      */
     QFile::FileError loadXML(const QString& fileName);
+
+    /** The show file that opened damaged or incomplete, while it is still
+     *  the current file (empty otherwise): Save goes to Save As for it, so
+     *  the original is never replaced with only what could be read. */
+    QString damagedFile() const { return m_damagedFile; }
 
     /**
      * Load workspace contents from the given XML document.
@@ -762,6 +771,7 @@ public slots:
 
 private:
     QString m_fileName;
+    QString m_damagedFile;
 
     /*********************************************************************
      * Autosave

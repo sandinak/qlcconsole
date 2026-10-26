@@ -3346,7 +3346,7 @@ void LookEditor::rebuildEffectDynWidget()
         QHBoxLayout *rl = new QHBoxLayout(row);
         rl->setContentsMargins(0, 6, 0, 0);
         rl->addWidget(new QLabel(tr("One-shot length:"), row));
-        QDoubleSpinBox *sp = new QDoubleSpinBox(row);
+        QDoubleSpinBox *sp = new SecondsSpinBox(row);
         sp->setRange(0.0, 120.0);
         sp->setSingleStep(0.1);
         sp->setDecimals(1);

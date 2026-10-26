@@ -88,6 +88,8 @@ private slots:
     void slotMscInputActivated(int index);
     void slotTimeChanged();
     void refreshMidiInputs();
+    /** refreshMidiInputs() once, when control returns to the event loop. */
+    void scheduleMidiInputsRefresh();
     void refreshTimecode();
 
 private:
@@ -102,6 +104,7 @@ private:
     Doc *m_doc;
     QPointer<ShowControlListener> m_listener;
     bool m_updating;
+    bool m_midiRefreshPending = false;
 
     // OSC in
     QCheckBox *m_oscCheck;

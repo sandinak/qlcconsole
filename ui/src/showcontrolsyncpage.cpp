@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QTimer>
 #include <QNetworkInterface>
 #include <QScrollArea>
 #include <QPushButton>
@@ -104,8 +105,11 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
     scroll->setWidget(content);
 
     InputOutputMap *iom = m_doc->inputOutputMap();
-    connect(iom, &InputOutputMap::universeAdded, this, &ShowControlSyncPage::refreshMidiInputs);
-    connect(iom, &InputOutputMap::universeRemoved, this, &ShowControlSyncPage::refreshMidiInputs);
+    /* Once for a run of them: a show's universes are added one at a time
+       as it loads, and a rebuild over all of them for each was O(N^2) --
+       minutes for a few thousand (F1). */
+    connect(iom, &InputOutputMap::universeAdded, this, &ShowControlSyncPage::scheduleMidiInputsRefresh);
+    connect(iom, &InputOutputMap::universeRemoved, this, &ShowControlSyncPage::scheduleMidiInputsRefresh);
     connect(iom, &InputOutputMap::pluginConfigurationChanged,
             this, &ShowControlSyncPage::refreshMidiInputs);
 
@@ -341,6 +345,17 @@ void ShowControlSyncPage::slotLastOscChanged(const QString &what)
 void ShowControlSyncPage::slotLastMscChanged(const QString &what)
 {
     m_mscLast->setText(what.isEmpty() ? tr("Nothing received yet.") : what);
+}
+
+void ShowControlSyncPage::scheduleMidiInputsRefresh()
+{
+    if (m_midiRefreshPending)
+        return;
+    m_midiRefreshPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_midiRefreshPending = false;
+        refreshMidiInputs();
+    });
 }
 
 void ShowControlSyncPage::refreshMidiInputs()

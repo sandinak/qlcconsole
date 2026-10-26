@@ -1016,12 +1016,16 @@ ShowEmbedding::Compatibility ShowEmbedding::compatibility(const QString &key) co
                 QStringList set = p->effectParamValues().keys();
                 set << p->effectStringParams().keys();
                 set.removeDuplicates();
+                /* Held here: paramNamed() points into the list it is given,
+                   and paramDefs() returns a copy (SA2). */
+                const QList<::EffectScript::ParamDef> defsA = a.paramDefs();
+                const QList<::EffectScript::ParamDef> defsB = b.paramDefs();
                 for (const QString &name : set)
                 {
-                    const ::EffectScript::ParamDef *da = paramNamed(a.paramDefs(), name);
+                    const ::EffectScript::ParamDef *da = paramNamed(defsA, name);
                     if (da == nullptr)
                         continue;           // not the show's either: nothing to lose
-                    const ::EffectScript::ParamDef *db = paramNamed(b.paramDefs(), name);
+                    const ::EffectScript::ParamDef *db = paramNamed(defsB, name);
                     if (db == nullptr)
                         c.problems << tr("Look “%1”: its setting “%2” is not in this computer's copy")
                                           .arg(p->name(), name);

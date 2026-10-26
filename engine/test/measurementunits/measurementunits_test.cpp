@@ -22,6 +22,7 @@
 
 #include "measurementunits_test.h"
 #include "measurementunits.h"
+#include "qlcfile.h"
 
 typedef MeasurementUnits MU;
 Q_DECLARE_METATYPE(MeasurementUnits::LengthUnit)
@@ -275,16 +276,66 @@ void MeasurementUnits_Test::preference()
     // Stored by key in qlcconsole's own settings, which the fixture editor
     // reads too.
     QSettings s(QSettings::defaultFormat(), QSettings::UserScope,
-                QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+                QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole"));
     QCOMPARE(s.value(MU::settingsKey()).toString(), QString("ft"));
     s.setValue(MU::settingsKey(), QStringLiteral("nonsense"));
     QCOMPARE(MU::preferredLength(), MU::Millimetres);
 }
 
+void MeasurementUnits_Test::keptWithEveryOtherSetting()
+{
+    /* The app's own names (App::App()): a plain QSettings() there is where
+       every other setting lives, and the units are kept there too (SA3). */
+    const QString org = QCoreApplication::organizationName();
+    const QString domain = QCoreApplication::organizationDomain();
+    const QString app = QCoreApplication::applicationName();
+    QCoreApplication::setOrganizationName(QStringLiteral("qlcplus"));
+    QCoreApplication::setOrganizationDomain(QStringLiteral("qlcplus.org"));
+    QCoreApplication::setApplicationName(QStringLiteral("qlcconsole"));
+
+    MU::setPreferredLength(MU::Centimetres);
+    {
+        QSettings plain;
+        QCOMPARE(plain.value(MU::settingsKey()).toString(), QString("cm"));
+        plain.setValue(MU::settingsKey(), QStringLiteral("in"));
+    }
+    QCOMPARE(MU::preferredLength(), MU::Inches);
+
+#if defined(Q_OS_DARWIN)
+    /* Where an older build kept them on macOS (com.qlcplus.qlcconsole):
+       moved over once, a value already in the app's settings winning. */
+    QSettings old(QSettings::defaultFormat(), QSettings::UserScope,
+                  QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+    QVERIFY(old.fileName() != QSettings().fileName());
+    old.setValue(MU::settingsKey(), QStringLiteral("ft"));
+    old.setValue(QStringLiteral("units/seededFromShow"), true);
+    QSettings().remove(QStringLiteral("units/seededFromShow"));
+    old.sync();
+    MU::moveOldSettings();
+    old.sync();
+    QCOMPARE(MU::preferredLength(), MU::Inches);    // already here: kept
+    QCOMPARE(QSettings().value(QStringLiteral("units/seededFromShow")).toBool(), true);
+    QVERIFY(!old.contains(MU::settingsKey()));
+    QVERIFY(!old.contains(QStringLiteral("units/seededFromShow")));
+
+    // Nothing here yet: the old value is the one.
+    QSettings().remove(MU::settingsKey());
+    old.setValue(MU::settingsKey(), QStringLiteral("ft"));
+    old.sync();
+    MU::moveOldSettings();
+    QCOMPARE(MU::preferredLength(), MU::Feet);
+#endif
+
+    QSettings().remove(QStringLiteral("units"));
+    QCoreApplication::setOrganizationName(org);
+    QCoreApplication::setOrganizationDomain(domain);
+    QCoreApplication::setApplicationName(app);
+}
+
 void MeasurementUnits_Test::seedFromFirstShow()
 {
     QSettings s(QSettings::defaultFormat(), QSettings::UserScope,
-                QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+                QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole"));
     s.clear();
     s.sync();
 

@@ -786,6 +786,37 @@ on Art-Net nodes whose poll replies carry a junk status byte.
 
 ### Fixed
 
+- **A damaged show file says so, and isn't saved over** (RC4, test matrix
+  F2). A show cut short or not well formed opened silently as a smaller
+  show, and a Save then replaced the original with less. It now opens as
+  far as it can be read with *This show file is damaged or incomplete
+  (line N)*, the footer keeps the message, and Save goes to Save As
+  (offering *show (recovered)*) instead of writing over it. The engine's
+  load returns false and logs the line.
+- **A fixture on an impossible universe no longer freezes the load** (RC4,
+  test matrix F1). `<Universe>65536</Universe>` added 65537 universes one
+  at a time, each rebuilding the Show Control page's lists (minutes), and
+  `-1` ended in an abort. A show now has at most 1024 universes; a fixture
+  past that, negative or not a number loads unpatched and the footer says
+  so. The Show Control page rebuilds once for a run of new universes.
+- **Opening a show no longer marks it modified** (RC4, test matrix F3).
+  Building the plot groups each truss with the fixtures rigged on it; a
+  show saved without those groups (Office.qlcc, help-demo.qxw) asked
+  "Save changes?" on close and wrote an autosave at open. The groups are
+  derived the same at every open, so they no longer count as an edit.
+- **Times take either decimal mark** (RC4, test matrix L1). In German,
+  "1.5" typed into a fade was 15 s (the "." read as a thousands mark).
+  Every fade and time field now reads "." and "," both as the decimal
+  point, and shows the language's own.
+- **The units setting lives with every other setting** (RC4, test matrix
+  SA3). On macOS it was kept in `com.qlcplus.qlcconsole` instead of
+  `org.qlcplus.qlcconsole`, so settings resets and exports missed it; an
+  existing value is moved over once. The fixture editor's toolbar style
+  now reads the app's real settings too.
+- **Uninitialised members** (RC4, test matrix M2, M3, SA2): the Show Tree
+  library filter and a VC button's state and action are set before the
+  constructor reads them, and a show-embedding check holds the parameter
+  list it points into.
 - **An Art-Net node's RDM flag no longer flickers** (RC4, board Q165-a).
   The office CR041R fills its ArtPollReply Status1 from an uncleared
   buffer (0x00 / 0x74 / 0x6F / 0xA9 from reply to reply, the RDM bit set

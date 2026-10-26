@@ -905,7 +905,7 @@ private:
     LookEditor *m_lookEditor = nullptr;
 
     // Library
-    QLineEdit *m_filter;
+    QLineEdit *m_filter = nullptr;
     QTreeWidget *m_library;
     QList<QPair<int, quint32>> m_recent;
     QList<QPair<int, quint32>> m_pinned;

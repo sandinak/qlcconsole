@@ -386,7 +386,7 @@ void App::initToolBar()
     // explicit org/name rather than this one's (QCoreApplication's, set
     // just below: organizationName matches, but applicationName doesn't,
     // so a plain QSettings here would read/write an unrelated file).
-    QSettings mainAppSettings(QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+    QSettings mainAppSettings(QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole"));
     switch (mainAppSettings.value(QStringLiteral("workspace/tabLabelMode"), 0).toInt())
     {
     case 1: // TabIconOnly

@@ -44,6 +44,7 @@
 #include "chaserstep.h"
 #include "chaser.h"
 #include "scene.h"
+#include "inputoutputmap.h"
 #include "doc.h"
 
 #include "showcontrol_ui_test.h"
@@ -435,6 +436,31 @@ void ShowControlUi_Test::theTimecodeSourceAndHealth()
     QCOMPARE(tc->sourceUniverse(), 1);
     tc->setSourceUniverse(-1);
     QCOMPARE(source->currentData().toInt(), -1);
+}
+
+void ShowControlUi_Test::manyUniversesRebuildTheListOnce()
+{
+    ShowControlSyncPage page(m_doc);
+    TimecodeSource *tc = m_doc->timecodeSource();
+    QComboBox *source = page.findChild<QComboBox *>("scMtcSource");
+    QVERIFY(source != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    // Picked before it exists (a show's setting read before its universes).
+    tc->setSourceUniverse(700);
+    QElapsedTimer t;
+    t.start();
+    while (iom->universesCount() < 1000)
+        QVERIFY(iom->addUniverse());
+    // Added, with nothing rebuilt yet: one pass over 1000 is cheap, 1000
+    // passes are not.
+    QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+    QCOMPARE(source->findData(700), -1);
+
+    // Back to the event loop: rebuilt, once, with all of them.
+    QTRY_VERIFY(source->findData(700) > 0);
+    QCOMPARE(source->currentData().toInt(), 700);
+    tc->setSourceUniverse(-1);
 }
 
 /* "Listen on": all MIDI inputs, or one port by name -- kept machine-wide,

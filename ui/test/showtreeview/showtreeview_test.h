@@ -159,6 +159,9 @@ private slots:
     /** Q60: a typed time is kept when focus leaves its field -- a click on
      *  another cue, Tab, the page changing; Esc puts it back. */
     void typedTimesAreKeptWhenFocusLeaves();
+    /** A time typed with either decimal mark is the same time, in any
+     *  language: "1.5" in German is not 15 s (L1). */
+    void aTimeTakesEitherDecimalMark();
     /** Q96: + Production, + Sub-cue and Merge under More ▾; + Production
      *  on the bar too while the show has none. */
     void theHeaderFoldsUnderMore();

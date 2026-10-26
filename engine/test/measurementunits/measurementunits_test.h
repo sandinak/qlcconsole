@@ -52,6 +52,9 @@ private slots:
     void storedMm();
     void preference();
     /** The first show ever opened, if in feet, seeds an unset preference */
+    /** The units live where every other setting does (a plain QSettings()
+     *  in the app), and an older build's are moved there once. */
+    void keptWithEveryOtherSetting();
     void seedFromFirstShow();
 
 private:

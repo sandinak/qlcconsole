@@ -1039,6 +1039,7 @@ void App::clearDocument()
     SimpleDesk::instance()->clearContents();
     m_doc->inputOutputMap()->resetUniverses();
     setFileName(QString());
+    m_damagedFile.clear();
     // A new show: the qlcconsole view (a loaded one sets its own, loadXML()).
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
@@ -3286,8 +3287,10 @@ QFile::FileError App::slotFileSave()
     QString asfName = autoSaveFileName();
 
     /* Attempt to save with the existing name. Fall back to Save As (which
-       asks about missing definitions itself). */
-    if (fileName().isEmpty() == true)
+       asks about missing definitions itself) -- also for a show that opened
+       damaged: only what could be read is here, and a plain Save would
+       replace the original with it (F2). */
+    if (fileName().isEmpty() == true || fileName() == m_damagedFile)
         error = slotFileSaveAs();
     else if (!confirmSaveWithoutDefinitions())
         return QFile::NoError;
@@ -3314,7 +3317,17 @@ QFile::FileError App::slotFileSaveAs()
     QFileDialog dialog(this);
     dialog.setWindowTitle(tr("Save Workspace As"));
     dialog.setAcceptMode(QFileDialog::AcceptSave);
-    dialog.selectFile(fileName());
+    if (!fileName().isEmpty() && fileName() == m_damagedFile)
+    {
+        /* Opened damaged: a name of its own, so the original stays. */
+        const QFileInfo fi(fileName());
+        dialog.selectFile(fi.dir().filePath(tr("%1 (recovered)").arg(fi.completeBaseName())
+                                            + QStringLiteral(".") + fi.suffix()));
+    }
+    else
+    {
+        dialog.selectFile(fileName());
+    }
 
     /* Append file filters to the dialog */
     QStringList filters;
@@ -4772,6 +4785,8 @@ QFile::FileError App::loadXML(const QString& fileName)
     if (fileName.isEmpty() == true)
         return QFile::OpenError;
 
+    m_damagedFile.clear();
+
     /* The definitions and scripts the show carries, put in use before any of
        it loads: where this computer has none, or a different one, the show's
        own (SHOW_EMBEDDING_DESIGN.md). Its folder's Fixtures/, EffectScripts/
@@ -4816,11 +4831,28 @@ QFile::FileError App::loadXML(const QString& fileName)
         }
         else
         {
+            /* Cut short or not well formed (F2): opened as far as it could
+               be read, which is what the user sees -- but the file is not
+               saved over with less (slotFileSave() goes to Save As). */
+            const bool damaged = doc->hasError();
+            const qint64 damagedLine = doc->lineNumber();
             setFileName(fileName);
+            if (damaged)
+                m_damagedFile = fileName;
             /* The venue it was last focused for, from the file beside it:
                applied over the show's own calibration, never into it. */
             m_doc->programmer()->venueCorrections()->setShowFile(fileName, true);
             updateVenueFooter();
+            if (damaged && m_noGui == false)
+            {
+                QTimer::singleShot(0, this, [this, damagedLine]() {
+                    QMessageBox::warning(this, tr("Damaged show file"),
+                        tr("This show file is damaged or incomplete (line %1). It was opened "
+                           "as far as it could be read: what came after that point is missing.\n\n"
+                           "The original is kept as it is. Save asks for a new name; "
+                           "to replace the original, choose its name there.").arg(damagedLine));
+                });
+            }
             /* Last changed over a day ago: "Still at <venue>?", New venue
                the default (board Q129). Not modal, so it never holds up a
                show opened from the command line. */
@@ -4832,7 +4864,6 @@ QFile::FileError App::loadXML(const QString& fileName)
                     if (FocusCallsDialog::offerVenueImport(m_doc, this, fileName) == nullptr)
                         FocusCallsDialog::confirmVenue(m_doc, this);
                 });
-            m_doc->resetModified();
             retval = QFile::NoError;
             cacheShowDefinitions();     // the next run of it needs nothing remote
 
@@ -4854,6 +4885,16 @@ QFile::FileError App::loadXML(const QString& fileName)
                 FixtureManager::instance()->updateView();
             if (Monitor::instance() != NULL)
                 Monitor::instance()->updateView();
+
+            /* Opened, not changed: after the views are built, not before.
+               Building the plot gathers each truss, riser, tower and pipe
+               with the fixtures rigged on it (MonitorGraphicsView::
+               ensureTrussGroup() and the rest) and marks the show modified
+               when the file had no such group yet -- derived again the same
+               on every open, so not an edit. Before, a show saved without
+               them (Office.qlcc) asked "Save changes?" on close and wrote
+               an autosave at open (F3). */
+            m_doc->resetModified();
         }
     }
     else
@@ -5029,6 +5070,14 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     VirtualConsole::instance()->postLoad();
     updateShowTreeNotice();
 
+    /* Cut short or not well formed, wherever it was (the Engine says so
+       itself; the Virtual Console and the rest after it do not). */
+    if (doc.hasError())
+    {
+        qWarning() << Q_FUNC_INFO << "XML error at line" << doc.lineNumber() << ":" << doc.errorString();
+        m_doc->appendToErrorLog(Doc::damagedFileMessage(doc));
+    }
+
     /* What went wrong loading it: in the footer with every other problem,
        where it stays until it is fixed -- not a dialog seen once and gone
        (CONSOLIDATION_REVIEW #5). Missing definitions are left out here: the
@@ -5144,6 +5193,8 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
         /* Set the file name for the current Doc instance and
            set it also in an unmodified state. */
         setFileName(fileName);
+        // Saved whole, wherever the user chose: no longer the damaged file.
+        m_damagedFile.clear();
         // Saved under a new name: its venues go with it.
         m_doc->programmer()->venueCorrections()->setShowFile(fileName, false);
         m_doc->resetModified();
@@ -6274,9 +6325,9 @@ void App::initStatusBar()
         foreach (Universe *u, io->universes())
             watchUniverse(u);
         connect(io, &InputOutputMap::universeAdded, this, [this, io, watchUniverse](quint32 id) {
-            foreach (Universe *u, io->universes())
-                if (u != NULL && u->id() == id)
-                    watchUniverse(u);
+            // The one added, by id: not a pass over all of them for each
+            // of a loading show's universes (F1).
+            watchUniverse(io->universe(id));
             updateStatusBar();
         });
         connect(io, &InputOutputMap::universeRemoved, this, &App::updateStatusBar);

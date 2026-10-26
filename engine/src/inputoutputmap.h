@@ -175,8 +175,17 @@ public:
     static quint32 invalidUniverse();
 
     /**
+     * The most universes a show can have. QLC+ itself sets no limit, but a
+     * universe is a set of 512-channel buffers, written every frame, so a
+     * damaged or hand-edited show naming universe 65536 made the load add
+     * 65537 of them, one at a time, and hang. Far above any rig a console
+     * like this drives.
+     */
+    static quint32 maxUniverses();
+
+    /**
      * Add a new universe and append it at the end of the
-     * current universes list
+     * current universes list. Refused (false) at maxUniverses().
      */
     bool addUniverse(quint32 id = InputOutputMap::invalidUniverse());
 

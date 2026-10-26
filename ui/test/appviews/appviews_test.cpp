@@ -1058,7 +1058,7 @@ void AppViews_Test::theViewMenuIsOnlyViews()
 void AppViews_Test::theGridFollowsTheUnitPreference()
 {
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope,
-                       QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+                       QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole"));
     auto forget = [&settings]() {
         settings.remove(MeasurementUnits::settingsKey());
         settings.remove(QStringLiteral("units/seededFromShow"));

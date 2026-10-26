@@ -23,15 +23,50 @@
 #include <cmath>
 
 #include "measurementunits.h"
+#include "qlcfile.h"
 
 namespace
 {
+    /* Where the units were kept before they joined the rest (SA3): on
+       macOS, "qlcplus" made it com.qlcplus.qlcconsole, beside every other
+       setting in org.qlcplus.qlcconsole. Moved over once, then gone from
+       there. Elsewhere it is the same place. */
+    void moveOldUnits(QSettings &to, bool always = false)
+    {
+#if defined(Q_OS_DARWIN)
+        static bool s_done = false;     // once a run: it is read often
+        if (s_done && !always)
+            return;
+        s_done = true;
+        QSettings from(to.format(), QSettings::UserScope,
+                       QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+        if (from.fileName() == to.fileName())
+            return;
+        from.beginGroup(QStringLiteral("units"));
+        const QStringList keys = from.childKeys();
+        from.endGroup();
+        if (keys.isEmpty())
+            return;
+        for (const QString &k : keys)
+        {
+            const QString key = QStringLiteral("units/") + k;
+            if (!to.contains(key))
+                to.setValue(key, from.value(key));
+        }
+        from.remove(QStringLiteral("units"));
+#else
+        Q_UNUSED(to)
+        Q_UNUSED(always)
+#endif
+    }
+
     /* qlcconsole's own settings, whichever app is asking: the fixture editor
        names itself differently, so a plain QSettings() there would read an
        unrelated file. The default format, not Native, so a test that points
        QSettings at a temporary INI gets this one too. */
 #define APP_SETTINGS(var) QSettings var(QSettings::defaultFormat(), QSettings::UserScope, \
-                                        QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"))
+                                        QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole")); \
+                          moveOldUnits(var)
 
     double roundTo(double v, int decimals)
     {
@@ -202,6 +237,13 @@ namespace
 /*****************************************************************************
  * Preference
  *****************************************************************************/
+
+void MeasurementUnits::moveOldSettings()
+{
+    QSettings s(QSettings::defaultFormat(), QSettings::UserScope,
+                QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole"));
+    moveOldUnits(s, true);
+}
 
 QString MeasurementUnits::settingsKey()
 {

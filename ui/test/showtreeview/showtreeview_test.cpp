@@ -56,6 +56,7 @@
 #undef protected
 #undef private
 #include "functionliveeditdialog.h"
+#include "fadetimespin.h"
 #include "functionmanager.h"
 #include "chasereditor.h"
 #include "noteedit.h"
@@ -7117,6 +7118,70 @@ void ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves()
     hold->setFocus();
     QTest::keyClick(hold, Qt::Key_Escape);
     QCOMPARE(st->cue(c3)->hold, Function::infiniteSpeed());
+}
+
+void ShowTreeView_Test::aTimeTakesEitherDecimalMark()
+{
+    const QLocale german(QLocale::German, QLocale::Germany);
+    QCOMPARE(german.decimalPoint(), QString(","));
+    QCOMPARE(german.groupSeparator(), QString("."));
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(view.selectNode(c1));
+    QDoubleSpinBox *fadeIn = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
+    QDoubleSpinBox *fadeOut = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
+    QVERIFY(fadeIn != nullptr && fadeOut != nullptr);
+    auto typeIn = [&](QDoubleSpinBox *box, const QString &text) {
+        box->setFocus();
+        QTRY_VERIFY(box->hasFocus());
+        box->selectAll();
+        QTest::keyClicks(box, text);
+        QTest::keyClick(box, Qt::Key_Return);
+    };
+
+    for (const QLocale &loc : { german, QLocale(QLocale::English, QLocale::UnitedStates), QLocale::c() })
+    {
+        fadeIn->setLocale(loc);
+        fadeOut->setLocale(loc);
+        typeIn(fadeIn, "1.5");
+        QCOMPARE(st->cue(c1)->fadeIn, 1500u);
+        typeIn(fadeOut, "2,25");
+        QCOMPARE(st->cue(c1)->fadeOut, 2250u);
+        // Shown with the mark this language writes.
+        QVERIFY2(fadeIn->text().startsWith(QStringLiteral("1") + loc.decimalPoint() + QStringLiteral("5")),
+                 qPrintable(fadeIn->text()));
+        typeIn(fadeIn, "3");
+        QCOMPARE(st->cue(c1)->fadeIn, 3000u);
+    }
+
+    // The fade fields everywhere else (a scene's, a look's) the same.
+    FadeTimeSpin spin(nullptr, QStringLiteral("scene"));
+    spin.setLocale(german);
+    spin.setMs(0);
+    for (const QString &typed : { QStringLiteral("1.5"), QStringLiteral("1,5") })
+    {
+        spin.setMs(0);
+        spin.selectAll();
+        QTest::keyClicks(&spin, typed);
+        spin.interpretText();
+        QCOMPARE(spin.ms(), 1500);
+        QCOMPARE(spin.QAbstractSpinBox::text(), QStringLiteral("1,50 s"));
+    }
+    // Its word for the default is left alone.
+    spin.setMs(-1);
+    QCOMPARE(spin.QAbstractSpinBox::text(), QStringLiteral("scene"));
+    QCOMPARE(spin.ms(), -1);
+    QCOMPARE(SecondsSpinBox::withDecimalPoint(QStringLiteral("1,5"), QLocale::c()), QStringLiteral("1.5"));
+    QCOMPARE(SecondsSpinBox::withDecimalPoint(QStringLiteral("1.5"), german), QStringLiteral("1,5"));
 }
 
 void ShowTreeView_Test::theHeaderFoldsUnderMore()

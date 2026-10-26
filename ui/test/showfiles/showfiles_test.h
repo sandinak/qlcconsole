@@ -57,6 +57,20 @@ private slots:
     void openingAShowNeverWritesIt_data();
     void openingAShowNeverWritesIt();
 
+    /** Opened and not touched, a show is not modified: closing it asks
+     *  nothing and no autosave is written. A show whose trusses have no
+     *  group yet (help-demo, Office) gets them as the plot is built --
+     *  derived the same at every open, so not an edit (F3). */
+    void aShowOpensUnmodified_data();
+    void aShowOpensUnmodified();
+
+    /** A show file cut short opens as far as it can be read, says so (a
+     *  warning naming the line, and the footer's load problems), and a
+     *  plain Save never writes over the original: it goes to Save As. Saved
+     *  under a name of its own, it is an ordinary show again (F2). */
+    void aDamagedShowOpensAndIsNotSavedOver_data();
+    void aDamagedShowOpensAndIsNotSavedOver();
+
     /** A QLC+ 4.x show opens with Auto-open shutters off, so it sends the
      *  same DMX here as in QLC+; once saved here the setting is in the file
      *  and opens the same. */
