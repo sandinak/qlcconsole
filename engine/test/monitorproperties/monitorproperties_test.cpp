@@ -3338,6 +3338,8 @@ void MonitorProperties_Test::hidingTheApronMovesNothingOnIt()
     QVERIFY(mp.setApronDepth(2.0f));
     StagePlatform *apron = mp.apronPlatform();
     QVERIFY(apron != nullptr);
+    // Kept by value: no depth deletes this deck, and the id must outlive it.
+    const quint32 apronId = apron->id();
     // Its height: the deck's, until set; the floor is a height like any other.
     QVERIFY(mp.apronHeightIsAuto());
     QCOMPARE(mp.apronHeight(), 1.0f);
@@ -3407,7 +3409,7 @@ void MonitorProperties_Test::hidingTheApronMovesNothingOnIt()
     QVERIFY(mp.apronPlatform() == nullptr);
     QVERIFY(mp.setApronDepth(1.0f));
     QVERIFY(mp.apronPlatform() != nullptr);
-    QCOMPARE(mp.apronPlatform()->id(), apron->id());
+    QCOMPARE(mp.apronPlatform()->id(), apronId);
 }
 
 void MonitorProperties_Test::stageMarksMigrateToStagePieces()
