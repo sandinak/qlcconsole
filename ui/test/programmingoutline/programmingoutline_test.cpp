@@ -41,12 +41,12 @@
 #include "fixtureconsole.h"
 #include "lookeditor.h"
 #include "fadetimespin.h"
+#include "showtreeview.h"
 #undef private
 #undef protected
 
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
-#include "showtreeview.h"
 #include "showtreecontroller.h"
 #include "qlcfixturedefcache.h"
 #include "scenetransition.h"
@@ -115,6 +115,74 @@ void ProgrammingOutline_Test::cleanup()
 {
     delete m_doc;
     m_doc = nullptr;
+}
+
+void ProgrammingOutline_Test::theListsFollowEveryDocSignal()
+{
+    /* Each Doc signal reaches the Build outline, Build > Effects and the
+       Show Tree Library. Built from a braced list of &Doc::signal, these
+       connected nothing on Windows (W1), where nothing else noticed. */
+    ProgrammingOutline outline(m_doc);
+    auto outlineHears = [&outline](const std::function<void()> &emitIt) {
+        outline.m_dirty = false;            // hidden: a rebuild is only marked
+        emitIt();
+        return outline.m_dirty;
+    };
+    QVERIFY(outlineHears([this]() { emit m_doc->functionAdded(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->functionRemoved(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->functionChanged(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->fixtureGroupAdded(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->fixtureGroupRemoved(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->fixtureGroupChanged(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->fixtureChanged(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->fixtureRemoved(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->paletteAdded(1); }));
+    QVERIFY(outlineHears([this]() { emit m_doc->paletteRemoved(1); }));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    QVERIFY(mgr.m_effectsList != nullptr);
+    auto effectsHear = [&mgr](const std::function<void()> &emitIt) {
+        QCoreApplication::processEvents();  // any rebuild already queued
+        if (mgr.m_effectsRebuildQueued)
+            return false;
+        emitIt();
+        return mgr.m_effectsRebuildQueued;
+    };
+    QVERIFY(effectsHear([this]() { emit m_doc->functionAdded(1); }));
+    QVERIFY(effectsHear([this]() { emit m_doc->functionRemoved(1); }));
+    QVERIFY(effectsHear([this]() { emit m_doc->paletteAdded(1); }));
+    QVERIFY(effectsHear([this]() { emit m_doc->paletteRemoved(1); }));
+    QCoreApplication::processEvents();
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.m_libraryTimer != nullptr);
+    // Every timer of the view stopped: does @p emitIt start one again?
+    auto viewHears = [&view](const std::function<void()> &emitIt, QTimer *which) {
+        const QList<QTimer *> timers = view.findChildren<QTimer *>();
+        for (QTimer *t : timers)
+            t->stop();
+        emitIt();
+        if (which != nullptr)
+            return which->isActive();
+        for (QTimer *t : timers)
+        {
+            if (t != view.m_libraryTimer && t->isActive())
+                return true;
+        }
+        return false;
+    };
+    QTimer *lib = view.m_libraryTimer;
+    QVERIFY(viewHears([this]() { emit m_doc->fixtureGroupAdded(1); }, lib));
+    QVERIFY(viewHears([this]() { emit m_doc->fixtureGroupRemoved(1); }, lib));
+    QVERIFY(viewHears([this]() { emit m_doc->fixtureGroupChanged(1); }, lib));
+    QVERIFY(viewHears([this]() { emit m_doc->paletteAdded(1); }, lib));
+    QVERIFY(viewHears([this]() { emit m_doc->paletteRemoved(1); }, lib));
+    // The fixtures' own timer (the Library's icons and the layers').
+    QVERIFY(viewHears([this]() { emit m_doc->fixtureAdded(1); }, nullptr));
+    QVERIFY(viewHears([this]() { emit m_doc->fixtureRemoved(1); }, nullptr));
+    QVERIFY(viewHears([this]() { emit m_doc->fixtureChanged(1); }, nullptr));
+    for (QTimer *t : view.findChildren<QTimer *>())
+        t->stop();
 }
 
 Scene *ProgrammingOutline_Test::scene(const QString &name, const QString &path)

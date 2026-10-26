@@ -66,6 +66,10 @@ private slots:
     /** QLC_OUTLINE_SHOW (a .qlcc, read only, in memory): every scene once,
      *  every look of each; QLC_OUTLINE_SHOT: pictures of the tab. */
     void aRealShow();
+    /** Every Doc signal the Build outline, Build > Effects and the Show Tree
+     *  Library follow is connected: on Windows a braced list of
+     *  &Doc::signal connected none of them (TEST_MATRIX W1). */
+    void theListsFollowEveryDocSignal();
 
 private:
     Scene *scene(const QString &name, const QString &path);

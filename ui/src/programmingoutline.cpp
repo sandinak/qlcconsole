@@ -145,11 +145,21 @@ ProgrammingOutline::ProgrammingOutline(Doc *doc, QWidget *parent)
     // What the outline shows changes with the show.
     if (m_doc != nullptr)
     {
-        for (auto sig : { &Doc::functionAdded, &Doc::functionRemoved, &Doc::functionChanged,
-                          &Doc::fixtureGroupAdded, &Doc::fixtureGroupRemoved,
-                          &Doc::fixtureGroupChanged, &Doc::fixtureChanged,
-                          &Doc::fixtureRemoved, &Doc::paletteAdded, &Doc::paletteRemoved })
-            connect(m_doc, sig, this, [this](quint32) { scheduleRebuild(); });
+        /* One connect() per signal, never a loop over a braced list of
+           &Doc::signal: on Windows (MinGW) such a list holds the import
+           thunks' addresses, moc finds no signal there, and nothing is
+           connected. */
+        const auto rebuild = [this](quint32) { scheduleRebuild(); };
+        connect(m_doc, &Doc::functionAdded, this, rebuild);
+        connect(m_doc, &Doc::functionRemoved, this, rebuild);
+        connect(m_doc, &Doc::functionChanged, this, rebuild);
+        connect(m_doc, &Doc::fixtureGroupAdded, this, rebuild);
+        connect(m_doc, &Doc::fixtureGroupRemoved, this, rebuild);
+        connect(m_doc, &Doc::fixtureGroupChanged, this, rebuild);
+        connect(m_doc, &Doc::fixtureChanged, this, rebuild);
+        connect(m_doc, &Doc::fixtureRemoved, this, rebuild);
+        connect(m_doc, &Doc::paletteAdded, this, rebuild);
+        connect(m_doc, &Doc::paletteRemoved, this, rebuild);
         // Auto fixtures shown as their closest look, or not: their icons.
         connect(m_doc, &Doc::stageLooksChanged, this, [this]() { scheduleRebuild(); });
         connect(m_doc, &Doc::loaded, this, [this]() {
