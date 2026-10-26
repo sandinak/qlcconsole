@@ -786,6 +786,25 @@ on Art-Net nodes whose poll replies carry a junk status byte.
 
 ### Fixed
 
+- **A new or opened show no longer reads freed stage structures** (RC4,
+  test matrix M1). File ▸ New or Open deletes every truss, riser, pipe,
+  stand, tower, scenery piece and target, and only then rebuilt the rig
+  view, whose items still pointed at them: a heap-use-after-free on every
+  show change with any structure on the plot, silent in a normal build but
+  a possible crash. Deleting one structure (Delete, Undo of a paste) did
+  the same to its own item. The model now says when a structure is about
+  to go, and the rig view drops the items that borrow it first; a new show
+  drops them all when it starts to clear.
+- **A mounted fixture's rebuilt plot item no longer starts hidden or
+  inverted** (RC4, test matrix SA1). The item rebuilt from a fixture's
+  mount left its fixed zoom and flags uninitialised, and shows saved the
+  junk (`FixedZoom="1804114660"` with Hidden / InvertedPan / InvertedTilt
+  in `stage-structures-demo.qxw` and the course shows). They now start at
+  zero, and on load an impossible fixed zoom is dropped with the flags
+  saved beside it.
+- **The studio's ray cache compares its keys by value** (RC4, test matrix
+  SA4): -0.0 and +0.0 are one key, and so is every NaN, where a byte
+  compare told them apart.
 - **A damaged show file says so, and isn't saved over** (RC4, test matrix
   F2). A show cut short or not well formed opened silently as a smaller
   show, and a Save then replaced the original with less. It now opens as

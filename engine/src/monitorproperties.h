@@ -66,8 +66,8 @@ struct PreviewItem
     QString m_name;             ///< Fixture/Item Custom name
     QString m_resource;         ///< Generic: source file
     QColor m_color;             ///< Generic: item color, Fixture: gel color
-    int m_zoom;                 ///< Fixture: fixed zoom in degrees
-    quint32 m_flags;            ///< Item flags as specified in the ItemsFlags enum
+    int m_zoom = 0;             ///< Fixture: fixed zoom in degrees (0 = none)
+    quint32 m_flags = 0;        ///< Item flags as specified in the ItemsFlags enum
     quint32 m_layerId = 0;      ///< 2D-map organizational layer (0 = Default)
     quint32 m_groupId = 0;      ///< 2D-map group (0 = ungrouped)
 };
@@ -108,6 +108,11 @@ public:
 
     /** Reset all the Monitor properties */
     void reset();
+
+private:
+    /** Tell structureAboutToBeDeleted(), then delete @p structure. */
+    void deleteStructure(QObject *structure);
+public:
 
     /** The whole rig as XML (what saveXML() writes), for undo and Cancel. */
     QByteArray snapshot(const Doc *mainDocument) const;
@@ -1125,6 +1130,13 @@ public:
     QString mountDescription(const FixtureRigProps &rp, quint32 fid) const;
 
 signals:
+    /** @p structure -- a Truss, StagePlatform, Pipe, Stand, Tower, Hanger,
+     *  Scenery or StageTarget -- is about to be deleted (its remove...(), or
+     *  reset() for a new or opened show). Still whole when this is emitted:
+     *  a view drawing it drops what borrows it now, then rebuilds (test
+     *  matrix M1: rig view items read freed structures). */
+    void structureAboutToBeDeleted(QObject *structure);
+
     /** The show's "draw Auto fixtures as their closest stage look" changed
      *  (setAutoStageLooks(), or a show / undo snapshot loaded with it): every
      *  view that draws fixtures classifies them again. */

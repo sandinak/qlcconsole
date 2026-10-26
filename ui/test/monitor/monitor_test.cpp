@@ -23,6 +23,9 @@
 #include <QShortcut>
 #include <memory>
 #include <QGraphicsItem>
+#include <cstring>
+#include <limits>
+#include <new>
 #include <QGraphicsScene>
 #include <QElapsedTimer>
 #include <QTimer>
@@ -23518,6 +23521,248 @@ void Monitor_Test::hangersAreOnThePlot()
         QVERIFY(gv->m_hangerItems.isEmpty());
     }
     delete doc;
+}
+
+/* Test matrix M1: a new or opened show deletes every stage structure
+   (MonitorProperties::reset()) and only then does the rig view rebuild. Each
+   structure's item borrows its structure, so the items must go first: on
+   Doc::clearing(), while what they point at still exists. Before, File > New
+   with any structure on the plot read freed trusses and risers in
+   refreshItemLayerState() and boundingRect() -- a heap-use-after-free under
+   ASan on every show change. Under ASan this test is the proof; without it,
+   the item counts are. */
+void Monitor_Test::aNewShowDropsTheStructureItemsFirst()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setOrigin(QVector3D(2.0f, 3.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    props->addHanger(Hanger::OnTruss, t->id())->setAlong(2.0f);
+    props->addPlatform();
+    props->addPipe();
+    props->addStand();
+    props->addTower();
+    props->addScenery();
+    props->addStageTarget();
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        mon.updateView();
+        gv->updateTrusses();
+        gv->updatePlatforms();
+        gv->updateTargets();
+        QCOMPARE(gv->m_trussItems.size(), 1);
+        QCOMPARE(gv->m_hangerItems.size(), 1);
+        QVERIFY(!gv->m_platformItems.isEmpty());
+        QCOMPARE(gv->m_targetItems.size(), 1);
+        gv->m_scene->items().first()->setSelected(true);
+        gv->m_savedSelection = gv->m_scene->selectedItems();
+
+        // Each structure is still alive when its item is dropped: a model
+        // spy on clearing() runs after the view's and sees no items left.
+        bool emptyOnClearing = false;
+        connect(doc, &Doc::clearing, gv, [gv, &emptyOnClearing]() {
+            emptyOnClearing = gv->m_trussItems.isEmpty() && gv->m_platformItems.isEmpty()
+                              && gv->m_pipeItems.isEmpty() && gv->m_standItems.isEmpty()
+                              && gv->m_towerItems.isEmpty() && gv->m_sceneryItems.isEmpty()
+                              && gv->m_hangerItems.isEmpty() && gv->m_targetItems.isEmpty()
+                              && gv->m_apronDeckItem == nullptr
+                              && gv->m_savedSelection.isEmpty();
+        });
+        doc->clearContents();
+
+        // What App::clearDocument() does next, and a paint: no freed reads
+        // (before the fix, ASan stops here on a freed truss).
+        gv->refreshItemLayerState();
+        mon.updateView();
+        gv->viewport()->grab();
+
+        QVERIFY2(emptyOnClearing, "the structure items go before the structures do");
+        QCOMPARE(gv->m_trussItems.size(), 0);
+        foreach (QGraphicsItem *gi, gv->m_scene->items())
+        {
+            QVERIFY(dynamic_cast<TrussItem *>(gi) == nullptr);
+            QVERIFY(dynamic_cast<PlatformItem *>(gi) == nullptr);
+            QVERIFY(dynamic_cast<TargetItem *>(gi) == nullptr);
+        }
+
+        // A new show's structures are drawn as usual.
+        props->addTruss()->setLength(3.0f);
+        gv->resize(1200, 800);          // the new show's grid, in a real size
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateGrid();
+        gv->updateTrusses();
+        QCOMPARE(gv->m_trussItems.size(), 1);
+    }
+    delete doc;
+}
+
+/* M1, one at a time: Delete (Monitor::slotTrussRemoveRequested() and the
+   rest) removes the structure, then calls update...(), whose removeItem()
+   asked the old item for its bounds -- from the freed structure. The item
+   now leaves the scene as the structure goes. */
+void Monitor_Test::removingAStructureDropsItsItemFirst()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setLength(4.0f);
+    StagePlatform *deck = props->addPlatform();
+    Pipe *pipe = props->addPipe();
+    Tower *tower = props->addTower();
+    StageTarget *target = props->addStageTarget();
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->resize(1200, 800);
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateGrid();
+        gv->updateTrusses();
+        gv->updatePlatforms();
+        gv->updateTargets();
+        QCOMPARE(gv->m_trussItems.size(), 1);
+        QCOMPARE(gv->m_platformItems.size(), 1);
+        QCOMPARE(gv->m_pipeItems.size(), 1);
+        QCOMPARE(gv->m_towerItems.size(), 1);
+        QCOMPARE(gv->m_targetItems.size(), 1);
+        TrussItem *ti = gv->m_trussItems.value(t->id());
+        ti->setSelected(true);
+        gv->m_savedSelection = gv->m_scene->selectedItems();
+        const int before = gv->m_scene->items().size();
+
+        props->removeTruss(t->id());
+        QVERIFY(gv->m_trussItems.isEmpty());
+        QVERIFY(gv->m_savedSelection.isEmpty());
+        QVERIFY(!gv->m_scene->items().contains(ti));
+        props->removePlatform(deck->id());
+        props->removePipe(pipe->id());
+        props->removeTower(tower->id());
+        props->removeStageTarget(target->id());
+        QVERIFY(gv->m_platformItems.isEmpty());
+        QVERIFY(gv->m_pipeItems.isEmpty());
+        QVERIFY(gv->m_towerItems.isEmpty());
+        QVERIFY(gv->m_targetItems.isEmpty());
+        QVERIFY(gv->m_scene->items().size() < before);
+
+        // What the Delete paths do next, and a paint (ASan: no freed reads).
+        gv->updateTrusses();
+        gv->updatePlatforms();
+        gv->updateTargets();
+        gv->refreshItemLayerState();
+        gv->viewport()->grab();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY(gv->m_trussItems.isEmpty());
+    }
+    delete doc;
+}
+
+/* Test matrix SA1: a mounted fixture's plot item is rebuilt from its mount
+   (setFixtureRigProps(), repairOrphanedMounts()) as a fresh PreviewItem,
+   whose fixed zoom and flags had no initial value -- it could come up
+   Hidden or inverted, and be saved so. */
+void Monitor_Test::aRebuiltPlotItemStartsShownAndUnzoomed()
+{
+    // Default-initialised over junk, as a stack PreviewItem is.
+    alignas(PreviewItem) unsigned char junk[sizeof(PreviewItem)];
+    std::memset(junk, 0xA5, sizeof junk);
+    PreviewItem *fresh = new (junk) PreviewItem;
+    QCOMPARE(fresh->m_zoom, 0);
+    QCOMPARE(fresh->m_flags, quint32(0));
+    QCOMPARE(fresh->m_layerId, quint32(0));
+    QCOMPARE(fresh->m_groupId, quint32(0));
+    fresh->~PreviewItem();
+
+    Doc *doc = new Doc(this);
+    Fixture *fx = new Fixture(doc);
+    fx->setChannels(1);
+    QVERIFY(doc->addFixture(fx));
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setLength(4.0f);
+    QVERIFY(!props->fixtureItemsID().contains(fx->id()));
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    props->setFixtureRigProps(fx->id(), rp);
+    QVERIFY(props->fixtureItemsID().contains(fx->id()));
+    QCOMPARE(props->fixtureItem(fx->id(), 0, 0).m_zoom, 0);
+    QCOMPARE(props->fixtureItem(fx->id(), 0, 0).m_flags, quint32(0));
+
+    // And as a load rebuilds it.
+    props->m_fixtureItems.remove(fx->id());
+    props->repairOrphanedMounts();
+    QVERIFY(props->fixtureItemsID().contains(fx->id()));
+    QCOMPARE(props->fixtureItem(fx->id(), 0, 0).m_zoom, 0);
+    QCOMPARE(props->fixtureItem(fx->id(), 0, 0).m_flags, quint32(0));
+    delete doc;
+}
+
+/* SA1's shows on disk: stage-structures-demo.qxw and the course shows carry
+   FixedZoom="1804114660" (and Hidden / InvertedPan / InvertedTilt with it)
+   from that uninitialised item. An angle no lens has is that garbage, so it
+   goes on load and its flags with it; a real fixed zoom and its flags stay. */
+void Monitor_Test::anUninitialisedZoomAndItsFlagsAreDroppedOnLoad()
+{
+    Doc *doc = new Doc(this);
+    Fixture *junk = new Fixture(doc);
+    junk->setChannels(1);
+    Fixture *real = new Fixture(doc);
+    real->setChannels(1);
+    real->setAddress(1);
+    QVERIFY(doc->addFixture(junk) && doc->addFixture(real));
+    MonitorProperties *props = doc->monitorProperties();
+
+    PreviewItem bad;
+    bad.m_zoom = 1804114660;
+    bad.m_flags = MonitorProperties::HiddenFlag | MonitorProperties::InvertedPanFlag
+                  | MonitorProperties::InvertedTiltFlag;
+    props->setFixtureItem(junk->id(), 0, 0, bad);
+    PreviewItem good;
+    good.m_zoom = 30;
+    good.m_flags = MonitorProperties::HiddenFlag;
+    props->setFixtureItem(real->id(), 0, 0, good);
+
+    const QByteArray snap = props->snapshot(doc);
+    QVERIFY(snap.contains("FixedZoom=\"1804114660\""));
+    QVERIFY(props->restoreSnapshot(snap, doc));
+    QCOMPARE(props->fixtureItem(junk->id(), 0, 0).m_zoom, 0);
+    QCOMPARE(props->fixtureItem(junk->id(), 0, 0).m_flags, quint32(0));
+    QCOMPARE(props->fixtureItem(real->id(), 0, 0).m_zoom, 30);
+    QCOMPARE(props->fixtureItem(real->id(), 0, 0).m_flags, quint32(MonitorProperties::HiddenFlag));
+    QVERIFY(!props->snapshot(doc).contains("1804114660"));
+    delete doc;
+}
+
+/* Test matrix SA4: the studio's ray cache keys on floats. memcmp made -0.0
+   a different key from +0.0 and only matched a NaN by its bits; by value
+   they are one key each, and equal keys hash equal. */
+void Monitor_Test::throwCacheKeysCompareByValue()
+{
+    const float nan1 = std::numeric_limits<float>::quiet_NaN();
+    const float nan2 = -std::numeric_limits<float>::quiet_NaN();
+    const float a[3] = { 0.0f, 1.5f, nan1 };
+    const float b[3] = { -0.0f, 1.5f, nan2 };
+    const float c[3] = { 0.0f, 1.25f, nan1 };
+    QVERIFY(StructureStudioView::keysEqual(a, b));
+    QCOMPARE(StructureStudioView::keysHash(a, 7), StructureStudioView::keysHash(b, 7));
+    QVERIFY(!StructureStudioView::keysEqual(a, c));
+
+    StructureStudioView::ThrowKey k1{ { 0.0f, 1.0f, 2.0f, 0.0f, 0.0f, -1.0f } };
+    StructureStudioView::ThrowKey k2{ { -0.0f, 1.0f, 2.0f, -0.0f, 0.0f, -1.0f } };
+    QVERIFY(k1 == k2);
+    QCOMPARE(qHash(k1, 3), qHash(k2, 3));
+    QHash<StructureStudioView::ThrowKey, int> cache;
+    cache.insert(k1, 1);
+    cache.insert(k2, 2);
+    QCOMPARE(cache.size(), 1);
+    StructureStudioView::ThrowKey n{ { nan1, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f } };
+    cache.insert(n, 3);
+    cache.insert(n, 4);
+    QCOMPARE(cache.size(), 2);
 }
 
 /* "No undo for a re-address": the Patch dialog's Apply is one rig undo step,

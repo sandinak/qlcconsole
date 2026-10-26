@@ -649,14 +649,15 @@ void TargetItem::confirmAndDelete()
                               QMessageBox::No) != QMessageBox::Yes)
         return;
 
-    props->removeStageTarget(tid);
-    m_doc->setModified();
-
     /* The view owns this item and rebuilds the whole set, so ask it to --
-       deleting ourselves from inside our own event handler is not survivable. */
-    if (MonitorGraphicsView *view =
-            qobject_cast<MonitorGraphicsView *>(scene() ? scene()->views().value(0) : nullptr))
-    {
+       deleting ourselves from inside our own event handler is not survivable.
+       Found first: removing the target takes this item out of the scene
+       (MonitorGraphicsView::dropItemFor()), so it has no view after. */
+    MonitorGraphicsView *view =
+        qobject_cast<MonitorGraphicsView *>(scene() ? scene()->views().value(0) : nullptr);
+    Doc *doc = m_doc;
+    props->removeStageTarget(tid);
+    doc->setModified();
+    if (view != nullptr)
         QMetaObject::invokeMethod(view, "updateTargets", Qt::QueuedConnection);
-    }
 }

@@ -141,15 +141,25 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(this, &MonitorGraphicsView::mapStructureChanged,
             this, &MonitorGraphicsView::updateStageMarks);
 
-    /* A new or opened show deletes the stage targets (MonitorProperties::
-       reset()) before the view is rebuilt, and a TargetItem only borrows its
-       StageTarget. The Doc is still emitting while it clears -- unloading the
+    /* A new or opened show deletes every stage structure (MonitorProperties::
+       reset()) before the view is rebuilt, and each structure's item only
+       borrows it. The Doc is still emitting while it clears -- unloading the
        bench re-seeds the follow-spot pin, which repositions the target items
-       -- so drop them now, while their targets still exist, not on the
-       updateView() that follows. Reading a freed target's position locked a
-       freed mutex and hung (courseshow_test, Release). */
+       -- and updateView() reads the old items (their layer, lock and group,
+       their bounds) before it rebuilds them. So drop them all now, while
+       their structures still exist. Reading a freed target's position locked
+       a freed mutex and hung (courseshow_test, Release); reading a freed
+       truss was a use-after-free on every File > New (test matrix M1). */
     if (m_doc != NULL)
-        connect(m_doc, &Doc::clearing, this, &MonitorGraphicsView::dropTargetItems);
+    {
+        connect(m_doc, &Doc::clearing, this, &MonitorGraphicsView::dropStructureItems);
+        /* And one at a time: Delete, Cut, Undo of a paste remove a structure
+           and only then call update...() -- whose removeItem() asked the
+           old item for its bounds, from its freed structure. */
+        if (MonitorProperties *props = m_doc->monitorProperties())
+            connect(props, &MonitorProperties::structureAboutToBeDeleted,
+                    this, &MonitorGraphicsView::dropItemFor);
+    }
 
     // dragging on the empty canvas rubber-band selects fixtures.
     // This works both when locked and unlocked.
@@ -4846,6 +4856,91 @@ void MonitorGraphicsView::updatePlatforms()
 
     updateHangers();      // and off towers
     refreshItemLayerState();
+}
+
+void MonitorGraphicsView::dropStructureItems()
+{
+    QScopedValueRollback<bool> rb(m_itemsRebuilding); m_itemsRebuilding = true;
+    dropTargetItems();
+
+    // Whatever a press remembered may be one of them.
+    m_savedSelection.clear();
+    m_clickAgainItem = nullptr;
+
+    auto drop = [this](auto &items) {
+        foreach (auto *item, items)
+        {
+            m_scene->removeItem(item);
+            delete item;
+        }
+        items.clear();
+    };
+    drop(m_hangerItems);
+    drop(m_trussItems);
+    drop(m_platformItems);
+    drop(m_pipeItems);
+    drop(m_standItems);
+    drop(m_sceneryItems);
+    drop(m_towerItems);
+    if (m_apronDeckItem != nullptr)
+    {
+        m_scene->removeItem(m_apronDeckItem);
+        delete m_apronDeckItem;
+        m_apronDeckItem = nullptr;
+    }
+}
+
+void MonitorGraphicsView::dropItemFor(QObject *structure)
+{
+    QScopedValueRollback<bool> rb(m_itemsRebuilding); m_itemsRebuilding = true;
+    /* Out of the scene and the view now; deleted later, because the
+       structure may be going from its own item's menu (a target's Delete),
+       which is still running. Out of the scene, it is neither drawn nor
+       asked for its bounds again. */
+    auto drop = [this](auto *item) {
+        if (item == nullptr)
+            return;
+        m_savedSelection.removeAll(item);
+        if (m_clickAgainItem == item)
+            m_clickAgainItem = nullptr;
+        if (item->scene() != nullptr)
+            item->scene()->removeItem(item);
+        item->deleteLater();
+    };
+    if (Truss *t = qobject_cast<Truss *>(structure))
+    {
+        drop(m_trussItems.take(t->id()));
+    }
+    else if (StagePlatform *p = qobject_cast<StagePlatform *>(structure))
+    {
+        drop(m_platformItems.take(p->id()));
+        if (m_apronDeckItem != nullptr && m_apronDeckItem->platform() == p)
+        {
+            drop(m_apronDeckItem);
+            m_apronDeckItem = nullptr;
+        }
+    }
+    else if (Pipe *b = qobject_cast<Pipe *>(structure))
+    {
+        drop(m_pipeItems.take(b->id()));
+    }
+    else if (Stand *st = qobject_cast<Stand *>(structure))
+    {
+        drop(m_standItems.take(st->id()));
+    }
+    else if (Tower *tw = qobject_cast<Tower *>(structure))
+    {
+        drop(m_towerItems.take(tw->id()));
+    }
+    else if (Scenery *sc = qobject_cast<Scenery *>(structure))
+    {
+        drop(m_sceneryItems.take(sc->id()));
+    }
+    else if (StageTarget *tg = qobject_cast<StageTarget *>(structure))
+    {
+        drop(m_targetItems.take(tg->id()));
+    }
+    // A HangerItem keeps only its hanger's id: updateHangers() rebuilds it.
 }
 
 void MonitorGraphicsView::updateHangers()

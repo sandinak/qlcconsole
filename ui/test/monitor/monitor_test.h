@@ -47,6 +47,11 @@ private slots:
     void theNetworkIsUndoneWithTheRig();
     void aModeChangedByThePatchIsUndone();
     void hangersAreOnThePlot();
+    void aNewShowDropsTheStructureItemsFirst();
+    void removingAStructureDropsItsItemFirst();
+    void aRebuiltPlotItemStartsShownAndUnzoomed();
+    void anUninitialisedZoomAndItsFlagsAreDroppedOnLoad();
+    void throwCacheKeysCompareByValue();
     void aPatchCanBeUndone();
     void fixturesSitAlongAHorizontalPipe();
     void theTrussEditorSpansTwoStands();

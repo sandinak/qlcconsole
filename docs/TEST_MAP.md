@@ -922,6 +922,9 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Line targets (spread, group, cross, edited in the studio) | LineTarget_Test (20); Monitor_Test::aLineTargetIsEditedInTheStudio, ::headsAimedAtALineGoToTheirOwnPoints | covered | covered | high |
 | Steps as aim surfaces (target on a tread) | MonitorProperties_Test::stepsAreAFlightOfTreads (treads only) | partial | partial | med |
 | LED Layout drawn in the plot and Rig Overview | LedLayout_Test::thePlotDrawsHeadsWhereTheLayoutSays; Monitor_Test::theRigViewDrawsHeadsWhereTheLedMapSays | covered | covered | med |
+| A new or opened show drops the rig view's structure items before the structures are deleted, on a new show and on each Delete (no use-after-free) (RC4, matrix M1) | Monitor_Test::aNewShowDropsTheStructureItemsFirst, ::removingAStructureDropsItsItemFirst (ASan proves them) | none | covered | high |
+| A mounted fixture's rebuilt plot item starts unhidden and unzoomed; an impossible saved FixedZoom and its flags dropped on load (RC4, matrix SA1) | Monitor_Test::aRebuiltPlotItemStartsShownAndUnzoomed, ::anUninitialisedZoomAndItsFlagsAreDroppedOnLoad | none | covered | med |
+| Studio ray-cache keys compare and hash by value (-0.0, NaN) (RC4, matrix SA4) | Monitor_Test::throwCacheKeysCompareByValue | none | covered | low |
 
 ## Output/engine
 

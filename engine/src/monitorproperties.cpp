@@ -178,6 +178,14 @@ void MonitorProperties::keepPatternsWithShow(const Doc *mainDocument)
     }
 }
 
+void MonitorProperties::deleteStructure(QObject *structure)
+{
+    if (structure == nullptr)
+        return;
+    emit structureAboutToBeDeleted(structure);
+    delete structure;
+}
+
 QByteArray MonitorProperties::snapshot(const Doc *mainDocument) const
 {
     QByteArray out;
@@ -1007,21 +1015,29 @@ void MonitorProperties::reset()
     m_fixtureItems.clear();
     m_genericItems.clear();
     m_commonBackgroundImage = QString();
-    qDeleteAll(m_trusses);
+    for (QObject *o : std::as_const(m_trusses))
+        deleteStructure(o);
     m_trusses.clear();
-    qDeleteAll(m_platforms);
+    for (QObject *o : std::as_const(m_platforms))
+        deleteStructure(o);
     m_platforms.clear();
-    qDeleteAll(m_pipes);
+    for (QObject *o : std::as_const(m_pipes))
+        deleteStructure(o);
     m_pipes.clear();
-    qDeleteAll(m_stands);
+    for (QObject *o : std::as_const(m_stands))
+        deleteStructure(o);
     m_stands.clear();
-    qDeleteAll(m_towers);
+    for (QObject *o : std::as_const(m_towers))
+        deleteStructure(o);
     m_towers.clear();
-    qDeleteAll(m_hangers);
+    for (QObject *o : std::as_const(m_hangers))
+        deleteStructure(o);
     m_hangers.clear();
-    qDeleteAll(m_sceneries);
+    for (QObject *o : std::as_const(m_sceneries))
+        deleteStructure(o);
     m_sceneries.clear();
-    qDeleteAll(m_stageTargets);
+    for (QObject *o : std::as_const(m_stageTargets))
+        deleteStructure(o);
     m_stageTargets.clear();
     m_rigProps.clear();
     m_calibrationBase.clear();
@@ -2099,7 +2115,7 @@ void MonitorProperties::removeTruss(quint32 id)
             m_groups.remove(gid);
     }
 
-    delete m_trusses.take(id);
+    deleteStructure(m_trusses.take(id));
 }
 
 /*********************************************************************
@@ -2154,7 +2170,7 @@ void MonitorProperties::removePlatform(quint32 id)
         }
     }
 
-    delete m_platforms.take(id);
+    deleteStructure(m_platforms.take(id));
 }
 
 quint32 MonitorProperties::nextPipeId() const
@@ -2185,7 +2201,7 @@ void MonitorProperties::removePipe(quint32 id)
         if (p->parentPipeId() == id)
             p->setParentPipeId(Pipe::invalidId());
 
-    delete m_pipes.take(id);
+    deleteStructure(m_pipes.take(id));
 }
 
 quint32 MonitorProperties::nextStandId() const
@@ -2464,7 +2480,7 @@ Scenery *MonitorProperties::addScenery()
 
 void MonitorProperties::removeScenery(quint32 id)
 {
-    delete m_sceneries.take(id);
+    deleteStructure(m_sceneries.take(id));
 }
 
 Stand *MonitorProperties::addStand()
@@ -2489,7 +2505,7 @@ void MonitorProperties::removeStand(quint32 id)
         if (t->endStandId() == id)
             t->setEndStandId(Stand::invalidId());   // the other end stays where it was
     }
-    delete m_stands.take(id);
+    deleteStructure(m_stands.take(id));
 }
 
 void MonitorProperties::recomputeStandMounts()
@@ -2597,7 +2613,7 @@ void MonitorProperties::removeHanger(quint32 id)
                 m_fixtureItems[it.key()].m_baseItem.m_position =
                     QVector3D(at.x() * 1000.0f, at.y() * 1000.0f, at.z() * 1000.0f);
         }
-    delete m_hangers.take(id);
+    deleteStructure(m_hangers.take(id));
 }
 
 QList<Hanger*> MonitorProperties::hangersOn(Hanger::ParentKind kind, quint32 parentId) const
@@ -2666,7 +2682,7 @@ void MonitorProperties::removeTower(quint32 id)
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
         if (it->towerId == id)
             it->towerId = UINT_MAX;
-    delete m_towers.take(id);
+    deleteStructure(m_towers.take(id));
 }
 
 float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
@@ -2893,7 +2909,7 @@ StageTarget *MonitorProperties::addStageTarget()
 
 void MonitorProperties::removeStageTarget(quint32 id)
 {
-    delete m_stageTargets.take(id);
+    deleteStructure(m_stageTargets.take(id));
     emit stageTargetsChanged();
 }
 
@@ -3415,6 +3431,21 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 item.m_flags |= InvertedTiltFlag;
             if (tAttrs.hasAttribute(KXMLQLCMonitorFixtureVertStrip))
                 item.m_flags |= VerticalStripFlag;
+
+            /* A fixed zoom is a beam angle. Before 0.3.0 a mounted fixture's
+               rebuilt plot item left its zoom and flags uninitialised (test
+               matrix SA1), and shows saved them: FixedZoom="1804114660" with
+               Hidden / InvertedPan / InvertedTilt that nobody set. An angle no
+               lens has is that garbage, and so are the flags that came with
+               it: drop both, or the light opens hidden and inverted in a 3D
+               view. */
+            if (item.m_zoom < 0 || item.m_zoom > 360)
+            {
+                qDebug() << "[Monitor] fixture" << fid << "had an uninitialised fixed zoom"
+                         << item.m_zoom << "and flags" << item.m_flags << "-- cleared";
+                item.m_zoom = 0;
+                item.m_flags = 0;
+            }
 
             // Layer & group membership are per-fixture (base item) properties.
             if (headIndex == 0 && linkedIndex == 0

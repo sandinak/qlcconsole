@@ -476,6 +476,21 @@ public:
      *  the StageTargets they point at are about to be deleted. */
     void dropTargetItems();
 
+    /** Delete every item that borrows a stage structure -- trusses, risers
+     *  and the apron's deck, pipes, stands, scenery, towers, hangers and
+     *  targets -- without rebuilding: for when those structures are about to
+     *  be deleted (a new or opened show, Doc::clearing()). Each item only
+     *  points at its structure, so it must not outlive it: the view reads
+     *  them (refreshItemLayerState(), boundingRect()) before updateView()
+     *  rebuilds them (test matrix M1). */
+    void dropStructureItems();
+
+    /** Delete the item that borrows @p structure, which is about to be
+     *  deleted (MonitorProperties::structureAboutToBeDeleted()). Whoever
+     *  deletes it rebuilds the view after; until then the item is gone, not
+     *  pointing at freed memory (test matrix M1). */
+    void dropItemFor(QObject *structure);
+
     /** Reposition existing TargetItems in place from their StageTarget data
      *  (no recreate) — used when the joystick moves an aim target live so the
      *  marker tracks without the churn of updateTargets(). */

@@ -27,6 +27,7 @@
 
 #include <QWidget>
 #include "../qlcui_export.h"
+#include <cmath>
 #include <cstring>
 #include <QImage>
 #include <functional>
@@ -763,6 +764,39 @@ private:
     mutable QVector<Occluder> m_occluders;  ///< this frame's, while painting
     mutable bool m_decksValid = false;
 
+public:
+    /** One float of a cache key, as the key compares and hashes it: by
+     *  value, with -0.0 the same key as +0.0 and every NaN one key (a NaN
+     *  is never == itself, so it would miss and be added again every frame).
+     *  Equal keys hash equal, which bytes compared with memcmp did not
+     *  promise (test matrix SA4). */
+    static quint32 keyBits(float f)
+    {
+        if (f == 0.0f)
+            return 0u;
+        if (std::isnan(f))
+            return 0x7fc00000u;
+        quint32 bits = 0;
+        std::memcpy(&bits, &f, sizeof bits);
+        return bits;
+    }
+    template <int N> static bool keysEqual(const float (&a)[N], const float (&b)[N])
+    {
+        for (int i = 0; i < N; ++i)
+        {
+            if (keyBits(a[i]) != keyBits(b[i]))
+                return false;
+        }
+        return true;
+    }
+    template <int N> static size_t keysHash(const float (&a)[N], size_t seed)
+    {
+        quint32 bits[N];
+        for (int i = 0; i < N; ++i)
+            bits[i] = keyBits(a[i]);
+        return qHashBits(bits, sizeof bits, seed);
+    }
+private:
     /** Where each ray thrown while painting landed (beamThrow()), kept from
      *  frame to frame: a par, a bar or a parked mover throws the very same
      *  rays every frame, and where they land only changes when what they
@@ -771,10 +805,10 @@ private:
     {
         float v[6];
         bool operator==(const ThrowKey &o) const
-        { return std::memcmp(v, o.v, sizeof v) == 0; }
+        { return keysEqual(v, o.v); }
     };
     friend size_t qHash(const ThrowKey &k, size_t seed = 0)
-    { return qHashBits(k.v, sizeof k.v, seed); }
+    { return keysHash(k.v, seed); }
     struct Throw
     {
         double run = 0.0;
@@ -798,10 +832,10 @@ private:
         float v[8];             ///< apex, direction, half angle, fade core
         int rings, sectors;
         bool operator==(const BeamMeshKey &o) const
-        { return rings == o.rings && sectors == o.sectors && std::memcmp(v, o.v, sizeof v) == 0; }
+        { return rings == o.rings && sectors == o.sectors && keysEqual(v, o.v); }
     };
     friend size_t qHash(const BeamMeshKey &k, size_t seed = 0)
-    { return qHashBits(k.v, sizeof k.v, seed) ^ size_t(k.rings * 131 + k.sectors); }
+    { return keysHash(k.v, seed) ^ size_t(k.rings * 131 + k.sectors); }
     struct BeamMesh
     {
         QVector<QVector3D> q;   ///< where each ray of the mesh landed
