@@ -32,6 +32,7 @@ nav_order: 2
 | **Correction** | How far a light is off in this room (a pan and a tilt, in degrees), kept so the cues land where they should. Also called calibration. |
 | **Venue** | One room the show plays in. Its corrections, its truss heights and its target positions are kept in a file beside the show, not in the show. |
 | **House rig / tour package** | The lights a room already has / the lights that travel with the show. |
+| **Stage marks** | The lines a crew spikes and focuses by: the centre line, the curtain line, the number line and the apron. On the plot they are the **Stage** layer. |
 | **Curtain line** | Where the main curtain hangs: the line up- and downstage distances are measured from. |
 | **Number line** | A line across the front of the stage, numbered in feet out from centre (**CL**, the centre line), so a crew can say how far left or right something is. |
 | **Apron** | The part of the stage in front of the curtain line. |
@@ -132,7 +133,9 @@ controller?** Every step gives the keys too.
 ### C. Run the calls
 
 12. Click **Start venue focus**. The venue Classroom is made now, and the
-    calls begin.
+    calls begin. The footer, beside the GM slider, now says **Venue:
+    Classroom**; clicking it opens the venue menu, the same one as
+    **Focus ▸ Venues**.
     - *You should see:* the panel says **Call 1 of 3: Truss-Spots →
       Center**. On the stage the first truss spot comes up white, aimed at
       Center, and blinks three times; the others in the call are dim. The
@@ -233,12 +236,27 @@ controller?** Every step gives the keys too.
 
 ## Done early? (Extension)
 
-1. **Say the light.** In the calls, press **W**. Hold it (**⇧W**) to switch
-   the feedback: lights only, voice only, both. Which would you want on a
-   loud load-in, and which during a rehearsal?
+1. **Say the light.** In the calls, press **W**. **⇧W** (on the
+   controller: hold the right stick click) switches the feedback: lights
+   only, voice only, both. Beside **Feedback** on the panel, **Voice**
+   sets how much is said: **Terse** ("F1 Spot 3"), **Standard** or
+   **Verbose**. Which would you want on a loud load-in, and which during
+   a rehearsal?
 2. **Medium.** Run the scramble again on **Medium: 2–6° off**. Compare
    the two reports: where did the time go?
 3. **Touring.** Click **Focus ▸ Venues ▸ Rig and universes…** (with
    Classroom applied). Read the page. If the show moved to the high school
    auditorium next week, what would change in this file, and what would
    stay in the show?
+
+## In the user guide
+
+The app's own help (F1) has the full story of each tool used today:
+
+- [Stage marks](https://github.com/sandinak/qlcconsole/blob/main/docs/features/lighting-studio.md#stage-marks-centre-line-curtain-line-number-line)
+  and [the Focus menu](https://github.com/sandinak/qlcconsole/blob/main/docs/features/lighting-studio.md#the-focus-menu)
+- [Venue focus](https://github.com/sandinak/qlcconsole/blob/main/docs/features/focus-calls.md): the calls, venues,
+  the focus report and the scramble practice
+- [Focus this cue](https://github.com/sandinak/qlcconsole/blob/main/docs/features/refine.md)
+- [House rig and tour package](https://github.com/sandinak/qlcconsole/blob/main/docs/features/venues.md): the venue
+  chip, the venue page and the clash check

@@ -21,7 +21,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 |---|---|
 | [Getting started](getting-started.md) | Starting the app, show files and autosave, finding your way around (the tabs and the Classic QLC+ / qlcconsole / Everything views), importing (another show, an ETC Eos show), and the ways a show comes together — designing first, patch first, at a venue, a row of like structures |
 | [What's new](whats-new.md) | The latest changes |
-| [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, plot symbols, locks, stage marks (curtain line, number line, apron), Focus mode; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
+| [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, plot symbols, locks, the Stage layer (curtain line, number line, apron), the Focus menu and Quick focus; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
 | [Build Tab](build.md) | Making the show's palettes, effects, scenes and collections: the navigator by section, the Workbench (a scene or a collection as layers, + Scene and + Effect ▾), looks out of reusable palettes instead of raw DMX, the inline look editor and effect browser, scene transitions, WLED effects |
 | [Show Tree](show-tree.md) | Writing the show as one tree of cue lists, cues and layers: tracking, cue numbers and reordering, move in black, hits for busking, the Run tab and the cue runner |
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog, output rules (relays, house and work lights), plot symbols and icons |
@@ -37,6 +37,18 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Keyboard and mouse](shortcuts.md) | Every shortcut, by view |
 | [Troubleshooting](troubleshooting.md) | When lights, the Lighting Studio or Rig Overview, files or fixtures aren't doing what you expect |
 | [Software updates](updates.md) | Update checks from GitHub, the footer chip, installing at quit (never during a show), channels, and turning it off for a school |
+
+## Beyond this guide
+
+These are on GitHub, not built into the app:
+
+- [The course](https://github.com/sandinak/qlcconsole/blob/main/docs/course/README.md) — *Lighting a show choir with the Show
+  Tree*, for high-school tech crews and their teachers: each lesson's
+  teacher guide, handout, slides, exit ticket and at-home work, on a
+  virtual copy of a show choir stage. Its lessons link back to the pages
+  of this guide.
+- [All the documentation](https://github.com/sandinak/qlcconsole/blob/main/docs/README.md) — this guide, the course, the
+  design notes behind each feature, and the developer docs.
 
 ## The rough shape of a show, end to end
 

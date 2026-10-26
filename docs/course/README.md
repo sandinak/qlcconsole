@@ -10,10 +10,13 @@ A course for high-school show choir tech crews: from "what does lighting
 do?" to programming and running a real show in **qlcconsole**, on a
 virtual copy of a show choir stage.
 
-> **Status (2026-10-20):** **Level 0** (2 lessons) and **Level 1** (5
-> lessons and the Level 1 check) are written, each step checked on
-> qlcconsole 0.2.0. Levels 2 and 3 are planned in the
-> [course plan](COURSE_PLAN.md).
+> **Status (2026-10-26):** **Level 0** (2 lessons), **Level 1** (5
+> lessons and the Level 1 check) and four **Level 3** lessons (3.3, 3.6,
+> 3.7 and the optional 3.10) are written. Every app step of Lessons 0.2,
+> 1.1–1.5, 3.3, 3.6, 3.7 and 3.10 is checked by the course test on
+> qlcconsole 0.3.0 (release candidate 4), and the pictures of Levels 0
+> and 1 and of Lesson 3.6 were taken on it. Level 2 and the rest of
+> Level 3 are planned in the [course plan](COURSE_PLAN.md).
 
 ## Start here
 
@@ -32,7 +35,14 @@ virtual copy of a show choir stage.
 | [0 — First look](level-0/index.md) | What light does; the virtual stage | 2 (written) |
 | [1 — Basics](level-1/index.md) | A song → cues: colour, intensity, direction, timing, GO ("Everybody Scream") | 5 (written) |
 | [2 — Intermediate](level-2/index.md) | Tracking, palettes, effects, moving lights, busking | 7 |
-| [3 — Advanced](level-3/index.md) | Patching, fixtures, reading and building the rig, show control, house lights and power, running a real show — on the real rig from December/January; an optional lesson for students coming from Eos | 10 (3 written) |
+| [3 — Advanced](level-3/index.md) | Patching, fixtures, reading and building the rig, show control, focus and touring, house lights and power, running a real show — on the real rig from December/January; an optional lesson for students coming from Eos | 10 (4 written) |
+
+## The user guide
+
+The course teaches a show; the app's own help explains every tool in
+full. It opens with **F1** in the app, on the page for what you're
+looking at, and is in the repo as the [user guide](https://github.com/sandinak/qlcconsole/blob/main/docs/features/README.md).
+All of qlcconsole's documentation starts at the [docs hub](https://github.com/sandinak/qlcconsole/blob/main/docs/README.md).
 
 ## What's in this folder
 

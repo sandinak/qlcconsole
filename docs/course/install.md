@@ -9,13 +9,12 @@ qlcconsole is free and runs on **Mac**, **Windows** and **Linux**. You
 don't need any lighting hardware: the course stage is a 3D model on
 screen.
 
-**Download qlcconsole 0.2.0 (or later) from the
+**Download qlcconsole 0.3.0 (or later) from the
 [qlcconsole Releases page](https://github.com/sandinak/qlcconsole/releases).**
-The lessons are checked against 0.2.0.
-The course uses the newest **pre-release** whose name starts with
-**Show Tree** (it has a *Pre-release* badge; the "Latest" release above it
-may be an older build without the Show Tree). Under its **Assets**, pick
-the file for your computer:
+The lessons are checked against 0.3.0. Take the newest release numbered
+0.3.0 or higher: a full release is named **qlcconsole 0.3.0**, a
+pre-release **Show Tree 0.3.0 (beta)** with a *Pre-release* badge; either
+works. Under its **Assets**, pick the file for your computer:
 
 | Your computer | File to download | Ends in |
 |---|---|---|

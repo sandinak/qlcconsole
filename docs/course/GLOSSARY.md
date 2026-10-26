@@ -27,6 +27,7 @@ brackets.
 | **Practical** | A light that is part of the set and is seen as a light by the audience: a hanging lantern, a lamp on a table, a light-up staff. Our **Lanterns** are practicals. [3.3] |
 | **House lights** | The lights over the audience. Up before the show and at intermission, out when the show starts. [3.7] |
 | **Work lights** | Plain bright lights for working on stage when there's no show: rigging, rehearsal set-up, cleaning. [3.7] |
+| **Stage marks** | The lines a crew spikes and focuses by: the centre line, the curtain line, the number line and the apron. In the Lighting Studio they are on the plot's **Stage** layer (Plot layers), each with its own eye and lock. [3.6] |
 | **Curtain line** | Where the main curtain hangs, across the stage: the line up- and downstage distances are measured from (the plaster line). [3.6] |
 | **Number line** | A line across the front of the stage, numbered in feet out from the centre line (**CL**), so the crew can say how far left or right something is: "SL 4". [3.6] |
 | **Apron** | The part of the stage in front of the curtain line. [3.6] |
@@ -118,7 +119,7 @@ brackets.
 | **Spot down / flood out** | Make a beam narrower / wider (its zoom). [3.6] |
 | **Sharp / soft** | A crisp / blurred edge on a beam (the focus of its lens). [3.6] |
 | **Correction** | How far a light is off in one room (pan and tilt, in degrees), kept so the cues still land on their marks. [3.6] |
-| **Venue** | One room the show plays in. Its corrections, truss heights, target positions, house rig and outputs are kept in a file beside the show (`Show.venues.xml`), never in the show. [3.6] |
+| **Venue** | One room the show plays in. Its corrections, truss heights, target positions, house rig and outputs are kept in a file beside the show (`Show.venues.xml`), never in the show. The footer's venue chip says which is applied (**Venue: Classroom**). [3.6] |
 | **House rig / tour package** | The lights a room already has / the lights that travel with the show. [3.6] |
 | **Owner** | Whose a light is: **Tour** (travels with the show; the default), **Rental** (hired, travels too) or **House** (the room's own, saved with that venue). [3.6] |
 | **Focus report** | The record of a focus: every light, its point, its correction, who checked it and when, and any dead lamp. [3.6] |

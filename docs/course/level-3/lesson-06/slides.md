@@ -36,6 +36,7 @@ teacher says. It can be turned into a deck as it is.*
 - **Curtain line**: where the main curtain hangs.
 - **Number line**: feet out from **CL**, SR one way, SL the other.
 - **Apron**: the deck in front of the curtain line.
+- On the plot's **Stage** layer (Plot layers), each with its own eye.
 - Picture: the classroom plot with the marks. "SL 1 · DS 1."
 
 ## 5. Venue focus: the focus calls
@@ -47,6 +48,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 6. The venue keeps the corrections
 
 - Each A writes a file beside the show: `Lesson3-6-you.venues.xml`.
+- The footer says which room: **Venue: Classroom**.
 - The show file never changes.
 - Touring: the **tour package** travels; each room's **house rig**,
   trims, marks and outputs live in its venue.

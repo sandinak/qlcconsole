@@ -51,6 +51,10 @@ connected to real lights**, so you can't break anything. Try everything.
 Save your own work with **File → Save As** and a new name, so the course
 file stays as it is.
 
+The app's own help (**F1**, or the [user guide](https://github.com/sandinak/qlcconsole/blob/main/docs/features/README.md)
+in the repo) explains each tool in full; the lessons link to its pages
+where it helps.
+
 Then read [The teaching show](rig.md) (what's on the stage) and do
 [Lesson 1.1](level-1/lesson-01/handout.md) as a student would. It takes
 about 20 minutes and is the best way to learn the app.
