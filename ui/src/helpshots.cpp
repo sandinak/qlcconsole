@@ -519,7 +519,8 @@ QList<HelpShots::Shot> HelpShots::shots()
         return f;
     }, nullptr };
 
-    // Connections, by universe, with the first universe's output showing.
+    // Connections, by universe, with the patch's columns and the first
+    // universe's output showing.
     list << Shot{ QStringLiteral("connections-by-universe"), [=]() {
         window();
         openScene(QStringLiteral("05 Stage Shape"), QString());   // something to send
@@ -542,6 +543,9 @@ QList<HelpShots::Shot> HelpShots::shots()
         f.callouts << by
                    << mark(tree, 2)
                    << mark(named(app, "connectionsOutput"), 3);
+        Callout cols = mark(named(app, "connectionsColumns"), 4);
+        cols.place = Corner;
+        f.callouts << cols;
         return f;
     }, nullptr };
 

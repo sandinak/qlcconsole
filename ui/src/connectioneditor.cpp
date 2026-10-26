@@ -44,6 +44,9 @@
 #define ROLE_PLUGIN (Qt::UserRole)
 #define ROLE_LINE   (Qt::UserRole + 1)
 
+/* A MIDI input's channel "every channel" (the plugin's MAX_MIDI_CHANNELS). */
+static const int kMidiOmni = 16;
+
 /* The target list's two entries that are not a port. */
 #define TARGET_BROADCAST (-1)
 #define TARGET_OTHER     (-2)
@@ -320,9 +323,11 @@ void ConnectionEditor::buildForm()
     inf->addRow(tr("Input profile:"), m_profileCombo);
     m_midiChannel = new QComboBox(m_inputBox);
     m_midiChannel->setObjectName(QStringLiteral("connMidiChannel"));
-    m_midiChannel->addItem(tr("All channels"), 0);
+    /* The MIDI plugin's own numbering: 0-15 are channels 1-16, and 16
+       (MAX_MIDI_CHANNELS) is every channel -- an input's default. */
+    m_midiChannel->addItem(tr("All channels"), kMidiOmni);
     for (int ch = 1; ch <= 16; ch++)
-        m_midiChannel->addItem(tr("Channel %1").arg(ch), ch);
+        m_midiChannel->addItem(tr("Channel %1").arg(ch), ch - 1);
     inf->addRow(tr("MIDI input channel:"), m_midiChannel);
     m_artnetInUni = new QSpinBox(m_inputBox);
     m_artnetInUni->setObjectName(QStringLiteral("connArtNetInputUniverse"));
@@ -482,7 +487,7 @@ void ConnectionEditor::load()
     const QMap<QString, QVariant> inParams = ip != nullptr ? ip->getPluginParameters()
                                                            : QMap<QString, QVariant>();
     m_midiChannel->setCurrentIndex(qMax(0, m_midiChannel->findData(inParams.value(
-                                       QStringLiteral("midichannel"), 0).toInt())));
+                                       QStringLiteral("midichannel"), kMidiOmni).toInt())));
     m_artnetInUni->setValue(inParams.value(QStringLiteral("inputUni"), m_universe).toInt());
 
     OutputPatch *fb = u->feedbackPatch();
@@ -775,6 +780,8 @@ void ConnectionEditor::focusSection(const QString &section)
         m_inputCombo->setFocus();
     else if (section == QLatin1String("feedback"))
         m_feedbackCombo->setFocus();
+    else if (section == QLatin1String("passthrough"))
+        m_passthrough->setFocus();
 }
 
 /*********************************************************************
@@ -933,7 +940,8 @@ bool ConnectionEditor::apply()
     {
         const QMap<QString, QVariant> pp = ip->getPluginParameters();
         if (m_midiChannel->isEnabled()
-                && pp.value(QStringLiteral("midichannel"), 0).toInt() != m_midiChannel->currentData().toInt())
+                && pp.value(QStringLiteral("midichannel"), kMidiOmni).toInt()
+                   != m_midiChannel->currentData().toInt())
             ip->setPluginParameter(QStringLiteral("midichannel"), m_midiChannel->currentData().toInt());
         if (m_artnetInUni->isEnabled()
                 && pp.value(QStringLiteral("inputUni"), m_universe).toInt() != m_artnetInUni->value())

@@ -43,6 +43,7 @@
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QTreeWidgetItemIterator>
+#include <QToolButton>
 
 #include "connectionstree.h"
 #include "shrinkablebar.h"
@@ -105,6 +106,20 @@
 #define COL_NAME    0
 #define COL_DETAIL  1
 #define COL_CARRIES 2
+/* By universe only: the patch as columns, each shown or hidden by the
+   operator (the Overview sub-tab's, folded in here, board Q153). Read-only:
+   a double-click opens the connection window on that part. */
+#define COL_OUTPUT   3
+#define COL_IP       4
+#define COL_U        5
+#define COL_MODE     6
+#define COL_INPUT    7
+#define COL_PROFILE  8
+#define COL_FEEDBACK 9
+#define COL_PT       10
+#define COL_COUNT    11
+
+#define SETTINGS_UNIVERSE_COLUMNS "connections/universeColumns"
 
 /** How a protocol is shown to an operator, as opposed to QLCIOPlugin::name()
  *  -- the identity string this same protocol is saved and matched by in the
@@ -239,9 +254,28 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     connect(m_byUniverse, &QCheckBox::toggled, this, [this, labelUnused](bool on) {
         QSettings().setValue(QStringLiteral("connections/byUniverse"), on);
         labelUnused();
+        applyUniverseColumns();
         refresh();
     });
     labelUnused();
+
+    /* The patch columns By universe can show, ticked here or from the
+       list header's right-click; By universe only. */
+    m_columnsButton = new QToolButton(this);
+    m_columnsButton->setObjectName(QStringLiteral("connectionsColumns"));
+    m_columnsButton->setText(tr("Columns"));
+    m_columnsButton->setToolTip(tr("Which of the patch's columns to show: output, IP, universe, "
+                                   "mode, input, profile, feedback, passthrough. Also on the "
+                                   "list header's right-click."));
+    m_columnsButton->setPopupMode(QToolButton::InstantPopup);
+    {
+        QMenu *columnsMenu = new QMenu(m_columnsButton);
+        connect(columnsMenu, &QMenu::aboutToShow, this, [this, columnsMenu]() {
+            columnsMenu->clear();
+            fillColumnsMenu(columnsMenu);
+        });
+        m_columnsButton->setMenu(columnsMenu);
+    }
 
     // Scrolls sideways rather than holding Connections wide (ShrinkableBar).
     QWidget *barRow = new QWidget(this);
@@ -249,6 +283,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     bar->setContentsMargins(0, 0, 0, 0);
     bar->addWidget(m_byUniverse);
     bar->addWidget(m_showUnused);
+    bar->addWidget(m_columnsButton);
     bar->addSpacing(12);
     bar->addWidget(hint);
     bar->addStretch(1);
@@ -275,9 +310,28 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
 
     m_tree = new RowTree(this);
     m_tree->setObjectName("connectionsTree");
-    m_tree->setColumnCount(3);
+    m_tree->setColumnCount(COL_COUNT);
     m_tree->setHeaderLabels(QStringList()
-                            << tr("Device") << tr("Detail") << tr("Carries"));
+                            << tr("Device") << tr("Detail") << tr("Carries")
+                            << tr("Output") << tr("IP") << tr("U") << tr("Mode")
+                            << tr("Input") << tr("Profile") << tr("Feedback") << tr("PT"));
+    {
+        const char *tips[COL_COUNT - COL_OUTPUT] = {
+            QT_TR_NOOP("Output: the protocol and interface this universe goes out on"),
+            QT_TR_NOOP("Where it is sent: the node's IP (Art-Net), the unicast address or "
+                       "multicast (sACN)"),
+            QT_TR_NOOP("The universe on the far end: net:subnet:universe (Art-Net), the sACN "
+                       "universe"),
+            QT_TR_NOOP("Transmit mode (Art-Net, sACN), or the MIDI output mode"),
+            QT_TR_NOOP("Input: the protocol and interface this universe listens to, with "
+                       "its Art-Net universe or MIDI channel"),
+            QT_TR_NOOP("The input profile on that input"),
+            QT_TR_NOOP("Feedback: where values are sent back to, with its address"),
+            QT_TR_NOOP("Passthrough: input forwarded straight to the output"),
+        };
+        for (int c = COL_OUTPUT; c < COL_COUNT; c++)
+            m_tree->headerItem()->setToolTip(c, tr(tips[c - COL_OUTPUT]));
+    }
     /* Extended selection so several universes can be retargeted in one go --
        the ArtNet block-patch case, where sixteen universes leave by one node
        on consecutive ports. Every single-row action keeps working on the row
@@ -293,6 +347,11 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_tree->header()->setSectionResizeMode(COL_NAME, QHeaderView::ResizeToContents);
     m_tree->header()->setSectionResizeMode(COL_DETAIL, QHeaderView::ResizeToContents);
     m_tree->header()->setSectionResizeMode(COL_CARRIES, QHeaderView::Stretch);
+    for (int c = COL_OUTPUT; c < COL_COUNT; c++)
+        m_tree->header()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
+    m_tree->header()->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree->header(), &QHeaderView::customContextMenuRequested,
+            this, &ConnectionsTree::slotHeaderMenu);
     connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem *, int)),
             this, SLOT(slotItemChanged(QTreeWidgetItem *, int)));
     /* Only a row's name is edited in place ("clicking to edit the text should
@@ -307,8 +366,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
             return nullptr;
         }
     };
-    m_tree->setItemDelegateForColumn(COL_DETAIL, new NoEdit(m_tree));
-    m_tree->setItemDelegateForColumn(COL_CARRIES, new NoEdit(m_tree));
+    for (int c = COL_DETAIL; c < COL_COUNT; c++)
+        m_tree->setItemDelegateForColumn(c, new NoEdit(m_tree));
+    applyUniverseColumns();
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotContextMenu(QPoint)));
@@ -389,9 +449,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     }
 
     /* Live input. Devices is the tab you are on when asking "is that surface
-       actually sending anything", and it was the only one of the three that
-       could not answer -- Overview flashes its input combo, Detailed prints a
-       readout, this had no input hookup at all. Tinting the universe row says
+       actually sending anything", and it was the only Connections page that
+       could not answer -- the Universes page prints a readout, this had no
+       input hookup at all. Tinting the universe row says
        it in the place the question is being asked. */
     if (m_doc->inputOutputMap() != NULL)
     {
@@ -1469,7 +1529,7 @@ void ConnectionsTree::refresh()
                             : QColor(245, 166, 35, 40)));  // configured, silent
                     }
 
-                    /* Same usage figure the Overview grid shows: how full the
+                    /* The usage figure the By universe rows show: how full the
                        universe is. A patch row without it answers "where does
                        this go" but not "is there anything in it". */
                     setCarriesFixtures(uitem, uniId);
@@ -2222,6 +2282,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     m_pluralRetarget = NULL;
     m_pluralPatch = NULL;
     m_pluralUnpatch = NULL;
+    m_pluralModes.clear();
     m_pluralUniverses = orderedSelectedUniverses();
     m_pluralLegs.clear();
     if (m_pluralUniverses.count() > 1)
@@ -2248,8 +2309,40 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             m_pluralRetarget = menu.addAction(tr("Retarget %1 selected universes…")
                                                   .arg(selUnis.count()));
     }
+    /* The transmit mode of every selected Art-Net or sACN universe at once
+       (the Overview grid set it down a selection). */
+    if (m_pluralUniverses.count() > 1 && m_doc->inputOutputMap() != NULL)
+    {
+        bool targets = false, sacn = false;
+        foreach (quint32 u, m_pluralUniverses)
+        {
+            Universe *uni = m_doc->inputOutputMap()->universe(u);
+            for (int i = 0; uni != NULL && i < uni->outputPatchesCount(); i++)
+            {
+                OutputPatch *op = uni->outputPatch(i);
+                const ConnectionEditor::Kind k = ConnectionEditor::kindOf(op != NULL ? op->plugin() : NULL);
+                targets = targets || k == ConnectionEditor::KindTargets;
+                sacn = sacn || k == ConnectionEditor::KindSacn;
+            }
+        }
+        if (targets || sacn)
+        {
+            QMenu *modes = menu.addMenu(tr("Transmit mode of %1 selected universes")
+                                            .arg(m_pluralUniverses.count()));
+            QStringList names;
+            if (targets)
+                names << QStringLiteral("Standard");
+            names << QStringLiteral("Full") << QStringLiteral("Partial");
+            foreach (const QString &n, names)
+            {
+                QAction *a = modes->addAction(n);
+                a->setData(n);
+                m_pluralModes << a;
+            }
+        }
+    }
     const bool plural = (m_pluralPatch != NULL || m_pluralUnpatch != NULL
-                         || m_pluralRetarget != NULL);
+                         || m_pluralRetarget != NULL || m_pluralModes.isEmpty() == false);
     if (plural)
         menu.addSeparator();
 
@@ -2567,7 +2660,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
         /* "This got bound to lo0 by mistake, move every universe on it to
            the real NIC" used to mean re-patching each affected universe by
-           hand, one at a time, through Overview or Detailed. Everything
+           hand, one at a time, through the Universes page. Everything
            else about each patch (target IP, transmit mode, ...) lives on
            the OutputPatch object itself and survives a plain line change
            untouched -- Universe::setOutputPatch() reuses the same patch and
@@ -2738,7 +2831,7 @@ bool ConnectionsTree::isUniverseRow(const QTreeWidgetItem *item)
            || kind == KIND_PENDING_UNIVERSE;
 }
 
-bool ConnectionsTree::editConnection(QTreeWidgetItem *item)
+bool ConnectionsTree::editConnection(QTreeWidgetItem *item, int column)
 {
     if (isUniverseRow(item) == false)
         return false;
@@ -2760,6 +2853,13 @@ bool ConnectionsTree::editConnection(QTreeWidgetItem *item)
             section = item->text(COL_DETAIL) == tr("feedback") ? QStringLiteral("feedback")
                                                                 : QStringLiteral("input");
     }
+    /* A By universe column: the window opens on the part it shows. */
+    if (column == COL_INPUT || column == COL_PROFILE)
+        section = QStringLiteral("input");
+    else if (column == COL_FEEDBACK)
+        section = QStringLiteral("feedback");
+    else if (column == COL_PT)
+        section = QStringLiteral("passthrough");
     const bool changed = ConnectionEditor::edit(m_doc, uni, plugin, line, this, section);
     if (changed)
         refresh();
@@ -2768,9 +2868,8 @@ bool ConnectionsTree::editConnection(QTreeWidgetItem *item)
 
 void ConnectionsTree::slotItemDoubleClicked(QTreeWidgetItem *item, int column)
 {
-    Q_UNUSED(column)
     if (isUniverseRow(item))
-        editConnection(item);
+        editConnection(item, column);
 }
 
 bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut,
@@ -3054,6 +3153,11 @@ bool ConnectionsTree::handleUniversalMenuAction(QAction *chosen, QTreeWidgetItem
         unpatchLegs(m_pluralLegs);
         return true;
     }
+    if (m_pluralModes.contains(chosen))
+    {
+        setTransmitModeOn(m_pluralUniverses, chosen->data().toString());
+        return true;
+    }
     if (chosen == collapseAll || chosen == expandAll)
     {
         setExpandedDeep(item, chosen == expandAll);
@@ -3303,15 +3407,6 @@ bool ConnectionsTree::patchTarget(quint32 universe, const QString &pluginName,
                                   quint32 &portAddress) const
 {
     return m_patcher->patchTarget(universe, pluginName, line, address, portAddress);
-}
-
-/* Nothing to have clicked first, so everything is asked: protocol,
-   interface, node and port -- UniversePatcher::patchUniverse(), the same
-   flow the Fixture Manager's universe rows use. It rebuilds this view
-   through patchChanged(). */
-void ConnectionsTree::patchUnpatchedUniverseTo(quint32 universe)
-{
-    m_patcher->patchUniverse(universe);
 }
 
 void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 line,
@@ -4442,6 +4537,7 @@ void ConnectionsTree::buildUniverseList()
             item->setForeground(COL_DETAIL, QBrush(QColor(138, 142, 153)));
         }
         setCarriesFixtures(item, u->id());
+        setUniverseColumns(item, u);
         if (selected.contains(u->id()))
             item->setSelected(true);
     }
@@ -4583,4 +4679,213 @@ void ConnectionsTree::addShowControlRows()
         row->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
         row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     }
+}
+
+/*****************************************************************************
+ * By universe: the patch as columns
+ *****************************************************************************/
+
+QStringList ConnectionsTree::universeColumnKeys()
+{
+    /* In column order, COL_OUTPUT on. */
+    return QStringList() << QStringLiteral("output") << QStringLiteral("ip")
+                         << QStringLiteral("u") << QStringLiteral("mode")
+                         << QStringLiteral("input") << QStringLiteral("profile")
+                         << QStringLiteral("feedback") << QStringLiteral("pt");
+}
+
+QStringList ConnectionsTree::shownUniverseColumns() const
+{
+    /* Detail already says where each universe goes, in words; the default
+       adds what it doesn't: mode, input, feedback, passthrough. */
+    const QVariant v = QSettings().value(QStringLiteral(SETTINGS_UNIVERSE_COLUMNS));
+    if (v.isValid() == false)
+        return QStringList() << QStringLiteral("mode") << QStringLiteral("input")
+                             << QStringLiteral("feedback") << QStringLiteral("pt");
+    return v.toStringList();
+}
+
+void ConnectionsTree::setUniverseColumnShown(const QString &key, bool shown)
+{
+    QStringList keys = shownUniverseColumns();
+    if (shown && keys.contains(key) == false)
+        keys << key;
+    else if (shown == false)
+        keys.removeAll(key);
+    QSettings().setValue(QStringLiteral(SETTINGS_UNIVERSE_COLUMNS), keys);
+    applyUniverseColumns();
+}
+
+void ConnectionsTree::applyUniverseColumns()
+{
+    if (m_tree == NULL)
+        return;
+    const bool byUniverse = m_byUniverse != NULL && m_byUniverse->isChecked();
+    const QStringList keys = universeColumnKeys();
+    const QStringList shown = shownUniverseColumns();
+    bool any = false;
+    for (int c = COL_OUTPUT; c < COL_COUNT; c++)
+    {
+        const bool on = byUniverse && shown.contains(keys.value(c - COL_OUTPUT));
+        m_tree->setColumnHidden(c, on == false);
+        any = any || on;
+    }
+    /* Carries takes the spare width only while it is the last column. */
+    m_tree->header()->setSectionResizeMode(COL_CARRIES, any ? QHeaderView::ResizeToContents
+                                                            : QHeaderView::Stretch);
+    if (m_columnsButton != NULL)
+        m_columnsButton->setVisible(byUniverse);
+}
+
+void ConnectionsTree::fillColumnsMenu(QMenu *menu)
+{
+    const QStringList keys = universeColumnKeys();
+    const QStringList shown = shownUniverseColumns();
+    for (int c = COL_OUTPUT; c < COL_COUNT; c++)
+    {
+        const QString key = keys.value(c - COL_OUTPUT);
+        QAction *a = menu->addAction(m_tree->headerItem()->text(c));
+        a->setCheckable(true);
+        a->setChecked(shown.contains(key));
+        a->setToolTip(m_tree->headerItem()->toolTip(c));
+        connect(a, &QAction::toggled, this, [this, key](bool on) {
+            setUniverseColumnShown(key, on);
+        });
+    }
+}
+
+void ConnectionsTree::slotHeaderMenu(const QPoint &pos)
+{
+    /* The columns are the universe list's; the wiring has none to choose. */
+    if (m_byUniverse == NULL || m_byUniverse->isChecked() == false)
+        return;
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("connectionsColumnsMenu"));
+    fillColumnsMenu(&menu);
+    menu.exec(m_tree->header()->viewport()->mapToGlobal(pos));
+}
+
+void ConnectionsTree::setUniverseColumns(QTreeWidgetItem *item, Universe *u) const
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (item == NULL || u == NULL || iomap == NULL)
+        return;
+
+    /* "ArtNet · eth0" -- the operator's name for the interface, as every
+       line row reads. */
+    auto lineText = [iomap](const QString &plugin, const QString &lineName) {
+        const QString alias = iomap->lineAlias(plugin, lineName);
+        return tr("%1 · %2").arg(displayPluginName(plugin),
+                                 alias.isEmpty() ? lineName : alias);
+    };
+
+    /* One value per output leg; a universe sent two ways lists both. */
+    QStringList outs, ips, unis, modes;
+    for (int i = 0; i < u->outputPatchesCount(); i++)
+    {
+        OutputPatch *op = u->outputPatch(i);
+        if (op == NULL)
+            continue;
+        outs << lineText(op->pluginName(), op->outputName());
+        const QMap<QString, QVariant> pp = op->getPluginParameters();
+        switch (ConnectionEditor::kindOf(op->plugin()))
+        {
+            case ConnectionEditor::KindTargets:
+                ips << (pp.contains(QStringLiteral("outputIP"))
+                        ? pp.value(QStringLiteral("outputIP")).toString() : tr("broadcast"));
+                unis << (pp.contains(QStringLiteral("outputUni"))
+                         ? portAddressText(pp.value(QStringLiteral("outputUni")).toUInt()) : QString());
+                modes << pp.value(QStringLiteral("transmitMode"), QStringLiteral("Standard")).toString();
+            break;
+            case ConnectionEditor::KindSacn:
+                ips << (pp.value(QStringLiteral("multicast"), 1).toInt() != 0
+                        ? tr("multicast") : pp.value(QStringLiteral("ucastIP")).toString());
+                unis << QString::number(pp.value(QStringLiteral("universe"), u->id() + 1).toInt());
+                modes << pp.value(QStringLiteral("transmitMode"), QStringLiteral("Full")).toString();
+            break;
+            case ConnectionEditor::KindMidi:
+                modes << pp.value(QStringLiteral("mode"), QStringLiteral("Control Change")).toString();
+            break;
+            default:
+            break;
+        }
+    }
+    auto joined = [](const QStringList &l) {
+        QStringList kept;
+        foreach (const QString &s, l)
+            if (s.isEmpty() == false)
+                kept << s;
+        return kept.join(QStringLiteral(", "));
+    };
+    item->setText(COL_OUTPUT, joined(outs));
+    item->setText(COL_IP, joined(ips));
+    item->setText(COL_U, joined(unis));
+    item->setText(COL_MODE, joined(modes));
+
+    if (InputPatch *ip = u->inputPatch())
+    {
+        QString in = lineText(ip->pluginName(), ip->inputName());
+        const QMap<QString, QVariant> pp = ip->getPluginParameters();
+        if (ip->pluginName() == QLatin1String("ArtNet"))
+            in += tr(" · universe %1").arg(pp.value(QStringLiteral("inputUni"), u->id()).toInt());
+        else if (ip->pluginName().contains(QLatin1String("MIDI"), Qt::CaseInsensitive))
+        {
+            /* The MIDI plugin's numbering: 0-15 channel 1-16, 16 all. */
+            const int ch = pp.value(QStringLiteral("midichannel"), 16).toInt();
+            in += ch >= 16 ? tr(" · all channels") : tr(" · channel %1").arg(ch + 1);
+        }
+        item->setText(COL_INPUT, in);
+        item->setText(COL_PROFILE, ip->profile() != NULL ? ip->profileName() : QString());
+    }
+
+    if (OutputPatch *fb = u->feedbackPatch())
+    {
+        QString text = lineText(fb->pluginName(), fb->outputName());
+        const QMap<QString, QVariant> pp = fb->getPluginParameters();
+        if (pp.contains(QStringLiteral("outputIP")) || pp.contains(QStringLiteral("outputUni")))
+        {
+            QStringList where;
+            if (pp.contains(QStringLiteral("outputIP")))
+                where << pp.value(QStringLiteral("outputIP")).toString();
+            if (pp.contains(QStringLiteral("outputUni")))
+                where << portAddressText(pp.value(QStringLiteral("outputUni")).toUInt());
+            text += tr(" → %1").arg(where.join(QStringLiteral(" · ")));
+        }
+        item->setText(COL_FEEDBACK, text);
+    }
+
+    if (u->passthrough())
+        item->setText(COL_PT, tr("on"));
+}
+
+void ConnectionsTree::setTransmitModeOn(const QList<quint32> &universes, const QString &mode)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL || universes.isEmpty())
+        return;
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(universes, tr("transmit mode %1 on %2 universes")
+                                                   .arg(mode).arg(universes.count()));
+    bool changed = false;
+    foreach (quint32 u, universes)
+    {
+        Universe *uni = iomap->universe(u);
+        for (int i = 0; uni != NULL && i < uni->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = uni->outputPatch(i);
+            if (op == NULL)
+                continue;
+            const ConnectionEditor::Kind k = ConnectionEditor::kindOf(op->plugin());
+            /* sACN has no Standard; leave it as it is. */
+            if (k == ConnectionEditor::KindTargets
+                    || (k == ConnectionEditor::KindSacn && mode != QLatin1String("Standard")))
+            {
+                op->setPluginParameter(QStringLiteral("transmitMode"), mode);
+                changed = true;
+            }
+        }
+    }
+    if (changed)
+        m_doc->setModified();
+    refresh();
 }

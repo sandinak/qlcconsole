@@ -83,7 +83,7 @@ private:
      * Tree widget
      *************************************************************************/
 public slots:
-    /** Put the last patch change back. Shared by all three tabs so they cannot
+    /** Put the last patch change back. Shared by every Connections page so they cannot
         drift into confirming or refreshing differently. */
     void slotUndoPatch();
     void slotUndoAvailabilityChanged();
@@ -129,7 +129,6 @@ protected:
 private:
     Doc *m_doc;
     class QTabWidget *m_ioTabs;
-    class UniversePatchGrid *m_patchGrid;
     QAction *m_undoPatchAction;
     class ConnectionsTree *m_devicesTree;
     class ShowControlSyncPage *m_showControlPage;

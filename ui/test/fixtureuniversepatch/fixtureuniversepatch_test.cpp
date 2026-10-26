@@ -22,6 +22,7 @@
 #include <QPushButton>
 #include <QMenu>
 #include <QTimer>
+#include <QComboBox>
 #include <functional>
 #include <memory>
 
@@ -32,6 +33,7 @@
 #include "fixturemanager.h"
 #include "fixturetreewidget.h"
 #include "universepatcher.h"
+#include "connectioneditor.h"
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
@@ -158,6 +160,54 @@ private:
     QTimer m_timer;
 };
 
+/** The connection window the next call opens: what it was opened on, then
+    @p fill on it and OK (no @p fill: Cancel) -- a test never waits on a
+    modal. */
+class EditorAnswer : public QObject
+{
+public:
+    explicit EditorAnswer(std::function<void(ConnectionEditor *)> fill = nullptr)
+        : m_fill(fill)
+    {
+        m_timer.setInterval(5);
+        connect(&m_timer, &QTimer::timeout, this, [this]() {
+            ConnectionEditor *ed = qobject_cast<ConnectionEditor *>(QApplication::activeModalWidget());
+            if (ed == nullptr)
+                return;
+            ++opened;
+            universe = ed->universe();
+            protocol = ed->m_protocolCombo->currentData().toString();
+            if (m_fill)
+            {
+                m_fill(ed);
+                ed->accept();
+            }
+            else
+                ed->reject();
+        });
+        m_timer.start();
+    }
+    int opened = 0;
+    quint32 universe = 0xFFFFFFFF;
+    QString protocol;
+
+private:
+    std::function<void(ConnectionEditor *)> m_fill;
+    QTimer m_timer;
+};
+
+/** Pick the target whose text starts with @p text in the window's list. */
+static void pickTarget(ConnectionEditor *ed, const QString &text)
+{
+    for (int i = 0; i < ed->m_targetCombo->count(); i++)
+        if (ed->m_targetCombo->itemText(i).startsWith(text))
+        {
+            ed->m_targetCombo->setCurrentIndex(i);
+            return;
+        }
+    QFAIL(qPrintable("no target " + text));
+}
+
 /** Right-click @p item WITHOUT touching the selection, and either read the
     menu (@p pick empty) or choose the entry titled @p pick. Returns the
     menu's texts; @p found says whether @p pick was there. */
@@ -251,16 +301,19 @@ void FixtureUniversePatch_Test::patchingFromTheMenuSetsTheOutputAndCanBeUndone()
     selectOnly(mgr, row);
 
     {
-        // The stub is the only protocol: interface, then the node's port --
-        // the Connections tab's picker, free ports first.
-        DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 3");
+        // The Connections tab's connection window, on this universe, not
+        // patched yet: the protocol, then the node's port.
+        const QString plugin = stub->name();
+        EditorAnswer answer([plugin](ConnectionEditor *ed) {
+            ed->m_protocolCombo->setCurrentIndex(ed->m_protocolCombo->findData(plugin));
+            pickTarget(ed, "Quad (172.18.2.50) — port 3");
+        });
         bool found = false;
         rightClick(mgr, row, "Patch output…", &found);
         QVERIFY(found);
-        QCOMPARE(answers.left(), 0);
-        QCOMPARE(answers.lists.count(), 2);
-        QVERIFY(answers.lists.at(1).contains("Another address…"));
-        QVERIFY(answers.lists.at(1).contains("Broadcast (no target)"));
+        QCOMPARE(answer.opened, 1);
+        QCOMPARE(answer.universe, quint32(0));
+        QCOMPARE(answer.protocol, QString());          // not patched
     }
 
     UniversePatcher p(m_doc, nullptr);
@@ -303,17 +356,26 @@ void FixtureUniversePatch_Test::aPatchedUniverseSaysWhereItGoesAndCanBeUnpatched
     foreach (const QString &t, texts)
         said = said || t.startsWith(where);
     QVERIFY2(said, qPrintable(texts.join(" | ")));
-    QVERIFY2(texts.contains("Change interface / target…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Edit connection…"), qPrintable(texts.join(" | ")));
     QVERIFY2(texts.contains("Unpatch output"), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.contains("Patch output…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Change interface / target…"), qPrintable(texts.join(" | ")));
 
-    // Change interface / target: interface asked again, then the port.
+    // Edit connection: the same window, filled in with where it goes now.
     {
-        DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 4");
+        QString current;
+        EditorAnswer answer([&current](ConnectionEditor *ed) {
+            current = ed->m_targetCombo->currentText();
+            pickTarget(ed, "Quad (172.18.2.50) — port 4");
+        });
         bool found = false;
-        rightClick(mgr, row, "Change interface / target…", &found);
+        rightClick(mgr, row, "Edit connection…", &found);
         QVERIFY(found);
-        QCOMPARE(answers.left(), 0);
+        QCOMPARE(answer.opened, 1);
+        QCOMPARE(answer.universe, quint32(1));
+        QCOMPARE(answer.protocol, stub->name());
+        QVERIFY2(current.startsWith("Quad (172.18.2.50) — port 2") && current.endsWith("(current)"),
+                 qPrintable(current));
     }
     QString a;
     quint32 port = 99;

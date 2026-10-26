@@ -40,7 +40,7 @@ private slots:
     void cleanup();
 
     void channelPickersListOnlyPatchedFixtures();
-    void thePatchGridCountsOnlyPatchedFixtures();
+    void theConnectionsListCountsOnlyPatchedFixtures();
     void theProgrammingSourceTreeFilesStagedFixturesUnderInventory();
     void aLookTargetSaysItIsUnpatched();
     void aGroupLayoutSaysAHeadIsUnpatched();

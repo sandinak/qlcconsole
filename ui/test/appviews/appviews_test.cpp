@@ -569,6 +569,12 @@ void AppViews_Test::classicLooksLikeQlcPlus()
     InputOutputManager *io = InputOutputManager::instance();
     QVERIFY(io != nullptr);
     QCOMPARE(io->m_ioTabs->tabText(io->m_ioTabs->currentIndex()), QString("Universes"));
+    // Devices and QLC+'s own Universes page; no Overview (board Q153: its
+    // columns are By universe's).
+    QStringList ioTabs;
+    for (int i = 0; i < io->m_ioTabs->count(); i++)
+        ioTabs << io->m_ioTabs->tabText(i);
+    QCOMPARE(ioTabs, QStringList() << "Devices" << "Universes");
 
     // Back in qlcconsole: none of it, and Connections opens on Devices.
     m_app->setWorkspaceView(App::ConsoleView);

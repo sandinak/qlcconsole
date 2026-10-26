@@ -1,6 +1,9 @@
 # Connections: Devices and Overview
 
-Status: **proposal, for a board question** (2026-10-25). No code yet.
+Status: **decided and done** (board Q153, 2026-10-26: *"A, and switch
+Fixture Manager's Patch to the new window"*). Built in 0.3.0 RC3 -- see
+[What was built](#what-was-built) at the end. The proposal is kept below as
+it was put.
 
 Branson, testing 0.3.0 RC1: *"In connections, Devices and Overview are the
 same thing different ways. Start a thread to look at those two and consider
@@ -138,3 +141,47 @@ grid's columns, edits through the connection window; the Overview tab
 goes). B: keep both with separate jobs (Devices = the network, Overview
 renamed Patch = the bulk patch sheet). C: keep both, show Overview only in
 the Everything view. Recommended: A.*
+
+## What was built
+
+Option A, 0.3.0 RC3.
+
+- **By universe has the patch as columns**: Output, IP, U, Mode, Input
+  (with its Art-Net universe or MIDI channel), Profile, Feedback (with its
+  address) and PT, read-only, each shown or hidden from the list header's
+  right-click or a **Columns** button (By universe only) and remembered
+  (QSettings `connections/universeColumns`; Mode, Input, Feedback and PT
+  to begin with, since Detail already says where each goes). A
+  double-click on a column opens the connection window on that part.
+  `ConnectionsTree::setUniverseColumns()`.
+- **The Overview sub-tab is gone** and `UniversePatchGrid` with it.
+  Connections has Devices and Universes in every view; Classic still opens
+  on Universes.
+- **The Fixture Manager's universe rows** open the connection window,
+  filled in with that universe: **Patch output…**, or **Edit connection…**
+  on a patched one (it was **Change interface / target…**).
+  `UniversePatcher::patchUniverse()` (the step-by-step questions) and
+  `ConnectionsTree::patchUnpatchedUniverseTo()` are removed; UniversePatcher
+  stays -- the connection window, the plural patch/unpatch/retarget and the
+  folded port rows all use it.
+
+What the Overview grid edited inline, and where it is now:
+
+| Overview | Now |
+|---|---|
+| Name | the connection window's Name; inline rename on the row |
+| Output device (plugin · line) | the window's Protocol and Interface |
+| MIDI Out/FB role toggle | the window: Protocol *Not patched*, Feedback to the MIDI port |
+| Out IP, Out U (Art-Net) | the window's Send to / Node IP / Universe on the node |
+| Out IP, Out U (sACN) | the window's sACN universe, multicast/unicast (the grid wrote `outputIP`, which E1.31 does not read) |
+| Mode (Art-Net), MIDI output mode | the window's Transmit mode, MIDI output mode |
+| Input device, In (Art-Net input universe), Profile | the window's Input, Art-Net input universe, Input profile |
+| In (MIDI channel) | the window's MIDI input channel -- **fixed**: it was one off against the plugin's numbering (0-15, 16 for every channel) |
+| Input "Edit…" (the input plugin's settings) | Configure on the protocol's row in Devices |
+| Feedback, FB IP, FB U | the window's Feedback to, Feedback address, Feedback universe |
+| PT (shown, not edited) | the window's Passthrough; the PT column |
+| Usage | the Carries column |
+| Several rows: IP, port address numbered up | Retarget N selected universes… (and Patch N selected universes to…) |
+| Several rows: transmit mode | **added**: Transmit mode of N selected universes (Art-Net, sACN) |
+| Add / Remove Universe, Rescan, Undo Patch Change | Devices' right-click, Rescan and Undo Patch Change |
+| Input activity flash | the row flashes |

@@ -87,7 +87,6 @@ add_library(${module_name}
     outputrulesdialog.cpp outputrulesdialog.h
     universeoutputview.cpp universeoutputview.h
     deviceprofile.cpp deviceprofile.h
-    universepatchgrid.cpp universepatchgrid.h
     inputoutputpatcheditor.cpp inputoutputpatcheditor.h inputoutputpatcheditor.ui
     inputprofileeditor.cpp inputprofileeditor.h inputprofileeditor.ui
     inputselectionwidget.cpp inputselectionwidget.h inputselectionwidget.ui

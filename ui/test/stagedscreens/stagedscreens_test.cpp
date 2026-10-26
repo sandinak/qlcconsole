@@ -26,7 +26,7 @@
 #define protected public
 #include "channelsselection.h"
 #include "addchannelsgroup.h"
-#include "universepatchgrid.h"
+#include "connectionstree.h"
 #include "fixturegroupsource.h"
 #include "scenegrouplooks.h"
 #include "fixturegroupeditor.h"
@@ -95,13 +95,18 @@ void StagedScreens_Test::channelPickersListOnlyPatchedFixtures()
     QVERIFY(rowsWith(add.m_tree, "Staged Dimmer").isEmpty());
 }
 
-void StagedScreens_Test::thePatchGridCountsOnlyPatchedFixtures()
+void StagedScreens_Test::theConnectionsListCountsOnlyPatchedFixtures()
 {
-    UniversePatchGrid grid(m_doc);
-    grid.reload();
-    QCOMPARE(grid.fixturesOnUniverse(0), 1);
-    const QString usage = grid.m_table->item(0, 2)->text();
+    /* By universe's Carries (the Overview grid's Usage, folded in): the
+       staged fixture is not in universe 1. */
+    ConnectionsTree tree(m_doc);
+    tree.m_showUnused->setChecked(true);
+    tree.m_byUniverse->setChecked(true);
+    QTreeWidgetItem *first = tree.m_tree->topLevelItem(0);
+    QVERIFY(first != nullptr);
+    const QString usage = first->text(2);
     QVERIFY2(usage.startsWith("1 fx") && usage.contains("2/512"), qPrintable(usage));
+    tree.m_byUniverse->setChecked(false);
 }
 
 void StagedScreens_Test::theProgrammingSourceTreeFilesStagedFixturesUnderInventory()

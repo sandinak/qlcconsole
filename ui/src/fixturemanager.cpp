@@ -86,6 +86,7 @@
 #include "monitor/monitor.h"
 #include "outputrulesdialog.h"
 #include "universepatcher.h"
+#include "connectioneditor.h"
 #include "outputpatch.h"
 #include "qlcioplugin.h"
 #include "patchundo.h"
@@ -3256,12 +3257,12 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         menu.addAction(m_addRGBAction);
     }
 
-    // A universe row itself: where it goes (patch, change, unpatch -- the
-    // Connections tab's questions, through UniversePatcher), and deleting
-    // it. Renaming is inline.
+    // A universe row itself: where it goes (patching or changing it opens
+    // the Connections tab's connection window; unpatching and the plural
+    // actions go through UniversePatcher), and deleting it. Renaming is
+    // inline.
     QAction *deleteUni = NULL;
     QAction *patchOut = NULL;
-    QAction *retargetOut = NULL;
     QAction *unpatchOut = NULL;
     QAction *pluralPatch = NULL;
     QAction *pluralUnpatch = NULL;
@@ -3306,6 +3307,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             }
         }
         const QStringList legs = m_patcher->outputText(ctxUni);
+        /* Patching and changing it are the connection window (board Q153),
+           the same one Connections opens, filled in with this universe. */
         if (legs.isEmpty())
         {
             patchOut = menu.addAction(tr("Patch output…"));
@@ -3316,10 +3319,9 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         {
             QAction *where = menu.addAction(tr("Output: %1").arg(legs.join(QStringLiteral(" · "))));
             where->setEnabled(false);
-            if (ctxPlugin.isEmpty() == false && m_patcher->supportsTargets(ctxPlugin))
-                retargetOut = menu.addAction(UniversePatcher::retargetText(ctxPlugin));
-            else
-                patchOut = menu.addAction(tr("Patch output…"));
+            patchOut = menu.addAction(tr("Edit connection…"));
+            patchOut->setToolTip(tr("Where this universe goes, its input and feedback, "
+                                    "in one window"));
             unpatchOut = menu.addAction(tr("Unpatch output"));
         }
         if (ShowStatus::instance()->actionLabel(QStringLiteral("connections.universe")).isEmpty() == false)
@@ -3452,12 +3454,9 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     if (patchOut != NULL && chosen == patchOut)
     {
-        m_patcher->patchUniverse(ctxUni);
-        return;
-    }
-    if (retargetOut != NULL && chosen == retargetOut)
-    {
-        m_patcher->retargetPatch(ctxUni, ctxPlugin, ctxLine);
+        if (ConnectionEditor::edit(m_doc, ctxUni, ctxPlugin, ctxLine, this)
+                && m_fixtures_tree != NULL)
+            m_fixtures_tree->updateUniverseLabels();
         return;
     }
     if (unpatchOut != NULL && chosen == unpatchOut)

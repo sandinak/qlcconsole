@@ -34,6 +34,7 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QToolButton>
 
 #define protected public
 #define private public
@@ -177,6 +178,7 @@ void ConnectionsTree_Test::cleanup()
     /* "By universe" is remembered across sessions; a test that turned it on
        must not leave every later test looking at the universe list. */
     QSettings().setValue(QStringLiteral("connections/byUniverse"), false);
+    QSettings().remove(QStringLiteral("connections/universeColumns"));
     delete m_doc;
     m_doc = NULL;
 }
@@ -685,7 +687,7 @@ void ConnectionsTree_Test::patchParameterDistinguishesAbsentFromZero()
 
     ConnectionsTree tree(m_doc);
 
-    // Absent is not zero. "midichannel 0" means every channel and "mode
+    // Absent is not zero. "midichannel 0" means channel 1 (16: every one) and "mode
     // unset" means the plugin's default -- a reader that cannot tell the
     // difference shows a value the rig is not actually using, and a menu
     // built from it puts a checkmark on the wrong row.
@@ -1841,72 +1843,6 @@ void ConnectionsTree_Test::targetPickerListsFreePortsFirst()
     QVERIFY(tree.targetPortChoices(stub->name(), 1, 0).isEmpty());
 }
 
-void ConnectionsTree_Test::patchToPicksAVisiblePort()
-{
-    ConnectionsTree tree(m_doc);
-    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
-    InputOutputMap *iom = m_doc->inputOutputMap();
-
-    DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 3");
-    tree.patchUnpatchedUniverseTo(0);
-    QCOMPARE(answers.left(), 0);
-    QCOMPARE(answers.lists.count(), 2);
-    QVERIFY(answers.lists.at(1).contains("Another address…"));
-    QVERIFY(answers.lists.at(1).contains("Broadcast (no target)"));
-    QString a;
-    quint32 p = 99;
-    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
-    QCOMPARE(a, QString("172.18.2.50"));
-    QCOMPARE(p, quint32(2));
-    QCOMPARE(iom->outputPatchesCount(0), 1);
-}
-
-void ConnectionsTree_Test::patchToAUsedPortChangesNothing()
-{
-    ConnectionsTree tree(m_doc);
-    nodeWithOnePortTaken(m_doc, tree);
-    InputOutputMap *iom = m_doc->inputOutputMap();
-
-    {
-        DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 2");
-        tree.patchUnpatchedUniverseTo(0);
-        QCOMPARE(answers.messages.count(), 1);
-        QVERIFY2(answers.messages.first().contains("Universe 8 already sends"),
-                 qPrintable(answers.messages.first()));
-        QCOMPARE(iom->outputPatchesCount(0), 0);       // never half-patched
-    }
-
-    // Cancelling the target question leaves it unpatched too.
-    DialogAnswers cancel(QStringList() << "#0" << "<cancel>");
-    tree.patchUnpatchedUniverseTo(0);
-    QCOMPARE(iom->outputPatchesCount(0), 0);
-}
-
-void ConnectionsTree_Test::patchToAnAddressTypedByHand()
-{
-    ConnectionsTree tree(m_doc);
-    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
-
-    {
-        DialogAnswers answers(QStringList() << "#0" << "Another address…"
-                                            << "10.1.1.1" << "0:1:2");
-        tree.patchUnpatchedUniverseTo(0);
-        QCOMPARE(answers.left(), 0);
-    }
-    QString a;
-    quint32 p = 99;
-    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
-    QCOMPARE(a, QString("10.1.1.1"));
-    QCOMPARE(p, quint32(0x12));
-
-    // Typing a port another universe holds is refused the same way.
-    DialogAnswers clash(QStringList() << "#0" << "Another address…"
-                                      << "172.18.2.50" << "0:0:1");
-    tree.patchUnpatchedUniverseTo(1);
-    QCOMPARE(clash.messages.count(), 1);
-    QCOMPARE(m_doc->inputOutputMap()->outputPatchesCount(1), 0);
-}
-
 void ConnectionsTree_Test::retargetOffersTheVisiblePortsWithTheCurrentOne()
 {
     ConnectionsTree tree(m_doc);
@@ -2647,4 +2583,251 @@ void ConnectionsTree_Test::connectionEditorRefusesATakenPortAndChangesNothing()
     // Universe 2 is still on interface 3, untargeted.
     QCOMPARE(iom->universe(1)->outputPatch(0)->output(), quint32(2));
     QVERIFY(iom->universe(1)->outputPatch(0)->getPluginParameters().contains("outputIP") == false);
+}
+
+/****************************************************************************
+ * By universe: the patch as columns (the Overview sub-tab's, board Q153)
+ ****************************************************************************/
+
+#define COL_OUTPUT   3
+#define COL_IP       4
+#define COL_U        5
+#define COL_MODE     6
+#define COL_INPUT    7
+#define COL_PROFILE  8
+#define COL_FEEDBACK 9
+#define COL_PT       10
+
+void ConnectionsTree_Test::byUniverseColumnsShowHideAndAreRemembered()
+{
+    ConnectionsTree tree(m_doc);
+    QCOMPARE(tree.m_tree->columnCount(), 11);
+
+    // The wiring has none of them, and no Columns button.
+    tree.m_byUniverse->setChecked(false);
+    for (int c = COL_OUTPUT; c <= COL_PT; c++)
+        QVERIFY2(tree.m_tree->isColumnHidden(c), qPrintable(QString::number(c)));
+    QVERIFY(tree.m_columnsButton->isVisibleTo(&tree) == false);
+
+    // By universe, by default: what Detail does not already say.
+    tree.m_byUniverse->setChecked(true);
+    QVERIFY(tree.m_columnsButton->isVisibleTo(&tree));
+    QVERIFY(tree.m_tree->isColumnHidden(COL_OUTPUT));
+    QVERIFY(tree.m_tree->isColumnHidden(COL_IP));
+    QVERIFY(tree.m_tree->isColumnHidden(COL_U));
+    QVERIFY(tree.m_tree->isColumnHidden(COL_MODE) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_INPUT) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_PROFILE));
+    QVERIFY(tree.m_tree->isColumnHidden(COL_FEEDBACK) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_PT) == false);
+
+    // The header's right-click: a tick per column, named as the header.
+    QStringList seen;
+    QTimer::singleShot(0, [&seen]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        foreach (QAction *a, m->actions())
+        {
+            seen << a->text();
+            if (a->text() == "IP")
+                a->trigger();               // show IP
+            else if (a->text() == "PT")
+                a->trigger();               // hide PT
+        }
+        m->close();
+    });
+    tree.slotHeaderMenu(QPoint(5, 5));
+    QApplication::processEvents();
+    QCOMPARE(seen, QStringList() << "Output" << "IP" << "U" << "Mode" << "Input"
+                                 << "Profile" << "Feedback" << "PT");
+    QVERIFY(tree.m_tree->isColumnHidden(COL_IP) == false);
+    QVERIFY(tree.m_tree->isColumnHidden(COL_PT));
+
+    // Remembered: another list opens with the same.
+    ConnectionsTree again(m_doc);
+    QVERIFY(again.m_byUniverse->isChecked());
+    QVERIFY(again.m_tree->isColumnHidden(COL_IP) == false);
+    QVERIFY(again.m_tree->isColumnHidden(COL_PT));
+    QVERIFY(again.m_tree->isColumnHidden(COL_MODE) == false);
+
+    // The Columns button is the same menu.
+    QMenu menu;
+    again.fillColumnsMenu(&menu);
+    QCOMPARE(menu.actions().count(), 8);
+    QVERIFY(menu.actions().at(1)->isChecked());         // IP
+    QVERIFY(menu.actions().at(7)->isChecked() == false); // PT
+
+    // The wiring's header has no columns to choose.
+    again.m_byUniverse->setChecked(false);
+    bool opened = false;
+    QTimer::singleShot(0, [&opened]() {
+        if (QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget()))
+        {
+            opened = true;
+            m->close();
+        }
+    });
+    again.slotHeaderMenu(QPoint(5, 5));
+    QApplication::processEvents();
+    QVERIFY(opened == false);
+}
+
+void ConnectionsTree_Test::byUniverseColumnsReadThePatch()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // Universe 1: a node's port, Full; listening on its input universe 5;
+    // passthrough.
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 1, false, 0));
+    OutputPatch *op = iom->universe(0)->outputPatch(0);
+    op->setPluginParameter("outputIP", "172.18.2.50");
+    op->setPluginParameter("outputUni", 0x12);
+    op->setPluginParameter("transmitMode", "Full");
+    QVERIFY(iom->setInputPatch(0, stub->name(), "", 2));
+    iom->universe(0)->inputPatch()->setPluginParameter("inputUni", 5);
+    iom->setUniversePassthrough(0, true);
+    // Universe 3: feedback to a node. (On a universe of its own: a plugin
+    // keeps one output's parameters per universe, which the output and the
+    // feedback would share.)
+    QVERIFY(iom->setOutputPatch(2, stub->name(), "", 3, true));
+    iom->universe(2)->feedbackPatch()->setPluginParameter("outputIP", "10.0.0.9");
+    iom->universe(2)->feedbackPatch()->setPluginParameter("outputUni", 3);
+    // Universe 2: broadcast, the default mode, nothing else.
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    tree.m_refreshTimer->stop();
+
+    QTreeWidgetItem *one = universeRow(tree.m_tree, 0);
+    QVERIFY(one != NULL);
+    QCOMPARE(one->text(COL_OUTPUT), QString("ArtNet · %1").arg(stub->outputs().at(1)));
+    QCOMPARE(one->text(COL_IP), QString("172.18.2.50"));
+    QCOMPARE(one->text(COL_U), QString("0:1:2"));
+    QCOMPARE(one->text(COL_MODE), QString("Full"));
+    QCOMPARE(one->text(COL_INPUT), QString("ArtNet · %1 · universe 5").arg(stub->inputs().at(2)));
+    QCOMPARE(one->text(COL_PROFILE), QString());
+    QCOMPARE(one->text(COL_FEEDBACK), QString());
+    QCOMPARE(one->text(COL_PT), QString("on"));
+    QTreeWidgetItem *three = universeRow(tree.m_tree, 2);
+    QVERIFY(three != NULL);
+    QCOMPARE(three->text(COL_FEEDBACK), QString("ArtNet · %1 → 10.0.0.9 · 0:0:3")
+                                            .arg(stub->outputs().at(3)));
+    QCOMPARE(three->text(COL_OUTPUT), QString());
+
+    QTreeWidgetItem *two = universeRow(tree.m_tree, 1);
+    QVERIFY(two != NULL);
+    QCOMPARE(two->text(COL_IP), QString("broadcast"));
+    QCOMPARE(two->text(COL_U), QString());
+    QCOMPARE(two->text(COL_MODE), QString("Standard"));
+    QCOMPARE(two->text(COL_INPUT), QString());
+    QCOMPARE(two->text(COL_FEEDBACK), QString());
+    QCOMPARE(two->text(COL_PT), QString());
+
+    // Read-only: a double-click on a column opens the connection window.
+    tree.m_byUniverse->blockSignals(true);   // keep the columns as they are
+    QSettings().setValue(QStringLiteral("connections/universeColumns"),
+                         QStringList() << "ip" << "mode");
+    tree.applyUniverseColumns();
+    tree.m_byUniverse->blockSignals(false);
+    QVERIFY(one->flags() & Qt::ItemIsEditable);              // the name only
+    QVERIFY(tree.m_tree->itemDelegateForColumn(COL_IP) != tree.m_tree->itemDelegate());
+    EditorSpy spy;
+    tree.slotItemDoubleClicked(one, COL_IP);
+    QCOMPARE(spy.opened, 1);
+    QCOMPARE(spy.universe, quint32(0));
+    QCOMPARE(spy.protocol, QString("ArtNet"));
+
+    // A change of patch shows at the next rebuild.
+    op->setPluginParameter("transmitMode", "Partial");
+    tree.refresh();
+    QCOMPARE(universeRow(tree.m_tree, 0)->text(COL_MODE), QString("Partial"));
+}
+
+void ConnectionsTree_Test::severalSelectedTakeOneTransmitMode()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    stub->m_nameOverride = "ArtNet";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < 3; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", 0, false, 0));
+    iom->universe(2)->outputPatch(0)->setPluginParameter("transmitMode", "Partial");
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    tree.m_refreshTimer->stop();
+    clickUniverse(tree, 0);
+    clickUniverse(tree, 1, Qt::ControlModifier);
+
+    // Offered for the selection, by count, Art-Net's three modes.
+    QStringList modes;
+    QTimer::singleShot(0, [&modes]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        foreach (QAction *a, m->actions())
+        {
+            if (a->menu() != NULL && a->text() == "Transmit mode of 2 selected universes")
+            {
+                foreach (QAction *sub, a->menu()->actions())
+                    modes << sub->text();
+            }
+        }
+        m->close();
+    });
+    tree.slotContextMenu(tree.m_tree->visualItemRect(universeRow(tree.m_tree, 0)).center());
+    QApplication::processEvents();
+    QCOMPARE(modes, QStringList() << "Standard" << "Full" << "Partial");
+
+    tree.setTransmitModeOn(tree.orderedSelectedUniverses(), "Full");
+    QCOMPARE(iom->universe(0)->outputPatch(0)->getPluginParameters().value("transmitMode").toString(),
+             QString("Full"));
+    QCOMPARE(iom->universe(1)->outputPatch(0)->getPluginParameters().value("transmitMode").toString(),
+             QString("Full"));
+    // Not selected: as it was.
+    QCOMPARE(iom->universe(2)->outputPatch(0)->getPluginParameters().value("transmitMode").toString(),
+             QString("Partial"));
+
+    // One undo step puts both back.
+    QVERIFY(iom->patchUndo()->undo());
+    QVERIFY(iom->universe(0)->outputPatch(0)->getPluginParameters().contains("transmitMode") == false);
+    QVERIFY(iom->universe(1)->outputPatch(0)->getPluginParameters().contains("transmitMode") == false);
+}
+
+void ConnectionsTree_Test::connectionEditorSetsAMidiInputsChannel()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_nameOverride = "MIDI";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), "", 1));
+
+    // No channel set: the plugin's default for an input, every channel.
+    {
+        ConnectionEditor ed(m_doc, 0);
+        QVERIFY(ed.m_midiChannel->isEnabled());
+        QCOMPARE(ed.m_midiChannel->currentText(), QString("All channels"));
+    }
+    // The plugin numbers channels 0-15, 16 for all of them.
+    iom->universe(0)->inputPatch()->setPluginParameter("midichannel", 4);
+    {
+        ConnectionEditor ed(m_doc, 0);
+        QCOMPARE(ed.m_midiChannel->currentText(), QString("Channel 5"));
+        ed.m_midiChannel->setCurrentIndex(ed.m_midiChannel->findText("Channel 1"));
+        QVERIFY2(ed.apply(), qPrintable(ed.error()));
+    }
+    QCOMPARE(iom->universe(0)->inputPatch()->getPluginParameters().value("midichannel").toInt(), 0);
+    {
+        ConnectionEditor ed(m_doc, 0);
+        ed.m_midiChannel->setCurrentIndex(ed.m_midiChannel->findText("All channels"));
+        QVERIFY2(ed.apply(), qPrintable(ed.error()));
+    }
+    QCOMPARE(iom->universe(0)->inputPatch()->getPluginParameters().value("midichannel").toInt(), 16);
+
+    // By universe says the same.
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    QVERIFY2(universeRow(tree.m_tree, 0)->text(COL_INPUT).endsWith(" · all channels"),
+             qPrintable(universeRow(tree.m_tree, 0)->text(COL_INPUT)));
 }

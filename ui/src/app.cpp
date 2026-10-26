@@ -6652,40 +6652,6 @@ void App::captureScenarioIfRequested()
             }
         }
 
-        // Optionally check every collapsible-group toggle in the I/O grid and
-        // grab it (QLC_SHOT_IOGROUPS=1), to verify the hidden column groups.
-        if (qgetenv("QLC_SHOT_IOGROUPS") == QByteArray("1"))
-        {
-            foreach (QToolButton *tb, findChildren<QToolButton *>())
-            {
-                const QString t = tb->text();
-                if (t == "Feedback" || t == "Passthrough" || t == "Input")
-                    if (tb->defaultAction() && tb->defaultAction()->isCheckable()
-                            && !tb->defaultAction()->isChecked())
-                        tb->defaultAction()->trigger();
-            }
-            qApp->processEvents();
-            save(this, "io_groups");
-        }
-
-        // Optionally scroll the Connections Overview grid to a given row and
-        // grab it (QLC_SHOT_IOROW=<row>), to verify deep rows render.
-        const QByteArray ioRowEnv = qgetenv("QLC_SHOT_IOROW");
-        if (ioRowEnv.isEmpty() == false)
-        {
-            foreach (QTableWidget *tw, findChildren<QTableWidget *>())
-            {
-                if (tw->columnCount() >= 8 && tw->rowCount() > 10)
-                {
-                    tw->scrollToItem(tw->item(ioRowEnv.toInt(), 0),
-                                     QAbstractItemView::PositionAtTop);
-                    qApp->processEvents();
-                    save(this, "io_scrolled");
-                    break;
-                }
-            }
-        }
-
         // Optionally pop + grab the Fixture Studio group editor (its 3-plane
         // canvas), one PNG per plane. QLC_SHOT_STUDIO = a group id number, or a
         // name substring, or "1"/empty to pick the first studio (hasFrame) group.

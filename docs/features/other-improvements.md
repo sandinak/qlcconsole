@@ -9,10 +9,11 @@ Smaller fork-specific features that don't need a full guide of their own.
 The Connections tab reworks stock QLC+'s I/O patching into one place that
 answers "how is this console actually wired," following the signal outward:
 **protocol → interface → devices heard on it → the universes they carry.**
-Three sub-tabs — **Devices** (shown above), **Overview**, and **Universes**
-(QLC+'s own Inputs/Outputs page) — give the same information at different
-levels of depth. Classic QLC+ opens on **Universes**; the other views on
-**Devices**. At the bottom of Devices, **Show control &amp; sync** lists
+Two sub-tabs — **Devices** (shown above) and **Universes** (QLC+'s own
+Inputs/Outputs page) — give the same information at different levels of
+depth. Classic QLC+ opens on **Universes**; the other views on
+**Devices**. (0.3 folded the old **Overview** spreadsheet into Devices:
+its columns are By universe's, below.) At the bottom of Devices, **Show control &amp; sync** lists
 what controls or clocks the show from outside — OSC and MIDI Show Control
 cue commands in, MIDI timecode with its sync health — each row with its
 state; click one to set it up on the right. See
@@ -34,11 +35,26 @@ refers to them, so one from the middle can't be removed without renumbering
 the rest.) Only the **Device** column is edited in place; Detail and
 Carries describe the row and aren't text to type over.
 
+By universe, the rows can also carry the whole patch as columns:
+**Output** (protocol and interface), **IP** (the node's address, the sACN
+unicast address, or broadcast/multicast), **U** (the universe on the far
+end: net:subnet:universe for Art-Net, the sACN universe), **Mode** (the
+transmit mode, or a MIDI output's mode), **Input** (with its Art-Net
+universe or MIDI channel), **Profile**, **Feedback** (with its address) and
+**PT** (passthrough). Right-click the list's header, or use **Columns**, to
+show or hide each; the choice is remembered. Mode, Input, Feedback and PT
+are on to begin with (Detail already says where each goes). The columns are
+read-only: double-click one to open the universe's connection, on that part
+— everything they show is edited there.
+
 ![Connections, by universe, with Universe 1's output showing](../images/connections-by-universe.png)
 
 1. **By universe** — every universe in use, in number order.
-2. **The universes**, each with where it goes and what it carries.
+2. **The universes**, each with where it goes, what it carries, and the
+   patch columns you've chosen.
 3. **What the selected universe is sending**, channel by channel.
+4. **Columns** — which of the patch's columns to show (also the header's
+   right-click).
 
 Select a universe and the panel on the right shows what it is **sending**,
 live: all 512 channels, each with its value and a bar as high, the channels
@@ -111,16 +127,20 @@ in either view, patched or not — and right-click one of them:
   at once.
 - **Retarget N selected universes…** re-aims already-patched universes at
   one node on consecutive port addresses, also in clicked order.
+- **Transmit mode of N selected universes** sets the mode of every
+  selected Art-Net (Standard, Full, Partial) and sACN (Full, Partial)
+  universe at once.
 
 Each is one step for **Undo Patch Change**. The Fixture Manager's universe
-rows offer the same patching, through the same code — see
+rows open the same connection window (**Patch output…**, or **Edit
+connection…** on a patched one) and offer the same plural actions — see
 [Patching a universe's output](fixture-manager.md#patching-a-universes-output).
 (The Devices tab keeps all of this
 to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so
 the list and the output view get the window's height.) A full patch-change **undo**
-(⌘Z, from any of the patching sub-tabs) snapshots and restores the whole
+(⌘Z, from either sub-tab) snapshots and restores the whole
 patch state, not just the last single edit.
 
 Compared to stock QLC+, this fork also fixed a number of real patching

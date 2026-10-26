@@ -47,8 +47,11 @@ class Doc;
  * universes they carry -- so the question "where does universe 5 physically
  * come out" has a visible answer.
  *
- * Deliberately read-only. Editing stays in Overview (inline) and Detailed
- * (per-universe), which are the surfaces that already own it.
+ * Editing goes through one window, the connection editor (double-click a
+ * universe, or Edit connection…). By universe, the rows also carry the
+ * patch as columns -- output, IP, port, mode, input, profile, feedback,
+ * passthrough -- shown or hidden from the header's right-click and
+ * remembered (they were the Overview sub-tab's, board Q153).
  */
 class ConnectionsTree : public QWidget
 {
@@ -96,6 +99,8 @@ protected:
 
 private slots:
     void slotContextMenu(const QPoint &pos);
+    /** The header's right-click: which patch columns By universe shows. */
+    void slotHeaderMenu(const QPoint &pos);
     /** Poll every plugin for hardware now, rather than waiting for a tick. */
     void slotRescan();
     /** Put the last patch change back. */
@@ -118,8 +123,9 @@ private:
      *  unpatched universe. */
     static bool isUniverseRow(const QTreeWidgetItem *item);
     /** Open the connection window for that row's universe (and its leg),
-     *  filled in. True if it changed anything. */
-    bool editConnection(QTreeWidgetItem *item);
+     *  filled in; @p column, a By universe column, opens it on that part
+     *  (input, feedback, passthrough). True if it changed anything. */
+    bool editConnection(QTreeWidgetItem *item, int column = -1);
 
     /** Patch an existing or new universe to this plugin line. */
     void patchUniverseTo(const QString &pluginName, quint32 line, bool output);
@@ -315,12 +321,6 @@ private:
     /** Patch a universe and aim it at one physical port of a discovered node. */
     void patchUniverseToPort(const QString &pluginName, quint32 line,
                              const QString &deviceAddress, quint32 portAddress);
-    /** Patch an UNPATCHED universe by choosing everything from scratch --
-     *  protocol, then interface, then (for a target-capable protocol) an
-     *  address and port -- since there is no line/target/port row to have
-     *  clicked to get here in the first place. */
-    void patchUnpatchedUniverseTo(quint32 universe);
-
     /** The port address an output patch is aimed at, or invalid if untargeted. */
     bool patchTarget(quint32 universe, const QString &pluginName, quint32 line,
                      QString &address, quint32 &portAddress) const;
@@ -334,6 +334,25 @@ private:
     QCheckBox *m_byUniverse = nullptr;
     /** Build the "By universe" list (refresh() does, when it is on). */
     void buildUniverseList();
+    /** Fill a By universe row's patch columns (output, IP, U, mode, input,
+     *  profile, feedback, passthrough) from @p universe as it is now. */
+    void setUniverseColumns(class QTreeWidgetItem *item, class Universe *universe) const;
+
+    /** The patch columns By universe can show, by key ("output", "ip", "u",
+     *  "mode", "input", "profile", "feedback", "pt"). */
+    static QStringList universeColumnKeys();
+    /** The ones shown, as remembered (connections/universeColumns). */
+    QStringList shownUniverseColumns() const;
+    /** Show or hide one, and remember it. */
+    void setUniverseColumnShown(const QString &key, bool shown);
+    /** Hide or show the patch columns for the view and the choice. */
+    void applyUniverseColumns();
+    /** The columns menu: a tick per patch column (header right-click, and
+     *  the Columns button). */
+    void fillColumnsMenu(class QMenu *menu);
+    /** "Transmit mode of N selected universes": every Art-Net and sACN
+     *  output leg of @p universes set to @p mode, as one undo step. */
+    void setTransmitModeOn(const QList<quint32> &universes, const QString &mode);
     /** The "Show control & sync" branch and its rows, after the rest. */
     void addShowControlRows();
     /** The show-control branch, or nullptr. */
@@ -342,6 +361,9 @@ private:
      *  (QLCIOPlugin::outputProblems()): the problem appended to Detail, in
      *  red, every problem in the tooltip. Both views end with it. */
     void markOutputProblems();
+    /** By universe only: the patch columns to show (also the header's
+     *  right-click). */
+    class QToolButton *m_columnsButton = nullptr;
     class QPushButton *m_rescan;
     class QPushButton *m_undo;
     class QLabel *m_status;
@@ -406,6 +428,8 @@ private:
     class QAction *m_pluralRetarget = nullptr;
     class QAction *m_pluralPatch = nullptr;
     class QAction *m_pluralUnpatch = nullptr;
+    /** "Transmit mode of N selected universes" ▸ one action per mode. */
+    QList<class QAction *> m_pluralModes;
     QList<quint32> m_pluralUniverses;
     QList<UnpatchLeg> m_pluralLegs;
 };

@@ -442,6 +442,22 @@ show plays Show Tree content; and faster Matrix effects.
 
 ### Changed
 
+- **Connections: Overview folded into Devices** (RC3, board Q153,
+  docs/CONNECTIONS_CLEANUP.md option A). Devices ▸ **By universe** carries
+  the Overview grid's columns -- Output, IP, U, Mode, Input, Profile,
+  Feedback, PT -- as read-only columns, each shown or hidden from the
+  header's right-click or the **Columns** button and remembered
+  (`connections/universeColumns`; Mode, Input, Feedback and PT to begin
+  with). A double-click on one opens the connection window on that part.
+  The Overview sub-tab is gone (`UniversePatchGrid` removed); Connections
+  has Devices and QLC+'s own Universes page. What the grid did that
+  Devices lacked: **Transmit mode of N selected universes** (Art-Net and
+  sACN, one undo step) on the universe menu. The **Fixture Manager's
+  universe rows** open the same connection window, filled in with that
+  universe (**Patch output…**, or **Edit connection…** on a patched one),
+  in place of the old step-by-step questions
+  (`UniversePatcher::patchUniverse` removed).
+
 - **Matrix effects cost less a tick** (RC2; the same frames). Bouncing
   Balls, Kaleidoscope, Lissajous and Starfield draw only the pixels a
   point can light and keep what does not change from tick to tick, and the
@@ -672,6 +688,13 @@ show plays Show Tree content; and faster Matrix effects.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+
+- **The connection window's MIDI input channel was one off** (RC3). It
+  stored channel N as N and "All channels" as 0, where the MIDI plugin
+  reads 0-15 as channels 1-16 and 16 as every channel: "Channel 1" listened
+  on channel 2, "All channels" on channel 1 only, and an input with no
+  channel set opened as channel 1. It now reads and writes the plugin's
+  numbers (the Overview grid had them right).
 
 - **Line targets keep their colour, edit, and snap.** A target is drawn in
   the colour set in Edit Target whether locked or not (a red ring says

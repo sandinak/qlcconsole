@@ -40,7 +40,6 @@
 
 #include "inputoutputpatcheditor.h"
 #include "showcontrolsyncpage.h"
-#include "universepatchgrid.h"
 #include "universeitemwidget.h"
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
@@ -71,7 +70,6 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     : QWidget(parent)
     , m_doc(doc)
     , m_ioTabs(NULL)
-    , m_patchGrid(NULL)
     , m_undoPatchAction(NULL)
     , m_showControlPage(NULL)
     , m_toolbar(NULL)
@@ -95,22 +93,22 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     layout()->setContentsMargins(0, 0, 0, 0);
     layout()->setSpacing(0);
 
-    // Two views: a spreadsheet "Overview" of the whole patch (inline-editable),
-    // and the classic per-universe "Universes" editor (list + patch editor,
-    // QLC+'s own Inputs/Outputs page; was "Detailed").
+    // Two pages: Devices (the wiring, or By universe with the patch as
+    // columns; edited through the connection window), and the classic
+    // per-universe "Universes" editor (list + patch editor, QLC+'s own
+    // Inputs/Outputs page; was "Detailed"). The Overview grid that sat
+    // between them was folded into By universe (board Q153).
     m_ioTabs = new QTabWidget(this);
     layout()->addWidget(m_ioTabs);
 
     /* Devices first: it answers "what is out there and is it reachable", which
        is what you want before patching anything. Also a full editing surface
-       in its own right, not just Overview/Detailed -- right-click a row to
+       in its own right -- double-click a universe for its connection, or
+       right-click a row to
        rename/patch/unpatch/retarget/delete that universe, or right-click
        empty space to add a new one (ConnectionsTree::slotContextMenu()). */
     m_devicesTree = new ConnectionsTree(m_doc, this);
     m_ioTabs->addTab(m_devicesTree, tr("Devices"));
-
-    m_patchGrid = new UniversePatchGrid(m_doc, this);
-    m_ioTabs->addTab(m_patchGrid, tr("Overview"));
 
     QWidget *detailed = new QWidget(this);
     QVBoxLayout *detailedLay = new QVBoxLayout(detailed);
@@ -164,12 +162,12 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     /* Ctrl+Z, scoped to the Connections area rather than the window.
        A global Ctrl+Z would promise general undo and deliver patch undo, which
        is the objection to offering it at all. Scoped here it promises exactly
-       what it does: inside these three tabs there is nothing to undo BUT
+       what it does: inside these pages there is nothing to undo BUT
        patches, so within this context the shortcut means the whole of undo.
        Same reasoning that moved Ctrl+N/Ctrl+D onto the Detailed page -- a
        shortcut should mean what the surface it fires on says it means.
 
-       One action, shared: the Devices and Overview buttons route through this
+       One action, shared: the Devices button routes through this
        too, so the confirmation text and what gets refreshed afterwards cannot
        drift apart between tabs. */
     m_undoPatchAction = new QAction(QIcon(":/back.png"),
@@ -394,9 +392,6 @@ void InputOutputManager::applyToolbarLabelMode()
 
 void InputOutputManager::updateList()
 {
-    if (m_patchGrid != NULL)
-        m_patchGrid->reload();
-
     m_list->blockSignals(true);
     m_list->clear();
     bool anyPatched = false;
@@ -666,8 +661,6 @@ void InputOutputManager::slotUndoPatch()
        rows describing the patch as it was a moment ago. */
     if (m_devicesTree != NULL)
         m_devicesTree->refresh();
-    if (m_patchGrid != NULL)
-        m_patchGrid->reload();
     updateList();
 }
 

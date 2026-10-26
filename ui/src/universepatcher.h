@@ -197,11 +197,6 @@ public:
                        quint32 universe, bool allowBroadcast,
                        QString &address, quint32 &port);
 
-    /** Patch one universe's output from scratch: protocol, then interface,
-     *  then (for a protocol with targets) node and port -- each opened on
-     *  what it has now. Replaces its patch rather than adding a second. */
-    void patchUniverse(quint32 universe);
-
     /** Repoint an existing output patch: its interface (asked again, the
      *  current one preselected), then its node / port on that interface. */
     void retargetPatch(quint32 universe, const QString &pluginName, quint32 line);

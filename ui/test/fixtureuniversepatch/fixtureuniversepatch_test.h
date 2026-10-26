@@ -23,8 +23,9 @@
 class Doc;
 
 /* "right click on universe in fixtures list should let me patch": the
-   Fixture Manager's universe rows patch, re-patch and unpatch their output
-   through the Connections tab's own flow (UniversePatcher). */
+   Fixture Manager's universe rows patch and change their output in the
+   Connections tab's connection window (board Q153), and unpatch through
+   its own code (UniversePatcher). */
 class FixtureUniversePatch_Test final : public QObject
 {
     Q_OBJECT

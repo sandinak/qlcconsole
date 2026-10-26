@@ -568,6 +568,16 @@ their house lights, relays and subs.
   filled in. One window instead of a question per step, and one entry
   instead of a dozen on the right-click. See
   [Editing a connection](other-improvements.md#editing-a-connection).
+- **Overview is part of Devices now.** Tick **By universe** and the rows
+  carry the patch as columns — Output, IP, U, Mode, Input, Profile,
+  Feedback, PT — chosen from the header's right-click or **Columns**, and
+  remembered. Double-click one to change it in the connection window. The
+  Overview sub-tab is gone. Several universes selected: **Transmit mode of
+  N selected universes** sets them all at once.
+- **Patch from the Fixture Manager in the same window.** A universe row's
+  **Patch output…** (or **Edit connection…**, once patched) opens the
+  connection window on that universe. See
+  [Patching a universe's output](fixture-manager.md#patching-a-universes-output).
 - **Fixture Properties opens for every fixture**, on the plot or not; a
   fixture not on the plot has its position rows greyed.
 

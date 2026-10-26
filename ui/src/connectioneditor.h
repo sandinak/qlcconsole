@@ -76,8 +76,9 @@ public:
                      quint32 line = 0, QWidget *parent = nullptr);
     ~ConnectionEditor();
 
-    /** Open it over @p parent and make the change on OK. @p section: "input"
-     *  or "feedback" to open with that part in view. True if anything changed. */
+    /** Open it over @p parent and make the change on OK. @p section: "input",
+     *  "feedback" or "passthrough" to open with that part in view. True if
+     *  anything changed. */
     static bool edit(Doc *doc, quint32 universe, const QString &pluginName, quint32 line,
                      QWidget *parent, const QString &section = QString());
 
@@ -89,7 +90,8 @@ public:
     bool apply();
     QString error() const { return m_error; }
 
-    /** Bring "input" or "feedback" into view and give it the focus. */
+    /** Bring "input", "feedback" or "passthrough" into view and give it
+     *  the focus. */
     void focusSection(const QString &section);
 
     /** The universe being edited. */

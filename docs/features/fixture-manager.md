@@ -664,20 +664,18 @@ change.
 
 ### Patching a universe's output
 
-A universe row patches where the universe goes, with the same questions,
-rules and undo as the Connections tab (see
-[Connections &amp; patch](other-improvements.md#connections--patch)):
+A universe row patches where the universe goes in the Connections tab's
+own connection window, with the same rules and undo (see
+[Editing a connection](other-improvements.md#editing-a-connection)):
 
-- **Patch output…** — on a universe that goes nowhere yet: the protocol,
-  then the interface, then (Art-Net, WLED) the node port — the visible
-  devices' ports, free ones first, with **Another address…** and
-  **Broadcast**. A port another universe already uses is refused.
+- **Patch output…** — on a universe that goes nowhere yet: the connection
+  window opens on that universe, not patched; pick the protocol, the
+  interface and (Art-Net) the node port — the visible devices' ports, free
+  ones first, with **Another address…** and **Broadcast**. A port another
+  universe already uses is refused.
 - On a patched universe the menu says where it goes now, e.g. **Output:
-  ArtNet → CS1 (172.18.2.211) · port 1 · universe 0:0:0**, then **Change
-  interface / target…** (the interface asked again, the current one
-  preselected, then the port) and **Unpatch output**. A protocol without
-  targets (a USB widget) offers **Patch output…** again instead, which
-  replaces the patch.
+  ArtNet → CS1 (172.18.2.211) · port 1 · universe 0:0:0**, then **Edit
+  connection…** (the same window, filled in) and **Unpatch output**.
 - With several universe rows selected: **Patch N selected universes to…**
   puts them on a device's ports in the order you clicked them, and
   **Unpatch N selected universes** takes them all off.

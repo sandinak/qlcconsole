@@ -126,9 +126,6 @@ private slots:
 
     /* A target address is picked from the ports visible on the interface. */
     void targetPickerListsFreePortsFirst();
-    void patchToPicksAVisiblePort();
-    void patchToAUsedPortChangesNothing();
-    void patchToAnAddressTypedByHand();
     void retargetOffersTheVisiblePortsWithTheCurrentOne();
 
     /* "port" is the node's socket, "universe" its port-address: everywhere. */
@@ -157,6 +154,14 @@ private slots:
     void connectionEditorSetsSacnSettings();
     void connectionEditorPatchesAUsbWidget();
     void connectionEditorRefusesATakenPortAndChangesNothing();
+    void connectionEditorSetsAMidiInputsChannel();
+
+    /* By universe carries the patch as columns, shown or hidden from the
+       header's right-click and remembered; read-only, edited through the
+       connection window (board Q153: the Overview sub-tab folded in). */
+    void byUniverseColumnsShowHideAndAreRemembered();
+    void byUniverseColumnsReadThePatch();
+    void severalSelectedTakeOneTransmitMode();
 
 private:
     Doc *m_doc;
