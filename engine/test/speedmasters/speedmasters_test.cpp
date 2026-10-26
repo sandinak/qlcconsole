@@ -140,15 +140,25 @@ void SpeedMasters_Test::tapSetsAnOwnMasterNotAFollower()
 {
     SpeedMasters *sm = m_doc->speedMasters();
     sm->setRate(0, 0.5);
-    QElapsedTimer sinceTap;
+    QElapsedTimer sinceTap, sinceFirst;
+    qint64 firstNs = 0, lastNs = 0;
+    sinceFirst.start();
     for (int i = 0; i < 5; ++i)
     {
         if (i)
-            QTest::qWait(250);                   // 240 BPM heard
+            QTest::qWait(250);                   // ~240 BPM heard
+        const qint64 before = sinceFirst.nsecsElapsed();
         QVERIFY(sm->tap(0));
+        const qint64 after = sinceFirst.nsecsElapsed();
+        (i ? lastNs : firstNs) = (before + after) / 2;
         sinceTap.start();
     }
-    QVERIFY2(sm->bpm(0) > 200 && sm->bpm(0) < 260, qPrintable(QString::number(sm->bpm(0))));
+    /* The tempo heard is the one actually tapped: a stalled runner stretches
+       the 250 ms waits (199.5 BPM seen on CI), so compare against the taps'
+       own spacing rather than a fixed 240. */
+    const double tapped = 60e9 / (double(lastNs - firstNs) / 4);
+    QVERIFY2(qAbs(sm->bpm(0) - tapped) < tapped * 0.05,
+             qPrintable(QString("%1 BPM for taps at %2 BPM").arg(sm->bpm(0)).arg(tapped)));
     QCOMPARE(sm->rate(0), 0.5);                  // the fader stays put
     /* The last tap is on the beat: the phase is no more than the time since
        it has moved it on (a fixed 0.05 flaked on a stalled CI runner). */
