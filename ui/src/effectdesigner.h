@@ -26,6 +26,7 @@
 #include <QWidget>
 
 #include "showtreemodel.h"
+#include "qlcui_export.h"
 
 class QPushButton;
 class QMenu;
@@ -53,7 +54,7 @@ class Doc;
  * Hosts: EffectLayerDialog (a Show Tree layer), the Workbench's editor
  * pane (Build ▸ Effects), and EffectsPage.
  */
-class EffectDesigner final : public QWidget
+class QLC_UI_EXPORT EffectDesigner final : public QWidget
 {
     Q_OBJECT
 

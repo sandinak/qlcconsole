@@ -23,6 +23,7 @@
 
 #include <QDialog>
 #include <functional>
+#include "qlcui_export.h"
 
 class MonitorProperties;
 class FeetInchesSpinBox;
@@ -33,7 +34,7 @@ class QLabel;
  * @{
  */
 
-class StagePieceDialog final : public QDialog
+class QLC_UI_EXPORT StagePieceDialog final : public QDialog
 {
     Q_OBJECT
 

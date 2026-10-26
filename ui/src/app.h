@@ -37,6 +37,7 @@
 #include "dmxdumpfactoryproperties.h"
 #include "qlcfixturedefcache.h"
 #include "doc.h"
+#include "qlcui_export.h"
 
 class QProgressDialog;
 class VideoProvider;
@@ -85,7 +86,7 @@ signals:
     void closing();
 };
 
-class App final : public QMainWindow
+class QLC_UI_EXPORT App final : public QMainWindow
 {
     Q_OBJECT
     Q_DISABLE_COPY(App)

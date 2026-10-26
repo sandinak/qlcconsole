@@ -33,6 +33,7 @@
 #include "fixturepower.h"
 #include "qlcfixturedef.h"
 #include "rigowner.h"
+#include "qlcengine_export.h"
 
 class QString;
 
@@ -79,7 +80,7 @@ typedef struct
     QLCCapability *m_currCap; /** The current capability in use */
 } ChannelAlias;
 
-class Fixture final : public QObject
+class QLC_ENGINE_EXPORT Fixture final : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY(Fixture)

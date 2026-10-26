@@ -24,6 +24,7 @@
 #include <functional>
 
 #include "showcontrol.h"
+#include "qlcui_export.h"
 
 class QTreeWidgetItem;
 class CueRunnerHandle;
@@ -63,7 +64,7 @@ class Doc;
  * -- between the info and the buttons, and between GO and Sub GO -- while
  * unlocked (the VC widget unlocks them in Design mode only).
  */
-class CueRunner final : public QWidget
+class QLC_UI_EXPORT CueRunner final : public QWidget
 {
     Q_OBJECT
     Q_DISABLE_COPY(CueRunner)

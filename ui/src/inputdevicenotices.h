@@ -22,6 +22,7 @@
 #include <QString>
 #include <QList>
 #include <QMap>
+#include "qlcui_export.h"
 
 class QTimer;
 class Doc;
@@ -41,7 +42,7 @@ class Doc;
  * held for settleTime(), and a device that came back by then is not
  * mentioned at all.
  */
-class InputDeviceNotices : public QObject
+class QLC_UI_EXPORT InputDeviceNotices : public QObject
 {
     Q_OBJECT
 

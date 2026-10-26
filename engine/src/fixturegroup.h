@@ -30,6 +30,7 @@
 #include "qlcpoint.h"
 #include "fixture.h"
 #include "rigowner.h"
+#include "qlcengine_export.h"
 
 class QXmlStreamReader;
 class Doc;
@@ -41,7 +42,7 @@ class Doc;
 #define KXMLQLCFixtureGroup     QStringLiteral("FixtureGroup")
 #define KXMLQLCFixtureGroupID   QStringLiteral("ID")
 
-class FixtureGroup final : public QObject
+class QLC_ENGINE_EXPORT FixtureGroup final : public QObject
 {
     Q_OBJECT
 

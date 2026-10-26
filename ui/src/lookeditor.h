@@ -21,6 +21,7 @@
 #include <QWidget>
 #include <QColor>
 #include <functional>
+#include "qlcui_export.h"
 
 class QStackedWidget;
 class QColorDialog;
@@ -46,7 +47,7 @@ class Doc;
  * @{
  */
 
-class LookEditor final : public QWidget
+class QLC_UI_EXPORT LookEditor final : public QWidget
 {
     Q_OBJECT
 

@@ -330,6 +330,7 @@ void EffectDesigner_Test::aNamedEffectIsACopyUntilUpdated()
 
     QSignalSpy chosen(ed, &EffectDesigner::effectChosen);
     QVERIFY(ed->updateOriginal());
+    QCOMPARE(chosen.count(), 1);
     QCOMPARE(chosen.first().at(2).value<EffectDesigner::Outcome>(), EffectDesigner::UpdatedPalette);
     QCOMPARE(phaser->effectParamValues().value("speed"), 3.0);
     QCOMPARE(phaser->name(), QString("Phaser"));

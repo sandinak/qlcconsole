@@ -23,6 +23,7 @@
 #include <QObject>
 
 #include "universe.h"
+#include "qlcengine_export.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -52,7 +53,7 @@ class Doc;
  * sliders, the Simple Desk -- and every reader of the output (DMX, the 2D
  * monitor, the Rig Overview) see the same thing.
  */
-class ShutterAutoOpen final : public QObject
+class QLC_ENGINE_EXPORT ShutterAutoOpen final : public QObject
 {
     Q_OBJECT
 

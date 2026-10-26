@@ -165,13 +165,12 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
             if (!plugin->setInputDiagnostics(true))
                 continue;
             m_plugins.append(plugin);
-            connect(plugin, &QLCIOPlugin::inputDiagnostic, this,
-                    [this, plugin](quint32 input, const QString &device, const QString &connection,
-                                   const QString &element, int raw, int channel, int value) {
-                addInput(plugin, input, device, connection, element, raw, channel, value);
-            });
-            connect(plugin, &QLCIOPlugin::configurationChanged, this,
-                    &ControllerTestDialog::refreshStatus);
+            /* By name, not &QLCIOPlugin::signal: every plugin DLL builds its
+               own copy of QLCIOPlugin, so on Windows that address is never
+               the one the plugin's moc compares with, and nothing connects. */
+            connect(plugin, SIGNAL(inputDiagnostic(quint32,QString,QString,QString,int,int,int)),
+                    this, SLOT(slotInputDiagnostic(quint32,QString,QString,QString,int,int,int)));
+            connect(plugin, SIGNAL(configurationChanged()), this, SLOT(refreshStatus()));
         }
     }
     connect(m_doc->programmer()->controllerKeepAlive(), &ControllerKeepAlive::heldChanged,
@@ -184,6 +183,20 @@ ControllerTestDialog::~ControllerTestDialog()
     for (const QPointer<QLCIOPlugin> &plugin : std::as_const(m_plugins))
         if (!plugin.isNull())
             plugin->setInputDiagnostics(false);
+}
+
+void ControllerTestDialog::slotInputDiagnostic(quint32 input, const QString &device,
+                                               const QString &connection, const QString &element,
+                                               int raw, int channel, int value)
+{
+    for (const QPointer<QLCIOPlugin> &plugin : std::as_const(m_plugins))
+    {
+        if (!plugin.isNull() && static_cast<QObject *>(plugin.data()) == sender())
+        {
+            addInput(plugin.data(), input, device, connection, element, raw, channel, value);
+            return;
+        }
+    }
 }
 
 void ControllerTestDialog::refreshStatus()

@@ -856,10 +856,13 @@ void VenueRig_Test::theVenuePatchIsAppliedAndRestored()
     QVERIFY(v->setActiveVenue(a));
     QCOMPARE(iom->outputPatch(0)->output(), 2u);           // the room's on
 
-    // The sidecar has it; the show file never does.
-    QFile side(v->filePath());
-    QVERIFY(side.open(QIODevice::ReadOnly));
-    QVERIFY(side.readAll().contains("Line=\"2\""));
+    // The sidecar has it; the show file never does. (Closed again before
+    // forgetPatch() rewrites it: Windows will not replace an open file.)
+    {
+        QFile side(v->filePath());
+        QVERIFY(side.open(QIODevice::ReadOnly));
+        QVERIFY(side.readAll().contains("Line=\"2\""));
+    }
     QVERIFY(!engineXml(m_doc).contains("Line=\"2\""));
 
     // Forgotten: the show's patch is on again, the venue has none.
