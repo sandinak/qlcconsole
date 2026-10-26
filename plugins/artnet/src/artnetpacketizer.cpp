@@ -222,7 +222,7 @@ bool ArtNetPacketizer::checkPacketAndCode(QByteArray const& data, quint16 &code)
     if (data.at(7) != 0x00)
         return false;
 
-    code = (quint16(data.at(9)) << 8) + quint16(data.at(8));
+    code = quint16((quint8(data.at(9)) << 8) | quint8(data.at(8)));
 
     return true;
 }
@@ -404,22 +404,33 @@ bool ArtNetPacketizer::fillArtIpProgReply(const QByteArray &data, ArtNetIpProgRe
     return true;
 }
 
+/** ArtDmx: header (0-11), Sequence, Physical, SubUni, Net, LengthHi, Length. */
+static const int kArtDmxHeaderSize = 18;
+
 bool ArtNetPacketizer::fillDMXdata(QByteArray const& data, QByteArray &dmx, quint32 &universe)
 {
-    if (data.isNull())
-        return false;
     dmx.clear();
+    /* Everything up to the Length field (16-17) must be there: a datagram
+       from the network can be any size (fuzz, matrix 2: 12-17 bytes read
+       past the end). */
+    if (data.size() < kArtDmxHeaderSize)
+        return false;
     //char sequence = data.at(12);
     //qDebug() << "Sequence: " << sequence;
     // char physical = data.at(13) // skipped
-    universe = (data.at(15) << 8) + data.at(14);
+    universe = (quint32(quint8(data.at(15))) << 8) | quint8(data.at(14));
 
-    unsigned int msb = (data.at(16)&0xff);
-    unsigned int lsb = (data.at(17)&0xff);
-    int length = (msb << 8) | lsb;
+    unsigned int msb = quint8(data.at(16));
+    unsigned int lsb = quint8(data.at(17));
+    int length = int((msb << 8) | lsb);
+
+    /* A universe is 512 channels whatever the packet claims; the receivers
+       index a 512-byte buffer with what this returns. mid() stops at the
+       end of a packet that holds less than it claims. */
+    length = qMin(length, 512);
 
     //qDebug() << "length: " << length;
-    dmx.append(data.mid(18, length));
+    dmx.append(data.mid(kArtDmxHeaderSize, length));
     return true;
 }
 
@@ -433,7 +444,7 @@ bool ArtNetPacketizer::processTODdata(const QByteArray &data, quint32 &universe,
     // 13 Port
     // 14 - 20 Spare
     // 21, 23 address
-    universe = (data.at(21) << 8) + data.at(23);
+    universe = (quint32(quint8(data.at(21))) << 8) | quint8(data.at(23));
     // 22 Command response
     // 24 - 25 UID total
     //quint16 uidTotal = (quint8(data.at(24)) << 8) + quint8(data.at(25));
@@ -442,6 +453,11 @@ bool ArtNetPacketizer::processTODdata(const QByteArray &data, quint32 &universe,
     quint8 uidCount = quint8(data.at(27));
 
     qDebug() << "UID count:" << uidCount;
+
+    /* The count comes from the network: a packet promising more UIDs than
+       it carries is malformed and dropped whole (fuzz, matrix 2). */
+    if (data.length() < 28 + int(uidCount) * 6)
+        return false;
 
     for (int i = 0; i < uidCount; i++)
     {
@@ -465,7 +481,7 @@ bool ArtNetPacketizer::processRDMdata(const QByteArray &data, quint32 &universe,
     // 12 RDM version
     // 13 - 20 zero fillers
     // 21, 23 address
-    universe = (data.at(21) << 8) + data.at(23);
+    universe = (quint32(quint8(data.at(21))) << 8) | quint8(data.at(23));
 
     RDMProtocol rdm;
     return rdm.parsePacket(data.mid(24), values);

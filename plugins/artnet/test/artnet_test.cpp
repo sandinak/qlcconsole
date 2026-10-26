@@ -33,6 +33,7 @@
 #include "artnetcontroller.h"
 #include "artnetplugin.h"
 #include "artnetnodesetup.h"
+#include "rdmprotocol.h"
 #undef private
 
 #include <QNetworkDatagram>
@@ -1844,4 +1845,342 @@ void ArtNet_Test::rdmFlagReachesTheNodesList()
     reply[23] = char(0x00);
     QVERIFY(ctrl->handlePacket(reply, cr041r));
     QVERIFY(ctrl->getNodesList().value(cr041r).rdmCapable);
+}
+
+/*****************************************************************************
+ * Malformed packets (fuzz, matrix 2)
+ *****************************************************************************/
+
+static QByteArray artHeader(quint16 opCode, int size)
+{
+    QByteArray b(size, char(0));
+    b.replace(0, 8, QByteArray("Art-Net\0", 8));
+    b[8] = char(opCode & 0xff);
+    b[9] = char(opCode >> 8);
+    b[11] = char(14);
+    return b;
+}
+
+/* An ArtRdm datagram carrying an RDM GET_COMMAND_RESPONSE for pid with
+   payload, checksummed as parsePacket checks it (no start code on the
+   wire, so 0xCC is counted in). */
+static QByteArray artRdmReply(quint16 pid, const QByteArray &payload)
+{
+    QByteArray rdm;
+    rdm.append(char(RDM_SC_SUB_MESSAGE));
+    rdm.append(char(24 + payload.size()));                      // message length
+    rdm.append(QByteArray::fromHex("7a7000000001"));            // destination UID
+    rdm.append(QByteArray::fromHex("4d4812345678"));            // source UID
+    rdm.append(char(0x07));                                     // transaction
+    rdm.append(char(RESPONSE_TYPE_ACK));
+    rdm.append(char(0x00));                                     // message count
+    rdm.append(char(0x00)).append(char(0x00));                  // sub-device
+    rdm.append(char(GET_COMMAND_RESPONSE));
+    rdm.append(char(pid >> 8)).append(char(pid & 0xff));
+    rdm.append(char(payload.size()));                           // PDL
+    rdm.append(payload);
+    quint16 cs = RDM_START_CODE;
+    for (char c : rdm)
+        cs += uchar(c);
+    rdm.append(char(cs >> 8)).append(char(cs & 0xff));
+
+    QByteArray b = artHeader(ARTNET_RDM, 24);
+    b[12] = char(0x01);                                         // RDM version
+    b[21] = char(0x00);                                         // Net
+    b[23] = char(0x03);                                         // Address
+    return b + rdm;
+}
+
+/* Dispatched the way ArtNetController::handlePacket dispatches a datagram;
+   returns what the parser returned. */
+static bool parseAsTheControllerWould(const QByteArray &b)
+{
+    ArtNetPacketizer p;
+    quint16 code = 0;
+    if (!p.checkPacketAndCode(b, code))
+        return false;
+    quint32 universe = 0;
+    QVariantMap values;
+    switch (code)
+    {
+        case ARTNET_POLLREPLY: { ArtNetNodeInfo info; return p.fillArtPollReplyInfo(b, info); }
+        case ARTNET_DMX: { QByteArray dmx; return p.fillDMXdata(b, dmx, universe); }
+        case ARTNET_TODDATA: return p.processTODdata(b, universe, values);
+        case ARTNET_RDM: return p.processRDMdata(b, universe, values);
+        case ARTNET_IPREPLY: { ArtNetIpProgReply reply; return p.fillArtIpProgReply(b, reply); }
+        default: return false;
+    }
+}
+
+void ArtNet_Test::artDmxShorterThanItsHeaderIsDropped()
+{
+    /* The fuzzer's known/artdmx-12-bytes.bin: a bare header. */
+    const QByteArray known = QByteArray::fromHex("4172742d4e6574000050000e");
+    ArtNetPacketizer p;
+    QByteArray dmx("stale");
+    quint32 universe = 77;
+    QVERIFY(!p.fillDMXdata(known, dmx, universe));
+    QVERIFY(dmx.isEmpty());
+
+    QByteArray full;
+    p.setupArtNetDmx(full, 1, QByteArray(4, char(0x11)));
+    for (int n = 0; n < 18; n++)
+        QVERIFY2(!p.fillDMXdata(full.left(n), dmx, universe), qPrintable(QString::number(n)));
+    QVERIFY(p.fillDMXdata(full.left(18), dmx, universe));      // header only: no channels
+    QVERIFY(dmx.isEmpty());
+    QVERIFY(p.fillDMXdata(full, dmx, universe));
+    QCOMPARE(dmx, QByteArray(4, char(0x11)));
+    QCOMPARE(universe, quint32(1));
+}
+
+void ArtNet_Test::artDmxIsClampedToAUniverse()
+{
+    ArtNetPacketizer p;
+    QByteArray dmx;
+    quint32 universe = 0;
+
+    /* A Length of 0xffff over 600 bytes: a universe is 512 channels, and
+       the receivers index a 512-byte buffer with the result. */
+    QByteArray big = artHeader(ARTNET_DMX, 18) + QByteArray(600, char(0x42));
+    big[16] = char(0xff);
+    big[17] = char(0xff);
+    QVERIFY(p.fillDMXdata(big, dmx, universe));
+    QCOMPARE(dmx.size(), 512);
+
+    /* Less than it claims: what is there, no more. */
+    QByteArray shortOne = artHeader(ARTNET_DMX, 18) + QByteArray(10, char(0x01));
+    shortOne[16] = char(0x02);
+    shortOne[17] = char(0x00);
+    QVERIFY(p.fillDMXdata(shortOne, dmx, universe));
+    QCOMPARE(dmx.size(), 10);
+
+    /* SubUni and Net with the top bit set were sign-extended (and a left
+       shift of a negative value, UBSan). Port-Address 0x7f80 is valid. */
+    QByteArray high;
+    p.setupArtNetDmx(high, 0, QByteArray(2, char(0)));
+    high[14] = char(0x80);
+    high[15] = char(0x7f);
+    QVERIFY(p.fillDMXdata(high, dmx, universe));
+    QCOMPARE(universe, quint32(0x7f80));
+}
+
+void ArtNet_Test::artTodDataPromisingMoreUidsIsDropped()
+{
+    /* The fuzzer's known/arttoddata-uidcount-255.bin: 28 bytes, UidCount 255. */
+    const QByteArray known = QByteArray::fromHex(
+        "4172742d4e6574000081000e010000000000000000000000000000ff");
+    QCOMPARE(known.size(), 28);
+    ArtNetPacketizer p;
+    quint32 universe = 0;
+    QVariantMap values;
+    QVERIFY(!p.processTODdata(known, universe, values));
+    QVERIFY(values.isEmpty());
+
+    /* One UID short of what it promises. */
+    QByteArray tod = artHeader(ARTNET_TODDATA, 28) + QByteArray::fromHex("4d4812345678");
+    tod[27] = char(2);
+    QVERIFY(!p.processTODdata(tod, universe, values));
+    QVERIFY(values.isEmpty());
+}
+
+void ArtNet_Test::artTodDataStillParses()
+{
+    QByteArray tod = artHeader(ARTNET_TODDATA, 28)
+                     + QByteArray::fromHex("4d4812345678" "7a70deadbeef");
+    tod[21] = char(0x01);           // Net
+    tod[23] = char(0x93);           // Address, top bit set
+    tod[27] = char(2);
+    ArtNetPacketizer p;
+    quint32 universe = 0;
+    QVariantMap values;
+    QVERIFY(p.processTODdata(tod, universe, values));
+    QCOMPARE(universe, quint32(0x0193));
+    QCOMPARE(values.value("DISCOVERY_COUNT").toInt(), 2);
+    QCOMPARE(values.value("UID-0").toString(), QString("4D4812345678"));
+    QCOMPARE(values.value("UID-1").toString(), QString("7A70DEADBEEF"));
+
+    /* An empty table is a table. */
+    QByteArray empty = artHeader(ARTNET_TODDATA, 28);
+    values.clear();
+    QVERIFY(p.processTODdata(empty, universe, values));
+    QCOMPARE(values.value("DISCOVERY_COUNT").toInt(), 0);
+}
+
+void ArtNet_Test::rdmValidRepliesStillParse()
+{
+    ArtNetPacketizer p;
+    quint32 universe = 0;
+    QVariantMap values;
+
+    /* DEVICE_INFO, 19 bytes (E1.20 table A-3). */
+    const QByteArray info = QByteArray::fromHex(
+        "0100" "1234" "0101" "00010203" "0010" "02" "05" "0021" "0000" "03");
+    QCOMPARE(info.size(), 19);
+    QVERIFY(p.processRDMdata(artRdmReply(PID_DEVICE_INFO, info), universe, values));
+    QCOMPARE(universe, quint32(0x0003));
+    QCOMPARE(values.value("UID_INFO").toString(), QString("4D4812345678"));
+    QCOMPARE(values.value("Response").toString(), QString("ACK"));
+    QCOMPARE(values.value("PID").toInt(), int(PID_DEVICE_INFO));
+    QCOMPARE(values.value("Device model ID").toInt(), 0x1234);
+    QCOMPARE(values.value("TYPE").toString(), QString("Fixture Fixed"));
+    QCOMPARE(values.value("Software version").toUInt(), 0x00010203u);
+    QCOMPARE(values.value("DMX_CHANNELS").toInt(), 16);
+    QCOMPARE(values.value("PERSONALITY_INDEX").toInt(), 2);
+    QCOMPARE(values.value("PERSONALITY_COUNT").toInt(), 5);
+    QCOMPARE(values.value("DMX_START_ADDRESS").toInt(), 0x21);
+    QCOMPARE(values.value("Number of sensors").toInt(), 3);  // was the checksum's low byte
+    QCOMPARE(values.value("RAW_DATA").toByteArray(), info.toHex(','));
+
+    /* SUPPORTED_PARAMETERS: a list of PIDs. */
+    values.clear();
+    QVERIFY(p.processRDMdata(artRdmReply(PID_SUPPORTED_PARAMETERS,
+                                         QByteArray::fromHex("00e000e10120")), universe, values));
+    QCOMPARE(values.value("PID_LIST").value<QVector<quint16>>(),
+             QVector<quint16>({ 0x00e0, 0x00e1, 0x0120 }));
+
+    /* DMX_PERSONALITY_DESCRIPTION: index, footprint, text. */
+    values.clear();
+    QVERIFY(p.processRDMdata(artRdmReply(PID_DMX_PERSONALITY_DESCRIPTION,
+                                         QByteArray::fromHex("02000c") + "8ch RGBW"), universe, values));
+    QCOMPARE(values.value("PERS_INDEX").toInt(), 2);
+    QCOMPARE(values.value("PERS_CHANNELS").toInt(), 12);
+    QCOMPARE(values.value("PERS_DESC").toString(), QString("8ch RGBW"));
+
+    /* A bad checksum is still refused. */
+    QByteArray bad = artRdmReply(PID_DMX_START_ADDRESS, QByteArray::fromHex("0001"));
+    bad[bad.size() - 1] = char(bad.at(bad.size() - 1) ^ 0x01);
+    values.clear();
+    QVERIFY(!p.processRDMdata(bad, universe, values));
+
+    /* Through the serial (start-code) path, as DMX USB parses it. */
+    QByteArray serial = artRdmReply(PID_DMX_START_ADDRESS, QByteArray::fromHex("0001")).mid(24);
+    serial.prepend(char(RDM_START_CODE));
+    RDMProtocol rdm;
+    values.clear();
+    QVERIFY(rdm.parsePacket(serial, values));
+    QCOMPARE(values.value("DMX_START_ADDRESS").toInt(), 1);
+}
+
+void ArtNet_Test::rdmEveryTruncationIsDropped()
+{
+    /* Every prefix of a valid reply, for each PID the parser decodes, and
+       the same replies with a PDL larger than what follows: refused, never
+       read past (a Debug build asserts in QByteArray::at). */
+    const QList<QPair<quint16, QByteArray>> replies = {
+        { PID_DEVICE_INFO, QByteArray(19, char(0x01)) },
+        { PID_SUPPORTED_PARAMETERS, QByteArray::fromHex("00e000e1") },
+        { PID_PARAMETER_DESCRIPTION, QByteArray(24, char(0x41)) },
+        { PID_DMX_PERSONALITY, QByteArray::fromHex("0103") },
+        { PID_DMX_PERSONALITY_DESCRIPTION, QByteArray::fromHex("010004") + "abc" },
+        { PID_DMX_START_ADDRESS, QByteArray::fromHex("0001") },
+        { PID_SLOT_INFO, QByteArray::fromHex("00000000010001000002") },
+        { PID_SLOT_DESCRIPTION, QByteArray::fromHex("0000") + "Dim" },
+        { PID_MANUFACTURER_LABEL, QByteArray("Maker") },
+        { PID_DEVICE_MODEL_DESCRIPTION, QByteArray("Model") },
+    };
+    ArtNetPacketizer p;
+    quint32 universe = 0;
+    for (const auto &r : replies)
+    {
+        const QByteArray full = artRdmReply(r.first, r.second);
+        QVariantMap values;
+        QVERIFY2(p.processRDMdata(full, universe, values), qPrintable(QString::number(r.first, 16)));
+        for (int n = 0; n < full.size(); n++)
+        {
+            values.clear();
+            QVERIFY2(!p.processRDMdata(full.left(n), universe, values),
+                     qPrintable(QString("pid %1, %2 bytes").arg(r.first, 0, 16).arg(n)));
+        }
+        for (int pdl = r.second.size() + 1; pdl < 256; pdl++)
+        {
+            QByteArray lying = full;
+            lying[24 + 22] = char(pdl);                     // PDL byte
+            values.clear();
+            QVERIFY(!p.processRDMdata(lying, universe, values));
+        }
+    }
+
+    /* A PDL too short for what the PID decodes is skipped, not read past:
+       the packet is still well formed and checksummed. */
+    for (quint16 pid : { quint16(PID_DEVICE_INFO), quint16(PID_DMX_PERSONALITY),
+                         quint16(PID_DMX_PERSONALITY_DESCRIPTION), quint16(PID_DMX_START_ADDRESS),
+                         quint16(PID_SLOT_DESCRIPTION), quint16(PID_SLOT_INFO),
+                         quint16(PID_SUPPORTED_PARAMETERS) })
+    {
+        QVariantMap values;
+        QVERIFY(p.processRDMdata(artRdmReply(pid, QByteArray(1, char(0x05))), universe, values));
+        QVERIFY(!values.contains("DMX_START_ADDRESS"));
+        QVERIFY(!values.contains("PERS_CURRENT"));
+        QVERIFY(!values.contains("PERS_DESC"));
+        QVERIFY(!values.contains("SLOT_ID"));
+        QVERIFY(!values.contains("Number of sensors"));
+        if (values.contains("PID_LIST"))
+            QVERIFY(values.value("PID_LIST").value<QVector<quint16>>().isEmpty());
+        if (values.contains("SLOT_LIST"))
+            QVERIFY(values.value("SLOT_LIST").value<QVector<quint16>>().isEmpty());
+    }
+
+    /* A UID from too few bytes is no UID. */
+    quint16 esta = 1;
+    quint32 device = 1;
+    QVERIFY(RDMProtocol::byteArrayToUID(QByteArray::fromHex("4d4812"), esta, device).isEmpty());
+    QCOMPARE(esta, quint16(0));
+    QCOMPARE(device, quint32(0));
+}
+
+void ArtNet_Test::rdmFuzzCrashesAreDroppedQuietly()
+{
+    /* The smallest crashing input per signature from the fuzzer's ArtRdm
+       run (dink ~/matrix2/fuzz/out/artnet-rdm-early), named by the line
+       it crashed at before the fix. */
+    static const char *const crashes[] = {
+        /* artnetpacketizer.cpp:468 */ "4172742d4e6574000083010100ffff514c432b000081000e012d",
+        /* rdmprotocol.cpp:284 */ "4172742d4e6574000083100000010101010101010101410101",
+        /* rdmprotocol.cpp:301 */ "4172742d4e657400008310000001010101010101010101010101010101010101010101007ce7",
+        /* rdmprotocol.cpp:304 */ "4172742d4e65740000830000212121212100002d4e657a000101010101011c0101010101010141",
+        /* rdmprotocol.cpp:311 */ "4172742d4e657400008310000001010101010101010101010101010101014172742d4e65d6000101",
+        /* rdmprotocol.cpp:318 */ "4172742d4e6574000083000e0100000000000000000000010174000081000e0901415f000000000035",
+        /* rdmprotocol.cpp:326 */ "4172742d4e657400008310000001010101010101010101010101010101010101010101014172010101417274",
+        /* rdmprotocol.cpp:374 */ "4172742d4e657400008310000001010101010101010101010101010101010101010101012e01014172742d4e006001",
+        /* rdmprotocol.cpp:375 */ "4172742d4e657400008310002401010101010101010101010101010101010101010101012e01014172742d4e0060010101010172742d4e6574000101",
+        /* rdmprotocol.cpp:378 */ "4172742d4e657400008310000001000083010101010101010101006021210001000083010101010101010101006021210000000000000021210101007ce7",
+        /* rdmprotocol.cpp:401 */ "4172742d4e657400008310000001000083010101010101010101006021210001000082fe0101010101010101005121010101007ce7",
+        /* rdmprotocol.cpp:498 */ "4172742d4e6574000083100000010101010101014e6574000101",
+        /* rdmprotocol.cpp:501 */ "4172742d4e657400008310004172742d4e6574000101000001000000",
+        /* rdmprotocol.cpp:502 */ "4172742d4e657400008310000001000083100800050101010141720101",
+        /* rdmprotocol.cpp:503 */ "4172742d4e65740000836574000018000060000027002100010121212121",
+        /* rdmprotocol.cpp:504 */ "4172742d4e6574000083000021010101010101010101010101012101010050",
+        /* rdmprotocol.cpp:568 */ "4172742d4e6574000083000e01000000000000000000000101150123456789ab7ff8010907750901010000003104aa",
+    };
+    for (const char *hex : crashes)
+    {
+        const QByteArray b = QByteArray::fromHex(hex);
+        QVERIFY2(!parseAsTheControllerWould(b), hex);
+        /* And every prefix of it. */
+        for (int n = 0; n < b.size(); n++)
+            QVERIFY(!parseAsTheControllerWould(b.left(n)));
+    }
+}
+
+void ArtNet_Test::malformedPacketsThroughTheController()
+{
+    QObject owner;
+    const QHostAddress node("172.18.2.10");
+    ArtNetController *ctrl = testController(&owner, node, { 0 });
+
+    const QList<QByteArray> packets = {
+        QByteArray::fromHex("4172742d4e6574000050000e"),
+        QByteArray::fromHex("4172742d4e6574000081000e010000000000000000000000000000ff"),
+        QByteArray::fromHex("4172742d4e6574000083100000010101010101010101410101"),
+        artHeader(ARTNET_POLLREPLY, 100),
+        artHeader(ARTNET_IPREPLY, 20),
+    };
+    /* handlePacket answers true for a packet it does not recognise; what
+       matters is that each one is dealt with, not read past. */
+    const quint64 before = ctrl->getPacketReceivedNumber();
+    for (const QByteArray &b : packets)
+        for (int n = 0; n <= b.size(); n++)
+            ctrl->handlePacket(b.left(n), node);
+    QCOMPARE(ctrl->getPacketReceivedNumber(), before);
+    QVERIFY(ctrl->getNodesList().isEmpty());
 }

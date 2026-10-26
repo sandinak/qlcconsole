@@ -808,7 +808,9 @@ bool Chaser::loadXML(QXmlStreamReader &root)
 
             if (step.loadXML(root, stepNumber, doc()) == true)
             {
-                if (stepNumber >= m_steps.size())
+                /* A missing, negative or too-large Number appends: the
+                   file is untrusted and QList::insert needs 0..size(). */
+                if (stepNumber < 0 || stepNumber >= m_steps.size())
                     m_steps.append(step);
                 else
                     m_steps.insert(stepNumber, step);

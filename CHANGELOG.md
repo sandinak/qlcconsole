@@ -816,6 +816,32 @@ on Art-Net nodes whose poll replies carry a junk status byte.
 - **The studio's ray cache compares its keys by value** (RC4, test matrix
   SA4): -0.0 and +0.0 are one key, and so is every NaN, where a byte
   compare told them apart.
+- **A malformed Art-Net or sACN packet is dropped, not read past** (RC4,
+  test matrix 2, fuzzing). Every Art-Net receive path trusted the lengths
+  inside the packet: an ArtDmx of 12–17 bytes, an ArtTodData whose UID
+  count was more than it carried, and an ArtRdm whose message or
+  parameter-data length ran past its end all read beyond the datagram
+  (memory any host on the show network could reach). Each is now checked
+  before it is read and a packet that doesn't add up is dropped. An
+  ArtDmx or sACN packet is held to 512 channels (a longer one overran the
+  512-byte input buffer), a sACN packet one byte short of its start code
+  is dropped, and an Art-Net universe or RDM address with its top bit set
+  is no longer sign-extended. An RDM DEVICE_INFO reply's sensor count is
+  read from its own byte; it was the checksum.
+- **A chaser or sequence step with a bad number loads** (RC4, test matrix
+  2, fuzzing). A `<Step>` without `Number`, or with one negative or past
+  the end, was inserted at that index: an abort in a Debug build and
+  memory corruption in Release. It is now appended.
+- **Undefined behaviour found by UBSan** (RC4, test matrix 2): a channel
+  modifier above 127 went from float straight to char, and a new
+  Virtual Console slider compared its mode against `SliderMode(-1)`. Both
+  are well defined now, with the same results.
+- **The fader race test can't starve** (RC4, test matrix 2):
+  `GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites`
+  hung to the 300 s watchdog under the Linux coverage build. Its writer
+  thread re-took the fader's lock back to back, and a mutex isn't fair;
+  the app's universe thread writes once a tick. The writer now lets the
+  setter in between writes.
 - **A damaged show file says so, and isn't saved over** (RC4, test matrix
   F2). A show cut short or not well formed opened silently as a smaller
   show, and a Save then replaced the original with less. It now opens as

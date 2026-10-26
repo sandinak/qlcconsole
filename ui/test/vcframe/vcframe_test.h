@@ -39,6 +39,10 @@ private slots:
     void customMenu();
     void handleWidgetSelection();
     void mouseMoveEvent();
+    /** A new slider starts in Playback from a valid mode (it was built from
+     *  SliderMode(-1), which UBSan flags: matrix 2) and follows the Grand
+     *  Master only while in that mode. */
+    void sliderStartsInAValidMode();
 
 private:
     Doc* m_doc;

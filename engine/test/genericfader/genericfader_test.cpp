@@ -356,19 +356,28 @@ void GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites()
     Universe *uni = ua.at(0);
     QSharedPointer<GenericFader> fader(new GenericFader());
 
+    /* The writer waits for the setter to get the lock at least once between
+       two writes. Spinning write() back to back with only a yield, it held
+       the lock nearly all the time, and a mutex is not fair: under the slow
+       Linux coverage build the setter never got it again and the test ran
+       into the 300 s watchdog (matrix 2). The app's universe thread writes
+       once a tick; this still interleaves a write with every few set-ups. */
     std::atomic<bool> done(false);
+    std::atomic<int> setUps(0);
     QThread *universe = QThread::create([&]() {
         while (!done.load())
         {
             fader->write(uni);   // each channel reaches its target, and goes
-            QThread::yieldCurrentThread();
+            const int seen = setUps.load();
+            while (!done.load() && setUps.load() == seen)
+                QThread::yieldCurrentThread();
         }
     });
     universe->start();
 
     int moved = 0;
     // absolute addresses clear of the fixture init() patches at 10
-    for (int i = 0; i < 500000; ++i)
+    for (int i = 0; i < 500000; ++i, ++setUps)
     {
         const quint32 ch = 100 + quint32(i % 256);
         GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, uni, Fixture::invalidId(), ch);

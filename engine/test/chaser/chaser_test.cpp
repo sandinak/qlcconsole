@@ -586,6 +586,38 @@ void Chaser_Test::loadWrongType()
     QVERIFY(c.loadXML(xmlReader) == false);
 }
 
+void Chaser_Test::loadStepNumberOutOfRange()
+{
+    /* The fuzzer's minimised repro: a truncated file whose only step has
+       no Number (stepNumber stays -1). */
+    {
+        QXmlStreamReader xmlReader(QByteArray("<Function Type=\"Chaser\"><Step>"));
+        xmlReader.readNextStartElement();
+        Chaser c(m_doc);
+        c.loadXML(xmlReader);
+        QCOMPARE(c.steps().size(), 1);
+    }
+
+    /* Numbers out of every range, around one valid insert. */
+    QXmlStreamReader xmlReader(QByteArray(
+        "<Function Type=\"Chaser\">"
+        "<Step Number=\"-7\">10</Step>"
+        "<Step Number=\"99\">11</Step>"
+        "<Step>12</Step>"
+        "<Step Number=\"-2147483648\">13</Step>"
+        "<Step Number=\"0\">14</Step>"
+        "<Step Number=\"junk\">15</Step>"
+        "</Function>"));
+    xmlReader.readNextStartElement();
+    Chaser c(m_doc);
+    QVERIFY(c.loadXML(xmlReader));
+    QList<quint32> fids;
+    for (const ChaserStep &step : c.steps())
+        fids << step.fid;
+    /* "junk" parses as 0, so it is inserted at the front like Number 0. */
+    QCOMPARE(fids, QList<quint32>({ 15, 14, 10, 11, 12, 13 }));
+}
+
 void Chaser_Test::loadWrongRoot()
 {
     QBuffer buffer;

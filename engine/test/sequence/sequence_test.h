@@ -40,6 +40,9 @@ private slots:
     void loadWrongType();
     void loadWithScene();
     void loadWithoutScene();
+    /** A step Number missing, negative or past the end appends (the
+     *  Chaser fuzz finding, matrix 2, in Sequence's copy of the loop). */
+    void loadStepNumberOutOfRange();
     void save();
 
 private:

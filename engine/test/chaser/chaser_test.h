@@ -51,6 +51,9 @@ private slots:
     void loadSuccess();
     void loadWrongType();
     void loadWrongRoot();
+    /** A step Number missing, negative or past the end (fuzz, matrix 2:
+     *  QList::insert at an invalid index) appends instead of corrupting. */
+    void loadStepNumberOutOfRange();
     void postLoad();
     void save();
 

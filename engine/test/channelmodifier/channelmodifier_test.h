@@ -30,6 +30,9 @@ private slots:
     void initial();
     void nameType();
     void modifierMap();
+    /** Values above 127 come out exactly, ascending and descending (they
+     *  went float -> char directly, undefined: UBSan, matrix 2). */
+    void upperHalfValues();
     void saveLoad();
 };
 

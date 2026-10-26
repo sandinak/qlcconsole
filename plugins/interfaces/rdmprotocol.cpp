@@ -258,6 +258,10 @@ bool RDMProtocol::parseDiscoveryReply(const QByteArray &buffer, QVariantMap &val
     return true;
 }
 
+/** Sub-start code, length, destination and source UIDs, transaction number,
+ *  response type, message count, sub-device, command class, PID and PDL. */
+static const int kRdmHeaderSize = 23;
+
 bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
 {
     int i = 0;
@@ -276,6 +280,14 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
         startCode = true;
         i++;
     }
+
+    /* Everything below comes from the wire: a packet must hold the whole
+       fixed header (sub-start code .. PDL, 23 bytes) before any of it is
+       read, and its PDL of parameter data plus the checksum before those
+       are (fuzz, matrix 2: every length here was trusted). Anything
+       shorter is dropped. */
+    if (buffer.length() < i + kRdmHeaderSize)
+        return false;
 
     if (buffer.at(i++) != char(RDM_SC_SUB_MESSAGE))
         return false;
@@ -325,6 +337,9 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
     // Parameter data length
     quint8 PDL = quint8(buffer.at(i++));
 
+    if (buffer.length() < i + int(PDL) + 2)
+        return false;
+
 #ifdef DEBUG_RDM
     qDebug().nospace().noquote() <<
         "[RDM] Data length: " << QString::number(length) <<
@@ -353,7 +368,7 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
             QDebug out = qDebug();
             out.nospace().noquote() << "Supported PIDs list: ";
 #endif
-            for (int n = 0; n < PDL; n += 2)
+            for (int n = 0; n + 2 <= PDL; n += 2)
             {
                 quint16 pid = byteArrayToShort(buffer, i + n);
                 pidList.append(pid);
@@ -366,6 +381,9 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
         break;
         case PID_DEVICE_INFO:
         {
+            if (PDL < 19)
+                break;
+
             values.insert("RDM version", byteArrayToShort(buffer, i));
             values.insert("Device model ID", byteArrayToShort(buffer, i + 2));
             values.insert("TYPE", categoryToString(byteArrayToShort(buffer, i + 4)));
@@ -375,7 +393,9 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
             values.insert("PERSONALITY_COUNT", quint8(buffer.at(i + 13)));
             values.insert("DMX_START_ADDRESS", byteArrayToShort(buffer, i + 14));
             values.insert("Sub-device count", byteArrayToShort(buffer, i + 16));
-            values.insert("Number of sensors", quint8(buffer.at(i + 20)));
+            /* Sensor Count is the 19th and last byte (E1.20 table A-3);
+               i + 20 was the checksum's low byte. */
+            values.insert("Number of sensors", quint8(buffer.at(i + 18)));
         }
         break;
         case PID_DEVICE_MODEL_DESCRIPTION:
@@ -408,12 +428,18 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
         break;
         case PID_DMX_PERSONALITY:
         {
+            if (PDL < 2)
+                break;
+
             values.insert("PERS_CURRENT", quint8(buffer.at(i)));
             values.insert("PERS_COUNT", quint8(buffer.at(i + 1)));
         }
         break;
         case PID_DMX_PERSONALITY_DESCRIPTION:
         {
+            if (PDL < 3)
+                break;
+
             values.insert("PERS_INDEX", quint8(buffer.at(i)));
             values.insert("PERS_CHANNELS", byteArrayToShort(buffer, i + 1));
             values.insert("PERS_DESC", QString(buffer.mid(i + 3, PDL - 3)));
@@ -421,6 +447,9 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
         break;
         case PID_DMX_START_ADDRESS:
         {
+            if (PDL < 2)
+                break;
+
             values.insert("DMX_START_ADDRESS", byteArrayToShort(buffer, i));
         }
         break;
@@ -428,7 +457,7 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
         {
             QVector<quint16> slotList;
 
-            for (int n = 0; n < PDL; n += 5)
+            for (int n = 0; n + 5 <= PDL; n += 5)
             {
                 quint16 slotId = byteArrayToShort(buffer, i + n);
                 slotList.append(slotId);
@@ -439,6 +468,9 @@ bool RDMProtocol::parsePacket(const QByteArray &buffer, QVariantMap &values)
         break;
         case PID_SLOT_DESCRIPTION:
         {
+            if (PDL < 2)
+                break;
+
             values.insert("SLOT_ID", byteArrayToShort(buffer, i));
             values.insert("SLOT_DESC", QString(buffer.mid(i + 2, PDL - 2)));
         }
@@ -494,13 +526,21 @@ QByteArray RDMProtocol::UIDToByteArray(quint16 manufacturer, quint32 deviceId)
 
 QString RDMProtocol::byteArrayToUID(QByteArray buffer, quint16 &ESTAId, quint32 &deviceId)
 {
+    /* A UID is 6 bytes; a short one (a truncated packet) is no UID. */
+    if (buffer.length() < 6)
+    {
+        ESTAId = 0;
+        deviceId = 0;
+        return QString();
+    }
+
     int i = 0;
     ESTAId = quint8(buffer.at(i)) << 8 | quint8(buffer.at(i + 1));
     i += 2;
 
-    deviceId  = quint8(buffer.at(i++)) << 24;
-    deviceId |= quint8(buffer.at(i++)) << 16;
-    deviceId |= quint8(buffer.at(i++)) << 8;
+    deviceId  = quint32(quint8(buffer.at(i++))) << 24;
+    deviceId |= quint32(quint8(buffer.at(i++))) << 16;
+    deviceId |= quint32(quint8(buffer.at(i++))) << 8;
     deviceId |= quint8(buffer.at(i++));
 
     return QString("%1%2")
@@ -540,7 +580,7 @@ QByteArray RDMProtocol::longToByteArray(quint32 data)
 
 quint16 RDMProtocol::byteArrayToShort(const QByteArray &buffer, int index)
 {
-    if (buffer.length() < index + 2)
+    if (index < 0 || buffer.length() < index + 2)
         return 0;
 
     quint16 value = quint8(buffer.at(index)) << 8 |
@@ -550,10 +590,10 @@ quint16 RDMProtocol::byteArrayToShort(const QByteArray &buffer, int index)
 
 quint32 RDMProtocol::byteArrayToLong(const QByteArray &buffer, int index)
 {
-    if (buffer.length() < index + 4)
+    if (index < 0 || buffer.length() < index + 4)
         return 0;
 
-    quint32 value = quint8(buffer.at(index)) << 24 |
+    quint32 value = quint32(quint8(buffer.at(index))) << 24 |
                     quint8(buffer.at(index + 1)) << 16 |
                     quint8(buffer.at(index + 2)) << 8  |
                     quint8(buffer.at(index + 3));
@@ -564,6 +604,7 @@ quint16 RDMProtocol::calculateChecksum(bool startCode, const QByteArray &ba, int
 {
     ushort cs = startCode ? 0 : RDM_START_CODE;
 
+    len = qMin(len, int(ba.length()));
     for (int i = 0; i < len; i++)
         cs += uchar(ba.at(i));
 
