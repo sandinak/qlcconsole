@@ -1008,8 +1008,9 @@ static bool showNetLine(ArtNetPlugin &plugin, const QSharedPointer<QUdpSocket> &
     io.address = entry;
     io.controller = new ArtNetController(iface, entry, sock, 0, &plugin);
     io.controller->m_testSink = sink;
-    QObject::connect(io.controller, &ArtNetController::ipProgReplied,
-                     &plugin, &ArtNetPlugin::ipProgReplied);
+    // By name: see problemsChanged above (Windows, plugin DLL).
+    QObject::connect(io.controller, SIGNAL(ipProgReplied(QString,ArtNetIpProgReply)),
+                     &plugin, SIGNAL(ipProgReplied(QString,ArtNetIpProgReply)));
     plugin.m_IOmapping.clear();
     plugin.m_IOmapping.append(io);
     if (ifaceOut != NULL)
@@ -1247,7 +1248,7 @@ void ArtNet_Test::ipProgReplyReachesThePlugin()
     data.append(QByteArray(10, '\0'));          // ProgPort, Status, Spare, ProgDg, Spares
     QCOMPARE(data.size(), 34);
 
-    QSignalSpy spy(&plugin, &ArtNetPlugin::ipProgReplied);
+    QSignalSpy spy(&plugin, SIGNAL(ipProgReplied(QString,ArtNetIpProgReply)));
     plugin.handlePacket(data, QHostAddress("172.18.2.60"), uint(iface.index()));
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toString(), QString("172.18.2.60"));

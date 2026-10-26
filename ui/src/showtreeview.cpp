@@ -2075,9 +2075,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_libraryTimer->setSingleShot(true);
     m_libraryTimer->setInterval(0);
     connect(m_libraryTimer, &QTimer::timeout, this, &ShowTreeView::reloadLibrary);
-    for (auto signal : { &Doc::fixtureGroupAdded, &Doc::fixtureGroupRemoved, &Doc::fixtureGroupChanged,
-                         &Doc::paletteAdded, &Doc::paletteRemoved })
-        connect(m_doc, signal, m_libraryTimer, QOverload<>::of(&QTimer::start));
+    // One connect() per signal: a braced list of &Doc::signal connects
+    // nothing on Windows (it holds the DLL import thunks' addresses).
+    const auto kickTimer = QOverload<>::of(&QTimer::start);
+    connect(m_doc, &Doc::fixtureGroupAdded, m_libraryTimer, kickTimer);
+    connect(m_doc, &Doc::fixtureGroupRemoved, m_libraryTimer, kickTimer);
+    connect(m_doc, &Doc::fixtureGroupChanged, m_libraryTimer, kickTimer);
+    connect(m_doc, &Doc::paletteAdded, m_libraryTimer, kickTimer);
+    connect(m_doc, &Doc::paletteRemoved, m_libraryTimer, kickTimer);
     /* A fixture's look or output rules changed (or one came or went): the
        Library's fixture and group icons, and the layers' -- the same icon as
        in every other list. Once per burst. */
@@ -2088,8 +2093,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         buildTree();
         reloadLibrary();
     });
-    for (auto signal : { &Doc::fixtureAdded, &Doc::fixtureRemoved, &Doc::fixtureChanged })
-        connect(m_doc, signal, fixtureTimer, QOverload<>::of(&QTimer::start));
+    connect(m_doc, &Doc::fixtureAdded, fixtureTimer, kickTimer);
+    connect(m_doc, &Doc::fixtureRemoved, fixtureTimer, kickTimer);
+    connect(m_doc, &Doc::fixtureChanged, fixtureTimer, kickTimer);
     connect(m_doc, &Doc::loaded, this, &ShowTreeView::reload);
     // Auto fixtures shown as their closest look, or not: the Library's and
     // the layers' icons.

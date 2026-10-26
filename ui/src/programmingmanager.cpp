@@ -667,8 +667,13 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, &Doc::paletteRemoved, this, [this](quint32) { m_paletteTree->updateTree(); });
     connect(m_doc, &Doc::loaded, m_paletteTree, &FunctionsTreeWidget::updateTree);
     connect(m_doc, &Doc::cleared, m_paletteTree, &FunctionsTreeWidget::updateTree);
-    for (auto sig : { &Doc::functionAdded, &Doc::functionRemoved, &Doc::paletteAdded, &Doc::paletteRemoved })
-        connect(m_doc, sig, this, [this](quint32) { rebuildEffects(); });
+    // One connect() per signal: a braced list of &Doc::signal connects
+    // nothing on Windows (it holds the DLL import thunks' addresses).
+    const auto effects = [this](quint32) { rebuildEffects(); };
+    connect(m_doc, &Doc::functionAdded, this, effects);
+    connect(m_doc, &Doc::functionRemoved, this, effects);
+    connect(m_doc, &Doc::paletteAdded, this, effects);
+    connect(m_doc, &Doc::paletteRemoved, this, effects);
     connect(m_doc, &Doc::loaded, this, [this]() { rebuildEffects(); });
     connect(m_doc, &Doc::cleared, this, [this]() { rebuildEffects(); });
 

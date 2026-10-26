@@ -28,6 +28,7 @@
 #include <functional>
 #include "function.h"
 #include "powerdistribution.h"
+#include "qlcui_export.h"
 
 class QTreeWidgetItem;
 class QKeyEvent;
@@ -62,7 +63,7 @@ class Doc;
  * @{
  */
 
-class ProgrammingManager final : public QWidget
+class QLC_UI_EXPORT ProgrammingManager final : public QWidget
 {
     Q_OBJECT
     friend class HelpShots;     // opens scenes for the help's pictures

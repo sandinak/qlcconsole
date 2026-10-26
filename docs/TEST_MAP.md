@@ -962,6 +962,9 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Show timecode follow, override, freeze | ShowRunner_Test::timecodeFollow, ::timecodeDriveAndFreeze; TimecodeSource_Test (all) | covered | covered | high |
 | GO on the beat / bar | SpeedMasters_Test::aGoLandsOnTheNextBeat, ::aGoOnTheBarWaitsForTheBar | covered | covered | high |
 | Chaser sub-cues | SubCues_Test (12) | covered | covered | high |
+| Windows: the Build outline, Build ▸ Effects and the Show Tree Library follow every Doc signal (one connect() per signal, RC4, matrix W1) | ProgrammingOutline_Test::theListsFollowEveryDocSignal (new); on Windows CI | none | covered | high |
+| Windows: engine and UI signals connected from another DLL (Fixture curtain drapes, the group editor, the Controller Test inputs; RC4, matrix W2) | DllSignals_Test (new: reads the sources for unexported classes, plugin signals by member pointer, braced signal lists); Monitor_Test curtain tests, VenueRigUi_Test, FocusMode_Test::theControllerTestListsEachInput on Windows CI | none | covered | high |
+| Windows: the test suite fails the CI job (RC4, matrix W3) | the Windows "Test" step (was informational); EffectDesigner_Test checks a spy's count before first() | none | covered | med |
 
 ## Import/Export
 

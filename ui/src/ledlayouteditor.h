@@ -29,6 +29,7 @@
 #include <QPointer>
 
 #include "headlayout.h"
+#include "qlcui_export.h"
 
 class GenericDMXSource;
 class QPushButton;
@@ -115,7 +116,7 @@ private:
     int m_lit = -1;
 };
 
-class LedLayoutEditor final : public QWidget
+class QLC_UI_EXPORT LedLayoutEditor final : public QWidget
 {
     Q_OBJECT
 public:

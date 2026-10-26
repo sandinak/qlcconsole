@@ -122,9 +122,10 @@ void LanternPixels::watch(QLCIOPlugin *plugin, quint32 universe)
     if (!m_connected.contains(plugin))
     {
         m_connected.insert(plugin);
-        connect(plugin, &QLCIOPlugin::targetPixelsChanged, this, [this](quint32) {
-            emit changed();
-        });
+        /* By name, not &QLCIOPlugin::targetPixelsChanged: each plugin DLL
+           builds its own QLCIOPlugin, so on Windows that address is not the
+           one the plugin's moc compares with, and nothing would connect. */
+        connect(plugin, SIGNAL(targetPixelsChanged(quint32)), this, SIGNAL(changed()));
     }
 }
 

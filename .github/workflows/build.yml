@@ -402,22 +402,32 @@ jobs:
           path: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
           if-no-files-found: error
 
-      # Informational, after the artifact on purpose: the suite does not pass
-      # on Windows yet (TODO.md lists the failures), and a failing test there
-      # should not withhold the installer. Runs every test binary under its
-      # own timeout and lists the failures. (unittest.sh itself also works
-      # under MSYS2: ./unittest.sh ui build.)
-      - name: Test (informational)
-        continue-on-error: true
+      # After the artifact on purpose, so a failing test still leaves the
+      # installer to look at -- but a failure fails the job: while this step
+      # was informational, 16 of 190 programs failed unnoticed for days
+      # (docs/TEST_MATRIX.md W1-W3). Runs every test binary under its own
+      # timeout and lists the failures. A program that cannot run on this
+      # runner goes in SKIP below, with its reason, never silently.
+      # (unittest.sh itself also works under MSYS2: ./unittest.sh ui build.)
+      - name: Test
         timeout-minutes: 45
         run: |
+          # name:reason, one per line. Nothing skipped yet.
+          SKIP=""
           # Stages resources for the tests (and checks the fixtures); runs none.
           QLC_TEST_PHASE=stage ./unittest.sh ui build > /tmp/unittest.log 2>&1 || true
           grep -E "^Fixtures|definitions processed|^Fixturesmap" /tmp/unittest.log || true
           DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
           FAILED=""
+          SKIPPED=""
           PASSED=0
           for t in $(find build -name '*_test.exe' -not -path '*/CMakeFiles/*' | sort); do
+            why=$(printf '%s\n' "$SKIP" | sed -n "s/^$(basename "$t" .exe):\(.*\)/\1/p")
+            if [ -n "$why" ]; then
+              echo "=== $t skipped: $why"
+              SKIPPED="$SKIPPED $(basename "$t" .exe)"
+              continue
+            fi
             rc=0
             ( cd "$(dirname "$t")" && PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
                 /usr/bin/timeout 300 "./$(basename "$t")" > /tmp/t.log 2>&1 ) || rc=$?
@@ -433,6 +443,7 @@ jobs:
             fi
           done
           echo "Passed: $PASSED test binaries"
+          echo "Skipped:$SKIPPED"
           echo "Failed:$FAILED"
           [ -z "$FAILED" ]
 
@@ -441,6 +452,7 @@ jobs:
       # real show lit. Plus a bundle that runs the same headless on another
       # Windows machine (monitor_test + the deployed app + offscreen).
       - name: Rig view renders (informational)
+        if: ${{ !cancelled() }}
         continue-on-error: true
         timeout-minutes: 20
         run: |

@@ -27,6 +27,7 @@
 #include <QWidget>
 
 #include "universepatcher.h"
+#include "qlcui_export.h"
 
 class QTreeWidgetItem;
 class QTreeWidget;
@@ -53,7 +54,7 @@ class Doc;
  * passthrough -- shown or hidden from the header's right-click and
  * remembered (they were the Overview sub-tab's, board Q153).
  */
-class ConnectionsTree : public QWidget
+class QLC_UI_EXPORT ConnectionsTree : public QWidget
 {
     Q_OBJECT
 
