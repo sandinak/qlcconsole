@@ -46,6 +46,45 @@
 #include "qlcfile.h"
 #include "doc.h"
 
+#if !defined(Q_OS_WIN)
+#include <sys/resource.h>
+#include <climits>
+#endif
+
+namespace
+{
+/* Every universe runs its own thread, and every Qt thread's event dispatcher
+   takes a wakeup pipe: a show reaching the last universe (1024 of them) needs
+   ~2000 descriptors. macOS starts processes at a soft limit of 256, and a Qt
+   older than 6.10 does not raise it, so the 128th or so universe thread hit
+   qFatal("Cannot continue without a thread pipe") and took the app down.
+   Raise the soft limit to the hard one, once, as Qt 6.10+ does itself. */
+void raiseOpenFileLimit()
+{
+#if !defined(Q_OS_WIN)
+    static bool done = false;
+    if (done)
+        return;
+    done = true;
+
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) != 0)
+        return;
+    rlim_t want = rl.rlim_max;
+#if defined(Q_OS_DARWIN) && defined(OPEN_MAX)
+    /* Darwin refuses a soft limit above OPEN_MAX, even under an unlimited hard one. */
+    if (want == RLIM_INFINITY || want > rlim_t(OPEN_MAX))
+        want = OPEN_MAX;
+#endif
+    if (want == RLIM_INFINITY || want <= rl.rlim_cur)
+        return;
+    rl.rlim_cur = want;
+    if (setrlimit(RLIMIT_NOFILE, &rl) != 0)
+        qWarning() << "Could not raise the open file limit to" << quint64(want);
+#endif
+}
+}
+
 InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     : QObject(NULL)
     , m_doc(doc)
@@ -61,6 +100,8 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     , m_beatTime(new QElapsedTimer())
     , m_inputCapture(NULL)
 {
+    raiseOpenFileLimit();
+
     m_patchUndo = new PatchUndo(this, this);
     m_grandMaster = new GrandMaster(this);
     for (quint32 i = 0; i < universes; i++)

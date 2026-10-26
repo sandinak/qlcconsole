@@ -866,6 +866,9 @@ changes (signals across DLLs), and CI's Windows tests now fail the build.
   `-1` ended in an abort. A show now has at most 1024 universes; a fixture
   past that, negative or not a number loads unpatched and the footer says
   so. The Show Control page rebuilds once for a run of new universes.
+  A show reaching the last universes no longer aborts on a Mac either:
+  each universe's thread takes file handles, and the app now raises the
+  open-file limit (256 by default) as Qt 6.10 and later do themselves.
 - **Opening a show no longer marks it modified** (RC4, test matrix F3).
   Building the plot groups each truss with the fixtures rigged on it; a
   show saved without those groups (Office.qlcc, help-demo.qxw) asked
