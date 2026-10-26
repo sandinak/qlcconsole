@@ -57,6 +57,8 @@
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "patchinventorydialog.h"
+#include "patchlabelsdialog.h"
+#include "patchlistdialog.h"
 #include "functionstreewidget.h"
 #include "scenegrouplooks.h"
 #include "effectbrowser.h"
@@ -575,6 +577,81 @@ QList<HelpShots::Shot> HelpShots::shots()
         return f;
     }, [=]() {
         if (QWidget *dlg = app->findChild<QWidget *>(QStringLiteral("helpShotPatch")))
+            dlg->close();
+    } };
+
+    // The patch list, grouped by where the fixtures hang, a row selected.
+    list << Shot{ QStringLiteral("patch-list"), [=]() {
+        window();
+        PatchListDialog *dlg = new PatchListDialog(doc, app);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setObjectName(QStringLiteral("helpShotPatchList"));
+        dlg->setGroupBy(PatchList::ByLocation);
+        dlg->resize(1100, 620);
+        dlg->show();
+        QTreeWidget *tree = dlg->tree();
+        QTreeWidgetItemIterator it(tree);
+        while (*it)
+        {
+            if ((*it)->data(0, Qt::UserRole).toInt() >= 0)
+            {
+                (*it)->setSelected(true);
+                break;
+            }
+            ++it;
+        }
+        Frame f;
+        f.grab = dlg;
+        f.pad = QMargins(30, 0, 0, 0);
+        for (const char *name : { "patchListGroupBy", "patchListShow", "patchListOwner" })
+        {
+            Callout c = mark(named(dlg, name), f.callouts.size() + 1);
+            c.place = Corner;       // their labels are on their left
+            f.callouts << c;
+        }
+        f.callouts << mark(tree, 4);
+        for (const char *name : { "patchListXlsx", "patchListLabels" })
+        {
+            Callout c = mark(named(dlg, name), f.callouts.size() + 1);
+            c.place = Corner;       // the next button is close by
+            f.callouts << c;
+        }
+        return f;
+    }, [=]() {
+        if (QWidget *dlg = app->findChild<QWidget *>(QStringLiteral("helpShotPatchList")))
+            dlg->close();
+    } };
+
+    // Fixture labels: 24 mm tape, the default template, the preview.
+    list << Shot{ QStringLiteral("patch-labels"), [=]() {
+        window();
+        const PatchList pl = PatchList::build(doc);
+        QList<PatchList::Row> rows = pl.arranged(PatchList::ByLocation);
+        PatchLabelsDialog *dlg = new PatchLabelsDialog(rows, QList<PatchList::Row>(),
+                                                       QStringLiteral("Fixture labels"),
+                                                       QStringLiteral("labels.pdf"), app);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setObjectName(QStringLiteral("helpShotPatchLabels"));
+        dlg->setMultiUniverse(pl.multiUniverse());
+        dlg->setSheetKey(QStringLiteral("tape"));
+        dlg->setTapeWidth(24);
+        dlg->setLabelTemplate(PatchLabels::defaultTemplate());
+        dlg->setCutGap(4);
+        dlg->resize(560, dlg->sizeHint().height());
+        dlg->show();
+        Frame f;
+        f.grab = dlg;
+        f.pad = QMargins(30, 0, 0, 0);
+        for (const char *name : { "labelSheet", "labelTape", "labelTemplate", "labelCutGap",
+                                  "labelPreview", "printLabels" })
+        {
+            Callout c = mark(named(dlg, name), f.callouts.size() + 1);
+            c.place = Corner;       // the rows are close together
+            f.callouts << c;
+        }
+        return f;
+    }, [=]() {
+        if (QWidget *dlg = app->findChild<QWidget *>(QStringLiteral("helpShotPatchLabels")))
             dlg->close();
     } };
 

@@ -48,6 +48,7 @@ add_library(${module_name} SHARED
     paletteops.cpp paletteops.h
     palettenaming.cpp palettenaming.h
     patchlist.cpp patchlist.h
+    xlsxwriter.cpp xlsxwriter.h
     speedmasters.cpp speedmasters.h
     showcontrol.cpp showcontrol.h
     showtreecommand.cpp showtreecommand.h

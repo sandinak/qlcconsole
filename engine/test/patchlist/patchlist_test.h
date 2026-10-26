@@ -45,6 +45,15 @@ private slots:
     void thePdfIsWritten();
     void anUnwritablePdfSaysWhy();
 
+    void theModeSaysItsChannelsOnce();
+    void groupedByLocationThenAddress();
+    void groupedByUniverseAndType();
+    void pixelFixturesByTypeOrHeads();
+    void theFilterPicksKindAndOwner();
+    void theMultiUniverseFlagIsTheShows();
+    void theCsvFollowsTheGrouping();
+    void theXlsxIsAWorkbook();
+
 private:
     Doc *m_doc = nullptr;
 };

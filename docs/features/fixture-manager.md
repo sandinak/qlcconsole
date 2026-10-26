@@ -221,57 +221,112 @@ shows the range under the IP field — "One each: 172.18.2.60 to
 
 The paperwork for the crew who hang, name and address the rig. Open it from
 the menu bar's **Fixtures → Patch List…**, or the Lighting Studio's
-**More → Patch List…**. A row per fixture, in universe and address order,
-fixtures still in the inventory last:
+**More → Patch List…**.
+
+![The patch list grouped by location, with the Group by, Show and Owner controls and the export and label buttons](../images/patch-list.png)
+
+1. **Group by** — **Location** (the default, and remembered): what each
+   fixture hangs on — "Truss FOH", "Bar Elec 1", "Tower SL", "Riser A",
+   "Deck 2" (a fixture on a hanger is listed under the truss or tower the
+   hanger is on); a fixture hung on nothing is listed under its fixture
+   group (the first one that holds it); one in neither is **Not placed**,
+   last. **Universe** (a heading per universe, the inventory last),
+   **Type** (Moving Head, LED Bar (Pixels) …) or **None** (one list in
+   universe and address order, the inventory last). Within a heading the
+   fixtures are in universe and address order. Headings are in name order,
+   numbers counted ("Truss 2" before "Truss 10").
+2. **Show** — **All fixtures**, **Discrete fixtures** or **RGB Matrix &
+   pixel fixtures**. A fixture is *pixel / matrix* when its definition's
+   type is **LED Bar (Pixels)**, or its mode has **two or more heads with
+   colour (RGB) channels of their own** — the bars, panels and strips an
+   RGB Matrix draws across. Everything else (a single-cell par, a moving
+   head, a dimmer, a hazer) is discrete.
+3. **Owner** — anybody's, or only the **Tour**, **House** or **Rental**
+   fixtures (see [Owner: Tour, House or Rental](venues.md#owner-tour-house-or-rental)).
+4. The list: a row per fixture under its heading. Right-click a row (or
+   several, or a heading for all of its rows) for **Print Label…** /
+   **Print N Labels…**, **Print Labels for the List Shown…** and **Copy the
+   List**.
+5. **Save XLSX…** — the export (below).
+6. **Print Labels…** — labels for the rows selected, or for the list shown
+   (below).
+
+What Show and Owner leave out is left out of the copy, the exports, the PDF
+and the labels too, and they follow the grouping.
 
 | Column | What it says |
 |---|---|
 | **Patch** | Universe (and its name) and the channels, one-based as the crew reads them: "1: Stage left · 12–23". A clashing fixture is listed where it asked to be, marked **clash**. |
 | **Fixture** | Its name. |
-| **Make / model**, **Mode** | From its definition. |
-| **Ch** | How many channels it takes. |
+| **Make / model** | From its definition. |
+| **Mode** | The mode, and how many channels it takes when the name doesn't say: "18 Channel", "165ch", "Open + Fly (2 ch)". |
 | **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
 | **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) · port 1 · universe 0:0:0" — port is the socket on the node, universe its Art-Net address), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
+| **Owner** | Tour, House or Rental — only when some fixture in the show is not the tour's. |
 
-- **Save CSV…** — every column plus the fixture ID, the first and last
-  channel, X/Y/Z on the plot (in the plot's units) and a note, for a
-  spreadsheet or another label program.
-- **Save PDF…** — a landscape Letter page, a table per universe headed
-  with where that universe goes, the header row repeated on each page.
+- **Save CSV…** / **Save XLSX…** — the list shown, in the order shown: the
+  heading in a first column of its own (Location, Universe or Type; none
+  when not grouped), then every column plus the fixture ID, the channel
+  count, the first and last channel, X/Y/Z on the plot (in the plot's
+  units), a note, the location, fixture group, type and kind (Discrete or
+  Pixel / matrix), and the owner when there is one. The XLSX is an Excel
+  workbook (Numbers and Google Sheets open it), the header bold and frozen,
+  numbers as numbers.
+- **Save PDF…** — a landscape Letter page, a table per heading (per
+  universe headed with where that universe goes), the header row repeated
+  on each page.
 - **Copy** — the CSV on the clipboard, to paste straight into a sheet.
-- **Labels…** — a label per fixture, as a PDF (below).
 
 #### Labels
 
-**Labels…** in the patch list makes a label to stick on each fixture (or
-its case), saved as a PDF to print from Preview. Each label has:
+**Print Labels…** (or **Print Label…** on a right-click) makes a label to
+stick on each fixture (or its case) and prints it through the system's
+print dialog, or saves it as a PDF.
 
-- the fixture's **name**, large;
-- its **address**, large: universe and first channel, one-based — "U3 · 101"
-  ("not patched" for a fixture in the inventory, "clash · U1 · 12" for one
-  in an address clash) — with the universe's name, when it has one, smaller
-  beside it;
-- its **mode and channels** — "16-channel · 16 ch";
-- for a network fixture, a line of its own: its transport and the name its
-  IP goes by — "WLED · lantern-2" — or the IP when it has no name
-  ("WLED · 172.18.2.50");
-- **where it hangs**, the same words as the Mounted on column.
+![Fixture labels on 24 mm tape: the stock, tape width, template and cut gap, and a preview of the first label](../images/patch-labels.png)
 
-A name too long for the label is set smaller, then cut short with "…";
-nothing runs off the edge.
+1. **Stock** — remembered for next time (table below).
+2. **Tape** — 12 mm or 24 mm, for a tape stock.
+3. **Label says** — the template, remembered: **`{name} D{address}`**
+   unless you change it ("Spot 3 D101"); **Default** puts it back. The
+   fields: `{name}`, `{address}`, `{universe}`, `{mode}`, `{location}`,
+   `{owner}`, `{group}`. A field the label doesn't know is printed as
+   typed.
+4. **Cut gap** — blank tape between one label's text and the next, half at
+   each end of a label, where it is cut (4 mm unless changed).
+5. The first label, as it prints.
+6. **Print…** — the system's print dialog, set to the label's size;
+   **Save PDF…** saves the same pages.
 
-Pick the **stock** — the choice is remembered for next time:
+**The address:** `{address}` is the DMX start address, one-based —
+"101". When the show patches fixtures in **more than one universe** it says
+which first, a dot between — "2.101" (so "Spot 3 D2.101"). That is decided
+over the whole show, not the fixtures you are labelling, so every label of
+a show reads the same way. A fixture still in the inventory gets "—"; one in
+an address clash, the address it asked for.
+
+On tape the label is **one line**, as tall as the tape prints (18 mm of a
+24 mm TZe tape, about 9 mm of a 12 mm one), and **as long as the longest
+label's text** needs, with the cut gap — the same length for all of them,
+25 to 150 mm; text longer than that is set smaller. On the sheets and the
+roll the template's line is large and the mode, the universe's name, a
+network fixture's transport and name, and where it hangs follow, smaller.
+A line too long is set smaller, then cut short with "…"; nothing runs off
+the edge.
 
 | Stock | What it is |
 |---|---|
-| **Avery 5160** (the default) | US Letter sheets, 30 labels (3 across, 10 down), each 2⅝ × 1 in. Avery's 5260, 5960, 8160 and other "30 per sheet" labels are the same layout. |
+| **Continuous tape** (the default) | Label-printer tape, 12 or 24 mm: one label a page, the printer's driver cuts between them. |
+| **Brother PT-P710BT** | The same tape (24 mm unless changed) through Brother's own macOS driver (P-touch), which takes the page size as the label; **Print…** picks the PT-P710BT when it is set up on the Mac. Set the driver's cut option (cut each label, or chain print) in its print dialog. |
+| **Avery 5160** | US Letter sheets, 30 labels (3 across, 10 down), each 2⅝ × 1 in. Avery's 5260, 5960, 8160 and other "30 per sheet" labels are the same layout. |
 | **62 mm roll** | A continuous 62 mm roll (Brother DK-22205 and the like), one 62 × 29 mm label a page; the printer cuts between them. |
 
-and **which fixtures**: all of them, or the rows selected in the list (the
-default when some are). The dialog says how many labels that is and, on
-sheets, how many sheets. Print the PDF at **100% / actual size** — "fit to
-page" shrinks it and the labels no longer line up with the sheet.
+and **which fixtures**: the list shown, or the rows selected (the default
+when some are). The dialog says how many labels that is and, on tape, how
+long each one is, on sheets how many sheets. Print a saved PDF at **100% /
+actual size** — "fit to page" shrinks it and the labels no longer line up
+with the sheet or the tape.
 
 ## The head-layout grid editor
 

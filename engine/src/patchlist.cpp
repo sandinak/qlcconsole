@@ -17,7 +17,9 @@
   limitations under the License.
 */
 
+#include <QRegularExpression>
 #include <QTextDocument>
+#include <QCollator>
 #include <QPageLayout>
 #include <QPdfWriter>
 #include <QPageSize>
@@ -31,12 +33,16 @@
 #include "qlcioplugin.h"
 #include "inputoutputmap.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
 #include "qlcfixturedef.h"
+#include "fixturegroup.h"
 #include "outputpatch.h"
 #include "patchlist.h"
 #include "rigowner.h"
 #include "universe.h"
 #include "fixture.h"
+#include "xlsxwriter.h"
+#include "truss.h"
 #include "doc.h"
 
 QString PatchList::Row::patchText() const
@@ -52,6 +58,18 @@ QString PatchList::Row::patchText() const
     if (!patched)
         return QStringLiteral("not patched");
     return QStringLiteral("%1 · %2").arg(uni, range);
+}
+
+QString PatchList::Row::modeText() const
+{
+    /* "18 Channel", "165ch", "15-Channel-Chinese" say it already: the
+       count as a number of its own in the name. */
+    const QRegularExpression count(QStringLiteral("(^|\\D)%1(\\D|$)").arg(channels));
+    if (mode.isEmpty())
+        return channels > 0 ? QStringLiteral("%1 ch").arg(channels) : QString();
+    if (channels == 0 || mode.contains(count))
+        return mode;
+    return QStringLiteral("%1 (%2 ch)").arg(mode).arg(channels);
 }
 
 QString PatchList::Row::makeModel() const
@@ -130,12 +148,100 @@ QString PatchList::universeOutput(Doc *doc, quint32 universe)
     return QString();
 }
 
+bool PatchList::isPixelFixture(const Fixture *fixture)
+{
+    if (fixture == nullptr)
+        return false;
+    if (fixture->type() == QLCFixtureDef::LEDBarPixels)
+        return true;
+    if (fixture->fixtureMode() == nullptr)
+        return false;
+    int coloured = 0;
+    for (int h = 0; h < fixture->heads(); ++h)
+    {
+        if (fixture->rgbChannels(h).size() >= 3)
+            coloured++;
+    }
+    return coloured >= 2;
+}
+
+/* What @p rp hangs on, without where along it: "Truss FOH", "Tower SL";
+   a hanger is on its truss or tower. Empty when it is on nothing. */
+static QString hangsOn(MonitorProperties *mp, const FixtureRigProps &rp)
+{
+    if (rp.onHanger())
+    {
+        Hanger *h = mp->hanger(rp.hangerId);
+        if (h == nullptr)
+            return QString();
+        if (h->parentKind() == Hanger::OnTruss)
+        {
+            Truss *t = mp->truss(h->parentId());
+            return t != nullptr ? QObject::tr("Truss %1").arg(t->name()) : QString();
+        }
+        Tower *tw = mp->tower(h->parentId());
+        return tw != nullptr ? QObject::tr("Tower %1").arg(tw->name()) : QString();
+    }
+    if (rp.trussId != Truss::invalidId())
+    {
+        Truss *t = mp->truss(rp.trussId);
+        return t != nullptr ? QObject::tr("Truss %1").arg(t->name()) : QString();
+    }
+    if (rp.pipeId != Pipe::invalidId())
+    {
+        Pipe *p = mp->pipe(rp.pipeId);
+        return p != nullptr ? QObject::tr("Bar %1").arg(p->name()) : QString();
+    }
+    if (rp.towerId != Tower::invalidId())
+    {
+        Tower *t = mp->tower(rp.towerId);
+        return t != nullptr ? QObject::tr("Tower %1").arg(t->name()) : QString();
+    }
+    if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = mp->platform(rp.riserPlatformId);
+        return pl != nullptr ? QObject::tr("Riser %1").arg(pl->name()) : QString();
+    }
+    if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = mp->platform(rp.deckPlatformId);
+        return pl != nullptr ? QObject::tr("Deck %1").arg(pl->name()) : QString();
+    }
+    return QString();
+}
+
 PatchList PatchList::build(Doc *doc, const QList<quint32> &ids)
 {
     PatchList list;
     MonitorProperties *mp = doc->monitorProperties();
     list.m_feet = mp->gridUnits() == MonitorProperties::Feet;
     const QList<quint32> plotted = mp->fixtureItemsID();
+
+    /* A fixture's group: the first (lowest id) that holds it. */
+    QHash<quint32, QString> groupOf;
+    QList<FixtureGroup *> groups = doc->fixtureGroups();
+    std::sort(groups.begin(), groups.end(), [](FixtureGroup *a, FixtureGroup *b) {
+        return a->id() < b->id();
+    });
+    foreach (FixtureGroup *g, groups)
+    {
+        foreach (quint32 fid, g->fixtureList())
+        {
+            if (!groupOf.contains(fid))
+                groupOf.insert(fid, g->name());
+        }
+    }
+    const QHash<quint32, RigOwner::Owner> owners = RigOwner::effectiveAll(doc);
+
+    /* Universes in use, over the whole show (a label's address says which
+       when there is more than one). */
+    QSet<quint32> universes;
+    foreach (Fixture *f, doc->fixtures())
+    {
+        if (f != nullptr && f->isPatched())
+            universes.insert(f->universe());
+    }
+    list.m_multiUniverse = universes.size() > 1;
 
     QHash<quint32, QString> outputs;      // one look-up per universe
     foreach (Fixture *f, doc->fixtures())
@@ -179,7 +285,14 @@ PatchList PatchList::build(Doc *doc, const QList<quint32> &ids)
         }
 
         r.mountedOn = mp->mountDescription(r.id);
-        const RigOwner::Owner owner = RigOwner::effective(doc, r.id);
+        r.group = groupOf.value(r.id);
+        r.location = hangsOn(mp, mp->fixtureRigProps(r.id));
+        if (r.location.isEmpty())
+            r.location = r.group;
+        r.type = f->typeString();
+        r.pixel = isPixelFixture(f);
+        const RigOwner::Owner owner = owners.value(r.id, RigOwner::Tour);
+        r.ownerKind = owner;
         if (owner != RigOwner::Tour)
         {
             r.owner = RigOwner::displayName(owner);
@@ -234,44 +347,234 @@ static QString coord(float metres, bool feet)
     return QString::number(feet ? m * 3.28084 : m, 'f', 1);
 }
 
-QString PatchList::toCsv() const
+/*********************************************************************
+ * Filtering and grouping
+ *********************************************************************/
+
+bool PatchList::Filter::accepts(const Row &row) const
 {
-    const QString unit = m_feet ? QStringLiteral("ft") : QStringLiteral("m");
-    QStringList out;
-    out << csvRow({ QStringLiteral("Fixture"), QStringLiteral("ID"), QStringLiteral("Manufacturer"),
-                    QStringLiteral("Model"), QStringLiteral("Mode"), QStringLiteral("Channels"),
-                    QStringLiteral("Universe"), QStringLiteral("Universe name"),
-                    QStringLiteral("Address"), QStringLiteral("Last channel"),
-                    QStringLiteral("Connection"), QStringLiteral("IP"), QStringLiteral("Output"),
-                    QStringLiteral("Mounted on"),
-                    QStringLiteral("X (%1)").arg(unit), QStringLiteral("Y (%1)").arg(unit),
-                    QStringLiteral("Z (%1)").arg(unit), QStringLiteral("Note") });
-    // An Owner column only when some fixture is not the tour's: unchanged otherwise.
-    if (m_owners)
-        out.last() += QStringLiteral(",Owner");
+    if (kind == Discrete && row.pixel)
+        return false;
+    if (kind == Pixel && !row.pixel)
+        return false;
+    return owners.isEmpty() || owners.contains(row.ownerKind);
+}
+
+PatchList PatchList::filtered(const Filter &filter) const
+{
+    PatchList out = *this;
+    out.m_rows.clear();
     foreach (const Row &r, m_rows)
     {
-        const bool at = r.patched || r.clash;
-        out << csvRow({ r.name, QString::number(r.id), r.manufacturer, r.model, r.mode,
-                        QString::number(r.channels),
-                        at ? QString::number(r.universe + 1) : QString(),
-                        at ? r.universeName : QString(),
-                        at ? QString::number(r.firstChannel()) : QString(),
-                        at ? QString::number(r.lastChannel()) : QString(),
-                        r.network ? QStringLiteral("Network (%1)").arg(r.transport) : QStringLiteral("DMX"),
-                        r.ip, r.output, r.mountedOn,
-                        r.onPlot ? coord(r.position.x(), m_feet) : QString(),
-                        r.onPlot ? coord(r.position.y(), m_feet) : QString(),
-                        r.onPlot ? coord(r.position.z(), m_feet) : QString(),
-                        r.clash ? QStringLiteral("address clash: not output")
-                                : (r.patched ? QString() : QStringLiteral("in the inventory")) });
-        if (m_owners)
-            out.last() += QLatin1Char(',') + csv(r.owner.isEmpty() ? RigOwner::displayName(RigOwner::Tour) : r.owner);
+        if (filter.accepts(r))
+            out.m_rows << r;
     }
+    return out;
+}
+
+QString PatchList::groupByName(GroupBy by)
+{
+    switch (by)
+    {
+        case ByLocation: return QObject::tr("Location");
+        case ByUniverse: return QObject::tr("Universe");
+        case ByType:     return QObject::tr("Type");
+        case ByNone:     break;
+    }
+    return QString();
+}
+
+/* The headings that go last: nowhere to hang, nothing patched. */
+static QString notPlaced()   { return QObject::tr("Not placed"); }
+static QString notPatched()  { return QObject::tr("Not patched (in the inventory)"); }
+
+QString PatchList::sectionTitle(const Row &row, GroupBy by)
+{
+    switch (by)
+    {
+        case ByLocation:
+            return row.location.isEmpty() ? notPlaced() : row.location;
+        case ByUniverse:
+        {
+            if (!row.patched && !row.clash)
+                return notPatched();
+            QString head = QObject::tr("Universe %1").arg(row.universe + 1);
+            if (!row.universeName.isEmpty())
+                head += QStringLiteral(": ") + row.universeName;
+            return head;
+        }
+        case ByType:
+            return row.type.isEmpty() ? QObject::tr("Other") : row.type;
+        case ByNone:
+            break;
+    }
+    return QString();
+}
+
+QList<PatchList::Section> PatchList::sections(GroupBy by) const
+{
+    QList<Section> out;
+    if (m_rows.isEmpty())
+        return out;
+    if (by == ByNone)
+    {
+        Section all;
+        all.rows = m_rows;
+        out << all;
+        return out;
+    }
+
+    /* The rows are in patch order already; a section keeps it. */
+    QHash<QString, int> at;
+    QHash<QString, quint32> firstUniverse;
+    foreach (const Row &r, m_rows)
+    {
+        const QString t = sectionTitle(r, by);
+        if (!at.contains(t))
+        {
+            at.insert(t, out.size());
+            Section s;
+            s.title = t;
+            out << s;
+            firstUniverse.insert(t, (r.patched || r.clash) ? r.universe : UINT_MAX);
+        }
+        out[at.value(t)].rows << r;
+    }
+
+    const QString last = by == ByLocation ? notPlaced()
+                       : (by == ByUniverse ? notPatched() : QString());
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    std::stable_sort(out.begin(), out.end(), [&](const Section &a, const Section &b) {
+        const bool la = a.title == last, lb = b.title == last;
+        if (la != lb)
+            return lb;
+        if (by == ByUniverse)
+            return firstUniverse.value(a.title) < firstUniverse.value(b.title);
+        return collator.compare(a.title, b.title) < 0;
+    });
+    return out;
+}
+
+QList<PatchList::Row> PatchList::arranged(GroupBy by) const
+{
+    QList<Row> out;
+    foreach (const Section &s, sections(by))
+        out << s.rows;
+    return out;
+}
+
+/*********************************************************************
+ * The spreadsheet
+ *********************************************************************/
+
+QList<QStringList> PatchList::table(GroupBy by) const
+{
+    const QString unit = m_feet ? QStringLiteral("ft") : QStringLiteral("m");
+    QList<QStringList> out;
+    QStringList header;
+    if (by != ByNone)
+        header << groupByName(by);
+    header << QStringLiteral("Fixture") << QStringLiteral("ID") << QStringLiteral("Manufacturer")
+           << QStringLiteral("Model") << QStringLiteral("Mode") << QStringLiteral("Channels")
+           << QStringLiteral("Universe") << QStringLiteral("Universe name")
+           << QStringLiteral("Address") << QStringLiteral("Last channel")
+           << QStringLiteral("Connection") << QStringLiteral("IP") << QStringLiteral("Output")
+           << QStringLiteral("Mounted on")
+           << QStringLiteral("X (%1)").arg(unit) << QStringLiteral("Y (%1)").arg(unit)
+           << QStringLiteral("Z (%1)").arg(unit) << QStringLiteral("Note")
+           << QStringLiteral("Location") << QStringLiteral("Fixture group")
+           << QStringLiteral("Type") << QStringLiteral("Kind");
+    // An Owner column only when some fixture is not the tour's.
+    if (m_owners)
+        header << QStringLiteral("Owner");
+    out << header;
+
+    foreach (const Section &s, sections(by))
+    {
+        foreach (const Row &r, s.rows)
+        {
+            const bool at = r.patched || r.clash;
+            QStringList line;
+            if (by != ByNone)
+                line << s.title;
+            line << r.name << QString::number(r.id) << r.manufacturer << r.model << r.mode
+                 << QString::number(r.channels)
+                 << (at ? QString::number(r.universe + 1) : QString())
+                 << (at ? r.universeName : QString())
+                 << (at ? QString::number(r.firstChannel()) : QString())
+                 << (at ? QString::number(r.lastChannel()) : QString())
+                 << (r.network ? QStringLiteral("Network (%1)").arg(r.transport) : QStringLiteral("DMX"))
+                 << r.ip << r.output << r.mountedOn
+                 << (r.onPlot ? coord(r.position.x(), m_feet) : QString())
+                 << (r.onPlot ? coord(r.position.y(), m_feet) : QString())
+                 << (r.onPlot ? coord(r.position.z(), m_feet) : QString())
+                 << (r.clash ? QStringLiteral("address clash: not output")
+                             : (r.patched ? QString() : QStringLiteral("in the inventory")))
+                 << r.location << r.group << r.type
+                 << (r.pixel ? QStringLiteral("Pixel / matrix") : QStringLiteral("Discrete"));
+            if (m_owners)
+                line << RigOwner::displayName(r.ownerKind);
+            out << line;
+        }
+    }
+    return out;
+}
+
+QString PatchList::toCsv(GroupBy by) const
+{
+    QStringList out;
+    foreach (const QStringList &line, table(by))
+        out << csvRow(line);
     return out.join(QLatin1Char('\n')) + QLatin1Char('\n');
 }
 
-QString PatchList::toHtml(const QString &title) const
+QByteArray PatchList::toXlsx(GroupBy by) const
+{
+    /* The columns that hold numbers, as numbers: a sheet sorts them right. */
+    const QList<QStringList> t = table(by);
+    QList<int> numeric;
+    if (!t.isEmpty())
+    {
+        const QStringList &h = t.first();
+        for (int c = 0; c < h.size(); ++c)
+        {
+            const QString &n = h.at(c);
+            if (n == QLatin1String("ID") || n == QLatin1String("Channels")
+                || n == QLatin1String("Universe") || n == QLatin1String("Address")
+                || n == QLatin1String("Last channel") || n.startsWith(QLatin1String("X ("))
+                || n.startsWith(QLatin1String("Y (")) || n.startsWith(QLatin1String("Z (")))
+            {
+                // "Universe" grouped by universe is the heading, words: not a number.
+                if (!(c == 0 && by != ByNone))
+                    numeric << c;
+            }
+        }
+    }
+    return XlsxWriter::workbook(QStringLiteral("Patch list"), t, numeric);
+}
+
+bool PatchList::writeXlsx(const QString &path, GroupBy by, QString *error) const
+{
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+        if (error != nullptr)
+            *error = file.errorString();
+        return false;
+    }
+    const QByteArray data = toXlsx(by);
+    if (file.write(data) != data.size())
+    {
+        if (error != nullptr)
+            *error = file.errorString();
+        return false;
+    }
+    return true;
+}
+
+QString PatchList::toHtml(const QString &title, GroupBy by) const
 {
     const QString unit = m_feet ? QStringLiteral(" ft") : QStringLiteral(" m");
     QString h;
@@ -286,77 +589,70 @@ QString PatchList::toHtml(const QString &title) const
 
     int patched = 0;
     foreach (const Row &r, m_rows)
+    {
         if (r.patched)
             patched++;
+    }
     h += QStringLiteral("<p>%1 fixtures, %2 patched · %3</p>").arg(m_rows.size()).arg(patched)
              .arg(QLocale().toString(QDateTime::currentDateTime(), QLocale::ShortFormat));
 
+    /* Grouped by where they hang, the mount says more than the heading; by
+       universe, the heading says the universe. */
     const QString header = QStringLiteral(
         "<table cellspacing=\"0\" width=\"100%\"><thead><tr>"
-        "<th>Address</th><th>Fixture</th><th>Make / model</th><th>Mode</th><th>Ch</th>"
+        "<th>Address</th><th>Fixture</th><th>Make / model</th><th>Mode</th>"
         "<th>Connection</th><th>Mounted on</th><th>Position</th></tr></thead>");
 
-    bool open = false;
-    int section = -2;                     // -1: the inventory
-    foreach (const Row &r, m_rows)
+    foreach (const Section &s, sections(by))
     {
-        const bool at = r.patched || r.clash;
-        const int s = at ? int(r.universe) : -1;
-        if (s != section)
+        if (!s.title.isEmpty())
+            h += QStringLiteral("<h2>%1</h2>").arg(s.title.toHtmlEscaped());
+        if (by == ByUniverse && !s.rows.isEmpty() && (s.rows.first().patched || s.rows.first().clash))
         {
-            if (open)
-                h += QStringLiteral("</table>");
-            section = s;
+            const QString output = s.rows.first().output;
+            h += QStringLiteral("<p>Goes to: %1</p>")
+                     .arg(output.isEmpty() ? QStringLiteral("<b>nowhere</b> (not patched to an output)")
+                                           : output.toHtmlEscaped());
+        }
+        h += header;
+        foreach (const Row &r, s.rows)
+        {
+            const bool at = r.patched || r.clash;
+            QString addr;
             if (at)
             {
-                QString head = QStringLiteral("Universe %1").arg(r.universe + 1);
-                if (!r.universeName.isEmpty())
-                    head += QStringLiteral(": ") + r.universeName.toHtmlEscaped();
-                h += QStringLiteral("<h2>%1</h2>").arg(head);
-                h += QStringLiteral("<p>Goes to: %1</p>")
-                         .arg(r.output.isEmpty() ? QStringLiteral("<b>nowhere</b> (not patched to an output)")
-                                                 : r.output.toHtmlEscaped());
+                const QString range = r.channels > 1
+                    ? QStringLiteral("%1–%2").arg(r.firstChannel()).arg(r.lastChannel())
+                    : QString::number(r.firstChannel());
+                addr = by == ByUniverse ? range : QStringLiteral("%1 · %2").arg(r.universe + 1).arg(range);
             }
-            else
-            {
-                h += QStringLiteral("<h2>Not patched (in the inventory)</h2>");
-            }
-            h += header;
-            open = true;
+            if (r.clash)
+                addr += QStringLiteral(" <b>clash</b>");
+            const QString make = r.makeModel();
+            QString conn = QStringLiteral("DMX");
+            if (r.network)
+                conn = QStringLiteral("%1 %2").arg(r.transport,
+                                                  r.ip.isEmpty() ? QStringLiteral("(no IP)") : r.ip);
+            QString pos;
+            if (r.onPlot)
+                pos = QStringLiteral("%1, %2, %3%4").arg(coord(r.position.x(), m_feet),
+                                                        coord(r.position.y(), m_feet),
+                                                        coord(r.position.z(), m_feet), unit);
+            h += QStringLiteral("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td>"
+                                "<td>%5</td><td>%6</td><td>%7</td></tr>")
+                     .arg(addr, r.owner.isEmpty() ? r.name.toHtmlEscaped()
+                                                  : QStringLiteral("%1 <i>(%2)</i>").arg(r.name.toHtmlEscaped(),
+                                                                                         r.owner.toHtmlEscaped()),
+                          make.toHtmlEscaped(), r.modeText().toHtmlEscaped(), conn.toHtmlEscaped(),
+                          r.mountedOn.toHtmlEscaped(), pos);
         }
-
-        QString addr;
-        if (at)
-            addr = r.channels > 1 ? QStringLiteral("%1–%2").arg(r.firstChannel()).arg(r.lastChannel())
-                                  : QString::number(r.firstChannel());
-        if (r.clash)
-            addr += QStringLiteral(" <b>clash</b>");
-        const QString make = r.makeModel();
-        QString conn = QStringLiteral("DMX");
-        if (r.network)
-            conn = QStringLiteral("%1 %2").arg(r.transport,
-                                              r.ip.isEmpty() ? QStringLiteral("(no IP)") : r.ip);
-        QString pos;
-        if (r.onPlot)
-            pos = QStringLiteral("%1, %2, %3%4").arg(coord(r.position.x(), m_feet),
-                                                    coord(r.position.y(), m_feet),
-                                                    coord(r.position.z(), m_feet), unit);
-        h += QStringLiteral("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td>"
-                            "<td>%6</td><td>%7</td><td>%8</td></tr>")
-                 .arg(addr, r.owner.isEmpty() ? r.name.toHtmlEscaped()
-                                              : QStringLiteral("%1 <i>(%2)</i>").arg(r.name.toHtmlEscaped(),
-                                                                                     r.owner.toHtmlEscaped()),
-                      make.toHtmlEscaped(), r.mode.toHtmlEscaped(),
-                      QString::number(r.channels), conn.toHtmlEscaped(),
-                      r.mountedOn.toHtmlEscaped(), pos);
-    }
-    if (open)
         h += QStringLiteral("</table>");
+    }
     h += QStringLiteral("</body></html>");
     return h;
 }
 
-bool PatchList::writePdf(const QString &path, const QString &title, QString *error) const
+bool PatchList::writePdf(const QString &path, const QString &title, QString *error, GroupBy by) const
 {
     {
         // QPdfWriter says nothing when it can't open the file; find out first.
@@ -381,7 +677,7 @@ bool PatchList::writePdf(const QString &path, const QString &title, QString *err
     QTextDocument doc;
     doc.setDocumentMargin(0);
     doc.setPageSize(writer.pageLayout().paintRectPoints().size());
-    doc.setHtml(toHtml(title));
+    doc.setHtml(toHtml(title, by));
     doc.print(&writer);
     return true;
 }

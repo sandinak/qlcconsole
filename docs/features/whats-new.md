@@ -10,6 +10,21 @@ QLC+ shows open in a **Classic QLC+** view and can be upgraded in one
 step. Fixtures get plot symbols and output rules, and Eos shows import with
 their house lights, relays and subs.
 
+### Patch list and fixture labels
+
+- **Grouped by where it hangs.** The patch list groups by **Location** —
+  the truss, bar or tower a fixture hangs on, else its fixture group —
+  or by universe or type, in address order under each heading.
+- **Only what you need.** **Show** discrete fixtures or the RGB Matrix &
+  pixel ones, and only the Tour, House or Rental fixtures; the copy, CSV,
+  the new **XLSX** export, the PDF and the labels follow.
+- **One Mode column.** The channel count is in the Mode when its name
+  doesn't say it ("Open + Fly (2 ch)").
+- **Labels on tape.** Right-click a row → **Print Label…**: "Spot 3 D101"
+  (a template you can change) on 12 or 24 mm tape, printed through the
+  system's print dialog — with a preset for the **Brother PT-P710BT** —
+  or saved as a PDF. See [The patch list](fixture-manager.md#the-patch-list).
+
 ### House rig and tour package
 
 - **Owner: Tour, House or Rental.** Set it on a fixture group (beside its

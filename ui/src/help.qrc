@@ -45,6 +45,8 @@
     <file alias="images/lighting-studio-top-view.png">../../docs/images/lighting-studio-top-view.png</file>
     <file alias="images/lighting-studio-truss-editor.png">../../docs/images/lighting-studio-truss-editor.png</file>
     <file alias="images/patch-dialog.png">../../docs/images/patch-dialog.png</file>
+    <file alias="images/patch-labels.png">../../docs/images/patch-labels.png</file>
+    <file alias="images/patch-list.png">../../docs/images/patch-list.png</file>
     <file alias="images/programming-tab-effect-browser.png">../../docs/images/programming-tab-effect-browser.png</file>
     <file alias="images/build-tab-layout.png">../../docs/images/build-tab-layout.png</file>
     <file alias="images/build-effects-menu.png">../../docs/images/build-effects-menu.png</file>

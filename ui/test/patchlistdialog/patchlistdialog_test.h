@@ -35,6 +35,10 @@ private slots:
     void cleanup();
 
     void theTableIsInPatchOrder();
+    void theColumnsHaveNoChannelCount();
+    void groupedByLocationByDefault();
+    void groupByIsRemembered();
+    void theFilterPicksTheRows();
     void copyPutsTheCsvOnTheClipboard();
     void saveCsvWritesTheSpreadsheet();
     void savePdfAsksWhereAndWrites();
@@ -46,6 +50,13 @@ private slots:
     void theLabelStockIsRemembered();
     void saveLabelsAsksWhereAndWrites();
     void aNetworkFixturesIpIsOnMouseover();
+
+    void theRightClickMenu();
+    void aSectionHeadingSelectsItsRows();
+    void theExportsFollowWhatIsShown();
+    void theLabelTemplateIsRememberedAndPreviewed();
+    void labelsPrintToAPrinter();
+    void theLabelsKnowTheShowUsesTwoUniverses();
 
 private:
     Doc *m_doc = nullptr;

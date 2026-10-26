@@ -27,15 +27,53 @@
 #include <QFile>
 #include <QFont>
 
+#include <QRegularExpression>
+#include <QHash>
+#include <QImage>
+
 #include "patchlabels.h"
+#include "rigowner.h"
 
 /*********************************************************************
  * The stocks
  *********************************************************************/
 
+/* A continuous tape @p mm wide, 60 mm a label until fitted(). TZe tape
+   prints 18 mm of 24 and about 9 of 12: the rest is the margin. */
+static void makeTape(PatchLabels::Sheet &s, int mm)
+{
+    const qreal w = mm;
+    s.page = QSizeF(60, w);
+    s.label = s.page;
+    s.origin = QPointF(0, 0);
+    s.pitch = s.page;
+    s.columns = 1;
+    s.rows = 1;
+    s.tape = true;
+    s.margin = mm >= 24 ? 3.0 : 1.5;
+}
+
 QList<PatchLabels::Sheet> PatchLabels::sheets()
 {
     QList<Sheet> out;
+
+    /* Continuous tape, the label printers' kind (Brother TZe, Dymo D1 ...):
+       a label a page, the printer's driver cuts between them. */
+    Sheet tape;
+    tape.key = QStringLiteral("tape");
+    tape.name = QCoreApplication::translate("PatchLabels", "Continuous tape (a label a page)");
+    makeTape(tape, 24);
+    out << tape;
+
+    /* The Brother PT-P710BT: the same tape through Brother's own macOS
+       driver, which takes the page size as the label. Picked as the printer
+       when it is there. */
+    Sheet brother;
+    brother.key = QStringLiteral("ptp710bt");
+    brother.name = QCoreApplication::translate("PatchLabels", "Brother PT-P710BT (TZe tape, Brother driver)");
+    makeTape(brother, 24);
+    brother.printer = QStringLiteral("PT-P710BT");
+    out << brother;
 
     /* Avery 5160 (and its 8160, 5260, 5960 ... cousins): US Letter, three
        across and ten down, 2⅝" × 1", a ⅛" gutter between the columns,
@@ -70,13 +108,78 @@ QString PatchLabels::defaultSheetKey()
     return sheets().first().key;
 }
 
-PatchLabels::Sheet PatchLabels::sheet(const QString &key)
+QList<int> PatchLabels::tapeWidths()
+{
+    return { 12, 24 };
+}
+
+PatchLabels::Sheet PatchLabels::sheet(const QString &key, int tapeMm)
 {
     const QList<Sheet> all = sheets();
+    Sheet out = all.first();
     foreach (const Sheet &s, all)
+    {
         if (s.key == key)
-            return s;
-    return all.first();
+            out = s;
+    }
+    if (out.tape)
+        makeTape(out, tapeWidths().contains(tapeMm) ? tapeMm : 24);
+    return out;
+}
+
+/*********************************************************************
+ * The template
+ *********************************************************************/
+
+QString PatchLabels::defaultTemplate()
+{
+    return QStringLiteral("{name} D{address}");
+}
+
+QStringList PatchLabels::templateFields()
+{
+    return { QStringLiteral("{name}"), QStringLiteral("{address}"), QStringLiteral("{universe}"),
+             QStringLiteral("{mode}"), QStringLiteral("{location}"), QStringLiteral("{owner}"),
+             QStringLiteral("{group}") };
+}
+
+QString PatchLabels::address(const PatchList::Row &row, bool multiUniverse)
+{
+    if (!row.patched && !row.clash)
+        return QStringLiteral("—");
+    if (multiUniverse)
+        return QStringLiteral("%1.%2").arg(row.universe + 1).arg(row.firstChannel());
+    return QString::number(row.firstChannel());
+}
+
+QString PatchLabels::render(const QString &text, const PatchList::Row &row, bool multiUniverse)
+{
+    const bool at = row.patched || row.clash;
+    const QHash<QString, QString> fields = {
+        { QStringLiteral("name"), row.name },
+        { QStringLiteral("address"), address(row, multiUniverse) },
+        { QStringLiteral("universe"), at ? QString::number(row.universe + 1) : QStringLiteral("—") },
+        { QStringLiteral("mode"), row.modeText() },
+        { QStringLiteral("location"), row.location },
+        { QStringLiteral("owner"), RigOwner::displayName(row.ownerKind) },
+        { QStringLiteral("group"), row.group },
+    };
+    /* One pass: a name with "{address}" in it stays as it is. */
+    static const QRegularExpression field(QStringLiteral("\\{(\\w+)\\}"));
+    const QString tmpl = text.isEmpty() ? defaultTemplate() : text;
+    QString out;
+    int from = 0;
+    QRegularExpressionMatchIterator it = field.globalMatch(tmpl);
+    while (it.hasNext())
+    {
+        const QRegularExpressionMatch m = it.next();
+        out += tmpl.mid(from, m.capturedStart() - from);
+        const QString key = m.captured(1).toLower();
+        out += fields.contains(key) ? fields.value(key) : m.captured(0);
+        from = m.capturedEnd();
+    }
+    out += tmpl.mid(from);
+    return out.simplified();
 }
 
 QRectF PatchLabels::labelRect(const Sheet &sheet, int index, int *page)
@@ -176,38 +279,165 @@ static void drawLine(QPainter &p, const QRectF &box, const QString &text, bool b
                QFontMetricsF(font, p.device()).elidedText(text, Qt::ElideRight, box.width()));
 }
 
-/* The address, large, and the universe's name beside it, smaller, on the
-   same baseline, in what room is left. */
-static void drawAddress(QPainter &p, const QRectF &box, const QString &address,
-                        const QString &universe, qreal maxPx, qreal minPx)
+/* The size the font is set at for its line (ascent + descent) to fill
+   @p height device units. */
+static qreal fullHeightPx(QPaintDevice *device, qreal height)
 {
-    if (universe.isEmpty())
+    const QFontMetricsF fm(labelFont(true, 100), device);
+    return height * 100.0 / qMax(1.0, fm.ascent() + fm.descent());
+}
+
+/* Tape: the line takes this share of the printed band, the rest air
+   above and below so it reads as a label, not a stamp. */
+static const qreal kTapeLine = 0.8;
+
+PatchLabels::Sheet PatchLabels::fitted(const Sheet &sheet, const QList<PatchList::Row> &rows,
+                                       const Options &options)
+{
+    if (!sheet.tape)
+        return sheet;
+    /* Measured in millimetres on a 254 dpi picture: 10 units a mm. */
+    QImage probe(1, 1, QImage::Format_ARGB32);
+    probe.setDotsPerMeterX(10000);
+    probe.setDotsPerMeterY(10000);
+    const qreal band = (sheet.page.height() - 2 * sheet.margin) * 10;
+    const QFont font = labelFont(true, fullHeightPx(&probe, band * kTapeLine));
+    const QFontMetricsF fm(font, &probe);
+    qreal longest = 0;
+    foreach (const PatchList::Row &r, rows)
+        longest = qMax(longest, fm.horizontalAdvance(render(options.text, r, options.multiUniverse)) / 10);
+    const qreal length = qBound(25.0, longest + 2 * sheet.margin + qMax(0.0, options.cutGap), 150.0);
+    Sheet out = sheet;
+    out.page.setWidth(length);
+    out.label = out.page;
+    out.pitch = out.page;
+    return out;
+}
+
+QPageLayout PatchLabels::pageLayout(const Sheet &sheet)
+{
+    /* A page wider than it is tall (tape, the roll) is a portrait size
+       turned on its side: a PDF viewer then shows it the way it reads. */
+    const bool wide = sheet.page.width() > sheet.page.height();
+    const QSizeF portrait = wide ? sheet.page.transposed() : sheet.page;
+    return QPageLayout(QPageSize(portrait, QPageSize::Millimeter, sheet.name, QPageSize::ExactMatch),
+                       wide ? QPageLayout::Landscape : QPageLayout::Portrait,
+                       QMarginsF(0, 0, 0, 0), QPageLayout::Millimeter);
+}
+
+/* One label in @p mm (millimetres), drawn at @p dpm device units a mm. */
+static void drawLabel(QPainter &p, const QRectF &mm, qreal dpm, const PatchList::Row &row,
+                      const PatchLabels::Sheet &sheet, const PatchLabels::Options &options)
+{
+    const QString text = PatchLabels::render(options.text, row, options.multiUniverse);
+    p.setPen(Qt::black);
+
+    if (sheet.tape)
     {
-        drawLine(p, box, address, true, maxPx, minPx);
+        /* One line, as tall as the tape prints; the cut gap at the ends. */
+        const qreal end = qMax(0.0, options.cutGap) / 2 + sheet.margin;
+        const QRectF band((mm.x() + end) * dpm, (mm.y() + sheet.margin) * dpm,
+                          (mm.width() - 2 * end) * dpm, (mm.height() - 2 * sheet.margin) * dpm);
+        const qreal full = fullHeightPx(p.device(), band.height() * kTapeLine);
+        drawLine(p, band, text, true, full, full * 0.3);
         return;
     }
-    /* The address keeps at least two thirds of the width for itself. */
-    const QFont big = labelFont(true, fitPx(p, address, true, box.width() * 2 / 3, maxPx, minPx));
-    const QFontMetricsF bfm(big, p.device());
-    const QString addr = bfm.elidedText(address, Qt::ElideRight, box.width() * 2 / 3);
-    const qreal baseline = box.center().y() + (bfm.ascent() - bfm.descent()) / 2;
-    p.setFont(big);
-    p.drawText(QPointF(box.left(), baseline), addr);
 
-    const qreal gap = bfm.height() * 0.3;
-    const qreal x = box.left() + bfm.horizontalAdvance(addr) + gap;
-    const qreal room = box.right() - x;
-    if (room <= 0)
-        return;
-    const qreal smallMax = qMax(minPx * 0.6, big.pixelSize() * 0.55);
-    const QFont small = labelFont(false, fitPx(p, universe, false, room, smallMax, smallMax * 0.7));
-    p.setFont(small);
-    p.drawText(QPointF(x, baseline),
-               QFontMetricsF(small, p.device()).elidedText(universe, Qt::ElideRight, room));
+    /* Inside a printer's margin of error: 2 mm in from each edge. */
+    const qreal pad = sheet.margin;
+    const QRectF inner((mm.x() + pad) * dpm, (mm.y() + pad * 0.75) * dpm,
+                       (mm.width() - 2 * pad) * dpm, (mm.height() - 1.5 * pad) * dpm);
+    const PatchLabels::Label l = PatchLabels::label(row);
+
+    /* The template's line large, the rest small, in shares of the height:
+       a network fixture's own line takes some from the large one. */
+    const bool net = !l.network.isEmpty();
+    const qreal big = net ? 0.40 : 0.46;
+    const qreal small = (1.0 - big) / (net ? 3 : 2);
+    qreal y = inner.top();
+    auto box = [&](qreal share) {
+        const QRectF r(inner.left(), y, inner.width(), inner.height() * share);
+        y += r.height();
+        return r;
+    };
+    QRectF r = box(big);
+    drawLine(p, r, text, true, r.height() * 0.82, r.height() * 0.4);
+    r = box(small);
+    const QString detail = l.universe.isEmpty() ? l.detail
+                                                : QStringLiteral("%1 · %2").arg(l.detail, l.universe);
+    drawLine(p, r, detail, false, r.height() * 0.82, r.height() * 0.5);
+    if (net)
+    {
+        r = box(small);
+        drawLine(p, r, l.network, false, r.height() * 0.82, r.height() * 0.5);
+    }
+    r = box(small);
+    drawLine(p, r, l.mount, false, r.height() * 0.82, r.height() * 0.5);
+}
+
+bool PatchLabels::paint(QPagedPaintDevice *device, const QList<PatchList::Row> &rows,
+                        const Sheet &sheet, const Options &options, QString *error)
+{
+    if (rows.isEmpty())
+    {
+        if (error != nullptr)
+            *error = QCoreApplication::translate("PatchLabels", "There are no fixtures to label.");
+        return false;
+    }
+    QPainter p;
+    if (device == nullptr || !p.begin(device))
+    {
+        if (error != nullptr)
+            *error = QCoreApplication::translate("PatchLabels", "Could not draw the labels.");
+        return false;
+    }
+    const qreal dpm = device->logicalDpiX() / 25.4;        // device units a millimetre
+
+    int current = 0;
+    for (int i = 0; i < rows.size(); ++i)
+    {
+        int page = 0;
+        const QRectF mm = labelRect(sheet, i, &page);
+        if (page != current)
+        {
+            device->newPage();
+            current = page;
+        }
+        drawLabel(p, mm, dpm, rows.at(i), sheet, options);
+    }
+    p.end();
+    return true;
+}
+
+QImage PatchLabels::preview(const PatchList::Row &row, const Sheet &sheet, const Options &options,
+                            qreal pxPerMm)
+{
+    const QSizeF mm = sheet.label;
+    QImage img(qMax(1, qRound(mm.width() * pxPerMm)), qMax(1, qRound(mm.height() * pxPerMm)),
+               QImage::Format_ARGB32_Premultiplied);
+    img.setDotsPerMeterX(qRound(pxPerMm * 1000));
+    img.setDotsPerMeterY(qRound(pxPerMm * 1000));
+    img.fill(Qt::white);
+    QPainter p(&img);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::TextAntialiasing);
+    drawLabel(p, QRectF(QPointF(0, 0), mm), pxPerMm, row, sheet, options);
+    p.setPen(QPen(QColor(160, 160, 160), 1));
+    p.setBrush(Qt::NoBrush);
+    p.drawRect(QRectF(0.5, 0.5, img.width() - 1, img.height() - 1));
+    p.end();
+    return img;
 }
 
 bool PatchLabels::writePdf(const QString &path, const QList<PatchList::Row> &rows,
                            const Sheet &sheet, const QString &title, QString *error)
+{
+    return writePdf(path, rows, sheet, title, Options(), error);
+}
+
+bool PatchLabels::writePdf(const QString &path, const QList<PatchList::Row> &rows,
+                           const Sheet &sheet, const QString &title, const Options &options,
+                           QString *error)
 {
     if (rows.isEmpty())
     {
@@ -226,70 +456,10 @@ bool PatchLabels::writePdf(const QString &path, const QList<PatchList::Row> &row
         }
     }
 
+    const Sheet s = fitted(sheet, rows, options);
     QPdfWriter writer(path);
     writer.setTitle(title);
     writer.setCreator(QStringLiteral("qlcconsole"));
-    /* A page wider than it is tall (the roll) is a portrait size turned on
-       its side: a PDF viewer then shows it the way it reads. */
-    const bool wide = sheet.page.width() > sheet.page.height();
-    const QSizeF portrait = wide ? sheet.page.transposed() : sheet.page;
-    writer.setPageLayout(QPageLayout(QPageSize(portrait, QPageSize::Millimeter, sheet.name,
-                                               QPageSize::ExactMatch),
-                                     wide ? QPageLayout::Landscape : QPageLayout::Portrait,
-                                     QMarginsF(0, 0, 0, 0), QPageLayout::Millimeter));
-
-    QPainter p;
-    if (!p.begin(&writer))
-    {
-        if (error != nullptr)
-            *error = QCoreApplication::translate("PatchLabels", "Could not draw the PDF.");
-        return false;
-    }
-    p.setPen(Qt::black);
-    const qreal dpm = writer.resolution() / 25.4;          // device units a millimetre
-
-    int current = 0;
-    for (int i = 0; i < rows.size(); ++i)
-    {
-        int page = 0;
-        const QRectF mm = labelRect(sheet, i, &page);
-        if (page != current)
-        {
-            writer.newPage();
-            current = page;
-        }
-
-        /* Inside a printer's margin of error: 2 mm in from each edge. */
-        const qreal pad = 2.0;
-        const QRectF inner((mm.x() + pad) * dpm, (mm.y() + pad * 0.75) * dpm,
-                           (mm.width() - 2 * pad) * dpm, (mm.height() - 1.5 * pad) * dpm);
-        const Label l = label(rows.at(i));
-
-        /* Name and address large, the rest small, in shares of the height:
-           a network fixture's own line takes some from the large two. */
-        const bool net = !l.network.isEmpty();
-        const qreal big = net ? 0.28 : 0.31, addr = net ? 0.27 : 0.29;
-        const qreal small = (1.0 - big - addr) / (net ? 3 : 2);
-        qreal y = inner.top();
-        auto box = [&](qreal share) {
-            const QRectF r(inner.left(), y, inner.width(), inner.height() * share);
-            y += r.height();
-            return r;
-        };
-        QRectF r = box(big);
-        drawLine(p, r, l.name, true, r.height() * 0.82, r.height() * 0.45);
-        r = box(addr);
-        drawAddress(p, r, l.address, l.universe, r.height() * 0.82, r.height() * 0.45);
-        r = box(small);
-        drawLine(p, r, l.detail, false, r.height() * 0.82, r.height() * 0.5);
-        if (net)
-        {
-            r = box(small);
-            drawLine(p, r, l.network, false, r.height() * 0.82, r.height() * 0.5);
-        }
-        r = box(small);
-        drawLine(p, r, l.mount, false, r.height() * 0.82, r.height() * 0.5);
-    }
-    p.end();
-    return true;
+    writer.setPageLayout(pageLayout(s));
+    return paint(&writer, rows, s, options, error);
 }

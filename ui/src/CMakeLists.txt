@@ -299,6 +299,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt6::Multimedia
     Qt6::MultimediaWidgets
     Qt6::Network
+    Qt6::PrintSupport   # fixture labels through the system's print dialog
     Qt6::Widgets
     qlcplusengine
 )

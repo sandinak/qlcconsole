@@ -21,6 +21,10 @@
 #include <QtTest>
 
 #include "monitorproperties.h"
+#include "qlcfixturedef.h"
+#include "fixturegroup.h"
+#include "xlsxwriter.h"
+#include "truss.h"
 #include "inputoutputmap.h"
 #include "patchlist.h"
 #include "fixture.h"
@@ -229,6 +233,276 @@ void PatchList_Test::anUnwritablePdfSaysWhy()
     QVERIFY(PatchList::build(m_doc).writePdf(QStringLiteral("/nonexistent-dir/x.pdf"),
                                              QStringLiteral("t"), &error) == false);
     QVERIFY(error.isEmpty() == false);
+}
+
+/* A row of @p cells RGB cells (a pixel bar); @p type overrides the
+   generic panel's "LED Bar (Pixels)". */
+static Fixture *rgbBar(Doc *doc, const QString &name, int cells, quint32 universe, quint32 address,
+                       QLCFixtureDef::FixtureType type = QLCFixtureDef::LEDBarPixels)
+{
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    QLCFixtureDef *def = f->genericRGBPanelDef(cells, Fixture::RGB, false);
+    def->setType(type);
+    QLCFixtureMode *mode = f->genericRGBPanelMode(def, Fixture::RGB, false, 100, 100);
+    f->setFixtureDefinition(def, mode);
+    f->setUniverse(universe);
+    f->setAddress(address);
+    f->setPatched(true);
+    doc->addFixture(f);
+    return f;
+}
+
+static FixtureGroup *group(Doc *doc, const QString &name, const QList<Fixture *> &fixtures)
+{
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName(name);
+    doc->addFixtureGroup(g);
+    foreach (Fixture *f, fixtures)
+        g->assignFixture(f->id());
+    return g;
+}
+
+static void hangOnTruss(Doc *doc, Fixture *f, Truss *t)
+{
+    FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(f->id());
+    rp.trussId = t->id();
+    doc->monitorProperties()->setFixtureRigProps(f->id(), rp);
+}
+
+static QStringList titles(const QList<PatchList::Section> &sections)
+{
+    QStringList out;
+    foreach (const PatchList::Section &s, sections)
+        out << s.title;
+    return out;
+}
+
+static QStringList rowNames(const QList<PatchList::Row> &rows)
+{
+    QStringList out;
+    foreach (const PatchList::Row &r, rows)
+        out << r.name;
+    return out;
+}
+
+void PatchList_Test::theModeSaysItsChannelsOnce()
+{
+    PatchList::Row r;
+    r.channels = 18;
+    r.mode = QStringLiteral("18 Channel");
+    QCOMPARE(r.modeText(), QStringLiteral("18 Channel"));
+    r.channels = 165;
+    r.mode = QStringLiteral("165ch");
+    QCOMPARE(r.modeText(), QStringLiteral("165ch"));
+    r.channels = 15;
+    r.mode = QStringLiteral("15-Channel-Chinese");
+    QCOMPARE(r.modeText(), QStringLiteral("15-Channel-Chinese"));
+    // The name doesn't say it: the count after it.
+    r.channels = 2;
+    r.mode = QStringLiteral("Open + Fly");
+    QCOMPARE(r.modeText(), QStringLiteral("Open + Fly (2 ch)"));
+    // Another number is not the count.
+    r.channels = 18;
+    r.mode = QStringLiteral("118ch");
+    QCOMPARE(r.modeText(), QStringLiteral("118ch (18 ch)"));
+    r.mode.clear();
+    QCOMPARE(r.modeText(), QStringLiteral("18 ch"));
+}
+
+void PatchList_Test::groupedByLocationThenAddress()
+{
+    Truss *foh = m_doc->monitorProperties()->addTruss();
+    foh->setName(QStringLiteral("FOH"));
+    Truss *mid = m_doc->monitorProperties()->addTruss();
+    mid->setName(QStringLiteral("Mid"));
+
+    Fixture *spot3 = dimmer(m_doc, QStringLiteral("Spot 3"), 0, 100);
+    Fixture *spot1 = dimmer(m_doc, QStringLiteral("Spot 1"), 0, 20);
+    Fixture *wash = dimmer(m_doc, QStringLiteral("Wash"), 0, 0);
+    Fixture *floor = dimmer(m_doc, QStringLiteral("Floor par"), 0, 60);
+    dimmer(m_doc, QStringLiteral("Loose"), 0, 200);
+    hangOnTruss(m_doc, spot3, mid);
+    hangOnTruss(m_doc, spot1, mid);
+    hangOnTruss(m_doc, wash, foh);
+    // Not hung: its fixture group says where it is.
+    group(m_doc, QStringLiteral("Floor"), { floor });
+
+    const PatchList list = PatchList::build(m_doc);
+    const QList<PatchList::Section> s = list.sections(PatchList::ByLocation);
+    // By name ("Floor" from the group), "Not placed" last.
+    QCOMPARE(titles(s), QStringList({ QStringLiteral("Floor"), QStringLiteral("Truss FOH"),
+                                      QStringLiteral("Truss Mid"), QStringLiteral("Not placed") }));
+    // Address order within each.
+    QCOMPARE(rowNames(s.at(2).rows), QStringList({ QStringLiteral("Spot 1"), QStringLiteral("Spot 3") }));
+    QCOMPARE(rowNames(list.arranged(PatchList::ByLocation)),
+             QStringList({ QStringLiteral("Floor par"), QStringLiteral("Wash"), QStringLiteral("Spot 1"),
+                           QStringLiteral("Spot 3"), QStringLiteral("Loose") }));
+    QCOMPARE(list.rows().at(0).group, QString());                     // Wash: no group
+    QCOMPARE(PatchList::sectionTitle(list.rows().at(0), PatchList::ByLocation), QStringLiteral("Truss FOH"));
+
+    // Not grouped: one untitled section, patch order.
+    const QList<PatchList::Section> none = list.sections(PatchList::ByNone);
+    QCOMPARE(none.size(), 1);
+    QVERIFY(none.first().title.isEmpty());
+    QCOMPARE(rowNames(none.first().rows), names(list));
+    QVERIFY(PatchList().sections(PatchList::ByLocation).isEmpty());
+}
+
+void PatchList_Test::groupedByUniverseAndType()
+{
+    dimmer(m_doc, QStringLiteral("Spare"), 0, 0, 4, false);
+    dimmer(m_doc, QStringLiteral("U10"), 9, 0);
+    dimmer(m_doc, QStringLiteral("U2"), 1, 0);
+    rgbBar(m_doc, QStringLiteral("Bar"), 4, 1, 10);
+    m_doc->inputOutputMap()->setUniverseName(1, QStringLiteral("Stage left"));
+
+    const PatchList list = PatchList::build(m_doc);
+    // Universes in number order (10 after 2), the inventory last.
+    QCOMPARE(titles(list.sections(PatchList::ByUniverse)),
+             QStringList({ QStringLiteral("Universe 2: Stage left"), QStringLiteral("Universe 10"),
+                           QStringLiteral("Not patched (in the inventory)") }));
+    const QStringList types = titles(list.sections(PatchList::ByType));
+    QCOMPARE(types.size(), 2);
+    QVERIFY2(types.contains(QStringLiteral("LED Bar (Pixels)")), qPrintable(types.join(", ")));
+}
+
+void PatchList_Test::pixelFixturesByTypeOrHeads()
+{
+    QVERIFY(!PatchList::isPixelFixture(nullptr));
+    Fixture *par = dimmer(m_doc, QStringLiteral("Dimmer"), 0, 0);
+    QVERIFY(!PatchList::isPixelFixture(par));
+    // "LED Bar (Pixels)", whatever its heads.
+    QVERIFY(PatchList::isPixelFixture(rgbBar(m_doc, QStringLiteral("Pixel bar"), 1, 0, 10)));
+    // Another type with two or more coloured heads: a matrix all the same.
+    QVERIFY(PatchList::isPixelFixture(rgbBar(m_doc, QStringLiteral("Panel"), 4, 0, 20,
+                                             QLCFixtureDef::ColorChanger)));
+    // One coloured head is a discrete colour changer.
+    QVERIFY(!PatchList::isPixelFixture(rgbBar(m_doc, QStringLiteral("Par"), 1, 0, 40,
+                                              QLCFixtureDef::ColorChanger)));
+}
+
+void PatchList_Test::theFilterPicksKindAndOwner()
+{
+    Fixture *spot = dimmer(m_doc, QStringLiteral("Spot"), 0, 0);
+    Fixture *house = dimmer(m_doc, QStringLiteral("House par"), 0, 10);
+    house->setOwner(RigOwner::House);
+    Fixture *bar = rgbBar(m_doc, QStringLiteral("Bar"), 8, 0, 20);
+    FixtureGroup *rental = group(m_doc, QStringLiteral("Rentals"), { bar });
+    rental->setOwner(RigOwner::Rental);
+    Q_UNUSED(spot)
+
+    const PatchList list = PatchList::build(m_doc);
+    QVERIFY(list.hasOwners());
+    PatchList::Filter f;
+    QVERIFY(f.isEmpty());
+    QCOMPARE(names(list.filtered(f)), names(list));
+    f.kind = PatchList::Discrete;
+    QCOMPARE(names(list.filtered(f)), QStringList({ QStringLiteral("Spot"), QStringLiteral("House par") }));
+    f.kind = PatchList::Pixel;
+    QCOMPARE(names(list.filtered(f)), QStringList({ QStringLiteral("Bar") }));
+    f.kind = PatchList::AllKinds;
+    f.owners = { RigOwner::House };
+    QCOMPARE(names(list.filtered(f)), QStringList({ QStringLiteral("House par") }));
+    f.owners = { RigOwner::Tour };
+    QCOMPARE(names(list.filtered(f)), QStringList({ QStringLiteral("Spot") }));
+    f.owners = { RigOwner::Rental };
+    f.kind = PatchList::Discrete;
+    QVERIFY(list.filtered(f).isEmpty());
+}
+
+void PatchList_Test::theMultiUniverseFlagIsTheShows()
+{
+    Fixture *a = dimmer(m_doc, QStringLiteral("A"), 0, 0);
+    QVERIFY(!PatchList::build(m_doc).multiUniverse());
+    dimmer(m_doc, QStringLiteral("Spare"), 3, 0, 4, false);         // not patched: no universe
+    QVERIFY(!PatchList::build(m_doc).multiUniverse());
+    dimmer(m_doc, QStringLiteral("B"), 1, 0);
+    QVERIFY(PatchList::build(m_doc).multiUniverse());
+    // However few are asked for, and however filtered.
+    QVERIFY(PatchList::build(m_doc, { a->id() }).multiUniverse());
+    PatchList::Filter f;
+    f.kind = PatchList::Pixel;
+    QVERIFY(PatchList::build(m_doc).filtered(f).multiUniverse());
+}
+
+void PatchList_Test::theCsvFollowsTheGrouping()
+{
+    Truss *foh = m_doc->monitorProperties()->addTruss();
+    foh->setName(QStringLiteral("FOH"));
+    Fixture *b = dimmer(m_doc, QStringLiteral("B"), 0, 0);
+    Fixture *a = dimmer(m_doc, QStringLiteral("A"), 0, 10);
+    hangOnTruss(m_doc, a, foh);
+    Q_UNUSED(b)
+
+    const PatchList list = PatchList::build(m_doc);
+    QStringList lines = list.toCsv(PatchList::ByLocation).split(QLatin1Char('\n'));
+    QVERIFY2(lines.at(0).startsWith(QStringLiteral("Location,Fixture,ID")), qPrintable(lines.at(0)));
+    QVERIFY2(lines.at(1).startsWith(QStringLiteral("Truss FOH,A,")), qPrintable(lines.at(1)));
+    QVERIFY2(lines.at(2).startsWith(QStringLiteral("Not placed,B,")), qPrintable(lines.at(2)));
+    QVERIFY(lines.at(0).contains(QStringLiteral(",Location,Fixture group,Type,Kind")));
+    QVERIFY(lines.at(1).endsWith(QStringLiteral(",Truss FOH,,Dimmer,Discrete")));
+
+    // Not grouped: no group column, the patch order.
+    lines = list.toCsv().split(QLatin1Char('\n'));
+    QVERIFY(lines.at(0).startsWith(QStringLiteral("Fixture,ID")));
+    QVERIFY(lines.at(1).startsWith(QStringLiteral("B,")));
+    QCOMPARE(list.table(PatchList::ByNone).size(), 3);
+}
+
+/* The stored files of a ZIP the writer made: name -> contents. */
+static QHash<QString, QByteArray> unzip(const QByteArray &zip)
+{
+    QHash<QString, QByteArray> out;
+    int at = 0;
+    auto u16 = [&](int i) { return quint16(quint8(zip.at(i)) | (quint8(zip.at(i + 1)) << 8)); };
+    auto u32 = [&](int i) { return quint32(u16(i)) | (quint32(u16(i + 2)) << 16); };
+    while (at + 30 <= zip.size() && u32(at) == 0x04034b50)
+    {
+        const quint32 crc = u32(at + 14);
+        const int size = int(u32(at + 18));
+        const int nameLen = u16(at + 26);
+        const QString name = QString::fromUtf8(zip.mid(at + 30, nameLen));
+        const QByteArray data = zip.mid(at + 30 + nameLen, size);
+        if (XlsxWriter::crc32(data) != crc)
+            return QHash<QString, QByteArray>();
+        out.insert(name, data);
+        at += 30 + nameLen + size;
+    }
+    return out;
+}
+
+void PatchList_Test::theXlsxIsAWorkbook()
+{
+    // The checksum ZIP uses, and Excel's column names.
+    QCOMPARE(XlsxWriter::crc32(QByteArray("123456789")), quint32(0xCBF43926));
+    QCOMPARE(XlsxWriter::columnName(0), QStringLiteral("A"));
+    QCOMPARE(XlsxWriter::columnName(25), QStringLiteral("Z"));
+    QCOMPARE(XlsxWriter::columnName(26), QStringLiteral("AA"));
+
+    dimmer(m_doc, QStringLiteral("Par <1> & co"), 0, 100);
+    const QByteArray x = PatchList::build(m_doc).toXlsx(PatchList::ByUniverse);
+    QVERIFY(x.startsWith("PK\x03\x04"));
+    QVERIFY(x.contains(QByteArray("PK\x05\x06", 4)));      // the end of the central directory
+    const QHash<QString, QByteArray> files = unzip(x);
+    QVERIFY(files.contains(QStringLiteral("[Content_Types].xml")));
+    QVERIFY(files.contains(QStringLiteral("xl/workbook.xml")));
+    QVERIFY(files.contains(QStringLiteral("xl/styles.xml")));
+    const QString sheet = QString::fromUtf8(files.value(QStringLiteral("xl/worksheets/sheet1.xml")));
+    // The header bold, text escaped, the address a number.
+    QVERIFY(sheet.contains(QStringLiteral("<c r=\"A1\" s=\"1\" t=\"inlineStr\"><is><t xml:space=\"preserve\">Universe</t>")));
+    QVERIFY(sheet.contains(QStringLiteral(">Universe 1</t>")));
+    QVERIFY(sheet.contains(QStringLiteral(">Par &lt;1&gt; &amp; co</t>")));
+    QVERIFY2(sheet.contains(QStringLiteral("<v>101</v>")), qPrintable(sheet));
+
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("patch.xlsx"));
+    QString error;
+    QVERIFY2(PatchList::build(m_doc).writeXlsx(path, PatchList::ByNone, &error), qPrintable(error));
+    QVERIFY(QFileInfo(path).size() > 0);
+    QVERIFY(!PatchList::build(m_doc).writeXlsx(QStringLiteral("/nonexistent-dir/x.xlsx"),
+                                               PatchList::ByNone, &error));
+    QVERIFY(!error.isEmpty());
 }
 
 QTEST_MAIN(PatchList_Test)

@@ -41,6 +41,11 @@ private slots:
     void theRollPdfIsALabelAPage();
     void nothingToLabelIsAnError();
     void anUnwritablePathIsAnError();
+    void theTapeStocks();
+    void theTemplateRenders();
+    void theTapeIsAsLongAsTheText();
+    void theTapePdfIsALabelAPageTapeWide();
+    void thePreviewIsTheLabel();
 };
 
 #endif

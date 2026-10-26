@@ -25,6 +25,7 @@
 #include "inputoutputmap.h"
 #include "patchlabels.h"
 #include "patchlist.h"
+#include "rigowner.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -80,9 +81,9 @@ static bool sameMm(qreal a, qreal b)
 void PatchLabels_Test::theStocksAreThere()
 {
     const QList<PatchLabels::Sheet> all = PatchLabels::sheets();
-    QVERIFY(all.size() >= 2);
-    QCOMPARE(all.first().key, QStringLiteral("avery5160"));
-    QCOMPARE(PatchLabels::defaultSheetKey(), QStringLiteral("avery5160"));
+    QVERIFY(all.size() >= 4);
+    QCOMPARE(all.first().key, QStringLiteral("tape"));
+    QCOMPARE(PatchLabels::defaultSheetKey(), QStringLiteral("tape"));
     QStringList keys;
     foreach (const PatchLabels::Sheet &s, all)
     {
@@ -99,13 +100,15 @@ void PatchLabels_Test::theStocksAreThere()
         }
     }
     QVERIFY(keys.contains(QStringLiteral("roll62")));
+    QVERIFY(keys.contains(QStringLiteral("avery5160")));
+    QVERIFY(keys.contains(QStringLiteral("ptp710bt")));
 }
 
 void PatchLabels_Test::anUnknownStockIsTheDefault()
 {
     QCOMPARE(PatchLabels::sheet(QStringLiteral("roll62")).key, QStringLiteral("roll62"));
-    QCOMPARE(PatchLabels::sheet(QStringLiteral("no such")).key, QStringLiteral("avery5160"));
-    QCOMPARE(PatchLabels::sheet(QString()).key, QStringLiteral("avery5160"));
+    QCOMPARE(PatchLabels::sheet(QStringLiteral("no such")).key, QStringLiteral("tape"));
+    QCOMPARE(PatchLabels::sheet(QString()).key, QStringLiteral("tape"));
 }
 
 void PatchLabels_Test::avery5160PlacesThirtyAPage()
@@ -338,6 +341,153 @@ void PatchLabels_Test::anUnwritablePathIsAnError()
     QVERIFY(!PatchLabels::writePdf(QStringLiteral("/nonexistent-dir/labels.pdf"), rows(2),
                                    PatchLabels::sheet(QString()), QStringLiteral("Labels"), &error));
     QVERIFY(!error.isEmpty());
+}
+
+/* The first page's size in a PDF, millimetres. */
+static QSizeF pdfPageMm(const QByteArray &pdf)
+{
+    static const QRegularExpression box(QStringLiteral("/MediaBox\\s*\\[\\s*([-\\d.]+)\\s+([-\\d.]+)\\s+([-\\d.]+)\\s+([-\\d.]+)"));
+    const QRegularExpressionMatch m = box.match(QString::fromLatin1(pdf));
+    if (!m.hasMatch())
+        return QSizeF();
+    return QSizeF((m.captured(3).toDouble() - m.captured(1).toDouble()) * 25.4 / 72,
+                  (m.captured(4).toDouble() - m.captured(2).toDouble()) * 25.4 / 72);
+}
+
+void PatchLabels_Test::theTapeStocks()
+{
+    QCOMPARE(PatchLabels::tapeWidths(), QList<int>({ 12, 24 }));
+    PatchLabels::Sheet t = PatchLabels::sheet(QStringLiteral("tape"));
+    QVERIFY(t.tape);
+    QCOMPARE(t.perPage(), 1);
+    QVERIFY(sameMm(t.page.height(), 24));                    // 24 mm unless asked
+    QVERIFY(sameMm(t.page.height() - 2 * t.margin, 18));    // TZe 24 prints 18 mm
+    t = PatchLabels::sheet(QStringLiteral("tape"), 12);
+    QVERIFY(sameMm(t.page.height(), 12));
+    QVERIFY(t.page.height() - 2 * t.margin >= 8.9);
+    QVERIFY(sameMm(PatchLabels::sheet(QStringLiteral("tape"), 18).page.height(), 24));   // no such tape
+
+    // The Brother preset: 24 mm, its printer named for the hook.
+    const PatchLabels::Sheet b = PatchLabels::sheet(QStringLiteral("ptp710bt"));
+    QVERIFY(b.tape);
+    QVERIFY(sameMm(b.page.height(), 24));
+    QCOMPARE(b.printer, QStringLiteral("PT-P710BT"));
+    QVERIFY(b.name.contains(QStringLiteral("PT-P710BT")));
+    QVERIFY(PatchLabels::sheet(QStringLiteral("tape")).printer.isEmpty());
+    // Sheets are not tape, and a width says nothing to them.
+    QVERIFY(!PatchLabels::sheet(QStringLiteral("avery5160"), 12).tape);
+    QVERIFY(sameMm(PatchLabels::sheet(QStringLiteral("avery5160"), 12).page.height(), 279.4));
+}
+
+void PatchLabels_Test::theTemplateRenders()
+{
+    QCOMPARE(PatchLabels::defaultTemplate(), QStringLiteral("{name} D{address}"));
+    PatchList::Row r = row(QStringLiteral("Spot 3"), 1, 100, 18);
+    r.mode = QStringLiteral("Open + Fly");
+    r.location = QStringLiteral("Truss FOH");
+    r.group = QStringLiteral("Spots");
+    r.ownerKind = RigOwner::House;
+
+    // One universe in the show: the address alone.
+    QCOMPARE(PatchLabels::render(QString(), r, false), QStringLiteral("Spot 3 D101"));
+    QCOMPARE(PatchLabels::render(PatchLabels::defaultTemplate(), r, false), QStringLiteral("Spot 3 D101"));
+    // More than one: the universe first.
+    QCOMPARE(PatchLabels::render(QString(), r, true), QStringLiteral("Spot 3 D2.101"));
+    QCOMPARE(PatchLabels::address(r, true), QStringLiteral("2.101"));
+    QCOMPARE(PatchLabels::address(r, false), QStringLiteral("101"));
+
+    // Every field.
+    QCOMPARE(PatchLabels::render(QStringLiteral("{name}|{address}|{universe}|{mode}|{location}|{owner}|{group}"),
+                                 r, false),
+             QStringLiteral("Spot 3|101|2|Open + Fly (18 ch)|Truss FOH|House|Spots"));
+    // Unknown fields stay; an empty one leaves no double space; a name
+    // with a field in it is not filled in again.
+    QCOMPARE(PatchLabels::render(QStringLiteral("{name} {colour}"), r, false), QStringLiteral("Spot 3 {colour}"));
+    r.group.clear();
+    QCOMPARE(PatchLabels::render(QStringLiteral("{name} {group} D{address}"), r, false),
+             QStringLiteral("Spot 3 D101"));
+    r.name = QStringLiteral("{address}");
+    QCOMPARE(PatchLabels::render(QString(), r, false), QStringLiteral("{address} D101"));
+
+    // Not patched: no address.
+    r.patched = false;
+    QCOMPARE(PatchLabels::address(r, true), QStringLiteral("—"));
+    QCOMPARE(PatchLabels::templateFields().size(), 7);
+}
+
+void PatchLabels_Test::theTapeIsAsLongAsTheText()
+{
+    const PatchLabels::Sheet t = PatchLabels::sheet(QStringLiteral("tape"), 24);
+    PatchLabels::Options o;
+    const PatchLabels::Sheet shortOne = PatchLabels::fitted(t, { row(QStringLiteral("A"), 0, 0) }, o);
+    QVERIFY(shortOne.page.width() >= 25);                       // the shortest there is
+    QVERIFY(sameMm(shortOne.page.height(), 24));
+    const PatchLabels::Sheet longer = PatchLabels::fitted(t, { row(QStringLiteral("A"), 0, 0),
+                                                               row(QStringLiteral("Spot 3 downstage"), 0, 100) }, o);
+    QVERIFY2(longer.page.width() > shortOne.page.width() + 20 && longer.page.width() <= 150.01,
+             qPrintable(QStringLiteral("%1 / %2").arg(shortOne.page.width()).arg(longer.page.width())));
+    QVERIFY(sameMm(longer.label.width(), longer.page.width()));
+    // A longer cut gap, a longer label.
+    o.cutGap = 10;
+    const qreal spot = PatchLabels::fitted(t, { row(QStringLiteral("Spot 3"), 0, 100) }, PatchLabels::Options()).page.width();
+    QVERIFY2(spot < 140, qPrintable(QString::number(spot)));
+    QVERIFY(PatchLabels::fitted(t, { row(QStringLiteral("Spot 3"), 0, 100) }, o).page.width() > spot + 5);
+    // No end of text: 150 mm, the text set smaller.
+    QVERIFY(sameMm(PatchLabels::fitted(t, { row(QString(300, QLatin1Char('W')), 0, 0) }, o).page.width(), 150));
+    // 12 mm tape: shorter for the same text.
+    QVERIFY(PatchLabels::fitted(PatchLabels::sheet(QStringLiteral("tape"), 12),
+                                { row(QStringLiteral("Spot 3"), 0, 100) }, PatchLabels::Options()).page.width()
+            < spot);
+    // A sheet is as it is.
+    const PatchLabels::Sheet avery = PatchLabels::sheet(QStringLiteral("avery5160"));
+    QVERIFY(sameMm(PatchLabels::fitted(avery, rows(3), o).page.width(), avery.page.width()));
+}
+
+void PatchLabels_Test::theTapePdfIsALabelAPageTapeWide()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath("tape.pdf");
+    PatchLabels::Options o;
+    o.multiUniverse = true;
+    foreach (int mm, PatchLabels::tapeWidths())
+    {
+        const PatchLabels::Sheet s = PatchLabels::sheet(QStringLiteral("tape"), mm);
+        QString error;
+        QVERIFY2(PatchLabels::writePdf(path, rows(4), s, QStringLiteral("Labels"), o, &error), qPrintable(error));
+        const QByteArray pdf = readAll(path);
+        QCOMPARE(pdfPages(pdf), 4);
+        const QSizeF page = pdfPageMm(pdf);
+        const qreal length = PatchLabels::fitted(s, rows(4), o).page.width();
+        // Across: the label's length; up: the tape's width.
+        QVERIFY2(qAbs(page.height() - mm) < 0.5 && qAbs(page.width() - length) < 0.5,
+                 qPrintable(QStringLiteral("%1 × %2 mm on %3 mm tape").arg(page.width()).arg(page.height()).arg(mm)));
+    }
+    // The Brother preset is the same tape.
+    QVERIFY(PatchLabels::writePdf(path, rows(2), PatchLabels::sheet(QStringLiteral("ptp710bt")),
+                                  QStringLiteral("Labels"), o));
+    QCOMPARE(pdfPages(readAll(path)), 2);
+    QVERIFY(qAbs(pdfPageMm(readAll(path)).height() - 24) < 0.5);
+}
+
+void PatchLabels_Test::thePreviewIsTheLabel()
+{
+    const PatchLabels::Sheet s = PatchLabels::fitted(PatchLabels::sheet(QStringLiteral("tape"), 24),
+                                                     { row(QStringLiteral("Spot 3"), 0, 100) },
+                                                     PatchLabels::Options());
+    const QImage img = PatchLabels::preview(row(QStringLiteral("Spot 3"), 0, 100), s, PatchLabels::Options(), 4);
+    QCOMPARE(img.height(), 96);
+    QCOMPARE(img.width(), qRound(s.page.width() * 4));
+    // Some of it is printed black.
+    int dark = 0;
+    for (int y = 0; y < img.height(); ++y)
+    {
+        for (int x = 2; x < img.width() - 2; ++x)
+        {
+            if (qGray(img.pixel(x, y)) < 80)
+                dark++;
+        }
+    }
+    QVERIFY2(dark > 100, qPrintable(QString::number(dark)));
 }
 
 QTEST_MAIN(PatchLabels_Test)

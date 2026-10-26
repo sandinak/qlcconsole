@@ -22,10 +22,14 @@
 
 #include <QDialog>
 
+#include "patchlabels.h"
 #include "patchlist.h"
 
+class QDoubleSpinBox;
 class QRadioButton;
+class QLineEdit;
 class QComboBox;
+class QPrinter;
 class QLabel;
 
 /** @addtogroup ui_fixtures
@@ -33,11 +37,16 @@ class QLabel;
  */
 
 #define SETTINGS_PATCH_LABEL_SHEET "patchlist/labelsheet"
+#define SETTINGS_PATCH_LABEL_TAPE "patchlist/labeltape"
+#define SETTINGS_PATCH_LABEL_TEMPLATE "patchlist/labeltemplate"
+#define SETTINGS_PATCH_LABEL_CUTGAP "patchlist/labelcutgap"
 
 /**
  * Labels from the patch list: a label per fixture (all of them, or the rows
- * picked in the list) on a label stock (PatchLabels::sheets()), saved as a
- * PDF to print. The stock chosen is remembered.
+ * picked in the list) saying what the template says ("{name} D{address}"),
+ * on a label stock (PatchLabels::sheets()): printed through the system's
+ * print dialog or saved as a PDF. The stock, the tape width, the template
+ * and the cut gap are remembered.
  */
 class PatchLabelsDialog : public QDialog
 {
@@ -47,9 +56,24 @@ public:
     PatchLabelsDialog(const QList<PatchList::Row> &all, const QList<PatchList::Row> &selected,
                       const QString &title, const QString &suggestedFile, QWidget *parent = NULL);
 
-    /** The stock chosen ("avery5160"). */
+    /** The stock chosen ("tape"). */
     QString sheetKey() const;
     void setSheetKey(const QString &key);
+    /** The tape's width in millimetres (12, 24), for a tape stock. */
+    int tapeWidth() const;
+    void setTapeWidth(int mm);
+    /** The label's template. */
+    QString labelTemplate() const;
+    void setLabelTemplate(const QString &text);
+    /** Millimetres of blank tape between labels. */
+    qreal cutGap() const;
+    void setCutGap(qreal mm);
+    /** The show patches more than one universe: addresses say which. */
+    void setMultiUniverse(bool multi);
+
+    /** The stock as it prints the rows chosen (PatchLabels::fitted()). */
+    PatchLabels::Sheet sheet() const;
+    PatchLabels::Options options() const;
 
     /** Only the rows picked in the list, rather than every fixture. */
     bool selectedOnly() const;
@@ -60,22 +84,34 @@ public:
 
     /** Write the labels to @p path. False (with @p error set) if it cannot. */
     bool savePdf(const QString &path, QString *error = NULL) const;
+    /** Set @p printer up for the labels (page size, no margins) and the
+     *  Brother preset's printer when it is there. */
+    void setUpPrinter(QPrinter *printer) const;
+    /** Print the labels on @p printer as it is set up. False (with @p error
+     *  set) if it cannot. */
+    bool print(QPrinter *printer, QString *error = NULL) const;
 
 public slots:
     void slotSave();
+    void slotPrint();
 
 private slots:
-    void slotUpdateCount();
+    void slotUpdate();
 
 private:
     QList<PatchList::Row> m_all;
     QList<PatchList::Row> m_selected;
     QString m_title;
     QString m_suggestedFile;
+    bool m_multiUniverse = false;
 
     QComboBox *m_sheet;
+    QComboBox *m_tape;
+    QLineEdit *m_template;
+    QDoubleSpinBox *m_cutGap;
     QRadioButton *m_allRadio;
     QRadioButton *m_selectedRadio;
+    QLabel *m_preview;
     QLabel *m_count;
 };
 

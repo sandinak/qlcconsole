@@ -33,6 +33,33 @@ show plays Show Tree content; and faster Matrix effects.
 
 ### Added
 
+- **Patch list: grouped, filtered, exported to Excel, and labels on tape**
+  (RC3, board Q151). The patch list (`PatchListDialog`, now a tree) groups
+  by **Location** (default, remembered as `patchlist/groupby`: the truss,
+  bar, tower, riser or deck a fixture hangs on, a hanger under its truss
+  or tower; else its first fixture group; else "Not placed", last),
+  **Universe**, **Type** or **None**, in address order within each. **Show:
+  All / Discrete / RGB Matrix & pixel fixtures** and **Owner: Tour / House
+  / Rental** filter the list, the copy, the CSV, a new **XLSX** export
+  (`XlsxWriter`: one sheet, stored ZIP, no new dependency) and the PDF,
+  which follow the grouping (a first column for the heading). Pixel /
+  matrix = an "LED Bar (Pixels)" definition, or a mode with two or more
+  heads with RGB channels of their own (`PatchList::isPixelFixture`). The
+  **Ch** column is gone: the Mode says the count when its name doesn't
+  ("Open + Fly (2 ch)"). Right-click → **Print Label… / Print N
+  Labels…**, and **Print Labels…** for the list shown. Labels
+  (`PatchLabels`) say what a remembered template says, default
+  **`{name} D{address}`** ("Spot 3 D101"; fields {name} {address}
+  {universe} {mode} {location} {owner} {group}); the address is the DMX
+  start address, "2.101" when the show patches more than one universe.
+  New stocks: **Continuous tape** 12 / 24 mm (TZe; one line as tall as the
+  tape prints, the label as long as the longest text needs, 25-150 mm, a
+  cut gap) -- now the default -- and a **Brother PT-P710BT** preset (24 mm
+  tape through Brother's macOS driver; Print picks that printer when it is
+  there). **Print…** goes through the system print dialog (QPrinter, Qt
+  PrintSupport now linked); **Save PDF…** writes the same pages; the
+  dialog previews the first label.
+
 - **House rig, tour package and universes per venue** (VENUES.md, board
   Q137-Q138). Fixtures and fixture groups have an owner (`RigOwner`: Tour,
   House, Rental; a fixture follows its group unless it says otherwise),

@@ -23,50 +23,98 @@
 #include <QDialog>
 
 #include "patchlist.h"
+#include "rigowner.h"
 
-class QTableWidget;
+class QTreeWidgetItem;
+class QTreeWidget;
 class QPushButton;
+class QComboBox;
+class QLabel;
+class QMenu;
 class Doc;
 
 /** @addtogroup ui_fixtures
  * @{
  */
 
+#define SETTINGS_PATCH_LIST_GROUPBY "patchlist/groupby"
+
 /**
  * The patch list (PatchList) to look over, copy, or save as a spreadsheet
- * (CSV) or a printable PDF for the crew. Read-only; built when it opens.
+ * (CSV, XLSX) or a printable PDF for the crew, and to print fixture labels
+ * from. Grouped by where the fixtures hang (or universe, or type), filtered
+ * to the discrete or the pixel / matrix fixtures and by owner; the exports
+ * and the labels follow what is shown. Read-only; built when it opens.
  */
 class PatchListDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    /** The table's columns that say where a fixture's data goes. */
-    enum { ConnectionColumn = 5, GoesToColumn = 6 };
+    /** The columns. A fixture's mode carries its channel count when the
+     *  mode's name doesn't say it ("Open + Fly (2 ch)"). */
+    enum { PatchColumn = 0, FixtureColumn, MakeColumn, ModeColumn, ConnectionColumn,
+           GoesToColumn, MountedColumn, OwnerColumn, ColumnCount };
 
     PatchListDialog(Doc *doc, QWidget *parent = NULL);
 
+    /** Every fixture in the show. */
     const PatchList &list() const { return m_list; }
-    QTableWidget *table() const { return m_table; }
+    /** What the dialog shows: list() filtered. */
+    PatchList shown() const;
+    QTreeWidget *tree() const { return m_tree; }
     /** "Patch list — show.qlcc": the PDF's heading. */
     QString title() const { return m_title; }
 
-    /** Write the CSV to @p path. False (with @p error set) if it cannot. */
-    bool saveCsv(const QString &path, QString *error = NULL) const;
+    PatchList::GroupBy groupBy() const;
+    void setGroupBy(PatchList::GroupBy by);
+    PatchList::Filter filter() const;
+    void setKind(PatchList::Kind kind);
+    /** Only @p owner's fixtures; RigOwner::Unset for anybody's. */
+    void setOwner(RigOwner::Owner owner);
 
-    /** The rows picked in the table, in list order. */
+    /** The fixture rows shown, in the order shown. */
+    QList<PatchList::Row> shownRows() const;
+    /** The rows picked in the list, in list order; a section's heading
+     *  picks the whole section. */
     QList<PatchList::Row> selectedRows() const;
+    /** The item for the fixture called @p name, or null. */
+    QTreeWidgetItem *itemFor(const QString &name) const;
+
+    /** Write the CSV / XLSX (what is shown, as it is grouped) to @p path.
+     *  False (with @p error set) if it cannot. */
+    bool saveCsv(const QString &path, QString *error = NULL) const;
+    bool saveXlsx(const QString &path, QString *error = NULL) const;
+
+    /** The right-click menu for the rows selected now (the caller owns it). */
+    QMenu *contextMenu();
 
 public slots:
     void slotCopy();
     void slotSaveCsv();
+    void slotSaveXlsx();
     void slotSavePdf();
+    /** Labels for the list shown (or the rows picked). */
     void slotLabels();
+    /** Labels for the rows picked. */
+    void slotPrintSelectedLabels();
+
+private slots:
+    void slotRefill();
+    void slotContextMenu(const QPoint &pos);
+
+private:
+    void openLabels(const QList<PatchList::Row> &selected);
 
 private:
     PatchList m_list;
     QString m_title;
-    QTableWidget *m_table;
+    QList<PatchList::Row> m_shown;     //!< the fixture rows, in the order shown
+    QTreeWidget *m_tree;
+    QComboBox *m_groupBy;
+    QComboBox *m_kind;
+    QComboBox *m_owner;
+    QLabel *m_summary;
 };
 
 /** @} */

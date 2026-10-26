@@ -155,7 +155,7 @@ Findings that are not marked as bugs:
 | M023 | House rig / venues | UI: Slot on the Connections toolbar | VenueRigUi_Test::theConnectionsSlotPicker | covered | covered | med |  |
 | M024 | House rig / venues | UI: venue page (house list, universe table, slot, not-ours, clash list, keep/forget patch); opened from Focus calls ▸ Rig and universes | VenueRigUi_Test::theVenuePageShowsTheUniverses, VenueRigUi_Test::theVenueManagerOpensIt | covered | covered | med |  |
 | M025 | House rig / venues | UI: the plot's Owner overlay (ViewOwner colours) | none | none | none | low | ui/test/monitor: set m_overlayCombo to Owner and check the item colours. |
-| M026 | House rig / venues | Owners in the Inventory and the patch list | FocusReport_Test owner column only (engine/test/focusreport/focusreport_test.cpp) | none | none | low | PatchList m_owners column (engine/test/patchlist) and the MonitorInventoryPanel "[House]" label are untested. |
+| M026 | House rig / venues | Owners in the Inventory and the patch list | FocusReport_Test owner column; **PatchList_Test::theFilterPicksKindAndOwner**, **PatchListDialog_Test::theColumnsHaveNoChannelCount** (Owner column), ::theFilterPicksTheRows (Owner filter) | none | covered | low | The MonitorInventoryPanel "[House]" label is untested. |
 | M027 | Focus calls / venues / Refine | One controller map shared by every tool; per-tool labels; crew words | FocusCalls_Test::theControllerSchemeIsOneMap (engine/test/focuscalls/focuscalls_test.cpp) | covered | covered | med |  |
 | M028 | Focus calls / venues / Refine | On-screen map labelled per tool (panels) | FocusCallsUi_Test::thePanelShowsTheCall, FocusCallsUi_Test::theRefinePanel (ui/test/focuscallsui/focuscallsui_test.cpp) | covered | covered | low |  |
 | M029 | Focus calls / venues / Refine | Focus calls saved in the show, in order; nothing written when empty; reorder | FocusCalls_Test::callsAreSavedWithTheShow; **FocusCalls_Test::callsComeBackWithTheWholeShow** (new) | partial | covered | high |  |
@@ -718,6 +718,8 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Return to inventory (keeps groups/looks, Design only) | FixtureManager_Test::returningToInventoryReleasesTheAddress; Inventory_Test::unpatchReturnsAFixtureToTheInventory, ::unpatchRefusesInOperateModeAndForStagedFixtures | covered | covered | high |
 | Connection DMX / Art-Net / WLED per fixture; batch IPs; WLED gets the WLED output | AddFixture_Test::connectionAndIpAreReported; FixtureCreator_Test::aBatchOfNetworkFixturesGetsOneIpEach; Inventory_Test::aWledFixtureGetsTheWledOutputAimedAtIt | covered | covered | high |
 | Patch list (rows, one-based, clash, mount, IP), CSV / PDF / Copy, labels | PatchList_Test (all); PatchListDialog_Test (all); PatchLabels_Test (all) | covered | covered | low |
+| Patch list grouping (Location / Universe / Type / None), Show and Owner filters, Mode with its count, XLSX | PatchList_Test::groupedByLocationThenAddress, ::groupedByUniverseAndType, ::pixelFixturesByTypeOrHeads, ::theFilterPicksKindAndOwner, ::theModeSaysItsChannelsOnce, ::theCsvFollowsTheGrouping, ::theXlsxIsAWorkbook; PatchListDialog_Test::groupedByLocationByDefault, ::theFilterPicksTheRows, ::theColumnsHaveNoChannelCount, ::theExportsFollowWhatIsShown | none | covered | low |
+| Fixture labels: template ({name} D{address}, multi-universe "2.101"), tape 12 / 24 mm and the PT-P710BT preset, print (QPrinter to PDF), preview, right-click Print Label | PatchLabels_Test::theTemplateRenders, ::theTapeStocks, ::theTapeIsAsLongAsTheText, ::theTapePdfIsALabelAPageTapeWide, ::thePreviewIsTheLabel; PatchListDialog_Test::theRightClickMenu, ::labelsPrintToAPrinter, ::theLabelTemplateIsRememberedAndPreviewed, ::theLabelsKnowTheShowUsesTwoUniverses | none | covered | low |
 | Grid editor: head-type tags, drag heads, arrow picker, marquee/Ctrl select, Move fixture | FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi (blocks only) | partial | partial | low |
 | Grid editor: add group as block, drag block with collision guard | FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi, ::draggingASubGroupBlockMovesItThroughTheRealDropPath | covered | covered | low |
 | Grid editor Ctrl+Z (50-deep group-layout undo) | none | none | none | med |
@@ -954,7 +956,7 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Eos special circuits → output rules and Eos/ groups; $$Options X | EosImporter_Test::specialCircuits, ::circuitClassifier; EosImportWizard_Test::specialCircuitsPage; EosAsciiParser_Test::patchOptionsAndSubModes | covered | covered | high |
 | Eos subs become VC Playback sliders | EosImporter_Test::subsForTheConsole; EosImportWizard_Test::subFaders | covered | covered | med |
 | QXW import (palettes follow scenes) | QxwImporter_Test (all) | covered | covered | med |
-| Patch list CSV / PDF, labels | PatchList_Test; PatchListDialog_Test; PatchLabels_Test | covered | covered | low |
+| Patch list CSV / XLSX / PDF, grouping and filters, labels (tape, print, template) | PatchList_Test; PatchListDialog_Test; PatchLabels_Test | covered | covered | low |
 | ⌘D dump DMX values into a function | DmxDumpFactoryProperties_Test (properties only) | partial | partial | med |
 
 ## Show control
