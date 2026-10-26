@@ -108,6 +108,16 @@ private slots:
     /** Quick focus lists selected lights that cannot be aimed, and leaves
      *  them out (the default) or cancels. */
     void lightsThatCannotBeAimedAreListed();
+    /** Q150: the venue chip -- its text, its menu (contents and what is
+     *  greyed), switching, renaming, a new venue and None from it, and it
+     *  following a venue removed elsewhere. */
+    void theVenueChipSaysTheVenueAndOpensItsMenu();
+    /** Q150: clashes turn the chip amber with a count, Clashes (n) opens
+     *  the venue page's list; the chip follows the rig changing. */
+    void theVenueChipTurnsAmberWithItsClashes();
+    /** Q150: "Still at <venue>?" unanswered shows on the chip and heads its
+     *  menu; the answer shows on the chip. */
+    void theVenueChipAsksStillAt();
 
 private:
     Doc *m_doc = nullptr;

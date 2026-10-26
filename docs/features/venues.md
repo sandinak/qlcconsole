@@ -7,10 +7,48 @@ house rig is saved with that venue. When you move the show to the next
 room, apply that room's venue and its house rig comes in. The tour
 package stays exactly as it was.
 
-The venue is the one you apply with **Focus ▸ Venues** on the Lighting
-Studio toolbar (or pick in **Focus ▸ Edit focus calls…**), kept in the
-file next to the show with its focus corrections. See [Venue
+The venue is the one you apply with the **venue chip** in the footer (or
+**View ▸ Venue…**, or **Focus ▸ Venues** on the Lighting Studio toolbar),
+kept in the file next to the show with its focus corrections. See [Venue
 focus](focus-calls.md#venues-corrections-that-stay-with-the-room).
+
+## The venue chip
+
+The footer says which room the show is set up for, beside **Ready** and
+the Grand Master: **Venue: Lincoln HS**, or **Venue: none** with no
+venue applied. It is always there in the qlcconsole and Everything
+views; in Classic QLC+ only once the show has a venue.
+
+![The venue chip in the footer, amber: Lincoln HS clashes with the show's own rig](../images/venue-chip.png)
+
+1. The chip: the venue applied, and here its clashes with the show
+   ("· 2 clashes"). It turns **amber** with the count while there are
+   any.
+
+Click it for the **venue menu**. **View ▸ Venue…** and **Focus ▸
+Venues** in the Lighting Studio open the same menu.
+
+![The venue menu: switch, new, rename, the venue page, venue focus, the focus report and the clashes](../images/venue-menu.png)
+
+1. **Switch venue ▸**: the show's venues, and **None** (the show's own
+   calibration, rig and patch). Clashes are listed first, as with Apply
+   now (see [The clash check](#the-clash-check)).
+2. **New venue…**: name the room you are in; its corrections start from
+   the venue changed last. It is applied at once.
+3. **Rename…** the venue applied. Its corrections, house rig and patch
+   go with the name.
+4. **Rig and universes…**: [the venue page](#the-venue-page).
+5. **Venue focus…**: run the focus calls in this room.
+6. **Focus report…**: the venue's focus, light by light.
+7. **Clashes (n)…**, only when there are any: the venue page, its clash
+   list in front.
+
+The chip follows everything that changes it: a venue applied, renamed or
+deleted, a fixture patched onto the room's channels. When the show was
+last focused for a venue more than 20 hours ago, the chip says **Venue:
+Lincoln HS?** and the menu starts with **Still at Lincoln HS?…** until
+you answer (see [Still at the
+venue?](focus-calls.md#venues-corrections-that-stay-with-the-room)).
 
 ## Owner: Tour, House or Rental
 
@@ -90,7 +128,7 @@ dialog marks it **CONFLICT**.
 
 ## The venue page
 
-**Focus ▸ Venues ▸ Rig and universes…** (for the venue applied; greyed
+**Rig and universes…** in the venue menu (for the venue applied; greyed
 until one is), or **Rig and universes…** in the focus calls list (for the
 venue chosen beside it: with **None** or **New venue…** chosen, it asks
 you to choose a venue first), opens the venue page. Apply the venue first to change its house rig or its
@@ -116,9 +154,11 @@ patch; **Not ours** and the clash check work either way.
 
 ## The clash check
 
-**Apply now** (in the focus calls list, beside the venue), or **Focus ▸
-Venues ▸ Apply**, first lists what clashes with the show, with **Apply
-anyway** or **Cancel** (the default).
+**Apply now** (in the focus calls list, beside the venue), or **Switch
+venue ▸** in the venue menu, first lists what clashes with the show, with
+**Apply anyway** or **Cancel** (the default). Once a venue is applied, the
+footer's chip turns amber with the count while anything clashes, and
+**Clashes (n)…** in its menu opens the list.
 Starting the focus calls on a venue applies it without asking, so press
 Apply now first in a new room:
 

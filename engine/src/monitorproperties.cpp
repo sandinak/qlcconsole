@@ -490,7 +490,8 @@ float MonitorProperties::deckFrontY() const
 float MonitorProperties::downstageEdgeY() const
 {
     const float front = deckFrontY();
-    if (const StagePlatform *apron = apronPlatform())
+    const StagePlatform *apron = apronPlatform();
+    if (apron != nullptr && stageMarkVisible(ApronFlag))
         return qMax(front, apron->frontEdgeAt(stageCentre().x()));
     return front;
 }
@@ -568,13 +569,43 @@ void MonitorProperties::setApronFrontCurve(float metres)
     syncApron();
 }
 
+float MonitorProperties::apronHeight() const
+{
+    if (m_apronHeightSet)
+        return m_apronHeight;
+    const StagePlatform *deck = mainDeck();
+    return (deck != nullptr) ? deck->height() : 0.0f;
+}
+
+bool MonitorProperties::setApronHeight(float metres)
+{
+    if (!std::isfinite(metres) || metres < 0.0f)
+        return false;
+    m_apronHeightSet = true;
+    m_apronHeight = metres;
+    syncApron();
+    return true;
+}
+
+void MonitorProperties::setApronHeightAuto()
+{
+    m_apronHeightSet = false;
+    syncApron();
+}
+
 bool MonitorProperties::syncApron()
 {
     if (m_loadingXml)
         return false;
     const float depth = apronDepth();
     StagePlatform *apron = apronPlatform();
-    if (!stageMarkVisible(ApronFlag) || depth < 0.01f)
+    /* Hidden is only how it looks (board Q155-2): a deck it has had stays,
+       so a light stood or mounted on it keeps its height and its mount. It
+       is made the first time it is shown, never for a show that never
+       showed it; and it goes only when it has no depth (nothing to stand
+       on). */
+    const bool everShown = m_apronPlatformId != 0xFFFFFFFF;
+    if (depth < 0.01f || (!stageMarkVisible(ApronFlag) && !everShown))
     {
         if (apron == nullptr)
             return false;
@@ -586,7 +617,7 @@ bool MonitorProperties::syncApron()
     const float unit = gridUnitMetres();
     const float x0 = (deck != nullptr) ? deck->originX() : 0.0f;
     const float width = (deck != nullptr) ? deck->width() : m_gridSize.x() * unit;
-    const float height = (deck != nullptr) ? deck->height() : 0.0f;
+    const float height = apronHeight();
     const QColor colour = (deck != nullptr && deck->color().isValid()) ? deck->color() : QColor(70, 74, 84);
     const float curve = apronFrontCurve();
     const float y0 = curtainLineY();
@@ -650,7 +681,7 @@ void MonitorProperties::saveStagePieces(QXmlStreamWriter *doc) const
     /* Only once used -- a piece shown, moved, set or locked -- so a show
        that never used them saves as it always has. */
     const bool used = m_stageMarks != NoStageMarks || m_curtainLineSet || m_numberLineSet
-                      || !m_apronAuto || m_stagePieceLocks != 0 || hasStageLayer();
+                      || !m_apronAuto || m_apronHeightSet || m_stagePieceLocks != 0 || hasStageLayer();
     if (!used)
         return;
     doc->writeStartElement(KXMLQLCMonitorStagePieces);
@@ -688,6 +719,8 @@ void MonitorProperties::saveStagePieces(QXmlStreamWriter *doc) const
                     doc->writeAttribute(QStringLiteral("Depth"), metresText(m_apronDepth));
                     doc->writeAttribute(QStringLiteral("FrontCurve"), metresText(m_apronFrontCurve));
                 }
+                if (m_apronHeightSet)
+                    doc->writeAttribute(QStringLiteral("Height"), metresText(m_apronHeight));
                 if (m_apronPlatformId != 0xFFFFFFFF)
                     doc->writeAttribute(QStringLiteral("Platform"), QString::number(m_apronPlatformId));
             break;
@@ -752,6 +785,8 @@ void MonitorProperties::loadStagePieces(QXmlStreamReader &root)
                 m_apronDepth = qMax(0.0f, number(a, QStringLiteral("Depth")));
             if (a.hasAttribute(QStringLiteral("FrontCurve")))
                 m_apronFrontCurve = qMax(0.0f, number(a, QStringLiteral("FrontCurve")));
+            m_apronHeightSet = a.hasAttribute(QStringLiteral("Height"));
+            m_apronHeight = m_apronHeightSet ? qMax(0.0f, number(a, QStringLiteral("Height"))) : 0.0f;
             if (a.hasAttribute(QStringLiteral("Platform")))
                 m_apronPlatformId = a.value(QStringLiteral("Platform")).toUInt();
         }
@@ -957,6 +992,8 @@ void MonitorProperties::reset()
     m_apronAuto = true;
     m_apronDepth = 0.0f;
     m_apronFrontCurve = 0.0f;
+    m_apronHeightSet = false;
+    m_apronHeight = 0.0f;
     m_apronPlatformId = 0xFFFFFFFF;
     m_curtainLineSet = false;
     m_curtainLineY = 0.0f;

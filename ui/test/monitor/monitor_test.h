@@ -71,6 +71,12 @@ private slots:
     /** Q146: the apron is drawn as deck in the Rig Overview whatever marks
      *  are on. */
     void theApronIsDeckInTheRigOverview();
+    /** Q155-2: hiding the apron is only how it looks -- the lights on it
+     *  keep their mount and height; its height can be the floor. */
+    void hidingTheApronMovesNothingOnIt();
+    /** Q159-1: a new object while the active layer is locked asks where:
+     *  pick a layer, unlock and place, or cancel; once a placement. */
+    void placingOnALockedLayerAsksWhere();
     /** Q145: the Rig Overview's controls are in a footer bar like the plot's. */
     void theRigOverviewHasAFooterBar();
     void initTestCase();

@@ -115,7 +115,8 @@ the show's unit, with what it means written under it:
   downstage of the curtain line it is (**1.5 m DS of curtain line**). A
   negative distance puts it upstage of the curtain line.
 - **Apron:** **Auto**, or its **Depth** from the curtain line and its
-  **Front curve**.
+  **Front curve**; and its **Height** (the main deck's, or one you set:
+  0 is the floor).
 - **Centre line / DSC mark:** the mark, the full-depth line, or both.
 
 Each also has **Shown** and **Lock**. OK keeps the changes as one undo step;
@@ -137,7 +138,7 @@ put, and the distance shown changes to match.
 
 #### The apron
 
-![An apron's properties: Shown and Lock, Auto, its depth from the curtain line, and its front curve](../images/lighting-studio-apron-properties.png)
+![An apron's properties: Shown and Lock, Auto, its depth from the curtain line, its front curve and its height](../images/lighting-studio-apron-properties.png)
 
 1. **Shown:** the apron and its deck, on the plot and in the Rig Overview.
 2. **Lock:** not dragged on the plot.
@@ -146,16 +147,24 @@ put, and the distance shown changes to match.
 4. **Depth**, from the curtain line, in the show's unit.
 5. **Front curve:** how far the middle of its front reaches past its
    corners; 0 is a straight front.
+6. **Height:** **Auto** is the main deck's height; untick it to set your
+   own. **0 is the floor**: an apron at floor height in front of a raised
+   stage. Lights stood on the apron stand at its height.
 
 The apron is its own piece. It starts at the curtain line and runs
-downstage by its depth, as wide and as high as the main deck and in its
-colour (the stage grid's width, on the floor, with no deck), and its rounded
+downstage by its depth, as wide as the main deck, as high as it until you
+set its **Height**, and in its colour (the stage grid's width, on the
+floor, with no deck), and its rounded
 front is right there at its front edge. It's real deck: drawn as deck on the
 plot, in every view, and in the Rig Overview from above, at 45° and in 3D
 whatever marks are on, and fixtures and figures stand on it. Move the curtain
 line and the apron moves with it, keeping its depth. It never borrows another
 platform: a riser butted against the front of the deck stays exactly as it
-is, whatever the apron's depth. Hiding the apron takes its deck away.
+is, whatever the apron's depth. **Hiding the apron is only how it looks**:
+it is not drawn (on the plot, in the Rig Overview, or in a beam's way),
+but its deck stays, so a light stood or mounted on it keeps its height
+and its mount, and nothing moves or drops. Shown again, it is the same
+deck.
 
 **Where a target is, in crew terms.** Every stage target on the plot has a
 small readout under it giving where it is against these marks, in the show's
@@ -728,9 +737,14 @@ still locked. **Locked draws red**, always: every locked object, and
 every fixture on a locked layer, gets a red outline (a target keeps its
 own colour and gets a red ring).
 
-A new object never lands on a locked layer: when the active layer is
-locked, it goes on the first unlocked layer in the list (where it could
-not even be picked, it would be no use).
+A new object never lands on a locked layer, where it could not even be
+picked. When the active layer is locked, placing one **asks where it
+goes**: the unlocked layers are listed (the first one picked, as
+before), with **Place on this layer**, **Unlock "Rig" and place here**
+(the layer unlocked, the object on it) and **Cancel** (nothing placed).
+The answer holds for the rest of that placement (every fixture of one
+drop, everything one paste makes); the next one asks again. With every
+layer locked, it offers only Unlock or Cancel.
 
 **Shows from 0.2 with a "Locked" layer.** For a while an object's lock was
 its layer's, and opening a show that had objects locked on their own moved
@@ -1056,8 +1070,11 @@ toolbar, **Focus ▾**, beside **Add ▾**:
   ([Venue focus](focus-calls.md#running-venue-focus)).
 - **Edit focus calls…** — the calls, in order, and the venue
   ([Setting up the calls](focus-calls.md#setting-up-the-calls)).
-- **Venues ▸** — **Apply ▸** a venue (or None), **New venue…**, and **Rig
-  and universes…** for the venue applied ([Venues](focus-calls.md#venues-corrections-that-stay-with-the-room)).
+- **Venues ▸** — the venue menu, the same one the footer's venue chip
+  and **View ▸ Venue…** open: **Switch venue ▸** a venue (or None), **New
+  venue…**, **Rename…**, **Rig and universes…**, **Venue focus…**, **Focus
+  report…**, and **Clashes (n)…** when there are any ([The venue
+  chip](venues.md#the-venue-chip)).
 - **Practice (scramble)…** — knocks the moving heads in the calls off
   their targets by a random amount for you to focus back, scored
   ([Practice](focus-calls.md#practice-scramble-and-focus-back)).

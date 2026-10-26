@@ -10,6 +10,22 @@ QLC+ shows open in a **Classic QLC+** view and can be upgraded in one
 step. Fixtures get plot symbols and output rules, and Eos shows import with
 their house lights, relays and subs.
 
+### The venue chip
+
+- **Which room, always in sight.** The footer says the venue applied —
+  **Venue: Lincoln HS**, or **Venue: none** — and turns amber with a
+  count when it clashes with the show's own rig. Click it for the venue
+  menu: switch venue, new, rename, the venue page, venue focus, the focus
+  report and the clashes. **View ▸ Venue…** and the Lighting Studio's
+  **Focus ▸ Venues** open the same menu. See [The venue
+  chip](venues.md#the-venue-chip).
+- **The apron on the floor.** The apron has a **Height** (the main
+  deck's until you set it; 0 is the floor), and hiding it no longer moves
+  or drops the lights on it. See [The apron](lighting-studio.md#the-apron).
+- **A locked layer asks.** Placing something while the active layer is
+  locked asks which layer it goes on, or unlocks it for you. See
+  [Locks](lighting-studio.md#locks).
+
 ### Patch list and fixture labels
 
 - **Grouped by where it hangs.** The patch list groups by **Location** —
@@ -43,7 +59,7 @@ their house lights, relays and subs.
 - **The clash check.** Apply now lists a house fixture on a tour
   fixture's addresses, anything on channels that are not ours, and
   fixtures in the other kind's slot, before the venue goes live. The
-  venue page (**Focus ▸ Venues ▸ Rig and universes…** in the Lighting Studio) has it all; the plot
+  venue page (**Rig and universes…** in the venue menu) has it all; the plot
   has an **Owner** overlay. See [House rig and tour package](venues.md).
 
 ### Quick focus, Venue focus and Focus this cue: the controller on stage

@@ -23,6 +23,7 @@
 #include <QDialogButtonBox>
 #include <QTreeWidget>
 #include <QStatusBar>
+#include <QMenu>
 #include <QTabWidget>
 #include <QListWidget>
 #include <QCheckBox>
@@ -839,7 +840,8 @@ QList<HelpShots::Shot> HelpShots::shots()
         f.pad = QMargins(0, 0, 36, 0);
         int n = 0;
         foreach (const char *name, QList<const char *>() << "stagePieceVisible" << "stagePieceLocked"
-                                                        << "apronDepthAuto" << "apronDepth" << "apronFrontCurve")
+                                                        << "apronDepthAuto" << "apronDepth" << "apronFrontCurve"
+                                                        << "apronHeight")
         {
             Callout c = mark(named(d, name), ++n);
             c.place = (n == 3) ? Left : Right;
@@ -855,6 +857,7 @@ QList<HelpShots::Shot> HelpShots::shots()
             return;
         mon->m_props->setStageMarks(MonitorProperties::NoStageMarks);
         mon->m_props->setApronAuto(true);
+        mon->m_props->setApronHeightAuto();
         if (mon->property("helpShotDeck").isValid())
             mon->m_props->removePlatform(mon->property("helpShotDeck").toUInt());
         mon->setProperty("helpShotDeck", QVariant());
@@ -1247,6 +1250,81 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (QWidget *d = app->findChild<QWidget *>(QStringLiteral("helpShotVenueRig")))
             delete d;
         endVenue();
+        settle();
+    } };
+
+    /* The venue chip (Q150): Lincoln HS applied, the room keeping U1's
+       first channels, so it clashes and the chip is amber with the count;
+       then its menu, open. */
+    auto startVenueChip = [doc]() {
+        VenueCorrections *v = doc->programmer()->venueCorrections();
+        const QString venue = v->addVenue(QStringLiteral("Lincoln HS"));
+        v->setActiveVenue(venue);
+        VenueRig::NotOurs keep;
+        keep.universe = 0;
+        keep.from = 0;
+        keep.to = 23;
+        v->setNotOurs(venue, QList<VenueRig::NotOurs>() << keep);
+    };
+    list << Shot{ QStringLiteral("venue-chip"), [=]() {
+        window();
+        Frame f;
+        startVenueChip();
+        app->updateVenueFooter();
+        settle();
+        QWidget *chip = named(app, "footerVenue");
+        if (chip == nullptr)
+            return f;
+        QStatusBar *bar = app->statusBar();
+        f.grab = bar;
+        const QRect at(chip->mapTo(bar, QPoint(0, 0)), chip->size());
+        // The number above the chip, in the room padded on above the bar.
+        f.pad = QMargins(0, 40, 0, 0);
+        f.crop = QRect(0, -40, qMin(bar->width(), at.right() + 260), bar->height() + 40);
+        f.callouts << mark(chip, 1);
+        f.callouts.last().place = Above;
+        return f;
+    }, [=]() {
+        endVenue();
+        app->updateVenueFooter();
+        settle();
+    } };
+    list << Shot{ QStringLiteral("venue-menu"), [=]() {
+        window();
+        Frame f;
+        startVenueChip();
+        app->updateVenueFooter();
+        settle();
+        QMenu *menu = app->openVenueMenu();
+        settle();
+        if (menu == nullptr)
+            return f;
+        f.grab = menu;
+        int n = 0;
+        foreach (const char *name, QList<const char *>() << "venueSwitch" << "venueNew" << "venueRename"
+                                                        << "venueRig" << "venueFocus" << "venueReport"
+                                                        << "venueClashes")
+        {
+            ++n;
+            for (QAction *a : menu->actions())
+            {
+                if (a->objectName() == QLatin1String(name))
+                {
+                    Callout c;
+                    c.rect = menu->actionGeometry(a).adjusted(2, 3, -2, -3);
+                    c.number = n;
+                    c.place = Right;
+                    f.callouts << c;
+                }
+            }
+        }
+        f.pad = QMargins(0, 0, 40, 0);
+        return f;
+    }, [=]() {
+        if (QMenu *menu = app->findChild<QMenu *>(QStringLiteral("venueMenu")))
+            menu->close();
+        endVenue();
+        app->updateVenueFooter();
         settle();
     } };
 

@@ -18,19 +18,16 @@
 */
 
 #include <QAbstractButton>
-#include <QActionGroup>
-#include <QInputDialog>
-#include <QMessageBox>
 #include <QAction>
 #include <QMenu>
 
 #include "programmercontroller.h"
 #include "venuecorrections.h"
 #include "focuscallsdialog.h"
-#include "venuerigdialog.h"
 #include "focussession.h"
 #include "focuscalls.h"
 #include "focusmenu.h"
+#include "venuemenu.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -171,76 +168,12 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
                         "focus to, a note for the crew; and the venue"));
 
     menu->addSeparator();
+    /* The venue menu (Q150): the same one the app's venue chip and View ▸
+       Venue… open, filled by the same code. */
     QMenu *venuesMenu = menu->addMenu(tr("Venues"));
     venuesMenu->setObjectName(QStringLiteral("focusVenuesMenu"));
     venuesMenu->menuAction()->setObjectName(QStringLiteral("focusVenues"));
-    venuesMenu->setToolTipsVisible(true);
-    {
-        const QString blocked = venuesBlocked(doc);
-        QMenu *apply = venuesMenu->addMenu(tr("Apply"));
-        apply->setObjectName(QStringLiteral("focusVenueApplyMenu"));
-        apply->menuAction()->setObjectName(QStringLiteral("focusVenueApply"));
-        apply->setToolTipsVisible(true);
-        QActionGroup *group = new QActionGroup(apply);
-        QStringList names = venues->venueNames();
-        names.prepend(QString());
-        for (const QString &name : names)
-        {
-            QAction *a = apply->addAction(name.isEmpty() ? tr("None (the show's own calibration)") : name);
-            a->setCheckable(true);
-            a->setChecked(name == venues->activeVenue());
-            group->addAction(a);
-            QObject::connect(a, &QAction::triggered, parent, [doc, parent, name]() {
-                VenueCorrections *vc = doc->programmer()->venueCorrections();
-                if (doc->programmer()->focusSession()->isActive())
-                {
-                    QMessageBox::information(parent, tr("Venues"),
-                                             tr("Leave Quick focus or Venue focus first: its heads are "
-                                                "being worked on."));
-                    return;
-                }
-                if (!VenueRigDialog::confirmClashes(doc, parent, name))
-                    return;
-                vc->setActiveVenue(name);
-            });
-        }
-        if (names.size() == 1)
-            setAvailable(apply->menuAction(), tr("No venue yet. Make one with New venue\342\200\246"), QString());
-        else
-            setAvailable(apply->menuAction(), blocked, tr("Put a venue's corrections on the rig now"));
-
-        QAction *add = venuesMenu->addAction(tr("New venue\342\200\246"), parent, [doc, parent]() {
-            VenueCorrections *vc = doc->programmer()->venueCorrections();
-            bool ok = false;
-            const QString name = QInputDialog::getText(parent, tr("New venue"),
-                tr("The room's name (its corrections start from %1):")
-                    .arg(vc->lastVenue().isEmpty() ? tr("the show's own") : vc->lastVenue()),
-                QLineEdit::Normal, VenueCorrections::defaultVenueName(), &ok).trimmed();
-            if (!ok || name.isEmpty())
-                return;
-            if (vc->hasVenue(name))
-            {
-                QMessageBox::information(parent, tr("New venue"),
-                                         tr("\342\200\234%1\342\200\235 is already a venue: apply it "
-                                            "with Venues \342\226\270 Apply.").arg(name));
-                return;
-            }
-            const QString last = vc->lastVenue();
-            const QString made = last.isEmpty() ? vc->addVenue(name) : vc->addVenueFrom(name, last);
-            if (!made.isEmpty() && !doc->programmer()->focusSession()->isActive())
-                vc->setActiveVenue(made);
-        });
-        add->setObjectName(QStringLiteral("focusVenueNew"));
-        setAvailable(add, blocked, tr("Make a venue for the room you are in, and apply it"));
-
-        QAction *rig = venuesMenu->addAction(tr("Rig and universes\342\200\246"), parent, [doc, parent]() {
-            VenueRigDialog::open(doc, parent, doc->programmer()->venueCorrections()->activeVenue());
-        });
-        rig->setObjectName(QStringLiteral("focusVenueRig"));
-        setAvailable(rig, venueRigBlocked(doc),
-                     tr("This venue's house rig, its outputs for each universe, the channels it keeps, "
-                        "and the clash check"));
-    }
+    VenueMenu::fill(venuesMenu, doc, parent);
 
     menu->addSeparator();
     QAction *practice = menu->addAction(tr("Practice (scramble)\342\200\246"), parent, [doc, parent]() {

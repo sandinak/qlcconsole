@@ -484,8 +484,11 @@ BeamOcclusion::ModelPtr BeamOcclusion::build(const MonitorProperties *mp, int ki
     {
         foreach (StagePlatform *pl, mp->platforms())
         {
-            if (pl == nullptr || pl->topMaterial() == StagePlatform::OpenTop)
-                continue;
+            if (pl == nullptr || pl->topMaterial() == StagePlatform::OpenTop
+                || mp->isHiddenApronPlatform(pl->id()))
+            {
+                continue;           // a hidden apron is not drawn, so not in the way
+            }
             m->beginBlocker(Platforms, pl->id(), nameOr(pl->name(), tr("Platform"), pl->id()));
             const float base = mp->platformBaseZ(pl->id());
             const bool solidTop = pl->topMaterial() == StagePlatform::SolidTop;
@@ -664,7 +667,10 @@ static quint64 stageSignature(const MonitorProperties *mp, int kinds, float minS
     if (kinds & Platforms)
         for (StagePlatform *pl : mp->platforms())
         {
-            if (pl == nullptr) continue;
+            if (pl == nullptr || mp->isHiddenApronPlatform(pl->id()))
+            {
+                continue;
+            }
             s.add(pl->id()); s.add(pl->name());
             s.add(pl->originX()); s.add(pl->originY()); s.add(pl->width()); s.add(pl->depth());
             s.add(pl->height()); s.add(pl->rotation()); s.add(int(pl->topMaterial()));

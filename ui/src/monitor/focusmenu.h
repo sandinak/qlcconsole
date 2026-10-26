@@ -69,8 +69,8 @@ public:
 
     /** Fill the Lighting Studio's Focus ▾ menu (cleared first), its state
      *  as it is now: Quick focus (@p quickFocus), Venue focus, Edit focus
-     *  calls, Venues ▸, Practice (scramble), Focus report. Dialogs open
-     *  over @p parent. */
+     *  calls, Venues ▸ (the venue menu, VenueMenu::fill()), Practice
+     *  (scramble), Focus report. Dialogs open over @p parent. */
     static void fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function<void()> &quickFocus);
 };
 

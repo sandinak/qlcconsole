@@ -6723,7 +6723,9 @@ void MonitorGraphicsView::updateStageMarks()
     {
         props->syncApron();
         StagePlatform *apron = props->apronPlatform();
-        if (apron != nullptr && m_cellPixels > 0 && props->layer(apron->layerId()).visible)
+        // Hidden, it is still deck (Q155-2): only not drawn.
+        if (apron != nullptr && m_cellPixels > 0 && props->layer(apron->layerId()).visible
+            && !props->isHiddenApronPlatform(apron->id()))
         {
             m_apronDeckItem = newPlatformItem(apron);
             m_apronDeckItem->setFlag(QGraphicsItem::ItemIsMovable, false);
@@ -8735,7 +8737,13 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         const QList<quint32> deckIds = mountIds;
         QMenu *deckMenu = mountMenu->addMenu(deckIds.size() > 1 ? tr("Deck (%1 fixtures)").arg(deckIds.size())
                                                                  : tr("Deck"));
-        const QList<StagePlatform *> decks = props->platforms();
+        QList<StagePlatform *> decks = props->platforms();
+        // The apron hidden: not offered (it is not drawn), though kept.
+        for (int i = decks.size() - 1; i >= 0; --i)
+        {
+            if (decks.at(i) != nullptr && props->isHiddenApronPlatform(decks.at(i)->id()))
+                decks.removeAt(i);
+        }
         deckMenu->setEnabled(!decks.isEmpty());
         deckMenu->addAction(deckIds.size() > 1 ? tr("The deck under each") : tr("The deck under it"),
                             this, [this, deckIds]() {

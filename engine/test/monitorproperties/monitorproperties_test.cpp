@@ -3164,16 +3164,20 @@ void MonitorProperties_Test::theApronIsMeasuredFromTheCurtainLine()
     QCOMPARE(back.apronPlatform()->originY(), 4.0f);
     QVERIFY(qAbs(back.apronDepth() - 2.0f) < 1e-4f);
 
-    // Hidden: no deck, the id kept for it; a new platform does not take it.
+    // Hidden (Q155-2): only how it looks -- the deck stays, the same one,
+    // not counted as the stage's front; a new platform does not take its id.
     const quint32 apronId = apron->id();
     mp.setStagePieceVisible(MP::ApronPiece, false);
-    QVERIFY(mp.apronPlatform() == nullptr);
-    QCOMPARE(mp.platforms().size(), count);
+    QCOMPARE(mp.apronPlatform(), apron);
+    QVERIFY(mp.isHiddenApronPlatform(apronId));
+    QCOMPARE(mp.platforms().size(), count + 1);
+    QCOMPARE(mp.downstageEdgeY(), mp.deckFrontY());
     StagePlatform *other = mp.addPlatform();
     QVERIFY(other->id() != apronId);
     mp.removePlatform(other->id());
     mp.setStagePieceVisible(MP::ApronPiece, true);
-    QVERIFY(mp.apronPlatform() != nullptr);
+    QCOMPARE(mp.apronPlatform(), apron);
+    QVERIFY(!mp.isHiddenApronPlatform(apronId));
     QCOMPARE(mp.apronPlatform()->id(), apronId);
 
     // A curtain line found from the main drape: the apron starts there.
@@ -3308,6 +3312,102 @@ void MonitorProperties_Test::theApronNeverMovesARiserAtTheFront()
     QCOMPARE(riser2->depth(), 1.0f);
     QVERIFY(back.apronPlatform() != nullptr);
     QVERIFY(back.apronPlatform()->id() != riser->id());
+}
+
+void MonitorProperties_Test::hidingTheApronMovesNothingOnIt()
+{
+    /* Board Q155-2: Branson's aprons are at floor height, in front of a
+       raised deck. Hiding the apron took its deck away, and the lights stood
+       on it dropped (their mount went with it). Hidden is only how it looks
+       now; its height comes from the deck until set, and the floor is one. */
+    typedef MonitorProperties MP;
+    MonitorProperties mp;
+    mp.setGridUnits(MP::Meters);
+    mp.setGridSize(QVector3D(10, 6, 8));
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(8.0f); deck->setDepth(5.0f);
+    deck->setHeight(1.0f);
+
+    // Never shown: no deck of its own, hidden or not (an old show as it was).
+    QVERIFY(mp.apronPlatform() == nullptr);
+    QVERIFY(!mp.syncApron());
+    QVERIFY(mp.apronPlatform() == nullptr);
+
+    mp.setStagePieceVisible(MP::ApronPiece, true);
+    QVERIFY(mp.setApronDepth(2.0f));
+    StagePlatform *apron = mp.apronPlatform();
+    QVERIFY(apron != nullptr);
+    // Its height: the deck's, until set; the floor is a height like any other.
+    QVERIFY(mp.apronHeightIsAuto());
+    QCOMPARE(mp.apronHeight(), 1.0f);
+    QCOMPARE(apron->height(), 1.0f);
+    QVERIFY(mp.setApronHeight(0.0f));
+    QVERIFY(!mp.apronHeightIsAuto());
+    QCOMPARE(apron->height(), 0.0f);
+    QVERIFY(!mp.setApronHeight(-0.5f));
+    QCOMPARE(apron->height(), 0.0f);
+    deck->setHeight(1.2f);          // the deck changes: a set height does not follow
+    mp.syncApron();
+    QCOMPARE(apron->height(), 0.0f);
+
+    // A light stood on it, another on the deck.
+    const quint32 onApron = 7, onDeck = 8;
+    mp.setFixturePosition(onApron, 0, 0, QVector3D(5000.0f, 5500.0f, 0.0f));
+    mp.setFixturePosition(onDeck, 0, 0, QVector3D(5000.0f, 2000.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.deckPlatformId = apron->id();
+    mp.setFixtureRigProps(onApron, rp);
+    rp.deckPlatformId = deck->id();
+    mp.setFixtureRigProps(onDeck, rp);
+    const QVector3D apronBefore = mp.fixtureRigPosition(onApron);
+    const QVector3D deckBefore = mp.fixtureRigPosition(onDeck);
+    QCOMPARE(apronBefore.z(), 0.0f);    // on the floor, with the apron
+
+    // Hidden: nothing moves, nothing drops, the mount is kept.
+    mp.setStagePieceVisible(MP::ApronPiece, false);
+    QCOMPARE(mp.apronPlatform(), apron);
+    QCOMPARE(mp.fixtureRigProps(onApron).deckPlatformId, apron->id());
+    QCOMPARE(mp.fixtureRigPosition(onApron), apronBefore);
+    QCOMPARE(mp.fixtureRigPosition(onDeck), deckBefore);
+    // Raised while hidden: the light on it goes up with it (it is deck).
+    QVERIFY(mp.setApronHeight(0.3f));
+    QVERIFY(qAbs(mp.fixtureRigPosition(onApron).z() - (apronBefore.z() + 0.3f)) < 1e-4f);
+    QVERIFY(mp.setApronHeight(0.0f));
+
+    // Saved hidden, its height set: back the same, hidden, still deck.
+    auto apronXml = [](const QByteArray &all) {
+        const int at = all.indexOf("Kind=\"Apron\"");
+        return at < 0 ? QByteArray() : all.mid(at, all.indexOf("/>", at) - at);
+    };
+    const QByteArray xml = stageMarksXml(mp);
+    QVERIFY(apronXml(xml).startsWith("Kind=\"Apron\" Visible=\"0\""));
+    QVERIFY2(apronXml(xml).contains("Height=\"0\""), apronXml(xml).constData());
+    MonitorProperties back;
+    loadStageMarksXml(back, xml);
+    QVERIFY(back.apronPlatform() != nullptr);
+    QCOMPARE(back.apronPlatform()->id(), apron->id());
+    QVERIFY(back.isHiddenApronPlatform(apron->id()));
+    QCOMPARE(back.apronHeight(), 0.0f);
+    QVERIFY(!back.apronHeightIsAuto());
+
+    // Shown again: the same deck, everything where it was.
+    mp.setStagePieceVisible(MP::ApronPiece, true);
+    QCOMPARE(mp.apronPlatform(), apron);
+    QCOMPARE(mp.fixtureRigPosition(onApron), apronBefore);
+
+    // Back to the deck's height.
+    mp.setApronHeightAuto();
+    QVERIFY(mp.apronHeightIsAuto());
+    QCOMPARE(apron->height(), 1.2f);
+    QVERIFY(!apronXml(stageMarksXml(mp)).contains("Height="));
+
+    // No depth: nothing to stand on, so no deck (the id kept, as ever).
+    QVERIFY(mp.setApronDepth(0.0f));
+    QVERIFY(mp.apronPlatform() == nullptr);
+    QVERIFY(mp.setApronDepth(1.0f));
+    QVERIFY(mp.apronPlatform() != nullptr);
+    QCOMPARE(mp.apronPlatform()->id(), apron->id());
 }
 
 void MonitorProperties_Test::stageMarksMigrateToStagePieces()

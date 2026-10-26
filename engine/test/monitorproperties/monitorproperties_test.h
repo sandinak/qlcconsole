@@ -191,6 +191,7 @@ private slots:
     /** Q147 regression: a riser butted against the deck's front is never
      *  moved or resized by the apron (it was taken for the apron piece). */
     void theApronNeverMovesARiserAtTheFront();
+    void hidingTheApronMovesNothingOnIt();
     /** Q147: a show saved with Show ▸ Stage marks (StageMarks, CurtainLineY,
      *  NumberLineY, TargetPositions) loads as the same stage pieces, at the
      *  same places, and saves them the new way; an older show has none. */

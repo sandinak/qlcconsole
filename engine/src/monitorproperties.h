@@ -359,18 +359,34 @@ public:
     float apronFrontCurve() const;
     /** Set its front curve (Auto off, the depth kept as it is). */
     void setApronFrontCurve(float metres);
+    /** How high the apron's deck is (metres): the main deck's height until
+     *  set (the floor, 0, with no deck); set, any height from the floor (0)
+     *  up (board Q155-2: an apron at floor height in front of a raised
+     *  stage). */
+    float apronHeight() const;
+    inline bool apronHeightIsAuto() const { return !m_apronHeightSet; }
+    /** Set its height, 0 (the floor) or more; false for anything else. */
+    bool setApronHeight(float metres);
+    /** Back to the main deck's height. */
+    void setApronHeightAuto();
     /** The apron's deck: a platform on the Stage layer, made, kept to the
      *  curtain line and resized by syncApron(), and saved with the apron,
-     *  not as a platform of its own. Null while the apron is hidden or has
-     *  no depth. */
+     *  not as a platform of its own. Made the first time the apron is
+     *  shown; hiding it is only how it looks (board Q155-2): the deck stays,
+     *  so what stands or is mounted on it keeps its height and its mount.
+     *  Null before it was first shown, or while it has no depth. */
     StagePlatform *apronPlatform() const;
     bool isApronPlatform(quint32 platformId) const
     { return platformId == m_apronPlatformId && m_platforms.contains(platformId); }
+    /** The apron's deck while the apron is hidden: in the model, not drawn
+     *  (not on the plot, in the Rig Overview, or in a beam's way). */
+    bool isHiddenApronPlatform(quint32 platformId) const
+    { return isApronPlatform(platformId) && !stageMarkVisible(ApronFlag); }
     /** Make the apron's deck agree with the apron as it is now: made when
-     *  it is shown, taken away when it is hidden, moved with the curtain
-     *  line and the main deck. Every stage setter calls it; a view calls it
-     *  after the deck or the curtain it is found from is edited. True when
-     *  anything changed. */
+     *  it is first shown, kept (not drawn) when it is hidden, moved with the
+     *  curtain line and the main deck. Every stage setter calls it; a view
+     *  calls it after the deck or the curtain it is found from is edited.
+     *  True when anything changed. */
     bool syncApron();
     /** The deck the stage is: the biggest square-on platform across the
      *  centre line (deckFrontY() starts from its front); null on a bare
@@ -445,6 +461,8 @@ private:
     bool m_apronAuto = true;
     float m_apronDepth = 0.0f;              ///< set depth, metres
     float m_apronFrontCurve = 0.0f;         ///< set front curve, metres
+    bool m_apronHeightSet = false;          ///< else the main deck's height
+    float m_apronHeight = 0.0f;             ///< set height, metres
     quint32 m_apronPlatformId = 0xFFFFFFFF; ///< its deck's platform id, kept while hidden
     bool m_loadingXml = false;              ///< syncApron() waits for the platforms
     void loadStagePieces(QXmlStreamReader &root);

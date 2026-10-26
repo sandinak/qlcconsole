@@ -920,7 +920,12 @@ QList<QPair<StructureStudioView::Kind, quint32> > StructureStudioView::everyStru
     foreach (Truss *t, props->trusses())
         if (t != nullptr && layerShown(t->layerId())) out << qMakePair(TrussKind, t->id());
     foreach (StagePlatform *pl, props->platforms())
-        if (pl != nullptr && layerShown(pl->layerId())) out << qMakePair(PlatformKind, pl->id());
+    {
+        if (pl != nullptr && layerShown(pl->layerId()) && !props->isHiddenApronPlatform(pl->id()))
+        {
+            out << qMakePair(PlatformKind, pl->id());
+        }
+    }
     foreach (Tower *tw, props->towers())
         if (tw != nullptr && layerShown(tw->layerId())) out << qMakePair(TowerKind, tw->id());
     foreach (Stand *st, props->stands())
@@ -3886,8 +3891,11 @@ QVector<StructureStudioView::Deck> StructureStudioView::decks() const
     MonitorProperties *props = m_doc->monitorProperties();
     foreach (StagePlatform *pl, props->platforms())
     {
-        if (pl == nullptr || !layerShown(pl->layerId()))
+        // The apron hidden: still deck in the model (Q155-2), not drawn.
+        if (pl == nullptr || !layerShown(pl->layerId()) || props->isHiddenApronPlatform(pl->id()))
+        {
             continue;
+        }
         Deck d;
         d.platform = pl;
         d.baseZ = double(props->platformBaseZ(pl->id()));

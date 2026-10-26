@@ -880,11 +880,18 @@ private:
      *  has none set or the check is off/lifted. Click opens the setting. */
     QLabel* m_statusRigNetLabel = nullptr;
     void updateRigNetworkFooter();
-    /** "Venue: Lincoln HS" while a venue's focus corrections are applied. */
-    QLabel* m_statusVenueLabel = nullptr;
+    /** The venue chip (board Q150): "Venue: Lincoln HS" or "Venue: none",
+     *  amber with a count when the venue clashes; a click opens the venue
+     *  menu. Always there in the qlcconsole and Everything views; in Classic
+     *  only when the show has venues. */
+    class VenueChip* m_venueChip = nullptr;
 public:
     void updateVenueFooter();
+    /** The chip's text while it is shown, else empty. */
     QString venueFooterText() const;
+    /** View ▸ Venue…: the venue menu, under the chip (at the mouse while
+     *  the chip is hidden). */
+    class QMenu *openVenueMenu();
 private:
     /** "Update available: 0.1.1" -- driven by m_updateManager, hidden while
      *  there is nothing to say; a click opens Software Update. */

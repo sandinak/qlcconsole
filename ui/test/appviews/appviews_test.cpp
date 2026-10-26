@@ -49,6 +49,10 @@
 #include "showtreecontroller.h"
 #include <QtMath>
 #include "appviews_test.h"
+#include "venuemenu.h"
+#include "focusmenu.h"
+#include "venuecorrections.h"
+#include "programmercontroller.h"
 
 #define private public
 #include "qlcfixturedefcache.h"
@@ -1048,7 +1052,7 @@ void AppViews_Test::theViewMenuIsOnlyViews()
         if (!a->isSeparator())
             items << a->text();
     QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "Rig Overview…"
-                                  << "Quick Focus…");
+                                  << "Quick Focus…" << "Venue…");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()
@@ -2682,4 +2686,102 @@ void AppViews_Test::quittingWithTheShowTreeShowing()
     delete m_app;
     m_app = nullptr;
     QVERIFY(ShowTreeView::instance() == nullptr);
+}
+
+/* Q150: the venue chip is in the footer, app-wide: "Venue: none" in the
+   qlcconsole and Everything views, in Classic only once the show has
+   venues; View ▸ Venue… and the Lighting Studio's Focus ▸ Venues ▸ open
+   the same menu as the chip. */
+void AppViews_Test::theVenueChipIsInTheFooter()
+{
+    VenueChip *chip = m_app->findChild<VenueChip *>(QStringLiteral("footerVenue"));
+    QVERIFY(chip != nullptr);
+    QCOMPARE(chip, m_app->m_venueChip);
+    VenueCorrections *vc = m_app->m_doc->programmer()->venueCorrections();
+    QTemporaryDir dir;
+    auto back = qScopeGuard([this, vc]() {
+        vc->reset();
+        m_app->setWorkspaceView(App::ConsoleView);
+        m_app->updateVenueFooter();
+    });
+
+    m_app->setWorkspaceView(App::ConsoleView);
+    QCOMPARE(chip->text(), QString("Venue: none"));
+    QVERIFY(!chip->isHidden());
+    QCOMPARE(m_app->venueFooterText(), QString("Venue: none"));
+    m_app->setWorkspaceView(App::EverythingView);
+    QVERIFY(!chip->isHidden());
+    // Classic: QLC+'s footer, until the show has a venue.
+    m_app->setWorkspaceView(App::ClassicView);
+    QVERIFY(chip->isHidden());
+    QCOMPARE(m_app->venueFooterText(), QString());
+    vc->setShowFile(dir.filePath("Tour.qlcc"), false);
+    QVERIFY(vc->setActiveVenue(vc->addVenue("Lincoln HS")));
+    QVERIFY(!chip->isHidden());
+    QCOMPARE(m_app->venueFooterText(), QString("Venue: Lincoln HS"));
+    m_app->setWorkspaceView(App::ConsoleView);
+
+    // View ▸ Venue…: the chip's menu, opened (not modal).
+    QAction *viewVenue = m_app->findChild<QAction *>(QStringLiteral("viewVenueAction"));
+    QVERIFY(viewVenue != nullptr);
+    viewVenue->trigger();
+    QPointer<QMenu> menu = chip->menu();
+    QVERIFY(menu != nullptr);
+    QTRY_VERIFY(menu->isVisible());
+    QStringList chipItems;
+    for (QAction *a : menu->actions())
+    {
+        if (!a->isSeparator())
+        {
+            chipItems << a->objectName();
+        }
+    }
+    QCOMPARE(chipItems, QStringList({ "venueSwitch", "venueNew", "venueRename", "venueRig", "venueFocus",
+                                      "venueReport" }));
+    menu->close();
+
+    // Focus ▸ Venues ▸ in the Lighting Studio: the same menu, the same entries.
+    QWidget studio;
+    QMenu focus;
+    FocusMenu::fill(&focus, m_app->m_doc, &studio, []() {});
+    QMenu *venues = nullptr;
+    for (QAction *a : focus.actions())
+    {
+        if (a->objectName() == QLatin1String("focusVenues"))
+        {
+            venues = a->menu();
+        }
+    }
+    QVERIFY(venues != nullptr);
+    QStringList focusItems;
+    for (QAction *a : venues->actions())
+    {
+        if (!a->isSeparator())
+        {
+            focusItems << a->objectName();
+        }
+    }
+    QCOMPARE(focusItems, chipItems);
+
+    // Switched there: the footer's chip follows.
+    vc->addVenue("Kennedy");
+    FocusMenu::fill(&focus, m_app->m_doc, &studio, []() {});
+    for (QAction *a : focus.actions())
+    {
+        if (a->objectName() == QLatin1String("focusVenues"))
+        {
+            venues = a->menu();
+        }
+    }
+    QMenu *sw = venues->findChild<QMenu *>(QStringLiteral("venueSwitchMenu"));
+    QVERIFY(sw != nullptr);
+    for (QAction *a : sw->actions())
+    {
+        if (a->text() == QLatin1String("Kennedy"))
+        {
+            a->trigger();
+        }
+    }
+    QCOMPARE(vc->activeVenue(), QString("Kennedy"));
+    QCOMPARE(chip->text(), QString("Venue: Kennedy"));
 }

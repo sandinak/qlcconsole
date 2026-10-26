@@ -93,6 +93,9 @@ private slots:
     void settingsAppearanceHoldsHowTheWindowLooks();
     /** Q65: View is only what you look at. */
     void theViewMenuIsOnlyViews();
+    /** Q150: the venue chip in the footer, by view; View ▸ Venue… and
+     *  Focus ▸ Venues ▸ open the same menu; the chip follows a switch. */
+    void theVenueChipIsInTheFooter();
     /** The grid follows Settings -> Units: an old show in feet seeds an
      *  unset preference once, a show opens in the person's unit, and is
      *  saved with Units from the preference */

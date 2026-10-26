@@ -58,11 +58,15 @@ the **Venue** before you start:
 
 **Apply now** puts the chosen venue on the rig without starting the calls
 (listing its clashes first: see [The clash check](venues.md#the-clash-check)).
-**Focus ▸ Venues** does the same from the toolbar: **Apply ▸** a venue (or
-None), **New venue…**, and **Rig and universes…** for the venue applied.
-**Rename…** and **Delete** rename or forget a venue and its corrections;
-the show is not changed. A venue needs a saved show: until the show has
-been saved, the dialog says "Save the show first".
+The **venue menu** does the same from anywhere: click the **Venue** chip
+in the footer, or **View ▸ Venue…**, or **Focus ▸ Venues** on the
+Lighting Studio toolbar (all three open the same menu; see [The venue
+chip](venues.md#the-venue-chip)): **Switch venue ▸** a venue (or None),
+**New venue…**, **Rename…**, and **Rig and universes…** for the venue
+applied. **Rename…** and **Delete** in this dialog rename or forget a
+venue and its corrections; the show is not changed. A venue needs a saved
+show: until the show has been saved, the dialog says "Save the show
+first".
 
 A venue's corrections are kept in a file **next to the show**, named after
 it: `Spring Show.qlcc` keeps them in `Spring Show.venues.xml`. Every **A**
@@ -87,16 +91,19 @@ by hand, and which fixture type and mode it was. It also holds the room's
 
 **Still at the venue?** When you open a show whose applied venue was last
 changed more than 20 hours ago, the laptop asks "Still at Lincoln
-HS?":
+HS?" (until you answer, the footer's chip says **Venue: Lincoln HS?** and
+its menu starts with **Still at Lincoln HS?…**, which asks again):
 
 - **New venue** (the default): name it, or leave it empty for the date.
   Its corrections start from the show's own; Lincoln HS's are kept.
 - **Still at Lincoln HS**: carry on with it.
 - **None**: the show's own calibration.
 
-The footer shows **Venue: Lincoln HS** while a venue is applied. The
-Venue Focus dialog does not pick an old venue for you either: until it is
-confirmed, **New venue…** is chosen, with a note naming the old one.
+The answer shows on the chip: **Venue: Lincoln HS** (its tooltip:
+"Confirmed: you are at Lincoln HS."), the new venue, or **Venue: none**.
+The Venue Focus dialog does not pick an old venue for you either: until
+it is confirmed, **New venue…** is chosen, with a note naming the old
+one.
 
 **A fixture that changed.** A correction remembers the fixture's type and
 mode. If the light is now another fixture (a lamp swapped for a mover,

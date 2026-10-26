@@ -42,6 +42,9 @@ StagePieceDialog::StagePieceDialog(MonitorProperties *props, int piece, QWidget 
 
     m_visible = new QCheckBox(tr("Show on the plot and in the Rig Overview"), this);
     m_visible->setObjectName(QStringLiteral("stagePieceVisible"));
+    if (sp == MP::ApronPiece)
+        m_visible->setToolTip(tr("Hidden, the apron is still deck: nothing stood or mounted on it moves "
+                                 "or drops."));
     form->addRow(tr("Shown:"), m_visible);
     m_locked = new QCheckBox(tr("Locked: not dragged on the plot"), this);
     m_locked->setObjectName(QStringLiteral("stagePieceLocked"));
@@ -138,6 +141,33 @@ StagePieceDialog::StagePieceDialog(MonitorProperties *props, int piece, QWidget 
             m_curve->setToolTip(tr("How far the middle of the apron's front reaches past its corners: "
                                    "0 is a straight front"));
             form->addRow(tr("Front curve:"), m_curve);
+            /* Its height (Q155-2): the deck's until set, and the floor (0)
+               is a height like any other -- an apron on the floor in front
+               of a raised stage. */
+            m_height = addDistance(form, tr("Height:"), QStringLiteral("apronHeight"),
+                                   tr("How high the apron's deck is. Auto is the main deck's height; "
+                                      "0 is the floor. Lights stood on it stand at this height."),
+                                   &m_heightAuto, &m_heightWords);
+            m_height->setMinimum(0.0);
+            connect(m_heightAuto, &QCheckBox::toggled, this, [this](bool on) {
+                if (m_syncing) return;
+                if (on)
+                {
+                    m_props->setApronHeightAuto();
+                }
+                else
+                {
+                    m_props->setApronHeight(m_props->apronHeight());
+                }
+                emit changed();
+                sync();
+            });
+            connect(m_height, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) {
+                if (m_syncing) return;
+                m_props->setApronHeight(qMax(0.0f, toMetres(v)));
+                emit changed();
+                sync();
+            });
             connect(m_auto, &QCheckBox::toggled, this, [this](bool on) {
                 if (m_syncing) return;
                 m_props->setApronAuto(on);
@@ -249,6 +279,14 @@ void StagePieceDialog::sync()
             m_words->setText(depth < 0.01f ? tr("No apron: the deck stops at the curtain line")
                                            : tr("Front %1 DS of the curtain line")
                                                  .arg(MP::formatStageDistance(depth, units)));
+            const float height = m_props->apronHeight();
+            m_heightAuto->setChecked(m_props->apronHeightIsAuto());
+            m_height->setValue(toDisplay(height));
+            m_height->setEnabled(!m_props->apronHeightIsAuto());
+            m_heightWords->setText(height < 0.005f ? tr("On the floor")
+                                   : m_props->apronHeightIsAuto()
+                                       ? tr("%1 high, as the main deck").arg(MP::formatStageDistance(height, units))
+                                       : tr("%1 high").arg(MP::formatStageDistance(height, units)));
         }
         break;
     }

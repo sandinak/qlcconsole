@@ -68,6 +68,9 @@ private:
     FeetInchesSpinBox *m_value = nullptr;
     FeetInchesSpinBox *m_curve = nullptr;
     QLabel *m_words = nullptr;
+    QCheckBox *m_heightAuto = nullptr;
+    FeetInchesSpinBox *m_height = nullptr;
+    QLabel *m_heightWords = nullptr;
 };
 
 /** @} */

@@ -244,6 +244,14 @@ public:
     typedef std::function<PasteFixtures(int count)> PasteFixturesAsk;
     void setPasteFixturesAsk(const PasteFixturesAsk &ask) { m_pasteFixturesAsk = ask; }
 
+    /** Where a new object goes (board Q159-1): the active layer, unless it
+     *  is locked -- then asks, in the chooser "placementLayerChooser": the
+     *  unlocked layers (the first one picked, as before), "Unlock '<layer>'
+     *  and place here", or Cancel (false: nothing is placed). The answer
+     *  holds for the rest of that placement (every fixture of one drop,
+     *  everything one paste makes) and is asked again next time. */
+    bool askPlacementLayer(quint32 *layerId);
+
 protected:
     /** Create a new MonitorFixture* and append it to the layout */
     void createMonitorFixture(Fixture* fxi);
@@ -770,6 +778,9 @@ private:
      *  nothing to paste. */
     bool pasteClipboard(float dxM, float dyM);
     PasteFixturesAsk m_pasteFixturesAsk;
+    /** askPlacementLayer()'s answer, kept until the event loop next runs. */
+    bool m_placementAnswered = false;
+    quint32 m_placementAnswer = 0;
     /** Patch the fixtures just pasted at the next free addresses after
      *  their originals; returns the status line that says where. */
     QString patchPastedFixtures(const QList<quint32> &fids, const QList<int> &clips);

@@ -31,7 +31,35 @@ per layer; the Classic QLC+ Functions tab without the Show Tree's own and
 the scene editor's General above its sliders; Classic QLC+ saying when a
 show plays Show Tree content; and faster Matrix effects.
 
+Release candidate 3 adds, from testing RC2: the venue chip in the footer
+and one venue menu wherever it opens (the chip, View ▸ Venue…, Focus ▸
+Venues), amber with a count when the venue clashes; an apron that can sit
+on the floor and stays deck when hidden; placing on a locked layer asking
+where the object goes; the patch list grouped, filtered and exported to
+Excel, with labels on tape; and Connections' Overview folded into Devices.
+
 ### Added
+
+- **The venue chip and one venue menu** (RC3, board Q150). The footer, beside
+  Ready and the Grand Master, says the venue applied: **Venue: Lincoln HS**,
+  or **Venue: none** (`VenueChip`, objectName `footerVenue`; always in the
+  qlcconsole and Everything views, in Classic only once the show has a
+  venue). A click opens the venue menu (`VenueMenu::fill`, one
+  implementation): **Switch venue ▸** (the venues and None; clashes asked
+  about first, as Apply now does), **New venue…**, **Rename…** (the venue
+  applied; corrections, house rig and patch go with the name), **Rig and
+  universes…**, **Venue focus…**, **Focus report…**, and **Clashes (n)…**
+  when the venue applied has any (the venue page, its clash list in front).
+  **View ▸ Venue…** opens the same menu, and the Lighting Studio's **Focus ▸
+  Venues ▸** now is that menu (its Apply ▸ is Switch venue ▸). The chip
+  turns amber with the count ("Venue: Lincoln HS · 3 clashes") while the
+  venue clashes with the show's own rig, and follows a venue applied,
+  renamed, deleted or confirmed and the rig changing (fixtures patched,
+  moved, added or removed; a quarter-second after a burst). "Still at
+  <venue>?" on opening is kept: until it is answered the chip reads
+  **Venue: Lincoln HS?** and the menu starts with **Still at Lincoln HS?…**;
+  the answer shows on the chip (`VenueCorrections::confirmedChanged`).
+  New venue and Rename ask in small dialogs that are not modal.
 
 - **Patch list: grouped, filtered, exported to Excel, and labels on tape**
   (RC3, board Q151). The patch list (`PatchListDialog`, now a tree) groups
@@ -468,6 +496,29 @@ show plays Show Tree content; and faster Matrix effects.
   tooltip "the Show Tree's cue runner").
 
 ### Changed
+
+- **Hiding the apron moves nothing** (RC3, board Q155-2). Hiding the apron
+  is only how it looks: its deck is no longer taken away (which unmounted
+  and dropped the lights stood on it), but kept in the model, not drawn on
+  the plot, in the Rig Overview or in a beam's way
+  (`MonitorProperties::isHiddenApronPlatform`). Its deck is made the first
+  time it is shown, never for a show that never showed it, and goes only
+  with no depth. The apron has a **Height** (its properties; Auto is the
+  main deck's height, as before; 0 is the floor, for an apron at floor
+  height in front of a raised stage), saved as `Height` on the apron's
+  StagePiece only when set. Saved shows need nothing changed; one saved
+  with the apron hidden after it was shown gets its deck back, hidden.
+
+- **Placing on a locked layer asks where** (RC3, board Q159-1). Placing a
+  new object (Add ▸ anything, a fixture dropped from the inventory, a
+  paste) while the active layer is locked opens a small chooser
+  (`Monitor::askPlacementLayer`): the unlocked layers, the first picked as
+  before, **Place on this layer**, **Unlock "<layer>" and place here**, or
+  **Cancel** (nothing placed). The answer holds for the rest of that
+  placement (every fixture of one drop, everything one paste makes) and is
+  asked again next time. With every layer locked it offers Unlock or
+  Cancel. A fixture put on the plot as a side effect (mounted from a
+  structure's menu) still goes on the first unlocked layer without asking.
 
 - **Connections: Overview folded into Devices** (RC3, board Q153,
   docs/CONNECTIONS_CLEANUP.md option A). Devices ▸ **By universe** carries

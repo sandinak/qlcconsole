@@ -3137,6 +3137,104 @@ void Monitor::updatePlotLockAppearance(bool locked)
              "Click to lock the plot for the show."));
 }
 
+bool Monitor::askPlacementLayer(quint32 *layerId)
+{
+    const quint32 active = m_props->activeLayerId();
+    if (!m_props->layer(active).locked)
+    {
+        *layerId = active;
+        return true;
+    }
+    // Asked already in this placement: the same answer (if it still holds).
+    if (m_placementAnswered && m_props->hasLayer(m_placementAnswer)
+        && !m_props->layer(m_placementAnswer).locked)
+    {
+        *layerId = m_placementAnswer;
+        return true;
+    }
+
+    QList<MonitorProperties::MonitorLayer> open;
+    foreach (const MonitorProperties::MonitorLayer &l, m_props->layers())
+    {
+        if (!l.locked && l.id != m_props->stageLayerId())
+            open << l;
+    }
+    const QString activeName = m_props->layer(active).name;
+
+    QDialog dlg(this);
+    dlg.setObjectName(QStringLiteral("placementLayerChooser"));
+    dlg.setWindowTitle(tr("Place on which layer?"));
+    dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#locks"));
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    QLabel *text = new QLabel(open.isEmpty()
+        ? tr("The layer \u201c%1\u201d is locked, and so is every other: a new object there could "
+             "not be selected or moved.").arg(activeName)
+        : tr("The layer \u201c%1\u201d is locked: a new object there could not be selected or "
+             "moved. Place it on another layer, or unlock \u201c%1\u201d.").arg(activeName), &dlg);
+    text->setObjectName(QStringLiteral("placementLayerText"));
+    text->setWordWrap(true);
+    vl->addWidget(text);
+    QComboBox *combo = new QComboBox(&dlg);
+    combo->setObjectName(QStringLiteral("placementLayer"));
+    foreach (const MonitorProperties::MonitorLayer &l, open)
+    {
+        combo->addItem(l.name, l.id);
+    }
+    combo->setVisible(!open.isEmpty());
+    vl->addWidget(combo);
+    QDialogButtonBox *bb = new QDialogButtonBox(&dlg);
+    QPushButton *place = bb->addButton(tr("Place on this layer"), QDialogButtonBox::AcceptRole);
+    place->setObjectName(QStringLiteral("placementPlace"));
+    place->setVisible(!open.isEmpty());
+    QPushButton *unlock = bb->addButton(tr("Unlock \u2018%1\u2019 and place here").arg(activeName),
+                                        QDialogButtonBox::ActionRole);
+    unlock->setObjectName(QStringLiteral("placementUnlock"));
+    QPushButton *cancel = bb->addButton(QDialogButtonBox::Cancel);
+    cancel->setObjectName(QStringLiteral("placementCancel"));
+    (open.isEmpty() ? unlock : place)->setDefault(true);
+    vl->addWidget(bb);
+    enum { Cancelled, Placed, Unlocked };
+    int answer = Cancelled;
+    connect(place, &QPushButton::clicked, &dlg, [&dlg, &answer]() {
+        answer = Placed;
+        dlg.accept();
+    });
+    connect(unlock, &QPushButton::clicked, &dlg, [&dlg, &answer]() {
+        answer = Unlocked;
+        dlg.accept();
+    });
+    connect(cancel, &QPushButton::clicked, &dlg, &QDialog::reject);
+    dlg.exec();
+
+    if (answer == Cancelled)
+    {
+        return false;
+    }
+    if (answer == Unlocked)
+    {
+        m_props->setLayerLocked(active, false);
+        if (m_graphicsView != nullptr)
+        {
+            m_graphicsView->refreshItemLayerState();
+        }
+        if (m_layersPanel != nullptr)
+        {
+            m_layersPanel->reload();
+        }
+        m_doc->setModified();
+        *layerId = active;
+    }
+    else
+    {
+        *layerId = combo->currentData().toUInt();
+    }
+    // Kept for this placement only: the next one asks again.
+    m_placementAnswered = true;
+    m_placementAnswer = *layerId;
+    QTimer::singleShot(0, this, [this]() { m_placementAnswered = false; });
+    return true;
+}
+
 void Monitor::slotAddFixture()
 {
     Q_ASSERT(m_graphicsView != NULL);
@@ -3156,6 +3254,11 @@ void Monitor::slotAddFixture()
     fs.setDisabledFixtures(disabled);
     if (fs.exec() == QDialog::Accepted)
     {
+        quint32 layer = 0;
+        if (!askPlacementLayer(&layer))
+        {
+            return;
+        }
         // Convert pending scene-px position to mm (use 0,0 when added from toolbar)
         QPointF mm = m_pendingAddScenePos.isNull()
                      ? QPointF(0, 0)
@@ -3170,7 +3273,7 @@ void Monitor::slotAddFixture()
             m_graphicsView->addFixture(fid, mm);
             m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
             m_props->setFixtureFlags(fid, 0, 0, 0);
-            m_props->setFixtureLayer(fid, m_props->placementLayerId());  // land on the selected layer
+            m_props->setFixtureLayer(fid, layer);  // land on the selected layer
             m_doc->setModified();
         }
     }
@@ -3482,6 +3585,11 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         if (withFixtures == PasteCancelled)
             return false;
     }
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return false;
+    }
 
     QList<quint32> newTrussIds, newPlatformIds, newTargetIds, newPaletteIds, newFixtureIds;
 
@@ -3496,7 +3604,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         t->setWidth(c.width);
         t->setProfile(Truss::Profile(c.profile));
         t->setLocked(false);   // a duplicate must be movable, even if the source was locked
-        t->setLayerId(m_props->placementLayerId());
+        t->setLayerId(layer);
         newTrussIds.append(t->id());
     }
 
@@ -3534,7 +3642,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         m_props->setFixtureRigProps(fid, rp);
         FixturePreviewItem item = c.item;
         item.m_baseItem.m_position += QVector3D(dxM * 1000.0f, dyM * 1000.0f, 0.0f);
-        item.m_baseItem.m_layerId = m_props->placementLayerId();
+        item.m_baseItem.m_layerId = layer;
         item.m_baseItem.m_groupId = 0;      // the original's map group isn't the copy's
         m_props->setFixtureProperties(fid, item);
         const QVector3D at = item.m_baseItem.m_position;
@@ -3555,7 +3663,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         p->setRotation(c.rotation);
         p->setFrontCurve(c.frontCurve);
         p->setColor(c.color);
-        p->setLayerId(m_props->placementLayerId());
+        p->setLayerId(layer);
         newPlatformIds.append(p->id());
     }
 
@@ -3600,7 +3708,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
             obj->setName(obj->name() + tr(" copy"));
             obj->setOriginX(obj->originX() + dxM);
             obj->setOriginY(obj->originY() + dyM);
-            obj->setLayerId(m_props->placementLayerId());
+            obj->setLayerId(layer);
         };
         switch (c.kind)
         {
@@ -5774,10 +5882,15 @@ void Monitor::slotAddImage()
         QString(), tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.svg)"));
     if (file.isEmpty())
         return;
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
 
     const quint32 id = m_props->addImage(file);
     MonitorProperties::MonitorImage img = m_props->image(id);
-    img.layerId = m_props->placementLayerId();
+    img.layerId = layer;
     // Default a Floor decal at a sensible size.
     img.plane   = MonitorProperties::MonitorImage::Floor;
     img.width   = qMin(3.0f, float(m_props->gridSize().x()));
@@ -5825,16 +5938,27 @@ void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scen
     // below then mounts each one on whatever truss/riser/tower it landed on.
     const QPointF base = m_graphicsView->pixelsToRealPosition(scenePos.x(), scenePos.y());
     int n = 0;
+    bool asked = false;
+    quint32 layer = 0;
     foreach (quint32 fid, fixtureIds)
     {
         Fixture *fx = m_doc->fixture(fid);
         if (fx == NULL || m_graphicsView->fixturesID().contains(fid))
             continue;
+        // Asked once, at the first one that lands (Q159-1); Cancel drops none.
+        if (!asked)
+        {
+            asked = true;
+            if (!askPlacementLayer(&layer))
+            {
+                break;
+            }
+        }
         const QPointF mm(base.x() + n * 400.0, base.y());
         m_graphicsView->addFixture(fid, mm);
         m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
         m_props->setFixtureFlags(fid, 0, 0, 0);
-        m_props->setFixtureLayer(fid, m_props->placementLayerId());
+        m_props->setFixtureLayer(fid, layer);
         m_graphicsView->finishFixtureDrop(fid);
         n++;
     }
@@ -6038,6 +6162,11 @@ void Monitor::slotAddNetworkNode()
 
     if (dlg.exec() != QDialog::Accepted)
         return;
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
 
     NetworkTopology *nt = m_doc->networkTopology();
     NetworkNode node;
@@ -6067,7 +6196,7 @@ void Monitor::slotAddNetworkNode()
     node.placed = true;
     node.posX = xSpin->value() * fromDisp;
     node.posY = ySpin->value() * fromDisp;
-    node.layerId = m_props->placementLayerId();   // land on the selected layer
+    node.layerId = layer;   // land on the selected layer
     nt->nodes().append(node);
 
     m_graphicsView->updateNetworkNodes();
@@ -6168,6 +6297,11 @@ void Monitor::slotAddTargetLine()
 
 void Monitor::addTarget(bool line)
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     StageTarget *t = m_props->addStageTarget();
     if (line)
     {
@@ -6190,7 +6324,7 @@ void Monitor::addTarget(bool line)
     // Sit on whatever solid platform it was dropped over, not at deck level --
     // same rule a drag follows, so placing and moving agree.
     t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));
-    t->setLayerId(m_props->placementLayerId());   // land on the selected layer
+    t->setLayerId(layer);   // land on the selected layer
 
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();
@@ -6232,6 +6366,11 @@ void Monitor::addTarget(bool line)
 
 void Monitor::slotAddPerson()
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     StageTarget *t = m_props->addStageTarget();
     t->setKind(StageTarget::Kind::Person);
     t->setPersonHeight(StageTarget::defaultPersonHeight());   // drawn this tall, aimed at its chest
@@ -6249,7 +6388,7 @@ void Monitor::slotAddPerson()
     t->setX(float(mm.x() / 1000.0));
     t->setY(float(mm.y() / 1000.0));
     t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));   // stand on the deck
-    t->setLayerId(m_props->placementLayerId());
+    t->setLayerId(layer);
 
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();
@@ -6493,6 +6632,11 @@ void Monitor::slotEditTarget(quint32 tid)
 
 void Monitor::slotAddPipe()
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     Pipe *b = m_props->addPipe();
     b->setName(tr("Boom %1").arg(b->id() + 1));
 
@@ -6500,7 +6644,7 @@ void Monitor::slotAddPipe()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     b->setOriginX(float(mm.x() / 1000.0));
     b->setOriginY(float(mm.y() / 1000.0));
-    b->setLayerId(m_props->placementLayerId());
+    b->setLayerId(layer);
 
     m_graphicsView->updatePlatforms();   // rebuilds platforms + pipes
     if (m_layersPanel) m_layersPanel->reload();
@@ -6511,13 +6655,18 @@ void Monitor::slotAddPipe()
 
 void Monitor::slotAddStand()
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     Stand *s = m_props->addStand();
     s->setName(tr("Stand %1").arg(s->id() + 1));
     QPointF mm = m_graphicsView->pixelsToRealPosition(
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     s->setOriginX(float(mm.x() / 1000.0));
     s->setOriginY(float(mm.y() / 1000.0));
-    s->setLayerId(m_props->placementLayerId());
+    s->setLayerId(layer);
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
@@ -6624,6 +6773,11 @@ void Monitor::slotAddCyclorama()
 
 void Monitor::slotAddScenery(int kind)
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     const double mpu = (m_props->gridUnits() == MonitorProperties::Feet) ? 0.3048 : 1.0;
     const double stageW = double(m_props->gridSize().x()) * mpu;
     const double stageD = double(m_props->gridSize().z()) * mpu;
@@ -6650,7 +6804,7 @@ void Monitor::slotAddScenery(int kind)
         s->setOriginY(float(atClick ? click.y() : y));
         s->setWidth(fullW);
         s->setHeight(6.0f);
-        s->setLayerId(m_props->placementLayerId());
+        s->setLayerId(layer);
         return s;
     };
     Scenery *s = nullptr;
@@ -6808,7 +6962,11 @@ void Monitor::slotAddFountain()
     const float base = float(baseSpin->value() * fromDisp);
     const float t = float(thickSpin->value() * fromDisp), gap = float(gapSpin->value() * fromDisp);
     const float back = float(centre.y()) - D / 2.0f;
-    const quint32 layer = m_props->placementLayerId();
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     const quint32 gid = m_props->nextGroupId();
     const int n = gid;
     m_props->createGroup(gid, tr("Fountain %1").arg(n), layer, 0);
@@ -7169,6 +7327,11 @@ Fixture *Monitor::addCurtainFixture(quint32 sid)
 
 void Monitor::slotAddTower()
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     Tower *t = m_props->addTower();
     t->setName(tr("Tower %1").arg(t->id() + 1));
     t->addShelf(0.6f);   // a couple of default shelves
@@ -7177,7 +7340,7 @@ void Monitor::slotAddTower()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     t->setOriginX(float(mm.x() / 1000.0));
     t->setOriginY(float(mm.y() / 1000.0));
-    t->setLayerId(m_props->placementLayerId());
+    t->setLayerId(layer);
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
@@ -7476,6 +7639,11 @@ void Monitor::slotEditTower(quint32 tid)
 
 void Monitor::slotAddElectric()
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     Pipe *b = m_props->addPipe();
     b->setName(tr("Electric %1").arg(b->id() + 1));
     b->setOrientation(Pipe::Horizontal);
@@ -7488,7 +7656,7 @@ void Monitor::slotAddElectric()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     b->setOriginX(float(mm.x() / 1000.0));
     b->setOriginY(float(mm.y() / 1000.0));
-    b->setLayerId(m_props->placementLayerId());
+    b->setLayerId(layer);
 
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
@@ -7499,6 +7667,11 @@ void Monitor::slotAddElectric()
 
 void Monitor::slotAddPlatform()
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     StagePlatform *p = m_props->addPlatform();
     p->setName(tr("Platform %1").arg(p->id() + 1));
 
@@ -7508,7 +7681,7 @@ void Monitor::slotAddPlatform()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     p->setOriginX(float(mm.x() / 1000.0));
     p->setOriginY(float(mm.y() / 1000.0));
-    p->setLayerId(m_props->placementLayerId());   // land on the selected layer
+    p->setLayerId(layer);   // land on the selected layer
 
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
@@ -7519,6 +7692,11 @@ void Monitor::slotAddPlatform()
 
 void Monitor::slotAddSteps()
 {
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
     /* "Steps as a stage feature .. count, rise, run and width. Default 8"
        rise with 8" run and 2 steps for a total 16" high and 3' wide." A
        platform with a stepped shape, so it drags, locks, layers, carries
@@ -7531,7 +7709,7 @@ void Monitor::slotAddSteps()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     p->setOriginX(float(mm.x() / 1000.0));
     p->setOriginY(float(mm.y() / 1000.0));
-    p->setLayerId(m_props->placementLayerId());
+    p->setLayerId(layer);
 
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
@@ -9683,6 +9861,11 @@ void Monitor::slotAddTruss()
 
     if (dlg.exec() != QDialog::Accepted)
         return;
+    quint32 layer = 0;
+    if (!askPlacementLayer(&layer))
+    {
+        return;
+    }
 
     Truss *t = m_props->addTruss();
     t->setName(nameEdit->text().isEmpty()
@@ -9696,7 +9879,7 @@ void Monitor::slotAddTruss()
     t->setDirection(QPointF(qCos(radians), qSin(radians)));
     t->setLength(length->value() * fromDisp_a);
     t->setWidth(width->value() * fromDisp_a);
-    t->setLayerId(m_props->placementLayerId());   // land on the selected layer
+    t->setLayerId(layer);   // land on the selected layer
 
     m_graphicsView->updateTrusses();
     if (m_layersPanel) m_layersPanel->reload();

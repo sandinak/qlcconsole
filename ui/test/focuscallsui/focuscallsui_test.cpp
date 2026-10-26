@@ -26,6 +26,7 @@
 #include <QLineEdit>
 #include <QSettings>
 #include <QPointer>
+#include <QInputDialog>
 #include <QLabel>
 #include <QtTest>
 
@@ -59,6 +60,9 @@
 #include "controllerscheme.h"
 #include "showtreeview.h"
 #include "focusmenu.h"
+#include "venuemenu.h"
+#include "venuerigdialog.h"
+#include "venuerig.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -1018,17 +1022,22 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
     QVERIFY(menuAction(&menu, "focusPractice")->toolTip().startsWith("No focus calls yet"));
     QVERIFY(!menuAction(&menu, "focusReport")->isEnabled());
     QVERIFY(menuAction(&menu, "focusReport")->toolTip().startsWith("No venue yet"));
+    // Venues: the venue menu (Q150), the one the footer's chip opens.
     QMenu *venues = menuAction(&menu, "focusVenues")->menu();
     QVERIFY(venues != nullptr);
     QStringList vt;
     for (QAction *a : venues->actions())
-        vt << a->text();
-    QCOMPARE(vt, QStringList({ "Apply", "New venue\342\200\246", "Rig and universes\342\200\246" }));
-    QAction *newVenue = menuAction(venues, "focusVenueNew");
+        if (!a->isSeparator())
+            vt << a->text();
+    QCOMPARE(vt, QStringList({ "Switch venue", "New venue\342\200\246", "Rename\342\200\246",
+                               "Rig and universes\342\200\246", "Venue focus\342\200\246",
+                               "Focus report\342\200\246" }));
+    QAction *newVenue = menuAction(venues, "venueNew");
     QVERIFY(!newVenue->isEnabled());
     QCOMPARE(newVenue->toolTip(), QString("Save the show first: a venue's corrections are kept in a file beside it."));
-    QVERIFY(!menuAction(venues, "focusVenueApply")->isEnabled());
-    QVERIFY(!menuAction(venues, "focusVenueRig")->isEnabled());
+    QVERIFY(!menuAction(venues, "venueSwitch")->isEnabled());
+    QVERIFY(!menuAction(venues, "venueRig")->isEnabled());
+    QVERIFY(!menuAction(venues, "venueRename")->isEnabled());
 
     // The rig placed, calls made, the show saved, a venue applied: all on.
     VenueCorrections *vc = m_doc->programmer()->venueCorrections();
@@ -1045,17 +1054,22 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
     QVERIFY(menuAction(&menu, "focusVenue")->toolTip().contains("Lincoln HS"));
     QVERIFY(menuAction(&menu, "focusPractice")->toolTip().contains("never touched"));
     venues = menuAction(&menu, "focusVenues")->menu();
-    QVERIFY(menuAction(venues, "focusVenueNew")->isEnabled());
-    QVERIFY(menuAction(venues, "focusVenueRig")->isEnabled());
-    QAction *apply = menuAction(venues, "focusVenueApply");
+    QVERIFY(menuAction(venues, "venueNew")->isEnabled());
+    QVERIFY(menuAction(venues, "venueRig")->isEnabled());
+    QVERIFY(menuAction(venues, "venueRename")->isEnabled());
+    QAction *apply = menuAction(venues, "venueSwitch");
     QVERIFY(apply->isEnabled());
     QStringList at;
     for (QAction *a : apply->menu()->actions())
         at << QString("%1%2").arg(a->text(), a->isChecked() ? "*" : "");
     QCOMPARE(at, QStringList({ "None (the show's own calibration)", "Lincoln HS*" }));
-    // Apply > None: the show's own, at once.
+    // Switch venue > None: the show's own, at once.
     apply->menu()->actions().first()->trigger();
     QVERIFY(!vc->isActive());
+    // Filled again (each time it opens): one Switch submenu, not two.
+    FocusMenu::fill(&menu, m_doc, &parent, [&quick]() { ++quick; });
+    venues = menuAction(&menu, "focusVenues")->menu();
+    QCOMPARE(venues->findChildren<QMenu *>(Qt::FindDirectChildrenOnly).size(), 1);
 
     // Quick focus is the Lighting Studio's own (its selection and scene).
     menuAction(&menu, "focusQuick")->trigger();
@@ -1211,4 +1225,206 @@ void FocusCallsUi_Test::lightsThatCannotBeAimedAreListed()
             box->button(QMessageBox::Cancel)->click();
     });
     QVERIFY(!d.confirmExclusions());
+}
+
+namespace
+{
+QStringList menuTexts(QMenu *menu)
+{
+    QStringList out;
+    for (QAction *a : menu->actions())
+    {
+        if (!a->isSeparator())
+        {
+            out << QString("%1%2").arg(a->text(), a->isEnabled() ? "" : " (off)");
+        }
+    }
+    return out;
+}
+
+/** The dialog named @p name open now (not modal: the venue menu's). */
+template <class T> T *openDialog(const char *name)
+{
+    for (QWidget *w : QApplication::topLevelWidgets())
+    {
+        if (w->objectName() == QLatin1String(name) && w->isVisible())
+        {
+            if (T *t = qobject_cast<T *>(w))
+            {
+                return t;
+            }
+        }
+    }
+    return nullptr;
+}
+}
+
+void FocusCallsUi_Test::theVenueChipSaysTheVenueAndOpensItsMenu()
+{
+    QWidget window;
+    VenueChip chip(m_doc, &window);
+    VenueCorrections *vc = m_doc->programmer()->venueCorrections();
+
+    // No venue: "none", and (in the qlcconsole views) shown all the same.
+    QCOMPARE(chip.text(), QString("Venue: none"));
+    QVERIFY(chip.wanted());
+    QVERIFY(!chip.isAmber());
+    // Classic: only once the show has venues.
+    chip.setAlwaysShown(false);
+    QVERIFY(!chip.wanted());
+
+    // Its menu, as things are: nothing saved, so nothing to switch to.
+    QPointer<QMenu> menu = chip.openMenu();
+    QVERIFY(menu != nullptr);
+    QTRY_VERIFY(menu->isVisible());
+    QCOMPARE(menuTexts(menu), QStringList({ "Switch venue (off)", "New venue\342\200\246 (off)",
+                                            "Rename\342\200\246 (off)", "Rig and universes\342\200\246 (off)",
+                                            "Venue focus\342\200\246 (off)", "Focus report\342\200\246 (off)" }));
+    menu->close();
+
+    // Saved, two venues, Lincoln HS applied: the chip says so at once.
+    vc->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    vc->addVenue("Kennedy");
+    QVERIFY(chip.wanted());                     // Classic too, now there are venues
+    QVERIFY(vc->setActiveVenue(vc->addVenue("Lincoln HS")));
+    QCOMPARE(chip.text(), QString("Venue: Lincoln HS"));
+    QVERIFY(chip.toolTip().contains("Lincoln HS is applied"));
+    menu = chip.openMenu();
+    QStringList texts = menuTexts(menu);
+    QCOMPARE(texts, QStringList({ "Switch venue", "New venue\342\200\246", "Rename\342\200\246",
+                                  "Rig and universes\342\200\246", "Venue focus\342\200\246 (off)",
+                                  "Focus report\342\200\246" }));
+    QMenu *sw = menuAction(menu, "venueSwitch")->menu();
+    QStringList names;
+    for (QAction *a : sw->actions())
+        names << QString("%1%2").arg(a->text(), a->isChecked() ? "*" : "");
+    QCOMPARE(names, QStringList({ "None (the show's own calibration)", "Kennedy", "Lincoln HS*" }));
+
+    // Switched from the chip: applied, and the chip follows.
+    sw->actions().at(1)->trigger();
+    QCOMPARE(vc->activeVenue(), QString("Kennedy"));
+    QCOMPARE(chip.text(), QString("Venue: Kennedy"));
+    menu->close();
+
+    // Renamed from the chip (its own small dialog, not modal).
+    chip.openMenu();
+    menuAction(chip.menu(), "venueRename")->trigger();
+    QPointer<QInputDialog> ask = openDialog<QInputDialog>("venueRenameName");
+    QVERIFY(ask != nullptr);
+    QCOMPARE(ask->textValue(), QString("Kennedy"));
+    ask->setTextValue("Kennedy Center");
+    ask->accept();
+    QTRY_VERIFY(ask.isNull());
+    QCOMPARE(vc->activeVenue(), QString("Kennedy Center"));
+    QCOMPARE(chip.text(), QString("Venue: Kennedy Center"));
+    chip.menu()->close();
+
+    // A new venue from the chip: made, and applied.
+    chip.openMenu();
+    menuAction(chip.menu(), "venueNew")->trigger();
+    ask = openDialog<QInputDialog>("venueNewName");
+    QVERIFY(ask != nullptr);
+    ask->setTextValue("Roosevelt");
+    ask->accept();
+    QTRY_VERIFY(ask.isNull());
+    QCOMPARE(vc->activeVenue(), QString("Roosevelt"));
+    QCOMPARE(chip.text(), QString("Venue: Roosevelt"));
+    chip.menu()->close();
+
+    // Removed (the venue manager): back to none.
+    QVERIFY(vc->removeVenue("Roosevelt"));
+    QCOMPARE(chip.text(), QString("Venue: none"));
+
+    // None from the chip's menu.
+    QVERIFY(vc->setActiveVenue("Lincoln HS"));
+    chip.openMenu();
+    menuAction(chip.menu(), "venueSwitch")->menu()->actions().first()->trigger();
+    QVERIFY(!vc->isActive());
+    QCOMPARE(chip.text(), QString("Venue: none"));
+    chip.menu()->close();
+}
+
+void FocusCallsUi_Test::theVenueChipTurnsAmberWithItsClashes()
+{
+    QWidget window;
+    VenueChip chip(m_doc, &window);
+    VenueCorrections *vc = m_doc->programmer()->venueCorrections();
+    vc->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(vc->setActiveVenue(vc->addVenue("Lincoln HS")));
+    QVERIFY(!chip.isAmber());
+    QVERIFY(menuAction(chip.openMenu(), "venueClashes") == nullptr);   // none: not offered
+    chip.menu()->close();
+
+    // The room keeps U1's first 8 channels: our spots are on them.
+    VenueRig::NotOurs keep;
+    keep.universe = 0;
+    keep.from = 0;
+    keep.to = 7;
+    QVERIFY(vc->setNotOurs("Lincoln HS", { keep }));
+    const int n = vc->clashes("Lincoln HS").size();
+    QVERIFY(n > 0);
+    QCOMPARE(chip.clashes(), n);
+    QVERIFY(chip.isAmber());
+    QVERIFY2(chip.text().startsWith("Venue: Lincoln HS \302\267 "), qPrintable(chip.text()));
+    QVERIFY(chip.text().endsWith(n == 1 ? "1 clash" : QString("%1 clashes").arg(n)));
+    QVERIFY(chip.styleSheet().contains("#f5a623"));
+    QAction *list = menuAction(chip.openMenu(), "venueClashes");
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->text(), QString("Clashes (%1)\342\200\246").arg(n));
+    // It opens the venue page, its clash list in front.
+    list->trigger();
+    QPointer<VenueRigDialog> page = openDialog<VenueRigDialog>("VenueRigDialog");
+    QVERIFY(page != nullptr);
+    QCOMPARE(page->clashList()->count(), n);
+    page->close();
+    QTRY_VERIFY(page.isNull());
+    chip.menu()->close();
+
+    // A spot moved off those channels: one fewer, a moment later.
+    m_doc->fixture(m_spots.last())->setAddress(100);
+    QTRY_COMPARE(chip.clashes(), vc->clashes("Lincoln HS").size());
+    QVERIFY(chip.clashes() < n);
+
+    // The room keeps nothing: plain again.
+    QVERIFY(vc->setNotOurs("Lincoln HS", {}));
+    QCOMPARE(chip.clashes(), 0);
+    QVERIFY(!chip.isAmber());
+    QCOMPARE(chip.text(), QString("Venue: Lincoln HS"));
+}
+
+void FocusCallsUi_Test::theVenueChipAsksStillAt()
+{
+    // A show whose applied venue was last changed three days ago.
+    const QString show = m_dir->filePath("Old.qlcc");
+    QFile f(VenueCorrections::sidecarPath(show));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QString("<QlcVenues Version=\"1\" Show=\"Old.qlcc\" Active=\"Lincoln HS\">"
+                    "<Venue Name=\"Lincoln HS\" Modified=\"%1\"/></QlcVenues>")
+            .arg(QDateTime::currentDateTime().addDays(-3).toString(Qt::ISODate)).toUtf8());
+    f.close();
+    QWidget window;
+    VenueChip chip(m_doc, &window);
+    VenueCorrections *vc = m_doc->programmer()->venueCorrections();
+    vc->setShowFile(show, true);
+    chip.refresh();
+    QVERIFY(vc->needsConfirm());
+    QCOMPARE(chip.text(), QString("Venue: Lincoln HS?"));
+    QVERIFY(chip.toolTip().contains("are you still there?"));
+    QMenu *menu = chip.openMenu();
+    QAction *still = menuAction(menu, "venueStillAt");
+    QVERIFY(still != nullptr);
+    QCOMPARE(menu->actions().first(), still);
+    QCOMPARE(still->text(), QString("Still at Lincoln HS?\342\200\246"));
+    menu->close();
+
+    // Answered (the prompt on opening, or from the menu): on the chip.
+    still->trigger();
+    QPointer<QDialog> d = openDialog<QDialog>("venueConfirm");
+    QVERIFY(d != nullptr);
+    d->findChild<QPushButton *>("venueConfirmStill")->click();
+    QTRY_VERIFY(d.isNull());
+    QCOMPARE(chip.text(), QString("Venue: Lincoln HS"));
+    QVERIFY(chip.toolTip().contains("Confirmed: you are at Lincoln HS."));
+    QVERIFY(menuAction(chip.openMenu(), "venueStillAt") == nullptr);
+    chip.menu()->close();
 }

@@ -101,6 +101,7 @@
 #include "operatorvoice.h"
 #include "focuscallcue.h"
 #include "focuscallsdialog.h"
+#include "venuemenu.h"
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -2502,6 +2503,14 @@ void App::initMenuBar()
     focusAct->setToolTip(tr("Quick focus: aim each light at its reference and nudge its calibration until it lands there"));
     connect(focusAct, &QAction::triggered, this, &App::slotFocusMode);
 
+    /* The venue menu (Q150), the one the footer's venue chip opens: from
+       here too, in every view (Classic hides the chip until there is a
+       venue). */
+    QAction *venueAct = viewMenu->addAction(tr("Venue…"));
+    venueAct->setObjectName(QStringLiteral("viewVenueAction"));
+    venueAct->setToolTip(tr("Switch, make, rename or check the venue: the room the show is in"));
+    connect(venueAct, &QAction::triggered, this, [this]() { openVenueMenu(); });
+
     /* Appearance -- theme, toolbar style, which chips the footer shows and
        the speed masters' beat -- is in Settings ▸ Appearance (Q65); View is
        only what you look at. */
@@ -4047,7 +4056,9 @@ void App::applyClassicChrome()
     if (InputOutputManager *io = InputOutputManager::instance())
         io->showStartPage(classic);
 
-    // The footer: the mode, the Grand Master and Ready only.
+    // The footer: the mode, the Grand Master and Ready only -- and the
+    // venue chip once the show has venues (Q150).
+    updateVenueFooter();
     if (m_statusLoadLabel != NULL)
         m_statusLoadLabel->setVisible(m_showFooterLoad && !classic);
     if (m_statusPowerLabel != NULL && classic)
@@ -5825,20 +5836,21 @@ void App::removeAutosaveFile()
 
 void App::updateVenueFooter()
 {
-    if (m_statusVenueLabel == nullptr || m_doc == nullptr || m_doc->programmer() == nullptr)
+    if (m_venueChip == nullptr)
+    {
         return;
-    const QString venue = m_doc->programmer()->venueCorrections()->activeVenue();
-    m_statusVenueLabel->setText(venue.isEmpty() ? QString() : tr("Venue: %1").arg(venue));
-    m_statusVenueLabel->setToolTip(tr("Focus corrections for this venue are applied over the show's "
-                                      "own calibration (from the .venues.xml beside the show). "
-                                      "Focus ▸ Venues in the Lighting Studio changes it."));
-    m_statusVenueLabel->setVisible(!venue.isEmpty());
+    }
+    m_venueChip->setAlwaysShown(m_workspaceView != ClassicView);
 }
 
 QString App::venueFooterText() const
 {
-    return m_statusVenueLabel != nullptr && !m_statusVenueLabel->isHidden()
-           ? m_statusVenueLabel->text() : QString();
+    return m_venueChip != nullptr && !m_venueChip->isHidden() ? m_venueChip->text() : QString();
+}
+
+QMenu *App::openVenueMenu()
+{
+    return m_venueChip != nullptr ? m_venueChip->openMenu() : nullptr;
 }
 
 void App::initStatusBar()
@@ -5853,13 +5865,14 @@ void App::initStatusBar()
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
 
-    // The venue the focus corrections come from (board Q129): "Venue:
-    // Lincoln HS", beside the readiness chip; hidden with none applied.
-    m_statusVenueLabel = new QLabel(this);
-    m_statusVenueLabel->setObjectName("footerVenue");
-    m_statusVenueLabel->setProperty("helpTopic", QStringLiteral("focus-calls.md"));
-    m_statusVenueLabel->hide();
-    sb->addWidget(m_statusVenueLabel, 0);
+    // The venue chip (board Q129, Q150): "Venue: Lincoln HS", beside the
+    // readiness chip; a click opens the venue menu. Keeps itself up to date.
+    if (m_doc != NULL && m_doc->programmer() != NULL)
+    {
+        m_venueChip = new VenueChip(m_doc, this);
+        sb->addWidget(m_venueChip, 0);
+        updateVenueFooter();
+    }
 
     // Rig network gate (InputOutputMap::transmitGateStatus()), right beside
     // the readiness chip: "Output held — not on the rig network". Hidden

@@ -1207,7 +1207,12 @@ void Monitor_Test::theApronIsDeckInTheRigOverview()
         };
         const QString where = QString("plane %1").arg(int(plane));
         props->setStagePieceVisible(MonitorProperties::ApronPiece, false);
-        QVERIFY(props->apronPlatform() == nullptr);
+        // Hidden: no deck yet the first time; after that, kept but not drawn (Q155-2).
+        if (const StagePlatform *hidden = props->apronPlatform())
+        {
+            QVERIFY(props->isHiddenApronPlatform(hidden->id()));
+            QVERIFY(!view.everyStructure().contains(qMakePair(StructureStudioView::PlatformKind, hidden->id())));
+        }
         const QImage without = shot();
         props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
         QVERIFY(props->apronPlatform() != nullptr);
@@ -1586,7 +1591,9 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         props->setStagePieceVisible(MonitorProperties::ApronPiece, false);
         props->setApronAuto(true);
         mon.stageMarksChanged();
-        QVERIFY(props->apronPlatform() == nullptr);
+        // Hidden: kept as deck (Q155-2), not drawn.
+        QVERIFY(props->apronPlatform() != nullptr);
+        QVERIFY(props->isHiddenApronPlatform(props->apronPlatform()->id()));
         QVERIFY(gv->m_apronDeckItem == nullptr);
         QCOMPARE(props->downstageEdgeY(), 6.0f);
         props->removePlatform(stageId);
@@ -26090,4 +26097,227 @@ void Monitor_Test::mountsNestInPlotLayers()
         QVERIFY2(chain("Spare Lantern").endsWith("SL Tower > Hook 1 > Spare Lantern"), qPrintable(chain("Spare Lantern")));
         QVERIFY2(chain("Spare Spot").endsWith("FOH Pipe > Ladder Bar > Spare Spot"), qPrintable(chain("Spare Spot")));
     }
+}
+
+/* Q155-2: Branson's aprons are at floor height. Hiding the apron took its
+   deck away and the lights on it dropped; hidden is only how it looks now,
+   and its height (the deck's until set) can be the floor. */
+void Monitor_Test::hidingTheApronMovesNothingOnIt()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(8.0f); deck->setDepth(5.0f);       // front at 6
+    deck->setHeight(1.0f);
+    props->setCurtainLineY(4.5f);
+    props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
+    QVERIFY(props->setApronDepth(2.5f));               // out to 7, past the deck
+    StagePlatform *apron = props->apronPlatform();
+    QVERIFY(apron != nullptr);
+    const quint32 apronId = apron->id();
+
+    // A light stood on the apron, out past the deck.
+    const quint32 fid = 41;
+    props->setFixturePosition(fid, 0, 0, QVector3D(5000.0f, 6500.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.deckPlatformId = apronId;
+    props->setFixtureRigProps(fid, rp);
+
+    QWidget parent;
+    parent.resize(1200, 800);
+    Monitor mon(&parent, doc);
+    MonitorGraphicsView *gv = mon.m_graphicsView;
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    gv->updatePlatforms();
+    gv->updateStageMarks();
+    QVERIFY(gv->m_apronDeckItem != nullptr);
+    QCOMPARE(props->fixtureRigPosition(fid).z(), 1.0f);    // the deck's height, at first
+
+    // Its properties: Height off Auto, to the floor.
+    onNextDialog([](QDialog *dlg) {
+        QCheckBox *autoBox = dlg->findChild<QCheckBox *>(QStringLiteral("apronHeightAuto"));
+        QDoubleSpinBox *spin = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("apronHeight"));
+        if (autoBox == nullptr || spin == nullptr)
+        {
+            dlg->reject();
+            QFAIL("no Height row");
+        }
+        QVERIFY(autoBox->isChecked());
+        QCOMPARE(spin->value(), 1.0);
+        autoBox->setChecked(false);
+        spin->setValue(0.0);
+        QCOMPARE(dlg->findChild<QLabel *>(QStringLiteral("apronHeightWords"))->text(), QString("On the floor"));
+        dlg->accept();
+    });
+    mon.editStagePiece(MonitorProperties::ApronPiece);
+    QVERIFY(!props->apronHeightIsAuto());
+    QCOMPARE(props->apronHeight(), 0.0f);
+    QCOMPARE(apron->height(), 0.0f);
+    const QVector3D before = props->fixtureRigPosition(fid);
+    QCOMPARE(before.z(), 0.0f);
+
+    // Hidden, from its properties: nothing on it moves or drops.
+    onNextDialog([](QDialog *dlg) {
+        QCheckBox *shown = dlg->findChild<QCheckBox *>(QStringLiteral("stagePieceVisible"));
+        if (shown == nullptr)
+        {
+            dlg->reject();
+            QFAIL("no Shown box");
+        }
+        QVERIFY(shown->toolTip().contains("still deck"));
+        shown->setChecked(false);
+        dlg->accept();
+    });
+    mon.editStagePiece(MonitorProperties::ApronPiece);
+    QVERIFY(!props->stagePieceVisible(MonitorProperties::ApronPiece));
+    QCOMPARE(props->apronPlatform(), apron);
+    QVERIFY(props->isHiddenApronPlatform(apronId));
+    QCOMPARE(props->fixtureRigProps(fid).deckPlatformId, apronId);
+    QCOMPARE(props->fixtureRigPosition(fid), before);
+    gv->updatePlatforms();
+    gv->updateStageMarks();
+    QVERIFY(gv->m_apronDeckItem == nullptr);                // not drawn
+    // Undone: shown again, the light where it was.
+    QVERIFY(mon.canUndo());
+    mon.undo();
+    QVERIFY(props->stagePieceVisible(MonitorProperties::ApronPiece));
+    QVERIFY(props->apronPlatform() != nullptr);
+    QCOMPARE(props->fixtureRigPosition(fid), before);
+}
+
+namespace
+{
+/** Answer the next placement chooser: pick @p pick in its list and press
+ *  @p button (placementPlace / placementUnlock / placementCancel). What it
+ *  offered goes in @p offered, its text in @p said; @p asked counts it.
+ *  Closed before anything is checked, so a miss never hangs the test. */
+void answerPlacement(const QString &button, int pick, QStringList *offered, QString *said, int *asked)
+{
+    QTimer::singleShot(0, [=]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        if (modal == nullptr || modal->objectName() != QLatin1String("placementLayerChooser"))
+        {
+            if (modal != nullptr)
+            {
+                modal->close();
+            }
+            return;
+        }
+        ++*asked;
+        QComboBox *combo = modal->findChild<QComboBox *>(QStringLiteral("placementLayer"));
+        offered->clear();
+        for (int i = 0; combo != nullptr && i < combo->count(); ++i)
+        {
+            offered->append(combo->itemText(i) + (i == combo->currentIndex() ? "*" : ""));
+        }
+        if (combo != nullptr && pick >= 0)
+        {
+            combo->setCurrentIndex(pick);
+        }
+        *said = modal->findChild<QLabel *>(QStringLiteral("placementLayerText"))->text();
+        QPushButton *b = modal->findChild<QPushButton *>(button);
+        if (b != nullptr && b->isVisible())
+        {
+            b->click();
+        }
+        else
+        {
+            modal->close();
+        }
+    });
+}
+}
+
+/* Q159-1: placing a new object while the active layer is locked asks where
+   it goes -- the unlocked layers (the first by default, as before), Unlock
+   and place here, or Cancel -- once for the whole placement. */
+void Monitor_Test::placingOnALockedLayerAsksWhere()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 def = MonitorProperties::defaultLayerId;
+    const quint32 rig = props->addLayer("Rig");
+    const quint32 marks = props->addLayer("Marks");
+    props->setActiveLayerId(def);
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    QStringList offered;
+    QString said;
+    int asked = 0;
+    auto people = [props]() {
+        QList<StageTarget *> out;
+        foreach (StageTarget *t, props->stageTargets())
+        {
+            if (t != nullptr && t->kind() == StageTarget::Kind::Person)
+            {
+                out << t;
+            }
+        }
+        return out;
+    };
+
+    // Not locked: never asked.
+    mon.slotAddPerson();
+    QCOMPARE(asked, 0);
+    QCOMPARE(people().last()->layerId(), def);
+
+    // Locked: asked, the unlocked layers offered, the first picked.
+    props->setLayerLocked(def, true);
+    answerPlacement("placementPlace", 1, &offered, &said, &asked);
+    mon.slotAddPerson();
+    QCOMPARE(asked, 1);
+    QCOMPARE(offered, QStringList({ "Rig*", "Marks" }));
+    QVERIFY(said.contains("is locked"));
+    QCOMPARE(people().size(), 2);
+    QCOMPARE(people().last()->layerId(), marks);       // the one chosen
+    QCoreApplication::processEvents();                  // that placement over
+
+    // Kept for the rest of that placement only: asked once, then again next time.
+    quint32 layer = 0;
+    answerPlacement("placementPlace", 0, &offered, &said, &asked);
+    QVERIFY(mon.askPlacementLayer(&layer));
+    QCOMPARE(layer, rig);
+    QCOMPARE(asked, 2);
+    QVERIFY(mon.askPlacementLayer(&layer));             // the same placement: not asked
+    QCOMPARE(layer, rig);
+    QCOMPARE(asked, 2);
+    QTest::qWait(0);                                    // the placement is over
+    QCoreApplication::processEvents();
+    answerPlacement("placementPlace", 1, &offered, &said, &asked);
+    QVERIFY(mon.askPlacementLayer(&layer));
+    QCOMPARE(asked, 3);
+    QCOMPARE(layer, marks);
+    QCoreApplication::processEvents();
+
+    // Cancel: nothing placed.
+    answerPlacement("placementCancel", 0, &offered, &said, &asked);
+    mon.slotAddPerson();
+    QCOMPARE(asked, 4);
+    QCOMPARE(people().size(), 2);
+    QVERIFY(props->layer(def).locked);
+    QCoreApplication::processEvents();
+
+    // Unlock and place here: the active layer unlocked, the object on it.
+    answerPlacement("placementUnlock", 0, &offered, &said, &asked);
+    mon.slotAddPerson();
+    QCOMPARE(asked, 5);
+    QVERIFY(!props->layer(def).locked);
+    QCOMPARE(people().size(), 3);
+    QCOMPARE(people().last()->layerId(), def);
+    QCoreApplication::processEvents();
+
+    // Every layer locked: only Unlock, or Cancel.
+    foreach (quint32 id, QList<quint32>() << def << rig << marks)
+        props->setLayerLocked(id, true);
+    answerPlacement("placementPlace", -1, &offered, &said, &asked);   // not there: closed
+    mon.slotAddPerson();
+    QCOMPARE(asked, 6);
+    QVERIFY(offered.isEmpty());
+    QVERIFY(said.contains("so is every other"));
+    QCOMPARE(people().size(), 3);
 }

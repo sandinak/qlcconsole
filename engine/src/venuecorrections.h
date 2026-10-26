@@ -207,7 +207,7 @@ public:
      *  show was opened: ask. */
     bool needsConfirm(const QDateTime &now = QDateTime::currentDateTime()) const;
     /** Someone said the applied venue is still the room. */
-    void confirmVenue() { m_confirmed = true; }
+    void confirmVenue() { m_confirmed = true; emit confirmedChanged(); }
     bool isConfirmed() const { return m_confirmed; }
 
     /*********************************************************************
@@ -378,6 +378,8 @@ public:
 signals:
     void activeVenueChanged(const QString &name);
     void venuesChanged();
+    /** confirmVenue(): "Still at <venue>?" answered (the venue chip). */
+    void confirmedChanged();
     void correctionsChanged();
     /** Something the operator should read once, about the venue applied
      *  (a file from before definitions were kept). */
