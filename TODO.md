@@ -347,20 +347,19 @@ written, known issues included.
 - **WLED config check: log noise** — reported from the soak logs (where
   it logs from is not yet pinned down); find what logs it and how often,
   and quiet it.
-- **Windows: make the CI test step fail the job** — all 142 test binaries
-  pass on Windows CI since `fix/win-tests-and-nits` (run 38938082831); the
-  step is still informational (`continue-on-error`) -- make it fail the job
-  once a few more runs stay green. The failures were QSettings with no
-  organization name (every UI test now gets its own INI file,
-  ui/test/common/testsettings.cpp), USERPROFILE not set alongside HOME, mixed
-  '\' separators in system fixture paths, and a read-only folder Windows
-  ignores. lookeditor's segfault (exit 139) went away with the settings
-  change; its exact cause was not pinned down.
+- **Windows CI test step: fails the job (2026-10-26)** — the earlier
+  "all 142 test binaries pass" (`fix/win-tests-and-nits`, run 38938082831)
+  went stale: by 2026-10-24, 16 of 190 programs failed there unnoticed
+  because the step was informational (TEST_MATRIX W1–W3: braced lists of
+  `&Doc::signal`, unexported `Fixture`/`FixtureGroup`/UI classes, plugin
+  signals by member pointer). Fixed (`fix/windows-rc4`); the step now fails
+  the job, a program that can't run on the runner goes in its `SKIP` list
+  with a reason, and `dllsignals_test` catches the pattern on every platform.
 - **Windows leftovers** — not code-signed (SmartScreen warns); ~95 MB
   installer, mostly ffmpeg codec DLLs from Qt Multimedia (trim if it
-  matters); `QLCIOPlugin` signals are connected by member pointer from the
-  UI too but its moc lives in each plugin DLL as well as the engine, not
-  annotated; no `-Werror` on MinGW, by design. Still to confirm on the VM:
+  matters); `QLCIOPlugin`'s moc lives in each plugin DLL as well as the
+  engine, so outside a plugin its signals are connected by name
+  (`dllsignals_test` enforces it); no `-Werror` on MinGW, by design. Still to confirm on the VM:
   the main window's outer edges resizing, audio, DMX USB/D2XX, the file
   associations, and opening a .qlcc whose definitions the VM lacks.
 

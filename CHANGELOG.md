@@ -786,6 +786,17 @@ on Art-Net nodes whose poll replies carry a junk status byte.
 
 ### Fixed
 
+- **On Windows, Build and the Show Tree follow the show again** (RC4, test
+  matrix W1–W3). The Build outline, Build ▸ Effects and the Show Tree
+  Library never refreshed when a function, group, fixture or palette
+  changed: their signals were connected from a braced list, which MinGW
+  fills with DLL import thunks that connect nothing. Each now has its own
+  connect. Also on Windows: a drape driven by a curtain fixture moves, the
+  group editor follows its group, and the Controller Test lists its
+  inputs (Fixture and FixtureGroup are now exported from the engine DLL,
+  and plugin signals are connected by name). The Windows CI test step,
+  which had been failing 16 of 190 programs unnoticed, now fails the
+  build, and a new source check catches the pattern on every platform.
 - **An Art-Net node's RDM flag no longer flickers** (RC4, board Q165-a).
   The office CR041R fills its ArtPollReply Status1 from an uncleared
   buffer (0x00 / 0x74 / 0x6F / 0xA9 from reply to reply, the RDM bit set
