@@ -442,7 +442,19 @@ void ShowFiles_Test::openingAShowNeverWritesIt()
     const QString copy = dir.filePath(QFileInfo(path).fileName());
     QVERIFY(QFile::copy(path, copy));
     QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner);
-    const QStringList before = folderState(dir.path());
+    /* The App's own crash-recovery autosave (<show>.autosave, every five
+       minutes from App::init) is not the show being written: on a slow
+       host this suite outlasts five minutes and the timer can land while
+       a show is open (val, 2026-10-26). Everything else must be as it was. */
+    const QString autosave = QFileInfo(copy).fileName() + QStringLiteral(".autosave");
+    auto state = [&dir, &autosave]() {
+        QStringList out;
+        for (const QString &line : folderState(dir.path()))
+            if (!line.startsWith(autosave))
+                out << line;
+        return out;
+    };
+    const QStringList before = state();
 
     QCOMPARE(open(m_app, copy), QFile::NoError);
     // Looked at, and closed without saving.
@@ -450,7 +462,9 @@ void ShowFiles_Test::openingAShowNeverWritesIt()
     m_app->clearDocument();
     QCoreApplication::processEvents();
 
-    QCOMPARE(folderState(dir.path()), before);
+    const QStringList after = state();
+    QVERIFY2(after == before, qPrintable(QStringLiteral("before:\n%1\nafter:\n%2")
+                                         .arg(before.join('\n'), after.join('\n'))));
 }
 
 void ShowFiles_Test::aStockShowOpensWithAutoOpenOff_data()
