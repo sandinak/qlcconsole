@@ -231,9 +231,11 @@ passed. **ASan: 0 reports** (the baseline full-suite run of the parent commit ha
 - `showtreeview.cpp:9546` (M2) and `vcbutton.cpp:479,618-671` (M3), from
   `mainbar_test` and `vcbutton_test`.
 - `vcslider.cpp:670-682`: `SliderMode(-1)` read in `setSliderMode` (M3's sibling).
+  **Fixed in `471f5f3c8`** (matrix 2, U3 below).
 - **New, product:** `channelmodifier.cpp:76`, `m_values[p] = floatVal` converts a
   float above 127 straight into a `char` (QByteArray), which is undefined. Upstream's
   code. It is reached from `ChannelModifier_Test::modifierMap`. Fix: `char(uchar(qRound(floatVal)))`.
+  **Fixed in `471f5f3c8`** (matrix 2, U2 below), truncating as before rather than rounding.
 - Not in this set, still open: `Monitor_Test::aDoubleClickOnTwoHungOnATrussEditsBoth`
   removes its truss through `MonitorProperties` while the rig view still has the
   `TrussItem`, and `~MonitorGraphicsView` then reads the freed truss
@@ -241,6 +243,30 @@ passed. **ASan: 0 reports** (the baseline full-suite run of the parent commit ha
   structures), so it is left to the M1 fix.
 
 The build copy `~/gates-matrix/rc4-testfix` was removed afterwards.
+
+## Matrix 2: fuzzing and the coverage build, fixed in `471f5f3c8`
+
+Matrix 2 (2026-10-26) fuzzed `52a23d27e` on dink with libFuzzer, ASan and UBSan
+(Homebrew clang): the show loader, venues, input profiles, fixture definitions
+and the Art-Net receive parsers (`~/matrix2/fuzz`), and ran a Debug + gcov
+coverage build on the Linux host. Approved for RC4 as Q168 ("Fix all in RC4").
+Every one is fixed in `471f5f3c8`. The minimised repros are in the tests as
+byte arrays. The fix was checked by replaying all 1056 ArtRdm crash artifacts,
+both Art-Net corpora and the known repros, with every prefix of each, under
+ASan + UBSan against the fixed parsers (0 reports; the old parsers abort on the
+first known repro).
+
+| ID | Where | Symptom | Fix | Test(s) |
+|---|---|---|---|---|
+| **Z1** | `Chaser::loadXML` (`chaser.cpp:814`), the same loop in `Sequence::loadXML` | A `<Step>` with no `Number`, or a negative one, was `QList::insert`-ed at that index: an abort in Debug, memory corruption in Release. Repro: `<Function Type="Chaser"><Step>` | Out-of-range numbers append. `Collection::addFunction` appends for any out-of-range index too | `Chaser_Test::loadStepNumberOutOfRange`, `Sequence_Test::loadStepNumberOutOfRange` |
+| **Z2** | `ArtNetPacketizer::fillDMXdata` (`artnetpacketizer.cpp:415-418`) | An ArtDmx of 12–17 bytes read bytes 14–17 past the end. Network-reachable | Under 18 bytes is dropped; the data is held to 512 channels, because the controller indexes a 512-byte input buffer with it | `ArtNet_Test::artDmxShorterThanItsHeaderIsDropped`, `::artDmxIsClampedToAUniverse` |
+| **Z3** | `ArtNetPacketizer::processTODdata` → `RDMProtocol::byteArrayToUID` (`rdmprotocol.cpp:498-503`) | An ArtTodData whose UidCount promises more UIDs than it carries read past the end | Dropped whole; `byteArrayToUID` refuses fewer than 6 bytes | `ArtNet_Test::artTodDataPromisingMoreUidsIsDropped`, `::artTodDataStillParses` |
+| **Z4** | `RDMProtocol::parsePacket` (`rdmprotocol.cpp:284, 301, 304, 311, 318, 326, 374-378, 401, 469→568`) | 1056 crashes, 17 signatures: the header, PDL, per-PID fields and checksum were all read on the packet's own word | The 23-byte header, then PDL + checksum, are checked before they are read; each PID needs the PDL it decodes; `calculateChecksum` stays in its buffer. DEVICE_INFO's sensor count now comes from byte 18 (it was the checksum's low byte) | `ArtNet_Test::rdmEveryTruncationIsDropped`, `::rdmFuzzCrashesAreDroppedQuietly` (one per signature), `::rdmValidRepliesStillParse`, `::malformedPacketsThroughTheController` |
+| **Z5** | `E131Packetizer::fillDMXdata` (found reviewing Z2) | A 125-byte sACN packet passed `checkPacket` and read its start code past the end; a count of 0 took the rest of the datagram; a long one overran the 512-byte buffer | Under 126 bytes dropped; 0–512 channels | `E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse` |
+| **U1** | `artnetpacketizer.cpp:415/436/446/468` (UBSan, thousands of reports) | Left shift of a negative `char` (universe, address); a byte shifted into bit 31 of an `int` in `byteArrayToUID`/`byteArrayToLong` | Through `quint8` / `quint32`; a top-bit universe byte is no longer sign-extended | `ArtNet_Test::artDmxIsClampedToAUniverse`, `::artTodDataStillParses` |
+| **U2** | `ChannelModifier::setModifierMap` (`channelmodifier.cpp:76`) | A float above 127 converted straight to `char` | Through `int` and `uchar`, truncated as before (same values) | `ChannelModifier_Test::upperHalfValues` |
+| **U3** | `VCSlider::VCSlider` → `setSliderMode` (`vcslider.cpp:205, 670-682`) | Compared against `SliderMode(-1)`, outside the enum | Starts from `Level` (header default too) | `VCFrame_Test::sliderStartsInAValidMode` |
+| **H1** | `GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites` (Linux Debug + gcov) | Hung to the 300 s watchdog. The stack: the test's writer thread in `sched_yield` / `GenericFader::write`, the setter blocked in `getChannelFader`'s lock | **Test.** The writer re-took the lock back to back with only a yield and a mutex isn't fair, so the setter starved; nothing in `GenericFader`/`Universe` holds the lock across calls, and the app's universe thread writes once a tick. The writer now waits for a set-up between writes | the test itself |
 
 ## Notes
 

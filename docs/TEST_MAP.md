@@ -696,6 +696,7 @@ Findings that are not marked as bugs:
 | D07 | Damaged files | A fixture on a universe the show can't have (past 1024, -1, 4294967295, not a number, empty) loads unpatched at once, said; addUniverse refuses past the limit (RC4, matrix F1) | **Doc_Test::loadUniverseOutOfRange** | none | covered | high |  |
 | D08 | Damaged files | A show's universes added one at a time rebuild the Show Control page's lists once, not once each (RC4, matrix F1) | **ShowControlUi_Test::manyUniversesRebuildTheListOnce** | none | covered | med |  |
 | D09 | Old shows | Opened and not touched, no show is modified (no "Save changes?", no autosave at open), including shows whose trusses had no group yet (RC4, matrix F3) | **ShowFiles_Test::aShowOpensUnmodified** (every show in test-workspaces/) | none | covered | high |  |
+| D10 | Damaged files | A chaser or sequence `<Step>` with no Number, a negative one or one past the end is appended, not inserted at that index (abort in Debug, memory corruption in Release) (RC4, matrix 2 fuzzing) | **Chaser_Test::loadStepNumberOutOfRange** (the fuzzer's minimised repro); **Sequence_Test::loadStepNumberOutOfRange** | none | covered | high |  |
 
 # Part 2: earlier features, by area
 
@@ -856,6 +857,7 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 
 | Feature | Test(s) | Before | After | Risk |
 |---|---|---|---|---|
+| A new VC slider starts in Playback from a valid mode (was SliderMode(-1), UBSan); every mode round-trips; follows the Grand Master only in that mode (RC4, matrix 2) | **VCFrame_Test::sliderStartsInAValidMode** | none | covered | low |
 | Run tab cue runner: GO / Sub GO / Back / Pause / Stop, what changes, click loads, double-click jumps, Space is GO | CueRunner_Test::goSubGoBackAndWhatChanges, ::clickLoadsDoubleClickJumps, ::spaceIsGoInTheRunTab, ::runnersAndShowControlMirrorOneState | covered | covered | high |
 | Cue Runner VC widget: inputs, keys, feedback, save/load, Swap Widget, handles | CueRunner_Test::vcActionsFromInputsAndKeys, ::vcFeedbackFollowsTheCue, ::theVcWidgetSavesLoadsAndCopies, ::swapWidgetOnAPage | covered | covered | high |
 | One top bar, » fold, Show Controls placement, Blackout/Blind colours, kiosk | MainBar_Test::everyTabsToolsAreInTheTopBar, ::thePlacementRoundTripsAndSwitchesLive, ::blackoutAndBlindLightUpInEveryTheme, ::kioskModeDropsTheBar | covered | covered | low |
@@ -965,6 +967,11 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Windows: the Build outline, Build ▸ Effects and the Show Tree Library follow every Doc signal (one connect() per signal, RC4, matrix W1) | ProgrammingOutline_Test::theListsFollowEveryDocSignal (new); on Windows CI | none | covered | high |
 | Windows: engine and UI signals connected from another DLL (Fixture curtain drapes, the group editor, the Controller Test inputs; RC4, matrix W2) | DllSignals_Test (new: reads the sources for unexported classes, plugin signals by member pointer, braced signal lists); Monitor_Test curtain tests, VenueRigUi_Test, FocusMode_Test::theControllerTestListsEachInput on Windows CI | none | covered | high |
 | Windows: the test suite fails the CI job (RC4, matrix W3) | the Windows "Test" step (was informational); EffectDesigner_Test checks a spy's count before first() | none | covered | med |
+| A malformed Art-Net packet is dropped, never read past: ArtDmx of 12–17 bytes, ArtTodData promising more UIDs than it carries, ArtRdm with a message or parameter-data length past its end; every prefix of a valid packet; each fuzz crash signature (RC4, matrix 2 fuzzing) | **ArtNet_Test::artDmxShorterThanItsHeaderIsDropped**, **::artTodDataPromisingMoreUidsIsDropped**, **::rdmEveryTruncationIsDropped**, **::rdmFuzzCrashesAreDroppedQuietly**, **::malformedPacketsThroughTheController** | none | covered | high |
+| Valid Art-Net / RDM packets parse as before; ArtDmx held to 512 channels; universe / address top bit not sign-extended; RDM DEVICE_INFO sensor count from its own byte (RC4, matrix 2) | **ArtNet_Test::artDmxIsClampedToAUniverse**, **::artTodDataStillParses**, **::rdmValidRepliesStillParse** | none | covered | high |
+| sACN (E1.31): a 125-byte packet (no start code) dropped; a count of 0 is no channels; held to 512 channels; short packets give what they hold (RC4, matrix 2) | **E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse** | none | covered | high |
+| Channel modifier values above 127 well defined (UBSan), same values (RC4, matrix 2) | **ChannelModifier_Test::upperHalfValues**; ChannelModifier_Test::modifierMap | partial | covered | med |
+| A fader's channel set up while the universe writes stays put; the race test can't starve its setter (300 s hang on the Linux coverage build, RC4, matrix 2) | GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites (writer now waits for the setter between writes) | covered | covered | high |
 
 ## Import/Export
 
