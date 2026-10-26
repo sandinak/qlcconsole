@@ -10,7 +10,7 @@ active work in [TODO.md](TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
-## [0.3.0] - 2026-10-25
+## [0.3.0] - 2026-10-26
 
 qlcconsole 0.3.0: the Build tab and its Workbench (scenes, collections and
 chasers edited as layers, shared with the Show Tree); the Classic QLC+ /
@@ -36,7 +36,9 @@ and one venue menu wherever it opens (the chip, View ▸ Venue…, Focus ▸
 Venues), amber with a count when the venue clashes; an apron that can sit
 on the floor and stays deck when hidden; placing on a locked layer asking
 where the object goes; the patch list grouped, filtered and exported to
-Excel, with labels on tape; and Connections' Overview folded into Devices.
+Excel, with labels on tape; Connections' Overview folded into Devices,
+and the Fixture Manager patching a universe in the same connection window;
+and the connection window's MIDI input channel no longer one off.
 
 ### Added
 

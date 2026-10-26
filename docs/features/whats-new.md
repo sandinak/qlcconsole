@@ -609,6 +609,9 @@ their house lights, relays and subs.
   **Patch output…** (or **Edit connection…**, once patched) opens the
   connection window on that universe. See
   [Patching a universe's output](fixture-manager.md#patching-a-universes-output).
+- **MIDI input listens on the channel you pick.** The connection
+  window's input channel was one off ("Channel 1" listened on channel 2,
+  "All channels" on channel 1 only); it now matches the MIDI plugin.
 - **Fixture Properties opens for every fixture**, on the plot or not; a
   fixture not on the plot has its position rows greyed.
 
