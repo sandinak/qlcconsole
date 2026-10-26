@@ -1136,7 +1136,10 @@ void ConnectionsTree_Test::multiPatchPutsThemOnTheDevicePortsInPickedOrder()
     QVERIFY(plan.conflicts.isEmpty());
 
     int rebuilds = 0;
-    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, [&rebuilds]() { rebuilds++; });
+    // Its own context, gone before rebuilds is: tree's teardown resets the
+    // model again after this frame's locals are out of scope.
+    QObject counting;
+    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, &counting, [&rebuilds]() { rebuilds++; });
     QCOMPARE(tree.applyOrderedPatch(plan), 4);
     QCOMPARE(rebuilds, 1);                             // one rebuild, not one per universe
 
@@ -1225,7 +1228,10 @@ void ConnectionsTree_Test::multiUnpatchRemovesEveryOneInOneStep()
     clickUniverse(tree, 1, Qt::ControlModifier);
 
     int rebuilds = 0;
-    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, [&rebuilds]() { rebuilds++; });
+    // Its own context, gone before rebuilds is: tree's teardown resets the
+    // model again after this frame's locals are out of scope.
+    QObject counting;
+    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, &counting, [&rebuilds]() { rebuilds++; });
 
     // From the menu, as Branson would: all four go at once.
     const QStringList offered = contextMenuOn(tree, 1, "Unpatch 4 selected universes");

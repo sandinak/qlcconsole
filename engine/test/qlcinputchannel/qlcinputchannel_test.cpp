@@ -81,8 +81,10 @@ void QLCInputChannel_Test::typeToString()
              QString(KXMLQLCInputChannelPageDown));
     QCOMPARE(QLCInputChannel::typeToString(QLCInputChannel::PageSet),
              QString(KXMLQLCInputChannelPageSet));
-    QCOMPARE(QLCInputChannel::typeToString(QLCInputChannel::Type(42)),
+    QCOMPARE(QLCInputChannel::typeToString(QLCInputChannel::NoType),
              QString(KXMLQLCInputChannelNone));
+    // Nothing else to try: every value a Type can hold (0..7) is named, and
+    // casting 42 to it is undefined behaviour (UBSan).
 }
 
 void QLCInputChannel_Test::stringToType()

@@ -1192,7 +1192,8 @@ void Fixture_Test::stageLookDefaultAndSet()
     QCOMPARE(spy.count(), 1);
 
     // Out of range is Auto, not a garbage look.
-    fxi.setStageLook(Fixture::StageLook(999));
+    // One past the last look: a value a StageLook can still hold (999 isn't).
+    fxi.setStageLook(Fixture::StageLook(int(Fixture::CurtainLook) + 1));
     QCOMPARE(fxi.stageLook(), Fixture::AutoLook);
     QCOMPARE(spy.count(), 2);
 }

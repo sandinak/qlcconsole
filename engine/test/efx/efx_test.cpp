@@ -144,7 +144,8 @@ void EFX_Test::algorithmNames()
     QCOMPARE(e.algorithm(), EFX::Lissajous);
 
     /* Invalid algorithm results in Circle as a fallback */
-    e.setAlgorithm(EFX::Algorithm(31337));
+    // 15: no algorithm, though a value an Algorithm can hold (0..15).
+    e.setAlgorithm(EFX::Algorithm(15));
     QCOMPARE(e.algorithm(), EFX::Circle);
 }
 
@@ -577,7 +578,8 @@ void EFX_Test::propagationMode()
     QCOMPARE(EFX::propagationModeToString(EFX::Serial), QString("Serial"));
     QCOMPARE(EFX::propagationModeToString(EFX::Parallel), QString("Parallel"));
     QCOMPARE(EFX::propagationModeToString(EFX::Asymmetric), QString("Asymmetric"));
-    QCOMPARE(EFX::propagationModeToString(EFX::PropagationMode(7)), QString("Parallel"));
+    // 3: no mode, though a value a PropagationMode can hold (0..3).
+    QCOMPARE(EFX::propagationModeToString(EFX::PropagationMode(3)), QString("Parallel"));
 
     QCOMPARE(EFX::stringToPropagationMode("Serial"), EFX::Serial);
     QCOMPARE(EFX::stringToPropagationMode("Parallel"), EFX::Parallel);

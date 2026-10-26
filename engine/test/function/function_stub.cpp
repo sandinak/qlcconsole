@@ -21,7 +21,9 @@
 #include "fixture.h"
 #include "function_stub.h"
 
-Function_Stub::Function_Stub(Doc* doc) : Function(doc, Function::Type(0xDEADBEEF))
+Function_Stub::Function_Stub(Doc* doc) : Function(doc, Function::Type(0x3FF))
+/* 0x3FF: every type bit at once, no type of its own -- and, unlike the
+   0xDEADBEEF it once was, a value a Function::Type can hold (0..1023). */
 {
     m_writeCalls = 0;
     m_preRunCalls = 0;

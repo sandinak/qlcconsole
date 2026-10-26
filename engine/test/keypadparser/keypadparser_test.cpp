@@ -108,7 +108,7 @@ void KeyPadParser_Test::parsing()
         QCOMPARE(scv.fxi, Fixture::invalidId());
         QCOMPARE(scv.channel, chnum++);
         QCOMPARE(scv.value, uchar(val));
-        universeValues[chnum] = val;
+        universeValues[chnum] = char(uchar(int(val)));   // a float straight into a char is UB past 127
         val += delta;
     }
 
@@ -121,7 +121,7 @@ void KeyPadParser_Test::parsing()
         QCOMPARE(scv.fxi, Fixture::invalidId());
         QCOMPARE(scv.channel, chnum++);
         QCOMPARE(scv.value, uchar(0));
-        universeValues[chnum] = val;
+        universeValues[chnum] = char(uchar(int(val)));   // a float straight into a char is UB past 127
     }
 
     scvList = parser.parseCommand(m_doc, "AT 123", universeValues);
@@ -133,7 +133,7 @@ void KeyPadParser_Test::parsing()
         QCOMPARE(scv.fxi, Fixture::invalidId());
         QCOMPARE(scv.channel, chnum++);
         QCOMPARE(scv.value, uchar(123));
-        universeValues[chnum] = val;
+        universeValues[chnum] = char(uchar(int(val)));   // a float straight into a char is UB past 127
     }
 
     scvList = parser.parseCommand(m_doc, "AT FULL", universeValues);
@@ -145,7 +145,7 @@ void KeyPadParser_Test::parsing()
         QCOMPARE(scv.fxi, Fixture::invalidId());
         QCOMPARE(scv.channel, chnum++);
         QCOMPARE(scv.value, uchar(255));
-        universeValues[chnum] = val;
+        universeValues[chnum] = char(uchar(int(val)));   // a float straight into a char is UB past 127
     }
 
     /* Set channels 6, 8, 10, 12, 14 and 16 to value 100 */

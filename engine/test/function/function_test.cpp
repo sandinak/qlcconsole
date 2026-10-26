@@ -272,7 +272,7 @@ void Function_Test::typeString()
     Doc doc(this);
 
     Function_Stub* stub = new Function_Stub(&doc);
-    QCOMPARE(stub->typeString(), Function::typeToString(Function::Type(31337)));
+    QCOMPARE(stub->typeString(), Function::typeToString(Function::Type(0x3FF)));
     stub->m_type = Function::SceneType;
     QCOMPARE(stub->typeString(), Function::typeToString(Function::SceneType));
     stub->m_type = Function::ChaserType;
@@ -293,8 +293,9 @@ void Function_Test::typeToString()
     QVERIFY(Function::typeToString(Function::AudioType) == "Audio");
     QVERIFY(Function::typeToString(Function::VideoType) == "Video");
 
+    // Not a type, though a value the enum can hold (0..1023).
     QVERIFY(Function::typeToString(Function::Type(42)) == "Undefined");
-    QVERIFY(Function::typeToString(Function::Type(31337)) == "Undefined");
+    QVERIFY(Function::typeToString(Function::Type(0x3FF)) == "Undefined");
 }
 
 void Function_Test::stringToType()
@@ -321,9 +322,8 @@ void Function_Test::runOrderToString()
     QVERIFY(Function::runOrderToString(Function::SingleShot) == "SingleShot");
     QVERIFY(Function::runOrderToString(Function::PingPong) == "PingPong");
     QVERIFY(Function::runOrderToString(Function::Random) == "Random");
-
-    QVERIFY(Function::runOrderToString(Function::RunOrder(42)) == "Loop");
-    QVERIFY(Function::runOrderToString(Function::RunOrder(69)) == "Loop");
+    // Nothing else to try: every value a RunOrder can hold (0..3) is named,
+    // and casting 42 to it is undefined behaviour (UBSan).
 }
 
 void Function_Test::stringToRunOrder()
@@ -341,9 +341,8 @@ void Function_Test::directionToString()
 {
     QVERIFY(Function::directionToString(Function::Forward) == "Forward");
     QVERIFY(Function::directionToString(Function::Backward) == "Backward");
-
-    QVERIFY(Function::directionToString(Function::Direction(42)) == "Forward");
-    QVERIFY(Function::directionToString(Function::Direction(69)) == "Forward");
+    // Nothing else to try: every value a Direction can hold (0..1) is named,
+    // and casting 42 to it is undefined behaviour (UBSan).
 }
 
 void Function_Test::stringToDirection()

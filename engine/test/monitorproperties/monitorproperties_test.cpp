@@ -1006,11 +1006,12 @@ void MonitorProperties_Test::stageStructureAddRemove()
         Truss *b = mp.addTruss();
         QVERIFY(a->id() != b->id());
         QCOMPARE(mp.trusses().count(), 2);
-        mp.removeTruss(a->id());
+        const quint32 aId = a->id();  // a is deleted by the remove
+        mp.removeTruss(aId);
         QCOMPARE(mp.trusses().count(), 1);
         QCOMPARE(mp.trusses().first()->id(), b->id());
         // Removing an id that's already gone is a safe no-op.
-        mp.removeTruss(a->id());
+        mp.removeTruss(aId);
         QCOMPARE(mp.trusses().count(), 1);
     }
 
@@ -1023,10 +1024,11 @@ void MonitorProperties_Test::stageStructureAddRemove()
         Pipe *b = mp.addPipe();
         QVERIFY(a->id() != b->id());
         QCOMPARE(mp.pipes().count(), 2);
-        mp.removePipe(a->id());
+        const quint32 aId = a->id();  // a is deleted by the remove
+        mp.removePipe(aId);
         QCOMPARE(mp.pipes().count(), 1);
         QCOMPARE(mp.pipes().first()->id(), b->id());
-        mp.removePipe(a->id());
+        mp.removePipe(aId);
         QCOMPARE(mp.pipes().count(), 1);
     }
 
@@ -1039,10 +1041,11 @@ void MonitorProperties_Test::stageStructureAddRemove()
         Stand *b = mp.addStand();
         QVERIFY(a->id() != b->id());
         QCOMPARE(mp.stands().count(), 2);
-        mp.removeStand(a->id());
+        const quint32 aId = a->id();  // a is deleted by the remove
+        mp.removeStand(aId);
         QCOMPARE(mp.stands().count(), 1);
         QCOMPARE(mp.stands().first()->id(), b->id());
-        mp.removeStand(a->id());
+        mp.removeStand(aId);
         QCOMPARE(mp.stands().count(), 1);
     }
 
@@ -1055,10 +1058,11 @@ void MonitorProperties_Test::stageStructureAddRemove()
         Tower *b = mp.addTower();
         QVERIFY(a->id() != b->id());
         QCOMPARE(mp.towers().count(), 2);
-        mp.removeTower(a->id());
+        const quint32 aId = a->id();  // a is deleted by the remove
+        mp.removeTower(aId);
         QCOMPARE(mp.towers().count(), 1);
         QCOMPARE(mp.towers().first()->id(), b->id());
-        mp.removeTower(a->id());
+        mp.removeTower(aId);
         QCOMPARE(mp.towers().count(), 1);
     }
 
@@ -1071,10 +1075,11 @@ void MonitorProperties_Test::stageStructureAddRemove()
         StageTarget *b = mp.addStageTarget();
         QVERIFY(a->id() != b->id());
         QCOMPARE(mp.stageTargets().count(), 2);
-        mp.removeStageTarget(a->id());
+        const quint32 aId = a->id();  // a is deleted by the remove
+        mp.removeStageTarget(aId);
         QCOMPARE(mp.stageTargets().count(), 1);
         QCOMPARE(mp.stageTargets().first()->id(), b->id());
-        mp.removeStageTarget(a->id());
+        mp.removeStageTarget(aId);
         QCOMPARE(mp.stageTargets().count(), 1);
     }
 }
@@ -1375,12 +1380,13 @@ void MonitorProperties_Test::goboSwapsAreKeptPerFixtureAndSaved()
     QCOMPARE(back.monitorProperties()->goboSwaps(a->id()).size(), 2);
 
     // Deleting the fixture takes its glass: a reused id starts with none.
-    QVERIFY(doc.deleteFixture(a->id()));
-    QVERIFY(mp->goboSwaps(a->id()).isEmpty());
+    const quint32 aId = a->id();  // deleteFixture() deletes a
+    QVERIFY(doc.deleteFixture(aId));
+    QVERIFY(mp->goboSwaps(aId).isEmpty());
 
     // A cleared workspace has none.
     back.monitorProperties()->reset();
-    QVERIFY(back.monitorProperties()->goboSwaps(a->id()).isEmpty());
+    QVERIFY(back.monitorProperties()->goboSwaps(aId).isEmpty());
 }
 
 void MonitorProperties_Test::theGoboLibraryImportsAndResolves()

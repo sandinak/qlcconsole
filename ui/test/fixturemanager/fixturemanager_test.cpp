@@ -1170,8 +1170,9 @@ void FixtureManager_Test::deletingInventoryFixturesUpdatesTheFolderCounts()
     QCOMPARE(inv()->text(KColumnName), QString("Inventory (4)"));
     QCOMPARE(inv()->child(0)->text(KColumnName), QString("Generic (4)"));
 
-    QVERIFY(m_doc->deleteFixture(lm70.at(0)->id()));
-    QCOMPARE(fixtureRow(mgr, lm70.at(0)->id()), nullptr);   // every row of it, group one included
+    const quint32 firstId = lm70.at(0)->id();          // deleteFixture() deletes it
+    QVERIFY(m_doc->deleteFixture(firstId));
+    QCOMPARE(fixtureRow(mgr, firstId), nullptr);       // every row of it, group one included
     QCOMPARE(inv()->text(KColumnName), QString("Inventory (3)"));
     QCOMPARE(inv()->child(0)->text(KColumnName), QString("Generic (3)"));
     QCOMPARE(inv()->child(0)->child(0)->text(KColumnName), QString("Dimmer, 4 ch (2)"));
