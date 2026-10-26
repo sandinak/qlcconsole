@@ -119,7 +119,7 @@ QString DllSignals_Test::moduleOf(const QString &rel)
     const QStringList parts = rel.split('/');
     const int t = parts.indexOf(QStringLiteral("test"));
     if (t >= 0 && t + 1 < parts.size())
-        return QStringLiteral("test:") + parts.mid(0, t + 2).join('/');
+        return QStringLiteral("test:") + parts.mid(0, qMin(t + 2, int(parts.size()) - 1)).join('/');
     if (rel == QLatin1String("plugins/interfaces/qlcioplugin.h"))
         return QStringLiteral("qlcioplugin");     // built into every plugin, and the engine
     if (rel.startsWith(QLatin1String("engine/src/")) || rel.startsWith(QLatin1String("engine/audio/src/")))
@@ -204,6 +204,10 @@ void DllSignals_Test::initTestCase()
     const QRegularExpression classRe(QStringLiteral(
         "^\\s*class\\s+(?:([A-Z][A-Z0-9_]*EXPORT|QLC_DECLSPEC)\\s+)?(\\w+)(?:\\s+final)?\\s*"
         "(?::\\s*(?:public|protected|private)?\\s*([\\w:]+))?[^;]*$"));
+    // "class QLC_ENGINE_EXPORT Function;" exports the class defined later.
+    const QRegularExpression fwdRe(QStringLiteral(
+        "^\\s*class\\s+([A-Z][A-Z0-9_]*EXPORT|QLC_DECLSPEC)\\s+(\\w+)\\s*;"));
+    QSet<QString> fwdExported;
     const QRegularExpression sigStart(QStringLiteral("^(?:signals|Q_SIGNALS)\\s*:"));
     const QRegularExpression access(QStringLiteral("^(?:public|private|protected)\\b[^:]*:"));
     const QRegularExpression sigDecl(QStringLiteral("^void\\s+(\\w+)\\s*\\("));
@@ -216,6 +220,9 @@ void DllSignals_Test::initTestCase()
         const QStringList lines = texts.value(rel).split('\n');
         for (const QString &line : lines)
         {
+            const QRegularExpressionMatch fwd = fwdRe.match(line);
+            if (fwd.hasMatch())
+                fwdExported.insert(moduleOf(rel) + '/' + fwd.captured(2));
             const QRegularExpressionMatch m = classRe.match(line);
             if (m.hasMatch())
             {
@@ -250,6 +257,25 @@ void DllSignals_Test::initTestCase()
         }
     }
 
+    for (auto it = m_classes.begin(); it != m_classes.end(); ++it)
+    {
+        for (ClassInfo &ci : it.value())
+            if (fwdExported.contains(ci.module + '/' + ci.name))
+                ci.exported = true;
+    }
+
+    /* A test that compiles a class's own source (qlcioplugin.cpp, a
+       plugin's) has that class in its own binary: no DLL in between. */
+    QHash<QString, QString> testSources;   // test module -> its CMakeLists.txt
+    for (const QString &rel : std::as_const(m_files))
+    {
+        const QString mod = moduleOf(rel);
+        if (!mod.startsWith(QLatin1String("test:")) || testSources.contains(mod))
+            continue;
+        QFile cm(m_root + '/' + mod.mid(5) + QStringLiteral("/CMakeLists.txt"));
+        testSources.insert(mod, cm.open(QIODevice::ReadOnly) ? QString::fromUtf8(cm.readAll()) : QString());
+    }
+
     // Every &Class::signal outside the module that declares it.
     const QRegularExpression refRe(QStringLiteral("&\\s*(\\w+)::(\\w+)\\b"));
     for (const QString &rel : std::as_const(m_files))
@@ -262,6 +288,9 @@ void DllSignals_Test::initTestCase()
             const QRegularExpressionMatch m = it.next();
             const ClassInfo *decl = signalOwner(m.captured(1), m.captured(2), mod);
             if (decl == nullptr || decl->module == mod)
+                continue;
+            const QString source = QFileInfo(decl->file).completeBaseName() + QStringLiteral(".cpp");
+            if (testSources.value(mod).contains(QLatin1Char('/') + source))
                 continue;
             Ref r;
             r.file = rel;
