@@ -256,7 +256,7 @@ and the labels too, and they follow the grouping.
 
 | Column | What it says |
 |---|---|
-| **Patch** | Universe (and its name) and the channels, one-based as the crew reads them: "1: Stage left · 12–23". A clashing fixture is listed where it asked to be, marked **clash**. |
+| **Patch** | Universe (and its name) and the channels, one-based as the crew reads them: "1: Stage left · 12–23". A clashing fixture is listed where it asked to be, marked **clash**. A fixture with no address yet (still in the inventory) is highlighted, amber and italic: **— not patched**; point at it for why. Its label prints "—" for the address. |
 | **Fixture** | Its name. |
 | **Make / model** | From its definition. |
 | **Mode** | The mode, and how many channels it takes when the name doesn't say: "18 Channel", "165ch", "Open + Fly (2 ch)". |
@@ -286,7 +286,10 @@ print dialog, or saves it as a PDF.
 
 ![Fixture labels on 24 mm tape: the stock, tape width, template and cut gap, and a preview of the first label](../images/patch-labels.png)
 
-1. **Stock** — remembered for next time (table below).
+1. **Stock** — remembered for next time (table below). When a Brother
+   PT-P710BT is set up on the Mac and you haven't chosen a stock before,
+   the dialog opens on its preset, says **Brother PT-P710BT found**, and
+   **Print…** goes to it. A stock you have chosen wins.
 2. **Tape** — 12 mm or 24 mm, for a tape stock.
 3. **Label says** — the template, remembered: **`{name} D{address}`**
    unless you change it ("Spot 3 D101"); **Default** puts it back. The
@@ -318,7 +321,7 @@ the edge.
 | Stock | What it is |
 |---|---|
 | **Continuous tape** (the default) | Label-printer tape, 12 or 24 mm: one label a page, the printer's driver cuts between them. |
-| **Brother PT-P710BT** | The same tape (24 mm unless changed) through Brother's own macOS driver (P-touch), which takes the page size as the label; **Print…** picks the PT-P710BT when it is set up on the Mac. Set the driver's cut option (cut each label, or chain print) in its print dialog. |
+| **Brother PT-P710BT** | The same tape (24 mm unless changed) through Brother's own macOS driver (P-touch), which takes the page size as the label; **Print…** picks the PT-P710BT when it is set up on the Mac (by its name or model, PT-P710BT or PT-P710), and the dialog starts on this stock when nothing else was chosen before. Set the driver's cut option (cut each label, or chain print) in its print dialog. |
 | **Avery 5160** | US Letter sheets, 30 labels (3 across, 10 down), each 2⅝ × 1 in. Avery's 5260, 5960, 8160 and other "30 per sheet" labels are the same layout. |
 | **62 mm roll** | A continuous 62 mm roll (Brother DK-22205 and the like), one 62 × 29 mm label a page; the printer cuts between them. |
 

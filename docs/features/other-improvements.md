@@ -150,6 +150,14 @@ controllers, rescan working on every plugin type, hardware lines no longer
 silently filtered from the "heard on" liveness view, and manual
 targets/ports/aliases that persist with the workspace.
 
+An Art-Net node's row says **RDM** or **no RDM**, from the RDM bit the
+node sends in every poll reply. Some nodes fill that byte with junk (the
+CR041R's changes from reply to reply), so the row only changes once the
+node has said the same thing five replies running, and a node whose
+status keeps changing reads **no RDM** until it settles for a few minutes.
+A node that answers RDM discovery with its table of devices reads **RDM**
+whatever its status byte says.
+
 ### Patches follow the network
 
 Art-Net, E1.31 (sACN) and OSC universes are patched to a **network**, not

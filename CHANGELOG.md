@@ -40,6 +40,11 @@ Excel, with labels on tape; Connections' Overview folded into Devices,
 and the Fixture Manager patching a universe in the same connection window;
 and the connection window's MIDI input channel no longer one off.
 
+Release candidate 4 adds, from testing RC3: the Labels dialog finding a
+Brother PT-P710BT on the Mac and starting on its preset and printer;
+unpatched fixtures highlighted in the patch list; and a steady RDM flag
+on Art-Net nodes whose poll replies carry a junk status byte.
+
 ### Added
 
 - **The venue chip and one venue menu** (RC3, board Q150). The footer, beside
@@ -499,6 +504,18 @@ and the connection window's MIDI input channel no longer one off.
 
 ### Changed
 
+- **The Labels dialog finds a Brother PT-P710BT** (RC4, board Q163-1).
+  With a printer installed whose name, description or model says PT-P710BT
+  (or PT-P710), and no stock chosen before, the dialog opens on the
+  Brother preset with that printer and says "Brother PT-P710BT found". A
+  stock chosen before still wins; the continuous tape stays the default
+  otherwise. (`PatchLabelsDialog::installedPrinters()`, a test seam over
+  `QPrinterInfo::availablePrinters()`.)
+- **Unpatched fixtures stand out in the patch list** (RC4, board Q163-6).
+  The Patch cell of a fixture with no address reads "— not patched",
+  italic, black on the house amber (readable on every theme), with a
+  tooltip; its label still prints "—" for the address.
+
 - **Hiding the apron moves nothing** (RC3, board Q155-2). Hiding the apron
   is only how it looks: its deck is no longer taken away (which unmounted
   and dropped the lights stood on it), but kept in the model, not drawn on
@@ -769,6 +786,16 @@ and the connection window's MIDI input channel no longer one off.
 
 ### Fixed
 
+- **An Art-Net node's RDM flag no longer flickers** (RC4, board Q165-a).
+  The office CR041R fills its ArtPollReply Status1 from an uncleared
+  buffer (0x00 / 0x74 / 0x6F / 0xA9 from reply to reply, the RDM bit set
+  in about a quarter of them), so its Devices row flipped between "RDM"
+  and "no RDM". The bit is now trusted only once the last five replies
+  agree, with the same Status1; a node whose Status1 changes four or more
+  times in sixteen replies is junk and reads "no RDM" until it has held
+  for 64 replies; an ArtTodData reply proves RDM whatever Status1 says
+  (`ArtNetRdmFlag`). The CR041R steadily reads "no RDM"; OLA (0xD2) reads
+  "RDM".
 - **The connection window's MIDI input channel was one off** (RC3). It
   stored channel N as N and "All channels" as 0, where the MIDI plugin
   reads 0-15 as channels 1-16 and 16 as every channel: "Channel 1" listened

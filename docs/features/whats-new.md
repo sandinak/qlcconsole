@@ -39,7 +39,10 @@ their house lights, relays and subs.
 - **Labels on tape.** Right-click a row → **Print Label…**: "Spot 3 D101"
   (a template you can change) on 12 or 24 mm tape, printed through the
   system's print dialog — with a preset for the **Brother PT-P710BT** —
-  or saved as a PDF. See [The patch list](fixture-manager.md#the-patch-list).
+  or saved as a PDF. A PT-P710BT set up on the Mac is found and picked
+  when you haven't chosen a stock. See [The patch list](fixture-manager.md#the-patch-list).
+- **What's missing stands out.** A fixture not patched yet is highlighted
+  amber in the list: **— not patched**.
 
 ### House rig and tour package
 
