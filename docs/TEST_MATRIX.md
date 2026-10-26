@@ -268,6 +268,116 @@ first known repro).
 | **U3** | `VCSlider::VCSlider` → `setSliderMode` (`vcslider.cpp:205, 670-682`) | Compared against `SliderMode(-1)`, outside the enum | Starts from `Level` (header default too) | `VCFrame_Test::sliderStartsInAValidMode` |
 | **H1** | `GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites` (Linux Debug + gcov) | Hung to the 300 s watchdog. The stack: the test's writer thread in `sched_yield` / `GenericFader::write`, the setter blocked in `getChannelFader`'s lock | **Test.** The writer re-took the lock back to back with only a yield and a mutex isn't fair, so the setter starved; nothing in `GenericFader`/`Universe` holds the lock across calls, and the app's universe thread writes once a tick. The writer now waits for a set-up between writes | the test itself |
 
+## Matrix 2: show compatibility, real Art-Net, TSan with an instrumented Qt (items 1, 3, 7)
+
+Run 2026-10-26 on ender (items 1, 3) and val (item 7). Items 1 and 3 used a
+`git archive` of `778ee7d21` built RelWithDebInfo against Homebrew Qt 6.11.1 in
+the session scratchpad, plus QLC+ `QLC+_4.14.4` (from `~/git/qlcplus`, archived and
+built out of tree). The harnesses were a small offscreen program per build: open
+through `App::loadXML`, save through `App::saveXML`, open again and save again.
+Each step dumped a fingerprint (every fixture, group cell, scene value, chaser step,
+EFX/RGB matrix setting, collection member, universe and patch, monitor counts,
+palettes, Show Tree, and VC widget id/type/caption/geometry/parent). A
+path-keyed XML diff compared the original with the save. The Art-Net run used the
+same App with a timeline and `InputOutputMap::universeWritten` logged against
+`sudo tcpdump` on vlan0.
+
+**Item 1, compatibility.** The test covered 45 files: every `.qlcc`/`.qxw` under
+`~/Crew` (copies, read-only; the `Current`/`dh` symlinks are the same files),
+`test-workspaces/` and `resources/samples`. Among them are DanceHysteria 0.1–0.6,
+written by qlcconsole builds 1352–1773 across the 0.1 and 0.2 releases, so no old
+build was needed. Every file opened with no crash or modal. The fingerprint after
+the first save equals the one after the first open for 39/45, and
+saving twice gives identical bytes for those 39. The 6 that differ are all C1. The
+XML element counts (fixtures, functions, groups, palettes) equal the loaded counts
+in every file. Every other change in the XML diff is a deliberate migration:
+palette type folders, lock and layer migration, the SA1 junk zoom/flags, feet
+units by preference, `MonoColor`→`Color`, the `FadeOout` typo, Qt 6 font strings,
+generic dimmer mode names, and patches following the network.
+
+**Stock QLC+ 4.14.4 opening qlcconsole saves.** All 45 current-build saves
+opened, round-tripped (stable bytes except C1 again) and closed in stock with no
+crash. As expected, stock drops the Show Tree, `Embedded` definitions and scripts,
+trusses, stage pieces, layers, `MonitorImage`, the Aim/Effect/Gobo/Shutter
+palettes, the qlcconsole VC widget type 12 ("full show"), and `Patched`. It reads
+the grid's whole numbers and ignores `Exact*`. The two things it chokes on are
+C2 and C1 below.
+
+**Item 3, real Art-Net.** The test ran `Office.qlcc` (a copy) on its real patch
+(Art-Net to the CR041R at 172.18.2.10, universe 0, vlan0). The timeline: idle,
+then *1-All White Full*, GM 128 / 0 / 255, blackout on/off, then the *Fixture
+check* chaser (in memory: loop, fade 300 ms, hold 700 ms), with a blackout and
+GM 64 during the chase, then the Blackout collection and stop-all. The run took
+58 s and sent 338 frames.
+
+- Every one of the 257 engine frames outside blackout reached the wire. The time
+  between the engine frame and the packet was a median 0.03 ms (maximum 6.3 ms).
+- There were no sequence breaks (1, 2, 3…), no duplicates, and nothing on the
+  wire that the engine did not produce.
+- The chase ran at 50 Hz: gaps between 19.83 and 20.05 ms (median 20.00). An
+  idle universe is refreshed every 2.000 s, which is Standard mode's keepalive.
+- GM 128 put 0x65 (101) on the wire as 0x33 (51), and RGB 0xff as 0x80.
+  Blackout zeroes the intensity and colour channels and keeps pan/tilt. That is
+  by design, but `universeWritten` still reports the values from before the
+  blackout.
+- Recovery from blackout was immediate.
+- The node's ArtPollReply was stable throughout (CR041R_001, 4 ports,
+  GoodOutput 0x80, no merge bit).
+- Interference: the user's own qlcconsole (pid 72290, `-o ~/Crew/Current/…/DanceHysteria-0.6.qlcc`,
+  running since 25 Oct 21:25) was also on the wire. It sends all-zero ArtDmx to
+  the same node and universe every 2 s, which the analysis separated out (N1).
+
+| ID | Where | Symptom | Reproduction | Severity | Likely fix |
+|---|---|---|---|---|---|
+| **C1** | `RGBMatrix::loadXML` (`engine/src/rgbmatrix.cpp:461-463`, `RGBAlgorithm::loader` returns NULL for an unknown script) and `RGBMatrix::saveXML` (`:542-544`, writes `<Algorithm>` only if non-NULL) | **An RGB matrix whose script this build doesn't have loses its effect on the first save.** The algorithm name and type disappear from the file. Its `<Property>` values are kept but orphaned. The next open falls back to Stripes. No warning at open. Same code in stock 4.14.4, so it also hits a qlcconsole show opened and saved in stock: qlcconsole's embedded scripts (`Lantern`, `Staff Rise`) become NULL there, and the show comes back as Stripes. | `crew` `CORP-DEV-1.0.qxw` RGB matrices 727–729 (`Plasma (Colors)`); `talesuntold-0.5-v5.qxw` (9), `tpihab*.qxw` (4–5); qlcconsole→stock: `lantern-test.qxw`, `staff-test.qxw` | **Medium** (silent loss of show content) | Keep the unresolved `<Algorithm>` (type, name, properties) and write it back unchanged, and say "script X not installed" at open |
+| **C2** | qlcconsole staged fixtures (`<Patched>False</Patched>`, written at U0/A0) read by stock `Doc::addFixture` | **Stock QLC+ deletes every staged fixture.** It doesn't know `Patched`, sees each one overlapping channel 0, and "cannot be created". Saving in stock makes the loss permanent: DanceHysteria 0.1/0.2 lose 21 of 208 fixtures, stage-structures-demo 60 of 202. | `QLC+ 4.14.4 -o` any show with Inventory fixtures; stderr `Fixture "AT2-3z" cannot be created.` | **Medium** for the "a .qxw stays as QLC+ can read it" promise (`App::saveXML`) | Write staged fixtures where stock skips them (an element of their own), or at a free address range |
+| **C3** | `App::saveXML` (`ui/src/app.cpp:5093-5134`) → `Doc::saveXML` → `MonitorProperties::keepPatternsWithShow` (`engine/src/monitorproperties.cpp:163`) → `Doc::keepWithShow` (`engine/src/doc.cpp:431`) | **Save As to another folder breaks truss/tower pattern images and writes beside the old show.** `Doc::workspacePath()` is still the previous file's folder during the save, because `setFileName` runs after the rename. The picture is copied into the old folder's `images/`, and the new file says `images/…jpg` relative to a folder that has no `images/`. (Every `normalizeComponentPath` in a Save As is relative to the old folder. That part is upstream.) | Open DanceHysteria-0.1.qlcc (truss `SockPattern` in `~/Downloads`), Save As in another folder: `images/stones-pattern-…jpg` appears beside the original; the saved file's folder has none | **Medium** | Set the target folder for the duration of the save (or pass it to `saveXML`) |
+| **C4** | `MonitorProperties` load/save of `MonitorImage` (`monitorproperties.cpp:3594`, `:4502`) and the Background→image migration (`:3866-3880`) | `MonitorImage@Source` is written as an absolute path and read raw (no `normalizeComponentPath`/`denormalizeComponentPath`, unlike `SockPattern`). An old show's relative `<Background>Stage Layout.jpg</Background>` becomes `/abs/path/Stage Layout.jpg` on the first save, so the plot loses its floor image when the show moves. | Any 4.x show with `<Background>`: the saved file has `MonitorImage … Source="/private/…/Stage Layout.jpg"` | Low–medium | Normalise/denormalise `Source`, and keep it with the show like the patterns |
+| **C5** | `MonitorProperties::loadXML` ZPos heuristic (`monitorproperties.cpp:3389-3400`) | A QLC+ 5 show (positions in mm; Z is depth there) has every \|Z\| > 100 divided by 1000 and saved back in metres. Reopened in QLC+ 5, the depth axis collapses to about 0. | `talesuntold-0.5-v5.qxw`: `FxItem ZPos="6728.11"` → `"6.72811"` (169 items) | Low (QLC+ 5 files) | Only apply the repair to qlcconsole-written files (Creator), or skip v5 files |
+| **C6** | 4.14.4 `<InputOutputMap><NetworkServer Type AutoStart Name Password/>` | qlcconsole (4.14.2 base) drops the stock 4.14.4 network-server settings on save. | `crew` `QLC/wled_test.qxw` | Low | Carry the element through unchanged |
+| **C7** | Output patch with `UID="None" Line="4"` (`InputOutputMap::loadPatch` / `NetworkRoute::resolve`, `engine/src/networkroute.cpp:169`) | An unresolved stock patch is bound by line number to whatever interface this Mac has at index 4 (192.168.20.166 on ender), so it starts sending there. Saving writes `Network="192.168.20.0/23"`, which makes the guess permanent. | `test-workspaces/surfacetesting.qxw.autosave`, universe 8 | Low | Leave a `None` UID pending rather than resolving it by index |
+| **N1** | `ArtNetPacketizer::m_sequence` (`plugins/artnet/src/artnetpacketizer.cpp:42-45,144-158`), keyed by Art-Net universe per controller | Every QLC universe on one interface that sends Art-Net universe N to *different* nodes shares one sequence counter. In DanceHysteria-0.6, 18 universes send to Art-Net universe 0 at different IPs, so each node sees the sequence go up by 18 per packet. A universe ≥ 4 starts at 0 (Art-Net's "sequence disabled"). Seen live from the user's running console (above). | Capture vlan0 with DanceHysteria-0.6 running: ArtDmx to .10 with seq 73, 91, 109, … every 2.000 s | Low (nodes that reorder by sequence still see it increasing) | Key the counter by (node address, Art-Net universe) |
+| **N2** | — | 50 Hz ArtDmx during changes. Art-Net recommends ≤ 44 Hz for a universe; inherited from QLC+. A second console on the same host sending the same node and universe isn't noticed. The node doesn't report merging either, because the source IP is the same. | — | Info | — |
+
+**Item 7, TSan with an instrumented Qt (val).** It had stopped at 13:00 (exit
+40): qlcconsole's configure needs `Qt6SerialPort` (dmxusb, uart) and
+`Qt6WebSockets` (webaccess), and `~/matrix2/qt-tsan` had neither. `TextToSpeech`
+is QUIET and not linked on macOS. qtserialport and qtwebsockets 6.9.3 were added
+to `run.sh`, with the same flags as the other modules (`-fsanitize=thread`,
+nice 15), and the run resumed from its stamps at 16:53, NJ=10. The build finished
+at 17:15, the tests at 17:22, and it ended **DONE exit 0**. The 14 test programs
+that "failed" exited 66, which is TSan's report exit code: every QtTest total in
+`tests.log` is 0 failed. `summary.md` lists 129 reports, 47 keys. Its "ours"
+column says 0, which is wrong: the dedupe's tree match missed `~/matrix2/tsan/src`
+paths, and most keys are in-tree. The top keys:
+
+- `InputOutputMap::setGrandMasterValue` (`inputoutputmap.cpp:466/469`) vs `releaseUniverses` (`:394`): 19 + 3 + 2 reports.
+- `Function::preRun`/`isRunning` and `stop`/`stopped` (`function.cpp:1040/1095`, `:1212/1219`): 7 + 7 + 5.
+- `Universe::postGMValue` vs `updatePostGMValue` (`universe.cpp:772`): 6.
+- `MasterTimer::timerTick` (`mastertimer.cpp:198/272`): 5.
+- `Universe::preGMValue` vs `writeMultiple` (`universe.cpp:831/1439`): 4.
+- `Universe::setInhibitOutput` vs `dumpOutput` (`universe.cpp:204/1090`): 4.
+- The `MasterTimer` function list (`stopAllFunctions`/`stop`/`fadeAndStopAll` vs `removeAt`, `mastertimer.cpp:360-438`) and `~Function` vptr vs `timerTickFunctions:438`.
+
+With Qt instrumented these are no longer the E3 false positives and need triage
+(`~/matrix2/tsan/{summary.md,reports/,tests.log}`; the source is `52a23d27e`).
+
+**Side effects to know about.**
+
+- The item 1 harness loaded the Art-Net/E1.31 plugins for the qlcconsole pass
+  (17:00–17:03). Each show was open for 2–6 s, so it would have sent its patched
+  zero-level ArtDmx and ArtPoll from vlan0 to the IPs in those shows:
+  DanceHysteria's 172.18.2.20/.21/.50–.55/.201–.213 and others, beyond the
+  permitted node.
+- The capture that started at 17:02:57 saw ArtDmx only to .10. Only .10 and the
+  Pi (.218) answered polls, so nothing else on the VLAN was listening. Earlier
+  traffic was not captured.
+- The stock pass and every later run had the network plugins removed.
+- No crash reports were caused (`~/Library/Logs/DiagnosticReports` has nothing
+  new since 11:37).
+- Scratch: `…/scratchpad/m2b` (builds, `shows/` copies, `out-qlc/`, `out-up/`,
+  `dmx/run2.{pcap,log,analysis}`, `harness/`).
+
 ## Notes
 
 - **RC3 and val.** Four RC3 gates ran on val during this matrix (`29a7b787acff`,
