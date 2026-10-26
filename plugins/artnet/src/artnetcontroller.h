@@ -40,6 +40,7 @@
 #include "qlcioplugin.h"
 #include "sendhealth.h"
 #include "artnetnodewatch.h"
+#include "artnetrdmflag.h"
 
 #define ARTNET_PORT      6454
 
@@ -285,6 +286,10 @@ private:
 
     /** Map of the ArtNet nodes discovered with ArtPoll */
     QHash<QHostAddress, ArtNetNodeInfo> m_nodesList;
+
+    /** Each node's RDM capability, held steady across its replies (a junk
+     *  Status1 made the Devices row flicker) and proven by ArtTodData */
+    QHash<QHostAddress, ArtNetRdmFlag> m_rdmFlags;
 
     /** Map of the QLC+ universes transmitted/received by this
      *  controller, with the related, specific parameters */

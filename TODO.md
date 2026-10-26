@@ -1126,6 +1126,11 @@ rig edits, bulk repatching, cross-show consistency checks.
   ArtAddress `0x7f` bytes). So Status1 on this node means nothing, including
   the RDM bit (set in ~27% of replies, `0x6F`), and the August "flaps between
   0x00 and 0x74" note was the same bug.
+  **Steadied in RC4 (Q165-a):** `ArtNetRdmFlag` (plugins/artnet/src) trusts
+  the bit only after five agreeing replies with the same Status1, treats a
+  Status1 that changes 4+ times in 16 replies as junk ("no RDM" until 64
+  calm replies), and takes an ArtTodData reply as proof. A fresh 47-reply
+  capture the same day (`00`/`74`/`AD` only, no RDM bit) is in ArtNet_Test.
 
 - **RDM configuration tooling — DMX-Workshop-class rig setup (NEW, 2026-08-25,
   Branson)** — make the desk the thing you use to *set up* the rig, not just

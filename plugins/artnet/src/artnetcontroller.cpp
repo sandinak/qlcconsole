@@ -474,6 +474,11 @@ bool ArtNetController::handleArtNetPollReply(QByteArray const& datagram, QHostAd
        was renamed, re-addressed or changed status kept showing whatever it
        happened to be saying the first time we heard it -- despite announcing
        itself roughly once a second ever since. */
+    /* Status1's RDM bit only once it holds (ArtNetRdmFlag): the CR041R's
+       Status1 is buffer junk, its RDM bit set in a quarter of its replies. */
+    ArtNetRdmFlag &rdm = m_rdmFlags[senderAddress];
+    rdm.replyHeard(newNode.status1);
+    newNode.rdmCapable = rdm.rdmCapable();
     m_nodesList[senderAddress] = newNode;
 
     ++m_packetReceived;
@@ -563,10 +568,12 @@ bool ArtNetController::handleArtNetTodData(const QByteArray &datagram, const QHo
     QVariantMap values;
     quint32 universe;
 
-    Q_UNUSED(senderAddress);
-
     if (m_packetizer->processTODdata(datagram, universe, values) == true)
     {
+        /* A table of devices: the node speaks RDM, whatever its Status1. */
+        m_rdmFlags[senderAddress].todHeard();
+        if (m_nodesList.contains(senderAddress))
+            m_nodesList[senderAddress].rdmCapable = true;
         emit rdmValueChanged(universe, m_line, values);
         return true;
     }

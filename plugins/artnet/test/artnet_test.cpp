@@ -1650,3 +1650,196 @@ void ArtNet_Test::rigNetworkGateDecisionIsCachedOffTheSendPath()
     plugin.setTransmitNetworks(QStringList());
     plugin.m_IOmapping.clear();
 }
+
+/****************************************************************************
+ * The RDM flag, held steady
+ ****************************************************************************/
+
+/* Status1 bytes as the office CR041R (172.18.2.10) sent them. Recorded
+   2026-10-26 (47 replies to 40 polls, interleaved with other controllers'):
+   its Status1 is an uncleared buffer, never the same for long. */
+static const uchar kCr041rRecorded[] = {
+    0x00, 0x00, 0x00, 0x74, 0x74, 0x74, 0x74, 0x74, 0x00, 0x74, 0x74, 0x74,
+    0x74, 0x00, 0x00, 0x74, 0x74, 0x74, 0x00, 0x00, 0x00, 0x74, 0x00, 0x00,
+    0x00, 0x74, 0x74, 0x00, 0x00, 0xAD, 0xAD, 0x74, 0x00, 0x74, 0x74, 0x74,
+    0x00, 0x00, 0x74, 0x74, 0x74, 0x00, 0x00, 0x00, 0x74, 0x74, 0x74 };
+
+/* The same node's earlier 40-poll run (TODO.md, 2026-10-26): 0x6F x11,
+   0x74 x16, 0x00 x11, 0xA9 x3, in runs as it sends them. 0x6F has the RDM
+   bit (bit 1) set: about a quarter of the replies claim RDM. */
+static const uchar kCr041rWithRdmBit[] = {
+    0x00, 0x00, 0x00, 0x6F, 0x6F, 0x6F, 0x74, 0x74, 0x74, 0x74, 0x00, 0x6F,
+    0x74, 0x74, 0x00, 0x00, 0x6F, 0x6F, 0xA9, 0x74, 0x74, 0x74, 0x00, 0x6F,
+    0x6F, 0x6F, 0x6F, 0x6F, 0x74, 0x74, 0x00, 0x00, 0xA9, 0x74, 0x74, 0x74,
+    0x74, 0x00, 0x00, 0xA9, 0x74 };
+
+void ArtNet_Test::rdmFlagCr041rStaysOff()
+{
+    {
+        ArtNetRdmFlag flag;
+        for (uchar st : kCr041rRecorded)
+        {
+            QVERIFY(!flag.replyHeard(st));
+            QVERIFY(!flag.rdmCapable());
+        }
+        QVERIFY(flag.statusIsJunk());
+    }
+
+    ArtNetRdmFlag flag;
+    int claimed = 0;
+    for (uchar st : kCr041rWithRdmBit)
+    {
+        if (st & 0x02)
+            claimed++;
+        QVERIFY(!flag.replyHeard(st));      // what is shown never changes
+        QVERIFY(!flag.rdmCapable());
+    }
+    QCOMPARE(claimed, 11);                  // read straight, it flickered
+    QVERIFY(flag.statusIsJunk());
+
+    // And again and again: steady.
+    for (int pass = 0; pass < 20; pass++)
+    {
+        for (uchar st : kCr041rWithRdmBit)
+        {
+            flag.replyHeard(st);
+            QVERIFY(!flag.rdmCapable());
+        }
+    }
+}
+
+/* OLA's Status1 is 0xD2, every reply: RDM once it has held for
+   StableReplies replies, and it stays. A node without RDM (0xF0, the
+   rig's other node) stays off. */
+void ArtNet_Test::rdmFlagAnRdmNodeTurnsOnAndHolds()
+{
+    ArtNetRdmFlag ola;
+    for (int i = 1; i <= 30; i++)
+    {
+        const bool changed = ola.replyHeard(0xD2);
+        QCOMPARE(ola.rdmCapable(), i >= ArtNetRdmFlag::StableReplies);
+        QCOMPARE(changed, i == ArtNetRdmFlag::StableReplies);
+    }
+    QVERIFY(!ola.statusIsJunk());
+
+    ArtNetRdmFlag plain;
+    for (int i = 0; i < 30; i++)
+    {
+        QVERIFY(!plain.replyHeard(0xF0));
+        QVERIFY(!plain.rdmCapable());
+    }
+}
+
+/* A node that really turns RDM off (and on again) is followed, once the
+   new Status1 has held: one change is a change, not junk. */
+void ArtNet_Test::rdmFlagARealChangeIsFollowed()
+{
+    ArtNetRdmFlag flag;
+    for (int i = 0; i < 10; i++)
+        flag.replyHeard(0xD2);
+    QVERIFY(flag.rdmCapable());
+
+    for (int i = 1; i <= 10; i++)
+    {
+        flag.replyHeard(0xD0);
+        QCOMPARE(flag.rdmCapable(), i < ArtNetRdmFlag::StableReplies);
+    }
+    for (int i = 1; i <= 10; i++)
+    {
+        flag.replyHeard(0xD2);
+        QCOMPARE(flag.rdmCapable(), i >= ArtNetRdmFlag::StableReplies);
+    }
+    QVERIFY(!flag.statusIsJunk());
+
+    // Short blips (a reply or two) change nothing.
+    flag.replyHeard(0xD0);
+    QVERIFY(flag.rdmCapable());
+    for (int i = 0; i < 20; i++)
+        flag.replyHeard(0xD2);
+    QVERIFY(flag.rdmCapable());
+}
+
+/* Once a node's Status1 has shown itself to be junk, a long run of the
+   RDM bit (eleven 0x6F in a row) is not believed; only a long calm makes
+   it trusted again. */
+void ArtNet_Test::rdmFlagJunkStaysJunkThroughALongRun()
+{
+    ArtNetRdmFlag flag;
+    for (uchar st : kCr041rWithRdmBit)
+        flag.replyHeard(st);
+    QVERIFY(flag.statusIsJunk());
+    for (int i = 0; i < 11; i++)
+    {
+        flag.replyHeard(0x6F);
+        QVERIFY(!flag.rdmCapable());
+    }
+    for (int i = 11; i < ArtNetRdmFlag::CalmReplies - 1; i++)
+    {
+        flag.replyHeard(0x6F);
+        QVERIFY(!flag.rdmCapable());
+    }
+    // A minute and more of the same byte: it means it.
+    flag.replyHeard(0x6F);
+    QVERIFY(!flag.statusIsJunk());
+    QVERIFY(flag.rdmCapable());
+}
+
+/* A table of devices from the node is proof, whatever Status1 says. */
+void ArtNet_Test::rdmFlagTableOfDevicesIsProof()
+{
+    ArtNetRdmFlag flag;
+    for (uchar st : kCr041rRecorded)
+        flag.replyHeard(st);
+    QVERIFY(!flag.rdmCapable());
+    QVERIFY(flag.todHeard());
+    QVERIFY(flag.rdmCapable());
+    QVERIFY(!flag.todHeard());              // already known
+    for (uchar st : kCr041rWithRdmBit)
+    {
+        flag.replyHeard(st);
+        QVERIFY(flag.rdmCapable());
+    }
+}
+
+/* Through the controller: the node list (what the Devices row reads)
+   says "no RDM" for the CR041R at every reply, RDM for OLA, and RDM for
+   the CR041R once it answers with a table of devices. */
+void ArtNet_Test::rdmFlagReachesTheNodesList()
+{
+    QObject owner;
+    const QHostAddress cr041r("172.18.2.10");
+    const QHostAddress ola("172.18.2.218");
+    ArtNetController *ctrl = testController(&owner, cr041r, { 0 });
+
+    for (uchar st : kCr041rWithRdmBit)
+    {
+        QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+        reply[23] = char(st);
+        QVERIFY(ctrl->handlePacket(reply, cr041r));
+        QVERIFY(ctrl->getNodesList().contains(cr041r));
+        QVERIFY(!ctrl->getNodesList().value(cr041r).rdmCapable);
+        QCOMPARE(int(ctrl->getNodesList().value(cr041r).status1), int(st));
+    }
+
+    for (int i = 1; i <= 8; i++)
+    {
+        QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+        reply[23] = char(0xD2);
+        QVERIFY(ctrl->handlePacket(reply, ola));
+        QCOMPARE(ctrl->getNodesList().value(ola).rdmCapable,
+                 i >= ArtNetRdmFlag::StableReplies);
+    }
+
+    /* ArtTodData (OpCode 0x8100), no UIDs: the node answered RDM
+       discovery, so it speaks RDM. */
+    QByteArray tod(28, char(0));
+    tod.replace(0, 8, QByteArray("Art-Net\0", 8));
+    tod[8] = char(0x00);
+    tod[9] = char(0x81);
+    tod[11] = char(14);
+    QVERIFY(ctrl->handlePacket(tod, cr041r));
+    QVERIFY(ctrl->getNodesList().value(cr041r).rdmCapable);
+    QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+    reply[23] = char(0x00);
+    QVERIFY(ctrl->handlePacket(reply, cr041r));
+    QVERIFY(ctrl->getNodesList().value(cr041r).rdmCapable);
