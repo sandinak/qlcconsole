@@ -24,6 +24,7 @@
 #include "e131_test.h"
 #include "e131controller.h"
 #include "e131plugin.h"
+#include "e131packetizer.h"
 #undef private
 
 static const qint64 kFrameMs = 23;
@@ -156,3 +157,44 @@ void E131_Test::pluginGroupsAProblemsUniverses()
 }
 
 QTEST_MAIN(E131_Test)
+
+void E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse()
+{
+    E131Packetizer p("02:00:00:00:00:01");
+    QByteArray full;
+    p.setupE131Dmx(full, 0x0102, 100, QByteArray(4, char(0x33)));
+    QCOMPARE(full.size(), 126 + 4);
+
+    QByteArray dmx;
+    quint32 universe = 0;
+    QVERIFY(p.checkPacket(full));
+    QVERIFY(p.fillDMXdata(full, dmx, universe));
+    QCOMPARE(universe, quint32(0x0102));
+    QCOMPARE(dmx, QByteArray(4, char(0x33)));
+
+    /* 125 bytes passes checkPacket() but has no start code. */
+    QByteArray b = full.left(125);
+    QVERIFY(p.checkPacket(b));
+    QVERIFY(!p.fillDMXdata(b, dmx, universe));
+    QVERIFY(dmx.isEmpty());
+
+    /* A count of 0 (no start code counted) is no channels, not the rest of
+       the datagram; a count past 513 is one universe. */
+    QByteArray zero = full;
+    zero[123] = char(0x00);
+    zero[124] = char(0x00);
+    QVERIFY(p.fillDMXdata(zero, dmx, universe));
+    QVERIFY(dmx.isEmpty());
+
+    QByteArray big;
+    p.setupE131Dmx(big, 1, 100, QByteArray(700, char(0x44)));
+    QVERIFY(p.fillDMXdata(big, dmx, universe));
+    QCOMPARE(dmx.size(), 512);
+
+    /* Claiming more than it holds: what is there. */
+    QByteArray liar = full;
+    liar[123] = char(0x02);
+    liar[124] = char(0x01);
+    QVERIFY(p.fillDMXdata(liar, dmx, universe));
+    QCOMPARE(dmx.size(), 4);
+}

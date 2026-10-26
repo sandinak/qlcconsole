@@ -98,6 +98,17 @@ private slots:
     void rdmFlagJunkStaysJunkThroughALongRun();
     void rdmFlagTableOfDevicesIsProof();
     void rdmFlagReachesTheNodesList();
+
+    /* Malformed packets from the network (fuzz, matrix 2): dropped quietly,
+       never read past their end; valid ones parse as before. */
+    void artDmxShorterThanItsHeaderIsDropped();
+    void artDmxIsClampedToAUniverse();
+    void artTodDataPromisingMoreUidsIsDropped();
+    void artTodDataStillParses();
+    void rdmValidRepliesStillParse();
+    void rdmEveryTruncationIsDropped();
+    void rdmFuzzCrashesAreDroppedQuietly();
+    void malformedPacketsThroughTheController();
 };
 
 #endif

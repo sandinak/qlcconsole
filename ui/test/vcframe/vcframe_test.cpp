@@ -32,6 +32,8 @@
 #include "vcframe_test.h"
 #include "mastertimer.h"
 #include "vcbutton.h"
+#include "vcslider.h"
+#include "inputoutputmap.h"
 #include "vcwidget.h"
 #include "vcframe.h"
 #include "vcframe.h"
@@ -436,3 +438,26 @@ void VCFrame_Test::mouseMoveEvent()
 }
 
 QTEST_MAIN(VCFrame_Test)
+
+void VCFrame_Test::sliderStartsInAValidMode()
+{
+    QWidget w;
+    VCSlider s(&w, m_doc);
+    QCOMPARE(s.sliderMode(), VCSlider::Playback);
+
+    for (VCSlider::SliderMode mode : { VCSlider::Level, VCSlider::Submaster, VCSlider::Parameter,
+                                       VCSlider::GrandMaster, VCSlider::Playback })
+    {
+        s.setSliderMode(mode);
+        QCOMPARE(s.sliderMode(), mode);
+    }
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    s.setSliderMode(VCSlider::GrandMaster);
+    iom->setGrandMasterValue(77);
+    QCOMPARE(s.sliderValue(), 77);
+    s.setSliderMode(VCSlider::Playback);
+    const int playback = s.sliderValue();
+    iom->setGrandMasterValue(200);
+    QCOMPARE(s.sliderValue(), playback);
+}

@@ -528,6 +528,25 @@ void Sequence_Test::loadWithoutScene()
     QVERIFY(cs->values.at(11).value == 90);
 }
 
+void Sequence_Test::loadStepNumberOutOfRange()
+{
+    QXmlStreamReader xmlReader(QByteArray(
+        "<Function Type=\"Sequence\" BoundScene=\"77\">"
+        "<Step Number=\"-1\" FadeIn=\"1\"/>"
+        "<Step Number=\"42\" FadeIn=\"2\"/>"
+        "<Step FadeIn=\"3\"/>"
+        "<Step Number=\"-99\" FadeIn=\"4\"/>"
+        "<Step Number=\"1\" FadeIn=\"5\"/>"
+        "</Function>"));
+    xmlReader.readNextStartElement();
+    Sequence s(m_doc);
+    QVERIFY(s.loadXML(xmlReader));
+    QList<uint> fades;
+    for (const ChaserStep &step : s.steps())
+        fades << step.fadeIn;
+    QCOMPARE(fades, QList<uint>({ 1, 5, 2, 3, 4 }));
+}
+
 void Sequence_Test::save()
 {
     Sequence* seq = new Sequence(m_doc);

@@ -112,7 +112,7 @@ bool Collection::addFunction(quint32 fid, int insertIndex)
     {
         {
             QMutexLocker locker(&m_functionListMutex);
-            if (insertIndex == -1)
+            if (insertIndex < 0 || insertIndex > m_functions.size())
                 m_functions.append(fid);
             else
                 m_functions.insert(insertIndex, fid);

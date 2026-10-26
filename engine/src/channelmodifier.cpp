@@ -71,9 +71,11 @@ void ChannelModifier::setModifierMap(QList<QPair<uchar, uchar> > map)
             float floatVal = lastDMXPair.second;
             for (int p = lastDMXPair.first; p < dmxPair.first; p++)
             {
-                // the float value is rounded here but it
-                // is what we wanted
-                m_values[p] = floatVal;
+                // the float value is truncated here but it
+                // is what we wanted. Through int and uchar: a float
+                // above 127 converted straight to char is undefined
+                // behaviour (UBSan, matrix 2).
+                m_values[p] = char(uchar(qBound(0, int(floatVal), 255)));
                 floatVal += dmxInc;
             }
         }

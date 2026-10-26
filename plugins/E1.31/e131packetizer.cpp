@@ -225,19 +225,26 @@ bool E131Packetizer::checkPacket(QByteArray &data)
 
 bool E131Packetizer::fillDMXdata(QByteArray& data, QByteArray &dmx, quint32 &universe)
 {
-    if (data.isNull())
+    dmx.clear();
+
+    /* The start code is byte 125: checkPacket() lets a 125-byte datagram
+       through, and a datagram can be any size. */
+    if (data.size() < 126)
         return false;
 
     /* Check valid DMX start code */
-    if (data[125] != (char)0x00)
+    if (data.at(125) != (char)0x00)
         return false;
 
-    universe = (uchar(data[113]) << 8) + uchar(data[114]);
-    int length = (uchar(data[123]) << 8) + uchar(data[124]);
+    universe = (uchar(data.at(113)) << 8) + uchar(data.at(114));
+    int length = (uchar(data.at(123)) << 8) + uchar(data.at(124));
 
     qDebug() << "[E1.31 fillDMXdata] universe:" << universe << ", length:" << length - 1;
 
-    dmx.clear();
-    dmx.append(data.mid(126, length - 1));
+    /* The count includes the start code. A universe is 512 channels: the
+       receiver indexes a 512-byte buffer with what this returns, and a
+       count of 0 made mid() take the rest of the datagram. */
+    const int channels = qBound(0, length - 1, 512);
+    dmx.append(data.mid(126, channels));
     return true;
 }

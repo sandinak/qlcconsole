@@ -232,7 +232,7 @@ public:
     void setSliderMode(SliderMode mode);
 
 protected:
-    SliderMode m_sliderMode;
+    SliderMode m_sliderMode = Level;
 
     /*********************************************************************
      * Parameter mode

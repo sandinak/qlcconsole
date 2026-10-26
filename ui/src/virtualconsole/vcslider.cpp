@@ -202,7 +202,9 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
 
     /* Initialize to playback mode by default */
     setInvertedAppearance(false);
-    m_sliderMode = SliderMode(-1); // avoid use of uninitialized value
+    /* Any valid mode before the first setSliderMode(): it compares the old
+       mode with the new one, and SliderMode(-1) is outside the enum (UBSan). */
+    m_sliderMode = Level;
     setSliderMode(Playback);
 
     /* Update the slider according to current mode */

@@ -62,6 +62,28 @@ void ChannelModifier_Test::modifierMap()
     QCOMPARE(mod.getValue(200), uchar(255));
 }
 
+void ChannelModifier_Test::upperHalfValues()
+{
+    ChannelModifier up;
+    up.setModifierMap({ { 0, 0 }, { 255, 255 } });
+    ChannelModifier down;
+    down.setModifierMap({ { 0, 255 }, { 255, 0 } });
+    for (int v = 0; v < 256; v++)
+    {
+        QCOMPARE(up.getValue(uchar(v)), uchar(v));
+        QCOMPARE(down.getValue(uchar(v)), uchar(255 - v));
+    }
+
+    /* A ramp that lives entirely above 127, truncated as before. */
+    ChannelModifier high;
+    high.setModifierMap({ { 0, 128 }, { 100, 128 }, { 200, 250 }, { 255, 255 } });
+    QCOMPARE(high.getValue(50), uchar(128));
+    QCOMPARE(high.getValue(150), uchar(189));
+    QCOMPARE(high.getValue(199), uchar(248));
+    QCOMPARE(high.getValue(200), uchar(250));
+    QCOMPARE(high.getValue(255), uchar(255));
+}
+
 void ChannelModifier_Test::saveLoad()
 {
     ChannelModifier mod;

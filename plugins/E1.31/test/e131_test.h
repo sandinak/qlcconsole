@@ -32,6 +32,11 @@ private slots:
     void alternatingResultsDoNotToggle();
     void aNewTargetStartsClean();
     void pluginGroupsAProblemsUniverses();
+
+    /* A malformed sACN datagram from the network is dropped or clamped,
+       never read past (the Art-Net fuzz findings, matrix 2, checked here
+       too); a valid one parses as before. */
+    void dmxPacketsAreBoundedByTheDatagramAndAUniverse();
 };
 
 #endif
