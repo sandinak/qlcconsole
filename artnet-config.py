@@ -90,7 +90,9 @@ def art_address(short=None, long_=None, swout=None, swin=None,
     p[0:8] = HDR
     p[8:10] = struct.pack("<H", OP_ADDRESS)
     p[10], p[11] = 0, 14
-    p[12] = (PROGRAM | (net & 0x7F)) if net is not None else 0x00   # NetSwitch
+    # NetSwitch/SubSwitch: 0x00 means "reset to the physical switches", not
+    # "leave alone" -- 0x7f is the no-change value here too.
+    p[12] = (PROGRAM | (net & 0x7F)) if net is not None else NOCHANGE  # NetSwitch
     p[13] = bindindex
     # An all-zero name field means "no change"; a non-empty one is programmed.
     if short is not None:
@@ -100,7 +102,7 @@ def art_address(short=None, long_=None, swout=None, swin=None,
     for i in range(4):
         p[96 + i] = (PROGRAM | (swin[i] & 0x0F)) if swin else NOCHANGE
         p[100 + i] = (PROGRAM | (swout[i] & 0x0F)) if swout else NOCHANGE
-    p[104] = (PROGRAM | (sub & 0x0F)) if sub is not None else 0x00  # SubSwitch
+    p[104] = (PROGRAM | (sub & 0x0F)) if sub is not None else NOCHANGE  # SubSwitch
     p[105] = 0                                                     # AcnPriority
     p[106] = command
     return bytes(p)
@@ -144,8 +146,12 @@ def main():
     print(f"\n=== {a.target} AFTER ==="); describe(after)
     # NodeReport carries a rolling counter that ticks on every reply, so a raw
     # byte compare always says "changed". Compare only the configurable fields.
+    # Names compare as C strings: the CR041R leaves stale buffer contents
+    # after the terminator (other packets' text, even our own ArtAddress
+    # bytes), so a raw compare reports changes that are not there.
     def cfg(d):
-        return (d[26:44], d[44:108], d[18], d[19], d[186:190], d[190:194])
+        return (cstr(d[26:44]), cstr(d[44:108]), d[18], d[19],
+                d[186:190], d[190:194])
     ca, cb = cfg(after), cfg(before)
     names = ["shortName", "longName", "net", "sub", "swIn", "swOut"]
     diffs = [f"{n}: {b!r} -> {a!r}" for n, b, a in zip(names, cb, ca) if a != b]

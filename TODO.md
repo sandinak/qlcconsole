@@ -1106,6 +1106,26 @@ rig edits, bulk repatching, cross-show consistency checks.
   high (program 7 as `0x87`); `0x00` means "reset to zero" and `0x7f` means
   "leave alone", so `0x7f` -- not `0x00` -- is the safe default for a field you
   do not intend to change.
+  **Re-checked 2026-10-26 (Branson cleared writes to the office node): no
+  change.** The office converter is still the CR041R (`172.18.2.10`, firmware
+  14, MAC 02:4D:48:12:02:0A). A short-name ArtAddress write was acked with
+  NodeReport `0006` (RcShNameOk) and discarded -- the name read back
+  `CR041R_001`, exactly as in August. Long-name and port-address writes were
+  not run this time (the session's tool permissions stopped further writes),
+  so nothing needed restoring. Verdict unchanged: **this node cannot validate
+  node configuration; keep ArtAddress out of the UI** (it still is -- the
+  plugin only defines `ARTNET_ADDRESS`; the UI has ArtIpProg "Set node IP
+  address…" only). `artnet-config.py` fixed the same day: Net/SubSwitch
+  defaulted to `0x00` ("reset to physical switches") instead of `0x7f`, and its
+  before/after diff compared raw name bytes, so the CR041R's stale buffer
+  bytes (below) read as "CONFIG CHANGED".
+  **CR041R reply quirk found:** its ArtPollReply reuses an uncleared buffer.
+  Byte 23 (Status1) is garbage -- 40 polls gave `0x6F` x11, `0x74` x16,
+  `0x00` x11, `0xA9` x3 -- and the bytes after the long name's terminator carry
+  other packets' text (OLA's NodeReport, `tcp://…` strings, even our own
+  ArtAddress `0x7f` bytes). So Status1 on this node means nothing, including
+  the RDM bit (set in ~27% of replies, `0x6F`), and the August "flaps between
+  0x00 and 0x74" note was the same bug.
 
 - **RDM configuration tooling — DMX-Workshop-class rig setup (NEW, 2026-08-25,
   Branson)** — make the desk the thing you use to *set up* the rig, not just
@@ -1127,8 +1147,8 @@ rig edits, bulk repatching, cross-show consistency checks.
     implemented by **both** transports this rig actually uses: `artnet`
     (`ArtNetController::sendRDMCommand`) and `dmxusb` (Enttec DMX USB Pro).
   - `ui/src/rdmmanager.{h,cpp,ui}` (~900 lines) — a discovery worker thread +
-    UID list + raw get/set-a-PID panel, reachable from Fixture Manager
-    (`fixturemanager.cpp:457`).
+    UID list + raw get/set-a-PID panel. NOT reachable: its Fixture
+    Manager tab is commented out upstream and here (see 2026-10-26 below).
   So the gap is **workflow, not plumbing**. Today it is a protocol inspector:
   it can talk to a device if you already know which PID you want. DMX-Workshop
   parity means turning it into a rig-setup tool.
@@ -1252,6 +1272,44 @@ rig edits, bulk repatching, cross-show consistency checks.
     `artnet-probe.py` (3 simulated UIDs). Note it is deliberately *permissive*
     about request length, so it cannot settle the 25-vs-56 question above.
   - Reproduce any of this with **`artnet-probe.py`** at the repo root.
+  - **Re-checked 2026-10-26 after the Connections rework (RC2/RC3,
+    d6662f0b6): capability intact, nothing regressed.**
+    Network (from this Mac, `vlan0` 172.18.2.219): three Art-Net nodes answer
+    -- the **CR041R** (still the office converter, 4 ports, swOut 0-3, ports 1-2
+    transmitting), **OLA on the Pi** (`172.18.2.218`, Status1 `0xD2`, RDM bit
+    set) and this console. AtcFlush + ArtTodRequest: CR041R **silent** again;
+    OLA answers `ArtTodData uidTotal=0` (TOD empty: its Dummy RDM device is
+    not patched to a universe). So **Branson's RDM light on the CR041R is not
+    reachable over Art-Net** -- the node is transmit-only hardware. Routes that
+    work: a DMXKing/Enttec USB Pro on that DMX line (`EnttecDMXUSBPro::
+    sendRDMCommand`; none was plugged in here today), an RDM-capable Art-Net
+    node in place of the CR041R, or OLA with an RDM-capable USB widget on that
+    line acting as the gateway.
+    **App path proven headless:** a QPluginLoader harness on the built
+    `libartnet.dylib` (no UI) lists both nodes through `discoveredDevices()`
+    with every ArtPollReply field (names, MAC, firmware, OEM/ESTA, RDM, per-
+    port address and "transmitting", NodeReport), and `sendRDMCommand(
+    DISCOVERY_COMMAND)` to OLA comes back as `rdmValueChanged
+    {DISCOVERY_COUNT: 0}`. **That settles the 25-vs-56-byte suspicion above
+    for OLA: it answers QLC+'s 25-byte ArtTodRequest** (idle Pi, three runs).
+    A strict node is still untested.
+    Gotcha for anyone writing such a harness: `ArtNetPlugin` re-declares
+    `rdmValueChanged` (upstream does too), shadowing `QLCIOPlugin`'s. The app
+    connects by string and gets the right one; a pointer-to-member connect to
+    `&QLCIOPlugin::rdmValueChanged` silently never fires.
+    **The RDM Manager has never been reachable in this fork** -- upstream
+    commented out its Fixture Manager tab (`fixturemanager.cpp`, the `/* … */`
+    around `new RDMManager`) and it still is; the "reachable from Fixture
+    Manager" line above was wrong. Not a regression; the device-table work
+    (1-5) needs its own entry point anyway.
+    Next step without hardware: patch OLA's Dummy RDM port to universe 0 on
+    the Pi (`ola_patch`) -- then the Art-Net TOD returns real UIDs and the
+    GET PIDs (DEVICE_INFO, labels, DMX_START_ADDRESS, personality, software
+    version) can be exercised end to end through the plugin.
+    Devices shows "RDM" / "no RDM" from Status1 bit 1, so with the CR041R's
+    garbage Status1 (see the ArtAddress item) it reads "RDM" in roughly one
+    refresh in four. Worth a fix: believe the bit only when it is stable across
+    replies, or confirm it with a TOD request.
 
   **Paradigm answers (2026-08-25 discussion) — no new U→node binding needed.**
   `ArtNetController::sendRDMCommand` (`artnetcontroller.cpp:374`) already looks
