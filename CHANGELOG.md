@@ -40,10 +40,21 @@ Excel, with labels on tape; Connections' Overview folded into Devices,
 and the Fixture Manager patching a universe in the same connection window;
 and the connection window's MIDI input channel no longer one off.
 
-Release candidate 4 adds, from testing RC3: the Labels dialog finding a
-Brother PT-P710BT on the Mac and starting on its preset and printer;
-unpatched fixtures highlighted in the patch list; and a steady RDM flag
-on Art-Net nodes whose poll replies carry a junk status byte.
+Release candidate 4 adds, from testing RC3: the Labels dialog picking a
+Brother PT-P710BT on the Mac automatically and starting on its preset and
+printer; unpatched rows in the patch list showing "— not patched"; and a
+steady RDM flag on Art-Net nodes whose poll replies carry a junk status
+byte. From the test matrices: a damaged show file says so and is never
+saved over; impossible universe numbers are refused; Office.qlcc no longer
+opens already modified; numbers read with either decimal mark; the rig
+view stays memory-safe across New, Open and deleting structures, and drops
+junk plot zoom and flags; malformed Art-Net, RDM and E1.31 packets from the
+network are dropped instead of read past their end; bad chaser and
+sequence step numbers in a show file are refused; the RDM DEVICE_INFO
+sensor count is read from the spec's offset; and the tests run clean under
+ASan and UBSan, with no generic fader test hang. On Windows, the Build
+outline, Build ▸ Effects and the Show Tree Library refresh when the show
+changes (signals across DLLs), and CI's Windows tests now fail the build.
 
 ### Added
 
